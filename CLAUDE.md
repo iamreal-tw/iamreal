@@ -22,3 +22,17 @@
 - PSE 的程式當成依賴，釘在特定 commit
 - 範例和測試用假資料：帳號 `@alice`、短編號 `7K2Q9F`
 - 密鑰只放在 `.gitignore` 排除的檔案（`.env.local`）
+
+## Agent skills
+
+### Issue tracker
+
+Issue 記在 GitHub Issues（`iamreal-tw/iamreal`），用 `gh` CLI 操作。見 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+沿用五個預設標籤：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。見 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+單一 context：根目錄的 `GLOSSARY.md` 加 `docs/adr/`。見 `docs/agents/domain.md`。
