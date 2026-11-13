@@ -1,0 +1,12 @@
+# local-only notes and settings
+CLAUDE.local.md
+.claude/settings.local.json
+
+# secrets and runtime data
+.env
+.env.local
+*.pem
+*.db
+
+# OS and editor
+.DS_Store
