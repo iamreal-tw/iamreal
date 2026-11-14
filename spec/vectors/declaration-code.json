@@ -1,0 +1,47 @@
+{
+  "spec": "declaration-code",
+  "version": "iamreal-declaration-v1",
+  "status": "draft",
+  "cases": [
+    {
+      "action": "declare",
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alice",
+      "challenge": "1234567890",
+      "preimage_sha256": "ea1f1dbd926cbbd76ec2b8389b482e5c4bf47d296eeeeae9257819b0ce698107",
+      "declaration_code": "DX8FHVFCJDJXXEVP2Q0W9PJ1EBH5Z8Z"
+    },
+    {
+      "action": "withdraw",
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alice",
+      "challenge": "1234567890",
+      "preimage_sha256": "d749b21c7317eed7b9ede31b9a7ab185bdecd1ed9935f6523215b6875bb0621f",
+      "declaration_code": "DTX4V473K2ZQDFEFDWCDSMYNHGPYYSM"
+    },
+    {
+      "action": "declare",
+      "scope_string": "iamreal-test:threads:0_________",
+      "username": "alice",
+      "challenge": "1234567890",
+      "preimage_sha256": "1f78198abd885c84f9275cf77daa8f931c7e33725ff66f67de0b9179e8cdf9f9",
+      "declaration_code": "D3XW1K2NXH1E89Y97BKVQVAMFJCE7WC"
+    },
+    {
+      "action": "declare",
+      "scope_string": "iamreal:threads:0______________",
+      "username": "bob_02",
+      "challenge": "1234567890",
+      "preimage_sha256": "a0522b19f23adf8ac203cd9acf0afc720ff40ae431e7687badb3b4248d77c107",
+      "declaration_code": "DM192P6FJ7BFRNGG3SPDCY2QWE87Z82"
+    },
+    {
+      "action": "declare",
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alice",
+      "challenge": "1234567891",
+      "preimage_sha256": "8c78ec42ea7c4ab913459194d0a9dda62fbca5e127e1c4038acf56692a5690ea",
+      "declaration_code": "DHHWERGQAFH5BJ4T5J6AD1AEXMRQVS9"
+    }
+  ]
+}
