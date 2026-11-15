@@ -3,8 +3,8 @@
 Status: **Draft**. Version tag: `iamreal-declaration-v1`.
 
 The declaration code is the 31-byte string a card signs to state "this slot
-is declared to this account, now" (or withdrawn from it). It is the message
-of the declaration signature proof.
+is declared to this account, now" (or withdrawn from it). It is the second
+of the two messages the card signs in a card proof.
 
 ## Computation
 
@@ -43,14 +43,14 @@ of the hash.
 ## Verification
 
 A verifier recomputes the code from the record's `action`, `scope_string`,
-`username` and `challenge`, and checks that it equals the message exposed by
-the declaration signature proof.
+`username` and `challenge`, and checks that it equals the declaration code
+exposed as a public input of the proof. This is the only place the challenge
+is bound: the circuit has no separate challenge input.
 
 ## Open items
 
-- The challenge format (it carries the issue date plus random data, and must
-  also be usable as the circuit's `challenge` input) will be defined in
-  `challenge.md`. The vectors use a placeholder value until then.
+- The challenge format (it carries the issue date plus random data) will be
+  defined in `challenge.md`. The vectors use a placeholder value until then.
 
 ## Test vectors
 
