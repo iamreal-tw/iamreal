@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR-0012
 ---
 
 # PSE 的電路只加檢查，不放寬
+
+> 2026-11-15 由 ADR-0012 取代：電路改成自己用 Noir 寫，PSE 的電路留作對照。下面是當時的決定，保留作紀錄。
 
 零知識證明用的是 PSE zkID 團隊的電路（[ethereum/zkID](https://github.com/ethereum/zkID) 的 `RSA-X.509-Cert` 分支，`wallet-unit-poc/circom/`；程式庫原本在 `privacy-ethereum/zkID`）。我們把它釘在一個特定的 commit，以它為基礎，只做符合下面四條的修改：
 
