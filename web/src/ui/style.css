@@ -68,7 +68,8 @@ button.link {
   margin-left: 0.5rem;
 }
 
-.message:empty {
+.message:empty,
+.working:empty {
   display: none;
 }
 

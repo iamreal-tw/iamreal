@@ -41,6 +41,7 @@ const EXAMPLES: Record<string, string> = {
   today: "2026-11-16",
   seq: "138",
   short_id: "7K2Q9F",
+  request_id: "3f9c2a7e5b1d4c80",
 };
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {

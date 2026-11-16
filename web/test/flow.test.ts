@@ -531,6 +531,37 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.equal(heldPin(u.flow), null);
   });
 
+  test("cancel (取消 on sections 3 and 4): the PIN, the certificate and the signature are dropped, as when the wait runs out", async () => {
+    type Held = { pin: unknown; cert: { der: Uint8Array; tbs: Uint8Array; issuerSignature: Uint8Array } | null; scopeSignature: Uint8Array | null };
+    for (const where of ["status_known", "chosen"] as const) {
+      const s = await setup();
+      await s.flow.readCard();
+      await s.flow.confirmCard(PIN);
+      if (where === "chosen") s.flow.choose({ action: "declare", username: "alice" });
+      assert.equal(s.flow.phase, where);
+      const held = s.flow as unknown as Held;
+      const cert = held.cert!;
+      const sig = held.scopeSignature!;
+      assert.ok(cert.der.some((b) => b !== 0) && sig.some((b) => b !== 0));
+      const n = s.backend.log.length;
+      s.flow.cancel();
+      assert.equal(s.flow.phase, "stopped", where);
+      assert.equal(heldPin(s.flow), null, `${where}: the PIN`);
+      assert.equal(held.cert, null, `${where}: the certificate`);
+      assert.equal(held.scopeSignature, null, `${where}: the signature`);
+      assert.ok([cert.der, cert.tbs, cert.issuerSignature, sig].every((b) => b.every((x) => x === 0)), `${where}: their bytes are zeros`);
+      assert.equal(s.flow.cardStatus, null, `${where}: the card's state`);
+      // The timer of the wait is gone: it does not fire later.
+      s.advance(IDLE_MS);
+      s.fireTimers();
+      assert.deepEqual(s.idleStops, [], `${where}: no idle afterwards`);
+      assert.throws(() => s.flow.choose({ action: "declare", username: "alice" }), (e) => e instanceof FlowStop);
+      assert.ok((await stopOf(s.flow.proceed("alice"))) !== null);
+      assert.equal(s.card.signed.length, 1, `${where}: the card signed once`);
+      assert.equal(s.backend.log.length, n, `${where}: no request after`);
+    }
+  });
+
   test("a blocked window, on each of the three clicks: nothing reaches the card, and the same step goes on", async () => {
     const s = await setup({ echoPublicInputs: true });
     // Reading the card.
