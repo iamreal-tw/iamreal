@@ -20,6 +20,8 @@ export interface FakeCardSpec {
   tries: number;
   /** An empty reader. */
   noCard?: boolean;
+  /** No reader at all: the code Chunghwa Telecom's library names (無可用讀卡機). */
+  noReader?: boolean;
 }
 
 export interface ComponentRequest {
@@ -100,6 +102,7 @@ export class FakeComponent {
     if (this.hold) await this.hold;
     const card = this.card;
     if (func === "GetUserCert") {
+      if (card?.noReader) return { ret_code: 0x76100003, last_error: 0, message: "無可用讀卡機" };
       if (!card || card.noCard) return { ret_code: 0, last_error: 0, version: "fake", slots: [{ slotDescription: "Fake Reader 0" }] };
       return {
         ret_code: 0,

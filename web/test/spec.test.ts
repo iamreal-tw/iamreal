@@ -11,7 +11,8 @@ import { type Day, formatDay, parseDay, taiwanDay } from "../src/spec/date.ts";
 import { declarationCode, declarationPreimage } from "../src/spec/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/spec/field.ts";
 import { type CardState, dailyLimitReached, declareOutcome, nextSwitchDay, possibleState, switchesLeft, withdrawOutcome } from "../src/spec/roster-rules.ts";
-import { lookupScope, normalizeUsername, scopeFor } from "../src/spec/scope.ts";
+import { PLATFORMS, platformOf } from "../src/platforms.ts";
+import { lookupScope, scopeFor } from "../src/spec/scope.ts";
 import { parseScopedId, scopedIdText, shortId } from "../src/spec/scoped-id.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
@@ -67,10 +68,19 @@ describe("scope.json", () => {
     assert.equal(scopeFor("test", "threads").scopeString, "iamreal-test:threads:0_________");
     assert.equal(scopeFor("production", "threads").scopeString, "iamreal:threads:0______________");
   });
-  test("normalizeUsername lowercases ASCII only", () => {
-    assert.equal(normalizeUsername("@Alice"), "alice");
-    assert.equal(normalizeUsername("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
-    assert.equal(scopeFor("test", "threads").validUsername(normalizeUsername("Kelvin")), false);
+  test("Threads' normalize lowercases ASCII only", () => {
+    const normalize = platformOf("threads").normalize;
+    assert.equal(normalize("@Alice"), "alice");
+    assert.equal(normalize("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
+    assert.equal(scopeFor("test", "threads").validUsername(normalize("Kelvin")), false);
+  });
+  test("the scope table comes from the platform definition: every open platform, no closed one", () => {
+    for (const p of PLATFORMS) {
+      for (const roster of ["production", "test"] as const) {
+        if (p.open) assert.equal(lookupScope(roster, p.scopeStrings[roster])?.platform, p.key);
+        else assert.throws(() => scopeFor(roster, p.key as "threads"));
+      }
+    }
   });
 });
 

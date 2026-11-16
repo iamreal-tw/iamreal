@@ -99,8 +99,15 @@ Submits one card proof.
   the mirror and that the newest is at most 3 days old; applies the roster
   rules. If everything passes it appends the record and marks the challenge
   as accepted, in one transaction.
-- Response `201`: `{"seq":138,"record_hash":"…","kind":"first"}` where `kind`
-  is `first`, `refresh`, `switch` or `withdraw`.
+- Response `201`:
+  `{"seq":138,"record_hash":"…","kind":"first","account_cards":1}` where
+  `kind` is `first`, `refresh`, `switch` or `withdraw`, and `account_cards`
+  is the number of cards whose `current` is the record's `username` in its
+  scope once the record is applied (after a withdrawal, the cards that still
+  declare it). The device uses `account_cards` only to choose which link to
+  suggest: the account's page when this card is the only one, the page of
+  this card when there are others. A wrong number cannot identify the
+  cardholder.
 - Errors:
 
   | Status | Code | Meaning |

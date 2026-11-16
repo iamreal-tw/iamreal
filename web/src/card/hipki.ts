@@ -121,8 +121,8 @@ export class HipkiCard implements Card {
     return p;
   }
 
-  async readCertificates(): Promise<Uint8Array[]> {
-    const reply = await this.take().request(JSON.stringify({ func: "GetUserCert" }));
+  async readCertificates(onConnected?: () => void): Promise<Uint8Array[]> {
+    const reply = await this.take().request(JSON.stringify({ func: "GetUserCert" }), onConnected);
     return certificatesOfReply(reply);
   }
 
@@ -206,8 +206,12 @@ class Popup {
     }
   }
 
-  /** Waits until the window is ready, posts `body` to it, and resolves with its reply. */
-  request(body: string): Promise<string> {
+  /**
+   * Waits until the window is ready, posts `body` to it, and resolves with
+   * its reply. `onReady` is called when the window says it is ready (the
+   * component answered), just before `body` is posted.
+   */
+  request(body: string, onReady?: () => void): Promise<string> {
     // Nothing is sent: the request never leaves this page.
     if (!this.win) return Promise.reject(new CardError("popup_blocked"));
     return new Promise<string>((resolve, reject) => {
@@ -229,6 +233,11 @@ class Popup {
       let replyTimer: ReturnType<typeof setTimeout> | undefined;
       const send = (): void => {
         clearTimeout(readyTimer);
+        try {
+          onReady?.();
+        } catch {
+          // For the screen's progress only; the request goes on.
+        }
         try {
           this.win!.postMessage(payload, this.origin);
         } catch {
@@ -283,7 +292,8 @@ export function replyError(r: Reply): CardError {
   const major = code32(r.ret_code);
   const minorRaw = r.last_error;
   const minor = code32(minorRaw);
-  if (major === NO_CARD || major === NO_READER) return new CardError("no_card", hex(major));
+  if (major === NO_READER) return new CardError("no_reader", hex(major));
+  if (major === NO_CARD) return new CardError("no_card", hex(major));
   if (major === LOGIN_FAILED) {
     if (minor === CKR_PIN_LOCKED) return new CardError("card_locked");
     // 0x80000001 and 0x80000002: wrong PIN, one or two tries left
@@ -313,11 +323,17 @@ function base64Bytes(s: unknown, what: string): Uint8Array {
  * The certificates of a GetUserCert reply, from every reader that has a
  * card. With two cards in two readers, both cards' certificates are
  * returned and the flow stops (two certificates pass: ambiguous).
+ *
+ * The reply lists one slot per reader, with a token when the reader has a
+ * card: no slot is no reader, slots without a token are readers without a
+ * card (read from the PSE example and Chunghwa Telecom's library; a reply
+ * of a computer with no reader was not seen).
  */
 export function certificatesOfReply(text: string): Uint8Array[] {
   const r = parseReply(text);
   if (!isSuccess(r)) throw replyError(r);
   if (!Array.isArray(r.slots)) throw new CardError("card_error", "reply_format");
+  if (r.slots.length === 0) throw new CardError("no_reader");
   const tokens = r.slots.filter((s): s is Reply => typeof s === "object" && s !== null && typeof (s as Reply).token === "object" && (s as Reply).token !== null);
   if (tokens.length === 0) throw new CardError("no_card");
   const out: Uint8Array[] = [];

@@ -10,7 +10,7 @@ import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
-import type { Platform, Roster } from "./spec/scope.ts";
+import type { Platform, Roster } from "./platforms.ts";
 import { localStorageStore } from "./storage.ts";
 import { IDLE_LIMIT_MS, ISSUERS } from "./target.ts";
 
@@ -39,6 +39,7 @@ export function createCardProof(opts: {
   onBackgroundStop?: FlowDeps["onBackgroundStop"];
   onTiming?: FlowDeps["onTiming"];
   onIdle?: FlowDeps["onIdle"];
+  onProgress?: FlowDeps["onProgress"];
 }): CardProofFlow {
   return new CardProofFlow(
     {
@@ -53,13 +54,14 @@ export function createCardProof(opts: {
       onBackgroundStop: opts.onBackgroundStop,
       onTiming: opts.onTiming,
       onIdle: opts.onIdle,
+      onProgress: opts.onProgress,
       idleMs: IDLE_LIMIT_MS,
     },
     { platform: opts.platform },
   );
 }
 
-export { CardProofFlow, FlowStop, IDLE_MS, type Choice, type Consequence, type Stop, type CardRead, type CardStatus, type Done, type Phase } from "./flow.ts";
+export { CardProofFlow, FlowStop, IDLE_MS, type Choice, type Consequence, type Stop, type CardRead, type CardStatus, type Done, type Phase, type Progress } from "./flow.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
-export { normalizeUsername } from "./spec/scope.ts";
+export { type ClosedPlatform, type OpenPlatform, type Platform, PLATFORMS, SITE_DOMAIN, handle, platformOf } from "./platforms.ts";
 export type { Prover, ThreadMode } from "./prover/prover.ts";

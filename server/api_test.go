@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -390,6 +391,45 @@ func TestDateOrder(t *testing.T) {
 	// 4 days back is still in order.
 	h.clock.Set(tw(2026, 11, 21, 12, 0, 0))
 	h.mustSubmit(h.sub("declare", newCard(), "alice", root), "first")
+}
+
+// account_cards: the cards whose current account is the record's username
+// once the record is applied (docs/api/card-proof.md), in the order the
+// document writes the fields.
+func TestAccountCards(t *testing.T) {
+	crl := g3CRL(t)
+	root := rootOf(t, crl)
+	h := newHarness(t, startOfTests, crl)
+	a, b := newCard(), newCard()
+	steps := []struct {
+		action, card, username, kind string
+		cards                        float64
+	}{
+		{"declare", a, "alice", "first", 1},
+		{"declare", b, "alice", "first", 2}, // another card declares the same account
+		{"declare", a, "bob", "switch", 1},  // a leaves alice for bob: bob has one card
+		{"declare", b, "alice", "refresh", 1},
+		{"withdraw", b, "alice", "withdraw", 0}, // after a withdrawal: the cards that still declare it
+		{"withdraw", a, "bob", "withdraw", 0},
+	}
+	for _, s := range steps {
+		status, out := h.submit(h.sub(s.action, s.card, s.username, root))
+		if status != 201 || out["kind"] != s.kind || out["account_cards"] != s.cards {
+			t.Fatalf("%s %s: %d %v, want %s with %v account_cards", s.action, s.username, status, out, s.kind, s.cards)
+		}
+	}
+	// An error has no account_cards.
+	status, out := h.submit(h.sub("withdraw", a, "bob", root))
+	if _, has := out["account_cards"]; status != 400 || out["error"] != "not_current" || has {
+		t.Errorf("an error: %d %v", status, out)
+	}
+	// The next day (3 records of each card today): the fields, in their order.
+	h.clock.Set(startOfTests.Add(24 * time.Hour))
+	body, _ := json.Marshal(h.sub("declare", a, "carol", root))
+	rec := h.raw("POST", "/api/v1/records", string(body))
+	if got := rec.Body.String(); !regexp.MustCompile(`^\{"seq":\d+,"record_hash":"[0-9a-f]{64}","kind":"switch","account_cards":1\}\n$`).MatchString(got) {
+		t.Errorf("the fields and their order: %s", got)
+	}
 }
 
 func TestNotCurrentAndSwitchLimit(t *testing.T) {

@@ -8,7 +8,7 @@ import { describe, test } from "node:test";
 import { CardError } from "../src/card/card.ts";
 import { FakeCard } from "../src/card/fake.ts";
 import { buildWith } from "../src/crl/build.ts";
-import { CardProofFlow, type Choice, type Consequence, FlowStop, IDLE_MS, type Stop } from "../src/flow.ts";
+import { CardProofFlow, type Choice, type Consequence, FlowStop, IDLE_MS, type Progress, type Stop } from "../src/flow.ts";
 import type { IssuerName } from "../src/issuers.ts";
 import { ArtifactError, loadCircuit } from "../src/prover/artifacts.ts";
 import type { Prover } from "../src/prover/prover.ts";
@@ -44,6 +44,8 @@ interface Setup {
   /** Runs the flow's timers that are due, as the page's setTimeout would. */
   fireTimers: () => void;
   idleStops: Stop[];
+  /** The flow's onProgress events, in order. */
+  progress: Progress[];
   prover: Prover;
   /**
    * Holds the server's answers on `path`: the request reaches the server (and
@@ -139,6 +141,7 @@ async function setup(o: {
   };
   const timers: { at: number; f: () => void; done: boolean }[] = [];
   const idleStops: Stop[] = [];
+  const progress: Progress[] = [];
   const flow = new CardProofFlow(
     {
       roster: "test",
@@ -151,6 +154,7 @@ async function setup(o: {
       startTreeBuilder: async () => ({ build: (k, n, s) => buildWith([p.runner(), p.runner()], k, n, s), close: () => undefined }),
       onBackgroundStop: onStop,
       onIdle: (s) => idleStops.push(s),
+      onProgress: (p) => progress.push(p),
       setTimer: (ms, f) => {
         const t = { at: now + ms, f, done: false };
         timers.push(t);
@@ -168,7 +172,7 @@ async function setup(o: {
       }
     }
   };
-  return { w, backend, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, prover, hold };
+  return { w, backend, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold };
 }
 
 /** Card read, PIN given, the card's state known, `choice` picked. */
@@ -372,7 +376,7 @@ describe("the flow, with a server that gives values the device must not accept",
     await toChosen(t);
     assert.deepEqual(await stopOf(t.flow.proceed("alice")), { code: "server", server: "internal", status: 500 });
     assert.equal(t.flow.stop, null, "internal can be sent again");
-    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first" } };
+    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first", account_cards: 1 } };
     const done = await t.flow.resubmit();
     assert.equal(done.seq, 7);
     assert.equal(t.backend.submissions.length, 2);
@@ -406,7 +410,9 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.deepEqual(status.options.other, { kind: "switch" });
     assert.equal(status.switchesUsed, 1);
     assert.equal(status.switchesLeft, 1);
-    assert.equal(s.flow.choose({ action: "declare", username: "alice" }).switchesLeftAfter, 0);
+    const cq = s.flow.choose({ action: "declare", username: "alice" });
+    // The last switch of the window: the next is a year after the earlier one.
+    assert.deepEqual([cq.switchesLeftAfter, cq.nextSwitchDateAfter], [0, "2027-03-02"]);
     const req = s.backend.log.find((r) => r.path === "/api/v1/card-state")!;
     assert.equal(req.method, "POST");
     assert.deepEqual(Object.keys(JSON.parse(req.body)), ["scope_string", "scoped_id"]);
@@ -450,7 +456,7 @@ describe("the flow, with a server that gives values the device must not accept",
     const n = await never.flow.confirmCard(PIN);
     assert.deepEqual(n.options, { refresh: null, declareBack: null, other: { kind: "first" }, withdraw: null });
     assert.deepEqual([n.switchesUsed, n.switchesLeft, n.nextSwitchDate], [0, 2, "2026-11-16"]);
-    assert.deepEqual(never.flow.choose({ action: "declare", username: "alice" }), { action: "declare", username: "alice", kind: "first", switchesLeftAfter: 2, today: "2026-11-16" });
+    assert.deepEqual(never.flow.choose({ action: "declare", username: "alice" }), { action: "declare", username: "alice", kind: "first", switchesLeftAfter: 2, nextSwitchDateAfter: "2026-11-16", today: "2026-11-16" });
 
     const declared = await setup({ backend: { cardState: cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: ["2025-11-17"] }) } });
     await declared.flow.readCard();
@@ -459,7 +465,7 @@ describe("the flow, with a server that gives values the device must not accept",
     // A switch dated 364 days ago is in the window; one 365 days ago is not.
     assert.deepEqual([d.switchesUsed, d.switchesLeft, d.lastCardProof], [1, 1, "2026-11-04"]);
     assert.equal(declared.flow.choose({ action: "declare", username: "alice" }).kind, "refresh");
-    assert.deepEqual(declared.flow.choose({ action: "withdraw" }), { action: "withdraw", username: "alice", kind: "withdraw", switchesLeftAfter: 1, today: "2026-11-16" });
+    assert.deepEqual(declared.flow.choose({ action: "withdraw" }), { action: "withdraw", username: "alice", kind: "withdraw", switchesLeftAfter: 1, nextSwitchDateAfter: "2026-11-16", today: "2026-11-16" });
 
     // Withdrawn: the same account again is not a switch; another one is.
     const withdrawn = await setup({ backend: { cardState: cardState({ current: null, last_declared: "bob", last_card_proof: "2026-11-10", switch_dates: ["2025-11-16"] }) } });
@@ -469,7 +475,8 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.deepEqual([w.switchesUsed, w.switchesLeft], [0, 2]);
     assert.equal(withdrawn.flow.choose({ action: "declare", username: "bob" }).kind, "refresh");
     const sw = withdrawn.flow.choose({ action: "declare", username: "carol" });
-    assert.deepEqual([sw.kind, sw.switchesLeftAfter], ["switch", 1]);
+    // One switch left after this one: a switch is allowed today still.
+    assert.deepEqual([sw.kind, sw.switchesLeftAfter, sw.nextSwitchDateAfter], ["switch", 1, "2026-11-16"]);
   });
 
   test("3 records today: the engine refuses every choice; no second signature, no challenge", async () => {
@@ -1192,7 +1199,7 @@ describe("a step called again while it is under way", () => {
     const s = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
     await toChosen(s);
     assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "internal", status: 500 });
-    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first" } };
+    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first", account_cards: 1 } };
     const open = s.hold("/api/v1/records");
     const first = s.flow.resubmit();
     await until(() => requestsOn(s, "/api/v1/records") === 2, "the record was sent again");
@@ -1220,5 +1227,178 @@ describe("the wait for the second signature has one timer", () => {
     s.fireTimers();
     assert.deepEqual(s.flow.stop, { code: "idle" }, "5 minutes after the second start");
     assert.deepEqual(s.idleStops, [{ code: "idle" }], "the screen is told once");
+  });
+});
+
+describe("what the flow tells the screen as it goes (onProgress)", () => {
+  test("each thing done, once: the card read, then the checks that need no signature (in any order), then the declaration", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    assert.deepEqual(s.progress.slice(0, 3), ["component", "certificates", "certificate"]);
+    assert.deepEqual([...s.progress.slice(3)].sort(), ["circuit", "config", "crl", "engine", "tree"]);
+    assert.ok(s.progress.indexOf("config") < s.progress.indexOf("crl") && s.progress.indexOf("crl") < s.progress.indexOf("tree"), "in each chain, in its order");
+    await s.flow.confirmCard(PIN);
+    s.flow.choose({ action: "declare", username: "alice" });
+    await s.flow.proceed("alice");
+    assert.deepEqual(s.progress.slice(8), ["challenge", "signed", "proved"]);
+  });
+
+  test("a revoked card: the CRL, but no tree; the screen hears nothing more once the flow stopped", async () => {
+    const s = await setup({ crls: [{ serials: [...randomSerials(50), 0x1234567890abcdef1234567890abcdefn], crlNumber: 100n, thisUpdate: CRL_TIME }] });
+    await s.flow.readCard();
+    assert.deepEqual(await stopOf(s.flow.checksDone()), { code: "revoked" });
+    assert.ok(s.progress.includes("crl") && !s.progress.includes("tree"), JSON.stringify(s.progress));
+    const n = s.progress.length;
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(s.progress.length, n);
+  });
+
+  test("a challenge of another day: no challenge event, nothing after the stop", async () => {
+    const s = await setup({ backend: { challenge: () => "2026-11-15.000G40R40M30E209185GR38E1W" } });
+    await toChosen(s);
+    const n = s.progress.length;
+    await stopOf(s.flow.proceed("alice"));
+    assert.equal(s.progress.length, n);
+  });
+});
+
+describe("no reader, and two certificates that pass", () => {
+  test("no reader: its own stop, before any request", async () => {
+    const s = await setup();
+    (s.card as unknown as { opts: { noReader: boolean } }).opts.noReader = true;
+    const stop = await stopOf(s.flow.readCard());
+    assert.deepEqual(stop, { code: "card", card: "no_reader" });
+    assert.deepEqual(s.progress, ["component"], "the reader's component answered; nothing read");
+    assert.equal(s.backend.log.length, 0);
+  });
+
+  test("two certificates that both pass: ambiguous_certificate, nothing requested", async () => {
+    const w = await makeWorld();
+    const s = await setup({ world: w });
+    const other = await makeWorld();
+    (s.card as unknown as { opts: { certificates: Uint8Array[] } }).opts.certificates = [w.signingCert, other.signingCert];
+    // The second world has its own issuer keys; the flow trusts both here.
+    (s.flow as unknown as { deps: { issuers: unknown[] } }).deps.issuers = [...w.issuers, ...other.issuers];
+    const stop = await stopOf(s.flow.readCard());
+    assert.deepEqual(stop, { code: "certificate", problem: "ambiguous_certificate" });
+    assert.equal(s.backend.log.length, 0);
+  });
+});
+
+describe("account_cards in the answer to a submission", () => {
+  test("passed on to the screen", async () => {
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body: { seq: 9, record_hash: "c".repeat(64), kind: "first", account_cards: 3 } }) } });
+    await toChosen(s);
+    const done = await s.flow.proceed("alice");
+    assert.deepEqual([done.seq, done.accountCards, done.kind], [9, 3, "first"]);
+  });
+
+  // The record is in the roster already: an account_cards the device cannot read does not stop the card proof.
+  for (const bad of ["(none)", -1, 1.5, "1", null]) {
+    test(`not a count (${JSON.stringify(bad)}): done, the number not known`, async () => {
+      const body: Record<string, unknown> = { seq: 9, record_hash: "c".repeat(64), kind: "first" };
+      if (bad !== "(none)") body.account_cards = bad;
+      const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body }) } });
+      await toChosen(s);
+      const done = await s.flow.proceed("alice");
+      assert.deepEqual([done.seq, done.recordHash, done.kind, done.accountCards], [9, "c".repeat(64), "first", null]);
+      assert.equal(s.flow.phase, "done");
+    });
+  }
+
+  // seq, record_hash and kind stay strict.
+  for (const [label, body] of [
+    ["no seq", { record_hash: "c".repeat(64), kind: "first", account_cards: 1 }],
+    ["a record_hash not in hex", { seq: 9, record_hash: "C".repeat(64), kind: "first", account_cards: 1 }],
+    ["an unknown kind", { seq: 9, record_hash: "c".repeat(64), kind: "declare", account_cards: 1 }],
+  ] as const) {
+    test(`${label}: malformed_response`, async () => {
+      const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body }) } });
+      await toChosen(s);
+      assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "malformed_response", status: 201 });
+    });
+  }
+});
+
+// The first submission's answer was lost (here: a 500, after which, in this
+// story, the server had appended the record); the resubmission is answered
+// challenge_used. The card's state, asked again, says whether the record is
+// this card proof's.
+describe("a resubmission answered challenge_used (a fake server)", () => {
+  async function lost(o: { before?: Record<string, unknown>; choice?: Choice; first?: { status: number; body: unknown } }): Promise<Setup> {
+    let calls = 0;
+    const s = await setup({
+      echoPublicInputs: true,
+      backend: {
+        ...(o.before && { cardState: o.before }),
+        submit: () => (++calls === 1 ? (o.first ?? { status: 500, body: { error: "internal" } }) : { status: 400, body: { error: "challenge_used" } }),
+      },
+    });
+    await toChosen(s, o.choice);
+    return s;
+  }
+  const firstFails = async (s: Setup, account = "alice"): Promise<void> => {
+    assert.deepEqual(await stopOf(s.flow.proceed(account)), { code: "server", server: "internal", status: 500 });
+    assert.equal(s.flow.phase, "submit_failed");
+  };
+
+  test("a declaration: current is the account and last_card_proof is today: done, without seq and account_cards", async () => {
+    const s = await lost({});
+    await firstFails(s);
+    s.backend.opts.cardState = cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-16" });
+    const done = await s.flow.resubmit();
+    assert.deepEqual([done.seq, done.recordHash, done.accountCards, done.kind, done.username, done.date], [null, null, null, "first", "alice", "2026-11-16"]);
+    assert.equal(s.flow.phase, "done");
+    assert.equal(requestsOn(s, "/api/v1/card-state"), 2, "the card's state asked again");
+    assert.equal(requestsOn(s, "/api/v1/records"), 2);
+    assert.equal(s.card.signed.length, 2, "no new signature");
+  });
+
+  test("a withdrawal: current is null, last_declared is the account, last_card_proof is today: done", async () => {
+    const s = await lost({ before: cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04" }), choice: { action: "withdraw" } });
+    await firstFails(s);
+    s.backend.opts.cardState = cardState({ current: null, last_declared: "alice", last_card_proof: "2026-11-16" });
+    const done = await s.flow.resubmit();
+    assert.deepEqual([done.seq, done.accountCards, done.kind, done.username], [null, null, "withdraw", "alice"]);
+  });
+
+  const notFound: [string, Record<string, unknown>][] = [
+    ["nothing declared", cardState({})],
+    ["another account", cardState({ current: "bob", last_declared: "bob", last_card_proof: "2026-11-16" })],
+    ["the account, an earlier day", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-15" })],
+    ["withdrawn instead", cardState({ current: null, last_declared: "alice", last_card_proof: "2026-11-16" })],
+  ];
+  for (const [label, state] of notFound) {
+    test(`a declaration not in the card's state (${label}): the server's challenge_used stops the flow`, async () => {
+      const s = await lost({});
+      await firstFails(s);
+      s.backend.opts.cardState = state;
+      assert.deepEqual(await stopOf(s.flow.resubmit()), { code: "server", server: "challenge_used", status: 400 });
+      assert.notEqual(s.flow.stop, null);
+      const n = s.backend.log.length;
+      await new Promise((r) => setTimeout(r, 50));
+      assert.equal(s.backend.log.length, n, "nothing after the stop");
+    });
+  }
+
+  test("a withdrawal not in the card's state (still declared): challenge_used", async () => {
+    const s = await lost({ before: cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04" }), choice: { action: "withdraw" } });
+    await firstFails(s);
+    s.backend.opts.cardState = cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-16" });
+    assert.deepEqual(await stopOf(s.flow.resubmit()), { code: "server", server: "challenge_used", status: 400 });
+  });
+
+  test("the card's state cannot be read then: that reason, not that nothing was recorded", async () => {
+    const s = await lost({});
+    await firstFails(s);
+    s.backend.opts.cardState = { current: "Alice!" };
+    assert.deepEqual(await stopOf(s.flow.resubmit()), { code: "server", server: "malformed_response", status: 200 });
+  });
+
+  test("challenge_used on the first submission (not a resubmission): stops; the card's state is not asked again", async () => {
+    const s = await lost({ first: { status: 400, body: { error: "challenge_used" } } });
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "challenge_used", status: 400 });
+    assert.equal(requestsOn(s, "/api/v1/card-state"), 1);
   });
 });

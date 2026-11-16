@@ -7,7 +7,11 @@
 //     not have);
 //   - every line of the Markdown's screens (its code blocks) and every cell
 //     of its tables that the screen shows is made of JSON entries and
-//     nothing else (no sentence of the document missing).
+//     nothing else (no sentence of the document missing). Besides entries,
+//     a line may hold the values the screen shows as they are (an account,
+//     a date, the name on the card, a link, a platform's name and prefix
+//     from src/platforms.ts) and the marks the document draws buttons,
+//     list items and expandable questions with.
 //
 // And no file of the screen has a sentence of its own: no CJK character in
 // src/ui/ or in the HTML pages.
@@ -16,6 +20,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { PLATFORMS, SITE_DOMAIN } from "../src/platforms.ts";
 import { type Copy, fill } from "../src/ui/copy.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -26,9 +31,9 @@ const copy = JSON.parse(readFileSync(join(web, "..", "design", "copy", "card-pro
 /** The values the Markdown's examples use ("例子裡的 … 是會換掉的值"). */
 const EXAMPLES: Record<string, string> = {
   platform: "Threads",
-  account: "alice",
-  current: "bob",
-  last_declared: "bob",
+  account: "@alice",
+  current: "@bob",
+  last_declared: "@bob",
   name: "王小明",
   expiry_date: "2025-03-01",
   valid_from: "2026-12-01",
@@ -42,11 +47,28 @@ const EXAMPLES: Record<string, string> = {
   seq: "138",
   short_id: "7K2Q9F",
   request_id: "3f9c2a7e5b1d4c80",
+  step: "2",
+  steps: "6",
+  domain: SITE_DOMAIN,
 };
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {
   "stops.rejected": { code: "root" },
+  "done.switch": { account: "@carol.tw" },
+  "choose.switches_used_up": { switches_used: "2" },
 };
+/**
+ * Values the screen shows on their own, not in a sentence: the example
+ * account, date and name, the link of section 6, and each platform's name
+ * and prefix (src/platforms.ts).
+ */
+const VALUES = new Set([
+  EXAMPLES.account!,
+  EXAMPLES.today!,
+  EXAMPLES.name!,
+  `${SITE_DOMAIN}/threads/@alice`,
+  ...PLATFORMS.flatMap((p) => (p.open ? [p.name, p.prefix] : [p.name])),
+]);
 /** Entries that are not in card-proof.md on purpose. */
 const NOT_IN_MD = new Set(["not_in_card_proof_md.help_pending"]);
 
@@ -75,27 +97,34 @@ test("every entry of card-proof.json is in card-proof.md, word for word", () => 
   }
 });
 
-/** The text the screens show: the lines of the code blocks, and the table cells after the first column. */
+/** The columns of the Markdown's tables that hold what the screen writes; the others describe the case. */
+const SCREEN_COLUMNS = new Set(["畫面寫", "標題", "名冊會公開記下", "按鈕"]);
+
+/** The text the screens show: the lines of the code blocks, and the table cells of the screen's columns. */
 function screenText(): string[] {
   const lines: string[] = [];
   // The code blocks are found in the Markdown as written (mdText has no backticks, so no fences).
   const blocks = [...md.matchAll(/^```\n([\s\S]*?)^```$/gm)].map((m) => m[1]!.replace(/`/g, ""));
   assert.ok(blocks.length >= 10, `card-proof.md: ${blocks.length} screens found`);
   for (const b of blocks) lines.push(...b.split("\n"));
-  let inTable = false;
+  let columns: boolean[] | null = null;
+  let tables = 0;
   for (const line of mdText.split("\n")) {
     if (!line.startsWith("|")) {
-      inTable = false;
+      columns = null;
       continue;
     }
     const cells = line.split("|").slice(1, -1).map((c) => c.trim());
-    if (!inTable) {
-      inTable = true; // the header row
+    if (columns === null) {
+      columns = cells.map((h) => SCREEN_COLUMNS.has(h)); // the header row
+      assert.ok(columns.some(Boolean), `card-proof.md: a table with no column of the screen's text: ${line}`);
+      tables++;
       continue;
     }
     if (cells.every((c) => /^-+$/.test(c))) continue;
-    lines.push(...cells.slice(1));
+    lines.push(...cells.filter((_, i) => columns![i]));
   }
+  assert.ok(tables >= 4, `card-proof.md: ${tables} tables found`);
   return lines;
 }
 
@@ -106,12 +135,16 @@ test("every sentence of the screens in card-proof.md is in card-proof.json", () 
     .map(([key, text]) => example(key, text))
     .sort((a, b) => b.length - a.length);
   for (const line of screenText()) {
-    // The notes in parentheses the document writes for a missing button are not text of the screen.
-    let rest = line.replace(/（沒有按鈕）|（只有取消）/g, "");
+    // Notes of the document, not text of the screen: where the QR code goes, a cell that points at another table.
+    let rest = line.replace(/（QR code）|第 2 步那張表裡同一種情況的句子/g, "");
     for (const r of rendered) rest = rest.split(r).join(" ");
-    // What may remain: bullets, the input boxes, the buttons' brackets.
-    rest = rest.replace(/[·\s[\]]/g, "");
-    assert.equal(rest, "", `card-proof.md: "${line}" is not made of card-proof.json's entries (left: "${rest}")`);
+    // What may remain: bullets, the input boxes, the buttons' brackets, the arrows of
+    // buttons and questions, the circles of list items; and values shown as they are.
+    const left = rest
+      .replace(/[·[\]›▸○]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t !== "" && !VALUES.has(t));
+    assert.deepEqual(left, [], `card-proof.md: "${line}" is not made of card-proof.json's entries`);
   }
 });
 

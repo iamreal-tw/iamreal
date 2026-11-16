@@ -36,11 +36,11 @@ describe("GetUserCert", () => {
     assert.deepEqual(certificatesOfReply(JSON.stringify(reply)), [certA, certB]);
   });
 
-  test("no reader with a card, or no reader at all: no card", () => {
+  test("readers without a card: no card; no reader at all: no reader", () => {
     assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0, slots: [{ slotDescription: "r" }] }))), { code: "no_card", detail: "" });
-    assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0, slots: [] }))), { code: "no_card", detail: "" });
-    assert.equal(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76000006 }))).code, "no_card");
-    assert.equal(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76100003 }))).code, "no_card");
+    assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76000006 }))), { code: "no_card", detail: "76000006" });
+    assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0, slots: [] }))), { code: "no_reader", detail: "" });
+    assert.deepEqual(cardError(() => certificatesOfReply(JSON.stringify({ ret_code: 0x76100003 }))), { code: "no_reader", detail: "76100003" });
   });
 
   test("a card without certificates: none (the flow says it)", () => {

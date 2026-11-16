@@ -16,6 +16,8 @@ export interface FakeCardOptions {
   triesLeft?: number;
   /** Simulates an empty reader. */
   noCard?: boolean;
+  /** Simulates a computer with no reader. */
+  noReader?: boolean;
 }
 
 export class FakeCard implements Card {
@@ -29,7 +31,9 @@ export class FakeCard implements Card {
     this.tries = opts.triesLeft ?? 3;
   }
 
-  async readCertificates(): Promise<Uint8Array[]> {
+  async readCertificates(onConnected?: () => void): Promise<Uint8Array[]> {
+    onConnected?.();
+    if (this.opts.noReader) throw new CardError("no_reader");
     if (this.opts.noCard) throw new CardError("no_card");
     return this.opts.certificates.map((c) => c.slice());
   }

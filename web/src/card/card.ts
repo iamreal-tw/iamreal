@@ -4,6 +4,8 @@
 export type CardErrorCode =
   /** The component cannot be reached. */
   | "component_unreachable"
+  /** The component found no card reader. */
+  | "no_reader"
   /** No card in the reader. */
   | "no_card"
   /** The PIN was wrong. */
@@ -38,8 +40,12 @@ export interface CardSignature {
 }
 
 export interface Card {
-  /** The certificates on the card, DER. No PIN. */
-  readCertificates(): Promise<Uint8Array[]>;
+  /**
+   * The certificates on the card, DER. No PIN. `onConnected` is called once
+   * the card's reader answers (MOICA's component: its window is ready),
+   * before the certificates are read; for the screen's progress only.
+   */
+  readCertificates(onConnected?: () => void): Promise<Uint8Array[]>;
   /**
    * The card's signing key signs exactly 31 bytes. Needs the PIN; the
    * implementation passes it to the card and keeps no copy.
