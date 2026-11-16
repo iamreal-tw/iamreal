@@ -19,6 +19,9 @@ record is or how it is verified. It can change without invalidating records.
   application, the reverse proxy or the load balancer. A scoped ID next to an
   IP address would let the operator, or anyone who obtains the logs, look for
   the person behind a card.
+- A request body is at most 64 KB; a larger one is `400` `malformed`.
+- Besides the codes listed per endpoint: `404` `not_found`, `405`
+  `method_not_allowed`, `500` `internal`.
 - An error is a 4xx or 5xx status with `{"error":"CODE"}`. The device shows a
   message for the code. It does not report failures of its own (a card that
   cannot pass, a challenge it refused) to the server (ADR-0016).
@@ -57,7 +60,7 @@ The state of one card in one scope, as computed by the roster rules
   have none. A card with no valid record gets all three `null` and an empty
   `switch_dates`; this is not an error. `count` and `head` are the number of
   records and the head the answer was computed at.
-- Errors: `400` `malformed`.
+- Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 What the device does with it: shows it. The device computes what a
 declaration would be (`first`, `refresh`, `switch`, or blocked by
@@ -105,6 +108,14 @@ Submits one card proof.
 
   A submission that fails leaves the challenge usable, up to the 5
   submissions.
+
+  When several apply, the first in this order: `scope`, `malformed`,
+  `challenge_unknown`, `challenge_used`, `challenge_attempts`, `proof`,
+  `crl_stale`, `root`, then the roster rules in their own order. A submission
+  that is `scope` or `malformed` does not count towards the 5. "More than 3
+  days old" compares dates in Taiwan: the server's date is later than the CRL
+  date plus 3 days. The two newest CRLs are the two usable ones with the
+  highest `crl_number`.
 
 ## `GET /api/v1/config`
 

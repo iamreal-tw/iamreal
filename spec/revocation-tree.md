@@ -148,8 +148,9 @@ become, so that widening the rule from 3 days does not require updating
 installed apps.
 
 **The server**, when accepting a card proof, accepts only the roots of the
-two newest CRLs of that issuer in the mirror, and none if the newest is more
-than 3 days old. This keeps normal operation on fresh CRLs. Nobody else can
+two newest CRLs of that issuer in the mirror (the usable ones with the
+highest `cRLNumber`), and none if today in Taiwan is later than the newest
+one's CRL date plus 3 days. This keeps normal operation on fresh CRLs. Nobody else can
 check it, since it depends on what the mirror had at that moment.
 
 **Anyone re-verifying** checks the rule of the previous section against the
