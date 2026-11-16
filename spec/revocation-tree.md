@@ -25,8 +25,12 @@ A CRL is usable if:
 
 - it is a `CertificateList` (RFC 5280 section 5) signed with
   sha256WithRSAEncryption, and the signature verifies under the issuer key;
-- it is a complete CRL, not a delta CRL: it has no `deltaCRLIndicator`
-  extension;
+- it is a complete CRL for everything the key issued: it has neither a
+  `deltaCRLIndicator` nor an `issuingDistributionPoint` extension, and no
+  critical extension other than these rules know. MOICA's CRLs, as checked on
+  2026-11-16, carry only `authorityKeyIdentifier` and `cRLNumber`. If MOICA
+  starts partitioning its CRLs, devices stop rather than build an incomplete
+  tree, and this document changes;
 - every serial number in `revokedCertificates` gives a key (below), and no
   two keys share their lowest 127 bits.
 
@@ -126,10 +130,6 @@ archived CRLs.
 
 ## Open items
 
-- Whether MOICA's CRLs carry an `issuingDistributionPoint` extension, and
-  whether that makes a CRL partial. A partial CRL would let a revoked card
-  pass, so the rules above must say which values are accepted. To be checked
-  against the real files.
 - Where the archive is published and in what format.
 - The issuer keys themselves (with [`record.md`](record.md)'s open item).
 
