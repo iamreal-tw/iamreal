@@ -105,10 +105,20 @@ the empty roster is 64 zeros.
 What the chain does: once someone has kept a head, the operator cannot drop
 or reorder an earlier record, or show a different history to someone else,
 without the kept head failing to match. What it does not do: if nobody kept
-an old head, the operator can recompute the whole chain. The head therefore
-has to be published regularly somewhere outside the operator's control (open
-item). Forging or altering an event is already prevented by the proof; the
-chain is about omission, order and equivocation.
+an old head, the operator can recompute the whole chain. Forging or altering
+an event is already prevented by the proof; the chain is about omission,
+order and equivocation.
+
+**Where heads are published.** Every daily snapshot, with its head, is
+committed to a public git repository. Anyone can clone it and keep the heads
+they have seen. API responses and the re-verifying command also show the
+current head and the number of records. This relies on people keeping copies:
+the operator can still rewrite its own git history or show different
+snapshots to different people, and only someone holding an older copy would
+notice. Publishing heads with a third party (for example, a transaction on a
+public blockchain) adds a timestamp and a single public sequence that the
+operator cannot rewrite; it is not done at launch, and adding it later does
+not change the record format.
 
 ## Verifying a record
 
@@ -159,7 +169,8 @@ records keep verifying.
   proof), how the roster rules still count switches for that scoped ID, and
   where the public notice of each hiding is kept. This changes the line
   format, so it is a new version of this document.
-- **Where and how often the head is published.**
+- **The git repository of snapshots**: its name, layout, and how a
+  re-verifier compares a roster file with it.
 
 ## Test vectors
 
