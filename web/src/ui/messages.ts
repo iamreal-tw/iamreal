@@ -49,6 +49,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
         case "card_locked":
           return say(s.card_locked);
         case "card_error":
+          // A PIN the bridge does not send (hipki.ts) has a sentence of its own.
+          if (stop.detail === "pin_characters") return say(COPY.confirm_card.pin_characters);
           return say(s.card_error, { code: stop.detail || "card_error" });
       }
       break;
@@ -102,14 +104,18 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
+      // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
+      if (stop.server === "crl_stale") return { ...say(s.server_crl_stale), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
     // The screen does not offer a choice that is not possible; the engine refuses it too. No sentence.
     case "blocked":
       return { code: stop.reason };
-    // No sentence in the copy: the wait for the second signature ran out; a step called out of order.
+    // The wait for the second signature ran out: the screen is back at the beginning.
     case "idle":
+      return say(COPY.before_pin.idle);
+    // No sentence in the copy: a step called out of order.
     case "state":
       break;
   }
@@ -147,7 +153,11 @@ export function statusView(st: CardStatus, platform: PlatformKey): StatusView {
       state: "declared",
       first: say(c.current, { account: st.current }),
       facts: [
-        st.lastCardProof !== null ? say(c.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) }) : { code: "no_last_card_proof" },
+        st.lastCardProof === null
+          ? { code: "no_last_card_proof" }
+          : st.lastCardProof === st.today
+            ? say(c.last_card_proof_today)
+            : say(c.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) }),
         say(c.switches, { switches_used: st.switchesUsed, switches_left: st.switchesLeft }),
       ],
       canSwitch,
@@ -196,8 +206,14 @@ export function consequenceView(cq: Consequence, current: string | null, platfor
   };
 }
 
-/** The first line of section 6 (done), by the kind of the record. */
-export function doneTitle(kind: "first" | "refresh" | "switch" | "withdraw", account: string): Sentence {
+/**
+ * The first line of section 6 (done), by the kind of the record. `current`:
+ * the account the card declared before this card proof (CardStatus.current).
+ * Declaring again the account withdrawn before is a `refresh` by the roster
+ * rules, but to the cardholder a new declaration: done.first.
+ */
+export function doneTitle(kind: "first" | "refresh" | "switch" | "withdraw", account: string, current: string | null): Sentence {
+  if (kind === "refresh" && current !== account) return say(COPY.done.first, { account });
   return say(COPY.done[kind], { account });
 }
 

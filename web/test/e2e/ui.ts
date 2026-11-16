@@ -17,9 +17,11 @@
 //    switch); withdraw; declare another (a switch); switches used up (the
 //    button cannot be pressed, and the engine refuses it too); a submission
 //    that did not get through, one the server refused (with its request ID
-//    on the screen); the PIN's wait running out; a window the browser
-//    blocked on each of the three clicks, then the same click again; every
-//    case that stops before the PIN is asked; a wrong PIN, a locked card.
+//    on the screen); 回到開頭 on section 6 and 取消 on sections 3 and 4, then
+//    card proofs again on the same page with the same proof engine; the
+//    PIN's wait running out; a window the browser blocked on each of the
+//    three clicks, then the same click again; every case that stops before
+//    the PIN is asked; a wrong PIN, a locked card, a PIN that is not sent.
 // 5. Publishes the daily snapshot and re-verifies it with iamreal-verify:
 //    the state is the one the screens showed.
 // 6. Checks the response headers, that the page is cross-origin isolated,
@@ -27,7 +29,8 @@
 //    workers connected to nothing but their own origin (the component's
 //    window aside), and that the browser's storage holds the CRL numbers
 //    and nothing else; that the PIN is in no field, attribute, storage or
-//    global after it was used.
+//    global after it was used, and neither are the name, the certificates
+//    and the card's signatures once a card proof was left.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -270,18 +273,53 @@ async function confirmPin(pin: string): Promise<void> {
   await page.clickButton(C.confirm_card.confirm_card);
 }
 
-/** Nothing of the PIN anywhere the page keeps things. */
-async function pinGone(): Promise<boolean> {
-  return page.eval<boolean>(`(() => {
-    const pin = ${JSON.stringify(PIN)};
-    const f = document.querySelector('#pin');
-    if (f && f.value !== "") return false;
-    if (document.documentElement.outerHTML.includes(pin) || location.href.includes(pin)) return false;
-    for (const s of [localStorage, sessionStorage]) for (let i = 0; i < s.length; i++) if ((s.key(i) + s.getItem(s.key(i))).includes(pin)) return false;
-    for (const k of Object.keys(window)) { try { if (String(window[k]).includes(pin)) return false; } catch {} }
-    return true;
+/** Which of `values` the page keeps anywhere: a field, the HTML, the URL, storage, a global. */
+async function foundOnPage(values: string[]): Promise<string[]> {
+  return page.eval<string[]>(`(() => {
+    const values = ${JSON.stringify(values)};
+    const fields = [...document.querySelectorAll('input')].map((f) => f.value).join("\\n");
+    let kept = [document.documentElement.outerHTML, document.body.innerText, location.href, fields];
+    for (const s of [localStorage, sessionStorage]) for (let i = 0; i < s.length; i++) kept.push(s.key(i) + s.getItem(s.key(i)));
+    for (const k of Object.keys(window)) { try { kept.push(String(window[k])); } catch {} }
+    return values.filter((v) => kept.some((t) => t.includes(v)));
   })()`);
 }
+
+/** Nothing of the PIN anywhere the page keeps things. */
+async function pinGone(): Promise<boolean> {
+  return (await page.eval<boolean>(`(() => { const f = document.querySelector('#pin'); return !f || f.value === ""; })()`)) && (await foundOnPage([PIN])).length === 0;
+}
+
+const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
+
+/**
+ * After a card proof was left (cancel, the wait ran out, back to the
+ * beginning): its PIN, the name, the certificates and the card's signatures
+ * are nowhere on the page.
+ */
+async function lastCardProofGone(label: string, card: TestCard): Promise<void> {
+  const spec = card.spec();
+  const values: Record<string, string> = { PIN: PIN, name: "測試用戶" };
+  for (const [i, c] of spec.certificates.entries()) values[`certificate ${i}`] = b64(c);
+  for (const [i, s] of component.signatures.slice(-2).entries()) values[`signature ${i}`] = s;
+  const found = await foundOnPage(Object.values(values));
+  const names = Object.entries(values).filter(([, v]) => found.includes(v)).map(([k]) => k);
+  check(names.length === 0 && (await pinGone()), `${label}: the PIN, the name, the certificates and the signatures are nowhere on the page${names.length ? ` (found: ${names.join(", ")})` : ""}`);
+}
+
+/** The status lines of sections 1 and 2 ([data-working]) as they appear, recorded in the page. */
+async function watchWorking(): Promise<void> {
+  await page.eval(`(() => {
+    if (!window.__working) {
+      new MutationObserver(() => {
+        const t = document.querySelector('[data-working]')?.textContent;
+        if (t && window.__working.at(-1) !== t) window.__working.push(t);
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    }
+    window.__working = [];
+  })()`);
+}
+const workingSeen = () => page.eval<string[]>(`window.__working ?? []`);
 
 interface StatusSeen {
   state: string;
@@ -350,8 +388,11 @@ interface Shown {
 const shown: Shown[] = [];
 
 /** Section 1, and reading the card up to section 3. */
-async function toStatus(o: { wrongPinFirst?: boolean; blockClicks?: boolean; screenshots?: string } = {}): Promise<StatusSeen> {
-  await open();
+async function toStatus(o: { wrongPinFirst?: boolean; blockClicks?: boolean; screenshots?: string; samePage?: boolean } = {}): Promise<StatusSeen> {
+  // samePage: section 1 is on the screen already (after cancel, or back to the beginning); no new page load.
+  if (o.samePage) await waitStep("before_pin", "section 1, same page");
+  else await open();
+  await watchWorking();
   const s1 = await page.text();
   for (const s of [
     fill(C.before_pin.title, { platform: PLATFORM }),
@@ -401,6 +442,11 @@ async function toStatus(o: { wrongPinFirst?: boolean; blockClicks?: boolean; scr
   check(componentCount("MakeSignature") === signs + 1, "the first signature");
   const lastSign = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(lastSign.tbs === "iamreal-test:threads:0_________" && lastSign.pin === PIN, "the first signature: the test scope string, with the PIN");
+  // What the page said while it read the card, checked it, and had it sign.
+  const working = await workingSeen();
+  const order = [C.before_pin.reading, C.confirm_card.checking, C.confirm_card.signing].map((t) => working.indexOf(t));
+  check(order.every((i, k) => i >= 0 && (k === 0 || i > order[k - 1]!)), `sections 1 and 2 said, in order, ${JSON.stringify(working)}`);
+  check(await page.eval<boolean>(`!document.querySelector('[data-working]')`), "the status line is gone on section 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-status`);
   return st;
 }
@@ -464,6 +510,7 @@ function finishDone(o: { title: string; recordAccount: string; withdraw?: boolea
   const sid = /編號開頭是 ([0-9A-Z]{6})。/.exec(d.main)?.[1] ?? "";
   check(d.main.includes(fill(C.done.short_id, { platform: PLATFORM, short_id: sid })) && d.main.includes(C.done.unplug), "section 6: the short ID and the rest");
   check(d.main.includes(C.done.advice) === !o.withdraw, `section 6: the advice to come back ${o.withdraw ? "is not there (withdrawn)" : "is there"}`);
+  check(lines.at(-1) === C.done.restart, `section 6 ends with the button "${lines.at(-1)}"`);
   shown.push({ kind: o.title, seq: Number(m?.[1]), shortId: sid });
 }
 
@@ -474,7 +521,7 @@ function checkConsequence(label: string, c: ConsequenceSeen, o: { account: strin
   const switchLine = o.switchesLeft === undefined ? "" : fill(C.consequence.uses_switch, { switches_left: o.switchesLeft });
   check(c.switchLine === switchLine, `${label}: section 4, the switch line "${c.switchLine}"`);
   check(c.main.includes(o.withdraw ? C.consequence.later_withdraw : C.consequence.later), `${label}: section 4, what can be done later`);
-  check(JSON.stringify(c.buttons) === JSON.stringify([C.consequence.back, o.button]), `${label}: section 4 buttons ${JSON.stringify(c.buttons)}`);
+  check(JSON.stringify(c.buttons) === JSON.stringify([C.consequence.back, C.consequence.cancel, o.button]), `${label}: section 4 buttons ${JSON.stringify(c.buttons)}`);
 }
 
 const tryStep = async (label: string, f: () => Promise<void>) => {
@@ -486,7 +533,8 @@ const tryStep = async (label: string, f: () => Promise<void>) => {
   }
 };
 
-const declaredFacts = (switchesUsed: number) => [fill(C.status.last_card_proof, { days_ago: 0 }), fill(C.status.switches, { switches_used: switchesUsed, switches_left: 2 - switchesUsed })];
+// Every card proof here is today: 上次過卡是今天 (not 0 天前).
+const declaredFacts = (switchesUsed: number) => [C.status.last_card_proof_today, fill(C.status.switches, { switches_used: switchesUsed, switches_left: 2 - switchesUsed })];
 const choiceButtons = (st: StatusSeen) => JSON.stringify(st.buttons);
 
 component.card = main.spec();
@@ -518,7 +566,7 @@ await tryStep("card proof again, no account typed (the first submission dropped)
   const st = await toStatus();
   check(st.state === "declared" && st.first === fill(C.status.current, { account: "alice" }), `section 3: "${st.first}"`);
   check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(0)), `section 3 facts ${JSON.stringify(st.facts)}`);
-  check(choiceButtons(st) === JSON.stringify([C.status.refresh, C.status.switch, C.status.withdraw].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
+  check(choiceButtons(st) === JSON.stringify([C.status.refresh, C.status.switch, C.status.withdraw, C.status.cancel].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
   check(st.main.includes(C.status.refresh_note) && st.main.includes(C.status.uses_switch), "section 3: what each choice does");
   check(!(await page.eval<boolean>(`!!document.querySelector('#account')`)), "no account field");
   await screenshot("refresh-3-status");
@@ -569,12 +617,13 @@ await tryStep("withdrawn: declare @bob again (not a switch)", async () => {
   const st = await toStatus();
   check(st.state === "withdrawn" && st.first === fill(C.status.withdrawn, { last_declared: "bob" }), `section 3: "${st.first}"`);
   const back = fill(C.status.declare_back, { last_declared: "bob" });
-  check(choiceButtons(st) === JSON.stringify([back, C.status.declare_other].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
+  check(choiceButtons(st) === JSON.stringify([back, C.status.declare_other, C.status.cancel].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
   check(st.main.includes(C.status.not_a_switch) && st.main.includes(C.status.uses_switch), "section 3: which one is a switch");
   await screenshot("withdrawn-3-status");
   await page.clickButton(back);
   checkConsequence("declare again", await waitConsequence(), { account: "bob", button: fill(C.consequence.button_first, { account: "bob" }) });
-  await finish({ label: "declare @bob again", button: fill(C.consequence.button_first, { account: "bob" }), title: C.done.refresh, recordAccount: "bob" });
+  // A refresh by the roster rules; to the cardholder, 已宣告.
+  await finish({ label: "declare @bob again", button: fill(C.consequence.button_first, { account: "bob" }), title: C.done.first, recordAccount: "bob" });
 });
 
 await tryStep("withdraw @bob again", async () => {
@@ -636,26 +685,70 @@ await tryStep("switches used up; then a submission the server refuses", async ()
   check(!d.done && d.message.startsWith(expected), `refused: "${d.message}"`);
   const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 400).at(-1);
   check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id, `the request ID on the screen (${id}) is the response's (${res?.headers["x-request-id"]})`);
+  check(d.message === `${expected}\n${fill(C.stops.request_id, { request_id: id })}`, `the request ID follows its label, on the next line: ${JSON.stringify(d.message)}`);
   check(serverLog.includes(`"id":"${id}"`) && serverLog.includes(`"error":"proof"`), "the server's log line has the same ID");
 });
 
-await tryStep("withdraw @carol", async () => {
+// From here to the PIN's wait running out, one page load: 回到開頭 and 取消 start the
+// next card proof on the same page, with the same proof engine (ADR-0013).
+const crsG1 = "/crs/bn254_g1_compressed_2p18.dat";
+let samePage: { timeOrigin: number; crsFetches: number } | null = null;
+const crsFetchCount = () => browser.requests.filter((r) => r.url.endsWith(crsG1)).length;
+
+/** Section 1 again, on the same page, with no sentence; nothing of the last card proof on the page. */
+async function backAtTheBeginning(label: string): Promise<void> {
+  await waitStep("before_pin", `${label}: section 1`);
+  check((await messageText()) === "", `${label}: section 1, with no message`);
+  check((await buttons()).some((b) => b.text === C.before_pin.read_card && !b.disabled), `${label}: the read button is there`);
+  await lastCardProofGone(label, main);
+}
+
+await tryStep("withdraw @carol; then 回到開頭", async () => {
   await toStatus();
+  samePage = { timeOrigin: await page.eval<number>("performance.timeOrigin"), crsFetches: crsFetchCount() };
   await page.clickButton(C.status.withdraw);
   await waitConsequence();
   await finish({ label: "withdraw @carol", button: fill(C.consequence.button_withdraw, { account: "carol" }), title: C.done.withdraw, recordAccount: "carol", withdraw: true });
+  await page.clickButton(C.done.restart);
+  await backAtTheBeginning("回到開頭");
 });
 
-await tryStep("withdrawn, switches used up: 宣告別的帳號 cannot be pressed", async () => {
-  const st = await toStatus();
+await tryStep("withdrawn, switches used up: 宣告別的帳號 cannot be pressed; then 取消 on section 3", async () => {
+  const st = await toStatus({ samePage: true });
   check(st.first === fill(C.status.withdrawn, { last_declared: "carol" }), `section 3: "${st.first}"`);
   check(st.buttons.find((b) => b.text === C.status.declare_other)?.disabled === true, "宣告別的帳號 cannot be pressed");
   check(st.buttons.find((b) => b.text === fill(C.status.declare_back, { last_declared: "carol" }))?.disabled === false, "宣告回 @carol can");
   check(/一年最多更換兩次，下一次可以更換是 \d{4}-\d{2}-\d{2}。/.test(st.main), "the sentence next to it");
+  const signs = componentCount("MakeSignature");
+  const challenges = challengeCount();
+  await page.clickButton(C.status.cancel);
+  await backAtTheBeginning("取消 on section 3");
+  await sleep(500);
+  check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on section 3: no second signature, no challenge");
+});
+
+await tryStep("取消 on section 4, and on the account screen", async () => {
+  // Section 4.
+  await toStatus({ samePage: true });
+  const signs = componentCount("MakeSignature");
+  const challenges = challengeCount();
+  await page.clickButton(fill(C.status.declare_back, { last_declared: "carol" }));
+  await waitConsequence();
+  await page.clickButton(C.consequence.cancel);
+  await backAtTheBeginning("取消 on section 4");
+  // The account screen (also section 3). Switches are used up here, so the button is opened by a script.
+  await toStatus({ samePage: true });
+  await page.eval(`[...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.status.declare_other)}).disabled = false`);
+  await page.clickButton(C.status.declare_other);
+  await waitStep("account", "the account screen");
+  await page.clickButton(C.status.cancel);
+  await backAtTheBeginning("取消 on the account screen");
+  await sleep(500);
+  check(componentCount("MakeSignature") === signs + 1 && challengeCount() === challenges, "取消: the first signature of each card proof only, no challenge");
 });
 
 await tryStep("the PIN's wait runs out: back to the beginning", async () => {
-  const st = await toStatus();
+  const st = await toStatus({ samePage: true });
   const signs = componentCount("MakeSignature");
   await page.clickButton(fill(C.status.declare_back, { last_declared: "carol" }));
   await waitConsequence();
@@ -663,10 +756,31 @@ await tryStep("the PIN's wait runs out: back to the beginning", async () => {
   await waitStep("before_pin", "the beginning, after the wait", IDLE_MS + 15_000);
   const waited = Date.now() - t0;
   const m = await messageText();
-  check(m === "idle" && st.state === "withdrawn", `back to the beginning after ${Math.round(waited / 1000)} s, with the code: "${m}"`);
+  check(m === C.before_pin.idle && st.state === "withdrawn", `back to the beginning after ${Math.round(waited / 1000)} s: "${m}"`);
   check(await pinGone(), "the wait ran out: the PIN is nowhere on the page");
+  await lastCardProofGone("the wait ran out", main);
   check(componentCount("MakeSignature") === signs, "no second signature");
   check((await buttons()).some((b) => b.text === C.before_pin.read_card && !b.disabled), "the read button is there");
+});
+
+await tryStep("the same page after 回到開頭, 取消 and the wait: declare @carol again, withdraw again", async () => {
+  await toStatus({ samePage: true });
+  await page.clickButton(fill(C.status.declare_back, { last_declared: "carol" }));
+  await waitConsequence();
+  await finish({ label: "declare @carol again, same page", button: fill(C.consequence.button_first, { account: "carol" }), title: C.done.first, recordAccount: "carol" });
+  await page.clickButton(C.done.restart);
+  await backAtTheBeginning("回到開頭 after a declaration");
+  const st = await toStatus({ samePage: true });
+  check(st.first === fill(C.status.current, { account: "carol" }) && JSON.stringify(st.facts) === JSON.stringify(declaredFacts(2)), `section 3: "${st.first}" ${JSON.stringify(st.facts)}`);
+  await page.clickButton(C.status.withdraw);
+  await waitConsequence();
+  await finish({ label: "withdraw @carol again, same page", button: fill(C.consequence.button_withdraw, { account: "carol" }), title: C.done.withdraw, recordAccount: "carol", withdraw: true });
+  // One page load, one proof engine: the CRS was fetched once, the engine started once.
+  const engineStarts = await page.eval<number>(`performance.getEntriesByName("iamreal:engine_engine_total").length`);
+  check(
+    samePage !== null && (await page.eval<number>("performance.timeOrigin")) === samePage.timeOrigin && crsFetchCount() === samePage.crsFetches && engineStarts === 1,
+    `seven card proofs on one page load (three done), one proof engine: CRS fetched ${crsFetchCount() - (samePage?.crsFetches ?? 0)} more times, engine started ${engineStarts} time(s)`,
+  );
 });
 
 // After the PIN: a locked card, a challenge dated another day.
@@ -679,6 +793,27 @@ await tryStep("a wrong PIN that locks the card", async () => {
   check(m === C.stops.card_locked, `locked: "${m}"`);
   check(await pinGone(), "locked: the PIN is nowhere");
 });
+/** Component windows opened for a request that was never sent (a PIN the bridge does not send). */
+let unusedWindows = 0;
+await tryStep("a PIN with +, % or a character that is not ASCII: not sent", async () => {
+  component.card = main.spec();
+  for (const bad of ["12+456", "12%456", "１２３４５６"]) {
+    await open();
+    check((await readCard()).pin, "read");
+    const signs = componentCount("MakeSignature");
+    const states = cardStateCount();
+    const popups = popupCount();
+    await confirmPin(bad);
+    const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText`, "the message");
+    check(m === C.confirm_card.pin_characters, `PIN ${JSON.stringify(bad)}: "${m}"`);
+    await sleep(500);
+    unusedWindows += popupCount() - popups;
+    check(componentCount("MakeSignature") === signs && cardStateCount() === states, `PIN ${JSON.stringify(bad)}: nothing sent to the card, no card-state`);
+    check((await foundOnPage([bad])).length === 0, `PIN ${JSON.stringify(bad)}: nowhere on the page`);
+    check((await buttons()).some((b) => b.text === C.before_pin.read_card && !b.disabled), `PIN ${JSON.stringify(bad)}: the read button is there again`);
+  }
+});
+
 await tryStep("a challenge dated another day", async () => {
   component.card = fresh.spec();
   await open();
@@ -780,7 +915,7 @@ for (const [label, card, expected, o] of tests) await tryStep(`before the PIN: $
 
 // 5. Snapshot and re-verification -----------------------------------------------
 
-const KINDS = ["first", "refresh", "switch", "withdraw", "refresh", "withdraw", "switch", "withdraw"];
+const KINDS = ["first", "refresh", "switch", "withdraw", "refresh", "withdraw", "switch", "withdraw", "refresh", "withdraw"];
 await tryStep("snapshot and iamreal-verify", async () => {
   execFileSync(serverBin, ["snapshot", "-data", data, "-bb", BB, "-crs", crsDir, "-roster", "test", "-test-issuers", issuersDir], { stdio: "pipe" });
   const v = JSON.parse(
@@ -839,8 +974,12 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
   // Two windows had no request: the silent component's, and the one opened for the second
   // signature that the challenge of another day stopped (the window is closed unused).
-  // The blocked clicks opened none.
-  check(popups.size === component.requests.length + 2, `one component window per request (${popups.size} windows, ${component.requests.length} requests)`);
+  // The blocked clicks opened none. A PIN the bridge does not send: its window is closed unused
+  // (and may not have loaded).
+  check(
+    popups.size === component.requests.length + 2 + unusedWindows && unusedWindows <= 3,
+    `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
+  );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
   check(component.requests.every((r) => ["GetUserCert", "MakeSignature"].includes(r.func)), "only GetUserCert and MakeSignature were asked of the component");
 }

@@ -40,12 +40,14 @@ describe("stops", () => {
     [{ code: "proof_check" }, COPY.stops.proof_check],
     [{ code: "server", server: "challenge_unknown", status: 400 }, COPY.stops.challenge_expired],
     [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），名冊沒有變動。"],
-    [{ code: "server", server: "crl_stale", status: 503 }, "這次過卡沒有被接受（代碼 crl_stale），名冊沒有變動。"],
+    [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。"],
+    [{ code: "card", card: "card_error", detail: "pin_characters" }, "這一頁不支援含有 +、% 或非英數符號的 PIN。請先到內政部憑證管理中心的網站變更 PIN。"],
+    [{ code: "card", card: "card_error", detail: "no_pin" }, "讀卡時發生錯誤（代碼 no_pin）。請重新插卡再試一次。"],
     [{ code: "server", server: "malformed_response", status: 200 }, "伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 malformed_response）"],
     [{ code: "server", server: "network", status: 0 }, "伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 network）"],
     [{ code: "username" }, COPY.status.bad_username],
     [{ code: "state" }, "[state]"],
-    [{ code: "idle" }, "[idle]"],
+    [{ code: "idle" }, "超過 5 分鐘沒有完成，為了不讓 PIN 留在這一頁太久，已經回到開頭。請再讀一次卡片。"],
     [{ code: "blocked", reason: "switch_limit" }, "[switch_limit]"],
   ];
   for (const [stop, want] of cases) {
@@ -65,7 +67,7 @@ describe("stops", () => {
   });
 
   test("every server error carries its request ID", () => {
-    for (const server of ["root", "challenge_unknown", "malformed_response", "not_found"]) {
+    for (const server of ["root", "challenge_unknown", "crl_stale", "malformed_response", "not_found"]) {
       assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }).requestId, "ab", server);
     }
   });
@@ -108,6 +110,12 @@ describe("the card's state (section 3)", () => {
     assert.equal(used.canSwitch, false);
     assert.equal(used.switchLimit, "一年最多更換兩次，下一次可以更換是 2027-03-02。");
     assert.deepEqual(used.facts, ["上次過卡是 12 天前。", "過去一年更換過 2 次，還可以更換 0 次。"]);
+  });
+
+  test("declared, the last card proof today: 今天, not 0 天前", () => {
+    const d = { current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-16", options: { refresh: { kind: "refresh" as const }, declareBack: null, other: { kind: "switch" as const }, withdraw: { kind: "withdraw" as const } } };
+    assert.deepEqual(view(d).facts, ["上次過卡是今天。", "過去一年更換過 0 次，還可以更換 2 次。"]);
+    assert.deepEqual(view({ ...d, lastCardProof: "2026-11-15" }).facts[0], "上次過卡是 1 天前。");
   });
 
   test("withdrawn", () => {
@@ -164,10 +172,12 @@ describe("the consequence (section 4)", () => {
 describe("done (section 6)", () => {
   test("the first line and the record line", () => {
     const t = (s: { template: string; values: Record<string, string | number> }) => fill(s.template, s.values);
-    assert.equal(t(doneTitle("first", "alice")), "已宣告。");
-    assert.equal(t(doneTitle("refresh", "alice")), "已再次過卡。");
-    assert.equal(t(doneTitle("switch", "alice")), "已改成 @alice。");
-    assert.equal(t(doneTitle("withdraw", "alice")), "已收回。");
+    assert.equal(t(doneTitle("first", "alice", null)), "已宣告。");
+    assert.equal(t(doneTitle("refresh", "alice", "alice")), "已再次過卡。");
+    assert.equal(t(doneTitle("switch", "alice", "bob")), "已改成 @alice。");
+    assert.equal(t(doneTitle("withdraw", "alice", "alice")), "已收回。");
+    // Declaring again the account withdrawn before: a refresh by the roster rules, 已宣告 on the screen.
+    assert.equal(t(doneTitle("refresh", "alice", null)), "已宣告。");
     assert.equal(t(doneRecord("first", "2026-11-16", "alice", "threads")), "2026-11-16，有一張有效的自然人憑證宣告了 Threads 的 @alice。");
     assert.equal(t(doneRecord("withdraw", "2026-11-16", "alice", "threads")), "2026-11-16，有一張有效的自然人憑證收回了對 Threads 的 @alice 的宣告。");
   });

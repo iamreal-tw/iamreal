@@ -10,8 +10,8 @@
 //     storage, URL, log, global or DOM attribute). The field is not in a form
 //     and has no name, so the browser has nothing to remember it by. The
 //     engine holds it until the second signature, and drops it if that is
-//     not made within 5 minutes of the first (the screen goes back to the
-//     beginning).
+//     not made within 5 minutes of the first, or when cancel is pressed on
+//     sections 3 and 4 (either way the screen goes back to the beginning).
 //   - The name on the certificate is shown in section 2 only; that screen is
 //     taken down when the card's state is known.
 //   - A typed account is kept in this module's memory while its screens are
@@ -37,7 +37,7 @@ import {
   normalizeUsername,
 } from "../index.ts";
 import { scopeFor } from "../spec/scope.ts";
-import { COPY, fill } from "./copy.ts";
+import { COPY, fill, parts } from "./copy.ts";
 import { append, button, el, replace, sentence } from "./dom.ts";
 import { type Message, PLATFORM_NAMES, type Sentence, consequenceView, doneRecord, doneTitle, statusView, stopMessage } from "./messages.ts";
 
@@ -70,14 +70,26 @@ function say(s: Sentence): DocumentFragment {
   return sentence(s.template, s.values);
 }
 
-/** A message element: the sentence (or the code alone), the request ID, the help link. */
+/** A message element: the sentence (or the code alone), the help link, the request ID after stops.request_id. */
 function messageNodes(m: Message): Node[] {
   const out: Node[] = [];
   if ("code" in m) out.push(el("code", { attrs: { "data-code": "" } }, m.code));
   else out.push(say(m));
   if ("link" in m && m.link) out.push(document.createTextNode(" "), helpLink(m.link));
-  if (m.requestId) out.push(document.createTextNode(" "), el("code", { class: "request-id", attrs: { "data-request-id": "" } }, m.requestId));
+  if (m.requestId) {
+    const line = parts(COPY.stops.request_id, { request_id: m.requestId }).map((p) =>
+      p.placeholder === null ? p.text : el("code", { class: "request-id", attrs: { "data-request-id": "" } }, p.text),
+    );
+    // On a line of its own, as card-proof.md writes it.
+    out.push(el("br"), el("span", { attrs: { "data-request-line": "" } }, ...line));
+  }
   return out;
+}
+
+/** A line saying what the page is doing (reading the card, checking it, the first signature); not an alert. */
+function workingLine(): { node: HTMLElement; show: (text: string | null) => void } {
+  const node = el("p", { class: "working", attrs: { role: "status", "data-working": "" } });
+  return { node, show: (text) => (text === null ? replace(node) : replace(node, text)) };
 }
 
 function stopOf(e: unknown): Stop {
@@ -135,16 +147,24 @@ export function startApp(o: AppOptions): void {
 
   // Sections 1 and 2: before the PIN; reading the card; the PIN ----------------------
 
-  /** The beginning. `why`: the reason the screen came back here (the wait for the second signature ran out). */
+  /**
+   * The beginning. Everything the last card proof held is dropped first
+   * (CardProofFlow.cancel): after the wait for the second signature ran out,
+   * after cancel on sections 3 and 4, after done.restart on section 6. The next
+   * card proof uses the same proof engine (ADR-0013). `why`: the reason the
+   * screen came back here (the wait ran out).
+   */
   function start(why: Message | null = null): void {
     drop();
     const c = COPY.before_pin;
     const cc = COPY.confirm_card;
     const step = el("div", { class: "card-step", attrs: { "data-card-step": "" } });
+    const working = workingLine();
     const message = messageArea();
 
     const stopped = (e: unknown): void => {
       card.release();
+      working.show(null);
       message.show(stopMessage(stopOf(e)));
       readButton(); // another try starts a new card proof (reading needs no PIN)
     };
@@ -160,6 +180,7 @@ export function startApp(o: AppOptions): void {
       }
       (ev.currentTarget as HTMLButtonElement).disabled = true;
       message.show(null);
+      working.show(c.reading);
       flow?.cancel();
       const f = createCardProof({
         platform: PLATFORM,
@@ -174,6 +195,7 @@ export function startApp(o: AppOptions): void {
           if (flow !== f) return;
           const name = el("div", { attrs: { "data-card-read": "" } }, el("p", {}, sentence(cc.card_read, { name: read.name })), el("p", {}, cc.name_note));
           replace(step, name);
+          working.show(cc.checking);
           // The PIN field appears only when every check that needs no signature passed.
           f.checksDone().then(
             () => flow === f && pinField(f, name),
@@ -194,6 +216,7 @@ export function startApp(o: AppOptions): void {
       const confirm = button(cc.confirm_card, onConfirm, "primary");
       confirm.disabled = true;
       pin.addEventListener("input", () => (confirm.disabled = pin.value === ""));
+      working.show(null);
       replace(
         step,
         name,
@@ -216,11 +239,13 @@ export function startApp(o: AppOptions): void {
           return;
         }
         message.show(null);
+        working.show(cc.signing);
         f.confirmCard(value).then(
           (status) => flow === f && statusScreen(f, status),
           (e) => {
             if (flow !== f) return;
             card.release();
+            working.show(null);
             // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
             if (retryable(f, e)) {
               message.show(stopMessage(e.stop));
@@ -245,6 +270,7 @@ export function startApp(o: AppOptions): void {
         el("section", {}, el("h2", {}, c.local_heading), list(c.local_pin, c.local_certificate, c.local_signature)),
         el("p", {}, c.keep_card, el("br"), c.card_and_pin, " ", helpLink("more")),
         step,
+        working.node,
         message.node,
         el("p", {}, c.needs, " ", helpLink("prepare")),
       ),
@@ -282,6 +308,9 @@ export function startApp(o: AppOptions): void {
   }
 
   const noCheck = (): HTMLElement => el("p", {}, COPY.status.no_check, el("br"), COPY.status.acknowledged, " ", helpLink("more"));
+
+  /** Cancel on sections 3 and 4: the PIN, the certificate and the signature are dropped, and the screen goes back to the beginning (the same way as when the wait runs out, without its sentence). */
+  const cancelButton = (label: string): HTMLButtonElement => button(label, () => start(), "");
 
   /**
    * Picks `choice` in the engine and shows its consequence. A choice the
@@ -327,7 +356,13 @@ export function startApp(o: AppOptions): void {
     let body: (HTMLElement | null)[];
     if (view.state === "never") {
       const account = accountField(c.account_label, typed, (u) => pick(f, { action: "declare", username: u }, message.show, () => goBack(f, (st) => statusScreen(f, st, u))), message.show);
-      body = [account.field, el("p", {}, sentence(c.one_account, { platform: platformName })), message.node, el("p", {}, button(c.next, account.go, "primary")), noCheck()];
+      body = [
+        account.field,
+        el("p", {}, sentence(c.one_account, { platform: platformName })),
+        message.node,
+        el("p", { class: "buttons" }, cancelButton(c.cancel), " ", button(c.next, account.go, "primary")),
+        noCheck(),
+      ];
     } else if (view.state === "declared") {
       const current = status.current!;
       const again = (): void => goBack(f, (st) => statusScreen(f, st));
@@ -338,6 +373,7 @@ export function startApp(o: AppOptions): void {
         choice(c.switch, switchNote(), () => accountScreen(f, status, ""), view.canSwitch),
         choice(c.withdraw, null, () => pick(f, { action: "withdraw" }, message.show, again)),
         message.node,
+        el("p", { class: "buttons" }, cancelButton(c.cancel)),
       ];
     } else {
       const last = status.lastDeclared!;
@@ -347,6 +383,7 @@ export function startApp(o: AppOptions): void {
         ),
         choice(c.declare_other, switchNote(), () => accountScreen(f, status, ""), view.canSwitch),
         message.node,
+        el("p", { class: "buttons" }, cancelButton(c.cancel)),
       ];
     }
     replace(root, el("section", { attrs: { "data-step": "status", "data-state": view.state } }, first, ...body));
@@ -364,7 +401,7 @@ export function startApp(o: AppOptions): void {
         { attrs: { "data-step": "account" } },
         account.field,
         message.node,
-        el("p", { class: "buttons" }, button(c.back, () => statusScreen(f, status), ""), " ", button(c.next, account.go, "primary")),
+        el("p", { class: "buttons" }, button(c.back, () => statusScreen(f, status), ""), " ", cancelButton(c.cancel), " ", button(c.next, account.go, "primary")),
         noCheck(),
       ),
     );
@@ -397,7 +434,7 @@ export function startApp(o: AppOptions): void {
         el("p", {}, c.no_identity, el("br"), c.card_and_pin),
         el("p", {}, ...later),
         message.node,
-        el("p", { class: "buttons" }, button(c.back, back, ""), " ", go),
+        el("p", { class: "buttons" }, button(c.back, back, ""), " ", cancelButton(c.cancel), " ", go),
       ),
     );
     if (why) message.show(why);
@@ -407,6 +444,8 @@ export function startApp(o: AppOptions): void {
 
   function progress(f: CardProofFlow, cq: Consequence, back: () => void): void {
     const c = COPY.progress;
+    // The account the card declared before this card proof, for the first line of section 6.
+    const current = f.cardStatus?.current ?? null;
     const lines = el("div", { attrs: { "data-progress": "" } });
     const message = messageArea();
     const bar = el("progress", { attrs: { max: "100", value: "0" } });
@@ -438,7 +477,7 @@ export function startApp(o: AppOptions): void {
       p.then(
         (done) => {
           onStep = null;
-          if (flow === f) doneScreen(done);
+          if (flow === f) doneScreen(done, current);
         },
         (e) => {
           clearInterval(timer);
@@ -466,7 +505,7 @@ export function startApp(o: AppOptions): void {
 
   // Section 6: done -------------------------------------------------------------
 
-  function doneScreen(d: Done): void {
+  function doneScreen(d: Done, current: string | null): void {
     const c = COPY.done;
     flow = null;
     replace(
@@ -474,11 +513,13 @@ export function startApp(o: AppOptions): void {
       el(
         "section",
         { attrs: { "data-step": "done" } },
-        el("h1", {}, say(doneTitle(d.kind, d.username))),
+        el("h1", {}, say(doneTitle(d.kind, d.username, current))),
         el("p", { attrs: { "data-record": "" } }, sentence(c.seq, { seq: d.seq }), say(doneRecord(d.kind, d.date, d.username, PLATFORM))),
         el("p", {}, sentence(c.short_id, { platform: platformName, short_id: d.shortId })),
         el("ul", {}, d.kind !== "withdraw" && el("li", {}, c.advice), el("li", {}, c.reverify, " ", helpLink("reverify"))),
         el("p", {}, c.unplug),
+        // Another card proof, with the same engine (ADR-0013).
+        el("p", {}, button(c.restart, () => start(), "")),
       ),
     );
   }

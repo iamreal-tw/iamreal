@@ -53,6 +53,8 @@ export class FakeComponent {
   /** The window never says it is ready (a component that is not running). */
   silent = false;
   readonly requests: ComponentRequest[] = [];
+  /** Every signature it returned, base64 (to check that the page does not keep them). */
+  readonly signatures: string[] = [];
   private server: Server | null = null;
 
   async start(port: number): Promise<void> {
@@ -109,6 +111,7 @@ export class FakeComponent {
       }
       if (typeof r.tbs !== "string" || r.hashAlgorithm !== "SHA256" || r.signatureType !== "PKCS1") return { ret_code: 0x7600000c, last_error: 0, message: "參數錯誤" };
       const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", card.signingKey, new TextEncoder().encode(r.tbs)));
+      this.signatures.push(b64(sig));
       return { func: "sign", ret_code: 0, last_error: 0, signature: b64(sig), certb64: b64(card.signingCertificate), cardSN: "FAKE0001" };
     }
     return { ret_code: 0x7600000e, last_error: 0, message: "不支援的方法" };
