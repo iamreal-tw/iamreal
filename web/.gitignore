@@ -4,3 +4,5 @@ dist/
 crs/
 # Test runs: fixtures, proofs, browser profiles.
 test-output/
+# pnpm local: the server, its roster and the CRL mirror.
+local/

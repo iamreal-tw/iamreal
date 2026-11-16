@@ -224,6 +224,54 @@ func TestLogHasNoAddress(t *testing.T) {
 	}
 }
 
+// Every API response carries X-Request-Id, the ID of its log line
+// (docs/api/card-proof.md), and only API responses do.
+func TestRequestIDIsTheLogs(t *testing.T) {
+	h := newHarness(t, startOfTests)
+	var ids []string
+	for _, c := range []struct{ method, path string }{
+		{"POST", "/api/v1/challenges"}, {"GET", "/api/v1/config"}, {"POST", "/api/v1/card-state"},
+		{"POST", "/api/v1/records"}, {"GET", "/api/v1/nothing"}, {"GET", "/api/v1/records"},
+	} {
+		id := h.raw(c.method, c.path, "").Header().Get("X-Request-Id")
+		if len(id) != 16 || strings.Trim(id, "0123456789abcdef") != "" {
+			t.Errorf("%s %s: X-Request-Id %q", c.method, c.path, id)
+		}
+		ids = append(ids, id)
+	}
+	var logged []string
+	for _, l := range strings.Split(strings.TrimSpace(h.logs.String()), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatal(err)
+		}
+		logged = append(logged, m["id"].(string))
+	}
+	if !reflect.DeepEqual(ids, logged) {
+		t.Errorf("response IDs %v, logged %v", ids, logged)
+	}
+	if ids[0] == ids[1] {
+		t.Errorf("two requests, one ID")
+	}
+	if id := h.raw("GET", "/crl/index.jsonl", "").Header().Get("X-Request-Id"); id != "" {
+		t.Errorf("a static file has X-Request-Id %q", id)
+	}
+}
+
+// web/README.md quotes the Content-Security-Policy the server sends.
+func TestWebReadmeQuotesThePolicy(t *testing.T) {
+	readme, err := os.ReadFile(filepath.Join("..", "web", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readme), pageHeaders["Content-Security-Policy"]) {
+		t.Errorf("web/README.md does not quote the Content-Security-Policy of headers.go")
+	}
+	if !strings.Contains(string(readme), "Document-Isolation-Policy: "+pageHeaders["Document-Isolation-Policy"]) {
+		t.Errorf("web/README.md does not quote the Document-Isolation-Policy of headers.go")
+	}
+}
+
 func TestStaticFiles(t *testing.T) {
 	c := g3CRL(t)
 	h := newHarness(t, startOfTests, c)
@@ -258,6 +306,14 @@ func TestStaticFiles(t *testing.T) {
 		}
 		if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s: no nosniff", x.path)
+		}
+		// The page's headers go with the web directory's files, not with the
+		// mirror or the roster.
+		page := !strings.HasPrefix(x.path, "/crl/") && !strings.HasPrefix(x.path, "/roster/")
+		for k, v := range pageHeaders {
+			if got := rec.Header().Get(k); (got == v) != page {
+				t.Errorf("%s: %s is %q", x.path, k, got)
+			}
 		}
 	}
 	if rec := h.raw("GET", "/crl/"+name, ""); rec.Body.String() != string(c) {

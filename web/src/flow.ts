@@ -32,7 +32,7 @@
 //                    signature is made or the flow stops; never stored
 //   failures         returned to the caller only; no request carries them
 import { type Fetch, ServerError, type Submission, requestCardState, requestChallenge, requestCrlMaxAge, submitRecord } from "./api.ts";
-import { type Card, CardError, type CardErrorCode } from "./card/card.ts";
+import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
 import type { TreeBuilder } from "./crl/build.ts";
 import { type RevocationProblem, RevocationError, crlMaxAge, loadCrl } from "./crl/revocation.ts";
@@ -49,12 +49,14 @@ import { type Outcome, declareOutcome, nextSwitchDay, switchesLeft, withdrawOutc
 import { type Platform, type Roster, type ScopeRow, scopeFor } from "./spec/scope.ts";
 import { scopedId, scopedIdText, shortId } from "./spec/scoped-id.ts";
 import type { CrlNumberStore } from "./storage.ts";
-import { bytesOfBigint, wipe } from "./bytes.ts";
+import { bytesOfBigint, equalBytes, wipe } from "./bytes.ts";
 
 /** Why the flow stopped. Returned to the caller; never sent to the server (ADR-0016). */
 export type Stop =
-  | { code: "card"; card: CardErrorCode }
-  | { code: "certificate"; problem: CertificateProblem; notAfter?: string }
+  /** `detail` is the short code the screen shows with `card_error` (CardError.detail). */
+  | { code: "card"; card: CardErrorCode; detail?: string }
+  /** `notAfter` (expired) and `notBefore` (not_yet_valid) are Taiwan dates, YYYY-MM-DD. */
+  | { code: "certificate"; problem: CertificateProblem; notAfter?: string; notBefore?: string }
   | { code: "revocation"; problem: RevocationProblem }
   /** The card's certificate is on the CRL (revoked or suspended). */
   | { code: "revoked" }
@@ -72,8 +74,12 @@ export type Stop =
   | { code: "engine"; detail: string }
   /** The proof is not 14,656 bytes, or its public inputs are not the ones the device built. */
   | { code: "proof_check" }
-  /** The server answered with an error, or a response the device cannot read. */
-  | { code: "server"; server: string; status: number }
+  /**
+   * The server answered with an error, or a response the device cannot read.
+   * `requestId` is the response's X-Request-Id, which the screen shows so
+   * that the cardholder can report it (docs/api/card-proof.md).
+   */
+  | { code: "server"; server: string; status: number; requestId?: string }
   /** The username is not in the scope's format. */
   | { code: "username" }
   /** The caller called a step out of order. */
@@ -257,8 +263,18 @@ export class CardProofFlow {
     try {
       return await f();
     } catch (e) {
-      if (e instanceof CardError) this.fail({ code: "card", card: e.code });
-      this.fail({ code: "card", card: "card_error" });
+      this.fail(cardStop(e));
+    }
+  }
+
+  /**
+   * The card's reader reports which certificate made a signature (MOICA's
+   * component does): it must be the one chosen when the card was read.
+   */
+  private checkSigner(s: CardSignature): void {
+    if (s.certificate !== null && !equalBytes(s.certificate, this.cert!.der)) {
+      wipe(s.signature);
+      this.fail({ code: "card", card: "card_error", detail: "certificate_mismatch" });
     }
   }
 
@@ -270,8 +286,9 @@ export class CardProofFlow {
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);
     if (!sel.ok) {
-      const notAfter = sel.notAfter !== undefined ? formatNotAfter(sel.notAfter) : undefined;
-      this.fail({ code: "certificate", problem: sel.problem, ...(notAfter && { notAfter }) });
+      const notAfter = sel.notAfter !== undefined ? certificateDay(sel.notAfter) : undefined;
+      const notBefore = sel.notBefore !== undefined ? certificateDay(sel.notBefore) : undefined;
+      this.fail({ code: "certificate", problem: sel.problem, ...(notAfter && { notAfter }), ...(notBefore && { notBefore }) });
     }
     this.cert = sel.cert;
     this.cardPublicKey = await cardKey(sel.cert);
@@ -351,14 +368,16 @@ export class CardProofFlow {
     this.expect("checking", "ready_for_pin");
     // Nothing is signed, and no request carries the scoped ID, before these pass.
     await this.checksDone();
-    let sig: Uint8Array;
+    let signed: CardSignature;
     try {
-      sig = await this.deps.card.sign(this.scopeBytes, pin);
+      signed = await this.deps.card.sign(this.scopeBytes, pin);
     } catch (e) {
       // A wrong PIN does not end the flow: the screen asks again. Nothing is kept.
       if (e instanceof CardError && e.code === "pin_incorrect") throw new FlowStop({ code: "card", card: "pin_incorrect" });
-      this.fail({ code: "card", card: e instanceof CardError ? e.code : "card_error" });
+      this.fail(cardStop(e));
     }
+    this.checkSigner(signed);
+    const sig = signed.signature;
     this.pin = pin;
     if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, this.scopeBytes))) {
       wipe(sig);
@@ -430,12 +449,14 @@ export class CardProofFlow {
     const code = await declarationCode(this.action, this.scope.scopeString, username, challengeText);
 
     const pin = this.pin!;
-    let sig: Uint8Array;
+    let signed: CardSignature;
     try {
-      sig = await this.cardCall(() => this.deps.card.sign(code, pin));
+      signed = await this.cardCall(() => this.deps.card.sign(code, pin));
     } finally {
       this.pin = null; // the second signature is made (or failed): the PIN is not needed again
     }
+    this.checkSigner(signed);
+    const sig = signed.signature;
     if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, code))) {
       wipe(sig);
       this.fail({ code: "card_signature" });
@@ -539,13 +560,18 @@ function toStop(e: unknown): Stop {
   if (e instanceof FlowStop) return e.stop;
   if (e instanceof RevocationError) return { code: "revocation", problem: e.problem };
   if (e instanceof ArtifactError) return { code: "artifact", path: e.path };
-  if (e instanceof ServerError) return { code: "server", server: e.code, status: e.status };
-  if (e instanceof CardError) return { code: "card", card: e.code };
+  if (e instanceof ServerError) return { code: "server", server: e.code, status: e.status, ...(e.requestId && { requestId: e.requestId }) };
+  if (e instanceof CardError) return cardStop(e);
   return { code: "engine", detail: e instanceof Error ? e.message.slice(0, 200) : "unknown" };
 }
 
-/** notAfter YYMMDDHHMMSS (UTC) as the Taiwan date the certificate expires on. */
-function formatNotAfter(t: bigint): string {
+function cardStop(e: unknown): Stop {
+  if (!(e instanceof CardError)) return { code: "card", card: "card_error" };
+  return { code: "card", card: e.code, ...(e.detail && { detail: e.detail }) };
+}
+
+/** A certificate's time, YYMMDDHHMMSS (UTC), as its Taiwan date. */
+function certificateDay(t: bigint): string {
   const s = t.toString().padStart(12, "0");
   const ms = Date.UTC(2000 + Number(s.slice(0, 2)), Number(s.slice(2, 4)) - 1, Number(s.slice(4, 6)), Number(s.slice(6, 8)), Number(s.slice(8, 10)), Number(s.slice(10, 12)));
   return formatDay(taiwanDay(ms));

@@ -249,7 +249,7 @@ export async function checkCertificate(der: Uint8Array, today: Day, issuers: rea
   };
 }
 
-export type Selection = { ok: true; cert: CardCertificate } | { ok: false; problem: CertificateProblem; notAfter?: bigint };
+export type Selection = { ok: true; cert: CardCertificate } | { ok: false; problem: CertificateProblem; notAfter?: bigint; notBefore?: bigint };
 
 /**
  * From the certificates a card returns, the one a card proof uses: the only
@@ -271,10 +271,11 @@ export async function selectCertificate(ders: readonly Uint8Array[], today: Day,
   const failed = results.filter((r): r is Extract<CheckResult, { ok: false }> => !r.ok);
   const signing = failed.find((r) => r.signing && r.problem !== "unsupported_format") ?? failed.find((r) => r.signing);
   if (!signing) return { ok: false, problem: "unsupported_format" };
-  if (signing.problem === "expired") {
+  // The screen says the date: when it expired, or from when it is valid.
+  if (signing.problem === "expired" || signing.problem === "not_yet_valid") {
     const idx = results.indexOf(signing);
     const w = walkTbs(splitCertificate(ders[idx]!).tbs);
-    return { ok: false, problem: "expired", notAfter: w.notAfter };
+    return signing.problem === "expired" ? { ok: false, problem: "expired", notAfter: w.notAfter } : { ok: false, problem: "not_yet_valid", notBefore: w.notBefore };
   }
   return { ok: false, problem: signing.problem };
 }

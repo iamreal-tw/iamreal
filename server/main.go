@@ -57,6 +57,21 @@ func productionDeps() deps {
 	}
 }
 
+// testOptions is set only in a build with the tag iamrealtest
+// (testissuers.go). It adds the options that replace MOICA's issuer keys and
+// CRL addresses with throwaway ones, for web/'s end-to-end test against this
+// server. A program built without the tag has no such option.
+var testOptions func(fs *flag.FlagSet) func(*deps) error
+
+// addTestOptions adds testOptions to fs, if the build has them, and returns
+// what applies them after parsing.
+func addTestOptions(fs *flag.FlagSet) func(*deps) error {
+	if testOptions == nil {
+		return func(*deps) error { return nil }
+	}
+	return testOptions(fs)
+}
+
 // The files of the data directory.
 func dbPath(data string) string    { return filepath.Join(data, "iamreal.sqlite") }
 func crlDir(data string) string    { return filepath.Join(data, "crl") }
@@ -109,11 +124,16 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
 	runMirror := fs.Bool("mirror", true, "fetch MOICA's CRLs at start and every hour")
+	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *data == "" || *bb == "" || *crs == "" || fs.NArg() != 0 {
 		fs.Usage()
+		return 2
+	}
+	if err := applyTest(&d); err != nil {
+		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	r, err := parseRoster(*kind)
@@ -210,11 +230,16 @@ func mirror(args []string, stderr io.Writer, d deps) int {
 	fs := flag.NewFlagSet("mirror", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	data := fs.String("data", "", "the data `directory` (required)")
+	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *data == "" || fs.NArg() != 0 {
 		fs.Usage()
+		return 2
+	}
+	if err := applyTest(&d); err != nil {
+		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
@@ -242,11 +267,16 @@ func snapshotCommand(args []string, stdout, stderr io.Writer, d deps) int {
 	kind := rosterFlag(fs)
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
+	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return snapshotError
 	}
 	if *data == "" || *bb == "" || *crs == "" || fs.NArg() != 0 {
 		fs.Usage()
+		return snapshotError
+	}
+	if err := applyTest(&d); err != nil {
+		fmt.Fprintln(stderr, err)
 		return snapshotError
 	}
 	if *out == "" {

@@ -34,7 +34,7 @@ go build -o iamreal-server ./server
 | `-mirror` | 開 | `serve` 要不要自己跑清冊鏡像 |
 | `-out` | `DATA/roster` | `snapshot` 寫到哪個目錄 |
 
-發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。
+發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多兩個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）。給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入。照這份 README 建置的執行檔沒有這兩個選項。
 
 ## 資料放在哪裡
 
@@ -57,7 +57,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 
 ## 介面
 
-照 `docs/api/card-proof.md`，欄位、狀態碼、錯誤代碼一字不差。所有回應是 JSON，帶 `Cache-Control: no-store`；不設 cookie，不送 CORS 標頭。
+照 `docs/api/card-proof.md`，欄位、狀態碼、錯誤代碼一字不差。所有回應是 JSON，帶 `Cache-Control: no-store` 和 `X-Request-Id`（這個請求在紀錄裡的請求編號，持卡人回報問題時說得出來）；不設 cookie，不送 CORS 標頭。
 
 文件沒有列、這裡另外用到的三個錯誤代碼：
 
@@ -127,7 +127,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 
 ## 回應標頭
 
-所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`，只有這一個地方。現在只有 `X-Content-Type-Options: nosniff`；網頁的 `Content-Security-Policy`、`Document-Isolation-Policy` 等 `web/` 定了再加在這裡。
+所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`：`X-Content-Type-Options: nosniff`。`-web` 目錄的每個檔案（頁面、它的程式和 worker、電路、通用參數）另外送 `pageHeaders`：`web/README.md` 寫的 `Content-Security-Policy`，和 `Document-Isolation-Policy: isolate-and-credentialless`（多執行緒的證明，同時保留和內政部元件視窗的來往）。理由在 `web/README.md`「頁面需要的 `Content-Security-Policy`」；`server_test.go` 檢查那裡引用的和這裡一字不差。清冊鏡像和名冊不送這兩個。
 
 靜態檔：`.crl` 是 `application/pkix-crl`，`.jsonl` 是 `application/jsonl`。不列目錄，`.` 開頭的檔案不提供。
 
@@ -143,7 +143,7 @@ go test -race ./server/...
 |---|---|
 | `store/sqlite_test.go` | 鏈接不上（跳號、重號、`prev` 錯）就不寫；題目沒發過或已接受就不寫紀錄；送出次數；刪過期題目；重開、唯讀 |
 | `api_test.go` | 每個介面每個錯誤代碼：題目的日期在台灣午夜前後；`card-state` 的每一種 `malformed`，回應的欄位順序；`records` 的每一種 `malformed`、`scope`、`challenge_unknown`（沒發過；剛好 10 分鐘；差 1 奈秒仍可用，跨過午夜）、`challenge_used`、`challenge_attempts`（失敗 4 次後第 5 次仍可成功；失敗 5 次後第 6 次被擋）、`proof`、`root`（第三新的清冊、別把金鑰的樹根、不存在的樹根）、`crl_stale`（清冊日期後第 3 天 23:59:59 可以、第 4 天 00:00:00 不行；新清冊進來後恢復；這把金鑰沒有清冊）、`date_order`、`not_current`、`switch_limit`；`404`、`405` |
-| `server_test.go` | 20 個請求同時送出時 `seq` 連續、鏈不斷，同一個題目同時送兩次只接受一次；重開後現況相同；有無效紀錄、清冊不見、索引寫錯、名冊屬於另一份時不啟動並指出第幾筆；紀錄裡沒有對方的位址、匿名編號、帳號、題目，只有該有的欄位；靜態檔 |
+| `server_test.go` | 20 個請求同時送出時 `seq` 連續、鏈不斷，同一個題目同時送兩次只接受一次；重開後現況相同；有無效紀錄、清冊不見、索引寫錯、名冊屬於另一份時不啟動並指出第幾筆；紀錄裡沒有對方的位址、匿名編號、帳號、題目，只有該有的欄位；每個 API 回應的 `X-Request-Id` 和那一行紀錄的請求編號相同，靜態檔沒有；靜態檔，頁面的標頭只在網頁目錄的檔案上；`web/README.md` 引用的 CSP 和這裡的相同 |
 | `mirror_test.go` | 假的內政部伺服器：第一次下載並建索引（和 `crl.BuildIndex` 相同）、之後送條件請求、新清冊加一行、同樣的內容換了 `ETag` 不重存、不是清冊的檔案也存並列為不可用、錯誤狀態不存；索引寫錯時不動存檔 |
 | `snapshot_test.go` | 空名冊、1,001 筆切成兩個檔、同一天再跑什麼都不做、隔天寫滿的檔不重寫；有無效的紀錄、證明驗不過、清冊索引和檔案不同、已公布的檔被改過、`heads.jsonl` 不是這份名冊的或寫法不對時，都不發布 |
 | `e2e_test.go` | 建置標籤 `iamrealtest`、需要 `bb`：用 `testdata/` 的真證明（見那裡的 `README.md`）從假的內政部抓清冊，跑宣告、再次過卡、更換、更換到上限、收回，以及證明驗不過；出快照（每份證明用 `bb` 重驗），用 `go build -tags iamrealtest` 建出的 `iamreal-verify` 重驗那個目錄，結果和後台的現況相同；換成內政部的金鑰時快照拒絕發布 |
@@ -162,7 +162,8 @@ go test -race ./server/...
 | `mirror.go` | 清冊鏡像 |
 | `snapshot.go` | 每日快照 |
 | `log.go` | 連線紀錄、程式版本 |
-| `headers.go` | 回應標頭、靜態檔 |
+| `headers.go` | 回應標頭、頁面的標頭、靜態檔 |
+| `testissuers.go` | 只在建置標籤 `iamrealtest` 下：測試金鑰和假內政部的選項 |
 | `store/` | 名冊和題目的儲存：介面和 SQLite 的實作 |
 | `testdata/` | 端到端測試的資料 |
 

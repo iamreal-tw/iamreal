@@ -1,0 +1,93 @@
+/*
+ * Only what makes the screen readable. The visual rules are not decided yet
+ * (docs/design/principles.md, the three layers): no colours that mean a conclusion,
+ * no icons; the two lists of screen 2 side by side.
+ */
+:root {
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 44rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.fields dd {
+  margin: 0;
+}
+
+.prefix {
+  margin-right: 0.25rem;
+}
+
+.account {
+  font-size: 1.4rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.columns ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+input {
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.35rem 1rem;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.buttons button + button {
+  margin-left: 0.5rem;
+}
+
+.message:empty {
+  display: none;
+}
+
+progress {
+  width: 100%;
+}
+
+code {
+  font-family: ui-monospace, Menlo, monospace;
+}

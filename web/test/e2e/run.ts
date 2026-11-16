@@ -53,7 +53,7 @@ if (!readFileSync(join(web, "README.md"), "utf8").includes(CONTENT_SECURITY_POLI
 
 mkdirSync(out, { recursive: true });
 const dist = join(out, "dist");
-await build({ root: join(here), configFile: join(web, "vite.config.ts"), logLevel: "warn", build: { outDir: dist, emptyOutDir: true } });
+await build({ root: join(here), configFile: join(web, "vite.config.ts"), mode: "engine", logLevel: "warn", build: { outDir: dist, emptyOutDir: true } });
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".json": "application/json", ".gz": "application/gzip", ".dat": "application/octet-stream" };
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
