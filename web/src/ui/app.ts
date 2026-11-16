@@ -8,7 +8,8 @@
 //   - The PIN is read from its field when "confirm" is clicked, the field is
 //     emptied at once, and the value goes to the engine and nowhere else (no
 //     storage, URL, log, global or DOM attribute). The field is not in a form
-//     and has no name, so the browser has nothing to remember it by. The
+//     and has no name, so the browser has nothing to remember it by. Until
+//     that step ends, the field and the button cannot be used. The
 //     engine holds it until the second signature, and drops it if that is
 //     not made within 5 minutes of the first, or when cancel is pressed on
 //     sections 3 and 4 (either way the screen goes back to the beginning).
@@ -215,7 +216,7 @@ export function startApp(o: AppOptions): void {
       });
       const confirm = button(cc.confirm_card, onConfirm, "primary");
       confirm.disabled = true;
-      pin.addEventListener("input", () => (confirm.disabled = pin.value === ""));
+      pin.addEventListener("input", () => (confirm.disabled = pin.disabled || pin.value === ""));
       working.show(null);
       replace(
         step,
@@ -238,6 +239,9 @@ export function startApp(o: AppOptions): void {
           pin.focus();
           return;
         }
+        // Until this step ends, neither the field nor the button can be used:
+        // pressed again, the card would be asked to sign again.
+        pin.disabled = true;
         message.show(null);
         working.show(cc.signing);
         f.confirmCard(value).then(
@@ -248,6 +252,7 @@ export function startApp(o: AppOptions): void {
             working.show(null);
             // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
             if (retryable(f, e)) {
+              pin.disabled = false;
               message.show(stopMessage(e.stop));
               pin.focus();
               return;

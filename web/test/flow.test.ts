@@ -977,3 +977,186 @@ describe("what the flow wipes besides its own fields", () => {
     }
   });
 });
+
+// Found when those fixes were checked again (2026-11-17): confirmCard()
+// called a second time while the first was under way (a PIN typed again on
+// section 2 and the button pressed again) had the card sign again, sent
+// card-state again, and started a second timer without cancelling the first.
+// That first timer later stopped a card proof whose record was already sent.
+
+/** The promise's FlowStop, or "still running" if it has not settled within `ms`. */
+async function settledWithin(p: Promise<unknown>, ms = 500): Promise<Stop | "still running"> {
+  return Promise.race([stopOf(p), new Promise<"still running">((r) => setTimeout(() => r("still running"), ms))]);
+}
+
+/** Holds every call of the card's sign() until the returned function is called. */
+function holdSigns(card: FakeCard): () => void {
+  let open!: () => void;
+  const gate = new Promise<void>((r) => (open = r));
+  const sign = card.sign.bind(card);
+  card.sign = async (m, p) => {
+    await gate;
+    return sign(m, p);
+  };
+  return open;
+}
+
+async function until(f: () => boolean, what: string): Promise<void> {
+  for (let i = 0; i < 500 && !f(); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(f(), what);
+}
+
+const requestsOn = (s: Setup, path: string): number => s.backend.log.filter((r) => r.path === path).length;
+
+const isState = (e: unknown): boolean => e instanceof FlowStop && e.stop.code === "state";
+
+describe("a step called again while it is under way", () => {
+  for (const where of ["the checks", "the card's signature", "card-state"] as const) {
+    test(`confirmCard() again while the first waits for ${where}: refused (state); the card is not asked, nothing is sent, the first goes on`, async () => {
+      const s = await setup();
+      await s.flow.readCard();
+      if (where !== "the checks") await s.flow.checksDone();
+      let release: () => void = () => undefined;
+      if (where === "card-state") release = s.hold("/api/v1/card-state");
+      if (where === "the card's signature") release = holdSigns(s.card);
+      const signs = countSigns(s.card);
+      const first = s.flow.confirmCard(PIN);
+      if (where === "card-state") await untilRequested(s, "/api/v1/card-state");
+      if (where === "the card's signature") await until(() => signs() === 1, "the card was asked to sign");
+      const calls = signs();
+      const n = s.backend.log.length;
+
+      assert.deepEqual(await settledWithin(s.flow.confirmCard(PIN)), { code: "state" });
+      assert.equal(signs(), calls, "the card was not asked again");
+      // While the checks run, they send requests of their own.
+      if (where !== "the checks") assert.equal(s.backend.log.length, n, "no request");
+      assert.equal(requestsOn(s, "/api/v1/card-state"), where === "card-state" ? 1 : 0, "card-state so far");
+      assert.equal(s.flow.stop, null, "the first is not stopped");
+
+      release();
+      const status = await first;
+      assert.equal(status.options.other.kind, "first");
+      assert.equal(s.flow.phase, "status_known");
+      assert.equal(heldPin(s.flow), PIN, "the first's PIN is held, as after any first signature");
+      assert.equal(signs(), 1, "the card was asked once");
+      assert.equal(s.card.signed.length, 1, "the card signed once");
+      assert.equal(requestsOn(s, "/api/v1/card-state"), 1, "one card-state");
+    });
+  }
+
+  test("confirmCard() again a minute later, then a declaration that ends after the first's 5 minutes: the card proof is not stopped", async () => {
+    // The order of events that showed the problem: the first timer, never
+    // cancelled, fired while the record was being submitted.
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const openState = s.hold("/api/v1/card-state");
+    const first = s.flow.confirmCard(PIN);
+    await untilRequested(s, "/api/v1/card-state");
+    s.advance(60_000);
+    const second = s.flow.confirmCard(PIN);
+    second.catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 100));
+    openState();
+    await first;
+    const [secondResult] = await Promise.allSettled([second]);
+    const cq = s.flow.choose({ action: "declare", username: "alice" });
+    const openRecord = s.hold("/api/v1/records");
+    s.advance(3 * 60_000 + 50_000); // 4 min 50 s after the first signature
+    const pending = s.flow.proceed(cq.username);
+    await untilRequested(s, "/api/v1/records");
+    s.advance(10_000); // 5 min after the first signature
+    s.fireTimers();
+    assert.equal(s.flow.stop, null, "not stopped while the record is on its way");
+    assert.deepEqual(s.idleStops, [], "the screen is not told to go back");
+    openRecord();
+    const done = await pending;
+    assert.equal(done.kind, "first");
+    assert.equal(s.flow.phase, "done");
+    assert.equal(s.backend.submissions.length, 1);
+    assert.ok(secondResult!.status === "rejected" && isState(secondResult!.reason), "the second confirmCard() was refused");
+    assert.equal(s.card.signed.length, 2, "the scope string once, the declaration code once");
+    assert.equal(requestsOn(s, "/api/v1/card-state"), 1, "one card-state");
+  });
+
+  test("readCard() again while the first reads: refused (state); the card is read once, the checks start once", async () => {
+    const s = await setup();
+    let reads = 0;
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const read = s.card.readCertificates.bind(s.card);
+    s.card.readCertificates = async () => {
+      reads++;
+      await gate;
+      return read();
+    };
+    const first = s.flow.readCard();
+    await until(() => reads === 1, "the card was asked for its certificates");
+    assert.deepEqual(await settledWithin(s.flow.readCard()), { code: "state" });
+    assert.equal(reads, 1, "the card was not asked again");
+    assert.equal(s.flow.stop, null, "the first is not stopped");
+    open();
+    assert.equal((await first).name, "測試用戶");
+    assert.equal(s.flow.phase, "checking");
+    await s.flow.checksDone();
+    assert.equal(requestsOn(s, "/api/v1/config"), 1, "the checks started once");
+  });
+
+  test("proceed() again, choose() and back() while proceed() waits: refused (state); one challenge, one second signature", async () => {
+    // proceed() leaves "chosen" before its first await: this held already.
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const open = s.hold("/api/v1/challenges");
+    const first = s.flow.proceed(cq.username);
+    await untilRequested(s, "/api/v1/challenges");
+    const n = s.backend.log.length;
+    assert.deepEqual(await settledWithin(s.flow.proceed(cq.username)), { code: "state" });
+    assert.throws(() => s.flow.choose({ action: "declare", username: "bob" }), isState);
+    assert.throws(() => s.flow.back(), isState);
+    assert.equal(s.backend.log.length, n, "no request");
+    assert.equal(s.flow.stop, null);
+    assert.equal(s.flow.phase, "signing");
+    open();
+    const done = await first;
+    assert.equal(done.username, "alice");
+    assert.equal(s.card.signed.length, 2);
+    assert.equal(requestsOn(s, "/api/v1/challenges"), 1);
+    assert.equal(s.backend.submissions.length, 1);
+  });
+
+  test("resubmit() again while the first resubmission waits: refused (state); the record is sent once more, not twice", async () => {
+    // resubmit() leaves "submit_failed" before its first await: this held already.
+    let answer = { status: 500, body: { error: "internal" } as unknown };
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
+    await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "internal", status: 500 });
+    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first" } };
+    const open = s.hold("/api/v1/records");
+    const first = s.flow.resubmit();
+    await until(() => requestsOn(s, "/api/v1/records") === 2, "the record was sent again");
+    assert.deepEqual(await settledWithin(s.flow.resubmit()), { code: "state" });
+    open();
+    assert.equal((await first).seq, 7);
+    assert.equal(requestsOn(s, "/api/v1/records"), 2);
+  });
+});
+
+describe("the wait for the second signature has one timer", () => {
+  test("a second start of the wait cancels the first's timer", async () => {
+    // confirmCard() is its only caller and no longer runs twice at once;
+    // this holds the timer to the same rule on its own.
+    const s = await setup();
+    await s.flow.readCard();
+    await s.flow.confirmCard(PIN); // the first timer: due 5 minutes from now
+    s.advance(60_000);
+    (s.flow as unknown as { startIdleTimer(): void }).startIdleTimer(); // the second: due a minute after the first
+    s.advance(IDLE_MS - 60_000);
+    s.fireTimers();
+    assert.equal(s.flow.stop, null, "5 minutes after the first start: the first timer was cancelled");
+    assert.deepEqual(s.idleStops, []);
+    s.advance(60_000);
+    s.fireTimers();
+    assert.deepEqual(s.flow.stop, { code: "idle" }, "5 minutes after the second start");
+    assert.deepEqual(s.idleStops, [{ code: "idle" }], "the screen is told once");
+  });
+});
