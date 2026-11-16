@@ -115,10 +115,25 @@ CRL, checks MOICA's signature, and rebuilds the root.
 - downloads the newest CRL of its certificate's issuer from the mirror;
 - checks that it is usable, with the issuer key the device already trusts for
   its own certificate;
-- stops if today (Taiwan date, from the device clock) is more than 3 days
-  after the CRL date. It shows the cardholder that MOICA's list is out of
-  date;
+- stops if today (Taiwan date, from the device clock) is more than `L` days
+  after the CRL date, and shows the cardholder that MOICA's list is out of
+  date. `L` is the smaller of the bound the server currently announces and
+  7, the bound built into the device;
+- remembers, per issuer, the highest `cRLNumber` it has used, and does not
+  use a CRL with a lower one;
 - builds the tree and the proof of absence for its own serial number.
+
+**Why the device has its own bound.** The mirror chooses which CRL a device
+gets. CRLs list suspended certificates only while they are suspended. A
+mirror serving one cardholder an older CRL would learn, from whether the card
+proof fails, that the card was suspended then and is not now. MOICA knows who
+that was. The device's bound limits how far back a mirror can reach, and
+remembering the highest `cRLNumber` stops it for any device that has seen a
+newer CRL. A bound that protects the cardholder from the server cannot come
+from the server, so the device takes the server's figure only when it is
+smaller. The built-in 7 days is the widest the record rule is expected to
+become, so that widening the rule from 3 days does not require updating
+installed apps.
 
 **The server**, when accepting a card proof, accepts only the roots of the
 two newest CRLs of that issuer in the mirror, and none if the newest is more
