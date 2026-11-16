@@ -69,7 +69,9 @@ func snapshot(c snapshotConfig) int {
 		return snapshotError
 	}
 
-	// The roster file: every record, in order.
+	// The roster file: every record, in order, up to the count read first.
+	// The server may append while this runs; those records wait for the
+	// next snapshot.
 	count, _, err := c.Store.Head()
 	if err != nil {
 		return fail(err)
@@ -77,7 +79,7 @@ func snapshot(c snapshotConfig) int {
 	var lines [][]byte
 	var hashes []string
 	for first := uint64(1); first <= count; first += linesPerFile {
-		records, err := c.Store.Records(first, first+linesPerFile-1)
+		records, err := c.Store.Records(first, min(first+linesPerFile-1, count))
 		if err != nil {
 			return fail(err)
 		}
