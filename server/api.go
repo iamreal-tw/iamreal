@@ -125,12 +125,13 @@ func (s *Server) postChallenge(r *http.Request) reply {
 // cardState is the response of POST /api/v1/card-state. The fields are in
 // the order of docs/api/card-proof.md; nil pointers are written as null.
 type cardState struct {
-	Current       *string  `json:"current"`
-	LastDeclared  *string  `json:"last_declared"`
-	LastCardProof *string  `json:"last_card_proof"`
-	SwitchDates   []string `json:"switch_dates"`
-	Count         uint64   `json:"count"`
-	Head          string   `json:"head"`
+	Current          *string  `json:"current"`
+	LastDeclared     *string  `json:"last_declared"`
+	LastCardProof    *string  `json:"last_card_proof"`
+	ProofsOnLastDate int      `json:"proofs_on_last_date"`
+	SwitchDates      []string `json:"switch_dates"`
+	Count            uint64   `json:"count"`
+	Head             string   `json:"head"`
 }
 
 // POST /api/v1/card-state: the state of one card in one scope, as the
@@ -151,7 +152,7 @@ func (s *Server) postCardState(r *http.Request) reply {
 
 	s.mu.RLock()
 	card := s.rules.Card(f["scope_string"], f["scoped_id"])
-	out := cardState{Current: card.Current, LastDeclared: card.LastDeclared, SwitchDates: []string{}, Count: s.count, Head: s.head}
+	out := cardState{Current: card.Current, LastDeclared: card.LastDeclared, ProofsOnLastDate: card.ProofsOnLastDate, SwitchDates: []string{}, Count: s.count, Head: s.head}
 	s.mu.RUnlock()
 
 	if card.LastCardProof != nil {

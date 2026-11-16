@@ -178,15 +178,15 @@ func TestEndToEnd(t *testing.T) {
 		}
 	}
 	recs := h.checkChain()
-	if len(recs) != 6 {
+	if len(recs) != 8 {
 		t.Fatalf("%d records", len(recs))
 	}
 
 	// The state the server answers.
 	g2Card, g3Card := proofs[0].Body["scoped_id"], proofs[1].Body["scoped_id"]
 	for card, want := range map[string]map[string]any{
-		g2Card: {"current": "alice", "last_declared": "alice", "last_card_proof": "2026-11-20", "switch_dates": []any{}},
-		g3Card: {"current": nil, "last_declared": "carol", "last_card_proof": "2026-11-22", "switch_dates": []any{"2026-11-21", "2026-11-21"}},
+		g2Card: {"current": "alice", "last_declared": "alice", "last_card_proof": "2026-11-20", "proofs_on_last_date": 1.0, "switch_dates": []any{}},
+		g3Card: {"current": nil, "last_declared": "carol", "last_card_proof": "2026-11-22", "proofs_on_last_date": 3.0, "switch_dates": []any{"2026-11-21", "2026-11-21"}},
 	} {
 		_, out := h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
 		for k, w := range want {
@@ -236,7 +236,7 @@ func TestEndToEnd(t *testing.T) {
 	for _, r := range report.Results {
 		kinds = append(kinds, r.Kind)
 	}
-	if !report.Valid || report.Head != recs[5].Hash() || !reflect.DeepEqual(kinds, []string{"first", "first", "refresh", "switch", "switch", "withdraw"}) {
+	if !report.Valid || report.Head != recs[7].Hash() || !reflect.DeepEqual(kinds, []string{"first", "first", "refresh", "switch", "switch", "withdraw", "refresh", "withdraw"}) {
 		t.Errorf("iamreal-verify: %s", stdout.String())
 	}
 	// The same state as the server's.
@@ -257,7 +257,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.proofs = prod
-	if code, _, stderr := h.snapshot("2026-11-23"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("6 invalid record(s)")) {
+	if code, _, stderr := h.snapshot("2026-11-23"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("8 invalid record(s)")) {
 		t.Errorf("MOICA's keys: exit %d\n%s", code, stderr)
 	}
 }

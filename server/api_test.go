@@ -133,7 +133,7 @@ func TestCardState(t *testing.T) {
 
 	// A card with no record: not an error.
 	status, body := ask()
-	want := map[string]any{"current": nil, "last_declared": nil, "last_card_proof": nil, "switch_dates": []any{}, "count": 0.0, "head": verifier.GenesisPrev}
+	want := map[string]any{"current": nil, "last_declared": nil, "last_card_proof": nil, "proofs_on_last_date": 0.0, "switch_dates": []any{}, "count": 0.0, "head": verifier.GenesisPrev}
 	if status != 200 || !reflect.DeepEqual(body, want) {
 		t.Errorf("no record: %d %v", status, body)
 	}
@@ -146,7 +146,7 @@ func TestCardState(t *testing.T) {
 	recs := h.checkChain()
 	status, body = ask()
 	want = map[string]any{
-		"current": nil, "last_declared": "bob", "last_card_proof": "2026-11-21",
+		"current": nil, "last_declared": "bob", "last_card_proof": "2026-11-21", "proofs_on_last_date": 1.0,
 		"switch_dates": []any{"2026-11-20"}, "count": 4.0, "head": recs[3].Hash(),
 	}
 	if status != 200 || !reflect.DeepEqual(body, want) {
@@ -154,7 +154,7 @@ func TestCardState(t *testing.T) {
 	}
 	// The keys are in the order of the API document.
 	raw := h.raw("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`).Body.String()
-	if !strings.HasPrefix(raw, `{"current":null,"last_declared":"bob","last_card_proof":"2026-11-21","switch_dates":["2026-11-20"],"count":4,"head":"`) {
+	if !strings.HasPrefix(raw, `{"current":null,"last_declared":"bob","last_card_proof":"2026-11-21","proofs_on_last_date":1,"switch_dates":["2026-11-20"],"count":4,"head":"`) {
 		t.Errorf("body %s", raw)
 	}
 }
@@ -402,6 +402,8 @@ func TestNotCurrentAndSwitchLimit(t *testing.T) {
 	h.mustSubmit(h.sub("declare", card, "alice", root), "refresh")
 	h.wantError(h.sub("withdraw", card, "bob", root), 400, "not_current")
 	h.mustSubmit(h.sub("declare", card, "bob", root), "switch")
+	// At most 3 valid records of a card a day: the rest on the next day.
+	h.clock.Set(tw(2026, 11, 21, 9, 0, 0))
 	h.mustSubmit(h.sub("declare", card, "carol", root), "switch")
 	h.wantError(h.sub("declare", card, "dave", root), 400, "switch_limit")
 	h.mustSubmit(h.sub("declare", card, "carol", root), "refresh")
@@ -410,5 +412,46 @@ func TestNotCurrentAndSwitchLimit(t *testing.T) {
 	recs := h.checkChain()
 	if len(recs) != 6 {
 		t.Errorf("%d records; rejected card proofs must not be appended", len(recs))
+	}
+}
+
+func TestDailyLimit(t *testing.T) {
+	crl := g3CRL(t)
+	root := rootOf(t, crl)
+	h := newHarness(t, tw(2026, 11, 20, 23, 55, 0), crl)
+	card := newCard()
+	state := func() map[string]any {
+		_, out := h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
+		return out
+	}
+	h.mustSubmit(h.sub("declare", card, "alice", root), "first")
+	// Records the rules reject do not count.
+	h.wantError(h.sub("withdraw", card, "bob", root), 400, "not_current")
+	h.mustSubmit(h.sub("declare", card, "bob", root), "switch")
+	h.mustSubmit(h.sub("withdraw", card, "bob", root), "withdraw")
+	if out := state(); out["last_card_proof"] != "2026-11-20" || out["proofs_on_last_date"] != 3.0 {
+		t.Errorf("after 3 records: %v", out)
+	}
+	// The fourth of the day, of any kind, is not appended; the challenge
+	// stays usable.
+	s := h.sub("declare", card, "bob", root)
+	h.wantError(s, 400, "daily_limit")
+	h.wantError(h.sub("declare", card, "carol", root), 400, "daily_limit")
+	// Another card on the same day is not limited.
+	h.mustSubmit(h.sub("declare", newCard(), "alice", root), "first")
+	if recs := h.checkChain(); len(recs) != 4 {
+		t.Errorf("%d records; rejected card proofs must not be appended", len(recs))
+	}
+	if out := state(); out["proofs_on_last_date"] != 3.0 || out["current"] != nil {
+		t.Errorf("after daily_limit: %v", out)
+	}
+	// The next day in Taiwan. A challenge issued before midnight is dated
+	// the day before, so the same submission is still the fourth of its
+	// date.
+	h.clock.Set(tw(2026, 11, 21, 0, 0, 0))
+	h.wantError(s, 400, "daily_limit")
+	h.mustSubmit(h.sub("declare", card, "bob", root), "refresh")
+	if out := state(); out["last_card_proof"] != "2026-11-21" || out["proofs_on_last_date"] != 1.0 {
+		t.Errorf("the next day: %v", out)
 	}
 }

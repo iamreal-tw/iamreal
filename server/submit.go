@@ -147,7 +147,8 @@ func ruleError(reason string) string {
 	case roster.CodeProof:
 		return errProof
 	default:
-		// root, date_order, not_current, switch_limit: the same names.
+		// root, date_order, not_current, switch_limit, daily_limit: the
+		// same names.
 		return reason
 	}
 }
