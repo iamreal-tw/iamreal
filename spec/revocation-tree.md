@@ -212,7 +212,9 @@ for it.
 
 ## Open items
 
-- Where the archive is published, and how its files are named.
+- Where the archive is published. In the mirror, each CRL file is named by
+  its SHA-256 (64 lowercase hex digits) followed by `.crl`; the index does not
+  depend on file names.
 
 ## Test vectors
 

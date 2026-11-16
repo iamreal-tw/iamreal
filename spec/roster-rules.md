@@ -9,7 +9,8 @@ server's API.
 
 ## Input
 
-A snapshot: a roster file ([`record.md`](record.md)).
+A snapshot: a roster file ([`record.md`](record.md)), usually read from a
+roster directory ("The published roster").
 
 **The file as a whole** is valid only if:
 

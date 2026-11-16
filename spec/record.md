@@ -82,6 +82,47 @@ line. A roster with no records is the empty file.
 ([`roster-rules.md`](roster-rules.md)). A roster file is valid or broken.
 Only in a valid one can a single record be valid or invalid.
 
+## The published roster
+
+A record is about 20 KB, almost all of it the proof, so the roster is
+published as a directory of files rather than one file.
+
+**Roster directory.** The roster file cut every 1,000 lines:
+
+- The file that starts with the record of `seq` `s` is named `s` written as
+  16 decimal digits with leading zeros, followed by `.jsonl`:
+  `0000000000000001.jsonl`, `0000000000001001.jsonl`, and so on.
+- Every file holds exactly 1,000 lines, except the last, which holds 1 to
+  1,000. There is no empty file. A roster with no records has no such file.
+- The roster file is these files concatenated in name order. Everything in
+  this document and in [`roster-rules.md`](roster-rules.md) applies to that
+  concatenation.
+
+How the roster is cut depends only on `seq`, so everyone holding the same
+records has the same files, and a file that is full never changes again. A
+directory that breaks one of these rules (a missing file, a file of the
+wrong length, a file whose first `seq` does not match its name) is broken,
+like a malformed line.
+
+**Heads file.** `heads.jsonl`, in the same directory, has one line per day
+on which the roster was published, in the same one-spelling form as a roster
+line: this template, followed by one `LF`.
+
+```
+{"date":"DATE","count":COUNT,"head":"HEAD"}
+```
+
+| Field | Format |
+|---|---|
+| `date` | The date in Taiwan on which the line was written, `YYYY-MM-DD` |
+| `count` | The number of records at that moment: `0`, or a decimal integer without leading zeros |
+| `head` | The head at that moment: the record hash of the record with `seq` = `count`; 64 zeros for `count` `0` |
+
+Lines are in order of `date`, each date at most once, and `count` never
+decreases. Anyone holding the roster can check every line. The file is short
+(one line per day), so it is easy to keep and to publish in more than one
+place.
+
 ## Record hash and the chain
 
 ```
@@ -109,16 +150,14 @@ an old head, the operator can recompute the whole chain. Forging or altering
 an event is already prevented by the proof; the chain is about omission,
 order and equivocation.
 
-**Where heads are published.** Every daily snapshot, with its head, is
-committed to a public git repository. Anyone can clone it and keep the heads
-they have seen. API responses and the re-verifying command also show the
-current head and the number of records. This relies on people keeping copies:
-the operator can still rewrite its own git history or show different
-snapshots to different people, and only someone holding an older copy would
-notice. Publishing heads with a third party (for example, a transaction on a
-public blockchain) adds a timestamp and a single public sequence that the
-operator cannot rewrite; it is not done at launch, and adding it later does
-not change the record format.
+**Where heads are published.** The heads file (above) is published with
+the roster directory, and API responses and the re-verifying command show
+the current head and the number of records. This relies on people keeping
+copies: the operator can still show different rosters to different people,
+and only someone holding an older head would notice. Publishing the heads
+file somewhere the operator cannot rewrite (a public git repository that
+people clone, or a transaction on a public blockchain) makes that harder; it
+is not decided yet, and does not change the record format or the heads file.
 
 ## Verifying a record
 
@@ -161,8 +200,8 @@ records keep verifying.
 
 ## Open items
 
-- **The git repository of snapshots**: its name, layout, and how a
-  re-verifier compares a roster file with it.
+- **Where the heads file is published** besides the roster directory.
+- **Test vectors for the roster directory and the heads file.**
 
 ## Test vectors
 
