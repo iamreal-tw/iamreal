@@ -102,7 +102,7 @@ How the roster is cut depends only on `seq`, so everyone holding the same
 records has the same files, and a file that is full never changes again. A
 directory that breaks one of these rules (a missing file, a file of the
 wrong length, a file whose first `seq` does not match its name) is broken,
-like a malformed line.
+like a malformed line; a re-verifier reports it with the code `directory`.
 
 **Heads file.** `heads.jsonl`, in the same directory, has one line per day
 on which the roster was published, in the same one-spelling form as a roster
@@ -122,6 +122,11 @@ Lines are in order of `date`, each date at most once, and `count` never
 decreases. Anyone holding the roster can check every line. The file is short
 (one line per day), so it is easy to keep and to publish in more than one
 place.
+
+A published roster directory has a heads file; a re-verifier reports a
+directory without one. The roster is published at most once per Taiwan date:
+publishing again on the same date with the same head changes nothing, and
+with more records it is refused, so that a date's line never changes.
 
 ## Record hash and the chain
 
