@@ -3,8 +3,10 @@ package crl
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -124,6 +126,7 @@ func TestParseIndexRejects(t *testing.T) {
 	for name, bad := range map[string]string{
 		"no LF":               good,
 		"CRLF":                good + "\r\n",
+		"BOM":                 "\xef\xbb\xbf" + good,
 		"empty line":          good + "\n\n",
 		"space":               strings.Replace(good, `,"crl_number"`, `, "crl_number"`, 1),
 		"key order":           strings.Replace(strings.Replace(good, `"this_update"`, `"X"`, 1), `"next_update"`, `"this_update"`, 1),
@@ -272,18 +275,83 @@ func TestRebuildArchive(t *testing.T) {
 		t.Error("a file the index does not list did not count")
 	}
 
-	// No index, or an index that is not as the spec writes it.
+	os.Remove(filepath.Join(dir, "extra.crl"))
+	os.WriteFile(filepath.Join(dir, "one.crl"), mustRead(t, "testdata/one.crl"), 0o600)
+	countsOne := func(a *Archive) {
+		t.Helper()
+		if d, _ := a.CRLDates("G3", one.Root); len(d) != 1 {
+			t.Error("the rebuilt index is not the one that counts")
+		}
+	}
+
+	// No index: one difference, and nothing compared. Trusting the index,
+	// it is an error.
 	os.Remove(filepath.Join(dir, IndexFileName))
-	if _, _, err := RebuildArchive(dir, testKeys(t), nil); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("no index: %v", err)
+	a, diffs = rebuild()
+	if !slices.Equal(diffs, []IndexMismatch{{Problem: "is missing"}}) || diffs[0].String() != "index.jsonl is missing" {
+		t.Errorf("no index: %v", diffs)
 	}
-	write(bytes.ReplaceAll(index, []byte(`":"`), []byte(`": "`)))
+	countsOne(a)
+	if _, err := ReadArchiveIndex(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("no index, trusted: %v", err)
+	}
+
+	// An index that cannot be split into lines: one difference, and
+	// nothing compared.
 	var ie *IndexError
-	if _, _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &ie) {
-		t.Errorf("bad index: %v", err)
+	for name, b := range map[string][]byte{
+		"no LF": index[:len(index)-1],
+		"BOM":   append([]byte("\xef\xbb\xbf"), index...),
+	} {
+		write(b)
+		a, diffs = rebuild()
+		if len(diffs) != 1 || diffs[0].Line != 0 || !strings.HasPrefix(diffs[0].String(), "index.jsonl cannot be split into lines: ") {
+			t.Errorf("%s: %v", name, diffs)
+		}
+		countsOne(a)
+		if _, err := ReadArchiveIndex(dir); !errors.As(err, &ie) {
+			t.Errorf("%s, trusted: %v", name, err)
+		}
 	}
-	if _, err := ReadArchiveIndex(dir); !errors.As(err, &ie) {
-		t.Errorf("bad index: %v", err)
+
+	// Lines not as the spec writes it, each reported with its number; the
+	// well-formed lines are still compared, a line out of order too. The
+	// index is L0 (other-key, issuer -) then L1 to L4 (G3). Written: line
+	// 1 is L0 broken, 2 is L4, 3 is L1 (out of order after L4), 4 is L2
+	// with a root that is p, 5 is L3. L0 and L2 then have no line.
+	ls := strings.SplitAfter(string(index), "\n")[:5]
+	if !strings.HasPrefix(ls[0], `{"issuer":"-"`) {
+		t.Fatalf("index starts with %s", ls[0])
+	}
+	const p = "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+	rootP := regexp.MustCompile(`"root":"[^"]*"`).ReplaceAllString(ls[2], `"root":"`+p+`"`)
+	write([]byte(strings.Replace(ls[0], `":"`, `": "`, 1) + ls[4] + ls[1] + rootP + ls[3]))
+	a, diffs = rebuild()
+	want = []IndexMismatch{
+		{Line: 1, Index: strings.TrimSuffix(strings.Replace(ls[0], `":"`, `": "`, 1), "\n")},
+		{Line: 3, Index: strings.TrimSuffix(ls[1], "\n"), Problem: "out of order"},
+		{Line: 4, Index: strings.TrimSuffix(rootP, "\n")},
+		{Files: strings.TrimSuffix(ls[0], "\n")},
+		{Files: strings.TrimSuffix(ls[2], "\n")},
+	}
+	if len(diffs) != len(want) {
+		t.Fatalf("malformed lines: %d differences\n%v", len(diffs), diffs)
+	}
+	for i, d := range diffs {
+		w := want[i]
+		if d.Line != w.Line || d.Index != w.Index || d.Files != w.Files || (w.Problem != "" && d.Problem != w.Problem) {
+			t.Errorf("difference %d: %+v, want %+v", i, d, w)
+		}
+		if d.Line > 0 && (d.Problem == "" || !strings.HasPrefix(d.String(), fmt.Sprintf("index.jsonl line %d is not as the spec writes it (", d.Line))) {
+			t.Errorf("difference %d: %s", i, d)
+		}
+	}
+	if !strings.Contains(diffs[2].Problem, "not below the BN254 scalar field modulus p") {
+		t.Errorf("root p: %s", diffs[2])
+	}
+	countsOne(a)
+	if _, err := ReadArchiveIndex(dir); !errors.As(err, &ie) || ie.Line != 1 {
+		t.Errorf("malformed lines, trusted: %v", err)
 	}
 }
 

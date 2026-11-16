@@ -101,13 +101,35 @@ func archiveCases() []archiveCase {
 		}, exit: exitInvalid, records: []string{"1 valid first", "2 valid first", "3 invalid root"},
 			stderr: []string{"the index differs from the files", "the index lists a file the archive does not have",
 				"the archive has a file the index does not list"}, diffs: 3},
-		{name: "no index", edit: func(t *testing.T, dir string) {
-			os.Remove(filepath.Join(dir, crl.IndexFileName))
-		}, exit: exitError, stderr: []string{crl.IndexFileName}},
-		{name: "index not as the spec writes it", edit: func(t *testing.T, dir string) {
-			editIndex(t, dir, func(b []byte) []byte { return bytes.Replace(b, []byte(`"G2"`), []byte(`"g2"`), 1) })
-		}, trustIndex: true, exit: exitError, stderr: []string{"index line 1"}},
+		// No index: rebuilding reports it once and answers from the files;
+		// trusting the index, there is nothing to trust.
+		{name: "no index", edit: removeIndex, exit: exitInvalid, records: allValid,
+			stderr: []string{"iamreal-verify: CRL archive: index.jsonl is missing\n"}, diffs: 1},
+		{name: "no index, trust index", edit: removeIndex, trustIndex: true, exit: exitError,
+			stderr: []string{crl.IndexFileName}},
+		// Line 1 (A's) not as the spec writes it: rebuilding reports the
+		// line, and A's file as one the index does not list.
+		{name: "index not as the spec writes it", edit: breakLine1, exit: exitInvalid, records: allValid,
+			stderr: []string{"index.jsonl line 1 is not as the spec writes it (issuer \"g2\"",
+				"the archive has a file the index does not list: {\"issuer\":\"G2\""}, diffs: 2},
+		{name: "index not as the spec writes it, trust index", edit: breakLine1, trustIndex: true, exit: exitError,
+			stderr: []string{"index line 1"}},
+		// An index that cannot be split into lines: reported once.
+		{name: "index without the last LF", edit: func(t *testing.T, dir string) {
+			editIndex(t, dir, func(b []byte) []byte { return b[:len(b)-1] })
+		}, exit: exitInvalid, records: allValid,
+			stderr: []string{"index.jsonl cannot be split into lines: does not end in LF"}, diffs: 1},
 	}
+}
+
+func removeIndex(t *testing.T, dir string) {
+	if err := os.Remove(filepath.Join(dir, crl.IndexFileName)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func breakLine1(t *testing.T, dir string) {
+	editIndex(t, dir, func(b []byte) []byte { return bytes.Replace(b, []byte(`"G2"`), []byte(`"g2"`), 1) })
 }
 
 // removeCRL removes a CRL from the archive, and its line from the index if
@@ -212,13 +234,19 @@ func runArchiveCases(t *testing.T, mk func(verifier.Config) (roster.ProofVerifie
 					t.Errorf("stderr lacks %q:\n%s", want, errOut.String())
 				}
 			}
-			reported := strings.Count(errOut.String(), "iamreal-verify: CRL archive: the ")
-			summary := fmt.Sprintf("%d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files", c.diffs, crl.IndexFileName)
-			if reported != c.diffs || (c.diffs > 0) != strings.Contains(errOut.String(), summary) {
-				t.Errorf("%d differences reported, want %d:\n%s", reported, c.diffs, errOut.String())
-			}
 			if c.exit == exitError {
 				return
+			}
+			// One line per difference, then the summary.
+			summary := fmt.Sprintf("%d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files", c.diffs, crl.IndexFileName)
+			reported := 0
+			for _, l := range strings.Split(errOut.String(), "\n") {
+				if strings.HasPrefix(l, "iamreal-verify: CRL archive: ") && !strings.HasSuffix(l, summary) {
+					reported++
+				}
+			}
+			if reported != c.diffs || (c.diffs > 0) != strings.Contains(errOut.String(), summary) {
+				t.Errorf("%d differences reported, want %d:\n%s", reported, c.diffs, errOut.String())
 			}
 			var got []string
 			for _, l := range strings.Split(out.String(), "\n") {
