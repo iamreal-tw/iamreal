@@ -146,7 +146,6 @@ archived CRLs.
 ## Open items
 
 - Where the archive is published and in what format.
-- The issuer keys themselves (with [`record.md`](record.md)'s open item).
 
 ## Test vectors
 

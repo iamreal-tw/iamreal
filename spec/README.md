@@ -16,8 +16,9 @@ there are the names used here.
 | [`record.md`](record.md) | One record: fields, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
 | [`roster-rules.md`](roster-rules.md) | How the state is computed from the records | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
+| [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
+| [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
 
-Planned: the issuer keys, and the checks on proofs and public inputs.
 
 ## Test vectors
 

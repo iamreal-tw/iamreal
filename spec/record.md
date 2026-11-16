@@ -118,8 +118,8 @@ re-verifying, then:
 1. Checks that `circuit` is one of the accepted circuits and goes with
    `issuer` (table below).
 2. Rebuilds the public inputs, in the circuit's order:
-   - `issuer_modulus`: the modulus for `issuer`, in 120-bit limbs, least
-     significant first;
+   - `issuer_modulus`: the modulus for `issuer` ([`issuers.md`](issuers.md)),
+     in 120-bit limbs, least significant first;
    - `smt_root`: from the record (whether the root is recognized is a
      separate roster rule, [`roster-rules.md`](roster-rules.md));
    - `current_time`: from the challenge's date;
@@ -130,8 +130,8 @@ re-verifying, then:
 3. Verifies `proof` with these public inputs under the verification key whose
    SHA-256 is `circuit`.
 
-The checks on the proof bytes and on running `bb verify` are listed in the
-public inputs document of the circuits (to be moved into `spec/`).
+The checks on the proof bytes and on running `bb verify` are in
+[`proof-verification.md`](proof-verification.md).
 
 The server also checks the challenge before appending: it issued it, it has
 not expired, it is unused. It also applies the roster rules. A record that
@@ -151,9 +151,6 @@ records keep verifying.
 
 ## Open items
 
-- **The issuer moduli.** The G2 and G3 moduli, with the source of each
-  issuer certificate, will be listed here. Test issuer keys never appear in
-  this table.
 - **Hiding an account name on request.** When an account owner asks, later
   snapshots hide the account name in that owner's records. The hidden record
   keeps `seq`, `prev` and its original record hash, so the chain stays
