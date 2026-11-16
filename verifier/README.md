@@ -28,7 +28,12 @@ Poseidon2 和廢止清冊的樹不在這裡：驗證一筆紀錄不需要算它�
 
 ### 發證金鑰和測試金鑰
 
-正式的發證金鑰（`G2`、`G3` 的模數）和接受的電路寫死在 `tables.go`。**沒有任何設定能加入別的金鑰。** 測試用的金鑰只能經由 `export_test.go` 的 `NewWithIssuers` 注入；這個檔案只在 `go test` 時編譯，任何執行檔都不含它。
+正式的發證金鑰（`G2`、`G3` 的模數）和接受的電路寫死在 `tables.go`。**沒有任何設定能加入別的金鑰。** 測試用的金鑰只能經由 `NewWithIssuers` 注入，它只在兩種情況下存在：
+
+- `export_test.go`：只在 `go test ./verifier` 時編譯，給這個目錄自己的測試用。
+- `testissuers.go`：只在加了建置標籤 `iamrealtest` 時編譯，給其他目錄的測試用（`cmd/iamreal-verify` 的端到端測試，`go test -tags iamrealtest`）。
+
+照 README 建置的執行檔不帶這個標籤，所以不含 `NewWithIssuers`，不認得測試金鑰。
 
 ### `bb verify` 前後
 

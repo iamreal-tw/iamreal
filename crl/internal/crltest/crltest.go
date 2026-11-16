@@ -44,6 +44,9 @@ type CRL struct {
 	// are no entries, instead of leaving the field out.
 	EmptyList  bool
 	Extensions []Extension // after authorityKeyIdentifier and cRLNumber
+	// NoNullTBS and NoNullOuter leave out the NULL parameters of
+	// sha256WithRSAEncryption in tbsCertList and next to the signature.
+	NoNullTBS, NoNullOuter bool
 }
 
 var (
@@ -60,10 +63,12 @@ var (
 	OIDFreshestCRL              = asn1.ObjectIdentifier{2, 5, 29, 46}
 )
 
-func addAlgorithm(b *cryptobyte.Builder) {
+func addAlgorithm(b *cryptobyte.Builder, null bool) {
 	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 		b.AddASN1ObjectIdentifier(oidSHA256WithRSA)
-		b.AddASN1NULL()
+		if null {
+			b.AddASN1NULL()
+		}
 	})
 }
 
@@ -103,7 +108,7 @@ func TBS(c *CRL, keyID []byte) []byte {
 	var b cryptobyte.Builder
 	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 		b.AddASN1Int64(1) // v2
-		addAlgorithm(b)
+		addAlgorithm(b, !c.NoNullTBS)
 		b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 			for _, rdn := range []struct {
 				oid asn1.ObjectIdentifier
@@ -167,20 +172,28 @@ func KeyID(key *rsa.PublicKey) []byte {
 
 // Sign wraps tbs into a CertificateList signed by key.
 func Sign(tbs []byte, key *rsa.PrivateKey) []byte {
+	return Wrap(tbs, signature(tbs, key))
+}
+
+func signature(tbs []byte, key *rsa.PrivateKey) []byte {
 	digest := sha256.Sum256(tbs)
 	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	if err != nil {
 		panic(err)
 	}
-	return Wrap(tbs, sig)
+	return sig
 }
 
 // Wrap puts tbs and a signature into a CertificateList.
 func Wrap(tbs, sig []byte) []byte {
+	return wrap(tbs, sig, true)
+}
+
+func wrap(tbs, sig []byte, null bool) []byte {
 	var b cryptobyte.Builder
 	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 		b.AddBytes(tbs)
-		addAlgorithm(b)
+		addAlgorithm(b, null)
 		b.AddASN1BitString(sig)
 	})
 	return b.BytesOrPanic()
@@ -188,5 +201,6 @@ func Wrap(tbs, sig []byte) []byte {
 
 // Make returns c signed by key.
 func Make(c *CRL, key *rsa.PrivateKey) []byte {
-	return Sign(TBS(c, KeyID(&key.PublicKey)), key)
+	tbs := TBS(c, KeyID(&key.PublicKey))
+	return wrap(tbs, signature(tbs, key), !c.NoNullOuter)
 }

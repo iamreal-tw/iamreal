@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"time"
 
 	"golang.org/x/crypto/cryptobyte"
@@ -228,15 +229,54 @@ func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 }
 
 // Unusable is the error Check returns for a CRL that gives no tree
-// (spec/revocation-tree.md, "Which CRLs").
+// (spec/revocation-tree.md, "Which CRLs"). Code is one of the Reason
+// constants; Reason says why, for people.
 type Unusable struct {
+	Code   string
 	Reason string
 }
 
-func (e *Unusable) Error() string { return "crl: not usable: " + e.Reason }
+func (e *Unusable) Error() string { return "crl: not usable (" + e.Code + "): " + e.Reason }
 
-func unusable(format string, args ...any) error {
-	return &Unusable{Reason: fmt.Sprintf(format, args...)}
+// Reason codes of a CRL that is not usable, as the archive index writes them
+// after "-" in place of the root (spec/revocation-tree.md, "Archive index").
+// When several apply, the first in this order is given.
+const (
+	// Not a DER CertificateList (Parse fails).
+	ReasonDER = "not_usable_der"
+	// An AlgorithmIdentifier is not sha256WithRSAEncryption with NULL
+	// parameters.
+	ReasonAlgorithm = "not_usable_algorithm"
+	// The signature does not verify under the issuer key (in the index: under
+	// neither G2 nor G3).
+	ReasonSignature = "not_usable_signature"
+	// An extension appears twice, in the CRL or in an entry.
+	ReasonDuplicateExtension = "not_usable_duplicate_extension"
+	// A critical extension these rules do not know, in the CRL or in an
+	// entry.
+	ReasonCriticalExtension = "not_usable_critical_extension"
+	// A delta CRL (deltaCRLIndicator).
+	ReasonDelta = "not_usable_delta"
+	// A partitioned CRL (issuingDistributionPoint).
+	ReasonPartitioned = "not_usable_partitioned"
+	// No cRLNumber, or one that is not a non-negative INTEGER.
+	ReasonCRLNumber = "not_usable_crl_number"
+	// A serial number that gives no key: empty, negative, not in its
+	// shortest encoding, or more than 20 content bytes.
+	ReasonSerial = "not_usable_serial"
+	// Two different keys share their lowest 127 bits.
+	ReasonCollision = "not_usable_collision"
+)
+
+// Reasons lists the reason codes in the order Check applies them.
+var Reasons = []string{
+	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonDuplicateExtension,
+	ReasonCriticalExtension, ReasonDelta, ReasonPartitioned, ReasonCRLNumber,
+	ReasonSerial, ReasonCollision,
+}
+
+func unusable(code, format string, args ...any) error {
+	return &Unusable{Code: code, Reason: fmt.Sprintf(format, args...)}
 }
 
 // sha256WithRSAEncryption with NULL parameters, the encoding RFC 4055
@@ -252,45 +292,63 @@ var sha256WithRSANull = func() []byte {
 	return b
 }()
 
-// Check decides whether c is usable under issuerKey, and returns its keys in
-// the order of revokedCertificates. A CRL that is not usable gives an
-// *Unusable error:
+// Check decides whether c is usable under issuerKey, and returns its keys:
+// one per distinct serial number, in the order of their first appearance in
+// revokedCertificates. A CRL that is not usable gives an *Unusable error.
+// The checks, in the order their reason codes are given:
 //
 //   - both AlgorithmIdentifiers are sha256WithRSAEncryption with NULL
 //     parameters, and the signature verifies under issuerKey;
-//   - no deltaCRLIndicator, no issuingDistributionPoint, no extension
-//     appearing twice, and no critical extension (of the CRL or of an entry)
-//     other than authorityKeyIdentifier and cRLNumber;
-//   - every serial number gives a key (KeyFromSerial), and no two keys share
-//     their lowest 127 bits.
+//   - no extension of the CRL appears twice, and none is critical other
+//     than those these rules know;
+//   - no deltaCRLIndicator and no issuingDistributionPoint;
+//   - a cRLNumber holding a non-negative INTEGER;
+//   - entry by entry: no extension of the entry appears twice or is
+//     critical other than those the CRL may have, and the serial number
+//     gives a key (KeyFromSerial);
+//   - no two different keys share their lowest 127 bits. The same serial
+//     number listed twice is one key.
 func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
 	if err := c.VerifySignature(issuerKey); err != nil {
 		return nil, err
 	}
-	if err := checkExtensions(c.Extensions, "CRL"); err != nil {
+	if err := checkExtensions(c.Extensions, "CRL", crlExtensionsKnown); err != nil {
 		return nil, err
 	}
 	for _, x := range c.Extensions {
 		switch {
 		case x.ID.Equal(oidDeltaCRLIndicator):
-			return nil, unusable("delta CRL (deltaCRLIndicator)")
+			return nil, unusable(ReasonDelta, "delta CRL (deltaCRLIndicator)")
 		case x.ID.Equal(oidIssuingDistributionPoint):
-			return nil, unusable("partitioned CRL (issuingDistributionPoint)")
+			return nil, unusable(ReasonPartitioned, "partitioned CRL (issuingDistributionPoint)")
 		}
 	}
-	keys := make([]Key, len(c.Entries))
+	switch n, err := c.Number(); {
+	case err != nil:
+		return nil, unusable(ReasonCRLNumber, "%v", err)
+	case n == nil:
+		return nil, unusable(ReasonCRLNumber, "no cRLNumber extension")
+	}
+	keys := make([]Key, 0, len(c.Entries))
+	entryOf := make([]int, 0, len(c.Entries)) // the entry each key comes from
+	seen := make(map[Key]bool, len(c.Entries))
 	for i, e := range c.Entries {
-		if err := checkExtensions(e.Extensions, fmt.Sprintf("entry %d", i)); err != nil {
+		if err := checkExtensions(e.Extensions, fmt.Sprintf("entry %d", i), crlExtensionsKnown); err != nil {
 			return nil, err
 		}
 		k, err := KeyFromSerial(e.Serial)
 		if err != nil {
-			return nil, unusable("entry %d: %v", i, err)
+			return nil, unusable(ReasonSerial, "entry %d: %v", i, err)
 		}
-		keys[i] = k
+		if seen[k] {
+			continue // the same serial number again: one key
+		}
+		seen[k] = true
+		keys = append(keys, k)
+		entryOf = append(entryOf, i)
 	}
 	if i, j, ok := findCollision(keys); ok {
-		return nil, unusable("entries %d and %d share their lowest 127 bits", i, j)
+		return nil, unusable(ReasonCollision, "entries %d and %d are different serial numbers that share their lowest 127 bits", entryOf[i], entryOf[j])
 	}
 	return keys, nil
 }
@@ -299,33 +357,50 @@ func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
 // sha256WithRSAEncryption with NULL parameters and that the signature
 // verifies under issuerKey. It returns an *Unusable error if not.
 func (c *CRL) VerifySignature(issuerKey *rsa.PublicKey) error {
-	if !bytes.Equal(c.TBSSignatureAlgorithm, sha256WithRSANull) ||
-		!bytes.Equal(c.SignatureAlgorithm, sha256WithRSANull) {
-		return unusable("signature algorithm is not sha256WithRSAEncryption")
+	if !c.algorithmsOK() {
+		return unusable(ReasonAlgorithm, "signature algorithm is not sha256WithRSAEncryption with NULL parameters")
 	}
-	digest := sha256.Sum256(c.TBS)
-	if err := rsa.VerifyPKCS1v15(issuerKey, crypto.SHA256, digest[:], c.Signature); err != nil {
-		return unusable("signature does not verify under the issuer key")
+	if !c.signedBy(issuerKey) {
+		return unusable(ReasonSignature, "signature does not verify under the issuer key")
 	}
 	return nil
 }
 
-func checkExtensions(exts []Extension, where string) error {
+func (c *CRL) algorithmsOK() bool {
+	return bytes.Equal(c.TBSSignatureAlgorithm, sha256WithRSANull) &&
+		bytes.Equal(c.SignatureAlgorithm, sha256WithRSANull)
+}
+
+// signedBy reports whether the signature verifies under key as an
+// RSASSA-PKCS1-v1_5 signature with SHA-256, whatever the
+// AlgorithmIdentifiers say.
+func (c *CRL) signedBy(key *rsa.PublicKey) bool {
+	digest := sha256.Sum256(c.TBS)
+	return rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], c.Signature) == nil
+}
+
+// crlExtensionsKnown are the extensions these rules know, so that they may
+// be critical, in the CRL or in an entry.
+var crlExtensionsKnown = []asn1.ObjectIdentifier{
+	oidAuthorityKeyIdentifier, oidCRLNumber, oidDeltaCRLIndicator, oidIssuingDistributionPoint,
+}
+
+func checkExtensions(exts []Extension, where string, known []asn1.ObjectIdentifier) error {
 	for i, x := range exts {
 		for _, y := range exts[:i] {
 			if x.ID.Equal(y.ID) {
-				return unusable("%s: extension %v appears twice", where, x.ID)
+				return unusable(ReasonDuplicateExtension, "%s: extension %v appears twice", where, x.ID)
 			}
 		}
-		if x.Critical && !x.ID.Equal(oidAuthorityKeyIdentifier) && !x.ID.Equal(oidCRLNumber) &&
-			!x.ID.Equal(oidDeltaCRLIndicator) && !x.ID.Equal(oidIssuingDistributionPoint) {
-			return unusable("%s: unknown critical extension %v", where, x.ID)
+		if x.Critical && !slices.ContainsFunc(known, x.ID.Equal) {
+			return unusable(ReasonCriticalExtension, "%s: unknown critical extension %v", where, x.ID)
 		}
 	}
 	return nil
 }
 
-// Number returns the cRLNumber extension, or nil if there is none.
+// Number returns the cRLNumber extension, or nil if there is none. It is an
+// error if the extension does not hold a non-negative INTEGER in DER.
 func (c *CRL) Number() (*big.Int, error) {
 	for _, x := range c.Extensions {
 		if !x.ID.Equal(oidCRLNumber) {

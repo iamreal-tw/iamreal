@@ -76,17 +76,15 @@ func TestSyntheticCRLs(t *testing.T) {
 			if parsed.Date() != c.CRLDate {
 				t.Errorf("CRL date %s, want %s", parsed.Date(), c.CRLDate)
 			}
-			n, err := parsed.Number()
-			if err != nil {
-				t.Fatal(err)
-			}
+			// A cRLNumber that is not a non-negative INTEGER reads as none.
+			n, _ := parsed.Number()
 			if (n == nil) != (c.CRLNumber == "") || (n != nil && n.String() != c.CRLNumber) {
 				t.Errorf("cRLNumber %v, want %q", n, c.CRLNumber)
 			}
 			keys, err := parsed.Check(key)
 			if !c.Usable {
 				var u *Unusable
-				if !errors.As(err, &u) || !strings.Contains(u.Reason, c.Reason) {
+				if !errors.As(err, &u) || u.Code != c.Reason {
 					t.Fatalf("got %v, want unusable: %s", err, c.Reason)
 				}
 				return

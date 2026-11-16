@@ -27,17 +27,38 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
    | 欄位 | 內容 |
    |---|---|
-   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位時是 `-` |
+   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位、或它不是非負整數時是 `-` |
    | `this_update`、`next_update` | 清冊的 `thisUpdate`、`nextUpdate`（UTC） |
    | `crl_date` | 清冊日期：`thisUpdate` 換成台灣日期（UTC+8） |
    | `sha256` | 整個檔案的 SHA-256 |
-   | `entries` | 廢止的筆數 |
+   | `entries` | 廢止的筆數（同一個序號列兩次算兩筆） |
    | `usable` | 照規格「Which CRLs」可不可用 |
-   | `root` | 樹根，64 個小寫十六進位數字（大端序），和紀錄的 `smt_root` 同一種寫法 |
+   | `reason` | 不可用時的原因代碼（下表） |
+   | `root` | 可用時的樹根，64 個小寫十六進位數字（大端序），和紀錄的 `smt_root` 同一種寫法 |
+   | `keys` | 樹裡的鍵數（同一個序號列兩次算一個鍵） |
 
 3. 拿 `root` 和紀錄的 `smt_root` 比對。紀錄的日期要落在清冊日期的前 1 天到後 3 天之間，樹根才被承認（規格「Which roots a record may use」）。
 
-清冊不可用時印出 `usable no` 和原因，結束代碼是 1；其他錯誤（讀不到檔案、不是 DER 的清冊）是 2。不可用的原因有：簽章演算法不是 sha256WithRSAEncryption、簽章不對、差異清冊（`deltaCRLIndicator`）、分段清冊（`issuingDistributionPoint`）、不認得的關鍵延伸欄位、同一個延伸欄位出現兩次、序號是負數／不是最短編碼／超過 20 個位元組、兩個序號的最低 127 位元相同。
+清冊不可用時印出 `usable no` 和原因代碼，說明印在標準錯誤，結束代碼是 1；不是 DER 的 `CertificateList` 也算不可用（只印 `sha256`）。其他錯誤（讀不到檔案、選項錯誤）是 2。
+
+### 不可用的原因代碼
+
+規格「Which CRLs」的每一條對應下面一個或幾個代碼。存檔索引把它接在 `-` 後面寫在 `root` 欄位（例如 `-not_usable_signature`）。好幾條都不符合時，給檢查順序最前面的那一個：
+
+| 順序 | 代碼 | 意思 |
+|---|---|---|
+| 1 | `not_usable_der` | 不是 DER 的 `CertificateList`（多餘的位元組、非最短的長度、結構不對） |
+| 2 | `not_usable_algorithm` | `tbsCertList` 裡或外面的簽章演算法不是 sha256WithRSAEncryption，或參數不是 NULL（包括省略） |
+| 3 | `not_usable_signature` | 簽章在發證金鑰下驗不過（索引：兩把都驗不過） |
+| 4 | `not_usable_duplicate_extension` | 清冊的同一個延伸欄位出現兩次 |
+| 5 | `not_usable_critical_extension` | 清冊有不認得的關鍵延伸欄位。認得的是 `authorityKeyIdentifier`、`cRLNumber`、`deltaCRLIndicator`、`issuingDistributionPoint` |
+| 6 | `not_usable_delta` | 差異清冊（`deltaCRLIndicator`，關鍵與否都算） |
+| 7 | `not_usable_partitioned` | 分段清冊（`issuingDistributionPoint`） |
+| 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER |
+| 9 | 單筆的 `not_usable_duplicate_extension`、`not_usable_critical_extension`、`not_usable_serial` | 逐筆檢查，第一個有問題的那一筆決定代碼：延伸欄位重複、不認得的關鍵延伸欄位（認得的同第 5 列，所以帶關鍵 `certificateIssuer` 的間接清冊不可用）、序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組） |
+| 10 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |
+
+代碼在程式裡是 `crl.Reason…` 常數，清單是 `crl.Reasons`。
 
 在 M1 Max 上，G3（約 17.6 萬筆）建樹約 5 秒、記憶體約 110 MB；G2（約 34 萬筆）約 10 秒、約 200 MB。
 
@@ -51,37 +72,61 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 這個指令是給檢查和測試用的。持卡人的裝置自己建樹、自己算證明，不用這個指令，也不把序號交給任何人。
 
-### 存檔索引（提案）
+`-key FILE` 讓 `check`、`prove` 改用測試用的發證金鑰（公鑰或憑證，DER 或 PEM）。測試金鑰從來不是內政部的金鑰。
 
-規格把「存檔放哪裡、什麼格式」列為待辦，這裡的格式是提案：
+### 存檔索引
+
+格式照規格「Archive index」。存檔是一個目錄：清冊檔案，加上索引 `index.jsonl`。
 
 ```sh
-./iamreal-crl index DIR
+./iamreal-crl index DIR > DIR/index.jsonl
 ```
 
-讀一個目錄裡的每個檔案，用兩把發證金鑰試簽章，決定它屬於 G2 還是 G3，每份可用的清冊印一行，依金鑰、清冊編號、SHA-256 排序：
+`index` 讀目錄裡的每個檔案（不讀子目錄、名字以 `.` 開頭的檔案和 `index.jsonl` 本身），用兩把發證金鑰試簽章，每個檔案印一行，可用或不可用都印：
 
 ```
-{"issuer":"G3","crl_number":"4660","this_update":"2026-11-15T16:30:00Z","next_update":"2026-11-17T04:30:00Z","crl_date":"2026-11-16","sha256":"…","root":"…"}
+{"issuer":"G3","crl_number":"2026111605","this_update":"2026-11-15T21:12:06Z","next_update":"2026-11-17T09:00:00Z","crl_date":"2026-11-16","sha256":"…","root":"…"}
+{"issuer":"-","crl_number":"-","this_update":"-","next_update":"-","crl_date":"-","sha256":"…","root":"-not_usable_der"}
 ```
 
-每一行是固定的樣板（鍵的順序固定、沒有空白），和紀錄的寫法相同（[`spec/record.md`](../spec/record.md)「Lines and files」）。不可用或讀不懂的檔案不列入，原因印在標準錯誤，所有檔案處理完後結束代碼是 1。
+| 欄位 | 寫法 |
+|---|---|
+| `issuer` | 簽章驗得過的金鑰，`G2` 或 `G3`；兩把都驗不過時 `-`。這裡的「驗得過」只看 RSA 的 SHA-256 簽章本身，不看演算法欄位，所以演算法欄位不對、但簽章驗得過的清冊有 `issuer`，原因是 `not_usable_algorithm` |
+| `crl_number` | `cRLNumber` 的十進位，沒有前導零；沒有、讀不懂、或是負數時 `-` |
+| `this_update`、`next_update` | UTC，`YYYY-MM-DDTHH:MM:SSZ`；沒有時（或整個檔案讀不懂時）`-` |
+| `crl_date` | 清冊日期；整個檔案讀不懂時 `-` |
+| `sha256` | 整個檔案的 SHA-256 |
+| `root` | 可用時是樹根；不可用時是 `-` 接上面的原因代碼 |
 
-索引只是方便：重驗的人仍然要下載清冊本身，檢查簽章，自己重建樹根。
+排序：`issuer`（位元組順序，所以 `-` 在 `G2`、`G3` 前面），然後 `crl_number` 當數字（`-` 在所有數字前面），然後 `sha256`。內容相同的兩個檔案得到兩行相同的行。
 
-`-key FILE` 讓 `check`、`prove` 改用測試用的發證金鑰（公鑰或憑證，DER 或 PEM），`index` 則多試這把金鑰。測試金鑰從來不是內政部的金鑰。
+有任何不可用的檔案時，索引照樣印完，每個不可用的檔案在標準錯誤印一行，結束代碼是 1。
+
+`-key FILE` 多試一把測試用的發證金鑰，用它驗過的行 `issuer` 寫 `test`。這樣的索引不合規格（`issuer` 只能是 `G2`、`G3`、`-`），只給測試用。
+
+### 讀存檔：`crl.Archive`
+
+`roster/` 的第 3 項檢查（樹根是否被承認）要問：「這把金鑰、這個樹根，有哪些可用清冊的日期？」`crl.Archive` 回答這個問題（`CRLDates(issuer, root)`，日期是 `YYYY-MM-DD` 字串；`crl/` 不引用 `verifier/`，換成 `verifier.Date` 在 `cmd/iamreal-verify` 做）。兩種開法：
+
+- **`crl.RebuildArchive(DIR, 金鑰, …)`：完整重算。** 先照規格檢查索引的每一行，再對目錄裡的每個檔案重新驗章、建樹，重建一份索引，兩份的行要完全相同（比的是整行，所以 `sha256`、`root`、日期都比到）。索引沒列的檔案、索引列了但目錄裡沒有的檔案、任何一行不同，都停下並回報第一個不同（`*crl.IndexMismatch`）。G2 的清冊一份約 10 秒，一年份的存檔要很久。
+- **`crl.ReadArchiveIndex(DIR)`：只信索引。** 只讀 `index.jsonl`，照規格檢查每一行（`crl.ParseIndex`）：固定的樣板、各欄位的格式、`crl_date` 等於 `this_update` 在台灣的日期、有樹根的行要有 `issuer`、`crl_number`、`this_update`、行的順序。樹根和檔案本身沒有檢查。
+
+兩種都只用可用的行（`root` 是樹根的行）。同一個樹根可能對應好幾份清冊（兩份清冊之間沒有新的廢止時），每一份的日期都會回傳。
+
+索引只是方便：重驗的人可以從檔案重建它，完整重算就是這樣做。
 
 ## 檔案
 
 | 檔案 | 內容 |
 |---|---|
-| `crl.go` | 解析 `CertificateList`（嚴格的 DER），`Check` 判斷可不可用並取出每個序號的鍵，清冊日期 |
+| `crl.go` | 解析 `CertificateList`（嚴格的 DER），`Check` 判斷可不可用並取出每個序號的鍵，原因代碼，清冊日期 |
+| `index.go` | 存檔索引的一行（`IndexFile`）、整個目錄（`BuildIndex`）、排序、讀索引並檢查寫法（`ParseIndex`）、`Archive`（`RebuildArchive`、`ReadArchiveIndex`） |
 | `key.go` | 鍵：序號內容位元組的無號大端值，最多 20 個位元組 |
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
 | `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間 |
-| `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、樹根） |
+| `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、原因代碼、樹根） |
 
 ## 測試
 
@@ -92,7 +137,8 @@ go test ./crl/...
 - `spec/vectors/poseidon2-constants.json`：常數、置換；`spec/vectors/poseidon2.json`：`hash_2`、`hash_3`、`scoped_id`、`revocation_tree`（樹根和每一份證明）。
 - 樹和規格裡的遞迴定義（測試裡另寫一份慢的）在亂數的樹上比對；每份證明用電路的檢查方式（`assert_not_in_tree`）重算回樹根。
 - Poseidon2 另有一份 `math/big` 寫的慢版本（`poseidon2/reference_test.go`），兩份互相比對。
-- `testdata/` 的每份自製清冊：可不可用、原因、樹根、清冊日期等。
+- `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。
+- 存檔索引：排序、每一種寫錯的行被拒絕、完整重算找得到改過的樹根、多出來的檔案、少了的檔案；只信索引時照索引回答。
 
 ### 重新產生自製清冊
 
