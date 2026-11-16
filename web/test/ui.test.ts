@@ -19,6 +19,7 @@ import {
   doneView,
   firstNotDone,
   itemStates,
+  progressButtons,
   readItemOf,
   statusView,
   stopMessage,
@@ -161,6 +162,23 @@ describe("the lists of steps 2 and 5", () => {
     assert.deepEqual(states(["component", "certificates", "certificate", "config"], { running: false, stoppedAt: 5 }), ["done", "done", "done", "done", "", "halt"]);
     // The certificates came back, but none can be used: stopped at item 3 although its event came.
     assert.deepEqual(states(["component", "certificates"], { running: false, stoppedAt: 2 }), ["done", "done", "halt", "", "", ""]);
+  });
+
+  test("the buttons after step 5 stopped: by whether the engine still holds the PIN", () => {
+    // The phase the engine is in after each stop of proceed() and resubmit() (src/flow.ts).
+    const cases: [string, string, string[]][] = [
+      ["the browser blocked the window of the second signature (the PIN kept)", "chosen", ["back"]],
+      ["the submission did not get through (the PIN dropped after the second signature)", "submit_failed", ["read_again", "retry"]],
+      ["the challenge expired on the server (challenge_unknown)", "stopped", ["read_again"]],
+      ["a challenge of another day", "stopped", ["read_again"]],
+      ["the server refused the record", "stopped", ["read_again"]],
+      ["the server's 3 records today", "stopped", ["read_again"]],
+      ["the card's signature does not verify", "stopped", ["read_again"]],
+      ["the device cannot prove", "stopped", ["read_again"]],
+    ];
+    for (const [label, phase, want] of cases) assert.deepEqual(progressButtons(phase), want, label);
+    assert.equal(COPY.read.read_again, "再讀一次卡片");
+    assert.equal(COPY.progress.back, "回到上一步");
   });
 
   test("step 5 stops where it got to: the first item not done", () => {

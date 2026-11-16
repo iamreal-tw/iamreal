@@ -567,6 +567,7 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
       `the platforms: Threads can be picked, X is listed as not open ${JSON.stringify(rows)}`,
     );
     check((await whereText()) === "", "the platforms come before the six steps");
+    check((await page.text("header")) === C.common.service_name, `the header: the mark and "${C.common.service_name}"`);
     if (o.screenshots) await screenshot(`${o.screenshots}-0-platforms`);
     await page.click('[data-platform="threads"]');
   }
@@ -692,7 +693,7 @@ async function finish(o: {
     await page.clickButton(o.button);
     const d1 = await waitDoneOrMessage();
     check(d1.item === "submit" && d1.message === C.stops.submit_failed, `a submission that did not get through, under 送出: "${d1.message}" (${d1.item})`);
-    check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.progress.back, C.progress.retry]), `stopped at 送出: ${JSON.stringify((await buttons()).map((b) => b.text))}`);
+    check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.read.read_again, C.progress.retry]), `stopped at 送出 (the PIN dropped after the second signature): 再讀一次卡片 and 再試一次: ${JSON.stringify((await buttons()).map((b) => b.text))}`);
     if (o.screenshots) await screenshot(`${o.screenshots}-5-submit-failed`);
     await page.clickButton(C.progress.retry);
     const d = await waitDoneOrMessage();
@@ -728,7 +729,7 @@ function finishDone(o: { title: string; recordAccount: string; withdraw?: boolea
   if (!check(d.done, `${o.label}: done ${d.message}`)) return;
   const lines = d.main.split("\n").filter(Boolean);
   const titleAt = lines.findIndex((l) => l === o.title);
-  check(titleAt >= 0 && titleAt <= 1, `step 6: the title "${o.title}" (${JSON.stringify(lines.slice(0, 2))})`);
+  check(titleAt >= 0 && titleAt <= 2, `step 6: the title "${o.title}" (${JSON.stringify(lines.slice(0, 3))})`);
   const sid = /島民編號開頭是 ([0-9A-Z]{6})。/.exec(d.main)?.[1] ?? "";
   check(d.main.includes(doneLine(o.recordAccount, o.withdraw) + fill(C.done.short_id, { platform: PLATFORM, short_id: sid })), `step 6: the record line and the short ID (${sid})`);
   check(d.main.includes(C.done.recorded) && d.main.includes(today()) && d.main.includes(C.done.trust) && d.main.includes(C.done.unplug), "step 6: the roster's line, its date, that anyone can verify, unplug");
@@ -974,13 +975,21 @@ await tryStep("the server finds 3 records today when the card proof is sent (dai
   check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id && serverLog.includes(`"error":"daily_limit"`), `the request ID on the screen (${id}) is the response's, and the server logged daily_limit`);
   check(componentCount("MakeSignature") === signs + 1, "the second signature, once");
   check((await recordCount()) === before, "nothing was appended");
-  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.progress.back]), `stopped: 回到上一步 only ${JSON.stringify((await buttons()).map((b) => b.text))}`);
+  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.read.read_again]), `stopped (the PIN dropped): 再讀一次卡片 only ${JSON.stringify((await buttons()).map((b) => b.text))}`);
   await screenshot("daily-limit-5-server");
-  // The card proof ended (the PIN was dropped): 回到上一步 reads the card again.
-  await page.clickButton(C.progress.back);
-  await waitStep("read", "回到上一步: step 2");
-  check((await items("read")).every((i) => i.state === ""), "回到上一步: step 2, nothing read");
-  await lastCardProofGone("回到上一步 after a stop", main);
+  // The card proof ended (the PIN was dropped): 再讀一次卡片 is step 2, reading the card in that click.
+  const reads = componentCount("GetUserCert");
+  await watchList();
+  await page.clickButton(C.read.read_again);
+  await waitStep("read", "再讀一次卡片: step 2");
+  check((await whereText()).includes(stepLine(2)), "再讀一次卡片: 第 2 步");
+  const r = await page.waitFor<string>(
+    `(() => { const n = [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.common.next)}); return n && !n.disabled ? "read" : (document.querySelector('[data-list="read"] [data-state="halt"]') ? "stopped" : null); })()`,
+    "the card read again",
+    30_000,
+  );
+  check(r === "read" && componentCount("GetUserCert") === reads + 1, `再讀一次卡片: the card read again at once (${r})`);
+  await lastCardProofGone("再讀一次卡片 after a stop", main);
 });
 
 await setDay(2);
@@ -1044,7 +1053,7 @@ await tryStep("switches used up; then a submission the server refuses", async ()
   check(serverLog.includes(`"id":"${id}"`) && serverLog.includes(`"error":"proof"`), "the server's log line has the same ID");
   const list = await items("progress");
   check(JSON.stringify(list.map((i) => i.state)) === JSON.stringify(["done", "done", "done", "halt"]) && list[3]!.st === C.common.halted, `in progress: done, done, done, 停在這裡 ${JSON.stringify(list.map((i) => i.st))}`);
-  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.progress.back]), "refused: 回到上一步 only (no 再試一次)");
+  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.read.read_again]), "refused: 再讀一次卡片 only (no 再試一次)");
   await screenshot("rejected-5-progress");
 });
 
@@ -1232,12 +1241,53 @@ await tryStep("a challenge dated another day: stopped under 連上島民的伺�
   check(!d.done && d.item === "server" && d.message === C.stops.date_mismatch, `challenge of another day, under 連上島民的伺服器: "${d.message}" (${d.item})`);
   const list = await items("progress");
   check(JSON.stringify(list.map((i) => i.state)) === JSON.stringify(["halt", "", "", ""]), `in progress: 停在這裡, then nothing ${JSON.stringify(list.map((i) => i.state))}`);
-  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.progress.back]), "回到上一步 only");
+  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.read.read_again]), "再讀一次卡片 only");
   await screenshot("date-5-progress");
   await sleep(500);
   check(componentCount("MakeSignature") === signs, "no second signature");
-  await page.clickButton(C.progress.back);
-  await waitStep("read", "回到上一步: step 2");
+  const reads = componentCount("GetUserCert");
+  await page.clickButton(C.read.read_again);
+  await waitStep("read", "再讀一次卡片: step 2");
+  for (let i = 0; i < 100 && componentCount("GetUserCert") === reads; i++) await sleep(50);
+  check(componentCount("GetUserCert") === reads + 1, "再讀一次卡片: the card read again");
+});
+
+// The server says the challenge expired (challenge_unknown) when the record is
+// sent: the engine dropped the PIN at the second signature, so the card proof
+// starts again from reading the card.
+await tryStep("the challenge expired when sent (challenge_unknown): 再讀一次卡片, then the card proof again", async () => {
+  await toPin(fresh.spec());
+  await confirmPin(PIN);
+  await waitStatus();
+  await typeAccount("alice");
+  await waitConsequence();
+  const before = await recordCount();
+  const undo = await intercept("*/api/v1/records", (p) =>
+    page.send("Fetch.fulfillRequest", {
+      requestId: p.requestId,
+      responseCode: 400,
+      responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+      body: Buffer.from(JSON.stringify({ error: "challenge_unknown" })).toString("base64"),
+    }),
+  );
+  await page.clickButton(fill(C.confirm.button_first, { account: "@alice" }));
+  const d = await waitDoneOrMessage();
+  await undo();
+  check(!d.done && d.item === "submit" && d.message === C.stops.challenge_expired, `the challenge expired, under 送出: "${d.message}" (${d.item})`);
+  check(JSON.stringify((await buttons()).map((b) => b.text)) === JSON.stringify([C.read.read_again]), `the PIN dropped: 再讀一次卡片 only ${JSON.stringify((await buttons()).map((b) => b.text))}`);
+  check((await recordCount()) === before, "nothing appended");
+  await screenshot("expired-5-progress");
+  await watchList();
+  await page.clickButton(C.read.read_again);
+  const r = await page.waitFor<string>(
+    `(() => { const n = [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.common.next)}); return n && !n.disabled && document.querySelector('[data-step="read"]') ? "read" : null; })()`,
+    "the card read again",
+    30_000,
+  );
+  check(r === "read", "再讀一次卡片: step 2, every item done");
+  await page.clickButton(C.common.next);
+  await waitStep("pin", "step 3");
+  check(await pinGone(), "step 3 again: the PIN field is empty (the PIN is typed again)");
 });
 
 // On step 3, the PIN typed again and 確認卡片 pressed again while the first
@@ -1419,6 +1469,35 @@ await tryStep("a second card declares @dave: this card's link, and why (account_
   await waitConsequence();
   await finish({ label: "@dave, a second card", button: fill(C.confirm.button_first, { account: "@dave" }), title: C.done.first, recordAccount: "dave", link: "card", otherCards: true, screenshots: "other-cards" });
 });
+await tryStep("account_cards missing from the answer: done all the same, this card's link, no sentence about other cards", async () => {
+  component.card = other.spec();
+  await toStatus();
+  await clickChoice(C.choose.refresh);
+  await waitConsequence();
+  const seen: unknown[] = [];
+  const undo = await intercept(
+    "*/api/v1/records",
+    async (p) => {
+      const r = await page.send("Fetch.getResponseBody", { requestId: p.requestId });
+      const body = JSON.parse(r.base64Encoded ? Buffer.from(r.body, "base64").toString() : r.body);
+      seen.push(body.account_cards);
+      delete body.account_cards;
+      await page.send("Fetch.fulfillRequest", { requestId: p.requestId, responseCode: p.responseStatusCode, responseHeaders: p.responseHeaders, body: Buffer.from(JSON.stringify(body)).toString("base64") });
+    },
+    "Response",
+  );
+  try {
+    const before = await recordCount();
+    await page.clickButton(C.confirm.button_refresh);
+    const d = await waitDoneOrMessage();
+    check(JSON.stringify(seen) === "[2]", `the server answered account_cards ${JSON.stringify(seen)}; the page got none`);
+    finishDone({ label: "refresh @dave, no account_cards", title: C.done.refresh, recordAccount: "dave", link: "card", otherCards: false }, d);
+    check((await recordCount()) === before + 1, "one record");
+  } finally {
+    await undo();
+  }
+});
+
 await tryStep("the answer to the submission lost, the record appended: 再試一次 gets challenge_used, the card's state shows the record (the real server)", async () => {
   component.card = fresh.spec();
   await toStatus();

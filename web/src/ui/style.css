@@ -96,6 +96,13 @@ code,
   flex: none;
 }
 
+.top b {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
 .logo-card-body {
   fill: var(--red);
 }

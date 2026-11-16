@@ -248,7 +248,7 @@ export interface Done {
   /**
    * The cards that declare the record's account now (`account_cards`), for
    * which link the screen suggests; null when the record was found in the
-   * card's state.
+   * card's state, or the answer's number could not be read.
    */
   accountCards: number | null;
   kind: "first" | "refresh" | "switch" | "withdraw";

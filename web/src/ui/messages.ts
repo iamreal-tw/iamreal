@@ -225,6 +225,25 @@ export function itemStates(items: readonly ListItem[], seen: ReadonlySet<Progres
   return out;
 }
 
+/**
+ * The buttons under step 5's list when it stopped (design/copy/card-proof.md,
+ * in progress). `phase`: the flow's phase after the stop.
+ *
+ *   back        progress.back: the PIN is still in the engine ("chosen": the
+ *               browser blocked the window of the second signature), so the
+ *               confirm screen's button works again
+ *   read_again  read.read_again: the engine dropped the PIN (every other
+ *               stop: the flow ended, or the second signature was made); the
+ *               card proof starts again from reading the card
+ *   retry       progress.retry, besides: the submission did not get through
+ *               ("submit_failed") and can be sent again as it is
+ */
+export function progressButtons(phase: string): ("back" | "read_again" | "retry")[] {
+  if (phase === "chosen") return ["back"];
+  if (phase === "submit_failed") return ["read_again", "retry"];
+  return ["read_again"];
+}
+
 /** The first item not done (where a step that runs in order stopped). */
 export function firstNotDone(states: readonly ItemState[]): number {
   const i = states.findIndex((st) => st !== "done");

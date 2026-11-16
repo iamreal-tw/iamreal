@@ -13,7 +13,7 @@ if (title !== null) {
   document.title = title;
   replace(
     document.getElementById("app")!,
-    el("header", { class: "top" }, logo()),
+    el("header", { class: "top" }, logo(), el("b", {}, COPY.common.service_name)),
     el("section", { class: "step", attrs: { "data-help": topic! } }, el("h1", {}, title), el("p", {}, COPY.not_in_card_proof_md.help_pending)),
   );
 }

@@ -1,5 +1,6 @@
 {
   "common": {
+    "service_name": "島民",
     "step": "第 {step} 步，共 {steps} 步",
     "back": "上一步",
     "next": "下一步",

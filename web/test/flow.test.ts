@@ -1294,9 +1294,27 @@ describe("account_cards in the answer to a submission", () => {
     assert.deepEqual([done.seq, done.accountCards, done.kind], [9, 3, "first"]);
   });
 
-  for (const bad of [undefined, -1, 1.5, "1", null]) {
-    test(`not a count (${JSON.stringify(bad)}): malformed_response`, async () => {
-      const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body: { seq: 9, record_hash: "c".repeat(64), kind: "first", account_cards: bad } }) } });
+  // The record is in the roster already: an account_cards the device cannot read does not stop the card proof.
+  for (const bad of ["(none)", -1, 1.5, "1", null]) {
+    test(`not a count (${JSON.stringify(bad)}): done, the number not known`, async () => {
+      const body: Record<string, unknown> = { seq: 9, record_hash: "c".repeat(64), kind: "first" };
+      if (bad !== "(none)") body.account_cards = bad;
+      const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body }) } });
+      await toChosen(s);
+      const done = await s.flow.proceed("alice");
+      assert.deepEqual([done.seq, done.recordHash, done.kind, done.accountCards], [9, "c".repeat(64), "first", null]);
+      assert.equal(s.flow.phase, "done");
+    });
+  }
+
+  // seq, record_hash and kind stay strict.
+  for (const [label, body] of [
+    ["no seq", { record_hash: "c".repeat(64), kind: "first", account_cards: 1 }],
+    ["a record_hash not in hex", { seq: 9, record_hash: "C".repeat(64), kind: "first", account_cards: 1 }],
+    ["an unknown kind", { seq: 9, record_hash: "c".repeat(64), kind: "declare", account_cards: 1 }],
+  ] as const) {
+    test(`${label}: malformed_response`, async () => {
+      const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body }) } });
       await toChosen(s);
       assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "malformed_response", status: 201 });
     });

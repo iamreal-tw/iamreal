@@ -49,6 +49,7 @@ import {
   firstNotDone,
   formatHint,
   itemStates,
+  progressButtons,
   readItemOf,
   statusView,
   stopMessage,
@@ -167,7 +168,7 @@ export function startApp(o: AppOptions): void {
             el("span", { class: "bar", attrs: { "aria-hidden": "true" } }, ...Array.from({ length: STEPS }, (_, i) => el("i", { class: i < step ? "on" : "" }))),
             el("span", {}, fill(COPY.common.step, { step, steps: STEPS })),
           );
-    replace(root, el("header", { class: "top" }, logo()), where, screen);
+    replace(root, el("header", { class: "top" }, logo(), el("b", {}, COPY.common.service_name)), where, screen);
     document.title = screen.querySelector("h1")?.textContent ?? "";
     window.scrollTo(0, 0);
   }
@@ -235,8 +236,12 @@ export function startApp(o: AppOptions): void {
 
   // Step 2: read the card -----------------------------------------------------------
 
-  /** Step 2, with nothing read. Going back to it (from step 3) starts a new card proof. */
-  function read(p: OpenPlatform): void {
+  /**
+   * Step 2, with nothing read. Going back to it (from step 3) starts a new
+   * card proof. `now`: read the card at once (read.read_again pressed on step
+   * 5: called in that click, so the component's window may open).
+   */
+  function read(p: OpenPlatform, o: { now?: boolean } = {}): void {
     drop();
     const c = COPY.read;
     const message = messageArea();
@@ -244,19 +249,23 @@ export function startApp(o: AppOptions): void {
     const buttons = el("div", { class: "actions" });
     const back = secondary(COPY.common.back, () => before(p));
     let seen = new Set<Progress>();
+    let readButton: HTMLButtonElement | null = null;
 
-    const idle = (label: string): void => replace(buttons, back, primary(label, onRead));
+    const idle = (label: string): void => {
+      readButton = primary(label, (ev) => onRead(ev.currentTarget as HTMLButtonElement));
+      replace(buttons, back, readButton);
+    };
     idle(c.read_card);
     list.render(itemStates(READ_ITEMS, seen, { running: false, stoppedAt: null }));
 
-    function onRead(ev: MouseEvent): void {
+    function onRead(pressed: HTMLButtonElement): void {
       // The component's window opens now, in the click (one click, one window).
       if (!card.open()) {
         // Nothing was sent. The same button, once the browser allows the window.
         message.show(stopMessage({ code: "card", card: "popup_blocked" }, p));
         return;
       }
-      (ev.currentTarget as HTMLButtonElement).disabled = true;
+      pressed.disabled = true;
       back.disabled = true;
       message.show(null);
       seen = new Set();
@@ -301,6 +310,7 @@ export function startApp(o: AppOptions): void {
     }
 
     show(2, el("section", { class: "step", attrs: { "data-step": "read" } }, el("h1", {}, c.title), el("p", { class: "lead" }, c.insert), message.node, list.node, buttons));
+    if (o.now && readButton) onRead(readButton);
   }
 
   // Step 3: the PIN ------------------------------------------------------------------
@@ -590,24 +600,20 @@ export function startApp(o: AppOptions): void {
           card.release();
           if (flow !== f) return;
           onProgress = null;
-          // A blocked window: nothing reached the card; back to step 5, the same button again.
-          if (retryable(f, e) && e.stop.code === "card" && e.stop.card === "popup_blocked") {
-            confirmScreen(p, f, cq, back, stopMessage(e.stop, p));
-            return;
-          }
           const states = itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: null });
           const at = firstNotDone(states);
           const m = stopMessage(stopOf(e), p, f.phase === "submit_failed");
           list.render(itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: at }), { at, message: m });
           zk.hidden = true;
-          // "Back to the last step": step 5 again if the engine can still make the card proof
-          // from there; once it ended (the PIN dropped), the card has to sign
-          // again from the start, so the card is read again.
-          const toBack = (): void => (f.phase === "chosen" ? confirmScreen(p, f, cq, back) : read(p));
+          // The PIN still in the engine (a blocked window: nothing reached the card):
+          // back to step 5, the same button again. Otherwise the engine dropped the
+          // PIN: the card proof starts again, reading the card in this click.
+          const kinds = progressButtons(f.phase);
           replace(
             buttons,
-            secondary(c.back, toBack),
-            !("code" in m) && m.retry
+            kinds.includes("back") ? secondary(c.back, () => confirmScreen(p, f, cq, back)) : null,
+            kinds.includes("read_again") ? secondary(COPY.read.read_again, () => read(p, { now: true })) : null,
+            kinds.includes("retry")
               ? primary(c.retry, () => {
                   replace(buttons);
                   list.render(itemStates(PROGRESS_ITEMS, seen, { running: true, stoppedAt: null }));
