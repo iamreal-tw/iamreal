@@ -9,10 +9,11 @@ import { FakeCard } from "../src/card/fake.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { CardProofFlow, FlowStop, type Stop } from "../src/flow.ts";
 import type { IssuerName } from "../src/issuers.ts";
-import { loadCircuit } from "../src/prover/artifacts.ts";
+import { ArtifactError, loadCircuit } from "../src/prover/artifacts.ts";
 import type { Prover } from "../src/prover/prover.ts";
 import type { Action } from "../src/spec/declaration-code.ts";
 import { memoryStore } from "../src/storage.ts";
+import { pack31 } from "../src/spec/field.ts";
 import { poseidon } from "./bb.ts";
 import { type BackendOptions, FakeBackend } from "./fixtures/backend.ts";
 import { IDP } from "./fixtures/crls.ts";
@@ -48,6 +49,9 @@ async function setup(o: {
   action?: Action;
   username?: string;
   tamperCircuit?: boolean;
+  engineFails?: boolean;
+  /** The stub prover returns the public inputs the circuit would (the proof bytes stay zeros). */
+  echoPublicInputs?: boolean;
 } = {}): Promise<Setup> {
   const w = o.world ?? (await makeWorld());
   const files = new Map<string, Uint8Array>(circuitFiles);
@@ -62,12 +66,27 @@ async function setup(o: {
   const p = await poseidon();
   const proveCalls: Record<string, unknown>[] = [];
   const prover: Prover = {
-    ready: async () => ({ multithreaded: false, threads: 1, reportedThreads: null }),
+    ready: async () => {
+      if (o.engineFails) throw new ArtifactError("/crs/bn254_g1_compressed_2p18.dat", "SHA-256 is not the expected one");
+      return { multithreaded: false, threads: 1, reportedThreads: null };
+    },
     hash2: async (a, b) => p.hash2(a, b),
     preloadCircuit: async (name) => void (await loadCircuit(backend.fetch, name)),
     prove: async (_name, inputs) => {
       proveCalls.push(inputs);
-      return { proof: new Uint8Array(14_656), publicInputs: [] };
+      if (!o.echoPublicInputs) return { proof: new Uint8Array(14_656), publicInputs: [] };
+      const big = (x: unknown) => BigInt(x as string);
+      let nullifier = 0n;
+      for (const limb of inputs.scope_signature as string[]) nullifier = p.hash2(nullifier, big(limb));
+      const publicInputs = [
+        ...(inputs.issuer_modulus as string[]).map(big),
+        big(inputs.smt_root),
+        big(inputs.current_time),
+        nullifier,
+        pack31(Uint8Array.from(inputs.scope as number[])),
+        pack31(Uint8Array.from(inputs.declaration_code as number[])),
+      ];
+      return { proof: new Uint8Array(14_656), publicInputs };
     },
   };
   const store = memoryStore(o.remembered);
@@ -121,6 +140,11 @@ async function assertQuiet(s: Setup, stop: Stop, requestsAtStop: number): Promis
   }
 }
 
+/** No request carried the scoped ID. */
+function assertNoCardState(s: Setup): void {
+  assert.equal(s.backend.log.filter((r) => r.path === "/api/v1/card-state").length, 0, "a card-state request was sent");
+}
+
 /** Card read, then the background (CRL, tree, circuit) finishes or stops. */
 async function readAndWait(s: Setup): Promise<Stop | null> {
   await s.flow.readCard();
@@ -133,7 +157,7 @@ describe("the flow, with a server that gives values the device must not accept",
     const s = await setup({ backend: { challenge: () => "2026-11-15.000G40R40M30E209185GR38E1W" } });
     await s.flow.readCard();
     await s.flow.confirmCard(PIN);
-    const stop = await stopOf(s.flow.proceed());
+    const stop = await stopOf(s.flow.proceed("alice"));
     assert.deepEqual(stop, { code: "challenge_not_today", challengeDate: "2026-11-15", today: "2026-11-16" });
     assert.equal(s.card.signed.length, 1, "the card signed only the scope string");
     await assertQuiet(s, stop, s.backend.log.length);
@@ -151,7 +175,7 @@ describe("the flow, with a server that gives values the device must not accept",
       const s = await setup({ backend: { challenge: () => bad } });
       await s.flow.readCard();
       await s.flow.confirmCard(PIN);
-      const stop = await stopOf(s.flow.proceed());
+      const stop = await stopOf(s.flow.proceed("alice"));
       assert.deepEqual(stop, { code: "challenge_malformed" });
       assert.equal(s.card.signed.length, 1);
       await assertQuiet(s, stop, s.backend.log.length);
@@ -167,6 +191,8 @@ describe("the flow, with a server that gives values the device must not accept",
       const stop = await stopOf(s.flow.confirmCard(PIN));
       assert.deepEqual(stop, expected);
       assert.equal(s.card.signed.length, 0, "the card was not asked to sign");
+      assert.equal(s.flow.phase, "stopped");
+      assertNoCardState(s);
       await assertQuiet(s, stop, n);
       if (rememberedAfter !== undefined) assert.equal(s.store.values.G3 ?? null, rememberedAfter);
     });
@@ -211,6 +237,70 @@ describe("the flow, with a server that gives values the device must not accept",
     { code: "revoked" },
   );
 
+  await crlCase("a CRS file whose SHA-256 is not the one in the page", { engineFails: true }, { code: "artifact", path: "/crs/bn254_g1_compressed_2p18.dat" });
+
+  for (const [name, o, expected] of [
+    ["serial on the CRL", { crls: [{ serials: [...randomSerials(50), 0x1234567890abcdef1234567890abcdefn], crlNumber: 100n, thisUpdate: CRL_TIME }] }, { code: "revoked" }],
+    ["CRL not usable", { crls: [{ serials: randomSerials(10), crlNumber: 100n, thisUpdate: CRL_TIME, extraExtensions: [IDP] }] }, { code: "revocation", problem: { code: "crl_unusable", reason: "not_usable_partitioned" } }],
+    ["circuit hash wrong", { tamperCircuit: true }, { code: "artifact", path: "/circuits/card_proof_rs4096.json" }],
+  ] as const) {
+    test(`PIN given before the checks finish (${name}): no signature, no card-state`, async () => {
+      const s = await setup(o as Parameters<typeof setup>[0]);
+      await s.flow.readCard();
+      assert.equal(s.flow.phase, "checking");
+      const stop = await stopOf(s.flow.confirmCard(PIN));
+      assert.deepEqual(stop, expected);
+      assert.equal(s.card.signed.length, 0, "the card was not asked to sign");
+      assertNoCardState(s);
+      await assertQuiet(s, stop, s.backend.log.length);
+    });
+  }
+
+  test("the phase says when the PIN may be asked", async () => {
+    const s = await setup();
+    assert.equal(s.flow.phase, "start");
+    await s.flow.readCard();
+    assert.equal(s.flow.phase, "checking");
+    await s.flow.checksDone();
+    assert.equal(s.flow.phase, "ready_for_pin");
+    assert.equal(s.card.signed.length, 0);
+    assertNoCardState(s);
+    await s.flow.confirmCard(PIN);
+    assert.equal(s.flow.phase, "status_known");
+  });
+
+  test("the second signature needs the account the screen showed", async () => {
+    const s = await setup({ action: "withdraw", backend: { cardState: { current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: [], count: 1, head: "a".repeat(64) } } });
+    await s.flow.readCard();
+    await s.flow.confirmCard(PIN);
+    const n = s.backend.log.length;
+    assert.deepEqual(await stopOf(s.flow.proceed("bob")), { code: "state" });
+    assert.equal(s.card.signed.length, 1, "no second signature");
+    assert.equal(s.backend.log.length, n, "no challenge requested");
+  });
+
+  test("a submission the server refuses for good, and one that can be sent again", async () => {
+    let answer = { status: 503, body: { error: "crl_stale" } as unknown };
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
+    await s.flow.readCard();
+    await s.flow.confirmCard(PIN);
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "crl_stale", status: 503 });
+    assert.notEqual(s.flow.stop, null, "crl_stale ends the flow");
+
+    answer = { status: 500, body: { error: "internal" } };
+    const t = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
+    await t.flow.readCard();
+    await t.flow.confirmCard(PIN);
+    assert.deepEqual(await stopOf(t.flow.proceed("alice")), { code: "server", server: "internal", status: 500 });
+    assert.equal(t.flow.stop, null, "internal can be sent again");
+    answer = { status: 201, body: { seq: 7, record_hash: "b".repeat(64), kind: "first" } };
+    const done = await t.flow.resubmit();
+    assert.equal(done.seq, 7);
+    assert.equal(t.backend.submissions.length, 2);
+    assert.equal(JSON.stringify(t.backend.submissions[0]), JSON.stringify(t.backend.submissions[1]), "the same record");
+    assert.equal(t.card.signed.length, 2, "no new signature");
+  });
+
   test("a file served under its name but with other bytes", async () => {
     const s = await setup();
     const sha = [...s.backend.opts.files.keys()].find((k) => k.endsWith(".crl"))!;
@@ -252,7 +342,7 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.deepEqual(status.outcome, { kind: "blocked", reason: "switch_limit" });
     assert.equal(status.nextSwitchDate, "2027-03-02");
     const n = s.backend.log.length;
-    const stop = await stopOf(s.flow.proceed());
+    const stop = await stopOf(s.flow.proceed("alice"));
     assert.deepEqual(stop, { code: "blocked", reason: "switch_limit" });
     assert.equal(s.card.signed.length, 1);
     await assertQuiet(s, stop, n);
@@ -277,14 +367,14 @@ describe("the flow, with a server that gives values the device must not accept",
     await s.flow.readCard();
     const status = await s.flow.confirmCard(PIN);
     assert.deepEqual(status.outcome, { kind: "blocked", reason: "not_current" });
-    assert.deepEqual(await stopOf(s.flow.proceed()), { code: "blocked", reason: "not_current" });
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "blocked", reason: "not_current" });
   });
 
   test("a proof whose public inputs are not the device's: nothing is submitted", async () => {
     const s = await setup();
     await s.flow.readCard();
     await s.flow.confirmCard(PIN);
-    const stop = await stopOf(s.flow.proceed());
+    const stop = await stopOf(s.flow.proceed("alice"));
     assert.deepEqual(stop, { code: "proof_check" });
     assert.equal(s.proveCalls.length, 1);
     assert.equal(s.card.signed.length, 2);

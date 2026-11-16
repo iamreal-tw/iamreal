@@ -1,14 +1,25 @@
 // One card proof, as a state machine without a screen. The steps follow the
 // table in the design notes (three clicks):
 //
-//   readCard()       read certificates (no PIN); check them; start the CRL,
-//                    the tree and the circuit in the background
+//   readCard()       read certificates (no PIN); check them; start the
+//                    checks that need no signature: CRL, tree, circuit, CRS
+//   checksDone()     resolves when every one of those passed; until then
+//                    the screen shows no PIN field (`phase` is "checking")
 //   confirmCard(pin) card signs the scope string; scoped ID; card state;
 //                    what this card proof would do
-//   proceed()        challenge, checked; card signs the declaration code;
-//                    PIN dropped; wait for the tree; prove; submit
+//   proceed(account) the caller confirms the account it showed; challenge,
+//                    checked; card signs the declaration code; PIN dropped;
+//                    prove; submit
 //   resubmit()       after a network failure, the same record again
 //   cancel()         drop everything
+//
+// The card is asked for its first signature only after every check that
+// needs no signature has passed: the certificate, the CRL (downloaded and
+// verified), the tree, the serial number not in it, the circuit and CRS
+// hashes. A card that fails one of them stops before any request carries
+// its scoped ID; otherwise the server would see a scoped ID that asked for
+// its state and then went silent, and could match that with the CRL its
+// mirror served (ADR-0015, ADR-0016).
 //
 // Where each value comes from and goes to:
 //   scope string     the table in spec/scope.ts, by the platform picked on
@@ -133,7 +144,12 @@ export interface Done {
   record: Submission;
 }
 
-type Phase = "start" | "card_read" | "status_known" | "submitting" | "submit_failed" | "done" | "stopped";
+/**
+ * Where the flow is. "checking": the card was read and the checks that need
+ * no signature are running; the screen does not ask for the PIN yet.
+ * "ready_for_pin": they all passed.
+ */
+export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "submitting" | "submit_failed" | "done" | "stopped";
 
 interface Background {
   promise: Promise<{ tree: AbsenceProof; crlNumber: bigint; crlDate: Day }>;
@@ -147,7 +163,7 @@ export class CardProofFlow {
   private readonly scopeBytes: Uint8Array;
   private typedUsername: string | null;
 
-  private phase: Phase = "start";
+  private phaseValue: Phase = "start";
   private stopped: Stop | null = null;
   private cert: CardCertificate | null = null;
   private cardPublicKey: CryptoKey | null = null;
@@ -168,8 +184,12 @@ export class CardProofFlow {
     if (opts.action === "declare" && (this.typedUsername === null || !this.scope.validUsername(this.typedUsername))) {
       // Every later step throws this stop.
       this.stopped = { code: "username" };
-      this.phase = "stopped";
+      this.phaseValue = "stopped";
     }
+  }
+
+  get phase(): Phase {
+    return this.phaseValue;
   }
 
   get scopeString(): string {
@@ -200,14 +220,14 @@ export class CardProofFlow {
   /** Stops the flow: drops every secret and remembers why. */
   private fail(stop: Stop): never {
     if (!this.stopped) this.stopped = stop;
-    this.phase = "stopped";
+    this.phaseValue = "stopped";
     this.dropSecrets();
     throw new FlowStop(this.stopped);
   }
 
   private expect(...phases: Phase[]): void {
     if (this.stopped) throw new FlowStop(this.stopped);
-    if (!phases.includes(this.phase)) throw new FlowStop({ code: "state" });
+    if (!phases.includes(this.phaseValue)) throw new FlowStop({ code: "state" });
   }
 
   private dropSecrets(): void {
@@ -230,7 +250,7 @@ export class CardProofFlow {
     this.dropSecrets();
     this.submission = null;
     if (!this.stopped) this.stopped = { code: "state" };
-    this.phase = "stopped";
+    this.phaseValue = "stopped";
   }
 
   private async cardCall<T>(f: () => Promise<T>): Promise<T> {
@@ -256,11 +276,21 @@ export class CardProofFlow {
     this.cert = sel.cert;
     this.cardPublicKey = await cardKey(sel.cert);
     this.background = this.startBackground(sel.cert, today);
-    this.phase = "card_read";
+    this.phaseValue = "checking";
+    this.background.promise.then(
+      () => {
+        if (this.phaseValue === "checking") this.phaseValue = "ready_for_pin";
+      },
+      () => undefined,
+    );
     return { name: sel.cert.name, issuer: sel.cert.issuer.name };
   }
 
-  /** CRL, tree and circuit, while the cardholder types the PIN. */
+  /**
+   * The checks that need no signature, started as soon as the card is read:
+   * the server's CRL age bound, the CRL, the tree and the serial number's
+   * absence, the circuit's and the CRS's hashes (the engine's start).
+   */
   private startBackground(cert: CardCertificate, today: Day): Background {
     const bg: Background = { failed: null, promise: Promise.resolve() as never };
     const circuit = circuitOf(cert);
@@ -282,6 +312,7 @@ export class CardProofFlow {
         const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial));
         if (result.inTree) throw new FlowStop({ code: "revoked" });
         await circuitP;
+        await this.deps.prover.ready();
         return { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay };
       } finally {
         builderP.then((b) => b.close(), () => undefined);
@@ -290,7 +321,7 @@ export class CardProofFlow {
     bg.promise = run().catch((e: unknown) => {
       const stop = toStop(e);
       bg.failed = stop;
-      if (this.phase !== "done" && this.phase !== "stopped") this.deps.onBackgroundStop?.(stop);
+      if (this.phaseValue !== "done" && this.phaseValue !== "stopped") this.deps.onBackgroundStop?.(stop);
       throw new FlowStop(stop);
     });
     bg.promise.catch(() => undefined);
@@ -301,11 +332,25 @@ export class CardProofFlow {
     if (this.background?.failed) this.fail(this.background.failed);
   }
 
+  /**
+   * Resolves when every check that needs no signature has passed (phase
+   * "ready_for_pin"); rejects with the FlowStop of the first that did not.
+   */
+  async checksDone(): Promise<void> {
+    this.expect("checking", "ready_for_pin");
+    try {
+      await this.background!.promise;
+    } catch (e) {
+      this.fail(toStop(e));
+    }
+  }
+
   // Step 2: the card signs the scope string -----------------------------------
 
   async confirmCard(pin: string): Promise<CardStatus> {
-    this.expect("card_read");
-    this.checkBackground();
+    this.expect("checking", "ready_for_pin");
+    // Nothing is signed, and no request carries the scoped ID, before these pass.
+    await this.checksDone();
     let sig: Uint8Array;
     try {
       sig = await this.deps.card.sign(this.scopeBytes, pin);
@@ -320,11 +365,6 @@ export class CardProofFlow {
       this.fail({ code: "card_signature" });
     }
     this.scopeSignature = sig;
-    try {
-      await this.deps.prover.ready();
-    } catch (e) {
-      this.fail(toStop(e));
-    }
     const id = await scopedId(sig, (a, b) => this.deps.prover.hash2(a, b));
     this.scopedIdValue = id;
     const idText = scopedIdText(id);
@@ -354,18 +394,25 @@ export class CardProofFlow {
       count: state.count,
       head: state.head,
     };
-    this.phase = "status_known";
+    this.phaseValue = "status_known";
     return this.status;
   }
 
   // Step 3: the card signs the declaration code, then prove and submit --------
 
-  async proceed(): Promise<Done> {
+  /**
+   * `confirmedUsername` is the account the screen showed the cardholder and
+   * they confirmed: the typed one, or for a withdrawal the one the server
+   * reported as current (CardStatus.username). The card signs only if it is
+   * the account the declaration code will name.
+   */
+  async proceed(confirmedUsername: string): Promise<Done> {
     this.expect("status_known");
     const status = this.status!;
     if (status.outcome.kind === "blocked") this.fail({ code: "blocked", reason: status.outcome.reason });
+    if (status.username === null || confirmedUsername !== status.username) this.fail({ code: "state" });
     this.checkBackground();
-    const username = status.username!;
+    const username = status.username;
 
     let challenge: unknown;
     try {
@@ -442,7 +489,7 @@ export class CardProofFlow {
     // The proof holds everything the server needs; the certificate and the
     // signatures are no longer needed by anyone.
     this.dropSecrets();
-    this.phase = "submitting";
+    this.phaseValue = "submitting";
     return this.submit();
   }
 
@@ -450,7 +497,7 @@ export class CardProofFlow {
     const s = this.submission!;
     try {
       const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
-      this.phase = "done";
+      this.phaseValue = "done";
       this.submission = null;
       return {
         seq: accepted.seq,
@@ -463,9 +510,12 @@ export class CardProofFlow {
         record: s,
       };
     } catch (e) {
-      if (e instanceof ServerError && (e.code === "network" || e.status >= 500 || e.status === 429)) {
+      // Transient: no answer, rate limited, or a server failure. `crl_stale`
+      // (503) is the server refusing every card proof until MOICA's CRL is
+      // fresh again: not something a resubmission fixes.
+      if (e instanceof ServerError && (e.code === "network" || e.status === 429 || (e.status >= 500 && e.code !== "crl_stale"))) {
         // The record can be sent again as it is (up to 5 submissions per challenge).
-        this.phase = "submit_failed";
+        this.phaseValue = "submit_failed";
         throw new FlowStop({ code: "server", server: e.code, status: e.status });
       }
       this.fail(toStop(e));
@@ -475,7 +525,7 @@ export class CardProofFlow {
   /** Sends the same record again after a network failure. No new signature. */
   async resubmit(): Promise<Done> {
     this.expect("submit_failed");
-    this.phase = "submitting";
+    this.phaseValue = "submitting";
     return this.submit();
   }
 

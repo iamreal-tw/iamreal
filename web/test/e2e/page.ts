@@ -77,8 +77,11 @@ async function main() {
     const start = performance.now();
     try {
       const read = await flow.readCard();
+      // The screen shows the PIN field only after the checks that need no signature.
+      await flow.checksDone();
       const status = await flow.confirmCard(fx.pin);
-      const done = await flow.proceed();
+      // The screen shows status.username; the cardholder confirms it.
+      const done = await flow.proceed(status.username!);
       results.push({ ok: true, name: read.name, status, done, ms: Math.round(performance.now() - start), signed: card.signed.length });
     } catch (e) {
       results.push({ ok: false, stop: e instanceof FlowStop ? e.stop : String(e), ms: Math.round(performance.now() - start) });
