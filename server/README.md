@@ -127,7 +127,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 
 ## 回應標頭
 
-所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`：`X-Content-Type-Options: nosniff`。`-web` 目錄的每個檔案（頁面、它的程式和 worker、電路、通用參數）另外送 `pageHeaders`：`web/README.md` 寫的 `Content-Security-Policy`，和 `Document-Isolation-Policy: isolate-and-credentialless`（多執行緒的證明，同時保留和內政部元件視窗的來往）。理由在 `web/README.md`「頁面需要的 `Content-Security-Policy`」；`server_test.go` 檢查那裡引用的和這裡一字不差。清冊鏡像和名冊不送這兩個。
+所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`：`X-Content-Type-Options: nosniff`。`-web` 目錄的每個檔案（頁面、它的程式和 worker、電路、通用參數）另外送 `pageHeaders`：`web/README.md` 寫的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`（多執行緒的證明，同時保留和內政部元件視窗的來往）和 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（用 `window.open` 開了這一頁的別的網站，碰不到這一頁和它開的元件視窗）。理由在 `web/README.md`「頁面需要的標頭」；`server_test.go` 檢查那裡引用的和這裡一字不差。清冊鏡像和名冊不送這三個。
 
 靜態檔：`.crl` 是 `application/pkix-crl`，`.jsonl` 是 `application/jsonl`。不列目錄，`.` 開頭的檔案不提供。
 

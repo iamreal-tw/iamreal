@@ -3,15 +3,37 @@
 // does with each value is in the README's table. Nothing here reports a
 // failure of the device's own checks to the server (ADR-0016): there is no
 // request for that.
+//
+// Every request has a time limit, the response's body included. A request
+// that runs out of it is aborted and counts as no answer (`network`), the
+// same as a failed connection: a server that holds its answer cannot hold
+// the device. The limits:
+//
+//   API_TIMEOUT_MS   config, card-state, challenge, submission: small JSON
+//                    answers. The server answers from memory, or (a
+//                    submission) after verifying one proof, well under a
+//                    second; 30 s leaves room for a slow network and stays
+//                    far inside the 5 minutes the PIN may wait (flow.ts).
+//   FILE_TIMEOUT_MS  the mirror's index and CRL, the circuits, the CRS. The
+//                    largest are G2's CRL (16.9 MB) and the CRS (8 MiB),
+//                    fetched together with a circuit (0.8 MB) when the card
+//                    is read: about 26 MB, which 5 minutes allow down to
+//                    about 0.7 Mbit/s. They are all fetched before the first
+//                    signature, so nothing secret waits on them.
 import type { Action } from "./spec/declaration-code.ts";
 import { type Day, parseDay } from "./spec/date.ts";
-import type { CardState } from "./spec/roster-rules.ts";
+import { type CardState, possibleState } from "./spec/roster-rules.ts";
 
-/** `fetch` restricted to the page's own origin. Tests pass a fake. */
-export type Fetch = (path: string, init?: { method: "GET" | "POST"; body?: string }) => Promise<Response>;
+/** The time limit of a request with a small JSON answer (see above). */
+export const API_TIMEOUT_MS = 30_000;
+/** The time limit of a static file: the CRL, the circuits, the CRS (see above). */
+export const FILE_TIMEOUT_MS = 5 * 60_000;
+
+/** `fetch` restricted to the page's own origin. Tests pass a fake. `signal` aborts the request (its time limit). */
+export type Fetch = (path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal }) => Promise<Response>;
 
 /** The page's fetch: same origin, no credentials, no cache, no redirects. */
-export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; body?: string }): Promise<Response> {
+export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal }): Promise<Response> {
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("not a same-origin path");
   return fetch(path, {
     method: init?.method ?? "GET",
@@ -21,7 +43,28 @@ export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; b
     cache: "no-store",
     redirect: "error",
     referrerPolicy: "no-referrer",
+    signal: init?.signal,
   });
+}
+
+/**
+ * Runs `f` with a signal that aborts after `ms`; then rejects with
+ * ServerError `network` whether or not `f` heeds the signal.
+ */
+async function withTimeout<T>(ms: number, f: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new ServerError("network", 0));
+    }, ms);
+  });
+  try {
+    return await Promise.race([f(controller.signal), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** An error the server answered with (`{"error":"CODE"}`), or a response the device cannot read. */
@@ -48,18 +91,23 @@ function requestIdOf(res: Response): string | null {
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
 async function request(fetchFn: Fetch, path: string, init: { method: "GET" | "POST"; body?: string }, okStatus: number): Promise<Record<string, unknown>> {
-  let res: Response;
-  try {
-    res = await fetchFn(path, init);
-  } catch {
-    throw new ServerError("network", 0);
-  }
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
-  }
+  const { res, body } = await withTimeout(API_TIMEOUT_MS, async (signal) => {
+    let res: Response;
+    try {
+      res = await fetchFn(path, { ...init, signal });
+    } catch {
+      throw new ServerError("network", 0);
+    }
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    // A body cut off by the time limit is no answer, not a malformed one.
+    if (signal.aborted) throw new ServerError("network", 0);
+    return { res, body };
+  });
   if (res.status !== okStatus) {
     const code = isObject(body) && typeof body.error === "string" && /^[a-z_]{1,40}$/.test(body.error) ? body.error : "http_" + res.status;
     throw new ServerError(code, res.status, requestIdOf(res));
@@ -82,13 +130,16 @@ export interface CardStateResponse extends CardState {
 /**
  * `POST /api/v1/card-state`. The scoped ID goes in the body, never in the
  * URL. The answer is read strictly; the device shows it and computes the
- * consequence itself, but cannot check it (README, known limits).
+ * consequence itself, but cannot check it (README, known limits). A state
+ * the roster rules cannot produce for any roster (possibleState, with
+ * `today`, the device's Taiwan date) is not read either.
  */
 export async function requestCardState(
   fetchFn: Fetch,
   scopeString: string,
   scopedId: string,
   validUsername: (u: string) => boolean,
+  today: Day,
 ): Promise<CardStateResponse> {
   const b = await request(fetchFn, "/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) }, 200);
   const user = (x: unknown): string | null => {
@@ -109,14 +160,9 @@ export async function requestCardState(
     if (d === null) throw new ServerError("malformed_response", 200);
     return d;
   });
-  return {
-    current: user(b.current),
-    lastDeclared: user(b.last_declared),
-    lastCardProof: day(b.last_card_proof),
-    switchDates,
-    count: b.count as number,
-    head: b.head,
-  };
+  const state: CardState = { current: user(b.current), lastDeclared: user(b.last_declared), lastCardProof: day(b.last_card_proof), switchDates };
+  if (!possibleState(state, today)) throw new ServerError("malformed_response", 200);
+  return { ...state, count: b.count as number, head: b.head };
 }
 
 /** The fields of a record except `seq` and `prev` (spec/record.md). */
@@ -172,12 +218,18 @@ export async function requestCrlMaxAge(fetchFn: Fetch): Promise<number> {
 
 /** A static file of the mirror, as bytes. */
 export async function getBytes(fetchFn: Fetch, path: string): Promise<Uint8Array> {
-  let res: Response;
-  try {
-    res = await fetchFn(path, { method: "GET" });
-  } catch {
-    throw new ServerError("network", 0);
-  }
-  if (res.status !== 200) throw new ServerError("http_" + res.status, res.status);
-  return new Uint8Array(await res.arrayBuffer());
+  return withTimeout(FILE_TIMEOUT_MS, async (signal) => {
+    let res: Response;
+    try {
+      res = await fetchFn(path, { method: "GET", signal });
+    } catch {
+      throw new ServerError("network", 0);
+    }
+    if (res.status !== 200) throw new ServerError("http_" + res.status, res.status);
+    try {
+      return new Uint8Array(await res.arrayBuffer());
+    } catch {
+      throw new ServerError("network", 0);
+    }
+  });
 }

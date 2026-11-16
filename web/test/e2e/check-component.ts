@@ -1,7 +1,8 @@
 // Can a page on http://localhost, sent with the server's page headers, be
 // cross-origin isolated and still talk to MOICA's real component? Opens a
-// page on http://localhost:PORT with the Content-Security-Policy and
-// Document-Isolation-Policy of server/headers.go, clicks its one button
+// page on http://localhost:PORT with the Content-Security-Policy,
+// Document-Isolation-Policy and Cross-Origin-Opener-Policy of
+// server/headers.go, clicks its one button
 // (a real mouse event), which opens the component's window and sends it
 // CheckEnvir, the component's environment check, and nothing else: no
 // certificate is read, nothing is signed, no PIN exists here. The reply is
@@ -15,7 +16,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Browser } from "./cdp.ts";
-import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS } from "./headers.ts";
+import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS } from "./headers.ts";
 
 const out = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "test-output", "check-component");
 mkdirSync(out, { recursive: true });
@@ -29,7 +30,9 @@ const ORIGIN = "http://localhost:61161";
 window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("go").addEventListener("click", () => {
     const t0 = performance.now();
-    const w = window.open(ORIGIN + "/popupForm", "iamreal-hipki", "popup,width=420,height=300");
+    // A name of its own, as src/card/hipki.ts gives each window.
+    const name = "iamreal-" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+    const w = window.open(ORIGIN + "/popupForm", name, "popup,width=420,height=300");
     if (!w) { window.__result = { error: "popup_blocked" }; return; }
     let ready = false;
     const timer = setTimeout(() => { window.__result = { error: ready ? "no_reply" : "not_ready" }; }, 15000);
@@ -58,7 +61,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 const server = createServer((req, res) => {
   res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
-  for (const [k, v] of Object.entries(ISOLATION_HEADERS)) res.setHeader(k, v);
+  for (const [k, v] of Object.entries({ ...ISOLATION_HEADERS, ...OPENER_HEADERS })) res.setHeader(k, v);
   if (req.url === "/") return res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(HTML);
   if (req.url === "/probe.js") return res.writeHead(200, { "Content-Type": "text/javascript" }).end(PROBE);
   res.writeHead(404).end();

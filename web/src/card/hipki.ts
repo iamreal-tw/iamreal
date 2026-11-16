@@ -41,8 +41,20 @@ export const READY_MS = 8_000;
 export const REPLY_MS = 30_000;
 
 const POPUP_PATH = "/popupForm";
-const POPUP_NAME = "iamreal-hipki";
 const POPUP_FEATURES = "popup,width=420,height=300";
+
+/**
+ * A new name for each window: 128 random bits. With a fixed name, a page
+ * that opened this one could reach the component's window by that name and
+ * navigate it elsewhere (tried in Chrome 157, 2026-11-16; the page's
+ * Cross-Origin-Opener-Policy cuts that page off too, server/headers.go).
+ * Each window is closed before the next is opened (open(), request()).
+ */
+function popupName(): string {
+  let s = "iamreal-";
+  for (const b of crypto.getRandomValues(new Uint8Array(16))) s += b.toString(16).padStart(2, "0");
+  return s;
+}
 
 // The component's codes (ChtICToken.js, index.js "MajorErrorReason" and
 // "MinorErrorReason"). `ret_code` is the major one; with LOGIN_FAILED,
@@ -164,7 +176,7 @@ class Popup {
     this.origin = origin;
     let win: Window | null = null;
     try {
-      win = window.open(origin + POPUP_PATH, POPUP_NAME, POPUP_FEATURES);
+      win = window.open(origin + POPUP_PATH, popupName(), POPUP_FEATURES);
     } catch {
       win = null;
     }

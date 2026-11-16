@@ -28,7 +28,14 @@
 // Between the two signatures the PIN stays in this object while the
 // cardholder reads and picks. If the second signature is not made within
 // IDLE_MS of the first, the PIN, the certificate and the signature are
-// dropped and the flow stops (`idle`); the caller starts again.
+// dropped and the flow stops (`idle`); the caller starts again. This holds
+// in every step between the two signatures, while the server is asked for
+// the card's state or the challenge too, and the clock is read again just
+// before the card is asked for the second signature.
+//
+// Once the flow stopped (cancel(), the wait ran out, a failed check), a step
+// that was waiting writes nothing when its wait ends and sends nothing: each
+// step checks after every await.
 //
 // A window the browser blocked (`popup_blocked`) sent nothing to the card:
 // the step can be tried again, and the flow keeps what it held before it.
@@ -53,7 +60,7 @@ import { type RevocationProblem, RevocationError, crlMaxAge, loadCrl } from "./c
 import type { AbsenceProof } from "./crl/tree.ts";
 import { type IssuerKey, rsaVerify } from "./issuers.ts";
 import { ArtifactError, CIRCUITS } from "./prover/artifacts.ts";
-import { circuitInputs, circuitOf, expectedPublicInputs } from "./prover/inputs.ts";
+import { circuitInputs, circuitOf, expectedPublicInputs, wipeInputs } from "./prover/inputs.ts";
 import type { Prover, ThreadMode } from "./prover/prover.ts";
 import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "./spec/challenge.ts";
@@ -211,9 +218,19 @@ export interface Done {
  */
 export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "chosen" | "signing" | "submitting" | "submit_failed" | "done" | "stopped";
 
+interface BackgroundResult {
+  tree: AbsenceProof;
+  crlNumber: bigint;
+  crlDate: Day;
+  /** L, the CRL age bound in force (crlMaxAge of the server's figure). */
+  maxAgeDays: number;
+}
+
 interface Background {
-  promise: Promise<{ tree: AbsenceProof; crlNumber: bigint; crlDate: Day }>;
+  promise: Promise<BackgroundResult>;
   failed: Stop | null;
+  /** Set when every check passed. */
+  done: BackgroundResult | null;
 }
 
 export class CardProofFlow {
@@ -238,6 +255,8 @@ export class CardProofFlow {
   /** When the first signature was made (deps.clock), and the timer that ends the wait for the second. */
   private firstSignedAt: number | null = null;
   private cancelIdleTimer: (() => void) | null = null;
+  /** The card was asked for the second signature (the PIN went to it); the wait no longer applies. */
+  private secondSignAsked = false;
 
   constructor(deps: FlowDeps, opts: { platform: Platform }) {
     this.deps = deps;
@@ -312,6 +331,17 @@ export class CardProofFlow {
     throw new FlowStop(this.stopped!);
   }
 
+  /**
+   * Called after every await: if the flow stopped meanwhile (cancel(), the
+   * wait ran out), the step goes no further. `drop` are bytes the step holds
+   * and has not stored; they are wiped.
+   */
+  private live(...drop: (Uint8Array | null | undefined)[]): void {
+    if (!this.stopped) return;
+    for (const b of drop) wipe(b);
+    throw new FlowStop(this.stopped);
+  }
+
   private startIdleTimer(): void {
     this.firstSignedAt = this.deps.clock();
     const set =
@@ -322,9 +352,13 @@ export class CardProofFlow {
       });
     this.cancelIdleTimer = set(this.idleMs, () => {
       this.cancelIdleTimer = null;
-      // While the second signature is being asked for, proceed() checks the
-      // time itself if it comes back to "chosen" (a blocked window).
-      if (this.phaseValue === "status_known" || this.phaseValue === "chosen") this.expireIdle();
+      // Any step between the two signatures, while the server is asked for
+      // the card's state or the challenge too. Once the card was asked for
+      // the second signature, the PIN is with it already: the bridge's own
+      // limits end that step (src/card/hipki.ts), and the PIN is dropped
+      // when it ends. A blocked window brings proceed() back to "chosen",
+      // where it reads the clock itself.
+      if (!this.secondSignAsked) this.expireIdle();
     });
   }
 
@@ -332,6 +366,7 @@ export class CardProofFlow {
     this.cancelIdleTimer?.();
     this.cancelIdleTimer = null;
     this.firstSignedAt = null;
+    this.secondSignAsked = false;
   }
 
   private dropSecrets(): void {
@@ -366,10 +401,28 @@ export class CardProofFlow {
    * component does): it must be the one chosen when the card was read.
    */
   private checkSigner(s: CardSignature): void {
-    if (s.certificate !== null && !equalBytes(s.certificate, this.cert!.der)) {
+    const same = s.certificate === null || equalBytes(s.certificate, this.cert!.der);
+    // The reported copy is not needed once compared.
+    wipe(s.certificate);
+    if (!same) {
       wipe(s.signature);
       this.fail({ code: "card", card: "card_error", detail: "certificate_mismatch" });
     }
+  }
+
+  /**
+   * Again on `today`: the certificate is still valid and the CRL no older
+   * than L days. Both were checked when the card was read; a card proof can
+   * cross midnight since. proceed() calls it before it asks for the challenge
+   * and again before the second signature.
+   */
+  private checkStillValid(today: Day): void {
+    const cert = this.cert!;
+    const now = currentTime(today);
+    if (now > cert.notAfter) this.fail({ code: "certificate", problem: "expired", notAfter: certificateDay(cert.notAfter) });
+    if (now < cert.notBefore) this.fail({ code: "certificate", problem: "not_yet_valid", notBefore: certificateDay(cert.notBefore) });
+    const bg = this.background!.done!;
+    if (today - bg.crlDate > bg.maxAgeDays) this.fail({ code: "revocation", problem: { code: "crl_stale", days: today - bg.crlDate, maxDays: bg.maxAgeDays } });
   }
 
   // Step 1: read the certificates (no PIN) ------------------------------------
@@ -380,19 +433,27 @@ export class CardProofFlow {
     try {
       ders = await this.deps.card.readCertificates();
     } catch (e) {
+      this.live();
       // A blocked window sent nothing to the card: the same step can be tried again.
       if (e instanceof CardError && e.code === "popup_blocked") throw new FlowStop(cardStop(e));
       this.fail(cardStop(e));
     }
+    this.live(...ders);
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);
+    // Only the chosen certificate is kept; the others (the encryption
+    // certificate, with the same name) are wiped now.
+    for (const d of ders) if (!sel.ok || d !== sel.cert.der) wipe(d);
+    this.live(sel.ok ? sel.cert.der : null);
     if (!sel.ok) {
       const notAfter = sel.notAfter !== undefined ? certificateDay(sel.notAfter) : undefined;
       const notBefore = sel.notBefore !== undefined ? certificateDay(sel.notBefore) : undefined;
       this.fail({ code: "certificate", problem: sel.problem, ...(notAfter && { notAfter }), ...(notBefore && { notBefore }) });
     }
+    const key = await cardKey(sel.cert);
+    this.live(sel.cert.der);
     this.cert = sel.cert;
-    this.cardPublicKey = await cardKey(sel.cert);
+    this.cardPublicKey = key;
     this.background = this.startBackground(sel.cert, today);
     this.phaseValue = "checking";
     this.background.promise.then(
@@ -410,7 +471,7 @@ export class CardProofFlow {
    * absence, the circuit's and the CRS's hashes (the engine's start).
    */
   private startBackground(cert: CardCertificate, today: Day): Background {
-    const bg: Background = { failed: null, promise: Promise.resolve() as never };
+    const bg: Background = { failed: null, done: null, promise: Promise.resolve() as never };
     const circuit = circuitOf(cert);
     const serial = cert.serial;
     const issuer = cert.issuer;
@@ -422,16 +483,15 @@ export class CardProofFlow {
       let builder: TreeBuilder | null = null;
       try {
         const serverDays = await this.timed("config", requestCrlMaxAge(this.deps.fetch));
-        const crl = await this.timed(
-          "crl",
-          loadCrl({ fetch: this.deps.fetch, issuer, today, maxAgeDays: crlMaxAge(serverDays), store: this.deps.store }),
-        );
+        const maxAgeDays = crlMaxAge(serverDays);
+        const crl = await this.timed("crl", loadCrl({ fetch: this.deps.fetch, issuer, today, maxAgeDays, store: this.deps.store }));
         builder = await builderP;
         const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial));
         if (result.inTree) throw new FlowStop({ code: "revoked" });
         await circuitP;
         await this.deps.prover.ready();
-        return { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay };
+        bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays };
+        return bg.done;
       } finally {
         builderP.then((b) => b.close(), () => undefined);
       }
@@ -459,8 +519,10 @@ export class CardProofFlow {
     try {
       await this.background!.promise;
     } catch (e) {
+      this.live();
       this.fail(toStop(e));
     }
+    this.live();
   }
 
   // Step 2: the card signs the scope string -----------------------------------
@@ -473,14 +535,18 @@ export class CardProofFlow {
     try {
       signed = await this.deps.card.sign(this.scopeBytes, pin);
     } catch (e) {
+      this.live();
       // A wrong PIN or a blocked window does not end the flow: the screen asks
       // again. Nothing is kept, the PIN included.
       if (e instanceof CardError && (e.code === "pin_incorrect" || e.code === "popup_blocked")) throw new FlowStop(cardStop(e));
       this.fail(cardStop(e));
     }
+    this.live(signed.signature, signed.certificate);
     this.checkSigner(signed);
     const sig = signed.signature;
-    if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, this.scopeBytes))) {
+    const verified = await rsaVerify(this.cardPublicKey!, 2048, sig, this.scopeBytes);
+    this.live(sig);
+    if (!verified) {
       wipe(sig);
       this.fail({ code: "card_signature" });
     }
@@ -489,16 +555,18 @@ export class CardProofFlow {
     // The wait for the second signature starts now (IDLE_MS).
     this.startIdleTimer();
     const id = await scopedId(sig, (a, b) => this.deps.prover.hash2(a, b));
+    this.live();
     this.scopedIdValue = id;
     const idText = scopedIdText(id);
     let state: CardStateResponse;
     try {
-      state = await requestCardState(this.deps.fetch, this.scope.scopeString, idText, this.scope.validUsername);
+      state = await requestCardState(this.deps.fetch, this.scope.scopeString, idText, this.scope.validUsername, this.today());
     } catch (e) {
+      this.live();
       this.fail(toStop(e));
     }
     // The wait may have run out while the server answered.
-    if (this.stopped) throw new FlowStop(this.stopped);
+    this.live();
     this.checkIdle();
     const today = this.today();
     this.state = state;
@@ -597,6 +665,9 @@ export class CardProofFlow {
     }
     if (again.kind !== chosen.kind) this.fail({ code: "state" });
     this.checkBackground();
+    // The certificate and the CRL, again with today's date: the card may have
+    // been read before midnight. No challenge is asked for if they no longer pass.
+    this.checkStillValid(this.today());
     const { action, username } = chosen;
     this.phaseValue = "signing";
 
@@ -604,22 +675,32 @@ export class CardProofFlow {
     try {
       challenge = await requestChallenge(this.deps.fetch);
     } catch (e) {
+      this.live();
       this.fail(toStop(e));
     }
+    this.live();
     const challengeDay = parseChallenge(challenge);
     if (challengeDay === null) this.fail({ code: "challenge_malformed" });
     const today = this.today();
     if (challengeDay !== today) {
       this.fail({ code: "challenge_not_today", challengeDate: formatDay(challengeDay), today: formatDay(today) });
     }
+    // Midnight may have passed while the server answered.
+    this.checkStillValid(today);
     const challengeText = challenge as string;
     const code = await declarationCode(action, this.scope.scopeString, username, challengeText);
-    if (this.stopped) throw new FlowStop(this.stopped);
+    this.live();
+    // The clock again, right before the card is asked: the server may have
+    // held the challenge, and the timer may not have run (a background tab).
+    this.checkIdle();
 
     let signed: CardSignature;
+    this.secondSignAsked = true;
     try {
       signed = await this.deps.card.sign(code, this.pin!);
     } catch (e) {
+      this.secondSignAsked = false;
+      this.live();
       if (e instanceof CardError && e.code === "popup_blocked") {
         // Nothing reached the card. The flow is back where it was; the wait
         // for the second signature still counts from the first.
@@ -632,9 +713,12 @@ export class CardProofFlow {
     // The second signature is made: the PIN is not needed again.
     this.pin = null;
     this.stopIdleTimer();
+    this.live(signed.signature, signed.certificate);
     this.checkSigner(signed);
     const sig = signed.signature;
-    if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, code))) {
+    const verified = await rsaVerify(this.cardPublicKey!, 2048, sig, code);
+    this.live(sig);
+    if (!verified) {
       wipe(sig);
       this.fail({ code: "card_signature" });
     }
@@ -644,8 +728,10 @@ export class CardProofFlow {
     try {
       bg = await this.background!.promise;
     } catch (e) {
+      this.live();
       this.fail(toStop(e));
     }
+    this.live();
     const cert = this.cert!;
     const ct = currentTime(today);
     const circuit = circuitOf(cert);
@@ -662,8 +748,13 @@ export class CardProofFlow {
     try {
       proof = await this.timed("proof", this.deps.prover.prove(circuit, inputs));
     } catch (e) {
+      this.live();
       this.fail(toStop(e));
+    } finally {
+      // The input map holds the certificate and both signatures too.
+      wipeInputs(inputs);
     }
+    this.live();
     const expected = expectedPublicInputs(cert, bg.tree.root, ct, this.scopedIdValue!, this.scopeBytes, code);
     if (
       proof.proof.length !== PROOF_BYTES ||
@@ -695,6 +786,7 @@ export class CardProofFlow {
     const s = this.submission!;
     try {
       const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
+      this.live();
       this.phaseValue = "done";
       this.submission = null;
       return {
@@ -708,6 +800,7 @@ export class CardProofFlow {
         record: s,
       };
     } catch (e) {
+      this.live();
       // Transient: no answer, rate limited, or a server failure. `crl_stale`
       // (503) is the server refusing every card proof until MOICA's CRL is
       // fresh again: not something a resubmission fixes.
