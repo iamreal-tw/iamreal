@@ -181,16 +181,13 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | 1 | `not_usable_der` | is not a DER `CertificateList` |
 | 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
 | 3 | `not_usable_signature` | has a signature that verifies under neither key |
-| 4 | `not_usable_duplicate_extension` | has an extension twice, in the CRL or, checked entry by entry in order, in an entry |
-| 5 | `not_usable_critical_extension` | has a critical extension, in the CRL or, entry by entry, in an entry |
+| 4 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
+| 5 | `not_usable_critical_extension` | has a critical extension of the CRL |
 | 6 | `not_usable_delta` | has `deltaCRLIndicator` |
 | 7 | `not_usable_partitioned` | has `issuingDistributionPoint` |
 | 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER |
-| 9 | `not_usable_serial` | has a serial number that gives no key (the first such entry decides) |
+| 9 | `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
 | 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
-
-Within checks 4, 5 and 9, entries are checked in order and the first entry
-with a problem decides; in that entry, check 4 comes before 5.
 
 **Order.** Lines are sorted by `issuer` (bytes: `-` before `G2` before `G3`),
 then `crl_number` as a number with `-` before every number, then `sha256`.
