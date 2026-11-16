@@ -181,10 +181,12 @@ async function toChosen(s: Setup, choice: Choice = { action: "declare", username
 /** The flow's PIN, for tests only (it is private). */
 const heldPin = (f: CardProofFlow): unknown => (f as unknown as { pin: unknown }).pin;
 
-const cardState = (o: Partial<Record<"current" | "last_declared" | "last_card_proof", string | null>> & { switch_dates?: string[] }) => ({
+const cardState = (o: Partial<Record<"current" | "last_declared" | "last_card_proof", string | null>> & { switch_dates?: string[]; proofs_on_last_date?: unknown }) => ({
   current: o.current ?? null,
   last_declared: o.last_declared ?? null,
   last_card_proof: o.last_card_proof ?? null,
+  // One record on the last card proof's date unless the test says otherwise.
+  proofs_on_last_date: "proofs_on_last_date" in o ? o.proofs_on_last_date : o.last_card_proof ? 1 : 0,
   switch_dates: o.switch_dates ?? [],
   count: 137,
   head: "a".repeat(64),
@@ -468,6 +470,58 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.equal(withdrawn.flow.choose({ action: "declare", username: "bob" }).kind, "refresh");
     const sw = withdrawn.flow.choose({ action: "declare", username: "carol" });
     assert.deepEqual([sw.kind, sw.switchesLeftAfter], ["switch", 1]);
+  });
+
+  test("3 records today: the engine refuses every choice; no second signature, no challenge", async () => {
+    const s = await setup({ backend: { cardState: cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-16", proofs_on_last_date: 3 }) } });
+    await s.flow.readCard();
+    const status = await s.flow.confirmCard(PIN);
+    assert.equal(status.dailyLimit, true);
+    const n = s.backend.log.length;
+    const refused = (choice: Choice): Stop | null => {
+      try {
+        s.flow.choose(choice);
+      } catch (e) {
+        return e instanceof FlowStop ? e.stop : null;
+      }
+      return null;
+    };
+    for (const choice of [{ action: "declare", username: "alice" }, { action: "declare", username: "bob" }, { action: "withdraw" }] as Choice[]) {
+      assert.deepEqual(refused(choice), { code: "blocked", reason: "daily_limit" }, JSON.stringify(choice));
+    }
+    assert.equal(s.flow.stop, null, "the screen goes back to the beginning; the engine does not end the flow by itself");
+    assert.equal(s.flow.phase, "status_known");
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "state" });
+    assert.equal(s.card.signed.length, 1);
+    await assertQuiet(s, { code: "blocked", reason: "daily_limit" }, n);
+  });
+
+  test("3 records today and the switches used up: the switch is refused for the switch limit first, as the rules order them", async () => {
+    const s = await setup({ backend: { cardState: cardState({ current: "bob", last_declared: "bob", last_card_proof: "2026-11-16", proofs_on_last_date: 3, switch_dates: ["2026-03-02", "2026-11-16"] }) } });
+    await s.flow.readCard();
+    await s.flow.confirmCard(PIN);
+    assert.throws(() => s.flow.choose({ action: "declare", username: "alice" }), (e) => e instanceof FlowStop && e.stop.code === "blocked" && e.stop.reason === "switch_limit");
+    assert.throws(() => s.flow.choose({ action: "declare", username: "bob" }), (e) => e instanceof FlowStop && e.stop.code === "blocked" && e.stop.reason === "daily_limit");
+  });
+
+  test("fewer than 3 records today, or 3 on another date: every choice as before", async () => {
+    for (const [date, n] of [["2026-11-16", 2], ["2026-11-15", 3], ["2026-11-17", 3]] as const) {
+      const s = await setup({ backend: { cardState: cardState({ current: "alice", last_declared: "alice", last_card_proof: date, proofs_on_last_date: n }) } });
+      await s.flow.readCard();
+      const status = await s.flow.confirmCard(PIN);
+      assert.equal(status.dailyLimit, false, `${n} on ${date}`);
+      assert.equal(s.flow.choose({ action: "declare", username: "alice" }).kind, "refresh");
+      assert.equal(s.flow.choose({ action: "withdraw" }).kind, "withdraw");
+    }
+  });
+
+  test("the server rejects the card proof as the fourth of today (daily_limit): the flow ends", async () => {
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 400, body: { error: "daily_limit" } }) } });
+    await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed("alice")), { code: "server", server: "daily_limit", status: 400 });
+    assert.notEqual(s.flow.stop, null);
+    assert.equal(s.flow.phase, "stopped");
+    assert.equal(s.backend.submissions.length, 1);
   });
 
   test("nothing to withdraw: the engine refuses it", async () => {
@@ -925,6 +979,13 @@ describe("a card-state answer the roster rules cannot produce is not read", () =
     ["a last card proof more than 3 days after today", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-20" })],
     ["dates in 2049", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2049-12-31", switch_dates: ["2049-12-31", "2049-12-31"] })],
     ["a switch after the last card proof", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: ["2026-11-10"] })],
+    ["records on the last card proof's date without a last card proof", cardState({ proofs_on_last_date: 1 })],
+    ["no record on the last card proof's date", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", proofs_on_last_date: 0 })],
+    ["4 records on one date", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-16", proofs_on_last_date: 4 })],
+    ["a fraction of a record", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", proofs_on_last_date: 1.5 })],
+    ["the count as a string", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", proofs_on_last_date: "1" })],
+    ["no count", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", proofs_on_last_date: undefined })],
+    ["a null count", cardState({ proofs_on_last_date: null })],
   ] as const) {
     test(name, async () => {
       const s = await setup({ backend: { cardState: state } });
@@ -935,10 +996,11 @@ describe("a card-state answer the roster rules cannot produce is not read", () =
     });
   }
 
-  test("what the rules can produce is read: 3 days ahead, a switch on the last card proof's date, a withdrawn card", async () => {
+  test("what the rules can produce is read: 3 days ahead, a switch on the last card proof's date, a withdrawn card, 3 records today", async () => {
     for (const state of [
       cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-19", switch_dates: ["2026-11-19"] }),
       cardState({ last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: ["2026-11-04", "2025-12-01"] }),
+      cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-16", proofs_on_last_date: 3 }),
     ]) {
       const s = await setup({ backend: { cardState: state } });
       await s.flow.readCard();

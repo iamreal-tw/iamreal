@@ -34,7 +34,7 @@ go build -o iamreal-server ./server
 | `-mirror` | 開 | `serve` 要不要自己跑清冊鏡像 |
 | `-out` | `DATA/roster` | `snapshot` 寫到哪個目錄 |
 
-發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多兩個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）。給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入。照這份 README 建置的執行檔沒有這兩個選項。
+發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多三個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）、`-test-clock <檔案>`（檔案裡寫一個整數，時鐘比這台機器的快幾天；每次讀時鐘都重讀這個檔案）。給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入；同一張卡片的過卡分到不同的日期（一張卡片一天最多 3 筆有效紀錄）。照這份 README 建置的執行檔沒有這三個選項。
 
 ## 資料放在哪裡
 
@@ -163,7 +163,7 @@ go test -race ./server/...
 | `snapshot.go` | 每日快照 |
 | `log.go` | 連線紀錄、程式版本 |
 | `headers.go` | 回應標頭、頁面的標頭、靜態檔 |
-| `testissuers.go` | 只在建置標籤 `iamrealtest` 下：測試金鑰和假內政部的選項 |
+| `testissuers.go` | 只在建置標籤 `iamrealtest` 下：測試金鑰、假內政部和時鐘的選項 |
 | `store/` | 名冊和題目的儲存：介面和 SQLite 的實作 |
 | `testdata/` | 端到端測試的資料 |
 

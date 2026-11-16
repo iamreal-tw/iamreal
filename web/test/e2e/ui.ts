@@ -17,12 +17,17 @@
 //    switch); withdraw; declare another (a switch); switches used up (the
 //    button cannot be pressed, and the engine refuses it too); a submission
 //    that did not get through, one the server refused (with its request ID
-//    on the screen); 回到開頭 on section 6 and 取消 on sections 3 and 4, then
+//    on the screen); a card with 3 records today (section 3 offers nothing
+//    but 回到開頭), and one the server finds has 3 when it is sent;
+//    回到開頭 on section 6 and 取消 on sections 3 and 4, then
 //    card proofs again on the same page with the same proof engine; the
 //    PIN's wait running out; a window the browser blocked on each of the
 //    three clicks, then the same click again; every case that stops before
 //    the PIN is asked; a wrong PIN, a locked card, a PIN that is not sent;
 //    the PIN typed and 確認卡片 pressed again while the card is confirmed.
+//    The ten card proofs of one card fall on four days: the server's clock
+//    (-test-clock) and the page's (Date.now) move ahead together, since a
+//    card has at most 3 valid records a day (spec/roster-rules.md).
 // 5. Publishes the daily snapshot and re-verifies it with iamreal-verify:
 //    the state is the one the screens showed.
 // 6. Checks the response headers, that the page is cross-origin isolated,
@@ -86,7 +91,16 @@ for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${
 
 const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
 const taiwanDate = (ms: number) => new Date(ms + 8 * 3600_000).toISOString().slice(0, 10);
-const today = taiwanDate(Date.now());
+/**
+ * The test's clock, the server's and the page's together, runs `day` whole
+ * days ahead of the machine's (setDay below): a card has at most 3 valid
+ * records a day (spec/roster-rules.md, check 6), and this test makes ten
+ * with one card. The days go from 0 to 3, the most the CRLs allow (3 days).
+ */
+let day = 0;
+const dayOf = (n: number) => taiwanDate(Date.now() + n * 86_400_000);
+const today = () => dayOf(day);
+const firstDay = dayOf(0);
 
 interface TestCard {
   spec: () => FakeCardSpec;
@@ -130,8 +144,9 @@ const fresh = await makeCard({ serial: "0890567890abcdef1234567890abcdef" });
 
 const now = Date.now();
 const crls = {
-  // G3: fresh, with the revoked card's serial.
-  G3: await makeCrl({ issuer: issuerKeys.G3, serials: [...randomSerials(20_000, 3n), revoked.serial], crlNumber: 300n, thisUpdate: new Date(now - 6 * 3600_000) }),
+  // G3: fresh, with the revoked card's serial. Dated the first day in Taiwan (its first second), so that it
+  // is no more than 3 days old on the test's last day.
+  G3: await makeCrl({ issuer: issuerKeys.G3, serials: [...randomSerials(20_000, 3n), revoked.serial], crlNumber: 300n, thisUpdate: new Date(Date.parse(`${firstDay}T00:00:00+08:00`)) }),
   // G2: 5 days old (Taiwan dates), more than the 3 days the server allows.
   G2: await makeCrl({ issuer: issuerKeys.G2, serials: randomSerials(2_000, 5n), crlNumber: 200n, thisUpdate: new Date(now - 5 * 86_400_000) }),
 };
@@ -186,10 +201,13 @@ const freePort = async (): Promise<number> => {
 };
 const serverPort = await freePort();
 const data = join(out, "data");
+/** The server's -test-clock: the days its clock runs ahead. */
+const clockFile = join(out, "clock-days");
+writeFileSync(clockFile, "0");
 let serverLog = "";
 const server: ChildProcess = spawn(
   serverBin,
-  ["serve", "-data", data, "-bb", BB, "-crs", crsDir, "-addr", `127.0.0.1:${serverPort}`, "-web", dist, "-roster", "test", "-test-issuers", issuersDir, "-test-moica", moicaUrl],
+  ["serve", "-data", data, "-bb", BB, "-crs", crsDir, "-addr", `127.0.0.1:${serverPort}`, "-web", dist, "-roster", "test", "-test-issuers", issuersDir, "-test-moica", moicaUrl, "-test-clock", clockFile],
   { stdio: ["ignore", "ignore", "pipe"] },
 );
 server.stderr!.on("data", (b: Buffer) => (serverLog += b.toString()));
@@ -247,6 +265,27 @@ browser.on((m, p, s) => {
   windows.names.add(r.name);
   if (r.othersOpen > 0) windows.openedWhileAnother++;
 });
+// The page's clock: Date.now, which the engine reads (src/index.ts), runs
+// `day` days ahead, in every load of the page, set before its scripts run.
+// The setter changes it in a page already loaded (the card proofs on one
+// page load); it is not enumerable, so the checks of what the page keeps
+// (foundOnPage) see the page's own globals only.
+const clockSource = (n: number) => `(() => {
+  const now = Date.now.bind(Date);
+  let days = ${n};
+  Object.defineProperty(window, "__iamrealClockDays", { set: (d) => { days = d; } });
+  Date.now = () => now() + days * 86400000;
+})()`;
+let clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(0) })).identifier as string;
+/** Moves the server's and the page's clocks to `n` days ahead. */
+async function setDay(n: number): Promise<void> {
+  day = n;
+  writeFileSync(clockFile, String(n));
+  await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
+  clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(n) })).identifier as string;
+  await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
+  console.log(`\n== day ${n}: ${today()}`);
+}
 const results: Record<string, unknown> = {};
 
 const step = (name: string) => `document.querySelector('[data-step="${name}"]')`;
@@ -407,8 +446,8 @@ async function screenshot(name: string): Promise<void> {
 }
 /** The line of section 4 (ends with "，"), and of section 6 (ends with "。"). */
 const consequenceLine = (account: string, withdraw = false) =>
-  fill(withdraw ? C.consequence.record_withdraw : C.consequence.record_declare, { today, platform: PLATFORM, account });
-const doneLine = (account: string, withdraw = false) => fill(withdraw ? C.done.record_withdraw : C.done.record_declare, { today, platform: PLATFORM, account });
+  fill(withdraw ? C.consequence.record_withdraw : C.consequence.record_declare, { today: today(), platform: PLATFORM, account });
+const doneLine = (account: string, withdraw = false) => fill(withdraw ? C.done.record_withdraw : C.done.record_declare, { today: today(), platform: PLATFORM, account });
 
 interface Shown {
   kind: string;
@@ -564,8 +603,11 @@ const tryStep = async (label: string, f: () => Promise<void>) => {
   }
 };
 
-// Every card proof here is today: 上次過卡是今天 (not 0 天前).
-const declaredFacts = (switchesUsed: number) => [C.status.last_card_proof_today, fill(C.status.switches, { switches_used: switchesUsed, switches_left: 2 - switchesUsed })];
+// The last card proof today: 上次過卡是今天 (not 0 天前); otherwise days ago.
+const declaredFacts = (switchesUsed: number, daysAgo = 0) => [
+  daysAgo === 0 ? C.status.last_card_proof_today : fill(C.status.last_card_proof, { days_ago: daysAgo }),
+  fill(C.status.switches, { switches_used: switchesUsed, switches_left: 2 - switchesUsed }),
+];
 const choiceButtons = (st: StatusSeen) => JSON.stringify(st.buttons);
 
 component.card = main.spec();
@@ -637,9 +679,26 @@ await tryStep("switch to @bob, with 上一步 back and forth", async () => {
   await finish({ label: "switch to @bob", button: fill(C.consequence.button_switch, { account: "bob" }), title: fill(C.done.switch, { account: "bob" }), recordAccount: "bob" });
 });
 
+// Three records of the card today: section 3 offers nothing but 回到開頭.
+await tryStep("3 records today: section 3 says so, and offers only 回到開頭", async () => {
+  const st = await toStatus();
+  check(st.state === "daily_limit" && st.first === fill(C.stops.daily_limit, { platform: PLATFORM }), `section 3: "${st.first}"`);
+  check(st.facts.length === 0 && choiceButtons(st) === JSON.stringify([{ text: C.done.restart, disabled: false }]), `section 3: no facts, no choices ${JSON.stringify(st.facts)} ${choiceButtons(st)}`);
+  check(!(await page.eval<boolean>(`!!document.querySelector('#account')`)), "no account field");
+  await screenshot("daily-limit-3-status");
+  const signs = componentCount("MakeSignature");
+  const challenges = challengeCount();
+  await page.clickButton(C.done.restart);
+  await backAtTheBeginning("回到開頭 on section 3, 3 records today");
+  await sleep(500);
+  check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "3 records today: no second signature, no challenge");
+});
+
+await setDay(1);
+
 await tryStep("withdraw @bob", async () => {
   const st = await toStatus();
-  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(1)), `section 3 facts ${JSON.stringify(st.facts)}`);
+  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(1, 1)), `section 3 facts ${JSON.stringify(st.facts)}`);
   await page.clickButton(C.status.withdraw);
   checkConsequence("withdraw", await waitConsequence(), { account: "bob", withdraw: true, button: fill(C.consequence.button_withdraw, { account: "bob" }) });
   await finish({ label: "withdraw @bob", button: fill(C.consequence.button_withdraw, { account: "bob" }), title: C.done.withdraw, recordAccount: "bob", withdraw: true });
@@ -666,6 +725,50 @@ await tryStep("withdraw @bob again", async () => {
   await finish({ label: "withdraw @bob again", button: fill(C.consequence.button_withdraw, { account: "bob" }), title: C.done.withdraw, recordAccount: "bob", withdraw: true });
 });
 
+// The card's state says 2 records today (the answer changed on its way); the
+// server finds the third already there when the card proof is sent.
+await tryStep("the server finds 3 records today when the card proof is sent (daily_limit)", async () => {
+  const seen: unknown[] = [];
+  await page.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/card-state", requestStage: "Response" }] });
+  const off = browser.on((m, p, s) => {
+    if (m !== "Fetch.requestPaused" || s !== page.sessionId) return;
+    void (async () => {
+      const r = await page.send("Fetch.getResponseBody", { requestId: p.requestId });
+      const state = JSON.parse(r.base64Encoded ? Buffer.from(r.body, "base64").toString() : r.body);
+      seen.push(state.proofs_on_last_date);
+      state.proofs_on_last_date = 2;
+      await page.send("Fetch.fulfillRequest", { requestId: p.requestId, responseCode: p.responseStatusCode, responseHeaders: p.responseHeaders, body: Buffer.from(JSON.stringify(state)).toString("base64") });
+    })().catch((e) => console.log(`   (card-state: ${e.message})`));
+  });
+  let st: StatusSeen;
+  try {
+    st = await toStatus();
+  } finally {
+    off();
+    await page.send("Fetch.disable");
+  }
+  check(JSON.stringify(seen) === "[3]", `the server's card-state said ${JSON.stringify(seen)} record(s) today`);
+  check(st.state === "withdrawn", `section 3 with 2 records today: "${st.first}"`);
+  const before = (await (await fetch(`http://127.0.0.1:${serverPort}/api/v1/head`)).json()).count;
+  const back = fill(C.status.declare_back, { last_declared: "bob" });
+  await page.clickButton(back);
+  await waitConsequence();
+  const signs = componentCount("MakeSignature");
+  await page.clickButton(fill(C.consequence.button_first, { account: "bob" }));
+  const d = await waitDoneOrMessage();
+  const expected = fill(C.stops.daily_limit, { platform: PLATFORM });
+  const id = await page.text("[data-request-id]");
+  check(!d.done && d.message === `${expected}\n${fill(C.stops.request_id, { request_id: id })}`, `the server's daily_limit: ${JSON.stringify(d.message)}`);
+  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 400).at(-1);
+  check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id && serverLog.includes(`"error":"daily_limit"`), `the request ID on the screen (${id}) is the response's, and the server logged daily_limit`);
+  check(componentCount("MakeSignature") === signs + 1, "the second signature, once");
+  const after = (await (await fetch(`http://127.0.0.1:${serverPort}/api/v1/head`)).json()).count;
+  check(after === before, `nothing was appended (${before} records, then ${after})`);
+  await screenshot("daily-limit-5-server");
+});
+
+await setDay(2);
+
 await tryStep("withdrawn: declare another account, @carol (a switch)", async () => {
   await toStatus();
   await page.clickButton(C.status.declare_other);
@@ -683,7 +786,8 @@ await tryStep("switches used up; then a submission the server refuses", async ()
   const sw = st.buttons.find((b) => b.text === C.status.switch);
   check(sw?.disabled === true, "改成別的帳號 cannot be pressed");
   const next = /下一次可以更換是 (\d{4}-\d{2}-\d{2})。/.exec(st.main)?.[1] ?? "";
-  check(next === new Date(Date.parse(today + "T00:00:00Z") + 365 * 86_400_000).toISOString().slice(0, 10) && st.main.includes(fill(C.status.switch_limit, { next_switch_date: next })), `the sentence next to it: next switch ${next}`);
+  // The switches were on the first day (@bob) and today (@carol): a year after the first.
+  check(next === new Date(Date.parse(firstDay + "T00:00:00Z") + 365 * 86_400_000).toISOString().slice(0, 10) && st.main.includes(fill(C.status.switch_limit, { next_switch_date: next })), `the sentence next to it: next switch ${next}`);
   check(!st.main.includes(C.status.uses_switch), "no 會用掉一次更換 next to a button that cannot be pressed");
   await screenshot("limit-3-status");
   // Pressed anyway (the attribute removed by a script): the engine refuses it, and nothing is signed.
@@ -802,8 +906,10 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: declare @c
   await finish({ label: "declare @carol again, same page", button: fill(C.consequence.button_first, { account: "carol" }), title: C.done.first, recordAccount: "carol" });
   await page.clickButton(C.done.restart);
   await backAtTheBeginning("回到開頭 after a declaration");
+  // The third record of the card today: the next one on the next day, on the same page.
+  await setDay(3);
   const st = await toStatus({ samePage: true });
-  check(st.first === fill(C.status.current, { account: "carol" }) && JSON.stringify(st.facts) === JSON.stringify(declaredFacts(2)), `section 3: "${st.first}" ${JSON.stringify(st.facts)}`);
+  check(st.first === fill(C.status.current, { account: "carol" }) && JSON.stringify(st.facts) === JSON.stringify(declaredFacts(2, 1)), `section 3: "${st.first}" ${JSON.stringify(st.facts)}`);
   await page.clickButton(C.status.withdraw);
   await waitConsequence();
   await finish({ label: "withdraw @carol again, same page", button: fill(C.consequence.button_withdraw, { account: "carol" }), title: C.done.withdraw, recordAccount: "carol", withdraw: true });
@@ -964,7 +1070,8 @@ const tests: [string, FakeCardSpec | null, string, Parameters<typeof stopsBefore
   ["two certificates that pass", { ...main.spec(), certificates: [...main.spec().certificates, ...revoked.spec().certificates] }, C.stops.unsupported_format],
   ["not issued by MOICA", unknownIssuer.spec(), C.stops.unknown_issuer],
   ["revoked", revoked.spec(), C.stops.revoked],
-  ["the CRL is 5 days old", g2card.spec(), fill(C.stops.crl_stale, { crl_days: 5 })],
+  // 5 days old on the first day; the clock is `day` days ahead by now.
+  ["the CRL is 5 days old", g2card.spec(), fill(C.stops.crl_stale, { crl_days: 5 + day })],
   [
     "the mirror's index has no usable CRL",
     main.spec(),
@@ -998,7 +1105,7 @@ for (const [label, card, expected, o] of tests) await tryStep(`before the PIN: $
 
 const KINDS = ["first", "refresh", "switch", "withdraw", "refresh", "withdraw", "switch", "withdraw", "refresh", "withdraw"];
 await tryStep("snapshot and iamreal-verify", async () => {
-  execFileSync(serverBin, ["snapshot", "-data", data, "-bb", BB, "-crs", crsDir, "-roster", "test", "-test-issuers", issuersDir], { stdio: "pipe" });
+  execFileSync(serverBin, ["snapshot", "-data", data, "-bb", BB, "-crs", crsDir, "-roster", "test", "-test-issuers", issuersDir, "-test-clock", clockFile], { stdio: "pipe" });
   const v = JSON.parse(
     execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-roster", "test", "-json", "-test-issuers", issuersDir, "-crl-archive", join(data, "crl"), join(data, "roster")], { stdio: ["ignore", "pipe", "pipe"] }).toString(),
   );
@@ -1008,7 +1115,7 @@ await tryStep("snapshot and iamreal-verify", async () => {
   check(JSON.stringify(shown.map((s) => s.seq)) === JSON.stringify(KINDS.map((_, i) => i + 1)), `the screens showed records ${JSON.stringify(shown.map((s) => s.seq))}`);
   const scope = v.state.find((s: { scope_string: string }) => s.scope_string === "iamreal-test:threads:0_________");
   const cards = scope?.cards ?? [];
-  check(cards.length === 1 && cards[0].current === null && cards[0].last_card_proof === today, `one card, no current account, last card proof ${today}: ${JSON.stringify(cards)}`);
+  check(cards.length === 1 && cards[0].current === null && cards[0].last_card_proof === today(), `one card, no current account, last card proof ${today()}: ${JSON.stringify(cards)}`);
   check(shown.every((s) => s.shortId === shortId(cards[0]?.scoped_id ?? "")), `the short ID on the screens is the card's: ${shortId(cards[0]?.scoped_id ?? "")}`);
 });
 

@@ -57,7 +57,7 @@ export class FakeBackend {
       return this.json(200, { challenge: c });
     }
     if (method === "POST" && path === "/api/v1/card-state") {
-      return this.json(200, o.cardState ?? { current: null, last_declared: null, last_card_proof: null, switch_dates: [], count: 0, head: "0".repeat(64) });
+      return this.json(200, o.cardState ?? { current: null, last_declared: null, last_card_proof: null, proofs_on_last_date: 0, switch_dates: [], count: 0, head: "0".repeat(64) });
     }
     if (method === "POST" && path === "/api/v1/records") {
       const parsed = JSON.parse(body) as Record<string, unknown>;

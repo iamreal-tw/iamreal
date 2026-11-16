@@ -70,7 +70,7 @@ import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "./spec/challenge.ts";
 import { type Day, formatDay, taiwanDay } from "./spec/date.ts";
 import { type Action, declarationCode } from "./spec/declaration-code.ts";
-import { type CardState, type Outcome, declareOutcome, nextSwitchDay, switchesInWindow, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
+import { type CardState, type Outcome, dailyLimitReached, declareOutcome, nextSwitchDay, switchesInWindow, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
 import { type Platform, type Roster, type ScopeRow, scopeFor } from "./spec/scope.ts";
 import { scopedId, scopedIdText, shortId } from "./spec/scoped-id.ts";
 import type { CrlNumberStore } from "./storage.ts";
@@ -91,8 +91,8 @@ export type Stop =
   | { code: "challenge_malformed" }
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
-  /** The choice is not possible: switches used up, or nothing to withdraw. */
-  | { code: "blocked"; reason: "switch_limit" | "not_current" }
+  /** The choice is not possible: switches used up, nothing to withdraw, or 3 records of the card today. */
+  | { code: "blocked"; reason: "switch_limit" | "not_current" | "daily_limit" }
   /** The second signature was not made within IDLE_MS of the first: the PIN, the certificate and the signature were dropped. */
   | { code: "idle" }
   /** A circuit or CRS file did not match its SHA-256, or could not be fetched. */
@@ -184,6 +184,12 @@ export interface CardStatus {
   switchesLeft: number;
   /** The first date a switch is allowed (today if it is now). */
   nextSwitchDate: string;
+  /**
+   * The card has 3 valid records dated today in this scope (`last_card_proof`
+   * is today and `proofs_on_last_date` is 3): no choice can be made today,
+   * whatever `options` says (spec/roster-rules.md, check 6).
+   */
+  dailyLimit: boolean;
   today: string;
   /** The roster's size and head the answer was computed at. */
   count: number;
@@ -622,6 +628,7 @@ export class CardProofFlow {
       switchesUsed: switchesInWindow(state, today),
       switchesLeft: switchesLeft(state, today),
       nextSwitchDate: formatDay(nextSwitchDay(state, today)),
+      dailyLimit: dailyLimitReached(state, today),
       today: formatDay(today),
       count: state.count,
       head: state.head,
@@ -639,9 +646,9 @@ export class CardProofFlow {
 
   /**
    * What `choice` would do; the next step is proceed(). A choice that is not
-   * possible (switches used up, nothing to withdraw) or an account not in
-   * the scope's format throws without ending the flow: the cardholder can
-   * pick again. Nothing is signed, nothing is sent.
+   * possible (switches used up, nothing to withdraw, 3 records today) or an
+   * account not in the scope's format throws without ending the flow: the
+   * cardholder can pick again. Nothing is signed, nothing is sent.
    */
   choose(choice: Choice): Consequence {
     this.expect("status_known", "chosen");
@@ -676,6 +683,8 @@ export class CardProofFlow {
       outcome = withdrawOutcome(state, username);
     }
     if (outcome.kind === "blocked") throw new FlowStop({ code: "blocked", reason: outcome.reason });
+    // Check 6 after the event rules, in the order of the rules.
+    if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
     const left = switchesLeft(state, today);
     return { action: choice.action, username, kind: outcome.kind, switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left, today: formatDay(today) };
   }

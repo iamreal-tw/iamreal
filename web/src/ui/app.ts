@@ -103,7 +103,7 @@ function messageArea(): { node: HTMLElement; show: (m: Message | null) => void }
   return { node, show: (m) => (m ? replace(node, ...messageNodes(m)) : replace(node)) };
 }
 
-const BLOCKED: Message = stopMessage({ code: "card", card: "popup_blocked" });
+const BLOCKED: Message = stopMessage({ code: "card", card: "popup_blocked" }, PLATFORM);
 
 /** Passes the card through, and tells the screen when a signature is made. */
 class WatchedCard implements Card {
@@ -166,7 +166,7 @@ export function startApp(o: AppOptions): void {
     const stopped = (e: unknown): void => {
       card.release();
       working.show(null);
-      message.show(stopMessage(stopOf(e)));
+      message.show(stopMessage(stopOf(e), PLATFORM));
       readButton(); // another try starts a new card proof (reading needs no PIN)
     };
 
@@ -188,7 +188,7 @@ export function startApp(o: AppOptions): void {
         card: watched,
         prover: o.prover,
         onTiming: timing,
-        onIdle: (stop) => flow === f && start(stopMessage(stop)),
+        onIdle: (stop) => flow === f && start(stopMessage(stop, PLATFORM)),
       });
       flow = f;
       f.readCard().then(
@@ -253,7 +253,7 @@ export function startApp(o: AppOptions): void {
             // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
             if (retryable(f, e)) {
               pin.disabled = false;
-              message.show(stopMessage(e.stop));
+              message.show(stopMessage(e.stop, PLATFORM));
               pin.focus();
               return;
             }
@@ -294,7 +294,7 @@ export function startApp(o: AppOptions): void {
     const go = (): void => {
       const u = normalizeUsername(input.value);
       if (!validUsername(u)) {
-        show(stopMessage({ code: "username" }));
+        show(stopMessage({ code: "username" }, PLATFORM));
         return;
       }
       next(u);
@@ -328,8 +328,8 @@ export function startApp(o: AppOptions): void {
       cq = f.choose(choice);
     } catch (e) {
       if (flow !== f) return; // the wait ran out: the beginning is on screen already
-      if (retryable(f, e)) return show(stopMessage(e.stop));
-      return start(stopMessage(stopOf(e)));
+      if (retryable(f, e)) return show(stopMessage(e.stop, PLATFORM));
+      return start(stopMessage(stopOf(e), PLATFORM));
     }
     consequenceScreen(f, cq, back);
   }
@@ -340,7 +340,7 @@ export function startApp(o: AppOptions): void {
     try {
       status = f.back();
     } catch (e) {
-      if (flow === f) start(stopMessage(stopOf(e)));
+      if (flow === f) start(stopMessage(stopOf(e), PLATFORM));
       return;
     }
     to(status);
@@ -359,7 +359,10 @@ export function startApp(o: AppOptions): void {
     };
     const switchNote = (): string | DocumentFragment => (view.switchLimit ? say(view.switchLimit) : c.uses_switch);
     let body: (HTMLElement | null)[];
-    if (view.state === "never") {
+    if (view.state === "daily_limit") {
+      // 3 records of the card today: nothing to choose. Back to the beginning drops the PIN, as cancel does.
+      body = [el("p", { class: "buttons" }, button(COPY.done.restart, () => start(), ""))];
+    } else if (view.state === "never") {
       const account = accountField(c.account_label, typed, (u) => pick(f, { action: "declare", username: u }, message.show, () => goBack(f, (st) => statusScreen(f, st, u))), message.show);
       body = [
         account.field,
@@ -494,7 +497,7 @@ export function startApp(o: AppOptions): void {
             consequenceScreen(f, cq, back, BLOCKED);
             return;
           }
-          const m = stopMessage(stopOf(e), f.phase === "submit_failed");
+          const m = stopMessage(stopOf(e), PLATFORM, f.phase === "submit_failed");
           message.show(m);
           if (!("code" in m) && m.retry) {
             append(message.node, " ", button(COPY.stops.retry, () => {

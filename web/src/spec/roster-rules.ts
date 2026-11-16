@@ -10,9 +10,14 @@ export interface CardState {
   current: string | null;
   lastDeclared: string | null;
   lastCardProof: Day | null;
+  /** The number of valid records dated `lastCardProof`; 0 without one. */
+  proofsOnLastDate: number;
   /** One entry per valid switch, in roster order. */
   switchDates: Day[];
 }
+
+/** At most 3 valid records of a card in a scope have the same date (check 6, `daily_limit`). */
+export const MAX_PER_DATE = 3;
 
 /**
  * How many days after today a date in the roster can be: a record's date is
@@ -36,11 +41,16 @@ export const MAX_DAYS_AHEAD = 3;
  *   - No date is more than MAX_DAYS_AHEAD days after today.
  *   - `last_card_proof` is the latest date among the valid records, switches
  *     included. So no switch is dated after it.
+ *   - `proofs_on_last_date` counts the valid records dated
+ *     `last_card_proof`, and check 6 allows at most 3 of a date. So it is 0
+ *     without `last_card_proof`, and an integer from 1 to 3 with it.
  *
  * Anything else is read as the server sends it.
  */
 export function possibleState(state: CardState, today: Day): boolean {
-  const { current, lastDeclared, lastCardProof, switchDates } = state;
+  const { current, lastDeclared, lastCardProof, proofsOnLastDate, switchDates } = state;
+  if (lastCardProof === null && proofsOnLastDate !== 0) return false;
+  if (lastCardProof !== null && !(Number.isInteger(proofsOnLastDate) && proofsOnLastDate >= 1 && proofsOnLastDate <= MAX_PER_DATE)) return false;
   if (current !== null && current !== lastDeclared) return false;
   if ((current !== null || lastDeclared !== null) && lastCardProof === null) return false;
   if (current === null && lastDeclared === null && lastCardProof === null && switchDates.length > 0) return false;
@@ -67,6 +77,18 @@ export function declareOutcome(state: CardState, username: string, day: Day): Ou
 /** The kind a `withdraw` of `username` on `day` would have. */
 export function withdrawOutcome(state: CardState, username: string): Outcome {
   return state.current !== null && state.current === username ? { kind: "withdraw" } : { kind: "blocked", reason: "not_current" };
+}
+
+/**
+ * True if the card has 3 valid records dated `day` in the scope, so that no
+ * card proof of any kind is valid on `day` (check 6, `daily_limit`). The
+ * state tells the count of one date only, `last_card_proof`'s; for any other
+ * date this is false, and the server's rules decide (a record dated a day
+ * before `last_card_proof`, around midnight, can still be the fourth of its
+ * date).
+ */
+export function dailyLimitReached(state: CardState, day: Day): boolean {
+  return state.lastCardProof === day && state.proofsOnLastDate >= MAX_PER_DATE;
 }
 
 /** Entries of `switchDates` on or after `day − 364`, including any after `day`. */
