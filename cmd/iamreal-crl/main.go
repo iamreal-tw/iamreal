@@ -9,8 +9,8 @@
 // nextUpdate, CRL date, the SHA-256 of the file and the root. prove prints
 // the proof that a serial number is not in the tree, as the circuit's
 // inputs. index prints the archive index of a directory: one line per file,
-// usable or not (spec/revocation-tree.md, "Archive index"). -key replaces
-// -issuer with a test key.
+// usable or not (spec/revocation-tree.md, "Archive index"). -key-g2 and
+// -key-g3 make a test key stand in for MOICA's G2 or G3 key, for tests.
 package main
 
 import (
@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/iamreal-tw/iamreal/crl"
@@ -35,9 +36,9 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "check":
-		err = check(os.Args[2:], os.Stdout)
+		err = check(os.Args[2:], os.Stdout, os.Stderr)
 	case "prove":
-		err = prove(os.Args[2:], os.Stdout)
+		err = prove(os.Args[2:], os.Stdout, os.Stderr)
 	case "index":
 		err = index(os.Args[2:], os.Stdout, os.Stderr)
 	default:
@@ -55,39 +56,67 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
-  iamreal-crl check (-issuer G2|G3 | -key FILE) CRL
-  iamreal-crl prove (-issuer G2|G3 | -key FILE) -serial HEX CRL
-  iamreal-crl index [-key FILE] DIR
+  iamreal-crl check -issuer G2|G3 [-key-g2 FILE] [-key-g3 FILE] CRL
+  iamreal-crl prove -issuer G2|G3 [-key-g2 FILE] [-key-g3 FILE] -serial HEX CRL
+  iamreal-crl index [-key-g2 FILE] [-key-g3 FILE] DIR
+
+-key-g2 and -key-g3 make a test key (a public key or certificate, DER or
+PEM) stand in for MOICA's G2 or G3 key. For tests only.
 
 Exit status 1: the CRL is not usable (index: a file is not usable).
 2: any other error.`)
 	os.Exit(2)
 }
 
-// issuerFlags adds -issuer and -key to fs.
-type issuerFlags struct {
-	issuer, key *string
+// keyFlags adds -key-g2 and -key-g3 to fs: each names a test key that
+// stands in for that MOICA issuer key.
+type keyFlags map[string]*string
+
+func addKeyFlags(fs *flag.FlagSet) keyFlags {
+	f := keyFlags{}
+	for _, name := range crl.Issuers {
+		f[name] = fs.String("key-"+strings.ToLower(name), "", "`file` of a test key (public key or certificate, DER or PEM) that stands in for MOICA's "+name+" key; for tests only")
+	}
+	return f
 }
 
-func addIssuerFlags(fs *flag.FlagSet) issuerFlags {
-	return issuerFlags{
-		issuer: fs.String("issuer", "", "MOICA issuer key: G2 or G3"),
-		key:    fs.String("key", "", "a test issuer's public key or certificate (DER or PEM) instead of -issuer"),
+// keys returns MOICA's issuer keys, in the order of crl.Issuers, with each
+// test key given standing in for its issuer's. It warns on errw for every
+// test key in use.
+func (f keyFlags) keys(errw io.Writer) ([]crl.NamedKey, error) {
+	keys, err := crl.MOICAKeys()
+	if err != nil {
+		return nil, err
 	}
+	for i, k := range keys {
+		path := *f[k.Name]
+		if path == "" {
+			continue
+		}
+		if keys[i].Key, err = readKey(path); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(errw, "iamreal-crl: WARNING: test key %s stands in for MOICA's %s key; results under it say nothing about MOICA's CRLs\n", path, k.Name)
+	}
+	return keys, nil
 }
 
-func (f issuerFlags) load() (string, *rsa.PublicKey, error) {
-	switch {
-	case *f.issuer != "" && *f.key != "":
-		return "", nil, errors.New("give -issuer or -key, not both")
-	case *f.issuer != "":
-		k, err := crl.IssuerKey(*f.issuer)
-		return *f.issuer, k, err
-	case *f.key != "":
-		k, err := readKey(*f.key)
-		return "test", k, err
+// issuerKey returns the key of the issuer named by -issuer: MOICA's, or
+// the test key standing in for it.
+func issuerKey(issuer string, f keyFlags, errw io.Writer) (*rsa.PublicKey, error) {
+	if _, ok := f[issuer]; !ok {
+		return nil, errors.New("give -issuer G2 or G3")
 	}
-	return "", nil, errors.New("give -issuer G2 or G3 (or -key)")
+	keys, err := f.keys(errw)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range keys {
+		if k.Name == issuer {
+			return k.Key, nil
+		}
+	}
+	panic("unreachable: every issuer has a key")
 }
 
 // readKey reads an RSA public key from a SubjectPublicKeyInfo or a
@@ -133,14 +162,15 @@ func open(path string, w io.Writer) (*crl.CRL, error) {
 	return c, nil
 }
 
-func check(args []string, w io.Writer) error {
+func check(args []string, w, errw io.Writer) error {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
-	keyFlags := addIssuerFlags(fs)
+	issuer := fs.String("issuer", "", "MOICA issuer key: G2 or G3")
+	testKeys := addKeyFlags(fs)
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		usage()
 	}
-	name, key, err := keyFlags.load()
+	key, err := issuerKey(*issuer, testKeys, errw)
 	if err != nil {
 		return err
 	}
@@ -150,7 +180,7 @@ func check(args []string, w io.Writer) error {
 	}
 	// The fields as the index writes them; the issuer is the key asked for.
 	l := crl.IndexFile(c.Raw, nil)
-	fmt.Fprintf(w, "issuer       %s\n", name)
+	fmt.Fprintf(w, "issuer       %s\n", *issuer)
 	fmt.Fprintf(w, "crl_number   %s\n", l.CRLNumber)
 	fmt.Fprintf(w, "this_update  %s\n", l.ThisUpdate)
 	fmt.Fprintf(w, "next_update  %s\n", l.NextUpdate)
@@ -174,15 +204,16 @@ func check(args []string, w io.Writer) error {
 	return nil
 }
 
-func prove(args []string, w io.Writer) error {
+func prove(args []string, w, errw io.Writer) error {
 	fs := flag.NewFlagSet("prove", flag.ExitOnError)
-	keyFlags := addIssuerFlags(fs)
+	issuer := fs.String("issuer", "", "MOICA issuer key: G2 or G3")
+	testKeys := addKeyFlags(fs)
 	serial := fs.String("serial", "", "the certificate's serial number as a hexadecimal integer: its content bytes read unsigned")
 	fs.Parse(args)
 	if fs.NArg() != 1 || *serial == "" {
 		usage()
 	}
-	_, key, err := keyFlags.load()
+	key, err := issuerKey(*issuer, testKeys, errw)
 	if err != nil {
 		return err
 	}
@@ -220,26 +251,19 @@ func prove(args []string, w io.Writer) error {
 
 // index prints the archive index of a directory (spec/revocation-tree.md,
 // "Archive index"): one line per file, usable or not, sorted. The issuer is
-// the key whose signature verifies. If a file is not usable, the exit
-// status is 1 after the index is printed; each such file is also reported
-// on stderr.
+// the key whose signature verifies, G2 or G3, also when a test key stands
+// in for it. If a file is not usable, the exit status is 1 after the index
+// is printed; each such file is also reported on stderr.
 func index(args []string, w, errw io.Writer) error {
 	fs := flag.NewFlagSet("index", flag.ExitOnError)
-	keyPath := fs.String("key", "", "also try a test issuer's public key or certificate; its lines have issuer \"test\"")
+	testKeys := addKeyFlags(fs)
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		usage()
 	}
-	keys, err := crl.MOICAKeys()
+	keys, err := testKeys.keys(errw)
 	if err != nil {
 		return err
-	}
-	if *keyPath != "" {
-		k, err := readKey(*keyPath)
-		if err != nil {
-			return err
-		}
-		keys = append(keys, crl.NamedKey{Name: "test", Key: k})
 	}
 	lines, err := crl.BuildIndex(fs.Arg(0), keys, nil)
 	if err != nil {

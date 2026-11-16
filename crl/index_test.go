@@ -112,6 +112,12 @@ func TestParseIndexRejects(t *testing.T) {
 	if _, err := ParseIndex([]byte(good + "\n")); err != nil {
 		t.Fatal(err)
 	}
+	// p - 1 is the largest root; p and above are not field elements.
+	const p = "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+	pMinus1 := strings.Replace(good, strings.Repeat("0", 64), p[:63]+"0", 1)
+	if _, err := ParseIndex([]byte(pMinus1 + "\n")); err != nil {
+		t.Errorf("root p-1: %v", err)
+	}
 	if l, err := ParseIndex(nil); err != nil || len(l) != 0 {
 		t.Fatal("an empty index is an index of nothing")
 	}
@@ -132,6 +138,8 @@ func TestParseIndexRejects(t *testing.T) {
 		"date without time":   strings.Replace(good, `"2026-11-15T16:30:00Z"`, `"-"`, 1),
 		"upper-case sha256":   strings.Replace(good, strings.Repeat("a", 64), strings.Repeat("A", 64), 1),
 		"short root":          strings.Replace(good, strings.Repeat("0", 64), strings.Repeat("0", 63), 1),
+		"root p":              strings.Replace(good, strings.Repeat("0", 64), p, 1),
+		"root above p":        strings.Replace(good, strings.Repeat("0", 64), strings.Repeat("f", 64), 1),
 		"root without issuer": strings.Replace(good, `"G3"`, `"-"`, 1),
 		"root without number": strings.Replace(good, `"4660"`, `"-"`, 1),
 		"bare dash":           strings.Replace(good, strings.Repeat("0", 64), "-", 1),
@@ -189,16 +197,25 @@ func TestRebuildArchive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	rebuild := func() (*Archive, []IndexMismatch) {
+		t.Helper()
+		a, diffs, err := RebuildArchive(dir, testKeys(t), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a, diffs
+	}
 	write(index)
 	var seen []string
-	a, err := RebuildArchive(dir, testKeys(t), func(name string) { seen = append(seen, name) })
-	if err != nil {
-		t.Fatal(err)
+	a, diffs, err := RebuildArchive(dir, testKeys(t), func(name string) { seen = append(seen, name) })
+	if err != nil || len(diffs) != 0 {
+		t.Fatal(err, diffs)
 	}
 	if len(seen) != 5 {
 		t.Errorf("read %v", seen)
 	}
 	one := IndexFile(mustRead(t, "testdata/one.crl"), testKeys(t))
+	duplicate := IndexFile(mustRead(t, "testdata/duplicate.crl"), testKeys(t))
 	if d, _ := a.CRLDates("G3", one.Root); !slices.Equal(d, []string{"2026-11-16"}) {
 		t.Errorf("dates %v", d)
 	}
@@ -206,45 +223,89 @@ func TestRebuildArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A root changed in the index: the index alone is trusted, the files
-	// are not.
-	tampered := bytes.Replace(index, []byte(one.Root), []byte(strings.Repeat("0", 64)), 1)
+	// Two roots changed in the index: the index alone is trusted, the files
+	// are not. Rebuilding reports both lines and answers from the files.
+	zero := strings.Repeat("0", 64)
+	tampered := bytes.Replace(index, []byte(one.Root), []byte(zero), 1)
+	tampered = bytes.Replace(tampered, []byte(duplicate.Root), []byte(strings.Repeat("1", 64)), 1)
 	write(tampered)
 	if a, err := ReadArchiveIndex(dir); err != nil {
 		t.Fatal(err)
-	} else if d, _ := a.CRLDates("G3", strings.Repeat("0", 64)); len(d) != 1 {
+	} else if d, _ := a.CRLDates("G3", zero); len(d) != 1 {
 		t.Error("the index alone is what ReadArchiveIndex answers from")
 	}
-	var m *IndexMismatch
-	if _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &m) || m.Index == "" || m.Files == "" {
-		t.Errorf("tampered root: %v", err)
+	a, diffs = rebuild()
+	if len(diffs) != 2 {
+		t.Fatalf("tampered roots: %v", diffs)
+	}
+	for _, m := range diffs {
+		if m.Index == "" || m.Files == "" || !strings.HasPrefix(m.String(), "the index differs from the files:") {
+			t.Errorf("tampered root: %+v", m)
+		}
+	}
+	if d, _ := a.CRLDates("G3", one.Root); len(d) != 1 {
+		t.Error("the rebuilt index is not the one that counts")
+	}
+	if d, _ := a.CRLDates("G3", zero); len(d) != 0 {
+		t.Error("a root only the index has counted")
 	}
 
-	// A file missing from the index, and one the index lists but the
-	// archive lacks.
+	// A file the index does not list, and one the index lists but the
+	// archive lacks: both reported, the index's line first.
 	write(index)
 	os.WriteFile(filepath.Join(dir, "extra.crl"), mustRead(t, "testdata/zero.crl"), 0o600)
-	if _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &m) || m.Index != "" {
-		t.Errorf("extra file: %v", err)
+	os.Remove(filepath.Join(dir, "one.crl"))
+	a, diffs = rebuild()
+	extra := IndexFile(mustRead(t, "testdata/zero.crl"), testKeys(t))
+	want := []IndexMismatch{{Index: lineText(one)}, {Files: lineText(extra)}}
+	if !slices.Equal(diffs, want) {
+		t.Fatalf("extra and missing file: %v, want %v", diffs, want)
 	}
-	os.Remove(filepath.Join(dir, "extra.crl"))
-	os.Remove(filepath.Join(dir, "moica-like.crl"))
-	if _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &m) || m.Files != "" {
-		t.Errorf("missing file: %v", err)
+	if !strings.HasPrefix(diffs[0].String(), "the index lists a file the archive does not have: ") ||
+		!strings.HasPrefix(diffs[1].String(), "the archive has a file the index does not list: ") {
+		t.Errorf("%s\n%s", diffs[0], diffs[1])
+	}
+	if d, _ := a.CRLDates("G3", one.Root); len(d) != 0 {
+		t.Error("a file the archive lacks counted")
+	}
+	if d, _ := a.CRLDates("G3", extra.Root); len(d) != 1 {
+		t.Error("a file the index does not list did not count")
 	}
 
 	// No index, or an index that is not as the spec writes it.
 	os.Remove(filepath.Join(dir, IndexFileName))
-	if _, err := RebuildArchive(dir, testKeys(t), nil); !errors.Is(err, os.ErrNotExist) {
+	if _, _, err := RebuildArchive(dir, testKeys(t), nil); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("no index: %v", err)
 	}
 	write(bytes.ReplaceAll(index, []byte(`":"`), []byte(`": "`)))
 	var ie *IndexError
-	if _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &ie) {
+	if _, _, err := RebuildArchive(dir, testKeys(t), nil); !errors.As(err, &ie) {
 		t.Errorf("bad index: %v", err)
 	}
 	if _, err := ReadArchiveIndex(dir); !errors.As(err, &ie) {
 		t.Errorf("bad index: %v", err)
+	}
+}
+
+func lineText(l IndexLine) string { return strings.TrimSuffix(string(l.Line()), "\n") }
+
+// Every difference is reported once, a line of the index paired with a line
+// of the files by SHA-256, also when the same line appears more than once.
+func TestCompareIndexes(t *testing.T) {
+	l := func(sha, root string) IndexLine {
+		return IndexLine{"G3", "1", "2026-11-15T16:30:00Z", "-", "2026-11-16", strings.Repeat(sha, 64), strings.Repeat(root, 64)}
+	}
+	a, a2, b, c, d := l("a", "1"), l("a", "2"), l("b", "1"), l("c", "1"), l("d", "1")
+	if got := compareIndexes([]IndexLine{a, b}, []IndexLine{a, b}); len(got) != 0 {
+		t.Errorf("same: %v", got)
+	}
+	got := compareIndexes([]IndexLine{a, b, b, c}, []IndexLine{a2, b, d})
+	want := []IndexMismatch{{Index: lineText(a), Files: lineText(a2)}, {Index: lineText(b)}, {Index: lineText(c)}, {Files: lineText(d)}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
+	if got := compareIndexes([]IndexLine{b}, []IndexLine{b, b}); !slices.Equal(got, []IndexMismatch{{Files: lineText(b)}}) {
+		t.Errorf("a file twice: %v", got)
 	}
 }
 

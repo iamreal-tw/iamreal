@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/iamreal-tw/iamreal/crl"
 	"github.com/iamreal-tw/iamreal/roster"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
@@ -59,7 +60,9 @@ func (everyRoot) CRLDates(string, string) ([]verifier.Date, error) {
 func fakeDeps(pv roster.ProofVerifier, crls roster.CRLArchive) deps {
 	return deps{
 		verifier: func(verifier.Config) (roster.ProofVerifier, error) { return pv, nil },
-		archive:  func(string, bool, func(string)) (roster.CRLArchive, error) { return crls, nil },
+		archive: func(string, bool, func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
+			return crls, nil, nil
+		},
 	}
 }
 

@@ -6,3 +6,5 @@
 go build -o iamreal-crl ./cmd/iamreal-crl
 iamreal-crl check -issuer G3 MOICA-G3-complete.crl
 ```
+
+測試時，`-key-g2 FILE`、`-key-g3 FILE` 讓測試用的金鑰代替內政部的 G2、G3 發證金鑰（`check`、`prove`、`index` 都可以用），標準錯誤會印一行 `WARNING`；索引裡用它驗過的行仍寫 `G2`、`G3`。見 `crl/README.md`「測試用的發證金鑰」。

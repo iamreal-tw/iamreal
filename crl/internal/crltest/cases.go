@@ -148,23 +148,51 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Critical: true, Value: Integer(4659)}}
-	add("delta", "a delta CRL (critical deltaCRLIndicator)", false, "not_usable_delta", c)
+	add("delta", "a delta CRL with a critical deltaCRLIndicator: the critical extension (check 5) comes before the delta (check 6)", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
 	add("delta-noncritical", "deltaCRLIndicator marked non-critical", false, "not_usable_delta", c)
 	c = base(r, Serial(hexBytes("05")))
 	idp, _ := asn1.Marshal(struct{}{}) // IssuingDistributionPoint with every field absent
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Critical: true, Value: idp}}
-	add("idp", "a partitioned CRL (critical issuingDistributionPoint)", false, "not_usable_partitioned", c)
+	add("idp", "a partitioned CRL with a critical issuingDistributionPoint: the critical extension (check 5) comes before the partition (check 7)", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}}
+	add("idp-noncritical", "issuingDistributionPoint marked non-critical", false, "not_usable_partitioned", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Critical: true, Value: []byte{5, 0}}}
 	add("unknown-critical", "an unknown critical CRL extension", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Value: []byte{5, 0}}}
 	add("unknown-noncritical", "an unknown non-critical CRL extension", true, "", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.CriticalAKI = true
+	add("critical-aki", "authorityKeyIdentifier marked critical: no extension may be critical", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.CriticalNumber = true
+	add("critical-number", "cRLNumber marked critical: no extension may be critical", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = []Extension{
+		{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Critical: true, Value: []byte{5, 0}},
+		{ID: OIDCRLNumber, Value: Integer(4660)},
+	}
+	add("critical-and-duplicate", "a critical CRL extension, then cRLNumber twice: the duplicate (check 4) comes before the critical extension (check 5)", false, "not_usable_duplicate_extension", c)
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	c.Entries[1].Extensions = []Extension{{ID: asn1.ObjectIdentifier{2, 5, 29, 29}, Critical: true, Value: []byte{0x30, 0}}}
 	add("entry-critical", "an entry with a critical certificateIssuer extension (an indirect CRL)", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].CriticalReason = true
+	add("entry-critical-reason", "an entry whose reasonCode is marked critical: no extension may be critical", false, "not_usable_critical_extension", c)
+	c = base(r, Serial(hexBytes("05")), []byte{0xff, 0x01})
+	c.Entries[1].CriticalReason = true
+	add("entry-critical-and-negative", "one entry with a critical reasonCode and a negative serial: within the entry, the critical extension comes first", false, "not_usable_critical_extension", c)
+	c = base(r, []byte{0xff, 0x01}, Serial(hexBytes("06")))
+	c.Entries[1].CriticalReason = true
+	add("negative-then-entry-critical", "a negative serial, then an entry with a critical reasonCode: the first entry with a problem decides", false, "not_usable_serial", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Entries[0].CriticalReason = true
+	c.Number = -1
+	add("no-number-entry-critical", "no cRLNumber, and an entry with a critical reasonCode: the CRL number (check 8) comes before the entries (check 9)", false, "not_usable_crl_number", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Number = -1
 	add("no-number", "no cRLNumber extension", false, "not_usable_crl_number", c)

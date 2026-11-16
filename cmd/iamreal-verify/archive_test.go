@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +45,10 @@ type archiveCase struct {
 	trustIndex bool
 	exit       int
 	records    []string // the per-record lines of the output, if exit is not exitError
-	stderr     string   // a substring of the standard error
+	stderr     []string // substrings of the standard error
+	// diffs is the number of differences between the index and the files
+	// the command reports; it then continues with the rebuilt index.
+	diffs int
 }
 
 const (
@@ -57,8 +61,8 @@ var allValid = []string{"1 valid first", "2 valid first", "3 valid withdraw"}
 
 func archiveCases() []archiveCase {
 	return []archiveCase{
-		{name: "full", exit: exitAllValid, records: allValid, stderr: "rebuilding"},
-		{name: "trust index", trustIndex: true, exit: exitAllValid, records: allValid, stderr: "trusting"},
+		{name: "full", exit: exitAllValid, records: allValid, stderr: []string{"rebuilding"}},
+		{name: "trust index", trustIndex: true, exit: exitAllValid, records: allValid, stderr: []string{"trusting"}},
 		// Record 3 (2026-11-24) fits only C (2026-11-21); record 2
 		// (2026-11-21) still fits B (2026-11-20), which has the same root.
 		{name: "without C", edit: removeCRL(crlC, true), exit: exitInvalid,
@@ -68,27 +72,41 @@ func archiveCases() []archiveCase {
 		{name: "without B", edit: removeCRL(crlB, true), exit: exitAllValid, records: allValid},
 		{name: "without A", edit: removeCRL(crlA, true), exit: exitInvalid,
 			records: []string{"1 invalid root", "2 valid first", "3 valid withdraw"}},
-		// The index still lists C: rebuilding finds the difference and
-		// stops; trusting the index does not notice.
-		{name: "C removed, index unchanged", edit: removeCRL(crlC, false), exit: exitError,
-			stderr: "the index lists a file the archive does not have: {\"issuer\":\"G3\",\"crl_number\":\"2026112105\""},
+		// The index still lists C: rebuilding reports the difference and
+		// goes on without C, so record 3 loses its CRL; trusting the index
+		// does not notice.
+		{name: "C removed, index unchanged", edit: removeCRL(crlC, false), exit: exitInvalid,
+			records: []string{"1 valid first", "2 valid first", "3 invalid root"},
+			stderr:  []string{"the index lists a file the archive does not have: {\"issuer\":\"G3\",\"crl_number\":\"2026112105\""}, diffs: 1},
 		{name: "C removed, index unchanged, trust index", edit: removeCRL(crlC, false), trustIndex: true,
 			exit: exitAllValid, records: allValid},
-		// C's root changed in the index: rebuilding finds it; trusting the
-		// index, record 3 loses its CRL.
-		{name: "C's root changed", edit: changeRoot(crlC), exit: exitError, stderr: "the index differs from the files"},
+		// C's root changed in the index: rebuilding reports it and answers
+		// from the files, so every record is valid but the exit status is 1;
+		// trusting the index, record 3 loses its CRL.
+		{name: "C's root changed", edit: changeRoot(crlC), exit: exitInvalid, records: allValid,
+			stderr: []string{"the index differs from the files"}, diffs: 1},
 		{name: "C's root changed, trust index", edit: changeRoot(crlC), trustIndex: true, exit: exitInvalid,
 			records: []string{"1 valid first", "2 valid first", "3 invalid root"}},
-		// A file the index does not list.
+		// A file the index does not list: it is not usable, so the result
+		// does not change, but the difference is reported.
 		{name: "extra file", edit: func(t *testing.T, dir string) {
 			os.WriteFile(filepath.Join(dir, "junk"), []byte("x"), 0o600)
-		}, exit: exitError, stderr: "the archive has a file the index does not list"},
+		}, exit: exitInvalid, records: allValid,
+			stderr: []string{"the archive has a file the index does not list: {\"issuer\":\"-\""}, diffs: 1},
+		// Every difference is reported, not only the first.
+		{name: "three differences", edit: func(t *testing.T, dir string) {
+			changeRoot(crlA)(t, dir)
+			removeCRL(crlC, false)(t, dir)
+			os.WriteFile(filepath.Join(dir, "junk"), []byte("x"), 0o600)
+		}, exit: exitInvalid, records: []string{"1 valid first", "2 valid first", "3 invalid root"},
+			stderr: []string{"the index differs from the files", "the index lists a file the archive does not have",
+				"the archive has a file the index does not list"}, diffs: 3},
 		{name: "no index", edit: func(t *testing.T, dir string) {
 			os.Remove(filepath.Join(dir, crl.IndexFileName))
-		}, exit: exitError, stderr: crl.IndexFileName},
+		}, exit: exitError, stderr: []string{crl.IndexFileName}},
 		{name: "index not as the spec writes it", edit: func(t *testing.T, dir string) {
 			editIndex(t, dir, func(b []byte) []byte { return bytes.Replace(b, []byte(`"G2"`), []byte(`"g2"`), 1) })
-		}, trustIndex: true, exit: exitError, stderr: "index line 1"},
+		}, trustIndex: true, exit: exitError, stderr: []string{"index line 1"}},
 	}
 }
 
@@ -189,8 +207,15 @@ func runArchiveCases(t *testing.T, mk func(verifier.Config) (roster.ProofVerifie
 			if code != c.exit {
 				t.Fatalf("exit %d, want %d\n%s\n%s", code, c.exit, out.String(), errOut.String())
 			}
-			if !strings.Contains(errOut.String(), c.stderr) {
-				t.Errorf("stderr lacks %q:\n%s", c.stderr, errOut.String())
+			for _, want := range c.stderr {
+				if !strings.Contains(errOut.String(), want) {
+					t.Errorf("stderr lacks %q:\n%s", want, errOut.String())
+				}
+			}
+			reported := strings.Count(errOut.String(), "iamreal-verify: CRL archive: the ")
+			summary := fmt.Sprintf("%d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files", c.diffs, crl.IndexFileName)
+			if reported != c.diffs || (c.diffs > 0) != strings.Contains(errOut.String(), summary) {
+				t.Errorf("%d differences reported, want %d:\n%s", reported, c.diffs, errOut.String())
 			}
 			if c.exit == exitError {
 				return
@@ -236,8 +261,8 @@ func TestArchiveIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := crl.RebuildArchive(dir, moica, nil); err == nil {
-		t.Error("test CRLs accepted under MOICA's keys")
+	if _, diffs, err := crl.RebuildArchive(dir, moica, nil); err != nil || len(diffs) != 3 {
+		t.Errorf("test CRLs under MOICA's keys: %v %v", diffs, err)
 	}
 	for _, l := range mustBuild(t, dir, moica) {
 		if l.Issuer != "-" || l.Reason() != crl.ReasonSignature {

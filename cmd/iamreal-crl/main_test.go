@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +17,13 @@ import (
 const testdata = "../../crl/testdata"
 
 var testKey = filepath.Join(testdata, "issuer-public-key.der")
+
+// asG3 makes the test key stand in for G3.
+var asG3 = []string{"-issuer", "G3", "-key-g3", testKey}
+
+const warning = "WARNING: test key " // the start of the warning, after "iamreal-crl: "
+
+func args(a ...string) []string { return append(append([]string{}, asG3...), a...) }
 
 type expectedCase struct {
 	Name   string `json:"name"`
@@ -42,12 +50,15 @@ func expected(t *testing.T) map[string]expectedCase {
 }
 
 func TestCheck(t *testing.T) {
-	var out bytes.Buffer
-	if err := check([]string{"-key", testKey, filepath.Join(testdata, "one.crl")}, &out); err != nil {
+	var out, errs bytes.Buffer
+	if err := check(args(filepath.Join(testdata, "one.crl")), &out, &errs); err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(errs.String(), "iamreal-crl: "+warning+testKey+" stands in for MOICA's G3 key") {
+		t.Errorf("no warning about the test key:\n%s", errs.String())
+	}
 	for _, want := range []string{
-		"crl_number   4660\n", "this_update  2026-11-15T16:30:00Z\n", "crl_date     2026-11-16\n",
+		"issuer       G3\n", "crl_number   4660\n", "this_update  2026-11-15T16:30:00Z\n", "crl_date     2026-11-16\n",
 		"usable       yes\n", "root         12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -55,23 +66,46 @@ func TestCheck(t *testing.T) {
 		}
 	}
 	out.Reset()
-	err := check([]string{"-key", testKey, filepath.Join(testdata, "delta.crl")}, &out)
+	err := check(args(filepath.Join(testdata, "delta.crl")), &out, &errs)
 	var u *crl.Unusable
 	if !errors.As(err, &u) || !strings.Contains(out.String(), "usable       no\n") {
 		t.Errorf("delta CRL: %v\n%s", err, out.String())
 	}
-	// A test CRL is not signed by MOICA's keys.
-	err = check([]string{"-issuer", "G3", filepath.Join(testdata, "one.crl")}, &out)
-	if !errors.As(err, &u) {
-		t.Errorf("test CRL under G3: %v", err)
+	// A test CRL is not signed by MOICA's keys, and no warning is given
+	// without a test key.
+	errs.Reset()
+	err = check([]string{"-issuer", "G3", filepath.Join(testdata, "one.crl")}, &out, &errs)
+	if !errors.As(err, &u) || u.Code != crl.ReasonSignature || errs.Len() != 0 {
+		t.Errorf("test CRL under G3: %v\n%s", err, errs.String())
+	}
+	// The test key stands in for G2 only: under G3, MOICA's key.
+	errs.Reset()
+	err = check([]string{"-issuer", "G3", "-key-g2", testKey, filepath.Join(testdata, "one.crl")}, &out, &errs)
+	if !errors.As(err, &u) || u.Code != crl.ReasonSignature || !strings.Contains(errs.String(), "MOICA's G2 key") {
+		t.Errorf("test key for G2, CRL under G3: %v\n%s", err, errs.String())
+	}
+	out.Reset()
+	if err := check([]string{"-issuer", "G2", "-key-g2", testKey, filepath.Join(testdata, "one.crl")}, &out, &errs); err != nil ||
+		!strings.Contains(out.String(), "issuer       G2\n") {
+		t.Errorf("test key for G2: %v\n%s", err, out.String())
+	}
+	// -issuer is required, also with a test key.
+	for _, a := range [][]string{{"-key-g3", testKey}, {"-issuer", "test", "-key-g3", testKey}, {"-issuer", "G1"}} {
+		var u *crl.Unusable
+		if err := check(append(a, filepath.Join(testdata, "one.crl")), &out, &errs); err == nil || errors.As(err, &u) {
+			t.Errorf("%v: %v", a, err)
+		}
 	}
 }
 
 func TestProve(t *testing.T) {
-	var out bytes.Buffer
+	var out, errs bytes.Buffer
 	// spec/vectors/poseidon2.json, revocation_tree case 1, serial 0x4.
-	if err := prove([]string{"-key", testKey, "-serial", "04", filepath.Join(testdata, "one.crl")}, &out); err != nil {
+	if err := prove(args("-serial", "04", filepath.Join(testdata, "one.crl")), &out, &errs); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(errs.String(), warning) {
+		t.Errorf("no warning about the test key:\n%s", errs.String())
 	}
 	var p struct {
 		Root     string   `json:"smt_root"`
@@ -93,13 +127,14 @@ func TestProve(t *testing.T) {
 		}
 	}
 	out.Reset()
-	if err := prove([]string{"-key", testKey, "-serial", "0x5", filepath.Join(testdata, "one.crl")}, &out); !errors.Is(err, crl.ErrInTree) {
+	if err := prove(args("-serial", "0x5", filepath.Join(testdata, "one.crl")), &out, &errs); !errors.Is(err, crl.ErrInTree) {
 		t.Errorf("revoked serial: %v", err)
 	}
 }
 
 // index lists every file, usable or not, with the root or reason of
-// expected.json, in the line format of the spec.
+// expected.json, in the line format of the spec. With the test key standing
+// in for G3, the lines say G3.
 func TestIndex(t *testing.T) {
 	dir := t.TempDir()
 	files, _ := filepath.Glob(filepath.Join(testdata, "*.crl"))
@@ -115,13 +150,13 @@ func TestIndex(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, ".hidden"), []byte("skipped"), 0o600)
 
 	var out, errs bytes.Buffer
-	err := index([]string{"-key", testKey, dir}, &out, &errs)
+	err := index([]string{"-key-g3", testKey, dir}, &out, &errs)
 	var u *crl.Unusable
 	if !errors.As(err, &u) {
 		t.Fatalf("want a report of unusable files, got %v", err)
 	}
 	want := expected(t)
-	line := regexp.MustCompile(`^\{"issuer":"(test|-)","crl_number":"(-|0|[1-9][0-9]*)","this_update":"(-|[0-9TZ:-]{20})","next_update":"(-|[0-9TZ:-]{20})","crl_date":"(-|[0-9]{4}-[0-9]{2}-[0-9]{2})","sha256":"([0-9a-f]{64})","root":"([0-9a-f]{64}|-[a-z0-9_]+)"\}$`)
+	line := regexp.MustCompile(`^\{"issuer":"(G3|-)","crl_number":"(-|0|[1-9][0-9]*)","this_update":"(-|[0-9TZ:-]{20})","next_update":"(-|[0-9TZ:-]{20})","crl_date":"(-|[0-9]{4}-[0-9]{2}-[0-9]{2})","sha256":"([0-9a-f]{64})","root":"([0-9a-f]{64}|-[a-z0-9_]+)"\}$`)
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 	if len(lines) != len(files)+1 {
 		t.Fatalf("%d lines, %d files", len(lines), len(files)+1)
@@ -158,6 +193,13 @@ func TestIndex(t *testing.T) {
 	if n := strings.Count(errs.String(), "not usable"); n != len(lines)-usableCount(want) {
 		t.Errorf("%d reported on stderr\n%s", n, errs.String())
 	}
+	if !strings.Contains(errs.String(), warning+testKey+" stands in for MOICA's G3 key") {
+		t.Errorf("no warning about the test key:\n%s", errs.String())
+	}
+	// Every line the index writes passes ParseIndex.
+	if _, err := crl.ParseIndex(out.Bytes()); err != nil {
+		t.Error(err)
+	}
 }
 
 func usableCount(m map[string]expectedCase) int {
@@ -182,7 +224,7 @@ func TestCheckReasons(t *testing.T) {
 		junk:                                           crl.ReasonDER,
 	} {
 		var out bytes.Buffer
-		err := check([]string{"-key", testKey, path}, &out)
+		err := check(args(path), &out, io.Discard)
 		var u *crl.Unusable
 		if !errors.As(err, &u) || u.Code != reason || !strings.Contains(out.String(), "reason       "+reason+"\n") {
 			t.Errorf("%s: %v\n%s", path, err, out.String())

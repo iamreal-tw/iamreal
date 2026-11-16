@@ -30,6 +30,8 @@ type Entry struct {
 	Serial         []byte
 	RevocationDate time.Time
 	Reason         int // reasonCode; 0 leaves the extension out
+	// CriticalReason marks the reasonCode extension critical.
+	CriticalReason bool
 	Extensions     []Extension
 }
 
@@ -44,6 +46,9 @@ type CRL struct {
 	// are no entries, instead of leaving the field out.
 	EmptyList  bool
 	Extensions []Extension // after authorityKeyIdentifier and cRLNumber
+	// CriticalAKI and CriticalNumber mark authorityKeyIdentifier and
+	// cRLNumber critical.
+	CriticalAKI, CriticalNumber bool
 	// NoNullTBS and NoNullOuter leave out the NULL parameters of
 	// sha256WithRSAEncryption in tbsCertList and next to the signature.
 	NoNullTBS, NoNullOuter bool
@@ -137,7 +142,7 @@ func TBS(c *CRL, keyID []byte) []byte {
 						if e.Reason != 0 {
 							var r cryptobyte.Builder
 							r.AddASN1Enum(int64(e.Reason))
-							exts = append([]Extension{{ID: OIDReasonCode, Value: r.BytesOrPanic()}}, exts...)
+							exts = append([]Extension{{ID: OIDReasonCode, Critical: e.CriticalReason, Value: r.BytesOrPanic()}}, exts...)
 						}
 						if len(exts) > 0 {
 							addExtensions(b, exts)
@@ -151,9 +156,9 @@ func TBS(c *CRL, keyID []byte) []byte {
 		aki.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 			b.AddASN1(cbasn1.Tag(0).ContextSpecific(), func(b *cryptobyte.Builder) { b.AddBytes(keyID) })
 		})
-		exts = append(exts, Extension{ID: OIDAuthorityKeyIdentifier, Value: aki.BytesOrPanic()})
+		exts = append(exts, Extension{ID: OIDAuthorityKeyIdentifier, Critical: c.CriticalAKI, Value: aki.BytesOrPanic()})
 		if c.Number >= 0 {
-			exts = append(exts, Extension{ID: OIDCRLNumber, Value: Integer(c.Number)})
+			exts = append(exts, Extension{ID: OIDCRLNumber, Critical: c.CriticalNumber, Value: Integer(c.Number)})
 		}
 		exts = append(exts, c.Extensions...)
 		b.AddASN1(cbasn1.Tag(0).Constructed().ContextSpecific(), func(b *cryptobyte.Builder) {
