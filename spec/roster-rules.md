@@ -43,10 +43,9 @@ challenge was used before; its challenge still counts as used.
 |---|---|---|
 | 1 | The record verifies ([`record.md`](record.md), "Verifying a record") | `proof` |
 | 2 | Its `challenge` appears in no earlier record, valid or invalid, of any card and any scope | `challenge_reused` |
-| 3 | The event rules below, for the state of its (`scope_string`, `scoped_id`) | `not_current` or `switch_limit` |
-
-A check on the revocation root will be added before check 3, with code
-`root`, once the revocation rules are written.
+| 3 | Its `smt_root` is recognized for its `issuer` and date ([`revocation-tree.md`](revocation-tree.md)) | `root` |
+| 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card and any scope | `date_order` |
+| 5 | The event rules below, for the state of its (`scope_string`, `scoped_id`) | `not_current` or `switch_limit` |
 
 The **date** `d` of a record is the date in its challenge. Order is always by
 `seq`, never by date. Dates can step backwards by a day around midnight,
@@ -105,18 +104,25 @@ What follows from these rules:
 The rules take each record's date from its challenge, and the card's
 signature covers the challenge. Neither the server nor anyone else can change
 a date after the card signed. But the server chooses the date when it issues
-the challenge, and a modified device would sign a challenge dated in the
-future, as long as the certificate is still valid on that date. Records dated
-a year apart could then give one card more switches than the rules allow.
-One record dated years ahead would keep the card looking recent until then.
+the challenge, and a modified device would sign a challenge with any date on
+which the certificate is valid. Records dated a year apart could then give
+one card more switches than the rules allow, and one record dated years ahead
+would keep the card looking recent until then. Two checks bound this.
 
-**The upper bound on dates comes from the revocation root.** Every proof is
-made against a root built from a CRL that MOICA signed, and the CRL carries
-the date it was issued. The revocation rules (not written yet) will require a
-record's date to be within a fixed number of days after the issue date of
-the CRL behind its `smt_root`. A CRL from the future does not exist, so a
-date can then run ahead by at most that many days. **Until those rules are
-written, a re-verifier cannot detect dates written into the future.**
+- **Into the future: at most 3 days** (check 3). A record's date is at most
+  3 days after the date of the CRL behind its root, and MOICA has not signed
+  future CRLs.
+- **Into the past: at most 4 days** (check 4), relative to the records
+  already in the roster. The 4 days cover a record dated the full 3 days
+  ahead, plus one day around midnight, so an honest record is never caught by
+  a record dated ahead of it. Check 3 alone would not stop dates in the past:
+  old CRLs stay recognized so that old records keep verifying.
+
+Both bounds are far below the 365-day window, so dating cannot buy extra
+switches. Within the bounds, an operator working with a modified device can
+make a card's `last_card_proof` look up to 3 days more recent than it is.
+If the bound of check 3 is ever widened, the bound of check 4 widens with it
+(one day more).
 
 ## Output
 
@@ -149,4 +155,6 @@ carry the date.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): sequences of events
 with the outcome of each and the final state. Events stand for well-formed
 records and carry only the fields the rules read. Their `verifies` field
-says whether the record passes check 1.
+says whether the record passes check 1. Their `crl_date` is the CRL date
+behind `smt_root` (the date `thisUpdate` falls on in Taiwan), or null if the root is not the root of a
+usable CRL of the record's issuer.

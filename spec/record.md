@@ -154,10 +154,6 @@ records keep verifying.
 - **The issuer moduli.** The G2 and G3 moduli, with the source of each
   issuer certificate, will be listed here. Test issuer keys never appear in
   this table.
-- **Which `smt_root` values are recognized**: one tree or one per issuer,
-  how old a root may be, how historical roots are archived for re-verifying
-  old records. The same rule bounds how far into the future a challenge's
-  date can be ([`roster-rules.md`](roster-rules.md)).
 - **Hiding an account name on request.** When an account owner asks, later
   snapshots hide the account name in that owner's records. The hidden record
   keeps `seq`, `prev` and its original record hash, so the chain stays

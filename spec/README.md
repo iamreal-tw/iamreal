@@ -15,15 +15,15 @@ there are the names used here.
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
 | [`record.md`](record.md) | One record: fields, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
 | [`roster-rules.md`](roster-rules.md) | How the state is computed from the records | Draft |
+| [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 
-Planned: the revocation tree (how `crl/` builds it and which roots are
-recognized), the issuer keys, and the checks on proofs and public inputs.
+Planned: the issuer keys, and the checks on proofs and public inputs.
 
 ## Test vectors
 
 `vectors/` holds one JSON file per document. `poseidon2.json` and
-`poseidon2-constants.json` belong to `scoped-id.md` and will be shared with
-the revocation tree. Every implementation (Go,
+`poseidon2-constants.json` belong to `scoped-id.md` and
+`revocation-tree.md`. Every implementation (Go,
 TypeScript, and later the mobile apps) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
