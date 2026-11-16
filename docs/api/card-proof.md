@@ -107,7 +107,9 @@ Submits one card proof.
   declare it). The device uses `account_cards` only to choose which link to
   suggest: the account's page when this card is the only one, the page of
   this card when there are others. A wrong number cannot identify the
-  cardholder.
+  cardholder. A device that cannot read `account_cards` treats it as
+  unknown and suggests the page of this card: the record is in the roster
+  by then.
 - Errors:
 
   | Status | Code | Meaning |
