@@ -24,7 +24,8 @@ declaration_code = "D" || first 30 characters of base32(SHA-256(preimage))
   (see ADR-0007).
 - `username` is the account name on the platform, lowercase, without `@`.
 - `challenge` is the challenge issued by the server for this card proof,
-  written exactly as issued.
+  written exactly as issued ([`challenge.md`](challenge.md)). It contains no
+  `LF`.
 - `base32` is the Crockford encoding defined in [`README.md`](README.md).
 
 The result is 31 ASCII bytes: `D` followed by 30 characters carrying 150 bits
@@ -47,11 +48,6 @@ A verifier recomputes the code from the record's `action`, `scope_string`,
 exposed as a public input of the proof. This is the only place the challenge
 is bound: the circuit has no separate challenge input.
 
-## Open items
-
-- The challenge format (it carries the issue date plus random data) will be
-  defined in `challenge.md`. The vectors use a placeholder value until then.
-
 ## Test vectors
 
 [`vectors/declaration-code.json`](vectors/declaration-code.json). Example:
@@ -61,7 +57,7 @@ iamreal-declaration-v1
 declare
 iamreal:threads:0______________
 alice
-1234567890
+2026-11-16.000G40R40M30E209185GR38E1W
 ```
 
-gives `DX8FHVFCJDJXXEVP2Q0W9PJ1EBH5Z8Z`.
+gives `DKE20ETW3YCPWH84JD2YDE1766QY6HZ`.
