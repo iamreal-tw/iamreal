@@ -1,5 +1,5 @@
 // Command iamreal-crl checks a MOICA CRL and rebuilds its revocation tree
-// (spec/revocation-tree.md).
+// (spec/revocation-tree.md). See crl/README.md.
 //
 //	iamreal-crl check -issuer G3 MOICA-G3-complete.crl
 //	iamreal-crl prove -issuer G3 -serial 0x1234… MOICA-G3-complete.crl
@@ -8,7 +8,7 @@
 // check prints whether the CRL is usable, its cRLNumber, thisUpdate,
 // nextUpdate, CRL date, the SHA-256 of the file and the root. prove prints
 // the proof that a serial number is not in the tree, as the circuit's
-// inputs. index prints one line per CRL file in a directory (see README.md;
+// inputs. index prints one line per CRL file in a directory (see crl/README.md;
 // the format is a proposal). -key replaces -issuer with a test key.
 package main
 

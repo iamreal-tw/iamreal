@@ -13,7 +13,7 @@ import (
 	"github.com/iamreal-tw/iamreal/crl"
 )
 
-const testdata = "../../testdata"
+const testdata = "../../crl/testdata"
 
 var testKey = filepath.Join(testdata, "issuer-public-key.der")
 

@@ -2,14 +2,14 @@
 
 這個目錄讓人檢查的事：**拿內政部的廢止清冊，任何人都能重建出相同的樹根。** 規則在 [`spec/revocation-tree.md`](../spec/revocation-tree.md)：哪些清冊可以用、樹怎麼建、「不在樹裡」的證明長什麼樣子。
 
-這裡的程式不引用這個程式庫的其他目錄。用來驗清冊簽章的兩張發證憑證直接放在這裡（`MOICA2.cer`、`MOICA-G3.cer`），測試會檢查它們的 SHA-256 和模數等於 [`spec/issuers.md`](../spec/issuers.md) 與 `spec/vectors/issuers.json`。
+這裡的程式不引用這個程式庫的其他目錄。指令在 [`cmd/iamreal-crl/`](../cmd/iamreal-crl)，只引用 `crl/`。用來驗清冊簽章的兩張發證憑證直接放在這裡（`MOICA2.cer`、`MOICA-G3.cer`），測試會檢查它們的 SHA-256 和模數等於 [`spec/issuers.md`](../spec/issuers.md) 與 `spec/vectors/issuers.json`。
 
 ## 單獨執行
 
 只需要 Go 1.26。在程式庫的根目錄：
 
 ```sh
-go build -o iamreal-crl ./crl/cmd/iamreal-crl
+go build -o iamreal-crl ./cmd/iamreal-crl
 ```
 
 ### 拿內政部的清冊重算樹根
@@ -80,7 +80,6 @@ go build -o iamreal-crl ./crl/cmd/iamreal-crl
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
-| `cmd/iamreal-crl/` | 上面的指令 |
 | `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間 |
 | `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、樹根） |
 
