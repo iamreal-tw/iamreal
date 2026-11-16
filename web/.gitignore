@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Barretenberg's common reference string: fetched by scripts/fetch-crs.mjs, checked by SHA-256.
+crs/
+# Test runs: fixtures, proofs, browser profiles.
+test-output/
