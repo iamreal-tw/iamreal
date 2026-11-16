@@ -11,7 +11,8 @@ server's API.
 
 A snapshot: records in `seq` order ([`record.md`](record.md)).
 
-**The snapshot as a whole.** `seq` starts at 1 and is consecutive, and every
+**The snapshot as a whole.** Every line is well formed
+([`record.md`](record.md)), `seq` starts at 1 and is consecutive, and every
 `prev` equals the record hash of the record before it. If not, the snapshot
 is broken. A broken snapshot is reported as such; the rules do not try to
 compute a state from it.

@@ -32,10 +32,25 @@ across scopes.
 
 ## File format
 
-JSON Lines: one record per line, a JSON object, records in `seq` order.
-Every field is a JSON string, except `seq`, which is a JSON number. The JSON
-spelling of a line (key order, whitespace) carries no meaning: the record
-hash is computed from the field values, not from the line.
+JSON Lines: one record per line, records in `seq` order. Each line is a JSON
+object with exactly the 11 keys of the table below, each once:
+
+- `seq` is a JSON number written as an integer, without fraction or exponent;
+- every other field is a JSON string;
+- a duplicate key, a missing key, an extra key or another type makes the
+  line malformed. A snapshot with a malformed line is broken as a whole
+  ([`roster-rules.md`](roster-rules.md)), not just that record.
+
+The rest of the JSON spelling (key order, whitespace, string escapes) carries
+no information. The record hash is computed from the 11 field values, not
+from the bytes of the line. Changing any value changes the hash, and a line
+cannot carry anything besides those 11 values. A reformatted copy of a
+snapshot therefore verifies the same as the original.
+
+Duplicate keys are the reason for the strictness: JSON parsers disagree on
+`{"username":"alice","username":"bob"}`. Some keep the first value, some the
+last. Without the rule, two re-verifiers could read the same line as two
+different events.
 
 ## Fields
 
@@ -143,6 +158,7 @@ records keep verifying.
 ## Test vectors
 
 [`vectors/record.json`](vectors/record.json): two chained records with their
-preimage hashes, record hashes and the head. The proofs are placeholder
+preimage hashes, record hashes and the head; lines that are malformed, with
+the reason. The proofs are placeholder
 bytes, not real proofs: the vectors test the formats and the chain, not
 proof verification.

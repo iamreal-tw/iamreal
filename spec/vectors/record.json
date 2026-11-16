@@ -40,5 +40,35 @@
       "record_hash": "9c77d91fb857d1da6b79581ce19f0f0cb19fe37e3bec405953f6eb9b2c6f3ead"
     }
   ],
-  "head": "9c77d91fb857d1da6b79581ce19f0f0cb19fe37e3bec405953f6eb9b2c6f3ead"
+  "head": "9c77d91fb857d1da6b79581ce19f0f0cb19fe37e3bec405953f6eb9b2c6f3ead",
+  "malformed_lines": [
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\",\"username\":\"bob\"}",
+      "reason": "duplicate key"
+    },
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\",\"note\":\"x\"}",
+      "reason": "extra key"
+    },
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\"}",
+      "reason": "missing key"
+    },
+    {
+      "line": "{\"seq\":\"1\",\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\"}",
+      "reason": "seq is not a JSON number"
+    },
+    {
+      "line": "{\"seq\":1.0,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\"}",
+      "reason": "seq is not an integer without fraction or exponent"
+    },
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":3,\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"<proof of case 0>\"}",
+      "reason": "a field other than seq is not a JSON string"
+    },
+    {
+      "line": "[{\"seq\": 1, \"prev\": \"0000000000000000000000000000000000000000000000000000000000000000\", \"scope_string\": \"iamreal:threads:0______________\", \"scoped_id\": \"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\", \"action\": \"declare\", \"username\": \"alice\", \"challenge\": \"2026-11-16.000G40R40M30E209185GR38E1W\", \"issuer\": \"G3\", \"smt_root\": \"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\", \"circuit\": \"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\", \"proof\": \"<proof of case 0>\"}]",
+      "reason": "not a JSON object"
+    }
+  ]
 }
