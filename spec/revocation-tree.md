@@ -29,10 +29,10 @@ A CRL is usable if:
 - it has a `cRLNumber` extension holding a non-negative integer. The device
   compares CRL numbers ("Who checks what");
 - it is a complete CRL for everything the key issued: it has neither a
-  `deltaCRLIndicator` nor an `issuingDistributionPoint` extension; no
-  extension appears twice; and no critical extension other than these rules
-  know, in the CRL or in any entry (so an indirect CRL, with a critical
-  `certificateIssuer` entry extension, is not usable). MOICA's CRLs, as checked
+  `deltaCRLIndicator` nor an `issuingDistributionPoint` extension, critical
+  or not; no extension appears twice, in the CRL or in an entry; and no
+  extension is critical, in the CRL or in any entry (so an indirect CRL, with
+  a critical `certificateIssuer` entry extension, is not usable). MOICA's CRLs, as checked
   on 2026-11-16, carry only `authorityKeyIdentifier` and `cRLNumber`, and each
   entry only a non-critical `reasonCode`. If MOICA starts partitioning its
   CRLs, devices stop rather than build an incomplete tree, and this document
@@ -167,18 +167,48 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 
 | Field | Format |
 |---|---|
-| `issuer` | `G2` or `G3`: the key whose signature verifies; `-` if neither |
-| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing or unreadable |
+| `issuer` | `G2` or `G3`: the key under which the RSA signature verifies, whatever the algorithm fields say; `-` if neither |
+| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable or negative |
 | `this_update`, `next_update` | UTC, `YYYY-MM-DDTHH:MM:SSZ`; `-` if missing |
 | `crl_date` | The CRL date, `YYYY-MM-DD`; `-` if `thisUpdate` is missing |
 | `sha256` | SHA-256 of the file, 64 lowercase hex digits |
-| `root` | The root, 64 lowercase hex digits; for a file that is not usable, `-` followed by the reason in lowercase letters, digits and `_` (for example `-not_usable_signature`) |
+| `root` | The root, 64 lowercase hex digits; for a file that is not usable, `-` followed by the reason code below (for example `-not_usable_signature`) |
 
-Lines are sorted by `issuer`, then `crl_number` as a number, then `sha256`.
-Every file in the archive has a line, usable or not, so the archive and the
-index can be checked against each other. Two different files with the same
-CRL number get two lines. The index is a convenience: a re-verifier can
-rebuild it from the files.
+**Reason codes.** When several apply, the first in this order:
+
+| # | Code | The file |
+|---|---|---|
+| 1 | `not_usable_der` | is not a DER `CertificateList` |
+| 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
+| 3 | `not_usable_signature` | has a signature that verifies under neither key |
+| 4 | `not_usable_duplicate_extension` | has an extension twice, in the CRL or, checked entry by entry in order, in an entry |
+| 5 | `not_usable_critical_extension` | has a critical extension, in the CRL or, entry by entry, in an entry |
+| 6 | `not_usable_delta` | has `deltaCRLIndicator` |
+| 7 | `not_usable_partitioned` | has `issuingDistributionPoint` |
+| 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER |
+| 9 | `not_usable_serial` | has a serial number that gives no key (the first such entry decides) |
+| 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
+
+Within checks 4, 5 and 9, entries are checked in order and the first entry
+with a problem decides; in that entry, check 4 comes before 5.
+
+**Order.** Lines are sorted by `issuer` (bytes: `-` before `G2` before `G3`),
+then `crl_number` as a number with `-` before every number, then `sha256`.
+
+**Files.** The archive is one directory. Its index is the file `index.jsonl`
+in it. Every other regular file in the directory whose name does not start
+with `.` is a CRL file of the archive and has exactly one line, usable or
+not, so the archive and the index can be checked against each other.
+Subdirectories are not part of the archive. The mirror stores only files it
+has not seen (by SHA-256), so no two lines are the same. Two different files
+with the same CRL number get two lines.
+
+**Re-verifying with the index.** The index is a convenience: a re-verifier
+can rebuild it from the files, and the rebuilt index is the one that counts.
+A re-verifier that rebuilds it and finds a difference reports every
+difference and continues with the rebuilt index. One that trusts the index
+without rebuilding it checks every line's form, and that `root` is below
+`p`.
 
 ## Open items
 
