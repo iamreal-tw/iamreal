@@ -56,7 +56,7 @@ func (h *harness) snapshot(today string) (int, string, string) {
 	var out, errOut bytes.Buffer
 	code := snapshot(snapshotConfig{
 		Store: h.store, Roster: verifier.Test, CRLDir: crlDir(h.data), OutDir: rosterDir(h.data),
-		Proofs: h.proofs, Keys: namedTestKeys(h.t), Today: mustDate(h.t, today), Out: &out, Err: &errOut,
+		Proofs: h.proofs, Keys: h.keys, Today: mustDate(h.t, today), Out: &out, Err: &errOut,
 	})
 	return code, out.String(), errOut.String()
 }

@@ -183,7 +183,8 @@ type harness struct {
 	t      *testing.T
 	data   string
 	clock  *fakeClock
-	proofs *fakeProofs
+	proofs roster.ProofVerifier // a *fakeProofs, except in e2e_test.go
+	keys   []crl.NamedKey       // the issuer keys of the CRLs
 	store  *store.SQLite
 	server *Server
 	http   http.Handler
@@ -211,7 +212,7 @@ func (s *syncBuffer) String() string {
 // newHarness starts a server at now with the given CRLs in its mirror.
 func newHarness(t *testing.T, now time.Time, crls ...[]byte) *harness {
 	t.Helper()
-	h := &harness{t: t, data: t.TempDir(), clock: &fakeClock{t: now}, proofs: &fakeProofs{reject: map[string]bool{badProof: true}}, logs: &syncBuffer{}}
+	h := &harness{t: t, data: t.TempDir(), clock: &fakeClock{t: now}, proofs: &fakeProofs{reject: map[string]bool{badProof: true}}, keys: namedTestKeys(t), logs: &syncBuffer{}}
 	for _, dir := range []string{crlDir(h.data), rosterDir(h.data)} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -256,7 +257,7 @@ func (h *harness) config() Config {
 // addCRL stores a CRL in the mirror the way the mirror does.
 func (h *harness) addCRL(der []byte) {
 	h.t.Helper()
-	m := &Mirror{Dir: crlDir(h.data), Keys: namedTestKeys(h.t)}
+	m := &Mirror{Dir: crlDir(h.data), Keys: h.keys}
 	if _, _, err := m.store(der); err != nil {
 		h.t.Fatal(err)
 	}
