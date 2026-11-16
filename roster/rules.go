@@ -115,66 +115,165 @@ type cardState struct {
 	lastCardProof *verifier.Date
 }
 
-// Apply applies the rules to the records of a valid roster file, in order.
-func Apply(records []*verifier.Record, proofs ProofVerifier, crls CRLArchive) (*State, error) {
-	st := &State{}
-	cards := map[cardKey]*cardState{}
-	used := map[string]bool{} // challenges of earlier records, valid or invalid
-	var latestValid *verifier.Date
+func (cs *cardState) clone() *cardState {
+	c := *cs
+	c.switchDates = append([]verifier.Date(nil), cs.switchDates...)
+	return &c
+}
 
-	for _, r := range records {
-		d, err := r.Date()
-		if err != nil {
-			return nil, fmt.Errorf("seq %d: %w", r.Seq, err)
-		}
-		res := RecordResult{Seq: r.Seq}
-		invalid := func(code, detail string) { res.Reason, res.Detail = code, detail }
+// Rules applies the rules to one record at a time, in seq order, and keeps
+// the state they compute. Apply (a whole roster file) is a loop over it, and
+// the server uses it for each record it appends, so both run the same code.
+//
+// Rules does not check the file as a whole (well-formed lines, seq, prev);
+// ReadFile and ReadLine do.
+type Rules struct {
+	proofs      ProofVerifier
+	crls        CRLArchive
+	cards       map[cardKey]*cardState
+	used        map[string]bool // challenges of earlier records, valid or invalid
+	latestValid *verifier.Date
+	results     []RecordResult
+}
 
-		key := cardKey{r.ScopeString, r.ScopedID}
-		cs := cards[key]
-		if cs == nil {
-			cs = &cardState{}
-		}
+// NewRules returns the rules before any record.
+func NewRules(proofs ProofVerifier, crls CRLArchive) *Rules {
+	return &Rules{proofs: proofs, crls: crls, cards: map[cardKey]*cardState{}, used: map[string]bool{}}
+}
 
-		// 1. The record verifies.
-		if err := proofs.VerifyRecord(r); err != nil {
-			var rej *verifier.Rejection
-			if !errors.As(err, &rej) {
-				return nil, fmt.Errorf("seq %d: %w", r.Seq, err)
-			}
-			invalid(CodeProof, rej.Reason)
-		} else if used[r.Challenge] {
-			// 2. Its challenge appears in no earlier record.
-			invalid(CodeChallengeReused, "")
-		} else if ok, err := rootRecognized(crls, r, d); err != nil {
-			return nil, fmt.Errorf("seq %d: %w", r.Seq, err)
-		} else if !ok {
-			// 3. Its root is recognized for its issuer and date.
-			invalid(CodeRoot, "")
-		} else if latestValid != nil && d < latestValid.AddDays(-DateOrderDays) {
-			// 4. Its date is no earlier than 4 days before the latest valid date.
-			invalid(CodeDateOrder, fmt.Sprintf("latest earlier valid date %s", latestValid))
-		} else {
-			// 5. The event rules.
-			kind, code := applyEvent(cs, r.Action, r.Username, d)
-			if code != "" {
-				invalid(code, "")
-			} else {
-				res.Valid, res.Kind = true, kind
-				if cs.lastCardProof == nil || d > *cs.lastCardProof {
-					cs.lastCardProof = &d
-				}
-				if latestValid == nil || d > *latestValid {
-					latestValid = &d
-				}
-				cards[key] = cs
-			}
-		}
-		used[r.Challenge] = true
-		st.Records = append(st.Records, res)
+// Check returns the result r would have as the next record, without
+// applying it: nothing changes.
+func (x *Rules) Check(r *verifier.Record) (RecordResult, error) {
+	res, _, err := x.check(r)
+	return res, err
+}
+
+// Apply applies r as the next record and returns its result. A valid record
+// changes the state of its card; an invalid one changes nothing but marks
+// its challenge as used (check 2). On an error nothing changes.
+func (x *Rules) Apply(r *verifier.Record) (RecordResult, error) {
+	res, next, err := x.check(r)
+	if err != nil {
+		return res, err
 	}
-	st.Scopes = output(cards)
-	return st, nil
+	if res.Valid {
+		x.cards[cardKey{r.ScopeString, r.ScopedID}] = next
+		d := *next.lastCardProof
+		if x.latestValid == nil || d > *x.latestValid {
+			x.latestValid = &d
+		}
+	}
+	x.used[r.Challenge] = true
+	x.results = append(x.results, res)
+	return res, nil
+}
+
+// check runs the checks of "Per record" on r, in order; the first that
+// fails gives the reason code. For a valid record it also returns the state
+// its card has after it. It changes nothing.
+func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
+	res := RecordResult{Seq: r.Seq}
+	d, err := r.Date()
+	if err != nil {
+		return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
+	}
+	invalid := func(code, detail string) (RecordResult, *cardState, error) {
+		res.Reason, res.Detail = code, detail
+		return res, nil, nil
+	}
+
+	// 1. The record verifies.
+	if err := x.proofs.VerifyRecord(r); err != nil {
+		var rej *verifier.Rejection
+		if !errors.As(err, &rej) {
+			return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
+		}
+		return invalid(CodeProof, rej.Reason)
+	}
+	// 2. Its challenge appears in no earlier record.
+	if x.used[r.Challenge] {
+		return invalid(CodeChallengeReused, "")
+	}
+	// 3. Its root is recognized for its issuer and date.
+	ok, err := rootRecognized(x.crls, r, d)
+	if err != nil {
+		return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
+	}
+	if !ok {
+		return invalid(CodeRoot, "")
+	}
+	// 4. Its date is no earlier than 4 days before the latest valid date.
+	if x.latestValid != nil && d < x.latestValid.AddDays(-DateOrderDays) {
+		return invalid(CodeDateOrder, fmt.Sprintf("latest earlier valid date %s", x.latestValid))
+	}
+	// 5. The event rules, on a copy of the card's state.
+	next := &cardState{}
+	if cs := x.cards[cardKey{r.ScopeString, r.ScopedID}]; cs != nil {
+		next = cs.clone()
+	}
+	kind, code := applyEvent(next, r.Action, r.Username, d)
+	if code != "" {
+		return invalid(code, "")
+	}
+	if next.lastCardProof == nil || d > *next.lastCardProof {
+		next.lastCardProof = &d
+	}
+	res.Valid, res.Kind = true, kind
+	return res, next, nil
+}
+
+// Count returns the number of records applied.
+func (x *Rules) Count() int { return len(x.results) }
+
+// State returns the output of the rules for the records applied so far.
+func (x *Rules) State() *State {
+	return &State{Records: append([]RecordResult(nil), x.results...), Scopes: output(x.cards)}
+}
+
+// CardInScope is the state of one card in one scope (spec/roster-rules.md,
+// "State of a card in a scope"). A card with no valid record has every
+// pointer nil and no switch dates.
+type CardInScope struct {
+	Current       *string
+	LastDeclared  *string
+	SwitchDates   []verifier.Date // one per valid switch, in seq order
+	LastCardProof *verifier.Date
+}
+
+// Card returns the state of the card scopedID in the scope scopeString. The
+// values are copies.
+func (x *Rules) Card(scopeString, scopedID string) CardInScope {
+	cs := x.cards[cardKey{scopeString, scopedID}]
+	if cs == nil {
+		return CardInScope{}
+	}
+	cs = cs.clone()
+	out := CardInScope{SwitchDates: cs.switchDates}
+	if cs.current != nil {
+		u := *cs.current
+		out.Current = &u
+	}
+	if cs.lastDeclared != nil {
+		u := *cs.lastDeclared
+		out.LastDeclared = &u
+	}
+	if cs.lastCardProof != nil {
+		d := *cs.lastCardProof
+		out.LastCardProof = &d
+	}
+	return out
+}
+
+// Apply applies the rules to the records of a valid roster file, in order:
+// Rules.Apply on each record.
+func Apply(records []*verifier.Record, proofs ProofVerifier, crls CRLArchive) (*State, error) {
+	x := NewRules(proofs, crls)
+	for _, r := range records {
+		if _, err := x.Apply(r); err != nil {
+			return nil, err
+		}
+	}
+	return x.State(), nil
 }
 
 func rootRecognized(crls CRLArchive, r *verifier.Record, d verifier.Date) (bool, error) {
