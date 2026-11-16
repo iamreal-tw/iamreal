@@ -30,11 +30,12 @@ const say = (template: string, values: Values = {}): Sentence => ({ template, va
 const REJECTED = new Set(["scope", "malformed", "challenge_used", "challenge_attempts", "proof", "crl_stale", "root", "date_order", "not_current", "switch_limit"]);
 
 /**
- * The message for a stop. `submitFailed`: the flow's phase is
+ * The message for a stop. `platform`: the platform of the card proof, for
+ * the sentences that name it. `submitFailed`: the flow's phase is
  * "submit_failed" (the submission did not get through and can be sent
  * again as it is).
  */
-export function stopMessage(stop: Stop, submitFailed = false): Message {
+export function stopMessage(stop: Stop, platform: PlatformKey, submitFailed = false): Message {
   switch (stop.code) {
     case "card":
       switch (stop.card) {
@@ -106,6 +107,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
       // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
       if (stop.server === "crl_stale") return { ...say(s.server_crl_stale), ...id };
+      // The card already has 3 valid records today (check 6): the card's state said fewer when it was asked.
+      if (stop.server === "daily_limit") return { ...say(s.daily_limit, { platform: PLATFORM_NAMES[platform] }), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
@@ -132,8 +135,12 @@ export function daysBetween(from: string, to: string): number {
 
 /** Section 3: the card's state, and which choices the screen offers. */
 export interface StatusView {
-  /** never: no declaration yet; declared: an account now; withdrawn: declared before, withdrawn since. */
-  state: "never" | "declared" | "withdrawn";
+  /**
+   * never: no declaration yet; declared: an account now; withdrawn: declared
+   * before, withdrawn since; daily_limit: 3 records of the card today, no
+   * choice at all (only the way back to the beginning).
+   */
+  state: "never" | "declared" | "withdrawn" | "daily_limit";
   /** The first sentence. */
   first: Sentence;
   /** For a declared card: the last card proof, and the switches of the past year. */
@@ -146,6 +153,9 @@ export interface StatusView {
 
 export function statusView(st: CardStatus, platform: PlatformKey): StatusView {
   const c = COPY.status;
+  if (st.dailyLimit) {
+    return { state: "daily_limit", first: say(s.daily_limit, { platform: PLATFORM_NAMES[platform] }), facts: [], canSwitch: false, switchLimit: null };
+  }
   const canSwitch = st.options.other.kind !== "blocked";
   const switchLimit = canSwitch ? null : say(c.switch_limit, { next_switch_date: st.nextSwitchDate });
   if (st.current !== null) {

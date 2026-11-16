@@ -10,7 +10,7 @@ import { currentTime, parseChallenge } from "../src/spec/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "../src/spec/date.ts";
 import { declarationCode, declarationPreimage } from "../src/spec/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/spec/field.ts";
-import { type CardState, declareOutcome, nextSwitchDay, switchesLeft, withdrawOutcome } from "../src/spec/roster-rules.ts";
+import { type CardState, dailyLimitReached, declareOutcome, nextSwitchDay, possibleState, switchesLeft, withdrawOutcome } from "../src/spec/roster-rules.ts";
 import { lookupScope, normalizeUsername, scopeFor } from "../src/spec/scope.ts";
 import { parseScopedId, scopedIdText, shortId } from "../src/spec/scoped-id.ts";
 import { repoFile, vectors } from "./vectors.ts";
@@ -135,27 +135,42 @@ describe("roster-rules.json: what a card proof would be, from the card's state",
       c.events.forEach((e: Record<string, any>, i: number) => {
         const r = c.results[i];
         const key = `${e.scope_string} ${e.scoped_id}`;
-        const s = states.get(key) ?? { current: null, lastDeclared: null, lastCardProof: null, switchDates: [] };
+        const s = states.get(key) ?? { current: null, lastDeclared: null, lastCardProof: null, proofsOnLastDate: 0, switchDates: [] };
         const d = parseDay(e.date)! as Day;
         // Outcomes the event rules decide; the other checks (proof, challenge, root, date) are not the device's.
-        if (r.valid || r.reason === "switch_limit" || r.reason === "not_current") {
+        if (r.valid || r.reason === "switch_limit" || r.reason === "not_current" || r.reason === "daily_limit") {
           const o = e.action === "declare" ? declareOutcome(s, e.username, d) : withdrawOutcome(s, e.username);
           if (r.valid) assert.deepEqual(o, { kind: r.kind }, `event ${e.seq}`);
+          else if (r.reason === "daily_limit") assert.notEqual(o.kind, "blocked", `event ${e.seq}: the event rules accept it`);
           else assert.deepEqual(o, { kind: "blocked", reason: r.reason }, `event ${e.seq}`);
         }
+        // The device knows the count of one date only, the last card
+        // proof's: there it agrees with the rules. It never blocks a valid record.
+        if (r.valid) assert.equal(dailyLimitReached(s, d), false, `event ${e.seq}`);
+        if (r.reason === "daily_limit" && d === s.lastCardProof) assert.equal(dailyLimitReached(s, d), true, `event ${e.seq}`);
         if (r.valid) {
           if (r.kind === "first" || r.kind === "switch") s.lastDeclared = e.username;
           if (r.kind === "switch") s.switchDates.push(d);
           s.current = r.kind === "withdraw" ? null : e.username;
-          s.lastCardProof = s.lastCardProof === null ? d : Math.max(s.lastCardProof, d);
+          if (s.lastCardProof === null || d > s.lastCardProof) [s.lastCardProof, s.proofsOnLastDate] = [d, 1];
+          else if (d === s.lastCardProof) s.proofsOnLastDate++;
         }
+        // Some vectors date records far ahead; "today" is then the latest date of the card.
+        assert.ok(possibleState(s, Math.max(d, ...s.switchDates, s.lastCardProof ?? d)), `event ${e.seq}: a state the rules produced`);
         states.set(key, s);
       });
+      // The final state, as the vector has it.
+      for (const scope of c.state) {
+        for (const card of scope.cards) {
+          const s = states.get(`${scope.scope_string} ${card.scoped_id}`)!;
+          assert.deepEqual([s.current, formatDay(s.lastCardProof!), s.proofsOnLastDate], [card.current, card.last_card_proof, card.proofs_on_last_date], card.scoped_id);
+        }
+      }
     });
   }
   test("switches left and the next date a switch is allowed", () => {
     const d = (s: string) => parseDay(s)!;
-    const s: CardState = { current: "bob", lastDeclared: "bob", lastCardProof: d("2026-11-04"), switchDates: [d("2026-03-02")] };
+    const s: CardState = { current: "bob", lastDeclared: "bob", lastCardProof: d("2026-11-04"), proofsOnLastDate: 1, switchDates: [d("2026-03-02")] };
     assert.equal(switchesLeft(s, d("2026-11-16")), 1);
     assert.equal(formatDay(nextSwitchDay(s, d("2026-11-16"))), "2026-11-16");
     s.switchDates.push(d("2026-06-01"));
@@ -164,5 +179,25 @@ describe("roster-rules.json: what a card proof would be, from the card's state",
     assert.equal(formatDay(nextSwitchDay(s, d("2026-11-16"))), "2027-03-02");
     assert.deepEqual(declareOutcome(s, "alice", d("2027-03-02")), { kind: "switch" });
     assert.deepEqual(declareOutcome(s, "alice", d("2027-03-01")), { kind: "blocked", reason: "switch_limit" });
+  });
+  test("3 records today: nothing more today; tomorrow again", () => {
+    const d = (s: string) => parseDay(s)!;
+    const s: CardState = { current: "bob", lastDeclared: "bob", lastCardProof: d("2026-11-16"), proofsOnLastDate: 3, switchDates: [] };
+    assert.equal(dailyLimitReached(s, d("2026-11-16")), true);
+    assert.equal(dailyLimitReached(s, d("2026-11-17")), false);
+    assert.equal(dailyLimitReached({ ...s, proofsOnLastDate: 2 }, d("2026-11-16")), false);
+    // The last card proof dated after today (around midnight, or ahead): the count of today is not known here.
+    assert.equal(dailyLimitReached(s, d("2026-11-15")), false);
+    assert.equal(dailyLimitReached({ ...s, current: null, lastDeclared: null, lastCardProof: null, proofsOnLastDate: 0 }, d("2026-11-16")), false);
+  });
+  test("proofs_on_last_date: 0 without a last card proof, otherwise 1 to 3", () => {
+    const d = (s: string) => parseDay(s)!;
+    const today = d("2026-11-16");
+    const declared: CardState = { current: "bob", lastDeclared: "bob", lastCardProof: d("2026-11-04"), proofsOnLastDate: 1, switchDates: [] };
+    const none: CardState = { current: null, lastDeclared: null, lastCardProof: null, proofsOnLastDate: 0, switchDates: [] };
+    for (const n of [1, 2, 3]) assert.equal(possibleState({ ...declared, proofsOnLastDate: n }, today), true, String(n));
+    for (const n of [0, 4, -1, 1.5, NaN, Infinity]) assert.equal(possibleState({ ...declared, proofsOnLastDate: n }, today), false, String(n));
+    assert.equal(possibleState(none, today), true);
+    for (const n of [1, 3, -1, 0.5]) assert.equal(possibleState({ ...none, proofsOnLastDate: n }, today), false, String(n));
   });
 });

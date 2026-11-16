@@ -1,7 +1,7 @@
 {
   "spec": "roster-rules",
   "status": "draft",
-  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. Two scopes appear only to test independence; a real roster accepts the scopes listed for it. `current` null means none.",
+  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. Two scopes appear only to test independence; a real roster accepts the scopes listed for it. `current` null means none. `proofs_on_last_date` of a card in `state` is the item of the card's state (\"State of a card in a scope\"); the output does not list it.",
   "cases": [
     {
       "name": "first declaration, refresh, withdraw",
@@ -70,7 +70,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": null,
-              "last_card_proof": "2026-04-01"
+              "last_card_proof": "2026-04-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": []
@@ -162,7 +163,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-03-01"
+              "last_card_proof": "2026-03-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -264,7 +266,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "carol",
-              "last_card_proof": "2026-01-05"
+              "last_card_proof": "2026-01-05",
+              "proofs_on_last_date": 2
             }
           ],
           "accounts": [
@@ -348,7 +351,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "bob",
-              "last_card_proof": "2026-01-03"
+              "last_card_proof": "2026-01-03",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -432,7 +436,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-03"
+              "last_card_proof": "2026-01-03",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -552,7 +557,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "dave",
-              "last_card_proof": "2027-01-02"
+              "last_card_proof": "2027-01-02",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -654,7 +660,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "carol",
-              "last_card_proof": "2026-01-03"
+              "last_card_proof": "2026-01-03",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -774,7 +781,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "dave",
-              "last_card_proof": "2029-02-28"
+              "last_card_proof": "2029-02-28",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -876,7 +884,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "carol",
-              "last_card_proof": "2026-01-02"
+              "last_card_proof": "2026-01-02",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -978,7 +987,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "carol",
-              "last_card_proof": "2028-06-01"
+              "last_card_proof": "2028-06-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1080,7 +1090,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": null,
-              "last_card_proof": "2026-01-03"
+              "last_card_proof": "2026-01-03",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": []
@@ -1162,7 +1173,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1282,7 +1294,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "carol",
-              "last_card_proof": "2026-01-05"
+              "last_card_proof": "2026-01-05",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1348,7 +1361,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-02"
+              "last_card_proof": "2026-01-02",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1432,12 +1446,14 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "bob",
-              "last_card_proof": "2026-01-05"
+              "last_card_proof": "2026-01-05",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1530,7 +1546,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1614,7 +1631,8 @@
             {
               "scoped_id": "040000000000000000000000000000000000000000000000000G",
               "current": "bob",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1635,7 +1653,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "bob",
-              "last_card_proof": "2026-01-02"
+              "last_card_proof": "2026-01-02",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1701,12 +1720,14 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "alice",
-              "last_card_proof": "2026-01-02"
+              "last_card_proof": "2026-01-02",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1794,17 +1815,20 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "a.b",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "040000000000000000000000000000000000000000000000000G",
               "current": "a0",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "a_b",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -1888,7 +1912,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": null,
-              "last_card_proof": "2026-01-02"
+              "last_card_proof": "2026-01-02",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": []
@@ -1998,7 +2023,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "erin",
-              "last_card_proof": "2027-01-01"
+              "last_card_proof": "2027-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2064,7 +2090,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2174,7 +2201,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2300,7 +2328,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-13"
+              "last_card_proof": "2026-01-13",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2456,12 +2485,14 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "grace",
-              "last_card_proof": "2028-06-01"
+              "last_card_proof": "2028-06-01",
+              "proofs_on_last_date": 2
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2028-06-01"
+              "last_card_proof": "2028-06-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2554,12 +2585,14 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "bob",
-              "last_card_proof": "2026-01-16"
+              "last_card_proof": "2026-01-16",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-20"
+              "last_card_proof": "2026-01-20",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2634,12 +2667,14 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "bob",
-              "last_card_proof": "2026-01-09"
+              "last_card_proof": "2026-01-09",
+              "proofs_on_last_date": 1
             },
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-13"
+              "last_card_proof": "2026-01-13",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2716,7 +2751,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-12"
+              "last_card_proof": "2026-01-12",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2780,7 +2816,8 @@
             {
               "scoped_id": "0400000000000000000000000000000000000000000000000000",
               "current": "bob",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2846,7 +2883,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2912,7 +2950,8 @@
             {
               "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
               "current": "alice",
-              "last_card_proof": "2026-01-01"
+              "last_card_proof": "2026-01-01",
+              "proofs_on_last_date": 1
             }
           ],
           "accounts": [
@@ -2922,6 +2961,1177 @@
                 {
                   "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
                   "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: three valid records of a card on one date; a fourth is invalid, whatever its kind",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.2ZDK11XMQR0W9TXX4V8JCY9H0G",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.5XHBEEXTCB32H7CZA9T41GP5KR",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.P3C6E9B860EFFVGB5N0ZVAJXSG",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.X32KT9T8GA2W46ZNS7M4YY2M08",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "alice",
+          "challenge": "2026-05-10.26Z0JY0D554G5XDQ1C54FY25J4",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: declare, correct a mistyped account and withdraw fit in one day",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alcie",
+          "challenge": "2026-05-10.KKVMQCJ6RS2VZ2XZ5GVD3TG3Z8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.JAJ8PXDTAMZPYESDBEDYBFY81W",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "alice",
+          "challenge": "2026-05-10.7W595A682MC2TBS6E2THQHEBWR",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.7XT6X67F412QM2GN0D6X22J9H4",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "withdraw"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": null,
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": []
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: the next date allows three more",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.A07AWK9AP9A0QE59MAVAR463T8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.FCRX1FH5X6NYCGEE7P88FDKEK4",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.HGRB0W6R4QD3JXB9XEEGHK3NC8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.XBK5F7HF0KTKVEPDFEPA7QDD48",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.S0AE7KSCG5DGHQ3YTPZ7AXYAN0",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "alice",
+          "challenge": "2026-05-11.XD9HWQYNE2Z1T8GHSXDNB6F6H8",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 5,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kind": "withdraw"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": null,
+              "last_card_proof": "2026-05-11",
+              "proofs_on_last_date": 2
+            }
+          ],
+          "accounts": []
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: records invalid under another rule do not count",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.PCVSYBCF6VQJD4F5Z5E0AMNZQW",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "bob",
+          "challenge": "2026-05-10.FG26TZ9BHNH8JH3W3M6X6Y4Y3R",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.FSP3Z4BYGDT653YPJJ0BHJ8ADW",
+          "date": "2026-05-10",
+          "verifies": false,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.PCVSYBCF6VQJD4F5Z5E0AMNZQW",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.ET5F0V2XYBK3WZR7KYN11CW1AG",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": []
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.WM221NKDS5NXCRBJGMR8YQAWG4",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "alice",
+          "challenge": "2026-05-10.AMCS1HNA4C1ZDWJMBBJKGB3KSG",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 8,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.0PRR7QXKW53DK2K5MR2FHG2TWR",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": false,
+          "reason": "not_current"
+        },
+        {
+          "seq": 3,
+          "valid": false,
+          "reason": "proof"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "challenge_reused"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "root"
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 7,
+          "valid": true,
+          "kind": "withdraw"
+        },
+        {
+          "seq": 8,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": null,
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": []
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: a record the switch limit blocks is switch_limit, not daily_limit",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.D72MX5NFR9RX8PE1FSKDZ8KH40",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-05-10.5PP9YHN0BWQEN9QHDFJSX1YXX0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.MPGYN7ZH6YK7FC9W2907B72J34",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2026-05-10.5WN4XB83AAWDWXAR2FV3KEWYGR",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "bob",
+          "challenge": "2026-05-10.546MPAYH2DH40M04QJDSW9KSB8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.PZF0VTBTAS408YTVZCG31J7V6C",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "switch_limit"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "not_current"
+        },
+        {
+          "seq": 6,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: two cards and two scopes count separately",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.BWXK6TF7M57QX2NNBFZV1DETVW",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.K3PZG6Y6PPQFVNCN2GSGRTWEP4",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.4AK6ZEQWQQVC5JJXGM9YMCCHK8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-05-10.10HAZ2ZQQKD63RDKB9YWB8Y0C8",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-05-10.C1VP9J01VJTP5E39FKYWGKQ0E0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-05-10.PYEJJKW0ZBVBD4Y91W9MPHHY4C",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.PG4CZYCN6F6MXE1HQYTN3HKX5G",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 8,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.BSBYNJ4P3HQ4ZVJ5NG3F3HJG34",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 9,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.8MT7VHZSBSWC33SFQ8R8VRZ1E0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 10,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.6D71V6WYBC7SAWQVCQA75RD9S0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 11,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-05-10.03BFM4VHD09Q2S6EC85S52SPZC",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 12,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-05-10.GY2DN4P5CE99M4BYT8E5WG62HG",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 5,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 7,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 8,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 9,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 10,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 11,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 12,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal-test:threads:0_________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "0400000000000000000000000000000000000000000000000000",
+              "current": "bob",
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            },
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-05-10",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            },
+            {
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
+                  "last_card_proof": "2026-05-10"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "daily_limit: dates stepping back a day around midnight count per date",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.XZKKDZW3958VCC61P55Z1XDYS0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.SMD31784X6R4TZ4G0KM4PPYJPR",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.DNEY6034XRQKQX09RBPXSM09NW",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.X8XWJ19J618YD34M1MPHA9QVB0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.AD2057V094WVKKDJGTRN8KKY8W",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.QZ3JWYG4J2ZMESTE3D0DKGG1BG",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.0AVRJJDDGFF0KP0NZTB8SQEWF4",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        },
+        {
+          "seq": 8,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.NPYJ9XVQDRX88GE2ADKTB182SM",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 7,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 8,
+          "valid": false,
+          "reason": "daily_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-05-11",
+              "proofs_on_last_date": 3
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-11"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "proofs_on_last_date counts only the records of the latest date",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-11.FY22HQMHYQVMPG8VJ7AQ3EHM70",
+          "date": "2026-05-11",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-11"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-05-10.YSZS6B32JZWSB7SFAEXNSCZ8Z0",
+          "date": "2026-05-10",
+          "verifies": true,
+          "crl_dates": [
+            "2026-05-10"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:threads:0______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-05-11",
+              "proofs_on_last_date": 1
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-05-11"
                 }
               ]
             }

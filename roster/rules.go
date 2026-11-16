@@ -16,6 +16,7 @@ const (
 	CodeDateOrder       = "date_order"
 	CodeNotCurrent      = "not_current"
 	CodeSwitchLimit     = "switch_limit"
+	CodeDailyLimit      = "daily_limit"
 )
 
 // Kinds of a valid record (spec/roster-rules.md, "Event rules").
@@ -39,6 +40,9 @@ const (
 	// At most MaxSwitches switches in any SwitchWindowDays days.
 	SwitchWindowDays = 365
 	MaxSwitches      = 2
+	// At most MaxPerDate valid records of a card in a scope have the same
+	// date (check 6).
+	MaxPerDate = 3
 )
 
 // ProofVerifier is check 1: whether a record verifies (spec/record.md,
@@ -113,12 +117,33 @@ type cardState struct {
 	lastDeclared  *string
 	switchDates   []verifier.Date
 	lastCardProof *verifier.Date
+	// perDate is the number of valid records of each date (check 6 and
+	// proofs_on_last_date). Dates more than DateOrderDays before the last
+	// record counted are dropped: check 4 rejects any later record dated
+	// that early before check 6 would ask, and last_card_proof is never
+	// earlier than that record.
+	perDate map[verifier.Date]int
 }
 
 func (cs *cardState) clone() *cardState {
 	c := *cs
 	c.switchDates = append([]verifier.Date(nil), cs.switchDates...)
+	c.perDate = make(map[verifier.Date]int, len(cs.perDate)+1)
+	for d, n := range cs.perDate {
+		c.perDate[d] = n
+	}
 	return &c
+}
+
+// count adds a valid record dated d, and drops the dates no later record
+// can have (see perDate).
+func (cs *cardState) count(d verifier.Date) {
+	cs.perDate[d]++
+	for e := range cs.perDate {
+		if e < d.AddDays(-DateOrderDays) {
+			delete(cs.perDate, e)
+		}
+	}
 }
 
 // Rules applies the rules to one record at a time, in seq order, and keeps
@@ -207,7 +232,7 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 		return invalid(CodeDateOrder, fmt.Sprintf("latest earlier valid date %s", x.latestValid))
 	}
 	// 5. The event rules, on a copy of the card's state.
-	next := &cardState{}
+	next := &cardState{perDate: map[verifier.Date]int{}}
 	if cs := x.cards[cardKey{r.ScopeString, r.ScopedID}]; cs != nil {
 		next = cs.clone()
 	}
@@ -215,6 +240,12 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	if code != "" {
 		return invalid(code, "")
 	}
+	// 6. Fewer than 3 earlier valid records of its card and scope have its
+	// date. The effects of the event rules (on the copy) are dropped.
+	if next.perDate[d] >= MaxPerDate {
+		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", next.perDate[d], d))
+	}
+	next.count(d)
 	if next.lastCardProof == nil || d > *next.lastCardProof {
 		next.lastCardProof = &d
 	}
@@ -232,12 +263,15 @@ func (x *Rules) State() *State {
 
 // CardInScope is the state of one card in one scope (spec/roster-rules.md,
 // "State of a card in a scope"). A card with no valid record has every
-// pointer nil and no switch dates.
+// pointer nil, no switch dates and ProofsOnLastDate 0.
 type CardInScope struct {
 	Current       *string
 	LastDeclared  *string
 	SwitchDates   []verifier.Date // one per valid switch, in seq order
 	LastCardProof *verifier.Date
+	// ProofsOnLastDate is the number of valid records dated LastCardProof
+	// (0 if there is none).
+	ProofsOnLastDate int
 }
 
 // Card returns the state of the card scopedID in the scope scopeString. The
@@ -260,6 +294,7 @@ func (x *Rules) Card(scopeString, scopedID string) CardInScope {
 	if cs.lastCardProof != nil {
 		d := *cs.lastCardProof
 		out.LastCardProof = &d
+		out.ProofsOnLastDate = cs.perDate[d]
 	}
 	return out
 }

@@ -93,10 +93,13 @@ type result struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// cardOut is a card of the output, with proofs_on_last_date from the
+// card's state (the output does not list it; see the vectors' note).
 type cardOut struct {
-	ScopedID      string  `json:"scoped_id"`
-	Current       *string `json:"current"`
-	LastCardProof string  `json:"last_card_proof"`
+	ScopedID         string  `json:"scoped_id"`
+	Current          *string `json:"current"`
+	LastCardProof    string  `json:"last_card_proof"`
+	ProofsOnLastDate int     `json:"proofs_on_last_date"`
 }
 
 type accountCardOut struct {
@@ -193,21 +196,29 @@ func TestVectorsRosterRules(t *testing.T) {
 			if !reflect.DeepEqual(got, c.Results) {
 				t.Errorf("results\n got %+v\nwant %+v", got, c.Results)
 			}
-			if gotState := stateOut(st); !reflect.DeepEqual(gotState, c.State) {
+			// The output; proofs_on_last_date is compared one record at a
+			// time (incremental_test.go), from Rules.Card.
+			if gotState, want := stateOut(st, nil), withoutProofsOnLastDate(c.State); !reflect.DeepEqual(gotState, want) {
 				g, _ := json.Marshal(gotState)
-				w, _ := json.Marshal(c.State)
+				w, _ := json.Marshal(want)
 				t.Errorf("state\n got %s\nwant %s", g, w)
 			}
 		})
 	}
 }
 
-func stateOut(st *roster.State) []scopeOut {
+// stateOut writes the output in the shape of the vectors. x, if not nil,
+// gives each card's proofs_on_last_date; otherwise it is 0.
+func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range st.Scopes {
 		so := scopeOut{ScopeString: s.ScopeString, Cards: []cardOut{}, Accounts: []accountOut{}}
 		for _, c := range s.Cards {
-			so.Cards = append(so.Cards, cardOut{c.ScopedID, c.Current, c.LastCardProof.String()})
+			n := 0
+			if x != nil {
+				n = x.Card(s.ScopeString, c.ScopedID).ProofsOnLastDate
+			}
+			so.Cards = append(so.Cards, cardOut{c.ScopedID, c.Current, c.LastCardProof.String(), n})
 		}
 		for _, a := range s.Accounts {
 			ao := accountOut{Username: a.Username, Cards: []accountCardOut{}}
@@ -217,6 +228,19 @@ func stateOut(st *roster.State) []scopeOut {
 			so.Accounts = append(so.Accounts, ao)
 		}
 		out = append(out, so)
+	}
+	return out
+}
+
+// withoutProofsOnLastDate is the vector's state with proofs_on_last_date 0.
+func withoutProofsOnLastDate(state []scopeOut) []scopeOut {
+	out := []scopeOut{}
+	for _, s := range state {
+		s.Cards = append([]cardOut{}, s.Cards...)
+		for i := range s.Cards {
+			s.Cards[i].ProofsOnLastDate = 0
+		}
+		out = append(out, s)
 	}
 	return out
 }

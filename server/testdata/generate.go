@@ -80,6 +80,9 @@ var proofs = []proofSpec{
 	{"2026-11-22T09:00:00+08:00", "G3", "declare", "dave", 1, 400, "switch_limit"},
 	{"2026-11-22T09:30:00+08:00", "G3", "withdraw", "bob", 1, 400, "not_current"},
 	{"2026-11-22T10:00:00+08:00", "G3", "withdraw", "carol", 1, 201, "withdraw"},
+	{"2026-11-22T10:30:00+08:00", "G3", "declare", "carol", 1, 201, "refresh"},
+	{"2026-11-22T11:00:00+08:00", "G3", "withdraw", "carol", 1, 201, "withdraw"},
+	{"2026-11-22T11:30:00+08:00", "G3", "declare", "carol", 1, 400, "daily_limit"},
 }
 
 // The file e2e_test.go reads.

@@ -160,7 +160,15 @@ export async function requestCardState(
     if (d === null) throw new ServerError("malformed_response", 200);
     return d;
   });
-  const state: CardState = { current: user(b.current), lastDeclared: user(b.last_declared), lastCardProof: day(b.last_card_proof), switchDates };
+  // A count: an integer; possibleState then bounds it.
+  if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) throw new ServerError("malformed_response", 200);
+  const state: CardState = {
+    current: user(b.current),
+    lastDeclared: user(b.last_declared),
+    lastCardProof: day(b.last_card_proof),
+    proofsOnLastDate: b.proofs_on_last_date,
+    switchDates,
+  };
   if (!possibleState(state, today)) throw new ServerError("malformed_response", 200);
   return { ...state, count: b.count as number, head: b.head };
 }

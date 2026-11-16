@@ -49,26 +49,29 @@ describe("stops", () => {
     [{ code: "state" }, "[state]"],
     [{ code: "idle" }, "超過 5 分鐘沒有完成，為了不讓 PIN 留在這一頁太久，已經回到開頭。請再讀一次卡片。"],
     [{ code: "blocked", reason: "switch_limit" }, "[switch_limit]"],
+    [{ code: "blocked", reason: "daily_limit" }, "[daily_limit]"],
+    // The card's state said fewer than 3 today; the server found the fourth when it was sent.
+    [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天在 Threads 已經過卡 3 次，明天才能再過卡。"],
   ];
   for (const [stop, want] of cases) {
-    test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => assert.equal(text(stopMessage(stop)), want));
+    test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => assert.equal(text(stopMessage(stop, "threads")), want));
   }
 
   test("the component cannot be reached: a link to how to prepare", () => {
-    const m = stopMessage({ code: "card", card: "component_unreachable" });
+    const m = stopMessage({ code: "card", card: "component_unreachable" }, "threads");
     assert.ok(!("code" in m) && m.link === "prepare");
   });
 
   test("a submission that did not get through: the retry button, and the request ID", () => {
-    const m = stopMessage({ code: "server", server: "internal", status: 500, requestId: "0123456789abcdef" }, true);
+    const m = stopMessage({ code: "server", server: "internal", status: 500, requestId: "0123456789abcdef" }, "threads", true);
     assert.equal(text(m), COPY.stops.submit_failed);
     assert.ok(!("code" in m) && m.retry === true);
     assert.equal(m.requestId, "0123456789abcdef");
   });
 
   test("every server error carries its request ID", () => {
-    for (const server of ["root", "challenge_unknown", "crl_stale", "malformed_response", "not_found"]) {
-      assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }).requestId, "ab", server);
+    for (const server of ["root", "challenge_unknown", "crl_stale", "daily_limit", "malformed_response", "not_found"]) {
+      assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }, "threads").requestId, "ab", server);
     }
   });
 });
@@ -84,6 +87,7 @@ describe("the card's state (section 3)", () => {
     switchesUsed: 0,
     switchesLeft: 2,
     nextSwitchDate: "2026-11-16",
+    dailyLimit: false,
     today: "2026-11-16",
     count: 0,
     head: "0".repeat(64),
@@ -116,6 +120,20 @@ describe("the card's state (section 3)", () => {
     const d = { current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-16", options: { refresh: { kind: "refresh" as const }, declareBack: null, other: { kind: "switch" as const }, withdraw: { kind: "withdraw" as const } } };
     assert.deepEqual(view(d).facts, ["上次過卡是今天。", "過去一年更換過 0 次，還可以更換 2 次。"]);
     assert.deepEqual(view({ ...d, lastCardProof: "2026-11-15" }).facts[0], "上次過卡是 1 天前。");
+  });
+
+  test("3 records today: that sentence alone, whatever the card declares", () => {
+    const full = {
+      state: "daily_limit",
+      first: "這張卡片今天在 Threads 已經過卡 3 次，明天才能再過卡。",
+      facts: [],
+      canSwitch: false,
+      switchLimit: null,
+    };
+    const options = { refresh: { kind: "refresh" as const }, declareBack: null, other: { kind: "switch" as const }, withdraw: { kind: "withdraw" as const } };
+    assert.deepEqual(view({ current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-16", options, dailyLimit: true }), full);
+    const withdrawn = { refresh: null, declareBack: { kind: "refresh" as const }, other: { kind: "blocked" as const, reason: "switch_limit" as const }, withdraw: null };
+    assert.deepEqual(view({ lastDeclared: "bob", lastCardProof: "2026-11-16", options: withdrawn, dailyLimit: true }), full);
   });
 
   test("withdrawn", () => {

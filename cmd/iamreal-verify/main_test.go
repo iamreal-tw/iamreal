@@ -104,6 +104,50 @@ scope iamreal:threads:0______________
 	}
 }
 
+// sameDay is a roster of four declarations of one card in one scope, all
+// dated 2026-11-16, made from the first record of threeRecords.
+func sameDay(t *testing.T) []byte {
+	t.Helper()
+	records, _, broken := roster.ReadFile(threeRecords(t), verifier.Production)
+	if broken != nil {
+		t.Fatal(broken)
+	}
+	var file []byte
+	prev := verifier.GenesisPrev
+	for i := 1; i <= 4; i++ {
+		r := *records[0]
+		r.Seq, r.Prev, r.Action, r.Username = uint64(i), prev, "declare", "alice"
+		r.Challenge = "2026-11-16." + verifier.EncodeBase32(bytes.Repeat([]byte{byte(i)}, 16))
+		file = append(file, r.Line()...)
+		prev = r.Hash()
+	}
+	return file
+}
+
+// The fourth valid record of a card on one date is daily_limit, in both
+// outputs.
+func TestDailyLimit(t *testing.T) {
+	code, out, _ := runWith(t, sameDay(t), allVerify{}, everyRoot{})
+	for _, line := range []string{"  1 valid first\n", "  3 valid refresh\n", "  4 invalid daily_limit (3 valid records dated 2026-11-16)\n"} {
+		if !strings.Contains(out, line) {
+			t.Errorf("no %q in\n%s", line, out)
+		}
+	}
+	if code != exitInvalid {
+		t.Errorf("exit %d, want %d", code, exitInvalid)
+	}
+	_, out, _ = runWith(t, sameDay(t), allVerify{}, everyRoot{}, "-json")
+	var got struct {
+		Results []jsonResult `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Results) != 4 || got.Results[3] != (jsonResult{Seq: 4, Reason: "daily_limit"}) {
+		t.Errorf("%s", out)
+	}
+}
+
 func TestJSONShape(t *testing.T) {
 	_, out, _ := runWith(t, threeRecords(t), allVerify{}, everyRoot{}, "-json")
 	var got struct {
