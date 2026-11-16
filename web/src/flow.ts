@@ -37,6 +37,10 @@
 // that was waiting writes nothing when its wait ends and sends nothing: each
 // step checks after every await.
 //
+// A step called again while it is under way is out of order (`state`), like
+// any step called in the wrong phase; the call under way goes on untouched.
+// There is one timer for the wait for the second signature at most.
+//
 // A window the browser blocked (`popup_blocked`) sent nothing to the card:
 // the step can be tried again, and the flow keeps what it held before it.
 //
@@ -257,6 +261,12 @@ export class CardProofFlow {
   private cancelIdleTimer: (() => void) | null = null;
   /** The card was asked for the second signature (the PIN went to it); the wait no longer applies. */
   private secondSignAsked = false;
+  /**
+   * readCard() or confirmCard() is under way. Both wait without leaving
+   * their phase, so the phase alone would let a second call in: the card
+   * asked again, another card-state, another timer.
+   */
+  private inStep = false;
 
   constructor(deps: FlowDeps, opts: { platform: Platform }) {
     this.deps = deps;
@@ -312,6 +322,21 @@ export class CardProofFlow {
     if (!phases.includes(this.phaseValue)) throw new FlowStop({ code: "state" });
   }
 
+  /**
+   * Runs a step that waits in its own phase (readCard, confirmCard). A call
+   * while one is under way is out of order (`state`): it touches nothing,
+   * and the one under way goes on.
+   */
+  private async once<T>(step: () => Promise<T>): Promise<T> {
+    if (this.inStep) throw new FlowStop({ code: "state" });
+    this.inStep = true;
+    try {
+      return await step();
+    } finally {
+      this.inStep = false;
+    }
+  }
+
   /** True if IDLE_MS passed since the first signature while the second was not made. */
   private idleExpired(): boolean {
     return this.firstSignedAt !== null && this.deps.clock() - this.firstSignedAt >= this.idleMs;
@@ -343,6 +368,10 @@ export class CardProofFlow {
   }
 
   private startIdleTimer(): void {
+    // One wait, one timer: a timer left from an earlier start would end the
+    // flow later, whatever step it is in by then.
+    this.cancelIdleTimer?.();
+    this.cancelIdleTimer = null;
     this.firstSignedAt = this.deps.clock();
     const set =
       this.deps.setTimer ??
@@ -429,6 +458,10 @@ export class CardProofFlow {
 
   async readCard(): Promise<CardRead> {
     this.expect("start");
+    return this.once(() => this.readCardStep());
+  }
+
+  private async readCardStep(): Promise<CardRead> {
     let ders: Uint8Array[];
     try {
       ders = await this.deps.card.readCertificates();
@@ -529,6 +562,10 @@ export class CardProofFlow {
 
   async confirmCard(pin: string): Promise<CardStatus> {
     this.expect("checking", "ready_for_pin");
+    return this.once(() => this.confirmCardStep(pin));
+  }
+
+  private async confirmCardStep(pin: string): Promise<CardStatus> {
     // Nothing is signed, and no request carries the scoped ID, before these pass.
     await this.checksDone();
     let signed: CardSignature;

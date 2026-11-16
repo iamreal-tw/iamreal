@@ -21,7 +21,8 @@
 //    card proofs again on the same page with the same proof engine; the
 //    PIN's wait running out; a window the browser blocked on each of the
 //    three clicks, then the same click again; every case that stops before
-//    the PIN is asked; a wrong PIN, a locked card, a PIN that is not sent.
+//    the PIN is asked; a wrong PIN, a locked card, a PIN that is not sent;
+//    the PIN typed and 確認卡片 pressed again while the card is confirmed.
 // 5. Publishes the daily snapshot and re-verifies it with iamreal-verify:
 //    the state is the one the screens showed.
 // 6. Checks the response headers, that the page is cross-origin isolated,
@@ -451,6 +452,7 @@ async function toStatus(o: { wrongPinFirst?: boolean; blockClicks?: boolean; scr
     const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText`, "the wrong PIN's message");
     check(m === C.confirm_card.pin_incorrect, `wrong PIN: "${m}"`);
     check(await pinGone(), "wrong PIN: the field is empty");
+    check(await page.eval<boolean>(`document.querySelector('#pin')?.disabled === false`), "wrong PIN: the field can be typed in again");
     await sleep(1500);
     check(componentCount("MakeSignature") === signsBefore + 1, "wrong PIN: sent once, not again by itself");
     check(await page.eval<boolean>(`document.querySelector('button.primary:not([hidden])')?.disabled === true`), "wrong PIN: the button waits for a new PIN");
@@ -867,6 +869,55 @@ await tryStep("a challenge dated another day", async () => {
   check(!d.done && d.message === C.stops.date_mismatch, `challenge of another day: "${d.message}"`);
   await sleep(500);
   check(componentCount("MakeSignature") === signs, "no second signature");
+});
+
+// On section 2, the PIN typed again and 確認卡片 pressed again while the first
+// confirmation is under way (the server slow to answer card-state). It used
+// to have the card sign a second time and send card-state again, and to leave
+// the first wait's timer running, which could later stop a card proof whose
+// record was already sent.
+await tryStep("確認卡片 pressed again while the card is confirmed: one signature, one card-state", async () => {
+  component.card = main.spec();
+  await open();
+  check((await readCard()).pin, "read");
+  const signs = componentCount("MakeSignature");
+  const states = cardStateCount();
+  const held: string[] = [];
+  let holding = true;
+  const undo = await intercept("*/api/v1/card-state", async (p) => {
+    if (holding) held.push(p.requestId);
+    else await page.send("Fetch.continueRequest", { requestId: p.requestId });
+  });
+  const release = async (): Promise<void> => {
+    holding = false;
+    for (const id of held.splice(0)) await page.send("Fetch.continueRequest", { requestId: id }).catch(() => undefined);
+  };
+  try {
+    await confirmPin(PIN);
+    for (let i = 0; i < 200 && held.length === 0; i++) await sleep(50);
+    check(held.length === 1, "the first card-state is on its way, its answer held");
+    const during = await page.eval<{ pin: boolean | null; button: boolean | null }>(`({
+      pin: document.querySelector('#pin')?.disabled ?? null,
+      button: [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.confirm_card.confirm_card)})?.disabled ?? null,
+    })`);
+    check(during.pin === true && during.button === true, `while the card is confirmed, the PIN field and the button cannot be used: ${JSON.stringify(during)}`);
+    // Typed and pressed again anyway, with the keyboard and the mouse.
+    await confirmPin(PIN);
+    await sleep(1500);
+    check(componentCount("MakeSignature") === signs + 1, `pressed again: the card was asked to sign once (${componentCount("MakeSignature") - signs} times)`);
+    check(cardStateCount() === states + 1, `pressed again: one card-state (${cardStateCount() - states})`);
+    check((await messageText()) === "", `pressed again: no message "${await messageText()}"`);
+    await release();
+    const st = await waitStatus();
+    check(st.state === "withdrawn", `section 3 after the answer: "${st.first}"`);
+    await sleep(1000);
+    check(componentCount("MakeSignature") === signs + 1 && cardStateCount() === states + 1, "the first confirmation, once: one signature, one card-state");
+  } finally {
+    await release();
+    await undo();
+  }
+  await page.clickButton(C.status.cancel);
+  await backAtTheBeginning("取消 after 確認卡片 pressed again");
 });
 
 /** A case that stops in section 2, before the PIN is asked. */
