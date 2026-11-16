@@ -1,17 +1,21 @@
-// One card proof, as a state machine without a screen. The steps follow the
-// table in the design notes (three clicks):
+// One card proof, as a state machine without a screen. First the card is
+// confirmed, then the cardholder picks what to do, then the declaration is
+// made (docs/design/principles.md, "輸入 PIN 之前的畫面"; three clicks):
 //
-//   readCard()       read certificates (no PIN); check them; start the
-//                    checks that need no signature: CRL, tree, circuit, CRS
-//   checksDone()     resolves when every one of those passed; until then
-//                    the screen shows no PIN field (`phase` is "checking")
-//   confirmCard(pin) card signs the scope string; scoped ID; card state;
-//                    what this card proof would do
-//   proceed(account) the caller confirms the account it showed; challenge,
-//                    checked; card signs the declaration code; PIN dropped;
-//                    prove; submit
-//   resubmit()       after a network failure, the same record again
-//   cancel()         drop everything
+//   readCard()        read certificates (no PIN); check them; start the
+//                     checks that need no signature: CRL, tree, circuit, CRS
+//   checksDone()      resolves when every one of those passed; until then
+//                     the screen shows no PIN field (`phase` is "checking")
+//   confirmCard(pin)  card signs the scope string; scoped ID; card state;
+//                     what each choice would be (CardStatus.options)
+//   choose(choice)    declare an account, or withdraw; the consequence. No
+//                     request, no signature
+//   back()            from the consequence to the card's state again
+//   proceed(account)  the caller confirms the account it showed; challenge,
+//                     checked; card signs the declaration code; PIN dropped;
+//                     prove; submit
+//   resubmit()        after a network failure, the same record again
+//   cancel()          drop everything
 //
 // The card is asked for its first signature only after every check that
 // needs no signature has passed: the certificate, the CRL (downloaded and
@@ -21,17 +25,27 @@
 // its state and then went silent, and could match that with the CRL its
 // mirror served (ADR-0015, ADR-0016).
 //
+// Between the two signatures the PIN stays in this object while the
+// cardholder reads and picks. If the second signature is not made within
+// IDLE_MS of the first, the PIN, the certificate and the signature are
+// dropped and the flow stops (`idle`); the caller starts again.
+//
+// A window the browser blocked (`popup_blocked`) sent nothing to the card:
+// the step can be tried again, and the flow keeps what it held before it.
+//
 // Where each value comes from and goes to:
 //   scope string     the table in spec/scope.ts, by the platform picked on
 //                    the screen; never from a server
 //   current_time     the device's clock, as a Taiwan date; a challenge
 //                    dated otherwise stops the flow
 //   certificate,     from the card; stay in this object; dropped (bytes
-//   signatures       zeroed) after the submission is accepted or on cancel
+//   signatures       zeroed) after the submission is accepted, on cancel,
+//                    or when the flow stops
 //   PIN              from the caller; kept in memory until the second
-//                    signature is made or the flow stops; never stored
+//                    signature is made, the flow stops, or IDLE_MS pass
+//                    after the first; never stored
 //   failures         returned to the caller only; no request carries them
-import { type Fetch, ServerError, type Submission, requestCardState, requestChallenge, requestCrlMaxAge, submitRecord } from "./api.ts";
+import { type CardStateResponse, type Fetch, ServerError, type Submission, requestCardState, requestChallenge, requestCrlMaxAge, submitRecord } from "./api.ts";
 import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
 import type { TreeBuilder } from "./crl/build.ts";
@@ -45,7 +59,7 @@ import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "./spec/challenge.ts";
 import { type Day, formatDay, taiwanDay } from "./spec/date.ts";
 import { type Action, declarationCode } from "./spec/declaration-code.ts";
-import { type Outcome, declareOutcome, nextSwitchDay, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
+import { type CardState, type Outcome, declareOutcome, nextSwitchDay, switchesInWindow, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
 import { type Platform, type Roster, type ScopeRow, scopeFor } from "./spec/scope.ts";
 import { scopedId, scopedIdText, shortId } from "./spec/scoped-id.ts";
 import type { CrlNumberStore } from "./storage.ts";
@@ -66,8 +80,10 @@ export type Stop =
   | { code: "challenge_malformed" }
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
-  /** The declaration is not possible: switches used up, or nothing to withdraw. */
+  /** The choice is not possible: switches used up, or nothing to withdraw. */
   | { code: "blocked"; reason: "switch_limit" | "not_current" }
+  /** The second signature was not made within IDLE_MS of the first: the PIN, the certificate and the signature were dropped. */
+  | { code: "idle" }
   /** A circuit or CRS file did not match its SHA-256, or could not be fetched. */
   | { code: "artifact"; path: string }
   /** The proof engine could not start or prove. */
@@ -109,7 +125,19 @@ export interface FlowDeps {
   onBackgroundStop?: (stop: Stop) => void;
   /** Step timings in milliseconds, for progress display and measurements. Stays on the device. */
   onTiming?: (step: string, ms: number) => void;
+  /** Called once if the flow stops because IDLE_MS passed after the first signature (`idle`). */
+  onIdle?: (stop: Stop) => void;
+  /** How long the PIN may wait between the two signatures; IDLE_MS unless a test shortens it. */
+  idleMs?: number;
+  /** Runs `f` after `ms` milliseconds; returns a function that cancels it. setTimeout in the page; tests replace it with the clock. */
+  setTimer?: (ms: number, f: () => void) => () => void;
 }
+
+/** The longest the PIN, the certificate and the first signature wait for the second signature: 5 minutes. */
+export const IDLE_MS = 5 * 60_000;
+
+/** What the cardholder picks once the card's state is known. */
+export type Choice = { action: "declare"; username: string } | { action: "withdraw" };
 
 export interface CardRead {
   /** The name on the certificate, for the screen only. */
@@ -124,19 +152,42 @@ export interface CardStatus {
   current: string | null;
   lastDeclared: string | null;
   lastCardProof: string | null;
-  /** What this card proof would be, computed here from those facts and today's date. */
-  outcome: Outcome;
-  /** For `declare`: switches left before this card proof, and after it if it is a switch. */
+  /**
+   * What each choice would be, computed here from those facts and today's
+   * date (spec/roster-rules.md); null where the choice does not apply.
+   *
+   *   refresh      declare the current account again
+   *   declareBack  after a withdrawal, declare the last declared account again (not a switch)
+   *   other        declare any other account: `first` for a card that never declared,
+   *                otherwise `switch`, or blocked by `switch_limit`
+   *   withdraw     withdraw the current account
+   */
+  options: {
+    refresh: Outcome | null;
+    declareBack: Outcome | null;
+    other: Outcome;
+    withdraw: Outcome | null;
+  };
+  /** Switches in the past year (the 365-day window), and how many a declaration today could still make. */
+  switchesUsed: number;
   switchesLeft: number;
-  switchesLeftAfter: number;
   /** The first date a switch is allowed (today if it is now). */
   nextSwitchDate: string;
-  /** The account this card proof names: the typed one, or for a withdrawal the current one. */
-  username: string | null;
   today: string;
   /** The roster's size and head the answer was computed at. */
   count: number;
   head: string;
+}
+
+/** What a choice would do, for the screen before the second signature. */
+export interface Consequence {
+  action: Action;
+  /** The account the declaration code will name: the typed one, or for a withdrawal the current one. */
+  username: string;
+  kind: "first" | "refresh" | "switch" | "withdraw";
+  /** Switches left in the 365-day window after this card proof. */
+  switchesLeftAfter: number;
+  today: string;
 }
 
 export interface Done {
@@ -153,9 +204,12 @@ export interface Done {
 /**
  * Where the flow is. "checking": the card was read and the checks that need
  * no signature are running; the screen does not ask for the PIN yet.
- * "ready_for_pin": they all passed.
+ * "ready_for_pin": they all passed. "status_known": the card signed the
+ * scope string and its state is known; the cardholder picks. "chosen": the
+ * consequence of the choice is shown; the next step is the second signature.
+ * "signing": proceed() is asking for the challenge and the second signature.
  */
-export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "submitting" | "submit_failed" | "done" | "stopped";
+export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "chosen" | "signing" | "submitting" | "submit_failed" | "done" | "stopped";
 
 interface Background {
   promise: Promise<{ tree: AbsenceProof; crlNumber: bigint; crlDate: Day }>;
@@ -164,10 +218,9 @@ interface Background {
 
 export class CardProofFlow {
   private readonly deps: FlowDeps;
-  private readonly action: Action;
   private readonly scope: ScopeRow;
   private readonly scopeBytes: Uint8Array;
-  private typedUsername: string | null;
+  private readonly idleMs: number;
 
   private phaseValue: Phase = "start";
   private stopped: Stop | null = null;
@@ -177,21 +230,20 @@ export class CardProofFlow {
   private pin: string | null = null;
   private scopeSignature: Uint8Array | null = null;
   private codeSignature: Uint8Array | null = null;
+  private state: CardState | null = null;
   private status: CardStatus | null = null;
+  private chosen: Consequence | null = null;
   private scopedIdValue: bigint | null = null;
   private submission: Submission | null = null;
+  /** When the first signature was made (deps.clock), and the timer that ends the wait for the second. */
+  private firstSignedAt: number | null = null;
+  private cancelIdleTimer: (() => void) | null = null;
 
-  constructor(deps: FlowDeps, opts: { action: Action; platform: Platform; username?: string }) {
+  constructor(deps: FlowDeps, opts: { platform: Platform }) {
     this.deps = deps;
-    this.action = opts.action;
     this.scope = scopeFor(deps.roster, opts.platform);
     this.scopeBytes = new TextEncoder().encode(this.scope.scopeString);
-    this.typedUsername = opts.username ?? null;
-    if (opts.action === "declare" && (this.typedUsername === null || !this.scope.validUsername(this.typedUsername))) {
-      // Every later step throws this stop.
-      this.stopped = { code: "username" };
-      this.phaseValue = "stopped";
-    }
+    this.idleMs = deps.idleMs ?? IDLE_MS;
   }
 
   get phase(): Phase {
@@ -204,8 +256,9 @@ export class CardProofFlow {
 
   /**
    * The reason the flow stopped for good, if it did. A FlowStop thrown while
-   * this is null (a wrong PIN, a submission that did not get through) leaves
-   * the step to be tried again.
+   * this is null (a wrong PIN, a blocked window, a choice that is not
+   * possible, a submission that did not get through) leaves the step to be
+   * tried again.
    */
   get stop(): Stop | null {
     return this.stopped;
@@ -225,10 +278,14 @@ export class CardProofFlow {
 
   /** Stops the flow: drops every secret and remembers why. */
   private fail(stop: Stop): never {
+    this.end(stop);
+    throw new FlowStop(this.stopped!);
+  }
+
+  private end(stop: Stop): void {
     if (!this.stopped) this.stopped = stop;
     this.phaseValue = "stopped";
     this.dropSecrets();
-    throw new FlowStop(this.stopped);
   }
 
   private expect(...phases: Phase[]): void {
@@ -236,7 +293,49 @@ export class CardProofFlow {
     if (!phases.includes(this.phaseValue)) throw new FlowStop({ code: "state" });
   }
 
+  /** True if IDLE_MS passed since the first signature while the second was not made. */
+  private idleExpired(): boolean {
+    return this.firstSignedAt !== null && this.deps.clock() - this.firstSignedAt >= this.idleMs;
+  }
+
+  /** The wait for the second signature is over: everything is dropped, and the caller is told. */
+  private expireIdle(): void {
+    if (this.stopped) return;
+    this.end({ code: "idle" });
+    this.deps.onIdle?.(this.stopped!);
+  }
+
+  /** Throws `idle` (and ends the flow) if the wait for the second signature is over. */
+  private checkIdle(): void {
+    if (!this.idleExpired()) return;
+    this.expireIdle();
+    throw new FlowStop(this.stopped!);
+  }
+
+  private startIdleTimer(): void {
+    this.firstSignedAt = this.deps.clock();
+    const set =
+      this.deps.setTimer ??
+      ((ms: number, f: () => void) => {
+        const t = setTimeout(f, ms);
+        return () => clearTimeout(t);
+      });
+    this.cancelIdleTimer = set(this.idleMs, () => {
+      this.cancelIdleTimer = null;
+      // While the second signature is being asked for, proceed() checks the
+      // time itself if it comes back to "chosen" (a blocked window).
+      if (this.phaseValue === "status_known" || this.phaseValue === "chosen") this.expireIdle();
+    });
+  }
+
+  private stopIdleTimer(): void {
+    this.cancelIdleTimer?.();
+    this.cancelIdleTimer = null;
+    this.firstSignedAt = null;
+  }
+
   private dropSecrets(): void {
+    this.stopIdleTimer();
     this.pin = null;
     wipe(this.scopeSignature);
     wipe(this.codeSignature);
@@ -255,16 +354,11 @@ export class CardProofFlow {
   cancel(): void {
     this.dropSecrets();
     this.submission = null;
+    this.status = null;
+    this.state = null;
+    this.chosen = null;
     if (!this.stopped) this.stopped = { code: "state" };
     this.phaseValue = "stopped";
-  }
-
-  private async cardCall<T>(f: () => Promise<T>): Promise<T> {
-    try {
-      return await f();
-    } catch (e) {
-      this.fail(cardStop(e));
-    }
   }
 
   /**
@@ -282,7 +376,14 @@ export class CardProofFlow {
 
   async readCard(): Promise<CardRead> {
     this.expect("start");
-    const ders = await this.cardCall(() => this.deps.card.readCertificates());
+    let ders: Uint8Array[];
+    try {
+      ders = await this.deps.card.readCertificates();
+    } catch (e) {
+      // A blocked window sent nothing to the card: the same step can be tried again.
+      if (e instanceof CardError && e.code === "popup_blocked") throw new FlowStop(cardStop(e));
+      this.fail(cardStop(e));
+    }
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);
     if (!sel.ok) {
@@ -372,43 +473,50 @@ export class CardProofFlow {
     try {
       signed = await this.deps.card.sign(this.scopeBytes, pin);
     } catch (e) {
-      // A wrong PIN does not end the flow: the screen asks again. Nothing is kept.
-      if (e instanceof CardError && e.code === "pin_incorrect") throw new FlowStop({ code: "card", card: "pin_incorrect" });
+      // A wrong PIN or a blocked window does not end the flow: the screen asks
+      // again. Nothing is kept, the PIN included.
+      if (e instanceof CardError && (e.code === "pin_incorrect" || e.code === "popup_blocked")) throw new FlowStop(cardStop(e));
       this.fail(cardStop(e));
     }
     this.checkSigner(signed);
     const sig = signed.signature;
-    this.pin = pin;
     if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, this.scopeBytes))) {
       wipe(sig);
       this.fail({ code: "card_signature" });
     }
+    this.pin = pin;
     this.scopeSignature = sig;
+    // The wait for the second signature starts now (IDLE_MS).
+    this.startIdleTimer();
     const id = await scopedId(sig, (a, b) => this.deps.prover.hash2(a, b));
     this.scopedIdValue = id;
     const idText = scopedIdText(id);
-    let state;
+    let state: CardStateResponse;
     try {
       state = await requestCardState(this.deps.fetch, this.scope.scopeString, idText, this.scope.validUsername);
     } catch (e) {
       this.fail(toStop(e));
     }
+    // The wait may have run out while the server answered.
+    if (this.stopped) throw new FlowStop(this.stopped);
+    this.checkIdle();
     const today = this.today();
-    const username = this.action === "declare" ? this.typedUsername : state.current;
-    const outcome =
-      this.action === "declare" ? declareOutcome(state, this.typedUsername!, today) : withdrawOutcome(state, state.current ?? "");
-    const left = switchesLeft(state, today);
+    this.state = state;
     this.status = {
       scopedId: idText,
       shortId: shortId(idText),
       current: state.current,
       lastDeclared: state.lastDeclared,
       lastCardProof: state.lastCardProof === null ? null : formatDay(state.lastCardProof),
-      outcome,
-      switchesLeft: left,
-      switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left,
+      options: {
+        refresh: state.current !== null ? declareOutcome(state, state.current, today) : null,
+        declareBack: state.current === null && state.lastDeclared !== null ? declareOutcome(state, state.lastDeclared, today) : null,
+        other: declareOutcome(state, otherThan(state.lastDeclared ?? ""), today),
+        withdraw: state.current !== null ? withdrawOutcome(state, state.current) : null,
+      },
+      switchesUsed: switchesInWindow(state, today),
+      switchesLeft: switchesLeft(state, today),
       nextSwitchDate: formatDay(nextSwitchDay(state, today)),
-      username,
       today: formatDay(today),
       count: state.count,
       head: state.head,
@@ -417,21 +525,80 @@ export class CardProofFlow {
     return this.status;
   }
 
+  /** The card's state from confirmCard(), while the flow waits for a choice or its confirmation; null otherwise. */
+  get cardStatus(): CardStatus | null {
+    return this.phaseValue === "status_known" || this.phaseValue === "chosen" ? this.status : null;
+  }
+
+  // The cardholder picks; nothing is signed or sent ----------------------------
+
+  /**
+   * What `choice` would do; the next step is proceed(). A choice that is not
+   * possible (switches used up, nothing to withdraw) or an account not in
+   * the scope's format throws without ending the flow: the cardholder can
+   * pick again. Nothing is signed, nothing is sent.
+   */
+  choose(choice: Choice): Consequence {
+    this.expect("status_known", "chosen");
+    this.checkIdle();
+    const consequence = this.consequenceOf(choice);
+    this.chosen = consequence;
+    this.phaseValue = "chosen";
+    return consequence;
+  }
+
+  /** Back from the consequence to the card's state. Nothing is signed or asked again. */
+  back(): CardStatus {
+    this.expect("status_known", "chosen");
+    this.checkIdle();
+    this.chosen = null;
+    this.phaseValue = "status_known";
+    return this.status!;
+  }
+
+  private consequenceOf(choice: Choice): Consequence {
+    const state = this.state!;
+    const today = this.today();
+    let username: string;
+    let outcome: Outcome;
+    if (choice.action === "declare") {
+      if (!this.scope.validUsername(choice.username)) throw new FlowStop({ code: "username" });
+      username = choice.username;
+      outcome = declareOutcome(state, username, today);
+    } else {
+      if (state.current === null) throw new FlowStop({ code: "blocked", reason: "not_current" });
+      username = state.current;
+      outcome = withdrawOutcome(state, username);
+    }
+    if (outcome.kind === "blocked") throw new FlowStop({ code: "blocked", reason: outcome.reason });
+    const left = switchesLeft(state, today);
+    return { action: choice.action, username, kind: outcome.kind, switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left, today: formatDay(today) };
+  }
+
   // Step 3: the card signs the declaration code, then prove and submit --------
 
   /**
-   * `confirmedUsername` is the account the screen showed the cardholder and
-   * they confirmed: the typed one, or for a withdrawal the one the server
-   * reported as current (CardStatus.username). The card signs only if it is
+   * `confirmedUsername` is the account the consequence showed the cardholder
+   * and they confirmed: the typed one, or for a withdrawal the one the server
+   * reported as current (Consequence.username). The card signs only if it is
    * the account the declaration code will name.
    */
   async proceed(confirmedUsername: string): Promise<Done> {
-    this.expect("status_known");
-    const status = this.status!;
-    if (status.outcome.kind === "blocked") this.fail({ code: "blocked", reason: status.outcome.reason });
-    if (status.username === null || confirmedUsername !== status.username) this.fail({ code: "state" });
+    this.expect("chosen");
+    this.checkIdle();
+    const chosen = this.chosen!;
+    if (confirmedUsername !== chosen.username) this.fail({ code: "state" });
+    // Again, with today's date: a choice that is no longer possible is not signed.
+    let again: Consequence;
+    try {
+      again = this.consequenceOf(chosen.action === "declare" ? { action: "declare", username: chosen.username } : { action: "withdraw" });
+    } catch (e) {
+      this.fail(toStop(e));
+    }
+    if (again.kind !== chosen.kind) this.fail({ code: "state" });
     this.checkBackground();
-    const username = status.username;
+    const { action, username } = chosen;
+    this.phaseValue = "signing";
 
     let challenge: unknown;
     try {
@@ -446,15 +613,25 @@ export class CardProofFlow {
       this.fail({ code: "challenge_not_today", challengeDate: formatDay(challengeDay), today: formatDay(today) });
     }
     const challengeText = challenge as string;
-    const code = await declarationCode(this.action, this.scope.scopeString, username, challengeText);
+    const code = await declarationCode(action, this.scope.scopeString, username, challengeText);
+    if (this.stopped) throw new FlowStop(this.stopped);
 
-    const pin = this.pin!;
     let signed: CardSignature;
     try {
-      signed = await this.cardCall(() => this.deps.card.sign(code, pin));
-    } finally {
-      this.pin = null; // the second signature is made (or failed): the PIN is not needed again
+      signed = await this.deps.card.sign(code, this.pin!);
+    } catch (e) {
+      if (e instanceof CardError && e.code === "popup_blocked") {
+        // Nothing reached the card. The flow is back where it was; the wait
+        // for the second signature still counts from the first.
+        this.phaseValue = "chosen";
+        this.checkIdle();
+        throw new FlowStop(cardStop(e));
+      }
+      this.fail(cardStop(e));
     }
+    // The second signature is made: the PIN is not needed again.
+    this.pin = null;
+    this.stopIdleTimer();
     this.checkSigner(signed);
     const sig = signed.signature;
     if (!(await rsaVerify(this.cardPublicKey!, 2048, sig, code))) {
@@ -498,8 +675,8 @@ export class CardProofFlow {
     }
     this.submission = {
       scope_string: this.scope.scopeString,
-      scoped_id: status.scopedId,
-      action: this.action,
+      scoped_id: this.status!.scopedId,
+      action,
       username,
       challenge: challengeText,
       issuer: cert.issuer.name,
@@ -554,6 +731,11 @@ export class CardProofFlow {
   async threadMode(): Promise<ThreadMode> {
     return this.deps.prover.ready();
   }
+}
+
+/** An account other than `u` in every scope's format: what declaring "another account" would be does not depend on which one. */
+function otherThan(u: string): string {
+  return u === "a" ? "b" : "a";
 }
 
 function toStop(e: unknown): Stop {

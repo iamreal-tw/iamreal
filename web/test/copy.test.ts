@@ -28,12 +28,14 @@ const EXAMPLES: Record<string, string> = {
   platform: "Threads",
   account: "alice",
   current: "bob",
+  last_declared: "bob",
   name: "王小明",
   expiry_date: "2025-03-01",
   valid_from: "2026-12-01",
   crl_days: "5",
   code: "X",
   days_ago: "12",
+  switches_used: "1",
   switches_left: "1",
   next_switch_date: "2027-03-02",
   today: "2026-11-16",
@@ -75,7 +77,9 @@ test("every entry of card-proof.json is in card-proof.md, word for word", () => 
 /** The text the screens show: the lines of the code blocks, and the table cells after the first column. */
 function screenText(): string[] {
   const lines: string[] = [];
-  const blocks = [...mdText.matchAll(/^```\n([\s\S]*?)^```$/gm)].map((m) => m[1]!);
+  // The code blocks are found in the Markdown as written (mdText has no backticks, so no fences).
+  const blocks = [...md.matchAll(/^```\n([\s\S]*?)^```$/gm)].map((m) => m[1]!.replace(/`/g, ""));
+  assert.ok(blocks.length >= 10, `card-proof.md: ${blocks.length} screens found`);
   for (const b of blocks) lines.push(...b.split("\n"));
   let inTable = false;
   for (const line of mdText.split("\n")) {

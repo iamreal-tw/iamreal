@@ -1,5 +1,5 @@
-// Opens a running page (for example `pnpm local`'s) in headless Chrome up to
-// screen 2 and stops there, before "read the card": the component is never
+// Opens a running page (for example `pnpm local`'s) in headless Chrome, at
+// the first screen, and stops there, before "read the card": the component is never
 // asked anything, so this can run with a real card in the reader. Checks the
 // headers, that the page is cross-origin isolated, that the proof engine
 // started, that no Content-Security-Policy was violated and that the page
@@ -28,17 +28,14 @@ const browser = await Browser.launch({ dir: out });
 const page = await browser.newPage();
 await page.send("Page.enable");
 await page.goto(url);
-await page.waitFor(`document.querySelector('[data-step="enter"]')`, "screen 1");
+await page.waitFor(`document.querySelector('[data-step="before_pin"]')`, "the first screen");
 const doc = browser.responses.find((r) => r.url === url);
 check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, "Content-Security-Policy");
 check(doc?.headers["document-isolation-policy"] === "isolate-and-credentialless", "Document-Isolation-Policy");
 check(await page.eval<boolean>("crossOriginIsolated"), "cross-origin isolated");
 const engine = await page.waitFor<number>(`performance.getEntriesByName("iamreal:engine_engine_total")[0]?.duration`, "the engine", 60_000).catch(() => 0);
 check(engine > 0, `the proof engine started (${Math.round(engine)} ms)`);
-await page.type("#account", "alice");
-await page.clickButton(COPY.enter.next);
-await page.waitFor(`document.querySelector('[data-step="before_pin"]')`, "screen 2");
-check((await page.text()).includes(COPY.before_pin.read_card), "screen 2, with the read button (not clicked)");
+check((await page.text()).includes(COPY.before_pin.read_card), "the first screen, with the read button (not clicked)");
 const origin = new URL(url).origin;
 const outside = browser.requests.filter((r) => ["page", "worker"].includes(r.targetType) && !r.url.startsWith("about:") && new URL(r.url).origin !== origin);
 check(outside.length === 0, `connected only to ${origin} ${JSON.stringify(outside.map((r) => r.url).slice(0, 3))}`);

@@ -1,11 +1,11 @@
-// Which sentence the screen shows for each stop and each state of the card
-// (src/ui/messages.ts). The screens themselves run in the headless browser
+// Which sentence the screen shows for each stop, each state of the card and
+// each consequence (src/ui/messages.ts). The screens themselves run in the headless browser
 // test (test/e2e/ui.ts).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { CardStatus, Stop } from "../src/flow.ts";
+import type { CardStatus, Consequence, Stop } from "../src/flow.ts";
 import { COPY, fill } from "../src/ui/copy.ts";
-import { type Message, daysBetween, statusView, stopMessage } from "../src/ui/messages.ts";
+import { type Message, consequenceView, daysBetween, doneRecord, doneTitle, statusView, stopMessage } from "../src/ui/messages.ts";
 
 const text = (m: Message): string => ("code" in m ? `[${m.code}]` : fill(m.template, m.values));
 
@@ -14,7 +14,8 @@ describe("stops", () => {
   const cases: [Stop, string][] = [
     [{ code: "card", card: "component_unreachable" }, COPY.stops.component_unreachable],
     [{ code: "card", card: "no_card" }, COPY.stops.no_card],
-    [{ code: "card", card: "pin_incorrect" }, COPY.before_pin.pin_incorrect],
+    [{ code: "card", card: "pin_incorrect" }, COPY.confirm_card.pin_incorrect],
+    [{ code: "card", card: "popup_blocked" }, COPY.confirm_card.popup_blocked],
     [{ code: "card", card: "card_locked" }, COPY.stops.card_locked],
     [{ code: "card", card: "card_error", detail: "76100009" }, "讀卡時發生錯誤（代碼 76100009）。請重新插卡再試一次。"],
     [{ code: "card", card: "card_error" }, "讀卡時發生錯誤（代碼 card_error）。請重新插卡再試一次。"],
@@ -42,8 +43,10 @@ describe("stops", () => {
     [{ code: "server", server: "crl_stale", status: 503 }, "這次過卡沒有被接受（代碼 crl_stale），名冊沒有變動。"],
     [{ code: "server", server: "malformed_response", status: 200 }, "伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 malformed_response）"],
     [{ code: "server", server: "network", status: 0 }, "伺服器的回應不正確，現在不能過卡。請稍後再試。（代碼 network）"],
-    [{ code: "username" }, COPY.enter.bad_username],
+    [{ code: "username" }, COPY.status.bad_username],
     [{ code: "state" }, "[state]"],
+    [{ code: "idle" }, "[idle]"],
+    [{ code: "blocked", reason: "switch_limit" }, "[switch_limit]"],
   ];
   for (const [stop, want] of cases) {
     test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => assert.equal(text(stopMessage(stop)), want));
@@ -68,65 +71,104 @@ describe("stops", () => {
   });
 });
 
-describe("the card's state", () => {
+describe("the card's state (section 3)", () => {
   const base: CardStatus = {
     scopedId: "X",
     shortId: "7K2Q9F",
     current: null,
     lastDeclared: null,
     lastCardProof: null,
-    outcome: { kind: "first" },
+    options: { refresh: null, declareBack: null, other: { kind: "first" }, withdraw: null },
+    switchesUsed: 0,
     switchesLeft: 2,
-    switchesLeftAfter: 2,
     nextSwitchDate: "2026-11-16",
-    username: "alice",
     today: "2026-11-16",
     count: 0,
     head: "0".repeat(64),
   };
-  const view = (action: "declare" | "withdraw", s: Partial<CardStatus>) => {
-    const v = statusView(action, { ...base, ...s }, "threads");
-    return { first: text(v.first), button: v.button && fill(v.button.template, v.button.values), record: v.record && fill(v.record.template, v.record.values) };
+  const view = (s: Partial<CardStatus>) => {
+    const v = statusView({ ...base, ...s }, "threads");
+    return { state: v.state, first: fill(v.first.template, v.first.values), facts: v.facts.map(text), canSwitch: v.canSwitch, switchLimit: v.switchLimit && fill(v.switchLimit.template, v.switchLimit.values) };
   };
 
-  test("the four rows of the copy", () => {
-    assert.deepEqual(view("declare", {}), {
-      first: "這張卡片還沒有宣告過。",
-      button: "宣告給 @alice",
-      record: "2026-11-16，有一張有效的自然人憑證宣告了 Threads 的 @alice。",
-    });
-    assert.deepEqual(view("declare", { current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-04", outcome: { kind: "refresh" } }).first, "這張卡片目前宣告的是 @alice，上次過卡是 12 天前。");
-    assert.equal(view("declare", { outcome: { kind: "refresh" }, current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-04" }).button, "再次過卡");
-    const sw = view("declare", { current: "bob", lastDeclared: "bob", lastCardProof: "2026-11-04", outcome: { kind: "switch" }, switchesLeft: 2, switchesLeftAfter: 1 });
-    assert.equal(sw.first, "這張卡片目前宣告的是 @bob。改成 @alice 會用掉一次更換，之後今年還剩 1 次。");
-    assert.equal(sw.button, "改成 @alice");
-    const blocked = view("declare", { current: "bob", lastDeclared: "bob", outcome: { kind: "blocked", reason: "switch_limit" }, nextSwitchDate: "2027-03-02" });
-    assert.equal(blocked.first, "這張卡片目前宣告的是 @bob。一年最多更換兩次，下一次可以更換是 2027-03-02。");
-    assert.equal(blocked.button, null);
+  test("never declared", () => {
+    assert.deepEqual(view({}), { state: "never", first: "這張卡片在 Threads 還沒有宣告過。", facts: [], canSwitch: true, switchLimit: null });
   });
 
-  test("withdrawal", () => {
-    assert.deepEqual(view("withdraw", { current: "alice", lastDeclared: "alice", outcome: { kind: "withdraw" }, username: "alice" }), {
+  test("declared: the last card proof and the switches of the past year", () => {
+    const d = { current: "alice", lastDeclared: "alice", lastCardProof: "2026-11-04", switchesUsed: 1, switchesLeft: 1 };
+    assert.deepEqual(view({ ...d, options: { refresh: { kind: "refresh" }, declareBack: null, other: { kind: "switch" }, withdraw: { kind: "withdraw" } } }), {
+      state: "declared",
       first: "這張卡片目前宣告的是 @alice。",
-      button: "收回對 @alice 的宣告",
-      record: "2026-11-16，有一張有效的自然人憑證收回了對 Threads 的 @alice 的宣告。",
+      facts: ["上次過卡是 12 天前。", "過去一年更換過 1 次，還可以更換 1 次。"],
+      canSwitch: true,
+      switchLimit: null,
     });
-    assert.deepEqual(view("withdraw", { outcome: { kind: "blocked", reason: "not_current" }, username: null }), {
-      first: "這張卡片目前沒有宣告任何帳號。",
-      button: null,
-      record: null,
-    });
+    const used = view({ ...d, switchesUsed: 2, switchesLeft: 0, nextSwitchDate: "2027-03-02", options: { refresh: { kind: "refresh" }, declareBack: null, other: { kind: "blocked", reason: "switch_limit" }, withdraw: { kind: "withdraw" } } });
+    assert.equal(used.canSwitch, false);
+    assert.equal(used.switchLimit, "一年最多更換兩次，下一次可以更換是 2027-03-02。");
+    assert.deepEqual(used.facts, ["上次過卡是 12 天前。", "過去一年更換過 2 次，還可以更換 0 次。"]);
   });
 
-  test("a card whose declaration was withdrawn: the copy has no first sentence, the code is shown", () => {
-    assert.equal(view("declare", { lastDeclared: "alice", lastCardProof: "2026-11-04", outcome: { kind: "refresh" } }).first, "[refresh_after_withdraw]");
-    assert.equal(view("declare", { lastDeclared: "bob", outcome: { kind: "switch" } }).first, "[switch_after_withdraw]");
-    assert.equal(view("declare", { lastDeclared: "bob", outcome: { kind: "blocked", reason: "switch_limit" } }).first, "[switch_limit_after_withdraw]");
+  test("withdrawn", () => {
+    const w = { lastDeclared: "bob", lastCardProof: "2026-11-10", options: { refresh: null, declareBack: { kind: "refresh" as const }, other: { kind: "switch" as const }, withdraw: null } };
+    assert.deepEqual(view(w), { state: "withdrawn", first: "這張卡片目前沒有宣告。上一次宣告的是 @bob，已經收回。", facts: [], canSwitch: true, switchLimit: null });
+    const used = view({ ...w, nextSwitchDate: "2027-03-02", options: { ...w.options, other: { kind: "blocked", reason: "switch_limit" } } });
+    assert.equal(used.canSwitch, false);
+    assert.equal(used.switchLimit, "一年最多更換兩次，下一次可以更換是 2027-03-02。");
   });
 
   test("days between two dates", () => {
     assert.equal(daysBetween("2026-11-04", "2026-11-16"), 12);
     assert.equal(daysBetween("2025-11-16", "2026-11-16"), 365);
     assert.equal(daysBetween("2026-11-16", "2026-11-16"), 0);
+  });
+});
+
+describe("the consequence (section 4)", () => {
+  const cq = (kind: Consequence["kind"], username = "alice", switchesLeftAfter = 1): Consequence => ({
+    action: kind === "withdraw" ? "withdraw" : "declare",
+    username,
+    kind,
+    switchesLeftAfter,
+    today: "2026-11-16",
+  });
+  const view = (c: Consequence, current: string | null) => {
+    const v = consequenceView(c, current, "threads");
+    return { record: fill(v.record.template, v.record.values), switchLine: v.switchLine && fill(v.switchLine.template, v.switchLine.values), later: v.later, button: fill(v.button.template, v.button.values) };
+  };
+  const declared = "2026-11-16，有一張有效的自然人憑證宣告了 Threads 的 @alice，";
+  const later = [COPY.consequence.later, COPY.consequence.permanent];
+
+  test("the rows of the table", () => {
+    assert.deepEqual(view(cq("first"), null), { record: declared, switchLine: null, later, button: "宣告給 @alice" });
+    assert.deepEqual(view(cq("refresh"), "alice"), { record: declared, switchLine: null, later, button: "再次過卡" });
+    assert.deepEqual(view(cq("switch"), "bob"), { record: declared, switchLine: "這會用掉一次更換，之後一年內還剩 1 次。", later, button: "改成 @alice" });
+    assert.deepEqual(view(cq("withdraw"), "alice"), {
+      record: "2026-11-16，有一張有效的自然人憑證收回了對 Threads 的 @alice 的宣告，",
+      switchLine: null,
+      later: [COPY.consequence.later_withdraw, COPY.consequence.permanent],
+      button: "收回對 @alice 的宣告",
+    });
+  });
+
+  test("declaring again the account withdrawn before: the row of a first declaration, no switch", () => {
+    assert.deepEqual(view(cq("refresh"), null), { record: declared, switchLine: null, later, button: "宣告給 @alice" });
+  });
+
+  test("a switch that leaves none", () => {
+    assert.equal(view(cq("switch", "carol", 0), "bob").switchLine, "這會用掉一次更換，之後一年內還剩 0 次。");
+  });
+});
+
+describe("done (section 6)", () => {
+  test("the first line and the record line", () => {
+    const t = (s: { template: string; values: Record<string, string | number> }) => fill(s.template, s.values);
+    assert.equal(t(doneTitle("first", "alice")), "已宣告。");
+    assert.equal(t(doneTitle("refresh", "alice")), "已再次過卡。");
+    assert.equal(t(doneTitle("switch", "alice")), "已改成 @alice。");
+    assert.equal(t(doneTitle("withdraw", "alice")), "已收回。");
+    assert.equal(t(doneRecord("first", "2026-11-16", "alice", "threads")), "2026-11-16，有一張有效的自然人憑證宣告了 Threads 的 @alice。");
+    assert.equal(t(doneRecord("withdraw", "2026-11-16", "alice", "threads")), "2026-11-16，有一張有效的自然人憑證收回了對 Threads 的 @alice 的宣告。");
   });
 });

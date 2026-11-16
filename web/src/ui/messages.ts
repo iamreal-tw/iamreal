@@ -1,10 +1,9 @@
 // Which sentence of the copy the screen shows for each reason the flow
-// stopped (web/README.md, the table of stops), and for each state of the
-// card (screen 3 of design/copy/card-proof.md). Pure functions, tested in Node
-// (test/ui.test.ts). Where the copy has no sentence, the screen shows the
-// code alone: `{ code }`.
-import type { CardStatus, Stop } from "../flow.ts";
-import type { Action } from "../spec/declaration-code.ts";
+// stopped (web/README.md, the table of stops), for each state of the card
+// (section 3 of design/copy/card-proof.md) and for each consequence
+// (section 4). Pure functions, tested in Node (test/ui.test.ts). Where the
+// copy has no sentence, the screen shows the code alone: `{ code }`.
+import type { CardStatus, Consequence, Stop } from "../flow.ts";
 import { COPY, type Values } from "./copy.ts";
 
 export interface Sentence {
@@ -44,7 +43,9 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
         case "no_card":
           return say(s.no_card);
         case "pin_incorrect":
-          return say(COPY.before_pin.pin_incorrect);
+          return say(COPY.confirm_card.pin_incorrect);
+        case "popup_blocked":
+          return say(COPY.confirm_card.popup_blocked);
         case "card_locked":
           return say(s.card_locked);
         case "card_error":
@@ -96,7 +97,7 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
     case "proof_check":
       return say(s.proof_check);
     case "username":
-      return say(COPY.enter.bad_username);
+      return say(COPY.status.bad_username);
     case "server": {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
@@ -104,7 +105,11 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
+    // The screen does not offer a choice that is not possible; the engine refuses it too. No sentence.
     case "blocked":
+      return { code: stop.reason };
+    // No sentence in the copy: the wait for the second signature ran out; a step called out of order.
+    case "idle":
     case "state":
       break;
   }
@@ -112,73 +117,91 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
 }
 
 export const PLATFORM_NAMES = { threads: "Threads" } as const;
-
-export interface StatusView {
-  /** The first sentence: what the server says about this card. */
-  first: Message;
-  /** The button of the last click, or null (only the cancel button). */
-  button: Sentence | null;
-  /** The line the roster will record (after `status.record_intro`), or null if the account is not known. */
-  record: Sentence | null;
-}
+export type PlatformKey = keyof typeof PLATFORM_NAMES;
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
 }
 
-/**
- * Screen 3 (the card's state and the consequence) for a card's status. The copy writes the
- * first sentence for a card that holds an account now; for a card whose last
- * declaration was withdrawn (current is null, but it declared before), it has
- * none, and the screen shows a code.
- */
-export function statusView(action: Action, st: CardStatus, platform: keyof typeof PLATFORM_NAMES): StatusView {
-  const c = COPY.status;
-  const p = PLATFORM_NAMES[platform];
-  if (action === "withdraw") {
-    if (st.outcome.kind === "withdraw" && st.username !== null) {
-      return {
-        first: say(c.withdraw_current, { account: st.username }),
-        button: say(c.button_withdraw, { account: st.username }),
-        record: say(c.record_withdraw, { today: st.today, platform: p, account: st.username }),
-      };
-    }
-    return { first: say(c.withdraw_none), button: null, record: null };
-  }
-  const account = st.username!;
-  const record = say(c.record_declare, { today: st.today, platform: p, account });
-  switch (st.outcome.kind) {
-    case "first":
-      return { first: say(c.not_declared), button: say(c.button_first, { account }), record };
-    case "refresh":
-      return {
-        first:
-          st.current === account && st.lastCardProof !== null
-            ? say(c.current_same, { account, days_ago: daysBetween(st.lastCardProof, st.today) })
-            : { code: "refresh_after_withdraw" },
-        button: say(c.button_refresh),
-        record,
-      };
-    case "switch":
-      return {
-        first: st.current !== null ? say(c.current_other, { current: st.current, account, switches_left: st.switchesLeftAfter }) : { code: "switch_after_withdraw" },
-        button: say(c.button_switch, { account }),
-        record,
-      };
-    case "blocked":
-      return {
-        first: st.current !== null ? say(c.switch_limit, { current: st.current, next_switch_date: st.nextSwitchDate }) : { code: "switch_limit_after_withdraw" },
-        button: null,
-        record,
-      };
-    case "withdraw":
-      break;
-  }
-  return { first: { code: st.outcome.kind }, button: null, record };
+/** Section 3: the card's state, and which choices the screen offers. */
+export interface StatusView {
+  /** never: no declaration yet; declared: an account now; withdrawn: declared before, withdrawn since. */
+  state: "never" | "declared" | "withdrawn";
+  /** The first sentence. */
+  first: Sentence;
+  /** For a declared card: the last card proof, and the switches of the past year. */
+  facts: Message[];
+  /** False when switches are used up: status.switch or status.declare_other cannot be pressed. */
+  canSwitch: boolean;
+  /** The sentence next to that button when it cannot be pressed. */
+  switchLimit: Sentence | null;
 }
 
-/** The first line of screen 5 (done), by the kind of the record. */
+export function statusView(st: CardStatus, platform: PlatformKey): StatusView {
+  const c = COPY.status;
+  const canSwitch = st.options.other.kind !== "blocked";
+  const switchLimit = canSwitch ? null : say(c.switch_limit, { next_switch_date: st.nextSwitchDate });
+  if (st.current !== null) {
+    return {
+      state: "declared",
+      first: say(c.current, { account: st.current }),
+      facts: [
+        st.lastCardProof !== null ? say(c.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) }) : { code: "no_last_card_proof" },
+        say(c.switches, { switches_used: st.switchesUsed, switches_left: st.switchesLeft }),
+      ],
+      canSwitch,
+      switchLimit,
+    };
+  }
+  if (st.lastDeclared !== null) {
+    return { state: "withdrawn", first: say(c.withdrawn, { last_declared: st.lastDeclared }), facts: [], canSwitch, switchLimit };
+  }
+  return { state: "never", first: say(c.not_declared, { platform: PLATFORM_NAMES[platform] }), facts: [], canSwitch: true, switchLimit: null };
+}
+
+/** Section 4: what the roster will record, and the button of the last click. */
+export interface ConsequenceView {
+  record: Sentence;
+  /** consequence.uses_switch, for a switch only. */
+  switchLine: Sentence | null;
+  /** The paragraph before the buttons: what can be done later, and that no record can be deleted. */
+  later: string[];
+  button: Sentence;
+}
+
+/**
+ * The table of section 4 names its rows by what was picked. The button
+ * follows what the card proof will be: a declaration of the current account
+ * is button_refresh; of the account withdrawn before, button_first (the row
+ * of declaring the same account again).
+ */
+export function consequenceView(cq: Consequence, current: string | null, platform: PlatformKey): ConsequenceView {
+  const c = COPY.consequence;
+  const values = { today: cq.today, platform: PLATFORM_NAMES[platform], account: cq.username };
+  if (cq.kind === "withdraw") {
+    return { record: say(c.record_withdraw, values), switchLine: null, later: [c.later_withdraw, c.permanent], button: say(c.button_withdraw, { account: cq.username }) };
+  }
+  const button =
+    cq.kind === "switch"
+      ? say(c.button_switch, { account: cq.username })
+      : cq.kind === "refresh" && current === cq.username
+        ? say(c.button_refresh)
+        : say(c.button_first, { account: cq.username });
+  return {
+    record: say(c.record_declare, values),
+    switchLine: cq.kind === "switch" ? say(c.uses_switch, { switches_left: cq.switchesLeftAfter }) : null,
+    later: [c.later, c.permanent],
+    button,
+  };
+}
+
+/** The first line of section 6 (done), by the kind of the record. */
 export function doneTitle(kind: "first" | "refresh" | "switch" | "withdraw", account: string): Sentence {
   return say(COPY.done[kind], { account });
+}
+
+/** The record line of section 6, after done.seq. */
+export function doneRecord(kind: "first" | "refresh" | "switch" | "withdraw", date: string, account: string, platform: PlatformKey): Sentence {
+  return say(kind === "withdraw" ? COPY.done.record_withdraw : COPY.done.record_declare, { today: date, platform: PLATFORM_NAMES[platform], account });
 }
