@@ -8,8 +8,10 @@
 
 | 檔案 | 內容 |
 |---|---|
-| `file.go` | `ReadFile`：整份檔案的檢查。逐行、照表格的順序（`line`、`seq`、`prev`），回報第一個失敗的行號和代碼；有效的檔案回傳紀錄和鏈尾雜湊 |
-| `rules.go` | `Apply`：每筆紀錄依序跑五項檢查（`proof`、`challenge_reused`、`root`、`date_order`、`not_current`／`switch_limit`），有效的給種類（`first`、`refresh`、`switch`、`withdraw`）；輸出每張卡片和每個帳號的現況，排序一律照位元組。`Check` 把檔案的檢查和規則接起來 |
+| `file.go` | `ReadFile`：整份檔案的檢查。逐行、照表格的順序（`line`、`seq`、`prev`），回報第一個失敗的行號和代碼；有效的檔案回傳紀錄和鏈尾雜湊。一行的檢查是 `ReadLine`，後台寫入每一筆之前也用它 |
+| `rules.go` | `Rules`：一次套用一筆。每筆紀錄依序跑五項檢查（`proof`、`challenge_reused`、`root`、`date_order`、`not_current`／`switch_limit`），有效的給種類（`first`、`refresh`、`switch`、`withdraw`）。`Check` 只回答「這一筆接在後面會怎樣」、不改狀態；`Apply` 套用；`Card` 回傳一張卡片在一個場合的現況（含上次宣告的帳號、更換的日期）；`State` 輸出每張卡片和每個帳號的現況，排序一律照位元組。整份名冊的 `Apply` 就是對每一筆呼叫 `Rules.Apply`，`Check` 把檔案的檢查和規則接起來 |
+
+**規則只有一份。** 後台（`server/`）不自己寫任何一條規則：開機時用 `Rules.Apply` 從頭重算，收到一筆時先用 `Rules.Check` 問會不會有效，寫進資料庫後再 `Rules.Apply`。重驗的人用 `Check`（整份檔案），走的是同一份程式。
 
 ## 兩個介面
 
@@ -29,6 +31,8 @@ go test ./roster
 
 - `spec/vectors/record.json` 的 `files`：每份檔案是有效（鏈尾相同）或在哪一行、用哪個代碼失敗。
 - `spec/vectors/roster-rules.json`：每個案例的事件換成紀錄，`verifies` 由假的 `ProofVerifier` 回答，`crl_dates` 由假的 `CRLArchive` 回答（每筆事件有自己的樹根）。比對每筆的結果和最後的現況。
+
+`incremental_test.go`：同一份 `roster-rules.json`，一筆一筆用 `Rules` 套用，每一筆先 `Check` 兩次（答案相同、狀態沒變）再 `Apply`（和 `Check` 的答案相同），結果、最後的現況都和標準答案、整份的 `Apply` 相同；`Card` 和輸出的每張卡片一致，另測收回後保留上次宣告的帳號和更換日期。
 
 `rules_test.go` 另外測：同一個樹根對應好幾份清冊時任一份符合就承認；驗證器或清冊存檔出錯時規則停下來。
 
