@@ -1,6 +1,7 @@
-// Command iamreal-verify re-verifies a roster file: whether the file as a
-// whole is valid, the result of each record, and the state of every card and
-// account (spec/roster-rules.md). See README.md.
+// Command iamreal-verify re-verifies a roster file, or a published roster
+// directory and its heads file: whether the roster as a whole is valid, the
+// result of each record, and the state of every card and account
+// (spec/roster-rules.md). See README.md.
 package main
 
 import (
@@ -19,9 +20,14 @@ import (
 // Exit codes.
 const (
 	exitAllValid = 0 // the file is valid and every record is valid
-	exitInvalid  = 1 // the file is broken, a record is invalid, or the CRL archive's index differs from its files
+	exitInvalid  = 1 // the file is broken, a record is invalid, the CRL archive's index differs from its files, or the heads file has a problem
 	exitError    = 2 // the check could not be made
 )
+
+// testOptions is set only in a build with the tag iamrealtest
+// (testissuers.go): options that let a test use throwaway issuer keys. The
+// program built as README.md says has no such option.
+var testOptions func(fs *flag.FlagSet) func(*deps) error
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, deps{newVerifier, openArchive(crl.MOICAKeys)}))
@@ -97,11 +103,21 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+"; without it no root is recognized")
 	trustIndex := fs.Bool("crl-trust-index", false, "read only the archive's index, without checking it against the CRL files")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] <roster file | ->")
+		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] <roster file | roster directory | ->")
 		fs.PrintDefaults()
+	}
+	var applyTestOptions func(*deps) error
+	if testOptions != nil {
+		applyTestOptions = testOptions(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return exitError
+	}
+	if applyTestOptions != nil {
+		if err := applyTestOptions(&d); err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+			return exitError
+		}
 	}
 	if fs.NArg() != 1 || *bb == "" || *crs == "" {
 		fs.Usage()
@@ -117,7 +133,21 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: -roster %q: want production or test\n", *kind)
 		return exitError
 	}
-	data, err := readInput(fs.Arg(0))
+	input := fs.Arg(0)
+	isDir := false
+	if input != "-" {
+		if info, err := os.Stat(input); err == nil && info.IsDir() {
+			isDir = true
+		}
+	}
+	var data []byte
+	var dirBroken *roster.Broken
+	var err error
+	if isDir {
+		data, dirBroken, err = readDirectory(input)
+	} else {
+		data, err = readInput(input)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
@@ -156,10 +186,29 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files\n", len(diffs), crl.IndexFileName)
 		}
 	}
-	rep, err := roster.Check(data, r, v, crls)
-	if err != nil {
+	var rep *roster.Report
+	if dirBroken != nil {
+		rep = &roster.Report{Broken: dirBroken}
+	} else if rep, err = roster.Check(data, r, v, crls); err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
+	}
+	// The heads file of a valid roster directory: every line is checked
+	// against the records; every problem is reported.
+	var headsProblems []string
+	headsLines := 0
+	if isDir && rep.Broken == nil {
+		records, _, _ := roster.ReadFile(data, r) // valid: Check read it
+		if headsProblems, headsLines, err = checkHeads(input, records); err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+			return exitError
+		}
+		for _, p := range headsProblems {
+			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
+		}
+		if len(headsProblems) == 0 {
+			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every head is the roster's\n", headsFileName, headsLines)
+		}
 	}
 	if *asJSON {
 		err = writeJSON(stdout, rep)
@@ -170,7 +219,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if rep.Broken != nil || len(diffs) > 0 {
+	if rep.Broken != nil || len(diffs) > 0 || len(headsProblems) > 0 {
 		return exitInvalid
 	}
 	for _, res := range rep.State.Records {
