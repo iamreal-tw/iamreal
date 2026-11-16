@@ -190,6 +190,12 @@ export interface Accepted {
   seq: number;
   recordHash: string;
   kind: "first" | "refresh" | "switch" | "withdraw";
+  /**
+   * `account_cards`: the cards whose `current` is the record's account once
+   * it is applied. Only chooses which link the screen suggests; the device
+   * cannot check it, and a wrong number cannot identify the cardholder.
+   */
+  accountCards: number;
 }
 
 /** `POST /api/v1/records`. */
@@ -210,7 +216,8 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
   if (!Number.isSafeInteger(b.seq) || (b.seq as number) < 1) throw new ServerError("malformed_response", 201);
   if (typeof b.record_hash !== "string" || !/^[0-9a-f]{64}$/.test(b.record_hash)) throw new ServerError("malformed_response", 201);
   if (b.kind !== "first" && b.kind !== "refresh" && b.kind !== "switch" && b.kind !== "withdraw") throw new ServerError("malformed_response", 201);
-  return { seq: b.seq as number, recordHash: b.record_hash, kind: b.kind };
+  if (!Number.isSafeInteger(b.account_cards) || (b.account_cards as number) < 0) throw new ServerError("malformed_response", 201);
+  return { seq: b.seq as number, recordHash: b.record_hash, kind: b.kind, accountCards: b.account_cards as number };
 }
 
 /**

@@ -85,6 +85,18 @@ func TestVectorsOneAtATime(t *testing.T) {
 			if x.Count() != len(records) {
 				t.Errorf("Count %d", x.Count())
 			}
+			// AccountCards agrees with the output's accounts; an account no
+			// card declares now has none.
+			for _, s := range whole.Scopes {
+				for _, a := range s.Accounts {
+					if n := x.AccountCards(s.ScopeString, a.Username); n != len(a.Cards) {
+						t.Errorf("AccountCards(%s, %s) = %d, output %d", s.ScopeString, a.Username, n, len(a.Cards))
+					}
+				}
+				if n := x.AccountCards(s.ScopeString, "nobody.declares.this"); n != 0 {
+					t.Errorf("AccountCards of an account no card declares: %d", n)
+				}
+			}
 			// Card agrees with the output for every listed card.
 			for _, s := range whole.Scopes {
 				for _, card := range s.Cards {

@@ -81,7 +81,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 4. **清冊的樹根**：這把發證金鑰在鏡像裡最新的清冊（照清冊編號，只算可用的）超過 3 天（今天的台灣日期 − 清冊日期 > 3）或一份都沒有，是 `503` `crl_stale`；樹根不是最新兩份之一的，是 `root`。
 5. **名冊規則**（`roster.Rules.Check`）：`root`、`date_order`、`not_current`、`switch_limit`、`daily_limit`。
 
-全部通過才寫入，寫入和題目標成已接受在同一個交易裡，再用 `roster.Rules.Apply` 更新記憶體裡的現況。步驟 4、5 和寫入在同一把鎖裡做，一次一筆：兩個請求同時送出時，`seq` 連續，鏈不斷；同一個題目同時送兩次，只有一次被接受，另一次是 `challenge_used`。
+全部通過才寫入，寫入和題目標成已接受在同一個交易裡，再用 `roster.Rules.Apply` 更新記憶體裡的現況。回應的 `account_cards` 是套用後這個場合裡目前宣告這個帳號的卡片數，由 `roster.Rules.AccountCards` 從同一份現況算（`server/` 不重寫規則），也在那把鎖裡。步驟 4、5 和寫入在同一把鎖裡做，一次一筆：兩個請求同時送出時，`seq` 連續，鏈不斷；同一個題目同時送兩次，只有一次被接受，另一次是 `challenge_used`。
 
 ### 時間
 
@@ -142,7 +142,7 @@ go test -race ./server/...
 | 檔案 | 測什麼 |
 |---|---|
 | `store/sqlite_test.go` | 鏈接不上（跳號、重號、`prev` 錯）就不寫；題目沒發過或已接受就不寫紀錄；送出次數；刪過期題目；重開、唯讀 |
-| `api_test.go` | 每個介面每個錯誤代碼：題目的日期在台灣午夜前後；`card-state` 的每一種 `malformed`，回應的欄位順序；`records` 的每一種 `malformed`、`scope`、`challenge_unknown`（沒發過；剛好 10 分鐘；差 1 奈秒仍可用，跨過午夜）、`challenge_used`、`challenge_attempts`（失敗 4 次後第 5 次仍可成功；失敗 5 次後第 6 次被擋）、`proof`、`root`（第三新的清冊、別把金鑰的樹根、不存在的樹根）、`crl_stale`（清冊日期後第 3 天 23:59:59 可以、第 4 天 00:00:00 不行；新清冊進來後恢復；這把金鑰沒有清冊）、`date_order`、`not_current`、`switch_limit`、`daily_limit`（同一張卡片同一天第 4 筆被擋、不寫入，被別的規則擋下的不算，別張卡片不受影響，隔天又可以；午夜前發的題目過了午夜送出，仍算前一天）；`card-state` 的 `proofs_on_last_date`；`404`、`405` |
+| `api_test.go` | 每個介面每個錯誤代碼：題目的日期在台灣午夜前後；`card-state` 的每一種 `malformed`，回應的欄位順序；`records` 的每一種 `malformed`、`scope`、`challenge_unknown`（沒發過；剛好 10 分鐘；差 1 奈秒仍可用，跨過午夜）、`challenge_used`、`challenge_attempts`（失敗 4 次後第 5 次仍可成功；失敗 5 次後第 6 次被擋）、`proof`、`root`（第三新的清冊、別把金鑰的樹根、不存在的樹根）、`crl_stale`（清冊日期後第 3 天 23:59:59 可以、第 4 天 00:00:00 不行；新清冊進來後恢復；這把金鑰沒有清冊）、`date_order`、`not_current`、`switch_limit`、`daily_limit`（同一張卡片同一天第 4 筆被擋、不寫入，被別的規則擋下的不算，別張卡片不受影響，隔天又可以；午夜前發的題目過了午夜送出，仍算前一天）；`card-state` 的 `proofs_on_last_date`；送出成功時的 `account_cards`（兩張卡片宣告同一個帳號、更換、收回之後，欄位的順序，錯誤時沒有這個欄位）；`404`、`405` |
 | `server_test.go` | 20 個請求同時送出時 `seq` 連續、鏈不斷，同一個題目同時送兩次只接受一次；重開後現況相同；有無效紀錄、清冊不見、索引寫錯、名冊屬於另一份時不啟動並指出第幾筆；紀錄裡沒有對方的位址、匿名編號、帳號、題目，只有該有的欄位；每個 API 回應的 `X-Request-Id` 和那一行紀錄的請求編號相同，靜態檔沒有；靜態檔，頁面的標頭只在網頁目錄的檔案上；`web/README.md` 引用的 CSP 和這裡的相同 |
 | `mirror_test.go` | 假的內政部伺服器：第一次下載並建索引（和 `crl.BuildIndex` 相同）、之後送條件請求、新清冊加一行、同樣的內容換了 `ETag` 不重存、不是清冊的檔案也存並列為不可用、錯誤狀態不存；索引寫錯時不動存檔 |
 | `snapshot_test.go` | 空名冊、1,001 筆切成兩個檔、同一天再跑什麼都不做、隔天寫滿的檔不重寫；有無效的紀錄、證明驗不過、清冊索引和檔案不同、已公布的檔被改過、`heads.jsonl` 不是這份名冊的或寫法不對時，都不發布 |

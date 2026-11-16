@@ -299,6 +299,19 @@ func (x *Rules) Card(scopeString, scopedID string) CardInScope {
 	return out
 }
 
+// AccountCards returns the number of cards whose current account in the
+// scope scopeString is username: the cards the output lists under that
+// account ("Output", accounts). It looks at every card of the rules' state.
+func (x *Rules) AccountCards(scopeString, username string) int {
+	n := 0
+	for k, cs := range x.cards {
+		if k.scope == scopeString && cs.current != nil && *cs.current == username {
+			n++
+		}
+	}
+	return n
+}
+
 // Apply applies the rules to the records of a valid roster file, in order:
 // Rules.Apply on each record.
 func Apply(records []*verifier.Record, proofs ProofVerifier, crls CRLArchive) (*State, error) {

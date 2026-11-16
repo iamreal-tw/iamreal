@@ -17,6 +17,10 @@
 //   resubmit()        after a network failure, the same record again
 //   cancel()          drop everything
 //
+// The screen lists what the page is doing while the card is read and while
+// the declaration is made; `onProgress` tells it each thing done (Progress).
+// The events report; they change nothing the flow checks, nor the order.
+//
 // The card is asked for its first signature only after every check that
 // needs no signature has passed: the certificate, the CRL (downloaded and
 // verified), the tree, the serial number not in it, the circuit and CRS
@@ -68,7 +72,7 @@ import { circuitInputs, circuitOf, expectedPublicInputs, wipeInputs } from "./pr
 import type { Prover, ThreadMode } from "./prover/prover.ts";
 import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "./spec/challenge.ts";
-import { type Day, formatDay, taiwanDay } from "./spec/date.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "./spec/date.ts";
 import { type Action, declarationCode } from "./spec/declaration-code.ts";
 import { type CardState, type Outcome, dailyLimitReached, declareOutcome, nextSwitchDay, switchesInWindow, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
 import { type Platform, type Roster, type ScopeRow, scopeFor } from "./spec/scope.ts";
@@ -138,6 +142,8 @@ export interface FlowDeps {
   onTiming?: (step: string, ms: number) => void;
   /** Called once if the flow stops because IDLE_MS passed after the first signature (`idle`). */
   onIdle?: (stop: Stop) => void;
+  /** Each thing the flow has done, for the screen's lists (Progress). Not called once the flow stopped. Stays on the device. */
+  onProgress?: (step: Progress) => void;
   /** How long the PIN may wait between the two signatures; IDLE_MS unless a test shortens it. */
   idleMs?: number;
   /** Runs `f` after `ms` milliseconds; returns a function that cancels it. setTimeout in the page; tests replace it with the clock. */
@@ -146,6 +152,28 @@ export interface FlowDeps {
 
 /** The longest the PIN, the certificate and the first signature wait for the second signature: 5 minutes. */
 export const IDLE_MS = 5 * 60_000;
+
+/**
+ * What the flow has done, as it is done. Several happen at the same time
+ * (config, circuit, engine, crl and tree run together after the card is
+ * read), so they come in any order; each comes at most once per flow.
+ *
+ *   readCard():
+ *     component      the card's reader answered (MOICA's component: its window is ready)
+ *     certificates   the card returned its certificates
+ *     certificate    one certificate passed the checks on the device
+ *   the checks that need no signature (checksDone()):
+ *     config         the server answered its CRL age bound
+ *     circuit        the circuit file matched its SHA-256
+ *     engine         the proof engine is ready (the CRS matched its SHA-256)
+ *     crl            the CRL was fetched and checked
+ *     tree           the tree was built, and the serial number is not in it
+ *   proceed():
+ *     challenge      the challenge was fetched and checked
+ *     signed         the card signed the declaration code, and it verified
+ *     proved         the proof was made and passed the device's own check
+ */
+export type Progress = "component" | "certificates" | "certificate" | "config" | "circuit" | "engine" | "crl" | "tree" | "challenge" | "signed" | "proved";
 
 /** What the cardholder picks once the card's state is known. */
 export type Choice = { action: "declare"; username: string } | { action: "withdraw" };
@@ -204,12 +232,25 @@ export interface Consequence {
   kind: "first" | "refresh" | "switch" | "withdraw";
   /** Switches left in the 365-day window after this card proof. */
   switchesLeftAfter: number;
+  /** The first date a switch is allowed after this card proof (today if it is then). */
+  nextSwitchDateAfter: string;
   today: string;
 }
 
 export interface Done {
-  seq: number;
-  recordHash: string;
+  /**
+   * The record's `seq` and hash, as the server answered the submission;
+   * null if the submission's answer was lost and the record was found in
+   * the card's state instead (resubmit(), `challenge_used`).
+   */
+  seq: number | null;
+  recordHash: string | null;
+  /**
+   * The cards that declare the record's account now (`account_cards`), for
+   * which link the screen suggests; null when the record was found in the
+   * card's state.
+   */
+  accountCards: number | null;
   kind: "first" | "refresh" | "switch" | "withdraw";
   date: string;
   scopedId: string;
@@ -273,6 +314,8 @@ export class CardProofFlow {
    * asked again, another card-state, another timer.
    */
   private inStep = false;
+  /** resubmit() was called: the submission's earlier answer may have been lost. */
+  private resubmitted = false;
 
   constructor(deps: FlowDeps, opts: { platform: Platform }) {
     this.deps = deps;
@@ -301,6 +344,11 @@ export class CardProofFlow {
 
   private today(): Day {
     return taiwanDay(this.deps.clock());
+  }
+
+  /** Tells the screen a thing is done, unless the flow stopped. */
+  private progress(step: Progress): void {
+    if (!this.stopped) this.deps.onProgress?.(step);
   }
 
   private timed<T>(step: string, p: Promise<T>): Promise<T> {
@@ -470,7 +518,7 @@ export class CardProofFlow {
   private async readCardStep(): Promise<CardRead> {
     let ders: Uint8Array[];
     try {
-      ders = await this.deps.card.readCertificates();
+      ders = await this.deps.card.readCertificates(() => this.progress("component"));
     } catch (e) {
       this.live();
       // A blocked window sent nothing to the card: the same step can be tried again.
@@ -478,6 +526,7 @@ export class CardProofFlow {
       this.fail(cardStop(e));
     }
     this.live(...ders);
+    this.progress("certificates");
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);
     // Only the chosen certificate is kept; the others (the encryption
@@ -493,6 +542,7 @@ export class CardProofFlow {
     this.live(sel.cert.der);
     this.cert = sel.cert;
     this.cardPublicKey = key;
+    this.progress("certificate");
     this.background = this.startBackground(sel.cert, today);
     this.phaseValue = "checking";
     this.background.promise.then(
@@ -514,19 +564,30 @@ export class CardProofFlow {
     const circuit = circuitOf(cert);
     const serial = cert.serial;
     const issuer = cert.issuer;
+    // Progress only while no check has failed: the screen shows the first failure.
+    const progress = (step: Progress): void => {
+      if (!bg.failed) this.progress(step);
+    };
     const run = async () => {
       const builderP = this.timed("tree_workers", this.deps.startTreeBuilder());
       const circuitP = this.deps.prover.preloadCircuit(circuit);
       circuitP.catch(() => undefined); // awaited below; a failure is reported there
       builderP.catch(() => undefined);
+      // The screen hears of the circuit and the engine as soon as each is
+      // ready; the checks below still await them in their order.
+      circuitP.then(() => progress("circuit"), () => undefined);
+      this.deps.prover.ready().then(() => progress("engine"), () => undefined);
       let builder: TreeBuilder | null = null;
       try {
         const serverDays = await this.timed("config", requestCrlMaxAge(this.deps.fetch));
+        progress("config");
         const maxAgeDays = crlMaxAge(serverDays);
         const crl = await this.timed("crl", loadCrl({ fetch: this.deps.fetch, issuer, today, maxAgeDays, store: this.deps.store }));
+        progress("crl");
         builder = await builderP;
         const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial));
         if (result.inTree) throw new FlowStop({ code: "revoked" });
+        progress("tree");
         await circuitP;
         await this.deps.prover.ready();
         bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays };
@@ -686,7 +747,15 @@ export class CardProofFlow {
     // Check 6 after the event rules, in the order of the rules.
     if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
     const left = switchesLeft(state, today);
-    return { action: choice.action, username, kind: outcome.kind, switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left, today: formatDay(today) };
+    const after = outcome.kind === "switch" ? { ...state, switchDates: [...state.switchDates, today] } : state;
+    return {
+      action: choice.action,
+      username,
+      kind: outcome.kind,
+      switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left,
+      nextSwitchDateAfter: formatDay(nextSwitchDay(after, today)),
+      today: formatDay(today),
+    };
   }
 
   // Step 3: the card signs the declaration code, then prove and submit --------
@@ -733,6 +802,7 @@ export class CardProofFlow {
     }
     // Midnight may have passed while the server answered.
     this.checkStillValid(today);
+    this.progress("challenge");
     const challengeText = challenge as string;
     const code = await declarationCode(action, this.scope.scopeString, username, challengeText);
     this.live();
@@ -769,6 +839,7 @@ export class CardProofFlow {
       this.fail({ code: "card_signature" });
     }
     this.codeSignature = sig;
+    this.progress("signed");
 
     let bg;
     try {
@@ -810,6 +881,7 @@ export class CardProofFlow {
     ) {
       this.fail({ code: "proof_check" });
     }
+    this.progress("proved");
     this.submission = {
       scope_string: this.scope.scopeString,
       scoped_id: this.status!.scopedId,
@@ -833,18 +905,7 @@ export class CardProofFlow {
     try {
       const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
       this.live();
-      this.phaseValue = "done";
-      this.submission = null;
-      return {
-        seq: accepted.seq,
-        recordHash: accepted.recordHash,
-        kind: accepted.kind,
-        date: s.challenge.slice(0, 10),
-        scopedId: s.scoped_id,
-        shortId: shortId(s.scoped_id),
-        username: s.username,
-        record: s,
-      };
+      return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, accountCards: accepted.accountCards, kind: accepted.kind });
     } catch (e) {
       this.live();
       // Transient: no answer, rate limited, or a server failure. `crl_stale`
@@ -855,14 +916,57 @@ export class CardProofFlow {
         this.phaseValue = "submit_failed";
         throw new FlowStop({ code: "server", server: e.code, status: e.status });
       }
+      if (this.resubmitted && e instanceof ServerError && e.code === "challenge_used") return this.foundInCardState(s, e);
       this.fail(toStop(e));
     }
   }
 
-  /** Sends the same record again after a network failure. No new signature. */
+  private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "accountCards" | "kind">): Done {
+    this.phaseValue = "done";
+    this.submission = null;
+    return { ...r, date: s.challenge.slice(0, 10), scopedId: s.scoped_id, shortId: shortId(s.scoped_id), username: s.username, record: s };
+  }
+
+  /**
+   * A resubmission was answered `challenge_used`: a record was accepted for
+   * this challenge, which no other card proof has. The earlier submission
+   * whose answer was lost (no answer in time, a dropped connection) may have
+   * reached the server after all. The card's state, asked again, says
+   * whether this card proof's record is in the roster: for a declaration,
+   * `current` is the account and `last_card_proof` is the record's date; for
+   * a withdrawal, `current` is null, `last_declared` is the account and
+   * `last_card_proof` is the record's date. Then the card proof is done
+   * (without `seq` and `account_cards`); otherwise the flow stops on the
+   * server's `challenge_used`. The request carries the scoped ID the
+   * submission carried already.
+   */
+  private async foundInCardState(s: Submission, used: ServerError): Promise<Done> {
+    let state: CardStateResponse;
+    try {
+      state = await requestCardState(this.deps.fetch, s.scope_string, s.scoped_id, this.scope.validUsername, this.today());
+    } catch (e) {
+      this.live();
+      this.fail(toStop(e));
+    }
+    this.live();
+    const recordDay = parseDay(s.challenge.slice(0, 10));
+    const found =
+      s.action === "declare"
+        ? state.current === s.username && state.lastCardProof === recordDay
+        : state.current === null && state.lastDeclared === s.username && state.lastCardProof === recordDay;
+    if (!found) this.fail(toStop(used));
+    return this.done(s, { seq: null, recordHash: null, accountCards: null, kind: this.chosen!.kind });
+  }
+
+  /**
+   * Sends the same record again after a network failure. No new signature.
+   * If the server says a record was accepted for its challenge already, the
+   * card's state says whether it is this one (foundInCardState).
+   */
   async resubmit(): Promise<Done> {
     this.expect("submit_failed");
     this.phaseValue = "submitting";
+    this.resubmitted = true;
     return this.submit();
   }
 

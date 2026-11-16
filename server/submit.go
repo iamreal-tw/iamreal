@@ -14,11 +14,16 @@ import (
 // except seq and prev, which the server fills in (docs/api/card-proof.md).
 var recordKeys = []string{"scope_string", "scoped_id", "action", "username", "challenge", "issuer", "smt_root", "circuit", "proof"}
 
-// accepted is the response of a card proof that was appended.
+// accepted is the response of a card proof that was appended. AccountCards
+// is the number of cards whose current account in the record's scope is the
+// record's username once the record is applied, from the rules' state
+// (roster.Rules.AccountCards); the device uses it only to choose which link
+// to suggest (docs/api/card-proof.md).
 type accepted struct {
-	Seq        uint64 `json:"seq"`
-	RecordHash string `json:"record_hash"`
-	Kind       string `json:"kind"`
+	Seq          uint64 `json:"seq"`
+	RecordHash   string `json:"record_hash"`
+	Kind         string `json:"kind"`
+	AccountCards int    `json:"account_cards"`
 }
 
 // POST /api/v1/records: one card proof. The checks run in the order of
@@ -133,7 +138,7 @@ func (s *Server) postRecord(r *http.Request) reply {
 		os.Exit(1)
 	}
 	s.count, s.head = rec.Seq, rec.Hash()
-	return ok(http.StatusCreated, accepted{Seq: rec.Seq, RecordHash: s.head, Kind: res.Kind})
+	return ok(http.StatusCreated, accepted{Seq: rec.Seq, RecordHash: s.head, Kind: res.Kind, AccountCards: s.rules.AccountCards(rec.ScopeString, rec.Username)})
 }
 
 // ruleError is the API error for a record the roster rules find invalid.

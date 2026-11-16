@@ -66,7 +66,7 @@ export class FakeBackend {
         const r = o.submit(parsed);
         return this.json(r.status, r.body);
       }
-      return this.json(201, { seq: this.submissions.length, record_hash: await sha256Hex(new TextEncoder().encode(body)), kind: "first" });
+      return this.json(201, { seq: this.submissions.length, record_hash: await sha256Hex(new TextEncoder().encode(body)), kind: "first", account_cards: 1 });
     }
     return this.json(404, { error: "not_found" });
   }
