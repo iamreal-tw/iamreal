@@ -1,0 +1,674 @@
+{
+  "spec": "roster-rules",
+  "status": "draft",
+  "note": "Events stand for records that passed verification (record.md). `scoped_id` values are placeholders; `challenge` values only need to be distinct strings here. All events are in the scope iamreal:threads:0.",
+  "cases": [
+    {
+      "name": "first declaration, refresh, withdraw",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-03-01",
+          "challenge": "2026-03-01.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "alice",
+          "date": "2026-04-01",
+          "challenge": "2026-04-01.C0000000000000000000000003"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "withdrawal"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": null,
+          "last_card_proof": "2026-04-01"
+        }
+      }
+    },
+    {
+      "name": "A to B to A is two switches; a third within 365 days is invalid",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-02-01",
+          "challenge": "2026-02-01.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-03-01",
+          "challenge": "2026-03-01.C0000000000000000000000003"
+        },
+        {
+          "seq": 4,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "carol",
+          "date": "2026-04-01",
+          "challenge": "2026-04-01.C0000000000000000000000004"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "third switch within 365 days"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-03-01"
+        }
+      }
+    },
+    {
+      "name": "withdraw then declare another account counts as a switch",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "alice",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-01-03",
+          "challenge": "2026-01-03.C0000000000000000000000003"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "withdrawal"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "bob",
+          "last_card_proof": "2026-01-03"
+        }
+      }
+    },
+    {
+      "name": "withdraw then declare the same account is not a switch",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "alice",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-03",
+          "challenge": "2026-01-03.C0000000000000000000000003"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "withdrawal"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "refresh"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-01-03"
+        }
+      }
+    },
+    {
+      "name": "window: a switch 365 days before no longer counts, one 364 days before does",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "carol",
+          "date": "2026-01-03",
+          "challenge": "2026-01-03.C0000000000000000000000003"
+        },
+        {
+          "seq": 4,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "dave",
+          "date": "2027-01-02",
+          "challenge": "2027-01-02.C0000000000000000000000004"
+        },
+        {
+          "seq": 5,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "erin",
+          "date": "2027-01-02",
+          "challenge": "2027-01-02.C0000000000000000000000005"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "third switch within 365 days"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "dave",
+          "last_card_proof": "2027-01-02"
+        }
+      }
+    },
+    {
+      "name": "window: two switches within the last 364 days block a third",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "carol",
+          "date": "2026-01-03",
+          "challenge": "2026-01-03.C0000000000000000000000003"
+        },
+        {
+          "seq": 4,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "dave",
+          "date": "2027-01-01",
+          "challenge": "2027-01-01.C0000000000000000000000004"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "third switch within 365 days"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "carol",
+          "last_card_proof": "2026-01-03"
+        }
+      }
+    },
+    {
+      "name": "withdrawing an account that is not the current one is invalid",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "bob",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "alice",
+          "date": "2026-01-03",
+          "challenge": "2026-01-03.C0000000000000000000000003"
+        },
+        {
+          "seq": 4,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "alice",
+          "date": "2026-01-04",
+          "challenge": "2026-01-04.C0000000000000000000000004"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": false,
+          "reason": "not currently declared to this account"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "withdrawal"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "not currently declared to this account"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": null,
+          "last_card_proof": "2026-01-03"
+        }
+      }
+    },
+    {
+      "name": "invalid events do not change the state or the last card proof date",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "withdraw",
+          "username": "bob",
+          "date": "2026-06-01",
+          "challenge": "2026-06-01.C0000000000000000000000002"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": false,
+          "reason": "not currently declared to this account"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-01-01"
+        }
+      }
+    },
+    {
+      "name": "order is by seq; the last card proof date is the latest date",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000002"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "refresh"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-01-02"
+        }
+      }
+    },
+    {
+      "name": "two cards on one account; one card per account at a time",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K2",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K2",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-01-05",
+          "challenge": "2026-01-05.C0000000000000000000000003"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-01-01"
+        },
+        "K2": {
+          "current": "bob",
+          "last_card_proof": "2026-01-05"
+        }
+      }
+    },
+    {
+      "name": "a challenge used by an earlier record makes the later one invalid",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": false,
+          "reason": "challenge used before"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "alice",
+          "last_card_proof": "2026-01-01"
+        }
+      }
+    },
+    {
+      "name": "an earlier switch dated one day later still counts",
+      "events": [
+        {
+          "seq": 1,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "alice",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000001"
+        },
+        {
+          "seq": 2,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "bob",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000002"
+        },
+        {
+          "seq": 3,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "carol",
+          "date": "2026-01-02",
+          "challenge": "2026-01-02.C0000000000000000000000003"
+        },
+        {
+          "seq": 4,
+          "scoped_id": "K1",
+          "action": "declare",
+          "username": "dave",
+          "date": "2026-01-01",
+          "challenge": "2026-01-01.C0000000000000000000000004"
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "third switch within 365 days"
+        }
+      ],
+      "state": {
+        "K1": {
+          "current": "carol",
+          "last_card_proof": "2026-01-02"
+        }
+      }
+    }
+  ]
+}

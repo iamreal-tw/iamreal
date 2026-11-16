@@ -9,13 +9,19 @@ there are the names used here.
 
 | Document | Defines | Status |
 |---|---|---|
+| [`challenge.md`](challenge.md) | The challenge: format, date, `current_time` | Draft |
 | [`declaration-code.md`](declaration-code.md) | How the declaration code is computed | Draft |
+| [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, text form, short ID | Draft |
+| [`record.md`](record.md) | One record: fields, record hash, the chain, how to verify it | Draft |
+| [`roster-rules.md`](roster-rules.md) | How the state is computed from the records | Draft |
 
-Planned: `scoped-id.md`, `record.md`, `roster-rules.md`, `challenge.md`.
+Planned: the revocation tree (how `crl/` builds it and which roots are
+recognized), the issuer keys, and the checks on proofs and public inputs.
 
 ## Test vectors
 
-`vectors/` holds one JSON file per document. Every implementation (Go,
+`vectors/` holds one JSON file per document; `poseidon2.json` is shared by
+`scoped-id.md` and the revocation tree. Every implementation (Go,
 TypeScript, and later the mobile apps) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.

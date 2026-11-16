@@ -1,0 +1,91 @@
+{
+  "spec": "challenge",
+  "status": "draft",
+  "valid": [
+    {
+      "random_bytes": "000102030405060708090a0b0c0d0e0f",
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "date": "2026-11-16",
+      "current_time": 261116155959,
+      "current_time_public_input": "0000000000000000000000000000000000000000000000000000003ccbbc5837"
+    },
+    {
+      "random_bytes": "ffffffffffffffffffffffffffffffff",
+      "challenge": "2026-11-16.ZZZZZZZZZZZZZZZZZZZZZZZZZW",
+      "date": "2026-11-16",
+      "current_time": 261116155959,
+      "current_time_public_input": "0000000000000000000000000000000000000000000000000000003ccbbc5837"
+    },
+    {
+      "random_bytes": "5dd8393e6b0abd5c27ee1fb648915ec6",
+      "challenge": "2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
+      "date": "2027-01-01",
+      "current_time": 270101155959,
+      "current_time_public_input": "0000000000000000000000000000000000000000000000000000003ee3489077"
+    },
+    {
+      "random_bytes": "ed46efc3275f82824e1a7cfca9b88d67",
+      "challenge": "2028-02-29.XN3EZGS7BY184KGTFKYAKE4DCW",
+      "date": "2028-02-29",
+      "current_time": 280229155959,
+      "current_time_public_input": "000000000000000000000000000000000000000000000000000000413ef59477"
+    },
+    {
+      "random_bytes": "00000000000000000000000000000000",
+      "challenge": "2049-12-31.00000000000000000000000000",
+      "date": "2049-12-31",
+      "current_time": 491231155959,
+      "current_time_public_input": "000000000000000000000000000000000000000000000000000000725fa896f7"
+    }
+  ],
+  "invalid": [
+    {
+      "challenge": "2026-11-16.000g40r40m30e209185gr38e1w",
+      "reason": "lowercase letters"
+    },
+    {
+      "challenge": "2026-11-16-000G40R40M30E209185GR38E1W",
+      "reason": "separator after the date is not `.`"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1",
+      "reason": "25 random characters"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W0",
+      "reason": "27 random characters"
+    },
+    {
+      "challenge": "2026-11-16.I00G40R40M30E209185GR38E1W",
+      "reason": "`I` is not in the alphabet"
+    },
+    {
+      "challenge": "2026-11-16.U00G40R40M30E209185GR38E1W",
+      "reason": "`U` is not in the alphabet"
+    },
+    {
+      "challenge": "2026-02-29.000G40R40M30E209185GR38E1W",
+      "reason": "no such date"
+    },
+    {
+      "challenge": "2026-11-6.000G40R40M30E209185GR38E1W",
+      "reason": "day not written with two digits"
+    },
+    {
+      "challenge": "1999-12-31.000G40R40M30E209185GR38E1W",
+      "reason": "year before 2000"
+    },
+    {
+      "challenge": "2050-01-01.000G40R40M30E209185GR38E1W",
+      "reason": "year after 2049"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W\n",
+      "reason": "trailing line feed"
+    },
+    {
+      "challenge": " 2026-11-16.000G40R40M30E209185GR38E1W",
+      "reason": "leading space"
+    }
+  ]
+}
