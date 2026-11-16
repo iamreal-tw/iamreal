@@ -62,18 +62,19 @@ The state of one card in one scope, as computed by the roster rules
 - Response `200`:
 
   ```
-  {"current":"bob","last_declared":"bob","last_card_proof":"2026-11-04","switch_dates":["2026-03-02"],"count":137,"head":"…"}
+  {"current":"bob","last_declared":"bob","last_card_proof":"2026-11-04","proofs_on_last_date":1,"switch_dates":["2026-03-02"],"count":137,"head":"…"}
   ```
 
   `current`, `last_declared` and `last_card_proof` are `null` when the rules
-  have none. A card with no valid record gets all three `null` and an empty
-  `switch_dates`; this is not an error. `count` and `head` are the number of
+  have none. A card with no valid record gets all three `null`, a
+  `proofs_on_last_date` of 0 and an empty `switch_dates`; this is not an error. `count` and `head` are the number of
   records and the head the answer was computed at.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 What the device does with it: shows it. The device computes what a
 declaration would be (`first`, `refresh`, `switch`, or blocked by
-`switch_limit`) and how many switches remain from these facts and today's
+`switch_limit`), whether the card has reached the 3 records of today
+(`daily_limit`), and how many switches remain from these facts and today's
 date; the server does not send a conclusion. The device cannot check the
 answer without the whole roster. A wrong answer cannot identify the
 cardholder; it can mislead them about the consequence of the next step, and
@@ -111,7 +112,7 @@ Submits one card proof.
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
-  | `400` | `date_order`, `not_current`, `switch_limit` | The roster rule of that name |
+  | `400` | `date_order`, `not_current`, `switch_limit`, `daily_limit` | The roster rule of that name |
   | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
   | `429` | `rate_limited` | |
 

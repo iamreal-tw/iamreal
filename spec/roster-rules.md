@@ -47,6 +47,7 @@ challenge was used before; its challenge still counts as used.
 | 3 | Its `smt_root` is recognized for its `issuer` and date ([`revocation-tree.md`](revocation-tree.md)) | `root` |
 | 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card and any scope | `date_order` |
 | 5 | The event rules below, for the state of its (`scope_string`, `scoped_id`) | `not_current` or `switch_limit` |
+| 6 | Fewer than 3 earlier valid records of its (`scope_string`, `scoped_id`) have its date | `daily_limit` |
 
 The **date** `d` of a record is the date in its challenge. Order is always by
 `seq`, never by date. Dates can step backwards by a day around midnight,
@@ -62,6 +63,7 @@ For each (`scope_string`, `scoped_id`), starting empty:
 | `last_declared` | The account of the last valid `declare`, kept after a withdrawal | none |
 | `switch_dates` | A list with one entry, the date, per valid switch. Two switches on the same day are two entries. A blocked switch adds nothing | empty |
 | `last_card_proof` | The latest date among the valid records | none |
+| `proofs_on_last_date` | The number of valid records dated `last_card_proof` | 0 |
 
 ## Event rules
 
@@ -81,7 +83,12 @@ For each (`scope_string`, `scoped_id`), starting empty:
 | `current = u` | `withdraw` | `current = none`; `last_declared` unchanged |
 | otherwise, including a card with no earlier record | invalid, `not_current` | none |
 
-**Every valid record**: `last_card_proof = max(last_card_proof, d)`.
+The effects in the two tables apply only if check 6 also passes. A record
+that the event rules would accept, but that is the fourth of its card, scope
+and date, is invalid with `daily_limit` and changes nothing.
+
+**Every valid record**: `last_card_proof = max(last_card_proof, d)`, and
+`proofs_on_last_date` follows from it.
 
 What follows from these rules:
 
@@ -99,6 +106,11 @@ What follows from these rules:
   switch.
 - One card is declared to at most one account at a time in a scope. One
   account can be declared by any number of cards.
+- One card has at most 3 valid records per date in a scope, whatever their
+  kinds. Three leaves room to declare, correct a mistyped account and
+  withdraw on the same day; the limit keeps a single card from filling the
+  roster. A day is a date in Taiwan, as in every challenge. Records blocked
+  by another rule do not count, and the server does not append them anyway.
 
 ## How far dates are trusted
 
