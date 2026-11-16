@@ -9,7 +9,8 @@
       "username": "alice",
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
       "preimage_sha256": "9b84076b83f32dc8a09268bcd704e635fc68ff3f67546440f9e0c47901a5e2f9",
-      "declaration_code": "DKE20ETW3YCPWH84JD2YDE1766QY6HZ"
+      "declaration_code": "DKE20ETW3YCPWH84JD2YDE1766QY6HZ",
+      "declaration_code_packed": "0x005a483659513636373145445932444a34384857504359335754453032454b44"
     },
     {
       "action": "withdraw",
@@ -17,7 +18,8 @@
       "username": "alice",
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
       "preimage_sha256": "8659d0ea8159501001ca2eb0a0f1e55c094c3b5108edec1cd10518cc88a442ac",
-      "declaration_code": "DGSCX1TM1B58100EA5TRA1WF5BG4MRE"
+      "declaration_code": "DGSCX1TM1B58100EA5TRA1WF5BG4MRE",
+      "declaration_code_packed": "0x0045524d34474235465731415254354145303031383542314d54315843534744"
     },
     {
       "action": "declare",
@@ -25,7 +27,8 @@
       "username": "alice",
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
       "preimage_sha256": "d8a952fcb7283f1774c4fffa70aeb0f876db1ebf6b61f8d827a11a5617313955",
-      "declaration_code": "DV2MN5Z5Q50ZHEX64ZZX71BNGZ1VDP7"
+      "declaration_code": "DV2MN5Z5Q50ZHEX64ZZX71BNGZ1VDP7",
+      "declaration_code_packed": "0x0037504456315a474e423137585a5a34365845485a303551355a354e4d325644"
     },
     {
       "action": "declare",
@@ -33,7 +36,8 @@
       "username": "bob_02",
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
       "preimage_sha256": "dbb560d6c1f9c3bdaf37cd04fb7647ab864460439713f332e0f247ffcb6f89c0",
-      "declaration_code": "DVETP1NP1Z71VVBSQSM2FPXJ7NE348R"
+      "declaration_code": "DVETP1NP1Z71VVBSQSM2FPXJ7NE348R",
+      "declaration_code_packed": "0x0052383433454e374a585046324d53515342565631375a31504e315054455644"
     },
     {
       "action": "declare",
@@ -41,7 +45,8 @@
       "username": "alice",
       "challenge": "2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
       "preimage_sha256": "c43871331b9267683fab148e11e2d075a9740a5beb72d1bde7ecd836e497a85d",
-      "declaration_code": "DRGW72CRVJ9KPGFXB2J713RPGEPMQ82"
+      "declaration_code": "DRGW72CRVJ9KPGFXB2J713RPGEPMQ82",
+      "declaration_code_packed": "0x003238514d50454750523331374a3242584647504b394a565243323757475244"
     }
   ]
 }

@@ -24,13 +24,15 @@ random    = 26 characters of the Crockford base32 alphabet
   day. It must be a date that exists (`2026-02-29` is not one).
 - `random` is the base32 encoding ([`README.md`](README.md)) of 16 bytes from
   a cryptographically secure random generator: 128 bits, 26 characters. The
-  last character carries two zero padding bits; verifiers do not check this.
+  last character carries two padding bits, which must be zero: decoding and
+  re-encoding gives the same string. So the last character is one of
+  `0 4 8 C G M R W`, and one challenge has one spelling.
 - Uppercase only. The alphabet excludes `I`, `L`, `O` and `U`.
 
 As a regular expression, matched against the whole string:
 
 ```
-[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9A-HJKMNP-TV-Z]{26}
+[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9A-HJKMNP-TV-Z]{25}[048CGMRW]
 ```
 
 Match the whole string, not a line: in several languages `^…$` also accepts
@@ -60,8 +62,9 @@ current_time = YY MM DD 155959
 ```
 
 where `YY` is the year modulo 100 and `MM`, `DD` are taken from the
-challenge. `15:59:59` UTC is `23:59:59` in Taiwan. As a public input it is a
-32-byte big-endian integer.
+challenge. `15:59:59` UTC is `23:59:59` in Taiwan. It is an integer, not a
+string: for 2000 to 2009 it has fewer than 12 digits (`2001-01-01` gives
+`10101155959`). As a public input it is a 32-byte big-endian integer.
 
 `2026-11-16.…` gives `current_time = 261116155959`, public input
 `…003ccbbc5837`.
@@ -81,7 +84,7 @@ Who checks what. Only the last group can be checked from the public roster.
 **The server, when accepting a card proof**
 
 - It issued this challenge, less than 10 minutes ago, and has not accepted a
-  card proof for it before.
+  card proof for it before. It compares challenges as strings.
 
 **The cardholder's device**
 
@@ -99,7 +102,7 @@ helps identify the cardholder.
 
 **Anyone verifying a record**
 
-- The challenge matches the format above.
+- The challenge matches the format above, in its one spelling.
 - `current_time` equals the value derived from the challenge's date.
 - The challenge does not appear in an earlier record
   ([`roster-rules.md`](roster-rules.md)).

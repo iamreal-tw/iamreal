@@ -1,0 +1,152 @@
+{
+  "spec": "scope",
+  "status": "draft",
+  "scopes": [
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:0______________",
+      "accepted": true,
+      "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f5f5f5f5f303a736461657268743a6c6165726d6169"
+    },
+    {
+      "roster": "test",
+      "scope_string": "iamreal-test:threads:0_________",
+      "accepted": true,
+      "scope_packed": "0x005f5f5f5f5f5f5f5f5f303a736461657268743a747365742d6c6165726d6169"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal-test:threads:0_________",
+      "accepted": false,
+      "reason": "test scope string in the production roster"
+    },
+    {
+      "roster": "test",
+      "scope_string": "iamreal:threads:0______________",
+      "accepted": false,
+      "reason": "production scope string in a test roster"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:00_____________",
+      "accepted": false,
+      "reason": "another spelling of the version"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:Threads:0______________",
+      "accepted": false,
+      "reason": "uppercase platform"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:0_____________",
+      "accepted": false,
+      "reason": "30 bytes"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:0_______________",
+      "accepted": false,
+      "reason": "32 bytes"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:1______________",
+      "accepted": false,
+      "reason": "not listed"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:0 _____________",
+      "accepted": false,
+      "reason": "space"
+    }
+  ],
+  "usernames": [
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alice",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "bob_02",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "a",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "a.b_c",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "0",
+      "valid": true
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "Alice",
+      "valid": false,
+      "reason": "uppercase"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "@alice",
+      "valid": false,
+      "reason": "`@`"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "",
+      "valid": false,
+      "reason": "empty"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "reason": "31 characters"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "ali ce",
+      "valid": false,
+      "reason": "space"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alicé",
+      "valid": false,
+      "reason": "non-ASCII"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "alice\n",
+      "valid": false,
+      "reason": "line feed"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "ali-ce",
+      "valid": false,
+      "reason": "`-`"
+    },
+    {
+      "scope_string": "iamreal:threads:0______________",
+      "username": "ali\"ce",
+      "valid": false,
+      "reason": "`\"`"
+    }
+  ]
+}

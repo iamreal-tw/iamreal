@@ -1,7 +1,7 @@
 {
   "spec": "scoped-id",
   "status": "draft",
-  "note": "The Poseidon2 hash chain from signature to field element is in poseidon2.json (scoped_id). This file covers the text form.",
+  "note": "The Poseidon2 hash chain from signature to field element is in poseidon2.json (scoped_id). This file covers the text form and short IDs.",
   "field_modulus": "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
   "encoding": [
     {
@@ -54,8 +54,90 @@
       "reason": "51 characters"
     },
     {
+      "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V8800",
+      "reason": "53 characters"
+    },
+    {
+      "scoped_id": "ISP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+      "reason": "`I` is not in the alphabet"
+    },
+    {
+      "scoped_id": "LSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+      "reason": "`L` is not in the alphabet"
+    },
+    {
+      "scoped_id": "OSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+      "reason": "`O` is not in the alphabet"
+    },
+    {
+      "scoped_id": "USP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+      "reason": "`U` is not in the alphabet"
+    },
+    {
       "scoped_id": "04001W4KYQGM74BGQ5WMHT1K51ENH0C1PS2N1E19M0RY2WJECGR0",
       "reason": "value equal to p"
+    },
+    {
+      "scoped_id": "08001W4KYQGM74BGQ5WMHT1K51ENH0C1PS2N1E19M0RY2WJECGR0",
+      "reason": "value above p"
+    },
+    {
+      "scoped_id": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZG",
+      "reason": "value 2^256 - 1"
+    }
+  ],
+  "short_id_in_urls": [
+    {
+      "typed": "QSP7N6",
+      "reads_as": "QSP7N6"
+    },
+    {
+      "typed": "qsp7n6",
+      "reads_as": "QSP7N6"
+    },
+    {
+      "typed": "Qsp7N6",
+      "reads_as": "QSP7N6"
+    },
+    {
+      "typed": "0SP7N6",
+      "reads_as": "0SP7N6"
+    },
+    {
+      "typed": "oSP7N6",
+      "reads_as": "0SP7N6"
+    },
+    {
+      "typed": "11P7N6",
+      "reads_as": "11P7N6"
+    },
+    {
+      "typed": "ILP7N6",
+      "reads_as": "11P7N6"
+    },
+    {
+      "typed": "iLP7n6",
+      "reads_as": "11P7N6"
+    },
+    {
+      "typed": "QSP7N",
+      "reads_as": null,
+      "reason": "5 characters"
+    },
+    {
+      "typed": "QSP7N6X",
+      "reads_as": null,
+      "reason": "7 characters"
+    },
+    {
+      "typed": "QSP7NU",
+      "reads_as": null,
+      "reason": "`U`"
+    },
+    {
+      "typed": "QSP-N6",
+      "reads_as": null,
+      "reason": "`-`"
     }
   ]
 }

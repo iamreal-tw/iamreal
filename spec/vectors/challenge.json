@@ -36,6 +36,34 @@
       "date": "2049-12-31",
       "current_time": 491231155959,
       "current_time_public_input": "000000000000000000000000000000000000000000000000000000725fa896f7"
+    },
+    {
+      "random_bytes": "6d04446d5871a6db56d8562af7476ab8",
+      "challenge": "2000-01-01.DM248VARE6KDPNPRARNFEHVAQ0",
+      "date": "2000-01-01",
+      "current_time": 101155959,
+      "current_time_public_input": "0000000000000000000000000000000000000000000000000000000006078477"
+    },
+    {
+      "random_bytes": "bd5ab020d12c2493b5a26b618b2ccfae",
+      "challenge": "2000-02-29.QNDB086H5GJ97DD2DDGRPB6FNR",
+      "date": "2000-02-29",
+      "current_time": 229155959,
+      "current_time_public_input": "000000000000000000000000000000000000000000000000000000000da8a477"
+    },
+    {
+      "random_bytes": "6db429ac9f09d7974b42190d8a3469ce",
+      "challenge": "2001-01-01.DPT2KB4Z17BSEJT2346RMD39SR",
+      "date": "2001-01-01",
+      "current_time": 10101155959,
+      "current_time_public_input": "000000000000000000000000000000000000000000000000000000025a136877"
+    },
+    {
+      "random_bytes": "a9a62a8fa9a612f02b9ed9db014719e1",
+      "challenge": "2009-12-31.N6K2N3X9MR9F0AWYV7DG2HRSW4",
+      "date": "2009-12-31",
+      "current_time": 91231155959,
+      "current_time_public_input": "000000000000000000000000000000000000000000000000000000153dccf6f7"
     }
   ],
   "invalid": [
@@ -60,12 +88,44 @@
       "reason": "`I` is not in the alphabet"
     },
     {
+      "challenge": "2026-11-16.L00G40R40M30E209185GR38E1W",
+      "reason": "`L` is not in the alphabet"
+    },
+    {
+      "challenge": "2026-11-16.O00G40R40M30E209185GR38E1W",
+      "reason": "`O` is not in the alphabet"
+    },
+    {
       "challenge": "2026-11-16.U00G40R40M30E209185GR38E1W",
       "reason": "`U` is not in the alphabet"
     },
     {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1X",
+      "reason": "padding bits of the last character are not zero"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1Z",
+      "reason": "padding bits of the last character are not zero"
+    },
+    {
       "challenge": "2026-02-29.000G40R40M30E209185GR38E1W",
       "reason": "no such date"
+    },
+    {
+      "challenge": "2026-04-31.000G40R40M30E209185GR38E1W",
+      "reason": "no such date"
+    },
+    {
+      "challenge": "2026-00-10.000G40R40M30E209185GR38E1W",
+      "reason": "month 00"
+    },
+    {
+      "challenge": "2026-13-10.000G40R40M30E209185GR38E1W",
+      "reason": "month 13"
+    },
+    {
+      "challenge": "2026-11-00.000G40R40M30E209185GR38E1W",
+      "reason": "day 00"
     },
     {
       "challenge": "2026-11-6.000G40R40M30E209185GR38E1W",

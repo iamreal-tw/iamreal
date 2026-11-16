@@ -28,14 +28,65 @@ scoped_id = state, an element of the BN254 scalar field
   the card's key and the scope string.
 - Each limb is below 2^120, and `s` is below the modulus. The circuit checks
   both, so one signature has exactly one list of limbs.
-- `Poseidon2(a, b)` is Barretenberg's Poseidon2 sponge over the BN254 scalar
-  field (state width 4, 8 full and 56 partial rounds) over the two elements
-  `a`, `b`, as Noir's `Poseidon2::hash([a, b], 2)` computes it (the `poseidon`
-  library, v0.3.0). The sponge construction (initial state, padding) is part
-  of the definition. The vectors in `poseidon2.json` pin it down; an
-  implementation that does not reproduce them is not this hash.
+- `Poseidon2(a, b)` is defined in the next section.
 - The circuit names this value `nullifier`. It is a public input of the
   proof.
+
+## Poseidon2
+
+`Poseidon2(x_1, …, x_n)` for `n` = 2 or 3 field elements. `n = 3` is used by
+the revocation tree.
+
+**Field.** The BN254 scalar field, modulus
+
+```
+p = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001
+```
+
+Inputs are field elements, that is, integers below `p`.
+
+**Sponge.** This construction is Barretenberg's, not the paper's.
+
+```
+state     = [0, 0, 0, n · 2^64]
+state[i]  = state[i] + x_(i+1)        for i = 0 .. n−1
+state     = permutation(state)
+result    = state[0]
+```
+
+One permutation, no padding. The length `n` in the last element is what
+keeps `Poseidon2(a, b)` and `Poseidon2(a, b, 0)` apart.
+
+**Permutation.** The Poseidon2 permutation of Grassi, Khovratovich and
+Schofnegger ("Poseidon2: A Faster Version of the Poseidon Hash Function",
+2023) with:
+
+| Parameter | Value |
+|---|---|
+| State width `t` | 4 |
+| S-box | `x^5` |
+| Full rounds | 8: 4 before the partial rounds, 4 after |
+| Partial rounds | 56 |
+| External matrix `M_E` | `[[5,7,1,3],[4,6,1,1],[1,3,5,7],[1,1,4,6]]` |
+| Internal matrix `M_I` | `J + diag(d_0, d_1, d_2, d_3)`, `J` the all-ones matrix: `s_i ← s_i · d_i + (s_0 + s_1 + s_2 + s_3)` |
+
+```
+state = M_E · state
+4 times:  state_i = (state_i + c_i)^5 for every i;  state = M_E · state
+56 times: state_0 = (state_0 + c)^5;                 state = M_I · state
+4 times:  state_i = (state_i + c_i)^5 for every i;  state = M_E · state
+```
+
+The round constants (4 × 4 + 56 + 4 × 4) and `d_0 .. d_3` are in
+[`vectors/poseidon2-constants.json`](vectors/poseidon2-constants.json). They
+come from the paper's reference generation procedure for these parameters
+(Grain LFSR) and equal the constants in Barretenberg and in gnark-crypto.
+
+**What pins it in the circuit.** The circuit calls Noir's built-in
+`poseidon2_permutation`, which `nargo` (witness generation) and `bb` (the
+proving system) implement. The versions that pin it are therefore `nargo`
+1.0.0 and `bb` 6.0.0, not the version of the `poseidon` library that wraps
+the sponge around it.
 
 ## Text form
 
@@ -77,11 +128,15 @@ records.
 
 ## Test vectors
 
-- [`vectors/poseidon2.json`](vectors/poseidon2.json): `hash_2`, `hash_3`, and
-  under `scoped_id` the full computation from a 256-byte signature through
+- [`vectors/poseidon2-constants.json`](vectors/poseidon2-constants.json): the
+  constants, and the permutation of `[0, 1, 2, 3]`, to tell a wrong
+  permutation from a wrong sponge.
+- [`vectors/poseidon2.json`](vectors/poseidon2.json): `hash_2` and `hash_3`
+  (`Poseidon2` of 2 and 3 elements), and under `scoped_id` the full computation from a 256-byte signature through
   its 18 limbs to the field element. Its `revocation_tree` part belongs to
   the revocation tree specification (not written yet).
 - [`vectors/scoped-id.json`](vectors/scoped-id.json): field elements and their
-  little-endian bytes, text form and short ID; texts a parser must reject.
+  little-endian bytes, text form and short ID; texts a parser must reject;
+  short IDs as typed in URLs and how they read.
 
 The signatures in the vectors come from throwaway keys, not from cards.

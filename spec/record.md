@@ -30,43 +30,56 @@ The time the server received the event is not stored either. Nothing proves
 it, and minute-level times would make it easier to link one person's records
 across scopes.
 
-## File format
-
-JSON Lines: one record per line, records in `seq` order. Each line is a JSON
-object with exactly the 11 keys of the table below, each once:
-
-- `seq` is a JSON number written as an integer, without fraction or exponent;
-- every other field is a JSON string;
-- a duplicate key, a missing key, an extra key or another type makes the
-  line malformed. A snapshot with a malformed line is broken as a whole
-  ([`roster-rules.md`](roster-rules.md)), not just that record.
-
-The rest of the JSON spelling (key order, whitespace, string escapes) carries
-no information. The record hash is computed from the 11 field values, not
-from the bytes of the line. Changing any value changes the hash, and a line
-cannot carry anything besides those 11 values. A reformatted copy of a
-snapshot therefore verifies the same as the original.
-
-Duplicate keys are the reason for the strictness: JSON parsers disagree on
-`{"username":"alice","username":"bob"}`. Some keep the first value, some the
-last. Without the rule, two re-verifiers could read the same line as two
-different events.
+**Every record has exactly one spelling.** Each line of a roster file is a
+fixed template with the field values filled in. Each value has exactly one
+accepted form. Two copies of the same roster are the same bytes, and no
+line can be read in two ways.
 
 ## Fields
 
-| Field | Format | Meaning |
-|---|---|---|
-| `seq` | Integer, `1` for the first record, then consecutive | Position in the roster; the order the rules apply in |
-| `prev` | 64 lowercase hex digits | Record hash of the record with `seq − 1`; for `seq` 1, 64 zeros |
-| `scope_string` | The 31-byte scope string (ADR-0007) | The scope of the event |
-| `scoped_id` | 52 characters ([`scoped-id.md`](scoped-id.md)) | The card, within the scope |
-| `action` | `declare` or `withdraw` | The event |
-| `username` | Lowercase, without `@`; characters per platform (open item) | The account |
-| `challenge` | 37 characters ([`challenge.md`](challenge.md)) | The challenge the card proof answered |
-| `issuer` | `G2` or `G3` | Which MOICA issuer key signed the certificate |
-| `smt_root` | 64 lowercase hex digits, big-endian | Root of the revocation tree the proof was made against |
-| `circuit` | 64 lowercase hex digits | SHA-256 of the verification key |
-| `proof` | Standard base64 with padding, of exactly 14,656 bytes | The proof |
+| Field | Format |
+|---|---|
+| `seq` | Decimal integer from `1` to `9007199254740991` (2^53 − 1), without leading zeros |
+| `prev` | 64 lowercase hex digits: the record hash of the record with `seq − 1`; for `seq` 1, 64 zeros |
+| `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
+| `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
+| `action` | `declare` or `withdraw` |
+| `username` | The `username` format of the record's scope ([`scope.md`](scope.md)) |
+| `challenge` | 37 characters, in the one accepted spelling ([`challenge.md`](challenge.md)) |
+| `issuer` | `G2` or `G3` |
+| `smt_root` | 64 lowercase hex digits, a big-endian integer below the field modulus `p` ([`scoped-id.md`](scoped-id.md)) |
+| `circuit` | 64 lowercase hex digits: SHA-256 of the verification key |
+| `proof` | 19,544 characters: the standard base64 encoding (RFC 4648 section 4, `A–Z a–z 0–9 + /`, with `=` padding) of exactly 14,656 bytes. Decoding and re-encoding gives the same string, so the unused bits of the last data character are zero |
+
+Every format is printable ASCII without `"`, `\` or any control character.
+
+## Lines and files
+
+A record is one line:
+
+```
+{"seq":SEQ,"prev":"PREV","scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","action":"ACTION","username":"USERNAME","challenge":"CHALLENGE","issuer":"ISSUER","smt_root":"SMT_ROOT","circuit":"CIRCUIT","proof":"PROOF"}
+```
+
+followed by one `LF` (`0x0A`). The upper-case placeholders are replaced by
+the field values; nothing else changes. The keys are in this order, there is
+no whitespace and no escape sequence. This is valid JSON, but parsing it as
+JSON is not enough to check it.
+
+**Check a line** by parsing it in any way, checking every value against the
+table, then writing the line again from the template and comparing bytes. If
+the bytes differ, the line is malformed. This one comparison rejects
+everything JSON would otherwise allow: other key orders, whitespace, escapes,
+duplicate keys, keys in another case, `null`, numbers written as `1.0` or
+`1e0`, and lines ending in `CR LF`.
+
+**A roster file** is its lines concatenated, in `seq` order. It has no byte
+order mark and no empty lines, and its last byte is the `LF` of the last
+line. A roster with no records is the empty file.
+
+**A malformed line breaks the whole roster file**, not just that record
+([`roster-rules.md`](roster-rules.md)). A roster file is valid or broken.
+Only in a valid one can a single record be valid or invalid.
 
 ## Record hash and the chain
 
@@ -78,15 +91,15 @@ preimage    = "iamreal-record-v1" LF
 record_hash = SHA-256(preimage), written as 64 lowercase hex digits
 ```
 
-- `LF` is the byte `0x0A`; no trailing `LF`. `seq` is written in decimal
-  without leading zeros; every other field is written exactly as stored.
-- No field may contain `LF`. The formats above already exclude it.
-- The hash is defined over the field values, not over the JSON line, because
-  JSON allows many spellings of the same object.
+- `LF` is the byte `0x0A`; there is no trailing `LF`. Every field is written
+  exactly as in the line.
+- No field contains `LF`, so the preimage splits back into the fields in only
+  one way.
 
-Each record's `prev` is the hash of the record before it, so the records form
-a chain. The hash of the last record, the **head**, commits to the whole
-roster up to that point.
+Each record's `prev` is the hash of the record before it, compared as a
+string. The records therefore form a chain. The hash of the last record is
+the **head**. It commits to the whole roster up to that point. The head of
+the empty roster is 64 zeros.
 
 What the chain does: once someone has kept a head, the operator cannot drop
 or reorder an earlier record, or show a different history to someone else,
@@ -98,33 +111,32 @@ chain is about omission, order and equivocation.
 
 ## Verifying a record
 
-A verifier, the server or anyone re-verifying, does all of the following.
-The checks on the proof bytes and on `bb verify` itself are listed in full in
-the public inputs document of the circuits (to be moved into `spec/`). The
-ones that depend on record fields are:
+The line is already well formed. A verifier, the server or anyone
+re-verifying, then:
 
-1. Every field has the format in the table. `scoped_id` and `challenge` are
-   parsed strictly, as their documents say.
-2. `circuit` is one of the accepted circuits, and goes with `issuer` (table
-   below).
-3. Rebuild the public inputs, in the circuit's order:
+1. Checks that `circuit` is one of the accepted circuits and goes with
+   `issuer` (table below).
+2. Rebuilds the public inputs, in the circuit's order:
    - `issuer_modulus`: the modulus for `issuer`, in 120-bit limbs, least
      significant first;
    - `smt_root`: from the record, and recognized under the revocation rules
      (open item);
    - `current_time`: from the challenge's date;
    - `nullifier`: the field element decoded from `scoped_id`;
-   - `scope_packed`: `scope_string` packed little-endian into one field
-     element (`b[0] + b[1]·256 + … + b[30]·256^30`);
+   - `scope_packed`: `scope_string` packed as in [`scope.md`](scope.md);
    - `declaration_code_packed`: the declaration code recomputed from the
      record, packed the same way.
-4. Verify `proof` with these public inputs under the verification key whose
+3. Verifies `proof` with these public inputs under the verification key whose
    SHA-256 is `circuit`.
 
-The server additionally checks the challenge (issued by it, unexpired,
-unused) and the roster rules before appending. A record that fails any check
-is not accepted. A record that appears in the roster and fails anyway is
-invalid; see [`roster-rules.md`](roster-rules.md).
+The checks on the proof bytes and on running `bb verify` are listed in the
+public inputs document of the circuits (to be moved into `spec/`).
+
+The server also checks the challenge before appending: it issued it, it has
+not expired, it is unused. It also applies the roster rules. A record that
+fails any check is not appended. A record in the roster that fails one of the
+three steps above is invalid, with reason `proof`
+([`roster-rules.md`](roster-rules.md)).
 
 ## Accepted circuits
 
@@ -143,22 +155,28 @@ records keep verifying.
   this table.
 - **Which `smt_root` values are recognized**: one tree or one per issuer,
   how old a root may be, how historical roots are archived for re-verifying
-  old records. Waiting on measurements of building the tree on the device.
-- **Characters allowed in `username` for each platform**, with a source for
-  the platform's rules.
+  old records. The same rule bounds how far into the future a challenge's
+  date can be ([`roster-rules.md`](roster-rules.md)).
 - **Hiding an account name on request.** When an account owner asks, later
   snapshots hide the account name in that owner's records. The hidden record
   keeps `seq`, `prev` and its original record hash, so the chain stays
   intact. To be decided: which other fields go (with `challenge` and `proof`
   still present, the name could be found by trying candidates against the
   proof), how the roster rules still count switches for that scoped ID, and
-  where the public notice of each hiding is kept.
+  where the public notice of each hiding is kept. This changes the line
+  format, so it is a new version of this document.
 - **Where and how often the head is published.**
 
 ## Test vectors
 
-[`vectors/record.json`](vectors/record.json): two chained records with their
-preimage hashes, record hashes and the head; lines that are malformed, with
-the reason. The proofs are placeholder
-bytes, not real proofs: the vectors test the formats and the chain, not
-proof verification.
+[`vectors/record.json`](vectors/record.json):
+
+- two chained records with their lines, preimage hashes, record hashes and
+  the head;
+- well-formed lines and malformed lines, each with the reason;
+- roster files that are valid or broken, with the reason and the head.
+
+The proofs are placeholder bytes, not real proofs: the vectors test the
+formats and the chain, not proof verification. To keep the file small, lines
+write the proof as a token such as `@PROOF@`, to be replaced by the string
+given under `tokens` before testing.

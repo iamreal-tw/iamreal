@@ -9,30 +9,38 @@ server's API.
 
 ## Input
 
-A snapshot: records in `seq` order ([`record.md`](record.md)).
+A snapshot: a roster file ([`record.md`](record.md)).
 
-**The snapshot as a whole.** Every line is well formed
-([`record.md`](record.md)), `seq` starts at 1 and is consecutive, and every
-`prev` equals the record hash of the record before it. If not, the snapshot
-is broken. A broken snapshot is reported as such; the rules do not try to
-compute a state from it.
+**The file as a whole** is valid only if:
 
-**Each record** gets one of two outcomes: valid, or invalid with a reason.
-An invalid record stays in the roster and is listed, but changes nothing. The
-server does not accept events that would be invalid. Any invalid record a
-re-verifier finds therefore shows the operator appended something it should
+| Check | Code if it fails |
+|---|---|
+| Every line is well formed ([`record.md`](record.md), "Lines and files") | `line` |
+| The `seq` of the n-th line is n | `seq` |
+| Every `prev` equals the record hash of the line before it | `prev` |
+
+A broken file is reported with the first failing line (counting from 1) and
+the code. The rules do not compute a state from a broken file.
+
+**Each record** of a valid file is valid, or invalid with one reason code.
+An invalid record stays in the roster and is listed, but changes nothing.
+The server does not append records that would be invalid. Any invalid record
+a re-verifier finds therefore shows the operator appended something it should
 not have.
 
 ## Per record
 
-For each record, in `seq` order:
+For each record, in `seq` order, the checks below run in this order. The
+first one that fails gives the record's reason code.
 
-1. **Verification.** The record passes [`record.md`](record.md)'s checks,
-   including the proof. If not: invalid.
-2. **Challenge reuse.** Its `challenge` appears in no earlier record (valid
-   or not). If it does: invalid.
-3. **The event rules**, applied to the state of its
-   (`scope_string`, `scoped_id`).
+| # | Check | Code |
+|---|---|---|
+| 1 | The record verifies ([`record.md`](record.md), "Verifying a record") | `proof` |
+| 2 | Its `challenge` appears in no earlier record, valid or invalid, of any card and any scope | `challenge_reused` |
+| 3 | The event rules below, for the state of its (`scope_string`, `scoped_id`) | `not_current` or `switch_limit` |
+
+A check on the revocation root will be added before check 3, with code
+`root`, once the revocation rules are written.
 
 The **date** `d` of a record is the date in its challenge. Order is always by
 `seq`, never by date. Dates can step backwards by a day around midnight,
@@ -46,7 +54,7 @@ For each (`scope_string`, `scoped_id`), starting empty:
 |---|---|---|
 | `current` | The account the slot is declared to now, or none | none |
 | `last_declared` | The account of the last valid `declare`, kept after a withdrawal | none |
-| `switch_dates` | Dates of the valid switches | empty |
+| `switch_dates` | A list with one entry, the date, per valid switch. Two switches on the same day are two entries | empty |
 | `last_card_proof` | The latest date among the valid records | none |
 
 ## Event rules
@@ -55,12 +63,17 @@ For each (`scope_string`, `scoped_id`), starting empty:
 
 | Condition | Kind | Effect |
 |---|---|---|
-| `last_declared` is none | first declaration | `current = u`, `last_declared = u` |
-| `last_declared = u` | refresh | `current = u` |
-| otherwise | switch | Valid only if fewer than 2 dates in `switch_dates` are on or after `d − 364 days`. Then `current = u`, `last_declared = u`, add `d` to `switch_dates`. Else invalid |
+| `last_declared` is none | `first` | `current = u`, `last_declared = u` |
+| `last_declared = u` | `refresh` | `current = u` |
+| otherwise, and fewer than 2 entries of `switch_dates` are on or after `d − 364 days` | `switch` | `current = u`, `last_declared = u`, append `d` to `switch_dates` |
+| otherwise | invalid, `switch_limit` | none |
 
-**`withdraw` of account `u` on date `d`**: valid only if `current = u`. Then
-`current = none`. `last_declared` is unchanged.
+**`withdraw` of account `u` on date `d`**:
+
+| Condition | Kind | Effect |
+|---|---|---|
+| `current = u` | `withdraw` | `current = none`; `last_declared` unchanged |
+| otherwise, including a card with no earlier record | invalid, `not_current` | none |
 
 **Every valid record**: `last_card_proof = max(last_card_proof, d)`.
 
@@ -69,21 +82,45 @@ What follows from these rules:
 - A switch is a declaration to a different account than the last one
   declared, whether or not there was a withdrawal in between. Withdrawing and
   then declaring another account is a switch. A → B → A is two switches.
-- Withdrawing and then declaring the same account again is not a switch.
+- Withdrawing and then declaring the same account again is a refresh, not a
+  switch. So is declaring again the account a blocked switch tried to leave:
+  an invalid record does not change `last_declared`.
 - A first declaration is not a switch.
-- At most 2 switches in any 365 days, counting the day of the switch:
-  dates from `d − 364` through `d`. Earlier switches dated after `d` also
-  count; this only happens around midnight.
+- At most 2 switches in any 365 days: the window counts the earlier switches
+  dated from `d − 364` on, including any dated after `d`. Those occur only
+  around midnight, or when dates are written into the future (next section).
 - There is no free correction of a mistyped account. Correcting it uses a
   switch.
-- One card is declared to at most one account at a time. One account can be
-  declared by any number of cards.
+- One card is declared to at most one account at a time in a scope. One
+  account can be declared by any number of cards.
+
+## How far dates are trusted
+
+The rules take each record's date from its challenge, and the card's
+signature covers the challenge. Neither the server nor anyone else can change
+a date after the card signed. But the server chooses the date when it issues
+the challenge, and a modified device would sign a challenge dated in the
+future, as long as the certificate is still valid on that date. Records dated
+a year apart could then give one card more switches than the rules allow.
+One record dated years ahead would keep the card looking recent until then.
+
+**The upper bound on dates comes from the revocation root.** Every proof is
+made against a root built from a CRL that MOICA signed, and the CRL carries
+the date it was issued. The revocation rules (not written yet) will require a
+record's date to be within a fixed number of days after the issue date of
+the CRL behind its `smt_root`. A CRL from the future does not exist, so a
+date can then run ahead by at most that many days. **Until those rules are
+written, a re-verifier cannot detect dates written into the future.**
 
 ## Output
 
-- **Per card in a scope**: `current` and `last_card_proof`.
-- **Per account in a scope**: the scoped IDs whose `current` is this
-  account, each with its `last_card_proof`.
+Per scope, sorted by `scoped_id` as a string:
+
+- **Per card**: `scoped_id`, `current` (or none) and `last_card_proof`. A
+  card with no valid record is not listed.
+- **Per account**: the cards whose `current` is this account, each with its
+  `last_card_proof`. Accounts sorted by `username` as a string.
+- **Per record**: valid with its kind, or invalid with its reason code.
 
 There is no expiry. The rules report facts and dates. How recent a card
 proof must be to count is up to whoever uses the answer, so answers always
@@ -93,10 +130,12 @@ carry the date.
 
 - The 10-minute lifetime of a challenge is a server rule. The roster does not
   record when a challenge was issued, so nobody else can check it.
-- Which `smt_root` values are recognized (see [`record.md`](record.md)).
+- A card proof the server rejects under these rules is not appended, so it
+  changes nothing, including `last_card_proof`.
 
 ## Test vectors
 
 [`vectors/roster-rules.json`](vectors/roster-rules.json): sequences of events
-with the outcome of each and the final state. The events stand for records
-that passed verification, so they carry only the fields the rules read.
+with the outcome of each and the final state. Events stand for well-formed
+records and carry only the fields the rules read. Their `verifies` field
+says whether the record passes check 1.

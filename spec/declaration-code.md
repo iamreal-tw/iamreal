@@ -45,12 +45,14 @@ of the hash.
 
 A verifier recomputes the code from the record's `action`, `scope_string`,
 `username` and `challenge`, and checks that it equals the declaration code
-exposed as a public input of the proof. This is the only place the challenge
+exposed as a public input of the proof, `declaration_code_packed`: the 31
+bytes packed as in [`scope.md`](scope.md). This is the only place the challenge
 is bound: the circuit has no separate challenge input.
 
 ## Test vectors
 
-[`vectors/declaration-code.json`](vectors/declaration-code.json). Example:
+[`vectors/declaration-code.json`](vectors/declaration-code.json), with the
+packed value of each code. Example:
 
 ```
 iamreal-declaration-v1

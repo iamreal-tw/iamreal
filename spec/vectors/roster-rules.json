@@ -1,34 +1,40 @@
 {
   "spec": "roster-rules",
   "status": "draft",
-  "note": "Events stand for records that passed verification (record.md). `scoped_id` values are placeholders; `challenge` values only need to be distinct strings here. All events are in the scope iamreal:threads:0.",
+  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1. `date` repeats the date in `challenge`. Two scopes appear only to test independence; a real roster accepts the scopes listed for it. `current` null means none.",
   "cases": [
     {
       "name": "first declaration, refresh, withdraw",
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-03-01.YXHQE07V7M4200N7A1P127TJTC",
           "date": "2026-03-01",
-          "challenge": "2026-03-01.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "alice",
+          "challenge": "2026-04-01.0CT7EDWDA2AJXHN89Y6H7BX1ZM",
           "date": "2026-04-01",
-          "challenge": "2026-04-01.C0000000000000000000000003"
+          "verifies": true
         }
       ],
       "results": [
@@ -45,13 +51,19 @@
         {
           "seq": 3,
           "valid": true,
-          "kind": "withdrawal"
+          "kind": "withdraw"
         }
       ],
       "state": {
-        "K1": {
-          "current": null,
-          "last_card_proof": "2026-04-01"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": null,
+              "last_card_proof": "2026-04-01"
+            }
+          ],
+          "accounts": []
         }
       }
     },
@@ -60,35 +72,43 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-02-01.ZGZ5SETZM33XWY3NWK7V55RBB4",
           "date": "2026-02-01",
-          "challenge": "2026-02-01.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-03-01.881P8TZEG2FV3Q3V2VG1J91488",
           "date": "2026-03-01",
-          "challenge": "2026-03-01.C0000000000000000000000003"
+          "verifies": true
         },
         {
           "seq": 4,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "carol",
+          "challenge": "2026-04-01.B7P39Y6C4W86J6F9P3HEC67WVW",
           "date": "2026-04-01",
-          "challenge": "2026-04-01.C0000000000000000000000004"
+          "verifies": true
         }
       ],
       "results": [
@@ -110,13 +130,118 @@
         {
           "seq": 4,
           "valid": false,
-          "reason": "third switch within 365 days"
+          "reason": "switch_limit"
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-03-01"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-03-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-03-01"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "two switches on the same day are two; a third that day is invalid",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-05.R4EGY6NAJCTJBX3QPTGBA491WR",
+          "date": "2026-01-05",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-01-05.Q9QQQKGTXWVSANVXKSA2X3HBTG",
+          "date": "2026-01-05",
+          "verifies": true
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2026-01-05.RX6ZWTJ7MYE1EW2GK4QNP9QGAC",
+          "date": "2026-01-05",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "switch_limit"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-01-05"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-05"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -125,27 +250,33 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "alice",
+          "challenge": "2026-01-02.NKEEK3A2DY5CDYGSA2842Z5FK0",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-01-03.R4BTCR59VJ103DZVWT9ZB4D6K8",
           "date": "2026-01-03",
-          "challenge": "2026-01-03.C0000000000000000000000003"
+          "verifies": true
         }
       ],
       "results": [
@@ -157,7 +288,7 @@
         {
           "seq": 2,
           "valid": true,
-          "kind": "withdrawal"
+          "kind": "withdraw"
         },
         {
           "seq": 3,
@@ -166,38 +297,60 @@
         }
       ],
       "state": {
-        "K1": {
-          "current": "bob",
-          "last_card_proof": "2026-01-03"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "bob",
+              "last_card_proof": "2026-01-03"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-03"
+                }
+              ]
+            }
+          ]
         }
       }
     },
     {
-      "name": "withdraw then declare the same account is not a switch",
+      "name": "withdraw then declare the same account is a refresh",
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "alice",
+          "challenge": "2026-01-02.NKEEK3A2DY5CDYGSA2842Z5FK0",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-03.50JEHQHC8V32NNRXJ6S2H3ZZK8",
           "date": "2026-01-03",
-          "challenge": "2026-01-03.C0000000000000000000000003"
+          "verifies": true
         }
       ],
       "results": [
@@ -209,7 +362,7 @@
         {
           "seq": 2,
           "valid": true,
-          "kind": "withdrawal"
+          "kind": "withdraw"
         },
         {
           "seq": 3,
@@ -218,9 +371,25 @@
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-01-03"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-03"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-03"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -229,43 +398,53 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-01-02.RJHYH4FR0WSJBF64HPFSRMF0HC",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "carol",
+          "challenge": "2026-01-03.950YTX4JNK42YM2TQ1HZJA189C",
           "date": "2026-01-03",
-          "challenge": "2026-01-03.C0000000000000000000000003"
+          "verifies": true
         },
         {
           "seq": 4,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "dave",
+          "challenge": "2027-01-02.ZJ6NSQE9NZG65E9NRH1R413EDG",
           "date": "2027-01-02",
-          "challenge": "2027-01-02.C0000000000000000000000004"
+          "verifies": true
         },
         {
           "seq": 5,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "erin",
+          "challenge": "2027-01-02.520HQ3DA5K8X5NK0H913AYHRYW",
           "date": "2027-01-02",
-          "challenge": "2027-01-02.C0000000000000000000000005"
+          "verifies": true
         }
       ],
       "results": [
@@ -292,13 +471,29 @@
         {
           "seq": 5,
           "valid": false,
-          "reason": "third switch within 365 days"
+          "reason": "switch_limit"
         }
       ],
       "state": {
-        "K1": {
-          "current": "dave",
-          "last_card_proof": "2027-01-02"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "dave",
+              "last_card_proof": "2027-01-02"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "dave",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2027-01-02"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -307,35 +502,43 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-01-02.RJHYH4FR0WSJBF64HPFSRMF0HC",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "carol",
+          "challenge": "2026-01-03.950YTX4JNK42YM2TQ1HZJA189C",
           "date": "2026-01-03",
-          "challenge": "2026-01-03.C0000000000000000000000003"
+          "verifies": true
         },
         {
           "seq": 4,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "dave",
+          "challenge": "2027-01-01.FBP6QD43H66H6MS9KVMW5DZRGG",
           "date": "2027-01-01",
-          "challenge": "2027-01-01.C0000000000000000000000004"
+          "verifies": true
         }
       ],
       "results": [
@@ -357,13 +560,311 @@
         {
           "seq": 4,
           "valid": false,
-          "reason": "third switch within 365 days"
+          "reason": "switch_limit"
         }
       ],
       "state": {
-        "K1": {
-          "current": "carol",
-          "last_card_proof": "2026-01-03"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-01-03"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-03"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "window across a leap day",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2028-01-01.DSEEHTPQBXSB2P68CBFSDRHBA8",
+          "date": "2028-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2028-02-29.A8ZP08CMWFYNPYN8YP9CFVVZV8",
+          "date": "2028-02-29",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2028-03-01.FQD6F47PM7RFRANQ1KG38092H4",
+          "date": "2028-03-01",
+          "verifies": true
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2029-02-28.NVNHXNTYWDHHTMDGSM7KM36ARW",
+          "date": "2029-02-28",
+          "verifies": true
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "erin",
+          "challenge": "2029-02-28.RG3ACHAZVKANWPEBWNY8481M60",
+          "date": "2029-02-28",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "switch_limit"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "dave",
+              "last_card_proof": "2029-02-28"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "dave",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2029-02-28"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an earlier switch dated one day later still counts",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-01.74MCRP3C8T3NSBJH0E0BGG786W",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-01-02.QQ2ABQWEWG8ECYPSSEH89K0ZVM",
+          "date": "2026-01-02",
+          "verifies": true
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2026-01-01.7QJQ75KQD3B3X6V3M1MSMK4X9G",
+          "date": "2026-01-01",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "switch_limit"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-01-02"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-02"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "earlier switches dated far in the future still count",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2027-06-01.BST8VN53DRNHFZ2C4WZWBS5KTC",
+          "date": "2027-06-01",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2028-06-01.SZS1ZYWYH7N8ZGN878FQYCAKC0",
+          "date": "2028-06-01",
+          "verifies": true
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2026-01-02.3RW4DRTRGXXTQV5FK6X9ZD9W7M",
+          "date": "2026-01-02",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "switch_limit"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2028-06-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2028-06-01"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -372,35 +873,43 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "bob",
+          "challenge": "2026-01-02.KYBETQK55K63K2ZZMTYPVZ2ZQW",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "alice",
+          "challenge": "2026-01-03.8AS5GP2EC2WC4086BT8KV5JB1R",
           "date": "2026-01-03",
-          "challenge": "2026-01-03.C0000000000000000000000003"
+          "verifies": true
         },
         {
           "seq": 4,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "alice",
+          "challenge": "2026-01-04.GS59A7B39D4FTJCAXTR41TP6AC",
           "date": "2026-01-04",
-          "challenge": "2026-01-04.C0000000000000000000000004"
+          "verifies": true
         }
       ],
       "results": [
@@ -412,44 +921,77 @@
         {
           "seq": 2,
           "valid": false,
-          "reason": "not currently declared to this account"
+          "reason": "not_current"
         },
         {
           "seq": 3,
           "valid": true,
-          "kind": "withdrawal"
+          "kind": "withdraw"
         },
         {
           "seq": 4,
           "valid": false,
-          "reason": "not currently declared to this account"
+          "reason": "not_current"
         }
       ],
       "state": {
-        "K1": {
-          "current": null,
-          "last_card_proof": "2026-01-03"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": null,
+              "last_card_proof": "2026-01-03"
+            }
+          ],
+          "accounts": []
         }
       }
+    },
+    {
+      "name": "withdrawing on a card with no earlier record is invalid",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "withdraw",
+          "username": "alice",
+          "challenge": "2026-01-01.T9CQ3TQ62HZGMXN7YA7W177NZR",
+          "date": "2026-01-01",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": false,
+          "reason": "not_current"
+        }
+      ],
+      "state": {}
     },
     {
       "name": "invalid events do not change the state or the last card proof date",
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "withdraw",
           "username": "bob",
+          "challenge": "2026-06-01.GV6Q7AZWWAMTKAZWJTE4FSQEZR",
           "date": "2026-06-01",
-          "challenge": "2026-06-01.C0000000000000000000000002"
+          "verifies": true
         }
       ],
       "results": [
@@ -461,13 +1003,133 @@
         {
           "seq": 2,
           "valid": false,
-          "reason": "not currently declared to this account"
+          "reason": "not_current"
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-01-01"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a blocked switch leaves last_declared; declaring the old account again is a refresh",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-02.RJHYH4FR0WSJBF64HPFSRMF0HC",
+          "date": "2026-01-02",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-01-03.950YTX4JNK42YM2TQ1HZJA189C",
+          "date": "2026-01-03",
+          "verifies": true
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "dave",
+          "challenge": "2026-01-04.H739DCDSVQW6BKPR63PQ25D37G",
+          "date": "2026-01-04",
+          "verifies": true
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "carol",
+          "challenge": "2026-01-05.C61PAKFBRJ3JWAJVXR4YFC2754",
+          "date": "2026-01-05",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        },
+        {
+          "seq": 4,
+          "valid": false,
+          "reason": "switch_limit"
+        },
+        {
+          "seq": 5,
+          "valid": true,
+          "kind": "refresh"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "carol",
+              "last_card_proof": "2026-01-05"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "carol",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-05"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -476,19 +1138,23 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-02.ZNEWXQPPDCTF8AFZS9BXD4TKRC",
           "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.TKQQTPKZBSXSZVYR746ZM8G4Y4",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000002"
+          "verifies": true
         }
       ],
       "results": [
@@ -504,9 +1170,25 @@
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-01-02"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-02"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-02"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -515,27 +1197,33 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K2",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.370YC21GMH60GMW54QM5MF4YKG",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000002"
+          "verifies": true
         },
         {
           "seq": 3,
-          "scoped_id": "K2",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-01-05.KNAJ3RZ181TTNFTSG0CRPKF5GC",
           "date": "2026-01-05",
-          "challenge": "2026-01-05.C0000000000000000000000003"
+          "verifies": true
         }
       ],
       "results": [
@@ -556,13 +1244,207 @@
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-01-01"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "0400000000000000000000000000000000000000000000000000",
+              "current": "bob",
+              "last_card_proof": "2026-01-05"
+            },
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            },
+            {
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
+                  "last_card_proof": "2026-01-05"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a record that does not verify changes nothing",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
         },
-        "K2": {
-          "current": "bob",
-          "last_card_proof": "2026-01-05"
+        {
+          "seq": 2,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-02.RJHYH4FR0WSJBF64HPFSRMF0HC",
+          "date": "2026-01-02",
+          "verifies": false
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-03.PN5NEDR064QC42JZZPK3W8ST0R",
+          "date": "2026-01-03",
+          "verifies": false
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": false,
+          "reason": "proof"
+        },
+        {
+          "seq": 3,
+          "valid": false,
+          "reason": "proof"
+        }
+      ],
+      "state": {
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "two scopes are independent",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-01.FDC222WN26A5WJFEA4GJH527FG",
+          "date": "2026-01-01",
+          "verifies": true
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "action": "declare",
+          "username": "bob",
+          "challenge": "2026-01-02.3H8W5SYFJ3XYQ5NAGZNYEE3V24",
+          "date": "2026-01-02",
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kind": "first"
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kind": "switch"
+        }
+      ],
+      "state": {
+        "iamreal-test:threads:0_________": {
+          "cards": [
+            {
+              "scoped_id": "040000000000000000000000000000000000000000000000000G",
+              "current": "bob",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "040000000000000000000000000000000000000000000000000G",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
+        },
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "bob",
+              "last_card_proof": "2026-01-02"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-02"
+                }
+              ]
+            }
+          ]
         }
       }
     },
@@ -571,19 +1453,23 @@
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": true
         }
       ],
       "results": [
@@ -595,50 +1481,92 @@
         {
           "seq": 2,
           "valid": false,
-          "reason": "challenge used before"
+          "reason": "challenge_reused"
         }
       ],
       "state": {
-        "K1": {
-          "current": "alice",
-          "last_card_proof": "2026-01-01"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
         }
       }
     },
     {
-      "name": "an earlier switch dated one day later still counts",
+      "name": "a challenge counts as used even in a record that does not verify, and across cards",
       "events": [
         {
           "seq": 1,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
           "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000001"
+          "verifies": false
         },
         {
           "seq": 2,
-          "scoped_id": "K1",
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
           "action": "declare",
           "username": "bob",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000002"
+          "verifies": true
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": false,
+          "reason": "proof"
         },
         {
-          "seq": 3,
-          "scoped_id": "K1",
+          "seq": 2,
+          "valid": false,
+          "reason": "challenge_reused"
+        }
+      ],
+      "state": {}
+    },
+    {
+      "name": "a challenge counts as used across scopes",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:threads:0______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
-          "username": "carol",
-          "date": "2026-01-02",
-          "challenge": "2026-01-02.C0000000000000000000000003"
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
+          "date": "2026-01-01",
+          "verifies": true
         },
         {
-          "seq": 4,
-          "scoped_id": "K1",
+          "seq": 2,
+          "scope_string": "iamreal-test:threads:0_________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
           "action": "declare",
-          "username": "dave",
+          "username": "alice",
+          "challenge": "2026-01-01.G9PYF6T6FCEQ2GH6DG2XHGFV74",
           "date": "2026-01-01",
-          "challenge": "2026-01-01.C0000000000000000000000004"
+          "verifies": true
         }
       ],
       "results": [
@@ -649,24 +1577,30 @@
         },
         {
           "seq": 2,
-          "valid": true,
-          "kind": "switch"
-        },
-        {
-          "seq": 3,
-          "valid": true,
-          "kind": "switch"
-        },
-        {
-          "seq": 4,
           "valid": false,
-          "reason": "third switch within 365 days"
+          "reason": "challenge_reused"
         }
       ],
       "state": {
-        "K1": {
-          "current": "carol",
-          "last_card_proof": "2026-01-02"
+        "iamreal:threads:0______________": {
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "current": "alice",
+              "last_card_proof": "2026-01-01"
+            }
+          ],
+          "accounts": [
+            {
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-01"
+                }
+              ]
+            }
+          ]
         }
       }
     }
