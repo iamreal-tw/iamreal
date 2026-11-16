@@ -207,6 +207,14 @@
     {
       "line": "[{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF1@\"}]\n",
       "reason": "not a JSON object"
+    },
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\\n\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF1@\"}\n",
+      "reason": "escaped line feed at the end of a value"
+    },
+    {
+      "line": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\n\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF1@\"}\n",
+      "reason": "raw line feed inside a value"
     }
   ],
   "files": [
@@ -283,6 +291,20 @@
       "valid": false,
       "line": 2,
       "code": "line"
+    },
+    {
+      "name": "line 1 has the wrong seq, line 2 is garbage: line by line, line 1 fails first",
+      "content": "{\"seq\":2,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF1@\"}\ngarbage\n",
+      "valid": false,
+      "line": 1,
+      "code": "seq"
+    },
+    {
+      "name": "line 2 has a wrong prev, line 3 a wrong seq: line 2 fails first",
+      "content": "{\"seq\":1,\"prev\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"alice\",\"challenge\":\"2026-11-16.000G40R40M30E209185GR38E1W\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF1@\"}\n{\"seq\":2,\"prev\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"withdraw\",\"username\":\"alice\",\"challenge\":\"2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF2@\"}\n{\"seq\":4,\"prev\":\"9c77d91fb857d1da6b79581ce19f0f0cb19fe37e3bec405953f6eb9b2c6f3ead\",\"scope_string\":\"iamreal:threads:0______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"action\":\"declare\",\"username\":\"bob_02\",\"challenge\":\"2028-02-29.XN3EZGS7BY184KGTFKYAKE4DCW\",\"issuer\":\"G3\",\"smt_root\":\"12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32\",\"circuit\":\"bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2\",\"proof\":\"@PROOF3@\"}\n",
+      "valid": false,
+      "line": 2,
+      "code": "prev"
     }
   ]
 }

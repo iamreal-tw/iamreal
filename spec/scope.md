@@ -17,7 +17,7 @@ scope_string = name ":" platform ":" version padding      (exactly 31 bytes)
 name         = "iamreal" | "iamreal-test"
 platform     = 1 to 21 characters of a-z, 0-9, "-"
 version      = "0" | a decimal number without leading zeros
-padding      = "_" repeated up to 31 bytes in total
+padding      = zero or more "_", up to 31 bytes in total
 ```
 
 The first byte is a lowercase letter: the circuit requires a scope string to
@@ -27,25 +27,32 @@ opens.
 
 ## Accepted scopes
 
-A roster accepts records only in the scopes listed for it. A record in any
-other scope string, including another spelling of a listed one
-(`…:00_____…`, `Threads`, a different padding), makes the line malformed
-([`record.md`](record.md)). Adding a scope adds a row; rows are never
-removed or changed.
+A roster accepts records only in the scopes listed for it: the production
+roster exactly the rows under "Production roster", a test roster exactly the
+rows under "Test rosters only". A record in any other scope string, including
+another spelling of a listed one (`…:00_____…`, `Threads`, a different
+padding), makes the line malformed ([`record.md`](record.md)).
+
+Adding a scope adds a row. Rows are never removed, and a row changes only
+once: when a scope is retired (ADR-0007: its version is replaced), its row
+gets the `seq` of the last record it accepts. A later record in that scope
+makes the line malformed, so one card cannot keep a slot in both the old and
+the new version.
 
 **Production roster**
 
-| Scope string | Platform | `username` format |
-|---|---|---|
-| `iamreal:threads:0______________` | Threads | `[a-z0-9._]{1,30}` |
+| Scope string | Platform | `username` format | Last accepted `seq` |
+|---|---|---|---|
+| `iamreal:threads:0______________` | Threads | `[a-z0-9._]{1,30}` | open |
 
 **Test rosters only**
 
-| Scope string | Platform | `username` format |
-|---|---|---|
-| `iamreal-test:threads:0_________` | Threads | `[a-z0-9._]{1,30}` |
+| Scope string | Platform | `username` format | Last accepted `seq` |
+|---|---|---|---|
+| `iamreal-test:threads:0_________` | Threads | `[a-z0-9._]{1,30}` | open |
 
-A test scope string never appears in the production roster. It produces
+A test scope string never appears in the production roster, and a production
+scope string never appears in a test roster. A test scope string produces
 scoped IDs unrelated to the production ones.
 
 ### The `username` format
@@ -63,7 +70,8 @@ provisional: lowercase letters, digits, `.` and `_`, 1 to 30 characters,
 to be confirmed against the platform's published rules before launch.
 
 None of the formats allows `"`, `\`, a control character or a non-ASCII
-character.
+character. Formats are matched against the whole value (in several
+languages `^…$` also accepts a trailing line feed).
 
 ## Packing
 

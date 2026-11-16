@@ -14,8 +14,9 @@ give every card a new scoped ID and void every slot already declared.
 
 ```
 s         = card's RSASSA-PKCS1-v1_5 signature (SHA-256) over the 31 bytes
-            of the scope string, as an integer below the card's modulus
-            (the modulus is exactly 2048 bits)
+            of the scope string: 256 bytes read as a big-endian integer
+            (OS2IP, RFC 8017), below the card's modulus (the modulus is
+            exactly 2048 bits)
 limb[i]   = bits 120·i to 120·i + 119 of s, for i = 0 .. 17
             (least significant limb first)
 state     = 0
@@ -81,6 +82,10 @@ The round constants (4 × 4 + 56 + 4 × 4) and `d_0 .. d_3` are in
 [`vectors/poseidon2-constants.json`](vectors/poseidon2-constants.json). They
 come from the paper's reference generation procedure for these parameters
 (Grain LFSR) and equal the constants in Barretenberg and in gnark-crypto.
+In that file, `round_constants_first_full[r][i]` and
+`round_constants_last_full[r][i]` are `c_i` of full round `r` (counting from
+0 within each group of 4), `round_constants_partial[r]` is `c` of partial
+round `r`, and `internal_d[i]` is `d_i`.
 
 **What pins it in the circuit.** The circuit calls Noir's built-in
 `poseidon2_permutation`, which `nargo` (witness generation) and `bb` (the
@@ -123,8 +128,9 @@ It is not unique across the roster. How pages resolve two cards with the
 same short ID on one account is outside this document.
 
 In URLs, short IDs are read case-insensitively, with `O` read as `0` and `I`
-and `L` as `1`. This leniency applies to short IDs in URLs only, never to
-records.
+and `L` as `1`. After this mapping a short ID is exactly 6 characters of the
+alphabet; anything else, including `U` and `-`, does not resolve. This
+leniency applies to short IDs in URLs only, never to records.
 
 ## Test vectors
 

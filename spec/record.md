@@ -67,8 +67,9 @@ no whitespace and no escape sequence. This is valid JSON, but parsing it as
 JSON is not enough to check it.
 
 **Check a line** by parsing it in any way, checking every value against the
-table, then writing the line again from the template and comparing bytes. If
-the bytes differ, the line is malformed. This one comparison rejects
+table, then writing the line again from the template and comparing bytes:
+the line's bytes up to and including its `LF` must equal the template
+followed by `LF`. If they differ, the line is malformed. This one comparison rejects
 everything JSON would otherwise allow: other key orders, whitespace, escapes,
 duplicate keys, keys in another case, `null`, numbers written as `1.0` or
 `1e0`, and lines ending in `CR LF`.
@@ -119,8 +120,8 @@ re-verifying, then:
 2. Rebuilds the public inputs, in the circuit's order:
    - `issuer_modulus`: the modulus for `issuer`, in 120-bit limbs, least
      significant first;
-   - `smt_root`: from the record, and recognized under the revocation rules
-     (open item);
+   - `smt_root`: from the record (whether the root is recognized is a
+     separate roster rule, [`roster-rules.md`](roster-rules.md));
    - `current_time`: from the challenge's date;
    - `nullifier`: the field element decoded from `scoped_id`;
    - `scope_packed`: `scope_string` packed as in [`scope.md`](scope.md);

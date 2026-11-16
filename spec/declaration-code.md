@@ -22,7 +22,8 @@ declaration_code = "D" || first 30 characters of base32(SHA-256(preimage))
 - `action` is `declare` or `withdraw`.
 - `scope_string` is the full 31-byte scope string, including `_` padding
   (see ADR-0007).
-- `username` is the account name on the platform, lowercase, without `@`.
+- `username` is the account name on the platform, without `@`, in the
+  `username` format of the scope ([`scope.md`](scope.md)).
 - `challenge` is the challenge issued by the server for this card proof,
   written exactly as issued ([`challenge.md`](challenge.md)). It contains no
   `LF`.

@@ -19,8 +19,12 @@ A snapshot: a roster file ([`record.md`](record.md)).
 | The `seq` of the n-th line is n | `seq` |
 | Every `prev` equals the record hash of the line before it | `prev` |
 
-A broken file is reported with the first failing line (counting from 1) and
-the code. The rules do not compute a state from a broken file.
+Lines are checked one at a time, in order. For each line the three checks
+run in the order of the table; the first failure ends the check, and the file
+is reported as broken with that line's number (counting from 1) and the
+code. Bytes after the last `LF`, an empty line and a byte order mark fail the
+first check on the line where they occur. The rules do not compute a state
+from a broken file.
 
 **Each record** of a valid file is valid, or invalid with one reason code.
 An invalid record stays in the roster and is listed, but changes nothing.
@@ -31,7 +35,9 @@ not have.
 ## Per record
 
 For each record, in `seq` order, the checks below run in this order. The
-first one that fails gives the record's reason code.
+first one that fails gives the record's reason code, and the later checks do
+not run. A record that does not verify is therefore `proof` even if its
+challenge was used before; its challenge still counts as used.
 
 | # | Check | Code |
 |---|---|---|
@@ -54,7 +60,7 @@ For each (`scope_string`, `scoped_id`), starting empty:
 |---|---|---|
 | `current` | The account the slot is declared to now, or none | none |
 | `last_declared` | The account of the last valid `declare`, kept after a withdrawal | none |
-| `switch_dates` | A list with one entry, the date, per valid switch. Two switches on the same day are two entries | empty |
+| `switch_dates` | A list with one entry, the date, per valid switch. Two switches on the same day are two entries. A blocked switch adds nothing | empty |
 | `last_card_proof` | The latest date among the valid records | none |
 
 ## Event rules
@@ -114,13 +120,18 @@ written, a re-verifier cannot detect dates written into the future.**
 
 ## Output
 
-Per scope, sorted by `scoped_id` as a string:
+Every sort is by the byte values of the strings (ASCII order), not by a
+locale's collation.
 
-- **Per card**: `scoped_id`, `current` (or none) and `last_card_proof`. A
-  card with no valid record is not listed.
-- **Per account**: the cards whose `current` is this account, each with its
-  `last_card_proof`. Accounts sorted by `username` as a string.
-- **Per record**: valid with its kind, or invalid with its reason code.
+- **Per scope**, scopes sorted by scope string. A scope with no listed card
+  is not listed.
+- **Per card**, sorted by `scoped_id`: `scoped_id`, `current` (or none) and
+  `last_card_proof`. A card with no valid record is not listed.
+- **Per account**, sorted by `username`: the cards whose `current` is this
+  account, sorted by `scoped_id`, each with its `last_card_proof`. An account
+  with no such card is not listed.
+- **Per record**, in `seq` order: valid with its kind, or invalid with its
+  reason code.
 
 There is no expiry. The rules report facts and dates. How recent a card
 proof must be to count is up to whoever uses the answer, so answers always
