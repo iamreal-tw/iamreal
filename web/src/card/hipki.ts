@@ -222,9 +222,13 @@ class Popup {
         () => finish(new CardError("component_unreachable")),
         Math.max(0, READY_MS - (performance.now() - this.opened)),
       );
-      // A window the cardholder closed will never answer.
+      // A window the cardholder closed will never answer. The component's
+      // window closes itself right after posting its reply, so a closed
+      // window gets a moment for that reply to arrive first.
       const closedPoll = setInterval(() => {
-        if (this.closed()) finish(new CardError(this.ready ? "card_error" : "component_unreachable", this.ready ? "popup_closed" : ""));
+        if (!this.closed()) return;
+        clearInterval(closedPoll);
+        setTimeout(() => finish(new CardError(this.ready ? "card_error" : "component_unreachable", this.ready ? "popup_closed" : "")), 1_000);
       }, 250);
       if (this.ready) send();
       else this.waitingReady = send;

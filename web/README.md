@@ -1,8 +1,71 @@
-# web/：網頁版的過卡引擎
+# web/：網頁版的過卡
 
-**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開持卡人的裝置。** 這裡是從「讀到卡片上的憑證」到「送出證明」之間，在持卡人的瀏覽器裡做的每一件事，寫成不含畫面的程式庫。畫面和內政部元件的橋接是下一份工作，會建在這一層上面。
+**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開持卡人的裝置。** 這裡是從「讀到卡片上的憑證」到「送出證明」之間，在持卡人的瀏覽器裡做的每一件事：過卡的引擎（`src/`，不含畫面）、內政部元件的橋接（`src/card/hipki.ts`）、五個畫面（`src/ui/`）。
 
 程式照 `spec/` 和 `docs/api/card-proof.md` 實作，不引用 `server/`。裝置上的保護照 ADR-0015、ADR-0016：保護持卡人、對抗伺服器的限制寫死在這裡，伺服器只能讓它更嚴。
+
+## 在本機用真卡片過卡
+
+需要 Node 22（22.6 以上）、pnpm 10、Go 1.26、`bb` 6.0.0（取得方式見 `verifier/README.md`）、讀卡機和內政部的元件（HiPKI，`http://localhost:61161`）。
+
+```
+cd web
+pnpm install --frozen-lockfile
+IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄>
+```
+
+`pnpm local`（`scripts/local.ts`）依序：通用參數不在就下載（`pnpm fetch-crs`）、建置正式的頁面（`vite build --mode production`：內政部的發證金鑰、元件在 `http://localhost:61161`）、建置後台（不帶測試的建置標籤）、跑一次清冊鏡像（抓內政部真的 G2、G3 清冊）、用測試的名冊啟動後台並提供頁面，在 `http://localhost:8080/`。按 Ctrl-C 停止。名冊、清冊、後台的執行檔在 `web/local/`（不進版控）；刪掉這個目錄就從空的名冊重來。
+
+用桌機的 Chrome 開 `http://localhost:8080/`。`localhost` 是瀏覽器認定的安全來源，不需要 HTTPS：在後台送的標頭之下，頁面是跨來源隔離的（多執行緒），也能和元件的視窗來回（2026-11-16 在這台 Mac 的 Chrome 157 實測，只送 `CheckEnvir`：`test/e2e/check-component.ts`）。Safari、Firefox 忽略 `Document-Isolation-Policy`，證明用 1 個執行緒；這一頁沒有在它們上面測過。
+
+確認頁面本身沒問題、但還不想插卡時：`node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/` 用無頭 Chrome 走到第 2 個畫面為止（不按「讀取卡片」，元件不會收到任何請求），檢查標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域。
+
+## 畫面和引擎怎麼分層
+
+| 層 | 檔案 | 做什麼 | 不做什麼 |
+|---|---|---|---|
+| 畫面 | `src/ui/` | 五個畫面和收回、三次點擊；把停止原因和這張卡片的現況對到 `design/copy/card-proof.json` 的句子（`messages.ts`）；在點擊裡開元件的視窗 | 不檢查任何東西、不碰憑證和簽章的位元組；沒有自己的句子（`test/copy.test.ts` 檢查 `src/ui/` 和 HTML 裡沒有中日韓文字） |
+| 引擎 | `src/flow.ts`、`src/index.ts` 和其他 | 全部的檢查、何時讓卡片簽、何時查現況、算證明、送出 | 不知道有畫面 |
+| 卡片 | `src/card/card.ts` 的介面；`hipki.ts`（元件）、`fake.ts`（測試金鑰） | 讀憑證（不用 PIN）、簽 31 個位元組（要 PIN），簽章附上實際簽章的憑證 | 不判斷憑證能不能用 |
+
+畫面的文字在 `design/copy/card-proof.json`，是 `design/copy/card-proof.md` 的句子照畫面分組、例子換成 `{名稱}`。`test/copy.test.ts` 兩個方向都比：JSON 的每一句代入 Markdown 的例子後，在 Markdown 裡一字不差；Markdown 的每個畫面（程式碼區塊）和表格裡畫面寫的每一格，都由 JSON 的句子組成、沒有剩下的字。文件裡沒有的句子，畫面只顯示代碼（見「停止的原因」）。唯一不在那份 Markdown 裡的是說明頁的「待補」。
+
+說明頁（「怎麼準備」「了解更多」「怎麼重驗」）是 `help.html?topic=…`，只有標題和「待補」，在新分頁開：離開這一頁，過卡就中斷了。
+
+## PIN 經過哪些程式
+
+1. 第 2 個畫面的欄位（`src/ui/app.ts` 的 `pinField`）：`type="password"`、`autocomplete="off"`、沒有 `name`、不在 `<form>` 裡。按「確認卡片」時讀一次欄位的值，**欄位立刻清空**，值只交給 `flow.confirmCard(pin)`。欄位是空的時候按鈕不能按，所以不會送出沒有 PIN 的請求。
+2. 引擎（`src/flow.ts`）：存在記憶體裡，到第二次簽章完成或流程停下為止，交給卡片兩次。
+3. 橋接（`src/card/hipki.ts` 的 `sign`）：放進一個請求字串，用 `postMessage` 送到元件的來源（`targetOrigin` 寫死），然後丟掉；這個物件沒有任何欄位存它。PIN 是空的、或含 `+`、`%`、非 ASCII 時不送（見下面）。
+4. 元件的視窗，再到卡片。
+
+沒有任何儲存空間、網址、紀錄、全域變數、DOM 的屬性存過它：`test/e2e/ui.ts` 在每次用過 PIN 之後，檢查欄位、整份 HTML、網址、`localStorage`、`sessionStorage`、`window` 上的每個值都沒有它。JavaScript 的字串不能清成 0，做得到的是不再持有它的參照。
+
+PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面顯示「PIN 不正確。……」、欄位是空的，持卡人重新輸入、再按一次才會再送；任何不成功的回應都不會自己重送。
+
+## 元件的橋接信任什麼
+
+`src/card/hipki.ts`。元件沒有 CORS 標頭，頁面不能用 `fetch` 呼叫它；它提供一頁 `/popupForm`，頁面用 `window.open` 開成視窗，視窗準備好時對開它的頁面送 `{"func":"getTbs"}`，頁面送一個請求，視窗做完把回應送回來、自己關掉。照 PSE 範例（`hipki-popup.ts`、`hipki-client.ts`）和 `web-isolation-bench` 量測頁的做法自己寫，沒有複製。
+
+- **網址寫死**：`http://localhost:61161`（`src/target.ts`），不從伺服器的回應或網址參數來。測試的建置換成假元件的網址；`test/build.test.ts` 檢查正式的建置只有這個網址、沒有任何測試的東西。
+- **只收元件來源的訊息**：`MessageEvent.origin` 不是 `http://localhost:61161`、或內容不是字串的訊息一律忽略（例如擴充功能送進來的）。送出時 `targetOrigin` 也寫死，視窗被導到別的網址就收不到請求（包括 PIN）。
+- **一次點擊一個視窗**：瀏覽器一次點擊只讓開一個視窗。畫面在點擊的處理程式裡、還沒有任何 `await` 之前呼叫 `open()`，接下來的讀憑證或簽章用這個視窗；沒用到就關掉（例如題目的日期不對，第二次簽章前就停了）。
+- **回應嚴格讀**：憑證只交給引擎自己檢查；簽章的回應附的憑證（`certb64`）交給引擎，和讀卡時選出的那一張不同就停（`card_error`、代碼 `certificate_mismatch`）。回應沒有附憑證也停（`no_certificate_in_reply`）。
+- **只送簽得對的內容**：要簽的字是 31 個 `[A-Za-z0-9:_.-]` 的字元（場合字串和宣告碼都是），以文字送出（2026-11-11 實測元件簽的是文字的位元組）。PIN 含 `+` 或 `%` 時不送：中華電信的程式庫送出前把 `+` 改寫成 `%2B`，看起來元件會像網址一樣解碼請求，這種 PIN 可能變成別的字送到卡片、用掉一次錯誤次數。
+
+| 情況 | 引擎的停止原因 | 怎麼得知 |
+|---|---|---|
+| 視窗被擋（`window.open` 回 `null`） | `card` `card_error`，代碼 `popup_blocked` | 程式的行為 |
+| 視窗 8 秒內沒有說準備好（元件沒裝、沒啟動） | `card` `component_unreachable` | 實測（`ui.ts` 的假元件）；真元件沒啟動時的樣子沒有實測 |
+| 準備好之後 30 秒沒有回應 | `card` `card_error`，代碼 `timeout` | 程式的行為 |
+| 視窗被持卡人關掉 | 還沒準備好：`component_unreachable`；準備好之後：`card_error`，代碼 `popup_closed` | 程式的行為 |
+| `GetUserCert` 沒有任何讀卡機有卡片，或 `ret_code` 是 `0x76000006`（未插入IC卡）、`0x76100003`（無可用讀卡機） | `card` `no_card` | 讀程式（中華電信的程式庫、PSE 範例、量測頁）；沒有實測 |
+| `MakeSignature` 回 `0x76100006`（IC卡登入失敗）且 `last_error` 是 `0xA0`（PIN碼錯誤）、`0xA2`（PIN碼長度錯誤）、`0x80000001`／`0x80000002`（還剩一或兩次） | `card` `pin_incorrect` | 讀程式；**沒有實測**（沒有用錯的 PIN 試） |
+| `0x76100006` 且 `last_error` 是 `0xA4`（已鎖卡） | `card` `card_locked` | 讀程式；沒有實測 |
+| `0x76100006` 但 `last_error` 是 0（程式庫的註解：可能是鎖卡等） | `card_error`，代碼 `76100006`，不猜 | 讀程式 |
+| 其他非 0 的 `ret_code`（例如 `0x7600000F` 禁止存取的網域） | `card_error`，代碼是十六進位的 `ret_code`（和 `last_error`） | 讀程式 |
+
+## 每個值從哪裡來、送到哪裡去
 
 ## 每個值從哪裡來、送到哪裡去
 
@@ -38,42 +101,42 @@
 
 ## 停止的原因
 
-流程停下來時丟出 `FlowStop`，`stop` 是下表的一種（`src/flow.ts` 的 `Stop`）。每一種都要讓畫面顯示一句話；文字在 `design/copy/card-proof.md`，這裡只對到那份文件的列，沒有對應列的標「待補文字」。這些原因都只給呼叫的程式，不送給伺服器。`flow.stop` 是 `null` 的（PIN 錯、送出時的暫時失敗）可以重試同一步，其他的結束這次流程。
+流程停下來時丟出 `FlowStop`，`stop` 是下表的一種（`src/flow.ts` 的 `Stop`）。畫面照 `src/ui/messages.ts` 顯示 `design/copy/card-proof.md` 的一句話；「代碼」是那句話裡的 `X`。後台的錯誤另外在那句話旁邊顯示回應標頭 `X-Request-Id` 的值（持卡人回報問題時說得出是哪一次）。這些原因都只給呼叫的程式，不送給伺服器。`flow.stop` 是 `null` 的（PIN 錯、送出時的暫時失敗）可以重試同一步，其他的結束這次流程；第 2 個畫面停下時，「讀取卡片」再出現一次，按下去是新的一次過卡（讀卡不用 PIN）。
 
 | `code` | 細項 | 什麼情況 | `design/copy/card-proof.md` 的哪一列 |
 |---|---|---|---|
-| `card` | `component_unreachable` | 連不上內政部的元件 | 2.「連不上元件」 |
+| `card` | `component_unreachable` | 連不上內政部的元件 | 2.「連不上元件」，附「怎麼準備」 |
 | `card` | `no_card` | 讀卡機裡沒有卡片 | 2.「沒有卡片」 |
 | `card` | `pin_incorrect` | PIN 錯（可以重試） | 2.「PIN 不正確」 |
-| `card` | `card_locked` | 卡片鎖住了 | 待補文字 |
-| `card` | `card_error` | 卡片或元件回了其他錯誤 | 待補文字 |
-| `certificate` | `no_certificate` | 卡片沒有回任何憑證 | 待補文字 |
+| `card` | `card_locked` | 卡片鎖住了 | 2.「卡片鎖住了」 |
+| `card` | `card_error`（附代碼，見上面橋接的表） | 卡片或元件回了其他錯誤 | 2.「讀卡或簽章時的其他錯誤」 |
+| `certificate` | `no_certificate` | 卡片沒有回任何憑證 | 2.「卡片上讀不到憑證」 |
 | `certificate` | `expired`（附 `notAfter`，台灣日期） | 憑證在今天之前到期 | 2.「憑證過期」 |
-| `certificate` | `not_yet_valid` | 憑證還沒生效 | 待補文字 |
+| `certificate` | `not_yet_valid`（附 `notBefore`，台灣日期） | 憑證還沒生效 | 2.「憑證還沒生效」 |
 | `certificate` | `not_citizen_primary` | 憑證政策或主體目錄屬性不是國民正卡的（外來人口、附卡、行動自然人憑證、政策不同） | 2.「不是國民的正卡」 |
 | `certificate` | `unsupported_format` | 電路的走法在其他地方不過 | 2.「憑證的格式電路不接受」 |
-| `certificate` | `unknown_issuer` | 不是 G2、G3 簽發的 | 待補文字 |
-| `certificate` | `ambiguous_certificate` | 卡片上有兩張不同的憑證都通過 | 待補文字 |
+| `certificate` | `unknown_issuer` | 不是 G2、G3 簽發的 | 2.「憑證不是內政部簽發的」 |
+| `certificate` | `ambiguous_certificate` | 卡片上有兩張不同的憑證都通過 | 2.「憑證的格式電路不接受」（文件的註） |
 | `revocation` | `crl_stale`（附天數、`L`） | 清冊比 `L` 天舊 | 2.「廢止清冊太舊」 |
-| `revocation` | `crl_unavailable` | 索引或清冊拿不到；索引沒有可用的行；編號最高的有兩個不同檔案 | 待補文字 |
-| `revocation` | `crl_hash` | 清冊的 SHA-256 不是檔名 | 待補文字 |
-| `revocation` | `crl_unusable`（附原因代碼） | 清冊不可用（章不對、分段、差異清冊……） | 待補文字 |
-| `revocation` | `crl_rollback` | 清冊編號比這台裝置用過的低 | 待補文字 |
+| `revocation` | `crl_unavailable`、`crl_hash`、`crl_unusable` | 索引或清冊拿不到；索引沒有可用的行；編號最高的有兩個不同檔案；清冊的 SHA-256 不是檔名；清冊不可用 | 2.「拿不到可用的廢止清冊」，代碼是這三個之一 |
+| `revocation` | `crl_rollback` | 清冊編號比這台裝置用過的低 | 2.「拿到的廢止清冊比這台電腦上次用過的舊」 |
 | `revoked` | | 序號在清冊上（廢止或暫時停用） | 2.「在廢止清冊上」 |
-| `artifact` | 檔案路徑 | 電路檔或通用參數拿不到，或 SHA-256 不對 | 待補文字 |
-| `engine` | | 證明引擎無法啟動或算不出證明 | 待補文字 |
-| `card_signature` | | 卡片回的簽章用憑證的公鑰驗不過 | 待補文字 |
-| `challenge_malformed` | | 題目不是唯一寫法 | 待補文字 |
+| `artifact` | 檔案路徑 | 電路檔或通用參數拿不到，或 SHA-256 不對 | 2.「電路檔或參數檔下載失敗，或內容和預期的不同」 |
+| `engine` | | 證明引擎無法啟動或算不出證明 | 4.「這台電腦算不出證明」 |
+| `card_signature` | | 卡片回的簽章用憑證的公鑰驗不過 | 4.「卡片回的簽章用憑證驗不過」，代碼 `card_signature` |
+| `challenge_malformed` | | 題目不是唯一寫法 | 2.「伺服器沒有回應，或回應讀不懂」，代碼 `challenge_malformed` |
 | `challenge_not_today` | 題目的日期、今天 | 題目的日期不是裝置的台灣今天 | 2.「電腦的日期和題目的日期不同」 |
-| `blocked` | `switch_limit` | 更換次數用完 | 3.「更換次數用完」（只有取消） |
-| `blocked` | `not_current` | 收回，但這張卡片目前沒有宣告 | 收回的 3.「目前沒有宣告」（只有取消） |
-| `proof_check` | | 證明不是 14,656 個位元組，或公開輸入和裝置重建的不同 | 待補文字 |
-| `server` | `network`、`internal`、其他 5xx、`rate_limited`（送出時，可以重試） | 送出沒有到達或後台暫時失敗 | 4.「送不出去」 |
+| `blocked` | `switch_limit` | 更換次數用完 | 3.「更換次數用完」（只有取消；不是訊息） |
+| `blocked` | `not_current` | 收回，但這張卡片目前沒有宣告 | 收回的 3.「目前沒有宣告」（只有取消；不是訊息） |
+| `proof_check` | | 證明不是 14,656 個位元組，或公開輸入和裝置重建的不同 | 4.「算出的證明沒有通過這一頁自己的檢查」 |
+| `server` | `network`、`internal`、其他 5xx、`rate_limited`（送出時，可以重試） | 送出沒有到達或後台暫時失敗 | 4.「送不出去」，附「再試一次」 |
 | `server` | `challenge_unknown` | 題目過期或不是這台後台發的 | 4.「停太久，題目過期」 |
-| `server` | `scope`、`malformed`、`challenge_used`、`challenge_attempts`、`proof`、`crl_stale`、`root`、`date_order`、`not_current`、`switch_limit` | 後台沒有接受這份紀錄 | 4.「後台沒有接受」（顯示代碼） |
-| `server` | 要題目、查現況、讀設定時的任何代碼；`malformed_response`；`not_found`、`method_not_allowed`；`http_狀態碼` | 後台沒有回答，或回答讀不懂 | 待補文字 |
-| `username` | | 輸入的帳號不符合場合的格式 | 待補文字（畫面 1 輸入時就該擋下） |
-| `state` | | 呼叫的程式步驟順序錯，或 `proceed` 傳的帳號不是畫面該顯示的那一個 | 不給持卡人看（程式錯誤） |
+| `server` | `scope`、`malformed`、`challenge_used`、`challenge_attempts`、`proof`、`crl_stale`、`root`、`date_order`、`not_current`、`switch_limit` | 後台沒有接受這份紀錄 | 4.「後台沒有接受」，代碼是後台的代碼 |
+| `server` | 要題目、查現況、讀設定時的任何代碼；`malformed_response`；`not_found`、`method_not_allowed`；`http_狀態碼` | 後台沒有回答，或回答讀不懂 | 2.「伺服器沒有回應，或回應讀不懂」，代碼是後台的代碼 |
+| `username` | | 輸入的帳號不符合場合的格式 | 1.「帳號的格式不對」（畫面 1 就擋下） |
+| `state` | | 呼叫的程式步驟順序錯，或 `proceed` 傳的帳號不是畫面該顯示的那一個 | 文件沒有這句；只顯示代碼 `state`（程式錯誤） |
+
+第 3 個畫面還有三種情況文件沒有第一句，畫面只顯示代碼，按鈕照常：卡片宣告過、後來收回了，現在再宣告同一個帳號（`refresh_after_withdraw`）、別的帳號（`switch_after_withdraw`），或更換次數用完（`switch_limit_after_withdraw`）。文件的句子都是「這張卡片目前宣告的是 @…」，這時目前沒有宣告任何帳號。
 
 ## 唯一存進瀏覽器的東西
 
@@ -83,7 +146,7 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ## 頁面需要的 `Content-Security-Policy`
 
-伺服器送這個標頭。頁面只能連自己的網域；套件被動了手腳，瀏覽器也不讓它把東西送到別處。
+伺服器送這個標頭（`server/headers.go` 的 `pageHeaders`，`web/` 的每個檔案都帶；`server/` 的測試檢查這份 README 引用的和它一字不差）。頁面只能連自己的網域；套件被動了手腳，瀏覽器也不讓它把東西送到別處。
 
 ```
 default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
@@ -92,10 +155,11 @@ default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; con
 - `'wasm-unsafe-eval'`：bb.js 和 Noir 要編譯 WebAssembly。
 - `worker-src 'self'`：建樹的 worker 和 bb.js 自己的 worker 都是同一個網域的檔案。
 - bb.js 原本把 WebAssembly 包成 `data:` 網址、把通用參數從 Aztec 的 CDN 下載。建置時把 WebAssembly 寫成檔案（`vite.config.ts`），通用參數改從自己的網域拿，所以 `connect-src` 只要 `'self'`。
-- 下一份工作加上畫面和內政部元件的彈出視窗時，這份要跟著看（樣式、元件在 `localhost` 的視窗）。
-- 多執行緒要頁面是跨來源隔離的：另外送 `Document-Isolation-Policy: isolate-and-credentialless`（Chromium 系的桌機版）。其他瀏覽器忽略它，證明用 1 個執行緒。
+- 畫面的樣式是同一個網域的 CSS 檔（`style-src 'self'`）；畫面不用 `style` 屬性，也沒有內嵌的 `<script>`。
+- **元件的視窗不需要多開任何東西。** `window.open` 開 `http://localhost:61161/popupForm`（頂層的導覽）和 `postMessage` 都不受 CSP 管；頁面本身不對 `localhost:61161` 發任何請求，那些請求是元件的頁面自己發的。`test/e2e/ui.ts` 在這份標頭之下跑完整條流程，沒有任何違反。
+- 多執行緒要頁面是跨來源隔離的：另外送 `Document-Isolation-Policy: isolate-and-credentialless`（Chromium 系的桌機版）。它不像 `Cross-Origin-Opener-Policy` 會切斷頁面和元件視窗的關係。其他瀏覽器忽略它，證明用 1 個執行緒。
 
-無頭瀏覽器的測試在這份標頭之下跑完整條流程，並檢查沒有任何違反（`securitypolicyviolation`），伺服器也沒有收到它不認得的請求。測試也檢查這份 README 引用的標頭和測試用的一字不差（`test/e2e/headers.ts`）。
+無頭瀏覽器的測試在這份標頭之下跑完整條流程，並檢查沒有任何違反，頁面和它的 worker 沒有連到自己的網域以外的地方。`test/e2e/run.ts` 也檢查這份 README 引用的標頭和測試用的一字不差（`test/e2e/headers.ts`）；`test/e2e/ui.ts` 檢查後台實際送的和 `test/e2e/headers.ts` 相同。
 
 ## 怎麼單獨執行和測試
 
@@ -106,11 +170,13 @@ cd web
 pnpm install --frozen-lockfile
 pnpm fetch-crs        # 下載通用參數到 crs/（不進版控），核對 SHA-256
 pnpm typecheck
-pnpm test             # Node 裡的測試，約 10 秒
-IAMREAL_BB=/path/to/bb pnpm test:e2e     # 無頭的 Chrome，約 2 分鐘
+pnpm test             # Node 裡的測試，約 20 秒（含一次正式的建置）
+IAMREAL_BB=/path/to/bb pnpm test:e2e     # 引擎，無頭的 Chrome，約 2 分鐘
+IAMREAL_BB=/path/to/bb pnpm test:ui      # 畫面、橋接、真的後台，無頭的 Chrome，約 3 分鐘（要 Go）
+pnpm build            # 正式的建置，到 dist/
 ```
 
-- `pnpm fetch-crs` 是這個目錄唯一對外的連線：從 `https://crs.aztec-cdn.foundation/` 下載 2^18 個點的 `g1_compressed.dat` 開頭 8 MiB（SHA-256 `5107a7926d504236331b4872b7218a1ca18921b5358d894822576e1aeb684934`）和 `g2.dat`（128 個位元組，`01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f`）。G1 的雜湊和 `bb` 自己下載、檢查過的兩份副本相同；G2 從 Aztec 的兩個網域下載的相同。頁面執行時從自己的網域拿這兩個檔案。
+- `pnpm fetch-crs` 是這個目錄的程式唯一對外的連線（`pnpm local` 另外讓後台的清冊鏡像抓內政部的清冊）：從 `https://crs.aztec-cdn.foundation/` 下載 2^18 個點的 `g1_compressed.dat` 開頭 8 MiB（SHA-256 `5107a7926d504236331b4872b7218a1ca18921b5358d894822576e1aeb684934`）和 `g2.dat`（128 個位元組，`01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f`）。G1 的雜湊和 `bb` 自己下載、檢查過的兩份副本相同；G2 從 Aztec 的兩個網域下載的相同。頁面執行時從自己的網域拿這兩個檔案。
 - `IAMREAL_BB` 是 `bb` 6.0.0（取得方式見 `verifier/README.md`）。`CHROME` 可以指定 Chrome 的路徑，預設是 macOS 的 Google Chrome。
 - `pnpm test:e2e` 後面可以接設定，例如 `G3-dip G3-none G2-dip G3-dip-t4`：發證金鑰的大小、頁面是否跨來源隔離、證明的執行緒上限。
 
@@ -121,7 +187,11 @@ IAMREAL_BB=/path/to/bb pnpm test:e2e     # 無頭的 Chrome，約 2 分鐘
 | `test/spec.test.ts` | `spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`（加上 `crl/` 的兩張發證憑證）、`roster-rules.json`（每個案例重播事件，每一筆宣告和收回事先算出的種類和結果相同）。標準答案直接讀那些檔案，不複製 |
 | `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；分份建樹和一次建的結果相同；索引怎麼選 |
 | `test/certificate.test.ts` | 照電路的走法預先檢查憑證：國民正卡通過；加密用憑證被跳過；過期（含到期日當天最後一秒）、還沒生效、外來人口、`cardHolderRank`、4096 位元的卡片金鑰、發證者名稱太長、金鑰用途不在第三個、不是兩把發證金鑰簽的，各自回對應的原因 |
-| `test/flow.test.ts` | 伺服器或鏡像給了不該接受的值，每一個都停下來，之後沒有請求，沒有請求帶著原因：日期不是今天的題目、寫法不唯一的題目（6 種）、章不對的清冊、舊於 `L` 天的清冊、`/api/v1/config` 回 365、編號比記住的低的清冊、分段的清冊、索引指到不存在的檔案、內容和檔名的雜湊不符的清冊、雜湊不對的電路檔、序號在清冊上。另外：卡片簽的場合字串只來自對照表；更換用完時卡片不簽第二次、不要題目；收回的帳號；格式不對的現況；公開輸入和裝置自己重建的不同時不送出；過期的憑證在任何請求之前停下；PIN 錯可以重試。序號在清冊上、清冊不可用、電路檔或通用參數雜湊不對時（包括 PIN 在檢查完成前就交進來），卡片沒有被要求簽章，也沒有 `card-state` 的請求；`phase` 從 `checking` 到 `ready_for_pin`；`proceed` 傳的帳號不是現況的帳號時不簽第二次；`crl_stale` 結束流程，`internal` 可以原封不動再送 |
+| `test/copy.test.ts` | `design/copy/card-proof.json` 和 `card-proof.md` 的句子兩個方向都相同；`src/ui/` 和 HTML 裡沒有中日韓文字 |
+| `test/ui.test.ts` | 每一種停止原因、每一種現況，畫面顯示哪一句（`src/ui/messages.ts`）；後台的錯誤帶請求編號 |
+| `test/hipki.test.ts` | 元件的回應怎麼讀：讀卡機有沒有卡片、憑證、簽章和附的憑證；PIN 錯、鎖卡、其他代碼（照讀程式得知的格式，見「元件的橋接信任什麼」） |
+| `test/build.test.ts` | 正式的建置有內政部的發證金鑰和 `http://localhost:61161`，沒有假卡片、測試的發證金鑰、假元件，`localhost` 以外的本機網址一個都沒有 |
+| `test/flow.test.ts` | 伺服器或鏡像給了不該接受的值，每一個都停下來，之後沒有請求，沒有請求帶著原因：日期不是今天的題目、寫法不唯一的題目（6 種）、章不對的清冊、舊於 `L` 天的清冊、`/api/v1/config` 回 365、編號比記住的低的清冊、分段的清冊、索引指到不存在的檔案、內容和檔名的雜湊不符的清冊、雜湊不對的電路檔、序號在清冊上。另外：卡片簽的場合字串只來自對照表；更換用完時卡片不簽第二次、不要題目；收回的帳號；格式不對的現況；公開輸入和裝置自己重建的不同時不送出；過期的憑證在任何請求之前停下；PIN 錯可以重試。序號在清冊上、清冊不可用、電路檔或通用參數雜湊不對時（包括 PIN 在檢查完成前就交進來），卡片沒有被要求簽章，也沒有 `card-state` 的請求；`phase` 從 `checking` 到 `ready_for_pin`；`proceed` 傳的帳號不是現況的帳號時不簽第二次；`crl_stale` 結束流程，`internal` 可以原封不動再送；卡片的讀卡機說簽章的憑證不是選出的那一張時停下、不查現況；還沒生效的憑證附生效日 |
 
 ### 無頭瀏覽器的測試（`pnpm test:e2e`）
 
@@ -133,11 +203,32 @@ IAMREAL_BB=/path/to/bb pnpm test:e2e     # 無頭的 Chrome，約 2 分鐘
 - 沒有違反 CSP，伺服器沒有收到它不認得的請求；
 - 瀏覽器的儲存空間只有清冊編號。
 
-測試的發證金鑰不是內政部的，所以這裡只驗證明本身；和真的後台對接是之後的整合工作。
+測試的發證金鑰不是內政部的，所以這裡只驗證明本身；和真的後台對接在 `pnpm test:ui`。
+
+### 畫面、橋接和真的後台（`pnpm test:ui`）
+
+`test/e2e/ui.ts`：
+
+1. 產生拋棄式的發證金鑰（G2、G3）、卡片和清冊（`test/fixtures/`）。
+2. 用建置標籤 `iamrealtest` 建置後台（`server/testissuers.go` 的 `-test-issuers`、`-test-moica`），用這兩把金鑰、一個假的內政部（給鏡像抓清冊）、測試的名冊啟動；頁面用 `vite build --mode test` 建置（`test/e2e/target.ts` 換掉 `src/target.ts`：測試的發證金鑰、假元件在 `http://localhost:61171`），由後台提供。
+3. 假元件（`test/e2e/fake-component.ts`）照真元件的訊息來回，用測試金鑰的卡片回答 `GetUserCert` 和 `MakeSignature`，PIN 錯、鎖卡回中華電信程式庫寫的代碼，並記下每一個請求。
+4. 用無頭 Chrome（`test/e2e/cdp.ts`，Chrome DevTools Protocol，不用套件）從畫面上點，滑鼠事件是真的（瀏覽器當成持卡人的點擊）：宣告（先輸入一次錯的 PIN）、再次過卡（第一次送出被丟掉，按「再試一次」）、更換、更換到上限（只有取消，卡片只簽一次）、送出被後台拒絕（中途改了帳號，畫面顯示代碼 `proof` 和請求編號，和回應標頭、後台的紀錄相同）、收回、沒有可收回的、鎖卡、題目的日期不是今天；以及每一種在輸入 PIN 之前停下的情況：元件不回應、沒有卡片、卡片沒有憑證、過期、還沒生效、不是國民正卡、格式不支援、兩張憑證都通過、不是內政部簽發、在清冊上、清冊 5 天沒更新、鏡像沒有可用的清冊、電路檔內容不符、後台不回應、清冊比這台電腦用過的舊。每一種都檢查畫面上的句子、沒有 PIN 欄位、卡片沒有簽、沒有 `card-state` 請求。
+5. 出每日快照，用 `iamreal-verify` 重驗：名冊成立，五筆的種類對，最後的現況（這張卡片目前沒有宣告、上次過卡是今天）和畫面顯示的相同，畫面上的短編號是這張卡片的。
+6. 頁面的標頭、跨來源隔離、多執行緒；沒有違反 CSP；頁面和它的 worker 只連到自己的網域、元件的視窗只連到元件；一次元件的請求一個視窗；沒有不帶 PIN 的簽章請求；用過 PIN 之後頁面上找不到它；姓名在第 2 個畫面之後不在頁面上；瀏覽器的儲存空間只有清冊編號。
+
+截圖在 `test-output/ui/screens/`，重驗的輸出在 `test-output/ui/verify.json`。
+
+### 其他的小程式（不在測試裡）
+
+| 指令 | 做什麼 |
+|---|---|
+| `node --experimental-strip-types test/e2e/check-component.ts` | 對**真的**元件只送 `CheckEnvir`（環境檢查，不讀憑證、不簽章），頁面在 `http://localhost:<埠>`、帶後台的兩個標頭：看頁面是不是跨來源隔離、元件能不能來回 |
+| `node --experimental-strip-types test/e2e/smoke.ts <網址>` | 對跑著的頁面（例如 `pnpm local`）走到第 2 個畫面為止，不碰元件 |
+| `node --experimental-strip-types test/e2e/background.ts [次數]` | 量分頁在背景時過卡的時間（見「時間」） |
 
 ### 假卡片
 
-`src/card/fake.ts`：測試金鑰簽發的憑證（簽章用和加密用各一張，結構和國民正卡相同，做法照電路測試的 `cert.mjs`，在 `test/fixtures/certs.ts`）和對應的私鑰。`src/index.ts` 不匯出它。
+`src/card/fake.ts`：測試金鑰簽發的憑證（簽章用和加密用各一張，結構和國民正卡相同，做法照電路測試的 `cert.mjs`，在 `test/fixtures/certs.ts`）和對應的私鑰。`src/index.ts` 不匯出它，正式的建置不含它（`test/build.test.ts`）。畫面的測試不用它：卡片在假元件裡（`test/e2e/fake-component.ts`），頁面走的是真的橋接。
 
 ## 時間
 
@@ -154,13 +245,17 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 
 - 引擎初始化從頁面開始算，大部分是把壓縮的通用參數展開（單執行緒約 3.9 秒）。它在進頁面時就開始，和讀卡、建樹同時進行。展開後的參數不存起來（見上面「唯一存進瀏覽器的東西」），所以每次載入都重做。
 - 證明的執行緒上限是 8（`MAX_PROOF_THREADS`，`src/prover/engine.ts`）：這台電腦上多於 8 個沒有更快，少於 8 個變慢。每一格只量一次，只有這一台電腦。
+- **分頁在背景時慢很多。** `test/e2e/background.ts`（2026-11-16，同一台電腦、Chrome 157 無頭模式，G3、自製的 176,000 筆清冊，每格兩次頁面載入、每次兩次過卡）：另一個分頁在前景、這一頁從載入到算完都在背景（`document.visibilityState` 是 `hidden`）時，跨來源隔離（8 個執行緒）的證明從 2.6 到 3.5 秒變成 28.6 到 32.5 秒，建樹從 2.5 到 2.9 秒變成 20.6 到 31.1 秒，引擎初始化從 1.8 到 1.9 秒變成 13.5 到 19.4 秒，整次過卡從 6.2 到 7.1 秒變成 56.5 到 66.8 秒；沒有隔離（1 個執行緒）的證明從 9.2 到 9.6 秒變成 60.3 到 65.2 秒，整次過卡從 12.4 到 14.4 秒變成 92.5 到 96.5 秒。原因沒有查（推測是 Chrome 降低背景分頁行程的優先順序）；有畫面的 Chrome 沒有量。
 - 頁面不是跨來源隔離時 bb.js 不報錯、安靜地用 1 個執行緒；引擎自己看 `crossOriginIsolated` 和 `SharedArrayBuffer` 決定，並把 bb.js 自己說開的執行緒數一起告訴呼叫的程式（`ThreadMode`）。
 
 ## 檔案
 
 | 檔案 | 內容 |
 |---|---|
-| `src/index.ts` | 頁面的入口：`startEngine()`（進頁面就呼叫）、`createCardProof()`。寫死發證金鑰、場合的名冊、同網域的 fetch、時鐘、儲存 |
+| `index.html`、`help.html` | 過卡的頁面、說明頁 |
+| `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（五個畫面和收回）、`messages.ts`（停止原因和現況對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`help.ts`、`style.css` |
+| `src/index.ts` | 引擎的入口：`startEngine()`（進頁面呼叫一次）、`createCardProof()`（每次過卡，用同一個引擎）。寫死場合的名冊、同網域的 fetch、時鐘、儲存 |
+| `src/target.ts` | 發證金鑰和元件的網址；測試的建置換成 `test/e2e/target.ts` |
 | `src/flow.ts` | 過卡的狀態機：`readCard` → `checksDone` → `confirmCard(pin)` → `proceed(帳號)` → 完成；`resubmit`、`cancel`；`phase` 說現在在哪一步。宣告和收回 |
 | `src/spec/` | 規格裡的算法：base32、題目、日期、場合字串、宣告碼、匿名編號、名冊規則的事先計算 |
 | `src/certificate.ts`、`src/der.ts` | 讀憑證、照電路的走法預先檢查、選出要用的那一張、驗發證金鑰的章 |
@@ -168,11 +263,11 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `src/crl/` | 讀清冊並判斷可不可用、從鏡像找清冊並檢查、樹、建樹的 worker |
 | `src/prover/` | 證明引擎（bb.js、Noir）、電路的輸入、電路和通用參數的雜湊 |
 | `src/api.ts` | 和後台之間的請求，嚴格讀回應 |
-| `src/card/` | 卡片的介面和假卡片 |
+| `src/card/` | 卡片的介面、元件的橋接（`hipki.ts`）、假卡片 |
 | `src/storage.ts` | 唯一的儲存：清冊編號 |
 | `circuits/` | 編譯好的電路，見裡面的 `README.md` |
-| `scripts/` | 下載通用參數、從 `nargo` 的輸出寫出 `circuits/` 的檔案 |
-| `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器 |
+| `scripts/` | 下載通用參數、從 `nargo` 的輸出寫出 `circuits/` 的檔案、在本機整條跑（`local.ts`） |
+| `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器；`test/e2e/` 是無頭瀏覽器的測試、假元件、量測 |
 
 執行時的依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和電路的程式庫釘的相同）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，`pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本。沒有介面框架；DER 自己解析。
 
@@ -182,4 +277,6 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 - **清掉瀏覽器資料後，清冊編號的保護退回「清冊不能舊於 `L` 天」。** 換一個瀏覽器、無痕視窗也一樣。
 - **頁面和 API 從同一台伺服器來時，這些檢查擋不住營運者本人**：改過的頁面可以不做這些檢查（ADR-0016）。
 - PIN 是 JavaScript 的字串，沒辦法清成 0；做得到的是第二次簽章後（或流程停下時）不再持有它。
+- **瀏覽器的密碼管理員會不會提議記住 PIN，沒有實測。** 欄位是 `autocomplete="off"`、沒有名稱、不在表單裡，但 Chrome 對密碼欄位不一定照 `autocomplete="off"`。無頭的 Chrome 沒有密碼管理員的提示可看。
+- **元件的錯誤格式是讀程式得知的**（見「元件的橋接信任什麼」的表）。PIN 錯、鎖卡、沒有卡片的真實回應沒有實測；不認得的回應一律停下、顯示代碼，不猜、不重送。
 - 只在 macOS 上的 Chrome 測過。Safari、Firefox、手機沒有跑過這裡的測試。
