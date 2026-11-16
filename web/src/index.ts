@@ -10,10 +10,9 @@ import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
-import type { Action } from "./spec/declaration-code.ts";
 import type { Platform, Roster } from "./spec/scope.ts";
 import { localStorageStore } from "./storage.ts";
-import { ISSUERS } from "./target.ts";
+import { IDLE_LIMIT_MS, ISSUERS } from "./target.ts";
 
 /**
  * Which scope table the page uses. This stage runs the test scope string
@@ -33,14 +32,13 @@ export function startEngine(onTiming?: (step: string, ms: number) => void): Prov
 }
 
 export function createCardProof(opts: {
-  action: Action;
   platform: Platform;
-  username?: string;
   card: Card;
   /** The page's one engine, from startEngine(). */
   prover: Prover;
   onBackgroundStop?: FlowDeps["onBackgroundStop"];
   onTiming?: FlowDeps["onTiming"];
+  onIdle?: FlowDeps["onIdle"];
 }): CardProofFlow {
   return new CardProofFlow(
     {
@@ -54,12 +52,14 @@ export function createCardProof(opts: {
       startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmUrl()),
       onBackgroundStop: opts.onBackgroundStop,
       onTiming: opts.onTiming,
+      onIdle: opts.onIdle,
+      idleMs: IDLE_LIMIT_MS,
     },
-    { action: opts.action, platform: opts.platform, username: opts.username },
+    { platform: opts.platform },
   );
 }
 
-export { CardProofFlow, FlowStop, type Stop, type CardRead, type CardStatus, type Done, type Phase } from "./flow.ts";
+export { CardProofFlow, FlowStop, IDLE_MS, type Choice, type Consequence, type Stop, type CardRead, type CardStatus, type Done, type Phase } from "./flow.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
 export { normalizeUsername } from "./spec/scope.ts";
 export type { Prover, ThreadMode } from "./prover/prover.ts";

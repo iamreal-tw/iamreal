@@ -87,12 +87,14 @@ export class HipkiCard implements Card {
 
   /**
    * Opens the component's window for the next readCertificates() or sign().
-   * Call it synchronously in the click handler. Opening fails if the browser
-   * blocks the window; the next call then reports it.
+   * Call it synchronously in the click handler. Returns false if the browser
+   * blocked the window: nothing was sent, and the next call reports
+   * `popup_blocked` without sending anything either.
    */
-  open(): void {
+  open(): boolean {
     this.release();
     this.next = new Popup(this.origin);
+    return this.next.opened;
   }
 
   /** Closes a window from open() that no request used. */
@@ -136,7 +138,7 @@ export class HipkiCard implements Card {
 class Popup {
   private readonly origin: string;
   private readonly win: Window | null;
-  private readonly opened = performance.now();
+  private readonly openedAt = performance.now();
   private ready = false;
   private waitingReady: (() => void) | null = null;
   private waitingReply: ((text: string) => void) | null = null;
@@ -170,6 +172,11 @@ class Popup {
     if (win) window.addEventListener("message", this.onMessage);
   }
 
+  /** False if the browser blocked the window. */
+  get opened(): boolean {
+    return this.win !== null;
+  }
+
   close(): void {
     window.removeEventListener("message", this.onMessage);
     try {
@@ -189,7 +196,8 @@ class Popup {
 
   /** Waits until the window is ready, posts `body` to it, and resolves with its reply. */
   request(body: string): Promise<string> {
-    if (!this.win) return Promise.reject(new CardError("card_error", "popup_blocked"));
+    // Nothing is sent: the request never leaves this page.
+    if (!this.win) return Promise.reject(new CardError("popup_blocked"));
     return new Promise<string>((resolve, reject) => {
       let payload: string | null = body;
       let done = false;
@@ -220,7 +228,7 @@ class Popup {
       this.waitingReply = (text) => finish(null, text);
       const readyTimer = setTimeout(
         () => finish(new CardError("component_unreachable")),
-        Math.max(0, READY_MS - (performance.now() - this.opened)),
+        Math.max(0, READY_MS - (performance.now() - this.openedAt)),
       );
       // A window the cardholder closed will never answer. The component's
       // window closes itself right after posting its reply, so a closed

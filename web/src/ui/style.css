@@ -1,7 +1,7 @@
 /*
  * Only what makes the screen readable. The visual rules are not decided yet
  * (docs/design/principles.md, the three layers): no colours that mean a conclusion,
- * no icons; the two lists of screen 2 side by side.
+ * no icons.
  */
 :root {
   font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
@@ -42,20 +42,8 @@ h2 {
   margin-right: 0.25rem;
 }
 
-.account {
-  font-size: 1.4rem;
-}
-
-.columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  margin: 1.5rem 0;
-}
-
-.columns ul {
-  margin: 0;
-  padding-left: 1.2rem;
+.choice .note {
+  margin-left: 0.75rem;
 }
 
 input {

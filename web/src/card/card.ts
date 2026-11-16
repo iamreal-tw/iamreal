@@ -11,7 +11,9 @@ export type CardErrorCode =
   /** The card is locked. */
   | "card_locked"
   /** Anything else the card or component reported. */
-  | "card_error";
+  | "card_error"
+  /** The browser blocked the component's window: nothing was sent to the card. */
+  | "popup_blocked";
 
 export class CardError extends Error {
   readonly code: CardErrorCode;

@@ -11,10 +11,15 @@
 // 3. Runs a fake component (fake-component.ts) on localhost:61171, the
 //    test build's component address.
 // 4. Clicks through the screens like a cardholder (real mouse events,
-//    cdp.ts): declare, card proof again, switch, switch to the limit,
-//    withdraw; every case that stops before the PIN is asked; a wrong PIN,
-//    a locked card, a submission that did not get through, one the server
-//    refused (with its request ID on the screen).
+//    cdp.ts): first the card, then the choice, then the declaration. A
+//    first declaration; card proof again (no account typed); a switch, with
+//    "上一步" back and forth; withdraw; declare the same account again (not a
+//    switch); withdraw; declare another (a switch); switches used up (the
+//    button cannot be pressed, and the engine refuses it too); a submission
+//    that did not get through, one the server refused (with its request ID
+//    on the screen); the PIN's wait running out; a window the browser
+//    blocked on each of the three clicks, then the same click again; every
+//    case that stops before the PIN is asked; a wrong PIN, a locked card.
 // 5. Publishes the daily snapshot and re-verifies it with iamreal-verify:
 //    the state is the one the screens showed.
 // 6. Checks the response headers, that the page is cross-origin isolated,
@@ -52,6 +57,11 @@ const COMPONENT_PORT = 61171;
 const COMPONENT = `http://localhost:${COMPONENT_PORT}`;
 const PIN = "834271";
 const PLATFORM = "Threads";
+/**
+ * The test build's wait for the second signature (the page's is 5 minutes,
+ * test/flow.test.ts): long enough for every case here, short enough to wait out.
+ */
+const IDLE_MS = 25_000;
 
 let failures = 0;
 const check = (ok: boolean, what: string): boolean => {
@@ -158,6 +168,7 @@ await build({
       { name: "G3", modulus: issuerKeys.G3.modulus.toString(16), bits: 4096 },
     ]),
     __IAMREAL_TEST_COMPONENT__: JSON.stringify(COMPONENT),
+    __IAMREAL_TEST_IDLE_MS__: JSON.stringify(IDLE_MS),
   },
   build: { outDir: dist, emptyOutDir: true },
 });
@@ -207,38 +218,56 @@ const results: Record<string, unknown> = {};
 
 const step = (name: string) => `document.querySelector('[data-step="${name}"]')`;
 const messageText = () => page.text("[data-message]");
+const waitStep = (name: string, what: string, ms = 30_000) => page.waitFor(step(name), what, ms);
 
+/** The beginning: section 1. */
 async function open(): Promise<void> {
   await page.goto(PAGE);
-  await page.waitFor(step("enter"), "screen 1");
+  await waitStep("before_pin", "section 1");
 }
 
-async function toBeforePin(account: string | null): Promise<void> {
-  await open();
-  if (account === null) {
-    await page.clickButton(C.enter.withdraw);
-  } else {
-    await page.type("#account", account);
-    await page.clickButton(C.enter.next);
-  }
-  await page.waitFor(step("before_pin"), "screen 2");
+const componentCount = (func?: string) => component.requests.filter((r) => func === undefined || r.func === func).length;
+const popupCount = () => new Set(browser.requests.filter((r) => r.url.startsWith(COMPONENT + "/popupForm")).map((r) => r.sessionId)).size;
+const cardStateCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/card-state")).length;
+const challengeCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/challenges")).length;
+
+/** Buttons on the screen: text and whether they can be pressed. */
+const buttons = () => page.eval<{ text: string; disabled: boolean }[]>(`[...document.querySelectorAll('main button')].map((b) => ({ text: b.textContent, disabled: b.disabled }))`);
+
+/**
+ * Clicks the button from a script, with no user activation: the browser's
+ * popup blocker blocks the component's window, as it does when a site is not
+ * allowed to open windows. Waits first until the activation of the last real
+ * click has expired.
+ */
+async function blockedClick(text: string, label: string, o: { pinCleared?: boolean } = {}): Promise<void> {
+  await page.waitFor(`!navigator.userActivation.isActive || null`, "the last click's activation to expire", 15_000);
+  const requests = componentCount();
+  const popups = popupCount();
+  const signs = componentCount("MakeSignature");
+  await page.eval(`[...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(text)}).click()`);
+  const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText || null`, `${label}: the message`, 10_000).catch(() => "");
+  check(m === C.confirm_card.popup_blocked, `${label}: a blocked window says "${m}"`);
+  await sleep(500);
+  check(componentCount() === requests && popupCount() === popups && componentCount("MakeSignature") === signs, `${label}: nothing reached the component`);
+  // On section 2 the PIN field is emptied by the click, as always: the button waits for the PIN again.
+  check((await buttons()).some((b) => b.text === text && b.disabled === !!o.pinCleared), `${label}: the same button ${o.pinCleared ? "is there, waiting for the PIN" : "can be pressed again"}`);
 }
 
 /** Reads the card; resolves when the PIN field is there, or with the message if the screen stopped. */
 async function readCard(): Promise<{ pin: boolean; message: string }> {
   await page.clickButton(C.before_pin.read_card);
-  const r = await page.waitFor<{ pin: boolean; message: string }>(
+  return page.waitFor<{ pin: boolean; message: string }>(
     `(() => { const m = document.querySelector('[data-message]')?.innerText; if (m) return { pin: false, message: m };
       if (document.querySelector('#pin')) return { pin: true, message: "" }; return null; })()`,
     "the PIN field or a message",
     30_000,
   );
-  return r;
 }
 
 async function confirmPin(pin: string): Promise<void> {
   await page.type("#pin", pin);
-  await page.clickButton(C.before_pin.confirm_card);
+  await page.clickButton(C.confirm_card.confirm_card);
 }
 
 /** Nothing of the PIN anywhere the page keeps things. */
@@ -254,13 +283,47 @@ async function pinGone(): Promise<boolean> {
   })()`);
 }
 
-async function waitStatus(): Promise<{ status: string; buttons: string[]; main: string }> {
-  await page.waitFor(step("status"), "screen 3", 30_000);
+interface StatusSeen {
+  state: string;
+  first: string;
+  facts: string[];
+  buttons: { text: string; disabled: boolean }[];
+  main: string;
+}
+
+async function waitStatus(): Promise<StatusSeen> {
+  await waitStep("status", "section 3");
   return {
-    status: await page.text("[data-status]"),
-    buttons: await page.eval<string[]>(`[...document.querySelectorAll('button')].map((b) => b.textContent)`),
+    state: await page.eval<string>(`document.querySelector('[data-step="status"]').dataset.state`),
+    first: await page.text("[data-status]"),
+    facts: await page.eval<string[]>(`[...document.querySelectorAll('[data-fact]')].map((e) => e.innerText)`),
+    buttons: await buttons(),
     main: await page.text(),
   };
+}
+
+interface ConsequenceSeen {
+  record: string;
+  switchLine: string;
+  buttons: string[];
+  main: string;
+}
+
+async function waitConsequence(): Promise<ConsequenceSeen> {
+  await waitStep("consequence", "section 4");
+  return {
+    record: await page.text("[data-record-line]"),
+    switchLine: await page.text("[data-switch-line]"),
+    buttons: (await buttons()).map((b) => b.text),
+    main: await page.text(),
+  };
+}
+
+/** Types an account on section 3 (a card that never declared) or on the account screen, and presses "下一步". */
+async function typeAccount(account: string): Promise<void> {
+  await page.eval(`document.querySelector('#account').value = ""`);
+  await page.type("#account", account);
+  await page.clickButton(C.status.next);
 }
 
 async function waitDoneOrMessage(): Promise<{ done: boolean; main: string; message: string }> {
@@ -268,16 +331,16 @@ async function waitDoneOrMessage(): Promise<{ done: boolean; main: string; messa
   return { done: r === "done", main: await page.text(), message: await messageText() };
 }
 
-const componentCount = (func: string) => component.requests.filter((r) => r.func === func).length;
-
 const screens = join(out, "screens");
 mkdirSync(screens);
 async function screenshot(name: string): Promise<void> {
   const { data } = await page.send("Page.captureScreenshot", { format: "png" });
   writeFileSync(join(screens, `${name}.png`), Buffer.from(data, "base64"));
 }
-const recordLine = (account: string, withdraw = false) =>
-  fill(withdraw ? C.status.record_withdraw : C.status.record_declare, { today, platform: PLATFORM, account });
+/** The line of section 4 (ends with "，"), and of section 6 (ends with "。"). */
+const consequenceLine = (account: string, withdraw = false) =>
+  fill(withdraw ? C.consequence.record_withdraw : C.consequence.record_declare, { today, platform: PLATFORM, account });
+const doneLine = (account: string, withdraw = false) => fill(withdraw ? C.done.record_withdraw : C.done.record_declare, { today, platform: PLATFORM, account });
 
 interface Shown {
   kind: string;
@@ -286,78 +349,77 @@ interface Shown {
 }
 const shown: Shown[] = [];
 
-/** One whole card proof that is expected to finish. */
-async function cardProof(o: {
-  label: string;
-  account: string | null;
-  statusText: string;
-  button: string;
-  title: string;
-  recordAccount: string;
-  wrongPinFirst?: boolean;
-  dropFirstSubmission?: boolean;
-  /** A name for screenshots of each screen (test-output/ui/screens/). */
-  screenshots?: string;
-}): Promise<void> {
-  console.log(`\n== ${o.label}`);
-  component.card = main.spec();
-  if (o.screenshots) {
-    await open();
-    await page.type("#account", o.account ?? "");
-    await screenshot(`${o.screenshots}-1-account`);
+/** Section 1, and reading the card up to section 3. */
+async function toStatus(o: { wrongPinFirst?: boolean; blockClicks?: boolean; screenshots?: string } = {}): Promise<StatusSeen> {
+  await open();
+  const s1 = await page.text();
+  for (const s of [
+    fill(C.before_pin.title, { platform: PLATFORM }),
+    C.before_pin.insert,
+    C.before_pin.pin_purpose,
+    C.before_pin.nothing_public,
+    C.before_pin.local_heading,
+    C.before_pin.local_certificate,
+    C.before_pin.local_signature,
+    C.before_pin.card_and_pin,
+    C.before_pin.needs,
+  ]) {
+    check(s1.includes(s), `section 1 says "${s}"`);
   }
-  await toBeforePin(o.account);
-  if (o.screenshots) await screenshot(`${o.screenshots}-2-before-pin`);
-  const screen2 = await page.text();
-  if (o.account !== null) {
-    // The four things: the account, what is published, what stays, the card and PIN.
-    for (const s of [
-      fill(C.before_pin.declaring, { platform: PLATFORM }),
-      `@${o.account}`,
-      fill(C.before_pin.public_declare, { platform: PLATFORM, account: o.account }),
-      C.before_pin.local_pin,
-      C.before_pin.local_certificate,
-      C.before_pin.local_signature,
-      fill(C.before_pin.card_and_pin_declare, { account: o.account }),
-    ]) {
-      check(screen2.includes(s), `screen 2 says "${s}"`);
-    }
-    check(
-      await page.eval<boolean>(`getComputedStyle(document.querySelector('.columns')).display === "grid" && document.querySelectorAll('.columns > section').length === 2`),
-      "screen 2: the two lists side by side",
-    );
-  } else {
-    check(screen2.includes(fill(C.before_pin.withdrawing, { platform: PLATFORM })) && screen2.includes(C.before_pin.public_withdraw), "screen 2 (withdraw) says what it withdraws and publishes");
-  }
-  check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), "no PIN field before the card is read");
+  check(!(await page.eval<boolean>(`!!document.querySelector('#pin') || !!document.querySelector('#account')`)), "section 1: no PIN field, no account field");
+  if (o.screenshots) await screenshot(`${o.screenshots}-1-before-pin`);
+  if (o.blockClicks) await blockedClick(C.before_pin.read_card, "blocked window, reading the card");
   const signsBefore = componentCount("MakeSignature");
+  const cardStates = cardStateCount();
   const r = await readCard();
   check(r.pin, `the card was read; the PIN field appeared ${r.message}`);
-  check((await page.text("[data-card-read]")).includes(fill(C.before_pin.card_read, { name: "測試用戶" })), "the name is shown");
-  check(componentCount("MakeSignature") === signsBefore, "nothing was signed before the PIN");
+  check((await page.text("[data-card-read]")).includes(fill(C.confirm_card.card_read, { name: "測試用戶" })), "the name is shown");
+  check(componentCount("MakeSignature") === signsBefore && cardStateCount() === cardStates, "nothing was signed or asked before the PIN");
   if (o.screenshots) await screenshot(`${o.screenshots}-2-pin`);
   if (o.wrongPinFirst) {
     await confirmPin("000000");
     const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText`, "the wrong PIN's message");
-    check(m === C.before_pin.pin_incorrect, `wrong PIN: "${m}"`);
+    check(m === C.confirm_card.pin_incorrect, `wrong PIN: "${m}"`);
     check(await pinGone(), "wrong PIN: the field is empty");
     await sleep(1500);
     check(componentCount("MakeSignature") === signsBefore + 1, "wrong PIN: sent once, not again by itself");
     check(await page.eval<boolean>(`document.querySelector('button.primary:not([hidden])')?.disabled === true`), "wrong PIN: the button waits for a new PIN");
   }
+  if (o.blockClicks) {
+    // The PIN is typed without a click (a click would give the page a user activation).
+    await page.eval(`document.querySelector('#pin').focus()`);
+    await page.send("Input.insertText", { text: PIN });
+    await blockedClick(C.confirm_card.confirm_card, "blocked window, confirming the card", { pinCleared: true });
+    check(await pinGone(), "blocked window: the PIN field is empty, the PIN nowhere");
+    check(await page.eval<boolean>(`document.querySelector('#pin') !== null`), "blocked window: still section 2");
+  }
+  const signs = componentCount("MakeSignature");
   await confirmPin(PIN);
   const st = await waitStatus();
   check(await pinGone(), "after the first signature, the PIN is nowhere on the page");
-  check(!st.main.includes("測試用戶") && !(await page.eval<boolean>(`document.documentElement.outerHTML.includes("測試用戶")`)), "the name is gone after screen 2");
-  check(st.status === o.statusText, `screen 3: "${st.status}"`);
-  check(st.buttons.includes(C.status.cancel) && st.buttons.includes(o.button), `screen 3 buttons ${JSON.stringify(st.buttons)}`);
-  check(st.main.includes(recordLine(o.recordAccount, o.account === null)), "screen 3: the line the roster will record");
-  if (o.screenshots) await screenshot(`${o.screenshots}-3-status`);
+  check(!st.main.includes("測試用戶") && !(await page.eval<boolean>(`document.documentElement.outerHTML.includes("測試用戶")`)), "the name is gone after section 2");
+  check(componentCount("MakeSignature") === signs + 1, "the first signature");
   const lastSign = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(lastSign.tbs === "iamreal-test:threads:0_________" && lastSign.pin === PIN, "the first signature: the test scope string, with the PIN");
+  if (o.screenshots) await screenshot(`${o.screenshots}-3-status`);
+  return st;
+}
 
-  let dropped = false;
+/** From section 4: the last click, section 5, section 6. */
+async function finish(o: {
+  label: string;
+  button: string;
+  title: string;
+  recordAccount: string;
+  withdraw?: boolean;
+  dropFirstSubmission?: boolean;
+  blockClick?: boolean;
+  screenshots?: string;
+}): Promise<void> {
+  if (o.blockClick) await blockedClick(o.button, "blocked window, the second signature");
+  const signs = componentCount("MakeSignature");
   if (o.dropFirstSubmission) {
+    let dropped = false;
     await page.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/records", requestStage: "Request" }] });
     const off = browser.on((m, p, s) => {
       if (m !== "Fetch.requestPaused" || s !== page.sessionId) return;
@@ -376,14 +438,15 @@ async function cardProof(o: {
     finishDone(o, d);
   } else {
     await page.clickButton(o.button);
-    check((await page.text("[data-progress]")).startsWith(C.progress.signing), "screen 4: the card signs");
+    check((await page.text("[data-progress]")).startsWith(C.progress.signing), "section 5: the card signs");
     const threads = Number(await page.waitFor<string>(`document.querySelector('[data-progress] progress')?.dataset.threads`, "the progress bar", 30_000).catch(() => "0"));
-    check(threads > 1, `screen 4: the progress bar is timed for a multithreaded proof (${threads} threads)`);
-    if (o.screenshots) await screenshot(`${o.screenshots}-4-progress`);
+    check(threads > 1, `section 5: the progress bar is timed for a multithreaded proof (${threads} threads)`);
+    if (o.screenshots) await screenshot(`${o.screenshots}-5-progress`);
     const d = await waitDoneOrMessage();
     finishDone(o, d);
   }
-  if (o.screenshots) await screenshot(`${o.screenshots}-5-done`);
+  if (o.screenshots) await screenshot(`${o.screenshots}-6-done`);
+  check(componentCount("MakeSignature") === signs + 1, "the second signature, once");
   const sign2 = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
   check(/^D[0-9A-Z]{30}$/.test(sign2.tbs ?? "") && sign2.pin === PIN, "the second signature: a declaration code, with the PIN");
   check(await pinGone(), "after the second signature, the PIN is nowhere on the page");
@@ -392,33 +455,270 @@ async function cardProof(o: {
   console.log(`   times (ms): ${timings.map(([n, ms]) => `${n.replace("iamreal:", "")} ${ms}`).join(", ")}`);
 }
 
-function finishDone(o: { title: string; recordAccount: string; account: string | null; label: string }, d: { done: boolean; main: string; message: string }): void {
+function finishDone(o: { title: string; recordAccount: string; withdraw?: boolean; label: string }, d: { done: boolean; main: string; message: string }): void {
   if (!check(d.done, `${o.label}: done ${d.message}`)) return;
   const lines = d.main.split("\n").filter(Boolean);
-  check(lines[0] === o.title, `screen 5: "${lines[0]}"`);
+  check(lines[0] === o.title, `section 6: "${lines[0]}"`);
   const m = /名冊第 (\d+) 筆：(.*)$/.exec(d.main.split("\n").find((l) => l.startsWith("名冊第")) ?? "");
-  check(!!m && m[2] === recordLine(o.recordAccount, o.account === null), `screen 5: the record line "${m?.[0]}"`);
+  check(!!m && m[2] === doneLine(o.recordAccount, o.withdraw), `section 6: the record line "${m?.[0]}"`);
   const sid = /編號開頭是 ([0-9A-Z]{6})。/.exec(d.main)?.[1] ?? "";
-  check(d.main.includes(fill(C.done.short_id, { platform: PLATFORM, short_id: sid })) && d.main.includes(C.done.unplug), "screen 5: the short ID and the rest");
+  check(d.main.includes(fill(C.done.short_id, { platform: PLATFORM, short_id: sid })) && d.main.includes(C.done.unplug), "section 6: the short ID and the rest");
+  check(d.main.includes(C.done.advice) === !o.withdraw, `section 6: the advice to come back ${o.withdraw ? "is not there (withdrawn)" : "is there"}`);
   shown.push({ kind: o.title, seq: Number(m?.[1]), shortId: sid });
 }
 
-/** A case that stops on screen 2, before the PIN is asked. */
-async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, o: { setup?: () => Promise<() => Promise<void>>; account?: string; silent?: boolean } = {}): Promise<void> {
-  console.log(`\n== before the PIN: ${label}`);
+/** Section 4 says what the roster will record, and offers "上一步" and the last button. */
+function checkConsequence(label: string, c: ConsequenceSeen, o: { account: string; withdraw?: boolean; switchesLeft?: number; button: string }): void {
+  check(c.record === consequenceLine(o.account, o.withdraw), `${label}: section 4 records "${c.record}"`);
+  check(c.main.includes(C.consequence.record_intro) && c.main.includes(C.consequence.with_id) && c.main.includes(C.consequence.permanent), `${label}: section 4, the record and that it cannot be deleted`);
+  const switchLine = o.switchesLeft === undefined ? "" : fill(C.consequence.uses_switch, { switches_left: o.switchesLeft });
+  check(c.switchLine === switchLine, `${label}: section 4, the switch line "${c.switchLine}"`);
+  check(c.main.includes(o.withdraw ? C.consequence.later_withdraw : C.consequence.later), `${label}: section 4, what can be done later`);
+  check(JSON.stringify(c.buttons) === JSON.stringify([C.consequence.back, o.button]), `${label}: section 4 buttons ${JSON.stringify(c.buttons)}`);
+}
+
+const tryStep = async (label: string, f: () => Promise<void>) => {
+  console.log(`\n== ${label}`);
+  try {
+    await f();
+  } catch (e) {
+    check(false, `${label}: ${e instanceof Error ? e.stack : String(e)}`);
+  }
+};
+
+const declaredFacts = (switchesUsed: number) => [fill(C.status.last_card_proof, { days_ago: 0 }), fill(C.status.switches, { switches_used: switchesUsed, switches_left: 2 - switchesUsed })];
+const choiceButtons = (st: StatusSeen) => JSON.stringify(st.buttons);
+
+component.card = main.spec();
+
+await tryStep("declare @alice (a wrong PIN first; a blocked window on each click)", async () => {
+  const st = await toStatus({ wrongPinFirst: true, blockClicks: true, screenshots: "declare" });
+  check(st.state === "never" && st.first === fill(C.status.not_declared, { platform: PLATFORM }), `section 3: "${st.first}"`);
+  check(st.main.includes(C.status.account_label) && st.main.includes(fill(C.status.one_account, { platform: PLATFORM })) && st.main.includes(C.status.no_check), "section 3: the account field and what it means");
+  await typeAccount("al ice");
+  check((await messageText()) === C.status.bad_username, "an account not in the format: the message, and still section 3");
+  await typeAccount("alice");
+  const cq = await waitConsequence();
+  checkConsequence("first", cq, { account: "alice", button: fill(C.consequence.button_first, { account: "alice" }) });
+  await screenshot("declare-4-consequence");
+  await finish({ label: "declare @alice", button: fill(C.consequence.button_first, { account: "alice" }), title: C.done.first, recordAccount: "alice", blockClick: true, screenshots: "declare" });
+});
+
+// The page's headers and isolation, read from the first load.
+{
+  const doc = browser.responses.find((r) => r.url === PAGE);
+  check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, `the page's Content-Security-Policy: ${doc?.headers["content-security-policy"]}`);
+  check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], `the page's Document-Isolation-Policy: ${doc?.headers["document-isolation-policy"]}`);
+  check(await page.eval<boolean>("crossOriginIsolated"), `the page on ${PAGE_ORIGIN} is cross-origin isolated`);
+  const api = browser.responses.find((r) => r.url.endsWith("/api/v1/card-state"));
+  check(/^[0-9a-f]{16}$/.test(api?.headers["x-request-id"] ?? ""), `an API response carries X-Request-Id ${api?.headers["x-request-id"]}`);
+}
+
+await tryStep("card proof again, no account typed (the first submission dropped)", async () => {
+  const st = await toStatus();
+  check(st.state === "declared" && st.first === fill(C.status.current, { account: "alice" }), `section 3: "${st.first}"`);
+  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(0)), `section 3 facts ${JSON.stringify(st.facts)}`);
+  check(choiceButtons(st) === JSON.stringify([C.status.refresh, C.status.switch, C.status.withdraw].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
+  check(st.main.includes(C.status.refresh_note) && st.main.includes(C.status.uses_switch), "section 3: what each choice does");
+  check(!(await page.eval<boolean>(`!!document.querySelector('#account')`)), "no account field");
+  await screenshot("refresh-3-status");
+  await page.clickButton(C.status.refresh);
+  checkConsequence("refresh", await waitConsequence(), { account: "alice", button: C.consequence.button_refresh });
+  await finish({ label: "refresh", button: C.consequence.button_refresh, title: C.done.refresh, recordAccount: "alice", dropFirstSubmission: true });
+});
+
+await tryStep("switch to @bob, with 上一步 back and forth", async () => {
+  await toStatus();
+  const signs = componentCount();
+  const states = cardStateCount();
+  const challenges = challengeCount();
+  await page.clickButton(C.status.switch);
+  await waitStep("account", "the account screen");
+  check((await page.text()).includes(C.status.new_account_label), "the account screen: 新的帳號");
+  await typeAccount("bob");
+  const cq = await waitConsequence();
+  await screenshot("switch-4-consequence");
+  checkConsequence("switch", cq, { account: "bob", switchesLeft: 1, button: fill(C.consequence.button_switch, { account: "bob" }) });
+  await page.clickButton(C.consequence.back);
+  await waitStep("account", "back: the account screen");
+  check((await page.eval<string>(`document.querySelector('#account').value`)) === "bob", "back: the account typed is still there");
+  await page.clickButton(C.status.back);
+  const again = await waitStatus();
+  check(again.first === fill(C.status.current, { account: "alice" }), "back: section 3 again");
+  await page.clickButton(C.status.withdraw);
+  checkConsequence("withdraw, looked at", await waitConsequence(), { account: "alice", withdraw: true, button: fill(C.consequence.button_withdraw, { account: "alice" }) });
+  await page.clickButton(C.consequence.back);
+  await waitStatus();
+  await page.clickButton(C.status.switch);
+  await waitStep("account", "the account screen");
+  await typeAccount("bob");
+  await waitConsequence();
+  check(componentCount() === signs && cardStateCount() === states && challengeCount() === challenges, "back and forth: no signature, no card-state, no challenge");
+  await finish({ label: "switch to @bob", button: fill(C.consequence.button_switch, { account: "bob" }), title: fill(C.done.switch, { account: "bob" }), recordAccount: "bob" });
+});
+
+await tryStep("withdraw @bob", async () => {
+  const st = await toStatus();
+  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(1)), `section 3 facts ${JSON.stringify(st.facts)}`);
+  await page.clickButton(C.status.withdraw);
+  checkConsequence("withdraw", await waitConsequence(), { account: "bob", withdraw: true, button: fill(C.consequence.button_withdraw, { account: "bob" }) });
+  await finish({ label: "withdraw @bob", button: fill(C.consequence.button_withdraw, { account: "bob" }), title: C.done.withdraw, recordAccount: "bob", withdraw: true });
+});
+
+await tryStep("withdrawn: declare @bob again (not a switch)", async () => {
+  const st = await toStatus();
+  check(st.state === "withdrawn" && st.first === fill(C.status.withdrawn, { last_declared: "bob" }), `section 3: "${st.first}"`);
+  const back = fill(C.status.declare_back, { last_declared: "bob" });
+  check(choiceButtons(st) === JSON.stringify([back, C.status.declare_other].map((text) => ({ text, disabled: false }))), `section 3 choices ${choiceButtons(st)}`);
+  check(st.main.includes(C.status.not_a_switch) && st.main.includes(C.status.uses_switch), "section 3: which one is a switch");
+  await screenshot("withdrawn-3-status");
+  await page.clickButton(back);
+  checkConsequence("declare again", await waitConsequence(), { account: "bob", button: fill(C.consequence.button_first, { account: "bob" }) });
+  await finish({ label: "declare @bob again", button: fill(C.consequence.button_first, { account: "bob" }), title: C.done.refresh, recordAccount: "bob" });
+});
+
+await tryStep("withdraw @bob again", async () => {
+  const st = await toStatus();
+  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(1)), `section 3 facts ${JSON.stringify(st.facts)}`);
+  await page.clickButton(C.status.withdraw);
+  await waitConsequence();
+  await finish({ label: "withdraw @bob again", button: fill(C.consequence.button_withdraw, { account: "bob" }), title: C.done.withdraw, recordAccount: "bob", withdraw: true });
+});
+
+await tryStep("withdrawn: declare another account, @carol (a switch)", async () => {
+  await toStatus();
+  await page.clickButton(C.status.declare_other);
+  await waitStep("account", "the account screen");
+  await typeAccount("carol");
+  checkConsequence("declare another", await waitConsequence(), { account: "carol", switchesLeft: 0, button: fill(C.consequence.button_switch, { account: "carol" }) });
+  await finish({ label: "declare @carol", button: fill(C.consequence.button_switch, { account: "carol" }), title: fill(C.done.switch, { account: "carol" }), recordAccount: "carol" });
+});
+
+// Switches used up: the button cannot be pressed, and the engine refuses the switch itself.
+// Then a submission the server refuses: its code and request ID on the screen.
+await tryStep("switches used up; then a submission the server refuses", async () => {
+  const st = await toStatus();
+  check(JSON.stringify(st.facts) === JSON.stringify(declaredFacts(2)), `section 3 facts ${JSON.stringify(st.facts)}`);
+  const sw = st.buttons.find((b) => b.text === C.status.switch);
+  check(sw?.disabled === true, "改成別的帳號 cannot be pressed");
+  const next = /下一次可以更換是 (\d{4}-\d{2}-\d{2})。/.exec(st.main)?.[1] ?? "";
+  check(next === new Date(Date.parse(today + "T00:00:00Z") + 365 * 86_400_000).toISOString().slice(0, 10) && st.main.includes(fill(C.status.switch_limit, { next_switch_date: next })), `the sentence next to it: next switch ${next}`);
+  check(!st.main.includes(C.status.uses_switch), "no 會用掉一次更換 next to a button that cannot be pressed");
+  await screenshot("limit-3-status");
+  // Pressed anyway (the attribute removed by a script): the engine refuses it, and nothing is signed.
+  const signs = componentCount();
+  const challenges = challengeCount();
+  await page.eval(`[...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.status.switch)}).disabled = false`);
+  await page.clickButton(C.status.switch);
+  await waitStep("account", "the account screen");
+  await typeAccount("dave");
+  const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText || null`, "the engine's refusal");
+  check(m === "switch_limit" && (await page.eval<boolean>(`!!${step("account")}`)), `the engine refuses the switch: "${m}", still the account screen`);
+  check(componentCount() === signs && challengeCount() === challenges, "refused: no signature, no challenge");
+  await page.clickButton(C.status.back);
+  await waitStatus();
+  await page.clickButton(C.status.refresh);
+  checkConsequence("refresh @carol", await waitConsequence(), { account: "carol", button: C.consequence.button_refresh });
+  await page.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/records", requestStage: "Request" }] });
+  const off = browser.on((msg, p, s) => {
+    if (msg !== "Fetch.requestPaused" || s !== page.sessionId) return;
+    // Another account: the proof no longer verifies.
+    const body = JSON.parse(p.request.postData);
+    body.username = "carl";
+    void page.send("Fetch.continueRequest", { requestId: p.requestId, postData: Buffer.from(JSON.stringify(body)).toString("base64") });
+  });
+  await page.clickButton(C.consequence.button_refresh);
+  const d = await waitDoneOrMessage();
+  off();
+  await page.send("Fetch.disable");
+  const id = await page.text("[data-request-id]");
+  const expected = fill(C.stops.rejected, { code: "proof" });
+  check(!d.done && d.message.startsWith(expected), `refused: "${d.message}"`);
+  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 400).at(-1);
+  check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id, `the request ID on the screen (${id}) is the response's (${res?.headers["x-request-id"]})`);
+  check(serverLog.includes(`"id":"${id}"`) && serverLog.includes(`"error":"proof"`), "the server's log line has the same ID");
+});
+
+await tryStep("withdraw @carol", async () => {
+  await toStatus();
+  await page.clickButton(C.status.withdraw);
+  await waitConsequence();
+  await finish({ label: "withdraw @carol", button: fill(C.consequence.button_withdraw, { account: "carol" }), title: C.done.withdraw, recordAccount: "carol", withdraw: true });
+});
+
+await tryStep("withdrawn, switches used up: 宣告別的帳號 cannot be pressed", async () => {
+  const st = await toStatus();
+  check(st.first === fill(C.status.withdrawn, { last_declared: "carol" }), `section 3: "${st.first}"`);
+  check(st.buttons.find((b) => b.text === C.status.declare_other)?.disabled === true, "宣告別的帳號 cannot be pressed");
+  check(st.buttons.find((b) => b.text === fill(C.status.declare_back, { last_declared: "carol" }))?.disabled === false, "宣告回 @carol can");
+  check(/一年最多更換兩次，下一次可以更換是 \d{4}-\d{2}-\d{2}。/.test(st.main), "the sentence next to it");
+});
+
+await tryStep("the PIN's wait runs out: back to the beginning", async () => {
+  const st = await toStatus();
+  const signs = componentCount("MakeSignature");
+  await page.clickButton(fill(C.status.declare_back, { last_declared: "carol" }));
+  await waitConsequence();
+  const t0 = Date.now();
+  await waitStep("before_pin", "the beginning, after the wait", IDLE_MS + 15_000);
+  const waited = Date.now() - t0;
+  const m = await messageText();
+  check(m === "idle" && st.state === "withdrawn", `back to the beginning after ${Math.round(waited / 1000)} s, with the code: "${m}"`);
+  check(await pinGone(), "the wait ran out: the PIN is nowhere on the page");
+  check(componentCount("MakeSignature") === signs, "no second signature");
+  check((await buttons()).some((b) => b.text === C.before_pin.read_card && !b.disabled), "the read button is there");
+});
+
+// After the PIN: a locked card, a challenge dated another day.
+await tryStep("a wrong PIN that locks the card", async () => {
+  component.card = lockable.spec();
+  await open();
+  check((await readCard()).pin, "read");
+  await confirmPin("000000");
+  const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText`, "the message");
+  check(m === C.stops.card_locked, `locked: "${m}"`);
+  check(await pinGone(), "locked: the PIN is nowhere");
+});
+await tryStep("a challenge dated another day", async () => {
+  component.card = fresh.spec();
+  await open();
+  check((await readCard()).pin, "read");
+  await confirmPin(PIN);
+  await waitStatus();
+  await typeAccount("alice");
+  await waitConsequence();
+  const signs = componentCount("MakeSignature");
+  const undo = await intercept("*/api/v1/challenges", (p) =>
+    page.send("Fetch.fulfillRequest", {
+      requestId: p.requestId,
+      responseCode: 200,
+      responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+      body: Buffer.from(JSON.stringify({ challenge: "2026-01-01.000G40R40M30E209185GR38E1W" })).toString("base64"),
+    }),
+  );
+  await page.clickButton(fill(C.consequence.button_first, { account: "alice" }));
+  const d = await waitDoneOrMessage();
+  await undo();
+  check(!d.done && d.message === C.stops.date_mismatch, `challenge of another day: "${d.message}"`);
+  await sleep(500);
+  check(componentCount("MakeSignature") === signs, "no second signature");
+});
+
+/** A case that stops in section 2, before the PIN is asked. */
+async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, o: { setup?: () => Promise<() => Promise<void>>; silent?: boolean } = {}): Promise<void> {
   component.card = card;
   component.silent = o.silent ?? false;
-  await toBeforePin(o.account ?? "alice");
+  await open();
   const undo = o.setup ? await o.setup() : null;
   const signs = componentCount("MakeSignature");
-  const cardStates = browser.requests.filter((r) => r.url.endsWith("/api/v1/card-state")).length;
+  const cardStates = cardStateCount();
   const r = await readCard();
   check(!r.pin && r.message === expected, `${label}: "${r.message}"`);
   await sleep(300);
   check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), `${label}: no PIN field`);
   check(componentCount("MakeSignature") === signs, `${label}: nothing signed`);
-  check(browser.requests.filter((x) => x.url.endsWith("/api/v1/card-state")).length === cardStates, `${label}: no card-state request`);
-  check(await page.eval<boolean>(`[...document.querySelectorAll('button')].some((b) => b.textContent === ${JSON.stringify(C.before_pin.read_card)} && !b.disabled)`), `${label}: the read button is there again`);
+  check(cardStateCount() === cardStates, `${label}: no card-state request`);
+  check((await buttons()).some((b) => b.text === C.before_pin.read_card && !b.disabled), `${label}: the read button is there again`);
   if (undo) await undo();
   component.silent = false;
 }
@@ -435,160 +735,6 @@ async function intercept(pattern: string, act: (p: any) => Promise<unknown>): Pr
     await page.send("Fetch.disable");
   };
 }
-
-const tryStep = async (label: string, f: () => Promise<void>) => {
-  try {
-    await f();
-  } catch (e) {
-    check(false, `${label}: ${e instanceof Error ? e.stack : String(e)}`);
-  }
-};
-
-const daysAgo0 = fill(C.status.current_same, { account: "alice", days_ago: 0 });
-
-await tryStep("declare", () =>
-  cardProof({ label: "declare @alice", account: "alice", statusText: C.status.not_declared, button: fill(C.status.button_first, { account: "alice" }), title: C.done.first, recordAccount: "alice", wrongPinFirst: true, screenshots: "declare" }),
-);
-
-// The page's headers and isolation, read from the first load.
-{
-  const doc = browser.responses.find((r) => r.url === PAGE);
-  check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, `the page's Content-Security-Policy: ${doc?.headers["content-security-policy"]}`);
-  check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], `the page's Document-Isolation-Policy: ${doc?.headers["document-isolation-policy"]}`);
-  check(await page.eval<boolean>("crossOriginIsolated"), `the page on ${PAGE_ORIGIN} is cross-origin isolated`);
-  const api = browser.responses.find((r) => r.url.endsWith("/api/v1/card-state"));
-  check(/^[0-9a-f]{16}$/.test(api?.headers["x-request-id"] ?? ""), `an API response carries X-Request-Id ${api?.headers["x-request-id"]}`);
-}
-
-await tryStep("refresh", () =>
-  cardProof({ label: "card proof again, the first submission dropped", account: "alice", statusText: daysAgo0, button: C.status.button_refresh, title: C.done.refresh, recordAccount: "alice", dropFirstSubmission: true }),
-);
-await tryStep("switch", () =>
-  cardProof({
-    label: "switch to @bob",
-    account: "bob",
-    statusText: fill(C.status.current_other, { current: "alice", account: "bob", switches_left: 1 }),
-    button: fill(C.status.button_switch, { account: "bob" }),
-    title: fill(C.done.switch, { account: "bob" }),
-    recordAccount: "bob",
-  }),
-);
-await tryStep("switch 2", () =>
-  cardProof({
-    label: "switch to @carol",
-    account: "carol",
-    statusText: fill(C.status.current_other, { current: "bob", account: "carol", switches_left: 0 }),
-    button: fill(C.status.button_switch, { account: "carol" }),
-    title: fill(C.done.switch, { account: "carol" }),
-    recordAccount: "carol",
-  }),
-);
-
-// Switches used up: the third switch is not offered.
-await tryStep("switch limit", async () => {
-  console.log("\n== switch to @dave: used up");
-  component.card = main.spec();
-  await toBeforePin("dave");
-  check((await readCard()).pin, "read");
-  const signs = componentCount("MakeSignature");
-  await confirmPin(PIN);
-  const st = await waitStatus();
-  const next = /下一次可以更換是 (\d{4}-\d{2}-\d{2})。/.exec(st.status)?.[1] ?? "";
-  check(st.status === fill(C.status.switch_limit, { current: "carol", next_switch_date: next }), `screen 3: "${st.status}"`);
-  check(JSON.stringify(st.buttons) === JSON.stringify([C.status.cancel]), `only cancel: ${JSON.stringify(st.buttons)}`);
-  await sleep(500);
-  check(componentCount("MakeSignature") === signs + 1, "the card signed once");
-  await page.clickButton(C.status.cancel);
-  await page.waitFor(step("enter"), "screen 1 after cancel");
-  check(componentCount("MakeSignature") === signs + 1, "cancel: no second signature");
-});
-
-// A submission the server refuses: its code and request ID on the screen.
-await tryStep("refused", async () => {
-  console.log("\n== a submission the server refuses (the record changed on its way)");
-  component.card = main.spec();
-  await toBeforePin("carol");
-  check((await readCard()).pin, "read");
-  await confirmPin(PIN);
-  const st = await waitStatus();
-  check(st.status === fill(C.status.current_same, { account: "carol", days_ago: 0 }), `screen 3: "${st.status}"`);
-  await page.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/records", requestStage: "Request" }] });
-  const off = browser.on((m, p, s) => {
-    if (m !== "Fetch.requestPaused" || s !== page.sessionId) return;
-    // Another account: the proof no longer verifies.
-    const body = JSON.parse(p.request.postData);
-    body.username = "carl";
-    void page.send("Fetch.continueRequest", { requestId: p.requestId, postData: Buffer.from(JSON.stringify(body)).toString("base64") });
-  });
-  await page.clickButton(C.status.button_refresh);
-  const d = await waitDoneOrMessage();
-  off();
-  await page.send("Fetch.disable");
-  const id = await page.text("[data-request-id]");
-  const expected = fill(C.stops.rejected, { code: "proof" });
-  check(!d.done && d.message.startsWith(expected), `refused: "${d.message}"`);
-  const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 400).at(-1);
-  check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id, `the request ID on the screen (${id}) is the response's (${res?.headers["x-request-id"]})`);
-  check(serverLog.includes(`"id":"${id}"`) && serverLog.includes(`"error":"proof"`), "the server's log line has the same ID");
-});
-
-await tryStep("withdraw", () =>
-  cardProof({
-    label: "withdraw",
-    account: null,
-    statusText: fill(C.status.withdraw_current, { account: "carol" }),
-    button: fill(C.status.button_withdraw, { account: "carol" }),
-    title: C.done.withdraw,
-    recordAccount: "carol",
-  }),
-);
-
-await tryStep("nothing to withdraw", async () => {
-  console.log("\n== withdraw again: nothing to withdraw");
-  component.card = main.spec();
-  await toBeforePin(null);
-  check((await readCard()).pin, "read");
-  await confirmPin(PIN);
-  const st = await waitStatus();
-  check(st.status === C.status.withdraw_none, `screen 3: "${st.status}"`);
-  check(JSON.stringify(st.buttons) === JSON.stringify([C.status.cancel]), `only cancel: ${JSON.stringify(st.buttons)}`);
-  await page.clickButton(C.status.cancel);
-});
-
-// After the PIN: a locked card, a challenge dated another day.
-await tryStep("locked", async () => {
-  console.log("\n== a wrong PIN that locks the card");
-  component.card = lockable.spec();
-  await toBeforePin("alice");
-  check((await readCard()).pin, "read");
-  await confirmPin("000000");
-  const m = await page.waitFor<string>(`document.querySelector('[data-message]')?.innerText`, "the message");
-  check(m === C.stops.card_locked, `locked: "${m}"`);
-  check(await pinGone(), "locked: the PIN is nowhere");
-});
-await tryStep("challenge date", async () => {
-  console.log("\n== a challenge dated another day");
-  component.card = fresh.spec();
-  await toBeforePin("alice");
-  check((await readCard()).pin, "read");
-  await confirmPin(PIN);
-  await waitStatus();
-  const signs = componentCount("MakeSignature");
-  const undo = await intercept("*/api/v1/challenges", (p) =>
-    page.send("Fetch.fulfillRequest", {
-      requestId: p.requestId,
-      responseCode: 200,
-      responseHeaders: [{ name: "Content-Type", value: "application/json" }],
-      body: Buffer.from(JSON.stringify({ challenge: "2026-01-01.000G40R40M30E209185GR38E1W" })).toString("base64"),
-    }),
-  );
-  await page.clickButton(fill(C.status.button_first, { account: "alice" }));
-  const d = await waitDoneOrMessage();
-  await undo();
-  check(!d.done && d.message === C.stops.date_mismatch, `challenge of another day: "${d.message}"`);
-  await sleep(500);
-  check(componentCount("MakeSignature") === signs, "no second signature");
-});
 
 // Every case that stops before the PIN.
 const tests: [string, FakeCardSpec | null, string, Parameters<typeof stopsBeforePin>[3]?][] = [
@@ -630,20 +776,20 @@ const tests: [string, FakeCardSpec | null, string, Parameters<typeof stopsBefore
     { setup: () => intercept("*/api/v1/config", (p) => page.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "ConnectionFailed" })) },
   ],
 ];
-for (const [label, card, expected, o] of tests) await tryStep(label, () => stopsBeforePin(label, card, expected, o));
+for (const [label, card, expected, o] of tests) await tryStep(`before the PIN: ${label}`, () => stopsBeforePin(label, card, expected, o));
 
 // 5. Snapshot and re-verification -----------------------------------------------
 
-console.log("\n== snapshot and iamreal-verify");
-await tryStep("snapshot", async () => {
+const KINDS = ["first", "refresh", "switch", "withdraw", "refresh", "withdraw", "switch", "withdraw"];
+await tryStep("snapshot and iamreal-verify", async () => {
   execFileSync(serverBin, ["snapshot", "-data", data, "-bb", BB, "-crs", crsDir, "-roster", "test", "-test-issuers", issuersDir], { stdio: "pipe" });
   const v = JSON.parse(
     execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-roster", "test", "-json", "-test-issuers", issuersDir, "-crl-archive", join(data, "crl"), join(data, "roster")], { stdio: ["ignore", "pipe", "pipe"] }).toString(),
   );
   writeFileSync(join(out, "verify.json"), JSON.stringify(v, null, 2));
   const kinds = v.results.map((r: { kind: string }) => r.kind);
-  check(v.valid === true && JSON.stringify(kinds) === JSON.stringify(["first", "refresh", "switch", "switch", "withdraw"]), `iamreal-verify: valid, ${JSON.stringify(kinds)}`);
-  check(JSON.stringify(shown.map((s) => s.seq)) === JSON.stringify([1, 2, 3, 4, 5]), `the screens showed records ${JSON.stringify(shown.map((s) => s.seq))}`);
+  check(v.valid === true && JSON.stringify(kinds) === JSON.stringify(KINDS), `iamreal-verify: valid, ${JSON.stringify(kinds)}`);
+  check(JSON.stringify(shown.map((s) => s.seq)) === JSON.stringify(KINDS.map((_, i) => i + 1)), `the screens showed records ${JSON.stringify(shown.map((s) => s.seq))}`);
   const scope = v.state.find((s: { scope_string: string }) => s.scope_string === "iamreal-test:threads:0_________");
   const cards = scope?.cards ?? [];
   check(cards.length === 1 && cards[0].current === null && cards[0].last_card_proof === today, `one card, no current account, last card proof ${today}: ${JSON.stringify(cards)}`);
@@ -665,7 +811,7 @@ await tryStep("storage", async () => {
 });
 
 // Last, because it leaves a higher CRL number behind.
-await tryStep("rollback", () =>
+await tryStep("before the PIN: a CRL older than the one this browser used", () =>
   stopsBeforePin("a CRL older than the one this browser used", main.spec(), C.stops.crl_rollback, {
     setup: async () => {
       await page.eval(`localStorage.setItem(${JSON.stringify(STORAGE_KEY_PREFIX + "G3")}, "301")`);
@@ -693,6 +839,7 @@ await tryStep("rollback", () =>
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
   // Two windows had no request: the silent component's, and the one opened for the second
   // signature that the challenge of another day stopped (the window is closed unused).
+  // The blocked clicks opened none.
   check(popups.size === component.requests.length + 2, `one component window per request (${popups.size} windows, ${component.requests.length} requests)`);
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
   check(component.requests.every((r) => ["GetUserCert", "MakeSignature"].includes(r.func)), "only GetUserCert and MakeSignature were asked of the component");

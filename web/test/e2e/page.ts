@@ -9,7 +9,7 @@ import { CardProofFlow, FlowStop } from "../../src/flow.ts";
 import type { IssuerKey } from "../../src/issuers.ts";
 import { BB_WASM_PATH } from "../../src/index.ts";
 import { proofEngine } from "../../src/prover/engine.ts";
-import type { Action } from "../../src/spec/declaration-code.ts";
+import type { Choice } from "../../src/flow.ts";
 import { localStorageStore } from "../../src/storage.ts";
 
 const t0 = performance.now();
@@ -25,7 +25,7 @@ interface Fixture {
   cardKeyPkcs8: string;
   pin: string;
   issuers: { name: "G2" | "G3"; modulus: string; bits: 2048 | 4096 }[];
-  runs: { action: Action; username: string }[];
+  runs: Choice[];
   maxThreads?: number;
 }
 
@@ -72,7 +72,7 @@ async function main() {
         startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmPath),
         onTiming,
       },
-      { action: r.action, platform: "threads", username: r.username },
+      { platform: "threads" },
     );
     const start = performance.now();
     try {
@@ -80,8 +80,9 @@ async function main() {
       // The screen shows the PIN field only after the checks that need no signature.
       await flow.checksDone();
       const status = await flow.confirmCard(fx.pin);
-      // The screen shows status.username; the cardholder confirms it.
-      const done = await flow.proceed(status.username!);
+      // The cardholder picks; the screen shows the consequence's account, and the cardholder confirms it.
+      const consequence = flow.choose(r);
+      const done = await flow.proceed(consequence.username);
       results.push({ ok: true, name: read.name, status, done, ms: Math.round(performance.now() - start), signed: card.signed.length });
     } catch (e) {
       results.push({ ok: false, stop: e instanceof FlowStop ? e.stop : String(e), ms: Math.round(performance.now() - start) });
