@@ -161,14 +161,6 @@ records keep verifying.
 
 ## Open items
 
-- **Hiding an account name on request.** When an account owner asks, later
-  snapshots hide the account name in that owner's records. The hidden record
-  keeps `seq`, `prev` and its original record hash, so the chain stays
-  intact. To be decided: which other fields go (with `challenge` and `proof`
-  still present, the name could be found by trying candidates against the
-  proof), how the roster rules still count switches for that scoped ID, and
-  where the public notice of each hiding is kept. This changes the line
-  format, so it is a new version of this document.
 - **The git repository of snapshots**: its name, layout, and how a
   re-verifier compares a roster file with it.
 
