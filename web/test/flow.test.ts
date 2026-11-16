@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
+import { CardError } from "../src/card/card.ts";
 import { FakeCard } from "../src/card/fake.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { CardProofFlow, FlowStop, type Stop } from "../src/flow.ts";
@@ -52,6 +53,8 @@ async function setup(o: {
   engineFails?: boolean;
   /** The stub prover returns the public inputs the circuit would (the proof bytes stay zeros). */
   echoPublicInputs?: boolean;
+  /** Which certificate the fake card reports with each signature, like MOICA's component; none by default. */
+  signer?: "signing" | "encryption";
 } = {}): Promise<Setup> {
   const w = o.world ?? (await makeWorld());
   const files = new Map<string, Uint8Array>(circuitFiles);
@@ -62,7 +65,8 @@ async function setup(o: {
   }
   for (const f of await mirror(w, o.crls ?? [{ serials: randomSerials(300), crlNumber: 100n, thisUpdate: CRL_TIME }])) files.set(f.path, f.bytes);
   const backend = new FakeBackend({ files, clock: () => NOW, ...o.backend });
-  const card = new FakeCard({ certificates: [w.encryptionCert, w.signingCert], signingKey: w.card.privateKey, pin: PIN });
+  const signingCertificate = o.signer === "signing" ? w.signingCert : o.signer === "encryption" ? w.encryptionCert : undefined;
+  const card = new FakeCard({ certificates: [w.encryptionCert, w.signingCert], signingKey: w.card.privateKey, pin: PIN, signingCertificate });
   const p = await poseidon();
   const proveCalls: Record<string, unknown>[] = [];
   const prover: Prover = {
@@ -401,5 +405,38 @@ describe("the flow, with a server that gives values the device must not accept",
   test("a username not in the format", async () => {
     const s = await setup({ username: "Alice" });
     assert.deepEqual(s.flow.stop, { code: "username" });
+  });
+
+  test("a certificate not yet valid: stopped before any request, with the date", async () => {
+    const s = await setup({ world: await makeWorld({ notBefore: "261130160000Z" }) });
+    const stop = await stopOf(s.flow.readCard());
+    assert.deepEqual(stop, { code: "certificate", problem: "not_yet_valid", notBefore: "2026-12-01" });
+    assert.equal(s.backend.log.length, 0);
+  });
+
+  test("the certificate the card's reader says signed: the chosen one goes on, another stops", async () => {
+    const own = await setup({ signer: "signing" });
+    await own.flow.readCard();
+    assert.equal((await own.flow.confirmCard(PIN)).outcome.kind, "first");
+
+    const other = await setup({ signer: "encryption" });
+    await other.flow.readCard();
+    await other.flow.checksDone();
+    const n = other.backend.log.length;
+    const stop = await stopOf(other.flow.confirmCard(PIN));
+    assert.deepEqual(stop, { code: "card", card: "card_error", detail: "certificate_mismatch" });
+    assert.equal(other.flow.phase, "stopped");
+    assertNoCardState(other);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(other.backend.log.length, n, "requests after the stop");
+  });
+
+  test("a card error's code reaches the screen", async () => {
+    const s = await setup();
+    s.card.sign = async () => {
+      throw new CardError("card_error", "7600000f");
+    };
+    await s.flow.readCard();
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), { code: "card", card: "card_error", detail: "7600000f" });
   });
 });

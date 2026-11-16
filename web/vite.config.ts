@@ -8,6 +8,16 @@
 // - The compiled circuits (circuits/) and the CRS (crs/, fetched by
 //   scripts/fetch-crs.mjs) are copied to the same paths in the build. The
 //   page checks each against the SHA-256 in src/prover/artifacts.ts.
+//
+// Modes:
+//
+// - production (`pnpm build`): the page (index.html) and the help page
+//   (help.html), with MOICA's issuer keys and component (src/target.ts).
+// - test: the same pages, with test/e2e/target.ts in place of src/target.ts:
+//   the test's issuer keys and fake component, which the caller passes as
+//   `define` (test/e2e/ui.ts). test/build.test.ts checks that a production
+//   build holds nothing of it.
+// - engine: the engine's own headless test page (test/e2e/run.ts, its root).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -68,10 +78,34 @@ function ownOriginAssets(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [noDataUrlWasm(), ownOriginAssets()],
-  build: { target: "es2022", assetsInlineLimit: 0, sourcemap: false },
-  // Worker bundles are built separately and need the plugin too.
-  worker: { format: "es", plugins: () => [noDataUrlWasm()] },
-  optimizeDeps: { exclude: ["@aztec-foundation/bb.js", "@noir-lang/noir_js"] },
+const TARGET = join(here, "src", "target.ts");
+const TEST_TARGET = join(here, "test", "e2e", "target.ts");
+
+/** In mode "test", src/target.ts is replaced by test/e2e/target.ts. */
+function testTarget(): Plugin {
+  return {
+    name: "iamreal-test-target",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      const r = await this.resolve(source, importer, { ...options, skipSelf: true });
+      return r && r.id === TARGET ? TEST_TARGET : null;
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const pages = mode !== "engine";
+  if (pages && mode !== "production" && mode !== "test") throw new Error(`vite mode ${mode}: production, test or engine`);
+  return {
+    plugins: [noDataUrlWasm(), ownOriginAssets(), ...(mode === "test" ? [testTarget()] : [])],
+    build: {
+      target: "es2022",
+      assetsInlineLimit: 0,
+      sourcemap: false,
+      ...(pages && { rollupOptions: { input: { index: join(here, "index.html"), help: join(here, "help.html") } } }),
+    },
+    // Worker bundles are built separately and need the plugin too.
+    worker: { format: "es", plugins: () => [noDataUrlWasm()] },
+    optimizeDeps: { exclude: ["@aztec-foundation/bb.js", "@noir-lang/noir_js"] },
+  };
 });

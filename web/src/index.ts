@@ -1,18 +1,19 @@
 // The page's entry point to the card proof engine. Everything a server could
-// otherwise influence is fixed here: the issuer keys, the scope table's
-// roster, the fetch (same origin only), the clock, the one storage key.
-// The screen (next piece of work) calls startEngine() when the page opens,
-// then createCardProof() for each card proof.
+// otherwise influence is fixed here: the issuer keys and the component's
+// address (target.ts), the scope table's roster, the fetch (same origin
+// only), the clock, the one storage key.
+// The screen (src/ui/) calls startEngine() once when the page opens, then
+// createCardProof() with that engine for each card proof (ADR-0013).
 import { sameOriginFetch } from "./api.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
-import { MOICA_ISSUERS } from "./issuers.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
 import type { Action } from "./spec/declaration-code.ts";
 import type { Platform, Roster } from "./spec/scope.ts";
 import { localStorageStore } from "./storage.ts";
+import { ISSUERS } from "./target.ts";
 
 /**
  * Which scope table the page uses. This stage runs the test scope string
@@ -26,7 +27,7 @@ export const BB_WASM_PATH = "/bb/barretenberg.wasm.gz";
 
 const wasmUrl = (): string => new URL(BB_WASM_PATH, location.origin).href;
 
-/** Starts the page's one proof engine (bb.js, CRS, Noir). Call it when the page opens. */
+/** Starts the page's one proof engine (bb.js, CRS, Noir). Call it once, when the page opens. */
 export function startEngine(onTiming?: (step: string, ms: number) => void): Prover {
   return proofEngine({ fetch: sameOriginFetch, wasmPath: wasmUrl(), onTiming });
 }
@@ -36,18 +37,20 @@ export function createCardProof(opts: {
   platform: Platform;
   username?: string;
   card: Card;
+  /** The page's one engine, from startEngine(). */
+  prover: Prover;
   onBackgroundStop?: FlowDeps["onBackgroundStop"];
   onTiming?: FlowDeps["onTiming"];
 }): CardProofFlow {
   return new CardProofFlow(
     {
       roster: ROSTER,
-      issuers: MOICA_ISSUERS,
+      issuers: ISSUERS,
       fetch: sameOriginFetch,
       clock: () => Date.now(),
       store: localStorageStore(),
       card: opts.card,
-      prover: startEngine(),
+      prover: opts.prover,
       startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmUrl()),
       onBackgroundStop: opts.onBackgroundStop,
       onTiming: opts.onTiming,
@@ -56,6 +59,7 @@ export function createCardProof(opts: {
   );
 }
 
-export { CardProofFlow, FlowStop, type Stop, type CardRead, type CardStatus, type Done } from "./flow.ts";
+export { CardProofFlow, FlowStop, type Stop, type CardRead, type CardStatus, type Done, type Phase } from "./flow.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
 export { normalizeUsername } from "./spec/scope.ts";
+export type { Prover, ThreadMode } from "./prover/prover.ts";

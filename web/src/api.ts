@@ -29,11 +29,20 @@ export class ServerError extends Error {
   /** The server's code, `malformed_response` or `network`. */
   readonly code: string;
   readonly status: number;
-  constructor(code: string, status: number) {
+  /** The response's X-Request-Id, for the cardholder to report; null without a response or a readable one. */
+  readonly requestId: string | null;
+  constructor(code: string, status: number, requestId: string | null = null) {
     super(`server: ${code} (${status})`);
     this.code = code;
     this.status = status;
+    this.requestId = requestId;
   }
+}
+
+/** The server's request ID (server/: 16 hex digits); anything else is not shown. */
+function requestIdOf(res: Response): string | null {
+  const id = res.headers.get("X-Request-Id");
+  return id !== null && /^[0-9a-f]{1,64}$/.test(id) ? id : null;
 }
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -53,9 +62,9 @@ async function request(fetchFn: Fetch, path: string, init: { method: "GET" | "PO
   }
   if (res.status !== okStatus) {
     const code = isObject(body) && typeof body.error === "string" && /^[a-z_]{1,40}$/.test(body.error) ? body.error : "http_" + res.status;
-    throw new ServerError(code, res.status);
+    throw new ServerError(code, res.status, requestIdOf(res));
   }
-  if (!isObject(body)) throw new ServerError("malformed_response", res.status);
+  if (!isObject(body)) throw new ServerError("malformed_response", res.status, requestIdOf(res));
   return body;
 }
 

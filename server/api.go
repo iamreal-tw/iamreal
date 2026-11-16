@@ -60,7 +60,8 @@ func (s *Server) endpoints() map[string]endpoint {
 }
 
 // api serves everything under /api/. Every response is JSON with
-// Cache-Control: no-store, and every request is logged once (log.go).
+// Cache-Control: no-store and X-Request-Id, and every request is logged
+// once (log.go) with the same ID.
 func (s *Server) api() http.Handler {
 	endpoints := s.endpoints()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +87,9 @@ func (s *Server) api() http.Handler {
 		}()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
+		// The ID the log line carries, so that a cardholder who reports an
+		// error can name it (docs/api/card-proof.md).
+		w.Header().Set("X-Request-Id", id)
 		w.WriteHeader(rep.status)
 		json.NewEncoder(w).Encode(rep.body)
 		s.logRequest(id, r, found, rep)

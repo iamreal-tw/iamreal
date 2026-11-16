@@ -1,6 +1,5 @@
-// The card, as the flow sees it: two actions. The bridge to MOICA's
-// component (HiPKI) implements this in the next piece of work; fake.ts
-// implements it with test keys.
+// The card, as the flow sees it: two actions. hipki.ts implements it with
+// MOICA's component (HiPKI); fake.ts implements it with test keys.
 
 export type CardErrorCode =
   /** The component cannot be reached. */
@@ -16,19 +15,32 @@ export type CardErrorCode =
 
 export class CardError extends Error {
   readonly code: CardErrorCode;
+  /** A short code for the screen ("讀卡時發生錯誤（代碼 X）"): letters, digits, `_`. Never a PIN or a certificate. */
+  readonly detail: string;
   constructor(code: CardErrorCode, detail = "") {
     super(detail ? `${code}: ${detail}` : code);
     this.code = code;
+    this.detail = detail;
   }
+}
+
+export interface CardSignature {
+  /** RSASSA-PKCS1-v1_5 / SHA-256, 256 bytes big-endian. */
+  signature: Uint8Array;
+  /**
+   * The certificate (DER) of the key that made the signature, if the card's
+   * reader says which; null if it does not. The flow stops unless it is the
+   * certificate it chose when the card was read.
+   */
+  certificate: Uint8Array | null;
 }
 
 export interface Card {
   /** The certificates on the card, DER. No PIN. */
   readCertificates(): Promise<Uint8Array[]>;
   /**
-   * RSASSA-PKCS1-v1_5 / SHA-256 signature of the card's signing key over
-   * exactly 31 bytes, 256 bytes big-endian. Needs the PIN; the
+   * The card's signing key signs exactly 31 bytes. Needs the PIN; the
    * implementation passes it to the card and keeps no copy.
    */
-  sign(message: Uint8Array, pin: string): Promise<Uint8Array>;
+  sign(message: Uint8Array, pin: string): Promise<CardSignature>;
 }
