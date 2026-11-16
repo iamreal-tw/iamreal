@@ -7,6 +7,7 @@ package roster_test
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,8 +74,10 @@ func TestVectorsOneAtATime(t *testing.T) {
 			if !reflect.DeepEqual(got, c.Results) {
 				t.Errorf("results\n got %+v\nwant %+v", got, c.Results)
 			}
-			if !reflect.DeepEqual(stateOut(x.State()), c.State) {
-				t.Errorf("state differs from the vector")
+			if got := stateOut(x.State(), x); !reflect.DeepEqual(got, c.State) {
+				g, _ := json.Marshal(got)
+				w, _ := json.Marshal(c.State)
+				t.Errorf("state\n got %s\nwant %s", g, w)
 			}
 			if !reflect.DeepEqual(x.State(), whole) {
 				t.Errorf("one at a time and all at once differ")
@@ -107,7 +110,7 @@ func TestCard(t *testing.T) {
 		{"withdraw", "bob", "2026-03-03.G9PYF6T6FCEQ2GH6DG2XHGFV74"},
 	}
 	x := roster.NewRules(fakeProofs{1: true, 2: true, 3: true}, everyRootRecognized{})
-	if c := x.Card(scope, id); c.Current != nil || c.LastDeclared != nil || c.LastCardProof != nil || len(c.SwitchDates) != 0 {
+	if c := x.Card(scope, id); c.Current != nil || c.LastDeclared != nil || c.LastCardProof != nil || len(c.SwitchDates) != 0 || c.ProofsOnLastDate != 0 {
 		t.Errorf("no record: %+v", c)
 	}
 	for i, e := range events {
@@ -122,7 +125,7 @@ func TestCard(t *testing.T) {
 	}
 	c := x.Card(scope, id)
 	if c.Current != nil || c.LastDeclared == nil || *c.LastDeclared != "bob" ||
-		c.LastCardProof == nil || *c.LastCardProof != date(t, "2026-03-03") ||
+		c.LastCardProof == nil || *c.LastCardProof != date(t, "2026-03-03") || c.ProofsOnLastDate != 1 ||
 		!reflect.DeepEqual(c.SwitchDates, []verifier.Date{date(t, "2026-03-02")}) {
 		t.Errorf("%+v", c)
 	}
