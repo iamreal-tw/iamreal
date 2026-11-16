@@ -78,6 +78,16 @@ fields: one challenge is used once ([`roster-rules.md`](roster-rules.md)).
 Records have one spelling, so the same event cannot appear twice under
 different bytes.
 
+## The CRS
+
+`bb verify` reads one file of Barretenberg's common reference string:
+`bn254_g1.dat`, 64 bytes, the BN254 G1 generator `(1, 2)`, SHA-256
+`d6ba9329f8932c12192b37849f772104d20048f76434a3290512d9d814e4116f`. A
+verifier writes this file itself (it is `(1, 2)` as two 32-byte big-endian
+integers) or checks its SHA-256, and points `bb` at it with `-c`. Without
+it, `bb` downloads the start of the CRS over plain HTTP before verifying;
+it checks a built-in hash, but a verifier should not depend on a download.
+
 ## What a proof guarantees
 
 For a proof that verifies, under a verification key above, with public
@@ -111,8 +121,6 @@ before launch (ADR-0012).
 
 - **Where the circuit source is published**, with the instructions to
   rebuild the verification keys and compare their SHA-256.
-- **The CRS.** Which files of Barretenberg's common reference string
-  `bb verify` reads, and their SHA-256, pinned with `verifier/`.
 - **A real proof as a test vector.** One proof per circuit with its public
   inputs, made with test keys, for testing a verifier's handling of the
   checks above.

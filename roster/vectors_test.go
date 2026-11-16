@@ -75,15 +75,15 @@ func TestVectorsRecordFiles(t *testing.T) {
 }
 
 type event struct {
-	Seq         uint64  `json:"seq"`
-	ScopeString string  `json:"scope_string"`
-	ScopedID    string  `json:"scoped_id"`
-	Action      string  `json:"action"`
-	Username    string  `json:"username"`
-	Challenge   string  `json:"challenge"`
-	Date        string  `json:"date"`
-	Verifies    bool    `json:"verifies"`
-	CRLDate     *string `json:"crl_date"`
+	Seq         uint64   `json:"seq"`
+	ScopeString string   `json:"scope_string"`
+	ScopedID    string   `json:"scoped_id"`
+	Action      string   `json:"action"`
+	Username    string   `json:"username"`
+	Challenge   string   `json:"challenge"`
+	Date        string   `json:"date"`
+	Verifies    bool     `json:"verifies"`
+	CRLDates    []string `json:"crl_dates"`
 }
 
 type result struct {
@@ -125,8 +125,8 @@ func (f fakeProofs) VerifyRecord(r *verifier.Record) error {
 	return &verifier.Rejection{Reason: "the vector says it does not verify"}
 }
 
-// fakeArchive is check 3 from the events' `crl_date`: each event's root is
-// its own, and the root has the event's CRL date, or none.
+// fakeArchive is check 3 from the events' `crl_dates`: each event's root is
+// its own, and the root belongs to CRLs with those dates (possibly none).
 type fakeArchive map[string][]verifier.Date
 
 func (a fakeArchive) CRLDates(issuer, root string) ([]verifier.Date, error) {
@@ -173,12 +173,12 @@ func TestVectorsRosterRules(t *testing.T) {
 					t.Fatalf("seq %d: date %s, the vector says %s", e.Seq, d, e.Date)
 				}
 				proofs[e.Seq] = e.Verifies
-				if e.CRLDate != nil {
-					d, err := verifier.ParseDate(*e.CRLDate)
+				for _, c := range e.CRLDates {
+					d, err := verifier.ParseDate(c)
 					if err != nil {
 						t.Fatal(err)
 					}
-					archive[r.SMTRoot] = []verifier.Date{d}
+					archive[r.SMTRoot] = append(archive[r.SMTRoot], d)
 				}
 				records = append(records, r)
 			}

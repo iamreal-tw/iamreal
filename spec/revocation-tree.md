@@ -23,16 +23,25 @@ The device needs only the CRL of its own issuer.
 
 A CRL is usable if:
 
-- it is a `CertificateList` (RFC 5280 section 5) signed with
-  sha256WithRSAEncryption, and the signature verifies under the issuer key;
+- it is a `CertificateList` (RFC 5280 section 5) in DER, signed with
+  sha256WithRSAEncryption with NULL parameters (both in `tbsCertList` and
+  outside it), and the signature verifies under the issuer key;
+- it has a `cRLNumber` extension holding a non-negative integer. The device
+  compares CRL numbers ("Who checks what");
 - it is a complete CRL for everything the key issued: it has neither a
-  `deltaCRLIndicator` nor an `issuingDistributionPoint` extension, and no
-  critical extension other than these rules know. MOICA's CRLs, as checked on
-  2026-11-16, carry only `authorityKeyIdentifier` and `cRLNumber`. If MOICA
-  starts partitioning its CRLs, devices stop rather than build an incomplete
-  tree, and this document changes;
-- every serial number in `revokedCertificates` gives a key (below), and no
-  two keys share their lowest 127 bits.
+  `deltaCRLIndicator` nor an `issuingDistributionPoint` extension; no
+  extension appears twice; and no critical extension other than these rules
+  know, in the CRL or in any entry (so an indirect CRL, with a critical
+  `certificateIssuer` entry extension, is not usable). MOICA's CRLs, as checked
+  on 2026-11-16, carry only `authorityKeyIdentifier` and `cRLNumber`, and each
+  entry only a non-critical `reasonCode`. If MOICA starts partitioning its
+  CRLs, devices stop rather than build an incomplete tree, and this document
+  changes;
+- every serial number in `revokedCertificates` is a valid DER INTEGER in its
+  shortest encoding, not negative, with at most 20 content bytes (a leading
+  `00` counts), so that it gives a key (below);
+- no two **different** keys share their lowest 127 bits. The same serial
+  number listed twice is one key.
 
 A CRL that fails any of these gives no tree. `crl/` stops with an error; the
 device does not make a proof.
@@ -43,7 +52,8 @@ The **CRL date** is `thisUpdate` converted to a date in Taiwan (UTC+8).
 
 **Key.** The serial number's content bytes (without the DER tag and length)
 read as an unsigned big-endian integer. This is the value the circuit reads
-from the certificate. A serial number is at most 20 bytes.
+from the certificate. A serial number has at most 20 content bytes. The
+serial number 0 gives the key 0.
 
 **Shape.** circomlib's sparse Merkle tree, hashed with `Poseidon2`
 ([`scoped-id.md`](scoped-id.md)). For a set `S` of keys at level `l`,
@@ -86,7 +96,9 @@ CRL date − 1 day  ≤  d  ≤  CRL date + 3 days
 ```
 
 Otherwise the record is invalid with code `root`
-([`roster-rules.md`](roster-rules.md)).
+([`roster-rules.md`](roster-rules.md)). When no certificate was revoked
+between two CRLs, both have the same tree and the same root; one usable CRL
+whose date fits is enough.
 
 - **The upper bound** means a record's date cannot run more than 3 days
   ahead of the newest CRL that exists. MOICA has not signed future CRLs, so
@@ -143,9 +155,34 @@ check it, since it depends on what the mirror had at that moment.
 **Anyone re-verifying** checks the rule of the previous section against the
 archived CRLs.
 
+## Archive index
+
+The archive comes with an index: one line per CRL file in the archive, in
+the same one-spelling form as roster lines ([`record.md`](record.md)): a fixed
+template, keys in this order, no whitespace, each line ending in `LF`.
+
+```
+{"issuer":"ISSUER","crl_number":"CRL_NUMBER","this_update":"THIS_UPDATE","next_update":"NEXT_UPDATE","crl_date":"CRL_DATE","sha256":"SHA256","root":"ROOT"}
+```
+
+| Field | Format |
+|---|---|
+| `issuer` | `G2` or `G3`: the key whose signature verifies; `-` if neither |
+| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing or unreadable |
+| `this_update`, `next_update` | UTC, `YYYY-MM-DDTHH:MM:SSZ`; `-` if missing |
+| `crl_date` | The CRL date, `YYYY-MM-DD`; `-` if `thisUpdate` is missing |
+| `sha256` | SHA-256 of the file, 64 lowercase hex digits |
+| `root` | The root, 64 lowercase hex digits; for a file that is not usable, `-` followed by the reason in lowercase letters, digits and `_` (for example `-not_usable_signature`) |
+
+Lines are sorted by `issuer`, then `crl_number` as a number, then `sha256`.
+Every file in the archive has a line, usable or not, so the archive and the
+index can be checked against each other. Two different files with the same
+CRL number get two lines. The index is a convenience: a re-verifier can
+rebuild it from the files.
+
 ## Open items
 
-- Where the archive is published and in what format.
+- Where the archive is published, and how its files are named.
 
 ## Test vectors
 

@@ -155,6 +155,7 @@ carry the date.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): sequences of events
 with the outcome of each and the final state. Events stand for well-formed
 records and carry only the fields the rules read. Their `verifies` field
-says whether the record passes check 1. Their `crl_date` is the CRL date
-behind `smt_root` (the date `thisUpdate` falls on in Taiwan), or null if the root is not the root of a
-usable CRL of the record's issuer.
+says whether the record passes check 1. Their `crl_dates` are the CRL dates
+(the date `thisUpdate` falls on in Taiwan) of the usable CRLs of the
+record's issuer whose tree has the record's `smt_root`: possibly several,
+possibly none.
