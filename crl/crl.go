@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"slices"
 	"time"
 
 	"golang.org/x/crypto/cryptobyte"
@@ -60,7 +59,6 @@ type Extension struct {
 
 var (
 	oidSHA256WithRSA            = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 11}
-	oidAuthorityKeyIdentifier   = asn1.ObjectIdentifier{2, 5, 29, 35}
 	oidCRLNumber                = asn1.ObjectIdentifier{2, 5, 29, 20}
 	oidDeltaCRLIndicator        = asn1.ObjectIdentifier{2, 5, 29, 27}
 	oidIssuingDistributionPoint = asn1.ObjectIdentifier{2, 5, 29, 28}
@@ -252,12 +250,11 @@ const (
 	ReasonSignature = "not_usable_signature"
 	// An extension appears twice, in the CRL or in an entry.
 	ReasonDuplicateExtension = "not_usable_duplicate_extension"
-	// A critical extension these rules do not know, in the CRL or in an
-	// entry.
+	// A critical extension, whichever it is, in the CRL or in an entry.
 	ReasonCriticalExtension = "not_usable_critical_extension"
-	// A delta CRL (deltaCRLIndicator).
+	// A delta CRL (deltaCRLIndicator, critical or not).
 	ReasonDelta = "not_usable_delta"
-	// A partitioned CRL (issuingDistributionPoint).
+	// A partitioned CRL (issuingDistributionPoint, critical or not).
 	ReasonPartitioned = "not_usable_partitioned"
 	// No cRLNumber, or one that is not a non-negative INTEGER.
 	ReasonCRLNumber = "not_usable_crl_number"
@@ -268,7 +265,9 @@ const (
 	ReasonCollision = "not_usable_collision"
 )
 
-// Reasons lists the reason codes in the order Check applies them.
+// Reasons lists the reason codes in the order Check applies them to the
+// CRL. ReasonDuplicateExtension, ReasonCriticalExtension and ReasonSerial
+// also apply to each entry, after ReasonCRLNumber (see Check).
 var Reasons = []string{
 	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonDuplicateExtension,
 	ReasonCriticalExtension, ReasonDelta, ReasonPartitioned, ReasonCRLNumber,
@@ -299,20 +298,20 @@ var sha256WithRSANull = func() []byte {
 //
 //   - both AlgorithmIdentifiers are sha256WithRSAEncryption with NULL
 //     parameters, and the signature verifies under issuerKey;
-//   - no extension of the CRL appears twice, and none is critical other
-//     than those these rules know;
-//   - no deltaCRLIndicator and no issuingDistributionPoint;
+//   - no extension of the CRL appears twice;
+//   - no extension of the CRL is critical, whichever it is;
+//   - no deltaCRLIndicator and no issuingDistributionPoint, critical or not;
 //   - a cRLNumber holding a non-negative INTEGER;
-//   - entry by entry: no extension of the entry appears twice or is
-//     critical other than those the CRL may have, and the serial number
-//     gives a key (KeyFromSerial);
+//   - entry by entry, the first entry with a problem deciding: no extension
+//     of the entry appears twice, none is critical, and the serial number
+//     gives a key (KeyFromSerial), in this order;
 //   - no two different keys share their lowest 127 bits. The same serial
 //     number listed twice is one key.
 func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
 	if err := c.VerifySignature(issuerKey); err != nil {
 		return nil, err
 	}
-	if err := checkExtensions(c.Extensions, "CRL", crlExtensionsKnown); err != nil {
+	if err := checkExtensions(c.Extensions, "CRL"); err != nil {
 		return nil, err
 	}
 	for _, x := range c.Extensions {
@@ -333,7 +332,7 @@ func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
 	entryOf := make([]int, 0, len(c.Entries)) // the entry each key comes from
 	seen := make(map[Key]bool, len(c.Entries))
 	for i, e := range c.Entries {
-		if err := checkExtensions(e.Extensions, fmt.Sprintf("entry %d", i), crlExtensionsKnown); err != nil {
+		if err := checkExtensions(e.Extensions, fmt.Sprintf("entry %d", i)); err != nil {
 			return nil, err
 		}
 		k, err := KeyFromSerial(e.Serial)
@@ -379,21 +378,21 @@ func (c *CRL) signedBy(key *rsa.PublicKey) bool {
 	return rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], c.Signature) == nil
 }
 
-// crlExtensionsKnown are the extensions these rules know, so that they may
-// be critical, in the CRL or in an entry.
-var crlExtensionsKnown = []asn1.ObjectIdentifier{
-	oidAuthorityKeyIdentifier, oidCRLNumber, oidDeltaCRLIndicator, oidIssuingDistributionPoint,
-}
-
-func checkExtensions(exts []Extension, where string, known []asn1.ObjectIdentifier) error {
+// checkExtensions checks the extensions of the CRL or of one entry: first
+// that none appears twice, then that none is critical. No extension may be
+// critical, not even one these rules read (spec/revocation-tree.md, "Which
+// CRLs").
+func checkExtensions(exts []Extension, where string) error {
 	for i, x := range exts {
 		for _, y := range exts[:i] {
 			if x.ID.Equal(y.ID) {
 				return unusable(ReasonDuplicateExtension, "%s: extension %v appears twice", where, x.ID)
 			}
 		}
-		if x.Critical && !slices.ContainsFunc(known, x.ID.Equal) {
-			return unusable(ReasonCriticalExtension, "%s: unknown critical extension %v", where, x.ID)
+	}
+	for _, x := range exts {
+		if x.Critical {
+			return unusable(ReasonCriticalExtension, "%s: critical extension %v", where, x.ID)
 		}
 	}
 	return nil

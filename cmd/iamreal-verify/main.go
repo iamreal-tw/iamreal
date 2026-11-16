@@ -19,7 +19,7 @@ import (
 // Exit codes.
 const (
 	exitAllValid = 0 // the file is valid and every record is valid
-	exitInvalid  = 1 // the file is broken, or a record is invalid
+	exitInvalid  = 1 // the file is broken, a record is invalid, or the CRL archive's index differs from its files
 	exitError    = 2 // the check could not be made
 )
 
@@ -32,31 +32,33 @@ func main() {
 type deps struct {
 	verifier func(verifier.Config) (roster.ProofVerifier, error)
 	// archive opens the archive directory dir: reading only its index if
-	// trustIndex, otherwise rebuilding the index from the files.
-	archive func(dir string, trustIndex bool, progress func(name string)) (roster.CRLArchive, error)
+	// trustIndex, otherwise rebuilding the index from the files. When
+	// rebuilding, it also returns every difference between the index and
+	// the rebuilt one; the archive is that of the rebuilt index.
+	archive func(dir string, trustIndex bool, progress func(name string)) (roster.CRLArchive, []crl.IndexMismatch, error)
 }
 
 func newVerifier(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.New(cfg) }
 
 // openArchive opens an archive whose CRLs are checked under keys.
-func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (roster.CRLArchive, error) {
-	return func(dir string, trustIndex bool, progress func(string)) (roster.CRLArchive, error) {
+func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
+	return func(dir string, trustIndex bool, progress func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
 		if trustIndex {
 			a, err := crl.ReadArchiveIndex(dir)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			return archive{a}, nil
+			return archive{a}, nil, nil
 		}
 		k, err := keys()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		a, err := crl.RebuildArchive(dir, k, progress)
+		a, diffs, err := crl.RebuildArchive(dir, k, progress)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return archive{a}, nil
+		return archive{a}, diffs, nil
 	}
 }
 
@@ -130,6 +132,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 	var crls roster.CRLArchive = noArchive{}
+	var diffs []crl.IndexMismatch
 	switch {
 	case *archiveDir == "":
 		fmt.Fprintln(stderr, "iamreal-verify: no CRL archive (-crl-archive): no root is recognized, so check 3 (root) fails for every record that verifies")
@@ -140,9 +143,17 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	if *archiveDir != "" {
 		progress := func(name string) { fmt.Fprintf(stderr, "iamreal-verify: CRL %s\n", name) }
-		if crls, err = d.archive(*archiveDir, *trustIndex, progress); err != nil {
+		if crls, diffs, err = d.archive(*archiveDir, *trustIndex, progress); err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
 			return exitError
+		}
+		// The rebuilt index is the one that counts (spec/revocation-tree.md,
+		// "Re-verifying with the index"): report every difference and go on.
+		for _, m := range diffs {
+			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %s\n", m)
+		}
+		if len(diffs) > 0 {
+			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files\n", len(diffs), crl.IndexFileName)
 		}
 	}
 	rep, err := roster.Check(data, r, v, crls)
@@ -159,7 +170,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if rep.Broken != nil {
+	if rep.Broken != nil || len(diffs) > 0 {
 		return exitInvalid
 	}
 	for _, res := range rep.State.Records {

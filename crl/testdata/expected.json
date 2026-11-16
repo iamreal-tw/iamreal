@@ -8,7 +8,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "ef786b5d9428a5f0570f327e62954f03bf02bc0ab2664dd4ef24a54856d3dbeb",
+    "sha256": "c4bb92b36ae027b882ace14069269cd13a9665a82ffdb33c8354f7a92b54b893",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -20,7 +20,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b1025a01e6374a0c299575dc29ae34819099821e36080f76142910dd4f05e0bd",
+    "sha256": "0166d4c899dcb7c09666eeea96f8e39de0a9c3e4847093d9c0fb318a28449cff",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -32,7 +32,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "1a1c0042e781a85ddbf4fa6dd1c01709aa2de27939585ef8ac193757350ae414",
+    "sha256": "d1c461f685e033e7013b6c58b1ed5e2592ab4f5ed34f73426d7543aa389bfbe2",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -44,7 +44,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "9984f213bb6c27de1c182355177660cb7a8ddf7fd8271fb81b7712e79b72f2a8",
+    "sha256": "5af5b7a88d2f14e949a5091c1b1a2f4c405b84079b8e53cb810c4b8523f168b7",
     "root": "11e7b98ee96f8e2634d4424de62483e5684f725b775b9d54296b758290b4d667"
   },
   {
@@ -56,7 +56,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "62ca5878273b3694e236271bb9f081bc07402f0b333b7534cb2f2f82630ff71d",
+    "sha256": "5dd779fc7774b727485a551f54cd56c5c64696b90dfeec457bea5c3ff8118803",
     "root": "0676e0325cf2419178f3cf67866e470a4a9e3244fc8c025aed3dbd42d2bb9863"
   },
   {
@@ -69,7 +69,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b52d2dcf84ad570423c098a1bafea812421b811531b9b84b232103df3c04891d"
+    "sha256": "0340889393273eaae78c4a83fa480b27c7ed32436ee905d030dc0a873f0bc1c9"
   },
   {
     "name": "same-low-127",
@@ -81,7 +81,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "560e656d36c1fed0d88c0ba36799cedc7c0071f19c92c69e850fd8e957956dd2"
+    "sha256": "0538cc54e7656f75ab05b0d6119e60d72efe987b03340f26a63b0774458eb92d"
   },
   {
     "name": "duplicate",
@@ -92,7 +92,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "e05ba6d2935eb244faae6d5e7ddd0bd963ff05d69025e5c4bd9596956986e194",
+    "sha256": "47988366c2c8d0205ab923156155616234c6587cc2cdfec4843df59bda345f7f",
     "root": "1108b18d39d9b957b639342cf0794a7a622e5df2847f05dac5e39c276e799c4c"
   },
   {
@@ -105,7 +105,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "89b065278b62d1d6c69deb5bde8e6be68664d4773a6915ee59bde1c2ccc9bd31"
+    "sha256": "adb6360ef4f8405dd2453b27ade7089dbadb31507eca3cfef4c674dedb059262"
   },
   {
     "name": "leading-00",
@@ -116,7 +116,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b847e69ce0ab81b076c0c5354e15bfe93eb545ab3987d39f449475330c7ca785",
+    "sha256": "83e3e48b13bec17718ac3798ceaad8f6165fd61a32c1e6971b9178c58f5ea614",
     "root": "2e29ee633502d28899a6c6c03b28c542e64283d8e86eef7e68f2681d3bf05d06"
   },
   {
@@ -128,7 +128,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "2a6c861285aa0a2c0868730cefa2b1429c380bc92c7527b63b80baa768f1e7c5",
+    "sha256": "e20534f7b9193586e9948ea5e8a527bf938fae0db568834770e0028512f4a367",
     "root": "08e2ec59cc657b2e6d8aeb7c58f8b10f7126ad8ca4414e8f2e1c98ac3264422f"
   },
   {
@@ -141,7 +141,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b5ac91b89ea0dd7d72e7afaf20268e88f18ad19dab3682b603aff6d3c9b9adb1"
+    "sha256": "58324a5792363ae4a89481343001ea114f492c43c6991942cc364d19e35c724d"
   },
   {
     "name": "negative",
@@ -153,7 +153,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "717515b7fe8d33d3612ff273b9b4f2adfeeb59f6a17d627966796fbc2ce96236"
+    "sha256": "9b5bce4dff15bf1dd2966cbc1e72e08d57f04d82d9be4eb5726ab4446dfca6e1"
   },
   {
     "name": "non-minimal",
@@ -165,7 +165,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "312909544ce5591e82f96d0a13916205b2b59971d137bedd2c4ef74c98b5c3a7"
+    "sha256": "8a927235bd5e800ba4fd24e9a47057b41a1c8c4d103654b56e3f80f69c9ec63b"
   },
   {
     "name": "zero",
@@ -176,20 +176,20 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "83ea5a964d0ef9b93f432e663026598d0cb8e519d8db9face54fb915b8be6137",
+    "sha256": "0bd223319a1cb7ced7ff0e25be0c8a201b22483061889f945a61b2f403c6ea20",
     "root": "2fca4ef5e48a5d4417d7e27f9616a74ded2c6f90e602009f188fa4f6b083c71f"
   },
   {
     "name": "delta",
-    "what": "a delta CRL (critical deltaCRLIndicator)",
+    "what": "a delta CRL with a critical deltaCRLIndicator: the critical extension (check 5) comes before the delta (check 6)",
     "usable": false,
-    "reason": "not_usable_delta",
+    "reason": "not_usable_critical_extension",
     "entries": 1,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "d818ef0efcc4c4d9be8fc58af0b228c7423a43392c6909b3e3d89a9be7bba06c"
+    "sha256": "e20f8a3ab4827261541c9785223a1c81b6b501683e0a5786ef6aaf5b0b28d598"
   },
   {
     "name": "delta-noncritical",
@@ -201,11 +201,23 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "c3a6d34660ca71310d5d5dbfd879fab3b57bd0dc3d6e47404a0f29b300e8949a"
+    "sha256": "8af8cccb7497a0b80febf4090fe20f0951ab3ce2492ed3c144d3a8870d14de1e"
   },
   {
     "name": "idp",
-    "what": "a partitioned CRL (critical issuingDistributionPoint)",
+    "what": "a partitioned CRL with a critical issuingDistributionPoint: the critical extension (check 5) comes before the partition (check 7)",
+    "usable": false,
+    "reason": "not_usable_critical_extension",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "a6861738bccf960b9e62edcfe14b10b1f5b52d205737c5186d4ef26f61fc88ce"
+  },
+  {
+    "name": "idp-noncritical",
+    "what": "issuingDistributionPoint marked non-critical",
     "usable": false,
     "reason": "not_usable_partitioned",
     "entries": 1,
@@ -213,7 +225,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "9e56649d88e805a248d0b71989c8f0e38d9f9eddf0559984e09ca5fc8508fd81"
+    "sha256": "e366863ab7ab06722300141abc817b71f5db5ac462ac4708a3ecbf15b548fb87"
   },
   {
     "name": "unknown-critical",
@@ -225,7 +237,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "676208c701801e244c906f63f34e207304c5796bbcf44f9db0a1c61b51471c75"
+    "sha256": "42de19480d90e2198e39d4022d3c99ba8dd6364927679f47c6139376c47dfa36"
   },
   {
     "name": "unknown-noncritical",
@@ -236,8 +248,44 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "6c92d3465f89b613d95af577fb5b3e9730ad0154c4142715ed1479e4533a7bfe",
+    "sha256": "ec5ccffe713638e7b4ad00cf558cba94eb5c840068fa3c60111e21518245eaa5",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
+  },
+  {
+    "name": "critical-aki",
+    "what": "authorityKeyIdentifier marked critical: no extension may be critical",
+    "usable": false,
+    "reason": "not_usable_critical_extension",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "6b5e8012a34863191d61a141843fd46cd241cc289a5962b9ae1ab965f535da23"
+  },
+  {
+    "name": "critical-number",
+    "what": "cRLNumber marked critical: no extension may be critical",
+    "usable": false,
+    "reason": "not_usable_critical_extension",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "8a0c3abd105875a42d0e23174af6de96e92fd05ae700d1f7e7864cb73749527d"
+  },
+  {
+    "name": "critical-and-duplicate",
+    "what": "a critical CRL extension, then cRLNumber twice: the duplicate (check 4) comes before the critical extension (check 5)",
+    "usable": false,
+    "reason": "not_usable_duplicate_extension",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "b46e982345b2500f3d31bd3d774512cf160d2e9266adcaddcad3c29c7ee0424e"
   },
   {
     "name": "entry-critical",
@@ -249,7 +297,54 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "67d530d0032afd3ce5e04ee5fe9f810c7f33f153bf5f78876955aeff44a0531b"
+    "sha256": "c5d4feef9de029cf9bbf1ed419fe442ee17030c35692a58c63fdb7320ef4712d"
+  },
+  {
+    "name": "entry-critical-reason",
+    "what": "an entry whose reasonCode is marked critical: no extension may be critical",
+    "usable": false,
+    "reason": "not_usable_critical_extension",
+    "entries": 2,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "0cf88f86fab3732a9ef00387427cf0a6718bb2eaf8e76512b03bb6f597723b52"
+  },
+  {
+    "name": "entry-critical-and-negative",
+    "what": "one entry with a critical reasonCode and a negative serial: within the entry, the critical extension comes first",
+    "usable": false,
+    "reason": "not_usable_critical_extension",
+    "entries": 2,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "6b4eefbd07e6b687117773b56e66c9aabed214e1e3fb19d541ce3e511d0c5740"
+  },
+  {
+    "name": "negative-then-entry-critical",
+    "what": "a negative serial, then an entry with a critical reasonCode: the first entry with a problem decides",
+    "usable": false,
+    "reason": "not_usable_serial",
+    "entries": 2,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "3c8d4f08e4b0a3e76cdff6b3f7fed1ca0a0ae8cf1940689abccf4a7ee357b1e5"
+  },
+  {
+    "name": "no-number-entry-critical",
+    "what": "no cRLNumber, and an entry with a critical reasonCode: the CRL number (check 8) comes before the entries (check 9)",
+    "usable": false,
+    "reason": "not_usable_crl_number",
+    "entries": 1,
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "c26583f701323e6171f840f3f3a7ddcef63b06398abcccd545e1ecada3d6eb4e"
   },
   {
     "name": "no-number",
@@ -260,7 +355,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "d699cb65a8f376a8bd4f99dc3c253e7e969fd225492480aa185b708b87c74e95"
+    "sha256": "918b76b2f133df1008d5c1f953039b1898fd36758792628447287fcf566765cb"
   },
   {
     "name": "negative-number",
@@ -271,7 +366,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "e9ea958497da0747c38892f382e7eff9f73cd7924ff6d140c45249b28c8d915d"
+    "sha256": "7ad06202120d506d0f056f26c300d37515fcf24b90032d7499c78c58297062e8"
   },
   {
     "name": "duplicate-number",
@@ -283,7 +378,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "16f7ab57e2b45a5b6dfdc50d10db652541d37000dc335d07ed1d35db29a52813"
+    "sha256": "9c9bb1b1a52a13c8be0564719713392a6cd17cfaa0b5ed1fbb5c6d299f87a33f"
   },
   {
     "name": "no-next-update",
@@ -293,7 +388,7 @@
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "3d3589f6d79c205939a9dcfbd1bfa26ee84aa1c345748602ed0bbf7a68b66a0a",
+    "sha256": "9a3eeda6c12caa2de77b773936d4fbf15ca4e3994bd1eed0f1d905832782a0d9",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -306,7 +401,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "3ae87583927f56260c0be64208b511b71de22f9906de9c60212e524686a7e052"
+    "sha256": "70a47880e04b1b71a3a60ff5ebf3908a0deafb4a412a20d623f81805225f3d70"
   },
   {
     "name": "no-null-outer",
@@ -318,7 +413,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "e40fef0f8b06c16f6c54bdbf54483d0fa391ae98722995235e8f00e264c2b204"
+    "sha256": "aafb1f732a71846232b0a3e4f66b0c808753aa6da7282286263eb093eae051e7"
   },
   {
     "name": "bad-signature",
@@ -330,7 +425,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "bc5d30e7e0853e6cc5892035568be66aa96b45ed9f08b8508546dc17b0bf1e71"
+    "sha256": "c6f2b422746055883030a1848533b8d987fc1827c89cd811b93c3f229407b1cb"
   },
   {
     "name": "other-key",
@@ -342,6 +437,6 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "7d0834993287fc1f1cf4154acbc775fdd9a7ded05dc4a24361b2600d2575c2f3"
+    "sha256": "3181542919011eb4b949da8519174639ce011bdae75d41c46934c4e861a284d7"
   }
 ]

@@ -6,11 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/iamreal-tw/iamreal/crl/poseidon2"
 )
 
 // IndexFileName is the name of the index in an archive directory. Every
@@ -237,28 +241,58 @@ var indexKeys = []string{"issuer", "crl_number", "this_update", "next_update", "
 // the template, the format of each field, and the order of the lines. It
 // also checks what one line implies about itself: the CRL date is the date
 // of thisUpdate in Taiwan (or "-" with it), and a line with a root has an
-// issuer, a CRL number and a thisUpdate. It cannot check the roots, the
-// hashes or that the files exist; RebuildArchive does.
+// issuer, a CRL number and a thisUpdate, and a root below the BN254 scalar
+// field modulus p. It cannot check that the roots are those of the files,
+// the hashes or that the files exist; RebuildArchive does. The first
+// problem is an *IndexError.
 func ParseIndex(data []byte) ([]IndexLine, error) {
+	lines, problems, whole := scanIndex(data)
+	if whole != nil {
+		return nil, whole
+	}
+	if len(problems) > 0 {
+		return nil, problems[0].IndexError
+	}
+	return lines, nil
+}
+
+// indexProblem is a line of an index file that is not as the spec writes
+// it. Raw is the line as read, without LF.
+type indexProblem struct {
+	*IndexError
+	Raw string
+}
+
+// scanIndex reads an index file line by line, going on after a line that
+// is not as the spec writes it. It returns the lines that are well formed
+// (including those out of order, which are well formed by themselves), and
+// a problem for every line that is not well formed or is out of order. A
+// file that cannot be split into lines (it does not end in LF, or starts
+// with a byte order mark) gives only whole.
+func scanIndex(data []byte) (lines []IndexLine, problems []indexProblem, whole *IndexError) {
 	if len(data) > 0 && data[len(data)-1] != '\n' {
 		n := bytes.Count(data, []byte("\n")) + 1
-		return nil, &IndexError{n, errors.New("does not end in LF")}
+		return nil, nil, &IndexError{n, errors.New("does not end in LF")}
 	}
-	var lines []IndexLine
+	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) {
+		return nil, nil, &IndexError{1, errors.New("starts with a byte order mark")}
+	}
 	for n := 1; len(data) > 0; n++ {
 		i := bytes.IndexByte(data, '\n')
 		raw := data[:i+1]
 		data = data[i+1:]
+		text := string(raw[:i])
 		l, err := parseIndexLine(raw)
 		if err != nil {
-			return nil, &IndexError{n, err}
+			problems = append(problems, indexProblem{&IndexError{n, err}, text})
+			continue
 		}
 		if len(lines) > 0 && compareLines(lines[len(lines)-1], l) > 0 {
-			return nil, &IndexError{n, errors.New("out of order")}
+			problems = append(problems, indexProblem{&IndexError{n, errors.New("out of order")}, text})
 		}
 		lines = append(lines, l)
 	}
-	return lines, nil
+	return lines, problems, nil
 }
 
 func parseIndexLine(raw []byte) (IndexLine, error) {
@@ -328,6 +362,9 @@ func (l IndexLine) check() error {
 		if !isHex64(l.Root) {
 			return fmt.Errorf("root %q: want 64 lowercase hex digits, or - and a reason", l.Root)
 		}
+		if r, _ := new(big.Int).SetString(l.Root, 16); r.Cmp(poseidon2.Modulus) >= 0 {
+			return fmt.Errorf("root %s: not below the BN254 scalar field modulus p", l.Root)
+		}
 		if l.Issuer == none || l.CRLNumber == none || l.ThisUpdate == none {
 			return errors.New("a root without an issuer, a crl_number or a this_update")
 		}
@@ -390,45 +427,92 @@ func readIndexFile(dir string) ([]IndexLine, error) {
 	return ParseIndex(data)
 }
 
-// IndexMismatch is an index that differs from the one its archive gives.
-// Index is the line of the index and Files the line the files give, both
-// without LF; one of them is "" when the other has no counterpart with the
-// same SHA-256.
+// IndexMismatch is one difference between the index of an archive and the
+// index its files give. It is one of:
+//
+//   - the index as a whole: Problem says what is wrong with index.jsonl
+//     (missing, or it cannot be split into lines), Line is 0, and Index and
+//     Files are "";
+//   - a line of the index that is not well formed or is out of order: Line
+//     is its number (from 1), Problem says why, and Index is the line as
+//     read, without LF;
+//   - a line that differs: Index is the line of the index and Files the
+//     line the files give, both without LF; one of them is "" when the
+//     other has no counterpart with the same SHA-256.
 type IndexMismatch struct {
 	Index, Files string
+	Line         int
+	Problem      string
 }
 
-func (e *IndexMismatch) Error() string {
+func (m IndexMismatch) String() string {
 	switch {
-	case e.Index == "":
-		return "crl: the archive has a file the index does not list: " + e.Files
-	case e.Files == "":
-		return "crl: the index lists a file the archive does not have: " + e.Index
+	case m.Problem != "" && m.Line == 0:
+		return IndexFileName + " " + m.Problem
+	case m.Problem != "":
+		return fmt.Sprintf("%s line %d is not as the spec writes it (%s): %s", IndexFileName, m.Line, m.Problem, m.Index)
+	case m.Index == "":
+		return "the archive has a file the index does not list: " + m.Files
+	case m.Files == "":
+		return "the index lists a file the archive does not have: " + m.Index
 	}
-	return fmt.Sprintf("crl: the index differs from the files:\n  index: %s\n  files: %s", e.Index, e.Files)
+	return fmt.Sprintf("the index differs from the files:\n  index: %s\n  files: %s", m.Index, m.Files)
 }
 
-// RebuildArchive reads the archive directory dir in full: it checks the
-// index as ParseIndex does, rebuilds it from the files under keys (checking
-// each signature and building each tree), and requires the two to have the
-// same lines. The first difference, in the order of the index and then of
-// the files, is an *IndexMismatch.
-func RebuildArchive(dir string, keys []NamedKey, progress func(name string)) (*Archive, error) {
-	index, err := readIndexFile(dir)
-	if err != nil {
-		return nil, err
+// RebuildArchive reads the archive directory dir in full: it rebuilds the
+// index from the files under keys (checking each signature and building
+// each tree) and returns the archive of the rebuilt index, which is the one
+// that counts (spec/revocation-tree.md, "Re-verifying with the index").
+// Every difference between index.jsonl and the rebuilt index is returned
+// with it, for the caller to report:
+//
+//   - index.jsonl is missing, or cannot be split into lines (it does not
+//     end in LF, or starts with a byte order mark): one difference, and
+//     nothing is compared;
+//   - otherwise, first every line that is not as ParseIndex requires, in
+//     order (a line out of order is still compared; any other is not);
+//     then, in the order of the index and then of the files, every line of
+//     the index whose file the archive does not have, every file the index
+//     does not list, and every file whose line differs.
+//
+// Only a file that cannot be read is an error.
+func RebuildArchive(dir string, keys []NamedKey, progress func(name string)) (*Archive, []IndexMismatch, error) {
+	var diffs []IndexMismatch
+	var index []IndexLine
+	compare := true
+	data, err := os.ReadFile(filepath.Join(dir, IndexFileName))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		diffs = append(diffs, IndexMismatch{Problem: "is missing"})
+		compare = false
+	case err != nil:
+		return nil, nil, err
+	default:
+		lines, problems, whole := scanIndex(data)
+		if whole != nil {
+			diffs = append(diffs, IndexMismatch{Problem: "cannot be split into lines: " + whole.Err.Error()})
+			compare = false
+		}
+		for _, p := range problems {
+			diffs = append(diffs, IndexMismatch{Index: p.Raw, Line: p.Line, Problem: p.Err.Error()})
+		}
+		index = lines
 	}
 	got, err := BuildIndex(dir, keys, progress)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := compareIndexes(index, got); err != nil {
-		return nil, err
+	if compare {
+		diffs = append(diffs, compareIndexes(index, got)...)
 	}
-	return NewArchive(got), nil
+	return NewArchive(got), diffs, nil
 }
 
-func compareIndexes(index, files []IndexLine) error {
+// compareIndexes returns every difference between index and files, the
+// lines of an index and the lines the files give. Lines are compared whole;
+// an unmatched line of the index is paired with an unmatched line of the
+// files that has the same SHA-256, if there is one.
+func compareIndexes(index, files []IndexLine) []IndexMismatch {
 	text := func(l IndexLine) string { return strings.TrimSuffix(string(l.Line()), "\n") }
 	count := map[string]int{} // lines of the index minus lines of the files
 	for _, l := range index {
@@ -437,24 +521,35 @@ func compareIndexes(index, files []IndexLine) error {
 	for _, l := range files {
 		count[text(l)]--
 	}
-	// The other side's unmatched line with the same SHA-256, if any.
-	match := func(sha string, from []IndexLine, sign int) string {
-		for _, l := range from {
-			if l.SHA256 == sha && count[text(l)]*sign > 0 {
-				return text(l)
-			}
-		}
-		return ""
-	}
+	var onlyIndex, onlyFiles []IndexLine
 	for _, l := range index {
-		if count[text(l)] > 0 {
-			return &IndexMismatch{Index: text(l), Files: match(l.SHA256, files, -1)}
+		if t := text(l); count[t] > 0 {
+			onlyIndex = append(onlyIndex, l)
+			count[t]--
 		}
 	}
 	for _, l := range files {
-		if count[text(l)] < 0 {
-			return &IndexMismatch{Files: text(l)}
+		if t := text(l); count[t] < 0 {
+			onlyFiles = append(onlyFiles, l)
+			count[t]++
 		}
 	}
-	return nil
+	paired := make([]bool, len(onlyFiles))
+	var out []IndexMismatch
+	for _, l := range onlyIndex {
+		m := IndexMismatch{Index: text(l)}
+		for j, f := range onlyFiles {
+			if !paired[j] && f.SHA256 == l.SHA256 {
+				paired[j], m.Files = true, text(f)
+				break
+			}
+		}
+		out = append(out, m)
+	}
+	for j, f := range onlyFiles {
+		if !paired[j] {
+			out = append(out, IndexMismatch{Files: text(f)})
+		}
+	}
+	return out
 }

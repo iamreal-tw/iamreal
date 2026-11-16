@@ -43,19 +43,19 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 ### 不可用的原因代碼
 
-規格「Which CRLs」的每一條對應下面一個或幾個代碼。存檔索引把它接在 `-` 後面寫在 `root` 欄位（例如 `-not_usable_signature`）。好幾條都不符合時，給檢查順序最前面的那一個：
+規格「Which CRLs」的每一條對應下面一個或幾個代碼，順序和規格「Archive index」的原因代碼表相同。存檔索引把它接在 `-` 後面寫在 `root` 欄位（例如 `-not_usable_signature`）。好幾條都不符合時，給檢查順序最前面的那一個：
 
 | 順序 | 代碼 | 意思 |
 |---|---|---|
 | 1 | `not_usable_der` | 不是 DER 的 `CertificateList`（多餘的位元組、非最短的長度、結構不對） |
 | 2 | `not_usable_algorithm` | `tbsCertList` 裡或外面的簽章演算法不是 sha256WithRSAEncryption，或參數不是 NULL（包括省略） |
 | 3 | `not_usable_signature` | 簽章在發證金鑰下驗不過（索引：兩把都驗不過） |
-| 4 | `not_usable_duplicate_extension` | 清冊的同一個延伸欄位出現兩次 |
-| 5 | `not_usable_critical_extension` | 清冊有不認得的關鍵延伸欄位。認得的是 `authorityKeyIdentifier`、`cRLNumber`、`deltaCRLIndicator`、`issuingDistributionPoint` |
-| 6 | `not_usable_delta` | 差異清冊（`deltaCRLIndicator`，關鍵與否都算） |
-| 7 | `not_usable_partitioned` | 分段清冊（`issuingDistributionPoint`） |
+| 4 | `not_usable_duplicate_extension` | 清冊本身的同一個延伸欄位出現兩次 |
+| 5 | `not_usable_critical_extension` | 清冊本身有關鍵延伸欄位，不論是哪一個（`authorityKeyIdentifier`、`cRLNumber` 標成關鍵也算） |
+| 6 | `not_usable_delta` | 差異清冊（有 `deltaCRLIndicator`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
+| 7 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
 | 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER |
-| 9 | 單筆的 `not_usable_duplicate_extension`、`not_usable_critical_extension`、`not_usable_serial` | 逐筆檢查，第一個有問題的那一筆決定代碼：延伸欄位重複、不認得的關鍵延伸欄位（認得的同第 5 列，所以帶關鍵 `certificateIssuer` 的間接清冊不可用）、序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組） |
+| 9 | `not_usable_duplicate_extension`、`not_usable_critical_extension` 或 `not_usable_serial` | 某一筆的延伸欄位出現兩次、某一筆有關鍵延伸欄位（不論是哪一個，所以帶關鍵 `certificateIssuer` 的間接清冊、`reasonCode` 標成關鍵的清冊都不可用）、或某一筆的序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組）。逐筆檢查，第一個有問題的那一筆決定代碼；同一筆裡照這個順序 |
 | 10 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |
 
 代碼在程式裡是 `crl.Reason…` 常數，清單是 `crl.Reasons`。
@@ -72,7 +72,9 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 這個指令是給檢查和測試用的。持卡人的裝置自己建樹、自己算證明，不用這個指令，也不把序號交給任何人。
 
-`-key FILE` 讓 `check`、`prove` 改用測試用的發證金鑰（公鑰或憑證，DER 或 PEM）。測試金鑰從來不是內政部的金鑰。
+### 測試用的發證金鑰：`-key-g2`、`-key-g3`
+
+`check`、`prove`、`index` 都可以加 `-key-g2 FILE`、`-key-g3 FILE`（各自可有可無）：給的檔案（公鑰或憑證，DER 或 PEM）代替內政部那一把發證金鑰，沒給的那一把仍是內政部的。`check`、`prove` 仍要給 `-issuer`，用的是那個發證者的金鑰（有代替的就用代替的）；`index` 用代替的金鑰驗過的行，`issuer` 照樣寫 `G2`、`G3`，所以索引的格式合規格。用到測試金鑰時，標準錯誤會印一行 `WARNING`。測試金鑰從來不是內政部的金鑰，這樣算出來的結果和內政部的清冊無關，只給測試用。
 
 ### 存檔索引
 
@@ -102,14 +104,19 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 有任何不可用的檔案時，索引照樣印完，每個不可用的檔案在標準錯誤印一行，結束代碼是 1。
 
-`-key FILE` 多試一把測試用的發證金鑰，用它驗過的行 `issuer` 寫 `test`。這樣的索引不合規格（`issuer` 只能是 `G2`、`G3`、`-`），只給測試用。
+`-key-g2`、`-key-g3` 讓測試金鑰代替內政部的金鑰（見上面）。
 
 ### 讀存檔：`crl.Archive`
 
 `roster/` 的第 3 項檢查（樹根是否被承認）要問：「這把金鑰、這個樹根，有哪些可用清冊的日期？」`crl.Archive` 回答這個問題（`CRLDates(issuer, root)`，日期是 `YYYY-MM-DD` 字串；`crl/` 不引用 `verifier/`，換成 `verifier.Date` 在 `cmd/iamreal-verify` 做）。兩種開法：
 
-- **`crl.RebuildArchive(DIR, 金鑰, …)`：完整重算。** 先照規格檢查索引的每一行，再對目錄裡的每個檔案重新驗章、建樹，重建一份索引，兩份的行要完全相同（比的是整行，所以 `sha256`、`root`、日期都比到）。索引沒列的檔案、索引列了但目錄裡沒有的檔案、任何一行不同，都停下並回報第一個不同（`*crl.IndexMismatch`）。G2 的清冊一份約 10 秒，一年份的存檔要很久。
-- **`crl.ReadArchiveIndex(DIR)`：只信索引。** 只讀 `index.jsonl`，照規格檢查每一行（`crl.ParseIndex`）：固定的樣板、各欄位的格式、`crl_date` 等於 `this_update` 在台灣的日期、有樹根的行要有 `issuer`、`crl_number`、`this_update`、行的順序。樹根和檔案本身沒有檢查。
+- **`crl.RebuildArchive(DIR, 金鑰, …)`：完整重算。** 對目錄裡的每個檔案重新驗章、建樹，重建一份索引，和 `index.jsonl` 逐行比對（比的是整行，所以 `sha256`、`root`、日期都比到）。照規格「Re-verifying with the index」，**重建的索引才算數**：回傳的 `Archive` 是重建的索引的，每一個不同都一起回傳（`[]crl.IndexMismatch`），不會停在第一個。回報這些不同是呼叫的人的事（`cmd/iamreal-verify` 印在標準錯誤）。不同有這幾種：
+  - **沒有 `index.jsonl`**，或它**沒辦法切成行**（最後沒有 LF、開頭有 BOM）：只算一個不同，不再逐行比對（不會把每個檔案都再報一次「索引沒列」）。
+  - **寫法不合規格的行**（`crl.ParseIndex` 會拒絕的：樣板不對、欄位格式不對、樹根不小於 `p`……）：每一行算一個不同，附行號；這一行不拿來比對，所以它對應的檔案通常也會報成「索引沒列的檔案」。**順序錯的行**也附行號報一個不同，但這一行本身寫法沒錯，照樣拿來比對。
+  - 寫法正確的行逐行比對後的三種不同，先照索引的順序、再照檔案的順序：索引列了但目錄裡沒有的檔案、索引沒列的檔案、同一個檔案（`sha256` 相同）的行不同。
+
+  只有讀不到檔案時是錯誤。G2 的清冊一份約 10 秒，一年份的存檔要很久。
+- **`crl.ReadArchiveIndex(DIR)`：只信索引。** 只讀 `index.jsonl`，照規格檢查每一行（`crl.ParseIndex`）：固定的樣板、各欄位的格式、`crl_date` 等於 `this_update` 在台灣的日期、有樹根的行要有 `issuer`、`crl_number`、`this_update`，樹根要小於 BN254 純量體的模數 `p`、行的順序。樹根是不是那份清冊的、檔案本身，都沒有檢查。沒有 `index.jsonl`、或任何一行寫法不對，都是錯誤（`*crl.IndexError` 指出第一個有問題的行）：只信索引時沒有別的東西能代替它。
 
 兩種都只用可用的行（`root` 是樹根的行）。同一個樹根可能對應好幾份清冊（兩份清冊之間沒有新的廢止時），每一份的日期都會回傳。
 
@@ -137,8 +144,8 @@ go test ./crl/...
 - `spec/vectors/poseidon2-constants.json`：常數、置換；`spec/vectors/poseidon2.json`：`hash_2`、`hash_3`、`scoped_id`、`revocation_tree`（樹根和每一份證明）。
 - 樹和規格裡的遞迴定義（測試裡另寫一份慢的）在亂數的樹上比對；每份證明用電路的檢查方式（`assert_not_in_tree`）重算回樹根。
 - Poseidon2 另有一份 `math/big` 寫的慢版本（`poseidon2/reference_test.go`），兩份互相比對。
-- `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。
-- 存檔索引：排序、每一種寫錯的行被拒絕、完整重算找得到改過的樹根、多出來的檔案、少了的檔案；只信索引時照索引回答。
+- `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。原因代碼的順序也各有清冊：關鍵延伸欄位先於差異清冊和分段清冊、重複先於關鍵、清冊編號先於逐筆的檢查、同一筆裡關鍵先於序號、第一個有問題的那一筆決定。
+- 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊
 
