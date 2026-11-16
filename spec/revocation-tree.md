@@ -203,9 +203,12 @@ with the same CRL number get two lines.
 **Re-verifying with the index.** The index is a convenience: a re-verifier
 can rebuild it from the files, and the rebuilt index is the one that counts.
 A re-verifier that rebuilds it and finds a difference reports every
-difference and continues with the rebuilt index. One that trusts the index
-without rebuilding it checks every line's form, and that `root` is below
-`p`.
+difference and continues with the rebuilt index. A missing `index.jsonl`,
+and every line of it that is not well formed, also count as differences:
+the rebuilt index does not need them. One that trusts the index without
+rebuilding it checks every line's form, and that `root` is below `p`; there
+a missing or malformed index is an error, since nothing else can stand in
+for it.
 
 ## Open items
 
