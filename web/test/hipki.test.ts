@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CardError } from "../src/card/card.ts";
-import { certificatesOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
+import { HipkiCard, certificatesOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
 
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 const certA = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x01);
@@ -95,5 +95,64 @@ describe("MakeSignature", () => {
   test("other codes: a card error with the code", () => {
     assert.deepEqual(cardError(() => signatureOfReply(JSON.stringify({ ret_code: 0x76000998 }))), { code: "card_error", detail: "76000998" });
     assert.deepEqual(cardError(() => signatureOfReply(JSON.stringify({ ret_code: "x" }))), { code: "card_error", detail: "no_code" });
+  });
+});
+
+// Another site that opened this page could find the component's window by
+// its fixed name. Each window now gets a name of its own. A stand-in
+// `window` records what window.open was given.
+describe("the component's window", () => {
+  interface Opened {
+    url: string;
+    name: string;
+    closed: boolean;
+    closedBeforeNextOpen: boolean | null;
+  }
+  function fakeWindow(): { opened: Opened[]; restore: () => void } {
+    const opened: Opened[] = [];
+    const g = globalThis as { window?: unknown };
+    const before = g.window;
+    g.window = {
+      open: (url: string, name: string) => {
+        for (const o of opened) if (o.closedBeforeNextOpen === null) o.closedBeforeNextOpen = o.closed;
+        const o: Opened = { url, name, closed: false, closedBeforeNextOpen: null };
+        opened.push(o);
+        return {
+          get closed() {
+            return o.closed;
+          },
+          close: () => (o.closed = true),
+          postMessage: () => undefined,
+        };
+      },
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    };
+    return { opened, restore: () => (g.window = before) };
+  }
+
+  test("a name of its own each time, not one another page could guess; the last one closed before the next opens", () => {
+    const w = fakeWindow();
+    try {
+      const card = new HipkiCard("http://localhost:61161");
+      for (let i = 0; i < 3; i++) assert.equal(card.open(), true);
+      card.release();
+      assert.equal(w.opened.length, 3);
+      const names = w.opened.map((o) => o.name);
+      assert.equal(new Set(names).size, 3, `three names: ${names.join(", ")}`);
+      for (const n of names) {
+        assert.notEqual(n, "iamreal-hipki");
+        assert.match(n, /^iamreal-[0-9a-f]{32}$/, n);
+      }
+      assert.ok(w.opened.every((o) => o.url === "http://localhost:61161/popupForm"));
+      assert.deepEqual(
+        w.opened.map((o) => o.closedBeforeNextOpen),
+        [true, true, null],
+        "each window was closed before the next was opened",
+      );
+      assert.ok(w.opened.every((o) => o.closed));
+    } finally {
+      w.restore();
+    }
   });
 });

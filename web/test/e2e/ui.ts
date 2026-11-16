@@ -45,9 +45,9 @@ import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, 
 import { makeCrl } from "../fixtures/crls.ts";
 import { type TestKey, hex, makeKey } from "../fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "../fixtures/world.ts";
-import { Browser, type Page, sleep } from "./cdp.ts";
+import { Browser, Page, sleep } from "./cdp.ts";
 import { FakeComponent, type FakeCardSpec } from "./fake-component.ts";
-import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS } from "./headers.ts";
+import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS } from "./headers.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..", "..");
@@ -217,6 +217,35 @@ const browser = await Browser.launch({ dir: out });
 const page = await browser.newPage();
 await page.send("Page.enable");
 const C = COPY;
+
+// The windows the page opens (the component's). Each has a name of its own
+// (src/card/hipki.ts), so none is reused by name: the last one must be
+// closed before the next one opens. A script the test adds to every load of
+// the page wraps window.open and reports, through a DevTools binding, each
+// window's name and how many earlier windows were still open at that moment.
+const windows = { opened: 0, names: new Set<string>(), badNames: [] as string[], openedWhileAnother: 0 };
+await page.send("Runtime.enable");
+await page.send("Runtime.addBinding", { name: "__iamrealWindowOpened" });
+await page.send("Page.addScriptToEvaluateOnNewDocument", {
+  source: `(() => {
+    const open = window.open.bind(window);
+    const opened = [];
+    window.open = function (url, name, features) {
+      const othersOpen = opened.filter((w) => !w.closed).length;
+      const w = open(url, name, features);
+      if (w) { opened.push(w); window.__iamrealWindowOpened(JSON.stringify({ name: String(name), othersOpen })); }
+      return w;
+    };
+  })()`,
+});
+browser.on((m, p, s) => {
+  if (m !== "Runtime.bindingCalled" || s !== page.sessionId || p.name !== "__iamrealWindowOpened") return;
+  const r = JSON.parse(p.payload) as { name: string; othersOpen: number };
+  windows.opened++;
+  if (windows.names.has(r.name) || !/^iamreal-[0-9a-f]{32}$/.test(r.name)) windows.badNames.push(r.name);
+  windows.names.add(r.name);
+  if (r.othersOpen > 0) windows.openedWhileAnother++;
+});
 const results: Record<string, unknown> = {};
 
 const step = (name: string) => `document.querySelector('[data-step="${name}"]')`;
@@ -557,6 +586,7 @@ await tryStep("declare @alice (a wrong PIN first; a blocked window on each click
   const doc = browser.responses.find((r) => r.url === PAGE);
   check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, `the page's Content-Security-Policy: ${doc?.headers["content-security-policy"]}`);
   check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], `the page's Document-Isolation-Policy: ${doc?.headers["document-isolation-policy"]}`);
+  check(doc?.headers["cross-origin-opener-policy"] === OPENER_HEADERS["Cross-Origin-Opener-Policy"], `the page's Cross-Origin-Opener-Policy: ${doc?.headers["cross-origin-opener-policy"]}`);
   check(await page.eval<boolean>("crossOriginIsolated"), `the page on ${PAGE_ORIGIN} is cross-origin isolated`);
   const api = browser.responses.find((r) => r.url.endsWith("/api/v1/card-state"));
   check(/^[0-9a-f]{16}$/.test(api?.headers["x-request-id"] ?? ""), `an API response carries X-Request-Id ${api?.headers["x-request-id"]}`);
@@ -982,7 +1012,123 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
   check(component.requests.every((r) => ["GetUserCert", "MakeSignature"].includes(r.func)), "only GetUserCert and MakeSignature were asked of the component");
+  check(
+    windows.opened > 0 && windows.opened >= popups.size && windows.openedWhileAnother === 0,
+    `each window opened only after the page closed the last one (${windows.opened} windows opened, ${windows.openedWhileAnother} while another was open)`,
+  );
+  check(windows.badNames.length === 0, `each window a name of its own, iamreal- and 128 random bits (${windows.names.size} names; not so: ${JSON.stringify(windows.badNames.slice(0, 3))})`);
 }
+
+// A page on another site opens this page with window.open. With
+// Cross-Origin-Opener-Policy: same-origin-allow-popups the opener loses its
+// hold on this page, and this page still talks to the component's window it
+// opens (README.md, "Cross-Origin-Opener-Policy"). It runs last, after the
+// checks of where the page connected, because the other site's pages
+// connect elsewhere by design.
+//
+// The other site's pages are served from the fake component's origin. A
+// page can find a window by its name only if it is in the same origin as
+// that window (Chrome 157, tried); this is the strongest opener, and the
+// one with which, without Cross-Origin-Opener-Policy and with a fixed
+// window name, the component's window was taken.
+await tryStep("a page on another site opens this page (Cross-Origin-Opener-Policy)", async () => {
+  const hits: string[] = [];
+  component.pages = (path) => {
+    hits.push(path);
+    if (path === "/__opener") {
+      return `<!doctype html><title>opener</title><button id="go" onclick="window.w = window.open('${PAGE}', '_blank')">open</button><button id="steal">steal</button>`;
+    }
+    if (path.startsWith("/__elsewhere/")) return `<!doctype html><p>elsewhere ${path}</p>`;
+    return null;
+  };
+  const ELSEWHERE = `${COMPONENT}/__elsewhere`;
+  const created: { targetId: string; openerId?: string }[] = [];
+  const off = browser.on((m, p) => {
+    if (m === "Target.targetCreated" && p.targetInfo.type === "page") created.push({ targetId: p.targetInfo.targetId, openerId: p.targetInfo.openerId });
+  });
+  const pageOf = async (targetId: string): Promise<Page> => {
+    for (let i = 0; i < 200; i++) {
+      for (const [sessionId, s] of browser.sessions) if (s.targetId === targetId) return new Page(browser, sessionId, targetId);
+      await sleep(50);
+    }
+    throw new Error(`target ${targetId} did not attach`);
+  };
+  const urlOf = (targetId: string) => [...browser.sessions.values()].find((s) => s.targetId === targetId)?.url ?? "";
+  let release: () => void = () => undefined;
+  try {
+    const opener = await browser.newPage();
+    await opener.send("Page.enable");
+    await opener.goto(`${COMPONENT}/__opener`);
+    await opener.click("#go");
+    for (let i = 0; i < 100 && !created.some((c) => c.openerId === opener.targetId); i++) await sleep(50);
+    const t = created.find((c) => c.openerId === opener.targetId);
+    if (!check(t !== undefined, "the other site opened this page")) return;
+    const ours = await pageOf(t!.targetId);
+    await ours.waitFor(step("before_pin"), "section 1 in the page the other site opened");
+
+    // 1. The page is still cross-origin isolated.
+    check(await ours.eval<boolean>("crossOriginIsolated"), "opened by another site: the page is cross-origin isolated");
+    // 2. The page has no opener.
+    check(await ours.eval<boolean>("window.opener === null"), "opened by another site: the page's window.opener is null");
+    // 3. The opener's handle on the page is cut.
+    check(await opener.eval<boolean>("window.w.closed === true"), "the other site's handle on the page is closed");
+
+    // 4 and 5. The page reads the card through the component's window; while
+    // that window waits for the card, the other site opens a window by its
+    // name. The component's window is not taken; the reply still comes back.
+    component.card = main.spec();
+    component.silent = false;
+    // The last case above left a higher CRL number behind; this card proof should get to the PIN.
+    await ours.eval(`localStorage.removeItem(${JSON.stringify(STORAGE_KEY_PREFIX + "G3")})`);
+    component.hold = new Promise<void>((r) => (release = r));
+    const requests = component.requests.length;
+    await ours.send("Page.bringToFront");
+    await ours.clickButton(C.before_pin.read_card);
+    for (let i = 0; i < 200 && component.requests.length === requests; i++) await sleep(50);
+    check(component.requests.length === requests + 1 && component.requests.at(-1)?.func === "GetUserCert", "the component's window got the page's request");
+    const w = created.find((c) => c.openerId === ours.targetId);
+    if (!check(w !== undefined, "the page opened the component's window")) return;
+    const popup = await pageOf(w!.targetId);
+    const name = await popup.eval<string>("window.name");
+    check(/^iamreal-[0-9a-f]{32}$/.test(name), `the component's window has a name of its own: ${name}`);
+    await opener.eval(`document.getElementById("steal").onclick = () => { window.stolen = window.open(${JSON.stringify(ELSEWHERE + "/stolen-window")}, ${JSON.stringify(name)}); }`);
+    await opener.send("Page.bringToFront");
+    await opener.click("#steal");
+    await sleep(1500);
+    // The attempt was made (a window loaded the address), and it did not land in the component's window.
+    const attempted = (await opener.eval<boolean>("!!window.stolen")) && hits.includes("/__elsewhere/stolen-window");
+    check(
+      attempted && urlOf(w!.targetId).startsWith(COMPONENT + "/popupForm"),
+      `the other site's window.open by that name (made: ${attempted}) left the component's window where it was: ${urlOf(w!.targetId)}`,
+    );
+    await ours.send("Page.bringToFront");
+    release();
+    component.hold = null;
+    const r = await ours
+      .waitFor<{ pin: boolean; message: string }>(
+        `(() => { const m = document.querySelector('[data-message]')?.innerText; if (m) return { pin: false, message: m };
+          if (document.querySelector('#pin')) return { pin: true, message: "" }; return null; })()`,
+        "the PIN field or a message",
+        40_000,
+      )
+      .catch(() => ({ pin: false, message: "(nothing)" }));
+    check(r.pin, `the page and the component's window went back and forth: ${r.pin ? "the PIN field" : r.message}`);
+
+    // 6. The other site cannot replace the page.
+    await opener.eval(`try { window.w.location = ${JSON.stringify(ELSEWHERE + "/tab-replaced")}; } catch (e) {} true`);
+    await sleep(1500);
+    const href = await ours.eval<string>("location.href").catch(() => "");
+    check(href === PAGE && !hits.includes("/__elsewhere/tab-replaced"), `the other site's w.location = … changed nothing: the page is at ${href}`);
+
+    for (const c of created) if (c.targetId !== page.targetId) await browser.send("Target.closeTarget", { targetId: c.targetId }).catch(() => undefined);
+    await browser.send("Target.closeTarget", { targetId: opener.targetId }).catch(() => undefined);
+  } finally {
+    release();
+    component.hold = null;
+    off();
+    component.pages = null;
+  }
+});
 
 writeFileSync(join(out, "ui-report.json"), JSON.stringify({ results, shown, component: component.requests.map((r) => ({ func: r.func, tbs: r.tbs })) }, null, 2));
 await browser.close();

@@ -35,8 +35,10 @@ export function circuitInputs(p: ProofInputs): Record<string, unknown> {
   const tbs = new Uint8Array(MAX_TBS_LEN);
   tbs.set(cert.tbs);
   if (p.scope.length !== 31 || p.declarationCode.length !== 31) throw new Error("signed messages are 31 bytes");
+  const tbsArray = Array.from(tbs);
+  tbs.fill(0);
   return {
-    tbs: Array.from(tbs),
+    tbs: tbsArray,
     tbs_len: cert.tbs.length,
     issuer_modulus: limbs(cert.issuer.modulus, 120, k).map(hex),
     issuer_redc: limbs(redc(cert.issuer.modulus, cert.issuer.bits), 120, k).map(hex),
@@ -53,6 +55,21 @@ export function circuitInputs(p: ProofInputs): Record<string, unknown> {
     declaration_code: Array.from(p.declarationCode),
     declaration_code_signature: limbs(bigintOfBytes(p.declarationCodeSignature), 120, 18).map(hex),
   };
+}
+
+/**
+ * Once the proof is made (or not): the arrays of the input map are
+ * overwritten, numbers with 0 and strings with "0x0", so that the map no
+ * longer holds the certificate's bytes or the signatures' limbs. The strings
+ * themselves cannot be zeroed in JavaScript; they are only no longer
+ * referenced from here. What the proof engine copied is not reached
+ * (README, "已知的限制").
+ */
+export function wipeInputs(inputs: Record<string, unknown>): void {
+  for (const v of Object.values(inputs)) {
+    if (!Array.isArray(v)) continue;
+    for (let i = 0; i < v.length; i++) v[i] = typeof v[i] === "number" ? 0 : "0x0";
+  }
 }
 
 /**

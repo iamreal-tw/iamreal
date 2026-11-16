@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COPY } from "../../src/ui/copy.ts";
 import { Browser } from "./cdp.ts";
-import { CONTENT_SECURITY_POLICY } from "./headers.ts";
+import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS } from "./headers.ts";
 
 const url = process.argv[2];
 if (!url) throw new Error("usage: smoke.ts URL");
@@ -31,7 +31,8 @@ await page.goto(url);
 await page.waitFor(`document.querySelector('[data-step="before_pin"]')`, "the first screen");
 const doc = browser.responses.find((r) => r.url === url);
 check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, "Content-Security-Policy");
-check(doc?.headers["document-isolation-policy"] === "isolate-and-credentialless", "Document-Isolation-Policy");
+check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], "Document-Isolation-Policy");
+check(doc?.headers["cross-origin-opener-policy"] === OPENER_HEADERS["Cross-Origin-Opener-Policy"], "Cross-Origin-Opener-Policy");
 check(await page.eval<boolean>("crossOriginIsolated"), "cross-origin isolated");
 const engine = await page.waitFor<number>(`performance.getEntriesByName("iamreal:engine_engine_total")[0]?.duration`, "the engine", 60_000).catch(() => 0);
 check(engine > 0, `the proof engine started (${Math.round(engine)} ms)`);

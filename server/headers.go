@@ -20,18 +20,27 @@ var responseHeaders = map[string]string{
 // web/README.md explains them and quotes the policy; a test checks that it
 // quotes this one.
 //
-//   - Content-Security-Policy: the page connects to its own origin only. The
-//     window of MOICA's component (http://localhost:61161) is opened with
-//     window.open and talked to with postMessage; this policy governs
-//     neither, so it needs nothing for the component.
+//   - Content-Security-Policy: fetch, images, WebSockets, forms, frames and
+//     other origins' scripts and workers reach the page's own origin only.
+//     It does not govern top-level navigation, window.open or WebRTC, so it
+//     does not stop a script in the page from sending data elsewhere
+//     (web/README.md says what it does and does not stop). The window of
+//     MOICA's component (http://localhost:61161) is opened with window.open
+//     and talked to with postMessage, so it needs nothing for the component.
 //   - Document-Isolation-Policy: makes the page cross-origin isolated in
 //     desktop Chromium (multithreaded proof) while it can still talk to the
-//     component's window, which Cross-Origin-Opener-Policy would cut off.
-//     Other browsers ignore it and prove with one thread.
+//     component's window, which Cross-Origin-Opener-Policy: same-origin
+//     would cut off. Other browsers ignore it and prove with one thread.
+//   - Cross-Origin-Opener-Policy: same-origin-allow-popups: a page on
+//     another site that opened this one with window.open loses its hold on
+//     it (it could otherwise replace the tab, or navigate the component's
+//     window by name). The windows the page opens itself keep their opener,
+//     so the component's reply still comes back.
 var pageHeaders = map[string]string{
 	"Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; " +
 		"img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-	"Document-Isolation-Policy": "isolate-and-credentialless",
+	"Document-Isolation-Policy":  "isolate-and-credentialless",
+	"Cross-Origin-Opener-Policy": "same-origin-allow-popups",
 }
 
 // contentTypes are the media types of the static files whose extension Go

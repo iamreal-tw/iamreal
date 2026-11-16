@@ -52,6 +52,10 @@ export class FakeComponent {
   card: FakeCardSpec | null = null;
   /** The window never says it is ready (a component that is not running). */
   silent = false;
+  /** While set, a request is recorded and then not answered until it resolves (its window stays open meanwhile). */
+  hold: Promise<void> | null = null;
+  /** While set, other pages on the component's origin (an opener in the same origin as the component's window): HTML for a path, or null. */
+  pages: ((path: string) => string | null) | null = null;
   readonly requests: ComponentRequest[] = [];
   /** Every signature it returned, base64 (to check that the page does not keep them). */
   readonly signatures: string[] = [];
@@ -70,6 +74,8 @@ export class FakeComponent {
         const reply = await this.answer(body);
         return res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(reply));
       }
+      const page = this.pages?.(path ?? "/") ?? null;
+      if (page !== null) return res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(page);
       res.writeHead(404).end();
     });
     await new Promise<void>((resolve, reject) => {
@@ -91,6 +97,7 @@ export class FakeComponent {
     }
     const func = String(r.func);
     this.requests.push({ func, ...(typeof r.tbs === "string" && { tbs: r.tbs }), ...(typeof r.pin === "string" && { pin: r.pin }) });
+    if (this.hold) await this.hold;
     const card = this.card;
     if (func === "GetUserCert") {
       if (!card || card.noCard) return { ret_code: 0, last_error: 0, version: "fake", slots: [{ slotDescription: "Fake Reader 0" }] };

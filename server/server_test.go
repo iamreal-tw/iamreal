@@ -270,6 +270,22 @@ func TestWebReadmeQuotesThePolicy(t *testing.T) {
 	if !strings.Contains(string(readme), "Document-Isolation-Policy: "+pageHeaders["Document-Isolation-Policy"]) {
 		t.Errorf("web/README.md does not quote the Document-Isolation-Policy of headers.go")
 	}
+	if !strings.Contains(string(readme), "Cross-Origin-Opener-Policy: "+pageHeaders["Cross-Origin-Opener-Policy"]) {
+		t.Errorf("web/README.md does not quote the Cross-Origin-Opener-Policy of headers.go")
+	}
+	if len(pageHeaders) != 3 {
+		t.Errorf("web/README.md explains three page headers; headers.go has %d", len(pageHeaders))
+	}
+}
+
+// A page that opened the card proof page with window.open must not keep a
+// hold on it, while the windows the page opens itself (MOICA's component)
+// keep theirs (web/README.md, "Cross-Origin-Opener-Policy"; the browser
+// test is web/test/e2e/ui.ts).
+func TestPageOpenerPolicy(t *testing.T) {
+	if got := pageHeaders["Cross-Origin-Opener-Policy"]; got != "same-origin-allow-popups" {
+		t.Errorf("Cross-Origin-Opener-Policy is %q", got)
+	}
 }
 
 func TestStaticFiles(t *testing.T) {

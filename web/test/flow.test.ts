@@ -44,6 +44,12 @@ interface Setup {
   /** Runs the flow's timers that are due, as the page's setTimeout would. */
   fireTimers: () => void;
   idleStops: Stop[];
+  prover: Prover;
+  /**
+   * Holds the server's answers on `path`: the request reaches the server (and
+   * its log) at once, the answer only when the returned function is called.
+   */
+  hold: (path: string) => () => void;
 }
 
 /** A card that reports a blocked window for the next `n` calls of `which`, then passes calls through. */
@@ -73,6 +79,8 @@ async function setup(o: {
   echoPublicInputs?: boolean;
   /** Which certificate the fake card reports with each signature, like MOICA's component; none by default. */
   signer?: "signing" | "encryption";
+  /** The flow's clock at the start; NOW by default. */
+  start?: number;
 } = {}): Promise<Setup> {
   const w = o.world ?? (await makeWorld());
   const files = new Map<string, Uint8Array>(circuitFiles);
@@ -114,14 +122,28 @@ async function setup(o: {
   const store = memoryStore(o.remembered);
   let onStop: (s: Stop) => void = () => undefined;
   const backgroundStop = new Promise<Stop>((r) => (onStop = r));
-  let now = NOW;
+  let now = o.start ?? NOW;
+  const gates = new Map<string, Promise<void>>();
+  const hold = (path: string): (() => void) => {
+    let open!: () => void;
+    gates.set(path, new Promise<void>((r) => (open = r)));
+    return () => {
+      gates.delete(path);
+      open();
+    };
+  };
+  const gatedFetch: typeof backend.fetch = async (path, init) => {
+    const res = await backend.fetch(path, init);
+    await gates.get(path);
+    return res;
+  };
   const timers: { at: number; f: () => void; done: boolean }[] = [];
   const idleStops: Stop[] = [];
   const flow = new CardProofFlow(
     {
       roster: "test",
       issuers: w.issuers,
-      fetch: backend.fetch,
+      fetch: gatedFetch,
       clock: () => now,
       store,
       card,
@@ -146,7 +168,7 @@ async function setup(o: {
       }
     }
   };
-  return { w, backend, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops };
+  return { w, backend, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, prover, hold };
 }
 
 /** Card read, PIN given, the card's state known, `choice` picked. */
@@ -650,5 +672,308 @@ describe("the flow, with a server that gives values the device must not accept",
     };
     await s.flow.readCard();
     assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), { code: "card", card: "card_error", detail: "7600000f" });
+  });
+});
+
+// Found in a review of web/ (2026-11-16): what the flow does when the server
+// holds its answer, when cancel() comes while a step waits, when a card
+// proof crosses midnight, when the card's state contradicts itself; and
+// what it wipes.
+
+/** Waits until the server has seen a request on `path`. */
+async function untilRequested(s: Setup, path: string): Promise<void> {
+  for (let i = 0; i < 500 && !s.backend.log.some((r) => r.path === path); i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(s.backend.log.some((r) => r.path === path), `no request on ${path}`);
+}
+
+type Held = { pin: unknown; cert: unknown; scopeSignature: unknown; codeSignature: unknown };
+const held = (f: CardProofFlow): Held => f as unknown as Held;
+
+/** Nothing secret is left on the flow object. */
+function assertNothingHeld(f: CardProofFlow, label: string): void {
+  const h = held(f);
+  assert.equal(h.pin, null, `${label}: the PIN`);
+  assert.equal(h.cert, null, `${label}: the certificate`);
+  assert.equal(h.scopeSignature, null, `${label}: the first signature`);
+  assert.equal(h.codeSignature, null, `${label}: the second signature`);
+}
+
+/** Counts the calls of the card's sign(), successful or not. */
+function countSigns(card: FakeCard): () => number {
+  let n = 0;
+  const original = card.sign.bind(card);
+  card.sign = (m, p) => {
+    n++;
+    return original(m, p);
+  };
+  return () => n;
+}
+
+/** From a card read to a choice: the PIN, then @alice. */
+async function toChosenFromRead(s: Setup): Promise<Consequence> {
+  await s.flow.confirmCard(PIN);
+  return s.flow.choose({ action: "declare", username: "alice" });
+}
+
+describe("between the two signatures, the device's own limit holds whatever the server does", () => {
+  test("card-state does not answer: 5 minutes after the first signature, everything is dropped and the screen is told", async () => {
+    const s = await setup();
+    await s.flow.readCard();
+    const open = s.hold("/api/v1/card-state");
+    const pending = stopOf(s.flow.confirmCard(PIN));
+    await untilRequested(s, "/api/v1/card-state");
+    const n = s.backend.log.length;
+    s.advance(IDLE_MS - 1);
+    s.fireTimers();
+    assert.equal(s.flow.stop, null, "just under 5 minutes: still waiting");
+    s.advance(1);
+    s.fireTimers();
+    assert.deepEqual(s.flow.stop, { code: "idle" });
+    assert.deepEqual(s.idleStops, [{ code: "idle" }], "the screen is told");
+    assert.equal(s.flow.phase, "stopped");
+    assertNothingHeld(s.flow, "the wait ran out while card-state was pending");
+    open();
+    assert.deepEqual(await pending, { code: "idle" });
+    assertNothingHeld(s.flow, "after the server answered");
+    assert.equal(s.flow.cardStatus, null);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(s.backend.log.length, n, "no request after");
+  });
+
+  test("the challenge does not answer: 5 minutes after the first signature, everything is dropped; the card does not sign again", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const open = s.hold("/api/v1/challenges");
+    const pending = stopOf(s.flow.proceed(cq.username));
+    await untilRequested(s, "/api/v1/challenges");
+    s.advance(IDLE_MS);
+    s.fireTimers();
+    assert.deepEqual(s.idleStops, [{ code: "idle" }], "the screen is told");
+    assertNothingHeld(s.flow, "the wait ran out while the challenge was pending");
+    open();
+    assert.deepEqual(await pending, { code: "idle" });
+    assert.equal(s.card.signed.length, 1, "no second signature");
+    assert.equal(s.backend.submissions.length, 0);
+  });
+
+  test("the challenge comes after the limit and the timer did not fire: the clock is read again before the card signs", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const open = s.hold("/api/v1/challenges");
+    const pending = stopOf(s.flow.proceed(cq.username));
+    await untilRequested(s, "/api/v1/challenges");
+    s.advance(30 * 60_000); // a throttled tab: the timer has not run
+    open();
+    assert.deepEqual(await pending, { code: "idle" });
+    assert.deepEqual(s.idleStops, [{ code: "idle" }]);
+    assert.equal(s.card.signed.length, 1, "no second signature 30 minutes after the first");
+    assert.equal(s.backend.submissions.length, 0);
+    assertNothingHeld(s.flow, "after");
+  });
+});
+
+describe("cancel() while a step waits: nothing is written, nothing is sent", () => {
+  test("during the check of the first signature: no card-state, the PIN and the signature are not kept", async () => {
+    const s = await setup();
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const orig = crypto.subtle.verify.bind(crypto.subtle);
+    let n = 0;
+    crypto.subtle.verify = (async (...a: Parameters<typeof orig>) => {
+      const r = await orig(...a);
+      if (n++ === 0) s.flow.cancel();
+      return r;
+    }) as typeof crypto.subtle.verify;
+    let stop: Stop;
+    try {
+      stop = await stopOf(s.flow.confirmCard(PIN));
+    } finally {
+      crypto.subtle.verify = orig;
+    }
+    assert.deepEqual(stop, { code: "state" });
+    assertNoCardState(s);
+    assertNothingHeld(s.flow, "cancelled");
+    s.advance(60 * 60_000);
+    s.fireTimers();
+    assertNothingHeld(s.flow, "an hour later");
+    assert.deepEqual(s.idleStops, []);
+  });
+
+  test("while the scoped ID is computed: no card-state", async () => {
+    const s = await setup();
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const hash2 = s.prover.hash2;
+    let n = 0;
+    s.prover.hash2 = async (a, b) => {
+      if (n++ === 0) s.flow.cancel();
+      return hash2(a, b);
+    };
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), { code: "state" });
+    assertNoCardState(s);
+    assertNothingHeld(s.flow, "cancelled");
+  });
+
+  test("while the component signs (and reports its certificate): stopped by a check, not by an accident", async () => {
+    const s = await setup({ signer: "signing" });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const sign = s.card.sign.bind(s.card);
+    const returned: { signature: Uint8Array; certificate: Uint8Array | null }[] = [];
+    s.card.sign = async (m, p) => {
+      const r = await sign(m, p);
+      s.flow.cancel();
+      returned.push(r);
+      return r;
+    };
+    // Before the fix this was a TypeError (checkSigner read the dropped certificate), not a FlowStop.
+    const stop = await stopOf(s.flow.confirmCard(PIN));
+    assert.deepEqual(stop, { code: "state" });
+    assertNoCardState(s);
+    assertNothingHeld(s.flow, "cancelled");
+    assert.ok(returned[0]!.signature.every((b) => b === 0), "the signature's bytes are zeros");
+    assert.ok(returned[0]!.certificate!.every((b) => b === 0), "the reported certificate's bytes are zeros");
+  });
+
+  test("while proceed() waits for the challenge: no second signature, nothing kept", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const open = s.hold("/api/v1/challenges");
+    const pending = stopOf(s.flow.proceed(cq.username));
+    await untilRequested(s, "/api/v1/challenges");
+    s.flow.cancel();
+    assertNothingHeld(s.flow, "cancelled");
+    open();
+    assert.deepEqual(await pending, { code: "state" });
+    assert.equal(s.card.signed.length, 1);
+    assert.equal(s.backend.submissions.length, 0);
+    assertNothingHeld(s.flow, "after the challenge came");
+  });
+
+  test("while confirmCard() waits for the checks: the card is not asked to sign", async () => {
+    const s = await setup();
+    await s.flow.readCard();
+    const signs = countSigns(s.card);
+    const pending = stopOf(s.flow.confirmCard(PIN));
+    s.flow.cancel();
+    assert.deepEqual(await pending, { code: "state" });
+    assert.equal(signs(), 0, "sign() was not called");
+    assertNoCardState(s);
+    assertNothingHeld(s.flow, "cancelled");
+  });
+
+  test("while readCard() checks the certificates: nothing kept, no request", async () => {
+    const s = await setup();
+    const pending = stopOf(s.flow.readCard());
+    s.flow.cancel();
+    assert.deepEqual(await pending, { code: "state" });
+    assertNothingHeld(s.flow, "cancelled");
+    assert.equal(s.flow.phase, "stopped");
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(s.backend.log.length, 0, "no request");
+  });
+
+  test("while the proof is computed: nothing submitted, nothing kept", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    const prove = s.prover.prove;
+    s.prover.prove = async (name, inputs) => {
+      const r = await prove(name, inputs);
+      s.flow.cancel();
+      return r;
+    };
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.username)), { code: "state" });
+    assert.equal(s.backend.submissions.length, 0);
+    assertNothingHeld(s.flow, "cancelled");
+  });
+});
+
+describe("a card proof that crosses midnight", () => {
+  // 2026-11-16 23:58 in Taiwan.
+  const LATE = Date.UTC(2026, 10, 16, 15, 58, 0);
+
+  test("the certificate's last day: proceed() checks it again with today's date, before the challenge", async () => {
+    const s = await setup({ world: await makeWorld({ notAfter: "261116155959Z" }), start: LATE });
+    const cq = await toChosen(s);
+    const n = s.backend.log.length;
+    s.advance(3 * 60_000); // 2026-11-17 00:01
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.username)), { code: "certificate", problem: "expired", notAfter: "2026-11-16" });
+    assert.equal(s.backend.log.length, n, "no challenge");
+    assert.equal(s.card.signed.length, 1, "no second signature");
+    assertNothingHeld(s.flow, "stopped");
+  });
+
+  test("the CRL's last day: proceed() checks its age again with today's date, before the challenge", async () => {
+    const s = await setup({ crls: [{ serials: randomSerials(10), crlNumber: 100n, thisUpdate: daysBefore(3) }], start: LATE });
+    const cq = await toChosen(s); // 3 days old, L = 3: usable on the 16th
+    const n = s.backend.log.length;
+    s.advance(3 * 60_000);
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.username)), { code: "revocation", problem: { code: "crl_stale", days: 4, maxDays: 3 } });
+    assert.equal(s.backend.log.length, n, "no challenge");
+    assert.equal(s.card.signed.length, 1, "no second signature");
+  });
+});
+
+describe("a card-state answer the roster rules cannot produce is not read", () => {
+  const MALFORMED: Stop = { code: "server", server: "malformed_response", status: 200 };
+  for (const [name, state] of [
+    ["current is not the last declared account", cardState({ current: "bob", last_declared: "alice", last_card_proof: "2026-11-04" })],
+    ["current without a last declared account", cardState({ current: "bob", last_card_proof: "2026-11-04" })],
+    ["current without a last card proof", cardState({ current: "alice", last_declared: "alice" })],
+    ["a last declared account without a last card proof", cardState({ last_declared: "alice" })],
+    ["switches on a card that has nothing else", cardState({ switch_dates: ["2026-03-02", "2026-06-01"] })],
+    ["a last card proof more than 3 days after today", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-20" })],
+    ["dates in 2049", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2049-12-31", switch_dates: ["2049-12-31", "2049-12-31"] })],
+    ["a switch after the last card proof", cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: ["2026-11-10"] })],
+  ] as const) {
+    test(name, async () => {
+      const s = await setup({ backend: { cardState: state } });
+      await s.flow.readCard();
+      assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), MALFORMED);
+      assert.equal(s.flow.phase, "stopped");
+      assertNothingHeld(s.flow, name);
+    });
+  }
+
+  test("what the rules can produce is read: 3 days ahead, a switch on the last card proof's date, a withdrawn card", async () => {
+    for (const state of [
+      cardState({ current: "alice", last_declared: "alice", last_card_proof: "2026-11-19", switch_dates: ["2026-11-19"] }),
+      cardState({ last_declared: "alice", last_card_proof: "2026-11-04", switch_dates: ["2026-11-04", "2025-12-01"] }),
+    ]) {
+      const s = await setup({ backend: { cardState: state } });
+      await s.flow.readCard();
+      await s.flow.confirmCard(PIN);
+      assert.equal(s.flow.phase, "status_known", JSON.stringify(state));
+    }
+  });
+});
+
+describe("what the flow wipes besides its own fields", () => {
+  test("the certificate not chosen, the certificate the component reports, the circuit's inputs", async () => {
+    const s = await setup({ signer: "signing", echoPublicInputs: true });
+    const read = s.card.readCertificates.bind(s.card);
+    let ders: Uint8Array[] = [];
+    s.card.readCertificates = async () => (ders = await read());
+    const sign = s.card.sign.bind(s.card);
+    const reported: Uint8Array[] = [];
+    s.card.sign = async (m, p) => {
+      const r = await sign(m, p);
+      reported.push(r.certificate!);
+      return r;
+    };
+    await s.flow.readCard();
+    assert.equal(ders.length, 2);
+    assert.ok(ders[0]!.every((b) => b === 0), "the encryption certificate, not chosen: zeros");
+    assert.ok(ders[1]!.some((b) => b !== 0), "the chosen one is kept until the end");
+    const cq = await toChosenFromRead(s);
+    assert.ok(reported[0]!.every((b) => b === 0), "the certificate the first signature came with: zeros");
+    await s.flow.proceed(cq.username);
+    assert.ok(reported[1]!.every((b) => b === 0), "the certificate the second signature came with: zeros");
+    assert.ok(ders[1]!.every((b) => b === 0), "the chosen certificate after the submission: zeros");
+    const inputs = s.proveCalls[0]!;
+    for (const k of ["tbs", "scope", "declaration_code"]) assert.ok((inputs[k] as number[]).every((x) => x === 0), `inputs.${k}: zeros`);
+    for (const k of ["scope_signature", "declaration_code_signature", "issuer_signature"]) {
+      assert.ok((inputs[k] as string[]).every((x) => x === "0x0"), `inputs.${k}: no longer the signature's limbs`);
+    }
   });
 });
