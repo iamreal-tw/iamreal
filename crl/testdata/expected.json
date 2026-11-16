@@ -8,7 +8,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "a397fd43506cad5cb6c4215edbb6293d7aac5adc89bde1a0bb67d0f3fd386e9d",
+    "sha256": "ef786b5d9428a5f0570f327e62954f03bf02bc0ab2664dd4ef24a54856d3dbeb",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -20,7 +20,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "19e5a5e028c25c9beeb53ed7e27b02c41da619d2fe6463f58f807fd7d75e4e15",
+    "sha256": "b1025a01e6374a0c299575dc29ae34819099821e36080f76142910dd4f05e0bd",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -32,7 +32,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "90e2c74696b2444bbe61308ea06f7974a38f89abef0b2ad269088e479728452d",
+    "sha256": "1a1c0042e781a85ddbf4fa6dd1c01709aa2de27939585ef8ac193757350ae414",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -44,7 +44,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "21a81029a660b0ae568128bd0e6a11eba3376253cb395c77eb13c17a345023bc",
+    "sha256": "9984f213bb6c27de1c182355177660cb7a8ddf7fd8271fb81b7712e79b72f2a8",
     "root": "11e7b98ee96f8e2634d4424de62483e5684f725b775b9d54296b758290b4d667"
   },
   {
@@ -56,44 +56,56 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "76b3a2b22ece50e6631f77b32bcdcd3e35be6c96f9c2e0cbe82ead59490fa03f",
+    "sha256": "62ca5878273b3694e236271bb9f081bc07402f0b333b7534cb2f2f82630ff71d",
     "root": "0676e0325cf2419178f3cf67866e470a4a9e3244fc8c025aed3dbd42d2bb9863"
   },
   {
     "name": "top-bit-127",
     "what": "two 16-byte serials that differ only in their highest bit (127)",
     "usable": false,
-    "reason": "share their lowest 127 bits",
+    "reason": "not_usable_collision",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "0060f4d41eb46738bcd7d0dbe4ffd4d64fa4aad7090ed742c97c4d80bbeb7566"
+    "sha256": "b52d2dcf84ad570423c098a1bafea812421b811531b9b84b232103df3c04891d"
   },
   {
     "name": "same-low-127",
     "what": "two 20-byte serials that differ only in bit 150",
     "usable": false,
-    "reason": "share their lowest 127 bits",
+    "reason": "not_usable_collision",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "0cac1ff63246c71ea08eced30e87fb1e06ca16e7bb4e4247fb0216baa09b4183"
+    "sha256": "560e656d36c1fed0d88c0ba36799cedc7c0071f19c92c69e850fd8e957956dd2"
   },
   {
     "name": "duplicate",
-    "what": "the same serial twice",
-    "usable": false,
-    "reason": "share their lowest 127 bits",
+    "what": "the same serial twice: one key",
+    "usable": true,
     "entries": 3,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "ab10b23c270abd8df890ad115b7585bcd5de50bb859ad9f9d6e7b21f40661cdb"
+    "sha256": "e05ba6d2935eb244faae6d5e7ddd0bd963ff05d69025e5c4bd9596956986e194",
+    "root": "1108b18d39d9b957b639342cf0794a7a622e5df2847f05dac5e39c276e799c4c"
+  },
+  {
+    "name": "duplicate-and-same-low-127",
+    "what": "the same serial twice, and a different serial that shares its lowest 127 bits",
+    "usable": false,
+    "reason": "not_usable_collision",
+    "entries": 4,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "89b065278b62d1d6c69deb5bde8e6be68664d4773a6915ee59bde1c2ccc9bd31"
   },
   {
     "name": "leading-00",
@@ -104,7 +116,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "9908613dce0cf305dfa7c91cc746b57b91ed09a98c94917412f7e32ec6550a27",
+    "sha256": "b847e69ce0ab81b076c0c5354e15bfe93eb545ab3987d39f449475330c7ca785",
     "root": "2e29ee633502d28899a6c6c03b28c542e64283d8e86eef7e68f2681d3bf05d06"
   },
   {
@@ -116,44 +128,44 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b17bcd3d5839ebc998f80b32cdb58b74bd30cfb29aa97f3af0b3cfe714e5d3d6",
+    "sha256": "2a6c861285aa0a2c0868730cefa2b1429c380bc92c7527b63b80baa768f1e7c5",
     "root": "08e2ec59cc657b2e6d8aeb7c58f8b10f7126ad8ca4414e8f2e1c98ac3264422f"
   },
   {
     "name": "twenty-one-bytes",
     "what": "a serial of 21 content bytes: 00 then 20 bytes with the top bit set",
     "usable": false,
-    "reason": "more than 20",
+    "reason": "not_usable_serial",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "0c5c959a61c80141952eff8f16118b71bd9041a90ad6491d39e4c9d3645ee9ea"
+    "sha256": "b5ac91b89ea0dd7d72e7afaf20268e88f18ad19dab3682b603aff6d3c9b9adb1"
   },
   {
     "name": "negative",
     "what": "a negative serial (content ff 01)",
     "usable": false,
-    "reason": "negative",
+    "reason": "not_usable_serial",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "7a1c75d0d68d20b49709117e4a0ef4965eefe44aa5c54e66cfac319f078f7e0a"
+    "sha256": "717515b7fe8d33d3612ff273b9b4f2adfeeb59f6a17d627966796fbc2ce96236"
   },
   {
     "name": "non-minimal",
     "what": "a serial with a superfluous leading 00 (00 05)",
     "usable": false,
-    "reason": "not minimally encoded",
+    "reason": "not_usable_serial",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "4e892520224242d703412c5e565b863fed0a5e5186bf20b4c929ac5452904a54"
+    "sha256": "312909544ce5591e82f96d0a13916205b2b59971d137bedd2c4ef74c98b5c3a7"
   },
   {
     "name": "zero",
@@ -164,56 +176,56 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "be52d00368b05d2d59fddb68ef54851298037b023eca4cd64fbcd28074ed9357",
+    "sha256": "83ea5a964d0ef9b93f432e663026598d0cb8e519d8db9face54fb915b8be6137",
     "root": "2fca4ef5e48a5d4417d7e27f9616a74ded2c6f90e602009f188fa4f6b083c71f"
   },
   {
     "name": "delta",
     "what": "a delta CRL (critical deltaCRLIndicator)",
     "usable": false,
-    "reason": "delta",
+    "reason": "not_usable_delta",
     "entries": 1,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "804a0c028b41c01456c4b03096277eeadd97146093fe15fc6624f58a2186012e"
+    "sha256": "d818ef0efcc4c4d9be8fc58af0b228c7423a43392c6909b3e3d89a9be7bba06c"
   },
   {
     "name": "delta-noncritical",
     "what": "deltaCRLIndicator marked non-critical",
     "usable": false,
-    "reason": "delta",
+    "reason": "not_usable_delta",
     "entries": 1,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "8f5deb7031543182589a35534e40c1703d96a20cb8e74b5bfd74f39596d4dee9"
+    "sha256": "c3a6d34660ca71310d5d5dbfd879fab3b57bd0dc3d6e47404a0f29b300e8949a"
   },
   {
     "name": "idp",
     "what": "a partitioned CRL (critical issuingDistributionPoint)",
     "usable": false,
-    "reason": "issuingDistributionPoint",
+    "reason": "not_usable_partitioned",
     "entries": 1,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "eeaff71befe9742d9700aa9a6bb152133a260a595332618b0f303d3afde26859"
+    "sha256": "9e56649d88e805a248d0b71989c8f0e38d9f9eddf0559984e09ca5fc8508fd81"
   },
   {
     "name": "unknown-critical",
     "what": "an unknown critical CRL extension",
     "usable": false,
-    "reason": "unknown critical",
+    "reason": "not_usable_critical_extension",
     "entries": 1,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "45a8eae815f585212ff3814cbf19aadfa44cc4dec03a216a19984e3e1ff63534"
+    "sha256": "676208c701801e244c906f63f34e207304c5796bbcf44f9db0a1c61b51471c75"
   },
   {
     "name": "unknown-noncritical",
@@ -224,31 +236,54 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "1080862808ef0fd68bdbf8450e4fc3e6cdcfcd57094e5226850274c8a5ac0f3d",
+    "sha256": "6c92d3465f89b613d95af577fb5b3e9730ad0154c4142715ed1479e4533a7bfe",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
     "name": "entry-critical",
     "what": "an entry with a critical certificateIssuer extension (an indirect CRL)",
     "usable": false,
-    "reason": "unknown critical",
+    "reason": "not_usable_critical_extension",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "90024d04779b435ba83597d08f3b8508384cd325e135f8f4f4e5cbe60903206e"
+    "sha256": "67d530d0032afd3ce5e04ee5fe9f810c7f33f153bf5f78876955aeff44a0531b"
   },
   {
     "name": "no-number",
     "what": "no cRLNumber extension",
-    "usable": true,
+    "usable": false,
+    "reason": "not_usable_crl_number",
     "entries": 1,
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "2fb2fd7a9169c94c302dc3b9141a7571c53b9ae1901b351547b24475ac31af6a",
-    "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
+    "sha256": "d699cb65a8f376a8bd4f99dc3c253e7e969fd225492480aa185b708b87c74e95"
+  },
+  {
+    "name": "negative-number",
+    "what": "a cRLNumber that is negative (-4660)",
+    "usable": false,
+    "reason": "not_usable_crl_number",
+    "entries": 1,
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "e9ea958497da0747c38892f382e7eff9f73cd7924ff6d140c45249b28c8d915d"
+  },
+  {
+    "name": "duplicate-number",
+    "what": "cRLNumber twice",
+    "usable": false,
+    "reason": "not_usable_duplicate_extension",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "16f7ab57e2b45a5b6dfdc50d10db652541d37000dc335d07ed1d35db29a52813"
   },
   {
     "name": "no-next-update",
@@ -258,31 +293,55 @@
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "34eb4619e4092431a8809683364d3466474580dd737c77e1287639434d991bf3",
+    "sha256": "3d3589f6d79c205939a9dcfbd1bfa26ee84aa1c345748602ed0bbf7a68b66a0a",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
+  },
+  {
+    "name": "no-null-parameters",
+    "what": "sha256WithRSAEncryption without NULL parameters, in both places, correctly signed",
+    "usable": false,
+    "reason": "not_usable_algorithm",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "3ae87583927f56260c0be64208b511b71de22f9906de9c60212e524686a7e052"
+  },
+  {
+    "name": "no-null-outer",
+    "what": "NULL parameters in tbsCertList but not next to the signature, correctly signed",
+    "usable": false,
+    "reason": "not_usable_algorithm",
+    "entries": 1,
+    "crl_number": "4660",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "e40fef0f8b06c16f6c54bdbf54483d0fa391ae98722995235e8f00e264c2b204"
   },
   {
     "name": "bad-signature",
     "what": "the last byte of the signature changed",
     "usable": false,
-    "reason": "signature",
+    "reason": "not_usable_signature",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "c86f85c2ef72601db392946ff89f9f375b7f5456793789722b4bb27c4928b494"
+    "sha256": "bc5d30e7e0853e6cc5892035568be66aa96b45ed9f08b8508546dc17b0bf1e71"
   },
   {
     "name": "other-key",
     "what": "signed by another key",
     "usable": false,
-    "reason": "signature",
+    "reason": "not_usable_signature",
     "entries": 2,
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "28a0da1de91672d7e31a76ec1f03cb06485f2730ec899f32da9eb663695ba12a"
+    "sha256": "7d0834993287fc1f1cf4154acbc775fdd9a7ded05dc4a24361b2600d2575c2f3"
   }
 ]

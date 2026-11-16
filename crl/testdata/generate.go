@@ -76,9 +76,7 @@ func main() {
 		if !parsed.NextUpdate.IsZero() {
 			e.NextUpdate = parsed.NextUpdate.Format("2006-01-02T15:04:05Z")
 		}
-		if n, err := parsed.Number(); err != nil {
-			log.Fatal(err)
-		} else if n != nil {
+		if n, err := parsed.Number(); err == nil && n != nil {
 			e.CRLNumber = n.String()
 		}
 		keys, err := parsed.Check(&key.PublicKey)
@@ -86,8 +84,8 @@ func main() {
 		switch {
 		case c.Usable && err != nil:
 			log.Fatalf("%s: %v", c.Name, err)
-		case !c.Usable && !errors.As(err, &u):
-			log.Fatalf("%s: want unusable, got %v", c.Name, err)
+		case !c.Usable && (!errors.As(err, &u) || u.Code != c.Reason):
+			log.Fatalf("%s: want unusable (%s), got %v", c.Name, c.Reason, err)
 		}
 		if c.Usable {
 			tree, err := crl.NewTree(keys)

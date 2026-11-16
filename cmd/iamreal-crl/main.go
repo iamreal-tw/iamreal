@@ -8,14 +8,14 @@
 // check prints whether the CRL is usable, its cRLNumber, thisUpdate,
 // nextUpdate, CRL date, the SHA-256 of the file and the root. prove prints
 // the proof that a serial number is not in the tree, as the circuit's
-// inputs. index prints one line per CRL file in a directory (see crl/README.md;
-// the format is a proposal). -key replaces -issuer with a test key.
+// inputs. index prints the archive index of a directory: one line per file,
+// usable or not (spec/revocation-tree.md, "Archive index"). -key replaces
+// -issuer with a test key.
 package main
 
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -23,9 +23,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/iamreal-tw/iamreal/crl"
@@ -62,7 +59,8 @@ func usage() {
   iamreal-crl prove (-issuer G2|G3 | -key FILE) -serial HEX CRL
   iamreal-crl index [-key FILE] DIR
 
-Exit status 1: the CRL is not usable. 2: any other error.`)
+Exit status 1: the CRL is not usable (index: a file is not usable).
+2: any other error.`)
 	os.Exit(2)
 }
 
@@ -115,58 +113,24 @@ func readKey(path string) (*rsa.PublicKey, error) {
 	return k, nil
 }
 
-// summary is what check prints and index lists.
-type summary struct {
-	Issuer     string
-	Number     string // decimal, or "-" if absent
-	ThisUpdate string
-	NextUpdate string // or "-" if absent
-	Date       string
-	SHA256     string
-	Entries    int
-	Root       string // or "" if not usable
-}
-
-const timeFormat = "2006-01-02T15:04:05Z"
-
-// open reads and parses a CRL and fills in what does not need the key.
-func open(path string) (*crl.CRL, summary, error) {
+// open reads and parses a CRL. A file that is not a DER CertificateList is
+// not usable (ReasonDER); check prints its SHA-256 first.
+func open(path string, w io.Writer) (*crl.CRL, error) {
 	der, err := os.ReadFile(path)
-	if err != nil {
-		return nil, summary{}, err
-	}
-	c, err := crl.Parse(der)
-	if err != nil {
-		return nil, summary{}, fmt.Errorf("%s: %w", path, err)
-	}
-	sum := c.SHA256()
-	s := summary{
-		Number:     "-",
-		ThisUpdate: c.ThisUpdate.Format(timeFormat),
-		NextUpdate: "-",
-		Date:       c.Date(),
-		SHA256:     hex.EncodeToString(sum[:]),
-		Entries:    len(c.Entries),
-	}
-	if !c.NextUpdate.IsZero() {
-		s.NextUpdate = c.NextUpdate.Format(timeFormat)
-	}
-	n, err := c.Number()
-	if err != nil {
-		return nil, summary{}, fmt.Errorf("%s: %w", path, err)
-	}
-	if n != nil {
-		s.Number = n.String()
-	}
-	return c, s, nil
-}
-
-func build(c *crl.CRL, key *rsa.PublicKey) (*crl.Tree, error) {
-	keys, err := c.Check(key)
 	if err != nil {
 		return nil, err
 	}
-	return crl.NewTree(keys)
+	c, err := crl.Parse(der)
+	if err != nil {
+		if w != nil {
+			l := crl.IndexFile(der, nil)
+			fmt.Fprintf(w, "sha256       %s\n", l.SHA256)
+			fmt.Fprintf(w, "usable       no\n")
+			fmt.Fprintf(w, "reason       %s\n", crl.ReasonDER)
+		}
+		return nil, &crl.Unusable{Code: crl.ReasonDER, Reason: fmt.Sprintf("%s: %v", path, err)}
+	}
+	return c, nil
 }
 
 func check(args []string, w io.Writer) error {
@@ -180,25 +144,31 @@ func check(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	c, s, err := open(fs.Arg(0))
+	c, err := open(fs.Arg(0), w)
 	if err != nil {
 		return err
 	}
+	// The fields as the index writes them; the issuer is the key asked for.
+	l := crl.IndexFile(c.Raw, nil)
 	fmt.Fprintf(w, "issuer       %s\n", name)
-	fmt.Fprintf(w, "crl_number   %s\n", s.Number)
-	fmt.Fprintf(w, "this_update  %s\n", s.ThisUpdate)
-	fmt.Fprintf(w, "next_update  %s\n", s.NextUpdate)
-	fmt.Fprintf(w, "crl_date     %s\n", s.Date)
-	fmt.Fprintf(w, "sha256       %s\n", s.SHA256)
-	fmt.Fprintf(w, "entries      %d\n", s.Entries)
+	fmt.Fprintf(w, "crl_number   %s\n", l.CRLNumber)
+	fmt.Fprintf(w, "this_update  %s\n", l.ThisUpdate)
+	fmt.Fprintf(w, "next_update  %s\n", l.NextUpdate)
+	fmt.Fprintf(w, "crl_date     %s\n", l.CRLDate)
+	fmt.Fprintf(w, "sha256       %s\n", l.SHA256)
+	fmt.Fprintf(w, "entries      %d\n", len(c.Entries))
 	start := time.Now()
-	tree, err := build(c, key)
+	tree, err := c.Tree(key)
 	if err != nil {
+		var u *crl.Unusable
+		errors.As(err, &u)
 		fmt.Fprintf(w, "usable       no\n")
+		fmt.Fprintf(w, "reason       %s\n", u.Code)
 		return err
 	}
 	fmt.Fprintf(w, "usable       yes\n")
 	fmt.Fprintf(w, "root         %s\n", tree.RootHex())
+	fmt.Fprintf(w, "keys         %d\n", tree.Len())
 	fmt.Fprintf(w, "hashes       %d\n", tree.Hashes())
 	fmt.Fprintf(w, "build_time   %.2fs\n", time.Since(start).Seconds())
 	return nil
@@ -220,11 +190,11 @@ func prove(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	c, _, err := open(fs.Arg(0))
+	c, err := open(fs.Arg(0), nil)
 	if err != nil {
 		return err
 	}
-	tree, err := build(c, key)
+	tree, err := c.Tree(key)
 	if err != nil {
 		return err
 	}
@@ -248,96 +218,45 @@ func prove(args []string, w io.Writer) error {
 	return enc.Encode(out)
 }
 
-// index prints one line per usable CRL in a directory, sorted by issuer,
-// cRLNumber and SHA-256. The issuer is the key whose signature verifies.
-// Files that are not usable under any key are reported on stderr, and make
-// the exit status 1 after the index is printed.
+// index prints the archive index of a directory (spec/revocation-tree.md,
+// "Archive index"): one line per file, usable or not, sorted. The issuer is
+// the key whose signature verifies. If a file is not usable, the exit
+// status is 1 after the index is printed; each such file is also reported
+// on stderr.
 func index(args []string, w, errw io.Writer) error {
 	fs := flag.NewFlagSet("index", flag.ExitOnError)
-	keyPath := fs.String("key", "", "also try a test issuer's public key or certificate")
+	keyPath := fs.String("key", "", "also try a test issuer's public key or certificate; its lines have issuer \"test\"")
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		usage()
 	}
-	type issuer struct {
-		name string
-		key  *rsa.PublicKey
-	}
-	var issuers []issuer
-	for _, name := range crl.Issuers {
-		k, err := crl.IssuerKey(name)
-		if err != nil {
-			return err
-		}
-		issuers = append(issuers, issuer{name, k})
+	keys, err := crl.MOICAKeys()
+	if err != nil {
+		return err
 	}
 	if *keyPath != "" {
 		k, err := readKey(*keyPath)
 		if err != nil {
 			return err
 		}
-		issuers = append(issuers, issuer{"test", k})
+		keys = append(keys, crl.NamedKey{Name: "test", Key: k})
 	}
-	entries, err := os.ReadDir(fs.Arg(0))
+	lines, err := crl.BuildIndex(fs.Arg(0), keys, nil)
 	if err != nil {
 		return err
 	}
-	var lines []summary
-	bad := 0
-	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		path := filepath.Join(fs.Arg(0), e.Name())
-		c, s, err := open(path)
-		if err != nil {
-			fmt.Fprintf(errw, "%s: %v\n", e.Name(), err)
-			bad++
-			continue
-		}
-		signed := false
-		for _, is := range issuers {
-			if c.VerifySignature(is.key) != nil {
-				continue
-			}
-			signed = true
-			s.Issuer = is.name
-			tree, err := build(c, is.key)
-			if err != nil {
-				fmt.Fprintf(errw, "%s: issuer %s: %v\n", e.Name(), is.name, err)
-				bad++
-			} else {
-				s.Root = tree.RootHex()
-			}
-			break
-		}
-		if !signed {
-			fmt.Fprintf(errw, "%s: the signature verifies under no issuer key\n", e.Name())
-			bad++
-		}
-		if s.Root == "" {
-			continue
-		}
-		lines = append(lines, s)
+	if _, err := w.Write(crl.FormatIndex(lines)); err != nil {
+		return err
 	}
-	slices.SortFunc(lines, func(a, b summary) int {
-		if c := strings.Compare(a.Issuer, b.Issuer); c != 0 {
-			return c
+	bad := 0
+	for _, l := range lines {
+		if !l.Usable() {
+			fmt.Fprintf(errw, "sha256 %s: not usable: %s\n", l.SHA256, l.Reason())
+			bad++
 		}
-		if c := len(a.Number) - len(b.Number); c != 0 && a.Number != "-" && b.Number != "-" {
-			return c
-		}
-		if c := strings.Compare(a.Number, b.Number); c != 0 {
-			return c
-		}
-		return strings.Compare(a.SHA256, b.SHA256)
-	})
-	for _, s := range lines {
-		fmt.Fprintf(w, `{"issuer":"%s","crl_number":"%s","this_update":"%s","next_update":"%s","crl_date":"%s","sha256":"%s","root":"%s"}`+"\n",
-			s.Issuer, s.Number, s.ThisUpdate, s.NextUpdate, s.Date, s.SHA256, s.Root)
 	}
 	if bad > 0 {
-		return &crl.Unusable{Reason: fmt.Sprintf("%d file(s) not indexed", bad)}
+		return &crl.Unusable{Code: "", Reason: fmt.Sprintf("%d of %d file(s) not usable", bad, len(lines))}
 	}
 	return nil
 }

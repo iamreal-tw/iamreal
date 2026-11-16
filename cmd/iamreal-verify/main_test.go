@@ -55,14 +55,25 @@ func (everyRoot) CRLDates(string, string) ([]verifier.Date, error) {
 	return []verifier.Date{d, e}, nil
 }
 
+// fakeDeps verifies with pv and opens every archive as crls.
+func fakeDeps(pv roster.ProofVerifier, crls roster.CRLArchive) deps {
+	return deps{
+		verifier: func(verifier.Config) (roster.ProofVerifier, error) { return pv, nil },
+		archive:  func(string, bool, func(string)) (roster.CRLArchive, error) { return crls, nil },
+	}
+}
+
+// runWith runs the command on file with -crl-archive, unless crls is nil.
 func runWith(t *testing.T, file []byte, pv roster.ProofVerifier, crls roster.CRLArchive, extra ...string) (int, string, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "roster.jsonl")
 	os.WriteFile(path, file, 0o600)
 	var out, errOut bytes.Buffer
-	mk := func(verifier.Config) (roster.ProofVerifier, error) { return pv, nil }
 	args := append([]string{"-bb", "bb", "-crs", "crs"}, extra...)
-	code := run(append(args, path), &out, &errOut, mk, crls)
+	if crls != nil {
+		args = append(args, "-crl-archive", "archive")
+	}
+	code := run(append(args, path), &out, &errOut, fakeDeps(pv, crls))
 	return code, out.String(), errOut.String()
 }
 
@@ -119,7 +130,7 @@ func TestBroken(t *testing.T) {
 }
 
 func TestNoArchive(t *testing.T) {
-	code, out, errOut := runWith(t, threeRecords(t), allVerify{}, noArchive{})
+	code, out, errOut := runWith(t, threeRecords(t), allVerify{}, nil)
 	if code != exitInvalid || !strings.Contains(out, "1 invalid root") || !strings.Contains(errOut, "no CRL archive") {
 		t.Errorf("exit %d\n%s\n%s", code, out, errOut)
 	}
@@ -134,11 +145,14 @@ func TestEmptyRoster(t *testing.T) {
 
 func TestUsage(t *testing.T) {
 	var out, errOut bytes.Buffer
-	mk := func(verifier.Config) (roster.ProofVerifier, error) { return allVerify{}, nil }
-	if code := run(nil, &out, &errOut, mk, everyRoot{}); code != exitError {
+	d := fakeDeps(allVerify{}, everyRoot{})
+	if code := run(nil, &out, &errOut, d); code != exitError {
 		t.Errorf("no arguments: exit %d", code)
 	}
-	if code := run([]string{"-bb", "x", "-crs", "y", "-roster", "staging", "f"}, &out, &errOut, mk, everyRoot{}); code != exitError {
+	if code := run([]string{"-bb", "x", "-crs", "y", "-roster", "staging", "f"}, &out, &errOut, d); code != exitError {
 		t.Errorf("bad roster: exit %d", code)
+	}
+	if code := run([]string{"-bb", "x", "-crs", "y", "-crl-trust-index", "f"}, &out, &errOut, d); code != exitError {
+		t.Errorf("-crl-trust-index without -crl-archive: exit %d", code)
 	}
 }

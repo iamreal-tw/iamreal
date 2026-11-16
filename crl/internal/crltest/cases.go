@@ -14,8 +14,8 @@ type Case struct {
 	Name string
 	What string // what the case checks
 	DER  []byte
-	// Usable is whether the CRL gives a tree; Reason is a substring of the
-	// error when it does not.
+	// Usable is whether the CRL gives a tree; Reason is the reason code
+	// (crl.Reason…) when it does not.
 	Usable bool
 	Reason string
 }
@@ -124,56 +124,73 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	add("top-bit-126", "two 16-byte serials that differ only in bit 126", true, "",
 		base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("7123456789abcdef0123456789abcdef"))))
 	// Differ only in bit 127: same lowest 127 bits.
-	add("top-bit-127", "two 16-byte serials that differ only in their highest bit (127)", false, "share their lowest 127 bits",
+	add("top-bit-127", "two 16-byte serials that differ only in their highest bit (127)", false, "not_usable_collision",
 		base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef"))))
-	add("same-low-127", "two 20-byte serials that differ only in bit 150", false, "share their lowest 127 bits",
+	add("same-low-127", "two 20-byte serials that differ only in bit 150", false, "not_usable_collision",
 		base(r, Serial(hexBytes("0011223344556677889900112233445566778899")), Serial(hexBytes("0051223344556677889900112233445566778899"))))
-	add("duplicate", "the same serial twice", false, "share their lowest 127 bits",
+	add("duplicate", "the same serial twice: one key", true, "",
 		base(r, Serial(hexBytes("05")), Serial(hexBytes("07")), Serial(hexBytes("05"))))
+	add("duplicate-and-same-low-127", "the same serial twice, and a different serial that shares its lowest 127 bits", false, "not_usable_collision",
+		base(r, Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("05")),
+			Serial(hexBytes("3123456789abcdef0123456789abcdef")), Serial(hexBytes("b123456789abcdef0123456789abcdef"))))
 	add("leading-00", "serials whose top bit is set, encoded with a leading 00 (key is the value without it)", true, "",
 		base(r, Serial(hexBytes("80")), Serial(hexBytes("ff00000000000000000000000000000001")), Serial(hexBytes("0102"))))
 	add("twenty-bytes", "serials of 20 content bytes, the longest: 7f ff … ff, and 00 ff … fe", true, "",
 		base(r, Serial(hexBytes("7f"+strings.Repeat("ff", 19))), Serial(hexBytes(strings.Repeat("ff", 18)+"fe"))))
-	add("twenty-one-bytes", "a serial of 21 content bytes: 00 then 20 bytes with the top bit set", false, "more than 20",
+	add("twenty-one-bytes", "a serial of 21 content bytes: 00 then 20 bytes with the top bit set", false, "not_usable_serial",
 		base(r, Serial(hexBytes("05")), Serial(hexBytes("ffffffffffffffffffffffffffffffffffffffff"))))
-	add("negative", "a negative serial (content ff 01)", false, "negative",
+	add("negative", "a negative serial (content ff 01)", false, "not_usable_serial",
 		base(r, Serial(hexBytes("05")), []byte{0xff, 0x01}))
-	add("non-minimal", "a serial with a superfluous leading 00 (00 05)", false, "not minimally encoded",
+	add("non-minimal", "a serial with a superfluous leading 00 (00 05)", false, "not_usable_serial",
 		base(r, Serial(hexBytes("07")), []byte{0x00, 0x05}))
 	add("zero", "serial 0 (content 00): a key like any other", true, "",
 		base(r, []byte{0x00}, Serial(hexBytes("05"))))
 
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Critical: true, Value: Integer(4659)}}
-	add("delta", "a delta CRL (critical deltaCRLIndicator)", false, "delta", c)
+	add("delta", "a delta CRL (critical deltaCRLIndicator)", false, "not_usable_delta", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
-	add("delta-noncritical", "deltaCRLIndicator marked non-critical", false, "delta", c)
+	add("delta-noncritical", "deltaCRLIndicator marked non-critical", false, "not_usable_delta", c)
 	c = base(r, Serial(hexBytes("05")))
 	idp, _ := asn1.Marshal(struct{}{}) // IssuingDistributionPoint with every field absent
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Critical: true, Value: idp}}
-	add("idp", "a partitioned CRL (critical issuingDistributionPoint)", false, "issuingDistributionPoint", c)
+	add("idp", "a partitioned CRL (critical issuingDistributionPoint)", false, "not_usable_partitioned", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Critical: true, Value: []byte{5, 0}}}
-	add("unknown-critical", "an unknown critical CRL extension", false, "unknown critical", c)
+	add("unknown-critical", "an unknown critical CRL extension", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Value: []byte{5, 0}}}
 	add("unknown-noncritical", "an unknown non-critical CRL extension", true, "", c)
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	c.Entries[1].Extensions = []Extension{{ID: asn1.ObjectIdentifier{2, 5, 29, 29}, Critical: true, Value: []byte{0x30, 0}}}
-	add("entry-critical", "an entry with a critical certificateIssuer extension (an indirect CRL)", false, "unknown critical", c)
+	add("entry-critical", "an entry with a critical certificateIssuer extension (an indirect CRL)", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Number = -1
-	add("no-number", "no cRLNumber extension", true, "", c)
+	add("no-number", "no cRLNumber extension", false, "not_usable_crl_number", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Number = -1
+	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: Integer(-4660)}}
+	add("negative-number", "a cRLNumber that is negative (-4660)", false, "not_usable_crl_number", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: Integer(4661)}}
+	add("duplicate-number", "cRLNumber twice", false, "not_usable_duplicate_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.NextUpdate = time.Time{}
 	add("no-next-update", "no nextUpdate", true, "", c)
 
+	c = base(r, Serial(hexBytes("05")))
+	c.NoNullTBS, c.NoNullOuter = true, true
+	add("no-null-parameters", "sha256WithRSAEncryption without NULL parameters, in both places, correctly signed", false, "not_usable_algorithm", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.NoNullOuter = true
+	add("no-null-outer", "NULL parameters in tbsCertList but not next to the signature, correctly signed", false, "not_usable_algorithm", c)
+
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	der := Make(c, key)
 	der[len(der)-1] ^= 1
-	cases = append(cases, Case{Name: "bad-signature", What: "the last byte of the signature changed", DER: der, Usable: false, Reason: "signature"})
+	cases = append(cases, Case{Name: "bad-signature", What: "the last byte of the signature changed", DER: der, Usable: false, Reason: "not_usable_signature"})
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
-	cases = append(cases, Case{Name: "other-key", What: "signed by another key", DER: Make(c, other), Usable: false, Reason: "signature"})
+	cases = append(cases, Case{Name: "other-key", What: "signed by another key", DER: Make(c, other), Usable: false, Reason: "not_usable_signature"})
 	return cases
 }

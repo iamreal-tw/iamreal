@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/iamreal-tw/iamreal/crl"
 	"github.com/iamreal-tw/iamreal/roster"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
@@ -23,19 +24,67 @@ const (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, newVerifier, noArchive{}))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, deps{newVerifier, openArchive(crl.MOICAKeys)}))
+}
+
+// deps makes the verifier and opens the CRL archive. Tests replace them to
+// use test issuer keys; the program uses only MOICA's.
+type deps struct {
+	verifier func(verifier.Config) (roster.ProofVerifier, error)
+	// archive opens the archive directory dir: reading only its index if
+	// trustIndex, otherwise rebuilding the index from the files.
+	archive func(dir string, trustIndex bool, progress func(name string)) (roster.CRLArchive, error)
 }
 
 func newVerifier(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.New(cfg) }
 
-// noArchive is the CRL archive while there is none to read: no root is
-// recognized, so every record that verifies gets `root`. The archive format
-// is not specified yet (spec/revocation-tree.md, "Open items").
+// openArchive opens an archive whose CRLs are checked under keys.
+func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (roster.CRLArchive, error) {
+	return func(dir string, trustIndex bool, progress func(string)) (roster.CRLArchive, error) {
+		if trustIndex {
+			a, err := crl.ReadArchiveIndex(dir)
+			if err != nil {
+				return nil, err
+			}
+			return archive{a}, nil
+		}
+		k, err := keys()
+		if err != nil {
+			return nil, err
+		}
+		a, err := crl.RebuildArchive(dir, k, progress)
+		if err != nil {
+			return nil, err
+		}
+		return archive{a}, nil
+	}
+}
+
+// archive is a crl.Archive as roster.CRLArchive: crl/ imports nothing of the
+// repository, so its dates are strings.
+type archive struct{ a *crl.Archive }
+
+func (c archive) CRLDates(issuer, smtRoot string) ([]verifier.Date, error) {
+	ds, err := c.a.CRLDates(issuer, smtRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]verifier.Date, len(ds))
+	for i, d := range ds {
+		if out[i], err = verifier.ParseDate(d); err != nil {
+			return nil, fmt.Errorf("CRL archive: date %q: %v", d, err)
+		}
+	}
+	return out, nil
+}
+
+// noArchive is the CRL archive when none is given: no root is recognized,
+// so every record that verifies gets `root`.
 type noArchive struct{}
 
 func (noArchive) CRLDates(string, string) ([]verifier.Date, error) { return nil, nil }
 
-func run(args []string, stdout, stderr io.Writer, mkVerifier func(verifier.Config) (roster.ProofVerifier, error), crls roster.CRLArchive) int {
+func run(args []string, stdout, stderr io.Writer, d deps) int {
 	fs := flag.NewFlagSet("iamreal-verify", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
@@ -43,6 +92,8 @@ func run(args []string, stdout, stderr io.Writer, mkVerifier func(verifier.Confi
 	timeout := fs.Duration("timeout", verifier.DefaultTimeout, "time one `bb verify` may take before the proof counts as rejected")
 	kind := fs.String("roster", "production", "whose accepted scopes apply: production or test")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
+	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+"; without it no root is recognized")
+	trustIndex := fs.Bool("crl-trust-index", false, "read only the archive's index, without checking it against the CRL files")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] <roster file | ->")
 		fs.PrintDefaults()
@@ -69,13 +120,30 @@ func run(args []string, stdout, stderr io.Writer, mkVerifier func(verifier.Confi
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	v, err := mkVerifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
+	if *trustIndex && *archiveDir == "" {
+		fmt.Fprintln(stderr, "iamreal-verify: -crl-trust-index needs -crl-archive")
+		return exitError
+	}
+	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
 	if err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if _, ok := crls.(noArchive); ok {
-		fmt.Fprintln(stderr, "iamreal-verify: no CRL archive yet: no root is recognized, so check 3 (root) fails for every record that verifies")
+	var crls roster.CRLArchive = noArchive{}
+	switch {
+	case *archiveDir == "":
+		fmt.Fprintln(stderr, "iamreal-verify: no CRL archive (-crl-archive): no root is recognized, so check 3 (root) fails for every record that verifies")
+	case *trustIndex:
+		fmt.Fprintln(stderr, "iamreal-verify: trusting the CRL archive's index without checking it against the CRLs")
+	default:
+		fmt.Fprintln(stderr, "iamreal-verify: rebuilding the CRL archive's index from its CRLs")
+	}
+	if *archiveDir != "" {
+		progress := func(name string) { fmt.Fprintf(stderr, "iamreal-verify: CRL %s\n", name) }
+		if crls, err = d.archive(*archiveDir, *trustIndex, progress); err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
+			return exitError
+		}
 	}
 	rep, err := roster.Check(data, r, v, crls)
 	if err != nil {

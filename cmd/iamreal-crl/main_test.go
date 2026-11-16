@@ -20,6 +20,7 @@ var testKey = filepath.Join(testdata, "issuer-public-key.der")
 type expectedCase struct {
 	Name   string `json:"name"`
 	Usable bool   `json:"usable"`
+	Reason string `json:"reason"`
 	SHA256 string `json:"sha256"`
 	Root   string `json:"root"`
 }
@@ -97,40 +98,94 @@ func TestProve(t *testing.T) {
 	}
 }
 
-// index lists every usable CRL, with the root of expected.json, in the
-// proposed line format, and reports the others.
+// index lists every file, usable or not, with the root or reason of
+// expected.json, in the line format of the spec.
 func TestIndex(t *testing.T) {
+	dir := t.TempDir()
+	files, _ := filepath.Glob(filepath.Join(testdata, "*.crl"))
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		os.WriteFile(filepath.Join(dir, filepath.Base(f)), b, 0o600)
+	}
+	os.WriteFile(filepath.Join(dir, "junk"), []byte("not a CRL"), 0o600)
+	os.WriteFile(filepath.Join(dir, crl.IndexFileName), []byte("skipped"), 0o600)
+	os.WriteFile(filepath.Join(dir, ".hidden"), []byte("skipped"), 0o600)
+
 	var out, errs bytes.Buffer
-	err := index([]string{"-key", testKey, testdata}, &out, &errs)
+	err := index([]string{"-key", testKey, dir}, &out, &errs)
 	var u *crl.Unusable
 	if !errors.As(err, &u) {
-		t.Fatalf("want a report of files not indexed, got %v", err)
+		t.Fatalf("want a report of unusable files, got %v", err)
 	}
 	want := expected(t)
-	usable := 0
-	for _, c := range want {
-		if c.Usable {
-			usable++
-		}
-	}
-	line := regexp.MustCompile(`^\{"issuer":"test","crl_number":"(-|[1-9][0-9]*)","this_update":"[0-9TZ:-]{20}","next_update":"(-|[0-9TZ:-]{20})","crl_date":"[0-9]{4}-[0-9]{2}-[0-9]{2}","sha256":"([0-9a-f]{64})","root":"([0-9a-f]{64})"\}$`)
+	line := regexp.MustCompile(`^\{"issuer":"(test|-)","crl_number":"(-|0|[1-9][0-9]*)","this_update":"(-|[0-9TZ:-]{20})","next_update":"(-|[0-9TZ:-]{20})","crl_date":"(-|[0-9]{4}-[0-9]{2}-[0-9]{2})","sha256":"([0-9a-f]{64})","root":"([0-9a-f]{64}|-[a-z0-9_]+)"\}$`)
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if len(lines) != usable {
-		t.Fatalf("%d lines, %d usable CRLs", len(lines), usable)
+	if len(lines) != len(files)+1 {
+		t.Fatalf("%d lines, %d files", len(lines), len(files)+1)
 	}
+	junk := 0
 	for _, l := range lines {
 		m := line.FindStringSubmatch(l)
 		if m == nil {
 			t.Fatalf("line does not match the format: %s", l)
 		}
-		c, ok := want[m[3]]
-		if !ok || !c.Usable || c.Root != m[4] {
-			t.Errorf("line %s: expected %+v", l, c)
+		c, ok := want[m[6]]
+		if !ok {
+			if m[7] != "-"+crl.ReasonDER || m[1] != "-" || m[3] != "-" {
+				t.Errorf("junk line %s", l)
+			}
+			junk++
+			continue
+		}
+		wantRoot := c.Root
+		if !c.Usable {
+			wantRoot = "-" + c.Reason
+		}
+		if m[7] != wantRoot {
+			t.Errorf("%s: root %s, want %s", c.Name, m[7], wantRoot)
+		}
+		// Only other-key and bad-signature verify under no key.
+		if (m[1] == "-") != (c.Name == "other-key" || c.Name == "bad-signature") {
+			t.Errorf("%s: issuer %s", c.Name, m[1])
 		}
 	}
-	for _, c := range want {
-		if !c.Usable && !strings.Contains(errs.String(), c.Name+".crl: ") {
-			t.Errorf("%s not reported", c.Name)
+	if junk != 1 {
+		t.Errorf("%d lines not in expected.json", junk)
+	}
+	if n := strings.Count(errs.String(), "not usable"); n != len(lines)-usableCount(want) {
+		t.Errorf("%d reported on stderr\n%s", n, errs.String())
+	}
+}
+
+func usableCount(m map[string]expectedCase) int {
+	n := 0
+	for _, c := range m {
+		if c.Usable {
+			n++
+		}
+	}
+	return n
+}
+
+// check reports why a CRL is not usable, with exit status 1 (an *Unusable),
+// also for a file that is not a CRL and for a missing cRLNumber.
+func TestCheckReasons(t *testing.T) {
+	junk := filepath.Join(t.TempDir(), "junk")
+	os.WriteFile(junk, []byte("not a CRL"), 0o600)
+	for path, reason := range map[string]string{
+		filepath.Join(testdata, "no-number.crl"):       crl.ReasonCRLNumber,
+		filepath.Join(testdata, "negative-number.crl"): crl.ReasonCRLNumber,
+		filepath.Join(testdata, "negative.crl"):        crl.ReasonSerial,
+		junk:                                           crl.ReasonDER,
+	} {
+		var out bytes.Buffer
+		err := check([]string{"-key", testKey, path}, &out)
+		var u *crl.Unusable
+		if !errors.As(err, &u) || u.Code != reason || !strings.Contains(out.String(), "reason       "+reason+"\n") {
+			t.Errorf("%s: %v\n%s", path, err, out.String())
 		}
 	}
 }
