@@ -15,10 +15,19 @@ record is or how it is verified. It can change without invalidating records.
 - Requests and responses are JSON (`application/json`, UTF-8) unless stated.
 - Responses carry `Cache-Control: no-store`, except the static files.
 - **A request that carries a scoped ID is a `POST` with the scoped ID in the
-  body, never in the URL, and its IP address is not logged** by the
-  application, the reverse proxy or the load balancer. A scoped ID next to an
-  IP address would let the operator, or anyone who obtains the logs, look for
-  the person behind a card.
+  body, never in the URL.**
+- **No request's IP address is logged**, by the application, the reverse
+  proxy or the load balancer, for any endpoint or static file. A scoped ID
+  next to an IP address would let the operator, or anyone who obtains the
+  logs, look for the person behind a card. Logging it only for the other
+  requests does not help: loading the page, downloading the CRL and asking
+  for a challenge all happen within a minute or two before the submission,
+  and the order of the records is public, so the times alone would link an
+  address to a record.
+- Every API response carries the header `X-Request-Id`. The server logs the
+  same ID with the time, the endpoint, the status and the error code, and
+  nothing that came in the request. The device shows the ID next to an error
+  from the server, so that a cardholder can report it.
 - A request body is at most 64 KB; a larger one is `400` `malformed`.
 - Besides the codes listed per endpoint: `404` `not_found`, `405`
   `method_not_allowed`, `500` `internal`.
@@ -37,7 +46,7 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - Response `200`: `{"challenge":"2026-11-16.000G40R40M30E209185GR38E1W"}`
 - The server stores the challenge with the time it was issued. It is usable
   for 10 minutes, for one accepted card proof, and for at most 5 submissions.
-- The server does not log the challenge next to the request's IP address.
+- The server does not log the challenge.
 - Errors: `429` `rate_limited`.
 
 What the device does with it: checks the format in its one spelling; checks
