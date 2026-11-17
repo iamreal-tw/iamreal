@@ -341,6 +341,8 @@ export interface AccountsView {
    * account now; nothing: it declared before and withdrew everything.
    */
   state: "never" | "declared" | "nothing";
+  /** accounts.title, or with one platform accounts.title_single. */
+  title: Sentence;
   /** The lines above the list. */
   lead: Message[][];
   rows: AccountRowView[];
@@ -379,6 +381,11 @@ export function rowLines(slot: SlotStatus): Sentence[] {
 export function accountsView(st: CardStatus): AccountsView {
   const a = COPY.accounts;
   const daily = st.dailyLimit;
+  // One platform (onePlatform): the title and two lines name it.
+  const single = onePlatform(st);
+  const title = single !== null ? say(a.title_single, { platform: single }) : say(a.title);
+  const fillOne = single !== null ? say(a.fill_one_single, { platform: single }) : say(a.fill_one);
+  const onePer = single !== null ? say(a.one_per_platform_single, { platform: single }) : say(a.one_per_platform);
   const rows: AccountRowView[] = st.slots.map((slot) => ({
     platform: slot.platform,
     name: platformName(slot),
@@ -397,6 +404,7 @@ export function accountsView(st: CardStatus): AccountsView {
   if (st.accounts.length > 0) {
     return {
       state: "declared",
+      title,
       lead: [[say(a.current), last]],
       rows,
       notes: daily ? [] : [{ sentences: [say(a.how_refresh)], more: false }, { sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
@@ -406,7 +414,8 @@ export function accountsView(st: CardStatus): AccountsView {
   if (st.lastCardProof !== null) {
     return {
       state: "nothing",
-      lead: [[say(a.nothing_now)], [say(a.fill_one)]],
+      title,
+      lead: [[say(a.nothing_now)], [fillOne]],
       rows,
       notes: daily ? [] : [{ sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
       dailyLimit,
@@ -414,9 +423,10 @@ export function accountsView(st: CardStatus): AccountsView {
   }
   return {
     state: "never",
-    lead: [[say(a.none_yet)], [say(a.fill_one)]],
+    title,
+    lead: [[say(a.none_yet)], [fillOne]],
     rows,
-    notes: daily ? [] : [{ sentences: [say(a.one_per_platform), say(a.switches_limited)], more: true }, ...preview],
+    notes: daily ? [] : [{ sentences: [onePer, say(a.switches_limited)], more: true }, ...preview],
     dailyLimit,
   };
 }
@@ -529,6 +539,8 @@ export interface DoneRecordRow {
 
 export interface DoneView {
   title: Sentence;
+  /** done.advice, or with one platform done.advice_single. */
+  advice: Sentence;
   /** The list is empty: no animation, no card, no link, no advice. */
   withdrawAll: boolean;
   /** The card's list after this record: what the card shows. */
@@ -612,6 +624,7 @@ export function doneView(d: Done, single: string | null = null): DoneView {
   const withdrew = (d.kinds ?? d.expected).some((k) => k.kind === "withdraw");
   return {
     title: doneTitle(d),
+    advice: single !== null ? say(t.advice_single) : say(t.advice),
     withdrawAll,
     card: d.accounts.map((a) => ({ name: nameOf(a.platform), account: accountOf(a.platform, a.username), raw: rawOf(a.platform) })),
     mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,

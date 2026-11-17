@@ -557,6 +557,8 @@ interface RowSeen {
 
 interface AccountsSeen {
   state: string;
+  /** The h1 of step 4. */
+  title: string;
   lead: string[];
   rows: RowSeen[];
   buttons: string[];
@@ -579,6 +581,7 @@ async function waitAccounts(): Promise<AccountsSeen> {
   await waitStep("accounts", "step 4");
   return {
     state: await page.eval<string>(`document.querySelector('[data-step="accounts"]').dataset.state`),
+    title: await page.text(`[data-step="accounts"] h1`),
     lead: await page.eval<string[]>(`[...document.querySelectorAll('[data-status], [data-fact]')].map((e) => e.innerText)`),
     rows: await rowsOnScreen(),
     buttons: await buttonTexts(),
@@ -825,6 +828,7 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "de
   const has = (s: string) => st.main.includes(s);
   const a = C.accounts;
   check(st.state === kind, `${label}: step 4 is "${st.state}"`);
+  check(st.title === a.title, `${label}: step 4's title "${st.title}"`);
   check(has(a.no_check) && has(a.acknowledged) && has(a.preview_note) && has(a.switches_limited), `${label}: step 4, that the account is not checked, the preview, that switches are limited`);
   check(has(a.how_refresh) === (kind === "declared"), `${label}: card proof again explained ${kind === "declared" ? "" : "not "}(什麼都不改……)`);
   check(has(a.how_change) === (kind !== "never") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
@@ -911,11 +915,12 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const sid = /^iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
   check(withdrawAll ? v.link === "" : v.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${v.link}`);
   check(v.main.includes(C.done.recorded) && v.main.includes(today()) && v.main.includes(C.done.trust) && v.main.includes(C.done.unplug), `${o.label}: step 6, the roster's line, its date, that anyone can verify, unplug`);
-  check(v.main.includes(C.done.advice) === !withdrawAll && v.main.includes(C.done.put_up) === !withdrawAll, `${o.label}: the advice to come back and how to put it up ${withdrawAll ? "are not there" : "are there"}`);
+  const advice = o.single ? C.done.advice_single : C.done.advice;
+  check(v.main.includes(advice) === !withdrawAll && v.main.includes(C.done.put_up) === !withdrawAll, `${o.label}: the advice to come back and how to put it up ${withdrawAll ? "are not there" : "are there"}`);
   const putLink = withdrawAll ? "" : o.single ? fill(C.done.put_link_single, { platform: o.single }) : C.done.put_link;
   check(v.putLink === putLink, `${o.label}: where to put the link "${v.putLink}"`);
   // The points: the advice and that a renamed account comes back, when the list is not empty; then that anyone can verify.
-  const points = [...(withdrawAll ? [] : [C.done.advice, C.done.renamed]), `${C.done.trust} ${C.links.verify}`];
+  const points = [...(withdrawAll ? [] : [advice, C.done.renamed]), `${C.done.trust} ${C.links.verify}`];
   check(JSON.stringify(v.points) === JSON.stringify(points), `${o.label}: step 6's points ${JSON.stringify(v.points)}`);
   if (o.record === null) {
     check(v.kindsUnreadable && v.record.length === 0 && !v.main.includes(C.done.record_list), `${o.label}: the kinds could not be read: the date and that sentence only`);
@@ -1514,6 +1519,8 @@ await tryStep("a platform the page does not know: the account kept in the list a
     await undo();
   }
   checkRows("unknown", st.rows, { [EXAMPLE]: [EXAMPLE, "a-b", [A.row_unknown_platform], { fixed: true }], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
+  // Threads alone on the table, and an account on a platform the page does not know: more than one.
+  check(st.title === A.title, `unknown: step 4's title is that of more than one platform "${st.title}"`);
   await screenshot("unknown-4-accounts");
   await page.clickButton(C.common.next);
   checkConfirm(
@@ -2197,6 +2204,12 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   check(seenConfig.length === 1, "the config was read once, and changed on its way");
   check(st.state === "never", `a new card: ${st.state}`);
   checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", [A.row_unused]] });
+  // Step 4 names the one platform: the title, the line on top, the note of a first declaration.
+  check(st.title === "你的 Threads 帳號" && st.title === fill(A.title_single, { platform: THREADS_NAME }), `step 4, one platform: the title "${st.title}"`);
+  check(JSON.stringify(st.lead) === JSON.stringify([A.none_yet, "填上你要宣告的 Threads 帳號。"]), `step 4, one platform: ${JSON.stringify(st.lead)}`);
+  check(st.main.includes("一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。") && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one), "step 4, one platform: 一張卡片只能宣告一個 Threads 帳號……, not the sentences of more than one");
+  check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
+  await screenshot("single-4-accounts");
   await typeRows({ [THREADS]: "yui" });
   const c = await waitConfirm();
   checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare_single, THREADS_NAME);
@@ -2219,6 +2232,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
     `step 6, one platform: "${await page.text("[data-put-link]")}"`,
   );
   check((await page.text()).includes("有一張有效的自然人憑證宣告了這個帳號："), "step 6, one platform: 有一張有效的自然人憑證宣告了這個帳號：");
+  check((await page.text()).includes("越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。") && !(await page.text()).includes(C.done.advice), "step 6, one platform: the advice of this account's date");
 });
 // 6. Storage, connections, policy ---------------------------------------------
 

@@ -492,7 +492,7 @@ export function startApp(o: AppOptions): void {
       el(
         "section",
         { class: "step", attrs: { "data-step": "accounts", "data-state": view.dailyLimit ? "daily_limit" : view.state } },
-        el("h1", {}, a.title),
+        el("h1", {}, say(view.title)),
         ...lead,
         el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes),
         ...body,
@@ -699,7 +699,7 @@ export function startApp(o: AppOptions): void {
         el(
           "ul",
           { class: "three ink" },
-          view.withdrawAll ? null : el("li", {}, t.advice),
+          view.withdrawAll ? null : el("li", {}, say(view.advice)),
           // A list that is not empty: the roster records names, and an old name may be taken by someone else.
           view.withdrawAll ? null : el("li", { attrs: { "data-renamed": "" } }, t.renamed),
           el("li", {}, t.trust, " ", helpLink("verify")),

@@ -258,6 +258,7 @@ describe("your accounts (step 4)", () => {
   test("never declared: two lines on top, one row per platform of the table, the notes of a first declaration", () => {
     const v = accountsView(status([slot(EXAMPLE), slot(THREADS)], { lastCardProof: null }));
     assert.equal(v.state, "never");
+    assert.equal(t(v.title), "你的帳號");
     assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
     assert.deepEqual(
       v.rows.map((r) => [r.platform, r.name, r.prefix, r.current, r.editable, r.preview, r.lines.map(t)]),
@@ -299,10 +300,25 @@ describe("your accounts (step 4)", () => {
   });
 
   test("everything withdrawn: two lines on top, no card proof again", () => {
-    const v = accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
+    const v = accountsView(status([slot(EXAMPLE), slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
     assert.equal(v.state, "nothing");
     assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
     assert.ok(!v.notes.some((n) => n.sentences.some((x) => x.template === COPY.accounts.how_refresh)));
+    // One platform: the line names it.
+    const one = accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
+    assert.deepEqual(one.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的 Threads 帳號。"]);
+  });
+
+  test("one platform: the title, the line on top and the note of a first declaration name it", () => {
+    const v = accountsView(status([slot(THREADS)], { lastCardProof: null }));
+    assert.equal(t(v.title), "你的 Threads 帳號");
+    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的 Threads 帳號。"]);
+    assert.deepEqual(v.notes[0]!.sentences.map(t), ["一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。", "更換的次數有限，用掉就不會恢復。"]);
+    // Declared, and on a day with 3 records: the title too.
+    assert.equal(t(accountsView(status([declared("alice")])).title), "你的 Threads 帳號");
+    assert.equal(t(accountsView(status([declared("alice")], { lastCardProof: TODAY, dailyLimit: true })).title), "你的 Threads 帳號");
+    // An account on a platform the device does not know: more than one.
+    assert.equal(t(accountsView(status([slot(null, { platform: "test-example", current: "a-b", lastDeclared: "a-b" }), slot(THREADS)], { lastCardProof: null })).title), "你的帳號");
   });
 
   test("the line under each row, by its counts", () => {
@@ -526,6 +542,12 @@ describe("done (step 6)", () => {
       t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").putLink),
       "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
     );
+  });
+
+  test("the advice: the list's dates, or with one platform this account's", () => {
+    const expected = [crow({ kind: "first", username: "alice" })];
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), null).advice), COPY.done.advice);
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").advice), "越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。");
   });
 
   test("the record's line: the list, or with one platform the account", () => {
