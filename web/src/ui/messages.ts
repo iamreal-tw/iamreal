@@ -7,7 +7,7 @@
 // code alone: `{ code }`.
 import type { AcceptedKind } from "../api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../flow.ts";
-import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
+import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
 import { COPY, type Values, fill } from "./copy.ts";
 
 export interface Sentence {
@@ -38,7 +38,7 @@ const say = (template: string, values: Values = {}): Sentence => ({ template, va
  * the codes other than the rows below it; `platform`, a list naming a
  * platform the roster does not accept, is one of them).
  */
-const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "switch_restricted"]);
+const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order"]);
 
 /** The format hint of a platform (design/copy/card-proof.json, `formats`); null if the copy has none. */
 export function formatHint(platform: string): Sentence | null {
@@ -131,6 +131,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
       if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
       if (stop.server === "empty") return { ...say(s.empty), ...id };
+      // The server's operating policy refused a switch the rules allow (none by default).
+      if (stop.server === "switch_restricted") return { ...say(s.switch_restricted), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
@@ -139,7 +141,7 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.reason === "empty") return say(COPY.accounts.need_one);
       // The screen offers no change on a day with 3 records; the engine refuses one too.
       if (stop.reason === "daily_limit") return say(s.daily_limit);
-      // Another account typed on a row that cannot switch (switch_limit, web_switch_limit).
+      // Another account typed on a row whose 5 switches are used up (switch_limit).
       return say(COPY.accounts.row_cannot_switch);
     // The date changed since step 5, and the list would now do something else: nothing was signed.
     case "date_changed":
@@ -267,19 +269,43 @@ export function firstNotDone(states: readonly ItemState[]): number {
   return i < 0 ? states.length - 1 : i;
 }
 
+// One platform -------------------------------------------------------------------------
+
+/**
+ * Whether the screens speak of one platform (design/copy/card-proof.md,
+ * the section on one platform): the server's table has one platform the
+ * device knows, and the card has no account on a platform the device does
+ * not know (one there counts as more than one). The platform's name (the
+ * device's own, src/platforms.ts) if so; null otherwise.
+ */
+export function onePlatform(st: Pick<CardStatus, "tablePlatforms" | "slots">): string | null {
+  if (st.tablePlatforms.length !== 1 || !st.slots.every((sl) => sl.row !== null)) return null;
+  return presentationOf(st.tablePlatforms[0]!)?.name ?? null;
+}
+
+export interface BeforeView {
+  /** before.one_proof, or with one platform before.one_proof_single. */
+  oneProof: Sentence;
+  /** before.listed_together: more than one platform. */
+  listedTogether: boolean;
+}
+
+/**
+ * Step 1. There is no platform table yet, nor the card's accounts: it goes
+ * by the platforms the device has its own definition of (src/platforms.ts).
+ */
+export function beforeView(known: ReadonlySet<string> = KNOWN_PLATFORMS): BeforeView {
+  const c = COPY.before;
+  const only = known.size === 1 ? presentationOf([...known][0]!) : null;
+  return only ? { oneProof: say(c.one_proof_single, { platform: only.name }), listedTogether: false } : { oneProof: say(c.one_proof), listedTogether: true };
+}
+
 // Step 4: the card's list ------------------------------------------------------------
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
 }
-
-/**
- * Whether the web page offers the 4th and 5th switch in the app (after the
- * app is out, the rows of 3 or 4 switches are accounts.row_app_only; before,
- * accounts.row_app_later). Decided by the build, like the choice of device on step 1.
- */
-export const APP_RELEASED = false;
 
 /** A platform's name on the screen: the server's display name, or for a platform the device does not know its ID. */
 /**
@@ -330,15 +356,13 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   if (slot.row === null) return [say(a.row_unknown_platform)];
   if (slot.lastDeclared === null) return [say(a.row_unused)];
   const used = slot.switchCount;
-  // The switches left are what the web page can still make: 3 minus the switches used.
+  // The switches left by the roster rules: 5 minus the switches used.
   const count =
     used === 0
-      ? say(a.row_no_switches_yet, { switches_left: slot.webSwitchesLeft })
-      : slot.webSwitchesLeft > 0
-        ? say(a.row_switches, { switches_used: used, switches_left: slot.webSwitchesLeft })
-        : used < 5
-          ? say(APP_RELEASED ? a.row_app_only : a.row_app_later, { switches_used: used })
-          : say(a.row_used_up, { switches_used: used });
+      ? say(a.row_no_switches_yet, { switches_left: slot.switchesLeft })
+      : slot.switchesLeft > 0
+        ? say(a.row_switches, { switches_used: used, switches_left: slot.switchesLeft })
+        : say(a.row_used_up, { switches_used: used });
   const lines: Sentence[] = [];
   const last = handle(slot.platform, slot.lastDeclared);
   if (slot.current === null) lines.push(say(a.row_withdrawn, { last_declared: last }));
@@ -346,7 +370,7 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   // An account put there today can be changed today without a switch (a correction), even when none is left.
   if (slot.correctionToday) {
     if (slot.current !== null) lines.push(say(a.row_today));
-  } else if (slot.webSwitchesLeft === 0) {
+  } else if (slot.switchesLeft === 0) {
     lines.push(slot.current !== null ? say(a.row_can_clear) : say(a.row_only_back, { last_declared: last }));
   }
   return lines;
@@ -422,8 +446,7 @@ export function switchSentence(r: ConsequenceRow): Sentence | null {
   if (r.kind === "correction") return say(c.switch_not_counted);
   if (r.kind !== "switch") return null;
   if (r.switchesLeftAfter === 0) return say(c.uses_final_switch);
-  if (r.webSwitchesLeftAfter === 0) return say(c.uses_last_switch);
-  return say(c.uses_switch, { switches_left: r.webSwitchesLeftAfter! });
+  return say(c.uses_switch, { switches_left: r.switchesLeftAfter! });
 }
 
 /** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
@@ -448,8 +471,10 @@ export interface ConfirmView {
   date: string;
   /** confirm.withdraw_stays: an account is withdrawn. */
   withdrawStays: boolean;
-  /** confirm.listed_together: the list is not empty. */
+  /** confirm.listed_together: the list is not empty, and the screens speak of more than one platform (onePlatform). */
   listedTogether: boolean;
+  /** confirm.listed_single, in its place: the list is not empty, and the screens speak of one platform. */
+  listedSingle: Sentence | null;
   /** The second point: what can be done later, and that no record can be deleted. */
   later: string;
   button: string;
@@ -460,7 +485,8 @@ function allUnchanged(rows: readonly { kind: string; username: string; current: 
   return rows.every((r) => r.kind === "refresh" && r.current === r.username);
 }
 
-export function confirmView(cq: Consequence): ConfirmView {
+/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status); null otherwise. */
+export function confirmView(cq: Consequence, single: string | null = null): ConfirmView {
   const c = COPY.confirm;
   const empty = cq.accounts.length === 0;
   const rows = cq.rows.map((r) => ({
@@ -472,13 +498,14 @@ export function confirmView(cq: Consequence): ConfirmView {
     lines: rowSentences(r),
   }));
   return {
-    intro: empty ? c.intro_withdraw_all : c.intro,
+    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_single : c.intro,
     rows,
     date: cq.today,
     withdrawStays: cq.rows.some((r) => r.kind === "withdraw"),
-    listedTogether: !empty,
+    listedTogether: !empty && single === null,
+    listedSingle: !empty && single !== null ? say(c.listed_single, { platform: single }) : null,
     later: (empty ? c.later_withdraw : c.later) + c.permanent,
-    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : c.button_declare,
+    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : single !== null ? c.button_declare_single : c.button_declare,
   };
 }
 
@@ -510,6 +537,8 @@ export interface DoneView {
   mismatch: Sentence | null;
   date: string;
   shortId: string;
+  /** Where to put the link: done.put_link, or with one platform done.put_link_single. */
+  putLink: Sentence;
   /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
   link: string;
   /** The link as it is copied: a whole https:// URL. */
@@ -518,7 +547,7 @@ export interface DoneView {
   newCard: boolean;
   /** An account was withdrawn and the list is not empty: its link can be taken down. */
   withdrawnLink: boolean;
-  /** The roster's line (record_list, record_withdraw_all), or null when the answer's kinds could not be read. */
+  /** The roster's line (record_list, with one platform record_single, record_withdraw_all), or null when the answer's kinds could not be read. */
   record: Sentence | null;
   rows: DoneRecordRow[];
   /** done.kinds_unreadable */
@@ -538,7 +567,8 @@ export function doneTitle(d: Done): Sentence {
   return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
 }
 
-export function doneView(d: Done): DoneView {
+/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
+export function doneView(d: Done, single: string | null = null): DoneView {
   const t = COPY.done;
   const expected = new Map(d.expected.map((r) => [r.platform, r]));
   // A platform step 5 did not show (the server's answer differs) is named as the device knows it.
@@ -587,11 +617,12 @@ export function doneView(d: Done): DoneView {
     mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,
     date: d.date,
     shortId: d.shortId,
+    putLink: single !== null ? say(t.put_link_single, { platform: single }) : say(t.put_link),
     link,
     url: `https://${link}`,
     newCard: d.firstRecord,
     withdrawnLink: withdrew && !withdrawAll,
-    record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : t.record_list),
+    record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : single !== null ? t.record_single : t.record_list),
     rows,
     kindsUnreadable: d.kinds === null,
     otherCards: (d.kinds ?? [])

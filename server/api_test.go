@@ -688,7 +688,6 @@ func TestEmptyAndSwitchLimit(t *testing.T) {
 	crl := g3CRL(t)
 	root := rootOf(t, crl)
 	h := newHarness(t, startOfTests, crl)
-	h.acceptRestricted = true // switch_limit, not the server's policy
 	h.start()
 	card := newCard()
 	state := func() map[string]any {
@@ -735,18 +734,18 @@ func TestEmptyAndSwitchLimit(t *testing.T) {
 	}
 }
 
-// switch_restricted (docs/api/card-proof.md): refused by default, a record
+// switch_restricted (docs/api/card-proof.md): accepted by default, as the
+// roster rules do. With the policy set (-restrict-late-switches), a record
 // that would use the fourth or fifth switch of a slot is 403 and not
 // appended; the first three, corrections, and every other kind are never
-// refused on this ground. With the policy set to accept, the same records
-// are appended.
+// refused on this ground.
 func TestSwitchRestricted(t *testing.T) {
-	for _, accept := range []bool{false, true} {
-		t.Run(fmt.Sprintf("accept=%v", accept), func(t *testing.T) {
+	for _, restrict := range []bool{false, true} {
+		t.Run(fmt.Sprintf("restrict=%v", restrict), func(t *testing.T) {
 			crl := g3CRL(t)
 			root := rootOf(t, crl)
 			h := newHarness(t, startOfTests, crl)
-			h.acceptRestricted = accept
+			h.restrictLate = restrict
 			h.start()
 			card := newCard()
 			h.mustSubmit(h.sub(card, root, "threads:a"), "threads first")
@@ -762,7 +761,7 @@ func TestSwitchRestricted(t *testing.T) {
 			// A correction on another slot: never refused.
 			h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:dd"), "test-example correction, threads refresh")
 			fourth := h.sub(card, root, "test-example:c-d", "threads:e")
-			if !accept {
+			if restrict {
 				h.wantError(fourth, 403, "switch_restricted")
 				// The whole list is refused, nothing recorded; the challenge
 				// stays usable, and a list without the switch is accepted.

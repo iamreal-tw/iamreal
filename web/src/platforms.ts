@@ -59,7 +59,7 @@ export function handle(platform: string, username: string): string {
  */
 export const SITE_DOMAIN = "iamreal.tw";
 
-/** The path of a card's page on iamreal's site, after the domain: `card/` and the 10 characters of the short ID. */
+/** The path of a card's page (its proof page) on iamreal's site, after the domain: `p/` and the 10 characters of the short ID. */
 export function cardPath(shortId: string): string {
-  return `card/${shortId}`;
+  return `p/${shortId}`;
 }

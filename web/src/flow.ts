@@ -109,14 +109,12 @@ export type Stop =
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
   /**
-   * The list is not possible, by the roster rules or the page's own limit:
+   * The list is not possible by the roster rules:
    *   switch_limit      it switches a slot whose 5 switches are used up (`platform`)
-   *   web_switch_limit  it switches a slot that used 3 or more: the fourth and
-   *                     fifth are not made on the web (WEB_SWITCHES; `platform`)
    *   empty             the list is empty and the card declares no account
    *   daily_limit       the card has 3 valid records today
    */
-  | { code: "blocked"; reason: "switch_limit" | "web_switch_limit" | "empty" | "daily_limit"; platform?: string }
+  | { code: "blocked"; reason: "switch_limit" | "empty" | "daily_limit"; platform?: string }
   /** The second signature was not made within IDLE_MS of the first: the PIN, the certificate and the signature were dropped. */
   | { code: "idle" }
   /** A circuit or CRS file did not match its SHA-256, or could not be fetched. */
@@ -216,14 +214,6 @@ export type Progress = "component" | "certificates" | "certificate" | "config" |
  */
 export type Choice = Readonly<Record<string, string>>;
 
-/**
- * The switches of a slot the web page makes: the first 3. The fourth and the
- * fifth (the roster rules allow 5, and the server may refuse those two:
- * `switch_restricted`, docs/api/card-proof.md) are not offered here
- * (design/copy/card-proof.md, step 4: "還可以更換幾次" counts the web's).
- */
-export const WEB_SWITCHES = 3;
-
 export interface CardRead {
   /** The name on the certificate, for the screen only. */
   name: string;
@@ -246,8 +236,6 @@ export interface SlotStatus {
   correctionDate: string | null;
   /** Switches left by the roster rules: 5 minus the count. */
   switchesLeft: number;
-  /** Switches the web page can still make: 3 minus the count, at least 0 (WEB_SWITCHES). */
-  webSwitchesLeft: number;
   /** `correction_date` is today: changing the account today is a correction, not counted. */
   correctionToday: boolean;
 }
@@ -262,6 +250,8 @@ export interface CardStatus {
    * know; in ascending order of platform.
    */
   slots: SlotStatus[];
+  /** The platforms of the server's table the device knows (a row it can read, and a definition of its own), in ascending order. */
+  tablePlatforms: string[];
   /** The card's list now: the `current` of every slot that has one, in ascending order of platform. */
   accounts: Account[];
   /**
@@ -289,9 +279,8 @@ export interface ConsequenceRow {
   current: string | null;
   /** For a `correction` or a `switch`: the account replaced (`current`, or after a withdrawal `last_declared`). */
   previous: string | null;
-  /** For a `switch`: the switches left after it by the rules, and on the web; null otherwise. */
+  /** For a `switch`: the switches left after it by the rules; null otherwise. */
   switchesLeftAfter: number | null;
-  webSwitchesLeftAfter: number | null;
 }
 
 /** What a choice would do, for the screen before the second signature. */
@@ -840,7 +829,6 @@ export class CardProofFlow {
       const entry = list.get(s.platform) ?? null;
       const o = slotOutcome(slot, entry, today);
       if (o.kind === "blocked") throw new FlowStop({ code: "blocked", reason: "switch_limit", platform: s.platform });
-      if (o.kind === "switch" && slot.switchCount >= WEB_SWITCHES) throw new FlowStop({ code: "blocked", reason: "web_switch_limit", platform: s.platform });
       if (o.kind === "none") continue;
       const replaced = o.kind === "switch" || o.kind === "correction" ? (slot.current ?? slot.lastDeclared) : null;
       rows.push({
@@ -851,7 +839,6 @@ export class CardProofFlow {
         current: slot.current,
         previous: replaced,
         switchesLeftAfter: o.kind === "switch" ? MAX_SWITCHES - slot.switchCount - 1 : null,
-        webSwitchesLeftAfter: o.kind === "switch" ? Math.max(0, WEB_SWITCHES - slot.switchCount - 1) : null,
       });
     }
     // The roster rules: no kind on any platform is a record that states nothing.
@@ -1135,12 +1122,11 @@ function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idTex
       switchCount: slot.switchCount,
       correctionDate: slot.correctionDate === null ? null : formatDay(slot.correctionDate),
       switchesLeft: MAX_SWITCHES - slot.switchCount,
-      webSwitchesLeft: Math.max(0, WEB_SWITCHES - slot.switchCount),
       correctionToday: slot.correctionDate === today,
     });
   }
   for (const k of state.kept) {
-    slots.push({ platform: k.platform, row: null, current: k.username, lastDeclared: k.username, switchCount: 0, correctionDate: null, switchesLeft: MAX_SWITCHES, webSwitchesLeft: WEB_SWITCHES, correctionToday: false });
+    slots.push({ platform: k.platform, row: null, current: k.username, lastDeclared: k.username, switchCount: 0, correctionDate: null, switchesLeft: MAX_SWITCHES, correctionToday: false });
   }
   slots.sort(byPlatform);
   return {
@@ -1148,6 +1134,7 @@ function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idTex
     shortId: shortId(idText),
     lastCardProof: state.lastCardProof === null ? null : formatDay(state.lastCardProof),
     slots,
+    tablePlatforms: table.map((r) => r.platform),
     accounts: slots.flatMap((s) => (s.current === null ? [] : [Object.freeze({ platform: s.platform, username: s.current })])),
     dailyLimit: dailyLimitReached(state, today),
     today: formatDay(today),
@@ -1167,7 +1154,7 @@ function sameRows(a: readonly ConsequenceRow[], b: readonly ConsequenceRow[]): b
     a.length === b.length &&
     a.every((x, i) => {
       const y = b[i]!;
-      return x.platform === y.platform && x.username === y.username && x.kind === y.kind && x.switchesLeftAfter === y.switchesLeftAfter && x.webSwitchesLeftAfter === y.webSwitchesLeftAfter;
+      return x.platform === y.platform && x.username === y.username && x.kind === y.kind && x.switchesLeftAfter === y.switchesLeftAfter;
     })
   );
 }

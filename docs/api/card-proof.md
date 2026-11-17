@@ -104,7 +104,7 @@ them and from today's date in Taiwan by its own clock:
 | Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
 | Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
 | What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
-| Whether the server may refuse a switch the rules allow | Yes if the change is a `switch` and `switch_count` is 3 or 4 (`switch_restricted`, below) |
+| Whether the server may refuse a switch the rules allow | Only by an operating policy of the server; there is none by default (`switch_restricted`, below) |
 
 What the device does with it: shows the card's whole list, and lets the
 cardholder change it. Before the card signs, the device shows the whole list
@@ -211,7 +211,7 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
   | `400` | `date_order`, `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
-  | `403` | `switch_restricted` | The roster rules accept the record, but it uses the fourth or fifth switch of a slot and the server's operating policy does not accept that switch. The whole list is refused |
+  | `403` | `switch_restricted` | The roster rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
   | `429` | `rate_limited` | |
 
@@ -255,15 +255,13 @@ Submits one card proof: the card's whole list of accounts.
   **`switch_restricted`** is a rule of the server, not of the roster
   ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Not part of these
   rules"). The roster rules give a card 5 switches on each platform. The
-  server may refuse the fourth and the fifth unless a condition of its
-  operating policy is met. It never refuses on this ground a record without
-  a `switch` (a `first`, `refresh`, `correction` or `withdraw` on every
-  platform), nor one whose switches are all among a slot's first three.
-  Nobody can check from the roster why a record was not appended; anybody
-  can check that a record that was appended is within the 5. How the
-  condition is met is not part of this document yet. A device may leave out
-  the switches the server's policy may refuse, and not offer them; the web
-  page does so.
+  server may, by its operating policy, refuse a switch that is within the
+  rules' limit. By default it has no such policy. It never refuses on this
+  ground a record without a `switch` (a `first`, `refresh`, `correction` or
+  `withdraw` on every platform). Nobody can check from the roster why a
+  record was not appended; anybody can check that a record that was
+  appended is within the 5. A device that gets this code shows it as it is:
+  the server did not accept the switch, and the card proof is not recorded.
 
   A device that gets a code it does not know shows it as an error of the
   server, with the request ID, and treats the card proof as not recorded.

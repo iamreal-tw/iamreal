@@ -47,10 +47,12 @@ import {
   READ_ITEMS,
   type Sentence,
   accountsView,
+  beforeView,
   confirmView,
   doneView,
   firstNotDone,
   itemStates,
+  onePlatform,
   progressButtons,
   readItemOf,
   stopMessage,
@@ -196,6 +198,7 @@ export function startApp(o: AppOptions): void {
   function before(why: Message | null = null): void {
     drop();
     const c = COPY.before;
+    const view = beforeView();
     const message = messageArea();
     const faq = (q: string, ...answers: (string | Node)[]): HTMLElement =>
       el("details", { class: "faq" }, el("summary", {}, q), ...answers.map((a) => el("p", {}, a)));
@@ -209,8 +212,9 @@ export function startApp(o: AppOptions): void {
         el("p", { class: "lead" }, c.prepare_card),
         el("p", {}, c.citizens_only),
         // As plain to see as the two lines above, not in a question to open: it may change whether to go on, and cannot be undone.
-        el("p", { class: "lead" }, c.one_proof),
-        el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together),
+        // By the platforms the device knows (there is no platform table yet): one, named; or more than one, and that their accounts are listed together.
+        el("p", { class: "lead", attrs: { "data-one-proof": "" } }, say(view.oneProof)),
+        view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
         faq(c.why_physical, c.why_physical_card, c.why_physical_mobile),
         // The page sends no one elsewhere but to the account's preview: MOICA's page is named, not linked.
         faq(c.how_to_get, c.how_to_get_counter, c.how_to_get_moica),
@@ -514,7 +518,8 @@ export function startApp(o: AppOptions): void {
   function confirmScreen(f: CardProofFlow, cq: Consequence, back: () => void, why: Message | null = null): void {
     const c = COPY.confirm;
     const status = f.cardStatus;
-    const view = confirmView(cq);
+    const single = status === null ? null : onePlatform(status);
+    const view = confirmView(cq, single);
     const message = messageArea();
     const go = primary(view.button, () => {
       // The component's window for the second signature opens now, in the click.
@@ -523,7 +528,7 @@ export function startApp(o: AppOptions): void {
         message.show(stopMessage({ code: "card", card: "popup_blocked" }));
         return;
       }
-      progress(f, cq, back);
+      progress(f, cq, back, single);
     });
     // The whole list to be signed, and each row's consequence, withdrawals included; the platform's ID beside its name.
     const rows = view.rows.flatMap((r) => [
@@ -552,6 +557,7 @@ export function startApp(o: AppOptions): void {
         ),
         view.withdrawStays ? el("p", { class: "small", attrs: { "data-withdraw-stays": "" } }, c.withdraw_stays) : null,
         view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
+        view.listedSingle ? el("p", { class: "lead", attrs: { "data-listed-single": "" } }, say(view.listedSingle)) : null,
         el("ul", { class: "three ink" }, el("li", {}, c.no_identity), el("li", {}, view.later)),
         message.node,
         actions(secondary(COPY.common.back, back), go),
@@ -561,7 +567,8 @@ export function startApp(o: AppOptions): void {
     message.show(why);
   }
 
-  function progress(f: CardProofFlow, cq: Consequence, back: () => void): void {
+  /** `single`: the one platform's name when the screens speak of one platform (onePlatform, as step 5 decided it); null otherwise. */
+  function progress(f: CardProofFlow, cq: Consequence, back: () => void, single: string | null): void {
     const c = COPY.progress;
     const list = taskList("progress", PROGRESS_ITEMS);
     const zk = el("p", { class: "note", attrs: { "data-zk": "" } }, c.zero_knowledge, " ", helpLink("more"));
@@ -583,7 +590,7 @@ export function startApp(o: AppOptions): void {
       work.then(
         (done) => {
           onProgress = null;
-          if (flow === f) doneScreen(done);
+          if (flow === f) doneScreen(done, single);
         },
         (e) => {
           card.release();
@@ -625,10 +632,10 @@ export function startApp(o: AppOptions): void {
 
   // Step 6: done -----------------------------------------------------------------------
 
-  function doneScreen(d: Done): void {
+  function doneScreen(d: Done, single: string | null): void {
     const t = COPY.done;
     flow = null;
-    const view = doneView(d);
+    const view = doneView(d, single);
     const mine: (HTMLElement | null)[] = [];
     if (!view.withdrawAll) {
       const copy = primary(t.copy, () => {
@@ -648,7 +655,7 @@ export function startApp(o: AppOptions): void {
           el("p", { class: "hand cert-note" }, t.hand_ai, el("br"), t.hand_profile),
         ),
         el("h2", { class: "put-up" }, t.put_up),
-        el("p", {}, t.put_link),
+        el("p", { attrs: { "data-put-link": "" } }, say(view.putLink)),
         el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link), copy),
         view.newCard ? el("p", { class: "small", attrs: { "data-new-card": "" } }, t.new_card) : null,
         view.withdrawnLink ? el("p", { class: "small", attrs: { "data-withdrawn-link": "" } }, t.withdrawn_link) : null,
@@ -689,7 +696,14 @@ export function startApp(o: AppOptions): void {
           view.kindsUnreadable ? null : el("p", {}, say(view.shortIdLine)),
         ),
         ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
-        el("ul", { class: "three ink" }, view.withdrawAll ? null : el("li", {}, t.advice), el("li", {}, t.trust, " ", helpLink("verify"))),
+        el(
+          "ul",
+          { class: "three ink" },
+          view.withdrawAll ? null : el("li", {}, t.advice),
+          // A list that is not empty: the roster records names, and an old name may be taken by someone else.
+          view.withdrawAll ? null : el("li", { attrs: { "data-renamed": "" } }, t.renamed),
+          el("li", {}, t.trust, " ", helpLink("verify")),
+        ),
         el("p", {}, t.unplug),
         // Another card proof, with the same engine (ADR-0013).
         actions(secondary(t.restart, () => before())),

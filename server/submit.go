@@ -46,8 +46,8 @@ type acceptedKind struct {
 //  4. smt_root is the root of one of the two newest CRLs of the issuer in
 //     the mirror, and the newest is at most 3 days old;
 //  5. the roster rules, which say whether the record would be valid;
-//  6. the server's own policy on the fourth and fifth switch of a slot
-//     (switch_restricted).
+//  6. the server's own policy on the fourth and fifth switch of a slot,
+//     if it is set (switch_restricted; none by default).
 //
 // If all pass, the record is appended and its challenge marked as accepted
 // in one transaction, and the rules are applied to it.
@@ -148,10 +148,11 @@ func (s *Server) postRecord(r *http.Request) reply {
 		return fail(http.StatusBadRequest, ruleError(res.Reason))
 	}
 
-	// 6. The server's policy: a record the rules accept, with a switch
-	// that would be the fourth or fifth of its slot. Never a record without
-	// a switch, nor one whose switches are all among a slot's first three.
-	if !s.cfg.AcceptRestrictedSwitches && usesRestrictedSwitch(s.rules.Card(rec.ScopeString, rec.ScopedID), res) {
+	// 6. The server's policy, if it is set: a record the rules accept,
+	// with a switch that would be the fourth or fifth of its slot. Never a
+	// record without a switch, nor one whose switches are all among a
+	// slot's first three.
+	if s.cfg.RestrictLateSwitches && usesRestrictedSwitch(s.rules.Card(rec.ScopeString, rec.ScopedID), res) {
 		return fail(http.StatusForbidden, errSwitchRestricted)
 	}
 
@@ -183,7 +184,7 @@ func (s *Server) postRecord(r *http.Request) reply {
 }
 
 // restrictedFrom is the first switch of a slot that the server's policy
-// may refuse: the fourth (docs/api/card-proof.md, switch_restricted).
+// refuses when it is set: the fourth (Config.RestrictLateSwitches).
 const restrictedFrom = 4
 
 // usesRestrictedSwitch reports whether a record with result res, applied to

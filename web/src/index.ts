@@ -57,7 +57,6 @@ export {
   CardProofFlow,
   FlowStop,
   IDLE_MS,
-  WEB_SWITCHES,
   type Choice,
   type Consequence,
   type ConsequenceRow,

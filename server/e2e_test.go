@@ -130,6 +130,10 @@ func TestEndToEnd(t *testing.T) {
 	random := &nextRandom{}
 	h := newHarness(t, tw(2026, 11, 20, 9, 0, 0))
 	h.keys, h.proofs, h.random = keys, v, random
+	// The policy on the fourth and fifth switch set (-restrict-late-switches):
+	// card proof 10 of testdata/ is a fourth switch, refused with
+	// switch_restricted (testdata/README.md).
+	h.restrictLate = true
 	mirror := &Mirror{Dir: crlDir(h.data), Keys: keys, Client: srv.Client(), Log: slog.New(slog.DiscardHandler),
 		Sources: []crlSource{{"G2", srv.URL + "/g2.crl"}, {"G3", srv.URL + "/g3.crl"}}}
 	if err := mirror.Fetch(context.Background()); err != nil {

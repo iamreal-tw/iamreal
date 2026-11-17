@@ -124,7 +124,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
 	runMirror := fs.Bool("mirror", true, "fetch MOICA's CRLs at start and every hour")
-	acceptRestricted := fs.Bool("accept-restricted-switches", false, "accept the fourth and fifth switch of a slot (switch_restricted); refused by default")
+	restrictLate := fs.Bool("restrict-late-switches", false, "refuse the fourth and fifth switch of a slot (switch_restricted); accepted by default, as the roster rules do")
 	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -170,13 +170,13 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	s, err := New(Config{
 		Roster: r, Store: st, CRLDir: crlDir(*data), Proofs: proofs,
 		Now: d.now, Random: rand.Reader, Log: logger, Version: version(),
-		AcceptRestrictedSwitches: *acceptRestricted,
+		RestrictLateSwitches: *restrictLate,
 	})
 	if err != nil {
 		return fail(err)
 	}
 	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "head", s.head, "version", version(),
-		"accept_restricted_switches", *acceptRestricted)
+		"restrict_late_switches", *restrictLate)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
