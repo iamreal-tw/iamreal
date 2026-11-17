@@ -267,19 +267,19 @@ records keep verifying.
 
 [`vectors/record.json`](vectors/record.json):
 
-- two chained records with their lines, preimage hashes, record hashes and
-  the head;
-- well-formed lines and malformed lines, each with the reason;
+- `chains`: two chains of three records, one of the production roster and
+  one of a test roster (only a test roster has a list of two accounts),
+  each record with its line, the list as written in the line
+  (`accounts_text`), its preimage hash and record hash, and each chain with
+  its head;
+- well-formed lines and malformed lines, each with the reason, among them
+  the lines that are malformed because of `accounts`;
 - roster files that are valid or broken, with the reason and the head.
 
-The file still holds the vectors from before the account list (ADR-0017);
-it is to be regenerated for this document, with lists of zero, one and two
-accounts, and lines that are malformed because of `accounts`: missing,
-`null`, an object instead of a list, a platform not in the table or in
-another spelling, a platform twice (with the same and with different
-usernames), two accounts in descending order, a `username` in another
-platform's format, keys of an account in the other order, an extra key,
-whitespace inside the list.
+Every chain, line and file has a `roster`, `production` or `test`: whose
+accepted scopes and platform table it is read with
+([`scope.md`](scope.md)). The same line can be well formed for one roster
+and malformed for the other.
 
 The proofs are placeholder bytes, not real proofs: the vectors test the
 formats and the chain, not proof verification. To keep the file small, lines

@@ -91,7 +91,8 @@ that takes effect on one platform and not on another.
 |---|---|---|
 | `current` | The account the slot is declared to now, or none | none |
 | `last_declared` | The last account the slot was declared to, kept after a withdrawal | none |
-| `switch_dates` | A list with one entry, the date, per valid switch of the slot. Two switches on the same day are two entries. A blocked switch adds nothing | empty |
+| `switch_count` | The number of valid switches of the slot. It never decreases | 0 |
+| `correction_date` | The date of the slot's last valid `first` or `switch`. A change of account dated that same date is a correction and is not counted | none |
 
 Within a slot, `current` and `last_declared` are a `username`; the slot's
 platform makes it an account.
@@ -108,13 +109,14 @@ belong to the platform.
 For a record with date `d`, every platform of the roster's table
 ([`scope.md`](scope.md)) is looked at, whether the list has an entry for it
 or not, against the state of the card's slot on that platform **before**
-the record:
+the record. The first row that applies gives the kind:
 
 | Entry | Condition | Kind | Effect on the slot |
 |---|---|---|---|
-| `u` | `last_declared` is none | `first` | `current = u`, `last_declared = u` |
+| `u` | `last_declared` is none | `first` | `current = u`, `last_declared = u`, `correction_date = d` |
 | `u` | `last_declared = u` | `refresh` | `current = u` |
-| `u` | otherwise, and fewer than 2 entries of `switch_dates` are on or after `d − 364 days` | `switch` | `current = u`, `last_declared = u`, append `d` to `switch_dates` |
+| `u` | `correction_date = d` | `correction` | `current = u`, `last_declared = u` |
+| `u` | `switch_count < 5` | `switch` | `current = u`, `last_declared = u`, `switch_count` plus 1, `correction_date = d` |
 | `u` | otherwise | blocked | |
 | none | `current` is not none | `withdraw` | `current = none`; `last_declared` unchanged |
 | none | `current` is none | no kind | none |
@@ -141,6 +143,45 @@ account that stays (the entry equals `current`) and an account declared
 again after a withdrawal (`current` was none, the entry equals
 `last_declared`).
 
+### Switches and corrections
+
+**A card has 5 switches on each platform, for good.** `switch_count` only
+grows. Nothing gives a switch back: not time, not a withdrawal, not
+declaring the earlier account again. A sixth switch is blocked, and stays
+blocked.
+
+**A correction is a change of account on the day the account was put
+there.** If the slot's last `first` or `switch` has the record's own date,
+changing the account again is a `correction`: it is not counted and it is
+never blocked. This is for a mistyped account noticed the same day.
+
+Exactly what a correction depends on:
+
+- **Only a `first` or a `switch` opens the day.** A `refresh`, a
+  `withdraw` and a `correction` do not set `correction_date`. Withdrawing
+  an account and declaring it again today therefore does not make the next
+  change free.
+- **The dates must be equal**, not merely close: `correction_date = d`,
+  both taken from challenges. A change on the next date is a switch, also
+  one minute after midnight. Around midnight a record can carry the earlier
+  date (its challenge was issued before midnight); then it is compared with
+  that earlier date, like everything else in these rules.
+- **The switch that opened the day stays counted.** A → B is a switch; B → A
+  on the same date is a correction. The count is 1, although the slot is
+  back where it was. Nothing uncounts a switch: if going back did, a card
+  could lend its slot to another account every day and take it back before
+  midnight for nothing.
+- **A correction has no count of its own**, but check 6 allows a card 3
+  valid records per date, so a `first` or a `switch` is followed by at most
+  2 corrections.
+- A correction after a `switch` that used the fifth switch is still a
+  correction.
+
+What a card can hold over its lifetime on one platform is therefore at most
+6 accounts from one date to the next: the first, and one per switch.
+Corrections add accounts that were replaced on the date they were put
+there.
+
 ## What follows from these rules
 
 About one platform:
@@ -149,20 +190,15 @@ About one platform:
   action, and nothing to name wrongly: whatever the card declared on a
   platform the list leaves out is withdrawn.
 - A switch is an entry different from the last account declared on that
-  platform, whether or not there was a withdrawal in between. Withdrawing
-  and then declaring another account is a switch. A → B → A is two switches.
+  platform, on a later date than the slot's last `first` or `switch`,
+  whether or not there was a withdrawal in between. Withdrawing and then
+  declaring another account is a switch. A → B → A on three different dates
+  is two switches.
 - Withdrawing and then declaring the same account again is a refresh, not a
   switch. So is declaring again the account a blocked switch tried to leave:
   an invalid record does not change `last_declared`.
 - A first declaration is not a switch.
-- At most 2 switches in any 365 days on each platform: the window counts the
-  earlier switches dated from `d − 364` on, including any dated after `d`.
-  Those occur only around midnight, or when dates are written into the
-  future ("How far dates are trusted"). When the two latest switches are
-  both in the window, the next one is possible from 365 days after the
-  earlier of the two.
-- There is no free correction of a mistyped account. Correcting it uses a
-  switch.
+- At most 5 switches, ever, on each platform ("Switches and corrections").
 - One card is declared to at most one account at a time on a platform. One
   account can be declared by any number of cards.
 
@@ -174,7 +210,8 @@ About the card:
   the state without having been in the card's last valid record.
 - **One record can change every platform**: a first declaration on one, a
   switch on another, a withdrawal on a third. Each switch is counted on its
-  own platform; a switch on one uses none of the switches of another.
+  own platform; a switch on one uses none of the switches of another, and a
+  `first` or `switch` on one opens no correction on another.
 - **A blocked platform blocks the record.** A cardholder whose switches on
   one platform are used up can still change the others, with a list that
   puts no new account on that platform: the same account as before, or
@@ -185,8 +222,8 @@ About the card:
   record. When the card declares none, including a card with no earlier
   record, it is `empty`: such a record would state nothing. A card that
   has withdrawn everything stays in the state, with its `last_card_proof`
-  and no account; its slots keep `last_declared` and `switch_dates`, and
-  the 365-day windows keep running. Nothing resets by withdrawing.
+  and no account; its slots keep `last_declared`, `switch_count` and
+  `correction_date`. Nothing resets by withdrawing.
 - **One card has at most 3 valid records per date**, whatever they change.
   One record covers every platform, so three leave room to declare, correct
   a mistyped account and withdraw on the same day; the limit keeps a single
@@ -207,14 +244,16 @@ About the card:
 An invalid record changes one thing: its challenge counts as used (check
 2). It changes nothing else, for its card or anyone:
 
-- not any slot's `current`, `last_declared` or `switch_dates`, on any
-  platform, including the platforms where its list asked for nothing new;
+- not any slot's `current`, `last_declared`, `switch_count` or
+  `correction_date`, on any platform, including the platforms where its
+  list asked for nothing new;
 - not the card's `last_card_proof` or `proofs_on_last_date`;
 - not the latest valid date that check 4 compares with.
 
 So a list with one change that is not allowed cannot carry another change
 through, cannot make the card look recent, cannot use up a switch or a place
-in the daily count, and cannot push the dates of later records.
+in the daily count, cannot open a correction, and cannot push the dates of
+later records.
 
 The checks run in order, so only a record that every other check accepts
 can get `daily_limit`: it verifies, its challenge is new, its root is
@@ -225,7 +264,9 @@ its card, and never reported as `daily_limit`.
 A list that cannot be read in one way is not an invalid record: a platform
 outside the table, a platform twice, accounts out of order make the line
 malformed and the whole file broken ([`record.md`](record.md)). The rules
-only ever see lists with at most one entry per platform.
+only ever see lists with at most one entry per platform. An implementation
+of the rules that is handed a list naming a platform outside the table
+stops with an error; it does not give the record a reason code.
 
 ## How far dates are trusted
 
@@ -233,9 +274,9 @@ The rules take each record's date from its challenge, and the card's
 signature covers the challenge. Neither the server nor anyone else can change
 a date after the card signed. But the server chooses the date when it issues
 the challenge, and a modified device would sign a challenge with any date on
-which the certificate is valid. Records dated a year apart could then give
-one card more switches than the rules allow, and one record dated years ahead
-would keep the card looking recent until then. Two checks bound this.
+which the certificate is valid. One record dated years ahead would keep the
+card looking recent until then, and a change dated back to the day of an
+old switch would pass as a correction. Two checks bound this.
 
 - **Into the future: at most 3 days** (check 3). A record's date is at most
   3 days after the date of the CRL behind its root, and MOICA has not signed
@@ -246,12 +287,20 @@ would keep the card looking recent until then. Two checks bound this.
   a record dated ahead of it. Check 3 alone would not stop dates in the past:
   old CRLs stay recognized so that old records keep verifying.
 
-Both bounds are far below the 365-day window, so dating cannot buy extra
-switches. Within the bounds, an operator working with a modified device can
-make a card's `last_card_proof` look up to 3 days more recent than it is.
+Within the bounds, an operator working with a modified device can make a
+card's `last_card_proof` look up to 3 days more recent than it is.
 `last_card_proof` belongs to the card, so this covers the card's accounts
 on every platform; the bound is the same 3 days. Both checks compare dates
 across all cards.
+
+The same pair can make corrections on days that are not the day of the
+switch, by issuing challenges with the switch's date for a few days around
+it. It gains little: a date still holds at most 3 valid records of the card
+(check 6), so a `first` or `switch` is still followed by at most 2
+corrections, and the switch count is not a matter of dates at all. A
+cardholder alone cannot do this: the server dates every challenge with the
+current date.
+
 If the bound of check 3 is ever widened, the bound of check 4 widens with it
 (one day more).
 
@@ -261,8 +310,10 @@ Every sort is by the byte values of the strings (ASCII order), not by a
 locale's collation.
 
 - **Per scope**, scopes sorted by scope string. A scope with no listed card
-  is not listed. The public roster has one scope with records, until a
-  version is retired ([`scope.md`](scope.md)).
+  is not listed. A roster has one scope with records, until a version is
+  retired ([`scope.md`](scope.md)); only then does it hold records of two
+  scope strings, and a card of the old one and a card of the new one are two
+  cards.
 - **Per card**, sorted by `scoped_id`: `scoped_id`, `last_card_proof`, and
   its current list, in ascending order of `platform` (the order of a
   record's list). A card with no valid record is not listed. A card with
@@ -272,7 +323,9 @@ locale's collation.
   with its `last_card_proof`. An account with no such card is not listed.
   The number of these cards is what the API calls `account_cards`.
 - **Per record**, in `seq` order: valid with its kinds, or invalid with its
-  reason code.
+  reason code. The reason code is the whole result of an invalid record. A
+  tool may add an explanation for people (for `switch_limit`, which
+  platform was blocked); the explanation is not part of the output.
 
 The accounts listed under one card are the accounts that card declares. It
 does not follow that they belong to one person: any cardholder can declare
@@ -288,6 +341,11 @@ carry the date.
   record when a challenge was issued, so nobody else can check it.
 - A card proof the server rejects under these rules is not appended, so it
   changes nothing, including `last_card_proof`.
+- **The server may decline to append a record these rules would accept.**
+  It can make the later switches of a slot subject to conditions of its own
+  ([`docs/api/card-proof.md`](../docs/api/card-proof.md)). That is a rule of
+  the server, not of the roster: a record that is in the roster is judged by
+  these rules only, and the limit that everyone can check is 5.
 - Which platforms exist is a table of [`scope.md`](scope.md), not something
   computed from the records. A record that lists a platform outside the
   table is a malformed line, not an invalid record.
@@ -297,25 +355,59 @@ carry the date.
 
 ## Test vectors
 
-[`vectors/roster-rules.json`](vectors/roster-rules.json): sequences of events
-with the outcome of each and the final state. Events stand for well-formed
-records and carry only the fields the rules read. Their `verifies` field
-says whether the record passes check 1. Their `crl_dates` are the CRL dates
-(the date `thisUpdate` falls on in Taiwan) of the usable CRLs of the
-record's issuer whose tree has the record's `smt_root`: possibly several,
-possibly none.
+[`vectors/roster-rules.json`](vectors/roster-rules.json): cases, each a
+sequence of events with the outcome of each and the final state.
 
-The file still holds the vectors from before ADR-0017 (one account per
-record, state per scope). It is to be regenerated for this document, with
-events that carry a list and, among the sequences, at least: a list of two
-accounts as a card's first record; one record with a `first` on one platform
-and a `switch` on the other; a withdrawal by leaving an account out, with
-the other account kept; the empty list withdrawing everything, then the
-same account again as a `refresh` and another as a `switch`; the empty list
-as a card's first record and after everything was withdrawn (`empty`);
-switches counted per platform, with a third switch on one platform blocking
-a record that also changes the other, and the other platform left
-unchanged; the daily limit counted per card across changes on different
-platforms; the same `username` on two platforms as two accounts; two cards
-listing the same account; and an invalid record of each code leaving every
-slot and `last_card_proof` unchanged.
+- `roster` says which roster the case is: `production` or `test`. It
+  decides the platform table the event rules go through
+  ([`scope.md`](scope.md)).
+- Events stand for well-formed records and carry only the fields the rules
+  read. `date` repeats the date of `challenge`. `verifies` says whether the
+  record passes check 1. `crl_dates` are the CRL dates (the date
+  `thisUpdate` falls on in Taiwan) of the usable CRLs of the record's issuer
+  whose tree has the record's `smt_root`: possibly several, possibly none.
+- A valid outcome has `kinds`: the (`platform`, `kind`) pairs, in ascending
+  order of `platform`. An invalid one has the reason code.
+- The final `state` is the output ("Output"), with two additions per card
+  that are items of the state, not of the output: `proofs_on_last_date`,
+  and `slots`, one per platform of the table with the items of the slot.
+  They are there so that a case can show that an invalid record left every
+  slot as it was.
+- Every case has one scope string. Cases with two scope strings in one
+  roster belong to retiring a scope and will be added with it.
+
+**To be regenerated.** The file was made for the earlier switch rule (2
+switches in 365 days, `switch_dates` in the slots). The cases about that
+rule are to be replaced, and `slots` are to carry `switch_count` and
+`correction_date` instead of `switch_dates`. The new cases, at least:
+
+- five switches on five dates, then a sixth blocked; the same sixth still
+  blocked years later;
+- after the fifth switch: a `refresh`, a `withdraw`, a `refresh` after the
+  withdrawal, and a `first` on the other platform are all valid;
+- a `first` followed on the same date by a `correction`, and by a second
+  `correction`; `switch_count` stays 0;
+- a `switch` followed on the same date by a `correction`; `switch_count`
+  is 1;
+- A → B → A on one date: `switch`, `correction`, count 1; A → B → A on three
+  dates: two switches;
+- a `first` on one date and another account on the next date: `switch`;
+- a correction after the fifth switch, on its date: valid; the same change
+  one date later: `switch_limit`;
+- a `withdraw` and a `refresh` of the same account on one date, then another
+  account on that date: `switch` (the refresh opened nothing);
+- an account withdrawn and another declared on the date of the `first`:
+  `correction`;
+- around midnight: a `switch` dated `D + 1`, then a record dated `D` that
+  changes the account: `switch`, not a correction; a `switch` dated `D`,
+  then a change in a record dated `D` that comes after a record of another
+  card dated `D + 1`: `correction`;
+- a `switch` on one platform and, on the same date, a change on the other
+  platform whose own `first` was earlier: `switch` there, counted there;
+- one record with a `correction` on one platform and a blocked switch on
+  the other: `switch_limit`, and the correction is not applied;
+- a `first`, two corrections, then a fourth record on that date:
+  `daily_limit`, not a third correction;
+- an invalid record of each code between a `first` and a change on the same
+  date: the change is still a `correction`, and no invalid record opened or
+  closed anything.

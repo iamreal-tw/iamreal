@@ -14,7 +14,7 @@ there are the names used here.
 | [`declaration-code.md`](declaration-code.md) | How the declaration code is computed from a card's list of accounts | Draft |
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
 | [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
-| [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot per card and platform | Draft |
+| [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot and 5 switches per card and platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
@@ -34,10 +34,10 @@ TypeScript, and later the mobile apps) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 
-`scope.json`, `declaration-code.json`, `record.json`, `roster-rules.json`
-and the short IDs of `scoped-id.json` still hold the vectors from before
-ADR-0017 and are to be regenerated. Until then the documents and those files disagree, and
-so do the tests that read them.
+`roster-rules.json` was made for an earlier switch rule and is to be
+regenerated ([`roster-rules.md`](roster-rules.md), "Test vectors"). Until
+then that document and that file disagree, and so do the tests that read
+the file.
 
 ## Shared conventions
 

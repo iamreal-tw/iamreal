@@ -104,9 +104,8 @@ accounts are bound: the circuit has no separate input for either.
 ## Test vectors
 
 [`vectors/declaration-code.json`](vectors/declaration-code.json), with the
-packed value of each code. The file still holds the vectors of an earlier
-draft (one account, with an `action` line); it is to be regenerated for this
-document, with lists of zero, one and two accounts.
+packed value of each code: lists of zero, one and two accounts, and lists
+that differ by one account, one platform or the challenge.
 
 Example, a list of one account:
 
@@ -121,6 +120,4 @@ gives `DYR31H79A046QB7TZR3EZ26GGF20ZV9` (SHA-256 of the preimage: `f606189d…c9
 
 The same with an empty list (three lines) gives `DW823ED4NZ8ABHYWZ583X7G4H6XPA6Q`.
 
-These values were computed once, with a short script that also reproduces
-the example of the first draft of this document. They are not yet backed by
-the vectors file, and are to be confirmed when the vectors are regenerated.
+Both are in the vectors file.

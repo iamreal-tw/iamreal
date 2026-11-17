@@ -170,8 +170,6 @@ never to records.
   the revocation tree specification (not written yet).
 - [`vectors/scoped-id.json`](vectors/scoped-id.json): field elements and their
   little-endian bytes, text form and short ID; texts a parser must reject;
-  short IDs as typed in URLs and how they read. The short IDs in the file
-  are still the 6-character ones of an earlier draft; they are to be
-  regenerated with 10 characters.
+  short IDs as typed in URLs and how they read.
 
 The signatures in the vectors come from throwaway keys, not from cards.

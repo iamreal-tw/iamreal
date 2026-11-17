@@ -112,6 +112,9 @@ platform = 1 to 21 characters of a-z, 0-9, "-"
   Threads. It never appears in the production roster. **IDs starting with
   `test-` are never added to the production table.**
 - "Added" is for readers. The rules do not read it.
+- The server sends its copy of this table to devices
+  ([`docs/api/card-proof.md`](../docs/api/card-proof.md), `config`). That
+  copy is a convenience. What a roster accepts is this table.
 
 ### Adding a platform
 
@@ -129,9 +132,9 @@ date already covers the new platform.
 - **A re-verifier needs a table at least as new as the roster.** With an
   older table, the first record that lists a platform it does not know is a
   malformed line, and the roster file is reported as broken.
-- **A device needs a table at least as new as the card's list.** A record
-  states the whole list, so a device that left out an account on a platform
-  it does not know would withdraw it. Such a device does not submit
+- **A device does not drop what it does not know.** A record states the
+  whole list, so a device that left out an account on a platform it does
+  not know would withdraw it. It keeps that account in the list as it is
   ([`docs/api/card-proof.md`](../docs/api/card-proof.md)).
 - A card proof cannot be made ahead with a platform that is not listed yet:
   the server rejects it, and its challenge expires after 10 minutes
@@ -155,6 +158,11 @@ to be confirmed against the platform's published rules before launch.
 None of the formats allows `"`, `\`, a control character or a non-ASCII
 character. Formats are matched against the whole value (in several
 languages `^…$` also accepts a trailing line feed).
+
+Every format is written as one character class followed by one length
+range, `[…]{m,n}`: which characters, and how many. A device gets the
+formats from the server as these strings and reads this one form itself, so
+a row never needs more of a regular expression language than that.
 
 ## Packing
 
@@ -181,9 +189,5 @@ bound to the proof only through the declaration code.
 
 [`vectors/scope.json`](vectors/scope.json): the accepted scope strings with
 their packed values; strings that are not accepted, with the reason;
-usernames valid and invalid for each format.
-
-The file still holds the vectors from before ADR-0017 (one scope per
-platform). It is to be regenerated for this document: the two scope strings
-above, platform IDs accepted and not accepted per roster, and usernames per
-platform.
+platform IDs accepted and not accepted by each roster; usernames valid and
+invalid for the format of each platform.

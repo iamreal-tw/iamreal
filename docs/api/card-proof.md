@@ -68,7 +68,7 @@ for all of them (ADR-0017).
 - Response `200`:
 
   ```
-  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_dates":["2026-03-02"]}},"count":137,"head":"…"}
+  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}},"count":137,"head":"…"}
   ```
 
   - `last_card_proof` and `proofs_on_last_date` are the card's. A card with
@@ -77,11 +77,20 @@ for all of them (ADR-0017).
     ([`spec/scope.md`](../../spec/scope.md)), keyed by the platform ID,
     whether or not the card declares an account there. The order of the
     entries means nothing.
-  - Each entry is the state of the card's slot on that platform. `current`
-    and `last_declared` are `null` when the rules have none; a slot the card
-    never used has both `null` and an empty `switch_dates`.
+  - Each entry is the state of the card's slot on that platform:
+    - `current` and `last_declared`: the account, or `null` when the rules
+      have none.
+    - `switch_count`: the number of switches the slot has used, 0 to 5.
+    - `correction_date`: the date of the slot's last `first` or `switch`,
+      that is, the day the slot last got an account that was new to it, or
+      `null`. It is not the date of a later `refresh`, `correction` or
+      `withdraw`.
+
+    A slot the card never used has `null`, `null`, 0 and `null`.
   - **The card's list** is the `current` of every entry where it is not
     `null`. It is not sent a second time in another form.
+  - The dates of the individual switches are not sent. The rules do not
+    read them; they are in the roster.
   - `count` and `head` are the number of records and the head the answer
     was computed at.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
@@ -92,36 +101,44 @@ them and from today's date in Taiwan by its own clock:
 | What the cardholder is told | How the device gets it |
 |---|---|
 | Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier |
-| Switches left on a platform | 2 minus the number of that entry's `switch_dates` on or after today − 364 days |
-| When a platform can be switched again, if none is left | 365 days after the second latest of that entry's `switch_dates` |
-| What a list would do on a platform | Its entry against `current` and `last_declared`: `first`, `refresh`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
+| Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
+| Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
+| What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
+| Whether the server may refuse a switch the rules allow | Yes if the change is a `switch` and `switch_count` is 3 or 4 (`switch_restricted`, below) |
 
 What the device does with it: shows the card's whole list, and lets the
 cardholder change it. Before the card signs, the device shows the whole list
 that will be signed and what it does on every platform, including the
-accounts it withdraws by leaving them out; a list that the rules would
-refuse (`switch_limit`, `empty`, `daily_limit`) is not offered. The device
-cannot check the answer without the whole roster. A wrong answer cannot
-identify the cardholder. It can mislead them: a state that hides an account
-would lead to a list without it, which withdraws it. The cardholder sees the
-list before signing, and the roster would show what the server answered
-wrongly.
+accounts it withdraws by leaving them out and the switches it uses up; a
+list that the rules would refuse (`switch_limit`, `empty`, `daily_limit`)
+is not offered. The device cannot check the answer without the whole
+roster. A wrong answer cannot identify the cardholder. It can mislead them:
+a state that hides an account would lead to a list without it, which
+withdraws it; a wrong `correction_date` would present a switch as free. The
+cardholder sees the list before signing, and the roster would show what the
+server answered wrongly.
 
-What the device does with what it cannot read:
+What the device does with what it cannot read. "A platform the device does
+not know" is one that has no row it can read in the platform table of
+`GET /api/v1/config`.
 
-- **`current` is not `null` on a platform the device does not know** (the
-  server's table is newer): the device does not go on to the declaration.
-  A list without that account would withdraw it, and the device cannot
-  check or show an account of a platform it does not know. It tells the
-  cardholder that the card declares an account this version cannot handle.
+- **`current` is not `null` on a platform the device does not know**: the
+  device keeps that account in the list exactly as it is, in its place in
+  the order of the list (ascending by platform ID, compared by byte
+  values), and shows it as a row that cannot be changed or removed. A list
+  without it would withdraw an account the cardholder did not choose to
+  withdraw. The device cannot check the `username` against a format; it
+  checks only what every platform ID and every `username` satisfy: the
+  platform ID is 1 to 21 characters of `a-z`, `0-9`, `-`, and the
+  `username` is 1 or more printable ASCII characters without `"` and `\`.
+  If either fails, the device treats the state as unread (below).
 - **An entry for a platform the device does not know, with `current`
-  `null`**: the device ignores it.
-- **A platform the device knows has no entry**: this roster does not accept
-  that platform. The device does not offer it.
-- **A response without `platforms`, or in which it cannot read
-  `last_card_proof`, `proofs_on_last_date` or the entry of a platform it
-  knows**: the device treats the state as unknown and does not go on to the
-  declaration. Without the state it cannot build the list.
+  `null`**: the device ignores it and does not offer the platform.
+- **A platform of the table has no entry**: the device does not offer it.
+- **No response, a response without `platforms`, or one in which it cannot
+  read `last_card_proof`, `proofs_on_last_date` or the entry of a platform
+  it knows**: the device treats the state as unread and does not go on to
+  the declaration. Without the state it cannot build the list.
 - **A field it does not know, in the response or inside an entry it can
   otherwise read**: the device ignores the field.
 
@@ -136,20 +153,27 @@ Submits one card proof: the card's whole list of accounts.
   {"scope_string":"…","scoped_id":"…","accounts":[{"platform":"threads","username":"alice"}],"challenge":"…","issuer":"G3","smt_root":"…","circuit":"…","proof":"…"}
   ```
 
-  `accounts` is required and is the whole list, in the form of the record:
-  ascending by `platform`, each platform at most once, `[]` for none. The
-  server does not sort it, does not merge it with the card's current list
-  and does not fill in anything. The list is what the card signed; any other
-  list fails verification.
+  `accounts` is required and is the whole list: the same accounts in the
+  same order as in the record, ascending by `platform`, each platform at
+  most once, `[]` for none. The server does not sort it, does not merge it
+  with the card's current list and does not fill in anything. The list is
+  what the card signed; any other list fails verification.
 
-- The server, in this order: checks every field's format; checks the
-  challenge (issued by it, less than 10 minutes ago, not accepted before, at
-  most 5 submissions); verifies the record
+  The request is JSON, not a line of the roster. The order of the keys of
+  the request and of an account, and whitespace between tokens, are free;
+  the server writes the roster line itself from the template. What is not
+  free is the content: the order of the accounts in the list, and one
+  account per platform.
+
+- The server, in this order: reads the request (below); checks every
+  field's format; checks the challenge (issued by it, less than 10 minutes
+  ago, not accepted before, at most 5 submissions); verifies the record
   ([`spec/proof-verification.md`](../../spec/proof-verification.md)); checks
   that `smt_root` is the root of one of the two newest CRLs of `issuer` in
   the mirror and that the newest is at most 3 days old; applies the roster
-  rules. If everything passes it appends the record and marks the challenge
-  as accepted, in one transaction.
+  rules; applies its own policy on switches (`switch_restricted`). If
+  everything passes it appends the record and marks the challenge as
+  accepted, in one transaction.
 - Response `201`:
 
   ```
@@ -159,26 +183,26 @@ Submits one card proof: the card's whole list of accounts.
   `kinds` has one entry for every platform on which the record has a kind
   ([`spec/roster-rules.md`](../../spec/roster-rules.md)), in ascending order
   of `platform`; there is at least one. `kind` is `first`, `refresh`,
-  `switch` or `withdraw`. `username` is the account: the one the list has
-  for that platform, or for `withdraw` the one that was withdrawn.
-  `account_cards` is the number of cards whose `current` on that platform is
-  that `username`, in the record's scope, once the record is applied (after
-  a withdrawal, the cards that still declare it). The same `username` on
-  another platform is another account and is not counted.
+  `correction`, `switch` or `withdraw`. `username` is the account: the one
+  the list has for that platform, or for `withdraw` the one that was
+  withdrawn. `account_cards` is the number of cards whose `current` on that
+  platform is that `username`, in the record's scope, once the record is
+  applied (after a withdrawal, the cards that still declare it). The same
+  `username` on another platform is another account and is not counted.
 
   The link the device suggests is the page of the card, by its short ID
   ([`spec/scoped-id.md`](../../spec/scoped-id.md)); it does not depend on
   this response. The device uses `kinds` to tell the cardholder what was
   recorded, and `account_cards` only to say whether other cards declare the
   same account. A wrong number cannot identify the cardholder. A device
-  that cannot read `kinds` or `account_cards` treats them as unknown and
-  says only that the list was recorded: the record is in the roster by
-  then.
+  that cannot read `kinds` or `account_cards`, or gets a `kind` it does not
+  know, treats them as unknown and says only that the list was recorded:
+  the record is in the roster by then.
 - Errors:
 
   | Status | Code | Meaning |
   |---|---|---|
-  | `400` | `malformed` | A field is not in its format |
+  | `400` | `malformed` | The request cannot be read, or a field is not in its format |
   | `400` | `scope` | The scope is not accepted by this roster |
   | `400` | `platform` | An account of the list is on a platform this roster does not accept |
   | `400` | `challenge_unknown` | Not issued by this server, or expired |
@@ -187,27 +211,58 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
   | `400` | `date_order`, `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
+  | `403` | `switch_restricted` | The roster rules accept the record, but it uses the fourth or fifth switch of a slot and the server's operating policy does not accept that switch. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
   | `429` | `rate_limited` | |
 
   A submission that fails leaves the challenge usable, up to the 5
   submissions.
 
-  When several apply, the first in this order: `scope`, `platform`,
-  `malformed`, `challenge_unknown`, `challenge_used`, `challenge_attempts`,
-  `proof`, `crl_stale`, `root`, then the roster rules in their own order. A
-  submission that is `scope`, `platform` or `malformed` does not count
-  towards the 5. `platform` is for a list whose every entry has the keys
-  `platform` and `username` as strings, one of the `platform` values not
-  being a platform ID of this roster. Everything else wrong with the list is
-  `malformed`: `accounts` missing or not a list, a platform twice, accounts
-  not in ascending order, a `username` that is not in the format of its
-  platform. A proof made for one list and submitted with another is
-  `proof`: the declaration code does not match.
+  **Reading the request**, and which of `malformed`, `scope` and `platform`
+  it gets:
+
+  1. The body is one JSON object with exactly the keys of the example, each
+     once, spelled as shown. Every value except `accounts` is a string;
+     `accounts` is present. Otherwise `malformed`: not JSON, a missing key
+     (also `accounts`), an extra key, a key twice, a key in another case, a
+     value of another type. This comes first because without it there is
+     no scope to look at.
+  2. `scope_string` is not a scope of this roster: `scope`.
+  3. `accounts` is a list, every element of it is an object with exactly
+     the two keys `platform` and `username`, each once, both strings, and
+     at least one `platform` is not a platform ID of this roster:
+     `platform`.
+  4. Anything else that is not in its format: `malformed`. For the list:
+     `accounts` is not a list; an element is not an object of exactly those
+     two string keys (an extra key, a key twice, a key in another case,
+     `null`), whatever the other elements are; a platform twice; accounts
+     not in ascending order; a `username` that is not in the format of its
+     platform.
+
+  A submission that ends at one of these four steps does not count towards
+  the 5.
+
+  When several of the later codes apply, the first in this order:
+  `challenge_unknown`, `challenge_used`, `challenge_attempts`, `proof`,
+  `crl_stale`, `root`, the roster rules in their own order, then
+  `switch_restricted`. A proof made for one list and submitted with another
+  is `proof`: the declaration code does not match.
 
   `switch_limit` does not say which platform is blocked. The device knows
   from the state it showed; if it is surprised by the code, the state has
   changed, and it asks for it again.
+
+  **`switch_restricted`** is a rule of the server, not of the roster
+  ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Not part of these
+  rules"). The roster rules give a card 5 switches on each platform. The
+  server may refuse the fourth and the fifth unless a condition of its
+  operating policy is met. It never refuses on this ground a record without
+  a `switch` (a `first`, `refresh`, `correction` or `withdraw` on every
+  platform), nor one whose switches are all among a slot's first three.
+  Nobody can check from the roster why a record was not appended; anybody
+  can check that a record that was appended is within the 5. How the
+  condition is met is not part of this document yet. The device tells the
+  cardholder before the card signs that such a switch may be refused.
 
   A device that gets a code it does not know shows it as an error of the
   server, with the request ID, and treats the card proof as not recorded.
@@ -218,10 +273,51 @@ Submits one card proof: the card's whole list of accounts.
 
 ## `GET /api/v1/config`
 
-- Response `200`: `{"crl_max_age_days":3}`
+- Response `200`:
 
-What the device does with it: uses the smaller of this number and its
-built-in 7 ([`spec/revocation-tree.md`](../../spec/revocation-tree.md)).
+  ```
+  {"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}
+  ```
+
+  - `platforms` is the platform table of this roster
+    ([`spec/scope.md`](../../spec/scope.md)), one element per row, in
+    ascending order of `platform`: the platform ID, the display name, and
+    the `username` format exactly as written in the table.
+
+The device asks for it at every card proof, before it shows the list.
+
+What the device does with `crl_max_age_days`: uses the smaller of this
+number and its built-in 7
+([`spec/revocation-tree.md`](../../spec/revocation-tree.md)).
+
+What the device does with `platforms`: offers these platforms, shows their
+display names, and checks a `username` the cardholder types against the
+format of its platform, as a whole value, before the declaration code is
+computed. A `username_format` is one character class followed by one
+length range, `[…]{m,n}` ([`spec/scope.md`](../../spec/scope.md)); the
+device reads that form itself, and a row whose format is not in it is a row
+it cannot read.
+
+**The table is a convenience for the device.** Which platforms a roster
+accepts, and in which format, is decided by the table of the specification,
+which every re-verifier has; a row the server adds on its own leads to
+records that make the roster file broken. The device does not take from
+this response, or from any other, which scope string the card signs
+(ADR-0016). A wrong table cannot identify the cardholder. It can mislead
+them, with a display name that belongs to another service, or lose them a
+card proof, with a platform or a format the roster does not accept; the
+cardholder sees the platform ID and the account in the list before
+signing.
+
+What the device does with what it cannot read:
+
+- **No response, or no `platforms` it can read**: the device does not go on
+  to the declaration. It has nothing to offer and nothing to check an
+  account against.
+- **A row it cannot read** (a key missing, a format not in the form
+  above): the platform of that row is one the device does not know
+  (`card-state`, above).
+- **A field it does not know**: the device ignores it.
 
 ## `GET /api/v1/head`
 
