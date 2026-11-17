@@ -34,11 +34,6 @@ TypeScript, and later the mobile apps) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 
-`roster-rules.json` was made for an earlier switch rule and is to be
-regenerated ([`roster-rules.md`](roster-rules.md), "Test vectors"). Until
-then that document and that file disagree, and so do the tests that read
-the file.
-
 ## Shared conventions
 
 - **Base32 alphabet**: Crockford, `0123456789ABCDEFGHJKMNPQRSTVWXYZ`.

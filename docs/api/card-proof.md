@@ -307,11 +307,11 @@ accepts, and in which format, is decided by the table of the specification,
 which every re-verifier has; a row the server adds on its own leads to
 records that make the roster file broken. The device does not take from
 this response, or from any other, which scope string the card signs
-(ADR-0016). A wrong table cannot identify the cardholder. It can mislead
-them, with a display name that belongs to another service, or lose them a
-card proof, with a platform or a format the roster does not accept; the
-cardholder sees the platform ID and the account in the list before
-signing.
+(ADR-0016). A wrong table cannot identify the cardholder, and it does not
+name the platforms the cardholder sees: the device shows its own names
+(ADR-0019). It can lose them a card proof, with a platform or a format the
+roster does not accept; the cardholder sees the platform ID and the account
+in the list before signing.
 
 What the device does with what it cannot read:
 
