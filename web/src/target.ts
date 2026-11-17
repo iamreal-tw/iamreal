@@ -1,13 +1,17 @@
-// What the page trusts that a test build replaces: the roster whose scope
-// string the card signs, the issuer keys, the address of MOICA's component,
-// and how long the PIN waits for the second signature. This file is the
-// production build's; the
-// headless browser test builds the page with test/e2e/target.ts in its
-// place (vite.config.ts, mode "test"), and test/build.test.ts checks that a
-// production build holds MOICA's keys, this address and nothing of the
-// test's.
+// What the page trusts that another build replaces: the roster whose scope
+// string the card signs, the platforms the page has its own definition of,
+// the issuer keys, the address of MOICA's component, and how long the PIN
+// waits for the second signature. This file is the production build's
+// (vite.config.ts, mode "production"). The headless browser test builds the
+// page with test/e2e/target.ts in its place (mode "test"); the build for a
+// real card on this computer (`pnpm local`) with src/target-local.ts (mode
+// "localcard"). test/build.test.ts checks that a production build holds MOICA's
+// keys, this address, the public roster's scope string and nothing of the
+// test's, and what the local build holds.
 import { IDLE_MS } from "./flow.ts";
 import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
+import type { Presentation } from "./platforms.ts";
+import { THREADS } from "./presentations/threads.ts";
 import type { Roster } from "./spec/scope.ts";
 
 /**
@@ -16,6 +20,9 @@ import type { Roster } from "./spec/scope.ts";
  * constant: never taken from a server's response or the page's address.
  */
 export const ROSTER: Roster = "production";
+
+/** The platforms of the production roster's table the page writes itself (src/platforms.ts). */
+export const PRESENTATIONS: readonly Presentation[] = Object.freeze([THREADS]);
 
 export const ISSUERS: readonly IssuerKey[] = MOICA_ISSUERS;
 

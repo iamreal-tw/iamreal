@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { CardError } from "../src/card/card.ts";
-import { HipkiCard, certificatesOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
+import { CLOSE_AGAIN_MS, HipkiCard, certificatesOfReply, replyError, signatureOfReply } from "../src/card/hipki.ts";
 
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 const certA = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x01);
@@ -153,6 +153,46 @@ describe("the component's window", () => {
       assert.ok(w.opened.every((o) => o.closed));
     } finally {
       w.restore();
+    }
+  });
+
+  // research/57: Chrome sometimes leaves open a window closed a few
+  // milliseconds after it was opened (its first page still loading in
+  // another process): `closed` turns true, then false again. The bridge looks
+  // again and closes it again.
+  test("a window that did not close the first time is closed again", async () => {
+    const g = globalThis as { window?: unknown };
+    const before = g.window;
+    let closes = 0;
+    let closed = false;
+    g.window = {
+      open: () => ({
+        get closed() {
+          return closed;
+        },
+        // The first close does not take: the window is open again right after.
+        close: () => {
+          closes++;
+          closed = closes > 1;
+        },
+        postMessage: () => undefined,
+      }),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    };
+    try {
+      const card = new HipkiCard("http://localhost:61161");
+      assert.equal(card.open(), true);
+      card.release();
+      assert.equal(closes, 1);
+      assert.equal(closed, false, "still open after the first close");
+      await new Promise((r) => setTimeout(r, CLOSE_AGAIN_MS[0]! + 50));
+      assert.equal(closed, true, "closed when looked at again");
+      assert.equal(closes, 2);
+      await new Promise((r) => setTimeout(r, CLOSE_AGAIN_MS.at(-1)! + 50));
+      assert.equal(closes, 2, "a window that is closed is not closed again");
+    } finally {
+      g.window = before;
     }
   });
 });

@@ -8,7 +8,7 @@
 import type { AcceptedKind } from "../api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../flow.ts";
 import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
-import { COPY, type Values } from "./copy.ts";
+import { COPY, type Values, fill } from "./copy.ts";
 
 export interface Sentence {
   template: string;
@@ -42,7 +42,7 @@ const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "c
 
 /** The format hint of a platform (design/copy/card-proof.json, `formats`); null if the copy has none. */
 export function formatHint(platform: string): Sentence | null {
-  const key = presentationOf(platform).formatHint;
+  const key = presentationOf(platform)?.formatHint ?? null;
   const hint = key === null ? undefined : (COPY.formats as Record<string, string>)[key];
   return hint === undefined ? null : say(hint);
 }
@@ -119,8 +119,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
     case "proof_check":
       return say(s.proof_check);
     case "username":
-      // The platform's hint; a platform the copy has no hint for shows the code.
-      return formatHint(stop.platform) ?? { code: "username" };
+      // The platform's hint; for a platform the copy has no hint for, the general sentence.
+      return formatHint(stop.platform) ?? say(COPY.accounts.format_no_hint);
     case "server": {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
@@ -139,8 +139,11 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.reason === "empty") return say(COPY.accounts.need_one);
       // The screen offers no change on a day with 3 records; the engine refuses one too.
       if (stop.reason === "daily_limit") return say(s.daily_limit);
-      // A switch the row says cannot be made (its lines say why): no sentence for typing one anyway.
-      return { code: stop.reason };
+      // Another account typed on a row that cannot switch (switch_limit, web_switch_limit).
+      return say(COPY.accounts.row_cannot_switch);
+    // The date changed since step 5, and the list would now do something else: nothing was signed.
+    case "date_changed":
+      return say(s.date_changed);
     // The wait for the second signature ran out: the screen is back at step 1.
     case "idle":
       return say(COPY.before.idle);
@@ -250,7 +253,9 @@ export function itemStates(items: readonly ListItem[], seen: ReadonlySet<Progres
  *   retry       progress.retry, besides: the submission did not get through
  *               ("submit_failed") and can be sent again as it is
  */
-export function progressButtons(phase: string): ("back" | "read_again" | "retry")[] {
+export function progressButtons(phase: string, stop?: Stop): ("back" | "read_again" | "retry" | "restart")[] {
+  // The date changed: nothing was signed, and the card proof starts again from the beginning (stops.date_changed).
+  if (stop?.code === "date_changed") return ["restart"];
   if (phase === "chosen") return ["back"];
   if (phase === "submit_failed") return ["read_again", "retry"];
   return ["read_again"];
@@ -277,8 +282,13 @@ export function daysBetween(from: string, to: string): number {
 export const APP_RELEASED = false;
 
 /** A platform's name on the screen: the server's display name, or for a platform the device does not know its ID. */
-export function platformName(slot: { platform: string; row: { displayName: string } | null }): string {
-  return slot.row === null ? slot.platform : slot.row.displayName;
+/**
+ * A platform's name on the screen: the device's own (src/platforms.ts), not
+ * the display name of the server's table; for a platform the device does
+ * not know (`row` null), its ID.
+ */
+export function platformName(slot: { platform: string; row: unknown }): string {
+  return (slot.row === null ? null : presentationOf(slot.platform)?.name) ?? slot.platform;
 }
 
 export interface AccountRowView {
@@ -287,6 +297,8 @@ export interface AccountRowView {
   name: string;
   /** What the screen writes before the account (`@`); "" for a platform the device does not know (shown as the server sent it). */
   prefix: string;
+  /** An account of a platform the device does not know: shown exactly as the server sent it, spaces included. */
+  raw: boolean;
   /** The account the row holds now ("" for none): what the field starts with. */
   current: string;
   /** A field the cardholder can type in; false for a platform the device does not know (kept as it is), and on a day with 3 records. */
@@ -346,10 +358,11 @@ export function accountsView(st: CardStatus): AccountsView {
   const rows: AccountRowView[] = st.slots.map((slot) => ({
     platform: slot.platform,
     name: platformName(slot),
-    prefix: slot.row === null ? "" : presentationOf(slot.platform).prefix,
+    prefix: slot.row === null ? "" : (presentationOf(slot.platform)?.prefix ?? ""),
+    raw: slot.row === null,
     current: slot.current ?? "",
     editable: slot.row !== null && !daily,
-    preview: slot.row !== null && !daily && presentationOf(slot.platform).profileUrl !== null,
+    preview: slot.row !== null && !daily && (presentationOf(slot.platform)?.profileUrl ?? null) !== null,
     lines: daily ? [] : rowLines(slot),
   }));
   const anyPreview = rows.some((r) => r.preview);
@@ -413,12 +426,19 @@ export function switchSentence(r: ConsequenceRow): Sentence | null {
   return say(c.uses_switch, { switches_left: r.webSwitchesLeftAfter! });
 }
 
+/** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
+export function rowSentences(r: ConsequenceRow): Sentence[] {
+  return [kindSentence(r), switchSentence(r)].filter((x): x is Sentence => x !== null);
+}
+
 export interface ConfirmRowView {
   platform: string;
   name: string;
-  /** The platform ID, shown beside the name: the display name comes from the server. */
+  /** The platform ID, shown beside the name. */
   id: string;
   account: string;
+  /** An account of a platform the device does not know, shown exactly as sent. */
+  raw: boolean;
   lines: Sentence[];
 }
 
@@ -448,7 +468,8 @@ export function confirmView(cq: Consequence): ConfirmView {
     name: platformName(r),
     id: r.platform,
     account: r.row === null ? r.username : handle(r.platform, r.username),
-    lines: [kindSentence(r), switchSentence(r)].filter((x): x is Sentence => x !== null),
+    raw: r.row === null,
+    lines: rowSentences(r),
   }));
   return {
     intro: empty ? c.intro_withdraw_all : c.intro,
@@ -467,10 +488,16 @@ export interface DoneRecordRow {
   platform: string;
   name: string;
   account: string;
+  /** An account of a platform the device does not know, shown exactly as sent. */
+  raw: boolean;
   /** What the server says was recorded on this platform; null where it has nothing for a platform the screen said it would. */
   kind: Sentence | null;
   /** The server's answer differs from what step 5 said for this platform. */
   mismatch: boolean;
+  /** Where it differs: what step 5 said for this row (done.mismatch_expected). */
+  expected: Sentence | null;
+  /** Where it differs and the server recorded a switch that step 5 did not call one: done.mismatch_switch_used. */
+  switchUsed: boolean;
 }
 
 export interface DoneView {
@@ -478,7 +505,9 @@ export interface DoneView {
   /** The list is empty: no animation, no card, no link, no advice. */
   withdrawAll: boolean;
   /** The card's list after this record: what the card shows. */
-  card: { name: string; account: string }[];
+  card: { name: string; account: string; raw: boolean }[];
+  /** What the server recorded differs from what step 5 said: done.mismatch, above the title. */
+  mismatch: Sentence | null;
   date: string;
   shortId: string;
   /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
@@ -512,11 +541,17 @@ export function doneTitle(d: Done): Sentence {
 export function doneView(d: Done): DoneView {
   const t = COPY.done;
   const expected = new Map(d.expected.map((r) => [r.platform, r]));
-  const nameOf = (platform: string): string => {
-    const r = expected.get(platform);
-    return r ? platformName(r) : platform;
+  // A platform step 5 did not show (the server's answer differs) is named as the device knows it.
+  const rowOf = (platform: string): { platform: string; row: unknown } => expected.get(platform) ?? { platform, row: presentationOf(platform) };
+  const nameOf = (platform: string): string => platformName(rowOf(platform));
+  const rawOf = (platform: string): boolean => rowOf(platform).row === null;
+  const accountOf = (platform: string, username: string): string => (rawOf(platform) ? username : handle(platform, username));
+  // done.mismatch_expected: step 5's sentences of the row, or that it had no such row.
+  const expectedOf = (platform: string): Sentence => {
+    const e = expected.get(platform);
+    const said = e ? rowSentences(e).map((x) => fill(x.template, x.values)).join("") : t.mismatch_no_platform;
+    return say(t.mismatch_expected, { expected: said });
   };
-  const accountOf = (platform: string, username: string): string => (expected.get(platform)?.row === null ? username : handle(platform, username));
   const link = `${SITE_DOMAIN}/${cardPath(d.shortId)}`;
   const rows: DoneRecordRow[] = [];
   if (d.kinds !== null) {
@@ -525,11 +560,21 @@ export function doneView(d: Done): DoneView {
       // The sentence of the kind recorded; kinds.switch names the account the screen knew was replaced.
       const previous = e ? e.previous ?? e.current : null;
       const sentence = (k.kind === "switch" || k.kind === "correction") && previous === null ? null : kindSentence({ ...k, current: e ? e.current : null, previous });
-      rows.push({ platform: k.platform, name: nameOf(k.platform), account: accountOf(k.platform, k.username), kind: sentence, mismatch: d.mismatches.includes(k.platform) });
+      const mismatch = d.mismatches.includes(k.platform);
+      rows.push({
+        platform: k.platform,
+        name: nameOf(k.platform),
+        account: accountOf(k.platform, k.username),
+        raw: rawOf(k.platform),
+        kind: sentence,
+        mismatch,
+        expected: mismatch ? expectedOf(k.platform) : null,
+        switchUsed: mismatch && k.kind === "switch" && e?.kind !== "switch",
+      });
     }
     for (const e of d.expected) {
       if (d.kinds.some((k) => k.platform === e.platform)) continue;
-      rows.push({ platform: e.platform, name: nameOf(e.platform), account: accountOf(e.platform, e.username), kind: null, mismatch: true });
+      rows.push({ platform: e.platform, name: nameOf(e.platform), account: accountOf(e.platform, e.username), raw: rawOf(e.platform), kind: null, mismatch: true, expected: expectedOf(e.platform), switchUsed: false });
     }
     rows.sort((a, b) => (a.platform < b.platform ? -1 : a.platform > b.platform ? 1 : 0));
   }
@@ -538,7 +583,8 @@ export function doneView(d: Done): DoneView {
   return {
     title: doneTitle(d),
     withdrawAll,
-    card: d.accounts.map((a) => ({ name: nameOf(a.platform), account: accountOf(a.platform, a.username) })),
+    card: d.accounts.map((a) => ({ name: nameOf(a.platform), account: accountOf(a.platform, a.username), raw: rawOf(a.platform) })),
+    mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,
     date: d.date,
     shortId: d.shortId,
     link,

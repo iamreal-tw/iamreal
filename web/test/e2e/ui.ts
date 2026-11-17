@@ -303,7 +303,7 @@ const browser = await Browser.launch({ dir: out, args: ["--host-resolver-rules=M
 const page = await browser.newPage();
 await page.send("Page.enable");
 const C = COPY;
-const threadsUrl = presentationOf(THREADS).profileUrl!;
+const threadsUrl = presentationOf(THREADS)!.profileUrl!;
 
 // The windows the page opens (the component's). Each has a name of its own
 // (src/card/hipki.ts), so none is reused by name: the last one must be
@@ -378,6 +378,12 @@ async function setDay(n: number): Promise<void> {
   clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(n) })).identifier as string;
   await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
   console.log(`\n== day ${n}: ${today()}`);
+}
+/** Moves the page's clock alone to `days` (whole or not) ahead of the machine's; the server's stays. */
+async function setPageClock(days: number): Promise<void> {
+  await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
+  clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(days) })).identifier as string;
+  await page.eval(`window.__iamrealClockDays = ${days}`).catch(() => undefined);
 }
 // "複製連結" writes to the clipboard; the test reads it back.
 await browser.send("Browser.grantPermissions", { origin: PAGE_ORIGIN, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
@@ -1026,7 +1032,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   // A platform the copy has no format hint for: the code, under its row.
   await typeRows({ [EXAMPLE]: "A_B", [THREADS]: "alice" });
   const ex = (await rowsOnScreen()).find((r) => r.platform === EXAMPLE)!.why;
-  check(ex === "username" && (await page.eval<boolean>(`!!${step("accounts")}`)), `an account not in the format of a platform with no hint in the copy: the code under its row ("${ex}")`);
+  check(ex === A.format_no_hint && (await page.eval<boolean>(`!!${step("accounts")}`)), `an account not in the format of a platform with no hint in the copy: the general sentence under its row ("${ex}")`);
   await screenshot("first-4-accounts-format-no-hint");
   check(componentCount() === signs && challengeCount() === 0, "step 4's messages: nothing signed, no challenge");
   await typeRows({ [EXAMPLE]: "", [THREADS]: "alice" });
@@ -1070,7 +1076,16 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
 }
 
 await tryStep("card proof again, nothing changed (the first submission dropped, then 再試一次)", async () => {
-  const st = await toAccounts({ screenshots: "refresh" });
+  // The server's table names the platforms otherwise: the screen writes the page's own names (src/platforms.ts).
+  const seenConfig: any[] = [];
+  const undoConfig = await rewrite("*/api/v1/config", (b) => void b.platforms.forEach((r: Record<string, string>) => (r.display_name = "Not " + r.display_name)), seenConfig);
+  let st: AccountsSeen;
+  try {
+    st = await toAccounts({ screenshots: "refresh" });
+  } finally {
+    await undoConfig();
+  }
+  check(seenConfig.length === 1 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are");
   check(JSON.stringify(st.lead) === JSON.stringify([lastProof(0)]), `step 4: ${JSON.stringify(st.lead)}`);
   checkAccountsNotes("refresh", st, "declared");
   checkRows("refresh", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "", [A.row_unused]], [THREADS]: [THREADS_NAME, "alice", [count(0), A.row_today]] });
@@ -1371,6 +1386,15 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
     mismatch: [THREADS],
     screenshots: "mismatch",
   });
+  const note = await page.text("[data-mismatch-note]");
+  const firstLine = (await page.text("[data-step=\"done\"]")).split("\n").filter(Boolean)[0];
+  check(note === C.done.mismatch && firstLine === C.done.mismatch, `the difference, first of all, above the title: "${note}"`);
+  const expected = await page.text(`dd[data-done-row="${THREADS}"] [data-expected]`);
+  const used = await page.text(`dd[data-done-row="${THREADS}"] [data-switch-used]`);
+  check(
+    expected === fill(C.done.mismatch_expected, { expected: fill(K.switch, { previous: at("bob") }) + C.confirm.switch_not_counted }) && used === C.done.mismatch_switch_used,
+    `under the row: what step 5 said ("${expected}"), and that a switch was used ("${used}")`,
+  );
 });
 
 // Day 4 -----------------------------------------------------------------------------
@@ -1419,7 +1443,7 @@ await tryStep("3 switches: the row says none is left on the web; another account
   const challenges = challengeCount();
   await typeRows({ [THREADS]: "erin" });
   const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)!.why;
-  check(why === "web_switch_limit" && (await page.eval<boolean>(`!!${step("accounts")}`)), `a fourth switch on the web: refused, the code under the row ("${why}")`);
+  check(why === A.row_cannot_switch && (await page.eval<boolean>(`!!${step("accounts")}`)), `a fourth switch on the web: refused, the sentence under the row ("${why}")`);
   await screenshot("web-limit-4-accounts-refused");
   check(componentCount() === requests && challengeCount() === challenges, "refused: nothing asked of the component, no challenge");
   await typeRows({ [THREADS]: "dave" });
@@ -1661,6 +1685,50 @@ await tryStep("5 switches: step 4 says none is left; a sixth refused by the rost
   await screenshot("switch-limit-5-progress");
 });
 
+// The card's state says test-example's account was put there today (as if it had been), step 5
+// says changing it is a correction; midnight passes before the button is pressed. On the new date
+// the change is a switch: nothing is signed, the sentence, and 回到開頭 only.
+await tryStep("the date changes while step 5 is up: not signed, stops.date_changed, 回到開頭", async () => {
+  // The page's clock (only the page's) set to 23:59:47 in Taiwan of the test's day, so that midnight
+  // passes for real while step 5 is up, within the PIN's wait (25 s in the test build) from the first signature.
+  const target = Date.parse(`${today()}T23:59:47+08:00`);
+  const midnight = target + 13_000; // 00:00:00 of the next day in Taiwan
+  try {
+    await setPageClock((target - Date.now()) / 86_400_000);
+    const undo = await rewrite("*/api/v1/card-state", (b) => {
+      b.platforms[EXAMPLE].correction_date = today();
+      b.last_card_proof = today();
+      b.proofs_on_last_date = 1;
+    });
+    try {
+      await toAccounts();
+    } finally {
+      await undo();
+    }
+    await typeRows({ [EXAMPLE]: "a-c" });
+    const c = await waitConfirm();
+    check(JSON.stringify(c.rows[0]?.kinds) === JSON.stringify([fill(K.switch, { previous: "a-b" }), C.confirm.switch_not_counted]), `step 5 says a correction: ${JSON.stringify(c.rows[0]?.kinds)}`);
+    const pageNow = await page.eval<number>("Date.now()");
+    check(pageNow < midnight, `step 5 is up before midnight (${Math.round((midnight - pageNow) / 1000)} s left)`);
+    await sleep(Math.max(0, midnight - pageNow) + 1000);
+    const signs = componentCount("MakeSignature");
+    const challenges = challengeCount();
+    const before = await recordCount();
+    await page.clickButton(C.confirm.button_declare);
+    const d = await waitDoneOrMessage();
+    check(!d.done && d.item === "server" && d.message === C.stops.date_changed, `under 連上島民的伺服器: "${d.message}" (${d.item})`);
+    check(JSON.stringify(await buttonTexts()) === JSON.stringify([A.restart]), `回到開頭 only: ${JSON.stringify(await buttonTexts())}`);
+    await screenshot("date-changed-5-progress");
+    await sleep(500);
+    check(componentCount("MakeSignature") === signs && challengeCount() === challenges && (await recordCount()) === before, "no second signature, no challenge, nothing recorded");
+    await page.clickButton(A.restart);
+    await backAtTheBeginning("回到開頭 after the date changed");
+  } finally {
+    // The page's clock back to the test's whole days.
+    await setPageClock(day);
+  }
+});
+
 // 5. Snapshot and re-verification -----------------------------------------------
 
 /** The kinds of the main card's records, in roster order, as the screens' step 6 showed them. */
@@ -1846,12 +1914,13 @@ await tryStep("確認卡片 pressed again while the card is confirmed: one signa
     await confirmPin(PIN);
     for (let i = 0; i < 200 && held.length === 0; i++) await sleep(50);
     check(held.length === 1, "the first card-state is on its way, its answer held");
-    const during = await page.eval<{ pin: boolean | null; button: boolean | null; working: string }>(`({
+    const during = await page.eval<{ pin: boolean | null; button: boolean | null; back: boolean | null; working: string }>(`({
+      back: [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.common.back)})?.disabled ?? null,
       pin: document.querySelector('#pin')?.disabled ?? null,
       button: [...document.querySelectorAll('main button')].find((b) => b.textContent === ${JSON.stringify(C.pin.confirm_card)})?.disabled ?? null,
       working: document.querySelector('[data-working]')?.innerText ?? "",
     })`);
-    check(during.pin === true && during.button === true && during.working === C.pin.signing, `while the card is confirmed, the PIN field and the button cannot be used: ${JSON.stringify(during)}`);
+    check(during.pin === true && during.button === true && during.back === true && during.working === C.pin.signing, `while the card is confirmed, the PIN field, the button and 上一步 cannot be used: ${JSON.stringify(during)}`);
     await screenshot("signing-3-pin");
     // Typed and pressed again anyway, with the keyboard and the mouse.
     await confirmPin(PIN);
@@ -1873,7 +1942,7 @@ await tryStep("確認卡片 pressed again while the card is confirmed: one signa
 });
 
 /** A case that stops on step 2, before the PIN is asked: the reason under its item. */
-async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, item: string, o: { setup?: () => Promise<() => Promise<void>>; silent?: boolean; screenshot?: string } = {}): Promise<void> {
+async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, item: string, o: { setup?: () => Promise<() => Promise<void>>; silent?: boolean; screenshot?: string; requestId?: boolean } = {}): Promise<void> {
   component.card = card;
   component.silent = o.silent ?? false;
   await open();
@@ -1882,7 +1951,11 @@ async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected
   const signs = componentCount("MakeSignature");
   const cardStates = cardStateCount();
   const r = await readCard();
-  check(!r.done && r.item === item && r.why === expected, `${label}: under "${item}": "${r.why}"`);
+  // An answer of the server the page cannot read: its request ID on the next line (research/57, 14).
+  const why = o.requestId ? r.why.split("\n")[0] : r.why;
+  const idLine = o.requestId ? (r.why.split("\n")[1] ?? "") : "";
+  check(!r.done && r.item === item && why === expected, `${label}: under "${item}": "${r.why}"`);
+  if (o.requestId) check(new RegExp("^" + fill(C.stops.request_id, { request_id: "[0-9a-f]{16}" }) + "$").test(idLine), `${label}: the request ID on the next line: "${idLine}"`);
   const list = await items("read");
   const at = READ_KEYS.indexOf(item);
   check(list[at]?.st === C.common.halted && list.slice(at + 1).every((i) => i.state === ""), `${label}: 停在這裡, nothing after it ${JSON.stringify(list.map((i) => i.state))}`);
@@ -1947,7 +2020,7 @@ const tests: [string, FakeCardSpec | null, string, string, Parameters<typeof sto
     main.spec(),
     fill(C.stops.server_unreadable, { code: "malformed_response" }),
     "server",
-    { setup: () => rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.map((p: Record<string, string>) => ({ ...p, username_format: "^[a-z]+$" })))), screenshot: "stop-2-platform-table" },
+    { setup: () => rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.map((p: Record<string, string>) => ({ ...p, username_format: "^[a-z]+$" })))), screenshot: "stop-2-platform-table", requestId: true },
   ],
 ];
 for (const [label, card, expected, item, o] of tests) await tryStep(`before the PIN: ${label}`, () => stopsBeforePin(label, card, expected, item, o));
@@ -2018,6 +2091,29 @@ await tryStep("the answer's kinds the page cannot read: 名冊已經記下這次
     await undo();
   }
   check(seen.length === 1 && Array.isArray(seen[0].kinds), "the server's answer had kinds; the page got a kind it does not know");
+});
+
+await tryStep("a 201 whose body the page cannot read: 名冊已經記下這次過卡, not a failure", async () => {
+  component.card = other.spec();
+  await toAccounts();
+  await page.clickButton(C.common.next);
+  await waitConfirm();
+  const undo = await rewrite("*/api/v1/records", () => ({ unexpected: true }));
+  try {
+    await finish({
+      label: "201 unreadable",
+      button: C.confirm.button_refresh,
+      title: C.done.recorded_only,
+      card: [
+        [EXAMPLE_NAME, "z-1"],
+        [THREADS_NAME, at("zoe")],
+      ],
+      record: null,
+      screenshots: "unreadable-201",
+    });
+  } finally {
+    await undo();
+  }
 });
 
 await tryStep("the answer to the submission lost, the record appended: 再試一次 gets challenge_used, the card's state shows the list (the real server)", async () => {
@@ -2110,12 +2206,12 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(workers > 0, `the requests of the workers were seen too (${workers})`);
   const csp = browser.logs.filter((l) => /Content Security Policy/i.test(l.text));
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
-  // Two windows had no request: the silent component's, and the one opened for the second
-  // signature that the challenge of another day stopped (the window is closed unused).
-  // The blocked clicks opened none. A PIN the bridge does not send: its window is closed unused
-  // (and may not have loaded).
+  // Three windows had no request: the silent component's, and the two opened for the second
+  // signature that the challenge of another day and the date that changed on step 5 stopped
+  // (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
+  // window is closed unused (and may not have loaded).
   check(
-    popups.size === component.requests.length + 2 + unusedWindows && unusedWindows <= 3,
+    popups.size === component.requests.length + 3 + unusedWindows && unusedWindows <= 3,
     `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");

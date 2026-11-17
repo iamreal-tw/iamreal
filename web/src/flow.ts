@@ -133,6 +133,13 @@ export type Stop =
   | { code: "server"; server: string; status: number; requestId?: string }
   /** The account typed for `platform` is not in that platform's format. */
   | { code: "username"; platform: string }
+  /**
+   * The date changed after the list was confirmed (midnight passed before the
+   * button was pressed, or while the challenge was on its way), and on the
+   * new date the list would do something other than the screen said (a
+   * correction turned into a switch). The card did not sign it.
+   */
+  | { code: "date_changed" }
   /** The caller called a step out of order. */
   | { code: "state" };
 
@@ -149,6 +156,12 @@ export interface FlowDeps {
   roster: Roster;
   /** The issuer keys the page trusts: MOICA_ISSUERS in the page, test keys in tests. */
   issuers: readonly IssuerKey[];
+  /**
+   * The platforms the page has its own definition of (src/platforms.ts). A
+   * platform of the server's table is offered only if it is one of them;
+   * any other is a platform the device does not know.
+   */
+  knownPlatforms: ReadonlySet<string>;
   fetch: Fetch;
   /** Milliseconds since the epoch (Date.now in the page). */
   clock: () => number;
@@ -440,6 +453,17 @@ export class CardProofFlow {
     if (!this.stopped) this.stopped = stop;
     this.phaseValue = "stopped";
     this.dropSecrets();
+    this.dropState();
+  }
+
+  /** The card's scoped ID, state, list and record: not secret, but not kept once the card proof ended. */
+  private dropState(): void {
+    this.scopedIdValue = null;
+    this.status = null;
+    this.state = null;
+    this.chosen = null;
+    this.choice = null;
+    this.submission = null;
   }
 
   private expect(...phases: Phase[]): void {
@@ -542,11 +566,7 @@ export class CardProofFlow {
   /** Drops everything. The flow cannot continue. */
   cancel(): void {
     this.dropSecrets();
-    this.submission = null;
-    this.status = null;
-    this.state = null;
-    this.chosen = null;
-    this.choice = null;
+    this.dropState();
     if (!this.stopped) this.stopped = { code: "state" };
     this.phaseValue = "stopped";
   }
@@ -664,7 +684,7 @@ export class CardProofFlow {
         progress("tree");
         await circuitP;
         await this.deps.prover.ready();
-        bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays, platforms: config.platforms };
+        bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays, platforms: config.platforms.filter((r) => this.deps.knownPlatforms.has(r.platform)) };
         return bg.done;
       } finally {
         builderP.then((b) => b.close(), () => undefined);
@@ -839,7 +859,30 @@ export class CardProofFlow {
     // Check 6 after the event rules, in the order of the rules.
     if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
     const accounts = [...list].map(([platform, username]) => Object.freeze({ platform, username })).sort(byPlatform);
+    // What the screen shows is what the card signs: the rows that are not a
+    // withdrawal are the list, account by account, in its order.
+    if (!sameList(rows.filter((r) => r.kind !== "withdraw"), accounts)) throw new FlowStop({ code: "state" });
     return { accounts, rows, firstRecord: state.lastCardProof === null, today: formatDay(today) };
+  }
+
+  /**
+   * The chosen list, worked out again on today's date by the device's clock:
+   * the same list must do on every platform what the screen said. Only the
+   * date can make it differ (the card's state is the one the screen showed),
+   * so a difference, or a list no longer possible, is `date_changed`.
+   */
+  private sameAsShown(): void {
+    const chosen = this.chosen!;
+    let again: Consequence;
+    try {
+      again = this.consequenceOf(this.choice!);
+    } catch (e) {
+      const stop = toStop(e);
+      this.fail(stop.code === "blocked" ? { code: "date_changed" } : stop);
+    }
+    // The same list from the same choice: a different list is a program error.
+    if (!sameList(again.accounts, chosen.accounts)) this.fail({ code: "state" });
+    if (!sameRows(again.rows, chosen.rows)) this.fail({ code: "date_changed" });
   }
 
   // Step 3: the card signs the declaration code, then prove and submit --------
@@ -855,14 +898,8 @@ export class CardProofFlow {
     this.checkIdle();
     const chosen = this.chosen!;
     if (!sameList(confirmed, chosen.accounts)) this.fail({ code: "state" });
-    // Again, with today's date: a list that is no longer possible, or that would do something else, is not signed.
-    let again: Consequence;
-    try {
-      again = this.consequenceOf(this.choice!);
-    } catch (e) {
-      this.fail(toStop(e));
-    }
-    if (!sameList(again.accounts, chosen.accounts) || !sameRows(again.rows, chosen.rows)) this.fail({ code: "state" });
+    // Again, with today's date: a list that would now do something else is not signed.
+    this.sameAsShown();
     this.checkBackground();
     // The certificate and the CRL, again with today's date: the card may have
     // been read before midnight. No challenge is asked for if they no longer pass.
@@ -886,6 +923,12 @@ export class CardProofFlow {
     }
     // Midnight may have passed while the server answered.
     this.checkStillValid(today);
+    // Midnight may have passed while the challenge was on its way. The record
+    // is dated the challenge's date (today, checked above): what the list
+    // does is worked out again on it, and a list that would now do something
+    // other than the screen said (a correction that is a switch on the new
+    // date) is not signed.
+    this.sameAsShown();
     this.progress("challenge");
     const challengeText = challenge as string;
     const code = await declarationCode(this.scopeStringValue, accounts, challengeText);

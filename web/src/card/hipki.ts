@@ -147,6 +147,17 @@ export class HipkiCard implements Card {
 }
 
 /** One window of the component: one request, one reply. */
+/** When a closed window is looked at again, and closed again if it is still open (Popup.close). */
+export const CLOSE_AGAIN_MS: readonly number[] = [100, 300, 1000];
+
+function closeWindow(win: Window | null): void {
+  try {
+    if (win && !win.closed) win.close();
+  } catch {
+    // A window that cannot be reached is already gone.
+  }
+}
+
 class Popup {
   private readonly origin: string;
   private readonly win: Window | null;
@@ -189,13 +200,19 @@ class Popup {
     return this.win !== null;
   }
 
+  /**
+   * Closes the window, and looks again later: Chrome does not always close a
+   * window closed a few milliseconds after it was opened, while its first
+   * page is still loading in another process (this page's
+   * Document-Isolation-Policy puts the component's window in one). `closed`
+   * turns true, then false again, and the window stays on the screen. Each
+   * look closes it again if it is still open (CLOSE_AGAIN_MS).
+   */
   close(): void {
     window.removeEventListener("message", this.onMessage);
-    try {
-      if (this.win && !this.win.closed) this.win.close();
-    } catch {
-      // A window that cannot be reached is already gone.
-    }
+    const win = this.win;
+    closeWindow(win);
+    if (win) for (const ms of CLOSE_AGAIN_MS) setTimeout(() => closeWindow(win), ms);
   }
 
   private closed(): boolean {

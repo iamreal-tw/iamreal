@@ -91,6 +91,14 @@ function requestIdOf(res: Response): string | null {
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
+/** The X-Request-Id of each answer read, so that an answer the device cannot read is reported with it. */
+const ids = new WeakMap<object, string | null>();
+
+/** `malformed_response` for the answer `body`, with its request ID. */
+function unreadable(body: Record<string, unknown>, status: number): ServerError {
+  return new ServerError("malformed_response", status, ids.get(body) ?? null);
+}
+
 async function request(fetchFn: Fetch, path: string, init: { method: "GET" | "POST"; body?: string }, okStatus: number): Promise<Record<string, unknown>> {
   const { res, body } = await withTimeout(API_TIMEOUT_MS, async (signal) => {
     let res: Response;
@@ -114,6 +122,7 @@ async function request(fetchFn: Fetch, path: string, init: { method: "GET" | "PO
     throw new ServerError(code, res.status, requestIdOf(res));
   }
   if (!isObject(body)) throw new ServerError("malformed_response", res.status, requestIdOf(res));
+  ids.set(body, requestIdOf(res));
   return body;
 }
 
@@ -170,19 +179,19 @@ function isDisplayName(x: unknown): x is string {
 export async function requestConfig(fetchFn: Fetch): Promise<Config> {
   const b = await request(fetchFn, "/api/v1/config", { method: "GET" }, 200);
   const n = b.crl_max_age_days;
-  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) throw new ServerError("malformed_response", 200);
-  if (!Array.isArray(b.platforms)) throw new ServerError("malformed_response", 200);
-  const ids: string[] = [];
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) throw unreadable(b, 200);
+  if (!Array.isArray(b.platforms)) throw unreadable(b, 200);
+  const named: string[] = [];
   const rows: PlatformRow[] = [];
   for (const r of b.platforms as unknown[]) {
     if (!isObject(r) || !isPlatformId(r.platform)) continue;
-    ids.push(r.platform);
+    named.push(r.platform);
     const format = parseUsernameFormat(r.username_format);
     if (format === null || !isDisplayName(r.display_name)) continue;
     rows.push(Object.freeze({ platform: r.platform, displayName: r.display_name, format }));
   }
-  for (let i = 1; i < ids.length; i++) if (!(ids[i - 1]! < ids[i]!)) throw new ServerError("malformed_response", 200);
-  if (rows.length === 0) throw new ServerError("malformed_response", 200);
+  for (let i = 1; i < named.length; i++) if (!(named[i - 1]! < named[i]!)) throw unreadable(b, 200);
+  if (rows.length === 0) throw unreadable(b, 200);
   return { crlMaxAgeDays: n, platforms: Object.freeze(rows) };
 }
 
@@ -224,7 +233,7 @@ export interface CardStateResponse extends CardState {
 export async function requestCardState(fetchFn: Fetch, scopeString: string, scopedId: string, table: readonly PlatformRow[], today: Day): Promise<CardStateResponse> {
   const b = await request(fetchFn, "/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) }, 200);
   const bad = (): never => {
-    throw new ServerError("malformed_response", 200);
+    throw unreadable(b, 200);
   };
   const day = (x: unknown): Day | null => {
     if (x === null) return null;
@@ -302,9 +311,16 @@ export interface AcceptedKind {
   accountCards: number | null;
 }
 
+/**
+ * The answer to a submission with status 201: the record is in the roster.
+ * An answer whose body the device cannot read (no `seq` or `record_hash` in
+ * their form) is still a 201: `seq`, `recordHash` and `kinds` are then null,
+ * and the screen says only that the record was made
+ * (docs/api/card-proof.md: "says only that the list was recorded").
+ */
 export interface Accepted {
-  seq: number;
-  recordHash: string;
+  seq: number | null;
+  recordHash: string | null;
   /**
    * `kinds`, in ascending order of platform; null if the device cannot read
    * it (not a non-empty list of readable elements in that order, or a kind it
@@ -341,11 +357,20 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
     circuit: s.circuit,
     proof: s.proof,
   });
-  const b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
-  if (!Number.isSafeInteger(b.seq) || (b.seq as number) < 1) throw new ServerError("malformed_response", 201);
-  if (typeof b.record_hash !== "string" || !/^[0-9a-f]{64}$/.test(b.record_hash)) throw new ServerError("malformed_response", 201);
-  // seq and record_hash are read strictly; kinds and account_cards are only told to the cardholder (Accepted.kinds).
-  return { seq: b.seq as number, recordHash: b.record_hash, kinds: readKinds(b.kinds) };
+  let b: Record<string, unknown>;
+  try {
+    b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
+  } catch (e) {
+    // A 201 is a record in the roster, whatever its body: not a failure (Accepted).
+    if (e instanceof ServerError && e.status === 201) return { seq: null, recordHash: null, kinds: null };
+    throw e;
+  }
+  const seq = Number.isSafeInteger(b.seq) && (b.seq as number) >= 1 ? (b.seq as number) : null;
+  const recordHash = typeof b.record_hash === "string" && /^[0-9a-f]{64}$/.test(b.record_hash) ? b.record_hash : null;
+  // An answer of which seq or record_hash cannot be read is one the device cannot read: nothing of it is told.
+  if (seq === null || recordHash === null) return { seq: null, recordHash: null, kinds: null };
+  // kinds and account_cards are only told to the cardholder (Accepted.kinds).
+  return { seq, recordHash, kinds: readKinds(b.kinds) };
 }
 
 /** A static file of the mirror, as bytes. */

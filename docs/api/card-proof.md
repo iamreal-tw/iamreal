@@ -261,8 +261,9 @@ Submits one card proof: the card's whole list of accounts.
   platform), nor one whose switches are all among a slot's first three.
   Nobody can check from the roster why a record was not appended; anybody
   can check that a record that was appended is within the 5. How the
-  condition is met is not part of this document yet. The device tells the
-  cardholder before the card signs that such a switch may be refused.
+  condition is met is not part of this document yet. A device may leave out
+  the switches the server's policy may refuse, and not offer them; the web
+  page does so.
 
   A device that gets a code it does not know shows it as an error of the
   server, with the request ID, and treats the card proof as not recorded.
@@ -290,13 +291,16 @@ What the device does with `crl_max_age_days`: uses the smaller of this
 number and its built-in 7
 ([`spec/revocation-tree.md`](../../spec/revocation-tree.md)).
 
-What the device does with `platforms`: offers these platforms, shows their
-display names, and checks a `username` the cardholder types against the
-format of its platform, as a whole value, before the declaration code is
-computed. A `username_format` is one character class followed by one
-length range, `[…]{m,n}` ([`spec/scope.md`](../../spec/scope.md)); the
-device reads that form itself, and a row whose format is not in it is a row
-it cannot read.
+What the device does with `platforms`: offers the platforms of this table
+that it has a definition of its own for (their names, how an account is
+written), shows its own names for them, not the `display_name` of this
+table, and checks a `username` the cardholder types against the format of
+its platform given here, as a whole value, before the declaration code is
+computed. A platform of this table that the device has no definition of its
+own for is a platform the device does not know (`card-state`, above). A
+`username_format` is one character class followed by one length range,
+`[…]{m,n}` ([`spec/scope.md`](../../spec/scope.md)); the device reads that
+form itself, and a row whose format is not in it is a row it cannot read.
 
 **The table is a convenience for the device.** Which platforms a roster
 accepts, and in which format, is decided by the table of the specification,

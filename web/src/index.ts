@@ -10,6 +10,7 @@ import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
+import { KNOWN_PLATFORMS } from "./platforms.ts";
 import { localStorageStore } from "./storage.ts";
 import { IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
 
@@ -37,6 +38,7 @@ export function createCardProof(opts: {
   return new CardProofFlow({
     roster: ROSTER,
     issuers: ISSUERS,
+    knownPlatforms: KNOWN_PLATFORMS,
     fetch: sameOriginFetch,
     clock: () => Date.now(),
     store: localStorageStore(),
@@ -70,5 +72,5 @@ export {
 export type { AcceptedKind, PlatformRow } from "./api.ts";
 export type { Account } from "./spec/declaration-code.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
-export { SITE_DOMAIN, cardPath, handle, presentationOf } from "./platforms.ts";
+export { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "./platforms.ts";
 export type { Prover, ThreadMode } from "./prover/prover.ts";

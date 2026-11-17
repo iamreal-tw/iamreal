@@ -12,6 +12,7 @@ import { declarationCode, declarationPreimage } from "../src/spec/declaration-co
 import { fieldBytes, pack31 } from "../src/spec/field.ts";
 import { type CardState, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/spec/roster-rules.ts";
 import { presentationOf } from "../src/platforms.ts";
+import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
 import { lookupScope, scopeOf } from "../src/spec/scope.ts";
 import { parseScopedId, scopedIdText, shortId } from "../src/spec/scoped-id.ts";
 import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/spec/username-format.ts";
@@ -153,14 +154,14 @@ describe("scope.json", () => {
     for (const bad of ["", "Threads", "threads_", "a:b", "x".repeat(22), "a b", null]) assert.equal(isPlatformId(bad), false, JSON.stringify(bad));
   });
   test("Threads' normalize lowercases ASCII only", () => {
-    const normalize = presentationOf("threads").normalize;
+    const normalize = presentationOf("threads")!.normalize;
     const format = parseUsernameFormat(tables.production[0]!.format)!;
     assert.equal(normalize("@Alice"), "alice");
     assert.equal(normalize("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
     assert.equal(format.accepts(normalize("Kelvin")), false);
-    // A platform the page has nothing of its own for: the name as typed.
-    assert.equal(presentationOf("test-example").normalize("@A-b"), "@A-b");
-    assert.equal(presentationOf("test-example").prefix, "");
+    // test-example (test builds only): the name as typed, no prefix.
+    assert.equal(TEST_EXAMPLE.normalize("@A-b"), "@A-b");
+    assert.equal(TEST_EXAMPLE.prefix, "");
   });
 });
 

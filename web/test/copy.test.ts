@@ -47,6 +47,8 @@ const EXAMPLES: Record<string, string> = {
   step: "2",
   steps: "6",
   domain: SITE_DOMAIN,
+  // done.mismatch_expected: the sentences of step 5's row (a switch, and that it is a correction).
+  expected: "更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。",
 };
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {
@@ -76,7 +78,7 @@ const VALUES = new Set([
   `${SITE_DOMAIN}/${cardPath(EXAMPLES.short_id!)}`,
   "Threads",
   "X",
-  presentationOf("threads").prefix,
+  presentationOf("threads")!.prefix,
 ]);
 /** Entries that are not in card-proof.md on purpose. */
 const NOT_IN_MD = new Set(["not_in_card_proof_md.help_pending"]);

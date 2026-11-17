@@ -329,9 +329,12 @@ export function startApp(o: AppOptions): void {
         field.focus();
         return;
       }
-      // Until this step ends, neither the field nor the button can be used:
-      // pressed again, the card would be asked to sign again.
+      // Until this step ends, neither the field, the button nor "back" can be
+      // used: pressed again, the card would be asked to sign again; back, a
+      // new card proof would open a second window while the card signs in the
+      // first.
       field.disabled = true;
+      back.disabled = true;
       message.show(null);
       replace(working, c.signing);
       f.confirmCard(value).then(
@@ -340,6 +343,7 @@ export function startApp(o: AppOptions): void {
           if (flow !== f) return;
           card.release();
           replace(working);
+          back.disabled = false;
           message.show(stopMessage(stopOf(e)));
           // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
           if (retryable(f, e)) {
@@ -398,7 +402,7 @@ export function startApp(o: AppOptions): void {
           "div",
           { class: "acctrow fixed", attrs: { "data-row": r.platform, "data-fixed": "" } },
           el("span", { class: "plat-name" }, r.name),
-          el("span", { class: "acct", attrs: { "data-row-account": "" } }, r.current === "" ? "" : r.prefix + r.current),
+          el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-row-account": "" } }, r.current === "" ? "" : r.prefix + r.current),
           lines,
         );
       }
@@ -412,7 +416,7 @@ export function startApp(o: AppOptions): void {
         ? secondary(a.preview, () => {
             const u = valid(r.platform);
             if (u === null || u === "") return;
-            const url = presentationOf(r.platform).profileUrl!(u);
+            const url = presentationOf(r.platform)!.profileUrl!(u);
             // A new tab with the account's page: nothing of the card proof goes with it.
             window.open(url, "_blank", "noopener,noreferrer");
           })
@@ -432,7 +436,7 @@ export function startApp(o: AppOptions): void {
     function valid(platform: string): string | null {
       const field = fields.get(platform)!;
       const slot = status.slots.find((sl) => sl.platform === platform)!;
-      const u = presentationOf(platform).normalize(field.input.value);
+      const u = presentationOf(platform)!.normalize(field.input.value);
       if (u === "" || slot.row!.format.accepts(u)) {
         replace(field.why);
         return u;
@@ -524,7 +528,7 @@ export function startApp(o: AppOptions): void {
     // The whole list to be signed, and each row's consequence, withdrawals included; the platform's ID beside its name.
     const rows = view.rows.flatMap((r) => [
       el("dt", { attrs: { "data-confirm-row": r.platform } }, r.name, " ", el("code", { class: "plat-id", attrs: { "data-platform-id": "" } }, r.id)),
-      el("dd", { attrs: { "data-confirm-row": r.platform } }, el("span", { class: "acct", attrs: { "data-account": "" } }, r.account), ...r.lines.map((l) => el("span", { class: "kind", attrs: { "data-kind": "" } }, say(l)))),
+      el("dd", { attrs: { "data-confirm-row": r.platform } }, el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-account": "" } }, r.account), ...r.lines.map((l) => el("span", { class: "kind", attrs: { "data-kind": "" } }, say(l)))),
     ]);
     show(
       5,
@@ -593,11 +597,13 @@ export function startApp(o: AppOptions): void {
           // The PIN still in the engine (a blocked window: nothing reached the card):
           // back to step 5, the same button again. Otherwise the engine dropped the
           // PIN: the card proof starts again, reading the card in this click.
-          const kinds = progressButtons(f.phase);
+          const kinds = progressButtons(f.phase, stopOf(e));
           replace(
             buttons,
             kinds.includes("back") ? secondary(c.back, () => confirmScreen(f, cq, back)) : null,
             kinds.includes("read_again") ? secondary(COPY.read.read_again, () => read({ now: true })) : null,
+            // The date changed and nothing was signed: from the beginning (stops.date_changed).
+            kinds.includes("restart") ? secondary(COPY.accounts.restart, () => before()) : null,
             kinds.includes("retry")
               ? primary(c.retry, () => {
                   replace(buttons);
@@ -637,7 +643,7 @@ export function startApp(o: AppOptions): void {
           "div",
           { class: "cert", attrs: { "data-proof": "" } },
           el("div", { class: "cert-top" }, el("span", {}, t.proof)),
-          el("dl", { class: "list" }, ...view.card.flatMap((r) => [el("dt", {}, r.name), el("dd", { class: "acct", attrs: { "data-card-account": "" } }, r.account)])),
+          el("dl", { class: "list" }, ...view.card.flatMap((r) => [el("dt", {}, r.name), el("dd", { class: r.raw ? "acct raw" : "acct", attrs: { "data-card-account": "" } }, r.account)])),
           el("dl", {}, el("dt", {}, COPY.confirm.date), el("dd", {}, el("time", {}, view.date)), el("dt", {}, COPY.confirm.short_id_label), el("dd", {}, sentence(COPY.confirm.short_id, { short_id: view.shortId }))),
           el("p", { class: "hand cert-note" }, t.hand_ai, el("br"), t.hand_profile),
         ),
@@ -654,9 +660,11 @@ export function startApp(o: AppOptions): void {
       el(
         "dd",
         { attrs: { "data-done-row": r.platform, ...(r.mismatch ? { "data-mismatch": "" } : {}) } },
-        el("span", { class: "acct" }, r.account),
+        el("span", { class: r.raw ? "acct raw" : "acct" }, r.account),
         r.kind ? el("span", { class: "kind", attrs: { "data-kind": "" } }, say(r.kind)) : null,
         // What the server recorded is not what step 5 said: no sentence in the copy, the code.
+        r.expected ? el("span", { class: "kind", attrs: { "data-expected": "" } }, say(r.expected)) : null,
+        r.switchUsed ? el("span", { class: "kind", attrs: { "data-switch-used": "" } }, COPY.done.mismatch_switch_used) : null,
         r.mismatch ? el("code", { class: "kind", attrs: { "data-code": "" } }, "kind_mismatch") : null,
       ),
     ]);
@@ -665,6 +673,8 @@ export function startApp(o: AppOptions): void {
       el(
         "section",
         { class: "step", attrs: { "data-step": "done", "data-result": view.withdrawAll ? "withdraw_all" : d.kinds === null ? "recorded_only" : "list" } },
+        // What the roster recorded is not what step 5 said: first of all, above the title.
+        view.mismatch ? el("p", { class: "stop", attrs: { role: "alert", "data-mismatch-note": "" } }, say(view.mismatch)) : null,
         view.withdrawAll ? null : el("div", { class: "hero" }, logo({ animated: true })),
         el("h1", {}, say(view.title)),
         ...mine,

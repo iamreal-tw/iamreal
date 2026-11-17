@@ -65,6 +65,7 @@ async function main() {
       {
         roster: "test",
         issuers,
+        knownPlatforms: new Set(["test-example", "threads"]),
         fetch: sameOriginFetch,
         clock: () => Date.now(),
         store: localStorageStore(),

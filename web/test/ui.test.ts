@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { PlatformRow } from "../src/api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../src/flow.ts";
-import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../src/platforms.ts";
+import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "../src/platforms.ts";
+import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
 import { scopeOf } from "../src/spec/scope.ts";
 import { parseUsernameFormat } from "../src/spec/username-format.ts";
 import { COPY, fill } from "../src/ui/copy.ts";
@@ -33,21 +34,28 @@ import {
 const text = (m: Message): string => ("code" in m ? `[${m.code}]` : fill(m.template, m.values));
 const t = (s: Sentence): string => fill(s.template, s.values);
 
-const THREADS: PlatformRow = { platform: "threads", displayName: "Threads", format: parseUsernameFormat("[a-z0-9._]{1,30}")! };
-const EXAMPLE: PlatformRow = { platform: "test-example", displayName: "Example (no real service)", format: parseUsernameFormat("[a-z0-9-]{1,20}")! };
+// The server's display names differ from the page's own on purpose: the screen shows the page's (src/platforms.ts).
+// The production build (which these tests import) has no definition of test-example: the screen names it by its ID.
+const EXAMPLE_NAME = "test-example";
+const THREADS: PlatformRow = { platform: "threads", displayName: "The server's Threads", format: parseUsernameFormat("[a-z0-9._]{1,30}")! };
+const EXAMPLE: PlatformRow = { platform: "test-example", displayName: "The server's example", format: parseUsernameFormat("[a-z0-9-]{1,20}")! };
 
 describe("what the page writes per platform, and the scope string", () => {
-  test("Threads: the prefix, the format hint, the profile page", () => {
-    const p = presentationOf("threads");
+  test("Threads: the name, the prefix, the format hint, the profile page", () => {
+    const p = presentationOf("threads")!;
+    assert.equal(p.name, "Threads");
     assert.equal(handle("threads", "alice"), "@alice");
     assert.equal(COPY.formats[p.formatHint as "threads"], "帳號只能用英文小寫、數字、句點和底線，最多 30 個字。");
     assert.equal(p.profileUrl!("alice"), "https://www.threads.com/@alice");
   });
-  test("a platform the page has nothing of its own for: no prefix, no hint, no preview", () => {
-    const p = presentationOf("test-example");
+  test("the production build knows Threads only; test-example is in the test builds", () => {
+    assert.deepEqual([...KNOWN_PLATFORMS], ["threads"]);
+    assert.equal(presentationOf("test-example"), null);
+    // A platform the page does not know: the account as it is.
     assert.equal(handle("test-example", "a-b"), "a-b");
-    assert.equal(p.formatHint, null);
-    assert.equal(p.profileUrl, null);
+    assert.equal(TEST_EXAMPLE.name, "Example (no real service)");
+    assert.equal(TEST_EXAMPLE.formatHint, null);
+    assert.equal(TEST_EXAMPLE.profileUrl, null);
   });
   test("the card's page and the scope strings: one for the public roster, none per platform", () => {
     assert.equal(SITE_DOMAIN, "iamreal.tw");
@@ -105,14 +113,16 @@ describe("stops", () => {
     [{ code: "card", card: "card_error", detail: "no_pin" }, "讀卡時發生錯誤（代碼 no_pin）。請重新插卡再試一次。", 2],
     [{ code: "username", platform: "threads" }, "帳號只能用英文小寫、數字、句點和底線，最多 30 個字。", null],
     // No hint in the copy for a platform the page has nothing of its own for: the code.
-    [{ code: "username", platform: "test-example" }, "[username]", null],
+    [{ code: "username", platform: "test-example" }, "帳號的格式不對。請照平台上顯示的帳號填。", null],
     [{ code: "state" }, "[state]", null],
     [{ code: "idle" }, "超過 5 分鐘沒有完成，為了不讓 PIN 留在這一頁太久，已經回到開頭。請再讀一次卡片。", null],
     [{ code: "blocked", reason: "empty" }, "請至少填一個帳號。", null],
     [{ code: "blocked", reason: "daily_limit" }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", null],
     // A switch the row says cannot be made: no sentence in the copy for typing one anyway.
-    [{ code: "blocked", reason: "switch_limit", platform: "threads" }, "[switch_limit]", null],
-    [{ code: "blocked", reason: "web_switch_limit", platform: "threads" }, "[web_switch_limit]", null],
+    [{ code: "blocked", reason: "switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
+    [{ code: "blocked", reason: "web_switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
+    // The date changed since step 5 (midnight): nothing signed, back to the beginning.
+    [{ code: "date_changed" }, "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，名冊也沒有記下任何東西。請回到開頭重新過卡。", null],
   ];
   for (const [stop, want, item] of cases) {
     test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => {
@@ -191,6 +201,8 @@ describe("the lists of steps 2 and 5", () => {
       ["the device cannot prove", "stopped", ["read_again"]],
     ];
     for (const [label, phase, want] of cases) assert.deepEqual(progressButtons(phase), want, label);
+    // The date changed since step 5: nothing was signed; back to the beginning only.
+    assert.deepEqual(progressButtons("stopped", { code: "date_changed" }), ["restart"]);
     assert.equal(COPY.read.read_again, "再讀一次卡片");
     assert.equal(COPY.progress.back, "回到上一步");
   });
@@ -249,7 +261,7 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual(
       v.rows.map((r) => [r.platform, r.name, r.prefix, r.current, r.editable, r.preview, r.lines.map(t)]),
       [
-        ["test-example", "Example (no real service)", "", "", true, false, ["還沒有宣告過。"]],
+        ["test-example", EXAMPLE_NAME, "", "", true, false, ["還沒有宣告過。"]],
         ["threads", "Threads", "@", "", true, true, ["還沒有宣告過。"]],
       ],
     );
@@ -347,7 +359,7 @@ describe("confirm (step 5)", () => {
       crow({ kind: "switch", username: "carol.tw", current: "alice", previous: "alice", switchesLeftAfter: 3, webSwitchesLeftAfter: 1 }),
     ]);
     assert.deepEqual(rowsOf(cq), [
-      ["Example (no real service)", "test-example", "a-b", ["新宣告"]],
+      [EXAMPLE_NAME, "test-example", "a-b", ["新宣告"]],
       ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]],
     ]);
     const v = confirmView(cq);
@@ -384,7 +396,7 @@ describe("confirm (step 5)", () => {
   test("an account withdrawn: its row, and that the record stays", () => {
     const cq = consequence([crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" }), crow({ kind: "refresh", username: "alice", current: "alice" })]);
     const v = confirmView(cq);
-    assert.deepEqual(rowsOf(cq)[0], ["Example (no real service)", "test-example", "a-b", ["收回"]]);
+    assert.deepEqual(rowsOf(cq)[0], [EXAMPLE_NAME, "test-example", "a-b", ["收回"]]);
     assert.equal(v.withdrawStays, true);
     assert.equal(v.listedTogether, true);
   });
@@ -440,14 +452,14 @@ describe("done (step 6)", () => {
     assert.equal(v.link, "iamreal.tw/card/7K2Q9FM4XD");
     assert.equal(v.url, "https://iamreal.tw/card/7K2Q9FM4XD");
     assert.deepEqual(v.card, [
-      { name: "Example (no real service)", account: "a-b" },
-      { name: "Threads", account: "@alice" },
+      { name: EXAMPLE_NAME, account: "a-b", raw: false },
+      { name: "Threads", account: "@alice", raw: false },
     ]);
     assert.equal(t(v.record!), "有一張有效的自然人憑證宣告了這份帳號清單：");
     assert.deepEqual(
       v.rows.map((r) => [r.name, r.account, t(r.kind!), r.mismatch]),
       [
-        ["Example (no real service)", "a-b", "新宣告", false],
+        [EXAMPLE_NAME, "a-b", "新宣告", false],
         ["Threads", "@alice", "不變", false],
       ],
     );
@@ -465,7 +477,7 @@ describe("done (step 6)", () => {
     const expected = [crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" }), crow({ kind: "refresh", username: "alice", current: "alice" })];
     const v = doneView(done(expected, [k("test-example", "withdraw", "a-b", 0), k("threads", "refresh", "alice")]));
     assert.equal(v.withdrawnLink, true);
-    assert.deepEqual(v.card, [{ name: "Threads", account: "@alice" }]);
+    assert.deepEqual(v.card, [{ name: "Threads", account: "@alice", raw: false }]);
     assert.deepEqual(v.rows.map((r) => [r.account, t(r.kind!)]), [["a-b", "收回"], ["@alice", "不變"]]);
   });
 
@@ -489,7 +501,7 @@ describe("done (step 6)", () => {
     assert.equal(v.record, null);
     assert.equal(v.kindsUnreadable, true);
     assert.deepEqual(v.rows, []);
-    assert.deepEqual(v.card, [{ name: "Threads", account: "@alice" }]);
+    assert.deepEqual(v.card, [{ name: "Threads", account: "@alice", raw: false }]);
     assert.equal(v.link, "iamreal.tw/card/7K2Q9FM4XD");
   });
 
@@ -498,8 +510,48 @@ describe("done (step 6)", () => {
     const expected = [crow({ kind: "correction", username: "bob", current: "alice", previous: "alice" })];
     const v = doneView(done(expected, [k("threads", "switch", "bob")], { mismatches: ["threads"] }));
     assert.deepEqual(v.rows.map((r) => [r.account, t(r.kind!), r.mismatch]), [["@bob", "更換，原本是 @alice。", true]]);
+    // On top, before the title; under the row what step 5 said, and that a switch was used.
+    assert.equal(t(v.mismatch!), "名冊記下的，和你確認時畫面說的不同。請看下面標出來的地方。");
+    assert.deepEqual(
+      v.rows.map((r) => [t(r.expected!), r.switchUsed]),
+      [["確認時畫面說的是：更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。", true]],
+    );
     // A platform the server reports and step 5 did not, and the other way round.
     const w = doneView(done([crow({ kind: "refresh", username: "alice", current: "alice" })], [k("test-example", "withdraw", "a-b", 0)], { mismatches: ["test-example", "threads"] }));
     assert.deepEqual(w.rows.map((r) => [r.platform, r.kind === null ? null : t(r.kind), r.mismatch]), [["test-example", "收回", true], ["threads", null, true]]);
+    assert.deepEqual(
+      w.rows.map((r) => [t(r.expected!), r.switchUsed]),
+      [
+        ["確認時畫面說的是：沒有這個平台", false],
+        ["確認時畫面說的是：不變", false],
+      ],
+    );
+    // No difference: nothing of it.
+    const same = doneView(done(expected, [k("threads", "correction", "bob")]));
+    assert.equal(same.mismatch, null);
+    assert.ok(same.rows.every((r) => r.expected === null && !r.switchUsed));
+  });
+
+  test("a switch recorded where step 5 said a switch too: not 'a switch was used' again", () => {
+    const expected = [crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 3, webSwitchesLeftAfter: 1 })];
+    const v = doneView(done(expected, [k("threads", "switch", "carol")], { mismatches: ["threads"] }));
+    assert.deepEqual(v.rows.map((r) => r.switchUsed), [false]);
+  });
+
+  test("an answer the device could not read at all (a 201): the title of a record made, no rows", () => {
+    const v = doneView(done([crow({ kind: "first", username: "alice" })], null, { seq: null, recordHash: null }));
+    assert.equal(t(v.title), "名冊已經記下這次過卡");
+    assert.equal(v.kindsUnreadable, true);
+  });
+
+  test("an account of a platform the device does not know is shown as it is (spaces kept)", () => {
+    const row = slot(null, { platform: "x-new", current: "a  b ", lastDeclared: "a  b " });
+    const a = accountsView(status([row]));
+    assert.deepEqual([a.rows[0]!.current, a.rows[0]!.raw, a.rows[0]!.name], ["a  b ", true, "x-new"]);
+    const cq = consequence([crow({ platform: "x-new", row: null, kind: "refresh", username: "a  b ", current: "a  b " })]);
+    assert.deepEqual(confirmView(cq).rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);
+    const d = doneView(done(cq.rows, [k("x-new", "refresh", "a  b ")]));
+    assert.deepEqual(d.card, [{ name: "x-new", account: "a  b ", raw: true }]);
+    assert.deepEqual(d.rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);
   });
 });

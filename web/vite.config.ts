@@ -17,6 +17,10 @@
 //   the test's issuer keys and fake component, which the caller passes as
 //   `define` (test/e2e/ui.ts). test/build.test.ts checks that a production
 //   build holds nothing of it.
+// - localcard (`pnpm local`): the same pages, with src/target-local.ts in place
+//   of src/target.ts: MOICA's issuer keys and component like production, but
+//   the test roster's scope string and its platforms (a real card tried out
+//   on this computer gets no scoped ID of the public roster).
 // - engine: the engine's own headless test page (test/e2e/run.ts, its root).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -80,24 +84,25 @@ function ownOriginAssets(): Plugin {
 
 const TARGET = join(here, "src", "target.ts");
 const TEST_TARGET = join(here, "test", "e2e", "target.ts");
+const LOCAL_TARGET = join(here, "src", "target-local.ts");
 
-/** In mode "test", src/target.ts is replaced by test/e2e/target.ts. */
-function testTarget(): Plugin {
+/** In mode "test", src/target.ts is replaced by test/e2e/target.ts; in mode "localcard", by src/target-local.ts. */
+function otherTarget(replacement: string): Plugin {
   return {
-    name: "iamreal-test-target",
+    name: "iamreal-other-target",
     enforce: "pre",
     async resolveId(source, importer, options) {
       const r = await this.resolve(source, importer, { ...options, skipSelf: true });
-      return r && r.id === TARGET ? TEST_TARGET : null;
+      return r && r.id === TARGET ? replacement : null;
     },
   };
 }
 
 export default defineConfig(({ mode }) => {
   const pages = mode !== "engine";
-  if (pages && mode !== "production" && mode !== "test") throw new Error(`vite mode ${mode}: production, test or engine`);
+  if (pages && mode !== "production" && mode !== "test" && mode !== "localcard") throw new Error(`vite mode ${mode}: production, test, localcard or engine`);
   return {
-    plugins: [noDataUrlWasm(), ownOriginAssets(), ...(mode === "test" ? [testTarget()] : [])],
+    plugins: [noDataUrlWasm(), ownOriginAssets(), ...(mode === "test" ? [otherTarget(TEST_TARGET)] : mode === "localcard" ? [otherTarget(LOCAL_TARGET)] : [])],
     build: {
       target: "es2022",
       assetsInlineLimit: 0,

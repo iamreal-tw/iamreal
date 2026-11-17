@@ -4,10 +4,16 @@
 // (test/e2e/ui.ts), which passes them as `define`. Never in a production
 // build (test/build.test.ts).
 import type { IssuerKey } from "../../src/issuers.ts";
+import type { Presentation } from "../../src/platforms.ts";
+import { TEST_EXAMPLE } from "../../src/presentations/test-example.ts";
+import { THREADS } from "../../src/presentations/threads.ts";
 import type { Roster } from "../../src/spec/scope.ts";
 
 /** The test roster: the card signs `iamreal-test:public:0__________`. */
 export const ROSTER: Roster = "test";
+
+/** The platforms of the test roster's table. */
+export const PRESENTATIONS: readonly Presentation[] = Object.freeze([TEST_EXAMPLE, THREADS]);
 
 declare const __IAMREAL_TEST_ISSUERS__: { name: "G2" | "G3"; modulus: string; bits: 2048 | 4096 }[];
 declare const __IAMREAL_TEST_COMPONENT__: string;

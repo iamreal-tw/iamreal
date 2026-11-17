@@ -72,6 +72,8 @@ function blockWindows(card: FakeCard, which: "readCertificates" | "sign", n: num
 }
 
 async function setup(o: {
+  /** The platforms the page has its own definition of; the test roster's two by default. */
+  knownPlatforms?: string[];
   world?: World;
   crls?: Parameters<typeof mirror>[1];
   backend?: Partial<BackendOptions>;
@@ -147,6 +149,7 @@ async function setup(o: {
     {
       roster: "test",
       issuers: w.issuers,
+      knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
       clock: () => now,
       store,
@@ -855,10 +858,27 @@ describe("the submission and what the server says it recorded", () => {
     ["no seq", { record_hash: "c".repeat(64), kinds: [{ platform: "threads", kind: "first", username: "alice", account_cards: 1 }] }],
     ["a record_hash not in hex", { seq: 9, record_hash: "C".repeat(64), kinds: [{ platform: "threads", kind: "first", username: "alice", account_cards: 1 }] }],
   ] as const) {
-    test(`${label}: malformed_response`, async () => {
+    test(`${label}: a 201 is a record made; nothing of the answer is told`, async () => {
       const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 201, body }) } });
       const cq = await toChosen(s);
-      assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "malformed_response", status: 201 });
+      const done = await s.flow.proceed(cq.accounts);
+      assert.deepEqual([done.seq, done.recordHash, done.kinds, done.mismatches], [null, null, null, []]);
+      assert.equal(s.flow.phase, "done");
+    });
+  }
+  for (const [label, body] of [
+    ["not JSON", "<html>"],
+    ["a list", "[]"],
+    ["empty", ""],
+  ] as const) {
+    test(`a 201 whose body is ${label}: done, the record made, nothing of the answer told`, async () => {
+      const s = await setup({ echoPublicInputs: true });
+      const orig = s.backend.fetch;
+      s.backend.fetch = (async (path: string, init?: { method: "GET" | "POST"; body?: string }) =>
+        path === "/api/v1/records" ? new Response(body, { status: 201, headers: { "Content-Type": "application/json" } }) : orig(path, init)) as typeof s.backend.fetch;
+      const cq = await toChosen(s);
+      const done = await s.flow.proceed(cq.accounts);
+      assert.deepEqual([done.seq, done.recordHash, done.kinds], [null, null, null]);
     });
   }
 
@@ -1295,10 +1315,52 @@ describe("a card proof that crosses midnight", () => {
     assert.deepEqual(cq.rows.map((r) => r.kind), ["correction"]);
     const n = s.backend.log.length;
     s.advance(3 * 60_000); // 2026-11-17 00:01: the same change is a switch now
-    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "state" });
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "date_changed" });
     assert.equal(s.backend.log.length, n, "no challenge");
     assert.equal(s.card.signed.length, 1, "no second signature");
     assertNothingHeld(s.flow, "stopped");
+  });
+
+  // research/57: the list re-checked before midnight, the challenge back after it, dated the next day.
+  test("midnight passes while the challenge is on its way: the list is worked out again on its date, and not signed", async () => {
+    const s = await setup({
+      echoPublicInputs: true,
+      start: Date.UTC(2026, 10, 16, 15, 59, 50), // 2026-11-16 23:59:50 in Taiwan
+      backend: {
+        challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
+        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { correction_date: "2026-11-16" }) } }),
+      },
+    });
+    const cq = await toChosen(s, { threads: "bob" });
+    assert.deepEqual(cq.rows.map((r) => r.kind), ["correction"], "the screen says: a correction, not counted");
+    const release = s.hold("/api/v1/challenges");
+    const p = s.flow.proceed(cq.accounts);
+    await untilRequested(s, "/api/v1/challenges");
+    s.advance(20_000); // 2026-11-17 00:00:10, while the server holds the challenge
+    release();
+    assert.deepEqual(await stopOf(p), { code: "date_changed" });
+    assert.equal(s.card.signed.length, 1, "no second signature: on its date the record would be a switch");
+    assert.equal(s.backend.log.filter((r) => r.path === "/api/v1/records").length, 0, "nothing submitted");
+    assertNothingHeld(s.flow, "stopped");
+  });
+
+  test("midnight passes while the challenge is on its way, and the list does the same on the new date: signed", async () => {
+    const s = await setup({
+      echoPublicInputs: true,
+      start: Date.UTC(2026, 10, 16, 15, 59, 50),
+      backend: {
+        challenge: () => "2026-11-17.000G40R40M30E209185GR38E1W",
+        cardState: cardState({ last_card_proof: "2026-11-16", platforms: { threads: has("alice", { correction_date: "2026-11-01" }) } }),
+      },
+    });
+    const cq = await toChosen(s, { threads: "alice" });
+    const release = s.hold("/api/v1/challenges");
+    const p = s.flow.proceed(cq.accounts);
+    await untilRequested(s, "/api/v1/challenges");
+    s.advance(20_000);
+    release();
+    const done = await p;
+    assert.equal(done.date, "2026-11-17");
   });
 
   test("3 records before midnight: after it, the same list is shown again as it was and can be signed", async () => {
@@ -1767,5 +1829,84 @@ describe("a resubmission answered challenge_used (a fake server)", () => {
     const { s, cq } = await lost({ first: { status: 400, body: { error: "challenge_used" } } });
     assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "challenge_used", status: 400 });
     assert.equal(requestsOn(s, "/api/v1/card-state"), 1);
+  });
+});
+
+// research/57 (15): the PIN is held until the second signature and no longer. Dropping it
+// before the submission (dropSecrets) would hide a flow that kept it through the proof.
+describe("the PIN after the second signature", () => {
+  test("dropped as soon as the card signed the declaration code: not held while the proof is made", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    const cq = await toChosen(s);
+    let pinWhileProving: unknown = "prove() not called";
+    const prove = s.prover.prove;
+    s.prover.prove = async (name, inputs) => {
+      pinWhileProving = heldPin(s.flow);
+      return prove(name, inputs);
+    };
+    await s.flow.proceed(cq.accounts);
+    assert.equal(pinWhileProving, null);
+  });
+
+  test("dropped when the submission does not get through (the record can be sent again; the PIN is not needed)", async () => {
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => ({ status: 500, body: { error: "internal" } }) } });
+    const cq = await toChosen(s);
+    await stopOf(s.flow.proceed(cq.accounts));
+    assert.equal(s.flow.phase, "submit_failed");
+    assert.equal(heldPin(s.flow), null);
+  });
+});
+
+// A platform can be edited only if the server's table has a row the device can
+// read and the page has its own definition of it (src/platforms.ts). A row of
+// the table the page has no definition of is a platform the device does not know.
+describe("a platform of the server's table the page has no definition of", () => {
+  test("with an account: kept as it is, a row that cannot be changed; without one: not shown", async () => {
+    const s = await setup({
+      echoPublicInputs: true,
+      knownPlatforms: ["threads"],
+      backend: { cardState: cardState({ last_card_proof: "2026-11-04", platforms: { "test-example": has("a-b"), threads: has("alice") } }) },
+    });
+    const status = await toStatus(s);
+    assert.deepEqual(
+      status.slots.map((sl) => [sl.platform, sl.row === null, sl.current]),
+      [
+        ["test-example", true, "a-b"],
+        ["threads", false, "alice"],
+      ],
+    );
+    // Only Threads is offered; naming test-example is a program error.
+    assert.deepEqual(refused(() => s.flow.choose({ "test-example": "a-c", threads: "alice" })), { code: "state" });
+    const cq = s.flow.choose({ threads: "bob" });
+    assert.deepEqual(cq.accounts, [
+      { platform: "test-example", username: "a-b" },
+      { platform: "threads", username: "bob" },
+    ]);
+    assert.deepEqual(cq.rows.map((r) => [r.platform, r.kind, r.row === null]), [
+      ["test-example", "refresh", true],
+      ["threads", "switch", false],
+    ]);
+    const done = await s.flow.proceed(cq.accounts);
+    assert.deepEqual(done.record.accounts, cq.accounts);
+  });
+
+  test("without an account there: not shown, not in the list", async () => {
+    const s = await setup({
+      knownPlatforms: ["threads"],
+      backend: { cardState: cardState({ last_card_proof: "2026-11-04", platforms: { "test-example": slot(), threads: has("alice") } }) },
+    });
+    const status = await toStatus(s);
+    assert.deepEqual(status.slots.map((sl) => sl.platform), ["threads"]);
+    assert.deepEqual(s.flow.choose({ threads: "alice" }).accounts, [{ platform: "threads", username: "alice" }]);
+  });
+
+  test("its entry is checked as any unknown platform's: only the minimum (a format the page cannot use is not applied)", async () => {
+    // An account the test-example format would refuse ("A B") but every account satisfies: kept, not refused.
+    const s = await setup({
+      knownPlatforms: ["threads"],
+      backend: { cardState: cardState({ last_card_proof: "2026-11-04", platforms: { "test-example": has("A B"), threads: has("alice") } }) },
+    });
+    const status = await toStatus(s);
+    assert.equal(status.slots.find((sl) => sl.platform === "test-example")?.current, "A B");
   });
 });

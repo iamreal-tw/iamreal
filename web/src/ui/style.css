@@ -726,3 +726,8 @@ time {
     animation: none;
   }
 }
+
+/* An account of a platform the page does not know, exactly as the server sent it: spaces kept. */
+.acct.raw {
+  white-space: pre-wrap;
+}

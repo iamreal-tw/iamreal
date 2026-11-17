@@ -1,19 +1,28 @@
-// What the screen writes differently for each platform and that the server
-// does not send (design/copy/card-proof.md, "每個平台不同的東西"): how an
-// account is written (Threads: `@` before the name), how a typed account is
-// tidied before its format is checked, the key of the format hint in
-// design/copy/card-proof.json, and the account's public page that "預覽個人
-// 檔案" opens. Keyed by the platform ID.
+// What the screen writes for each platform, fixed on the device
+// (design/copy/card-proof.md, "每個平台不同的東西"): the platform's name,
+// how an account is written (Threads: `@` before the name), how a typed
+// account is tidied before its format is checked, the key of the format
+// hint in design/copy/card-proof.json, and the account's public page that
+// "預覽個人檔案" opens. Keyed by the platform ID. Each platform's definition
+// is its own module (src/presentations/); the build's target
+// (src/target.ts) says which ones the page has, so that a test platform is
+// in no production build.
 //
-// Which platforms a card proof lists, their display names and their
-// `username` formats come from the server's platform table
-// (docs/api/card-proof.md, `config`, read by src/api.ts), not from here; a
-// platform of the table without an entry here is written without a prefix,
-// with no format hint (the screen shows the code) and no preview. The scope
-// string is not a platform's: there is one for the public roster
-// (src/spec/scope.ts).
+// A platform can be edited on the screen only if the server's platform
+// table has a row for it the device can read (its `username` format comes
+// from there, docs/api/card-proof.md) and the device has its own definition
+// here. A platform of the server's table without one is a platform the
+// device does not know: an account on it is kept as it is, shown by its ID,
+// and cannot be changed (src/flow.ts). The server's display name is not
+// shown. The scope string is not a platform's: there is one for the public
+// roster (src/spec/scope.ts).
+import { PRESENTATIONS } from "./target.ts";
 
 export interface Presentation {
+  /** The platform ID this definition is for. */
+  readonly platform: string;
+  /** The platform's name, as the screen writes it. */
+  readonly name: string;
   /** What the screen writes before an account name (Threads: `@`). */
   readonly prefix: string;
   /**
@@ -29,27 +38,19 @@ export interface Presentation {
   readonly profileUrl: ((username: string) => string) | null;
 }
 
-const threads: Presentation = Object.freeze({
-  prefix: "@",
-  // Threads does not distinguish case.
-  normalize: (typed: string): string => (typed.startsWith("@") ? typed.slice(1) : typed).replace(/[A-Z]/g, (c) => c.toLowerCase()),
-  formatHint: "threads",
-  profileUrl: (u: string): string => `https://www.threads.com/@${u}`,
-});
+const BY_ID: ReadonlyMap<string, Presentation> = new Map(PRESENTATIONS.map((p) => [p.platform, p]));
 
-/** A platform the device has nothing of its own for: the name as typed, no prefix, no hint, no preview. */
-const PLAIN: Presentation = Object.freeze({ prefix: "", normalize: (typed: string): string => typed, formatHint: null, profileUrl: null });
-
-const PRESENTATIONS: ReadonlyMap<string, Presentation> = new Map([["threads", threads]]);
-
-/** How the screen writes and checks accounts of platform `id`. */
-export function presentationOf(id: string): Presentation {
-  return PRESENTATIONS.get(id) ?? PLAIN;
+/** The device's own definition of platform `id`; null for a platform the device does not know. */
+export function presentationOf(id: string): Presentation | null {
+  return BY_ID.get(id) ?? null;
 }
 
-/** An account as the screen writes it: the platform's prefix and the name (`@alice`). */
+/** The IDs of the platforms the device has its own definition of. */
+export const KNOWN_PLATFORMS: ReadonlySet<string> = new Set(BY_ID.keys());
+
+/** An account as the screen writes it: the platform's prefix and the name (`@alice`); as it is for a platform the device does not know. */
 export function handle(platform: string, username: string): string {
-  return presentationOf(platform).prefix + username;
+  return (presentationOf(platform)?.prefix ?? "") + username;
 }
 
 /**
