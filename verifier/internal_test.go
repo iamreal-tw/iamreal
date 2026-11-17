@@ -1,14 +1,16 @@
 package verifier
 
 import (
+	"bytes"
 	"encoding/base64"
 	"testing"
 )
 
 func wellFormed() *Record {
 	return &Record{
-		Seq: 1, Prev: GenesisPrev, ScopeString: "iamreal:threads:0______________",
-		ScopedID: "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880", Action: "declare", Username: "alice",
+		Seq: 1, Prev: GenesisPrev, ScopeString: "iamreal:public:0_______________",
+		ScopedID:  "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+		Accounts:  []Account{{"threads", "alice"}},
 		Challenge: "2026-11-16.000G40R40M30E209185GR38E1W", Issuer: "G3",
 		SMTRoot: "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32",
 		Circuit: "bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2",
@@ -45,6 +47,60 @@ func TestScopeTables(t *testing.T) {
 			t.Errorf("%q in both tables", sc.String)
 		}
 		seen[sc.String] = true
+	}
+}
+
+// Every platform ID matches the format of spec/scope.md (so it has no `:`,
+// `"` or line feed), appears once, and the production table has no ID
+// starting with "test-". Platforms returns the IDs in ascending order.
+func TestPlatformTables(t *testing.T) {
+	seen := map[string]bool{}
+	for _, p := range append(append([]Platform(nil), productionPlatforms...), testPlatforms...) {
+		if !usernameOf(p.ID, 21, func(c byte) bool { return c == '-' }) {
+			t.Errorf("%q: not a platform ID", p.ID)
+		}
+		if seen[p.ID] {
+			t.Errorf("%q twice", p.ID)
+		}
+		seen[p.ID] = true
+	}
+	for _, p := range productionPlatforms {
+		if len(p.ID) >= 5 && p.ID[:5] == "test-" {
+			t.Errorf("%q in the production table", p.ID)
+		}
+	}
+	for _, r := range []Roster{Production, Test} {
+		ps := Platforms(r)
+		for i := 1; i < len(ps); i++ {
+			if !(ps[i-1].ID < ps[i].ID) {
+				t.Errorf("%s: %q before %q", r, ps[i-1].ID, ps[i].ID)
+			}
+		}
+	}
+	if len(Platforms(Test)) != len(productionPlatforms)+len(testPlatforms) {
+		t.Errorf("a test roster accepts %d platforms", len(Platforms(Test)))
+	}
+}
+
+// Every single-byte change inside the account list of a well-formed test
+// line with two accounts is rejected or gives another well-formed line
+// written exactly as its template.
+func TestSingleByteChangesInAccounts(t *testing.T) {
+	r := wellFormed()
+	r.ScopeString = "iamreal-test:public:0__________"
+	r.Accounts = []Account{{"test-example", "a-b"}, {"threads", "alice"}}
+	line := r.Line()
+	text := AccountsText(r.Accounts)
+	start := bytes.Index(line, []byte(text)) - 1 // from the `:` before `[`
+	for i := start; i <= start+len(text)+1; i++ {
+		for _, c := range []byte{0, '\n', ' ', '"', '\\', '[', ']', '{', '}', ',', ':', 'a', 'A', '-', '.', '_', 0xff} {
+			b := append([]byte(nil), line...)
+			b[i] = c
+			got, err := ParseLine(b, Test)
+			if err == nil && string(got.Line()) != string(b) {
+				t.Fatalf("byte %d to %q: accepted, not its template", i, c)
+			}
+		}
 	}
 }
 

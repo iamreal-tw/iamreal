@@ -15,7 +15,7 @@ import (
 // Config is everything the server needs. main fills it in; tests replace
 // the clock, the random source and the proof verifier.
 type Config struct {
-	Roster  verifier.Roster      // whose accepted scopes: production or test
+	Roster  verifier.Roster      // whose tables of scopes and platforms: production or test
 	Store   store.Store          // the roster and the challenges
 	CRLDir  string               // the CRL mirror: CRL files and index.jsonl
 	Proofs  roster.ProofVerifier // verifies each submitted record; *verifier.Verifier
@@ -61,7 +61,7 @@ func New(cfg Config) (*Server, error) {
 	if err := s.crls.reload(); err != nil {
 		return nil, fmt.Errorf("CRL mirror: %w", err)
 	}
-	s.rules = roster.NewRules(alreadyVerified{}, s.crls)
+	s.rules = roster.NewRules(cfg.Roster, alreadyVerified{}, s.crls)
 
 	count, head, err := cfg.Store.Head()
 	if err != nil {

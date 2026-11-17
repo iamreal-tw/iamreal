@@ -14,12 +14,13 @@ const (
 	CodeChallengeReused = "challenge_reused"
 	CodeRoot            = "root"
 	CodeDateOrder       = "date_order"
-	CodeNotCurrent      = "not_current"
+	CodeEmpty           = "empty"
 	CodeSwitchLimit     = "switch_limit"
 	CodeDailyLimit      = "daily_limit"
 )
 
-// Kinds of a valid record (spec/roster-rules.md, "Event rules").
+// Kinds of a valid record on one platform (spec/roster-rules.md, "Event
+// rules").
 const (
 	KindFirst    = "first"
 	KindRefresh  = "refresh"
@@ -37,11 +38,12 @@ const (
 	// A record's date is no earlier than DateOrderDays before the latest
 	// date among the earlier valid records (check 4).
 	DateOrderDays = 4
-	// At most MaxSwitches switches in any SwitchWindowDays days.
+	// At most MaxSwitches switches on a platform in any SwitchWindowDays
+	// days.
 	SwitchWindowDays = 365
 	MaxSwitches      = 2
-	// At most MaxPerDate valid records of a card in a scope have the same
-	// date (check 6).
+	// At most MaxPerDate valid records of a card have the same date
+	// (check 6).
 	MaxPerDate = 3
 )
 
@@ -66,32 +68,61 @@ type CRLArchive interface {
 	CRLDates(issuer, smtRoot string) ([]verifier.Date, error)
 }
 
-// RecordResult is the outcome of one record: valid with its kind, or invalid
-// with its reason code.
+// PlatformKind is what a valid record did on one platform.
+type PlatformKind struct {
+	Platform string
+	Kind     string
+	// Username is the account: the one the list has for the platform, or
+	// for KindWithdraw the one withdrawn. The rules' output is the
+	// (platform, kind) pair; the server also reports the account.
+	Username string
+}
+
+// RecordResult is the outcome of one record: valid with its kinds, or
+// invalid with its reason code.
 type RecordResult struct {
-	Seq    uint64
-	Valid  bool
-	Kind   string // if valid
+	Seq   uint64
+	Valid bool
+	// Kinds, if valid: one for every platform on which the record has a
+	// kind, in ascending order of platform; at least one.
+	Kinds  []PlatformKind
 	Reason string // if invalid
 	Detail string // why, for people; not part of the result
 }
 
-// Card is one card in a scope: its account now (nil for none) and the date
-// of its last card proof.
-type Card struct {
-	ScopedID      string
-	Current       *string
-	LastCardProof verifier.Date
+// Equal reports whether a and b are the same result, Detail included.
+func (a RecordResult) Equal(b RecordResult) bool {
+	if a.Seq != b.Seq || a.Valid != b.Valid || a.Reason != b.Reason || a.Detail != b.Detail || len(a.Kinds) != len(b.Kinds) {
+		return false
+	}
+	for i := range a.Kinds {
+		if a.Kinds[i] != b.Kinds[i] {
+			return false
+		}
+	}
+	return true
 }
 
-// AccountCard is a card whose current account is the account.
+// Card is one card of the output: the date of its last card proof and its
+// current list, in ascending order of platform. A card that withdrew
+// everything has an empty list.
+type Card struct {
+	ScopedID      string
+	LastCardProof verifier.Date
+	Accounts      []verifier.Account
+}
+
+// AccountCard is a card whose current account on the platform is the
+// account.
 type AccountCard struct {
 	ScopedID      string
 	LastCardProof verifier.Date
 }
 
-// Account is an account and the cards declared to it now.
+// Account is an account, (platform, username), and the cards whose current
+// account on that platform it is.
 type Account struct {
+	Platform string
 	Username string
 	Cards    []AccountCard
 }
@@ -112,10 +143,16 @@ type State struct {
 
 type cardKey struct{ scope, scopedID string }
 
+type accountKey struct{ scope, platform, username string }
+
+type slotState struct {
+	current      *string
+	lastDeclared *string
+	switchDates  []verifier.Date
+}
+
 type cardState struct {
-	current       *string
-	lastDeclared  *string
-	switchDates   []verifier.Date
+	slots         map[string]*slotState // one per platform of the table
 	lastCardProof *verifier.Date
 	// perDate is the number of valid records of each date (check 6 and
 	// proofs_on_last_date). Dates more than DateOrderDays before the last
@@ -126,13 +163,20 @@ type cardState struct {
 }
 
 func (cs *cardState) clone() *cardState {
-	c := *cs
-	c.switchDates = append([]verifier.Date(nil), cs.switchDates...)
-	c.perDate = make(map[verifier.Date]int, len(cs.perDate)+1)
+	c := &cardState{
+		slots:         make(map[string]*slotState, len(cs.slots)),
+		lastCardProof: cs.lastCardProof,
+		perDate:       make(map[verifier.Date]int, len(cs.perDate)+1),
+	}
+	for p, s := range cs.slots {
+		ns := *s
+		ns.switchDates = append([]verifier.Date(nil), s.switchDates...)
+		c.slots[p] = &ns
+	}
 	for d, n := range cs.perDate {
 		c.perDate[d] = n
 	}
-	return &c
+	return c
 }
 
 // count adds a valid record dated d, and drops the dates no later record
@@ -153,17 +197,32 @@ func (cs *cardState) count(d verifier.Date) {
 // Rules does not check the file as a whole (well-formed lines, seq, prev);
 // ReadFile and ReadLine do.
 type Rules struct {
+	roster      verifier.Roster
+	platforms   []verifier.Platform // the roster's table, in ascending order of ID
 	proofs      ProofVerifier
 	crls        CRLArchive
 	cards       map[cardKey]*cardState
-	used        map[string]bool // challenges of earlier records, valid or invalid
+	accounts    map[accountKey]int // the number of cards whose current account it is
+	used        map[string]bool    // challenges of earlier records, valid or invalid
 	latestValid *verifier.Date
 	results     []RecordResult
 }
 
-// NewRules returns the rules before any record.
-func NewRules(proofs ProofVerifier, crls CRLArchive) *Rules {
-	return &Rules{proofs: proofs, crls: crls, cards: map[cardKey]*cardState{}, used: map[string]bool{}}
+// NewRules returns the rules before any record, for a roster whose platform
+// table is that of r.
+func NewRules(r verifier.Roster, proofs ProofVerifier, crls CRLArchive) *Rules {
+	return &Rules{
+		roster: r, platforms: verifier.Platforms(r), proofs: proofs, crls: crls,
+		cards: map[cardKey]*cardState{}, accounts: map[accountKey]int{}, used: map[string]bool{},
+	}
+}
+
+func (x *Rules) newCard() *cardState {
+	cs := &cardState{slots: map[string]*slotState{}, perDate: map[verifier.Date]int{}}
+	for _, p := range x.platforms {
+		cs.slots[p.ID] = &slotState{}
+	}
+	return cs
 }
 
 // Check returns the result r would have as the next record, without
@@ -174,15 +233,19 @@ func (x *Rules) Check(r *verifier.Record) (RecordResult, error) {
 }
 
 // Apply applies r as the next record and returns its result. A valid record
-// changes the state of its card; an invalid one changes nothing but marks
-// its challenge as used (check 2). On an error nothing changes.
+// changes the state of its card, on every platform at once; an invalid one
+// changes nothing but marks its challenge as used (check 2). On an error
+// nothing changes.
 func (x *Rules) Apply(r *verifier.Record) (RecordResult, error) {
 	res, next, err := x.check(r)
 	if err != nil {
 		return res, err
 	}
 	if res.Valid {
-		x.cards[cardKey{r.ScopeString, r.ScopedID}] = next
+		key := cardKey{r.ScopeString, r.ScopedID}
+		x.countAccounts(key, x.cards[key], -1)
+		x.cards[key] = next
+		x.countAccounts(key, next, +1)
 		d := *next.lastCardProof
 		if x.latestValid == nil || d > *x.latestValid {
 			x.latestValid = &d
@@ -193,6 +256,24 @@ func (x *Rules) Apply(r *verifier.Record) (RecordResult, error) {
 	return res, nil
 }
 
+// countAccounts adds n to the count of every account that is current on a
+// slot of cs.
+func (x *Rules) countAccounts(key cardKey, cs *cardState, n int) {
+	if cs == nil {
+		return
+	}
+	for p, s := range cs.slots {
+		if s.current == nil {
+			continue
+		}
+		k := accountKey{key.scope, p, *s.current}
+		x.accounts[k] += n
+		if x.accounts[k] == 0 {
+			delete(x.accounts, k)
+		}
+	}
+}
+
 // check runs the checks of "Per record" on r, in order; the first that
 // fails gives the reason code. For a valid record it also returns the state
 // its card has after it. It changes nothing.
@@ -200,6 +281,12 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	res := RecordResult{Seq: r.Seq}
 	d, err := r.Date()
 	if err != nil {
+		return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
+	}
+	// The rules only ever see lists of the table, at most one account per
+	// platform: anything else is a malformed line (spec/record.md), which
+	// ReadLine rejects before the rules run.
+	if err := verifier.CheckAccounts(x.roster, r.Accounts); err != nil {
 		return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
 	}
 	invalid := func(code, detail string) (RecordResult, *cardState, error) {
@@ -231,17 +318,28 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	if x.latestValid != nil && d < x.latestValid.AddDays(-DateOrderDays) {
 		return invalid(CodeDateOrder, fmt.Sprintf("latest earlier valid date %s", x.latestValid))
 	}
-	// 5. The event rules, on a copy of the card's state.
-	next := &cardState{perDate: map[verifier.Date]int{}}
+	// 5. The event rules, on every platform of the table, on a copy of the
+	// card's state. One blocked platform blocks the record.
+	next := x.newCard()
 	if cs := x.cards[cardKey{r.ScopeString, r.ScopedID}]; cs != nil {
 		next = cs.clone()
 	}
-	kind, code := applyEvent(next, r.Action, r.Username, d)
-	if code != "" {
-		return invalid(code, "")
+	var kinds []PlatformKind
+	for _, p := range x.platforms {
+		u, listed := verifier.AccountOn(r.Accounts, p.ID)
+		kind, account, blocked := applyEntry(next.slots[p.ID], listed, u, d)
+		if blocked {
+			return invalid(CodeSwitchLimit, "platform "+p.ID)
+		}
+		if kind != "" {
+			kinds = append(kinds, PlatformKind{Platform: p.ID, Kind: kind, Username: account})
+		}
 	}
-	// 6. Fewer than 3 earlier valid records of its card and scope have its
-	// date. The effects of the event rules (on the copy) are dropped.
+	if len(kinds) == 0 {
+		return invalid(CodeEmpty, "")
+	}
+	// 6. Fewer than 3 earlier valid records of its card have its date. The
+	// effects of the event rules (on the copy) are dropped.
 	if next.perDate[d] >= MaxPerDate {
 		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", next.perDate[d], d))
 	}
@@ -249,8 +347,44 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	if next.lastCardProof == nil || d > *next.lastCardProof {
 		next.lastCardProof = &d
 	}
-	res.Valid, res.Kind = true, kind
+	res.Valid, res.Kinds = true, kinds
 	return res, next, nil
+}
+
+// applyEntry applies a record's entry for one platform to the slot of its
+// card on that platform (spec/roster-rules.md, "Event rules"): listed says
+// whether the list has an account u there. It returns the kind and its
+// account, no kind, or blocked. When blocked, the slot is left in some
+// state; the caller drops the whole copy.
+func applyEntry(s *slotState, listed bool, u string, d verifier.Date) (kind, account string, blocked bool) {
+	if !listed {
+		if s.current == nil {
+			return "", "", false
+		}
+		old := *s.current
+		s.current = nil
+		return KindWithdraw, old, false
+	}
+	switch {
+	case s.lastDeclared == nil:
+		s.current, s.lastDeclared = &u, &u
+		return KindFirst, u, false
+	case *s.lastDeclared == u:
+		s.current = &u
+		return KindRefresh, u, false
+	}
+	recent := 0
+	for _, w := range s.switchDates {
+		if w >= d.AddDays(-(SwitchWindowDays - 1)) {
+			recent++
+		}
+	}
+	if recent >= MaxSwitches {
+		return "", "", true
+	}
+	s.current, s.lastDeclared = &u, &u
+	s.switchDates = append(s.switchDates, d)
+	return KindSwitch, u, false
 }
 
 // Count returns the number of records applied.
@@ -258,38 +392,50 @@ func (x *Rules) Count() int { return len(x.results) }
 
 // State returns the output of the rules for the records applied so far.
 func (x *Rules) State() *State {
-	return &State{Records: append([]RecordResult(nil), x.results...), Scopes: output(x.cards)}
+	return &State{Records: append([]RecordResult(nil), x.results...), Scopes: x.output()}
 }
 
-// CardInScope is the state of one card in one scope (spec/roster-rules.md,
-// "State of a card in a scope"). A card with no valid record has every
-// pointer nil, no switch dates and ProofsOnLastDate 0.
-type CardInScope struct {
-	Current       *string
-	LastDeclared  *string
-	SwitchDates   []verifier.Date // one per valid switch, in seq order
+// Slot is the state of a card's slot on one platform (spec/roster-rules.md,
+// "State"). A slot never used has both pointers nil and no switch dates.
+type Slot struct {
+	Current      *string
+	LastDeclared *string
+	SwitchDates  []verifier.Date // one per valid switch, in seq order
+}
+
+// CardState is the state of one card (spec/roster-rules.md, "State"): the
+// card's own items and one slot per platform of the table. A card with no
+// valid record has LastCardProof nil, ProofsOnLastDate 0 and every slot
+// never used.
+type CardState struct {
 	LastCardProof *verifier.Date
 	// ProofsOnLastDate is the number of valid records dated LastCardProof
 	// (0 if there is none).
 	ProofsOnLastDate int
+	// Slots has one entry for every platform of the roster's table, keyed
+	// by platform ID.
+	Slots map[string]Slot
 }
 
 // Card returns the state of the card scopedID in the scope scopeString. The
 // values are copies.
-func (x *Rules) Card(scopeString, scopedID string) CardInScope {
+func (x *Rules) Card(scopeString, scopedID string) CardState {
 	cs := x.cards[cardKey{scopeString, scopedID}]
 	if cs == nil {
-		return CardInScope{}
+		cs = x.newCard()
 	}
-	cs = cs.clone()
-	out := CardInScope{SwitchDates: cs.switchDates}
-	if cs.current != nil {
-		u := *cs.current
-		out.Current = &u
-	}
-	if cs.lastDeclared != nil {
-		u := *cs.lastDeclared
-		out.LastDeclared = &u
+	out := CardState{Slots: map[string]Slot{}}
+	for p, s := range cs.slots {
+		slot := Slot{SwitchDates: append([]verifier.Date(nil), s.switchDates...)}
+		if s.current != nil {
+			u := *s.current
+			slot.Current = &u
+		}
+		if s.lastDeclared != nil {
+			u := *s.lastDeclared
+			slot.LastDeclared = &u
+		}
+		out.Slots[p] = slot
 	}
 	if cs.lastCardProof != nil {
 		d := *cs.lastCardProof
@@ -299,25 +445,20 @@ func (x *Rules) Card(scopeString, scopedID string) CardInScope {
 	return out
 }
 
-// AccountCards returns the number of cards whose current account in the
-// scope scopeString is username: the cards the output lists under that
-// account ("Output", accounts). It looks at every card of the rules' state.
-func (x *Rules) AccountCards(scopeString, username string) int {
-	n := 0
-	for k, cs := range x.cards {
-		if k.scope == scopeString && cs.current != nil && *cs.current == username {
-			n++
-		}
-	}
-	return n
+// AccountCards returns the number of cards in the scope scopeString whose
+// current account on platform is username: the cards the output lists
+// under that account ("Output", accounts). The same username on another
+// platform is another account.
+func (x *Rules) AccountCards(scopeString, platform, username string) int {
+	return x.accounts[accountKey{scopeString, platform, username}]
 }
 
-// Apply applies the rules to the records of a valid roster file, in order:
-// Rules.Apply on each record.
-func Apply(records []*verifier.Record, proofs ProofVerifier, crls CRLArchive) (*State, error) {
-	x := NewRules(proofs, crls)
-	for _, r := range records {
-		if _, err := x.Apply(r); err != nil {
+// Apply applies the rules to the records of a valid roster file of roster
+// r, in order: Rules.Apply on each record.
+func Apply(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*State, error) {
+	x := NewRules(r, proofs, crls)
+	for _, rec := range records {
+		if _, err := x.Apply(rec); err != nil {
 			return nil, err
 		}
 	}
@@ -337,49 +478,16 @@ func rootRecognized(crls CRLArchive, r *verifier.Record, d verifier.Date) (bool,
 	return false, nil
 }
 
-// applyEvent applies one declare or withdraw to the state of its card and
-// returns its kind, or the code that makes it invalid. An invalid event
-// changes nothing.
-func applyEvent(cs *cardState, action, u string, d verifier.Date) (kind, code string) {
-	switch action {
-	case verifier.Declare:
-		switch {
-		case cs.lastDeclared == nil:
-			cs.current, cs.lastDeclared = &u, &u
-			return KindFirst, ""
-		case *cs.lastDeclared == u:
-			cs.current = &u
-			return KindRefresh, ""
-		}
-		recent := 0
-		for _, s := range cs.switchDates {
-			if s >= d.AddDays(-(SwitchWindowDays - 1)) {
-				recent++
-			}
-		}
-		if recent >= MaxSwitches {
-			return "", CodeSwitchLimit
-		}
-		cs.current, cs.lastDeclared = &u, &u
-		cs.switchDates = append(cs.switchDates, d)
-		return KindSwitch, ""
-	case verifier.Withdraw:
-		if cs.current != nil && *cs.current == u {
-			cs.current = nil
-			return KindWithdraw, ""
-		}
-		return "", CodeNotCurrent
-	}
-	panic("action " + action) // ParseLine admits only the two actions
-}
-
-// output lists the state: scopes by scope string, cards by scoped_id,
-// accounts by username, each sorted by byte value. Cards with no valid
-// record, accounts with no card and scopes with no card are not listed.
-func output(cards map[cardKey]*cardState) []ScopeState {
+// output lists the state: scopes by scope string; cards by scoped_id, each
+// with its current list in ascending order of platform; accounts by
+// platform, then username, each with its cards by scoped_id. Every sort is
+// by byte value. Cards with no valid record, accounts with no card and
+// scopes with no card are not listed.
+func (x *Rules) output() []ScopeState {
 	byScope := map[string]*ScopeState{}
-	accounts := map[string]map[string][]AccountCard{}
-	for k, cs := range cards {
+	type acct struct{ platform, username string }
+	accounts := map[string]map[acct][]AccountCard{}
+	for k, cs := range x.cards {
 		if cs.lastCardProof == nil {
 			continue
 		}
@@ -387,24 +495,32 @@ func output(cards map[cardKey]*cardState) []ScopeState {
 		if s == nil {
 			s = &ScopeState{ScopeString: k.scope}
 			byScope[k.scope] = s
-			accounts[k.scope] = map[string][]AccountCard{}
+			accounts[k.scope] = map[acct][]AccountCard{}
 		}
-		var current *string
-		if cs.current != nil {
-			u := *cs.current
-			current = &u
-			accounts[k.scope][u] = append(accounts[k.scope][u], AccountCard{k.scopedID, *cs.lastCardProof})
+		card := Card{ScopedID: k.scopedID, LastCardProof: *cs.lastCardProof, Accounts: []verifier.Account{}}
+		for _, p := range x.platforms {
+			if cur := cs.slots[p.ID].current; cur != nil {
+				card.Accounts = append(card.Accounts, verifier.Account{Platform: p.ID, Username: *cur})
+				a := acct{p.ID, *cur}
+				accounts[k.scope][a] = append(accounts[k.scope][a], AccountCard{k.scopedID, *cs.lastCardProof})
+			}
 		}
-		s.Cards = append(s.Cards, Card{k.scopedID, current, *cs.lastCardProof})
+		s.Cards = append(s.Cards, card)
 	}
 	var out []ScopeState
 	for _, s := range byScope {
 		sort.Slice(s.Cards, func(i, j int) bool { return s.Cards[i].ScopedID < s.Cards[j].ScopedID })
-		for u, list := range accounts[s.ScopeString] {
+		for a, list := range accounts[s.ScopeString] {
 			sort.Slice(list, func(i, j int) bool { return list[i].ScopedID < list[j].ScopedID })
-			s.Accounts = append(s.Accounts, Account{u, list})
+			s.Accounts = append(s.Accounts, Account{a.platform, a.username, list})
 		}
-		sort.Slice(s.Accounts, func(i, j int) bool { return s.Accounts[i].Username < s.Accounts[j].Username })
+		sort.Slice(s.Accounts, func(i, j int) bool {
+			a, b := s.Accounts[i], s.Accounts[j]
+			if a.Platform != b.Platform {
+				return a.Platform < b.Platform
+			}
+			return a.Username < b.Username
+		})
 		out = append(out, *s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ScopeString < out[j].ScopeString })
@@ -419,13 +535,14 @@ type Report struct {
 	State   *State  // the rules applied to a valid file
 }
 
-// Check reads a roster file and, if it is valid, applies the rules to it.
+// Check reads a roster file of roster r and, if it is valid, applies the
+// rules to it.
 func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Report, error) {
 	records, head, broken := ReadFile(data, r)
 	if broken != nil {
 		return &Report{Broken: broken}, nil
 	}
-	st, err := Apply(records, proofs, crls)
+	st, err := Apply(records, r, proofs, crls)
 	if err != nil {
 		return nil, err
 	}

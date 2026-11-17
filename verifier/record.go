@@ -35,43 +35,68 @@ type Record struct {
 	Prev        string
 	ScopeString string
 	ScopedID    string
-	Action      string
-	Username    string
-	Challenge   string
-	Issuer      string
-	SMTRoot     string
-	Circuit     string
-	Proof       string
+	// Accounts is the whole list of accounts the card declares once the
+	// record is applied, in the order of the line. An empty list is written
+	// `[]`; nil and an empty slice are the same list.
+	Accounts  []Account
+	Challenge string
+	Issuer    string
+	SMTRoot   string
+	Circuit   string
+	Proof     string
 }
 
 // Line writes the record from the template, followed by LF. It does not check
 // the values.
 func (r *Record) Line() []byte {
 	var b bytes.Buffer
-	b.Grow(600 + len(r.Proof))
+	b.Grow(800 + len(r.Proof))
 	b.WriteString(`{"seq":`)
 	b.WriteString(strconv.FormatUint(r.Seq, 10))
-	for _, kv := range [][2]string{
-		{"prev", r.Prev}, {"scope_string", r.ScopeString}, {"scoped_id", r.ScopedID},
-		{"action", r.Action}, {"username", r.Username}, {"challenge", r.Challenge},
-		{"issuer", r.Issuer}, {"smt_root", r.SMTRoot}, {"circuit", r.Circuit}, {"proof", r.Proof},
-	} {
+	str := func(key, value string) {
 		b.WriteString(`,"`)
-		b.WriteString(kv[0])
+		b.WriteString(key)
 		b.WriteString(`":"`)
-		b.WriteString(kv[1])
+		b.WriteString(value)
 		b.WriteByte('"')
 	}
+	str("prev", r.Prev)
+	str("scope_string", r.ScopeString)
+	str("scoped_id", r.ScopedID)
+	b.WriteString(`,"accounts":`)
+	b.WriteString(AccountsText(r.Accounts))
+	str("challenge", r.Challenge)
+	str("issuer", r.Issuer)
+	str("smt_root", r.SMTRoot)
+	str("circuit", r.Circuit)
+	str("proof", r.Proof)
 	b.WriteString("}\n")
 	return b.Bytes()
 }
 
-// HashPreimage returns the bytes hashed into the record hash.
+// HashPreimage returns the bytes hashed into the record hash: the version
+// tag and the ten fields as written in the line, separated by LF.
 func (r *Record) HashPreimage() []byte {
 	return []byte(strings.Join([]string{
 		RecordVersion, strconv.FormatUint(r.Seq, 10), r.Prev, r.ScopeString, r.ScopedID,
-		r.Action, r.Username, r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof,
+		AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof,
 	}, "\n"))
+}
+
+// Equal reports whether r and o have the same values. A nil and an empty
+// account list are the same list.
+func (r *Record) Equal(o *Record) bool {
+	if len(r.Accounts) != len(o.Accounts) {
+		return false
+	}
+	for i := range r.Accounts {
+		if r.Accounts[i] != o.Accounts[i] {
+			return false
+		}
+	}
+	return r.Seq == o.Seq && r.Prev == o.Prev && r.ScopeString == o.ScopeString && r.ScopedID == o.ScopedID &&
+		r.Challenge == o.Challenge && r.Issuer == o.Issuer && r.SMTRoot == o.SMTRoot &&
+		r.Circuit == o.Circuit && r.Proof == o.Proof
 }
 
 // Hash returns the record hash: SHA-256 of the preimage, 64 lowercase hex digits.
@@ -102,7 +127,8 @@ func decodeProof(s string) ([]byte, error) {
 }
 
 // CheckValues checks every value against its format (spec/record.md,
-// "Fields"), in a roster whose accepted scopes are those of roster.
+// "Fields"), in a roster whose accepted scopes and platforms are those of
+// roster.
 func (r *Record) CheckValues(roster Roster) error {
 	if r.Seq < 1 || r.Seq > MaxSeq {
 		return errors.New("seq: not from 1 to 2^53 − 1")
@@ -120,11 +146,8 @@ func (r *Record) CheckValues(roster Roster) error {
 	if _, err := ParseScopedID(r.ScopedID); err != nil {
 		return err
 	}
-	if r.Action != Declare && r.Action != Withdraw {
-		return errors.New("action: not declare or withdraw")
-	}
-	if !scope.ValidUsername(r.Username) {
-		return errors.New("username: not in the format of the scope")
+	if err := CheckAccounts(roster, r.Accounts); err != nil {
+		return err
 	}
 	if _, err := ParseChallenge(r.Challenge); err != nil {
 		return err
@@ -164,7 +187,7 @@ func ParseLine(line []byte, roster Roster) (*Record, error) {
 	if bytes.IndexByte(line, '\n') != len(line)-1 {
 		return nil, errors.New("LF inside the line")
 	}
-	members, err := parseFlatObject(line[:len(line)-1])
+	members, err := parseRecordObject(line[:len(line)-1])
 	if err != nil {
 		return nil, err
 	}
@@ -185,8 +208,8 @@ func recordFromMembers(members []jsonMember) (*Record, error) {
 	r := &Record{}
 	strs := map[string]*string{
 		"prev": &r.Prev, "scope_string": &r.ScopeString, "scoped_id": &r.ScopedID,
-		"action": &r.Action, "username": &r.Username, "challenge": &r.Challenge,
-		"issuer": &r.Issuer, "smt_root": &r.SMTRoot, "circuit": &r.Circuit, "proof": &r.Proof,
+		"challenge": &r.Challenge, "issuer": &r.Issuer, "smt_root": &r.SMTRoot,
+		"circuit": &r.Circuit, "proof": &r.Proof,
 	}
 	seen := map[string]bool{}
 	for _, m := range members {
@@ -194,12 +217,20 @@ func recordFromMembers(members []jsonMember) (*Record, error) {
 			continue // a duplicate key; the byte comparison rejects the line
 		}
 		seen[m.key] = true
-		if m.key == "seq" {
-			if m.value.isString || !digits(m.value.text) || (len(m.value.text) > 1 && m.value.text[0] == '0') || len(m.value.text) > 16 {
+		switch m.key {
+		case "seq":
+			if m.value.isString || m.value.isList || !digits(m.value.text) || (len(m.value.text) > 1 && m.value.text[0] == '0') || len(m.value.text) > 16 {
 				return nil, errors.New("seq: not a decimal integer without leading zeros")
 			}
 			n, _ := strconv.ParseUint(m.value.text, 10, 64)
 			r.Seq = n
+			continue
+		case "accounts":
+			accounts, err := accountsFromList(m.value)
+			if err != nil {
+				return nil, err
+			}
+			r.Accounts = accounts
 			continue
 		}
 		p, ok := strs[m.key]
@@ -211,8 +242,47 @@ func recordFromMembers(members []jsonMember) (*Record, error) {
 		}
 		*p = m.value.text
 	}
-	if len(seen) != 11 || !seen["seq"] {
+	if len(seen) != 10 || !seen["seq"] || !seen["accounts"] {
 		return nil, errors.New("missing key")
 	}
 	return r, nil
+}
+
+// accountsFromList reads the accounts of the list v in the order written.
+// Within an account the first of two equal keys is taken; the byte
+// comparison of the rewritten line rejects the duplicate, like any other
+// spelling outside the template.
+func accountsFromList(v jsonValue) ([]Account, error) {
+	if !v.isList {
+		return nil, errors.New("accounts: not a list")
+	}
+	accounts := make([]Account, 0, len(v.list))
+	for _, members := range v.list {
+		var a Account
+		seen := map[string]bool{}
+		for _, m := range members {
+			if seen[m.key] {
+				continue
+			}
+			seen[m.key] = true
+			var p *string
+			switch m.key {
+			case "platform":
+				p = &a.Platform
+			case "username":
+				p = &a.Username
+			default:
+				return nil, fmt.Errorf("accounts: unknown key %q", m.key)
+			}
+			if !m.value.isString {
+				return nil, fmt.Errorf("accounts: %s: not a string", m.key)
+			}
+			*p = m.value.text
+		}
+		if !seen["platform"] || !seen["username"] {
+			return nil, errors.New("accounts: an account without platform or username")
+		}
+		accounts = append(accounts, a)
+	}
+	return accounts, nil
 }

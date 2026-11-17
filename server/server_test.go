@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/iamreal-tw/iamreal/crl"
 	"github.com/iamreal-tw/iamreal/verifier"
@@ -24,7 +25,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 	const n = 20
 	subs := make([]submission, n)
 	for i := range subs {
-		subs[i] = h.sub("declare", newCard(), "alice", root)
+		subs[i] = h.sub(newCard(), root, "threads:alice")
 	}
 	statuses := make([]int, n)
 	seqs := make([]float64, n)
@@ -54,7 +55,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 	}
 
 	// The same challenge twice at the same time.
-	s := h.sub("declare", newCard(), "alice", root)
+	s := h.sub(newCard(), root, "threads:alice")
 	other := s
 	other.ScopedID = newCard()
 	results := make([]string, 2)
@@ -83,18 +84,20 @@ func TestStartRecomputes(t *testing.T) {
 	root := rootOf(t, crl)
 	h := newHarness(t, startOfTests, crl)
 	card := newCard()
-	h.mustSubmit(h.sub("declare", card, "alice", root), "first")
-	h.mustSubmit(h.sub("declare", card, "bob", root), "switch")
+	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch")
 	ask := `{"scope_string":"` + testScope + `","scoped_id":"` + card + `"}`
 	_, before := h.do("POST", "/api/v1/card-state", ask)
 
 	h.start()
 	_, after := h.do("POST", "/api/v1/card-state", ask)
-	if !reflect.DeepEqual(before, after) || after["current"] != "bob" {
+	if !reflect.DeepEqual(before, after) || current(after, "threads") != "bob" || current(after, "test-example") != "a-b" {
 		t.Errorf("before %v\nafter %v", before, after)
 	}
-	h.mustSubmit(h.sub("declare", card, "carol", root), "switch")
-	h.wantError(h.sub("declare", card, "dave", root), 400, "switch_limit")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:carol"), "test-example refresh, threads switch")
+	h.wantError(h.sub(newCard(), root), 400, "empty")
+	h.clock.Set(startOfTests.Add(24 * time.Hour))
+	h.wantError(h.sub(card, root, "test-example:a-b", "threads:dave"), 400, "switch_limit")
 }
 
 // The server does not start on a roster with an invalid record, and says
@@ -104,20 +107,20 @@ func TestStartRefusesInvalidRecord(t *testing.T) {
 	root := rootOf(t, crl)
 	h := newHarness(t, startOfTests, crl)
 	card := newCard()
-	h.mustSubmit(h.sub("declare", card, "alice", root), "first")
+	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
 
-	// A record written past the server: a withdrawal of an account the
-	// card is not declared to.
+	// A record written past the server: the empty list of a card that
+	// declares no account.
 	_, head := mustHead(t, h)
 	r := &verifier.Record{
-		Seq: 2, Prev: head, ScopeString: testScope, ScopedID: card, Action: "withdraw", Username: "bob",
+		Seq: 2, Prev: head, ScopeString: testScope, ScopedID: newCard(),
 		Challenge: h.challenge(), Issuer: "G3", SMTRoot: root, Circuit: circuitOf("G3"), Proof: goodProof,
 	}
 	if err := h.store.Append(r); err != nil {
 		t.Fatal(err)
 	}
 	_, err := New(h.config())
-	if err == nil || !strings.Contains(err.Error(), "record 2 is invalid: not_current") {
+	if err == nil || !strings.Contains(err.Error(), "record 2 is invalid: empty") {
 		t.Errorf("%v", err)
 	}
 }
@@ -127,7 +130,7 @@ func TestStartRefusesInvalidRecord(t *testing.T) {
 func TestStartRefusesWithoutTheCRL(t *testing.T) {
 	c := g3CRL(t)
 	h := newHarness(t, startOfTests, c)
-	h.mustSubmit(h.sub("declare", newCard(), "alice", rootOf(t, c)), "first")
+	h.mustSubmit(h.sub(newCard(), rootOf(t, c), "threads:alice"), "threads first")
 	if err := os.Remove(filepath.Join(crlDir(h.data), crl.IndexFileName)); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +149,7 @@ func TestStartRefusesWithoutTheCRL(t *testing.T) {
 func TestStartRefusesBrokenRoster(t *testing.T) {
 	c := g3CRL(t)
 	h := newHarness(t, startOfTests, c)
-	h.mustSubmit(h.sub("declare", newCard(), "alice", rootOf(t, c)), "first")
+	h.mustSubmit(h.sub(newCard(), rootOf(t, c), "threads:alice"), "threads first")
 	cfg := h.config()
 	cfg.Roster = verifier.Production
 	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "record 1: the roster is broken there") {
@@ -172,9 +175,9 @@ func TestLogHasNoAddress(t *testing.T) {
 	root := rootOf(t, c)
 	h := newHarness(t, startOfTests, c)
 	card := newCard()
-	s := h.sub("declare", card, "alice", root)
+	s := h.sub(card, root, "threads:alice")
 	h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
-	h.mustSubmit(s, "first")
+	h.mustSubmit(s, "threads first")
 	h.wantError(s, 400, "challenge_used")
 	h.do("POST", "/api/v1/card-state", `{"scoped_id":"`+card+`"}`)
 	h.do("GET", "/api/v1/card-state/"+card, "")
@@ -343,4 +346,12 @@ func TestStaticFiles(t *testing.T) {
 	if rec := h.raw("GET", "/", ""); rec.Code != 404 {
 		t.Errorf("/ without web: %d", rec.Code)
 	}
+}
+
+// current returns the current account of a card-state response on a
+// platform, or nil.
+func current(body map[string]any, platform string) any {
+	platforms, _ := body["platforms"].(map[string]any)
+	slot, _ := platforms[platform].(map[string]any)
+	return slot["current"]
 }

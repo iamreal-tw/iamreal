@@ -36,7 +36,7 @@ import (
 
 const (
 	dir   = "cmd/iamreal-verify/testdata"
-	scope = "iamreal-test:threads:0_________"
+	scope = "iamreal-test:public:0__________"
 )
 
 // The circuit of each issuer key (spec/record.md, "Accepted circuits").
@@ -62,16 +62,24 @@ var crls = []crlSpec{
 // recordSpec is one record of the roster; crl is the index into crls of the
 // CRL whose root it uses.
 type recordSpec struct {
-	issuer, action, date string
-	crl                  int
+	issuer   string
+	accounts []verifier.Account
+	date     string
+	crl      int
 }
 
+var (
+	alice = verifier.Account{Platform: "threads", Username: "alice"}
+	ab    = verifier.Account{Platform: "test-example", Username: "a-b"}
+)
+
 // Record 2 (2026-11-21) fits B (2026-11-20) and C (2026-11-21); record 3
-// (2026-11-24) only C.
+// (2026-11-24) only C. Record 3 leaves out the account of record 2 on
+// test-example, which withdraws it.
 var records = []recordSpec{
-	{"G2", "declare", "2026-11-16", 0},
-	{"G3", "declare", "2026-11-21", 1},
-	{"G3", "withdraw", "2026-11-24", 1},
+	{"G2", []verifier.Account{alice}, "2026-11-16", 0},
+	{"G3", []verifier.Account{ab, alice}, "2026-11-21", 1},
+	{"G3", []verifier.Account{alice}, "2026-11-24", 1},
 }
 
 func main() {
@@ -151,12 +159,11 @@ func main() {
 
 	// The proofs, by make-proofs.mjs.
 	type inRecord struct {
-		Circuit   string   `json:"circuit"`
-		Issuer    string   `json:"issuer"`
-		Action    string   `json:"action"`
-		Username  string   `json:"username"`
-		Challenge string   `json:"challenge"`
-		Revoked   []string `json:"revoked"`
+		Circuit   string      `json:"circuit"`
+		Issuer    string      `json:"issuer"`
+		Accounts  []inAccount `json:"accounts"`
+		Challenge string      `json:"challenge"`
+		Revoked   []string    `json:"revoked"`
 	}
 	type inIssuer struct {
 		Bits   int    `json:"bits"`
@@ -181,7 +188,7 @@ func main() {
 		for _, s := range sets[crls[rec.crl].serials] {
 			revoked = append(revoked, hex.EncodeToString(s))
 		}
-		in.Records = append(in.Records, inRecord{circuits[rec.issuer], rec.issuer, rec.action, "alice", challenge(rec.date), revoked})
+		in.Records = append(in.Records, inRecord{circuits[rec.issuer], rec.issuer, inAccounts(rec.accounts), challenge(rec.date), revoked})
 	}
 	j, _ := json.Marshal(in)
 	write(filepath.Join(work, "input.json"), j)
@@ -193,8 +200,9 @@ func main() {
 	var out struct {
 		Commit  string `json:"zkid_noir_commit"`
 		Records []struct {
-			SMTRoot   string `json:"smt_root"`
-			Nullifier string `json:"nullifier"`
+			SMTRoot         string `json:"smt_root"`
+			DeclarationCode string `json:"declaration_code"`
+			Nullifier       string `json:"nullifier"`
 		} `json:"records"`
 	}
 	b, err := os.ReadFile(filepath.Join(work, "output.json"))
@@ -213,6 +221,10 @@ func main() {
 		// zkid-noir's reference tree and crl/ agree on the root.
 		if o.SMTRoot != roots[rec.crl] {
 			fatalf("record %d: root %s from zkid-noir, %s from crl/", i+1, o.SMTRoot, roots[rec.crl])
+		}
+		// make-proofs.mjs and verifier/ agree on the declaration code.
+		if code := verifier.DeclarationCode(scope, rec.accounts, in.Records[i].Challenge); o.DeclarationCode != code {
+			fatalf("record %d: declaration code %s from make-proofs.mjs, %s from verifier/", i+1, o.DeclarationCode, code)
 		}
 		n, ok := new(big.Int).SetString(o.Nullifier, 16)
 		if !ok {
@@ -234,7 +246,7 @@ func main() {
 		}
 		rr := &verifier.Record{
 			Seq: uint64(i + 1), Prev: prev, ScopeString: scope, ScopedID: verifier.ScopedIDText(f),
-			Action: rec.action, Username: "alice", Challenge: in.Records[i].Challenge, Issuer: rec.issuer,
+			Accounts: rec.accounts, Challenge: in.Records[i].Challenge, Issuer: rec.issuer,
 			SMTRoot: o.SMTRoot, Circuit: vk, Proof: base64.StdEncoding.EncodeToString(proof),
 		}
 		if _, err := verifier.ParseLine(rr.Line(), verifier.Test); err != nil {
@@ -250,6 +262,20 @@ func main() {
 
 // work holds the private keys while the program runs; fatal removes it.
 var work string
+
+// inAccount is an account in the input of make-proofs.mjs.
+type inAccount struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
+func inAccounts(list []verifier.Account) []inAccount {
+	out := []inAccount{}
+	for _, a := range list {
+		out = append(out, inAccount{a.Platform, a.Username})
+	}
+	return out
+}
 
 func fatal(v ...any) {
 	os.RemoveAll(work)

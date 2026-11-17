@@ -17,6 +17,7 @@ import (
 const (
 	errMalformed         = "malformed"
 	errScope             = "scope"
+	errPlatform          = "platform"
 	errChallengeUnknown  = "challenge_unknown"
 	errChallengeUsed     = "challenge_used"
 	errChallengeAttempts = "challenge_attempts"
@@ -124,18 +125,25 @@ func (s *Server) postChallenge(r *http.Request) reply {
 
 // cardState is the response of POST /api/v1/card-state. The fields are in
 // the order of docs/api/card-proof.md; nil pointers are written as null.
+// Platforms has one entry for every platform of the roster's table; the
+// order of its entries means nothing (encoding/json writes them sorted).
 type cardState struct {
-	Current          *string  `json:"current"`
-	LastDeclared     *string  `json:"last_declared"`
-	LastCardProof    *string  `json:"last_card_proof"`
-	ProofsOnLastDate int      `json:"proofs_on_last_date"`
-	SwitchDates      []string `json:"switch_dates"`
-	Count            uint64   `json:"count"`
-	Head             string   `json:"head"`
+	LastCardProof    *string              `json:"last_card_proof"`
+	ProofsOnLastDate int                  `json:"proofs_on_last_date"`
+	Platforms        map[string]slotState `json:"platforms"`
+	Count            uint64               `json:"count"`
+	Head             string               `json:"head"`
 }
 
-// POST /api/v1/card-state: the state of one card in one scope, as the
-// roster rules compute it.
+// slotState is the state of the card's slot on one platform.
+type slotState struct {
+	Current      *string  `json:"current"`
+	LastDeclared *string  `json:"last_declared"`
+	SwitchDates  []string `json:"switch_dates"`
+}
+
+// POST /api/v1/card-state: the state of one card, for every platform, as
+// the roster rules compute it. The server sends facts, not conclusions.
 func (s *Server) postCardState(r *http.Request) reply {
 	f, err := readObject(r.Body, "scope_string", "scoped_id")
 	if err != nil {
@@ -152,15 +160,19 @@ func (s *Server) postCardState(r *http.Request) reply {
 
 	s.mu.RLock()
 	card := s.rules.Card(f["scope_string"], f["scoped_id"])
-	out := cardState{Current: card.Current, LastDeclared: card.LastDeclared, ProofsOnLastDate: card.ProofsOnLastDate, SwitchDates: []string{}, Count: s.count, Head: s.head}
+	out := cardState{ProofsOnLastDate: card.ProofsOnLastDate, Platforms: map[string]slotState{}, Count: s.count, Head: s.head}
 	s.mu.RUnlock()
 
 	if card.LastCardProof != nil {
 		d := card.LastCardProof.String()
 		out.LastCardProof = &d
 	}
-	for _, d := range card.SwitchDates {
-		out.SwitchDates = append(out.SwitchDates, d.String())
+	for p, slot := range card.Slots {
+		st := slotState{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchDates: []string{}}
+		for _, d := range slot.SwitchDates {
+			st.SwitchDates = append(st.SwitchDates, d.String())
+		}
+		out.Platforms[p] = st
 	}
 	return ok(http.StatusOK, out)
 }

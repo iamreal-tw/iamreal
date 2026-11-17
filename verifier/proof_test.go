@@ -25,14 +25,13 @@ import (
 )
 
 type proofCase struct {
-	Circuit         string `json:"circuit"`
-	Issuer          string `json:"issuer"`
-	Action          string `json:"action"`
-	Username        string `json:"username"`
-	Challenge       string `json:"challenge"`
-	DeclarationCode string `json:"declaration_code"`
-	IssuerModulus   string `json:"issuer_modulus"`
-	Nullifier       string `json:"nullifier"`
+	Circuit         string          `json:"circuit"`
+	Issuer          string          `json:"issuer"`
+	Accounts        []vectorAccount `json:"accounts"`
+	Challenge       string          `json:"challenge"`
+	DeclarationCode string          `json:"declaration_code"`
+	IssuerModulus   string          `json:"issuer_modulus"`
+	Nullifier       string          `json:"nullifier"`
 }
 
 type proofData struct {
@@ -123,7 +122,7 @@ func records(t *testing.T, d *proofData) []*verifier.Record {
 		c := circuitOf(t, p.Circuit)
 		r := &verifier.Record{
 			Seq: uint64(i + 1), Prev: prev, ScopeString: d.ScopeString, ScopedID: verifier.ScopedIDText(f),
-			Action: p.Action, Username: p.Username, Challenge: p.Challenge, Issuer: p.Issuer,
+			Accounts: accountsOf(p.Accounts), Challenge: p.Challenge, Issuer: p.Issuer,
 			SMTRoot: d.SMTRoot, Circuit: c.VKSHA256,
 			Proof: base64.StdEncoding.EncodeToString(readTestdata(t, p.Circuit+".proof")),
 		}
@@ -170,7 +169,7 @@ func TestRealProofVerifies(t *testing.T) {
 			if !bytes.Equal(verifier.EncodePublicInputs(inputs), readTestdata(t, p.Circuit+".public_inputs")) {
 				t.Errorf("rebuilt public inputs differ from bb's")
 			}
-			if got := verifier.DeclarationCode(r.Action, r.ScopeString, r.Username, r.Challenge); got != p.DeclarationCode {
+			if got := verifier.DeclarationCode(r.ScopeString, r.Accounts, r.Challenge); got != p.DeclarationCode {
 				t.Errorf("declaration code %s, want %s", got, p.DeclarationCode)
 			}
 		})
@@ -250,18 +249,30 @@ func TestRealProofEachRecordFieldChanged(t *testing.T) {
 				"challenge date":   func(r *verifier.Record) { r.Challenge = "2026-11-17" + r.Challenge[10:] },
 				"challenge random": func(r *verifier.Record) { r.Challenge = r.Challenge[:11] + "00000000000000000000000000" },
 				"scoped_id":        func(r *verifier.Record) { r.ScopedID = "0400000000000000000000000000000000000000000000000000" },
-				"scope_string":     func(r *verifier.Record) { r.ScopeString = "iamreal:threads:0______________" },
-				"username":         func(r *verifier.Record) { r.Username = "bob" },
-				"action": func(r *verifier.Record) {
-					if r.Action == verifier.Declare {
-						r.Action = verifier.Withdraw
+				"scope_string":     func(r *verifier.Record) { r.ScopeString = "iamreal:public:0_______________" },
+				"a username": func(r *verifier.Record) {
+					r.Accounts[len(r.Accounts)-1].Username = "bob"
+				},
+				"an account moved to another platform": func(r *verifier.Record) {
+					a := r.Accounts[len(r.Accounts)-1]
+					r.Accounts = []verifier.Account{{Platform: "test-example", Username: a.Username}}
+				},
+				"one account fewer": func(r *verifier.Record) { r.Accounts = r.Accounts[1:] },
+				"one account more": func(r *verifier.Record) {
+					r.Accounts = append([]verifier.Account{{Platform: "test-example", Username: "c-d"}}, r.Accounts[len(r.Accounts)-1:]...)
+				},
+				"the accounts in the other order": func(r *verifier.Record) {
+					if len(r.Accounts) == 2 {
+						r.Accounts = []verifier.Account{r.Accounts[1], r.Accounts[0]}
 					} else {
-						r.Action = verifier.Declare
+						r.Accounts = append(r.Accounts, verifier.Account{Platform: "aaa", Username: "x"})
 					}
 				},
+				"the empty list": func(r *verifier.Record) { r.Accounts = nil },
 			}
 			for name, change := range changes {
 				c := *r
+				c.Accounts = append([]verifier.Account(nil), r.Accounts...)
 				change(&c)
 				if err := v.VerifyRecord(&c); !isRejection(err) {
 					t.Errorf("%s changed: %v, want a rejection", name, err)
@@ -477,13 +488,19 @@ func TestRealProofRoster(t *testing.T) {
 	}
 	var got []string
 	for _, res := range rep.State.Records {
-		got = append(got, res.Kind+res.Reason)
+		var kinds []string
+		for _, k := range res.Kinds {
+			kinds = append(kinds, k.Platform+" "+k.Kind)
+		}
+		got = append(got, strings.Join(kinds, " ")+res.Reason)
 	}
-	if strings.Join(got, ",") != "first,withdraw" {
-		t.Errorf("results %v, want first, withdraw", got)
+	if want := "test-example first threads first,test-example withdraw threads refresh"; strings.Join(got, ",") != want {
+		t.Errorf("results %v, want %s", got, want)
 	}
-	if len(rep.State.Scopes) != 1 || len(rep.State.Scopes[0].Cards) != 1 || rep.State.Scopes[0].Cards[0].Current != nil ||
-		rep.State.Scopes[0].Cards[0].LastCardProof.String() != "2027-01-01" || len(rep.State.Scopes[0].Accounts) != 0 {
+	if s := rep.State.Scopes; len(s) != 1 || len(s[0].Cards) != 1 ||
+		verifier.AccountsText(s[0].Cards[0].Accounts) != `[{"platform":"threads","username":"alice"}]` ||
+		s[0].Cards[0].LastCardProof.String() != "2027-01-01" || len(s[0].Accounts) != 1 ||
+		s[0].Accounts[0].Platform != "threads" || s[0].Accounts[0].Username != "alice" {
 		t.Errorf("state %+v", rep.State.Scopes)
 	}
 	// In a production roster the test scope makes the file broken.

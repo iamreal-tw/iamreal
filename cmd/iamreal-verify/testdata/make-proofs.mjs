@@ -7,8 +7,9 @@
 // one card serial number per issuer, and per record its fields and the
 // serial numbers of the CRL whose root it uses. It writes
 // <work dir>/output.json (per record: the root of its tree, built here with
-// zkid-noir's reference tree, the declaration code and the nullifier) and
-// <work dir>/record-<n>.proof.
+// zkid-noir's reference tree, the declaration code computed here from the
+// scope string, the record's accounts and its challenge, and the nullifier)
+// and <work dir>/record-<n>.proof.
 //
 // It uses the test helpers of zkid-noir (tests/lib/) and its compiled
 // circuits (target/), as verifier/testdata/make-proofs.mjs does. Nothing is
@@ -26,7 +27,6 @@ const { loadPoseidon2 } = await lib("hashes.mjs");
 const { chainCase, noirCardProofInputs } = await lib("inputs.mjs");
 const { runNoir } = await lib("run.mjs");
 const { Smt } = await lib("smt.mjs");
-const { declarationCode } = await lib("declaration-code.mjs");
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 const git = (...args) => execFileSync("git", ["-C", zkid, ...args], { encoding: "utf8" }).trim();
@@ -37,6 +37,22 @@ const VK_SHA256 = {
   card_proof_rs2048: "816406c75c5422cefab5acd70276f3dc8ce5d269736aefd9795e230569bd3ac8",
   card_proof_rs4096: "bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2",
 };
+
+// The declaration code of spec/declaration-code.md: the version tag, the
+// scope string, one line platform:username per account in the order of the
+// list, and the challenge. Written here rather than taken from zkid-noir,
+// whose helper (tests/lib/declaration-code.mjs) computes an earlier draft.
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+function declarationCode({ scopeString, accounts, challenge }) {
+  const lines = ["iamreal-declaration-v1", scopeString, ...accounts.map((a) => `${a.platform}:${a.username}`), challenge];
+  const digest = createHash("sha256").update(lines.join("\n"), "utf8").digest();
+  let bits = "";
+  for (const b of digest) bits += b.toString(2).padStart(8, "0");
+  bits = bits.padEnd(Math.ceil(bits.length / 5) * 5, "0");
+  let out = "";
+  for (let i = 0; i < bits.length; i += 5) out += CROCKFORD[parseInt(bits.slice(i, i + 5), 2)];
+  return Buffer.from("D" + out.slice(0, 30), "ascii");
+}
 
 // current_time: the last second of the challenge's date in Taiwan, in UTC.
 const currentTime = (challenge) => BigInt(challenge.slice(2, 4) + challenge.slice(5, 7) + challenge.slice(8, 10) + "155959");
@@ -69,7 +85,7 @@ for (const [i, r] of input.records.entries()) {
   for (const s of r.revoked) tree.insert(BigInt("0x" + s));
   const { key, tbs } = cards[r.issuer];
   const smt = tree.proveAbsent(serialOf(tbs));
-  const code = declarationCode({ action: r.action, scopeString: input.scope, username: r.username, challenge: r.challenge });
+  const code = declarationCode({ scopeString: input.scope, accounts: r.accounts, challenge: r.challenge });
   const inputs = noirCardProofInputs({
     chain: chainCase({ ca: issuers[r.issuer], tbs, currentTime: currentTime(r.challenge), smt }),
     key, scope: Buffer.from(input.scope, "ascii"), code,

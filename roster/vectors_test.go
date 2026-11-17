@@ -32,11 +32,23 @@ func load(t *testing.T, name string, v any) {
 	}
 }
 
+var rosters = map[string]verifier.Roster{"production": verifier.Production, "test": verifier.Test}
+
+func rosterOf(t *testing.T, name string) verifier.Roster {
+	t.Helper()
+	r, ok := rosters[name]
+	if !ok {
+		t.Fatalf("roster %q", name)
+	}
+	return r
+}
+
 func TestVectorsRecordFiles(t *testing.T) {
 	var v struct {
 		Tokens map[string]string `json:"tokens"`
 		Files  []struct {
 			Name    string `json:"name"`
+			Roster  string `json:"roster"`
 			Content string `json:"content"`
 			Valid   bool   `json:"valid"`
 			Head    string `json:"head"`
@@ -51,7 +63,7 @@ func TestVectorsRecordFiles(t *testing.T) {
 			for k, val := range v.Tokens {
 				content = strings.ReplaceAll(content, k, val)
 			}
-			records, head, broken := roster.ReadFile([]byte(content), verifier.Production)
+			records, head, broken := roster.ReadFile([]byte(content), rosterOf(t, f.Roster))
 			if !f.Valid {
 				if broken == nil {
 					t.Fatalf("valid, want broken at line %d with %s", f.Line, f.Code)
@@ -74,32 +86,48 @@ func TestVectorsRecordFiles(t *testing.T) {
 	}
 }
 
+type account struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
 type event struct {
-	Seq         uint64   `json:"seq"`
-	ScopeString string   `json:"scope_string"`
-	ScopedID    string   `json:"scoped_id"`
-	Action      string   `json:"action"`
-	Username    string   `json:"username"`
-	Challenge   string   `json:"challenge"`
-	Date        string   `json:"date"`
-	Verifies    bool     `json:"verifies"`
-	CRLDates    []string `json:"crl_dates"`
+	Seq         uint64    `json:"seq"`
+	ScopeString string    `json:"scope_string"`
+	ScopedID    string    `json:"scoped_id"`
+	Accounts    []account `json:"accounts"`
+	Challenge   string    `json:"challenge"`
+	Date        string    `json:"date"`
+	Verifies    bool      `json:"verifies"`
+	CRLDates    []string  `json:"crl_dates"`
+}
+
+type kind struct {
+	Platform string `json:"platform"`
+	Kind     string `json:"kind"`
 }
 
 type result struct {
 	Seq    uint64 `json:"seq"`
 	Valid  bool   `json:"valid"`
-	Kind   string `json:"kind,omitempty"`
+	Kinds  []kind `json:"kinds,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
 
-// cardOut is a card of the output, with proofs_on_last_date from the
-// card's state (the output does not list it; see the vectors' note).
+type slotOut struct {
+	Current      *string  `json:"current"`
+	LastDeclared *string  `json:"last_declared"`
+	SwitchDates  []string `json:"switch_dates"`
+}
+
+// cardOut is a card of the output, with proofs_on_last_date and slots from
+// the card's state (the output does not list them; see the vectors' note).
 type cardOut struct {
-	ScopedID         string  `json:"scoped_id"`
-	Current          *string `json:"current"`
-	LastCardProof    string  `json:"last_card_proof"`
-	ProofsOnLastDate int     `json:"proofs_on_last_date"`
+	ScopedID         string             `json:"scoped_id"`
+	LastCardProof    string             `json:"last_card_proof"`
+	Accounts         []account          `json:"accounts"`
+	ProofsOnLastDate int                `json:"proofs_on_last_date"`
+	Slots            map[string]slotOut `json:"slots"`
 }
 
 type accountCardOut struct {
@@ -108,6 +136,7 @@ type accountCardOut struct {
 }
 
 type accountOut struct {
+	Platform string           `json:"platform"`
 	Username string           `json:"username"`
 	Cards    []accountCardOut `json:"cards"`
 }
@@ -116,6 +145,14 @@ type scopeOut struct {
 	ScopeString string       `json:"scope_string"`
 	Cards       []cardOut    `json:"cards"`
 	Accounts    []accountOut `json:"accounts"`
+}
+
+type rulesCase struct {
+	Name    string     `json:"name"`
+	Roster  string     `json:"roster"`
+	Events  []event    `json:"events"`
+	Results []result   `json:"results"`
+	State   []scopeOut `json:"state"`
 }
 
 // fakeProofs is check 1 from the events' `verifies`.
@@ -145,60 +182,77 @@ func rootOf(seq uint64) string {
 	return "0" + hex.EncodeToString(sum[:])[1:]
 }
 
+func accountsOf(list []account) []verifier.Account {
+	out := []verifier.Account{}
+	for _, a := range list {
+		out = append(out, verifier.Account{Platform: a.Platform, Username: a.Username})
+	}
+	return out
+}
+
+// casesRecords turns a case's events into records, with the proof verifier
+// and CRL archive that answer checks 1 and 3 as the events say. Each record
+// is checked to be well formed in the case's roster.
+func caseRecords(t *testing.T, c rulesCase) ([]*verifier.Record, fakeProofs, fakeArchive) {
+	t.Helper()
+	r := rosterOf(t, c.Roster)
+	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
+	proofs := fakeProofs{}
+	archive := fakeArchive{}
+	var records []*verifier.Record
+	for _, e := range c.Events {
+		rec := &verifier.Record{
+			Seq: e.Seq, Prev: verifier.GenesisPrev, ScopeString: e.ScopeString, ScopedID: e.ScopedID,
+			Accounts: accountsOf(e.Accounts), Challenge: e.Challenge, Issuer: "G3",
+			SMTRoot: rootOf(e.Seq), Circuit: strings.Repeat("0", 64), Proof: proof,
+		}
+		if err := rec.CheckValues(r); err != nil {
+			t.Fatalf("seq %d is not a well-formed record of the %s roster: %v", e.Seq, r, err)
+		}
+		if d, _ := rec.Date(); d.String() != e.Date {
+			t.Fatalf("seq %d: date %s, the vector says %s", e.Seq, d, e.Date)
+		}
+		proofs[e.Seq] = e.Verifies
+		for _, s := range e.CRLDates {
+			archive[rec.SMTRoot] = append(archive[rec.SMTRoot], date(t, s))
+		}
+		records = append(records, rec)
+	}
+	return records, proofs, archive
+}
+
+func resultOf(res roster.RecordResult) result {
+	out := result{Seq: res.Seq, Valid: res.Valid, Reason: res.Reason}
+	for _, k := range res.Kinds {
+		out.Kinds = append(out.Kinds, kind{k.Platform, k.Kind})
+	}
+	return out
+}
+
 func TestVectorsRosterRules(t *testing.T) {
 	var v struct {
-		Cases []struct {
-			Name    string     `json:"name"`
-			Events  []event    `json:"events"`
-			Results []result   `json:"results"`
-			State   []scopeOut `json:"state"`
-		} `json:"cases"`
+		Cases []rulesCase `json:"cases"`
 	}
 	load(t, "roster-rules.json", &v)
-	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
 	for _, c := range v.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			proofs := fakeProofs{}
-			archive := fakeArchive{}
-			var records []*verifier.Record
-			for _, e := range c.Events {
-				r := &verifier.Record{
-					Seq: e.Seq, Prev: verifier.GenesisPrev, ScopeString: e.ScopeString, ScopedID: e.ScopedID,
-					Action: e.Action, Username: e.Username, Challenge: e.Challenge, Issuer: "G3",
-					SMTRoot: rootOf(e.Seq), Circuit: strings.Repeat("0", 64), Proof: proof,
-				}
-				// The events stand for well-formed records; the scopes are
-				// those of either roster.
-				if r.CheckValues(verifier.Production) != nil && r.CheckValues(verifier.Test) != nil {
-					t.Fatalf("seq %d is not a well-formed record: %v", e.Seq, r.CheckValues(verifier.Production))
-				}
-				if d, _ := r.Date(); d.String() != e.Date {
-					t.Fatalf("seq %d: date %s, the vector says %s", e.Seq, d, e.Date)
-				}
-				proofs[e.Seq] = e.Verifies
-				for _, c := range e.CRLDates {
-					d, err := verifier.ParseDate(c)
-					if err != nil {
-						t.Fatal(err)
-					}
-					archive[r.SMTRoot] = append(archive[r.SMTRoot], d)
-				}
-				records = append(records, r)
-			}
-			st, err := roster.Apply(records, proofs, archive)
+			records, proofs, archive := caseRecords(t, c)
+			st, err := roster.Apply(records, rosterOf(t, c.Roster), proofs, archive)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var got []result
 			for _, res := range st.Records {
-				got = append(got, result{Seq: res.Seq, Valid: res.Valid, Kind: res.Kind, Reason: res.Reason})
+				got = append(got, resultOf(res))
 			}
 			if !reflect.DeepEqual(got, c.Results) {
-				t.Errorf("results\n got %+v\nwant %+v", got, c.Results)
+				g, _ := json.Marshal(got)
+				w, _ := json.Marshal(c.Results)
+				t.Errorf("results\n got %s\nwant %s", g, w)
 			}
-			// The output; proofs_on_last_date is compared one record at a
-			// time (incremental_test.go), from Rules.Card.
-			if gotState, want := stateOut(st, nil), withoutProofsOnLastDate(c.State); !reflect.DeepEqual(gotState, want) {
+			// The output; proofs_on_last_date and the slots are compared one
+			// record at a time (incremental_test.go), from Rules.Card.
+			if gotState, want := stateOut(st, nil), withoutCardState(c.State); !reflect.DeepEqual(gotState, want) {
 				g, _ := json.Marshal(gotState)
 				w, _ := json.Marshal(want)
 				t.Errorf("state\n got %s\nwant %s", g, w)
@@ -208,20 +262,33 @@ func TestVectorsRosterRules(t *testing.T) {
 }
 
 // stateOut writes the output in the shape of the vectors. x, if not nil,
-// gives each card's proofs_on_last_date; otherwise it is 0.
+// gives each card's proofs_on_last_date and slots; otherwise they are left
+// out (0 and nil).
 func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range st.Scopes {
 		so := scopeOut{ScopeString: s.ScopeString, Cards: []cardOut{}, Accounts: []accountOut{}}
 		for _, c := range s.Cards {
-			n := 0
-			if x != nil {
-				n = x.Card(s.ScopeString, c.ScopedID).ProofsOnLastDate
+			co := cardOut{ScopedID: c.ScopedID, LastCardProof: c.LastCardProof.String(), Accounts: []account{}}
+			for _, a := range c.Accounts {
+				co.Accounts = append(co.Accounts, account{a.Platform, a.Username})
 			}
-			so.Cards = append(so.Cards, cardOut{c.ScopedID, c.Current, c.LastCardProof.String(), n})
+			if x != nil {
+				cs := x.Card(s.ScopeString, c.ScopedID)
+				co.ProofsOnLastDate = cs.ProofsOnLastDate
+				co.Slots = map[string]slotOut{}
+				for p, slot := range cs.Slots {
+					so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchDates: []string{}}
+					for _, d := range slot.SwitchDates {
+						so.SwitchDates = append(so.SwitchDates, d.String())
+					}
+					co.Slots[p] = so
+				}
+			}
+			so.Cards = append(so.Cards, co)
 		}
 		for _, a := range s.Accounts {
-			ao := accountOut{Username: a.Username, Cards: []accountCardOut{}}
+			ao := accountOut{Platform: a.Platform, Username: a.Username, Cards: []accountCardOut{}}
 			for _, c := range a.Cards {
 				ao.Cards = append(ao.Cards, accountCardOut{c.ScopedID, c.LastCardProof.String()})
 			}
@@ -232,13 +299,15 @@ func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 	return out
 }
 
-// withoutProofsOnLastDate is the vector's state with proofs_on_last_date 0.
-func withoutProofsOnLastDate(state []scopeOut) []scopeOut {
+// withoutCardState is the vector's state without proofs_on_last_date and
+// slots.
+func withoutCardState(state []scopeOut) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range state {
 		s.Cards = append([]cardOut{}, s.Cards...)
 		for i := range s.Cards {
 			s.Cards[i].ProofsOnLastDate = 0
+			s.Cards[i].Slots = nil
 		}
 		out = append(out, s)
 	}

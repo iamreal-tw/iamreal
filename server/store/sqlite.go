@@ -12,7 +12,8 @@ import (
 )
 
 // The two tables. A record's columns are its fields as written in its line
-// (spec/record.md); its hash is not stored, since it is computed from them.
+// (spec/record.md); accounts is the list from `[` to `]`, as in the line. Its
+// hash is not stored, since it is computed from them.
 // A challenge is stored from the moment it is issued until it is deleted
 // after it expired (see DeleteChallengesIssuedBefore).
 const schema = `
@@ -21,8 +22,7 @@ CREATE TABLE IF NOT EXISTS records (
 	prev         TEXT NOT NULL,
 	scope_string TEXT NOT NULL,
 	scoped_id    TEXT NOT NULL,
-	action       TEXT NOT NULL,
-	username     TEXT NOT NULL,
+	accounts     TEXT NOT NULL,
 	challenge    TEXT NOT NULL UNIQUE,
 	issuer       TEXT NOT NULL,
 	smt_root     TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS challenges (
 ) STRICT;
 `
 
-const recordColumns = `seq, prev, scope_string, scoped_id, action, username, challenge, issuer, smt_root, circuit, proof`
+const recordColumns = `seq, prev, scope_string, scoped_id, accounts, challenge, issuer, smt_root, circuit, proof`
 
 // SQLite is the Store kept in one SQLite file.
 type SQLite struct {
@@ -107,10 +107,14 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanRecord(row scanner) (*verifier.Record, error) {
 	r := &verifier.Record{}
-	err := row.Scan(&r.Seq, &r.Prev, &r.ScopeString, &r.ScopedID, &r.Action, &r.Username,
+	var accounts string
+	err := row.Scan(&r.Seq, &r.Prev, &r.ScopeString, &r.ScopedID, &accounts,
 		&r.Challenge, &r.Issuer, &r.SMTRoot, &r.Circuit, &r.Proof)
 	if err != nil {
 		return nil, err
+	}
+	if r.Accounts, err = verifier.ReadAccountsText(accounts); err != nil {
+		return nil, fmt.Errorf("store: record %d: %w", r.Seq, err)
 	}
 	return r, nil
 }
@@ -155,8 +159,8 @@ func (s *SQLite) Append(r *verifier.Record) error {
 	} else if n != 1 {
 		return ErrChallengeNotOpen
 	}
-	_, err = tx.Exec(`INSERT INTO records (`+recordColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.Seq, r.Prev, r.ScopeString, r.ScopedID, r.Action, r.Username, r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof)
+	_, err = tx.Exec(`INSERT INTO records (`+recordColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.Seq, r.Prev, r.ScopeString, r.ScopedID, verifier.AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof)
 	if err != nil {
 		return err
 	}

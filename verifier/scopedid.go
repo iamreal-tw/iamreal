@@ -9,7 +9,7 @@ import (
 const ScopedIDLength = 52
 
 // ShortIDLength is the length of a short ID.
-const ShortIDLength = 6
+const ShortIDLength = 10
 
 // ScopedIDText writes a scoped ID in its text form: the 32 little-endian
 // bytes of the field element in base32 (spec/scoped-id.md, "Text form").
@@ -33,7 +33,7 @@ func ParseScopedID(s string) (Field, error) {
 	return f, nil
 }
 
-// ShortID returns the first 6 characters of the text form.
+// ShortID returns the first 10 characters of the text form.
 func ShortID(scopedIDText string) string {
 	if len(scopedIDText) < ShortIDLength {
 		return scopedIDText
@@ -42,7 +42,7 @@ func ShortID(scopedIDText string) string {
 }
 
 // ReadShortIDInURL reads a short ID as typed in a URL: case-insensitively,
-// with O read as 0 and I and L as 1. After this mapping it must be exactly 6
+// with O read as 0 and I and L as 1. After this mapping it must be exactly 10
 // characters of the alphabet; ok is false otherwise. This leniency is for
 // URLs only, never for records.
 func ReadShortIDInURL(typed string) (shortID string, ok bool) {

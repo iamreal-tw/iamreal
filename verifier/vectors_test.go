@@ -82,6 +82,34 @@ func TestVectorsChallenge(t *testing.T) {
 	}
 }
 
+var rosters = map[string]verifier.Roster{"production": verifier.Production, "test": verifier.Test}
+
+func rosterOf(t *testing.T, name string) verifier.Roster {
+	t.Helper()
+	r, ok := rosters[name]
+	if !ok {
+		t.Fatalf("roster %q", name)
+	}
+	return r
+}
+
+// scopeOf returns the one accepted scope string of roster r.
+func scopeOf(r verifier.Roster) string { return verifier.Scopes(r)[0].String }
+
+// vectorAccount is an account as the vectors write it.
+type vectorAccount struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
+func accountsOf(list []vectorAccount) []verifier.Account {
+	out := []verifier.Account{}
+	for _, a := range list {
+		out = append(out, verifier.Account{Platform: a.Platform, Username: a.Username})
+	}
+	return out
+}
+
 func TestVectorsScope(t *testing.T) {
 	var v struct {
 		Scopes []struct {
@@ -91,21 +119,24 @@ func TestVectorsScope(t *testing.T) {
 			ScopePacked string `json:"scope_packed"`
 			Reason      string `json:"reason"`
 		} `json:"scopes"`
-		Usernames []struct {
-			ScopeString string `json:"scope_string"`
-			Username    string `json:"username"`
-			Valid       bool   `json:"valid"`
+		Platforms []struct {
+			Roster      string `json:"roster"`
+			Platform    string `json:"platform"`
+			Accepted    bool   `json:"accepted"`
+			DisplayName string `json:"display_name"`
 			Reason      string `json:"reason"`
+		} `json:"platforms"`
+		Usernames []struct {
+			Platform string `json:"platform"`
+			Username string `json:"username"`
+			Valid    bool   `json:"valid"`
+			Reason   string `json:"reason"`
 		} `json:"usernames"`
 	}
 	loadVectors(t, "scope.json", &v)
-	rosters := map[string]verifier.Roster{"production": verifier.Production, "test": verifier.Test}
 	for _, c := range v.Scopes {
 		t.Run(fmt.Sprintf("scope/%s/%q", c.Roster, c.ScopeString), func(t *testing.T) {
-			r, ok := rosters[c.Roster]
-			if !ok {
-				t.Fatalf("roster %q", c.Roster)
-			}
+			r := rosterOf(t, c.Roster)
 			_, accepted := verifier.LookupScope(r, c.ScopeString)
 			if accepted != c.Accepted {
 				t.Fatalf("accepted %v, want %v (%s)", accepted, c.Accepted, c.Reason)
@@ -128,18 +159,50 @@ func TestVectorsScope(t *testing.T) {
 			}
 		})
 	}
-	for _, c := range v.Usernames {
-		t.Run(fmt.Sprintf("username/%q", c.Username), func(t *testing.T) {
-			sc, ok := verifier.LookupScope(verifier.Production, c.ScopeString)
-			if !ok {
-				t.Fatalf("scope %q", c.ScopeString)
+	// Every platform each roster accepts is in the vectors, and no other.
+	listed := map[string]int{}
+	for _, c := range v.Platforms {
+		t.Run(fmt.Sprintf("platform/%s/%q", c.Roster, c.Platform), func(t *testing.T) {
+			r := rosterOf(t, c.Roster)
+			p, accepted := verifier.LookupPlatform(r, c.Platform)
+			if accepted != c.Accepted {
+				t.Fatalf("accepted %v, want %v (%s)", accepted, c.Accepted, c.Reason)
 			}
-			if got := sc.ValidUsername(c.Username); got != c.Valid {
+			if accepted {
+				listed[c.Roster]++
+				if p.DisplayName != c.DisplayName {
+					t.Errorf("display name %q, want %q", p.DisplayName, c.DisplayName)
+				}
+			}
+			// The same answer through the line check, with a username
+			// both formats accept.
+			rec := testRecord()
+			rec.ScopeString = scopeOf(r)
+			rec.Accounts = []verifier.Account{{Platform: c.Platform, Username: "alice"}}
+			_, err := verifier.ParseLine(rec.Line(), r)
+			if (err == nil) != c.Accepted {
+				t.Errorf("line check: %v, want accepted %v", err, c.Accepted)
+			}
+		})
+	}
+	for name, r := range rosters {
+		if n := len(verifier.Platforms(r)); n != listed[name] {
+			t.Errorf("the %s roster accepts %d platforms, the vectors list %d", name, n, listed[name])
+		}
+	}
+	for _, c := range v.Usernames {
+		t.Run(fmt.Sprintf("username/%s/%q", c.Platform, c.Username), func(t *testing.T) {
+			p, ok := verifier.LookupPlatform(verifier.Test, c.Platform)
+			if !ok {
+				t.Fatalf("platform %q", c.Platform)
+			}
+			if got := p.ValidUsername(c.Username); got != c.Valid {
 				t.Errorf("valid %v, want %v (%s)", got, c.Valid, c.Reason)
 			}
 			rec := testRecord()
-			rec.Username = c.Username
-			_, err := verifier.ParseLine(rec.Line(), verifier.Production)
+			rec.ScopeString = scopeOf(verifier.Test)
+			rec.Accounts = []verifier.Account{{Platform: c.Platform, Username: c.Username}}
+			_, err := verifier.ParseLine(rec.Line(), verifier.Test)
 			if (err == nil) != c.Valid {
 				t.Errorf("line check: %v, want valid %v", err, c.Valid)
 			}
@@ -151,13 +214,14 @@ func TestVectorsDeclarationCode(t *testing.T) {
 	var v struct {
 		Version string `json:"version"`
 		Cases   []struct {
-			Action                string `json:"action"`
-			ScopeString           string `json:"scope_string"`
-			Username              string `json:"username"`
-			Challenge             string `json:"challenge"`
-			PreimageSHA256        string `json:"preimage_sha256"`
-			DeclarationCode       string `json:"declaration_code"`
-			DeclarationCodePacked string `json:"declaration_code_packed"`
+			Label                 string          `json:"label"`
+			ScopeString           string          `json:"scope_string"`
+			Accounts              []vectorAccount `json:"accounts"`
+			Challenge             string          `json:"challenge"`
+			Preimage              string          `json:"preimage"`
+			PreimageSHA256        string          `json:"preimage_sha256"`
+			DeclarationCode       string          `json:"declaration_code"`
+			DeclarationCodePacked string          `json:"declaration_code_packed"`
 		} `json:"cases"`
 	}
 	loadVectors(t, "declaration-code.json", &v)
@@ -165,12 +229,17 @@ func TestVectorsDeclarationCode(t *testing.T) {
 		t.Errorf("version %q, want %q", v.Version, verifier.DeclarationVersion)
 	}
 	for _, c := range v.Cases {
-		t.Run(c.DeclarationCode, func(t *testing.T) {
-			sum := sha256.Sum256(verifier.DeclarationPreimage(c.Action, c.ScopeString, c.Username, c.Challenge))
+		t.Run(c.Label, func(t *testing.T) {
+			accounts := accountsOf(c.Accounts)
+			pre := verifier.DeclarationPreimage(c.ScopeString, accounts, c.Challenge)
+			if string(pre) != c.Preimage {
+				t.Errorf("preimage %q, want %q", pre, c.Preimage)
+			}
+			sum := sha256.Sum256(pre)
 			if got := hex.EncodeToString(sum[:]); got != c.PreimageSHA256 {
 				t.Errorf("preimage SHA-256 %s, want %s", got, c.PreimageSHA256)
 			}
-			code := verifier.DeclarationCode(c.Action, c.ScopeString, c.Username, c.Challenge)
+			code := verifier.DeclarationCode(c.ScopeString, accounts, c.Challenge)
 			if code != c.DeclarationCode {
 				t.Errorf("code %s, want %s", code, c.DeclarationCode)
 			}
@@ -179,7 +248,7 @@ func TestVectorsDeclarationCode(t *testing.T) {
 			}
 			// The same value as the last public input rebuilt from a record.
 			r := testRecord()
-			r.Action, r.ScopeString, r.Username, r.Challenge = c.Action, c.ScopeString, c.Username, c.Challenge
+			r.ScopeString, r.Accounts, r.Challenge = c.ScopeString, accounts, c.Challenge
 			inputs := publicInputs(t, r)
 			if got := fieldHex(inputs[len(inputs)-1]); got != c.DeclarationCodePacked {
 				t.Errorf("declaration_code_packed public input %s, want %s", got, c.DeclarationCodePacked)
@@ -345,46 +414,46 @@ func TestVectorsIssuers(t *testing.T) {
 	}
 }
 
+// vectorRecord is a record as record.json writes it.
+type vectorRecord struct {
+	Seq         uint64          `json:"seq"`
+	Prev        string          `json:"prev"`
+	ScopeString string          `json:"scope_string"`
+	ScopedID    string          `json:"scoped_id"`
+	Accounts    []vectorAccount `json:"accounts"`
+	Challenge   string          `json:"challenge"`
+	Issuer      string          `json:"issuer"`
+	SMTRoot     string          `json:"smt_root"`
+	Circuit     string          `json:"circuit"`
+	Proof       string          `json:"proof"`
+}
+
 // recordVectors is spec/vectors/record.json with its tokens replaced.
 type recordVectors struct {
 	Version     string            `json:"version"`
 	Tokens      map[string]string `json:"tokens"`
 	GenesisPrev string            `json:"genesis_prev"`
-	Cases       []struct {
-		Record struct {
-			Seq         uint64 `json:"seq"`
-			Prev        string `json:"prev"`
-			ScopeString string `json:"scope_string"`
-			ScopedID    string `json:"scoped_id"`
-			Action      string `json:"action"`
-			Username    string `json:"username"`
-			Challenge   string `json:"challenge"`
-			Issuer      string `json:"issuer"`
-			SMTRoot     string `json:"smt_root"`
-			Circuit     string `json:"circuit"`
-			Proof       string `json:"proof"`
-		} `json:"record"`
-		Line           string `json:"line"`
-		PreimageSHA256 string `json:"preimage_sha256"`
-		RecordHash     string `json:"record_hash"`
-	} `json:"cases"`
-	Head            string `json:"head"`
+	Chains      []struct {
+		Roster  string `json:"roster"`
+		Records []struct {
+			Record         vectorRecord `json:"record"`
+			AccountsText   string       `json:"accounts_text"`
+			Line           string       `json:"line"`
+			PreimageSHA256 string       `json:"preimage_sha256"`
+			RecordHash     string       `json:"record_hash"`
+		} `json:"records"`
+		Head string `json:"head"`
+	} `json:"chains"`
 	WellFormedLines []struct {
-		Line string `json:"line"`
-		Note string `json:"note"`
+		Roster string `json:"roster"`
+		Line   string `json:"line"`
+		Note   string `json:"note"`
 	} `json:"well_formed_lines"`
 	MalformedLines []struct {
+		Roster string `json:"roster"`
 		Line   string `json:"line"`
 		Reason string `json:"reason"`
 	} `json:"malformed_lines"`
-	Files []struct {
-		Name    string `json:"name"`
-		Content string `json:"content"`
-		Valid   bool   `json:"valid"`
-		Head    string `json:"head"`
-		Line    int    `json:"line"`
-		Code    string `json:"code"`
-	} `json:"files"`
 }
 
 // loadRecordVectors reads record.json and replaces every token, as its note
@@ -405,18 +474,17 @@ func loadRecordVectors(t *testing.T, path string) *recordVectors {
 		}
 		return s
 	}
-	for i := range v.Cases {
-		v.Cases[i].Line = sub(v.Cases[i].Line)
-		v.Cases[i].Record.Proof = sub(v.Cases[i].Record.Proof)
+	for i := range v.Chains {
+		for j := range v.Chains[i].Records {
+			v.Chains[i].Records[j].Line = sub(v.Chains[i].Records[j].Line)
+			v.Chains[i].Records[j].Record.Proof = sub(v.Chains[i].Records[j].Record.Proof)
+		}
 	}
 	for i := range v.WellFormedLines {
 		v.WellFormedLines[i].Line = sub(v.WellFormedLines[i].Line)
 	}
 	for i := range v.MalformedLines {
 		v.MalformedLines[i].Line = sub(v.MalformedLines[i].Line)
-	}
-	for i := range v.Files {
-		v.Files[i].Content = sub(v.Files[i].Content)
 	}
 	return &v
 }
@@ -445,44 +513,50 @@ func TestVectorsRecord(t *testing.T) {
 			}
 		}
 	})
-	prev := verifier.GenesisPrev
-	for _, c := range v.Cases {
-		t.Run(fmt.Sprintf("case/seq%d", c.Record.Seq), func(t *testing.T) {
-			cr := c.Record
-			r := &verifier.Record{Seq: cr.Seq, Prev: cr.Prev, ScopeString: cr.ScopeString, ScopedID: cr.ScopedID,
-				Action: cr.Action, Username: cr.Username, Challenge: cr.Challenge, Issuer: cr.Issuer,
-				SMTRoot: cr.SMTRoot, Circuit: cr.Circuit, Proof: cr.Proof}
-			if got := string(r.Line()); got != c.Line {
-				t.Errorf("line differs from the template")
+	for _, chain := range v.Chains {
+		roster := rosterOf(t, chain.Roster)
+		prev := verifier.GenesisPrev
+		for _, c := range chain.Records {
+			t.Run(fmt.Sprintf("chain/%s/seq%d", chain.Roster, c.Record.Seq), func(t *testing.T) {
+				cr := c.Record
+				r := &verifier.Record{Seq: cr.Seq, Prev: cr.Prev, ScopeString: cr.ScopeString, ScopedID: cr.ScopedID,
+					Accounts: accountsOf(cr.Accounts), Challenge: cr.Challenge, Issuer: cr.Issuer,
+					SMTRoot: cr.SMTRoot, Circuit: cr.Circuit, Proof: cr.Proof}
+				if got := verifier.AccountsText(r.Accounts); got != c.AccountsText {
+					t.Errorf("accounts written %s, want %s", got, c.AccountsText)
+				}
+				if got := string(r.Line()); got != c.Line {
+					t.Errorf("line differs from the template")
+				}
+				parsed, err := verifier.ParseLine([]byte(c.Line), roster)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !parsed.Equal(r) {
+					t.Errorf("parsed record differs")
+				}
+				sum := sha256.Sum256(r.HashPreimage())
+				if got := hex.EncodeToString(sum[:]); got != c.PreimageSHA256 {
+					t.Errorf("preimage SHA-256 %s, want %s", got, c.PreimageSHA256)
+				}
+				if got := r.Hash(); got != c.RecordHash {
+					t.Errorf("record hash %s, want %s", got, c.RecordHash)
+				}
+				if r.Prev != prev {
+					t.Errorf("prev %s, want %s", r.Prev, prev)
+				}
+				prev = r.Hash()
+			})
+		}
+		t.Run("chain/"+chain.Roster+"/head", func(t *testing.T) {
+			if prev != chain.Head {
+				t.Errorf("head %s, want %s", prev, chain.Head)
 			}
-			parsed, err := verifier.ParseLine([]byte(c.Line), verifier.Production)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if *parsed != *r {
-				t.Errorf("parsed record differs")
-			}
-			sum := sha256.Sum256(r.HashPreimage())
-			if got := hex.EncodeToString(sum[:]); got != c.PreimageSHA256 {
-				t.Errorf("preimage SHA-256 %s, want %s", got, c.PreimageSHA256)
-			}
-			if got := r.Hash(); got != c.RecordHash {
-				t.Errorf("record hash %s, want %s", got, c.RecordHash)
-			}
-			if r.Prev != prev {
-				t.Errorf("prev %s, want %s", r.Prev, prev)
-			}
-			prev = r.Hash()
 		})
 	}
-	t.Run("head", func(t *testing.T) {
-		if prev != v.Head {
-			t.Errorf("head %s, want %s", prev, v.Head)
-		}
-	})
 	for i, c := range v.WellFormedLines {
 		t.Run(fmt.Sprintf("well_formed/%d", i), func(t *testing.T) {
-			r, err := verifier.ParseLine([]byte(c.Line), verifier.Production)
+			r, err := verifier.ParseLine([]byte(c.Line), rosterOf(t, c.Roster))
 			if err != nil {
 				t.Fatalf("%v (%s)", err, c.Note)
 			}
@@ -493,7 +567,7 @@ func TestVectorsRecord(t *testing.T) {
 	}
 	for _, c := range v.MalformedLines {
 		t.Run("malformed/"+c.Reason, func(t *testing.T) {
-			if _, err := verifier.ParseLine([]byte(c.Line), verifier.Production); err == nil {
+			if _, err := verifier.ParseLine([]byte(c.Line), rosterOf(t, c.Roster)); err == nil {
 				t.Errorf("accepted (%s)", c.Reason)
 			}
 		})
@@ -506,10 +580,9 @@ func testRecord() *verifier.Record {
 	return &verifier.Record{
 		Seq:         1,
 		Prev:        verifier.GenesisPrev,
-		ScopeString: "iamreal:threads:0______________",
+		ScopeString: "iamreal:public:0_______________",
 		ScopedID:    "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-		Action:      "declare",
-		Username:    "alice",
+		Accounts:    []verifier.Account{{Platform: "threads", Username: "alice"}},
 		Challenge:   "2026-11-16.000G40R40M30E209185GR38E1W",
 		Issuer:      "G3",
 		SMTRoot:     "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32",

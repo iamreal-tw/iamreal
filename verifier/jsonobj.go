@@ -7,11 +7,14 @@ import (
 	"unicode/utf8"
 )
 
-// jsonValue is one member value of a flat JSON object: a string (decoded), or
-// any other scalar as its raw token.
+// jsonValue is one member value of a record's JSON object: a string
+// (decoded), any other scalar as its raw token, or a list whose elements are
+// flat objects (the account list).
 type jsonValue struct {
 	isString bool
 	text     string
+	isList   bool
+	list     [][]jsonMember // the members of each element, if isList
 }
 
 type jsonMember struct {
@@ -19,21 +22,32 @@ type jsonMember struct {
 	value jsonValue
 }
 
-// parseFlatObject reads one JSON object whose values are scalars, with
-// optional whitespace around it. It is the "parse it in any way" step of
-// checking a line (spec/record.md): it accepts more than the template does,
-// on purpose, because the byte comparison with the rewritten line is what
-// decides. Members are returned in order, duplicates included.
-func parseFlatObject(b []byte) ([]jsonMember, error) {
+// parseRecordObject reads one JSON object whose values are scalars or lists
+// of flat objects (objects whose values are scalars), with optional
+// whitespace around it. It is the "parse it in any way" step of checking a
+// line (spec/record.md): it accepts more than the template does, on purpose,
+// because the byte comparison with the rewritten line is what decides.
+// Members are returned in order, duplicates included, at both levels.
+func parseRecordObject(b []byte) ([]jsonMember, error) {
 	p := &jsonParser{b: b}
 	p.space()
+	members, err := p.object(true)
+	if err != nil {
+		return nil, err
+	}
+	return members, p.end()
+}
+
+// object reads an object at the parser's position. Its values are scalars;
+// if lists is true, they may also be lists of flat objects.
+func (p *jsonParser) object(lists bool) ([]jsonMember, error) {
 	if !p.eat('{') {
 		return nil, errors.New("not a JSON object")
 	}
 	var members []jsonMember
 	p.space()
 	if p.eat('}') {
-		return members, p.end()
+		return members, nil
 	}
 	for {
 		p.space()
@@ -46,7 +60,12 @@ func parseFlatObject(b []byte) ([]jsonMember, error) {
 			return nil, errors.New("expected `:`")
 		}
 		p.space()
-		v, err := p.scalar()
+		var v jsonValue
+		if lists && p.i < len(p.b) && p.b[p.i] == '[' {
+			v, err = p.list()
+		} else {
+			v, err = p.scalar()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -56,9 +75,40 @@ func parseFlatObject(b []byte) ([]jsonMember, error) {
 			continue
 		}
 		if p.eat('}') {
-			return members, p.end()
+			return members, nil
 		}
 		return nil, errors.New("expected `,` or `}`")
+	}
+}
+
+// list reads a list whose elements are flat objects.
+func (p *jsonParser) list() (jsonValue, error) {
+	v := jsonValue{isList: true, list: [][]jsonMember{}}
+	if !p.eat('[') {
+		return v, errors.New("not a list")
+	}
+	p.space()
+	if p.eat(']') {
+		return v, nil
+	}
+	for {
+		p.space()
+		if p.i >= len(p.b) || p.b[p.i] != '{' {
+			return v, errors.New("an element of the list is not an object")
+		}
+		members, err := p.object(false)
+		if err != nil {
+			return v, err
+		}
+		v.list = append(v.list, members)
+		p.space()
+		if p.eat(',') {
+			continue
+		}
+		if p.eat(']') {
+			return v, nil
+		}
+		return v, errors.New("expected `,` or `]`")
 	}
 }
 

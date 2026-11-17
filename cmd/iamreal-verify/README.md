@@ -22,7 +22,7 @@ iamreal-verify -bb <bb 的路徑> -crs <通用參數目錄> -crl-archive <存檔
 |---|---|---|
 | `-bb` | （必填） | `bb` 6.0.0 的路徑。版本不對就不執行 |
 | `-crs` | （必填） | 放 `bn254_g1.dat` 的目錄。SHA-256 不對就不執行 |
-| `-roster` | `production` | 照哪一份接受的場合：`production`（正式名冊）或 `test`（測試名冊） |
+| `-roster` | `production` | 照哪一份名冊的表（接受的場合和平台）：`production`（正式名冊）或 `test`（測試名冊） |
 | `-timeout` | `30s` | 一次 `bb verify` 最多跑多久，超過算證明不通過 |
 | `-json` | 關 | 用 JSON 輸出 |
 | `-crl-archive` | （無） | 廢止清冊存檔的目錄，裡面有清冊檔案和索引 `index.jsonl`。沒給時沒有任何樹根被承認（見下面） |
@@ -49,27 +49,37 @@ iamreal-verify -bb <bb 的路徑> -crs <通用參數目錄> -crl-archive <存檔
 
 ## 輸出
 
-文字輸出：
+文字輸出（`testdata/` 的測試名冊，`-roster test`）：
 
 ```
 roster file: valid
 records: 3
-head: 98949b75a890c8c834c752fe28fda41da55edeed66cc196b75547d376f4192e7
+head: 99d4ab63026bb765766463453694d8c4017225593d5247b8fc53b8e92c65f089
 
 records:
-  1 valid first
-  2 valid withdraw
-  3 invalid root
+  1 valid threads first
+  2 valid test-example first, threads first
+  3 valid test-example withdraw, threads refresh
 
-scope iamreal:threads:0______________
+scope iamreal-test:public:0__________
   cards:
-    QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880  current none  last card proof 2027-01-01
+    FEYB7PB5GX6DR23VAG6TGWHGFWP99M4XR8KP0RTC3P7Q6DY488AG  last card proof 2026-11-16
+      threads alice
+    SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24
+      threads alice
   accounts:
+    threads alice
+      FEYB7PB5GX6DR23VAG6TGWHGFWP99M4XR8KP0RTC3P7Q6DY488AG  last card proof 2026-11-16
+      SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24
 ```
+
+- 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`daily_limit (3 valid records dated 2026-11-16)`；說明不是規則的輸出）。
+- 每張卡片列出上次過卡日和現在的清單（每個平台一行，照平台排）；收回了全部帳號的卡片仍然列出，寫 `no account`。
+- 每個帳號是（平台、帳號名稱），照平台再照帳號名稱排，底下是現在在那個平台宣告它的卡片。同一個帳號名稱在兩個平台是兩個帳號。
 
 壞掉的檔案只印一行：`roster file: broken at line 3: line (…)`，不算現況。
 
-`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "head": …, "results": [...], "state": [...]}`，`results` 和 `state` 同 `roster-rules.json`；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
+`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "head": …, "results": [...], "state": [...]}`，`results` 和 `state` 同 `roster-rules.json`（有效的結果是 `kinds`，每一項 `platform`、`kind`；每張卡片是 `scoped_id`、`last_card_proof`、`accounts`；每個帳號是 `platform`、`username`、`cards`），只是卡片沒有 `proofs_on_last_date` 和 `slots`：那兩項是卡片的狀態，不是規則的輸出；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
 
 ## 結束碼
 
@@ -86,10 +96,10 @@ go test ./cmd/iamreal-verify
 IAMREAL_BB=/path/to/bb go test -tags iamrealtest ./cmd/iamreal-verify   # 加上真證明的端到端測試
 ```
 
-- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的檔案，檢查文字和 JSON 的輸出、壞掉的檔案、空的名冊、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是 `daily_limit`。
+- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的「three records」（一個帳號、空的清冊、一個帳號），檢查文字和 JSON 的輸出、壞掉的檔案、空的名冊、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是 `daily_limit`。
 - `archive_test.go`：`testdata/` 的測試名冊和清冊存檔（見 `testdata/README.md`），用真的存檔和假的驗證器：完整重算和只信索引都是全部有效；拿掉一份清冊（連同索引那一行），用它的紀錄變成 `root`；索引沒跟著改、多一個檔案、索引的樹根改過時，完整重算印出每一個不同、照重建的索引算出結果（結束碼 1），只信索引時照索引回答；沒有索引、索引寫法不對、索引最後沒有 LF 時，完整重算同樣報出不同、算出結果（結束碼 1），只信索引時結束碼 2。
 - `directory_test.go`：2,001 筆的假名冊切成目錄：三個檔、一個檔 1 筆或 1,000 筆、沒有紀錄時都成立，輸出和同一份名冊當成一個檔案時相同；少了中間的檔、第一個檔不滿 1,000 行、最後一個超過 1,000 行、空檔、第一個檔不是從 1 開始時是 `directory`；檔案最後少了 LF、檔案長度對但紀錄排錯時，照名冊檔案的規則報 `line`、`seq`。`heads.jsonl`：沒有、別份名冊的鏈尾、筆數超過、日期重複或倒退、筆數減少、別的寫法、日期不存在、最後沒有 LF，每一種都報出來並附行號，好幾行有問題時每一行都報。
-- `e2e_test.go`：同樣的案例，換成真的驗證器和 `bb`。測試的證明是用拋棄式的發證金鑰做的，要經由 `verifier.NewWithIssuers` 注入，這個函式只在建置標籤 `iamrealtest` 下存在（見 `verifier/README.md`「發證金鑰和測試金鑰」），所以要加 `-tags iamrealtest`；沒設 `IAMREAL_BB` 時跳過。另外確認用編進程式的發證金鑰時，三筆都是 `proof`。
+- `e2e_test.go`：同樣的案例，換成真的驗證器和 `bb`（每一筆的種類見 `testdata/README.md`）。測試的證明是用拋棄式的發證金鑰做的，要經由 `verifier.NewWithIssuers` 注入，這個函式只在建置標籤 `iamrealtest` 下存在（見 `verifier/README.md`「發證金鑰和測試金鑰」），所以要加 `-tags iamrealtest`；沒設 `IAMREAL_BB` 時跳過。另外確認用編進程式的發證金鑰時，三筆都是 `proof`。
 
 ### 只在測試建置裡的選項 `-test-issuers`
 

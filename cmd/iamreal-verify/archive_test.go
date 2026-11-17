@@ -57,7 +57,7 @@ const (
 	crlC = "G3-2026112105.crl"
 )
 
-var allValid = []string{"1 valid first", "2 valid first", "3 valid withdraw"}
+var allValid = []string{"1 valid threads first", "2 valid test-example first, threads first", "3 valid test-example withdraw, threads refresh"}
 
 func archiveCases() []archiveCase {
 	return []archiveCase{
@@ -66,17 +66,17 @@ func archiveCases() []archiveCase {
 		// Record 3 (2026-11-24) fits only C (2026-11-21); record 2
 		// (2026-11-21) still fits B (2026-11-20), which has the same root.
 		{name: "without C", edit: removeCRL(crlC, true), exit: exitInvalid,
-			records: []string{"1 valid first", "2 valid first", "3 invalid root"}},
+			records: []string{"1 valid threads first", "2 valid test-example first, threads first", "3 invalid root"}},
 		{name: "without C, trust index", edit: removeCRL(crlC, true), trustIndex: true, exit: exitInvalid,
-			records: []string{"1 valid first", "2 valid first", "3 invalid root"}},
+			records: []string{"1 valid threads first", "2 valid test-example first, threads first", "3 invalid root"}},
 		{name: "without B", edit: removeCRL(crlB, true), exit: exitAllValid, records: allValid},
 		{name: "without A", edit: removeCRL(crlA, true), exit: exitInvalid,
-			records: []string{"1 invalid root", "2 valid first", "3 valid withdraw"}},
+			records: []string{"1 invalid root", "2 valid test-example first, threads first", "3 valid test-example withdraw, threads refresh"}},
 		// The index still lists C: rebuilding reports the difference and
 		// goes on without C, so record 3 loses its CRL; trusting the index
 		// does not notice.
 		{name: "C removed, index unchanged", edit: removeCRL(crlC, false), exit: exitInvalid,
-			records: []string{"1 valid first", "2 valid first", "3 invalid root"},
+			records: []string{"1 valid threads first", "2 valid test-example first, threads first", "3 invalid root"},
 			stderr:  []string{"the index lists a file the archive does not have: {\"issuer\":\"G3\",\"crl_number\":\"2026112105\""}, diffs: 1},
 		{name: "C removed, index unchanged, trust index", edit: removeCRL(crlC, false), trustIndex: true,
 			exit: exitAllValid, records: allValid},
@@ -86,7 +86,7 @@ func archiveCases() []archiveCase {
 		{name: "C's root changed", edit: changeRoot(crlC), exit: exitInvalid, records: allValid,
 			stderr: []string{"the index differs from the files"}, diffs: 1},
 		{name: "C's root changed, trust index", edit: changeRoot(crlC), trustIndex: true, exit: exitInvalid,
-			records: []string{"1 valid first", "2 valid first", "3 invalid root"}},
+			records: []string{"1 valid threads first", "2 valid test-example first, threads first", "3 invalid root"}},
 		// A file the index does not list: it is not usable, so the result
 		// does not change, but the difference is reported.
 		{name: "extra file", edit: func(t *testing.T, dir string) {
@@ -98,7 +98,7 @@ func archiveCases() []archiveCase {
 			changeRoot(crlA)(t, dir)
 			removeCRL(crlC, false)(t, dir)
 			os.WriteFile(filepath.Join(dir, "junk"), []byte("x"), 0o600)
-		}, exit: exitInvalid, records: []string{"1 valid first", "2 valid first", "3 invalid root"},
+		}, exit: exitInvalid, records: []string{"1 valid threads first", "2 valid test-example first, threads first", "3 invalid root"},
 			stderr: []string{"the index differs from the files", "the index lists a file the archive does not have",
 				"the archive has a file the index does not list"}, diffs: 3},
 		// No index: rebuilding reports it once and answers from the files;

@@ -27,10 +27,13 @@ func testDeps(t *testing.T) deps {
 	}
 }
 
+// aliceOnThreads is the list of one account most records here have.
+var aliceOnThreads = []verifier.Account{{Platform: "threads", Username: "alice"}}
+
 // appendDirect writes a record into the store past the server's checks,
 // with a new challenge dated date. Tests use it to make long rosters fast,
 // and invalid ones.
-func (h *harness) appendDirect(card, action, username, date, root, proof string) *verifier.Record {
+func (h *harness) appendDirect(card string, accounts []verifier.Account, date, root, proof string) *verifier.Record {
 	h.t.Helper()
 	count, head, err := h.store.Head()
 	if err != nil {
@@ -39,7 +42,7 @@ func (h *harness) appendDirect(card, action, username, date, root, proof string)
 	random := make([]byte, 16)
 	rand.Read(random)
 	r := &verifier.Record{
-		Seq: count + 1, Prev: head, ScopeString: testScope, ScopedID: card, Action: action, Username: username,
+		Seq: count + 1, Prev: head, ScopeString: testScope, ScopedID: card, Accounts: accounts,
 		Challenge: date + "." + verifier.EncodeBase32(random), Issuer: "G3", SMTRoot: root, Circuit: circuitOf("G3"), Proof: proof,
 	}
 	if err := h.store.AddChallenge(r.Challenge, h.clock.Now()); err != nil {
@@ -85,7 +88,7 @@ func TestSnapshot(t *testing.T) {
 	}
 
 	for i := 0; i < 1001; i++ {
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 	}
 	if code, stdout, stderr := h.snapshot("2026-11-20"); code != 0 || !strings.Contains(stdout, "1001 records") {
 		t.Fatalf("%d %s %s", code, stdout, stderr)
@@ -108,7 +111,7 @@ func TestSnapshot(t *testing.T) {
 		t.Errorf("again: %d %s", code, stdout)
 	}
 	// A new record the same day: a date appears at most once.
-	h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+	h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 	if code, _, stderr := h.snapshot("2026-11-20"); code != 1 || !strings.Contains(stderr, "already has a line for 2026-11-20") {
 		t.Errorf("same day: %d %s", code, stderr)
 	}
@@ -155,39 +158,39 @@ func TestSnapshotRefuses(t *testing.T) {
 	t.Run("invalid record", func(t *testing.T) {
 		h := newHarness(t, startOfTests, c)
 		card := newCard()
-		h.appendDirect(card, "declare", "alice", "2026-11-20", root, goodProof)
-		h.appendDirect(card, "withdraw", "bob", "2026-11-20", root, goodProof)
+		h.appendDirect(card, aliceOnThreads, "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), nil, "2026-11-20", root, goodProof)
 		code, _, stderr := h.snapshot("2026-11-20")
-		unchanged(t, h, code, stderr, "record 2 is invalid: not_current")
+		unchanged(t, h, code, stderr, "record 2 is invalid: empty")
 	})
 	t.Run("proof does not verify", func(t *testing.T) {
 		h := newHarness(t, startOfTests, c)
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, badProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, badProof)
 		code, _, stderr := h.snapshot("2026-11-20")
 		unchanged(t, h, code, stderr, "record 1 is invalid: proof")
 	})
 	t.Run("CRL archive differs from its index", func(t *testing.T) {
 		h := newHarness(t, startOfTests, c)
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 		os.WriteFile(filepath.Join(crlDir(h.data), "extra.crl"), makeCRL(t, "G3", 9, crlTime, 1), 0o644)
 		code, _, stderr := h.snapshot("2026-11-20")
 		unchanged(t, h, code, stderr, "the archive has a file the index does not list")
 	})
 	t.Run("published file changed", func(t *testing.T) {
 		h := newHarness(t, startOfTests, c)
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 		if code, _, stderr := h.snapshot("2026-11-20"); code != 0 {
 			t.Fatal(stderr)
 		}
 		name := filepath.Join(rosterDir(h.data), "0000000000000001.jsonl")
 		os.WriteFile(name, []byte(strings.Replace(readFile(t, name), "alice", "alicf", 1)), 0o644)
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 		code, _, stderr := h.snapshot("2026-11-21")
 		unchanged(t, h, code, stderr, "is published with other bytes")
 	})
 	t.Run("heads line of another roster", func(t *testing.T) {
 		h := newHarness(t, startOfTests, c)
-		h.appendDirect(newCard(), "declare", "alice", "2026-11-20", root, goodProof)
+		h.appendDirect(newCard(), aliceOnThreads, "2026-11-20", root, goodProof)
 		os.WriteFile(filepath.Join(rosterDir(h.data), headsFileName), []byte(`{"date":"2026-11-19","count":1,"head":"`+strings.Repeat("a", 64)+`"}`+"\n"), 0o644)
 		code, _, stderr := h.snapshot("2026-11-20")
 		unchanged(t, h, code, stderr, "is not a head of this roster")
@@ -205,7 +208,7 @@ func TestSnapshotRefuses(t *testing.T) {
 func TestSnapshotCommand(t *testing.T) {
 	c := g3CRL(t)
 	h := newHarness(t, startOfTests, c)
-	h.mustSubmit(h.sub("declare", newCard(), "alice", rootOf(t, c)), "first")
+	h.mustSubmit(h.sub(newCard(), rootOf(t, c), "threads:alice"), "threads first")
 	var out, errOut bytes.Buffer
 	code := run([]string{"snapshot", "-data", h.data, "-bb", "unused", "-crs", "unused"}, &out, &errOut, testDeps(t))
 	if code != 0 || !strings.Contains(out.String(), "published 2026-11-20: 1 records") {

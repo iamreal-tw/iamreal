@@ -6,7 +6,7 @@
 |---|---|
 | `archive/` | 存檔：三份清冊和索引 `index.jsonl` |
 | `issuer-G2.der`、`issuer-G3.der` | 兩把測試用發證金鑰的公鑰（SubjectPublicKeyInfo）。同一把金鑰簽卡片的憑證和清冊，和內政部一樣 |
-| `roster.jsonl` | 測試名冊（場合 `iamreal-test:threads:0_________`） |
+| `roster.jsonl` | 測試名冊（場合 `iamreal-test:public:0__________`） |
 | `zkid-noir-commit` | 做證明用的 `zkid-noir` 提交 |
 | `generate.go`、`make-proofs.mjs` | 產生上面這些檔案的程式 |
 
@@ -22,13 +22,13 @@ B 和 C 廢止的序號相同，所以樹根相同（兩份清冊之間沒有新
 
 ## 名冊
 
-| `seq` | 電路 | `issuer` | `action` | 日期 | 樹根 | 承認它的清冊 |
+| `seq` | 電路 | `issuer` | 帳號清單 | 日期 | 樹根 | 承認它的清冊 |
 |---|---|---|---|---|---|---|
-| 1 | `card_proof_rs2048` | `G2` | `declare` `alice` | 2026-11-16 | A | A |
-| 2 | `card_proof_rs4096` | `G3` | `declare` `alice` | 2026-11-21 | B（= C） | B、C |
-| 3 | `card_proof_rs4096` | `G3` | `withdraw` `alice` | 2026-11-24 | B（= C） | 只有 C（B 的日期加 3 天是 11-23） |
+| 1 | `card_proof_rs2048` | `G2` | `threads:alice` | 2026-11-16 | A | A |
+| 2 | `card_proof_rs4096` | `G3` | `test-example:a-b`、`threads:alice` | 2026-11-21 | B（= C） | B、C |
+| 3 | `card_proof_rs4096` | `G3` | `threads:alice` | 2026-11-24 | B（= C） | 只有 C（B 的日期加 3 天是 11-23） |
 
-兩張卡片，每把發證金鑰一張，序號都不在清冊裡。三筆都有效：`first`、`first`、`withdraw`。拿掉 C 時第 3 筆變成 `root`，拿掉 A 時第 1 筆變成 `root`，拿掉 B 時三筆仍然有效。
+兩張卡片，每把發證金鑰一張，序號都不在清冊裡。三筆都有效：`threads first`；`test-example first, threads first`；`test-example withdraw, threads refresh`（第 3 筆的清單沒有 `test-example` 的帳號，就是收回它）。拿掉 C 時第 3 筆變成 `root`，拿掉 A 時第 1 筆變成 `root`，拿掉 B 時三筆仍然有效。
 
 ## 怎麼產生的
 
@@ -38,6 +38,6 @@ B 和 C 廢止的序號相同，所以樹根相同（兩份清冊之間沒有新
 go run ./cmd/iamreal-verify/testdata/generate.go -zkid <zkid-noir> -bb <bb> -crs <通用參數目錄>
 ```
 
-`generate.go` 產生兩把發證金鑰，簽三份清冊，寫出索引；把私鑰和每筆紀錄要用的序號交給 `make-proofs.mjs`（放在暫存目錄，結束時刪掉）。`make-proofs.mjs` 用 `zkid-noir` 的 `tests/lib/` 做卡片的憑證、用它的參考樹從序號自己建樹、算證明，和 `verifier/testdata/make-proofs.mjs` 同樣的做法，不寫任何東西到 `zkid-noir` 裡。`generate.go` 再確認 `zkid-noir` 的參考樹和 `crl/` 算出的樹根相同，組成名冊，確認每一行都是測試名冊裡格式正確的紀錄。
+`generate.go` 產生兩把發證金鑰，簽三份清冊，寫出索引；把私鑰、每筆紀錄的帳號清單和要用的序號交給 `make-proofs.mjs`（放在暫存目錄，結束時刪掉）。`make-proofs.mjs` 自己照 `spec/declaration-code.md` 算宣告碼（`zkid-noir` 的 `tests/lib/declaration-code.mjs` 是更早的草稿，不用它），`generate.go` 再確認和 `verifier.DeclarationCode` 算出的相同。`make-proofs.mjs` 用 `zkid-noir` 的 `tests/lib/` 做卡片的憑證、用它的參考樹從序號自己建樹、算證明，和 `verifier/testdata/make-proofs.mjs` 同樣的做法，不寫任何東西到 `zkid-noir` 裡。`generate.go` 再確認 `zkid-noir` 的參考樹和 `crl/` 算出的樹根相同，組成名冊，確認每一行都是測試名冊裡格式正確的紀錄。
 
 每次執行的金鑰、題目和證明都不同，測試照樣通過。

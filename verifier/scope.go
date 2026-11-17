@@ -1,12 +1,15 @@
 package verifier
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // ScopeStringLength is the length of every scope string in bytes.
 const ScopeStringLength = 31
 
-// Roster says which list of accepted scopes applies (spec/scope.md,
-// "Accepted scopes"): the production roster's, or the test rosters'.
+// Roster says which tables apply (spec/scope.md): the accepted scopes and
+// the platforms of the production roster, or of the test rosters.
 type Roster int
 
 const (
@@ -26,24 +29,40 @@ func (r Roster) String() string {
 
 // Scope is one row of an accepted-scopes table.
 type Scope struct {
-	String   string
-	Platform string
-	// ValidUsername checks a username against the scope's format, matched
-	// against the whole value.
-	ValidUsername func(string) bool
+	String string
 	// LastSeq is the `seq` of the last record the scope accepts, or 0 while
 	// the scope is open.
 	LastSeq uint64
 }
 
-// The tables of spec/scope.md. Rows are added, never removed; a row changes
-// only when its scope is retired (LastSeq).
+// Platform is one row of a platform table (spec/scope.md, "Platforms").
+type Platform struct {
+	// ID is the platform ID written in records and in the declaration code.
+	ID string
+	// DisplayName is for screens; the rules do not read it.
+	DisplayName string
+	// ValidUsername checks a username against the platform's format,
+	// matched against the whole value.
+	ValidUsername func(string) bool
+}
+
+// The tables of spec/scope.md. Rows are added, never removed; a scope's row
+// changes only when the scope is retired (LastSeq).
 var (
 	productionScopes = []Scope{
-		{String: "iamreal:threads:0______________", Platform: "Threads", ValidUsername: threadsUsername},
+		{String: "iamreal:public:0_______________"},
 	}
 	testScopes = []Scope{
-		{String: "iamreal-test:threads:0_________", Platform: "Threads", ValidUsername: threadsUsername},
+		{String: "iamreal-test:public:0__________"},
+	}
+	// productionPlatforms are the platforms of the production roster. A test
+	// roster accepts these and testPlatforms. IDs starting with "test-" are
+	// never added here.
+	productionPlatforms = []Platform{
+		{ID: "threads", DisplayName: "Threads", ValidUsername: threadsUsername},
+	}
+	testPlatforms = []Platform{
+		{ID: "test-example", DisplayName: "Example (no real service)", ValidUsername: testExampleUsername},
 	}
 )
 
@@ -68,14 +87,50 @@ func LookupScope(r Roster, s string) (Scope, bool) {
 	return Scope{}, false
 }
 
+// Platforms returns the platforms roster r accepts, in ascending order of
+// ID by byte value: the order of a record's account list.
+func Platforms(r Roster) []Platform {
+	var out []Platform
+	switch r {
+	case Production:
+		out = append(out, productionPlatforms...)
+	case Test:
+		out = append(append(out, productionPlatforms...), testPlatforms...)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// LookupPlatform returns the platform with ID id in roster r. The ID must
+// be exactly as in the table.
+func LookupPlatform(r Roster, id string) (Platform, bool) {
+	for _, p := range Platforms(r) {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return Platform{}, false
+}
+
 // threadsUsername is the format [a-z0-9._]{1,30}.
 func threadsUsername(u string) bool {
-	if len(u) < 1 || len(u) > 30 {
+	return usernameOf(u, 30, func(c byte) bool { return c == '.' || c == '_' })
+}
+
+// testExampleUsername is the format [a-z0-9-]{1,20}.
+func testExampleUsername(u string) bool {
+	return usernameOf(u, 20, func(c byte) bool { return c == '-' })
+}
+
+// usernameOf reports whether u is 1 to max characters of a-z, 0-9 and the
+// characters extra accepts.
+func usernameOf(u string, max int, extra func(byte) bool) bool {
+	if len(u) < 1 || len(u) > max {
 		return false
 	}
 	for i := 0; i < len(u); i++ {
 		c := u[i]
-		if !('a' <= c && c <= 'z' || '0' <= c && c <= '9' || c == '.' || c == '_') {
+		if !('a' <= c && c <= 'z' || '0' <= c && c <= '9' || extra(c)) {
 			return false
 		}
 	}

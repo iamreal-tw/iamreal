@@ -32,9 +32,10 @@ func challenge(i int) string {
 // record returns record seq after prev, with placeholder values.
 func record(seq uint64, prev string) *verifier.Record {
 	return &verifier.Record{
-		Seq: seq, Prev: prev, ScopeString: "iamreal-test:threads:0_________",
-		ScopedID: "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880", Action: "declare",
-		Username: "alice", Challenge: challenge(int(seq)), Issuer: "G3", SMTRoot: strings.Repeat("0", 64),
+		Seq: seq, Prev: prev, ScopeString: "iamreal-test:public:0__________",
+		ScopedID:  "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+		Accounts:  []verifier.Account{{Platform: "test-example", Username: "a-b"}, {Platform: "threads", Username: "alice"}},
+		Challenge: challenge(int(seq)), Issuer: "G3", SMTRoot: strings.Repeat("0", 64),
 		Circuit: strings.Repeat("1", 64), Proof: base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength)),
 	}
 }
@@ -72,7 +73,7 @@ func TestAppendKeepsTheChain(t *testing.T) {
 	}
 
 	got, err := s.Records(2, 10)
-	if err != nil || len(got) != 2 || *got[0] != *want[1] || *got[1] != *want[2] {
+	if err != nil || len(got) != 2 || !got[0].Equal(want[1]) || !got[1].Equal(want[2]) {
 		t.Errorf("Records(2, 10): %d records, %v", len(got), err)
 	}
 

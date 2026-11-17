@@ -19,9 +19,9 @@ func date(t *testing.T, s string) verifier.Date {
 
 func oneRecord(challenge string) []*verifier.Record {
 	return []*verifier.Record{{
-		Seq: 1, ScopeString: "iamreal:threads:0______________",
+		Seq: 1, ScopeString: "iamreal:public:0_______________",
 		ScopedID: "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-		Action:   "declare", Username: "alice", Challenge: challenge, Issuer: "G3", SMTRoot: rootOf(1),
+		Accounts: []verifier.Account{{Platform: "threads", Username: "alice"}}, Challenge: challenge, Issuer: "G3", SMTRoot: rootOf(1),
 	}}
 }
 
@@ -45,7 +45,7 @@ func TestRootOfSeveralCRLs(t *testing.T) {
 		for _, s := range c.dates {
 			ds = append(ds, date(t, s))
 		}
-		st, err := roster.Apply(recs, fakeProofs{1: true}, fakeArchive{rootOf(1): ds})
+		st, err := roster.Apply(recs, verifier.Production, fakeProofs{1: true}, fakeArchive{rootOf(1): ds})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,14 +69,14 @@ func (brokenArchive) CRLDates(string, string) ([]verifier.Date, error) {
 // a code: an error of the verifier says nothing about the record.
 func TestCannotCheckStops(t *testing.T) {
 	recs := oneRecord("2026-03-10.G9PYF6T6FCEQ2GH6DG2XHGFV74")
-	if _, err := roster.Apply(recs, brokenVerifier{}, fakeArchive{}); err == nil {
+	if _, err := roster.Apply(recs, verifier.Production, brokenVerifier{}, fakeArchive{}); err == nil {
 		t.Errorf("verifier error: no error")
 	}
-	if _, err := roster.Apply(recs, fakeProofs{1: true}, brokenArchive{}); err == nil {
+	if _, err := roster.Apply(recs, verifier.Production, fakeProofs{1: true}, brokenArchive{}); err == nil {
 		t.Errorf("archive error: no error")
 	}
 	// A record that does not verify never reaches check 3.
-	st, err := roster.Apply(recs, fakeProofs{}, brokenArchive{})
+	st, err := roster.Apply(recs, verifier.Production, fakeProofs{}, brokenArchive{})
 	if err != nil || st.Records[0].Reason != roster.CodeProof {
 		t.Errorf("%v %+v", err, st)
 	}

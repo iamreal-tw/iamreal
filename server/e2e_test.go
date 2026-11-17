@@ -99,11 +99,11 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	var proofs []struct {
-		At     string            `json:"at"`
-		Random string            `json:"random"`
-		Body   map[string]string `json:"body"`
-		Status int               `json:"status"`
-		Result string            `json:"result"`
+		At     string     `json:"at"`
+		Random string     `json:"random"`
+		Body   submission `json:"body"`
+		Status int        `json:"status"`
+		Result string     `json:"result"` // the kinds as kindsOf writes them, or the error code
 	}
 	b, err := os.ReadFile(filepath.Join("testdata", "card-proofs.json"))
 	if err != nil {
@@ -151,47 +151,58 @@ func TestEndToEnd(t *testing.T) {
 		}
 		r, _ := hex.DecodeString(p.Random)
 		random.set(r)
-		if c := h.challenge(); c != p.Body["challenge"] {
-			t.Fatalf("card proof %d: challenge %s, want %s", i+1, c, p.Body["challenge"])
+		if c := h.challenge(); c != p.Body.Challenge {
+			t.Fatalf("card proof %d: challenge %s, want %s", i+1, c, p.Body.Challenge)
 		}
-		body, _ := json.Marshal(p.Body)
-		if p.Result == "withdraw" {
-			// The same proof for another username does not verify; the
+		if p.Status == 201 && len(p.Body.Accounts) > 0 {
+			// The same proof with another list does not verify: the
+			// declaration code is computed from the whole list. The
 			// challenge stays usable.
-			other := map[string]string{}
-			for k, v := range p.Body {
-				other[k] = v
-			}
-			other["username"] = "carl"
-			ob, _ := json.Marshal(other)
-			if status, out := h.do("POST", "/api/v1/records", string(ob)); status != 400 || out["error"] != "proof" {
-				t.Fatalf("card proof %d for another username: %d %v", i+1, status, out)
+			other := p.Body
+			other.Accounts = append([]submittedAccount(nil), p.Body.Accounts...)
+			other.Accounts[len(other.Accounts)-1].Username = "carl"
+			h.wantError(other, 400, "proof")
+			if len(p.Body.Accounts) == 2 {
+				// One account fewer.
+				other.Accounts = p.Body.Accounts[1:]
+				h.wantError(other, 400, "proof")
+				// The same list in the other order: the server does not
+				// sort it.
+				other.Accounts = []submittedAccount{p.Body.Accounts[1], p.Body.Accounts[0]}
+				h.wantError(other, 400, "malformed")
 			}
 		}
-		status, out := h.do("POST", "/api/v1/records", string(body))
-		got, _ := out["kind"].(string)
+		status, out := h.submit(p.Body)
+		got := kindsOf(out)
 		if status != 201 {
 			got, _ = out["error"].(string)
 		}
 		if status != p.Status || got != p.Result {
-			t.Fatalf("card proof %d (%s %s): %d %v, want %d %s", i+1, p.Body["action"], p.Body["username"], status, out, p.Status, p.Result)
+			t.Fatalf("card proof %d (%v): %d %v, want %d %s", i+1, p.Body.Accounts, status, out, p.Status, p.Result)
 		}
 	}
 	recs := h.checkChain()
-	if len(recs) != 8 {
+	if len(recs) != 9 {
 		t.Fatalf("%d records", len(recs))
 	}
 
 	// The state the server answers.
-	g2Card, g3Card := proofs[0].Body["scoped_id"], proofs[1].Body["scoped_id"]
+	never := map[string]any{"current": nil, "last_declared": nil, "switch_dates": []any{}}
+	g2Card, g3Card := proofs[0].Body.ScopedID, proofs[1].Body.ScopedID
 	for card, want := range map[string]map[string]any{
-		g2Card: {"current": "alice", "last_declared": "alice", "last_card_proof": "2026-11-20", "proofs_on_last_date": 1.0, "switch_dates": []any{}},
-		g3Card: {"current": nil, "last_declared": "carol", "last_card_proof": "2026-11-22", "proofs_on_last_date": 3.0, "switch_dates": []any{"2026-11-21", "2026-11-21"}},
+		g2Card: {"last_card_proof": "2026-11-22", "proofs_on_last_date": 1.0, "platforms": map[string]any{
+			"test-example": never,
+			"threads":      map[string]any{"current": nil, "last_declared": "alice", "switch_dates": []any{}},
+		}},
+		g3Card: {"last_card_proof": "2026-11-22", "proofs_on_last_date": 3.0, "platforms": map[string]any{
+			"test-example": map[string]any{"current": nil, "last_declared": "c-d", "switch_dates": []any{"2026-11-21"}},
+			"threads":      map[string]any{"current": nil, "last_declared": "carol", "switch_dates": []any{"2026-11-21", "2026-11-21"}},
+		}},
 	} {
 		_, out := h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
 		for k, w := range want {
 			if !reflect.DeepEqual(out[k], w) {
-				t.Errorf("card %s: %s is %v, want %v", card[:6], k, out[k], w)
+				t.Errorf("card %s: %s is %v, want %v", card[:10], k, out[k], w)
 			}
 		}
 	}
@@ -220,24 +231,26 @@ func TestEndToEnd(t *testing.T) {
 		t.Errorf("iamreal-verify did not check the heads file:\n%s", stderr.String())
 	}
 	var report struct {
-		Valid   bool   `json:"valid"`
-		Head    string `json:"head"`
-		Results []struct {
-			Seq   uint64 `json:"seq"`
-			Valid bool   `json:"valid"`
-			Kind  string `json:"kind"`
-		} `json:"results"`
-		State json.RawMessage `json:"state"`
+		Valid   bool             `json:"valid"`
+		Head    string           `json:"head"`
+		Results []map[string]any `json:"results"`
+		State   json.RawMessage  `json:"state"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
 	var kinds []string
 	for _, r := range report.Results {
-		kinds = append(kinds, r.Kind)
+		kinds = append(kinds, kindsOf(r))
 	}
-	if !report.Valid || report.Head != recs[7].Hash() || !reflect.DeepEqual(kinds, []string{"first", "first", "refresh", "switch", "switch", "withdraw", "refresh", "withdraw"}) {
-		t.Errorf("iamreal-verify: %s", stdout.String())
+	var want []string
+	for _, p := range proofs {
+		if p.Status == 201 {
+			want = append(want, p.Result)
+		}
+	}
+	if !report.Valid || report.Head != recs[8].Hash() || !reflect.DeepEqual(kinds, want) {
+		t.Errorf("iamreal-verify: %s\nkinds %q\nwant %q", stdout.String(), kinds, want)
 	}
 	// The same state as the server's.
 	h.server.mu.RLock()
@@ -257,24 +270,30 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.proofs = prod
-	if code, _, stderr := h.snapshot("2026-11-23"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("8 invalid record(s)")) {
+	if code, _, stderr := h.snapshot("2026-11-23"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("9 invalid record(s)")) {
 		t.Errorf("MOICA's keys: exit %d\n%s", code, stderr)
 	}
 }
 
 // stateJSON writes the state in the shape of spec/vectors/roster-rules.json
-// ("state"), the shape of iamreal-verify -json.
+// ("state", without the items the output does not list), the shape of
+// iamreal-verify -json.
 func stateJSON(st *roster.State) []byte {
+	type listAccount struct {
+		Platform string `json:"platform"`
+		Username string `json:"username"`
+	}
 	type card struct {
-		ScopedID      string  `json:"scoped_id"`
-		Current       *string `json:"current"`
-		LastCardProof string  `json:"last_card_proof"`
+		ScopedID      string        `json:"scoped_id"`
+		LastCardProof string        `json:"last_card_proof"`
+		Accounts      []listAccount `json:"accounts"`
 	}
 	type accountCard struct {
 		ScopedID      string `json:"scoped_id"`
 		LastCardProof string `json:"last_card_proof"`
 	}
 	type account struct {
+		Platform string        `json:"platform"`
 		Username string        `json:"username"`
 		Cards    []accountCard `json:"cards"`
 	}
@@ -287,10 +306,14 @@ func stateJSON(st *roster.State) []byte {
 	for _, s := range st.Scopes {
 		so := scope{ScopeString: s.ScopeString, Cards: []card{}, Accounts: []account{}}
 		for _, c := range s.Cards {
-			so.Cards = append(so.Cards, card{c.ScopedID, c.Current, c.LastCardProof.String()})
+			co := card{ScopedID: c.ScopedID, LastCardProof: c.LastCardProof.String(), Accounts: []listAccount{}}
+			for _, a := range c.Accounts {
+				co.Accounts = append(co.Accounts, listAccount{a.Platform, a.Username})
+			}
+			so.Cards = append(so.Cards, co)
 		}
 		for _, a := range s.Accounts {
-			ao := account{Username: a.Username, Cards: []accountCard{}}
+			ao := account{Platform: a.Platform, Username: a.Username, Cards: []accountCard{}}
 			for _, c := range a.Cards {
 				ao.Cards = append(ao.Cards, accountCard{c.ScopedID, c.LastCardProof.String()})
 			}

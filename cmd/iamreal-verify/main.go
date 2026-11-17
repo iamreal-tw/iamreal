@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/iamreal-tw/iamreal/crl"
 	"github.com/iamreal-tw/iamreal/roster"
@@ -249,7 +250,11 @@ func writeText(w io.Writer, rep *roster.Report) error {
 	}
 	for _, res := range rep.State.Records {
 		if res.Valid {
-			p.f("  %d valid %s\n", res.Seq, res.Kind)
+			var kinds []string
+			for _, k := range res.Kinds {
+				kinds = append(kinds, k.Platform+" "+k.Kind)
+			}
+			p.f("  %d valid %s\n", res.Seq, strings.Join(kinds, ", "))
 		} else if res.Detail != "" {
 			p.f("  %d invalid %s (%s)\n", res.Seq, res.Reason, res.Detail)
 		} else {
@@ -259,15 +264,17 @@ func writeText(w io.Writer, rep *roster.Report) error {
 	for _, s := range rep.State.Scopes {
 		p.f("\nscope %s\n  cards:\n", s.ScopeString)
 		for _, c := range s.Cards {
-			current := "none"
-			if c.Current != nil {
-				current = *c.Current
+			p.f("    %s  last card proof %s\n", c.ScopedID, c.LastCardProof)
+			if len(c.Accounts) == 0 {
+				p.f("      no account\n")
 			}
-			p.f("    %s  current %s  last card proof %s\n", c.ScopedID, current, c.LastCardProof)
+			for _, a := range c.Accounts {
+				p.f("      %s %s\n", a.Platform, a.Username)
+			}
 		}
 		p.f("  accounts:\n")
 		for _, a := range s.Accounts {
-			p.f("    %s\n", a.Username)
+			p.f("    %s %s\n", a.Platform, a.Username)
 			for _, c := range a.Cards {
 				p.f("      %s  last card proof %s\n", c.ScopedID, c.LastCardProof)
 			}
@@ -288,7 +295,8 @@ func (p *printer) f(format string, args ...any) {
 }
 
 // The JSON output has the shape of spec/vectors/record.json ("files") and
-// spec/vectors/roster-rules.json ("results", "state").
+// spec/vectors/roster-rules.json ("results", "state"), without the items of
+// a card's state that the output does not list (proofs_on_last_date, slots).
 type jsonReport struct {
 	Valid   bool         `json:"valid"`
 	Line    int          `json:"line,omitempty"`
@@ -299,16 +307,26 @@ type jsonReport struct {
 }
 
 type jsonResult struct {
-	Seq    uint64 `json:"seq"`
-	Valid  bool   `json:"valid"`
-	Kind   string `json:"kind,omitempty"`
-	Reason string `json:"reason,omitempty"`
+	Seq    uint64     `json:"seq"`
+	Valid  bool       `json:"valid"`
+	Kinds  []jsonKind `json:"kinds,omitempty"`
+	Reason string     `json:"reason,omitempty"`
+}
+
+type jsonKind struct {
+	Platform string `json:"platform"`
+	Kind     string `json:"kind"`
+}
+
+type jsonListAccount struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
 }
 
 type jsonCard struct {
-	ScopedID      string  `json:"scoped_id"`
-	Current       *string `json:"current"`
-	LastCardProof string  `json:"last_card_proof"`
+	ScopedID      string            `json:"scoped_id"`
+	LastCardProof string            `json:"last_card_proof"`
+	Accounts      []jsonListAccount `json:"accounts"`
 }
 
 type jsonAccountCard struct {
@@ -317,6 +335,7 @@ type jsonAccountCard struct {
 }
 
 type jsonAccount struct {
+	Platform string            `json:"platform"`
 	Username string            `json:"username"`
 	Cards    []jsonAccountCard `json:"cards"`
 }
@@ -335,16 +354,24 @@ func writeJSON(w io.Writer, rep *roster.Report) error {
 		out.Valid, out.Head = true, rep.Head
 		out.Results = []jsonResult{}
 		for _, res := range rep.State.Records {
-			out.Results = append(out.Results, jsonResult{res.Seq, res.Valid, res.Kind, res.Reason})
+			jr := jsonResult{Seq: res.Seq, Valid: res.Valid, Reason: res.Reason}
+			for _, k := range res.Kinds {
+				jr.Kinds = append(jr.Kinds, jsonKind{k.Platform, k.Kind})
+			}
+			out.Results = append(out.Results, jr)
 		}
 		scopes := []jsonScope{}
 		for _, s := range rep.State.Scopes {
 			js := jsonScope{ScopeString: s.ScopeString, Cards: []jsonCard{}, Accounts: []jsonAccount{}}
 			for _, c := range s.Cards {
-				js.Cards = append(js.Cards, jsonCard{c.ScopedID, c.Current, c.LastCardProof.String()})
+				jc := jsonCard{ScopedID: c.ScopedID, LastCardProof: c.LastCardProof.String(), Accounts: []jsonListAccount{}}
+				for _, a := range c.Accounts {
+					jc.Accounts = append(jc.Accounts, jsonListAccount{a.Platform, a.Username})
+				}
+				js.Cards = append(js.Cards, jc)
 			}
 			for _, a := range s.Accounts {
-				ja := jsonAccount{Username: a.Username, Cards: []jsonAccountCard{}}
+				ja := jsonAccount{Platform: a.Platform, Username: a.Username, Cards: []jsonAccountCard{}}
 				for _, c := range a.Cards {
 					ja.Cards = append(ja.Cards, jsonAccountCard{c.ScopedID, c.LastCardProof.String()})
 				}

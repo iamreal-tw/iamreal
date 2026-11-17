@@ -158,7 +158,7 @@ func publicInputs(r *Record, issuers map[string]*big.Int) (Circuit, []Field, err
 	if err != nil {
 		return c, nil, reject("%v", err)
 	}
-	code := DeclarationCodePacked(DeclarationCode(r.Action, r.ScopeString, r.Username, r.Challenge))
+	code := DeclarationCodePacked(DeclarationCode(r.ScopeString, r.Accounts, r.Challenge))
 	inputs := append(limbs, root, currentTimeField(date), nullifier, scope, code)
 	return c, inputs, nil
 }

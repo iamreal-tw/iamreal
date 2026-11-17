@@ -12,6 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/big"
@@ -176,7 +177,7 @@ func newCard() string {
 	return verifier.ScopedIDText(f)
 }
 
-const testScope = "iamreal-test:threads:0_________"
+const testScope = "iamreal-test:public:0__________"
 
 // harness is a server with its data directory, ready for requests.
 type harness struct {
@@ -189,7 +190,8 @@ type harness struct {
 	server *Server
 	http   http.Handler
 	logs   *syncBuffer
-	random io.Reader // the server's random source; nil means crypto/rand
+	random io.Reader       // the server's random source; nil means crypto/rand
+	roster verifier.Roster // whose tables; verifier.Test unless a test sets it
 }
 
 type syncBuffer struct {
@@ -212,7 +214,7 @@ func (s *syncBuffer) String() string {
 // newHarness starts a server at now with the given CRLs in its mirror.
 func newHarness(t *testing.T, now time.Time, crls ...[]byte) *harness {
 	t.Helper()
-	h := &harness{t: t, data: t.TempDir(), clock: &fakeClock{t: now}, proofs: &fakeProofs{reject: map[string]bool{badProof: true}}, keys: namedTestKeys(t), logs: &syncBuffer{}}
+	h := &harness{t: t, data: t.TempDir(), clock: &fakeClock{t: now}, proofs: &fakeProofs{reject: map[string]bool{badProof: true}}, keys: namedTestKeys(t), logs: &syncBuffer{}, roster: verifier.Test}
 	for _, dir := range []string{crlDir(h.data), rosterDir(h.data)} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -249,7 +251,7 @@ func (h *harness) config() Config {
 		random = rand.Reader
 	}
 	return Config{
-		Roster: verifier.Test, Store: h.store, CRLDir: crlDir(h.data), Proofs: h.proofs,
+		Roster: h.roster, Store: h.store, CRLDir: crlDir(h.data), Proofs: h.proofs,
 		Now: h.clock.Now, Random: random, Log: slog.New(slog.NewJSONHandler(h.logs, nil)), Version: "test-version",
 	}
 }
@@ -300,21 +302,37 @@ func (h *harness) challenge() string {
 
 // submission is the body of POST /api/v1/records.
 type submission struct {
-	ScopeString string `json:"scope_string"`
-	ScopedID    string `json:"scoped_id"`
-	Action      string `json:"action"`
-	Username    string `json:"username"`
-	Challenge   string `json:"challenge"`
-	Issuer      string `json:"issuer"`
-	SMTRoot     string `json:"smt_root"`
-	Circuit     string `json:"circuit"`
-	Proof       string `json:"proof"`
+	ScopeString string             `json:"scope_string"`
+	ScopedID    string             `json:"scoped_id"`
+	Accounts    []submittedAccount `json:"accounts"`
+	Challenge   string             `json:"challenge"`
+	Issuer      string             `json:"issuer"`
+	SMTRoot     string             `json:"smt_root"`
+	Circuit     string             `json:"circuit"`
+	Proof       string             `json:"proof"`
 }
 
-// sub returns a submission of a G3 card proof with a new challenge.
-func (h *harness) sub(action, card, username, root string) submission {
+type submittedAccount struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
+// list returns an account list from "platform:username" strings, in the
+// order given: the tests also send lists in other orders.
+func list(accounts ...string) []submittedAccount {
+	out := []submittedAccount{}
+	for _, a := range accounts {
+		p, u, _ := strings.Cut(a, ":")
+		out = append(out, submittedAccount{p, u})
+	}
+	return out
+}
+
+// sub returns a submission of a G3 card proof of card with a new challenge;
+// accounts are "platform:username", in the order given.
+func (h *harness) sub(card, root string, accounts ...string) submission {
 	return submission{
-		ScopeString: testScope, ScopedID: card, Action: action, Username: username,
+		ScopeString: testScope, ScopedID: card, Accounts: list(accounts...),
 		Challenge: h.challenge(), Issuer: "G3", SMTRoot: root, Circuit: circuitOf("G3"), Proof: goodProof,
 	}
 }
@@ -325,13 +343,27 @@ func (h *harness) submit(s submission) (int, map[string]any) {
 	return h.do("POST", "/api/v1/records", string(b))
 }
 
-// mustSubmit submits and expects 201 with kind.
-func (h *harness) mustSubmit(s submission, kind string) {
+// kindsOf writes the kinds of a 201 response as "platform kind" pairs
+// separated by ", ".
+func kindsOf(body map[string]any) string {
+	list, _ := body["kinds"].([]any)
+	var out []string
+	for _, k := range list {
+		m, _ := k.(map[string]any)
+		out = append(out, fmt.Sprint(m["platform"], " ", m["kind"]))
+	}
+	return strings.Join(out, ", ")
+}
+
+// mustSubmit submits and expects 201 with kinds, written as kindsOf writes
+// them ("threads first", "test-example withdraw, threads switch").
+func (h *harness) mustSubmit(s submission, kinds string) map[string]any {
 	h.t.Helper()
 	status, body := h.submit(s)
-	if status != 201 || body["kind"] != kind {
-		h.t.Fatalf("%s %s: %d %v, want 201 %s", s.Action, s.Username, status, body, kind)
+	if status != 201 || kindsOf(body) != kinds {
+		h.t.Fatalf("%v: %d %v, want 201 %s", s.Accounts, status, body, kinds)
 	}
+	return body
 }
 
 // wantError submits and expects an error.
@@ -339,7 +371,7 @@ func (h *harness) wantError(s submission, status int, code string) {
 	h.t.Helper()
 	got, body := h.submit(s)
 	if got != status || body["error"] != code {
-		h.t.Fatalf("%s %s: %d %v, want %d %s", s.Action, s.Username, got, body, status, code)
+		h.t.Fatalf("%v: %d %v, want %d %s", s.Accounts, got, body, status, code)
 	}
 }
 
@@ -361,7 +393,7 @@ func (h *harness) rosterFile() []byte {
 // head the server reports.
 func (h *harness) checkChain() []*verifier.Record {
 	h.t.Helper()
-	recs, head, broken := roster.ReadFile(h.rosterFile(), verifier.Test)
+	recs, head, broken := roster.ReadFile(h.rosterFile(), h.roster)
 	if broken != nil {
 		h.t.Fatalf("stored roster is broken: %v", broken)
 	}

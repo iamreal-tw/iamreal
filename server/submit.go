@@ -10,26 +10,36 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// recordKeys are the fields of a submitted record: every field of a record
-// except seq and prev, which the server fills in (docs/api/card-proof.md).
-var recordKeys = []string{"scope_string", "scoped_id", "action", "username", "challenge", "issuer", "smt_root", "circuit", "proof"}
+// recordKeys are the string fields of a submitted record: every field of a
+// record except seq and prev, which the server fills in, and accounts, which
+// is a list (docs/api/card-proof.md).
+var recordKeys = []string{"scope_string", "scoped_id", "challenge", "issuer", "smt_root", "circuit", "proof"}
 
-// accepted is the response of a card proof that was appended. AccountCards
-// is the number of cards whose current account in the record's scope is the
-// record's username once the record is applied, from the rules' state
-// (roster.Rules.AccountCards); the device uses it only to choose which link
-// to suggest (docs/api/card-proof.md).
+// accepted is the response of a card proof that was appended.
 type accepted struct {
-	Seq          uint64 `json:"seq"`
-	RecordHash   string `json:"record_hash"`
+	Seq        uint64         `json:"seq"`
+	RecordHash string         `json:"record_hash"`
+	Kinds      []acceptedKind `json:"kinds"`
+}
+
+// acceptedKind is what the record did on one platform: its kind and
+// account, from the rules (roster.RecordResult), and AccountCards, the
+// number of cards whose current account on that platform is that username
+// in the record's scope once the record is applied, from the rules' state
+// (roster.Rules.AccountCards). The device uses AccountCards only to say
+// whether other cards declare the same account (docs/api/card-proof.md).
+type acceptedKind struct {
+	Platform     string `json:"platform"`
 	Kind         string `json:"kind"`
+	Username     string `json:"username"`
 	AccountCards int    `json:"account_cards"`
 }
 
-// POST /api/v1/records: one card proof. The checks run in the order of
-// docs/api/card-proof.md, and the first that fails gives the error:
+// POST /api/v1/records: one card proof, the card's whole list of accounts.
+// The checks run in the order of docs/api/card-proof.md, and the first that
+// fails gives the error:
 //
-//  1. every field's format;
+//  1. every field's format: scope, then platform, then malformed;
 //  2. the challenge: issued by this server less than 10 minutes ago, not
 //     accepted before, submitted at most 5 times (this submission counts);
 //  3. the record verifies;
@@ -42,16 +52,14 @@ type accepted struct {
 func (s *Server) postRecord(r *http.Request) reply {
 	now := s.cfg.Now()
 
-	// 1. Every field's format.
-	f, err := readObject(r.Body, recordKeys...)
+	// 1. Every field's format. A body that is not one object with exactly
+	// the keys of a submission, each once, the string fields strings, is
+	// malformed before anything else is read from it.
+	f, list, err := readObjectWithList(r.Body, "accounts", recordKeys...)
 	if err != nil {
 		return fail(http.StatusBadRequest, errMalformed)
 	}
-	rec := &verifier.Record{
-		ScopeString: f["scope_string"], ScopedID: f["scoped_id"], Action: f["action"], Username: f["username"],
-		Challenge: f["challenge"], Issuer: f["issuer"], SMTRoot: f["smt_root"], Circuit: f["circuit"], Proof: f["proof"],
-	}
-	scope, inRoster := verifier.LookupScope(s.cfg.Roster, rec.ScopeString)
+	scope, inRoster := verifier.LookupScope(s.cfg.Roster, f["scope_string"])
 	if !inRoster {
 		return fail(http.StatusBadRequest, errScope)
 	}
@@ -60,6 +68,23 @@ func (s *Server) postRecord(r *http.Request) reply {
 	s.mu.RUnlock()
 	if scope.LastSeq != 0 && next > scope.LastSeq {
 		return fail(http.StatusBadRequest, errScope) // the scope is retired
+	}
+	// The list is taken as it came: not sorted, not merged with the card's
+	// current list, nothing filled in. Every entry with the two keys as
+	// strings and a platform outside the table is `platform`; anything else
+	// wrong with the list is `malformed`, below.
+	accounts, shaped := readAccounts(list)
+	if !shaped {
+		return fail(http.StatusBadRequest, errMalformed)
+	}
+	for _, a := range accounts {
+		if _, ok := verifier.LookupPlatform(s.cfg.Roster, a.Platform); !ok {
+			return fail(http.StatusBadRequest, errPlatform)
+		}
+	}
+	rec := &verifier.Record{
+		ScopeString: f["scope_string"], ScopedID: f["scoped_id"], Accounts: accounts,
+		Challenge: f["challenge"], Issuer: f["issuer"], SMTRoot: f["smt_root"], Circuit: f["circuit"], Proof: f["proof"],
 	}
 	// seq and prev are not known yet; CheckValues needs some value for them.
 	withSeq := *rec
@@ -129,7 +154,7 @@ func (s *Server) postRecord(r *http.Request) reply {
 		return s.internal(r, "store", err)
 	}
 	applied, err := s.rules.Apply(rec)
-	if err != nil || applied != res {
+	if err != nil || !applied.Equal(res) {
 		// Check and Apply run the same code on the same state, under the
 		// same lock; they cannot differ. If they did, the state in memory
 		// would no longer match the store, so the program stops; on the
@@ -138,7 +163,14 @@ func (s *Server) postRecord(r *http.Request) reply {
 		os.Exit(1)
 	}
 	s.count, s.head = rec.Seq, rec.Hash()
-	return ok(http.StatusCreated, accepted{Seq: rec.Seq, RecordHash: s.head, Kind: res.Kind, AccountCards: s.rules.AccountCards(rec.ScopeString, rec.Username)})
+	out := accepted{Seq: rec.Seq, RecordHash: s.head, Kinds: []acceptedKind{}}
+	for _, k := range res.Kinds {
+		out.Kinds = append(out.Kinds, acceptedKind{
+			Platform: k.Platform, Kind: k.Kind, Username: k.Username,
+			AccountCards: s.rules.AccountCards(rec.ScopeString, k.Platform, k.Username),
+		})
+	}
+	return ok(http.StatusCreated, out)
 }
 
 // ruleError is the API error for a record the roster rules find invalid.
@@ -152,8 +184,9 @@ func ruleError(reason string) string {
 	case roster.CodeProof:
 		return errProof
 	default:
-		// root, date_order, not_current, switch_limit, daily_limit: the
-		// same names.
+		// root, date_order, empty, switch_limit, daily_limit: the same
+		// names. switch_limit does not say which platform is blocked
+		// (docs/api/card-proof.md).
 		return reason
 	}
 }

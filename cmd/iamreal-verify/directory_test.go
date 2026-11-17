@@ -30,8 +30,8 @@ var longRoster = sync.OnceValue(func() []*verifier.Record {
 		random := make([]byte, 16)
 		rand.Read(random)
 		r := &verifier.Record{
-			Seq: seq, Prev: prev, ScopeString: "iamreal:threads:0______________", ScopedID: verifier.ScopedIDText(f),
-			Action: "declare", Username: "alice", Challenge: "2026-11-16." + verifier.EncodeBase32(random),
+			Seq: seq, Prev: prev, ScopeString: "iamreal:public:0_______________", ScopedID: verifier.ScopedIDText(f),
+			Accounts: []verifier.Account{{Platform: "threads", Username: "alice"}}, Challenge: "2026-11-16." + verifier.EncodeBase32(random),
 			Issuer: "G3", SMTRoot: strings.Repeat("0", 64), Circuit: strings.Repeat("0", 64), Proof: proof,
 		}
 		out = append(out, r)

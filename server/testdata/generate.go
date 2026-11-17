@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/iamreal-tw/iamreal/crl"
@@ -38,7 +39,7 @@ import (
 
 const (
 	dir   = "server/testdata"
-	scope = "iamreal-test:threads:0_________"
+	scope = "iamreal-test:public:0__________"
 )
 
 var circuits = map[string]string{"G2": "card_proof_rs2048", "G3": "card_proof_rs4096"}
@@ -61,37 +62,67 @@ var crls = []crlSpec{
 
 // The card proofs, in the order the test submits them. at is the server's
 // clock (Taiwan time) when it issues the challenge and gets the proof.
+// accounts is the card's whole list, "platform:username" in ascending order
+// of platform.
 type proofSpec struct {
 	at       string
 	issuer   string
-	action   string
-	username string
+	accounts []string
 	crl      int // the CRL whose root the proof uses
 	status   int
-	result   string // the kind, or the error code
+	result   string // the kinds ("platform kind", separated by ", "), or the error code
 }
 
 var proofs = []proofSpec{
-	{"2026-11-20T10:00:00+08:00", "G2", "declare", "alice", 0, 201, "first"},
-	{"2026-11-20T10:05:00+08:00", "G3", "declare", "alice", 1, 201, "first"},
-	{"2026-11-20T10:20:00+08:00", "G3", "declare", "alice", 1, 201, "refresh"},
-	{"2026-11-21T09:00:00+08:00", "G3", "declare", "bob", 1, 201, "switch"},
-	{"2026-11-21T09:30:00+08:00", "G3", "declare", "carol", 1, 201, "switch"},
-	{"2026-11-22T09:00:00+08:00", "G3", "declare", "dave", 1, 400, "switch_limit"},
-	{"2026-11-22T09:30:00+08:00", "G3", "withdraw", "bob", 1, 400, "not_current"},
-	{"2026-11-22T10:00:00+08:00", "G3", "withdraw", "carol", 1, 201, "withdraw"},
-	{"2026-11-22T10:30:00+08:00", "G3", "declare", "carol", 1, 201, "refresh"},
-	{"2026-11-22T11:00:00+08:00", "G3", "withdraw", "carol", 1, 201, "withdraw"},
-	{"2026-11-22T11:30:00+08:00", "G3", "declare", "carol", 1, 400, "daily_limit"},
+	{"2026-11-20T10:00:00+08:00", "G2", []string{"threads:alice"}, 0, 201, "threads first"},
+	{"2026-11-20T10:05:00+08:00", "G3", []string{"test-example:a-b", "threads:alice"}, 1, 201, "test-example first, threads first"},
+	{"2026-11-20T10:20:00+08:00", "G3", []string{"test-example:a-b", "threads:alice"}, 1, 201, "test-example refresh, threads refresh"},
+	{"2026-11-21T09:00:00+08:00", "G3", []string{"test-example:a-b", "threads:bob"}, 1, 201, "test-example refresh, threads switch"},
+	{"2026-11-21T09:30:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example switch, threads switch"},
+	{"2026-11-22T09:00:00+08:00", "G3", []string{"test-example:e-f", "threads:dave"}, 1, 400, "switch_limit"},
+	{"2026-11-22T09:30:00+08:00", "G3", []string{"test-example:c-d"}, 1, 201, "test-example refresh, threads withdraw"},
+	{"2026-11-22T10:00:00+08:00", "G2", []string{}, 0, 201, "threads withdraw"},
+	{"2026-11-22T10:30:00+08:00", "G2", []string{}, 0, 400, "empty"},
+	{"2026-11-22T11:00:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example refresh, threads refresh"},
+	{"2026-11-22T11:30:00+08:00", "G3", []string{}, 1, 201, "test-example withdraw, threads withdraw"},
+	{"2026-11-22T12:00:00+08:00", "G3", []string{"threads:carol"}, 1, 400, "daily_limit"},
 }
 
 // The file e2e_test.go reads.
 type cardProof struct {
-	At     string            `json:"at"`
-	Random string            `json:"random"` // the 16 random bytes of the challenge, in hex
-	Body   map[string]string `json:"body"`   // the request body of POST /api/v1/records
-	Status int               `json:"status"`
-	Result string            `json:"result"`
+	At     string `json:"at"`
+	Random string `json:"random"` // the 16 random bytes of the challenge, in hex
+	Body   body   `json:"body"`   // the request body of POST /api/v1/records
+	Status int    `json:"status"`
+	Result string `json:"result"`
+}
+
+// body is the request body of POST /api/v1/records.
+type body struct {
+	ScopeString string      `json:"scope_string"`
+	ScopedID    string      `json:"scoped_id"`
+	Accounts    []inAccount `json:"accounts"`
+	Challenge   string      `json:"challenge"`
+	Issuer      string      `json:"issuer"`
+	SMTRoot     string      `json:"smt_root"`
+	Circuit     string      `json:"circuit"`
+	Proof       string      `json:"proof"`
+}
+
+// inAccount is an account as the request and make-proofs.mjs write it.
+type inAccount struct {
+	Platform string `json:"platform"`
+	Username string `json:"username"`
+}
+
+func accountsOf(list []string) ([]verifier.Account, []inAccount) {
+	accounts, in := []verifier.Account{}, []inAccount{}
+	for _, a := range list {
+		p, u, _ := strings.Cut(a, ":")
+		accounts = append(accounts, verifier.Account{Platform: p, Username: u})
+		in = append(in, inAccount{p, u})
+	}
+	return accounts, in
 }
 
 func main() {
@@ -164,12 +195,11 @@ func main() {
 
 	// The input of make-proofs.mjs.
 	type inRecord struct {
-		Circuit   string   `json:"circuit"`
-		Issuer    string   `json:"issuer"`
-		Action    string   `json:"action"`
-		Username  string   `json:"username"`
-		Challenge string   `json:"challenge"`
-		Revoked   []string `json:"revoked"`
+		Circuit   string      `json:"circuit"`
+		Issuer    string      `json:"issuer"`
+		Accounts  []inAccount `json:"accounts"`
+		Challenge string      `json:"challenge"`
+		Revoked   []string    `json:"revoked"`
 	}
 	type inIssuer struct {
 		Bits   int    `json:"bits"`
@@ -202,7 +232,8 @@ func main() {
 		for _, s := range sets[crls[p.crl].serials] {
 			revoked = append(revoked, hex.EncodeToString(s))
 		}
-		in.Records = append(in.Records, inRecord{circuits[p.issuer], p.issuer, p.action, p.username,
+		_, accounts := accountsOf(p.accounts)
+		in.Records = append(in.Records, inRecord{circuits[p.issuer], p.issuer, accounts,
 			date + "." + verifier.EncodeBase32(randoms[i]), revoked})
 	}
 	j, _ := json.Marshal(in)
@@ -215,8 +246,9 @@ func main() {
 	var out struct {
 		Commit  string `json:"zkid_noir_commit"`
 		Records []struct {
-			SMTRoot   string `json:"smt_root"`
-			Nullifier string `json:"nullifier"`
+			SMTRoot         string `json:"smt_root"`
+			DeclarationCode string `json:"declaration_code"`
+			Nullifier       string `json:"nullifier"`
 		} `json:"records"`
 	}
 	b, err := os.ReadFile(filepath.Join(work, "output.json"))
@@ -232,6 +264,12 @@ func main() {
 		o := out.Records[i]
 		if o.SMTRoot != roots[p.crl] {
 			fatalf("proof %d: root %s from zkid-noir, %s from crl/", i+1, o.SMTRoot, roots[p.crl])
+		}
+		accounts, inAccounts := accountsOf(p.accounts)
+		rec := in.Records[i]
+		// make-proofs.mjs and verifier/ agree on the declaration code.
+		if code := verifier.DeclarationCode(scope, accounts, rec.Challenge); o.DeclarationCode != code {
+			fatalf("proof %d: declaration code %s from make-proofs.mjs, %s from verifier/", i+1, o.DeclarationCode, code)
 		}
 		n, ok := new(big.Int).SetString(o.Nullifier, 16)
 		if !ok {
@@ -251,19 +289,18 @@ func main() {
 				vk = c.VKSHA256
 			}
 		}
-		rec := in.Records[i]
-		body := map[string]string{
-			"scope_string": scope, "scoped_id": verifier.ScopedIDText(f), "action": rec.Action,
-			"username": rec.Username, "challenge": rec.Challenge, "issuer": rec.Issuer,
-			"smt_root": o.SMTRoot, "circuit": vk, "proof": base64.StdEncoding.EncodeToString(proof),
+		b := body{
+			ScopeString: scope, ScopedID: verifier.ScopedIDText(f), Accounts: inAccounts,
+			Challenge: rec.Challenge, Issuer: rec.Issuer,
+			SMTRoot: o.SMTRoot, Circuit: vk, Proof: base64.StdEncoding.EncodeToString(proof),
 		}
-		check := &verifier.Record{Seq: 1, Prev: verifier.GenesisPrev, ScopeString: scope, ScopedID: body["scoped_id"],
-			Action: rec.Action, Username: rec.Username, Challenge: rec.Challenge, Issuer: rec.Issuer,
-			SMTRoot: o.SMTRoot, Circuit: vk, Proof: body["proof"]}
+		check := &verifier.Record{Seq: 1, Prev: verifier.GenesisPrev, ScopeString: scope, ScopedID: b.ScopedID,
+			Accounts: accounts, Challenge: rec.Challenge, Issuer: rec.Issuer,
+			SMTRoot: o.SMTRoot, Circuit: vk, Proof: b.Proof}
 		if err := check.CheckValues(verifier.Test); err != nil {
 			fatalf("proof %d is not a well-formed record: %v", i+1, err)
 		}
-		result = append(result, cardProof{p.at, hex.EncodeToString(randoms[i]), body, p.status, p.result})
+		result = append(result, cardProof{p.at, hex.EncodeToString(randoms[i]), b, p.status, p.result})
 	}
 	j, err = json.MarshalIndent(result, "", "  ")
 	if err != nil {

@@ -1,12 +1,12 @@
 # 後台端到端測試的資料
 
-給 `e2e_test.go` 用：廢止清冊、十一次過卡的請求，每一次都帶真的證明。發證金鑰和卡片金鑰都是當場產生的拋棄式金鑰，私鑰沒有留下；憑證和清冊是合成的。**沒有任何真實憑證或清冊的內容。** 兩把發證金鑰只在測試裡注入（驗證器經由 `verifier.NewWithIssuers`，只在建置標籤 `iamrealtest` 下存在），正式的執行檔不認得它們。
+給 `e2e_test.go` 用：廢止清冊、十二次過卡的請求，每一次都帶真的證明。發證金鑰和卡片金鑰都是當場產生的拋棄式金鑰，私鑰沒有留下；憑證和清冊是合成的。**沒有任何真實憑證或清冊的內容。** 兩把發證金鑰只在測試裡注入（驗證器經由 `verifier.NewWithIssuers`，只在建置標籤 `iamrealtest` 下存在），正式的執行檔不認得它們。
 
 | 檔案 | 內容 |
 |---|---|
 | `crl/` | 三份清冊，測試由假的內政部伺服器提供給鏡像 |
 | `issuer-G2.der`、`issuer-G3.der` | 兩把測試用發證金鑰的公鑰（SubjectPublicKeyInfo）。同一把金鑰簽卡片的憑證和清冊 |
-| `card-proofs.json` | 十一次過卡：後台的時鐘（台灣時間）、題目的 16 個亂數位元組、送出的內容（`POST /api/v1/records` 的請求）、預期的回應 |
+| `card-proofs.json` | 十二次過卡：後台的時鐘（台灣時間）、題目的 16 個亂數位元組、送出的內容（`POST /api/v1/records` 的請求，帶整份帳號清單）、預期的回應（成功時每個平台的種類，失敗時錯誤代碼） |
 | `zkid-noir-commit` | 做證明用的 `zkid-noir` 提交 |
 | `generate.go` | 產生上面這些檔案的程式 |
 
@@ -24,19 +24,24 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 
 題目由後台發：測試把後台的亂數來源換成 `card-proofs.json` 裡的 16 個位元組，後台發出的題目就是證明當初用的那一個。
 
-| | 時間 | 卡片 | 動作 | 回應 |
+場合是測試名冊的 `iamreal-test:public:0__________`，平台有 `test-example` 和 `threads`。
+
+| | 時間 | 卡片 | 帳號清單 | 回應 |
 |---|---|---|---|---|
-| 1 | 2026-11-20 10:00 | G2 的卡 | 宣告 `alice` | `201` `first` |
-| 2 | 2026-11-20 10:05 | G3 的卡 | 宣告 `alice` | `201` `first` |
-| 3 | 2026-11-20 10:20 | G3 的卡 | 宣告 `alice` | `201` `refresh` |
-| 4 | 2026-11-21 09:00 | G3 的卡 | 宣告 `bob` | `201` `switch` |
-| 5 | 2026-11-21 09:30 | G3 的卡 | 宣告 `carol` | `201` `switch` |
-| 6 | 2026-11-22 09:00 | G3 的卡 | 宣告 `dave` | `400` `switch_limit`（證明驗得過，名冊規則擋下） |
-| 7 | 2026-11-22 09:30 | G3 的卡 | 收回 `bob` | `400` `not_current` |
-| 8 | 2026-11-22 10:00 | G3 的卡 | 收回 `carol` | 先把帳號改成 `carl` 送一次：`400` `proof`；再送原本的：`201` `withdraw` |
-| 9 | 2026-11-22 10:30 | G3 的卡 | 宣告 `carol` | `201` `refresh` |
-| 10 | 2026-11-22 11:00 | G3 的卡 | 收回 `carol` | 和第 8 次一樣先送一次 `carl`：`400` `proof`；再送原本的：`201` `withdraw` |
-| 11 | 2026-11-22 11:30 | G3 的卡 | 宣告 `carol` | `400` `daily_limit`（證明驗得過；這張卡片這一天第 4 筆有效的紀錄。第 6、7 次被擋下，不算） |
+| 1 | 2026-11-20 10:00 | G2 的卡 | `threads:alice` | `201` `threads first` |
+| 2 | 2026-11-20 10:05 | G3 的卡 | `test-example:a-b`、`threads:alice` | `201` `test-example first, threads first` |
+| 3 | 2026-11-20 10:20 | G3 的卡 | `test-example:a-b`、`threads:alice` | `201` `test-example refresh, threads refresh` |
+| 4 | 2026-11-21 09:00 | G3 的卡 | `test-example:a-b`、`threads:bob` | `201` `test-example refresh, threads switch` |
+| 5 | 2026-11-21 09:30 | G3 的卡 | `test-example:c-d`、`threads:carol` | `201` `test-example switch, threads switch` |
+| 6 | 2026-11-22 09:00 | G3 的卡 | `test-example:e-f`、`threads:dave` | `400` `switch_limit`（證明驗得過；`threads` 第 3 次更換，整筆擋下，`test-example` 的更換也不算） |
+| 7 | 2026-11-22 09:30 | G3 的卡 | `test-example:c-d` | `201` `test-example refresh, threads withdraw` |
+| 8 | 2026-11-22 10:00 | G2 的卡 | （空的清單） | `201` `threads withdraw` |
+| 9 | 2026-11-22 10:30 | G2 的卡 | （空的清單） | `400` `empty`（這張卡片已經沒有帳號） |
+| 10 | 2026-11-22 11:00 | G3 的卡 | `test-example:c-d`、`threads:carol` | `201` `test-example refresh, threads refresh` |
+| 11 | 2026-11-22 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw, threads withdraw` |
+| 12 | 2026-11-22 12:00 | G3 的卡 | `threads:carol` | `400` `daily_limit`（證明驗得過；G3 的卡這一天第 4 筆有效的紀錄。第 6 次被擋下，不算） |
+
+每一次預期 `201`、清單不是空的過卡，測試先送同一份證明配上別的清單：最後一個帳號的名稱改成 `carl`，`400` `proof`；兩個帳號時再送少一個帳號的（`proof`）和順序對調的（`malformed`）。題目仍然可以用，最後送原本的。
 
 ## 怎麼產生的
 
@@ -46,6 +51,6 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 go run ./server/testdata/generate.go -zkid <zkid-noir> -bb <bb> -crs <通用參數目錄>
 ```
 
-證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`），不寫任何東西到 `zkid-noir` 裡。`generate.go` 確認 `zkid-noir` 的參考樹和 `crl/` 算出的樹根相同，每一次過卡都是測試名冊裡格式正確的紀錄。在 M1 Max 上全部約 16 秒。
+證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `zkid-noir` 裡。`generate.go` 確認 `zkid-noir` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 23 秒（十二份證明）。
 
 每次執行的金鑰、題目和證明都不同，測試照樣通過。
