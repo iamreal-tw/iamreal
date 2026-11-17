@@ -104,8 +104,8 @@ describe("stops", () => {
     [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），名冊沒有變動。", 4],
     [{ code: "server", server: "challenge_used", status: 400 }, "這次過卡沒有被接受（代碼 challenge_used），名冊沒有變動。", 4],
     [{ code: "server", server: "platform", status: 400 }, "這次過卡沒有被接受（代碼 platform），名冊沒有變動。", 4],
-    // The server's own policy on the fourth and fifth switch: no sentence of its own, the row of the other codes.
-    [{ code: "server", server: "switch_restricted", status: 403 }, "這次過卡沒有被接受（代碼 switch_restricted），名冊沒有變動。", 4],
+    // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
+    [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
     // The roster rules, when the card's state changed after it was asked.
     [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", 4],
@@ -122,7 +122,6 @@ describe("stops", () => {
     [{ code: "blocked", reason: "daily_limit" }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", null],
     // A switch the row says cannot be made: no sentence in the copy for typing one anyway.
     [{ code: "blocked", reason: "switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
-    [{ code: "blocked", reason: "web_switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
     // The date changed since step 5 (midnight): nothing signed, back to the beginning.
     [{ code: "date_changed" }, "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，名冊也沒有記下任何東西。請回到開頭重新過卡。", null],
   ];
@@ -233,7 +232,6 @@ function slot(row: PlatformRow | null, o: Partial<SlotStatus> = {}): SlotStatus 
     ...o,
     switchCount,
     switchesLeft: 5 - switchCount,
-    webSwitchesLeft: Math.max(0, 3 - switchCount),
   };
 }
 
@@ -286,7 +284,7 @@ describe("your accounts (step 4)", () => {
       v.rows.map((r) => [r.current, r.lines.map(t)]),
       [
         ["", ["還沒有宣告過。"]],
-        ["alice", ["更換過 1 次，還可以更換 2 次。"]],
+        ["alice", ["更換過 1 次，還可以更換 4 次。"]],
       ],
     );
     assert.deepEqual(
@@ -309,15 +307,16 @@ describe("your accounts (step 4)", () => {
 
   test("the line under each row, by its counts", () => {
     assert.deepEqual(lines(slot(THREADS)), ["還沒有宣告過。"]);
-    assert.deepEqual(lines(declared("alice")), ["還沒有更換過，還可以更換 3 次。"]);
-    assert.deepEqual(lines(declared("alice", { switchCount: 2 })), ["更換過 2 次，還可以更換 1 次。"]);
+    assert.deepEqual(lines(declared("alice")), ["還沒有更換過，還可以更換 5 次。"]);
+    assert.deepEqual(lines(declared("alice", { switchCount: 2 })), ["更換過 2 次，還可以更換 3 次。"]);
     // Put there today: changing it today is a correction, after the count.
-    assert.deepEqual(lines(declared("alice", { switchCount: 1, correctionDate: TODAY, correctionToday: true })), ["更換過 1 次，還可以更換 2 次。", "今天才宣告的帳號，今天改掉不另外算一次更換。"]);
+    assert.deepEqual(lines(declared("alice", { switchCount: 1, correctionDate: TODAY, correctionToday: true })), ["更換過 1 次，還可以更換 4 次。", "今天才宣告的帳號，今天改掉不另外算一次更換。"]);
     // Withdrawn: the account withdrawn first, then the count.
-    assert.deepEqual(lines(slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02", switchCount: 1 })), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 2 次。"]);
-    // 3 or 4 switches: none left on the web (the app not out yet); the row can be cleared.
-    assert.deepEqual(lines(declared("alice", { switchCount: 3 })), ["已經更換 3 次，目前不能再更換。之後請用島民 app。", "這一列不能改成別的帳號，可以清空。"]);
-    assert.deepEqual(lines(declared("alice", { switchCount: 4 })), ["已經更換 4 次，目前不能再更換。之後請用島民 app。", "這一列不能改成別的帳號，可以清空。"]);
+    assert.deepEqual(lines(slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02", switchCount: 1 })), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"]);
+    // 3 or 4 switches: the rest of the 5, on the web too.
+    assert.deepEqual(lines(declared("alice", { switchCount: 3 })), ["更換過 3 次，還可以更換 2 次。"]);
+    assert.deepEqual(lines(declared("alice", { switchCount: 4 })), ["更換過 4 次，還可以更換 1 次。"]);
+    // 5: used up; the row can be cleared.
     assert.deepEqual(lines(declared("alice", { switchCount: 5 })), ["已經更換 5 次，這個平台不能再更換。", "這一列不能改成別的帳號，可以清空。"]);
     assert.deepEqual(lines(slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02", switchCount: 5 })), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "已經更換 5 次，這個平台不能再更換。", "這個平台只能填回 @bob。"]);
     // Used up, but put there today: it can still be changed today.
@@ -370,7 +369,7 @@ describe("your accounts (step 4)", () => {
 
 /** A row of a consequence (Consequence.rows). */
 function crow(o: Partial<ConsequenceRow> & Pick<ConsequenceRow, "kind" | "username">): ConsequenceRow {
-  return { platform: "threads", row: THREADS, current: null, previous: null, switchesLeftAfter: null, webSwitchesLeftAfter: null, ...o };
+  return { platform: "threads", row: THREADS, current: null, previous: null, switchesLeftAfter: null, ...o };
 }
 function consequence(rows: ConsequenceRow[], o: Partial<Consequence> = {}): Consequence {
   return { accounts: rows.filter((r) => r.kind !== "withdraw").map((r) => ({ platform: r.platform, username: r.username })), rows, firstRecord: false, today: TODAY, ...o };
@@ -382,7 +381,7 @@ describe("confirm (step 5)", () => {
   test("each row: the platform's name and ID, the account, what happens", () => {
     const cq = consequence([
       crow({ platform: "test-example", row: EXAMPLE, kind: "first", username: "a-b" }),
-      crow({ kind: "switch", username: "carol.tw", current: "alice", previous: "alice", switchesLeftAfter: 3, webSwitchesLeftAfter: 1 }),
+      crow({ kind: "switch", username: "carol.tw", current: "alice", previous: "alice", switchesLeftAfter: 1 }),
     ]);
     assert.deepEqual(rowsOf(cq), [
       [EXAMPLE_NAME, "test-example", "a-b", ["新宣告"]],
@@ -404,11 +403,12 @@ describe("confirm (step 5)", () => {
     assert.deepEqual(one(crow({ kind: "withdraw", username: "alice", current: "alice" })), ["收回"]);
     assert.deepEqual(one(crow({ kind: "correction", username: "bob", current: "alice", previous: "alice" })), ["更換，原本是 @alice。", "今天才宣告的帳號，這次改掉不另外算一次更換。"]);
     // Withdrawn before, another account: a switch from the account withdrawn.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 2 次。"]);
-    // The third: none left on the web after it.
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2, webSwitchesLeftAfter: 0 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。這次之後，目前不能再更換。"]);
-    // The fifth (the app's).
-    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 0, webSwitchesLeftAfter: 0 })), ["更換，原本是 @bob。", "用掉最後一次更換。這次之後，這個平台不能再更換。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: null, previous: "bob", switchesLeftAfter: 4 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]);
+    // The third and the fourth: the switches left of the 5.
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 2 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 2 次。"]);
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 1 })), ["更換，原本是 @bob。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]);
+    // The fifth.
+    assert.deepEqual(one(crow({ kind: "switch", username: "carol", current: "bob", previous: "bob", switchesLeftAfter: 0 })), ["更換，原本是 @bob。", "用掉最後一次更換。這次之後，這個平台不能再更換。"]);
     // A platform the device does not know: the account as the server sent it, unchanged.
     assert.deepEqual(rowsOf(consequence([crow({ platform: "x-new", row: null, kind: "refresh", username: "alice-b", current: "alice-b" })])), [["x-new", "x-new", "alice-b", ["不變"]]]);
   });
@@ -441,7 +441,7 @@ describe("confirm (step 5)", () => {
     const again = confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads");
     assert.deepEqual([again.intro, again.button], ["按下後，名冊會公開記下這張卡片宣告的帳號：", "再次過卡"]);
     // A switch or declared again: 宣告這個帳號.
-    assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })]), "Threads").button, "宣告這個帳號");
+    assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4 })]), "Threads").button, "宣告這個帳號");
     assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
     // Everything withdrawn: neither, and the sentence and button of a withdrawal.
     const none = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
@@ -488,7 +488,7 @@ describe("done (step 6)", () => {
     assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
     const back = [crow({ kind: "refresh", username: "alice", current: null })];
     assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
-    const sw = [crow({ kind: "switch", username: "carol", current: "alice", previous: "alice", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })];
+    const sw = [crow({ kind: "switch", username: "carol", current: "alice", previous: "alice", switchesLeftAfter: 4 })];
     assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明已更新");
     const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
     assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)])).title), "已全部收回");
@@ -601,7 +601,7 @@ describe("done (step 6)", () => {
   });
 
   test("a switch recorded where step 5 said a switch too: not 'a switch was used' again", () => {
-    const expected = [crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 3, webSwitchesLeftAfter: 1 })];
+    const expected = [crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 3 })];
     const v = doneView(done(expected, [k("threads", "switch", "carol")], { mismatches: ["threads"] }));
     assert.deepEqual(v.rows.map((r) => r.switchUsed), [false]);
   });

@@ -38,7 +38,7 @@ const say = (template: string, values: Values = {}): Sentence => ({ template, va
  * the codes other than the rows below it; `platform`, a list naming a
  * platform the roster does not accept, is one of them).
  */
-const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "switch_restricted"]);
+const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order"]);
 
 /** The format hint of a platform (design/copy/card-proof.json, `formats`); null if the copy has none. */
 export function formatHint(platform: string): Sentence | null {
@@ -131,6 +131,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
       if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
       if (stop.server === "empty") return { ...say(s.empty), ...id };
+      // The server's operating policy refused a switch the rules allow (none by default).
+      if (stop.server === "switch_restricted") return { ...say(s.switch_restricted), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
@@ -139,7 +141,7 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.reason === "empty") return say(COPY.accounts.need_one);
       // The screen offers no change on a day with 3 records; the engine refuses one too.
       if (stop.reason === "daily_limit") return say(s.daily_limit);
-      // Another account typed on a row that cannot switch (switch_limit, web_switch_limit).
+      // Another account typed on a row whose 5 switches are used up (switch_limit).
       return say(COPY.accounts.row_cannot_switch);
     // The date changed since step 5, and the list would now do something else: nothing was signed.
     case "date_changed":
@@ -305,13 +307,6 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
 }
 
-/**
- * Whether the web page offers the 4th and 5th switch in the app (after the
- * app is out, the rows of 3 or 4 switches are accounts.row_app_only; before,
- * accounts.row_app_later). Decided by the build, like the choice of device on step 1.
- */
-export const APP_RELEASED = false;
-
 /** A platform's name on the screen: the server's display name, or for a platform the device does not know its ID. */
 /**
  * A platform's name on the screen: the device's own (src/platforms.ts), not
@@ -361,15 +356,13 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   if (slot.row === null) return [say(a.row_unknown_platform)];
   if (slot.lastDeclared === null) return [say(a.row_unused)];
   const used = slot.switchCount;
-  // The switches left are what the web page can still make: 3 minus the switches used.
+  // The switches left by the roster rules: 5 minus the switches used.
   const count =
     used === 0
-      ? say(a.row_no_switches_yet, { switches_left: slot.webSwitchesLeft })
-      : slot.webSwitchesLeft > 0
-        ? say(a.row_switches, { switches_used: used, switches_left: slot.webSwitchesLeft })
-        : used < 5
-          ? say(APP_RELEASED ? a.row_app_only : a.row_app_later, { switches_used: used })
-          : say(a.row_used_up, { switches_used: used });
+      ? say(a.row_no_switches_yet, { switches_left: slot.switchesLeft })
+      : slot.switchesLeft > 0
+        ? say(a.row_switches, { switches_used: used, switches_left: slot.switchesLeft })
+        : say(a.row_used_up, { switches_used: used });
   const lines: Sentence[] = [];
   const last = handle(slot.platform, slot.lastDeclared);
   if (slot.current === null) lines.push(say(a.row_withdrawn, { last_declared: last }));
@@ -377,7 +370,7 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   // An account put there today can be changed today without a switch (a correction), even when none is left.
   if (slot.correctionToday) {
     if (slot.current !== null) lines.push(say(a.row_today));
-  } else if (slot.webSwitchesLeft === 0) {
+  } else if (slot.switchesLeft === 0) {
     lines.push(slot.current !== null ? say(a.row_can_clear) : say(a.row_only_back, { last_declared: last }));
   }
   return lines;
@@ -453,8 +446,7 @@ export function switchSentence(r: ConsequenceRow): Sentence | null {
   if (r.kind === "correction") return say(c.switch_not_counted);
   if (r.kind !== "switch") return null;
   if (r.switchesLeftAfter === 0) return say(c.uses_final_switch);
-  if (r.webSwitchesLeftAfter === 0) return say(c.uses_last_switch);
-  return say(c.uses_switch, { switches_left: r.webSwitchesLeftAfter! });
+  return say(c.uses_switch, { switches_left: r.switchesLeftAfter! });
 }
 
 /** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */

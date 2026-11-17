@@ -32,7 +32,7 @@ go build -o iamreal-server ./server
 | `-addr` | `127.0.0.1:8080` | `serve` 聽的位址 |
 | `-web` | （無） | `serve` 在 `/` 一起提供的靜態檔目錄（之後放 `web/` 建置出來的檔案）。沒給時 `/` 是 404 |
 | `-mirror` | 開 | `serve` 要不要自己跑清冊鏡像 |
-| `-accept-restricted-switches` | 關 | `serve` 接不接受用到一個名額第 4、第 5 次更換的紀錄（`switch_restricted`，見「送出一筆的檢查順序」第 6 步）。關著時一律拒絕 |
+| `-restrict-late-switches` | 關 | `serve` 拒絕用到一個名額第 4、第 5 次更換的紀錄（`switch_restricted`，見「送出一筆的檢查順序」第 6 步）。關著時照名冊規則接受 |
 | `-out` | `DATA/roster` | `snapshot` 寫到哪個目錄 |
 
 發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多三個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）、`-test-clock <檔案>`（檔案裡寫一個整數，時鐘比這台機器的快幾天；每次讀時鐘都重讀這個檔案）。給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入；同一張卡片的過卡分到不同的日期（一張卡片一天最多 3 筆有效紀錄）。照這份 README 建置的執行檔沒有這三個選項。
@@ -85,7 +85,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 3. **驗證證明**（`verifier/`，`bb` 在子行程裡跑）：不通過是 `proof`。
 4. **清冊的樹根**：這把發證金鑰在鏡像裡最新的清冊（照清冊編號，只算可用的）超過 3 天（今天的台灣日期 − 清冊日期 > 3）或一份都沒有，是 `503` `crl_stale`；樹根不是最新兩份之一的，是 `root`。
 5. **名冊規則**（`roster.Rules.Check`）：`root`、`date_order`、`empty`、`switch_limit`、`daily_limit`。`switch_limit` 不說是哪個平台；整份清單都不寫入。
-6. **後台自己的更換政策**：規則接受的紀錄，只要有一個平台的種類是 `switch`、而那個名額寫入後的更換次數是 4 或 5，就是 `403` `switch_restricted`，整份清單不寫入。這是後台的規則，不是名冊的（`spec/roster-rules.md`「Not part of these rules」）。「條件滿足」怎麼判斷還沒有定，所以現在只有全有全無的開關：`Config.AcceptRestrictedSwitches`（`serve` 的 `-accept-restricted-switches`），預設關，也就是第 4、第 5 次更換一律拒絕；打開時規則接受的都接受。沒有 `switch` 的紀錄、更換都在前 3 次的紀錄、`correction`，不會因為這一條被拒絕。
+6. **後台自己的更換政策**（預設沒有）：開了 `Config.RestrictLateSwitches`（`serve` 的 `-restrict-late-switches`）時，規則接受的紀錄，只要有一個平台的種類是 `switch`、而那個名額寫入後的更換次數是 4 或 5，就是 `403` `switch_restricted`，整份清單不寫入。這是後台的規則，不是名冊的（`spec/roster-rules.md`「Not part of these rules」）。預設關著，規則接受的都接受。沒有 `switch` 的紀錄、更換都在前 3 次的紀錄、`correction`，不會因為這一條被拒絕。
 
 全部通過才寫入，寫入和題目標成已接受在同一個交易裡，再用 `roster.Rules.Apply` 更新記憶體裡的現況。回應的 `kinds` 是這筆紀錄在每個有結果的平台的種類，照平台排，每一項有 `platform`、`kind`、`username`（清單裡那個平台的帳號；收回時是被收回的那個）和 `account_cards`：套用後這個場合裡目前在那個平台宣告這個帳號的卡片數，由 `roster.Rules.AccountCards` 從同一份現況算（`server/` 不重寫規則），也在那把鎖裡。步驟 4、5 和寫入在同一把鎖裡做，一次一筆：兩個請求同時送出時，`seq` 連續，鏈不斷；同一個題目同時送兩次，只有一次被接受，另一次是 `challenge_used`。
 
@@ -148,11 +148,11 @@ go test -race ./server/...
 | 檔案 | 測什麼 |
 |---|---|
 | `store/sqlite_test.go` | 鏈接不上（跳號、重號、`prev` 錯）就不寫；題目沒發過或已接受就不寫紀錄；送出次數；刪過期題目；重開、唯讀 |
-| `api_test.go` | 每個介面每個錯誤代碼：題目的日期在台灣午夜前後；`config` 的平台表（兩份名冊；格式字串和檢查函式一致）；`card-state` 的形狀（每個平台一項、沒用過的名額、收回後保留上次宣告的帳號、`switch_count`、`correction_date`）、每一種 `malformed`，回應的欄位順序；正式名冊的後台只列 `threads`、測試平台是 `platform`；`records` 的每一種 `malformed`（清單：不是清單、`null`、某一項的鍵不對、平台重複、順序相反、帳號名稱是別的平台的格式；帳號的鍵換順序和空白照常接受）、`scope`（比 `platform`、`malformed` 先）、`platform`（比帳號名稱的格式先；不算進 5 次）、`challenge_unknown`（沒發過；剛好 10 分鐘；差 1 奈秒仍可用，跨過午夜）、`challenge_used`、`challenge_attempts`（失敗 4 次後第 5 次仍可成功；失敗 5 次後第 6 次被擋）、`proof`、`root`（第三新的清冊、別把金鑰的樹根、不存在的樹根）、`crl_stale`（清冊日期後第 3 天 23:59:59 可以、第 4 天 00:00:00 不行；新清冊進來後恢復；這把金鑰沒有清冊）、`date_order`、`empty`（沒有帳號的卡片送空清單；收回全部之後再送一次）、`switch_limit`（第 6 次更換，整筆不寫入，另一個平台也沒變；那個平台不動時另一個平台照常可以改；第 5 次之後當天的 `correction` 照常可以）、`switch_restricted`（預設和打開兩種狀態：第 4、第 5 次更換被拒或被接受，前 3 次、`correction`、沒有更換的紀錄都不受影響，被拒時不寫入、題目仍可用，規則的代碼優先）、`daily_limit`（同一張卡片同一天第 4 筆被擋、不寫入，不管改哪個平台，被別的規則擋下的不算，別張卡片不受影響，隔天又可以；午夜前發的題目過了午夜送出，仍算前一天）；送出成功時的 `kinds`（每個平台一項、照平台排、收回時帶被收回的帳號；`account_cards` 只算同一個平台的同一個帳號名稱；欄位的順序；錯誤時沒有這個欄位）；`404`、`405` |
+| `api_test.go` | 每個介面每個錯誤代碼：題目的日期在台灣午夜前後；`config` 的平台表（兩份名冊；格式字串和檢查函式一致）；`card-state` 的形狀（每個平台一項、沒用過的名額、收回後保留上次宣告的帳號、`switch_count`、`correction_date`）、每一種 `malformed`，回應的欄位順序；正式名冊的後台只列 `threads`、測試平台是 `platform`；`records` 的每一種 `malformed`（清單：不是清單、`null`、某一項的鍵不對、平台重複、順序相反、帳號名稱是別的平台的格式；帳號的鍵換順序和空白照常接受）、`scope`（比 `platform`、`malformed` 先）、`platform`（比帳號名稱的格式先；不算進 5 次）、`challenge_unknown`（沒發過；剛好 10 分鐘；差 1 奈秒仍可用，跨過午夜）、`challenge_used`、`challenge_attempts`（失敗 4 次後第 5 次仍可成功；失敗 5 次後第 6 次被擋）、`proof`、`root`（第三新的清冊、別把金鑰的樹根、不存在的樹根）、`crl_stale`（清冊日期後第 3 天 23:59:59 可以、第 4 天 00:00:00 不行；新清冊進來後恢復；這把金鑰沒有清冊）、`date_order`、`empty`（沒有帳號的卡片送空清單；收回全部之後再送一次）、`switch_limit`（第 6 次更換，整筆不寫入，另一個平台也沒變；那個平台不動時另一個平台照常可以改；第 5 次之後當天的 `correction` 照常可以）、`switch_restricted`（預設和開了 `-restrict-late-switches` 兩種狀態：第 4、第 5 次更換被接受或被拒，前 3 次、`correction`、沒有更換的紀錄都不受影響，被拒時不寫入、題目仍可用，規則的代碼優先）、`daily_limit`（同一張卡片同一天第 4 筆被擋、不寫入，不管改哪個平台，被別的規則擋下的不算，別張卡片不受影響，隔天又可以；午夜前發的題目過了午夜送出，仍算前一天）；送出成功時的 `kinds`（每個平台一項、照平台排、收回時帶被收回的帳號；`account_cards` 只算同一個平台的同一個帳號名稱；欄位的順序；錯誤時沒有這個欄位）；`404`、`405` |
 | `server_test.go` | 20 個請求同時送出時 `seq` 連續、鏈不斷，同一個題目同時送兩次只接受一次；重開後現況相同；有無效紀錄、清冊不見、索引寫錯、名冊屬於另一份時不啟動並指出第幾筆；紀錄裡沒有對方的位址、匿名編號、帳號、題目，只有該有的欄位；每個 API 回應的 `X-Request-Id` 和那一行紀錄的請求編號相同，靜態檔沒有；靜態檔，頁面的標頭只在網頁目錄的檔案上；`web/README.md` 引用的 CSP 和這裡的相同 |
 | `mirror_test.go` | 假的內政部伺服器：第一次下載並建索引（和 `crl.BuildIndex` 相同）、之後送條件請求、新清冊加一行、同樣的內容換了 `ETag` 不重存、不是清冊的檔案也存並列為不可用、錯誤狀態不存；索引寫錯時不動存檔 |
 | `snapshot_test.go` | 空名冊、1,001 筆切成兩個檔、同一天再跑什麼都不做、隔天寫滿的檔不重寫；有無效的紀錄、證明驗不過、清冊索引和檔案不同、已公布的檔被改過、`heads.jsonl` 不是這份名冊的或寫法不對時，都不發布 |
-| `e2e_test.go` | 建置標籤 `iamrealtest`、需要 `bb`：用 `testdata/` 的真證明（見那裡的 `README.md`）從假的內政部抓清冊，跑兩個平台的清單：宣告、當天更正（`correction`）、再次過卡、更換、第 4 次更換被後台的預設政策拒絕（`403` `switch_restricted`，證明驗得過）、漏掉一個帳號就是收回、空的清單收回全部、沒有帳號時的空清單（`empty`）、同一張卡片同一天第 4 筆（`daily_limit`）；每一筆成功的之前，同一份證明配上改了一個帳號、少一個帳號的清單都是 `proof`，順序對調的清單是 `malformed`；出快照（每份證明用 `bb` 重驗），用 `go build -tags iamrealtest` 建出的 `iamreal-verify` 重驗那個目錄，結果和後台的現況相同；換成內政部的金鑰時快照拒絕發布 |
+| `e2e_test.go` | 建置標籤 `iamrealtest`、需要 `bb`：用 `testdata/` 的真證明（見那裡的 `README.md`）從假的內政部抓清冊，跑兩個平台的清單：宣告、當天更正（`correction`）、再次過卡、更換、第 4 次更換被開了 `-restrict-late-switches` 的後台拒絕（`403` `switch_restricted`，證明驗得過）、漏掉一個帳號就是收回、空的清單收回全部、沒有帳號時的空清單（`empty`）、同一張卡片同一天第 4 筆（`daily_limit`）；每一筆成功的之前，同一份證明配上改了一個帳號、少一個帳號的清單都是 `proof`，順序對調的清單是 `malformed`；出快照（每份證明用 `bb` 重驗），用 `go build -tags iamrealtest` 建出的 `iamreal-verify` 重驗那個目錄，結果和後台的現況相同；換成內政部的金鑰時快照拒絕發布 |
 
 ## 檔案
 

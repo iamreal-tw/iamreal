@@ -22,14 +22,14 @@
 //    list for a card that declares nothing (請至少填一個帳號); both declared
 //    again; a switch the server records as a switch where the screen said a
 //    correction (the card's state changed on its way: the screen tells the
-//    cardholder, kind_mismatch); the third switch; the fourth that the web
-//    page does not make (the row's lines; the engine refuses it); a fourth
-//    switch made with a card's state that hid one, refused by the server's
-//    policy (switch_restricted); a platform the page does not know (the
-//    config without its row): the account kept in the list as it is; then
-//    the server restarted with -accept-restricted-switches: the fourth and
-//    fifth switches recorded, step 4 saying none is left, and a sixth
-//    refused by the roster rules (switch_limit). Along the way: a submission
+//    cardholder, kind_mismatch); the third switch; a fourth refused by the
+//    server's policy, which the server was started with for this
+//    (-restrict-late-switches: switch_restricted); a platform the page does
+//    not know (the config without its row): the account kept in the list as
+//    it is; then the server restarted as it runs by default (no such
+//    policy): the fourth and fifth switches recorded, step 4 saying none is
+//    left and refusing another account typed anyway, and a sixth refused by
+//    the roster rules (switch_limit). Along the way: a submission
 //    that did not get through (再試一次), one the server refused (its
 //    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
@@ -247,10 +247,10 @@ const TEST_OPTIONS = ["-test-issuers", issuersDir, "-test-moica", moicaUrl];
 let server: ChildProcess;
 /**
  * Starts the server on its port, with the same data: the roster carries
- * over. `acceptRestricted`: -accept-restricted-switches (the fourth and fifth
- * switch of a slot accepted; refused by default, switch_restricted).
+ * over. `restrictLate`: -restrict-late-switches (the fourth and fifth switch
+ * of a slot refused, switch_restricted; accepted by default).
  */
-async function startServer(o: { acceptRestricted?: boolean } = {}): Promise<void> {
+async function startServer(o: { restrictLate?: boolean } = {}): Promise<void> {
   server = spawn(
     serverBin,
     [
@@ -270,7 +270,7 @@ async function startServer(o: { acceptRestricted?: boolean } = {}): Promise<void
       ...TEST_OPTIONS,
       "-test-clock",
       clockFile,
-      ...(o.acceptRestricted ? ["-accept-restricted-switches"] : []),
+      ...(o.restrictLate ? ["-restrict-late-switches"] : []),
     ],
     { stdio: ["ignore", "ignore", "pipe"] },
   );
@@ -290,7 +290,10 @@ async function stopServer(): Promise<void> {
   server.kill();
   await exited;
 }
-await startServer();
+// Started with the policy on the fourth and fifth switch, for the case that
+// checks switch_restricted; restarted as it runs by default before the fourth
+// and fifth switches are made.
+await startServer({ restrictLate: true });
 const PAGE_ORIGIN = `http://localhost:${serverPort}`;
 const PAGE = `${PAGE_ORIGIN}/`;
 
@@ -1006,12 +1009,10 @@ const A = C.accounts;
 const at = (u: string) => handle(THREADS, u);
 const count = (used: number) =>
   used === 0
-    ? fill(A.row_no_switches_yet, { switches_left: 3 })
-    : used < 3
-      ? fill(A.row_switches, { switches_used: used, switches_left: 3 - used })
-      : used < 5
-        ? fill(A.row_app_later, { switches_used: used })
-        : fill(A.row_used_up, { switches_used: used });
+    ? fill(A.row_no_switches_yet, { switches_left: 5 })
+    : used < 5
+      ? fill(A.row_switches, { switches_used: used, switches_left: 5 - used })
+      : fill(A.row_used_up, { switches_used: used });
 const lastProof = (daysAgo: number) => fill(A.current, {}) + (daysAgo === 0 ? A.last_card_proof_today : fill(A.last_card_proof, { days_ago: daysAgo }));
 
 component.card = main.spec();
@@ -1210,7 +1211,7 @@ await tryStep("a switch on Threads (@alicia to @bob)", async () => {
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 2 })]],
+      [THREADS, THREADS_NAME, at("bob"), [fill(K.switch, { previous: at("alicia") }), fill(C.confirm.uses_switch, { switches_left: 4 })]],
     ],
     C.confirm.button_declare,
   );
@@ -1428,7 +1429,7 @@ await tryStep("a change the screen called a correction, recorded as a switch (th
 
 await setDay(4);
 
-await tryStep("the third switch (@carol to @dave): none left on the web after it", async () => {
+await tryStep("the third switch (@carol to @dave): 2 left after it", async () => {
   const st = await toAccounts();
   checkRows("two switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "carol", [count(2)]] });
   await typeRows({ [THREADS]: "dave" });
@@ -1437,7 +1438,7 @@ await tryStep("the third switch (@carol to @dave): none left on the web after it
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") }), C.confirm.uses_last_switch]],
+      [THREADS, THREADS_NAME, at("dave"), [fill(K.switch, { previous: at("carol") }), fill(C.confirm.uses_switch, { switches_left: 2 })]],
     ],
     C.confirm.button_declare,
   );
@@ -1461,18 +1462,11 @@ await tryStep("the third switch (@carol to @dave): none left on the web after it
 
 await setDay(5);
 
-await tryStep("3 switches: the row says none is left on the web; another account typed anyway is refused; 取消 on step 5", async () => {
+await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () => {
   const st = await toAccounts();
-  checkRows("three switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "dave", [count(3), A.row_can_clear]] });
-  await screenshot("web-limit-4-accounts");
-  const requests = componentCount();
+  checkRows("three switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
   const signs = componentCount("MakeSignature");
   const challenges = challengeCount();
-  await typeRows({ [THREADS]: "erin" });
-  const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)!.why;
-  check(why === A.row_cannot_switch && (await page.eval<boolean>(`!!${step("accounts")}`)), `a fourth switch on the web: refused, the sentence under the row ("${why}")`);
-  await screenshot("web-limit-4-accounts-refused");
-  check(componentCount() === requests && challengeCount() === challenges, "refused: nothing asked of the component, no challenge");
   await typeRows({ [THREADS]: "dave" });
   await waitConfirm();
   await page.clickButton(C.common.cancel);
@@ -1481,23 +1475,18 @@ await tryStep("3 switches: the row says none is left on the web; another account
   check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on step 5: no second signature, no challenge");
 });
 
-// The card's state hides a switch (2 where the roster has 3): the page makes
-// what it takes for the third switch, the server finds the fourth, and its
-// policy refuses it by default (switch_restricted).
-await tryStep("a fourth switch the server's policy refuses (switch_restricted)", async () => {
-  const undo = await rewrite("*/api/v1/card-state", (b) => void (b.platforms.threads.switch_count = 2));
-  try {
-    await toAccounts({ samePage: true });
-  } finally {
-    await undo();
-  }
+// The server was started with -restrict-late-switches: the page offers the
+// fourth switch (the roster rules allow 5), the server's policy refuses it
+// (switch_restricted).
+await tryStep("a fourth switch the server's policy refuses (-restrict-late-switches: switch_restricted)", async () => {
+  await toAccounts({ samePage: true });
   await typeRows({ [THREADS]: "erin" });
   checkConfirm(
-    "a fourth, shown as the third",
+    "a fourth",
     await waitConfirm(),
     [
       [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
-      [THREADS, THREADS_NAME, at("erin"), [fill(K.switch, { previous: at("dave") }), C.confirm.uses_last_switch]],
+      [THREADS, THREADS_NAME, at("erin"), [fill(K.switch, { previous: at("dave") }), fill(C.confirm.uses_switch, { switches_left: 1 })]],
     ],
     C.confirm.button_declare,
   );
@@ -1505,8 +1494,7 @@ await tryStep("a fourth switch the server's policy refuses (switch_restricted)",
   await page.clickButton(C.confirm.button_declare);
   const d = await waitDoneOrMessage();
   const id = await page.text("[data-request-id]");
-  const expected = fill(C.stops.rejected, { code: "switch_restricted" });
-  check(!d.done && d.item === "submit" && d.message === `${expected}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
+  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_restricted}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
   const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 403).at(-1);
   check(res?.headers["x-request-id"] === id && serverLog.includes(`"error":"switch_restricted"`), `403 switch_restricted, its request ID on the screen (${id})`);
   check((await recordCount()) === before, "nothing was appended");
@@ -1525,7 +1513,7 @@ await tryStep("a platform the page does not know: the account kept in the list a
   } finally {
     await undo();
   }
-  checkRows("unknown", st.rows, { [EXAMPLE]: [EXAMPLE, "a-b", [A.row_unknown_platform], { fixed: true }], [THREADS]: [THREADS_NAME, "dave", [count(3), A.row_can_clear]] });
+  checkRows("unknown", st.rows, { [EXAMPLE]: [EXAMPLE, "a-b", [A.row_unknown_platform], { fixed: true }], [THREADS]: [THREADS_NAME, "dave", [count(3)]] });
   await screenshot("unknown-4-accounts");
   await page.clickButton(C.common.next);
   checkConfirm(
@@ -1647,27 +1635,29 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
   );
 });
 
-// The server's policy opened: -accept-restricted-switches ---------------------------
+// The server as it runs by default: no policy on the fourth and fifth switch ----------
 
-await tryStep("the server restarted with -accept-restricted-switches", async () => {
+await tryStep("the server restarted without -restrict-late-switches (the default)", async () => {
   await stopServer();
-  await startServer({ acceptRestricted: true });
+  await startServer();
   const config = await (await fetch(`http://127.0.0.1:${serverPort}/api/v1/config`)).json();
   check(Array.isArray(config.platforms) && config.platforms.length === 2, "the server answers again, on the same address, with the same roster");
 });
 
-/** A fourth or fifth switch: the card's state hides the switches beyond 2 (the web page makes no more), the server records it. */
-async function hiddenSwitch(label: string, from: string, to: string, used: number): Promise<void> {
-  const seen: any[] = [];
-  const undo = await rewrite("*/api/v1/card-state", (b) => void (b.platforms.threads.switch_count = 2), seen);
-  try {
-    await toAccounts();
-  } finally {
-    await undo();
-  }
-  check(seen[0]?.platforms?.threads?.switch_count === used, `${label}: the roster has ${seen[0]?.platforms?.threads?.switch_count} switches`);
+/** A fourth or fifth switch, made on the web like the first three; the server records it. */
+async function lateSwitch(label: string, from: string, to: string, used: number): Promise<void> {
+  const st = await toAccounts();
+  checkRows(label, st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, from, [count(used)]] });
   await typeRows({ [THREADS]: to });
-  await waitConfirm();
+  checkConfirm(
+    label,
+    await waitConfirm(),
+    [
+      [EXAMPLE, EXAMPLE_NAME, "a-b", [K.unchanged]],
+      [THREADS, THREADS_NAME, at(to), [fill(K.switch, { previous: at(from) }), used + 1 === 5 ? C.confirm.uses_final_switch : fill(C.confirm.uses_switch, { switches_left: 5 - used - 1 })]],
+    ],
+    C.confirm.button_declare,
+  );
   await finish({
     label,
     button: C.confirm.button_declare,
@@ -1684,15 +1674,22 @@ async function hiddenSwitch(label: string, from: string, to: string, used: numbe
 }
 
 await setDay(6);
-await tryStep("the fourth switch, accepted by the server's policy (@dave to @erin)", () => hiddenSwitch("the fourth switch", "dave", "erin", 3));
+await tryStep("the fourth switch, accepted by default (@dave to @erin)", () => lateSwitch("the fourth switch", "dave", "erin", 3));
 await setDay(7);
-await tryStep("the fifth switch (@erin to @frank)", () => hiddenSwitch("the fifth switch", "erin", "frank", 4));
+await tryStep("the fifth switch (@erin to @frank)", () => lateSwitch("the fifth switch", "erin", "frank", 4));
 await setDay(8);
 
-await tryStep("5 switches: step 4 says none is left; a sixth refused by the roster rules (switch_limit)", async () => {
+await tryStep("5 switches: step 4 says none is left; another account typed anyway is refused; a sixth refused by the roster rules (switch_limit)", async () => {
   const st = await toAccounts();
   checkRows("five switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "frank", [count(5), A.row_can_clear]] });
   await screenshot("used-up-4-accounts");
+  const requests = componentCount();
+  const challenges = challengeCount();
+  await typeRows({ [THREADS]: "gina" });
+  const why = (await rowsOnScreen()).find((r) => r.platform === THREADS)!.why;
+  check(why === A.row_cannot_switch && (await page.eval<boolean>(`!!${step("accounts")}`)), `a sixth switch: refused, the sentence under the row ("${why}")`);
+  await screenshot("used-up-4-accounts-refused");
+  check(componentCount() === requests && challengeCount() === challenges, "refused: nothing asked of the component, no challenge");
   await page.clickButton(C.common.cancel);
   await backAtTheBeginning("取消 after 5 switches");
   const undo = await rewrite("*/api/v1/card-state", (b) => void (b.platforms.threads.switch_count = 2));

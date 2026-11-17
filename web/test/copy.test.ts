@@ -40,7 +40,7 @@ const EXAMPLES: Record<string, string> = {
   code: "X",
   days_ago: "12",
   switches_used: "1",
-  switches_left: "2",
+  switches_left: "4",
   today: "2026-11-16",
   short_id: "7K2Q9FM4XD",
   request_id: "3f9c2a7e5b1d4c80",
@@ -55,9 +55,7 @@ const EXAMPLES: Record<string, string> = {
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {
   "stops.rejected": { code: "root" },
-  "accounts.row_no_switches_yet": { switches_left: "3" },
-  "accounts.row_app_later": { switches_used: "3" },
-  "accounts.row_app_only": { switches_used: "3" },
+  "accounts.row_no_switches_yet": { switches_left: "5" },
   "accounts.row_used_up": { switches_used: "5" },
   "confirm.uses_switch": { switches_left: "1" },
 };

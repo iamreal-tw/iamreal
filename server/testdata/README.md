@@ -37,7 +37,7 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 | 7 | 2026-11-23 09:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads switch`（第 3 次） |
 | 8 | 2026-11-23 10:00 | G2 的卡 | （空的清單） | `201` `threads withdraw` |
 | 9 | 2026-11-23 10:30 | G2 的卡 | （空的清單） | `400` `empty`（這張卡片已經沒有帳號） |
-| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、名冊規則接受；`threads` 第 4 次更換，後台的預設政策拒絕） |
+| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、名冊規則接受；`threads` 第 4 次更換，`e2e_test.go` 開了 `-restrict-late-switches` 那個政策，所以拒絕） |
 | 11 | 2026-11-24 09:30 | G3 的卡 | `test-example:c-d` | `201` `test-example refresh, threads withdraw` |
 | 12 | 2026-11-24 11:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads refresh` |
 | 13 | 2026-11-24 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw, threads withdraw` |
