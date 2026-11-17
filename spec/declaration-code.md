@@ -2,31 +2,41 @@
 
 Status: **Draft**. Version tag: `iamreal-declaration-v1`.
 
-The declaration code is the 31-byte string a card signs to state "this slot
-is declared to this account, now" (or withdrawn from it). It is the second
-of the two messages the card signs in a card proof.
+The declaration code is the 31-byte string a card signs to state "these are
+the accounts this card declares, now": the card's whole list, one account at
+most on each platform (ADR-0017). It is the second of the two messages the
+card signs in a card proof.
+
+A card proof does not add or remove one account. It states the whole list,
+and whatever is not in the list is not declared any more
+([`roster-rules.md`](roster-rules.md)).
 
 ## Computation
 
 ```
 preimage = "iamreal-declaration-v1" LF
-           action                   LF
            scope_string             LF
-           platform                 LF
-           username                 LF
+           account_1                LF
+           …
+           account_n                LF
            challenge
+
+account_i = platform ":" username
 
 declaration_code = "D" || first 30 characters of base32(SHA-256(preimage))
 ```
 
 - `LF` is the byte `0x0A`. There is no trailing `LF`.
-- `action` is `declare` or `withdraw`.
 - `scope_string` is the full 31-byte scope string, including `_` padding
   (see ADR-0007).
-- `platform` is the platform ID of the account, exactly as in the platform
-  table ([`scope.md`](scope.md)).
-- `username` is the account name on the platform, without `@`, in the
-  `username` format of the platform ([`scope.md`](scope.md)).
+- `account_1` … `account_n` are the accounts of the record's list, in the
+  order of the list: ascending by `platform`, each platform at most once
+  ([`record.md`](record.md), "The account list"). `n` is the length of the
+  list, from 0 to the number of platforms of the roster. With an empty list
+  the preimage has three lines.
+- `platform` is the platform ID, exactly as in the platform table
+  ([`scope.md`](scope.md)). `username` is the account name on that platform,
+  without `@`, in the `username` format of the platform.
 - `challenge` is the challenge issued by the server for this card proof,
   written exactly as issued ([`challenge.md`](challenge.md)). It contains no
   `LF`.
@@ -35,60 +45,82 @@ declaration_code = "D" || first 30 characters of base32(SHA-256(preimage))
 The result is 31 ASCII bytes: `D` followed by 30 characters carrying 150 bits
 of the hash.
 
-The preimage always has exactly six lines, and no line contains `LF`, so it
-splits back into its values in only one way.
+### One list, one preimage
 
-### Where the platform line is, and why the tag is still `v1`
+Two different inputs never give the same preimage:
 
-The lines go from the widest to the narrowest: the scope, the platform in
-it, the account on the platform, then the challenge of this one card proof.
-`platform` and `username` together name the account, so they are adjacent.
-The challenge stays last ([`challenge.md`](challenge.md)).
+- No value contains `LF`. The first line is the tag, the second the scope
+  string, the last the challenge; every line in between is one account.
+- A platform ID contains no `:` ([`scope.md`](scope.md)), so an account line
+  splits at its first `:` in only one way, whatever the `username` contains.
+- The list has one order and no repeated platform, so one set of accounts
+  has one sequence of lines.
 
-The platform line was added while this document was a draft (ADR-0017). The
-version tag did not change: no roster has records computed the earlier way,
-and the tag counts the computations that records in a roster were made
-with. The earlier draft had five lines, so no preimage of it equals a
-preimage of this one.
+A verifier never parses a preimage. It builds one from the record and
+compares the result.
+
+### Why there is no `action` line
+
+Earlier drafts had a line `declare` or `withdraw`. A withdrawal is now a
+list without the account, so there is one kind of statement left, and a
+line with one possible value separates nothing.
+
+What keeps a proof made for one purpose from being used for another:
+
+- **The version tag** names this computation. Another statement a card may
+  sign later (for another kind of record, or for a service) gets its own
+  tag, and with it its own lines; it does not become a new value of a line
+  here.
+- **The first byte.** A declaration code starts with `D`. The circuit
+  accepts as the second message only a string starting with an uppercase
+  letter other than `S`, and as the first only a scope string (ADR-0013), so
+  a code cannot stand in for a scope string or the reverse. Other first
+  letters are reserved for other kinds of codes (ADR-0007).
+- **The scope string.** A code computed for the public roster is not valid
+  for a test roster or for the scope of another service.
+
+The tag is still `v1`: no roster has records computed the earlier ways, and
+the tag counts the computations that records in a roster were made with. No
+preimage of an earlier draft equals one of this document: their second line
+was `declare` or `withdraw`, which is not a scope string.
 
 ## Why each line is there
 
 | Line | Purpose |
 |---|---|
-| Version tag | Lets the computation change later without ambiguity |
-| `action` | A proof made for a declaration cannot be replayed as a withdrawal, or the reverse |
+| Version tag | Says which statement this is, and lets the computation change later without ambiguity |
 | `scope_string` | A code computed for one scope is not valid in another |
-| `platform` | A proof made for an account on one platform cannot be recorded as a declaration on another. Every public platform shares one scope string and one scoped ID (ADR-0017), so this line is the only thing that ties a proof to its platform |
-| `username` | With `platform`, names the account the slot is declared to |
+| The accounts | Name every account the card declares after this card proof. Every public platform shares one scope string and one scoped ID (ADR-0017), so these lines are the only thing that ties a proof to its platforms and accounts. Changing, adding or leaving out one account gives another code |
 | `challenge` | Shows the card signed after the server issued the challenge |
 
 ## Verification
 
-A verifier recomputes the code from the record's `action`, `scope_string`,
-`platform`, `username` and `challenge`, and checks that it equals the declaration code
-exposed as a public input of the proof, `declaration_code_packed`: the 31
-bytes packed as in [`scope.md`](scope.md). This is the only place the challenge
-and the platform are bound: the circuit has no separate input for either.
+A verifier recomputes the code from the record's `scope_string`, `accounts`
+and `challenge`, and checks that it equals the declaration code exposed as a
+public input of the proof, `declaration_code_packed`: the 31 bytes packed as
+in [`scope.md`](scope.md). This is the only place the challenge and the
+accounts are bound: the circuit has no separate input for either.
 
 ## Test vectors
 
 [`vectors/declaration-code.json`](vectors/declaration-code.json), with the
-packed value of each code. The file still holds the vectors of the five-line
-draft; it is to be regenerated for this document.
+packed value of each code. The file still holds the vectors of an earlier
+draft (one account, with an `action` line); it is to be regenerated for this
+document, with lists of zero, one and two accounts.
 
-Example:
+Example, a list of one account:
 
 ```
 iamreal-declaration-v1
-declare
 iamreal:public:0_______________
-threads
-alice
+threads:alice
 2026-11-16.000G40R40M30E209185GR38E1W
 ```
 
-gives `D695PT7N31SNR4BF3G05H0JYD7RHC7W` (SHA-256 of the preimage:
-`324b6d1e…12219831`). This value was computed once, with a short script
-that also reproduces the example of the five-line draft. It is not yet
-backed by the vectors file, and is to be confirmed when the vectors are
-regenerated.
+gives `DYR31H79A046QB7TZR3EZ26GGF20ZV9` (SHA-256 of the preimage: `f606189d…c9b95e7f`).
+
+The same with an empty list (three lines) gives `DW823ED4NZ8ABHYWZ583X7G4H6XPA6Q`.
+
+These values were computed once, with a short script that also reproduces
+the example of the first draft of this document. They are not yet backed by
+the vectors file, and are to be confirmed when the vectors are regenerated.

@@ -15,6 +15,7 @@ card other, unrelated scoped IDs.
 
 The roster's state is keyed on (`scope_string`, `scoped_id`) for a card, and
 on the platform within it for a slot ([`roster-rules.md`](roster-rules.md)).
+One record states the card's accounts on all platforms at once.
 
 The algorithm does not change after launch (ADR-0012). Changing it would
 give every card a new scoped ID and void every slot already declared.
@@ -129,19 +130,34 @@ scoped ID has one spelling.
 ## Short ID
 
 ```
-short_id = first 6 characters of the text form
+short_id = first 10 characters of the text form
 ```
 
-30 bits, used only in URLs to point at one card on an account's badge page.
-An account is a platform and a `username` ([`scope.md`](scope.md)); a card
-has the same short ID on every platform. It is not unique across the
-roster. How pages resolve two cards with the same short ID on one account is
-outside this document.
+50 bits. It is used only in URLs, to point at one card among all the cards
+of a roster: the page of a card lists the accounts that card declares
+(ADR-0017), and its address carries the card's short ID. A card has one
+short ID, whatever the platforms of its accounts.
+
+**Resolving.** A short ID resolves to every card of the roster's open scope
+whose text form starts with these 10 characters. It is not guaranteed to be
+unique. If it matches more than one card, all of them are listed; a page
+never picks one of them. If it matches none, it does not resolve.
+
+Ten characters, not fewer, because the short ID now singles out a card
+among all cards and not among the few cards of one account. With 100,000
+cards, 6 characters (30 bits) would be expected to give about 5 pairs of
+cards with the same short ID; 10 characters give about 0.000004, and about
+0.04 with 10 million cards. Nobody can choose a card's scoped ID, so a
+second card cannot be made to match a given short ID.
+
+**Pages of an account** (which cards declare this account) do not use short
+IDs: they list the cards, and each links to the page of that card.
 
 In URLs, short IDs are read case-insensitively, with `O` read as `0` and `I`
-and `L` as `1`. After this mapping a short ID is exactly 6 characters of the
-alphabet; anything else, including `U` and `-`, does not resolve. This
-leniency applies to short IDs in URLs only, never to records.
+and `L` as `1`. After this mapping a short ID is exactly 10 characters of
+the alphabet; anything else, including `U`, `-` and a shorter or longer
+string, does not resolve. This leniency applies to short IDs in URLs only,
+never to records.
 
 ## Test vectors
 
@@ -154,6 +170,8 @@ leniency applies to short IDs in URLs only, never to records.
   the revocation tree specification (not written yet).
 - [`vectors/scoped-id.json`](vectors/scoped-id.json): field elements and their
   little-endian bytes, text form and short ID; texts a parser must reject;
-  short IDs as typed in URLs and how they read.
+  short IDs as typed in URLs and how they read. The short IDs in the file
+  are still the 6-character ones of an earlier draft; they are to be
+  regenerated with 10 characters.
 
 The signatures in the vectors come from throwaway keys, not from cards.

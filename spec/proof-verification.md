@@ -46,13 +46,13 @@ The challenge is not a public input. It is bound to the proof only through
 the declaration code. A verifier that does not recompute the declaration code
 from the record's challenge has not checked the challenge at all.
 
-The same holds for the platform. Every public platform shares one scope
+The same holds for the accounts. Every public platform shares one scope
 string (ADR-0017), so `scope_packed` and `nullifier` are the same whatever
-the platform, and the circuit knows nothing about platforms. The record's
-`platform` is one line of the declaration code
+the platforms, and the circuit knows nothing about platforms or accounts.
+The record's whole account list goes into the declaration code
 ([`declaration-code.md`](declaration-code.md)); a verifier that does not
-recompute the code with it has not checked which platform the proof was
-made for.
+recompute the code from all of it has not checked which accounts the proof
+was made for.
 
 ## Encoding
 
@@ -120,7 +120,7 @@ inputs built as above:
 - The same key signed the 31 bytes of the declaration code, whose first byte
   is `A`..`Z` other than `S`.
 
-It says nothing about the challenge or the platform by itself; see "Public
+It says nothing about the challenge or the accounts by itself; see "Public
 inputs".
 
 The circuits have had two rounds of AI-assisted review and a check of the

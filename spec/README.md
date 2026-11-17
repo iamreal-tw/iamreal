@@ -11,18 +11,19 @@ there are the names used here.
 |---|---|---|
 | [`scope.md`](scope.md) | Scope strings: format, the accepted list, packing. Platforms: the table of each roster, the `username` format of each platform, how one is added | Draft |
 | [`challenge.md`](challenge.md) | The challenge: format, date, `current_time` | Draft |
-| [`declaration-code.md`](declaration-code.md) | How the declaration code is computed | Draft |
+| [`declaration-code.md`](declaration-code.md) | How the declaration code is computed from a card's list of accounts | Draft |
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
-| [`record.md`](record.md) | One record: fields, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
-| [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date per card, one slot per card and platform | Draft |
+| [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
+| [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot per card and platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
 
 The public roster is one scope shared by every public platform: a card has
-one scoped ID there and one slot on each platform (ADR-0017). The platform
-is a field of the record and a line of the declaration code, not a part of
-the scope string.
+one scoped ID there and one slot on each platform (ADR-0017). One card
+proof is one record, and a record states the card's whole list of accounts,
+at most one per platform. The platforms are in that list and in the
+declaration code, not in the scope string.
 
 ## Test vectors
 
@@ -33,9 +34,9 @@ TypeScript, and later the mobile apps) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 
-`scope.json`, `declaration-code.json`, `record.json` and
-`roster-rules.json` still hold the vectors from before ADR-0017 and are to
-be regenerated. Until then the documents and those four files disagree, and
+`scope.json`, `declaration-code.json`, `record.json`, `roster-rules.json`
+and the short IDs of `scoped-id.json` still hold the vectors from before
+ADR-0017 and are to be regenerated. Until then the documents and those files disagree, and
 so do the tests that read them.
 
 ## Shared conventions

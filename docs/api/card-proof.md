@@ -43,8 +43,8 @@ record is or how it is verified. It can change without invalidating records.
 Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 
 - Request: empty body. It carries no account, no platform, no scope and no
-  scoped ID. A challenge is not issued for a platform: the declaration code
-  the card signs names it
+  scoped ID. A challenge is not issued for a platform or a list: the
+  declaration code the card signs names them
   ([`spec/declaration-code.md`](../../spec/declaration-code.md)).
 - Response `200`: `{"challenge":"2026-11-16.000G40R40M30E209185GR38E1W"}`
 - The server stores the challenge with the time it was issued. It is usable
@@ -59,81 +59,88 @@ otherwise.
 ## `POST /api/v1/card-state`
 
 The state of one card, as computed by the roster rules
-([`spec/roster-rules.md`](../../spec/roster-rules.md)): the date of its last
-card proof, and its slot on every platform of this roster. One request
-answers for all platforms, because the card has one scoped ID for all of
-them (ADR-0017).
+([`spec/roster-rules.md`](../../spec/roster-rules.md)): its whole list of
+accounts, the date of its last card proof, and what the rules count for it.
+One request answers for all platforms, because the card has one scoped ID
+for all of them (ADR-0017).
 
 - Request: `{"scope_string":"…","scoped_id":"…"}`. It carries no platform.
 - Response `200`:
 
   ```
-  {"last_card_proof":"2026-11-04","platforms":{"threads":{"current":"bob","last_declared":"bob","last_declare_date":"2026-08-11","proofs_on_last_date":1,"switch_dates":["2026-03-02"]}},"count":137,"head":"…"}
+  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_dates":["2026-03-02"]}},"count":137,"head":"…"}
   ```
 
-  - `last_card_proof` is the card's, shared by every platform. It is `null`
-    for a card with no valid record.
+  - `last_card_proof` and `proofs_on_last_date` are the card's. A card with
+    no valid record has `null` and 0; this is not an error.
   - `platforms` has one entry for every platform this roster accepts
     ([`spec/scope.md`](../../spec/scope.md)), keyed by the platform ID,
-    whether or not the card has a record there. The order of the entries
-    means nothing.
-  - Each entry is the state of the card's slot on that platform. `current`,
-    `last_declared` and `last_declare_date` are `null` when the rules have
-    none. A slot with no valid record has all three `null`, a
-    `proofs_on_last_date` of 0 and an empty `switch_dates`. A card with no
-    valid record gets such an entry for every platform; this is not an
-    error.
-  - `last_declare_date` is the date of the slot's last valid declaration. In
-    the example the card last named `bob` on Threads on 2026-08-11, and
-    made its last card proof, on some platform, on 2026-11-04.
-  - `proofs_on_last_date` is the number of valid records of that slot dated
-    the card's `last_card_proof`, which may be the date of a record on
-    another platform.
+    whether or not the card declares an account there. The order of the
+    entries means nothing.
+  - Each entry is the state of the card's slot on that platform. `current`
+    and `last_declared` are `null` when the rules have none; a slot the card
+    never used has both `null` and an empty `switch_dates`.
+  - **The card's list** is the `current` of every entry where it is not
+    `null`. It is not sent a second time in another form.
   - `count` and `head` are the number of records and the head the answer
     was computed at.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
-What the device does with it: shows it, for every platform, since the
-accounts a card declares are listed together (ADR-0017). For the platform
-the cardholder chose, the device computes what a declaration would be
-(`first`, `refresh`, `switch`, or blocked by `switch_limit`), whether the
-slot has reached the 3 records of today (`daily_limit`: `last_card_proof`
-is today and the slot's `proofs_on_last_date` is 3), and how many switches
-remain, from that platform's entry and today's date; the server does not
-send a conclusion. The device cannot check the answer without the whole
-roster. A wrong answer cannot identify the cardholder; it can mislead them
-about the consequence of the next step, and the roster would show it.
+The server sends facts, not conclusions. The device computes the rest from
+them and from today's date in Taiwan by its own clock:
+
+| What the cardholder is told | How the device gets it |
+|---|---|
+| Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier |
+| Switches left on a platform | 2 minus the number of that entry's `switch_dates` on or after today − 364 days |
+| When a platform can be switched again, if none is left | 365 days after the second latest of that entry's `switch_dates` |
+| What a list would do on a platform | Its entry against `current` and `last_declared`: `first`, `refresh`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
+
+What the device does with it: shows the card's whole list, and lets the
+cardholder change it. Before the card signs, the device shows the whole list
+that will be signed and what it does on every platform, including the
+accounts it withdraws by leaving them out; a list that the rules would
+refuse (`switch_limit`, `empty`, `daily_limit`) is not offered. The device
+cannot check the answer without the whole roster. A wrong answer cannot
+identify the cardholder. It can mislead them: a state that hides an account
+would lead to a list without it, which withdraws it. The cardholder sees the
+list before signing, and the roster would show what the server answered
+wrongly.
 
 What the device does with what it cannot read:
 
-- **The platform the cardholder chose has no entry**: this roster does not
-  accept the platform. The device does not go on to the declaration.
-- **An entry for a platform the device does not know** (the server's table
-  is newer): the device does not use it for the next step. If its `current`
-  is not `null`, the device still tells the cardholder that the card
-  declares an account on a platform this version cannot name; it does not
-  present the card as having no other account.
+- **`current` is not `null` on a platform the device does not know** (the
+  server's table is newer): the device does not go on to the declaration.
+  A list without that account would withdraw it, and the device cannot
+  check or show an account of a platform it does not know. It tells the
+  cardholder that the card declares an account this version cannot handle.
+- **An entry for a platform the device does not know, with `current`
+  `null`**: the device ignores it.
+- **A platform the device knows has no entry**: this roster does not accept
+  that platform. The device does not offer it.
 - **A response without `platforms`, or in which it cannot read
-  `last_card_proof` or the entry of a platform it knows**: the device treats
-  the state as unknown and does not go on to the declaration. It cannot tell
-  the cardholder what the next step would do, or which accounts the new one
-  would be listed with.
-- **A field it does not know inside an entry it can otherwise read**: the
-  device ignores the field.
+  `last_card_proof`, `proofs_on_last_date` or the entry of a platform it
+  knows**: the device treats the state as unknown and does not go on to the
+  declaration. Without the state it cannot build the list.
+- **A field it does not know, in the response or inside an entry it can
+  otherwise read**: the device ignores the field.
 
 ## `POST /api/v1/records`
 
-Submits one card proof.
+Submits one card proof: the card's whole list of accounts.
 
 - Request: the fields of a record except `seq` and `prev`
   ([`spec/record.md`](../../spec/record.md)):
 
   ```
-  {"scope_string":"…","scoped_id":"…","action":"declare","platform":"threads","username":"alice","challenge":"…","issuer":"G3","smt_root":"…","circuit":"…","proof":"…"}
+  {"scope_string":"…","scoped_id":"…","accounts":[{"platform":"threads","username":"alice"}],"challenge":"…","issuer":"G3","smt_root":"…","circuit":"…","proof":"…"}
   ```
 
-  `platform` is required. The server does not fill in a platform for a
-  request without one; such a request is `malformed`.
+  `accounts` is required and is the whole list, in the form of the record:
+  ascending by `platform`, each platform at most once, `[]` for none. The
+  server does not sort it, does not merge it with the card's current list
+  and does not fill in anything. The list is what the card signed; any other
+  list fails verification.
 
 - The server, in this order: checks every field's format; checks the
   challenge (issued by it, less than 10 minutes ago, not accepted before, at
@@ -144,36 +151,42 @@ Submits one card proof.
   rules. If everything passes it appends the record and marks the challenge
   as accepted, in one transaction.
 - Response `201`:
-  `{"seq":138,"record_hash":"…","kind":"first","account_cards":1}` where
-  `kind` is `first`, `refresh`, `switch` or `withdraw`, for the card's slot
-  on the record's `platform`: the first declaration on a platform is `first`
-  even if the card declares accounts on others. `account_cards` is the
-  number of cards whose `current` on the record's `platform` is the record's
-  `username`, in its scope, once the record is applied (after a withdrawal,
-  the cards that still declare it). The same `username` on another platform
-  is another account and is not counted. The response does not repeat the
-  card's state: every valid record moves the card's `last_card_proof` to its
-  date if that is later, for the accounts on all platforms.
 
-  The device uses `account_cards` only to choose which link to
-  suggest: the account's page when this card is the only one, the page of
-  this card when there are others. A wrong number cannot identify the
-  cardholder. A device that cannot read `account_cards` treats it as
-  unknown and suggests the page of this card: the record is in the roster
-  by then.
+  ```
+  {"seq":138,"record_hash":"…","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}]}
+  ```
+
+  `kinds` has one entry for every platform on which the record has a kind
+  ([`spec/roster-rules.md`](../../spec/roster-rules.md)), in ascending order
+  of `platform`; there is at least one. `kind` is `first`, `refresh`,
+  `switch` or `withdraw`. `username` is the account: the one the list has
+  for that platform, or for `withdraw` the one that was withdrawn.
+  `account_cards` is the number of cards whose `current` on that platform is
+  that `username`, in the record's scope, once the record is applied (after
+  a withdrawal, the cards that still declare it). The same `username` on
+  another platform is another account and is not counted.
+
+  The link the device suggests is the page of the card, by its short ID
+  ([`spec/scoped-id.md`](../../spec/scoped-id.md)); it does not depend on
+  this response. The device uses `kinds` to tell the cardholder what was
+  recorded, and `account_cards` only to say whether other cards declare the
+  same account. A wrong number cannot identify the cardholder. A device
+  that cannot read `kinds` or `account_cards` treats them as unknown and
+  says only that the list was recorded: the record is in the roster by
+  then.
 - Errors:
 
   | Status | Code | Meaning |
   |---|---|---|
   | `400` | `malformed` | A field is not in its format |
   | `400` | `scope` | The scope is not accepted by this roster |
-  | `400` | `platform` | The platform is not accepted by this roster |
+  | `400` | `platform` | An account of the list is on a platform this roster does not accept |
   | `400` | `challenge_unknown` | Not issued by this server, or expired |
   | `400` | `challenge_used` | A card proof was already accepted for it |
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
-  | `400` | `date_order`, `not_current`, `switch_limit`, `daily_limit` | The roster rule of that name. The last three are about the card's slot on the record's `platform` only |
+  | `400` | `date_order`, `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
   | `429` | `rate_limited` | |
 
@@ -184,18 +197,24 @@ Submits one card proof.
   `malformed`, `challenge_unknown`, `challenge_used`, `challenge_attempts`,
   `proof`, `crl_stale`, `root`, then the roster rules in their own order. A
   submission that is `scope`, `platform` or `malformed` does not count
-  towards the 5. `platform` is for a value that is not a platform ID of this
-  roster; a missing `platform` is `malformed`, and so is a `username` that
-  is not in the format of its platform. A proof made for one platform and
-  submitted with another is `proof`: the declaration code does not match.
+  towards the 5. `platform` is for a list whose every entry has the keys
+  `platform` and `username` as strings, one of the `platform` values not
+  being a platform ID of this roster. Everything else wrong with the list is
+  `malformed`: `accounts` missing or not a list, a platform twice, accounts
+  not in ascending order, a `username` that is not in the format of its
+  platform. A proof made for one list and submitted with another is
+  `proof`: the declaration code does not match.
+
+  `switch_limit` does not say which platform is blocked. The device knows
+  from the state it showed; if it is surprised by the code, the state has
+  changed, and it asks for it again.
 
   A device that gets a code it does not know shows it as an error of the
   server, with the request ID, and treats the card proof as not recorded.
 
-  "More than 3
-  days old" compares dates in Taiwan: the server's date is later than the CRL
-  date plus 3 days. The two newest CRLs are the two usable ones with the
-  highest `crl_number`.
+  "More than 3 days old" compares dates in Taiwan: the server's date is
+  later than the CRL date plus 3 days. The two newest CRLs are the two
+  usable ones with the highest `crl_number`.
 
 ## `GET /api/v1/config`
 

@@ -5,7 +5,9 @@ Status: **Draft**.
 The roster stores events, not states (ADR-0005). The current state of every
 card and account is computed from the records by the rules below: which
 account a card declares on each platform, and when the card last made a card
-proof (ADR-0017). Anyone who
+proof (ADR-0017). One card proof is one record, and a record states the
+card's whole list of accounts ([`record.md`](record.md), "The account
+list"). Anyone who
 downloads a snapshot and applies these rules must get the same answer as the
 server's API.
 
@@ -42,12 +44,14 @@ not have.
 ## Words
 
 - A **card** is one (`scope_string`, `scoped_id`). The public roster is one
-  scope ([`scope.md`](scope.md)), so there a card is one `scoped_id`,
-  whatever the platform.
+  scope ([`scope.md`](scope.md)), so there a card is one `scoped_id`.
 - A **slot** is one (card, `platform`): the card's one place on that
   platform (ADR-0017). A card has as many slots as the roster has platforms.
 - An **account** is one (`platform`, `username`). The same `username` on two
   platforms is two accounts.
+- The **list** of a record is its `accounts`: at most one account per
+  platform. The **entry** of a platform is the `username` the list has for
+  that platform, or none.
 
 ## Per record
 
@@ -59,20 +63,18 @@ challenge was used before; its challenge still counts as used.
 | # | Check | Code |
 |---|---|---|
 | 1 | The record verifies ([`record.md`](record.md), "Verifying a record") | `proof` |
-| 2 | Its `challenge` appears in no earlier record, valid or invalid, of any card and any platform | `challenge_reused` |
+| 2 | Its `challenge` appears in no earlier record, valid or invalid, of any card | `challenge_reused` |
 | 3 | Its `smt_root` is recognized for its `issuer` and date ([`revocation-tree.md`](revocation-tree.md)) | `root` |
-| 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card and any platform | `date_order` |
-| 5 | The event rules below, for the state of its slot (`scope_string`, `scoped_id`, `platform`) | `not_current` or `switch_limit` |
-| 6 | Fewer than 3 earlier valid records of its slot have its date | `daily_limit` |
+| 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card | `date_order` |
+| 5 | The event rules below, for the state of its card | `empty` or `switch_limit` |
+| 6 | Fewer than 3 earlier valid records of its card have its date | `daily_limit` |
 
 The **date** `d` of a record is the date in its challenge. Order is always by
 `seq`, never by date. Dates can step backwards by a day around midnight,
 because the challenge is dated when it is issued.
 
-Checks 1 to 4 do not look at the platform beyond what verifying the record
-needs. Checks 5 and 6 look only at the record's own slot: a record on one
-platform is never accepted or refused because of what the card did on
-another.
+**A record is valid as a whole or invalid as a whole.** There is no record
+that takes effect on one platform and not on another.
 
 ## State
 
@@ -80,155 +82,150 @@ another.
 
 | Item | Meaning | Initially |
 |---|---|---|
-| `last_card_proof` | The latest date among the valid records of the card, on any platform | none |
+| `last_card_proof` | The latest date among the valid records of the card | none |
+| `proofs_on_last_date` | The number of valid records of the card dated `last_card_proof` | 0 |
 
 **Of a slot**, starting empty:
 
 | Item | Meaning | Initially |
 |---|---|---|
 | `current` | The account the slot is declared to now, or none | none |
-| `last_declared` | The account of the last valid `declare` of the slot, kept after a withdrawal | none |
+| `last_declared` | The last account the slot was declared to, kept after a withdrawal | none |
 | `switch_dates` | A list with one entry, the date, per valid switch of the slot. Two switches on the same day are two entries. A blocked switch adds nothing | empty |
-| `last_declare_date` | The date of the last valid `declare` of the slot (the last in `seq` order, of any kind), kept after a withdrawal | none |
-| `proofs_on_last_date` | The number of valid records of the slot dated the card's `last_card_proof` | 0 |
 
 Within a slot, `current` and `last_declared` are a `username`; the slot's
 platform makes it an account.
 
-`last_declare_date` is the last day on which the card signed this account's
-name. `last_card_proof` can be later: it moves with the card's records on
-every platform, none of which need name this account. No check reads
-`last_declare_date`; it is reported so that whoever uses the answer can tell
-"the card is still valid and in the cardholder's hands" from "the cardholder
-named this account again".
+The card's **current list** is the `current` of its slots, for the platforms
+where it is not none. After a valid record it equals that record's list.
 
-`last_card_proof` belongs to the card because a card proof is about the
-card: the certificate is valid and not revoked, and the cardholder has the
-card and its PIN. That does not depend on the platform (ADR-0017). The
-slot, the switches and the daily count belong to the platform.
-
-`proofs_on_last_date` is counted against the card's date, not against the
-date of the slot's own last record. A slot with no valid record on the day
-of the card's last card proof has 0, even if it had three the day before.
-Together with `last_card_proof` it answers "how many valid records does this
-slot have today": that number if `last_card_proof` is today, 0 if it is
-earlier.
+`last_card_proof` and the daily count belong to the card: a card proof is
+about the card, and every card proof signs the whole list. The switches
+belong to the platform.
 
 ## Event rules
 
-The tables read and change the state of the record's slot only.
+For a record with date `d`, every platform of the roster's table
+([`scope.md`](scope.md)) is looked at, whether the list has an entry for it
+or not, against the state of the card's slot on that platform **before**
+the record:
 
-**`declare` of account `u` on date `d`**:
+| Entry | Condition | Kind | Effect on the slot |
+|---|---|---|---|
+| `u` | `last_declared` is none | `first` | `current = u`, `last_declared = u` |
+| `u` | `last_declared = u` | `refresh` | `current = u` |
+| `u` | otherwise, and fewer than 2 entries of `switch_dates` are on or after `d − 364 days` | `switch` | `current = u`, `last_declared = u`, append `d` to `switch_dates` |
+| `u` | otherwise | blocked | |
+| none | `current` is not none | `withdraw` | `current = none`; `last_declared` unchanged |
+| none | `current` is none | no kind | none |
 
-| Condition | Kind | Effect |
-|---|---|---|
-| `last_declared` is none | `first` | `current = u`, `last_declared = u` |
-| `last_declared = u` | `refresh` | `current = u` |
-| otherwise, and fewer than 2 entries of `switch_dates` are on or after `d − 364 days` | `switch` | `current = u`, `last_declared = u`, append `d` to `switch_dates` |
-| otherwise | invalid, `switch_limit` | none |
+Then, for the record as a whole:
 
-**`withdraw` of account `u` on date `d`**:
+| Condition | Result |
+|---|---|
+| A platform is blocked | invalid, `switch_limit` |
+| No platform has a kind: the list is empty and the card declares no account | invalid, `empty` |
+| otherwise | valid; its **kinds** are the (`platform`, kind) pairs of the platforms that have a kind, in ascending order of `platform` |
 
-| Condition | Kind | Effect |
-|---|---|---|
-| `current = u` | `withdraw` | `current = none`; `last_declared` unchanged |
-| otherwise | invalid, `not_current` | none |
+The effects apply only if the record is valid, that is, only if no platform
+is blocked and check 6 also passes; then they apply on every platform at
+once. A record with one blocked platform changes nothing on any platform. A
+record that the event rules would accept, but that is the fourth of its card
+and date, is invalid with `daily_limit` and changes nothing.
 
-"Otherwise" includes a slot with no earlier record, and an account the card
-declares on another platform: a withdrawal names the platform it withdraws
-from.
+**Every valid record**: the card's `last_card_proof = max(last_card_proof,
+d)`, and `proofs_on_last_date` follows from it.
 
-The effects in the two tables apply only if check 6 also passes. A record
-that the event rules would accept, but that is the fourth of its slot and
-date, is invalid with `daily_limit` and changes nothing.
-
-**Every valid `declare`** (`first`, `refresh` or `switch`): the slot's
-`last_declare_date = d`.
-
-**Every valid record**, of any kind and on any platform: the card's
-`last_card_proof = max(last_card_proof, d)`. The `proofs_on_last_date` of
-each of the card's slots follows from it.
+A valid record always has at least one kind. `refresh` covers both an
+account that stays (the entry equals `current`) and an account declared
+again after a withdrawal (`current` was none, the entry equals
+`last_declared`).
 
 ## What follows from these rules
 
-Within one platform:
+About one platform:
 
-- A switch is a declaration to a different account than the last one
-  declared on that platform, whether or not there was a withdrawal in
-  between. Withdrawing and then declaring another account is a switch.
-  A → B → A is two switches.
+- **A withdrawal is a list without the account.** There is no withdrawing
+  action, and nothing to name wrongly: whatever the card declared on a
+  platform the list leaves out is withdrawn.
+- A switch is an entry different from the last account declared on that
+  platform, whether or not there was a withdrawal in between. Withdrawing
+  and then declaring another account is a switch. A → B → A is two switches.
 - Withdrawing and then declaring the same account again is a refresh, not a
   switch. So is declaring again the account a blocked switch tried to leave:
   an invalid record does not change `last_declared`.
 - A first declaration is not a switch.
-- At most 2 switches in any 365 days: the window counts the earlier switches
-  dated from `d − 364` on, including any dated after `d`. Those occur only
-  around midnight, or when dates are written into the future ("How far
-  dates are trusted").
+- At most 2 switches in any 365 days on each platform: the window counts the
+  earlier switches dated from `d − 364` on, including any dated after `d`.
+  Those occur only around midnight, or when dates are written into the
+  future ("How far dates are trusted"). When the two latest switches are
+  both in the window, the next one is possible from 365 days after the
+  earlier of the two.
 - There is no free correction of a mistyped account. Correcting it uses a
   switch.
-- One card is declared to at most one account at a time. One account can be
-  declared by any number of cards.
-- One card has at most 3 valid records per date, whatever their kinds. Three
-  leaves room to declare, correct a mistyped account and withdraw on the
-  same day. A day is a date in Taiwan, as in every challenge. Records
+- One card is declared to at most one account at a time on a platform. One
+  account can be declared by any number of cards.
+
+About the card:
+
+- **Every card proof restates every account.** A valid record signs the
+  whole list, so `last_card_proof` is the date on which the card last
+  named each account it declares now. There is no account that stays in
+  the state without having been in the card's last valid record.
+- **One record can change every platform**: a first declaration on one, a
+  switch on another, a withdrawal on a third. Each switch is counted on its
+  own platform; a switch on one uses none of the switches of another.
+- **A blocked platform blocks the record.** A cardholder whose switches on
+  one platform are used up can still change the others, with a list that
+  puts no new account on that platform: the same account as before, or
+  none. Nothing forces a change on a platform, so a record is never blocked
+  by a platform the cardholder leaves alone.
+- **The empty list** is valid when the card declares at least one account:
+  it withdraws them all, and it moves `last_card_proof` like any valid
+  record. When the card declares none, including a card with no earlier
+  record, it is `empty`: such a record would state nothing. A card that
+  has withdrawn everything stays in the state, with its `last_card_proof`
+  and no account; its slots keep `last_declared` and `switch_dates`, and
+  the 365-day windows keep running. Nothing resets by withdrawing.
+- **One card has at most 3 valid records per date**, whatever they change.
+  One record covers every platform, so three leave room to declare, correct
+  a mistyped account and withdraw on the same day; the limit keeps a single
+  card from filling the roster, and does not grow with the number of
+  platforms. A day is a date in Taiwan, as in every challenge. Records
   blocked by another rule do not count, and the server does not append them
   anyway.
-
-Across platforms:
-
-- **The slots are independent.** A record on one platform does not change
-  the `current`, `last_declared`, `switch_dates` or daily count of another.
-  The first declaration on each platform is a `first`. Switching the account
-  on one platform uses none of the switches of another, and three records on
-  one platform today leave three for each of the others.
-- **The date is shared.** Every valid record on any platform moves the
-  card's `last_card_proof`, and every account the card declares is listed
-  with that one date. A card proof on one platform makes the card's accounts
-  on every platform as recent.
-- **The shared date does not say the account was named again.** A card can
-  keep an account looking recent for years through records on other
-  platforms, without signing that account's name once. Meanwhile the name
-  may have passed to someone else on the platform. `last_declare_date` is
-  the date that is about the account; the output carries both.
-- **A withdrawal is a card proof like any other.** A valid withdrawal on one
-  platform moves `last_card_proof`, and so the date shown for the accounts
-  the card still declares on the other platforms. The card signed, with a
-  valid certificate, on that day; which action it signed for makes no
-  difference to that.
-- **A card that has withdrawn on every platform stays in the state.** It is
-  listed with its `last_card_proof` and no account. Each slot keeps its
-  `last_declared` and `switch_dates`: declaring the same account again is a
-  refresh, another account is a switch, and the 365-day windows keep
-  running. Nothing resets by withdrawing, on one platform or on all.
-- **A card declares at most one account per platform**, so at most as many
-  accounts as the roster has platforms, and has at most 3 valid records per
-  platform and date. The daily limit keeps a single card from filling the
-  roster; the bound per card and day grows with the number of platforms.
-- **The two limits count per platform ID.** They hold per service only as
+- **The switch limit counts per platform ID.** It holds per service only as
   long as one service has one row in the platform table
   ([`scope.md`](scope.md), "Adding a platform").
+- **Another card's list changes nothing for this card.** Any card can list
+  any account (ADR-0003). That adds the other card under the account in the
+  output; the slots, dates and counts of this card are computed from this
+  card's records only.
 
 ## What an invalid record changes
 
 An invalid record changes one thing: its challenge counts as used (check
-2). It changes nothing else, for its slot, its card or anyone:
+2). It changes nothing else, for its card or anyone:
 
-- not the slot's `current`, `last_declared`, `switch_dates`,
-  `last_declare_date` or daily count;
-- not the card's `last_card_proof`, so not the date of the card's accounts
-  on other platforms either;
+- not any slot's `current`, `last_declared` or `switch_dates`, on any
+  platform, including the platforms where its list asked for nothing new;
+- not the card's `last_card_proof` or `proofs_on_last_date`;
 - not the latest valid date that check 4 compares with.
 
-So a record that fails on one platform cannot make a card look recent on
-another, cannot use up a switch or a place in the daily count, and cannot
-push the dates of later records.
+So a list with one change that is not allowed cannot carry another change
+through, cannot make the card look recent, cannot use up a switch or a place
+in the daily count, and cannot push the dates of later records.
 
 The checks run in order, so only a record that every other check accepts
 can get `daily_limit`: it verifies, its challenge is new, its root is
 recognized, its date is in order, and the event rules would accept it. A
-record that is `not_current` or `switch_limit` is never counted towards the
-3 of its slot, and never reported as `daily_limit`.
+record that is `empty` or `switch_limit` is never counted towards the 3 of
+its card, and never reported as `daily_limit`.
+
+A list that cannot be read in one way is not an invalid record: a platform
+outside the table, a platform twice, accounts out of order make the line
+malformed and the whole file broken ([`record.md`](record.md)). The rules
+only ever see lists with at most one entry per platform.
 
 ## How far dates are trusted
 
@@ -253,8 +250,8 @@ Both bounds are far below the 365-day window, so dating cannot buy extra
 switches. Within the bounds, an operator working with a modified device can
 make a card's `last_card_proof` look up to 3 days more recent than it is.
 `last_card_proof` belongs to the card, so this covers the card's accounts
-on every platform; the bound is the same 3 days, whichever platform the
-record is on. Both checks compare dates across all cards and platforms.
+on every platform; the bound is the same 3 days. Both checks compare dates
+across all cards.
 If the bound of check 3 is ever widened, the bound of check 4 widens with it
 (one day more).
 
@@ -267,16 +264,14 @@ locale's collation.
   is not listed. The public roster has one scope with records, until a
   version is retired ([`scope.md`](scope.md)).
 - **Per card**, sorted by `scoped_id`: `scoped_id`, `last_card_proof`, and
-  the accounts it declares now: for each platform on which its `current` is
-  not none, sorted by `platform`, the `platform`, `current` and
-  `last_declare_date`. A card with no valid record is not listed. A card
-  with valid records and no `current` on any platform is listed with no
-  account.
+  its current list, in ascending order of `platform` (the order of a
+  record's list). A card with no valid record is not listed. A card with
+  valid records and an empty current list is listed with no account.
 - **Per account**, sorted by `platform`, then by `username`: the cards whose
   `current` on that platform is this `username`, sorted by `scoped_id`, each
-  with its `last_card_proof` and the `last_declare_date` of that slot. An
-  account with no such card is not listed.
-- **Per record**, in `seq` order: valid with its kind, or invalid with its
+  with its `last_card_proof`. An account with no such card is not listed.
+  The number of these cards is what the API calls `account_cards`.
+- **Per record**, in `seq` order: valid with its kinds, or invalid with its
   reason code.
 
 The accounts listed under one card are the accounts that card declares. It
@@ -294,8 +289,11 @@ carry the date.
 - A card proof the server rejects under these rules is not appended, so it
   changes nothing, including `last_card_proof`.
 - Which platforms exist is a table of [`scope.md`](scope.md), not something
-  computed from the records. A record for a platform outside the table is a
-  malformed line, not an invalid record.
+  computed from the records. A record that lists a platform outside the
+  table is a malformed line, not an invalid record.
+- A record does not say which state of the card the cardholder saw before
+  signing. Two card proofs of one card made from the same earlier state are
+  applied in `seq` order, and the later list replaces the earlier.
 
 ## Test vectors
 
@@ -307,13 +305,17 @@ says whether the record passes check 1. Their `crl_dates` are the CRL dates
 record's issuer whose tree has the record's `smt_root`: possibly several,
 possibly none.
 
-The file still holds the vectors from before ADR-0017 (state per scope). It
-is to be regenerated for this document, with events that carry `platform`
-and, among the sequences, at least: a record on one platform moving the
-date of an account on another; switches counted per platform; the daily
-limit counted per platform; a withdrawal naming an account the card
-declares on another platform (`not_current`); a withdrawal moving
-`last_card_proof`; a card withdrawn on every platform; the same `username`
-on two platforms as two accounts; `last_declare_date` staying behind while
-`last_card_proof` moves; and an invalid record of each code leaving
-`last_card_proof` and the other platform's slot unchanged.
+The file still holds the vectors from before ADR-0017 (one account per
+record, state per scope). It is to be regenerated for this document, with
+events that carry a list and, among the sequences, at least: a list of two
+accounts as a card's first record; one record with a `first` on one platform
+and a `switch` on the other; a withdrawal by leaving an account out, with
+the other account kept; the empty list withdrawing everything, then the
+same account again as a `refresh` and another as a `switch`; the empty list
+as a card's first record and after everything was withdrawn (`empty`);
+switches counted per platform, with a third switch on one platform blocking
+a record that also changes the other, and the other platform left
+unchanged; the daily limit counted per card across changes on different
+platforms; the same `username` on two platforms as two accounts; two cards
+listing the same account; and an invalid record of each code leaving every
+slot and `last_card_proof` unchanged.

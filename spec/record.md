@@ -2,8 +2,9 @@
 
 Status: **Draft**. Version tag: `iamreal-record-v1`.
 
-A record is the full public content of one event in the roster: what
-happened, and everything needed to re-verify it without the server. The
+A record is the full public content of one event in the roster: the list
+of accounts a card declares from then on, and everything needed to
+re-verify it without the server. One card proof is one record. The
 roster is the list of records in order (ADR-0005). Its rules are in
 [`roster-rules.md`](roster-rules.md).
 
@@ -20,7 +21,8 @@ Not stored, because each is computed:
 
 | Value | Computed from |
 |---|---|
-| Declaration code | `action`, `scope_string`, `platform`, `username`, `challenge` ([`declaration-code.md`](declaration-code.md)) |
+| Declaration code | `scope_string`, `accounts`, `challenge` ([`declaration-code.md`](declaration-code.md)) |
+| What the record did on each platform (a first declaration, a switch, a withdrawal) | The card's earlier records ([`roster-rules.md`](roster-rules.md)) |
 | `current_time` | The date in `challenge` ([`challenge.md`](challenge.md)) |
 | Date of the event | The date in `challenge` |
 | Issuer modulus | `issuer` (table below) |
@@ -43,36 +45,69 @@ line can be read in two ways.
 | `prev` | 64 lowercase hex digits: the record hash of the record with `seq − 1`; for `seq` 1, 64 zeros |
 | `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
 | `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
-| `action` | `declare` or `withdraw` |
-| `platform` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
-| `username` | The `username` format of the record's `platform` ([`scope.md`](scope.md)) |
+| `accounts` | The account list, below |
 | `challenge` | 37 characters, in the one accepted spelling ([`challenge.md`](challenge.md)) |
 | `issuer` | `G2` or `G3` |
 | `smt_root` | 64 lowercase hex digits, a big-endian integer below the field modulus `p` ([`scoped-id.md`](scoped-id.md)) |
 | `circuit` | 64 lowercase hex digits: SHA-256 of the verification key |
 | `proof` | 19,544 characters: the standard base64 encoding (RFC 4648 section 4, `A–Z a–z 0–9 + /`, with `=` padding) of exactly 14,656 bytes. Decoding and re-encoding gives the same string, so the unused bits of the last data character are zero |
 
-Every format is printable ASCII without `"`, `\` or any control character.
+Every format is printable ASCII without `"`, `\` or any control character;
+`accounts` contains `"` only where its own template puts them.
+
+### The account list
+
+`accounts` is the whole list of accounts the card declares once this record
+is applied: zero or more accounts, at most one per platform (ADR-0017). A
+platform that is not in the list is a platform the card declares no account
+on. There is no field that says "declare" or "withdraw": a withdrawal is a
+list without the account ([`roster-rules.md`](roster-rules.md)).
+
+```
+ACCOUNTS = "[" "]"
+         | "[" ACCOUNT { "," ACCOUNT } "]"
+ACCOUNT  = {"platform":"PLATFORM","username":"USERNAME"}
+```
+
+| Part | Format |
+|---|---|
+| `platform` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
+| `username` | The `username` format of that account's `platform` ([`scope.md`](scope.md)) |
+
+- **Order**: the accounts are in ascending order of `platform`, compared by
+  byte values, and each `platform` is strictly greater than the one before
+  it. So no platform appears twice, a set of accounts has one spelling, and
+  the list has at most as many accounts as the roster has platforms.
+- The empty list is `[]`. It is not left out and it is not `null`.
+- Inside an account the keys are `platform`, then `username`. No
+  whitespace, no escape sequence, no other key.
+- Checking a `username` needs its `platform` first, because the format
+  depends on it; a `username` that fits another platform's format but not
+  its own makes the line malformed.
+
+A list that breaks one of these rules (a platform outside the table or in
+another spelling, a repeated platform, accounts in another order, a
+`username` outside its format) makes the line malformed, like any other
+value outside its format. No such list is read in a second way or
+repaired: it is not sorted, and a repeated platform is not resolved to its
+first or its last account.
 
 ## Lines and files
 
 A record is one line:
 
 ```
-{"seq":SEQ,"prev":"PREV","scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","action":"ACTION","platform":"PLATFORM","username":"USERNAME","challenge":"CHALLENGE","issuer":"ISSUER","smt_root":"SMT_ROOT","circuit":"CIRCUIT","proof":"PROOF"}
+{"seq":SEQ,"prev":"PREV","scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","accounts":ACCOUNTS,"challenge":"CHALLENGE","issuer":"ISSUER","smt_root":"SMT_ROOT","circuit":"CIRCUIT","proof":"PROOF"}
 ```
 
 followed by one `LF` (`0x0A`). The upper-case placeholders are replaced by
-the field values; nothing else changes. The keys are in this order, there is
-no whitespace and no escape sequence. This is valid JSON, but parsing it as
-JSON is not enough to check it.
+the field values, `ACCOUNTS` by the list written from its own template
+("The account list"); nothing else changes. The keys are in this order,
+there is no whitespace and no escape sequence. This is valid JSON, but
+parsing it as JSON is not enough to check it.
 
-`platform` stands just before `username`: the two together name the account
-(ADR-0017). The platform is a field of the record, not a part of
-`scope_string`, and not a default: a line without it, or with it in another
-place, is malformed. Checking `username` needs `platform` first, because
-the format depends on it; a `username` that fits another platform's format
-but not its own makes the line malformed.
+For example, with one account: `…,"accounts":[{"platform":"threads","username":"alice"}],"challenge":…`;
+with none: `…,"accounts":[],"challenge":…`.
 
 **Check a line** by parsing it in any way, checking every value against the
 table, then writing the line again from the template and comparing bytes:
@@ -80,7 +115,10 @@ the line's bytes up to and including its `LF` must equal the template
 followed by `LF`. If they differ, the line is malformed. This one comparison rejects
 everything JSON would otherwise allow: other key orders, whitespace, escapes,
 duplicate keys, keys in another case, `null`, numbers written as `1.0` or
-`1e0`, and lines ending in `CR LF`.
+`1e0`, and lines ending in `CR LF`. It applies inside `accounts` as well:
+the list is written again from the parsed accounts, in the order they were
+read, after the checks of "The account list"; a parser that drops or merges
+something gives other bytes.
 
 **A roster file** is its lines concatenated, in `seq` order. It has no byte
 order mark and no empty lines, and its last byte is the `LF` of the last
@@ -140,16 +178,15 @@ with more records it is refused, so that a date's line never changes.
 
 ```
 preimage    = "iamreal-record-v1" LF
-              seq LF prev LF scope_string LF scoped_id LF action LF
-              platform LF username LF challenge LF issuer LF smt_root LF
-              circuit LF proof
+              seq LF prev LF scope_string LF scoped_id LF accounts LF
+              challenge LF issuer LF smt_root LF circuit LF proof
 record_hash = SHA-256(preimage), written as 64 lowercase hex digits
 ```
 
 - `LF` is the byte `0x0A`; there is no trailing `LF`. Every field is written
   exactly as in the line.
-- The fields are in the order of the line, all twelve of them. `platform`
-  is part of the hash like every other field.
+- The fields are in the order of the line, all ten of them. `accounts` is
+  written as in the line: the list from `[` to `]`, on one line.
 - No field contains `LF`, so the preimage splits back into the fields in only
   one way.
 
@@ -190,18 +227,17 @@ re-verifying, then:
    - `nullifier`: the field element decoded from `scoped_id`;
    - `scope_packed`: `scope_string` packed as in [`scope.md`](scope.md);
    - `declaration_code_packed`: the declaration code recomputed from the
-     record's `action`, `scope_string`, `platform`, `username` and
-     `challenge` ([`declaration-code.md`](declaration-code.md)), packed the
-     same way.
+     record's `scope_string`, `accounts` and `challenge`
+     ([`declaration-code.md`](declaration-code.md)), packed the same way.
 3. Verifies `proof` with these public inputs under the verification key whose
    SHA-256 is `circuit`.
 
-The platform is not a public input of its own. A proof is tied to its
-platform only by step 2: a verifier that computes the declaration code
-with a platform taken from anywhere but the record's `platform` field has
-not checked which platform the card declared on. With the right
-computation, a proof made for an account on one platform fails step 3 in a
-record that names another.
+The accounts are not public inputs of their own. A proof is tied to its
+list only by step 2: a verifier that computes the declaration code from
+anything but the record's `accounts`, all of them and in their order, has
+not checked what the card declared. With the right computation, a proof
+made for one list fails step 3 in a record with another: an account added,
+left out, moved to another platform or spelled differently.
 
 The checks on the proof bytes and on running `bb verify` are in
 [`proof-verification.md`](proof-verification.md).
@@ -236,10 +272,14 @@ records keep verifying.
 - well-formed lines and malformed lines, each with the reason;
 - roster files that are valid or broken, with the reason and the head.
 
-The file still holds the vectors from before the `platform` field
-(ADR-0017); it is to be regenerated for this document, with lines that are
-malformed because of `platform` (missing, misplaced, not in the table,
-another spelling, a `username` in another platform's format).
+The file still holds the vectors from before the account list (ADR-0017);
+it is to be regenerated for this document, with lists of zero, one and two
+accounts, and lines that are malformed because of `accounts`: missing,
+`null`, an object instead of a list, a platform not in the table or in
+another spelling, a platform twice (with the same and with different
+usernames), two accounts in descending order, a `username` in another
+platform's format, keys of an account in the other order, an extra key,
+whitespace inside the list.
 
 The proofs are placeholder bytes, not real proofs: the vectors test the
 formats and the chain, not proof verification. To keep the file small, lines

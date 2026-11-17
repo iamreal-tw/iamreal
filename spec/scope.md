@@ -10,8 +10,9 @@ use, never changes. Its format and the reasons behind it are in ADR-0007.
 
 The public roster is one scope, shared by every public platform (ADR-0017).
 A card has one scoped ID there, and one slot on each platform. The platform
-is not part of the scope string: it is a field of the record
-([`record.md`](record.md)) and a line of the declaration code
+is not part of the scope string: every record carries the card's whole list
+of accounts, each with its platform ([`record.md`](record.md)), and the
+declaration code is computed from that list
 ([`declaration-code.md`](declaration-code.md)).
 
 ## Format
@@ -75,9 +76,14 @@ declares again on every platform. One platform cannot start over by itself.
 A platform is the service an account is on. A roster accepts records only
 for the platforms listed for it: the production roster exactly the rows under
 "Production roster", a test roster those rows and the rows under "Test
-rosters only". A record whose `platform` is anything else, including another
-spelling of a listed ID (`Threads`, `threads_`), makes the line malformed
-([`record.md`](record.md)).
+rosters only". A record whose account list names anything else as a
+`platform`, including another spelling of a listed ID (`Threads`,
+`threads_`), makes the line malformed ([`record.md`](record.md)). The number
+of rows is also the greatest length of a record's list: one account per
+platform.
+
+A platform ID contains no `:`, no `"` and no line feed. The declaration code
+and the record's line rely on that.
 
 ```
 platform = 1 to 21 characters of a-z, 0-9, "-"
@@ -100,8 +106,8 @@ platform = 1 to 21 characters of a-z, 0-9, "-"
   follow the platform when it is renamed (ADR-0007). The display name is for
   screens and may change.
 - `test-example` stands for no real service. It exists so that a test roster
-  has a second platform, to test the rules that count per platform
-  ([`roster-rules.md`](roster-rules.md)). Its `username` format differs from
+  has a second platform, to test lists of two accounts and the rules that
+  count per platform ([`roster-rules.md`](roster-rules.md)). Its `username` format differs from
   the Threads one on purpose: `a-b` is valid only there, `a.b` only on
   Threads. It never appears in the production roster. **IDs starting with
   `test-` are never added to the production table.**
@@ -111,7 +117,8 @@ platform = 1 to 21 characters of a-z, 0-9, "-"
 
 Adding a platform adds a row. Nothing else changes: the scope string and
 every card's scoped ID stay the same, the records already in the roster keep
-their meaning, and a card's first declaration on the new platform is a
+their meaning (none of them lists the new platform, so no card declares an
+account there), and the first account a card lists on the new platform is a
 `first` ([`roster-rules.md`](roster-rules.md)). The card's last card proof
 date already covers the new platform.
 
@@ -120,9 +127,13 @@ date already covers the new platform.
   row (another name, an abbreviation, the name after a rebranding) would give
   every card a second slot and a second switch allowance on that service.
 - **A re-verifier needs a table at least as new as the roster.** With an
-  older table, the first record of a platform it does not list is a
+  older table, the first record that lists a platform it does not know is a
   malformed line, and the roster file is reported as broken.
-- A card proof cannot be made ahead for a platform that is not listed yet:
+- **A device needs a table at least as new as the card's list.** A record
+  states the whole list, so a device that left out an account on a platform
+  it does not know would withdraw it. Such a device does not submit
+  ([`docs/api/card-proof.md`](../docs/api/card-proof.md)).
+- A card proof cannot be made ahead with a platform that is not listed yet:
   the server rejects it, and its challenge expires after 10 minutes
   ([`challenge.md`](challenge.md)).
 
@@ -158,8 +169,8 @@ b[0] + b[1]·256 + … + b[30]·256^30
 the packing is one-to-one. The declaration code is packed the same way
 ([`declaration-code.md`](declaration-code.md)).
 
-The platform is not a public input. It is bound to the proof only through
-the declaration code.
+The platforms and accounts of a record are not public inputs. They are
+bound to the proof only through the declaration code.
 
 ## Open items
 
