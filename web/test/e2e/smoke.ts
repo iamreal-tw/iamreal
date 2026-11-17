@@ -1,5 +1,5 @@
 // Opens a running page (for example `pnpm local`'s) in headless Chrome, at
-// the first screen (the platforms), and stops there, before "read the card": the component is never
+// the first screen (step 1, before you start), and stops there, before "read the card": the component is never
 // asked anything, so this can run with a real card in the reader. Checks the
 // headers, that the page is cross-origin isolated, that the proof engine
 // started, that no Content-Security-Policy was violated and that the page
@@ -28,7 +28,7 @@ const browser = await Browser.launch({ dir: out });
 const page = await browser.newPage();
 await page.send("Page.enable");
 await page.goto(url);
-await page.waitFor(`document.querySelector('[data-step="platforms"]')`, "the first screen");
+await page.waitFor(`document.querySelector('[data-step="before"]')`, "the first screen");
 const doc = browser.responses.find((r) => r.url === url);
 check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, "Content-Security-Policy");
 check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], "Document-Isolation-Policy");
@@ -36,7 +36,7 @@ check(doc?.headers["cross-origin-opener-policy"] === OPENER_HEADERS["Cross-Origi
 check(await page.eval<boolean>("crossOriginIsolated"), "cross-origin isolated");
 const engine = await page.waitFor<number>(`performance.getEntriesByName("iamreal:engine_engine_total")[0]?.duration`, "the engine", 60_000).catch(() => 0);
 check(engine > 0, `the proof engine started (${Math.round(engine)} ms)`);
-check((await page.text()).includes(COPY.platforms.title), "the first screen, the platforms (nothing clicked)");
+check((await page.text()).includes(COPY.before.title), "the first screen, step 1 (nothing clicked)");
 const origin = new URL(url).origin;
 const outside = browser.requests.filter((r) => ["page", "worker"].includes(r.targetType) && !r.url.startsWith("about:") && new URL(r.url).origin !== origin);
 check(outside.length === 0, `connected only to ${origin} ${JSON.stringify(outside.map((r) => r.url).slice(0, 3))}`);

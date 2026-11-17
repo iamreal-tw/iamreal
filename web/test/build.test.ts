@@ -29,6 +29,8 @@ test("a production build holds nothing of the tests", async () => {
   // MOICA's component and issuer keys (the first hex digits of G2's and G3's moduli).
   assert.ok(code.includes("http://localhost:61161"), "the component's address");
   assert.ok(code.includes("9fd8089c05559d63d5ab34bc5df685fb") && code.includes("ae5ae964e29305a7dec0863d7f57aa66"), "MOICA's issuer keys");
+  // The public roster's scope string (src/target.ts: the production roster).
+  assert.ok(code.includes("iamreal:public:0_______________"), "the public roster's scope string");
   // Nothing of the fake card (src/card/fake.ts), the test target or the fake component.
   for (const s of ["the card signs 31 bytes", "__IAMREAL_TEST", "FakeCard", "fake-component", "testIssuer", "PRIVATE KEY", "pkcs8"]) {
     assert.ok(!code.includes(s), `the build contains ${JSON.stringify(s)}`);

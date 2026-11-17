@@ -1,36 +1,24 @@
-// Scope strings (spec/scope.md, ADR-0007). The device takes the scope string
-// only from the table below, keyed by the platform the cardholder picked on
-// the screen; never from a server response (ADR-0016). The table is built
-// from the platform definition (src/platforms.ts), the one place a scope
-// string is written.
-import { type OpenPlatform, PLATFORMS, type Platform, type Roster } from "../platforms.ts";
+// The scope string (spec/scope.md, ADR-0007, ADR-0017). The public roster is
+// one scope, shared by every public platform: the device signs the scope
+// string of the roster the page is built for, from the table below, and
+// never takes one from a server response or the page's address (ADR-0016).
+// The platform is not part of it: the list of accounts the card signs names
+// the platforms (spec/declaration-code.md).
 
-export type { Platform, Roster };
+export type Roster = "production" | "test";
 
-export interface ScopeRow {
-  readonly scopeString: string;
-  readonly platform: Platform;
-  /** The `username` format of the scope, matched against the whole value. */
-  readonly validUsername: (username: string) => boolean;
-}
-
-const open = PLATFORMS.filter((p): p is OpenPlatform => p.open);
-const rowsOf = (roster: Roster): readonly ScopeRow[] =>
-  Object.freeze(open.map((p) => Object.freeze({ scopeString: p.scopeStrings[roster], platform: p.key, validUsername: p.validUsername })));
-
-const SCOPES: Readonly<Record<Roster, readonly ScopeRow[]>> = Object.freeze({
-  production: rowsOf("production"),
-  test: rowsOf("test"),
+/** The open scope string of each roster (spec/scope.md, "Accepted scopes"). */
+const SCOPE_STRINGS: Readonly<Record<Roster, string>> = Object.freeze({
+  production: "iamreal:public:0_______________",
+  test: "iamreal-test:public:0__________",
 });
 
-/** The scope row a roster lists for a platform. */
-export function scopeFor(roster: Roster, platform: Platform): ScopeRow {
-  const row = SCOPES[roster].find((s) => s.platform === platform);
-  if (!row) throw new Error(`no scope for ${platform} in the ${roster} roster`);
-  return row;
+/** The scope string a card signs for `roster`. */
+export function scopeOf(roster: Roster): string {
+  return SCOPE_STRINGS[roster];
 }
 
 /** Whether `scopeString` is accepted by `roster`, in its exact spelling. */
-export function lookupScope(roster: Roster, scopeString: string): ScopeRow | null {
-  return SCOPES[roster].find((s) => s.scopeString === scopeString) ?? null;
+export function lookupScope(roster: Roster, scopeString: string): boolean {
+  return SCOPE_STRINGS[roster] === scopeString;
 }

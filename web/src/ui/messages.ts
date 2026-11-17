@@ -1,12 +1,13 @@
 // Which sentence of the copy the screen shows for each reason the flow
 // stopped (web/README.md, the table of stops) and under which item of the
-// lists; what each item of the two lists shows; the card's state and what
-// can be done (step 4 of design/copy/card-proof.md); the consequence
-// (step 5); done (step 6). Pure functions, tested in Node
+// lists; what each item of the two lists shows; the card's list and what
+// each row says (step 4 of design/copy/card-proof.md); the list to be
+// signed (step 5); done (step 6). Pure functions, tested in Node
 // (test/ui.test.ts). Where the copy has no sentence, the screen shows the
 // code alone: `{ code }`.
-import type { CardStatus, Consequence, Done, Progress, Stop } from "../flow.ts";
-import { type OpenPlatform, SITE_DOMAIN, handle } from "../platforms.ts";
+import type { AcceptedKind } from "../api.ts";
+import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../flow.ts";
+import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
 import { COPY, type Values } from "./copy.ts";
 
 export interface Sentence {
@@ -31,23 +32,27 @@ export type Message =
 const s = COPY.stops;
 const say = (template: string, values: Values = {}): Sentence => ({ template, values });
 
-/** Codes of a submission the server did not accept (web/README.md, the server's rejections). */
-const REJECTED = new Set(["scope", "malformed", "challenge_used", "challenge_attempts", "proof", "crl_stale", "root", "date_order", "not_current", "switch_limit"]);
+/**
+ * Codes of a submission the server did not accept, which the copy has no
+ * sentence of their own for (design/copy/card-proof.md, step 5, the row of the other codes,
+ * the codes other than the rows below it; `platform`, a list naming a
+ * platform the roster does not accept, is one of them).
+ */
+const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order", "switch_restricted"]);
 
-/** The format hint of the platform (design/copy/card-proof.json, `formats`). */
-export function formatHint(p: OpenPlatform): Sentence {
-  const hint = (COPY.formats as Record<string, string>)[p.formatHint];
-  if (hint === undefined) throw new Error(`no format hint ${p.formatHint}`);
-  return say(hint);
+/** The format hint of a platform (design/copy/card-proof.json, `formats`); null if the copy has none. */
+export function formatHint(platform: string): Sentence | null {
+  const key = presentationOf(platform).formatHint;
+  const hint = key === null ? undefined : (COPY.formats as Record<string, string>)[key];
+  return hint === undefined ? null : say(hint);
 }
 
 /**
- * The message for a stop. `p`: the platform of the card proof, for the
- * sentences that name it. `submitFailed`: the flow's phase is
+ * The message for a stop. `submitFailed`: the flow's phase is
  * "submit_failed" (the submission did not get through and can be sent
  * again as it is).
  */
-export function stopMessage(stop: Stop, p: OpenPlatform, submitFailed = false): Message {
+export function stopMessage(stop: Stop, submitFailed = false): Message {
   switch (stop.code) {
     case "card":
       switch (stop.card) {
@@ -114,20 +119,27 @@ export function stopMessage(stop: Stop, p: OpenPlatform, submitFailed = false): 
     case "proof_check":
       return say(s.proof_check);
     case "username":
-      return formatHint(p);
+      // The platform's hint; a platform the copy has no hint for shows the code.
+      return formatHint(stop.platform) ?? { code: "username" };
     case "server": {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
       // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
       if (stop.server === "crl_stale") return { ...say(s.server_crl_stale), ...id };
-      // The card already has 3 valid records today (check 6): the card's state said fewer when it was asked.
-      if (stop.server === "daily_limit") return { ...say(s.daily_limit, { platform: p.name }), ...id };
+      // The roster rules, when the card's state changed since it was asked.
+      if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
+      if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
+      if (stop.server === "empty") return { ...say(s.empty), ...id };
       if (REJECTED.has(stop.server)) return { ...say(s.rejected, { code: stop.server }), ...id };
       return { ...say(s.server_unreadable, { code: stop.server }), ...id };
     }
-    // The screen does not offer a choice that is not possible; the engine refuses it too. No sentence.
     case "blocked":
+      // The list is empty and the card declares nothing: accounts.need_one
+      if (stop.reason === "empty") return say(COPY.accounts.need_one);
+      // The screen offers no change on a day with 3 records; the engine refuses one too.
+      if (stop.reason === "daily_limit") return say(s.daily_limit);
+      // A switch the row says cannot be made (its lines say why): no sentence for typing one anyway.
       return { code: stop.reason };
     // The wait for the second signature ran out: the screen is back at step 1.
     case "idle":
@@ -189,7 +201,7 @@ export function readItemOf(stop: Stop): number | null {
     case "certificate":
       return stop.problem === "no_certificate" ? 2 : 3;
     // The circuit and the CRS are the page's files from the server; the proof engine
-    // starts with the CRS (the table has no row for an engine that cannot start).
+    // starts with the CRS. The config (the CRL age bound, the platform table) is the server's.
     case "artifact":
     case "engine":
     case "server":
@@ -250,134 +262,295 @@ export function firstNotDone(states: readonly ItemState[]): number {
   return i < 0 ? states.length - 1 : i;
 }
 
-// Step 4: the card's state -----------------------------------------------------------
+// Step 4: the card's list ------------------------------------------------------------
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
 }
 
-export interface StatusView {
-  /** never: no declaration yet; declared: an account now; withdrawn: declared before, withdrawn since. */
-  state: "never" | "declared" | "withdrawn";
-  /** The lines of the card's state; each line one or more sentences. */
-  lines: Message[][];
-  /**
-   * 3 records of the card today: the lines are shown, and in place of the
-   * choices this sentence and the button back to the beginning only.
-   */
-  dailyLimit: Sentence | null;
-  /** False when switches are used up: choose.switch or choose.declare_other cannot be pressed. */
-  canSwitch: boolean;
-  /** The sentence under that button when it cannot be pressed. */
-  switchLimit: Sentence | null;
-}
-
-export function statusView(st: CardStatus, p: OpenPlatform): StatusView {
-  const c = COPY.choose;
-  const dailyLimit = st.dailyLimit ? say(s.daily_limit, { platform: p.name }) : null;
-  const canSwitch = st.options.other.kind !== "blocked";
-  const switchLimit = canSwitch ? null : say(c.switch_limit, { next_switch_date: st.nextSwitchDate });
-  if (st.current !== null) {
-    const last: Message =
-      st.lastCardProof === null
-        ? { code: "no_last_card_proof" }
-        : st.lastCardProof === st.today
-          ? say(c.last_card_proof_today)
-          : say(c.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
-    const switches = canSwitch ? say(c.switches, { switches_used: st.switchesUsed, switches_left: st.switchesLeft }) : say(c.switches_used_up, { switches_used: st.switchesUsed });
-    return { state: "declared", lines: [[say(c.current, { account: handle(p, st.current) })], [last, switches]], dailyLimit, canSwitch, switchLimit };
-  }
-  if (st.lastDeclared !== null) {
-    return { state: "withdrawn", lines: [[say(c.nothing_now)], [say(c.withdrawn, { last_declared: handle(p, st.lastDeclared) })]], dailyLimit, canSwitch, switchLimit };
-  }
-  return { state: "never", lines: [[say(c.not_declared, { platform: p.name })]], dailyLimit, canSwitch: true, switchLimit: null };
-}
-
-// Step 5: the consequence --------------------------------------------------------------
-
-export interface ConsequenceView {
-  /** The sentence before the account: what the roster will record. */
-  record: Sentence;
-  account: string;
-  date: string;
-  /** For a switch only: how many are left after it, or when the next one is. */
-  switchLine: Sentence | null;
-  /** The second point: what can be done later, and that no record can be deleted. */
-  later: string[];
-  button: Sentence;
-}
-
 /**
- * The table of step 5 names its rows by what was picked. The button follows
- * what the card proof will be: a declaration of the current account is
- * button_refresh; of the account withdrawn before, button_first (the row of
- * declaring the same account again).
+ * Whether the web page offers the 4th and 5th switch in the app (after the
+ * app is out, the rows of 3 or 4 switches are accounts.row_app_only; before,
+ * accounts.row_app_later). Decided by the build, like the choice of device on step 1.
  */
-export function consequenceView(cq: Consequence, current: string | null, p: OpenPlatform): ConsequenceView {
-  const c = COPY.confirm;
-  const account = handle(p, cq.username);
-  if (cq.kind === "withdraw") {
-    return { record: say(c.record_withdraw, { platform: p.name }), account, date: cq.today, switchLine: null, later: [c.later_withdraw, c.permanent], button: say(c.button_withdraw, { account }) };
+export const APP_RELEASED = false;
+
+/** A platform's name on the screen: the server's display name, or for a platform the device does not know its ID. */
+export function platformName(slot: { platform: string; row: { displayName: string } | null }): string {
+  return slot.row === null ? slot.platform : slot.row.displayName;
+}
+
+export interface AccountRowView {
+  platform: string;
+  /** The display name, or the platform ID for a platform the device does not know. */
+  name: string;
+  /** What the screen writes before the account (`@`); "" for a platform the device does not know (shown as the server sent it). */
+  prefix: string;
+  /** The account the row holds now ("" for none): what the field starts with. */
+  current: string;
+  /** A field the cardholder can type in; false for a platform the device does not know (kept as it is), and on a day with 3 records. */
+  editable: boolean;
+  /** accounts.preview: the platform has a public page for an account. */
+  preview: boolean;
+  /** The lines under the row (design/copy/card-proof.md, step 4, the table of the line under each row). */
+  lines: Sentence[];
+}
+
+export interface AccountsView {
+  /**
+   * never: the card has no valid record; declared: it declares at least one
+   * account now; nothing: it declared before and withdrew everything.
+   */
+  state: "never" | "declared" | "nothing";
+  /** The lines above the list. */
+  lead: Message[][];
+  rows: AccountRowView[];
+  /** The lines below the list, before the button; each a sentence, and whether links.more follows it. */
+  notes: { sentences: Sentence[]; more: boolean }[];
+  /** 3 records of the card today: the list as it is, this sentence, and accounts.restart only. */
+  dailyLimit: Sentence | null;
+}
+
+/** The lines under one row (step 4, the table of the line under each row). */
+export function rowLines(slot: SlotStatus): Sentence[] {
+  const a = COPY.accounts;
+  if (slot.row === null) return [say(a.row_unknown_platform)];
+  if (slot.lastDeclared === null) return [say(a.row_unused)];
+  const used = slot.switchCount;
+  // The switches left are what the web page can still make: 3 minus the switches used.
+  const count =
+    used === 0
+      ? say(a.row_no_switches_yet, { switches_left: slot.webSwitchesLeft })
+      : slot.webSwitchesLeft > 0
+        ? say(a.row_switches, { switches_used: used, switches_left: slot.webSwitchesLeft })
+        : used < 5
+          ? say(APP_RELEASED ? a.row_app_only : a.row_app_later, { switches_used: used })
+          : say(a.row_used_up, { switches_used: used });
+  const lines: Sentence[] = [];
+  const last = handle(slot.platform, slot.lastDeclared);
+  if (slot.current === null) lines.push(say(a.row_withdrawn, { last_declared: last }));
+  lines.push(count);
+  // An account put there today can be changed today without a switch (a correction), even when none is left.
+  if (slot.correctionToday) {
+    if (slot.current !== null) lines.push(say(a.row_today));
+  } else if (slot.webSwitchesLeft === 0) {
+    lines.push(slot.current !== null ? say(a.row_can_clear) : say(a.row_only_back, { last_declared: last }));
   }
-  const button = cq.kind === "switch" ? say(c.button_switch, { account }) : cq.kind === "refresh" && current === cq.username ? say(c.button_refresh) : say(c.button_first, { account });
-  const switchLine =
-    cq.kind !== "switch" ? null : cq.switchesLeftAfter > 0 ? say(c.uses_switch, { switches_left: cq.switchesLeftAfter }) : say(c.uses_last_switch, { next_switch_date: cq.nextSwitchDateAfter });
-  return { record: say(c.record_declare, { platform: p.name }), account, date: cq.today, switchLine, later: [c.later, c.permanent], button };
+  return lines;
+}
+
+export function accountsView(st: CardStatus): AccountsView {
+  const a = COPY.accounts;
+  const daily = st.dailyLimit;
+  const rows: AccountRowView[] = st.slots.map((slot) => ({
+    platform: slot.platform,
+    name: platformName(slot),
+    prefix: slot.row === null ? "" : presentationOf(slot.platform).prefix,
+    current: slot.current ?? "",
+    editable: slot.row !== null && !daily,
+    preview: slot.row !== null && !daily && presentationOf(slot.platform).profileUrl !== null,
+    lines: daily ? [] : rowLines(slot),
+  }));
+  const anyPreview = rows.some((r) => r.preview);
+  const preview = anyPreview ? [{ sentences: [say(a.preview_note)], more: false }] : [];
+  const last: Message =
+    st.lastCardProof === null ? { code: "no_last_card_proof" } : st.lastCardProof === st.today ? say(a.last_card_proof_today) : say(a.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
+  const dailyLimit = daily ? say(s.daily_limit) : null;
+  if (st.accounts.length > 0) {
+    return {
+      state: "declared",
+      lead: [[say(a.current), last]],
+      rows,
+      notes: daily ? [] : [{ sentences: [say(a.how_refresh)], more: false }, { sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
+      dailyLimit,
+    };
+  }
+  if (st.lastCardProof !== null) {
+    return {
+      state: "nothing",
+      lead: [[say(a.nothing_now)], [say(a.fill_one)]],
+      rows,
+      notes: daily ? [] : [{ sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
+      dailyLimit,
+    };
+  }
+  return {
+    state: "never",
+    lead: [[say(a.none_yet)], [say(a.fill_one)]],
+    rows,
+    notes: daily ? [] : [{ sentences: [say(a.one_per_platform), say(a.switches_limited)], more: true }, ...preview],
+    dailyLimit,
+  };
+}
+
+// Step 5: the list to be signed ------------------------------------------------------
+
+/** The sentence of what a row does (step 5, the table of what each row does; step 6 uses the same). */
+export function kindSentence(r: { kind: ConsequenceRow["kind"]; username: string; current: string | null; previous: string | null; platform: string }): Sentence {
+  const k = COPY.kinds;
+  switch (r.kind) {
+    case "first":
+      return say(k.first);
+    case "refresh":
+      // The account it declares now: unchanged; declared again after a withdrawal: not a switch.
+      return r.current === r.username ? say(k.unchanged) : say(k.again);
+    case "correction":
+    case "switch":
+      return say(k.switch, { previous: handle(r.platform, r.previous ?? "") });
+    case "withdraw":
+      return say(k.withdraw);
+  }
+}
+
+/** For a switch or a correction, the sentence after it: what it uses up (step 5, the table after it). */
+export function switchSentence(r: ConsequenceRow): Sentence | null {
+  const c = COPY.confirm;
+  if (r.kind === "correction") return say(c.switch_not_counted);
+  if (r.kind !== "switch") return null;
+  if (r.switchesLeftAfter === 0) return say(c.uses_final_switch);
+  if (r.webSwitchesLeftAfter === 0) return say(c.uses_last_switch);
+  return say(c.uses_switch, { switches_left: r.webSwitchesLeftAfter! });
+}
+
+export interface ConfirmRowView {
+  platform: string;
+  name: string;
+  /** The platform ID, shown beside the name: the display name comes from the server. */
+  id: string;
+  account: string;
+  lines: Sentence[];
+}
+
+export interface ConfirmView {
+  intro: string;
+  rows: ConfirmRowView[];
+  date: string;
+  /** confirm.withdraw_stays: an account is withdrawn. */
+  withdrawStays: boolean;
+  /** confirm.listed_together: the list is not empty. */
+  listedTogether: boolean;
+  /** The second point: what can be done later, and that no record can be deleted. */
+  later: string;
+  button: string;
+}
+
+/** Every row of the list unchanged: card proof again. */
+function allUnchanged(rows: readonly { kind: string; username: string; current: string | null }[]): boolean {
+  return rows.every((r) => r.kind === "refresh" && r.current === r.username);
+}
+
+export function confirmView(cq: Consequence): ConfirmView {
+  const c = COPY.confirm;
+  const empty = cq.accounts.length === 0;
+  const rows = cq.rows.map((r) => ({
+    platform: r.platform,
+    name: platformName(r),
+    id: r.platform,
+    account: r.row === null ? r.username : handle(r.platform, r.username),
+    lines: [kindSentence(r), switchSentence(r)].filter((x): x is Sentence => x !== null),
+  }));
+  return {
+    intro: empty ? c.intro_withdraw_all : c.intro,
+    rows,
+    date: cq.today,
+    withdrawStays: cq.rows.some((r) => r.kind === "withdraw"),
+    listedTogether: !empty,
+    later: (empty ? c.later_withdraw : c.later) + c.permanent,
+    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : c.button_declare,
+  };
 }
 
 // Step 6: done ----------------------------------------------------------------------
 
-/**
- * The title of step 6, by the kind of the record. `current`: the account the
- * card declared before this card proof (CardStatus.current). Declaring again
- * the account withdrawn before is a `refresh` by the roster rules, but to the
- * cardholder a new declaration: done.first.
- */
-export function doneTitle(kind: Done["kind"], username: string, current: string | null, p: OpenPlatform): Sentence {
-  if (kind === "refresh" && current !== username) return say(COPY.done.first);
-  if (kind === "switch") return say(COPY.done.switch, { account: handle(p, username) });
-  return say(COPY.done[kind]);
+export interface DoneRecordRow {
+  platform: string;
+  name: string;
+  account: string;
+  /** What the server says was recorded on this platform; null where it has nothing for a platform the screen said it would. */
+  kind: Sentence | null;
+  /** The server's answer differs from what step 5 said for this platform. */
+  mismatch: boolean;
 }
 
 export interface DoneView {
   title: Sentence;
-  withdraw: boolean;
-  account: string;
+  /** The list is empty: no animation, no card, no link, no advice. */
+  withdrawAll: boolean;
+  /** The card's list after this record: what the card shows. */
+  card: { name: string; account: string }[];
   date: string;
   shortId: string;
-  /** The link to put on the profile, as the screen writes it (no scheme). */
+  /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
   link: string;
   /** The link as it is copied: a whole https:// URL. */
   url: string;
-  /** Other cards declare the account too: why the link carries the short ID. */
-  otherCards: Sentence | null;
-  /** The roster's line, then the short ID's. */
-  record: Sentence;
+  /** The card's first record: the sentence about a new card. */
+  newCard: boolean;
+  /** An account was withdrawn and the list is not empty: its link can be taken down. */
+  withdrawnLink: boolean;
+  /** The roster's line (record_list, record_withdraw_all), or null when the answer's kinds could not be read. */
+  record: Sentence | null;
+  rows: DoneRecordRow[];
+  /** done.kinds_unreadable */
+  kindsUnreadable: boolean;
+  /** One per account of the list that other cards declare too (`account_cards` above 1). */
+  otherCards: Sentence[];
   shortIdLine: Sentence;
 }
 
-/**
- * Step 6. The link is the account's page when the server said this card is
- * the only one declaring the account (`account_cards` 1), and this card's
- * page otherwise: other cards declare it, or the number is not known (the
- * record was found in the card's state, Done.accountCards null).
- */
-export function doneView(d: Done, current: string | null, p: OpenPlatform): DoneView {
-  const account = handle(p, d.username);
-  const path = p.accountPath(d.username) + (d.accountCards === 1 ? "" : `/${d.shortId}`);
-  const link = `${SITE_DOMAIN}/${path}`;
-  const withdraw = d.kind === "withdraw";
+/** The title of step 6 (the table of titles), by what the server says was recorded. */
+export function doneTitle(d: Done): Sentence {
+  const t = COPY.done;
+  if (d.kinds === null) return say(t.recorded_only);
+  if (d.firstRecord) return say(t.first);
+  if (d.accounts.length === 0) return say(t.withdraw_all);
+  const current = new Map(d.expected.map((r) => [r.platform, r.current]));
+  return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
+}
+
+export function doneView(d: Done): DoneView {
+  const t = COPY.done;
+  const expected = new Map(d.expected.map((r) => [r.platform, r]));
+  const nameOf = (platform: string): string => {
+    const r = expected.get(platform);
+    return r ? platformName(r) : platform;
+  };
+  const accountOf = (platform: string, username: string): string => (expected.get(platform)?.row === null ? username : handle(platform, username));
+  const link = `${SITE_DOMAIN}/${cardPath(d.shortId)}`;
+  const rows: DoneRecordRow[] = [];
+  if (d.kinds !== null) {
+    for (const k of d.kinds) {
+      const e = expected.get(k.platform);
+      // The sentence of the kind recorded; kinds.switch names the account the screen knew was replaced.
+      const previous = e ? e.previous ?? e.current : null;
+      const sentence = (k.kind === "switch" || k.kind === "correction") && previous === null ? null : kindSentence({ ...k, current: e ? e.current : null, previous });
+      rows.push({ platform: k.platform, name: nameOf(k.platform), account: accountOf(k.platform, k.username), kind: sentence, mismatch: d.mismatches.includes(k.platform) });
+    }
+    for (const e of d.expected) {
+      if (d.kinds.some((k) => k.platform === e.platform)) continue;
+      rows.push({ platform: e.platform, name: nameOf(e.platform), account: accountOf(e.platform, e.username), kind: null, mismatch: true });
+    }
+    rows.sort((a, b) => (a.platform < b.platform ? -1 : a.platform > b.platform ? 1 : 0));
+  }
+  const withdrawAll = d.accounts.length === 0;
+  const withdrew = (d.kinds ?? d.expected).some((k) => k.kind === "withdraw");
   return {
-    title: doneTitle(d.kind, d.username, current, p),
-    withdraw,
-    account,
+    title: doneTitle(d),
+    withdrawAll,
+    card: d.accounts.map((a) => ({ name: nameOf(a.platform), account: accountOf(a.platform, a.username) })),
     date: d.date,
     shortId: d.shortId,
     link,
     url: `https://${link}`,
-    otherCards: d.accountCards !== null && d.accountCards > 1 ? say(COPY.done.other_cards, { account }) : null,
-    record: say(withdraw ? COPY.done.record_withdraw : COPY.done.record_declare, { platform: p.name, account }),
-    shortIdLine: say(COPY.done.short_id, { platform: p.name, short_id: d.shortId }),
+    newCard: d.firstRecord,
+    withdrawnLink: withdrew && !withdrawAll,
+    record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : t.record_list),
+    rows,
+    kindsUnreadable: d.kinds === null,
+    otherCards: (d.kinds ?? [])
+      .filter((k: AcceptedKind) => k.kind !== "withdraw" && k.accountCards !== null && k.accountCards > 1)
+      .map((k) => say(t.other_cards, { account: accountOf(k.platform, k.username) })),
+    shortIdLine: say(t.short_id, { short_id: d.shortId }),
   };
 }

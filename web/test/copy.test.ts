@@ -9,9 +9,9 @@
 //     of its tables that the screen shows is made of JSON entries and
 //     nothing else (no sentence of the document missing). Besides entries,
 //     a line may hold the values the screen shows as they are (an account,
-//     a date, the name on the card, a link, a platform's name and prefix
-//     from src/platforms.ts) and the marks the document draws buttons,
-//     list items and expandable questions with.
+//     a date, the name on the card, a link, a platform's display name or ID,
+//     the prefix from src/platforms.ts) and the marks the document draws
+//     buttons, list items and expandable questions with.
 //
 // And no file of the screen has a sentence of its own: no CJK character in
 // src/ui/ or in the HTML pages.
@@ -20,7 +20,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PLATFORMS, SITE_DOMAIN } from "../src/platforms.ts";
+import { SITE_DOMAIN, cardPath, presentationOf } from "../src/platforms.ts";
 import { type Copy, fill } from "../src/ui/copy.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -30,10 +30,9 @@ const copy = JSON.parse(readFileSync(join(web, "..", "design", "copy", "card-pro
 
 /** The values the Markdown's examples use ("例子裡的 … 是會換掉的值"). */
 const EXAMPLES: Record<string, string> = {
-  platform: "Threads",
   account: "@alice",
-  current: "@bob",
   last_declared: "@bob",
+  previous: "@alice",
   name: "王小明",
   expiry_date: "2025-03-01",
   valid_from: "2026-12-01",
@@ -41,11 +40,9 @@ const EXAMPLES: Record<string, string> = {
   code: "X",
   days_ago: "12",
   switches_used: "1",
-  switches_left: "1",
-  next_switch_date: "2027-03-02",
+  switches_left: "2",
   today: "2026-11-16",
-  seq: "138",
-  short_id: "7K2Q9F",
+  short_id: "7K2Q9FM4XD",
   request_id: "3f9c2a7e5b1d4c80",
   step: "2",
   steps: "6",
@@ -54,20 +51,32 @@ const EXAMPLES: Record<string, string> = {
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {
   "stops.rejected": { code: "root" },
-  "done.switch": { account: "@carol.tw" },
-  "choose.switches_used_up": { switches_used: "2" },
+  "accounts.row_no_switches_yet": { switches_left: "3" },
+  "accounts.row_app_later": { switches_used: "3" },
+  "accounts.row_app_only": { switches_used: "3" },
+  "accounts.row_used_up": { switches_used: "5" },
+  "confirm.uses_switch": { switches_left: "1" },
 };
 /**
  * Values the screen shows on their own, not in a sentence: the example
- * account, date and name, the link of section 6, and each platform's name
- * and prefix (src/platforms.ts).
+ * accounts, date, name and link, the platforms' display names (from the
+ * server's table; Threads and X in the examples), a platform ID and an
+ * account shown as the server sent them (a platform the device does not
+ * know), and the prefix of src/platforms.ts.
  */
 const VALUES = new Set([
   EXAMPLES.account!,
+  "@alice_tw",
+  "@carol.tw",
+  "alice",
+  "alice-b",
+  "test-example",
   EXAMPLES.today!,
   EXAMPLES.name!,
-  `${SITE_DOMAIN}/threads/@alice`,
-  ...PLATFORMS.flatMap((p) => (p.open ? [p.name, p.prefix] : [p.name])),
+  `${SITE_DOMAIN}/${cardPath(EXAMPLES.short_id!)}`,
+  "Threads",
+  "X",
+  presentationOf("threads").prefix,
 ]);
 /** Entries that are not in card-proof.md on purpose. */
 const NOT_IN_MD = new Set(["not_in_card_proof_md.help_pending"]);

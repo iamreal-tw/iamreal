@@ -20,9 +20,10 @@
 //                    is read: about 26 MB, which 5 minutes allow down to
 //                    about 0.7 Mbit/s. They are all fetched before the first
 //                    signature, so nothing secret waits on them.
-import type { Action } from "./spec/declaration-code.ts";
+import type { Account } from "./spec/declaration-code.ts";
 import { type Day, parseDay } from "./spec/date.ts";
-import { type CardState, possibleState } from "./spec/roster-rules.ts";
+import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "./spec/roster-rules.ts";
+import { type UsernameFormat, isAnyUsername, isPlatformId, parseUsernameFormat } from "./spec/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
 export const API_TIMEOUT_MS = 30_000;
@@ -122,63 +123,161 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
   return body.challenge;
 }
 
+/** A row of the platform table the device can read (docs/api/card-proof.md, `config`). */
+export interface PlatformRow {
+  /** The platform ID. */
+  readonly platform: string;
+  /** The display name, as the server sends it; the screen shows the ID beside it before the card signs. */
+  readonly displayName: string;
+  readonly format: UsernameFormat;
+}
+
+export interface Config {
+  /** `crl_max_age_days`; the caller takes the smaller of it and the built-in 7 (crl/revocation.ts). */
+  crlMaxAgeDays: number;
+  /** The rows the device can read, in ascending order of platform. A platform of no row here is one the device does not know. */
+  platforms: readonly PlatformRow[];
+}
+
+/** A display name: a string of 1 to 100 characters, none of them a control or line-breaking character. */
+function isDisplayName(x: unknown): x is string {
+  if (typeof x !== "string" || x.length < 1 || x.length > 100) return false;
+  for (let i = 0; i < x.length; i++) {
+    const c = x.charCodeAt(i);
+    if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029) return false;
+  }
+  return true;
+}
+
+/**
+ * `GET /api/v1/config`: the CRL age bound the server announces, and its copy
+ * of the platform table. The table is a convenience for the device
+ * (docs/api/card-proof.md): which scope string the card signs is never taken
+ * from it (src/spec/scope.ts).
+ *
+ *   - `crl_max_age_days` is a non-negative integer, or the answer is not read.
+ *   - `platforms` is a list. Every element that names a platform ID (a
+ *     string of 1 to 21 `a-z0-9-`) must do so in strictly ascending order,
+ *     or the table is not read: two rows for one ID would be two answers.
+ *   - A row is read if it is an object whose `platform` is a platform ID,
+ *     `display_name` a string without control characters, and
+ *     `username_format` a format in the one form `[…]{m,n}`
+ *     (spec/username-format.ts). Another row is a platform the device does
+ *     not know. Fields the device does not know are ignored.
+ *   - No row it can read: the table is not read (`malformed_response`); the
+ *     device has nothing to offer and nothing to check an account against.
+ */
+export async function requestConfig(fetchFn: Fetch): Promise<Config> {
+  const b = await request(fetchFn, "/api/v1/config", { method: "GET" }, 200);
+  const n = b.crl_max_age_days;
+  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) throw new ServerError("malformed_response", 200);
+  if (!Array.isArray(b.platforms)) throw new ServerError("malformed_response", 200);
+  const ids: string[] = [];
+  const rows: PlatformRow[] = [];
+  for (const r of b.platforms as unknown[]) {
+    if (!isObject(r) || !isPlatformId(r.platform)) continue;
+    ids.push(r.platform);
+    const format = parseUsernameFormat(r.username_format);
+    if (format === null || !isDisplayName(r.display_name)) continue;
+    rows.push(Object.freeze({ platform: r.platform, displayName: r.display_name, format }));
+  }
+  for (let i = 1; i < ids.length; i++) if (!(ids[i - 1]! < ids[i]!)) throw new ServerError("malformed_response", 200);
+  if (rows.length === 0) throw new ServerError("malformed_response", 200);
+  return { crlMaxAgeDays: n, platforms: Object.freeze(rows) };
+}
+
 export interface CardStateResponse extends CardState {
+  /**
+   * The accounts of the card on platforms the device does not know (no row
+   * of `config` it can read), as the server sent them, in ascending order of
+   * platform. The device keeps them in the list as they are: a list without
+   * one would withdraw it.
+   */
+  kept: Account[];
   count: number;
   head: string;
 }
 
 /**
  * `POST /api/v1/card-state`. The scoped ID goes in the body, never in the
- * URL. The answer is read strictly; the device shows it and computes the
- * consequence itself, but cannot check it (README, known limits). A state
- * the roster rules cannot produce for any roster (possibleState, with
- * `today`, the device's Taiwan date) is not read either.
+ * URL. The answer is read strictly (docs/api/card-proof.md, "What the
+ * device does with what it cannot read"); the device shows it and computes
+ * what a list would do itself, but cannot check it (README, known limits).
+ *
+ *   - `last_card_proof` (a date or null), `proofs_on_last_date` (an
+ *     integer), `platforms` (an object), `count` and `head` must be read.
+ *   - The entry of every platform of `table` that has one must be read:
+ *     `current` and `last_declared` null or in the platform's format,
+ *     `switch_count` an integer from 0 to 5, `correction_date` a date or
+ *     null. A platform of the table without an entry is not offered (it is
+ *     not in `slots`).
+ *   - An entry of a platform the device does not know: with `current` null,
+ *     ignored; with `current` set, kept as it is if the platform ID and the
+ *     account pass the checks every platform satisfies
+ *     (spec/username-format.ts), otherwise the answer is not read. An entry
+ *     that is not an object, or has no `current`, is not read.
+ *   - A state the roster rules cannot produce (possibleSlot, possibleCard,
+ *     with `today`, the device's Taiwan date) is not read either.
+ *
+ * Fields the device does not know are ignored.
  */
-export async function requestCardState(
-  fetchFn: Fetch,
-  scopeString: string,
-  scopedId: string,
-  validUsername: (u: string) => boolean,
-  today: Day,
-): Promise<CardStateResponse> {
+export async function requestCardState(fetchFn: Fetch, scopeString: string, scopedId: string, table: readonly PlatformRow[], today: Day): Promise<CardStateResponse> {
   const b = await request(fetchFn, "/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) }, 200);
-  const user = (x: unknown): string | null => {
-    if (x === null) return null;
-    if (typeof x === "string" && validUsername(x)) return x;
+  const bad = (): never => {
     throw new ServerError("malformed_response", 200);
   };
   const day = (x: unknown): Day | null => {
     if (x === null) return null;
     const d = typeof x === "string" ? parseDay(x) : null;
-    if (d === null) throw new ServerError("malformed_response", 200);
-    return d;
+    return d === null ? bad() : d;
   };
-  if (!Array.isArray(b.switch_dates) || !Number.isSafeInteger(b.count) || (b.count as number) < 0) throw new ServerError("malformed_response", 200);
-  if (typeof b.head !== "string" || !/^[0-9a-f]{64}$/.test(b.head)) throw new ServerError("malformed_response", 200);
-  const switchDates = b.switch_dates.map((x) => {
-    const d = day(x);
-    if (d === null) throw new ServerError("malformed_response", 200);
-    return d;
-  });
-  // A count: an integer; possibleState then bounds it.
-  if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) throw new ServerError("malformed_response", 200);
-  const state: CardState = {
-    current: user(b.current),
-    lastDeclared: user(b.last_declared),
-    lastCardProof: day(b.last_card_proof),
-    proofsOnLastDate: b.proofs_on_last_date,
-    switchDates,
-  };
-  if (!possibleState(state, today)) throw new ServerError("malformed_response", 200);
-  return { ...state, count: b.count as number, head: b.head };
+  if (!Number.isSafeInteger(b.count) || (b.count as number) < 0) bad();
+  if (typeof b.head !== "string" || !/^[0-9a-f]{64}$/.test(b.head)) bad();
+  if (!("last_card_proof" in b)) bad();
+  const lastCardProof = day(b.last_card_proof);
+  // A count: an integer; possibleCard then bounds it.
+  if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) bad();
+  const proofsOnLastDate = b.proofs_on_last_date as number;
+  if (!possibleCard(lastCardProof, proofsOnLastDate, today)) bad();
+  if (!isObject(b.platforms)) bad();
+  const entries = b.platforms as Record<string, unknown>;
+
+  const known = new Set(table.map((r) => r.platform));
+  const slots = new Map<string, SlotState>();
+  for (const row of table) {
+    if (!Object.prototype.hasOwnProperty.call(entries, row.platform)) continue;
+    const e = entries[row.platform];
+    if (!isObject(e)) bad();
+    const entry = e as Record<string, unknown>;
+    const user = (x: unknown): string | null => (x === null ? null : typeof x === "string" && row.format.accepts(x) ? x : bad());
+    if (!("current" in entry) || !("last_declared" in entry) || !("correction_date" in entry)) bad();
+    const switchCount = entry.switch_count;
+    if (typeof switchCount !== "number" || !Number.isSafeInteger(switchCount) || switchCount < 0 || switchCount > MAX_SWITCHES) bad();
+    const slot: SlotState = { current: user(entry.current), lastDeclared: user(entry.last_declared), switchCount: switchCount as number, correctionDate: day(entry.correction_date) };
+    if (!possibleSlot(slot, lastCardProof)) bad();
+    slots.set(row.platform, slot);
+  }
+  const kept: Account[] = [];
+  for (const id of Object.keys(entries).sort()) {
+    if (known.has(id)) continue;
+    const e = entries[id];
+    if (!isObject(e) || !("current" in e)) bad();
+    const current = (e as Record<string, unknown>).current;
+    if (current === null) continue;
+    if (!isPlatformId(id) || !isAnyUsername(current)) bad();
+    // An account means a valid record of the card.
+    if (lastCardProof === null) bad();
+    kept.push(Object.freeze({ platform: id, username: current as string }));
+  }
+  return { lastCardProof, proofsOnLastDate, slots, kept, count: b.count as number, head: b.head as string };
 }
 
 /** The fields of a record except `seq` and `prev` (spec/record.md). */
 export interface Submission {
   scope_string: string;
   scoped_id: string;
-  action: Action;
-  username: string;
+  /** The whole list, in ascending order of platform, each platform at most once. */
+  accounts: Account[];
   challenge: string;
   issuer: "G2" | "G3";
   smt_root: string;
@@ -186,28 +285,56 @@ export interface Submission {
   proof: string;
 }
 
-export interface Accepted {
-  seq: number;
-  recordHash: string;
-  kind: "first" | "refresh" | "switch" | "withdraw";
+/** One element of the answer's `kinds`: what the server says the record is on one platform. */
+export interface AcceptedKind {
+  platform: string;
+  kind: Kind;
+  /** The account: the list's for that platform, or for `withdraw` the one withdrawn. */
+  username: string;
   /**
-   * `account_cards`: the cards whose `current` is the record's account once
-   * it is applied. Only chooses which link the screen suggests; the device
-   * cannot check it, and a wrong number cannot identify the cardholder.
-   * null if the answer has none, or not a count: the record is in the
-   * roster already, so this field alone does not stop the card proof.
+   * `account_cards`: the cards whose `current` on that platform is this
+   * account once the record is applied. Only says whether other cards
+   * declare it too; the device cannot check it, and a wrong number cannot
+   * identify the cardholder. null if the element has none, or not a count:
+   * the record is in the roster already, so this field alone does not stop
+   * the card proof.
    */
   accountCards: number | null;
 }
 
+export interface Accepted {
+  seq: number;
+  recordHash: string;
+  /**
+   * `kinds`, in ascending order of platform; null if the device cannot read
+   * it (not a non-empty list of readable elements in that order, or a kind it
+   * does not know). The record is in the roster by then: the device then says
+   * only that the list was recorded (docs/api/card-proof.md).
+   */
+  kinds: AcceptedKind[] | null;
+}
+
+const KINDS: readonly string[] = ["first", "refresh", "correction", "switch", "withdraw"];
+
+function readKinds(x: unknown): AcceptedKind[] | null {
+  if (!Array.isArray(x) || x.length === 0) return null;
+  const out: AcceptedKind[] = [];
+  for (const e of x as unknown[]) {
+    if (!isObject(e) || !isPlatformId(e.platform) || typeof e.kind !== "string" || !KINDS.includes(e.kind) || !isAnyUsername(e.username)) return null;
+    if (out.length > 0 && !(out[out.length - 1]!.platform < e.platform)) return null;
+    const n = e.account_cards;
+    out.push({ platform: e.platform, kind: e.kind as Kind, username: e.username, accountCards: Number.isSafeInteger(n) && (n as number) >= 0 ? (n as number) : null });
+  }
+  return out;
+}
+
 /** `POST /api/v1/records`. */
 export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accepted> {
-  // Keys in the order of spec/record.md.
+  // Keys in the order of spec/record.md; an account's keys platform, then username.
   const body = JSON.stringify({
     scope_string: s.scope_string,
     scoped_id: s.scoped_id,
-    action: s.action,
-    username: s.username,
+    accounts: s.accounts.map((a) => ({ platform: a.platform, username: a.username })),
     challenge: s.challenge,
     issuer: s.issuer,
     smt_root: s.smt_root,
@@ -217,21 +344,8 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
   const b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
   if (!Number.isSafeInteger(b.seq) || (b.seq as number) < 1) throw new ServerError("malformed_response", 201);
   if (typeof b.record_hash !== "string" || !/^[0-9a-f]{64}$/.test(b.record_hash)) throw new ServerError("malformed_response", 201);
-  if (b.kind !== "first" && b.kind !== "refresh" && b.kind !== "switch" && b.kind !== "withdraw") throw new ServerError("malformed_response", 201);
-  // seq, record_hash and kind are read strictly; account_cards only picks a link (Accepted.accountCards).
-  const accountCards = Number.isSafeInteger(b.account_cards) && (b.account_cards as number) >= 0 ? (b.account_cards as number) : null;
-  return { seq: b.seq as number, recordHash: b.record_hash, kind: b.kind, accountCards };
-}
-
-/**
- * `GET /api/v1/config`: the CRL age bound the server announces. The caller
- * takes the smaller of it and the built-in 7 (crl/revocation.ts).
- */
-export async function requestCrlMaxAge(fetchFn: Fetch): Promise<number> {
-  const b = await request(fetchFn, "/api/v1/config", { method: "GET" }, 200);
-  const n = b.crl_max_age_days;
-  if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) throw new ServerError("malformed_response", 200);
-  return n;
+  // seq and record_hash are read strictly; kinds and account_cards are only told to the cardholder (Accepted.kinds).
+  return { seq: b.seq as number, recordHash: b.record_hash, kinds: readKinds(b.kinds) };
 }
 
 /** A static file of the mirror, as bytes. */

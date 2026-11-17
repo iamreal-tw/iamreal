@@ -1,19 +1,24 @@
 // One card proof, as a state machine without a screen. First the card is
-// confirmed, then the cardholder picks what to do, then the declaration is
-// made (docs/design/principles.md, "輸入 PIN 之前的畫面"; three clicks):
+// confirmed, then the cardholder edits the card's whole list of accounts,
+// then the list is declared (design/copy/card-proof.md; ADR-0017: one
+// record states the card's whole list, at most one account per platform,
+// and one card proof covers every platform; three clicks):
 //
 //   readCard()        read certificates (no PIN); check them; start the
-//                     checks that need no signature: CRL, tree, circuit, CRS
+//                     checks that need no signature: the server's config
+//                     (CRL age bound, platform table), CRL, tree, circuit, CRS
 //   checksDone()      resolves when every one of those passed; until then
 //                     the screen shows no PIN field (`phase` is "checking")
 //   confirmCard(pin)  card signs the scope string; scoped ID; card state;
-//                     what each choice would be (CardStatus.options)
-//   choose(choice)    declare an account, or withdraw; the consequence. No
-//                     request, no signature
+//                     the card's list and each slot's counts (CardStatus)
+//   choose(entries)   the account typed on each platform, or none; the list
+//                     the card would sign and what it does on every platform
+//                     (Consequence). No request, no signature
 //   back()            from the consequence to the card's state again
-//   proceed(account)  the caller confirms the account it showed; challenge,
+//   proceed(list)     the caller confirms the list it showed; challenge,
 //                     checked; card signs the declaration code; PIN dropped;
-//                     prove; submit
+//                     prove; submit; what the server recorded, against what
+//                     was shown (Done.mismatches)
 //   resubmit()        after a network failure, the same record again
 //   cancel()          drop everything
 //
@@ -49,8 +54,15 @@
 // the step can be tried again, and the flow keeps what it held before it.
 //
 // Where each value comes from and goes to:
-//   scope string     the table in spec/scope.ts, by the platform picked on
-//                    the screen; never from a server
+//   scope string     the public roster's, fixed for the page's roster
+//                    (spec/scope.ts); never from a server
+//   platform table   the server's config: which platforms are offered,
+//                    their display names, their `username` formats (read by
+//                    the device itself, spec/username-format.ts). Not where
+//                    the scope string comes from
+//   the list         the card's state (card-state), as the cardholder
+//                    edits it; accounts on platforms the device does not
+//                    know are kept as they are
 //   current_time     the device's clock, as a Taiwan date; a challenge
 //                    dated otherwise stops the flow
 //   certificate,     from the card; stay in this object; dropped (bytes
@@ -60,7 +72,7 @@
 //                    signature is made, the flow stops, or IDLE_MS pass
 //                    after the first; never stored
 //   failures         returned to the caller only; no request carries them
-import { type CardStateResponse, type Fetch, ServerError, type Submission, requestCardState, requestChallenge, requestCrlMaxAge, submitRecord } from "./api.ts";
+import { type AcceptedKind, type CardStateResponse, type Fetch, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
 import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
 import type { TreeBuilder } from "./crl/build.ts";
@@ -73,10 +85,11 @@ import type { Prover, ThreadMode } from "./prover/prover.ts";
 import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "./spec/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "./spec/date.ts";
-import { type Action, declarationCode } from "./spec/declaration-code.ts";
-import { type CardState, type Outcome, dailyLimitReached, declareOutcome, nextSwitchDay, switchesInWindow, switchesLeft, withdrawOutcome } from "./spec/roster-rules.ts";
-import { type Platform, type Roster, type ScopeRow, scopeFor } from "./spec/scope.ts";
+import { type Account, declarationCode } from "./spec/declaration-code.ts";
+import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, dailyLimitReached, slotOutcome } from "./spec/roster-rules.ts";
+import { type Roster, scopeOf } from "./spec/scope.ts";
 import { scopedId, scopedIdText, shortId } from "./spec/scoped-id.ts";
+import { byPlatform } from "./spec/username-format.ts";
 import type { CrlNumberStore } from "./storage.ts";
 import { bytesOfBigint, equalBytes, wipe } from "./bytes.ts";
 
@@ -95,8 +108,15 @@ export type Stop =
   | { code: "challenge_malformed" }
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
-  /** The choice is not possible: switches used up, nothing to withdraw, or 3 records of the card today. */
-  | { code: "blocked"; reason: "switch_limit" | "not_current" | "daily_limit" }
+  /**
+   * The list is not possible, by the roster rules or the page's own limit:
+   *   switch_limit      it switches a slot whose 5 switches are used up (`platform`)
+   *   web_switch_limit  it switches a slot that used 3 or more: the fourth and
+   *                     fifth are not made on the web (WEB_SWITCHES; `platform`)
+   *   empty             the list is empty and the card declares no account
+   *   daily_limit       the card has 3 valid records today
+   */
+  | { code: "blocked"; reason: "switch_limit" | "web_switch_limit" | "empty" | "daily_limit"; platform?: string }
   /** The second signature was not made within IDLE_MS of the first: the PIN, the certificate and the signature were dropped. */
   | { code: "idle" }
   /** A circuit or CRS file did not match its SHA-256, or could not be fetched. */
@@ -111,8 +131,8 @@ export type Stop =
    * that the cardholder can report it (docs/api/card-proof.md).
    */
   | { code: "server"; server: string; status: number; requestId?: string }
-  /** The username is not in the scope's format. */
-  | { code: "username" }
+  /** The account typed for `platform` is not in that platform's format. */
+  | { code: "username"; platform: string }
   /** The caller called a step out of order. */
   | { code: "state" };
 
@@ -125,7 +145,7 @@ export class FlowStop extends Error {
 }
 
 export interface FlowDeps {
-  /** Which roster's scope table the page uses. Fixed by the page, not by a server. */
+  /** Which roster's scope string the card signs. Fixed by the page's build, not by a server. */
   roster: Roster;
   /** The issuer keys the page trusts: MOICA_ISSUERS in the page, test keys in tests. */
   issuers: readonly IssuerKey[];
@@ -163,7 +183,7 @@ export const IDLE_MS = 5 * 60_000;
  *     certificates   the card returned its certificates
  *     certificate    one certificate passed the checks on the device
  *   the checks that need no signature (checksDone()):
- *     config         the server answered its CRL age bound
+ *     config         the server answered its CRL age bound and its platform table
  *     circuit        the circuit file matched its SHA-256
  *     engine         the proof engine is ready (the CRS matched its SHA-256)
  *     crl            the CRL was fetched and checked
@@ -175,8 +195,21 @@ export const IDLE_MS = 5 * 60_000;
  */
 export type Progress = "component" | "certificates" | "certificate" | "config" | "circuit" | "engine" | "crl" | "tree" | "challenge" | "signed" | "proved";
 
-/** What the cardholder picks once the card's state is known. */
-export type Choice = { action: "declare"; username: string } | { action: "withdraw" };
+/**
+ * What the cardholder picks once the card's state is known: for every
+ * platform the screen offers (CardStatus.slots with a row), the account
+ * typed, or "" for none. Accounts on platforms the device does not know are
+ * not in it: the flow keeps them in the list as they are.
+ */
+export type Choice = Readonly<Record<string, string>>;
+
+/**
+ * The switches of a slot the web page makes: the first 3. The fourth and the
+ * fifth (the roster rules allow 5, and the server may refuse those two:
+ * `switch_restricted`, docs/api/card-proof.md) are not offered here
+ * (design/copy/card-proof.md, step 4: "還可以更換幾次" counts the web's).
+ */
+export const WEB_SWITCHES = 3;
 
 export interface CardRead {
   /** The name on the certificate, for the screen only. */
@@ -184,38 +217,44 @@ export interface CardRead {
   issuer: IssuerKey["name"];
 }
 
+/** One slot of the card as the server reports it (not checkable by the device), with what the device computes from it. */
+export interface SlotStatus {
+  platform: string;
+  /**
+   * The platform's row of the server's table; null for a platform the device
+   * does not know, which the card has an account on: kept in the list as it
+   * is, and not changed here.
+   */
+  row: PlatformRow | null;
+  current: string | null;
+  lastDeclared: string | null;
+  /** 0 to 5 (0 for a platform the device does not know). */
+  switchCount: number;
+  correctionDate: string | null;
+  /** Switches left by the roster rules: 5 minus the count. */
+  switchesLeft: number;
+  /** Switches the web page can still make: 3 minus the count, at least 0 (WEB_SWITCHES). */
+  webSwitchesLeft: number;
+  /** `correction_date` is today: changing the account today is a correction, not counted. */
+  correctionToday: boolean;
+}
+
 export interface CardStatus {
   scopedId: string;
   shortId: string;
-  /** What the server says about this card (not checkable by the device). */
-  current: string | null;
-  lastDeclared: string | null;
   lastCardProof: string | null;
   /**
-   * What each choice would be, computed here from those facts and today's
-   * date (spec/roster-rules.md); null where the choice does not apply.
-   *
-   *   refresh      declare the current account again
-   *   declareBack  after a withdrawal, declare the last declared account again (not a switch)
-   *   other        declare any other account: `first` for a card that never declared,
-   *                otherwise `switch`, or blocked by `switch_limit`
-   *   withdraw     withdraw the current account
+   * Every platform of the server's table that has an entry in the card's
+   * state, and every account of the card on a platform the device does not
+   * know; in ascending order of platform.
    */
-  options: {
-    refresh: Outcome | null;
-    declareBack: Outcome | null;
-    other: Outcome;
-    withdraw: Outcome | null;
-  };
-  /** Switches in the past year (the 365-day window), and how many a declaration today could still make. */
-  switchesUsed: number;
-  switchesLeft: number;
-  /** The first date a switch is allowed (today if it is now). */
-  nextSwitchDate: string;
+  slots: SlotStatus[];
+  /** The card's list now: the `current` of every slot that has one, in ascending order of platform. */
+  accounts: Account[];
   /**
-   * The card has 3 valid records dated today in this scope (`last_card_proof`
-   * is today and `proofs_on_last_date` is 3): no choice can be made today,
-   * whatever `options` says (spec/roster-rules.md, check 6).
+   * The card has 3 valid records dated today (`last_card_proof` is today and
+   * `proofs_on_last_date` is 3): no list can be declared today
+   * (spec/roster-rules.md, check 6).
    */
   dailyLimit: boolean;
   today: string;
@@ -224,16 +263,32 @@ export interface CardStatus {
   head: string;
 }
 
+/** What a list does on one platform, for the screen before the second signature. */
+export interface ConsequenceRow {
+  platform: string;
+  /** The platform's row of the server's table; null for a platform the device does not know. */
+  row: PlatformRow | null;
+  /** The account of the list on this platform, or for `withdraw` the account withdrawn. */
+  username: string;
+  /** The kind by the roster rules (spec/roster-rules.md, "Event rules"). */
+  kind: Kind;
+  /** The slot's `current` before this card proof. */
+  current: string | null;
+  /** For a `correction` or a `switch`: the account replaced (`current`, or after a withdrawal `last_declared`). */
+  previous: string | null;
+  /** For a `switch`: the switches left after it by the rules, and on the web; null otherwise. */
+  switchesLeftAfter: number | null;
+  webSwitchesLeftAfter: number | null;
+}
+
 /** What a choice would do, for the screen before the second signature. */
 export interface Consequence {
-  action: Action;
-  /** The account the declaration code will name: the typed one, or for a withdrawal the current one. */
-  username: string;
-  kind: "first" | "refresh" | "switch" | "withdraw";
-  /** Switches left in the 365-day window after this card proof. */
-  switchesLeftAfter: number;
-  /** The first date a switch is allowed after this card proof (today if it is then). */
-  nextSwitchDateAfter: string;
+  /** The list the card will sign: in ascending order of platform, each platform at most once. */
+  accounts: Account[];
+  /** Every platform the list has a kind on (each account of the list, each account withdrawn), in ascending order of platform. */
+  rows: ConsequenceRow[];
+  /** The card had no valid record before: this would be its first. */
+  firstRecord: boolean;
   today: string;
 }
 
@@ -246,16 +301,27 @@ export interface Done {
   seq: number | null;
   recordHash: string | null;
   /**
-   * The cards that declare the record's account now (`account_cards`), for
-   * which link the screen suggests; null when the record was found in the
-   * card's state, or the answer's number could not be read.
+   * What the server says the record is on each platform (`kinds`); null when
+   * the record was found in the card's state, or the answer's `kinds` could
+   * not be read. The record is in the roster either way.
    */
-  accountCards: number | null;
-  kind: "first" | "refresh" | "switch" | "withdraw";
+  kinds: AcceptedKind[] | null;
+  /** What the screen said the list would do, before the card signed (Consequence.rows). */
+  expected: ConsequenceRow[];
+  /**
+   * The platforms on which `kinds` differs from `expected` (another kind,
+   * another account, or one of the two has the platform and the other not),
+   * in ascending order. Empty when `kinds` is null: there is nothing to
+   * compare. The server's answer cannot be checked here; a difference means
+   * the card's state it sent, or this answer, was not what the roster holds.
+   */
+  mismatches: string[];
+  firstRecord: boolean;
   date: string;
   scopedId: string;
   shortId: string;
-  username: string;
+  /** The list the card signed: what the record states. */
+  accounts: Account[];
   record: Submission;
 }
 
@@ -263,9 +329,10 @@ export interface Done {
  * Where the flow is. "checking": the card was read and the checks that need
  * no signature are running; the screen does not ask for the PIN yet.
  * "ready_for_pin": they all passed. "status_known": the card signed the
- * scope string and its state is known; the cardholder picks. "chosen": the
- * consequence of the choice is shown; the next step is the second signature.
- * "signing": proceed() is asking for the challenge and the second signature.
+ * scope string and its state is known; the cardholder edits the list.
+ * "chosen": the consequence of the list is shown; the next step is the
+ * second signature. "signing": proceed() is asking for the challenge and the
+ * second signature.
  */
 export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "chosen" | "signing" | "submitting" | "submit_failed" | "done" | "stopped";
 
@@ -275,6 +342,8 @@ interface BackgroundResult {
   crlDate: Day;
   /** L, the CRL age bound in force (crlMaxAge of the server's figure). */
   maxAgeDays: number;
+  /** The rows of the server's platform table the device can read. */
+  platforms: readonly PlatformRow[];
 }
 
 interface Background {
@@ -286,7 +355,7 @@ interface Background {
 
 export class CardProofFlow {
   private readonly deps: FlowDeps;
-  private readonly scope: ScopeRow;
+  private readonly scopeStringValue: string;
   private readonly scopeBytes: Uint8Array;
   private readonly idleMs: number;
 
@@ -298,9 +367,11 @@ export class CardProofFlow {
   private pin: string | null = null;
   private scopeSignature: Uint8Array | null = null;
   private codeSignature: Uint8Array | null = null;
-  private state: CardState | null = null;
+  private state: CardStateResponse | null = null;
   private status: CardStatus | null = null;
   private chosen: Consequence | null = null;
+  /** The entries the consequence was computed from, to compute it again before the card signs. */
+  private choice: Choice | null = null;
   private scopedIdValue: bigint | null = null;
   private submission: Submission | null = null;
   /** When the first signature was made (deps.clock), and the timer that ends the wait for the second. */
@@ -317,10 +388,10 @@ export class CardProofFlow {
   /** resubmit() was called: the submission's earlier answer may have been lost. */
   private resubmitted = false;
 
-  constructor(deps: FlowDeps, opts: { platform: Platform }) {
+  constructor(deps: FlowDeps) {
     this.deps = deps;
-    this.scope = scopeFor(deps.roster, opts.platform);
-    this.scopeBytes = new TextEncoder().encode(this.scope.scopeString);
+    this.scopeStringValue = scopeOf(deps.roster);
+    this.scopeBytes = new TextEncoder().encode(this.scopeStringValue);
     this.idleMs = deps.idleMs ?? IDLE_MS;
   }
 
@@ -329,7 +400,7 @@ export class CardProofFlow {
   }
 
   get scopeString(): string {
-    return this.scope.scopeString;
+    return this.scopeStringValue;
   }
 
   /**
@@ -475,6 +546,7 @@ export class CardProofFlow {
     this.status = null;
     this.state = null;
     this.chosen = null;
+    this.choice = null;
     if (!this.stopped) this.stopped = { code: "state" };
     this.phaseValue = "stopped";
   }
@@ -556,8 +628,10 @@ export class CardProofFlow {
 
   /**
    * The checks that need no signature, started as soon as the card is read:
-   * the server's CRL age bound, the CRL, the tree and the serial number's
-   * absence, the circuit's and the CRS's hashes (the engine's start).
+   * the server's config (the CRL age bound, and the platform table: without
+   * one it can read the device has nothing to offer, docs/api/card-proof.md),
+   * the CRL, the tree and the serial number's absence, the circuit's and the
+   * CRS's hashes (the engine's start).
    */
   private startBackground(cert: CardCertificate, today: Day): Background {
     const bg: Background = { failed: null, done: null, promise: Promise.resolve() as never };
@@ -579,9 +653,9 @@ export class CardProofFlow {
       this.deps.prover.ready().then(() => progress("engine"), () => undefined);
       let builder: TreeBuilder | null = null;
       try {
-        const serverDays = await this.timed("config", requestCrlMaxAge(this.deps.fetch));
+        const config = await this.timed("config", requestConfig(this.deps.fetch));
         progress("config");
-        const maxAgeDays = crlMaxAge(serverDays);
+        const maxAgeDays = crlMaxAge(config.crlMaxAgeDays);
         const crl = await this.timed("crl", loadCrl({ fetch: this.deps.fetch, issuer, today, maxAgeDays, store: this.deps.store }));
         progress("crl");
         builder = await builderP;
@@ -590,7 +664,7 @@ export class CardProofFlow {
         progress("tree");
         await circuitP;
         await this.deps.prover.ready();
-        bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays };
+        bg.done = { tree: result.proof, crlNumber: crl.crlNumber, crlDate: crl.crlDay, maxAgeDays, platforms: config.platforms };
         return bg.done;
       } finally {
         builderP.then((b) => b.close(), () => undefined);
@@ -664,7 +738,7 @@ export class CardProofFlow {
     const idText = scopedIdText(id);
     let state: CardStateResponse;
     try {
-      state = await requestCardState(this.deps.fetch, this.scope.scopeString, idText, this.scope.validUsername, this.today());
+      state = await requestCardState(this.deps.fetch, this.scopeStringValue, idText, this.background!.done!.platforms, this.today());
     } catch (e) {
       this.live();
       this.fail(toStop(e));
@@ -674,26 +748,7 @@ export class CardProofFlow {
     this.checkIdle();
     const today = this.today();
     this.state = state;
-    this.status = {
-      scopedId: idText,
-      shortId: shortId(idText),
-      current: state.current,
-      lastDeclared: state.lastDeclared,
-      lastCardProof: state.lastCardProof === null ? null : formatDay(state.lastCardProof),
-      options: {
-        refresh: state.current !== null ? declareOutcome(state, state.current, today) : null,
-        declareBack: state.current === null && state.lastDeclared !== null ? declareOutcome(state, state.lastDeclared, today) : null,
-        other: declareOutcome(state, otherThan(state.lastDeclared ?? ""), today),
-        withdraw: state.current !== null ? withdrawOutcome(state, state.current) : null,
-      },
-      switchesUsed: switchesInWindow(state, today),
-      switchesLeft: switchesLeft(state, today),
-      nextSwitchDate: formatDay(nextSwitchDay(state, today)),
-      dailyLimit: dailyLimitReached(state, today),
-      today: formatDay(today),
-      count: state.count,
-      head: state.head,
-    };
+    this.status = statusOf(state, this.background!.done!.platforms, idText, today);
     this.phaseValue = "status_known";
     return this.status;
   }
@@ -703,19 +758,22 @@ export class CardProofFlow {
     return this.phaseValue === "status_known" || this.phaseValue === "chosen" ? this.status : null;
   }
 
-  // The cardholder picks; nothing is signed or sent ----------------------------
+  // The cardholder edits the list; nothing is signed or sent -------------------
 
   /**
-   * What `choice` would do; the next step is proceed(). A choice that is not
-   * possible (switches used up, nothing to withdraw, 3 records today) or an
-   * account not in the scope's format throws without ending the flow: the
-   * cardholder can pick again. Nothing is signed, nothing is sent.
+   * What the list `entries` makes would do; the next step is proceed(). A
+   * list that is not possible (a switch the rules or the web page do not
+   * allow, an empty list for a card that declares nothing, 3 records today)
+   * or an account not in its platform's format throws without ending the
+   * flow: the cardholder can change the list again. Nothing is signed,
+   * nothing is sent.
    */
-  choose(choice: Choice): Consequence {
+  choose(entries: Choice): Consequence {
     this.expect("status_known", "chosen");
     this.checkIdle();
-    const consequence = this.consequenceOf(choice);
+    const consequence = this.consequenceOf(entries);
     this.chosen = consequence;
+    this.choice = { ...entries };
     this.phaseValue = "chosen";
     return consequence;
   }
@@ -725,65 +783,91 @@ export class CardProofFlow {
     this.expect("status_known", "chosen");
     this.checkIdle();
     this.chosen = null;
+    this.choice = null;
     this.phaseValue = "status_known";
     return this.status!;
   }
 
-  private consequenceOf(choice: Choice): Consequence {
+  /**
+   * The list and what it does on each platform, by the event rules of
+   * spec/roster-rules.md against the slots the server reported, on today's
+   * date by the device's clock. Every platform offered (a slot with a row)
+   * must be in `entries`, and nothing else: an account on a platform the
+   * device does not know is kept as the server reported it, not taken from
+   * the caller.
+   */
+  private consequenceOf(entries: Choice): Consequence {
+    const status = this.status!;
     const state = this.state!;
     const today = this.today();
-    let username: string;
-    let outcome: Outcome;
-    if (choice.action === "declare") {
-      if (!this.scope.validUsername(choice.username)) throw new FlowStop({ code: "username" });
-      username = choice.username;
-      outcome = declareOutcome(state, username, today);
-    } else {
-      if (state.current === null) throw new FlowStop({ code: "blocked", reason: "not_current" });
-      username = state.current;
-      outcome = withdrawOutcome(state, username);
+    const offered = status.slots.filter((s) => s.row !== null);
+    const keys = Object.keys(entries);
+    if (keys.length !== offered.length || offered.some((s) => !Object.prototype.hasOwnProperty.call(entries, s.platform) || typeof entries[s.platform] !== "string")) {
+      throw new FlowStop({ code: "state" });
     }
-    if (outcome.kind === "blocked") throw new FlowStop({ code: "blocked", reason: outcome.reason });
+    const list = new Map<string, string>();
+    for (const s of offered) {
+      const u = entries[s.platform]!;
+      if (u === "") continue;
+      if (!s.row!.format.accepts(u)) throw new FlowStop({ code: "username", platform: s.platform });
+      list.set(s.platform, u);
+    }
+    for (const k of state.kept) list.set(k.platform, k.username);
+
+    const rows: ConsequenceRow[] = [];
+    for (const s of status.slots) {
+      const slot: SlotState = s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT);
+      const entry = list.get(s.platform) ?? null;
+      const o = slotOutcome(slot, entry, today);
+      if (o.kind === "blocked") throw new FlowStop({ code: "blocked", reason: "switch_limit", platform: s.platform });
+      if (o.kind === "switch" && slot.switchCount >= WEB_SWITCHES) throw new FlowStop({ code: "blocked", reason: "web_switch_limit", platform: s.platform });
+      if (o.kind === "none") continue;
+      const replaced = o.kind === "switch" || o.kind === "correction" ? (slot.current ?? slot.lastDeclared) : null;
+      rows.push({
+        platform: s.platform,
+        row: s.row,
+        username: o.kind === "withdraw" ? slot.current! : entry!,
+        kind: o.kind,
+        current: slot.current,
+        previous: replaced,
+        switchesLeftAfter: o.kind === "switch" ? MAX_SWITCHES - slot.switchCount - 1 : null,
+        webSwitchesLeftAfter: o.kind === "switch" ? Math.max(0, WEB_SWITCHES - slot.switchCount - 1) : null,
+      });
+    }
+    // The roster rules: no kind on any platform is a record that states nothing.
+    if (rows.length === 0) throw new FlowStop({ code: "blocked", reason: "empty" });
     // Check 6 after the event rules, in the order of the rules.
     if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
-    const left = switchesLeft(state, today);
-    const after = outcome.kind === "switch" ? { ...state, switchDates: [...state.switchDates, today] } : state;
-    return {
-      action: choice.action,
-      username,
-      kind: outcome.kind,
-      switchesLeftAfter: outcome.kind === "switch" ? left - 1 : left,
-      nextSwitchDateAfter: formatDay(nextSwitchDay(after, today)),
-      today: formatDay(today),
-    };
+    const accounts = [...list].map(([platform, username]) => Object.freeze({ platform, username })).sort(byPlatform);
+    return { accounts, rows, firstRecord: state.lastCardProof === null, today: formatDay(today) };
   }
 
   // Step 3: the card signs the declaration code, then prove and submit --------
 
   /**
-   * `confirmedUsername` is the account the consequence showed the cardholder
-   * and they confirmed: the typed one, or for a withdrawal the one the server
-   * reported as current (Consequence.username). The card signs only if it is
-   * the account the declaration code will name.
+   * `confirmed` is the list the consequence showed the cardholder and they
+   * confirmed (Consequence.accounts), in its order. The card signs only if it
+   * is the list the declaration code will name, and only if the list still
+   * does on every platform what was shown, with today's date.
    */
-  async proceed(confirmedUsername: string): Promise<Done> {
+  async proceed(confirmed: readonly Account[]): Promise<Done> {
     this.expect("chosen");
     this.checkIdle();
     const chosen = this.chosen!;
-    if (confirmedUsername !== chosen.username) this.fail({ code: "state" });
-    // Again, with today's date: a choice that is no longer possible is not signed.
+    if (!sameList(confirmed, chosen.accounts)) this.fail({ code: "state" });
+    // Again, with today's date: a list that is no longer possible, or that would do something else, is not signed.
     let again: Consequence;
     try {
-      again = this.consequenceOf(chosen.action === "declare" ? { action: "declare", username: chosen.username } : { action: "withdraw" });
+      again = this.consequenceOf(this.choice!);
     } catch (e) {
       this.fail(toStop(e));
     }
-    if (again.kind !== chosen.kind) this.fail({ code: "state" });
+    if (!sameList(again.accounts, chosen.accounts) || !sameRows(again.rows, chosen.rows)) this.fail({ code: "state" });
     this.checkBackground();
     // The certificate and the CRL, again with today's date: the card may have
     // been read before midnight. No challenge is asked for if they no longer pass.
     this.checkStillValid(this.today());
-    const { action, username } = chosen;
+    const accounts = chosen.accounts;
     this.phaseValue = "signing";
 
     let challenge: unknown;
@@ -804,7 +888,7 @@ export class CardProofFlow {
     this.checkStillValid(today);
     this.progress("challenge");
     const challengeText = challenge as string;
-    const code = await declarationCode(action, this.scope.scopeString, username, challengeText);
+    const code = await declarationCode(this.scopeStringValue, accounts, challengeText);
     this.live();
     // The clock again, right before the card is asked: the server may have
     // held the challenge, and the timer may not have run (a background tab).
@@ -883,10 +967,9 @@ export class CardProofFlow {
     }
     this.progress("proved");
     this.submission = {
-      scope_string: this.scope.scopeString,
+      scope_string: this.scopeStringValue,
       scoped_id: this.status!.scopedId,
-      action,
-      username,
+      accounts: accounts.map((a) => ({ platform: a.platform, username: a.username })),
       challenge: challengeText,
       issuer: cert.issuer.name,
       smt_root: bytesToHex(bytesOfBigint(bg.tree.root, 32)),
@@ -905,7 +988,7 @@ export class CardProofFlow {
     try {
       const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
       this.live();
-      return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, accountCards: accepted.accountCards, kind: accepted.kind });
+      return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, kinds: accepted.kinds });
     } catch (e) {
       this.live();
       // Transient: no answer, rate limited, or a server failure. `crl_stale`
@@ -921,10 +1004,29 @@ export class CardProofFlow {
     }
   }
 
-  private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "accountCards" | "kind">): Done {
+  /**
+   * The card proof is done. What the server says it recorded on each
+   * platform (`kinds`) is compared with what the screen said before the card
+   * signed (Consequence.rows): every difference is a platform in
+   * `mismatches`, for the screen to tell the cardholder (docs/api/card-proof.md
+   * cannot be checked by the device; a server that reported a wrong state, for
+   * example a `correction_date` that made a switch look free, shows here).
+   */
+  private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "kinds">): Done {
     this.phaseValue = "done";
     this.submission = null;
-    return { ...r, date: s.challenge.slice(0, 10), scopedId: s.scoped_id, shortId: shortId(s.scoped_id), username: s.username, record: s };
+    const expected = this.chosen!.rows;
+    return {
+      ...r,
+      expected,
+      mismatches: r.kinds === null ? [] : mismatchesOf(expected, r.kinds),
+      firstRecord: this.chosen!.firstRecord,
+      date: s.challenge.slice(0, 10),
+      scopedId: s.scoped_id,
+      shortId: shortId(s.scoped_id),
+      accounts: s.accounts,
+      record: s,
+    };
   }
 
   /**
@@ -932,30 +1034,29 @@ export class CardProofFlow {
    * this challenge, which no other card proof has. The earlier submission
    * whose answer was lost (no answer in time, a dropped connection) may have
    * reached the server after all. The card's state, asked again, says
-   * whether this card proof's record is in the roster: for a declaration,
-   * `current` is the account and `last_card_proof` is the record's date; for
-   * a withdrawal, `current` is null, `last_declared` is the account and
+   * whether this card proof's record is in the roster: the card's list is
+   * the list submitted (every platform the device knows has the list's
+   * account as `current`, or none where the list has none; every account
+   * kept on a platform it does not know is the list's) and
    * `last_card_proof` is the record's date. Then the card proof is done
-   * (without `seq` and `account_cards`); otherwise the flow stops on the
-   * server's `challenge_used`. The request carries the scoped ID the
-   * submission carried already.
+   * (without `seq`, and without `kinds`: what the server recorded on each
+   * platform is not known); otherwise the flow stops on the server's
+   * `challenge_used`. The request carries the scoped ID the submission
+   * carried already.
    */
   private async foundInCardState(s: Submission, used: ServerError): Promise<Done> {
     let state: CardStateResponse;
     try {
-      state = await requestCardState(this.deps.fetch, s.scope_string, s.scoped_id, this.scope.validUsername, this.today());
+      state = await requestCardState(this.deps.fetch, s.scope_string, s.scoped_id, this.background!.done!.platforms, this.today());
     } catch (e) {
       this.live();
       this.fail(toStop(e));
     }
     this.live();
     const recordDay = parseDay(s.challenge.slice(0, 10));
-    const found =
-      s.action === "declare"
-        ? state.current === s.username && state.lastCardProof === recordDay
-        : state.current === null && state.lastDeclared === s.username && state.lastCardProof === recordDay;
-    if (!found) this.fail(toStop(used));
-    return this.done(s, { seq: null, recordHash: null, accountCards: null, kind: this.chosen!.kind });
+    const now: Account[] = [...[...state.slots].flatMap(([platform, slot]) => (slot.current === null ? [] : [{ platform, username: slot.current }])), ...state.kept].sort(byPlatform);
+    if (state.lastCardProof !== recordDay || !sameList(now, s.accounts)) this.fail(toStop(used));
+    return this.done(s, { seq: null, recordHash: null, kinds: null });
   }
 
   /**
@@ -976,9 +1077,66 @@ export class CardProofFlow {
   }
 }
 
-/** An account other than `u` in every scope's format: what declaring "another account" would be does not depend on which one. */
-function otherThan(u: string): string {
-  return u === "a" ? "b" : "a";
+/** The card's state as the screen shows it, with what the device computes from it on `today`. */
+function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idText: string, today: Day): CardStatus {
+  const slots: SlotStatus[] = [];
+  for (const row of table) {
+    const slot = state.slots.get(row.platform);
+    // A platform of the table without an entry in the card's state is not offered (docs/api/card-proof.md).
+    if (!slot) continue;
+    slots.push({
+      platform: row.platform,
+      row,
+      current: slot.current,
+      lastDeclared: slot.lastDeclared,
+      switchCount: slot.switchCount,
+      correctionDate: slot.correctionDate === null ? null : formatDay(slot.correctionDate),
+      switchesLeft: MAX_SWITCHES - slot.switchCount,
+      webSwitchesLeft: Math.max(0, WEB_SWITCHES - slot.switchCount),
+      correctionToday: slot.correctionDate === today,
+    });
+  }
+  for (const k of state.kept) {
+    slots.push({ platform: k.platform, row: null, current: k.username, lastDeclared: k.username, switchCount: 0, correctionDate: null, switchesLeft: MAX_SWITCHES, webSwitchesLeft: WEB_SWITCHES, correctionToday: false });
+  }
+  slots.sort(byPlatform);
+  return {
+    scopedId: idText,
+    shortId: shortId(idText),
+    lastCardProof: state.lastCardProof === null ? null : formatDay(state.lastCardProof),
+    slots,
+    accounts: slots.flatMap((s) => (s.current === null ? [] : [Object.freeze({ platform: s.platform, username: s.current })])),
+    dailyLimit: dailyLimitReached(state, today),
+    today: formatDay(today),
+    count: state.count,
+    head: state.head,
+  };
+}
+
+/** Two lists with the same accounts in the same order. */
+function sameList(a: readonly Account[], b: readonly Account[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.platform === b[i]!.platform && x.username === b[i]!.username);
+}
+
+/** Two consequences that do the same on every platform. */
+function sameRows(a: readonly ConsequenceRow[], b: readonly ConsequenceRow[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((x, i) => {
+      const y = b[i]!;
+      return x.platform === y.platform && x.username === y.username && x.kind === y.kind && x.switchesLeftAfter === y.switchesLeftAfter && x.webSwitchesLeftAfter === y.webSwitchesLeftAfter;
+    })
+  );
+}
+
+/** The platforms on which the server's kinds and the expected rows differ: kind, account, or presence. */
+function mismatchesOf(expected: readonly ConsequenceRow[], kinds: readonly AcceptedKind[]): string[] {
+  const platforms = [...new Set([...expected.map((r) => r.platform), ...kinds.map((k) => k.platform)])].sort();
+  return platforms.filter((p) => {
+    const e = expected.find((r) => r.platform === p);
+    const k = kinds.find((r) => r.platform === p);
+    return !e || !k || e.kind !== k.kind || e.username !== k.username;
+  });
 }
 
 function toStop(e: unknown): Stop {

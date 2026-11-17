@@ -1,7 +1,7 @@
 // The page's entry point to the card proof engine. Everything a server could
-// otherwise influence is fixed here: the issuer keys and the component's
-// address (target.ts), the scope table's roster, the fetch (same origin
-// only), the clock, the one storage key.
+// otherwise influence is fixed here: the roster whose scope string the card
+// signs, the issuer keys and the component's address (target.ts), the fetch
+// (same origin only), the clock, the one storage key.
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
 import { sameOriginFetch } from "./api.ts";
@@ -10,16 +10,10 @@ import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
-import type { Platform, Roster } from "./platforms.ts";
 import { localStorageStore } from "./storage.ts";
-import { IDLE_LIMIT_MS, ISSUERS } from "./target.ts";
+import { IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
 
-/**
- * Which scope table the page uses. This stage runs the test scope string
- * (`iamreal-test:threads:0`); the production one waits for ADR-0007 to be
- * accepted.
- */
-export const ROSTER: Roster = "test";
+export { ROSTER };
 
 /** Where the build puts bb.js's WebAssembly (vite.config.ts). */
 export const BB_WASM_PATH = "/bb/barretenberg.wasm.gz";
@@ -32,7 +26,6 @@ export function startEngine(onTiming?: (step: string, ms: number) => void): Prov
 }
 
 export function createCardProof(opts: {
-  platform: Platform;
   card: Card;
   /** The page's one engine, from startEngine(). */
   prover: Prover;
@@ -41,27 +34,41 @@ export function createCardProof(opts: {
   onIdle?: FlowDeps["onIdle"];
   onProgress?: FlowDeps["onProgress"];
 }): CardProofFlow {
-  return new CardProofFlow(
-    {
-      roster: ROSTER,
-      issuers: ISSUERS,
-      fetch: sameOriginFetch,
-      clock: () => Date.now(),
-      store: localStorageStore(),
-      card: opts.card,
-      prover: opts.prover,
-      startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmUrl()),
-      onBackgroundStop: opts.onBackgroundStop,
-      onTiming: opts.onTiming,
-      onIdle: opts.onIdle,
-      onProgress: opts.onProgress,
-      idleMs: IDLE_LIMIT_MS,
-    },
-    { platform: opts.platform },
-  );
+  return new CardProofFlow({
+    roster: ROSTER,
+    issuers: ISSUERS,
+    fetch: sameOriginFetch,
+    clock: () => Date.now(),
+    store: localStorageStore(),
+    card: opts.card,
+    prover: opts.prover,
+    startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmUrl()),
+    onBackgroundStop: opts.onBackgroundStop,
+    onTiming: opts.onTiming,
+    onIdle: opts.onIdle,
+    onProgress: opts.onProgress,
+    idleMs: IDLE_LIMIT_MS,
+  });
 }
 
-export { CardProofFlow, FlowStop, IDLE_MS, type Choice, type Consequence, type Stop, type CardRead, type CardStatus, type Done, type Phase, type Progress } from "./flow.ts";
+export {
+  CardProofFlow,
+  FlowStop,
+  IDLE_MS,
+  WEB_SWITCHES,
+  type Choice,
+  type Consequence,
+  type ConsequenceRow,
+  type Stop,
+  type CardRead,
+  type CardStatus,
+  type SlotStatus,
+  type Done,
+  type Phase,
+  type Progress,
+} from "./flow.ts";
+export type { AcceptedKind, PlatformRow } from "./api.ts";
+export type { Account } from "./spec/declaration-code.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
-export { type ClosedPlatform, type OpenPlatform, type Platform, PLATFORMS, SITE_DOMAIN, handle, platformOf } from "./platforms.ts";
+export { SITE_DOMAIN, cardPath, handle, presentationOf } from "./platforms.ts";
 export type { Prover, ThreadMode } from "./prover/prover.ts";

@@ -38,6 +38,10 @@ export function parseScopedId(text: string): bigint | null {
   return id < P ? id : null;
 }
 
+/** The length of the short ID (spec/scoped-id.md). */
+export const SHORT_ID_LENGTH = 10;
+
+/** The first 10 characters of the scoped ID's text form: the card's page names the card by them. */
 export function shortId(text: string): string {
-  return text.slice(0, 6);
+  return text.slice(0, SHORT_ID_LENGTH);
 }

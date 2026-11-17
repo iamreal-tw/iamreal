@@ -55,6 +55,21 @@ mkdirSync(out, { recursive: true });
 const dist = join(out, "dist");
 await build({ root: join(here), configFile: join(web, "vite.config.ts"), mode: "engine", logLevel: "warn", build: { outDir: dist, emptyOutDir: true } });
 
+const SCOPE = "iamreal-test:public:0__________";
+/** The rows each card proof changes (page.ts), the list it signs, and what the server records on each platform. */
+const RUNS: Record<string, string>[] = [{ "test-example": "a-b", threads: "alice" }, { "test-example": "" }];
+const EXPECTED = [
+  {
+    accounts: [
+      { platform: "test-example", username: "a-b" },
+      { platform: "threads", username: "alice" },
+    ],
+    kinds: "test-example first a-b, threads first alice",
+  },
+  { accounts: [{ platform: "threads", username: "alice" }], kinds: "test-example withdraw a-b, threads refresh alice" },
+];
+const kindsText = (kinds: { platform: string; kind: string; username: string }[] | null) => (kinds === null ? "(none)" : kinds.map((k) => `${k.platform} ${k.kind} ${k.username}`).join(", "));
+
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".json": "application/json", ".gz": "application/gzip", ".dat": "application/octet-stream" };
 const b64 = (b: Uint8Array) => Buffer.from(b).toString("base64");
 let failures = 0;
@@ -77,10 +92,10 @@ for (const cfg of configs) {
     cardKeyPkcs8: b64(new Uint8Array(await crypto.subtle.exportKey("pkcs8", world.card.privateKey))),
     pin: "123456",
     issuers: world.issuers.map((i) => ({ name: i.name, modulus: i.modulus.toString(16), bits: i.bits })),
-    runs: [
-      { action: "declare", username: "alice" },
-      { action: "declare", username: "alice" },
-    ],
+    // A first declaration of two accounts, then a list without one of them
+    // (its withdrawal) on the same page load. The fake server keeps a roster
+    // of its own, so the second card proof sees the first.
+    runs: RUNS,
     maxThreads: cfg.maxThreads,
   };
   const unknown: string[] = [];
@@ -154,14 +169,18 @@ for (const cfg of configs) {
   const issuer = world.issuers.find((i) => i.name === cfg.issuer)!;
   const circuit = CIRCUIT_OF_BITS[issuer.bits].circuit;
   for (const [i, r] of report.results.entries()) {
-    check(r.ok, `card proof ${i + 1}: ${r.ok ? `${r.done.kind}, ${r.ms} ms` : JSON.stringify(r.stop)}`);
+    check(r.ok, `card proof ${i + 1}: ${r.ok ? `${kindsText(r.done.kinds)}, ${r.ms} ms` : JSON.stringify(r.stop)}`);
     if (!r.ok) continue;
     check(r.signed === 2 && r.name === "測試用戶", "the card signed twice; the name was read");
     const s = backend.submissions[i]!;
     check(JSON.stringify(s) === JSON.stringify(r.done.record), "the server got the record the page reports");
-    check(s.circuit === CIRCUITS[circuit].vkSha256 && s.issuer === cfg.issuer && s.scope_string === "iamreal-test:threads:0_________", "circuit, issuer and scope string");
+    check(s.circuit === CIRCUITS[circuit].vkSha256 && s.issuer === cfg.issuer && s.scope_string === SCOPE, "circuit, issuer and scope string");
+    const want = EXPECTED[i]!;
+    check(JSON.stringify(s.accounts) === JSON.stringify(want.accounts), `the list, in byte order: ${JSON.stringify(s.accounts)}`);
+    check(kindsText(r.done.kinds) === want.kinds && r.done.mismatches.length === 0, `what the server recorded is what the page said before signing: ${kindsText(r.done.kinds)}`);
     const day = parseChallenge(s.challenge)!;
-    const code = await declarationCode(s.action as "declare", s.scope_string as string, s.username as string, s.challenge as string);
+    // The declaration code of the whole list (spec/declaration-code.md), rebuilt here from the record.
+    const code = await declarationCode(s.scope_string as string, s.accounts as { platform: string; username: string }[], s.challenge as string);
     const pub = [
       ...limbs(issuer.modulus, 120, CIRCUIT_OF_BITS[issuer.bits].limbs),
       BigInt("0x" + s.smt_root),

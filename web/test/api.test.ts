@@ -4,7 +4,7 @@
 // connection. The clock is node:test's mock of setTimeout.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-import { API_TIMEOUT_MS, FILE_TIMEOUT_MS, type Fetch, ServerError, getBytes, requestCardState, requestChallenge } from "../src/api.ts";
+import { API_TIMEOUT_MS, FILE_TIMEOUT_MS, type Fetch, ServerError, getBytes, requestCardState, requestChallenge, requestConfig } from "../src/api.ts";
 import { dayOf } from "../src/spec/date.ts";
 
 const TODAY = dayOf(2026, 11, 16);
@@ -57,7 +57,7 @@ describe("time limits of the requests (src/api.ts)", () => {
 
   test("card-state not answered: no answer after API_TIMEOUT_MS, and the request is aborted", async () => {
     const s = silent();
-    const w = watch(requestCardState(s.fetch, "iamreal-test:threads:0_________", "1".repeat(64), () => true, TODAY));
+    const w = watch(requestCardState(s.fetch, "iamreal-test:public:0__________", "1".repeat(64), [], TODAY));
     await flush();
     mock.timers.tick(API_TIMEOUT_MS - 1);
     await flush();
@@ -107,4 +107,55 @@ describe("time limits of the requests (src/api.ts)", () => {
     const ok: Fetch = async () => new Response(JSON.stringify({ challenge: "x" }), { status: 200 });
     assert.equal(await requestChallenge(ok), "x");
   });
+});
+
+describe("the platform table of config (src/api.ts)", () => {
+  const answer =
+    (body: unknown): Fetch =>
+    async () =>
+      new Response(JSON.stringify(body), { status: 200 });
+  const row = (platform: unknown, username_format: unknown, display_name: unknown = "Name") => ({ platform, display_name, username_format });
+
+  test("the rows read, in order; a row it cannot read is a platform it does not know; fields it does not know ignored", async () => {
+    const c = await requestConfig(
+      answer({
+        crl_max_age_days: 3,
+        extra: true,
+        platforms: [
+          row("aaa", "(a|b)+"),
+          row("test-example", "[a-z0-9-]{1,20}", "Example (no real service)"),
+          { ...row("threads", "[a-z0-9._]{1,30}", "Threads"), more: 1 },
+          row("u-new", "[a-z]{1,5}", "Tab\tname"),
+          "x",
+          row(5, "[a]{1,1}"),
+        ],
+      }),
+    );
+    assert.equal(c.crlMaxAgeDays, 3);
+    assert.deepEqual(
+      c.platforms.map((r) => [r.platform, r.displayName, r.format.text]),
+      [
+        ["test-example", "Example (no real service)", "[a-z0-9-]{1,20}"],
+        ["threads", "Threads", "[a-z0-9._]{1,30}"],
+      ],
+    );
+    assert.equal(c.platforms[1]!.format.accepts("alice.b"), true);
+    assert.equal(c.platforms[1]!.format.accepts("a-b"), false);
+  });
+
+  for (const [label, body] of [
+    ["no table", { crl_max_age_days: 3 }],
+    ["not a list", { crl_max_age_days: 3, platforms: { threads: row("threads", "[a]{1,1}") } }],
+    ["no row", { crl_max_age_days: 3, platforms: [] }],
+    ["no row it can read", { crl_max_age_days: 3, platforms: [row("threads", "[a-z]*")] }],
+    ["out of order", { crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}"), row("test-example", "[a]{1,1}")] }],
+    ["twice", { crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}"), row("threads", "[a]{1,1}")] }],
+    ["twice, once unreadable", { crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}"), row("threads", "a")] }],
+    ["no CRL age", { platforms: [row("threads", "[a]{1,1}")] }],
+    ["a negative CRL age", { crl_max_age_days: -1, platforms: [row("threads", "[a]{1,1}")] }],
+  ] as const) {
+    test(`not read: ${label}`, async () => {
+      await assert.rejects(requestConfig(answer(body)), (e) => e instanceof ServerError && e.code === "malformed_response");
+    });
+  }
 });

@@ -25,7 +25,8 @@ interface Fixture {
   cardKeyPkcs8: string;
   pin: string;
   issuers: { name: "G2" | "G3"; modulus: string; bits: 2048 | 4096 }[];
-  runs: Choice[];
+  /** Per card proof, the rows the cardholder changes (platform: account, "" for none); the others stay as they are. */
+  runs: Record<string, string>[];
   maxThreads?: number;
 }
 
@@ -72,7 +73,6 @@ async function main() {
         startTreeBuilder: () => startTreeBuilder(treeWorkerCount(navigator.hardwareConcurrency ?? 1), wasmPath),
         onTiming,
       },
-      { platform: "threads" },
     );
     const start = performance.now();
     try {
@@ -80,10 +80,12 @@ async function main() {
       // The screen shows the PIN field only after the checks that need no signature.
       await flow.checksDone();
       const status = await flow.confirmCard(fx.pin);
-      // The cardholder picks; the screen shows the consequence's account, and the cardholder confirms it.
-      const consequence = flow.choose(r);
-      const done = await flow.proceed(consequence.username);
-      results.push({ ok: true, name: read.name, status, done, ms: Math.round(performance.now() - start), signed: card.signed.length });
+      // The cardholder edits the list: every platform offered, as it is unless the run changes it.
+      const entries: Choice = Object.fromEntries(status.slots.filter((s) => s.row !== null).map((s) => [s.platform, s.platform in r ? r[s.platform]! : (s.current ?? "")]));
+      // The screen shows the list to be signed, and the cardholder confirms it.
+      const consequence = flow.choose(entries);
+      const done = await flow.proceed(consequence.accounts);
+      results.push({ ok: true, name: read.name, status, consequence, done, ms: Math.round(performance.now() - start), signed: card.signed.length });
     } catch (e) {
       results.push({ ok: false, stop: e instanceof FlowStop ? e.stop : String(e), ms: Math.round(performance.now() - start) });
     }
