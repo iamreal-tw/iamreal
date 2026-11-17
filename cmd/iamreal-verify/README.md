@@ -73,7 +73,7 @@ scope iamreal-test:public:0__________
       SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24
 ```
 
-- 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`daily_limit (3 valid records dated 2026-11-16)`；說明不是規則的輸出）。
+- 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`correction`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`daily_limit (3 valid records dated 2026-11-16)`；說明不是規則的輸出）。
 - 每張卡片列出上次過卡日和現在的清單（每個平台一行，照平台排）；收回了全部帳號的卡片仍然列出，寫 `no account`。
 - 每個帳號是（平台、帳號名稱），照平台再照帳號名稱排，底下是現在在那個平台宣告它的卡片。同一個帳號名稱在兩個平台是兩個帳號。
 
@@ -96,7 +96,7 @@ go test ./cmd/iamreal-verify
 IAMREAL_BB=/path/to/bb go test -tags iamrealtest ./cmd/iamreal-verify   # 加上真證明的端到端測試
 ```
 
-- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的「three records」（一個帳號、空的清冊、一個帳號），檢查文字和 JSON 的輸出、壞掉的檔案、空的名冊、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是 `daily_limit`。
+- `main_test.go`：假的驗證器和假的清冊存檔，跑 `spec/vectors/record.json` 的「three records」（一個帳號、空的清冊、一個帳號），檢查文字和 JSON 的輸出、壞掉的檔案、空的名冊、結束碼；同一張卡片同一天第 4 筆在兩種輸出都是 `daily_limit`；同一天換帳號在兩種輸出都是 `correction`、隔天是 `switch`。
 - `archive_test.go`：`testdata/` 的測試名冊和清冊存檔（見 `testdata/README.md`），用真的存檔和假的驗證器：完整重算和只信索引都是全部有效；拿掉一份清冊（連同索引那一行），用它的紀錄變成 `root`；索引沒跟著改、多一個檔案、索引的樹根改過時，完整重算印出每一個不同、照重建的索引算出結果（結束碼 1），只信索引時照索引回答；沒有索引、索引寫法不對、索引最後沒有 LF 時，完整重算同樣報出不同、算出結果（結束碼 1），只信索引時結束碼 2。
 - `directory_test.go`：2,001 筆的假名冊切成目錄：三個檔、一個檔 1 筆或 1,000 筆、沒有紀錄時都成立，輸出和同一份名冊當成一個檔案時相同；少了中間的檔、第一個檔不滿 1,000 行、最後一個超過 1,000 行、空檔、第一個檔不是從 1 開始時是 `directory`；檔案最後少了 LF、檔案長度對但紀錄排錯時，照名冊檔案的規則報 `line`、`seq`。`heads.jsonl`：沒有、別份名冊的鏈尾、筆數超過、日期重複或倒退、筆數減少、別的寫法、日期不存在、最後沒有 LF，每一種都報出來並附行號，好幾行有問題時每一行都報。
 - `e2e_test.go`：同樣的案例，換成真的驗證器和 `bb`（每一筆的種類見 `testdata/README.md`）。測試的證明是用拋棄式的發證金鑰做的，要經由 `verifier.NewWithIssuers` 注入，這個函式只在建置標籤 `iamrealtest` 下存在（見 `verifier/README.md`「發證金鑰和測試金鑰」），所以要加 `-tags iamrealtest`；沒設 `IAMREAL_BB` 時跳過。另外確認用編進程式的發證金鑰時，三筆都是 `proof`。

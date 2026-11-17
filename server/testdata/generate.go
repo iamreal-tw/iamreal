@@ -76,16 +76,18 @@ type proofSpec struct {
 var proofs = []proofSpec{
 	{"2026-11-20T10:00:00+08:00", "G2", []string{"threads:alice"}, 0, 201, "threads first"},
 	{"2026-11-20T10:05:00+08:00", "G3", []string{"test-example:a-b", "threads:alice"}, 1, 201, "test-example first, threads first"},
-	{"2026-11-20T10:20:00+08:00", "G3", []string{"test-example:a-b", "threads:alice"}, 1, 201, "test-example refresh, threads refresh"},
+	{"2026-11-20T10:20:00+08:00", "G3", []string{"test-example:a-b", "threads:alice_"}, 1, 201, "test-example refresh, threads correction"},
 	{"2026-11-21T09:00:00+08:00", "G3", []string{"test-example:a-b", "threads:bob"}, 1, 201, "test-example refresh, threads switch"},
-	{"2026-11-21T09:30:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example switch, threads switch"},
-	{"2026-11-22T09:00:00+08:00", "G3", []string{"test-example:e-f", "threads:dave"}, 1, 400, "switch_limit"},
-	{"2026-11-22T09:30:00+08:00", "G3", []string{"test-example:c-d"}, 1, 201, "test-example refresh, threads withdraw"},
-	{"2026-11-22T10:00:00+08:00", "G2", []string{}, 0, 201, "threads withdraw"},
-	{"2026-11-22T10:30:00+08:00", "G2", []string{}, 0, 400, "empty"},
-	{"2026-11-22T11:00:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example refresh, threads refresh"},
-	{"2026-11-22T11:30:00+08:00", "G3", []string{}, 1, 201, "test-example withdraw, threads withdraw"},
-	{"2026-11-22T12:00:00+08:00", "G3", []string{"threads:carol"}, 1, 400, "daily_limit"},
+	{"2026-11-21T09:30:00+08:00", "G3", []string{"test-example:c-d", "threads:bob"}, 1, 201, "test-example switch, threads refresh"},
+	{"2026-11-22T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:carol"}, 1, 201, "test-example refresh, threads switch"},
+	{"2026-11-23T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:dave"}, 1, 201, "test-example refresh, threads switch"},
+	{"2026-11-23T10:00:00+08:00", "G2", []string{}, 0, 201, "threads withdraw"},
+	{"2026-11-23T10:30:00+08:00", "G2", []string{}, 0, 400, "empty"},
+	{"2026-11-24T09:00:00+08:00", "G3", []string{"test-example:c-d", "threads:erin"}, 1, 403, "switch_restricted"},
+	{"2026-11-24T09:30:00+08:00", "G3", []string{"test-example:c-d"}, 1, 201, "test-example refresh, threads withdraw"},
+	{"2026-11-24T11:00:00+08:00", "G3", []string{"test-example:c-d", "threads:dave"}, 1, 201, "test-example refresh, threads refresh"},
+	{"2026-11-24T11:30:00+08:00", "G3", []string{}, 1, 201, "test-example withdraw, threads withdraw"},
+	{"2026-11-24T12:00:00+08:00", "G3", []string{"threads:dave"}, 1, 400, "daily_limit"},
 }
 
 // The file e2e_test.go reads.

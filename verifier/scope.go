@@ -41,8 +41,12 @@ type Platform struct {
 	ID string
 	// DisplayName is for screens; the rules do not read it.
 	DisplayName string
-	// ValidUsername checks a username against the platform's format,
-	// matched against the whole value.
+	// UsernameFormat is the `username` format exactly as written in the
+	// table, one character class and one length range, `[…]{m,n}`. The
+	// server sends it to devices (docs/api/card-proof.md, config).
+	UsernameFormat string
+	// ValidUsername checks a username against UsernameFormat, matched
+	// against the whole value. A test checks that the two agree.
 	ValidUsername func(string) bool
 }
 
@@ -59,10 +63,10 @@ var (
 	// roster accepts these and testPlatforms. IDs starting with "test-" are
 	// never added here.
 	productionPlatforms = []Platform{
-		{ID: "threads", DisplayName: "Threads", ValidUsername: threadsUsername},
+		{ID: "threads", DisplayName: "Threads", UsernameFormat: "[a-z0-9._]{1,30}", ValidUsername: threadsUsername},
 	}
 	testPlatforms = []Platform{
-		{ID: "test-example", DisplayName: "Example (no real service)", ValidUsername: testExampleUsername},
+		{ID: "test-example", DisplayName: "Example (no real service)", UsernameFormat: "[a-z0-9-]{1,20}", ValidUsername: testExampleUsername},
 	}
 )
 

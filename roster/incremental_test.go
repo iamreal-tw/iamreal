@@ -121,7 +121,7 @@ func TestCard(t *testing.T) {
 		t.Errorf("no record: %+v", c)
 	}
 	for p, s := range c.Slots {
-		if s.Current != nil || s.LastDeclared != nil || len(s.SwitchDates) != 0 {
+		if s.Current != nil || s.LastDeclared != nil || s.SwitchCount != 0 || s.CorrectionDate != nil {
 			t.Errorf("no record, %s: %+v", p, s)
 		}
 	}
@@ -145,8 +145,9 @@ func TestCard(t *testing.T) {
 	c = x.Card(scope, id)
 	th, te := c.Slots["threads"], c.Slots["test-example"]
 	if th.Current != nil || th.LastDeclared == nil || *th.LastDeclared != "bob" ||
-		!reflect.DeepEqual(th.SwitchDates, []verifier.Date{date(t, "2026-03-02")}) ||
-		te.Current != nil || te.LastDeclared == nil || *te.LastDeclared != "a-b" || len(te.SwitchDates) != 0 ||
+		th.SwitchCount != 1 || th.CorrectionDate == nil || *th.CorrectionDate != date(t, "2026-03-02") ||
+		te.Current != nil || te.LastDeclared == nil || *te.LastDeclared != "a-b" || te.SwitchCount != 0 ||
+		te.CorrectionDate == nil || *te.CorrectionDate != date(t, "2026-03-01") ||
 		c.LastCardProof == nil || *c.LastCardProof != date(t, "2026-03-03") || c.ProofsOnLastDate != 1 {
 		t.Errorf("%+v %+v %+v", c, th, te)
 	}
@@ -163,8 +164,8 @@ func TestCard(t *testing.T) {
 	}) {
 		t.Errorf("kinds %+v", res.Kinds)
 	}
-	th.SwitchDates[0] = 0
-	if x.Card(scope, id).Slots["threads"].SwitchDates[0] != date(t, "2026-03-02") {
+	*th.CorrectionDate = 0
+	if *x.Card(scope, id).Slots["threads"].CorrectionDate != date(t, "2026-03-02") {
 		t.Errorf("Card returned the rules' own slice")
 	}
 }

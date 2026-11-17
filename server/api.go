@@ -18,6 +18,7 @@ const (
 	errMalformed         = "malformed"
 	errScope             = "scope"
 	errPlatform          = "platform"
+	errSwitchRestricted  = "switch_restricted"
 	errChallengeUnknown  = "challenge_unknown"
 	errChallengeUsed     = "challenge_used"
 	errChallengeAttempts = "challenge_attempts"
@@ -137,9 +138,10 @@ type cardState struct {
 
 // slotState is the state of the card's slot on one platform.
 type slotState struct {
-	Current      *string  `json:"current"`
-	LastDeclared *string  `json:"last_declared"`
-	SwitchDates  []string `json:"switch_dates"`
+	Current        *string `json:"current"`
+	LastDeclared   *string `json:"last_declared"`
+	SwitchCount    int     `json:"switch_count"`
+	CorrectionDate *string `json:"correction_date"`
 }
 
 // POST /api/v1/card-state: the state of one card, for every platform, as
@@ -168,18 +170,40 @@ func (s *Server) postCardState(r *http.Request) reply {
 		out.LastCardProof = &d
 	}
 	for p, slot := range card.Slots {
-		st := slotState{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchDates: []string{}}
-		for _, d := range slot.SwitchDates {
-			st.SwitchDates = append(st.SwitchDates, d.String())
+		st := slotState{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
+		if slot.CorrectionDate != nil {
+			d := slot.CorrectionDate.String()
+			st.CorrectionDate = &d
 		}
 		out.Platforms[p] = st
 	}
 	return ok(http.StatusOK, out)
 }
 
-// GET /api/v1/config
+// config is the response of GET /api/v1/config, in the order of
+// docs/api/card-proof.md.
+type config struct {
+	CRLMaxAgeDays int              `json:"crl_max_age_days"`
+	Platforms     []configPlatform `json:"platforms"`
+}
+
+// configPlatform is one row of the roster's platform table
+// (spec/scope.md): a convenience for devices, which every re-verifier can
+// check against the specification.
+type configPlatform struct {
+	Platform       string `json:"platform"`
+	DisplayName    string `json:"display_name"`
+	UsernameFormat string `json:"username_format"`
+}
+
+// GET /api/v1/config: the CRL age bound and the platform table of this
+// roster, in ascending order of platform ID.
 func (s *Server) getConfig(*http.Request) reply {
-	return ok(http.StatusOK, map[string]int{"crl_max_age_days": crlMaxAgeDays})
+	out := config{CRLMaxAgeDays: crlMaxAgeDays, Platforms: []configPlatform{}}
+	for _, p := range verifier.Platforms(s.cfg.Roster) {
+		out.Platforms = append(out.Platforms, configPlatform{p.ID, p.DisplayName, p.UsernameFormat})
+	}
+	return ok(http.StatusOK, out)
 }
 
 // head is the response of GET /api/v1/head.

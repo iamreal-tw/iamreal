@@ -192,6 +192,9 @@ type harness struct {
 	logs   *syncBuffer
 	random io.Reader       // the server's random source; nil means crypto/rand
 	roster verifier.Roster // whose tables; verifier.Test unless a test sets it
+	// acceptRestricted is Config.AcceptRestrictedSwitches; false, the
+	// default, unless a test sets it.
+	acceptRestricted bool
 }
 
 type syncBuffer struct {
@@ -251,7 +254,7 @@ func (h *harness) config() Config {
 		random = rand.Reader
 	}
 	return Config{
-		Roster: h.roster, Store: h.store, CRLDir: crlDir(h.data), Proofs: h.proofs,
+		Roster: h.roster, Store: h.store, CRLDir: crlDir(h.data), Proofs: h.proofs, AcceptRestrictedSwitches: h.acceptRestricted,
 		Now: h.clock.Now, Random: random, Log: slog.New(slog.NewJSONHandler(h.logs, nil)), Version: "test-version",
 	}
 }

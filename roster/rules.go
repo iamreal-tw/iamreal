@@ -22,10 +22,11 @@ const (
 // Kinds of a valid record on one platform (spec/roster-rules.md, "Event
 // rules").
 const (
-	KindFirst    = "first"
-	KindRefresh  = "refresh"
-	KindSwitch   = "switch"
-	KindWithdraw = "withdraw"
+	KindFirst      = "first"
+	KindRefresh    = "refresh"
+	KindCorrection = "correction"
+	KindSwitch     = "switch"
+	KindWithdraw   = "withdraw"
 )
 
 // The bounds of the rules, in days.
@@ -38,10 +39,9 @@ const (
 	// A record's date is no earlier than DateOrderDays before the latest
 	// date among the earlier valid records (check 4).
 	DateOrderDays = 4
-	// At most MaxSwitches switches on a platform in any SwitchWindowDays
-	// days.
-	SwitchWindowDays = 365
-	MaxSwitches      = 2
+	// At most MaxSwitches switches on each platform, for good ("Switches
+	// and corrections"). A correction is not counted.
+	MaxSwitches = 5
 	// At most MaxPerDate valid records of a card have the same date
 	// (check 6).
 	MaxPerDate = 3
@@ -148,7 +148,10 @@ type accountKey struct{ scope, platform, username string }
 type slotState struct {
 	current      *string
 	lastDeclared *string
-	switchDates  []verifier.Date
+	switchCount  int
+	// correctionDate is the date of the slot's last valid first or switch;
+	// nil before the first.
+	correctionDate *verifier.Date
 }
 
 type cardState struct {
@@ -170,7 +173,6 @@ func (cs *cardState) clone() *cardState {
 	}
 	for p, s := range cs.slots {
 		ns := *s
-		ns.switchDates = append([]verifier.Date(nil), s.switchDates...)
 		c.slots[p] = &ns
 	}
 	for d, n := range cs.perDate {
@@ -353,9 +355,10 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 
 // applyEntry applies a record's entry for one platform to the slot of its
 // card on that platform (spec/roster-rules.md, "Event rules"): listed says
-// whether the list has an account u there. It returns the kind and its
-// account, no kind, or blocked. When blocked, the slot is left in some
-// state; the caller drops the whole copy.
+// whether the list has an account u there. The first row of the table that
+// applies gives the kind: first, refresh, correction, switch, or blocked. It
+// returns the kind and its account, no kind, or blocked. When blocked, the
+// slot is left in some state; the caller drops the whole copy.
 func applyEntry(s *slotState, listed bool, u string, d verifier.Date) (kind, account string, blocked bool) {
 	if !listed {
 		if s.current == nil {
@@ -367,24 +370,20 @@ func applyEntry(s *slotState, listed bool, u string, d verifier.Date) (kind, acc
 	}
 	switch {
 	case s.lastDeclared == nil:
-		s.current, s.lastDeclared = &u, &u
+		s.current, s.lastDeclared, s.correctionDate = &u, &u, &d
 		return KindFirst, u, false
 	case *s.lastDeclared == u:
 		s.current = &u
 		return KindRefresh, u, false
+	case s.correctionDate != nil && *s.correctionDate == d:
+		s.current, s.lastDeclared = &u, &u
+		return KindCorrection, u, false
+	case s.switchCount < MaxSwitches:
+		s.current, s.lastDeclared, s.correctionDate = &u, &u, &d
+		s.switchCount++
+		return KindSwitch, u, false
 	}
-	recent := 0
-	for _, w := range s.switchDates {
-		if w >= d.AddDays(-(SwitchWindowDays - 1)) {
-			recent++
-		}
-	}
-	if recent >= MaxSwitches {
-		return "", "", true
-	}
-	s.current, s.lastDeclared = &u, &u
-	s.switchDates = append(s.switchDates, d)
-	return KindSwitch, u, false
+	return "", "", true
 }
 
 // Count returns the number of records applied.
@@ -396,11 +395,16 @@ func (x *Rules) State() *State {
 }
 
 // Slot is the state of a card's slot on one platform (spec/roster-rules.md,
-// "State"). A slot never used has both pointers nil and no switch dates.
+// "State"). A slot never used has every pointer nil and SwitchCount 0.
 type Slot struct {
 	Current      *string
 	LastDeclared *string
-	SwitchDates  []verifier.Date // one per valid switch, in seq order
+	// SwitchCount is the number of valid switches, 0 to MaxSwitches. It
+	// never decreases.
+	SwitchCount int
+	// CorrectionDate is the date of the slot's last valid first or switch:
+	// a change of account dated that date is a correction.
+	CorrectionDate *verifier.Date
 }
 
 // CardState is the state of one card (spec/roster-rules.md, "State"): the
@@ -426,7 +430,11 @@ func (x *Rules) Card(scopeString, scopedID string) CardState {
 	}
 	out := CardState{Slots: map[string]Slot{}}
 	for p, s := range cs.slots {
-		slot := Slot{SwitchDates: append([]verifier.Date(nil), s.switchDates...)}
+		slot := Slot{SwitchCount: s.switchCount}
+		if s.correctionDate != nil {
+			d := *s.correctionDate
+			slot.CorrectionDate = &d
+		}
 		if s.current != nil {
 			u := *s.current
 			slot.Current = &u

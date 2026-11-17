@@ -124,6 +124,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
 	runMirror := fs.Bool("mirror", true, "fetch MOICA's CRLs at start and every hour")
+	acceptRestricted := fs.Bool("accept-restricted-switches", false, "accept the fourth and fifth switch of a slot (switch_restricted); refused by default")
 	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -169,11 +170,13 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	s, err := New(Config{
 		Roster: r, Store: st, CRLDir: crlDir(*data), Proofs: proofs,
 		Now: d.now, Random: rand.Reader, Log: logger, Version: version(),
+		AcceptRestrictedSwitches: *acceptRestricted,
 	})
 	if err != nil {
 		return fail(err)
 	}
-	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "head", s.head, "version", version())
+	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "head", s.head, "version", version(),
+		"accept_restricted_switches", *acceptRestricted)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

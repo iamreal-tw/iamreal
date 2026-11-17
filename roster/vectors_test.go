@@ -115,9 +115,10 @@ type result struct {
 }
 
 type slotOut struct {
-	Current      *string  `json:"current"`
-	LastDeclared *string  `json:"last_declared"`
-	SwitchDates  []string `json:"switch_dates"`
+	Current        *string `json:"current"`
+	LastDeclared   *string `json:"last_declared"`
+	SwitchCount    int     `json:"switch_count"`
+	CorrectionDate *string `json:"correction_date"`
 }
 
 // cardOut is a card of the output, with proofs_on_last_date and slots from
@@ -278,9 +279,10 @@ func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 				co.ProofsOnLastDate = cs.ProofsOnLastDate
 				co.Slots = map[string]slotOut{}
 				for p, slot := range cs.Slots {
-					so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchDates: []string{}}
-					for _, d := range slot.SwitchDates {
-						so.SwitchDates = append(so.SwitchDates, d.String())
+					so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
+					if slot.CorrectionDate != nil {
+						d := slot.CorrectionDate.String()
+						so.CorrectionDate = &d
 					}
 					co.Slots[p] = so
 				}

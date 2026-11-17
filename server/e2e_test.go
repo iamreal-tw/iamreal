@@ -182,21 +182,21 @@ func TestEndToEnd(t *testing.T) {
 		}
 	}
 	recs := h.checkChain()
-	if len(recs) != 9 {
+	if len(recs) != 11 {
 		t.Fatalf("%d records", len(recs))
 	}
 
 	// The state the server answers.
-	never := map[string]any{"current": nil, "last_declared": nil, "switch_dates": []any{}}
+	never := map[string]any{"current": nil, "last_declared": nil, "switch_count": 0.0, "correction_date": nil}
 	g2Card, g3Card := proofs[0].Body.ScopedID, proofs[1].Body.ScopedID
 	for card, want := range map[string]map[string]any{
-		g2Card: {"last_card_proof": "2026-11-22", "proofs_on_last_date": 1.0, "platforms": map[string]any{
+		g2Card: {"last_card_proof": "2026-11-23", "proofs_on_last_date": 1.0, "platforms": map[string]any{
 			"test-example": never,
-			"threads":      map[string]any{"current": nil, "last_declared": "alice", "switch_dates": []any{}},
+			"threads":      map[string]any{"current": nil, "last_declared": "alice", "switch_count": 0.0, "correction_date": "2026-11-20"},
 		}},
-		g3Card: {"last_card_proof": "2026-11-22", "proofs_on_last_date": 3.0, "platforms": map[string]any{
-			"test-example": map[string]any{"current": nil, "last_declared": "c-d", "switch_dates": []any{"2026-11-21"}},
-			"threads":      map[string]any{"current": nil, "last_declared": "carol", "switch_dates": []any{"2026-11-21", "2026-11-21"}},
+		g3Card: {"last_card_proof": "2026-11-24", "proofs_on_last_date": 3.0, "platforms": map[string]any{
+			"test-example": map[string]any{"current": nil, "last_declared": "c-d", "switch_count": 1.0, "correction_date": "2026-11-21"},
+			"threads":      map[string]any{"current": nil, "last_declared": "dave", "switch_count": 3.0, "correction_date": "2026-11-23"},
 		}},
 	} {
 		_, out := h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
@@ -209,7 +209,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// The daily snapshot, with every proof verified again by bb and the
 	// CRL archive rebuilt.
-	if code, stdout, stderr := h.snapshot("2026-11-22"); code != 0 {
+	if code, stdout, stderr := h.snapshot("2026-11-24"); code != 0 {
 		t.Fatalf("snapshot: exit %d\n%s\n%s", code, stdout, stderr)
 	}
 
@@ -249,7 +249,7 @@ func TestEndToEnd(t *testing.T) {
 			want = append(want, p.Result)
 		}
 	}
-	if !report.Valid || report.Head != recs[8].Hash() || !reflect.DeepEqual(kinds, want) {
+	if !report.Valid || report.Head != recs[10].Hash() || !reflect.DeepEqual(kinds, want) {
 		t.Errorf("iamreal-verify: %s\nkinds %q\nwant %q", stdout.String(), kinds, want)
 	}
 	// The same state as the server's.
@@ -270,7 +270,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.proofs = prod
-	if code, _, stderr := h.snapshot("2026-11-23"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("9 invalid record(s)")) {
+	if code, _, stderr := h.snapshot("2026-11-25"); code != snapshotRefused || !bytes.Contains([]byte(stderr), []byte("11 invalid record(s)")) {
 		t.Errorf("MOICA's keys: exit %d\n%s", code, stderr)
 	}
 }

@@ -151,6 +151,46 @@ func TestDailyLimit(t *testing.T) {
 	}
 }
 
+// A change of account on the date of the first is a correction, in both
+// outputs; on a later date it is a switch.
+func TestCorrection(t *testing.T) {
+	records, _, broken := roster.ReadFile(threeRecords(t), verifier.Production)
+	if broken != nil {
+		t.Fatal(broken)
+	}
+	var file []byte
+	prev := verifier.GenesisPrev
+	for i, step := range []struct{ username, date string }{
+		{"alice", "2026-11-16"}, {"bob", "2026-11-16"}, {"carol", "2027-01-01"},
+	} {
+		r := *records[0]
+		r.Seq, r.Prev = uint64(i+1), prev
+		r.Accounts = []verifier.Account{{Platform: "threads", Username: step.username}}
+		r.Challenge = step.date + "." + verifier.EncodeBase32(bytes.Repeat([]byte{byte(i + 1)}, 16))
+		file = append(file, r.Line()...)
+		prev = r.Hash()
+	}
+	code, out, _ := runWith(t, file, allVerify{}, everyRoot{})
+	for _, line := range []string{"  1 valid threads first\n", "  2 valid threads correction\n", "  3 valid threads switch\n"} {
+		if !strings.Contains(out, line) {
+			t.Errorf("no %q in\n%s", line, out)
+		}
+	}
+	if code != exitAllValid {
+		t.Errorf("exit %d", code)
+	}
+	_, out, _ = runWith(t, file, allVerify{}, everyRoot{}, "-json")
+	var got struct {
+		Results []jsonResult `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Results) != 3 || !reflect.DeepEqual(got.Results[1], jsonResult{Seq: 2, Valid: true, Kinds: []jsonKind{{"threads", "correction"}}}) {
+		t.Errorf("%s", out)
+	}
+}
+
 func TestJSONShape(t *testing.T) {
 	_, out, _ := runWith(t, threeRecords(t), allVerify{}, everyRoot{}, "-json")
 	var got struct {

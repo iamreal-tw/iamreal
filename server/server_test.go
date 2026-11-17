@@ -85,7 +85,7 @@ func TestStartRecomputes(t *testing.T) {
 	h := newHarness(t, startOfTests, crl)
 	card := newCard()
 	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
-	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads correction")
 	ask := `{"scope_string":"` + testScope + `","scoped_id":"` + card + `"}`
 	_, before := h.do("POST", "/api/v1/card-state", ask)
 
@@ -94,10 +94,14 @@ func TestStartRecomputes(t *testing.T) {
 	if !reflect.DeepEqual(before, after) || current(after, "threads") != "bob" || current(after, "test-example") != "a-b" {
 		t.Errorf("before %v\nafter %v", before, after)
 	}
-	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:carol"), "test-example refresh, threads switch")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:carol"), "test-example refresh, threads correction")
 	h.wantError(h.sub(newCard(), root), 400, "empty")
 	h.clock.Set(startOfTests.Add(24 * time.Hour))
-	h.wantError(h.sub(card, root, "test-example:a-b", "threads:dave"), 400, "switch_limit")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:dave"), "test-example refresh, threads switch")
+	_, after = h.do("POST", "/api/v1/card-state", ask)
+	if th := after["platforms"].(map[string]any)["threads"].(map[string]any); th["switch_count"] != 1.0 || th["correction_date"] != "2026-11-21" {
+		t.Errorf("after the switch: %v", th)
+	}
 }
 
 // The server does not start on a roster with an invalid record, and says

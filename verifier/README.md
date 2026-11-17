@@ -111,7 +111,7 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 | `PublicInputs(r)`、`EncodePublicInputs` | 從紀錄重建公開輸入、寫成 `bb` 讀的二進位格式 |
 | `ParseChallenge`、`CurrentTime`、`ParseDate` | 題目和日期 |
 | `LookupScope`、`Scopes`、`ScopePacked` | 場合 |
-| `Platforms`、`LookupPlatform` | 平台表（照代號排序）和每個平台的帳號名稱格式 |
+| `Platforms`、`LookupPlatform` | 平台表（照代號排序）：代號、顯示名稱、帳號名稱格式的字串（`UsernameFormat`，和規格的表一字不差，後台的 `config` 送出它）和檢查函式（`ValidUsername`；兩者一致由 `server/api_test.go` 檢查） |
 | `DeclarationCode(scope, accounts, challenge)`、`DeclarationPreimage`、`DeclarationCodePacked` | 宣告碼 |
 | `ParseScopedID`、`ScopedIDText`、`ShortID`、`ReadShortIDInURL` | 匿名編號 |
 | `Issuers`、`AcceptedCircuits`、`LookupCircuit`、`ModulusLimbs` | 編進程式的表 |

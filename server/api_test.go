@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -71,8 +73,16 @@ func TestChallenges(t *testing.T) {
 func TestConfigAndHead(t *testing.T) {
 	h := newHarness(t, startOfTests, g3CRL(t))
 	status, body := h.do("GET", "/api/v1/config", "")
-	if status != 200 || !reflect.DeepEqual(body, map[string]any{"crl_max_age_days": 3.0}) {
+	want := map[string]any{"crl_max_age_days": 3.0, "platforms": []any{
+		map[string]any{"platform": "test-example", "display_name": "Example (no real service)", "username_format": "[a-z0-9-]{1,20}"},
+		map[string]any{"platform": "threads", "display_name": "Threads", "username_format": "[a-z0-9._]{1,30}"},
+	}}
+	if status != 200 || !reflect.DeepEqual(body, want) {
 		t.Errorf("config: %d %v", status, body)
+	}
+	// The keys in the order of the API document.
+	if raw := h.raw("GET", "/api/v1/config", "").Body.String(); !strings.HasPrefix(raw, `{"crl_max_age_days":3,"platforms":[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},`) {
+		t.Errorf("config body %s", raw)
 	}
 	status, body = h.do("GET", "/api/v1/head", "")
 	if status != 200 || body["count"] != 0.0 || body["head"] != verifier.GenesisPrev {
@@ -84,6 +94,102 @@ func TestConfigAndHead(t *testing.T) {
 	if body["count"] != 1.0 || body["head"] != recs[0].Hash() {
 		t.Errorf("head: %v", body)
 	}
+}
+
+// The platform table of config, for each roster: the rows of
+// verifier.Platforms, in ascending order, and every username_format is in
+// the one form of spec/scope.md, `[…]{m,n}`, and accepts exactly what the
+// platform's check function accepts.
+func TestConfigPlatforms(t *testing.T) {
+	for _, r := range []verifier.Roster{verifier.Production, verifier.Test} {
+		h := newHarness(t, startOfTests)
+		h.roster = r
+		h.start()
+		_, body := h.do("GET", "/api/v1/config", "")
+		rows, _ := body["platforms"].([]any)
+		table := verifier.Platforms(r)
+		if len(rows) != len(table) {
+			t.Fatalf("%s: %d rows, the table has %d", r, len(rows), len(table))
+		}
+		for i, row := range rows {
+			m, _ := row.(map[string]any)
+			id, _ := m["platform"].(string)
+			format, _ := m["username_format"].(string)
+			if id != table[i].ID || m["display_name"] != table[i].DisplayName || len(m) != 3 {
+				t.Errorf("%s: row %d is %v", r, i, m)
+			}
+			accept, err := parseUsernameFormat(format)
+			if err != nil {
+				t.Errorf("%s: %s: %q: %v", r, id, format, err)
+				continue
+			}
+			p, _ := verifier.LookupPlatform(r, id)
+			for _, u := range usernameProbes() {
+				if accept(u) != p.ValidUsername(u) {
+					t.Errorf("%s: %q: the format says %v, the check function %v", id, u, accept(u), p.ValidUsername(u))
+				}
+			}
+		}
+	}
+	if _, err := parseUsernameFormat("[a-z]+"); err == nil {
+		t.Errorf("a format outside the form was read")
+	}
+}
+
+// parseUsernameFormat reads the one form of a username format of
+// spec/scope.md, a character class and a length range, `[…]{m,n}`, the way
+// a device would: without a regular expression library. In the class, `x-y`
+// is a range and any other character stands for itself.
+func parseUsernameFormat(f string) (func(string) bool, error) {
+	open, close := strings.IndexByte(f, '['), strings.LastIndexByte(f, ']')
+	if open != 0 || close < 2 {
+		return nil, errors.New("not a character class first")
+	}
+	class := f[1:close]
+	var m, n int
+	if _, err := fmt.Sscanf(f[close+1:], "{%d,%d}", &m, &n); err != nil || fmt.Sprintf("{%d,%d}", m, n) != f[close+1:] || m < 1 || n < m {
+		return nil, errors.New("not a length range")
+	}
+	in := func(c byte) bool {
+		for i := 0; i < len(class); i++ {
+			if i+2 < len(class) && class[i+1] == '-' {
+				if class[i] <= c && c <= class[i+2] {
+					return true
+				}
+				i += 2
+				continue
+			}
+			if class[i] == c {
+				return true
+			}
+		}
+		return false
+	}
+	return func(u string) bool {
+		if len(u) < m || len(u) > n {
+			return false
+		}
+		for i := 0; i < len(u); i++ {
+			if !in(u[i]) {
+				return false
+			}
+		}
+		return true
+	}, nil
+}
+
+// usernameProbes are strings to tell two username checks apart: every
+// single byte, every byte after and before a letter, and runs of a letter
+// around each length limit of spec/scope.md.
+func usernameProbes() []string {
+	out := []string{""}
+	for c := 0; c < 256; c++ {
+		out = append(out, string([]byte{byte(c)}), string([]byte{'a', byte(c)}), string([]byte{byte(c), 'a'}))
+	}
+	for n := 1; n <= 32; n++ {
+		out = append(out, strings.Repeat("a", n), strings.Repeat("-", n), strings.Repeat(".", n))
+	}
+	return out
 }
 
 func TestEveryResponseIsJSONAndNotCached(t *testing.T) {
@@ -123,8 +229,7 @@ func TestNotFoundAndMethod(t *testing.T) {
 	}
 }
 
-// neverUsed is the state of a slot the card never used.
-var neverUsed = map[string]any{"current": nil, "last_declared": nil, "switch_dates": []any{}}
+var neverUsed = map[string]any{"current": nil, "last_declared": nil, "switch_count": 0.0, "correction_date": nil}
 
 func TestCardState(t *testing.T) {
 	crl := g3CRL(t)
@@ -148,17 +253,17 @@ func TestCardState(t *testing.T) {
 	}
 
 	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
+	h.day(1)
 	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch")
-	h.clock.Set(tw(2026, 11, 21, 9, 0, 0))
 	h.mustSubmit(h.sub(card, root, "test-example:a-b"), "test-example refresh, threads withdraw")
 	h.mustSubmit(h.sub(newCard(), root, "threads:alice"), "threads first") // another card
 	recs := h.checkChain()
 	status, body = ask()
 	want = map[string]any{
-		"last_card_proof": "2026-11-21", "proofs_on_last_date": 1.0,
+		"last_card_proof": "2026-11-21", "proofs_on_last_date": 2.0,
 		"platforms": map[string]any{
-			"test-example": map[string]any{"current": "a-b", "last_declared": "a-b", "switch_dates": []any{}},
-			"threads":      map[string]any{"current": nil, "last_declared": "bob", "switch_dates": []any{"2026-11-20"}},
+			"test-example": map[string]any{"current": "a-b", "last_declared": "a-b", "switch_count": 0.0, "correction_date": "2026-11-21"},
+			"threads":      map[string]any{"current": nil, "last_declared": "bob", "switch_count": 1.0, "correction_date": "2026-11-21"},
 		},
 		"count": 4.0, "head": recs[3].Hash(),
 	}
@@ -167,9 +272,19 @@ func TestCardState(t *testing.T) {
 	}
 	// The keys are in the order of the API document.
 	raw := h.raw("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`).Body.String()
-	if !strings.HasPrefix(raw, `{"last_card_proof":"2026-11-21","proofs_on_last_date":1,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_dates":[]},"threads":{"current":null,"last_declared":"bob","switch_dates":["2026-11-20"]}},"count":4,"head":"`) {
+	if !strings.HasPrefix(raw, `{"last_card_proof":"2026-11-21","proofs_on_last_date":2,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-21"},"threads":{"current":null,"last_declared":"bob","switch_count":1,"correction_date":"2026-11-21"}},"count":4,"head":"`) {
 		t.Errorf("body %s", raw)
 	}
+}
+
+// day moves the server's clock to noon of the date n days after
+// startOfTests, and gives the mirror a G3 CRL of that date with the serial
+// numbers of g3CRL: the same root, so it stays one of the two newest, and
+// the newest CRL is never more than 3 days old.
+func (h *harness) day(n int) {
+	h.t.Helper()
+	h.addCRL(makeCRL(h.t, "G3", int64(1+n), crlTime.Add(time.Duration(n)*24*time.Hour), 11, 12))
+	h.clock.Set(startOfTests.Add(time.Duration(n) * 24 * time.Hour))
 }
 
 // A production server answers for the platforms of the production table
@@ -525,26 +640,28 @@ func TestKindsAndAccountCards(t *testing.T) {
 		AccountCards float64 `json:"account_cards"`
 	}
 	steps := []struct {
+		day      int
 		card     string
 		accounts []string
 		want     []kind
 	}{
-		{a, []string{"threads:alice"}, []kind{{"threads", "first", "alice", 1}}},
+		{0, a, []string{"threads:alice"}, []kind{{"threads", "first", "alice", 1}}},
 		// Another card declares the same account, and alice on test-example,
 		// which is another account.
-		{b, []string{"test-example:alice", "threads:alice"}, []kind{{"test-example", "first", "alice", 1}, {"threads", "first", "alice", 2}}},
-		// a leaves alice for bob; alice has one card left.
-		{a, []string{"threads:bob"}, []kind{{"threads", "switch", "bob", 1}}},
+		{0, b, []string{"test-example:alice", "threads:alice"}, []kind{{"test-example", "first", "alice", 1}, {"threads", "first", "alice", 2}}},
+		// The next day, a leaves alice for bob; alice has one card left.
+		{1, a, []string{"threads:bob"}, []kind{{"threads", "switch", "bob", 1}}},
 		// b withdraws alice on threads by leaving it out: the cards that
 		// still declare it.
-		{b, []string{"test-example:alice"}, []kind{{"test-example", "refresh", "alice", 1}, {"threads", "withdraw", "alice", 0}}},
-		// The next day: b withdraws everything.
-		{b, nil, []kind{{"test-example", "withdraw", "alice", 0}}},
-		{a, []string{"test-example:alice", "threads:alice"}, []kind{{"test-example", "first", "alice", 1}, {"threads", "switch", "alice", 1}}},
+		{1, b, []string{"test-example:alice"}, []kind{{"test-example", "refresh", "alice", 1}, {"threads", "withdraw", "alice", 0}}},
+		// The same day, a changes bob again: a correction.
+		{1, a, []string{"threads:carol"}, []kind{{"threads", "correction", "carol", 1}}},
+		{1, b, nil, []kind{{"test-example", "withdraw", "alice", 0}}},
+		{2, a, []string{"test-example:alice", "threads:alice"}, []kind{{"test-example", "first", "alice", 1}, {"threads", "switch", "alice", 1}}},
 	}
 	for i, s := range steps {
-		if i == 4 {
-			h.clock.Set(startOfTests.Add(24 * time.Hour))
+		if s.day > 0 && h.clock.Now().Before(startOfTests.Add(time.Duration(s.day)*24*time.Hour)) {
+			h.day(s.day)
 		}
 		status, out := h.submit(h.sub(s.card, root, s.accounts...))
 		raw, _ := json.Marshal(out["kinds"])
@@ -571,6 +688,8 @@ func TestEmptyAndSwitchLimit(t *testing.T) {
 	crl := g3CRL(t)
 	root := rootOf(t, crl)
 	h := newHarness(t, startOfTests, crl)
+	h.acceptRestricted = true // switch_limit, not the server's policy
+	h.start()
 	card := newCard()
 	state := func() map[string]any {
 		_, out := h.do("POST", "/api/v1/card-state", `{"scope_string":"`+testScope+`","scoped_id":"`+card+`"}`)
@@ -578,29 +697,94 @@ func TestEmptyAndSwitchLimit(t *testing.T) {
 	}
 	// The empty list of a card with no account states nothing.
 	h.wantError(h.sub(card, root), 400, "empty")
-	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
-	h.mustSubmit(h.sub(card, root, "threads:bob"), "threads switch")
-	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:carol"), "test-example first, threads switch")
-	h.clock.Set(tw(2026, 11, 21, 9, 0, 0))
+	h.mustSubmit(h.sub(card, root, "threads:a"), "threads first")
+	// A change on the date of the first is a correction, not counted.
+	h.mustSubmit(h.sub(card, root, "threads:b"), "threads correction")
+	// Five switches on five dates; a correction after the fifth, on its
+	// date, is still free.
+	for i, u := range []string{"c", "d", "e", "f", "g"} {
+		h.day(i + 1)
+		h.mustSubmit(h.sub(card, root, "threads:"+u), "threads switch")
+	}
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:h"), "test-example first, threads correction")
+	if th := state()["platforms"].(map[string]any)["threads"].(map[string]any); th["switch_count"] != 5.0 || th["correction_date"] != "2026-11-25" {
+		t.Errorf("after five switches: %v", th)
+	}
+	h.day(6)
 	before := state()
-	// A third switch on threads blocks the whole record: test-example is
-	// not changed either.
-	h.wantError(h.sub(card, root, "test-example:c-d", "threads:dave"), 400, "switch_limit")
+	// A sixth switch blocks the whole record: test-example is not changed
+	// either.
+	h.wantError(h.sub(card, root, "test-example:c-d", "threads:i"), 400, "switch_limit")
 	if after := state(); !reflect.DeepEqual(before, after) {
 		t.Errorf("a blocked record changed the state:\n%v\n%v", before, after)
 	}
 	// threads left alone (the same account, or none): test-example can
 	// change.
-	h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:carol"), "test-example switch, threads refresh")
+	h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:h"), "test-example switch, threads refresh")
 	h.mustSubmit(h.sub(card, root, "test-example:c-d"), "test-example refresh, threads withdraw")
 	// The empty list withdraws everything; then it is empty again.
 	h.mustSubmit(h.sub(card, root), "test-example withdraw")
-	h.clock.Set(tw(2026, 11, 22, 9, 0, 0))
+	h.day(7)
 	h.wantError(h.sub(card, root), 400, "empty")
-	// Declaring the account a blocked switch tried to leave is a refresh.
-	h.mustSubmit(h.sub(card, root, "threads:carol"), "threads refresh")
-	if recs := h.checkChain(); len(recs) != 7 {
+	// Declaring the account a blocked switch tried to leave is a refresh;
+	// the sixth switch stays blocked.
+	h.mustSubmit(h.sub(card, root, "threads:h"), "threads refresh")
+	h.wantError(h.sub(card, root, "threads:i"), 400, "switch_limit")
+	if recs := h.checkChain(); len(recs) != 12 {
 		t.Errorf("%d records; rejected card proofs must not be appended", len(recs))
+	}
+}
+
+// switch_restricted (docs/api/card-proof.md): refused by default, a record
+// that would use the fourth or fifth switch of a slot is 403 and not
+// appended; the first three, corrections, and every other kind are never
+// refused on this ground. With the policy set to accept, the same records
+// are appended.
+func TestSwitchRestricted(t *testing.T) {
+	for _, accept := range []bool{false, true} {
+		t.Run(fmt.Sprintf("accept=%v", accept), func(t *testing.T) {
+			crl := g3CRL(t)
+			root := rootOf(t, crl)
+			h := newHarness(t, startOfTests, crl)
+			h.acceptRestricted = accept
+			h.start()
+			card := newCard()
+			h.mustSubmit(h.sub(card, root, "threads:a"), "threads first")
+			for i, u := range []string{"b", "c", "d"} { // switches 1 to 3
+				h.day(i + 1)
+				h.mustSubmit(h.sub(card, root, "threads:"+u), "threads switch")
+			}
+			h.mustSubmit(h.sub(card, root, "threads:dd"), "threads correction") // after the third, free
+			h.day(4)
+			// Not a switch on the slot with 3: refresh, withdraw, first
+			// elsewhere.
+			h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:dd"), "test-example first, threads refresh")
+			// A correction on another slot: never refused.
+			h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:dd"), "test-example correction, threads refresh")
+			fourth := h.sub(card, root, "test-example:c-d", "threads:e")
+			if !accept {
+				h.wantError(fourth, 403, "switch_restricted")
+				// The whole list is refused, nothing recorded; the challenge
+				// stays usable, and a list without the switch is accepted.
+				if n := len(h.checkChain()); n != 7 {
+					t.Errorf("%d records", n)
+				}
+				fourth.Accounts = list("test-example:c-d")
+				h.mustSubmit(fourth, "test-example refresh, threads withdraw")
+				h.day(5)
+				h.wantError(h.sub(card, root, "threads:e"), 403, "switch_restricted")
+				// A record the rules refuse gets the rules' code first.
+				h.wantError(h.sub(newCard(), root), 400, "empty")
+				return
+			}
+			h.mustSubmit(fourth, "test-example refresh, threads switch")
+			h.day(5)
+			h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:f"), "test-example refresh, threads switch")
+			h.mustSubmit(h.sub(card, root, "test-example:c-d", "threads:ff"), "test-example refresh, threads correction")
+			h.day(6)
+			// The sixth: the rules' code, whatever the policy.
+			h.wantError(h.sub(card, root, "threads:g"), 400, "switch_limit")
+		})
 	}
 }
 
@@ -616,7 +800,7 @@ func TestDailyLimit(t *testing.T) {
 	h.mustSubmit(h.sub(card, root, "threads:alice"), "threads first")
 	// Records the rules reject do not count.
 	h.wantError(h.sub(newCard(), root), 400, "empty")
-	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch")
+	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads correction")
 	h.mustSubmit(h.sub(card, root, "test-example:a-b"), "test-example refresh, threads withdraw")
 	if out := state(); out["last_card_proof"] != "2026-11-20" || out["proofs_on_last_date"] != 3.0 {
 		t.Errorf("after 3 records: %v", out)

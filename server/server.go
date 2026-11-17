@@ -23,6 +23,13 @@ type Config struct {
 	Random  io.Reader            // the random bytes of challenges; crypto/rand
 	Log     *slog.Logger         // the request log (see log.go)
 	Version string               // the program's version, written in the log
+	// AcceptRestrictedSwitches is the server's operating policy on the
+	// fourth and fifth switch of a slot (switch_restricted,
+	// docs/api/card-proof.md). How a condition of the policy is met is not
+	// defined yet, so it is all or nothing: false, the default, refuses
+	// every record that uses the fourth or fifth switch of a slot; true
+	// accepts every such record the roster rules accept.
+	AcceptRestrictedSwitches bool
 }
 
 // Server answers the card proof API (docs/api/card-proof.md).
