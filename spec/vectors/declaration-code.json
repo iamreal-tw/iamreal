@@ -2,51 +2,174 @@
   "spec": "declaration-code",
   "version": "iamreal-declaration-v1",
   "status": "draft",
+  "note": "`accounts` is the record's list, in its order. `preimage` is the text hashed, lines separated by LF, without a trailing LF. Every case gives a different code.",
   "cases": [
     {
-      "action": "declare",
-      "scope_string": "iamreal:threads:0______________",
-      "username": "alice",
+      "label": "one account (the example of declaration-code.md)",
+      "scope_string": "iamreal:public:0_______________",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
-      "preimage_sha256": "9b84076b83f32dc8a09268bcd704e635fc68ff3f67546440f9e0c47901a5e2f9",
-      "declaration_code": "DKE20ETW3YCPWH84JD2YDE1766QY6HZ",
-      "declaration_code_packed": "0x005a483659513636373145445932444a34384857504359335754453032454b44"
+      "preimage": "iamreal-declaration-v1\niamreal:public:0_______________\nthreads:alice\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "f606189d2a010d759f5fc0ddf11a107881fda579d64616d72cdc5797c9b95e7f",
+      "declaration_code": "DYR31H79A046QB7TZR3EZ26GGF20ZV9",
+      "declaration_code_packed": "0x0039565a303246474736325a4533525a54374251363430413937483133525944"
     },
     {
-      "action": "withdraw",
-      "scope_string": "iamreal:threads:0______________",
-      "username": "alice",
+      "label": "the empty list (the example of declaration-code.md)",
+      "scope_string": "iamreal:public:0_______________",
+      "accounts": [],
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
-      "preimage_sha256": "8659d0ea8159501001ca2eb0a0f1e55c094c3b5108edec1cd10518cc88a442ac",
-      "declaration_code": "DGSCX1TM1B58100EA5TRA1WF5BG4MRE",
-      "declaration_code_packed": "0x0045524d34474235465731415254354145303031383542314d54315843534744"
+      "preimage": "iamreal-declaration-v1\niamreal:public:0_______________\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "e204373495fa14b8fb9f2a07d3c091376ca35f7b26a70a3145219697f1dbcb00",
+      "declaration_code": "DW823ED4NZ8ABHYWZ583X7G4H6XPA6Q",
+      "declaration_code_packed": "0x0051364150583648344737583338355a5759484241385a4e3444453332385744"
     },
     {
-      "action": "declare",
-      "scope_string": "iamreal-test:threads:0_________",
-      "username": "alice",
+      "label": "two accounts, test scope",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "test-example",
+          "username": "a-b"
+        },
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
-      "preimage_sha256": "d8a952fcb7283f1774c4fffa70aeb0f876db1ebf6b61f8d827a11a5617313955",
-      "declaration_code": "DV2MN5Z5Q50ZHEX64ZZX71BNGZ1VDP7",
-      "declaration_code_packed": "0x0037504456315a474e423137585a5a34365845485a303551355a354e4d325644"
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\ntest-example:a-b\nthreads:alice\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "d94a4e6f4ab05489f92c00a285cf24c1ba169aad8324351fb16cd1765a51d4d3",
+      "declaration_code": "DV554WVTAP1A8KY9C02H8BKS4R6X1D6",
+      "declaration_code_packed": "0x0036443158365234534b42384832304339594b38413150415456573435355644"
     },
     {
-      "action": "declare",
-      "scope_string": "iamreal:threads:0______________",
-      "username": "bob_02",
+      "label": "one account fewer: test-example left out",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
       "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
-      "preimage_sha256": "dbb560d6c1f9c3bdaf37cd04fb7647ab864460439713f332e0f247ffcb6f89c0",
-      "declaration_code": "DVETP1NP1Z71VVBSQSM2FPXJ7NE348R",
-      "declaration_code_packed": "0x0052383433454e374a585046324d53515342565631375a31504e315054455644"
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\nthreads:alice\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "de6ad1fd15b8bbcec7a8ea3e6840a3edcd7eff4346420b8a89d5a63f07bf5433",
+      "declaration_code": "DVSND3Z8NQ2XWXHX8X8Z6GG53XQ6QXZ",
+      "declaration_code_packed": "0x005a585136515833354747365a385838584858575832514e385a33444e535644"
     },
     {
-      "action": "declare",
-      "scope_string": "iamreal:threads:0______________",
-      "username": "alice",
+      "label": "one account fewer: threads left out",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "test-example",
+          "username": "a-b"
+        }
+      ],
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\ntest-example:a-b\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "31e96a035a3b3d3e175d2cb96c6c36252f680abbe8fe482135576248b6a9dcbf",
+      "declaration_code": "D67MPM0TT7CYKW5TX5JWPRV1P4MQPG2",
+      "declaration_code_packed": "0x00324750514d345031565250574a35585435574b5943375454304d504d373644"
+    },
+    {
+      "label": "one account more: test-example added",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "test-example",
+          "username": "alice"
+        },
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\ntest-example:alice\nthreads:alice\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "6713277d078c4ab2dbe1c89bb36ffedaf521acbc1ed58faa52aea60f5b1f3324",
+      "declaration_code": "DCW9JEZ87HH5B5PZ1S2DV6VZYVBTJ3B",
+      "declaration_code_packed": "0x0042334a544256595a563656443253315a50354235484837385a454a39574344"
+    },
+    {
+      "label": "the account moved to another platform",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "test-example",
+          "username": "alice"
+        }
+      ],
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\ntest-example:alice\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "036df519b902c0944ce43f66118e1763b83341cd228362370f0fc97840e489c0",
+      "declaration_code": "D0DPZA6DS0B098K747XK133GQCEW36G",
+      "declaration_code_packed": "0x0047363357454351473333314b583734374b3839304230534436415a50443044"
+    },
+    {
+      "label": "the empty list, test scope",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [],
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "30f78f2ccedc33a9b5a4b040d864bb5291eeba0ef656e5071de070e2c915283b",
+      "declaration_code": "D63VRYB6EVGSTKDD4P10DGS5VAA8YXE",
+      "declaration_code_packed": "0x0045585938414156355347443031503444444b54534756453642595256333644"
+    },
+    {
+      "label": "another account",
+      "scope_string": "iamreal:public:0_______________",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "bob_02"
+        }
+      ],
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage": "iamreal-declaration-v1\niamreal:public:0_______________\nthreads:bob_02\n2026-11-16.000G40R40M30E209185GR38E1W",
+      "preimage_sha256": "2e50216d063e60504dc7b6cf24e8e4422d9ded8a1a42396ec32cd3bd3ee189cf",
+      "declaration_code": "D5S822V867SG50KE7PV7J9T7488PSVV",
+      "declaration_code_packed": "0x00565653503838343754394a37565037454b3035475337363856323238533544"
+    },
+    {
+      "label": "another challenge",
+      "scope_string": "iamreal:public:0_______________",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
       "challenge": "2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
-      "preimage_sha256": "c43871331b9267683fab148e11e2d075a9740a5beb72d1bde7ecd836e497a85d",
-      "declaration_code": "DRGW72CRVJ9KPGFXB2J713RPGEPMQ82",
-      "declaration_code_packed": "0x003238514d50454750523331374a3242584647504b394a565243323757475244"
+      "preimage": "iamreal-declaration-v1\niamreal:public:0_______________\nthreads:alice\n2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
+      "preimage_sha256": "bff482b1feff17996bf1a24acf3c685cbee2b4e306e1723ab786712a4cae297c",
+      "declaration_code": "DQZT85CFYZWBSJTZHM95CYF38BJZE5D",
+      "declaration_code_packed": "0x004435455a4a42383346594335394d485a544a5342575a5946433538545a5144"
+    },
+    {
+      "label": "another challenge, two accounts",
+      "scope_string": "iamreal-test:public:0__________",
+      "accounts": [
+        {
+          "platform": "test-example",
+          "username": "a-b"
+        },
+        {
+          "platform": "threads",
+          "username": "alice"
+        }
+      ],
+      "challenge": "2028-02-29.XN3EZGS7BY184KGTFKYAKE4DCW",
+      "preimage": "iamreal-declaration-v1\niamreal-test:public:0__________\ntest-example:a-b\nthreads:alice\n2028-02-29.XN3EZGS7BY184KGTFKYAKE4DCW",
+      "preimage_sha256": "3c20d855c5c62fd91e5eec3ae5506dc8ecea3d6aeca5f5c57e50fbfbf25f8ef8",
+      "declaration_code": "D7GGDGNE5RRQXJ7JYXGXEAM3DS3PEMF",
+      "declaration_code_packed": "0x00464d4550335344334d4145584758594a374a5851525235454e474447473744"
     }
   ]
 }

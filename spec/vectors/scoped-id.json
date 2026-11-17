@@ -1,7 +1,7 @@
 {
   "spec": "scoped-id",
   "status": "draft",
-  "note": "The Poseidon2 hash chain from signature to field element is in poseidon2.json (scoped_id). This file covers the text form and short IDs.",
+  "note": "The Poseidon2 hash chain from signature to field element is in poseidon2.json (scoped_id). This file covers the text form and short IDs. The short ID is the first 10 characters of the text form; `one` and `2^248 + 1` share one, so a short ID may match more than one card.",
   "field_modulus": "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001",
   "encoding": [
     {
@@ -9,35 +9,35 @@
       "field_element": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "bytes_little_endian": "0000000000000000000000000000000000000000000000000000000000000000",
       "scoped_id": "0000000000000000000000000000000000000000000000000000",
-      "short_id": "000000"
+      "short_id": "0000000000"
     },
     {
       "label": "one",
       "field_element": "0x0000000000000000000000000000000000000000000000000000000000000001",
       "bytes_little_endian": "0100000000000000000000000000000000000000000000000000000000000000",
       "scoped_id": "0400000000000000000000000000000000000000000000000000",
-      "short_id": "040000"
+      "short_id": "0400000000"
     },
     {
       "label": "p - 1",
       "field_element": "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000",
       "bytes_little_endian": "000000f093f5e1439170b97948e833285d588181b64550b829a031e1724e6430",
       "scoped_id": "00001W4KYQGM74BGQ5WMHT1K51ENH0C1PS2N1E19M0RY2WJECGR0",
-      "short_id": "00001W"
+      "short_id": "00001W4KYQ"
     },
     {
       "label": "2^248 + 1",
       "field_element": "0x0100000000000000000000000000000000000000000000000000000000000001",
       "bytes_little_endian": "0100000000000000000000000000000000000000000000000000000000000001",
       "scoped_id": "040000000000000000000000000000000000000000000000000G",
-      "short_id": "040000"
+      "short_id": "0400000000"
     },
     {
       "label": "the scoped_id case of poseidon2.json",
       "field_element": "0x10daa0a1eac47bb032508584b93ced526b77d3dd5f30d99fb273cde6987a6cbe",
       "bytes_little_endian": "be6c7a98e6cd73b29fd9305fddd3776b52ed3cb984855032b07bc4eaa1a0da10",
       "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-      "short_id": "QSP7N6"
+      "short_id": "QSP7N676SN"
     }
   ],
   "invalid": [
@@ -88,56 +88,66 @@
   ],
   "short_id_in_urls": [
     {
+      "typed": "QSP7N676SN",
+      "reads_as": "QSP7N676SN"
+    },
+    {
+      "typed": "qsp7n676sn",
+      "reads_as": "QSP7N676SN"
+    },
+    {
+      "typed": "Qsp7N676sN",
+      "reads_as": "QSP7N676SN"
+    },
+    {
+      "typed": "0SP7N676SN",
+      "reads_as": "0SP7N676SN"
+    },
+    {
+      "typed": "oSP7N676SN",
+      "reads_as": "0SP7N676SN"
+    },
+    {
+      "typed": "11P7N676SN",
+      "reads_as": "11P7N676SN"
+    },
+    {
+      "typed": "ILP7N676SN",
+      "reads_as": "11P7N676SN"
+    },
+    {
+      "typed": "iLP7n676sn",
+      "reads_as": "11P7N676SN"
+    },
+    {
+      "typed": "QSP7N676S",
+      "reads_as": null,
+      "reason": "9 characters"
+    },
+    {
+      "typed": "QSP7N676SNS",
+      "reads_as": null,
+      "reason": "11 characters"
+    },
+    {
       "typed": "QSP7N6",
-      "reads_as": "QSP7N6"
-    },
-    {
-      "typed": "qsp7n6",
-      "reads_as": "QSP7N6"
-    },
-    {
-      "typed": "Qsp7N6",
-      "reads_as": "QSP7N6"
-    },
-    {
-      "typed": "0SP7N6",
-      "reads_as": "0SP7N6"
-    },
-    {
-      "typed": "oSP7N6",
-      "reads_as": "0SP7N6"
-    },
-    {
-      "typed": "11P7N6",
-      "reads_as": "11P7N6"
-    },
-    {
-      "typed": "ILP7N6",
-      "reads_as": "11P7N6"
-    },
-    {
-      "typed": "iLP7n6",
-      "reads_as": "11P7N6"
-    },
-    {
-      "typed": "QSP7N",
       "reads_as": null,
-      "reason": "5 characters"
+      "reason": "6 characters (the length of an earlier draft)"
     },
     {
-      "typed": "QSP7N6X",
-      "reads_as": null,
-      "reason": "7 characters"
-    },
-    {
-      "typed": "QSP7NU",
+      "typed": "QSP7N676SU",
       "reads_as": null,
       "reason": "`U`"
     },
     {
-      "typed": "QSP-N6",
+      "typed": "QSP-N676SN",
       "reads_as": null,
       "reason": "`-`"
+    },
+    {
+      "typed": " QSP7N676S",
+      "reads_as": null,
+      "reason": "space"
     }
   ]
 }

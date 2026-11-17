@@ -1,152 +1,301 @@
 {
   "spec": "scope",
   "status": "draft",
+  "note": "`platforms`: the platform IDs each roster accepts, and IDs it does not. `usernames`: each against the format of its platform (spec/scope.md, \"The `username` format\"); test-example is a platform of test rosters only.",
   "scopes": [
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:0______________",
+      "scope_string": "iamreal:public:0_______________",
       "accepted": true,
-      "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f5f5f5f5f303a736461657268743a6c6165726d6169"
+      "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f5f5f5f5f5f303a63696c6275703a6c6165726d6169"
     },
     {
       "roster": "test",
-      "scope_string": "iamreal-test:threads:0_________",
+      "scope_string": "iamreal-test:public:0__________",
       "accepted": true,
-      "scope_packed": "0x005f5f5f5f5f5f5f5f5f303a736461657268743a747365742d6c6165726d6169"
+      "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f303a63696c6275703a747365742d6c6165726d6169"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal-test:threads:0_________",
+      "scope_string": "iamreal-test:public:0__________",
       "accepted": false,
       "reason": "test scope string in the production roster"
     },
     {
       "roster": "test",
-      "scope_string": "iamreal:threads:0______________",
+      "scope_string": "iamreal:public:0_______________",
       "accepted": false,
       "reason": "production scope string in a test roster"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:00_____________",
+      "scope_string": "iamreal:public:00______________",
       "accepted": false,
       "reason": "another spelling of the version"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:Threads:0______________",
+      "scope_string": "iamreal:Public:0_______________",
       "accepted": false,
-      "reason": "uppercase platform"
+      "reason": "uppercase range"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:0_____________",
+      "scope_string": "iamreal:public:0______________",
       "accepted": false,
       "reason": "30 bytes"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:0_______________",
+      "scope_string": "iamreal:public:0________________",
       "accepted": false,
       "reason": "32 bytes"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:1______________",
+      "scope_string": "iamreal:public:1_______________",
       "accepted": false,
       "reason": "not listed"
     },
     {
       "roster": "production",
-      "scope_string": "iamreal:threads:0 _____________",
+      "scope_string": "iamreal:public:0 ______________",
       "accepted": false,
       "reason": "space"
+    },
+    {
+      "roster": "production",
+      "scope_string": "iamreal:threads:0______________",
+      "accepted": false,
+      "reason": "a scope of one platform, from a draft before ADR-0017"
+    },
+    {
+      "roster": "test",
+      "scope_string": "iamreal-test:threads:0_________",
+      "accepted": false,
+      "reason": "a scope of one platform, from a draft before ADR-0017"
+    }
+  ],
+  "platforms": [
+    {
+      "roster": "production",
+      "platform": "threads",
+      "accepted": true,
+      "display_name": "Threads"
+    },
+    {
+      "roster": "test",
+      "platform": "test-example",
+      "accepted": true,
+      "display_name": "Example (no real service)"
+    },
+    {
+      "roster": "test",
+      "platform": "threads",
+      "accepted": true,
+      "display_name": "Threads"
+    },
+    {
+      "roster": "production",
+      "platform": "test-example",
+      "accepted": false,
+      "reason": "a test platform in the production roster"
+    },
+    {
+      "roster": "production",
+      "platform": "Threads",
+      "accepted": false,
+      "reason": "another spelling: uppercase"
+    },
+    {
+      "roster": "production",
+      "platform": "threads_",
+      "accepted": false,
+      "reason": "another spelling: trailing `_`"
+    },
+    {
+      "roster": "production",
+      "platform": "threads ",
+      "accepted": false,
+      "reason": "another spelling: trailing space"
+    },
+    {
+      "roster": "production",
+      "platform": "instagram",
+      "accepted": false,
+      "reason": "not listed"
+    },
+    {
+      "roster": "production",
+      "platform": "",
+      "accepted": false,
+      "reason": "empty"
+    },
+    {
+      "roster": "test",
+      "platform": "Threads",
+      "accepted": false,
+      "reason": "another spelling: uppercase"
+    },
+    {
+      "roster": "test",
+      "platform": "test-other",
+      "accepted": false,
+      "reason": "not listed"
     }
   ],
   "usernames": [
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "alice",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "bob_02",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "a",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "a.b_c",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "0",
       "valid": true
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "Alice",
       "valid": false,
       "reason": "uppercase"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "@alice",
       "valid": false,
       "reason": "`@`"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "",
       "valid": false,
       "reason": "empty"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "valid": false,
       "reason": "31 characters"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "ali ce",
       "valid": false,
       "reason": "space"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "alicé",
       "valid": false,
       "reason": "non-ASCII"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "alice\n",
       "valid": false,
       "reason": "line feed"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
       "username": "ali-ce",
       "valid": false,
       "reason": "`-`"
     },
     {
-      "scope_string": "iamreal:threads:0______________",
+      "platform": "threads",
+      "username": "a-b",
+      "valid": false,
+      "reason": "`-`: valid only on test-example"
+    },
+    {
+      "platform": "threads",
       "username": "ali\"ce",
       "valid": false,
       "reason": "`\"`"
+    },
+    {
+      "platform": "threads",
+      "username": "ali\\ce",
+      "valid": false,
+      "reason": "`\\`"
+    },
+    {
+      "platform": "test-example",
+      "username": "a-b",
+      "valid": true
+    },
+    {
+      "platform": "test-example",
+      "username": "alice",
+      "valid": true
+    },
+    {
+      "platform": "test-example",
+      "username": "aaaaaaaaaaaaaaaaaaaa",
+      "valid": true
+    },
+    {
+      "platform": "test-example",
+      "username": "0-9",
+      "valid": true
+    },
+    {
+      "platform": "test-example",
+      "username": "a.b",
+      "valid": false,
+      "reason": "`.`: valid only on threads"
+    },
+    {
+      "platform": "test-example",
+      "username": "a_b",
+      "valid": false,
+      "reason": "`_`"
+    },
+    {
+      "platform": "test-example",
+      "username": "aaaaaaaaaaaaaaaaaaaaa",
+      "valid": false,
+      "reason": "21 characters"
+    },
+    {
+      "platform": "test-example",
+      "username": "Alice",
+      "valid": false,
+      "reason": "uppercase"
+    },
+    {
+      "platform": "test-example",
+      "username": "",
+      "valid": false,
+      "reason": "empty"
+    },
+    {
+      "platform": "test-example",
+      "username": "a-b\n",
+      "valid": false,
+      "reason": "line feed"
     }
   ]
 }
