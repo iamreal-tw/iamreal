@@ -431,11 +431,22 @@ describe("confirm (step 5)", () => {
     const one = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
     assert.equal(one.listedTogether, false);
     assert.equal(t(one.listedSingle!), "這個 Threads 帳號會公開列在島民證明上。");
+    // The first sentence and the button speak of the account.
+    assert.equal(one.intro, "按下後，名冊會公開記下這張卡片宣告的帳號：");
+    assert.equal(one.button, "宣告這個帳號");
     const more = confirmView(consequence([crow({ kind: "first", username: "alice" })]), null);
     assert.deepEqual([more.listedTogether, more.listedSingle], [true, null]);
-    // Everything withdrawn: neither.
+    assert.deepEqual([more.intro, more.button], ["按下後，名冊會公開記下這張卡片的帳號清單：", "宣告這份清單"]);
+    // Card proof again with one platform: the first sentence of one platform, the button as it is.
+    const again = confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads");
+    assert.deepEqual([again.intro, again.button], ["按下後，名冊會公開記下這張卡片宣告的帳號：", "再次過卡"]);
+    // A switch or declared again: 宣告這個帳號.
+    assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })]), "Threads").button, "宣告這個帳號");
+    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
+    // Everything withdrawn: neither, and the sentence and button of a withdrawal.
     const none = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
     assert.deepEqual([none.listedTogether, none.listedSingle], [false, null]);
+    assert.deepEqual([none.intro, none.button], ["按下後，名冊會公開記下這張卡片不再宣告任何帳號：", "收回所有帳號"]);
   });
 
   test("everything withdrawn: the other first sentence, no listed together, the other second point, the button", () => {
@@ -472,13 +483,13 @@ describe("done (step 6)", () => {
 
   test("the titles", () => {
     const first = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(first, [k("threads", "first", "alice")], { firstRecord: true })).title), "你換到一張島民證明了");
+    assert.equal(t(doneView(done(first, [k("threads", "first", "alice")], { firstRecord: true })).title), "你拿到島民證明了");
     const same = [crow({ kind: "refresh", username: "alice", current: "alice" })];
-    assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民證明更新好了");
+    assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
     const back = [crow({ kind: "refresh", username: "alice", current: null })];
-    assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民證明改好了");
+    assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民證明已更新");
     const sw = [crow({ kind: "switch", username: "carol", current: "alice", previous: "alice", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })];
-    assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明改好了");
+    assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明已更新");
     const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
     assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)])).title), "已全部收回");
     assert.equal(t(doneView(done(same, null)).title), "名冊已經記下這次過卡");
@@ -515,6 +526,15 @@ describe("done (step 6)", () => {
       t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").putLink),
       "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
     );
+  });
+
+  test("the record's line: the list, or with one platform the account", () => {
+    const expected = [crow({ kind: "first", username: "alice" })];
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), null).record!), "有一張有效的自然人憑證宣告了這份帳號清單：");
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").record!), "有一張有效的自然人憑證宣告了這個帳號：");
+    // Everything withdrawn, one platform or not: the line of a withdrawal.
+    const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
+    assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)]), "Threads").record!), "有一張有效的自然人憑證收回了所有帳號的宣告：");
   });
 
   test("the card's first record: the sentence about a new card", () => {

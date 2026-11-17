@@ -506,14 +506,14 @@ export function confirmView(cq: Consequence, single: string | null = null): Conf
     lines: rowSentences(r),
   }));
   return {
-    intro: empty ? c.intro_withdraw_all : c.intro,
+    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_single : c.intro,
     rows,
     date: cq.today,
     withdrawStays: cq.rows.some((r) => r.kind === "withdraw"),
     listedTogether: !empty && single === null,
     listedSingle: !empty && single !== null ? say(c.listed_single, { platform: single }) : null,
     later: (empty ? c.later_withdraw : c.later) + c.permanent,
-    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : c.button_declare,
+    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : single !== null ? c.button_declare_single : c.button_declare,
   };
 }
 
@@ -555,7 +555,7 @@ export interface DoneView {
   newCard: boolean;
   /** An account was withdrawn and the list is not empty: its link can be taken down. */
   withdrawnLink: boolean;
-  /** The roster's line (record_list, record_withdraw_all), or null when the answer's kinds could not be read. */
+  /** The roster's line (record_list, with one platform record_single, record_withdraw_all), or null when the answer's kinds could not be read. */
   record: Sentence | null;
   rows: DoneRecordRow[];
   /** done.kinds_unreadable */
@@ -630,7 +630,7 @@ export function doneView(d: Done, single: string | null = null): DoneView {
     url: `https://${link}`,
     newCard: d.firstRecord,
     withdrawnLink: withdrew && !withdrawAll,
-    record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : t.record_list),
+    record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : single !== null ? t.record_single : t.record_list),
     rows,
     kindsUnreadable: d.kinds === null,
     otherCards: (d.kinds ?? [])

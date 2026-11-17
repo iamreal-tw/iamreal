@@ -838,7 +838,7 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   check(JSON.stringify(rows) === JSON.stringify(want), `${label}: step 5's list ${JSON.stringify(rows)}`);
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
   const empty = button === C.confirm.button_withdraw_all;
-  check(c.intro === (empty ? C.confirm.intro_withdraw_all : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
+  check(c.intro === (empty ? C.confirm.intro_withdraw_all : single !== null ? C.confirm.intro_single : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
   check(c.main.includes(today()) && c.main.includes(C.confirm.short_id_label) && c.main.includes(C.confirm.no_identity) && c.main.includes(C.confirm.permanent), `${label}: step 5, the date, the short ID, that the record has no name, that it cannot be deleted`);
   check(c.listedTogether === (!empty && single === null), `${label}: step 5 ${!empty && single === null ? "says" : "does not say"} the accounts are listed together`);
   const listedSingle = !empty && single !== null ? fill(C.confirm.listed_single, { platform: single }) : "";
@@ -919,7 +919,8 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   } else {
     const rows = v.record.map((r) => [r[0], r[1], r[2]]);
     check(JSON.stringify(rows) === JSON.stringify(o.record), `${o.label}: the record's rows ${JSON.stringify(rows)}`);
-    check(v.main.includes(withdrawAll ? C.done.record_withdraw_all : C.done.record_list), `${o.label}: the record's line`);
+    const recordLine = withdrawAll ? C.done.record_withdraw_all : o.single ? C.done.record_single : C.done.record_list;
+    check(v.main.includes(recordLine), `${o.label}: the record's line "${recordLine}"`);
     const mismatch = v.record.filter((r) => r[3]).map((r) => r[0]);
     const want = (o.mismatch ?? []).map((p) => (p === THREADS ? THREADS_NAME : p === EXAMPLE ? EXAMPLE_NAME : p));
     check(JSON.stringify(mismatch) === JSON.stringify(want) && v.record.every((r) => r[4] === (r[3] ? "kind_mismatch" : "")), `${o.label}: what the server recorded and what step 5 said ${want.length ? "differ on " + want.join(", ") + " (kind_mismatch)" : "are the same"}`);
@@ -2201,12 +2202,14 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", [A.row_unused]] });
   await typeRows({ [THREADS]: "yui" });
   const c = await waitConfirm();
-  checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare, THREADS_NAME);
+  checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare_single, THREADS_NAME);
   check(c.listedSingle === "這個 Threads 帳號會公開列在島民證明上。", `step 5, one platform: "${c.listedSingle}"`);
+  check(c.intro === "按下後，名冊會公開記下這張卡片宣告的帳號：", `step 5, one platform: "${c.intro}"`);
+  check(c.buttons.includes("宣告這個帳號"), `step 5, one platform: the button ${JSON.stringify(c.buttons)}`);
   await screenshot("single-5-confirm");
   await finish({
     label: "one platform",
-    button: C.confirm.button_declare,
+    button: C.confirm.button_declare_single,
     title: C.done.first,
     card: [[THREADS_NAME, at("yui")]],
     record: [[THREADS_NAME, at("yui"), [K.first]]],
@@ -2218,6 +2221,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
     (await page.text("[data-put-link]")) === "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
     `step 6, one platform: "${await page.text("[data-put-link]")}"`,
   );
+  check((await page.text()).includes("有一張有效的自然人憑證宣告了這個帳號："), "step 6, one platform: 有一張有效的自然人憑證宣告了這個帳號：");
 });
 // 6. Storage, connections, policy ---------------------------------------------
 
