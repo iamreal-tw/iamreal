@@ -20,11 +20,13 @@ import {
   READ_ITEMS,
   type Sentence,
   accountsView,
+  beforeView,
   confirmView,
   daysBetween,
   doneView,
   firstNotDone,
   itemStates,
+  onePlatform,
   progressButtons,
   readItemOf,
   rowLines,
@@ -59,7 +61,7 @@ describe("what the page writes per platform, and the scope string", () => {
   });
   test("the card's page and the scope strings: one for the public roster, none per platform", () => {
     assert.equal(SITE_DOMAIN, "iamreal.tw");
-    assert.equal(cardPath("7K2Q9FM4XD"), "card/7K2Q9FM4XD");
+    assert.equal(cardPath("7K2Q9FM4XD"), "p/7K2Q9FM4XD");
     assert.equal(scopeOf("production"), "iamreal:public:0_______________");
     assert.equal(scopeOf("test"), "iamreal-test:public:0__________");
   });
@@ -241,6 +243,7 @@ function status(slots: SlotStatus[], o: Partial<CardStatus> = {}): CardStatus {
     shortId: "7K2Q9FM4XD",
     lastCardProof: "2026-11-04",
     slots,
+    tablePlatforms: slots.filter((s) => s.row !== null).map((s) => s.platform),
     accounts: slots.flatMap((s) => (s.current === null ? [] : [{ platform: s.platform, username: s.current }])),
     dailyLimit: false,
     today: TODAY,
@@ -336,6 +339,29 @@ describe("your accounts (step 4)", () => {
     assert.deepEqual(v.notes, []);
   });
 
+  test("one platform: one platform of the table the device knows, and no account on a platform it does not know", () => {
+    // The platform's name: the device's own, not the server's display name.
+    assert.equal(onePlatform(status([slot(THREADS)])), "Threads");
+    assert.equal(onePlatform(status([declared("alice")])), "Threads");
+    assert.equal(onePlatform(status([slot(EXAMPLE), slot(THREADS)])), null);
+    // An account on a platform the device does not know counts as more than one.
+    assert.equal(onePlatform(status([slot(null, { platform: "test-example", current: "a-b", lastDeclared: "a-b" }), declared("alice")])), null);
+    // The table's platforms count, not the rows the card's state has an entry for.
+    assert.equal(onePlatform(status([slot(THREADS)], { tablePlatforms: ["test-example", "threads"] })), null);
+    assert.equal(onePlatform(status([], { tablePlatforms: [] })), null);
+  });
+
+  test("step 1: by the platforms the device knows; one named, or more listed together", () => {
+    // The production build knows Threads only.
+    const one = beforeView();
+    assert.equal(t(one.oneProof), "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。");
+    assert.equal(one.listedTogether, false);
+    assert.deepEqual(beforeView(new Set(["threads"])), one);
+    const more = beforeView(new Set(["test-example", "threads"]));
+    assert.equal(t(more.oneProof), "一張自然人憑證換一張島民證明，上面列出這張卡片宣告的帳號，每個平台最多一個。");
+    assert.equal(more.listedTogether, true);
+  });
+
   test("days between two dates", () => {
     assert.equal(daysBetween("2026-11-04", "2026-11-16"), 12);
     assert.equal(daysBetween("2025-11-16", "2026-11-16"), 365);
@@ -401,10 +427,22 @@ describe("confirm (step 5)", () => {
     assert.equal(v.listedTogether, true);
   });
 
+  test("one platform: this account is listed on the proof, in place of the accounts listed together", () => {
+    const one = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
+    assert.equal(one.listedTogether, false);
+    assert.equal(t(one.listedSingle!), "這個 Threads 帳號會公開列在島民證明上。");
+    const more = confirmView(consequence([crow({ kind: "first", username: "alice" })]), null);
+    assert.deepEqual([more.listedTogether, more.listedSingle], [true, null]);
+    // Everything withdrawn: neither.
+    const none = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
+    assert.deepEqual([none.listedTogether, none.listedSingle], [false, null]);
+  });
+
   test("everything withdrawn: the other first sentence, no listed together, the other second point, the button", () => {
     const v = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]));
     assert.equal(v.intro, "按下後，名冊會公開記下這張卡片不再宣告任何帳號：");
     assert.equal(v.listedTogether, false);
+    assert.equal(v.listedSingle, null);
     assert.equal(v.withdrawStays, true);
     assert.equal(v.later, "之後可以用同一張卡片再宣告。所有紀錄公開後無法刪除，這樣任何人才能驗證。");
     assert.equal(v.button, "收回所有帳號");
@@ -434,13 +472,13 @@ describe("done (step 6)", () => {
 
   test("the titles", () => {
     const first = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(first, [k("threads", "first", "alice")], { firstRecord: true })).title), "你換到一張島民名片了");
+    assert.equal(t(doneView(done(first, [k("threads", "first", "alice")], { firstRecord: true })).title), "你換到一張島民證明了");
     const same = [crow({ kind: "refresh", username: "alice", current: "alice" })];
-    assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民名片更新好了");
+    assert.equal(t(doneView(done(same, [k("threads", "refresh", "alice")])).title), "島民證明更新好了");
     const back = [crow({ kind: "refresh", username: "alice", current: null })];
-    assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民名片改好了");
+    assert.equal(t(doneView(done(back, [k("threads", "refresh", "alice")])).title), "島民證明改好了");
     const sw = [crow({ kind: "switch", username: "carol", current: "alice", previous: "alice", switchesLeftAfter: 4, webSwitchesLeftAfter: 2 })];
-    assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民名片改好了");
+    assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明改好了");
     const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
     assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)])).title), "已全部收回");
     assert.equal(t(doneView(done(same, null)).title), "名冊已經記下這次過卡");
@@ -449,8 +487,8 @@ describe("done (step 6)", () => {
   test("the card's page is the link; the card lists the list after the record; the rows of the record", () => {
     const expected = [crow({ platform: "test-example", row: EXAMPLE, kind: "first", username: "a-b" }), crow({ kind: "refresh", username: "alice", current: "alice" })];
     const v = doneView(done(expected, [k("test-example", "first", "a-b"), k("threads", "refresh", "alice")]));
-    assert.equal(v.link, "iamreal.tw/card/7K2Q9FM4XD");
-    assert.equal(v.url, "https://iamreal.tw/card/7K2Q9FM4XD");
+    assert.equal(v.link, "iamreal.tw/p/7K2Q9FM4XD");
+    assert.equal(v.url, "https://iamreal.tw/p/7K2Q9FM4XD");
     assert.deepEqual(v.card, [
       { name: EXAMPLE_NAME, account: "a-b", raw: false },
       { name: "Threads", account: "@alice", raw: false },
@@ -467,6 +505,16 @@ describe("done (step 6)", () => {
     assert.equal(v.newCard, false);
     assert.equal(v.withdrawnLink, false);
     assert.deepEqual(v.otherCards, []);
+  });
+
+  test("where to put the link: every account's profile, or with one platform this account's", () => {
+    const expected = [crow({ kind: "first", username: "alice" })];
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")])).putLink), COPY.done.put_link);
+    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), null).putLink), COPY.done.put_link);
+    assert.equal(
+      t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").putLink),
+      "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
+    );
   });
 
   test("the card's first record: the sentence about a new card", () => {
@@ -502,7 +550,7 @@ describe("done (step 6)", () => {
     assert.equal(v.kindsUnreadable, true);
     assert.deepEqual(v.rows, []);
     assert.deepEqual(v.card, [{ name: "Threads", account: "@alice", raw: false }]);
-    assert.equal(v.link, "iamreal.tw/card/7K2Q9FM4XD");
+    assert.equal(v.link, "iamreal.tw/p/7K2Q9FM4XD");
   });
 
   test("the server recorded something else than step 5 said: the server's kind, and the code", () => {

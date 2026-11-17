@@ -7,7 +7,7 @@
 // code alone: `{ code }`.
 import type { AcceptedKind } from "../api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../flow.ts";
-import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
+import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
 import { COPY, type Values, fill } from "./copy.ts";
 
 export interface Sentence {
@@ -267,6 +267,37 @@ export function firstNotDone(states: readonly ItemState[]): number {
   return i < 0 ? states.length - 1 : i;
 }
 
+// One platform -------------------------------------------------------------------------
+
+/**
+ * Whether the screens speak of one platform (design/copy/card-proof.md,
+ * the section on one platform): the server's table has one platform the
+ * device knows, and the card has no account on a platform the device does
+ * not know (one there counts as more than one). The platform's name (the
+ * device's own, src/platforms.ts) if so; null otherwise.
+ */
+export function onePlatform(st: Pick<CardStatus, "tablePlatforms" | "slots">): string | null {
+  if (st.tablePlatforms.length !== 1 || !st.slots.every((sl) => sl.row !== null)) return null;
+  return presentationOf(st.tablePlatforms[0]!)?.name ?? null;
+}
+
+export interface BeforeView {
+  /** before.one_proof, or with one platform before.one_proof_single. */
+  oneProof: Sentence;
+  /** before.listed_together: more than one platform. */
+  listedTogether: boolean;
+}
+
+/**
+ * Step 1. There is no platform table yet, nor the card's accounts: it goes
+ * by the platforms the device has its own definition of (src/platforms.ts).
+ */
+export function beforeView(known: ReadonlySet<string> = KNOWN_PLATFORMS): BeforeView {
+  const c = COPY.before;
+  const only = known.size === 1 ? presentationOf([...known][0]!) : null;
+  return only ? { oneProof: say(c.one_proof_single, { platform: only.name }), listedTogether: false } : { oneProof: say(c.one_proof), listedTogether: true };
+}
+
 // Step 4: the card's list ------------------------------------------------------------
 
 /** Whole days from `from` to `to` (YYYY-MM-DD). */
@@ -448,8 +479,10 @@ export interface ConfirmView {
   date: string;
   /** confirm.withdraw_stays: an account is withdrawn. */
   withdrawStays: boolean;
-  /** confirm.listed_together: the list is not empty. */
+  /** confirm.listed_together: the list is not empty, and the screens speak of more than one platform (onePlatform). */
   listedTogether: boolean;
+  /** confirm.listed_single, in its place: the list is not empty, and the screens speak of one platform. */
+  listedSingle: Sentence | null;
   /** The second point: what can be done later, and that no record can be deleted. */
   later: string;
   button: string;
@@ -460,7 +493,8 @@ function allUnchanged(rows: readonly { kind: string; username: string; current: 
   return rows.every((r) => r.kind === "refresh" && r.current === r.username);
 }
 
-export function confirmView(cq: Consequence): ConfirmView {
+/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status); null otherwise. */
+export function confirmView(cq: Consequence, single: string | null = null): ConfirmView {
   const c = COPY.confirm;
   const empty = cq.accounts.length === 0;
   const rows = cq.rows.map((r) => ({
@@ -476,7 +510,8 @@ export function confirmView(cq: Consequence): ConfirmView {
     rows,
     date: cq.today,
     withdrawStays: cq.rows.some((r) => r.kind === "withdraw"),
-    listedTogether: !empty,
+    listedTogether: !empty && single === null,
+    listedSingle: !empty && single !== null ? say(c.listed_single, { platform: single }) : null,
     later: (empty ? c.later_withdraw : c.later) + c.permanent,
     button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : c.button_declare,
   };
@@ -510,6 +545,8 @@ export interface DoneView {
   mismatch: Sentence | null;
   date: string;
   shortId: string;
+  /** Where to put the link: done.put_link, or with one platform done.put_link_single. */
+  putLink: Sentence;
   /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
   link: string;
   /** The link as it is copied: a whole https:// URL. */
@@ -538,7 +575,8 @@ export function doneTitle(d: Done): Sentence {
   return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
 }
 
-export function doneView(d: Done): DoneView {
+/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
+export function doneView(d: Done, single: string | null = null): DoneView {
   const t = COPY.done;
   const expected = new Map(d.expected.map((r) => [r.platform, r]));
   // A platform step 5 did not show (the server's answer differs) is named as the device knows it.
@@ -587,6 +625,7 @@ export function doneView(d: Done): DoneView {
     mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,
     date: d.date,
     shortId: d.shortId,
+    putLink: single !== null ? say(t.put_link_single, { platform: single }) : say(t.put_link),
     link,
     url: `https://${link}`,
     newCard: d.firstRecord,

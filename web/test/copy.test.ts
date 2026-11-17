@@ -47,6 +47,8 @@ const EXAMPLES: Record<string, string> = {
   step: "2",
   steps: "6",
   domain: SITE_DOMAIN,
+  // The one platform's name, where the screens speak of one platform.
+  platform: "Threads",
   // done.mismatch_expected: the sentences of step 5's row (a switch, and that it is a correction).
   expected: "更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。",
 };

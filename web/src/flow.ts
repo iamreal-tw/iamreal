@@ -262,6 +262,8 @@ export interface CardStatus {
    * know; in ascending order of platform.
    */
   slots: SlotStatus[];
+  /** The platforms of the server's table the device knows (a row it can read, and a definition of its own), in ascending order. */
+  tablePlatforms: string[];
   /** The card's list now: the `current` of every slot that has one, in ascending order of platform. */
   accounts: Account[];
   /**
@@ -1148,6 +1150,7 @@ function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idTex
     shortId: shortId(idText),
     lastCardProof: state.lastCardProof === null ? null : formatDay(state.lastCardProof),
     slots,
+    tablePlatforms: table.map((r) => r.platform),
     accounts: slots.flatMap((s) => (s.current === null ? [] : [Object.freeze({ platform: s.platform, username: s.current })])),
     dailyLimit: dailyLimitReached(state, today),
     today: formatDay(today),

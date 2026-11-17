@@ -47,7 +47,8 @@
 //    the one step 6 showed last. Then other cards: two cards declaring the
 //    same account (還有別的卡片也宣告了), an answer whose kinds cannot be read
 //    (名冊已經記下這次過卡), and an answer lost after the server appended the
-//    record (challenge_used, then the card's state shows the list).
+//    record (challenge_used, then the card's state shows the list); a
+//    platform table with Threads only (steps 5 and 6 name the one platform).
 // 6. Checks the response headers, that the page is cross-origin isolated,
 //    that no Content-Security-Policy was violated, that the page and its
 //    workers connected to nothing but their own origin (the component's
@@ -55,16 +56,18 @@
 //    and nothing else; that the PIN is in no field, attribute, storage or
 //    global after it was used, and neither are the name, the certificates
 //    and the card's signatures once a card proof was left.
+// 7. Opens the production build at step 1 (nothing clicked): it knows
+//    Threads only, so step 1 names the one platform.
 //
 // The browser resolves no host name but localhost and 127.0.0.1
 // (--host-resolver-rules): the preview's new tab, on the platform's
 // address, gets no further than its name.
 import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { type AddressInfo, createServer as netServer } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../../src/platforms.ts";
@@ -595,6 +598,8 @@ interface ConfirmSeen {
   buttons: string[];
   main: string;
   listedTogether: boolean;
+  /** With one platform, the sentence in place of listed together; "" if none. */
+  listedSingle: string;
   withdrawStays: boolean;
 }
 
@@ -615,6 +620,7 @@ async function waitConfirm(): Promise<ConfirmSeen> {
     buttons: await buttonTexts(),
     main: await page.text(),
     listedTogether: await page.eval<boolean>(`!!document.querySelector('[data-step="confirm"] [data-listed-together]')`),
+    listedSingle: await page.text(`[data-step="confirm"] [data-listed-single]`),
     withdrawStays: await page.eval<boolean>(`!!document.querySelector('[data-withdraw-stays]')`),
   };
 }
@@ -643,11 +649,11 @@ async function waitDoneOrMessage(): Promise<{ done: boolean; main: string; messa
 const screens = join(out, "screens");
 mkdirSync(screens);
 /** The whole page, as tall as it is. */
-async function screenshot(name: string): Promise<void> {
-  const m = await page.send("Page.getLayoutMetrics");
+async function screenshot(name: string, p: Page = page): Promise<void> {
+  const m = await p.send("Page.getLayoutMetrics");
   const h = Math.ceil(m.cssContentSize?.height ?? m.contentSize.height);
   const w = Math.ceil(m.cssLayoutViewport?.clientWidth ?? 1100);
-  const { data } = await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: w, height: h, scale: 1 } });
+  const { data } = await p.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: w, height: h, scale: 1 } });
   writeFileSync(join(screens, `${name}.png`), Buffer.from(data, "base64"));
 }
 
@@ -699,6 +705,8 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   await waitStep("before", "step 1");
   const s1 = await page.text();
   for (const s of [C.before.title, C.before.prepare_card, C.before.citizens_only, C.before.one_proof, C.before.listed_together, C.before.why_physical, C.before.how_to_get]) check(s1.includes(s), `step 1 says "${s}"`);
+  // The test build knows two platforms (test-example and threads): step 1 does not speak of one.
+  check((await page.text("[data-one-proof]")) === C.before.one_proof, `step 1: the test build knows more than one platform: "${await page.text("[data-one-proof]")}"`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="before"] details [data-listed-together]')`)), "step 1: that the accounts are listed together is not in a question to open");
   check((await whereText()).includes(stepLine(1)), `step 1: "${await whereText()}"`);
   check((await page.text("header")) === C.common.service_name, `the header: the mark and "${C.common.service_name}"`);
@@ -821,15 +829,20 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "de
   check(JSON.stringify(st.buttons.filter((b) => b !== C.accounts.preview)) === JSON.stringify([C.common.next, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
 }
 
-/** Step 5: the whole list to be signed, each row's platform name and ID and what happens; the buttons. */
-function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, name: string, account: string, kinds: string[]][], button: string): void {
+/**
+ * Step 5: the whole list to be signed, each row's platform name and ID and what happens; the buttons.
+ * `single`: the one platform's name, when the screens speak of one platform.
+ */
+function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, name: string, account: string, kinds: string[]][], button: string, single: string | null = null): void {
   const rows = c.rows.map((r) => [r.platform, r.name, r.account, r.kinds]);
   check(JSON.stringify(rows) === JSON.stringify(want), `${label}: step 5's list ${JSON.stringify(rows)}`);
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
   const empty = button === C.confirm.button_withdraw_all;
   check(c.intro === (empty ? C.confirm.intro_withdraw_all : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
   check(c.main.includes(today()) && c.main.includes(C.confirm.short_id_label) && c.main.includes(C.confirm.no_identity) && c.main.includes(C.confirm.permanent), `${label}: step 5, the date, the short ID, that the record has no name, that it cannot be deleted`);
-  check(c.listedTogether === !empty, `${label}: step 5 ${empty ? "does not say" : "says"} the accounts are listed together`);
+  check(c.listedTogether === (!empty && single === null), `${label}: step 5 ${!empty && single === null ? "says" : "does not say"} the accounts are listed together`);
+  const listedSingle = !empty && single !== null ? fill(C.confirm.listed_single, { platform: single }) : "";
+  check(c.listedSingle === listedSingle, `${label}: step 5 ${listedSingle ? `says "${listedSingle}"` : "does not say this one account is listed"} ("${c.listedSingle}")`);
   check(c.withdrawStays === want.some((r) => r[3].includes(C.kinds.withdraw)), `${label}: step 5, that a withdrawn account's records stay`);
   check(c.main.includes(empty ? C.confirm.later_withdraw : C.confirm.later), `${label}: step 5, what can be done later`);
   check(JSON.stringify(c.buttons) === JSON.stringify([C.common.back, button, C.common.cancel]), `${label}: step 5 buttons ${JSON.stringify(c.buttons)}`);
@@ -844,6 +857,10 @@ interface DoneSeen {
   withdrawnLink: boolean;
   otherCards: string[];
   kindsUnreadable: boolean;
+  /** Where to put the link (done.put_link or done.put_link_single); "" if none. */
+  putLink: string;
+  /** The points under what the roster recorded. */
+  points: string[];
   main: string;
 }
 
@@ -860,6 +877,8 @@ const doneSeen = async (): Promise<DoneSeen> => ({
     withdrawnLink: !!document.querySelector('[data-withdrawn-link]'),
     otherCards: [...document.querySelectorAll('[data-other-cards]')].map((e) => e.innerText),
     kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
+    putLink: document.querySelector('[data-put-link]')?.innerText ?? "",
+    points: [...document.querySelectorAll('[data-step="done"] ul.three li')].map((e) => e.innerText),
   })`)),
   main: await page.text(),
 });
@@ -876,6 +895,8 @@ interface DoneExpected {
   otherCards?: string[];
   /** Platforms whose recorded kind is not what step 5 said: the code kind_mismatch under them. */
   mismatch?: string[];
+  /** The one platform's name, when the screens speak of one platform. */
+  single?: string;
 }
 
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
@@ -884,10 +905,15 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(v.title === o.title, `${o.label}: step 6's title "${v.title}"`);
   const withdrawAll = o.card.length === 0;
   check(JSON.stringify(v.card) === JSON.stringify(o.card), `${o.label}: the card lists ${JSON.stringify(v.card)}`);
-  const sid = /^iamreal\.tw\/card\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
+  const sid = /^iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
   check(withdrawAll ? v.link === "" : v.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${v.link}`);
   check(v.main.includes(C.done.recorded) && v.main.includes(today()) && v.main.includes(C.done.trust) && v.main.includes(C.done.unplug), `${o.label}: step 6, the roster's line, its date, that anyone can verify, unplug`);
   check(v.main.includes(C.done.advice) === !withdrawAll && v.main.includes(C.done.put_up) === !withdrawAll, `${o.label}: the advice to come back and how to put it up ${withdrawAll ? "are not there" : "are there"}`);
+  const putLink = withdrawAll ? "" : o.single ? fill(C.done.put_link_single, { platform: o.single }) : C.done.put_link;
+  check(v.putLink === putLink, `${o.label}: where to put the link "${v.putLink}"`);
+  // The points: the advice and that a renamed account comes back, when the list is not empty; then that anyone can verify.
+  const points = [...(withdrawAll ? [] : [C.done.advice, C.done.renamed]), `${C.done.trust} ${C.links.verify}`];
+  check(JSON.stringify(v.points) === JSON.stringify(points), `${o.label}: step 6's points ${JSON.stringify(v.points)}`);
   if (o.record === null) {
     check(v.kindsUnreadable && v.record.length === 0 && !v.main.includes(C.done.record_list), `${o.label}: the kinds could not be read: the date and that sentence only`);
   } else {
@@ -1059,7 +1085,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.getAttribute("href") + " " + a.target + " " + a.rel)`);
   check(
     hrefs.includes("/help.html?topic=proof _blank noopener noreferrer") && hrefs.includes("/help.html?topic=verify _blank noopener noreferrer"),
-    `step 6: 打開這張島民名片 and 怎麼驗證 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
+    `step 6: 打開這張島民證明 and 怎麼驗證 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
   );
   check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero svg.logo-animated')`), "step 6: the mark's animation");
 });
@@ -2154,6 +2180,45 @@ await tryStep("the answer to the submission lost, the record appended: 再試一
     await undo();
   }
 });
+
+// The server's table with Threads only (the first release's), and a card with no account
+// elsewhere: steps 5 and 6 speak of one platform, by its name. (Step 1 of this build still
+// speaks of more than one: it goes by the platforms the build knows, test-example and threads;
+// the production build's step 1 is checked last.)
+const single = await makeCard({ serial: "0a90567890abcdef1234567890abcdef" });
+await tryStep("the platform table with Threads only: steps 5 and 6 speak of one platform", async () => {
+  component.card = single.spec();
+  const seenConfig: any[] = [];
+  const undoConfig = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)), seenConfig);
+  let st: AccountsSeen;
+  try {
+    st = await toAccounts();
+  } finally {
+    await undoConfig();
+  }
+  check(seenConfig.length === 1, "the config was read once, and changed on its way");
+  check(st.state === "never", `a new card: ${st.state}`);
+  checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", [A.row_unused]] });
+  await typeRows({ [THREADS]: "yui" });
+  const c = await waitConfirm();
+  checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare, THREADS_NAME);
+  check(c.listedSingle === "這個 Threads 帳號會公開列在島民證明上。", `step 5, one platform: "${c.listedSingle}"`);
+  await screenshot("single-5-confirm");
+  await finish({
+    label: "one platform",
+    button: C.confirm.button_declare,
+    title: C.done.first,
+    card: [[THREADS_NAME, at("yui")]],
+    record: [[THREADS_NAME, at("yui"), [K.first]]],
+    newCard: true,
+    single: THREADS_NAME,
+    screenshots: "single",
+  });
+  check(
+    (await page.text("[data-put-link]")) === "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
+    `step 6, one platform: "${await page.text("[data-put-link]")}"`,
+  );
+});
 // 6. Storage, connections, policy ---------------------------------------------
 
 await tryStep("storage", async () => {
@@ -2333,6 +2398,57 @@ await tryStep("a page on another site opens this page (Cross-Origin-Opener-Polic
     component.hold = null;
     off();
     component.pages = null;
+  }
+});
+
+// The production build's step 1: it knows Threads only, and there is no platform table yet, so
+// step 1 goes by that: the one platform named, and nothing about accounts listed together. The
+// page is served from a plain local server with the page's headers and opened to step 1 only:
+// nothing is clicked, and any request to MOICA's component (the real one's address) is failed
+// and counted (there should be none).
+await tryStep("the production build's step 1: one platform, named", async () => {
+  const prodDist = join(out, "dist-production");
+  await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "production", logLevel: "warn", build: { outDir: prodDist, emptyOutDir: true } });
+  const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".json": "application/json", ".svg": "image/svg+xml" };
+  const site = createServer((req, res) => {
+    const path = new URL(req.url ?? "/", "http://x").pathname;
+    const file = join(prodDist, path === "/" ? "index.html" : path);
+    let body: Buffer;
+    try {
+      if (!file.startsWith(prodDist)) throw new Error("outside");
+      body = readFileSync(file);
+    } catch {
+      res.writeHead(404).end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": types[extname(file)] ?? "application/octet-stream", "Content-Security-Policy": CONTENT_SECURITY_POLICY, ...ISOLATION_HEADERS, ...OPENER_HEADERS }).end(body);
+  });
+  await new Promise<void>((r) => site.listen(0, "127.0.0.1", r));
+  const prodUrl = `http://localhost:${(site.address() as AddressInfo).port}/`;
+  const prod = await browser.newPage();
+  const componentRequests: string[] = [];
+  const off = browser.on((m, p, s) => {
+    if (m !== "Fetch.requestPaused" || s !== prod.sessionId) return;
+    componentRequests.push(p.request.url);
+    void prod.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
+  });
+  try {
+    await prod.send("Page.enable");
+    await prod.send("Fetch.enable", { patterns: [{ urlPattern: "http://localhost:61161/*" }, { urlPattern: "http://127.0.0.1:61161/*" }] });
+    await prod.goto(prodUrl);
+    await prod.waitFor(step("before"), "the production build's step 1");
+    const oneProof = await prod.text("[data-one-proof]");
+    check(oneProof === fill(C.before.one_proof_single, { platform: THREADS_NAME }), `the production build's step 1: "${oneProof}"`);
+    check(oneProof === "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。", "the production build's step 1 names Threads");
+    check(!(await prod.eval<boolean>(`!!document.querySelector('[data-listed-together]')`)) && !(await prod.text()).includes(C.before.listed_together), "the production build's step 1 does not say the accounts are listed together");
+    await prod.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
+    await screenshot("single-1-before", prod);
+    await sleep(1000);
+    check(componentRequests.length === 0, `the production build's step 1 asked nothing of the component ${JSON.stringify(componentRequests)}`);
+  } finally {
+    off();
+    await browser.send("Target.closeTarget", { targetId: prod.targetId }).catch(() => undefined);
+    await new Promise((r) => site.close(r));
   }
 });
 
