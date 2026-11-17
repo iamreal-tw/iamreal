@@ -4,8 +4,17 @@ Status: **Draft**.
 
 The scoped ID identifies one card within one scope. Only the cardholder can
 compute it: it is derived from the card's signature over the scope string
-(ADR-0002). The same card has unrelated scoped IDs in different scopes. The
-roster is keyed on (`scope_string`, `scoped_id`).
+(ADR-0002). The same card has unrelated scoped IDs in different scopes.
+
+The public roster is one scope, shared by every public platform (ADR-0017):
+there a card has one scoped ID, the same on every platform, and the accounts
+it declares on different platforms are listed under that one ID. The
+platform is not an input of the computation below. Only the scopes of other
+services (scope strings starting with `S`, [`scope.md`](scope.md)) give the
+card other, unrelated scoped IDs.
+
+The roster's state is keyed on (`scope_string`, `scoped_id`) for a card, and
+on the platform within it for a slot ([`roster-rules.md`](roster-rules.md)).
 
 The algorithm does not change after launch (ADR-0012). Changing it would
 give every card a new scoped ID and void every slot already declared.
@@ -124,8 +133,10 @@ short_id = first 6 characters of the text form
 ```
 
 30 bits, used only in URLs to point at one card on an account's badge page.
-It is not unique across the roster. How pages resolve two cards with the
-same short ID on one account is outside this document.
+An account is a platform and a `username` ([`scope.md`](scope.md)); a card
+has the same short ID on every platform. It is not unique across the
+roster. How pages resolve two cards with the same short ID on one account is
+outside this document.
 
 In URLs, short IDs are read case-insensitively, with `O` read as `0` and `I`
 and `L` as `1`. After this mapping a short ID is exactly 6 characters of the

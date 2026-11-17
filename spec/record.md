@@ -20,7 +20,7 @@ Not stored, because each is computed:
 
 | Value | Computed from |
 |---|---|
-| Declaration code | `action`, `scope_string`, `username`, `challenge` ([`declaration-code.md`](declaration-code.md)) |
+| Declaration code | `action`, `scope_string`, `platform`, `username`, `challenge` ([`declaration-code.md`](declaration-code.md)) |
 | `current_time` | The date in `challenge` ([`challenge.md`](challenge.md)) |
 | Date of the event | The date in `challenge` |
 | Issuer modulus | `issuer` (table below) |
@@ -28,7 +28,7 @@ Not stored, because each is computed:
 
 The time the server received the event is not stored either. Nothing proves
 it, and minute-level times would make it easier to link one person's records
-across scopes.
+across scopes (the public roster and the scopes of other services).
 
 **Every record has exactly one spelling.** Each line of a roster file is a
 fixed template with the field values filled in. Each value has exactly one
@@ -44,7 +44,8 @@ line can be read in two ways.
 | `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
 | `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
 | `action` | `declare` or `withdraw` |
-| `username` | The `username` format of the record's scope ([`scope.md`](scope.md)) |
+| `platform` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
+| `username` | The `username` format of the record's `platform` ([`scope.md`](scope.md)) |
 | `challenge` | 37 characters, in the one accepted spelling ([`challenge.md`](challenge.md)) |
 | `issuer` | `G2` or `G3` |
 | `smt_root` | 64 lowercase hex digits, a big-endian integer below the field modulus `p` ([`scoped-id.md`](scoped-id.md)) |
@@ -58,13 +59,20 @@ Every format is printable ASCII without `"`, `\` or any control character.
 A record is one line:
 
 ```
-{"seq":SEQ,"prev":"PREV","scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","action":"ACTION","username":"USERNAME","challenge":"CHALLENGE","issuer":"ISSUER","smt_root":"SMT_ROOT","circuit":"CIRCUIT","proof":"PROOF"}
+{"seq":SEQ,"prev":"PREV","scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","action":"ACTION","platform":"PLATFORM","username":"USERNAME","challenge":"CHALLENGE","issuer":"ISSUER","smt_root":"SMT_ROOT","circuit":"CIRCUIT","proof":"PROOF"}
 ```
 
 followed by one `LF` (`0x0A`). The upper-case placeholders are replaced by
 the field values; nothing else changes. The keys are in this order, there is
 no whitespace and no escape sequence. This is valid JSON, but parsing it as
 JSON is not enough to check it.
+
+`platform` stands just before `username`: the two together name the account
+(ADR-0017). The platform is a field of the record, not a part of
+`scope_string`, and not a default: a line without it, or with it in another
+place, is malformed. Checking `username` needs `platform` first, because
+the format depends on it; a `username` that fits another platform's format
+but not its own makes the line malformed.
 
 **Check a line** by parsing it in any way, checking every value against the
 table, then writing the line again from the template and comparing bytes:
@@ -133,13 +141,15 @@ with more records it is refused, so that a date's line never changes.
 ```
 preimage    = "iamreal-record-v1" LF
               seq LF prev LF scope_string LF scoped_id LF action LF
-              username LF challenge LF issuer LF smt_root LF circuit LF
-              proof
+              platform LF username LF challenge LF issuer LF smt_root LF
+              circuit LF proof
 record_hash = SHA-256(preimage), written as 64 lowercase hex digits
 ```
 
 - `LF` is the byte `0x0A`; there is no trailing `LF`. Every field is written
   exactly as in the line.
+- The fields are in the order of the line, all twelve of them. `platform`
+  is part of the hash like every other field.
 - No field contains `LF`, so the preimage splits back into the fields in only
   one way.
 
@@ -180,9 +190,18 @@ re-verifying, then:
    - `nullifier`: the field element decoded from `scoped_id`;
    - `scope_packed`: `scope_string` packed as in [`scope.md`](scope.md);
    - `declaration_code_packed`: the declaration code recomputed from the
-     record, packed the same way.
+     record's `action`, `scope_string`, `platform`, `username` and
+     `challenge` ([`declaration-code.md`](declaration-code.md)), packed the
+     same way.
 3. Verifies `proof` with these public inputs under the verification key whose
    SHA-256 is `circuit`.
+
+The platform is not a public input of its own. A proof is tied to its
+platform only by step 2: a verifier that computes the declaration code
+with a platform taken from anywhere but the record's `platform` field has
+not checked which platform the card declared on. With the right
+computation, a proof made for an account on one platform fails step 3 in a
+record that names another.
 
 The checks on the proof bytes and on running `bb verify` are in
 [`proof-verification.md`](proof-verification.md).
@@ -216,6 +235,11 @@ records keep verifying.
   the head;
 - well-formed lines and malformed lines, each with the reason;
 - roster files that are valid or broken, with the reason and the head.
+
+The file still holds the vectors from before the `platform` field
+(ADR-0017); it is to be regenerated for this document, with lines that are
+malformed because of `platform` (missing, misplaced, not in the table,
+another spelling, a `username` in another platform's format).
 
 The proofs are placeholder bytes, not real proofs: the vectors test the
 formats and the chain, not proof verification. To keep the file small, lines

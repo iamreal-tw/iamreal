@@ -1,4 +1,4 @@
-# Scope string
+# Scope string and platforms
 
 Status: **Draft**.
 
@@ -8,63 +8,135 @@ card proof. The card's signature over it gives the scoped ID
 give every card a new scoped ID in that scope, so a scope string, once in
 use, never changes. Its format and the reasons behind it are in ADR-0007.
 
+The public roster is one scope, shared by every public platform (ADR-0017).
+A card has one scoped ID there, and one slot on each platform. The platform
+is not part of the scope string: it is a field of the record
+([`record.md`](record.md)) and a line of the declaration code
+([`declaration-code.md`](declaration-code.md)).
+
 ## Format
 
 Scope strings of the scopes we operate are ASCII, so a byte is a character:
 
 ```
-scope_string = name ":" platform ":" version padding      (exactly 31 bytes)
+scope_string = name ":" range ":" version padding      (exactly 31 bytes)
 name         = "iamreal" | "iamreal-test"
-platform     = 1 to 21 characters of a-z, 0-9, "-"
+range        = 1 to 21 characters of a-z, 0-9, "-"
 version      = "0" | a decimal number without leading zeros
 padding      = zero or more "_", up to 31 bytes in total
 ```
 
+The `range` of the public roster is `public`.
+
 The first byte is a lowercase letter: the circuit requires a scope string to
 start with `a`..`z` or `S` (ADR-0007, ADR-0013). Scopes starting with `S` are
 reserved for other services and are defined separately before the first one
-opens.
+opens. Their scoped IDs are unrelated to the ones in the public roster, and
+their results are not written to it (ADR-0017).
 
 ## Accepted scopes
 
 A roster accepts records only in the scopes listed for it: the production
 roster exactly the rows under "Production roster", a test roster exactly the
 rows under "Test rosters only". A record in any other scope string, including
-another spelling of a listed one (`…:00_____…`, `Threads`, a different
+another spelling of a listed one (`…:00_____…`, `Public`, a different
 padding), makes the line malformed ([`record.md`](record.md)).
-
-Adding a scope adds a row. Rows are never removed, and a row changes only
-once: when a scope is retired (ADR-0007: its version is replaced), its row
-gets the `seq` of the last record it accepts. A later record in that scope
-makes the line malformed, so one card cannot keep a slot in both the old and
-the new version.
 
 **Production roster**
 
-| Scope string | Platform | `username` format | Last accepted `seq` |
-|---|---|---|---|
-| `iamreal:threads:0______________` | Threads | `[a-z0-9._]{1,30}` | open |
+| Scope string | Last accepted `seq` |
+|---|---|
+| `iamreal:public:0_______________` | open |
 
 **Test rosters only**
 
-| Scope string | Platform | `username` format | Last accepted `seq` |
-|---|---|---|---|
-| `iamreal-test:threads:0_________` | Threads | `[a-z0-9._]{1,30}` | open |
+| Scope string | Last accepted `seq` |
+|---|---|
+| `iamreal-test:public:0__________` | open |
 
 A test scope string never appears in the production roster, and a production
 scope string never appears in a test roster. A test scope string produces
 scoped IDs unrelated to the production ones.
 
+### Starting over
+
+Rows are never removed, and a row changes only once: when the scope is
+retired (ADR-0007: its version is replaced), its row gets the `seq` of the
+last record it accepts, and a row for the new version is added. A later
+record in the retired scope makes the line malformed, so one card cannot keep
+slots in both the old and the new version.
+
+Retiring the scope voids the slots of every platform together (ADR-0017):
+the new version gives every card a new scoped ID, and every cardholder
+declares again on every platform. One platform cannot start over by itself.
+
+## Platforms
+
+A platform is the service an account is on. A roster accepts records only
+for the platforms listed for it: the production roster exactly the rows under
+"Production roster", a test roster those rows and the rows under "Test
+rosters only". A record whose `platform` is anything else, including another
+spelling of a listed ID (`Threads`, `threads_`), makes the line malformed
+([`record.md`](record.md)).
+
+```
+platform = 1 to 21 characters of a-z, 0-9, "-"
+```
+
+**Production roster**
+
+| `platform` | Display name | `username` format | Added |
+|---|---|---|---|
+| `threads` | Threads | `[a-z0-9._]{1,30}` | With the first version of this table |
+
+**Test rosters only**
+
+| `platform` | Display name | `username` format | Added |
+|---|---|---|---|
+| `test-example` | Example (no real service) | `[a-z0-9-]{1,20}` | With the first version of this table |
+
+- The `platform` ID is a permanent identifier, not a display name: the most
+  common English name of the platform when the row is added. It does not
+  follow the platform when it is renamed (ADR-0007). The display name is for
+  screens and may change.
+- `test-example` stands for no real service. It exists so that a test roster
+  has a second platform, to test the rules that count per platform
+  ([`roster-rules.md`](roster-rules.md)). Its `username` format differs from
+  the Threads one on purpose: `a-b` is valid only there, `a.b` only on
+  Threads. It never appears in the production roster. **IDs starting with
+  `test-` are never added to the production table.**
+- "Added" is for readers. The rules do not read it.
+
+### Adding a platform
+
+Adding a platform adds a row. Nothing else changes: the scope string and
+every card's scoped ID stay the same, the records already in the roster keep
+their meaning, and a card's first declaration on the new platform is a
+`first` ([`roster-rules.md`](roster-rules.md)). The card's last card proof
+date already covers the new platform.
+
+- **Rows are never removed, and an ID is never reused** for another service.
+- **One service has one row.** A second ID for a service that already has a
+  row (another name, an abbreviation, the name after a rebranding) would give
+  every card a second slot and a second switch allowance on that service.
+- **A re-verifier needs a table at least as new as the roster.** With an
+  older table, the first record of a platform it does not list is a
+  malformed line, and the roster file is reported as broken.
+- A card proof cannot be made ahead for a platform that is not listed yet:
+  the server rejects it, and its challenge expires after 10 minutes
+  ([`challenge.md`](challenge.md)).
+
 ### The `username` format
 
-Each scope fixes one spelling per account, so that one account is never
-counted as two. Platforms that do not distinguish case (Threads, like
-Instagram) store the name in lowercase; the screen accepts any case and
-lowercases it before the declaration code is computed. A platform where
-`Alice` and `alice` are different accounts would allow uppercase in its
-row instead.
+Each platform fixes one spelling per account, so that one account is never
+counted as two. An account is the pair (`platform`, `username`): the same
+`username` on two platforms is two accounts. Platforms that do not
+distinguish case (Threads, like Instagram) store the name in lowercase; the
+screen accepts any case and lowercases it before the declaration code is
+computed. A platform where `Alice` and `alice` are different accounts would
+allow uppercase in its row instead.
 
-The format of a scope is fixed when the scope opens. It may be widened
+The format of a platform is fixed when its row is added. It may be widened
 later (old records stay valid), never narrowed. The Threads row is
 provisional: lowercase letters, digits, `.` and `_`, 1 to 30 characters,
 to be confirmed against the platform's published rules before launch.
@@ -86,8 +158,21 @@ b[0] + b[1]·256 + … + b[30]·256^30
 the packing is one-to-one. The declaration code is packed the same way
 ([`declaration-code.md`](declaration-code.md)).
 
+The platform is not a public input. It is bound to the proof only through
+the declaration code.
+
+## Open items
+
+- **Closing one platform to new records** (a service that shuts down) is not
+  defined. Until it is, a row stays open.
+
 ## Test vectors
 
 [`vectors/scope.json`](vectors/scope.json): the accepted scope strings with
 their packed values; strings that are not accepted, with the reason;
-usernames valid and invalid for the Threads format.
+usernames valid and invalid for each format.
+
+The file still holds the vectors from before ADR-0017 (one scope per
+platform). It is to be regenerated for this document: the two scope strings
+above, platform IDs accepted and not accepted per roster, and usernames per
+platform.

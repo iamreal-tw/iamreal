@@ -46,6 +46,14 @@ The challenge is not a public input. It is bound to the proof only through
 the declaration code. A verifier that does not recompute the declaration code
 from the record's challenge has not checked the challenge at all.
 
+The same holds for the platform. Every public platform shares one scope
+string (ADR-0017), so `scope_packed` and `nullifier` are the same whatever
+the platform, and the circuit knows nothing about platforms. The record's
+`platform` is one line of the declaration code
+([`declaration-code.md`](declaration-code.md)); a verifier that does not
+recompute the code with it has not checked which platform the proof was
+made for.
+
 ## Encoding
 
 `bb` reads the public inputs as one file: each input as a 32-byte big-endian
@@ -107,11 +115,13 @@ inputs built as above:
   byte is `a`..`z` or `S` (ADR-0007, ADR-0013).
 - `nullifier` is the scoped ID computed from that signature. The signature
   has exactly one accepted encoding (every limb in range, and the integer
-  below the modulus), so one card has one scoped ID per scope string.
+  below the modulus), so one card has one scoped ID per scope string: one
+  in the public roster, for all its platforms (ADR-0017).
 - The same key signed the 31 bytes of the declaration code, whose first byte
   is `A`..`Z` other than `S`.
 
-It says nothing about the challenge by itself; see "Public inputs".
+It says nothing about the challenge or the platform by itself; see "Public
+inputs".
 
 The circuits have had two rounds of AI-assisted review and a check of the
 fixes that followed. They have not been audited by a person, and will not be
