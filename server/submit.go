@@ -49,8 +49,9 @@ type acceptedKind struct {
 //  6. the server's own policy on the fourth and fifth switch of a slot,
 //     if it is set (switch_restricted; none by default).
 //
-// If all pass, the record is appended and its challenge marked as accepted
-// in one transaction, and the rules are applied to it.
+// If all pass, the record is appended, its challenge marked as accepted and
+// the views updated (store.View) in one transaction, and the rules are
+// applied to it.
 func (s *Server) postRecord(r *http.Request) reply {
 	now := s.cfg.Now()
 
@@ -140,24 +141,30 @@ func (s *Server) postRecord(r *http.Request) reply {
 	if _, broken := roster.ReadLine(rec.Line(), s.cfg.Roster, int(rec.Seq), s.head); broken != nil {
 		return s.internal(r, "line", broken) // the format was checked in step 1
 	}
-	res, err := s.rules.Check(rec)
+	res, after, err := s.rules.CheckWithCard(rec)
 	if err != nil {
 		return s.internal(r, "rules", err)
 	}
 	if !res.Valid {
 		return fail(http.StatusBadRequest, ruleError(res.Reason))
 	}
+	before := s.rules.Card(rec.ScopeString, rec.ScopedID)
 
 	// 6. The server's policy, if it is set: a record the rules accept,
 	// with a switch that would be the fourth or fifth of its slot. Never a
 	// record without a switch, nor one whose switches are all among a
 	// slot's first three.
-	if s.cfg.RestrictLateSwitches && usesRestrictedSwitch(s.rules.Card(rec.ScopeString, rec.ScopedID), res) {
+	if s.cfg.RestrictLateSwitches && usesRestrictedSwitch(before, res) {
 		return fail(http.StatusForbidden, errSwitchRestricted)
 	}
 
-	// Append and mark the challenge as accepted, in one transaction.
-	switch err := s.cfg.Store.Append(rec); {
+	// Append, mark the challenge as accepted and update the views, in one
+	// transaction.
+	view, err := store.NewView(rec, res, before, after)
+	if err != nil {
+		return s.internal(r, "views", err)
+	}
+	switch err := s.cfg.Store.Append(rec, view); {
 	case errors.Is(err, store.ErrChallengeNotOpen):
 		return fail(http.StatusBadRequest, errChallengeUsed)
 	case err != nil:

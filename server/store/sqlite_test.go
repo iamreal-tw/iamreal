@@ -53,7 +53,7 @@ func TestAppendKeepsTheChain(t *testing.T) {
 		if err := s.AddChallenge(r.Challenge, t0); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.Append(r); err != nil {
+		if err := s.Append(r, nil); err != nil {
 			t.Fatalf("seq %d: %v", seq, err)
 		}
 		want = append(want, r)
@@ -67,7 +67,7 @@ func TestAppendKeepsTheChain(t *testing.T) {
 	// A seq that skips, a seq already taken, a wrong prev.
 	for _, r := range []*verifier.Record{record(5, prev), record(3, want[1].Hash()), record(4, strings.Repeat("a", 64))} {
 		s.AddChallenge(r.Challenge, t0)
-		if err := s.Append(r); !errors.Is(err, ErrNotNext) {
+		if err := s.Append(r, nil); !errors.Is(err, ErrNotNext) {
 			t.Errorf("seq %d prev %s: %v, want ErrNotNext", r.Seq, r.Prev[:8], err)
 		}
 	}
@@ -107,14 +107,14 @@ func TestReadOnlyCannotWrite(t *testing.T) {
 func TestAppendNeedsAnOpenChallenge(t *testing.T) {
 	s, _ := open(t)
 	r := record(1, verifier.GenesisPrev)
-	if err := s.Append(r); !errors.Is(err, ErrChallengeNotOpen) {
+	if err := s.Append(r, nil); !errors.Is(err, ErrChallengeNotOpen) {
 		t.Errorf("never issued: %v", err)
 	}
 	if count, _, _ := s.Head(); count != 0 {
 		t.Errorf("a record was written without its challenge")
 	}
 	s.AddChallenge(r.Challenge, t0)
-	if err := s.Append(r); err != nil {
+	if err := s.Append(r, nil); err != nil {
 		t.Fatal(err)
 	}
 	c, found, err := s.Submit(r.Challenge)
@@ -124,7 +124,7 @@ func TestAppendNeedsAnOpenChallenge(t *testing.T) {
 	// The same challenge for the next record.
 	r2 := record(2, r.Hash())
 	r2.Challenge = r.Challenge
-	if err := s.Append(r2); !errors.Is(err, ErrChallengeNotOpen) {
+	if err := s.Append(r2, nil); !errors.Is(err, ErrChallengeNotOpen) {
 		t.Errorf("accepted challenge: %v", err)
 	}
 }

@@ -34,7 +34,8 @@ type Config struct {
 // Server answers the card proof API (docs/api/card-proof.md).
 //
 // The state of the roster lives in memory, computed by roster.Rules from
-// every record. Writes are one at a time: mu is held from the checks that
+// every record. The views for the pages live in the store (store.View),
+// written with each record. Writes are one at a time: mu is held from the checks that
 // depend on the roster until the record is written and applied, so records
 // are appended in the order they pass, each after the one before.
 type Server struct {
@@ -45,6 +46,11 @@ type Server struct {
 	count uint64        // the number of records
 	head  string        // the record hash of the last record
 	crls  *crlIndex     // the mirror's index, read again for each card proof
+
+	// viewsFrom is the seq of the first record whose views New wrote
+	// (0: none; the views were already up to date). main logs it.
+	viewsFrom uint64
+	pending   []*store.View // views New computed and has not written yet
 }
 
 // alreadyVerified is the proof verifier of the server's own copy of the
@@ -62,6 +68,12 @@ func (alreadyVerified) VerifyRecord(*verifier.Record) error { return nil }
 // mirror. Proofs are not verified again. If any record is malformed,
 // breaks the chain or is invalid, New returns an error naming it, and the
 // server does not start.
+//
+// The views (store.View) are brought up to date on the way: for every
+// record after the store's ViewSeq, New writes what the record changes, as
+// the rules it is applying say, in batches of one transaction each. After
+// an upgrade that adds the views, or after ResetViews, this builds them
+// from every record.
 func New(cfg Config) (*Server, error) {
 	s := &Server{cfg: cfg, head: verifier.GenesisPrev, crls: newCRLIndex(cfg.CRLDir)}
 	if err := s.crls.reload(); err != nil {
@@ -73,6 +85,13 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	viewSeq, err := cfg.Store.ViewSeq()
+	if err != nil {
+		return nil, err
+	}
+	if viewSeq > count {
+		return nil, fmt.Errorf("the views are at record %d, but the store has %d records", viewSeq, count)
+	}
 	const batch = 1000
 	for first := uint64(1); first <= count; first += batch {
 		records, err := cfg.Store.Records(first, first+batch-1)
@@ -80,9 +99,12 @@ func New(cfg Config) (*Server, error) {
 			return nil, err
 		}
 		for _, r := range records {
-			if err := s.load(r); err != nil {
+			if err := s.load(r, r.Seq > viewSeq); err != nil {
 				return nil, err
 			}
+		}
+		if err := s.writePendingViews(); err != nil {
+			return nil, err
 		}
 	}
 	if s.count != count || s.head != head {
@@ -91,10 +113,15 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// load applies one stored record at startup.
-func (s *Server) load(r *verifier.Record) error {
+// load applies one stored record at startup and, if withView, computes
+// what it changes in the views (written by writePendingViews).
+func (s *Server) load(r *verifier.Record, withView bool) error {
 	if _, broken := roster.ReadLine(r.Line(), s.cfg.Roster, int(s.count+1), s.head); broken != nil {
 		return fmt.Errorf("record %d: the roster is broken there: %v", s.count+1, broken)
+	}
+	var before roster.CardState
+	if withView {
+		before = s.rules.Card(r.ScopeString, r.ScopedID)
 	}
 	res, err := s.rules.Apply(r)
 	if err != nil {
@@ -103,7 +130,29 @@ func (s *Server) load(r *verifier.Record) error {
 	if !res.Valid {
 		return fmt.Errorf("record %d is invalid: %s %s", r.Seq, res.Reason, res.Detail)
 	}
+	if withView {
+		v, err := store.NewView(r, res, before, s.rules.Card(r.ScopeString, r.ScopedID))
+		if err != nil {
+			return err
+		}
+		s.pending = append(s.pending, v)
+		if s.viewsFrom == 0 {
+			s.viewsFrom = r.Seq
+		}
+	}
 	s.count, s.head = r.Seq, r.Hash()
+	return nil
+}
+
+// writePendingViews writes the views load computed, in one transaction.
+func (s *Server) writePendingViews() error {
+	if len(s.pending) == 0 {
+		return nil
+	}
+	if err := s.cfg.Store.AddViews(s.pending); err != nil {
+		return fmt.Errorf("views of records %d to %d: %w", s.pending[0].Seq, s.pending[len(s.pending)-1].Seq, err)
+	}
+	s.pending = nil
 	return nil
 }
 

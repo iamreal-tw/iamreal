@@ -120,7 +120,7 @@ func TestStartRefusesInvalidRecord(t *testing.T) {
 		Seq: 2, Prev: head, ScopeString: testScope, ScopedID: newCard(),
 		Challenge: h.challenge(), Issuer: "G3", SMTRoot: root, Circuit: circuitOf("G3"), Proof: goodProof,
 	}
-	if err := h.store.Append(r); err != nil {
+	if err := h.store.Append(r, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, err := New(h.config())
