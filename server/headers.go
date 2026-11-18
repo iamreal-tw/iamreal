@@ -6,11 +6,13 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/iamreal-tw/iamreal/server/pages"
 )
 
 // responseHeaders are sent with every response: the API, the static files
 // and the pages of the web directory. This is the one place to change them,
-// with pageHeaders.
+// with pageHeaders and visitorHeaders (visitor.go).
 var responseHeaders = map[string]string{
 	"X-Content-Type-Options": "nosniff",
 }
@@ -52,15 +54,24 @@ var contentTypes = map[string]string{
 
 // routes returns the handler of the whole site:
 //
-//	/api/     the API (api.go)
-//	/crl/     the CRL mirror: index.jsonl and SHA256.crl
-//	/roster/  the published roster: the roster directory and heads.jsonl
-//	/         the web directory, if one is given
+//	/api/       the API (api.go)
+//	/crl/       the CRL mirror: index.jsonl and SHA256.crl
+//	/roster/    the published roster: the roster directory and heads.jsonl
+//	/p/         the page of a card (visitor.go)
+//	/threads/   the page of an account
+//	/roster     the roster page (without the slash)
+//	/pages.css  the style sheet of these three pages
+//	/           the web directory, if one is given
 func (s *Server) routes(crlDir, rosterDir, webDir string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.api())
 	mux.Handle("/crl/", http.StripPrefix("/crl/", staticFiles(crlDir)))
 	mux.Handle("/roster/", http.StripPrefix("/roster/", staticFiles(rosterDir)))
+	v := s.visitorPages()
+	mux.Handle("/p/", v.handler(v.proof))
+	mux.Handle("/threads/", v.handler(v.account))
+	mux.Handle("/roster", v.handler(v.roster))
+	mux.Handle(pages.CSSPath, v.handler(v.css))
 	if webDir != "" {
 		mux.Handle("/", withHeaders(pageHeaders, staticFiles(webDir)))
 	} else {

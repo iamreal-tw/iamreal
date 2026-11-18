@@ -1,0 +1,448 @@
+/*
+ * The pages visitors read: the page of a card, the page of an account and
+ * the roster page (server/pages). One column, at most 560 wide, 20 on each
+ * side on a phone.
+ *
+ * Nothing here means a conclusion (docs/design/principles.md, principle 4):
+ * no green, no check mark, no lock or shield, nothing that looks like a
+ * platform's verified badge. The raspberry red is for links and the one
+ * button. The last card proof looks the same whatever the number of days.
+ *
+ * The colours and type stacks are those of web/src/ui/style.css. The pages
+ * load no font file: the stacks name the visual identity's typefaces first
+ * and fall back to the system's. The Content-Security-Policy of these pages
+ * allows this file and nothing inline (server/README.md).
+ */
+:root {
+  --ink: #1b1b1f;
+  --paper: #f4f1ea;
+  --line: #d8d3c7;
+  --mute: #6b6860;
+  --white: #fffdf9;
+  --red: #bf2150;
+  --teal: #226977;
+  --teal-bg: #d9eef2;
+  --round: "GenSenRounded2 TW", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+}
+
+a {
+  color: var(--red);
+  text-underline-offset: 3px;
+}
+
+p {
+  margin: 0 0 10px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+.small {
+  font-size: 14px;
+  color: var(--mute);
+}
+
+.id {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+/* A test roster says so above everything else. */
+.test-roster {
+  margin: 0;
+  padding: 6px 20px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-weight: 700;
+  font-size: 15px;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+/* The mark at the top -------------------------------------------------------- */
+
+.top {
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.top a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.top .logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+.top b {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.top span {
+  font: 12px var(--mono);
+  color: var(--mute);
+}
+
+.logo-card-body {
+  fill: var(--red);
+}
+
+.logo-chip {
+  fill: var(--paper);
+}
+
+.logo-island-body {
+  fill: var(--ink);
+  stroke: var(--paper);
+}
+
+/* Titles ------------------------------------------------------------------------ */
+
+.title {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.55;
+  margin: 28px 0 8px;
+}
+
+.title .line {
+  display: block;
+}
+
+/* The account: the largest words of the first screen. */
+.title .account {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.lookup .title .account {
+  display: inline;
+  font-size: inherit;
+}
+
+.scope {
+  margin-bottom: 0;
+}
+
+/* The last card proof: as prominent as the title, the same for any number
+   of days. */
+.last {
+  margin: 20px 0 0;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.last .when {
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.55;
+  margin-bottom: 6px;
+}
+
+.last .small a {
+  white-space: nowrap;
+}
+
+/* Does the account owner acknowledge it ---------------------------------------- */
+
+h2 {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  margin: 36px 0 10px;
+}
+
+.backlink {
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+/* The profile on Threads. A fixed height that holds three lines of bio and
+   two links; more than that scrolls inside the frame, rather than cut a
+   link off. */
+iframe.threads-profile {
+  display: block;
+  width: 100%;
+  max-width: 558px;
+  height: 360px;
+  margin: 0 0 10px;
+  border: 0;
+  background: transparent;
+}
+
+/* The record ------------------------------------------------------------------------ */
+
+.facts {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.history summary {
+  cursor: pointer;
+  color: var(--teal);
+  font-weight: 500;
+  padding: 6px 0;
+}
+
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.log li {
+  display: flex;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.log time,
+.rows time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Several cards behind one short ID */
+
+.many {
+  margin-bottom: 8px;
+}
+
+.one-of-many {
+  margin-top: 36px;
+  padding-top: 4px;
+  border-top: 2px solid var(--ink);
+}
+
+.one-of-many .prefix {
+  margin: 10px 0 0;
+  font-size: 15px;
+}
+
+.one-of-many .title {
+  margin-top: 12px;
+}
+
+/* How to verify, and getting one's own -------------------------------------------- */
+
+.verify {
+  margin-top: 40px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.mine {
+  margin-top: 40px;
+  padding: 18px 18px 8px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.button {
+  display: inline-block;
+  margin: 4px 0 2px;
+  padding: 10px 24px;
+  border-radius: 99px;
+  background: var(--red);
+  color: var(--white);
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 17px;
+  text-decoration: none;
+}
+
+/* The page of an account ----------------------------------------------------------- */
+
+.cards {
+  list-style: none;
+  margin: 14px 0 18px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.cards li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.cards a {
+  margin-left: auto;
+}
+
+/* The roster page ------------------------------------------------------------------- */
+
+.query {
+  margin-top: 28px;
+}
+
+.query label {
+  font-weight: 500;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field .at {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.field input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: 16px var(--sans);
+}
+
+.field button {
+  padding: 8px 20px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--red);
+  color: var(--white);
+  font: 700 16px var(--round);
+  cursor: pointer;
+}
+
+.bad {
+  margin-top: 6px;
+}
+
+.rows {
+  list-style: none;
+  margin: 10px 0 10px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.rows a {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.rows .who {
+  color: var(--red);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.rows .id-line {
+  color: var(--mute);
+}
+
+.download {
+  margin-top: 28px;
+}
+
+.download a + a {
+  margin-left: 24px;
+}
+
+/* The page of a short ID that resolves to nothing */
+
+.typed {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* The foot of every page ----------------------------------------------------------- */
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 48px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .title .account {
+    font-size: 32px;
+  }
+
+  iframe.threads-profile {
+    height: 380px;
+  }
+
+  .cards a {
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,88 @@
+{{/* The page of a card: design/copy/proof-page.md. */}}
+{{define "content" -}}
+{{if .Multiple -}}
+<section class="many">
+<h1 class="title">這個網址對到 {{len .Cards}} 張自然人憑證</h1>
+<p class="small">它們的島民編號開頭 10 個字元碰巧相同，彼此沒有關聯。</p>
+</section>
+{{range .Cards -}}
+<article class="one-of-many">
+<p class="prefix">島民編號 <span class="id">{{.Prefix}}</span> 開頭</p>
+{{template "card" .}}
+</article>
+{{end -}}
+{{else -}}
+{{template "card" index .Cards 0}}
+{{end -}}
+{{template "verify"}}
+{{template "mine"}}
+{{- end}}
+
+{{/* Sections 1 to 4, or 6 and 4, of one card. */}}
+{{define "card" -}}
+{{if .Account -}}
+<section class="claim">
+{{if .Nested}}<h2 class="title">{{else}}<h1 class="title">{{end -}}
+<span class="line">一張台灣國民的自然人憑證，</span>
+<span class="line">把它在 Threads 唯一的名額給了</span>
+<span class="account">@{{.Account}}</span>
+{{- if .Nested}}</h2>{{else}}</h1>{{end}}
+<p class="small scope">這張證明只涵蓋 Threads 上的 @{{.Account}}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都不在這張證明裡。</p>
+</section>
+<section class="last">
+<p class="when">上次過卡：{{template "days" .Last}}（{{.LastDate}}）</p>
+<p class="small">那一天檢查過：這張自然人憑證在效期內，不在廢止清冊上。之後有沒有被廢止，要等下一次過卡才知道。</p>
+<p class="small">島民建議持卡人每季過卡一次。隔得越久，這張證明的說服力越低。 <a href="/">我要更新這張證明</a></p>
+</section>
+<section class="owner">
+<h2 class="ask">帳號主人承認嗎？你需要自己看。</h2>
+<p>@{{.Account}} 的個人檔案上有這個連結，才代表帳號主人承認：</p>
+<p class="backlink">iamreal.tw/p/{{.ShortID}}</p>
+{{template "embed" .Account}}
+<p class="small">@{{.Account}} 的個人檔案上沒有 {{.ShortID}}，代表帳號主人可能沒有承認這張證明。</p>
+<p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@{{.Account}}">Threads 的 @{{.Account}}</a></p>
+</section>
+{{- else -}}
+<section class="claim withdrawn">
+{{if .Nested}}<h2 class="title">{{else}}<h1 class="title">{{end -}}
+這張自然人憑證現在沒有把名額給任何帳號
+{{- if .Nested}}</h2>{{else}}</h1>{{end}}
+</section>
+<section class="last">
+<p class="when">上次過卡：{{template "days" .Last}}（{{.LastDate}}）</p>
+{{- if .Withdrawn}}
+<p class="small">那一天收回了 Threads 的 @{{.Withdrawn}}。</p>
+{{- end}}
+</section>
+{{- end}}
+<section class="record">
+<h2>這張自然人憑證在名冊上的紀錄</h2>
+<ul class="facts">
+<li>第一次過卡：{{.First}}</li>
+<li>過卡 {{.Proofs}} 次</li>
+<li>在 Threads 更換過 {{.Switches}} 次帳號（一張自然人憑證最多 5 次）</li>
+</ul>
+<details class="history">
+<summary>全部紀錄</summary>
+<ol class="log">
+{{- range .Rows}}
+<li><time>{{.Date}}</time> <span>{{template "event" .}}</span></li>
+{{- end}}
+</ol>
+</details>
+</section>
+{{- end}}
+
+{{/* One row of 全部紀錄 (proof-page.md, section 4): a historyRow. After a
+     withdrawal, declaring another account is written as a switch or a
+     correction, from the account withdrawn. */}}
+{{define "event" -}}
+{{if eq .Event "first"}}新宣告：@{{.After}}
+{{- else if eq .Event "refresh"}}再次過卡
+{{- else if eq .Event "switch" "switch_after_withdrawal"}}更換：@{{.Before}} 改成 @{{.After}}
+{{- else if eq .Event "correction" "correction_after_withdrawal"}}更正：@{{.Before}} 改成 @{{.After}}
+{{- else if eq .Event "withdraw"}}收回：@{{.Before}}
+{{- else if eq .Event "redeclare"}}再次宣告：@{{.After}}
+{{- else}}{{unknownEvent .Event}}
+{{- end}}
+{{- end}}

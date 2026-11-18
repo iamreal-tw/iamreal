@@ -1,6 +1,6 @@
 # server
 
-過卡的後台：發題目、回答一張卡片的現況、收證明並寫入名冊、鏡像內政部的廢止清冊、每天出快照。介面照 [`docs/api/card-proof.md`](../docs/api/card-proof.md)。
+過卡的後台：發題目、回答一張卡片的現況、收證明並寫入名冊、鏡像內政部的廢止清冊、每天出快照，加上訪客看的三種頁面（島民證明、查詢頁、名冊頁，見「訪客看的頁面」）。介面照 [`docs/api/card-proof.md`](../docs/api/card-proof.md)。
 
 **這個目錄讓人檢查的事：規則有照做。** 名冊規則只有一份，在 `roster/`；這裡不重寫任何一條。現況、「這一筆寫進去會不會有效」都由 `roster.Rules` 回答，每一行紀錄的寫法、`seq`、`prev` 由 `roster.ReadLine` 檢查，證明由 `verifier/` 驗，清冊由 `crl/` 讀。這裡只多了名冊規則以外、只有後台能做的幾件事：題目（發、10 分鐘、最多送 5 次、只能接受一次）、只收最新兩份清冊的樹根、清冊太舊時停止接受。
 
@@ -99,6 +99,44 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 
 開機前在一個交易裡清掉所有衍生表（`ResetViews`，`ViewSeq` 變回 0），接著照上面的方式從第 1 筆建起來。紀錄不動。建好之後照常提供服務，之後再重開不用帶這個選項。`serve` 跑著的時候不要用別的程式清衍生表：寫入會因為 `ErrViewsBehind` 失敗。
 
+## 訪客看的頁面（`visitor.go`、`pages/`）
+
+三種頁面由後台產生成完整的 HTML，**頁面上沒有任何程式**（沒有 `<script>`、沒有 `on…=` 屬性），也沒有行內的樣式。每次打開都從衍生表查（`Cards`、`History`、`AccountCards`、`Recent`、`Counts`），不讀記憶體裡的名冊規則；寫入一筆之後，下一次打開就看得到。畫面上的每一句照 `design/copy/` 的三份文字檔（`proof-page.md`、`account-page.md`、`roster-page.md`），寫在 `pages/templates/` 的樣板裡。天數照台灣的日期算（`clock.go`）。
+
+| 路徑 | 內容 |
+|---|---|
+| `GET /p/<短編號>` | 島民證明。對到一張：`proof-page.md` 第 1 到 5a 段，或第 6 段（全部收回）；對到兩張以上：第 7 段；對不到：第 9 段，`404`。短編號照 `spec/scoped-id.md`「Short ID」的寬鬆讀法（不分大小寫、`O` 讀成 `0`、`I` 和 `L` 讀成 `1`），不是標準寫法時 `301` 轉到標準寫法；讀不出來（長度不對、有別的字元）也是第 9 段、`404`，頁面寫出訪客打開的那一段 |
+| `GET /threads/@<名稱>` | 查詢頁（`account-page.md`），一張都沒有時也是 `200`。名稱有大寫時 `301` 轉到小寫；不合 Threads 的格式時 `404`，內容是「一張都沒有」的那一頁；沒有 `@` 時 `404` |
+| `GET /roster` | 名冊頁（`roster-page.md`），一次 50 筆。`?after=<日期>.<seq>`（例如 `2026-11-17.123`）接著列這個位置之後的，「更多」就是這樣的一般連結；讀不出來的位置從頭列 |
+| `GET /roster?q=<輸入>` | 查詢框（一般的 GET 表單）。去掉開頭的一個 `@`、把 A 到 Z 轉成小寫後合 Threads 的格式，就 `303` 轉到 `/threads/@<名稱>`；不合就顯示名冊頁，查詢框下面多一行 |
+| `GET /pages.css` | 三頁共用的樣式表，編在執行檔裡，帶 `ETag` |
+
+- 三頁和樣式表只接受 `GET`、`HEAD`，其他方法 `405`（帶 `Allow: GET, HEAD`）。
+- `/roster`（沒有結尾的斜線）是頁面，`/roster/` 底下仍然是公布的名冊檔案，兩者互不影響。
+- 頁面用後台啟動時那一份名冊（`-roster`）開著的場合字串；測試名冊的每一頁最上面有一行「測試名冊」。
+- 第一版只有 Threads：頁面只列 Threads 的名額。測試名冊裡 `test-example` 的帳號不顯示。
+- 名冊頁的兩個數字（`Counts`）在後台記住最多 60 秒（`countsMaxAge`），台灣的日期換了就重算；清單和另外兩頁不暫存。
+- Threads 的個人檔案用直接寫的 `<iframe>` 嵌入，不載入 `embed.js`：`sandbox="allow-popups allow-popups-to-escape-sandbox"`（框裡 Threads 的程式不執行，連結可以在新分頁打開）、`referrerpolicy="no-referrer"`、`credentialless`。高度固定（360，窄螢幕 380），框內可以捲動。帳號名稱放進網址之前一定是驗證過格式的小寫名稱，由樣板跳脫。
+- 頁面出錯（資料庫讀不到）時回 `500` 和一行純文字，錯誤記在紀錄裡（寫哪一種頁面，不寫網址裡的短編號或帳號）。頁面的請求不記連線紀錄，和靜態檔相同。
+
+### 頁面的標頭
+
+這三頁和樣式表送自己的一組（`visitor.go` 的 `visitorHeaders`），和過卡頁面的 `pageHeaders` 分開，過卡頁面的不變：
+
+```
+Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+Referrer-Policy: no-referrer
+X-Content-Type-Options: nosniff
+Cross-Origin-Opener-Policy: same-origin
+Cache-Control: no-cache
+```
+
+- **`Content-Security-Policy`**：頁面沒有程式，所以完全不開 `script-src`；樣式只有自己的 `/pages.css`（行內的 `style` 屬性和 `<style>` 都不能用，記號是行內的 SVG，顏色靠樣式表的 class）；`frame-src` 只開 Threads，是為了嵌入個人檔案，其他網站的框都擋；`form-action 'self'` 讓查詢框送回自己；`frame-ancestors 'none'`：這幾頁不能被別的網站放進框裡。
+- **`Referrer-Policy: no-referrer`**：點出去的連結和嵌入框的請求都不帶這一頁的網址（嵌入框本身也加了 `referrerpolicy`）。
+- **`Cross-Origin-Opener-Policy: same-origin`**：用 `window.open` 開了這一頁的別的網站碰不到它。這幾頁不用開內政部元件的視窗，所以不需要過卡頁面的 `same-origin-allow-popups`。
+- **`Cache-Control: no-cache`**：每次都回來確認，寫入一筆之後不會看到舊的頁面；樣式表帶 `ETag`，沒變就是 `304`。
+- **不送** `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`：送了 `require-corp`，瀏覽器會擋掉 Threads 的嵌入框（Threads 的回應帶 `Cross-Origin-Resource-Policy: same-origin`）。這幾頁不需要跨來源隔離。
+
 ## 介面
 
 照 `docs/api/card-proof.md`，欄位、狀態碼、錯誤代碼一字不差。所有回應是 JSON，帶 `Cache-Control: no-store` 和 `X-Request-Id`（這個請求在紀錄裡的請求編號，持卡人回報問題時說得出來）；不設 cookie，不送 CORS 標頭。
@@ -177,7 +215,7 @@ DATA/roster/          公布的名冊：名冊目錄（每 1,000 筆一檔）、
 
 ## 回應標頭
 
-所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`：`X-Content-Type-Options: nosniff`。`-web` 目錄的每個檔案（頁面、它的程式和 worker、電路、通用參數）另外送 `pageHeaders`：`web/README.md` 寫的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`（多執行緒的證明，同時保留和內政部元件視窗的來往）和 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（用 `window.open` 開了這一頁的別的網站，碰不到這一頁和它開的元件視窗）。理由在 `web/README.md`「頁面需要的標頭」；`server_test.go` 檢查那裡引用的和這裡一字不差。清冊鏡像和名冊不送這三個。
+所有回應都送的標頭寫在 `headers.go` 的 `responseHeaders`：`X-Content-Type-Options: nosniff`。訪客看的三頁和它們的樣式表另外送 `visitorHeaders`（見「頁面的標頭」）。`-web` 目錄的每個檔案（頁面、它的程式和 worker、電路、通用參數）另外送 `pageHeaders`：`web/README.md` 寫的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`（多執行緒的證明，同時保留和內政部元件視窗的來往）和 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（用 `window.open` 開了這一頁的別的網站，碰不到這一頁和它開的元件視窗）。理由在 `web/README.md`「頁面需要的標頭」；`server_test.go` 檢查那裡引用的和這裡一字不差。清冊鏡像和名冊不送這三個。
 
 靜態檔：`.crl` 是 `application/pkix-crl`，`.jsonl` 是 `application/jsonl`。不列目錄，`.` 開頭的檔案不提供。
 
@@ -199,6 +237,9 @@ go test -race ./server/...
 | `server_test.go` | 20 個請求同時送出時 `seq` 連續、鏈不斷，同一個題目同時送兩次只接受一次；重開後現況相同；有無效紀錄、清冊不見、索引寫錯、名冊屬於另一份時不啟動並指出第幾筆；紀錄裡沒有對方的位址、匿名編號、帳號、題目，只有該有的欄位；每個 API 回應的 `X-Request-Id` 和那一行紀錄的請求編號相同，靜態檔沒有；靜態檔，頁面的標頭只在網頁目錄的檔案上；`web/README.md` 引用的 CSP 和這裡的相同 |
 | `mirror_test.go` | 假的內政部伺服器：第一次下載並建索引（和 `crl.BuildIndex` 相同）、之後送條件請求、新清冊加一行、同樣的內容換了 `ETag` 不重存、不是清冊的檔案也存並列為不可用、錯誤狀態不存；索引寫錯時不動存檔 |
 | `snapshot_test.go` | 空名冊、1,001 筆切成兩個檔、同一天再跑什麼都不做、隔天寫滿的檔不重寫；有無效的紀錄、證明驗不過、清冊索引和檔案不同、已公布的檔被改過、`heads.jsonl` 不是這份名冊的或寫法不對時，都不發布 |
+| `visitor_test.go` | 訪客看的頁面，經過後台的路由：每一種情況的頁面包含文字檔裡那一種情況的每一句，照順序（直接讀 `design/copy/` 的程式碼區塊和 `proof-page.md` 第 4 段的表，把例子的值換成測試資料的值，空白不計；第 5a 段的最後一行讀 `home.md` 的〈需要什麼〉）。島民證明：文字檔例子的那張卡片（更換過 1 次）、更換 0 次、上次過卡是今天、「全部紀錄」的每一種列（含收回之後宣告回同一個、宣告別的帳號的更換和更正）、全部收回（帳號取歷程裡最後一筆收回）、短編號對到兩張（照匿名編號排、寫到分得開的長度、第 5 段只出現一次）、對不到和讀不出來（`404`）、寬鬆的寫法轉址；`<title>`、`og:title`、`og:site_name`。查詢頁：一張、兩張（照從哪一天起，不照上次過卡）、零張（`200`）、短編號相同的兩張、大寫轉址、格式不對 `404`。名冊頁：有資料（數字、順序、過了三個月的照算、全部收回的不列）、沒有資料、50 筆和「更多」、讀不出來的位置、查詢框的正常、帶 `@` 和大寫、格式不對。每一頁：沒有 `<script>`、沒有 `on…=`、沒有行內樣式、沒有 `description` 和 `og:image`；頁首、頁尾的連結；「測試名冊」只在測試名冊；嵌入框的寫法。網址裡的 HTML 和 `javascript:` 被跳脫。標頭：三頁和樣式表送的正是那一組，過卡頁面和 `/roster/` 底下的檔案沒有它；`HEAD` 可以、其他方法 `405`；樣式表的 `304`。寫入一筆之後頁面馬上反映，名冊頁的數字最多晚 60 秒 |
+| `preview_test.go` | 不是測試：在本機看這三頁用（平常略過）。`IAMREAL_PAGES_PREVIEW=127.0.0.1:8090 IAMREAL_PAGES_PREVIEW_ACCOUNTS=<a>,<b>,<c>,<不存在的名稱> go test -run TestPagesPreview -timeout 0 ./server`：用假紀錄建一份測試名冊，聽在那個位址直到停掉，開頭印出每一種情況的網址。頁面會真的嵌入那幾個帳號的 Threads 個人檔案，所以只填大型機構或政府單位的帳號，不填個人的。`IAMREAL_PAGES_PREVIEW_EMPTY=1` 是空的名冊 |
+| `pages/pages_test.go` | 不開伺服器，直接用資料產生頁面：沒有程式和行內樣式、網址來的字跳脫、不合格式的帳號和不認得的紀錄種類不產生頁面；數字的千分位、分得開的長度、「更多」的位置的寫法和讀法 |
 | `e2e_test.go` | 建置標籤 `iamrealtest`、需要 `bb`：用 `testdata/` 的真證明（見那裡的 `README.md`）從假的內政部抓清冊，跑兩個平台的清單：宣告、當天更正（`correction`）、再次過卡、更換、第 4 次更換被開了 `-restrict-late-switches` 的後台拒絕（`403` `switch_restricted`，證明驗得過）、漏掉一個帳號就是收回、空的清單收回全部、沒有帳號時的空清單（`empty`）、同一張卡片同一天第 4 筆（`daily_limit`）；每一筆成功的之前，同一份證明配上改了一個帳號、少一個帳號的清單都是 `proof`，順序對調的清單是 `malformed`；出快照（每份證明用 `bb` 重驗），用 `go build -tags iamrealtest` 建出的 `iamreal-verify` 重驗那個目錄，結果和後台的現況相同；換成內政部的金鑰時快照拒絕發布 |
 
 ## 檔案
@@ -215,7 +256,9 @@ go test -race ./server/...
 | `mirror.go` | 清冊鏡像 |
 | `snapshot.go` | 每日快照 |
 | `log.go` | 連線紀錄、程式版本 |
-| `headers.go` | 回應標頭、頁面的標頭、靜態檔 |
+| `headers.go` | 路由、回應標頭、過卡頁面的標頭、靜態檔 |
+| `visitor.go` | 訪客看的三頁：讀網址、查衍生表、轉址和狀態碼、頁面的標頭、名冊頁數字的暫存 |
+| `pages/` | 三頁的樣板（`templates/`）和樣式表（`style.css`），用 `embed` 編進執行檔；把資料變成 HTML 的函式，不碰 HTTP |
 | `testissuers.go` | 只在建置標籤 `iamrealtest` 下：測試金鑰、假內政部和時鐘的選項 |
 | `store/` | 名冊、題目和頁面用的衍生表的儲存：介面和 SQLite 的實作（`view.go` 是衍生表的型別和 `NewView`，`sqlite_view.go` 是它的表和查詢） |
 | `testdata/` | 端到端測試的資料 |

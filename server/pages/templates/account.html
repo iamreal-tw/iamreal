@@ -1,0 +1,19 @@
+{{/* The page of an account: design/copy/account-page.md. */}}
+{{define "content" -}}
+<section class="lookup">
+<h1 class="title">Threads 的 <span class="account">@{{.Username}}</span></h1>
+{{if .Rows -}}
+<p>有 {{len .Rows}} 張自然人憑證把它在 Threads 的名額給了這個帳號。</p>
+<ul class="cards">
+{{- range .Rows}}
+<li><span class="id-line">島民編號 <span class="id">{{.Prefix}}</span> 開頭</span> <span>{{.Since}} 起</span> <span>上次過卡 {{template "days" .Last}}</span> <a href="/p/{{.ShortID}}">看這張島民證明</a></li>
+{{- end}}
+</ul>
+<p>帳號主人承認的是哪一張，看 @{{.Username}} 的個人檔案上放的是哪一張的連結：</p>
+{{template "embed" .Username}}
+<p class="small">任何持卡人都可以把名額給任何帳號，張數不代表支持或連署。</p>
+{{- else -}}
+<p>沒有自然人憑證把名額給這個帳號。<br>名稱要和 Threads 上的完全相同。</p>
+{{- end}}
+</section>
+{{- end}}
