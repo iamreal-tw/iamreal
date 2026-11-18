@@ -45,6 +45,10 @@
 
 ## Agent skills
 
+### 貢獻規範
+
+每個變更要符合的規範在 `CONTRIBUTING.md`。
+
 ### Issue tracker
 
 Issue 記在 GitHub Issues（`iamreal-tw/iamreal`），用 `gh` CLI 操作。見 `docs/agents/issue-tracker.md`。
