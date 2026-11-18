@@ -25,7 +25,11 @@
 {{define "mine" -}}
 <section class="mine">
 <p>一張自然人憑證可以換一張 Threads 的島民證明，上面寫著你的 Threads 帳號。</p>
-<p><a class="button" href="/">我也要換島民證明</a></p>
-<p class="small">需要實體的自然人憑證、讀卡機和電腦。</p>
+<p><a class="button" href="/proof">我也要換島民證明</a></p>
+<p class="small">{{template "needs"}}</p>
 </section>
 {{- end}}
+
+{{/* home.md's 〈需要什麼〉: the one place it is written. The home page shows
+     it twice (sections 1 and 8), the page of a card once (section 5a). */}}
+{{define "needs"}}需要實體的自然人憑證、讀卡機和電腦。{{end}}

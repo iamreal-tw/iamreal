@@ -295,7 +295,8 @@ async function stopServer(): Promise<void> {
 // and fifth switches are made.
 await startServer({ restrictLate: true });
 const PAGE_ORIGIN = `http://localhost:${serverPort}`;
-const PAGE = `${PAGE_ORIGIN}/`;
+// The card proof page is at /proof, its files under /proof/ (vite.config.ts `base`, server/README.md).
+const PAGE = `${PAGE_ORIGIN}/proof`;
 
 // 3. The component -------------------------------------------------------------
 
@@ -1091,7 +1092,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   check((await buttons()).some((b) => b.text === C.done.copied), "the button says 已複製");
   const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.getAttribute("href") + " " + a.target + " " + a.rel)`);
   check(
-    hrefs.includes("/help.html?topic=proof _blank noopener noreferrer") && hrefs.includes("/help.html?topic=verify _blank noopener noreferrer"),
+    hrefs.includes("/proof/help.html?topic=proof _blank noopener noreferrer") && hrefs.includes("/proof/help.html?topic=verify _blank noopener noreferrer"),
     `step 6: 打開這張島民證明 and 怎麼驗證 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
   );
   check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero svg.logo-animated')`), "step 6: the mark's animation");
@@ -2273,6 +2274,18 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   });
   const types = [...new Set(ours.map((r) => r.targetType))];
   check(outside.length === 0, `the page and its workers (${types.join(", ")}) connected only to ${PAGE_ORIGIN}; the component's window only to ${componentOrigin}: ${JSON.stringify(outside.slice(0, 5))}`);
+  // On its own origin, the page asked for the page itself and its files under /proof/, the API
+  // and the CRL mirror, nothing else (the page moved from / to /proof). /favicon.ico is the
+  // browser's own request, not the page's.
+  const own = ours
+    .filter((r) => !popups.has(r.sessionId) && !r.url.startsWith("about:") && new URL(r.url).origin === PAGE_ORIGIN)
+    .map((r) => new URL(r.url).pathname)
+    .filter((p) => p !== "/favicon.ico");
+  const elsewhere = own.filter((p) => p !== "/proof" && !p.startsWith("/proof/") && !p.startsWith("/api/") && !p.startsWith("/crl/"));
+  check(
+    own.includes("/proof") && own.some((p) => p.startsWith("/proof/assets/")) && own.some((p) => p.startsWith("/proof/circuits/")) && own.some((p) => p.startsWith("/proof/crs/")) && own.some((p) => p.startsWith("/proof/bb/")) && elsewhere.length === 0,
+    `the page's own requests: /proof and its files under /proof/, the API and the CRLs only ${JSON.stringify([...new Set(elsewhere)].slice(0, 5))}`,
+  );
   const previewRequests = browser.requests.filter((r) => previewSessions.has(r.sessionId));
   check(
     previews.length === 1 && previewRequests.every((r) => new URL(r.url).origin === PROFILE_ORIGIN),
@@ -2426,11 +2439,12 @@ await tryStep("the production build's step 1: one platform, named", async () => 
   await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "production", logLevel: "warn", build: { outDir: prodDist, emptyOutDir: true } });
   const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".json": "application/json", ".svg": "image/svg+xml" };
   const site = createServer((req, res) => {
+    // The page at /proof, its files under /proof/, as the server serves them.
     const path = new URL(req.url ?? "/", "http://x").pathname;
-    const file = join(prodDist, path === "/" ? "index.html" : path);
+    const file = join(prodDist, path === "/proof" ? "index.html" : path.startsWith("/proof/") ? path.slice("/proof".length) : "/nothing");
     let body: Buffer;
     try {
-      if (!file.startsWith(prodDist)) throw new Error("outside");
+      if (!file.startsWith(prodDist + "/")) throw new Error("outside");
       body = readFileSync(file);
     } catch {
       res.writeHead(404).end();
@@ -2439,7 +2453,7 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     res.writeHead(200, { "Content-Type": types[extname(file)] ?? "application/octet-stream", "Content-Security-Policy": CONTENT_SECURITY_POLICY, ...ISOLATION_HEADERS, ...OPENER_HEADERS }).end(body);
   });
   await new Promise<void>((r) => site.listen(0, "127.0.0.1", r));
-  const prodUrl = `http://localhost:${(site.address() as AddressInfo).port}/`;
+  const prodUrl = `http://localhost:${(site.address() as AddressInfo).port}/proof`;
   const prod = await browser.newPage();
   const componentRequests: string[] = [];
   const off = browser.on((m, p, s) => {

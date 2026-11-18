@@ -9,7 +9,7 @@
 //   scripts/fetch-crs.mjs) are copied to the same paths in the build. The
 //   page checks each against the SHA-256 in src/prover/artifacts.ts.
 //
-// Modes:
+// Modes (the pages' three are built for the path /proof/, `base`; engine for /):
 //
 // - production (`pnpm build`): the page (index.html) and the help page
 //   (help.html), with MOICA's issuer keys and component (src/target.ts).
@@ -102,6 +102,9 @@ export default defineConfig(({ mode }) => {
   const pages = mode !== "engine";
   if (pages && mode !== "production" && mode !== "test" && mode !== "localcard") throw new Error(`vite mode ${mode}: production, test, localcard or engine`);
   return {
+    // The pages are served under /proof/ (the card proof page at /proof, server/README.md); the
+    // engine's own test page at /. src/base.ts reads it for the page's own paths.
+    base: pages ? "/proof/" : "/",
     plugins: [noDataUrlWasm(), ownOriginAssets(), ...(mode === "test" ? [otherTarget(TEST_TARGET)] : mode === "localcard" ? [otherTarget(LOCAL_TARGET)] : [])],
     build: {
       target: "es2022",

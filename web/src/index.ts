@@ -5,6 +5,7 @@
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
 import { sameOriginFetch } from "./api.ts";
+import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import { CardProofFlow, type FlowDeps } from "./flow.ts";
@@ -16,8 +17,8 @@ import { IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
 
 export { ROSTER };
 
-/** Where the build puts bb.js's WebAssembly (vite.config.ts). */
-export const BB_WASM_PATH = "/bb/barretenberg.wasm.gz";
+/** Where the build puts bb.js's WebAssembly (vite.config.ts), under the build's base. */
+export const BB_WASM_PATH = `${BASE}bb/barretenberg.wasm.gz`;
 
 const wasmUrl = (): string => new URL(BB_WASM_PATH, location.origin).href;
 

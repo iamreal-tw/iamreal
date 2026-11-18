@@ -52,31 +52,50 @@ var contentTypes = map[string]string{
 	".jsonl": "application/jsonl",
 }
 
+// ProofPath is where the card proof page is (the build of web/, its base);
+// every file of the web directory is under ProofPath + "/".
+const ProofPath = "/proof"
+
 // routes returns the handler of the whole site:
 //
 //	/api/       the API (api.go)
 //	/crl/       the CRL mirror: index.jsonl and SHA256.crl
 //	/roster/    the published roster: the roster directory and heads.jsonl
-//	/p/         the page of a card (visitor.go)
+//	/           the home page (visitor.go; only / itself)
+//	/faq        the FAQ
+//	/verify     how to verify
+//	/hang       hanging a proof on a profile; /hang/<short ID> with a proof
+//	/p/         the page of a card
 //	/threads/   the page of an account
 //	/roster     the roster page (without the slash)
-//	/pages.css  the style sheet of these three pages
-//	/           the web directory, if one is given
+//	/pages.css  the style sheet of the visitors' pages
+//	/copy.js    the script of the copy buttons of /verify and /hang/…
+//	/proof      the card proof page: index.html of the web directory, if
+//	            one is given; /proof/ is redirected to /proof
+//	/proof/…    the other files of the web directory
+//
+// Anything else is not found.
 func (s *Server) routes(crlDir, rosterDir, webDir string) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.api())
 	mux.Handle("/crl/", http.StripPrefix("/crl/", staticFiles(crlDir)))
 	mux.Handle("/roster/", http.StripPrefix("/roster/", staticFiles(rosterDir)))
 	v := s.visitorPages()
+	mux.Handle("/{$}", v.handler(v.home))
+	mux.Handle("/faq", v.handler(v.faq))
+	mux.Handle("/verify", v.scriptHandler(v.verify))
+	mux.Handle("/hang", v.handler(v.hangWithout))
+	mux.Handle("/hang/", v.scriptHandler(v.hang))
 	mux.Handle("/p/", v.handler(v.proof))
 	mux.Handle("/threads/", v.handler(v.account))
 	mux.Handle("/roster", v.handler(v.roster))
 	mux.Handle(pages.CSSPath, v.handler(v.css))
+	mux.Handle(pages.CopyJSPath, v.handler(v.copyJS))
 	if webDir != "" {
-		mux.Handle("/", withHeaders(pageHeaders, staticFiles(webDir)))
-	} else {
-		mux.Handle("/", http.NotFoundHandler())
+		mux.Handle(ProofPath, withHeaders(pageHeaders, proofPage(webDir)))
+		mux.Handle(ProofPath+"/", withHeaders(pageHeaders, proofFiles(webDir)))
 	}
+	mux.Handle("/", http.NotFoundHandler())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for k, v := range responseHeaders {
 			w.Header().Set(k, v)
@@ -92,6 +111,33 @@ func withHeaders(headers map[string]string, h http.Handler) http.Handler {
 			w.Header().Set(k, v)
 		}
 		h.ServeHTTP(w, r)
+	})
+}
+
+// proofPage serves the card proof page, index.html of the web directory,
+// at ProofPath, with GET and HEAD.
+func proofPage(webDir string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(webDir, "index.html"))
+	})
+}
+
+// proofFiles serves the files of the web directory under ProofPath + "/".
+// ProofPath + "/" itself is redirected (301) to ProofPath, the one address
+// of the page.
+func proofFiles(webDir string) http.Handler {
+	files := http.StripPrefix(ProofPath, staticFiles(webDir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == ProofPath+"/" {
+			http.Redirect(w, r, ProofPath, http.StatusMovedPermanently)
+			return
+		}
+		files.ServeHTTP(w, r)
 	})
 }
 

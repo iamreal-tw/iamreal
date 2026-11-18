@@ -91,22 +91,27 @@ func needs(t *testing.T) string {
 	return b[0]
 }
 
-var bracketed = regexp.MustCompile(`\[\s*([^\]]*?)\s*\]`)
+var (
+	bracketed = regexp.MustCompile(`\[\s*([^\]]*?)\s*\]`)
+	// placeholder is a line that stands for something else: （Threads 的個人
+	// 檔案嵌入）, （示意圖）, （縮小的島民證明）, （第 3 部分的兩行）.
+	placeholder = regexp.MustCompile(`^（[^）]*）$`)
+)
 
 // copyLines makes the lines a page must show from a code block: the
 // example values replaced (old, new pairs, in the order given, so put the
 // longer of two overlapping values first), placeholders dropped, a
-// button's [ ] taken off, 〈需要什麼〉 put in.
+// button's [ ] and a list item's · taken off, 〈需要什麼〉 put in.
 func copyLines(t *testing.T, lines []string, replace ...string) []string {
 	t.Helper()
 	r := strings.NewReplacer(replace...)
 	var out []string
 	for _, l := range lines {
 		l = strings.TrimSpace(l)
-		switch l {
-		case "", "（Threads 的個人檔案嵌入）", "……":
+		if l == "" || l == "……" || placeholder.MatchString(l) {
 			continue
 		}
+		l = strings.TrimPrefix(l, "· ")
 		l = bracketed.ReplaceAllString(l, "$1")
 		l = strings.ReplaceAll(l, "〈需要什麼〉", needs(t))
 		out = append(out, r.Replace(l))
@@ -176,6 +181,7 @@ var (
 	onAttr    = regexp.MustCompile(`(?i)\son[a-z]+\s*=`)
 	styleAttr = regexp.MustCompile(`(?i)\sstyle\s*=|<\s*style`)
 	descMeta  = regexp.MustCompile(`(?i)name="description"|og:description|og:image`)
+	imageMeta = regexp.MustCompile(`(?i)name="description"|og:image`)
 )
 
 // wantPreview checks the page's <title> (title followed by ｜島民) and, if
@@ -283,27 +289,68 @@ func (h *harness) get(path string) (int, string) {
 	return rec.Code, body
 }
 
-// checkVisitorPage checks a page's headers, that it has no script, no
-// inline style and no description, and its top and foot.
+// withScript reports whether the page at path loads the copy buttons'
+// script: /verify and /hang/<short ID>, nothing else.
+func withScript(path string) bool {
+	path, _, _ = strings.Cut(path, "?")
+	return path == "/verify" || strings.HasPrefix(path, "/hang/")
+}
+
+// The navigation bar (home.md, 導覽列) and the foot (home.md, section 9) of
+// every page, as written.
+var (
+	navHTML = `<header class="top">
+<a class="home" href="/"><svg class="logo"`
+	navLinks = `<b>島民</b></a>
+<nav class="links">
+<a href="/verify">怎麼驗證</a>
+<a href="/roster">名冊</a>
+<a href="/faq">常見問題</a>
+<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
+</nav>
+<a class="button nav-button" href="/proof">我要換島民證明</a>
+</header>`
+	footHTML = `<footer class="foot">
+<span class="site"><b>島民</b> <span>iamreal.tw</span></span>
+<a href="/roster">名冊</a>
+<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
+<a href="/proof/help.html?topic=prepare">怎麼準備</a>
+<a href="/faq">常見問題</a>
+</footer>`
+)
+
+var copyScript = regexp.MustCompile(`<script src="/copy\.js" defer></script>`)
+
+// checkVisitorPage checks a page's headers, that it has no script (or, on
+// /verify and /hang/<short ID>, the one script and nothing inline), no
+// inline style and no description (but the home page's), and its
+// navigation bar and foot.
 func checkVisitorPage(t *testing.T, path string, rec *httptest.ResponseRecorder, test bool) {
 	t.Helper()
-	checkVisitorHeaders(t, path, rec)
+	script := withScript(path) && rec.Code == 200
+	checkVisitorHeadersOf(t, path, rec, script)
 	body := rec.Body.String()
 	if rec.Header().Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Errorf("%s: Content-Type %q", path, rec.Header().Get("Content-Type"))
 	}
-	for _, re := range []*regexp.Regexp{scriptTag, onAttr, styleAttr, descMeta} {
+	scripts := len(scriptTag.FindAllString(body, -1))
+	if script {
+		if scripts != 1 || len(copyScript.FindAllString(body, -1)) != 1 {
+			t.Errorf("%s: %d scripts; want only /copy.js", path, scripts)
+		}
+	} else if scripts != 0 {
+		t.Errorf("%s: %d scripts on the page", path, scripts)
+	}
+	checks := []*regexp.Regexp{onAttr, styleAttr, descMeta}
+	if strings.SplitN(path, "?", 2)[0] == "/" {
+		checks = []*regexp.Regexp{onAttr, styleAttr, imageMeta}
+	}
+	for _, re := range checks {
 		if m := re.FindString(body); m != "" {
 			t.Errorf("%s: the page has %q", path, m)
 		}
 	}
-	for _, want := range []string{
-		`<link rel="stylesheet" href="/pages.css">`,
-		`<header class="top">` + "\n" + `<a href="/"><svg class="logo"`,
-		`<b>島民</b><span>iamreal.tw</span></a>`,
-		`<a href="/roster">名冊</a>`, `<a href="/faq">常見問題</a>`, `<a href="/verify">怎麼驗證</a>`,
-		`<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`,
-	} {
+	for _, want := range []string{`<link rel="stylesheet" href="/pages.css">`, navHTML, navLinks, footHTML} {
 		if !strings.Contains(body, want) {
 			t.Errorf("%s: no %s", path, want)
 		}
@@ -317,8 +364,19 @@ func checkVisitorPage(t *testing.T, path string, rec *httptest.ResponseRecorder,
 // and none of the card proof pages'.
 func checkVisitorHeaders(t *testing.T, path string, rec *httptest.ResponseRecorder) {
 	t.Helper()
+	checkVisitorHeadersOf(t, path, rec, false)
+}
+
+// checkVisitorHeadersOf is checkVisitorHeaders; with script, the policy
+// allows scripts of this origin too.
+func checkVisitorHeadersOf(t *testing.T, path string, rec *httptest.ResponseRecorder, script bool) {
+	t.Helper()
+	csp := "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+	if script {
+		csp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+	}
 	want := map[string]string{
-		"Content-Security-Policy":      "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+		"Content-Security-Policy":      csp,
 		"Referrer-Policy":              "no-referrer",
 		"X-Content-Type-Options":       "nosniff",
 		"Cross-Origin-Opener-Policy":   "same-origin",
@@ -329,6 +387,11 @@ func checkVisitorHeaders(t *testing.T, path string, rec *httptest.ResponseRecord
 	for k, v := range want {
 		if got := rec.Header().Get(k); got != v {
 			t.Errorf("%s: %s is %q, want %q", path, k, got, v)
+		}
+	}
+	for k := range rec.Header() {
+		if _, ok := want[k]; !ok && k != "Content-Type" && k != "Etag" && k != "Content-Length" && k != "Accept-Ranges" && k != "Last-Modified" {
+			t.Errorf("%s: another header %s", path, k)
 		}
 	}
 }
@@ -374,10 +437,10 @@ func TestProofPage(t *testing.T) {
 
 	// The links of the page.
 	for _, link := range []string{
-		`<a href="/">我要更新這張證明</a>`,
+		`<a href="/proof">我要更新這張證明</a>`,
 		`<a href="https://www.threads.com/@alice">Threads 的 @alice</a>`,
 		`<a href="/verify">怎麼驗證</a>`,
-		`<a class="button" href="/">我也要換島民證明</a>`,
+		`<a class="button" href="/proof">我也要換島民證明</a>`,
 	} {
 		if !strings.Contains(page, link) {
 			t.Errorf("no %s", link)
@@ -847,14 +910,14 @@ func TestVisitorPagesEscape(t *testing.T) {
 
 func TestVisitorPagesMethods(t *testing.T) {
 	h, _, _ := exampleCards(t, false)
-	for _, path := range []string{"/p/7K2Q9FM4XD", "/threads/@alice", "/roster", "/pages.css"} {
+	for _, path := range []string{"/p/7K2Q9FM4XD", "/threads/@alice", "/roster", "/pages.css", "/", "/faq", "/verify", "/hang", "/hang/7K2Q9FM4XD", "/copy.js"} {
 		// (net/http drops the body of a HEAD response; the recorder keeps
 		// it.)
 		head := h.raw("HEAD", path, "")
 		if head.Code != 200 {
 			t.Errorf("HEAD %s: %d", path, head.Code)
 		}
-		checkVisitorHeaders(t, "HEAD "+path, head)
+		checkVisitorHeadersOf(t, "HEAD "+path, head, withScript(path))
 		for _, m := range []string{"POST", "PUT", "DELETE"} {
 			rec := h.raw(m, path, "")
 			if rec.Code != 405 || rec.Header().Get("Allow") != "GET, HEAD" {
@@ -902,15 +965,15 @@ func TestVisitorHeadersAndRoutes(t *testing.T) {
 		t.Errorf("/roster: %d", status)
 	}
 	// The card proof pages: their own headers, none of the visitors'.
-	page := h.raw("GET", "/", "")
+	page := h.raw("GET", "/proof", "")
 	for k, v := range pageHeaders {
 		if page.Header().Get(k) != v {
-			t.Errorf("/: %s is %q", k, page.Header().Get(k))
+			t.Errorf("/proof: %s is %q", k, page.Header().Get(k))
 		}
 	}
 	for _, k := range []string{"Referrer-Policy", "Cache-Control"} {
 		if page.Header().Get(k) != "" {
-			t.Errorf("/: %s is %q", k, page.Header().Get(k))
+			t.Errorf("/proof: %s is %q", k, page.Header().Get(k))
 		}
 	}
 }
@@ -920,7 +983,7 @@ func TestVisitorPagesProductionRoster(t *testing.T) {
 	h := newHarness(t, startOfTests, g3CRL(t))
 	h.roster = verifier.Production
 	h.start()
-	for _, path := range []string{"/roster", "/threads/@alice", "/p/7K2Q9FM4XD"} {
+	for _, path := range []string{"/roster", "/threads/@alice", "/p/7K2Q9FM4XD", "/", "/faq", "/verify", "/hang"} {
 		h.get(path) // checkVisitorPage checks there is no 測試名冊
 	}
 }

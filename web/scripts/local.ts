@@ -6,7 +6,9 @@
 // no scoped ID of the public roster), fetches the CRS if it is missing,
 // builds the server, runs the CRL mirror once against MOICA's real CRLs, and
 // serves the page and the API with the test roster (its platform table:
-// test-example and threads) on http://localhost:PORT/. Stop it with Ctrl-C.
+// test-example and threads) on http://localhost:PORT/proof (the rest of the
+// site, the home page and the visitors' pages, at http://localhost:PORT/).
+// Stop it with Ctrl-C.
 //
 //   IAMREAL_BB=/path/to/bb pnpm local [--port 8080] [--data DIR]
 //
@@ -54,7 +56,7 @@ writeFileSync(join(crs, "bn254_g1.dat"), point);
 console.log("4/5 the CRL mirror, once (MOICA's G2 and G3 CRLs)");
 execFileSync(server, ["mirror", "-data", data], { stdio: "inherit" });
 
-console.log(`5/5 serving http://localhost:${port}/ (test roster; Ctrl-C to stop)`);
+console.log(`5/5 serving http://localhost:${port}/proof, and the rest of the site at http://localhost:${port}/ (test roster; Ctrl-C to stop)`);
 const child = spawn(
   server,
   ["serve", "-data", data, "-bb", BB, "-crs", crs, "-addr", `127.0.0.1:${port}`, "-web", dist, "-roster", "test", "-mirror=false"],

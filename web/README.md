@@ -14,11 +14,11 @@ pnpm install --frozen-lockfile
 IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄>
 ```
 
-`pnpm local`（`scripts/local.ts`）依序：通用參數不在就下載（`pnpm fetch-crs`）、建置本機用真卡片的頁面（`vite build --mode localcard`，`src/target-local.ts` 換掉 `src/target.ts`：內政部的發證金鑰、元件在 `http://localhost:61161`、沒有假卡片和測試金鑰，和正式的建置相同；**但簽的是測試名冊的場合字串 `iamreal-test:public:0__________`**，在這裡試真卡片算出的匿名編號和公開名冊上的無關；認得測試名冊的兩個平台 `test-example`、`threads`）、建置後台（不帶測試的建置標籤）、跑一次清冊鏡像（抓內政部真的 G2、G3 清冊）、用測試的名冊（`-roster test`）啟動後台並提供頁面，在 `http://localhost:8080/`。按 Ctrl-C 停止。名冊、清冊、後台的執行檔在 `web/local/`（不進版控）；刪掉這個目錄就從空的名冊重來。正式的建置（`pnpm build`）不變，簽的是公開名冊的場合字串。
+`pnpm local`（`scripts/local.ts`）依序：通用參數不在就下載（`pnpm fetch-crs`）、建置本機用真卡片的頁面（`vite build --mode localcard`，`src/target-local.ts` 換掉 `src/target.ts`：內政部的發證金鑰、元件在 `http://localhost:61161`、沒有假卡片和測試金鑰，和正式的建置相同；**但簽的是測試名冊的場合字串 `iamreal-test:public:0__________`**，在這裡試真卡片算出的匿名編號和公開名冊上的無關；認得測試名冊的兩個平台 `test-example`、`threads`）、建置後台（不帶測試的建置標籤）、跑一次清冊鏡像（抓內政部真的 G2、G3 清冊）、用測試的名冊（`-roster test`）啟動後台並提供頁面，在 `http://localhost:8080/proof`（同一個後台在 `http://localhost:8080/` 提供首頁和其他訪客的頁面）。按 Ctrl-C 停止。名冊、清冊、後台的執行檔在 `web/local/`（不進版控）；刪掉這個目錄就從空的名冊重來。正式的建置（`pnpm build`）不變，簽的是公開名冊的場合字串。
 
-用桌機的 Chrome 開 `http://localhost:8080/`。`localhost` 是瀏覽器認定的安全來源，不需要 HTTPS：在後台送的標頭之下，頁面是跨來源隔離的（多執行緒），也能和元件的視窗來回（2026-11-16 在這台 Mac 的 Chrome 157 實測，只送 `CheckEnvir`：`test/e2e/check-component.ts`）。Safari、Firefox 忽略 `Document-Isolation-Policy`，證明用 1 個執行緒；這一頁沒有在它們上面測過。後台另外送 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（見「頁面需要的標頭」）；加了它之後元件還能不能用，Chrome 以外的瀏覽器和真的過卡還沒有確認。
+用桌機的 Chrome 開 `http://localhost:8080/proof`。`localhost` 是瀏覽器認定的安全來源，不需要 HTTPS：在後台送的標頭之下，頁面是跨來源隔離的（多執行緒），也能和元件的視窗來回（2026-11-16 在這台 Mac 的 Chrome 157 實測，只送 `CheckEnvir`：`test/e2e/check-component.ts`）。Safari、Firefox 忽略 `Document-Isolation-Policy`，證明用 1 個執行緒；這一頁沒有在它們上面測過。後台另外送 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（見「頁面需要的標頭」）；加了它之後元件還能不能用，Chrome 以外的瀏覽器和真的過卡還沒有確認。
 
-確認頁面本身沒問題、但還不想插卡時：`node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/` 用無頭 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件不會收到任何請求），檢查標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域。
+確認頁面本身沒問題、但還不想插卡時：`node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/proof` 用無頭 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件不會收到任何請求），檢查標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域。
 
 ## 畫面和引擎怎麼分層
 
@@ -33,11 +33,17 @@ IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄
 
 `card-proof.json` 的 `app` 那一組（選裝置、用手機過卡）是 app 推出之後用的：畫面現在不顯示它們（`card-proof.md`「app 推出之前」），文字測試照樣比對它們在 Markdown 裡。
 
-說明頁（「怎麼準備」「了解更多」「怎麼驗證」，和完成畫面的「打開這張島民證明」）是 `help.html?topic=…`，只有標題和「待補」，在新分頁開：離開這一頁，過卡就中斷了。島民證明的頁面還沒做，「打開這張島民證明」先指到說明頁。
+說明頁（「怎麼準備」「了解更多」「怎麼驗證」，和完成畫面的「打開這張島民證明」）是 `/proof/help.html?topic=…`，只有標題和「待補」，在新分頁開：離開這一頁，過卡就中斷了。島民證明的頁面還沒做，「打開這張島民證明」先指到說明頁。
 
 每個畫面的頁首是記號和服務的名稱「島民」（`card-proof.json` 的 `common.service_name`）。
 
 **字體**：頁面不載入任何字體檔。後台送的 CSP 是 `default-src 'none'` 而沒有 `font-src`，字體檔即使放在自己的網域也會被擋；要用視覺設計定的字體（源泉圓體、思源黑體、芫荽），得先在 CSP 加 `font-src 'self'`（放寬 CSP，還沒有決定）。`style.css` 的字體依序寫這幾個字體的名稱，電腦裝了就用，沒裝就用系統的字體。
+
+## 網址
+
+過卡的頁面在 `/proof`，它的每個檔案在 `/proof/` 底下：程式和 worker（`/proof/assets/…`）、bb.js 的 WebAssembly（`/proof/bb/…`）、電路（`/proof/circuits/…`）、通用參數（`/proof/crs/…`）、說明頁（`/proof/help.html`）。網站的 `/` 是首頁，由後台產生（`server/README.md`「訪客看的頁面」）。三種頁面的建置（production、test、localcard）的 `base` 是 `/proof/`（`vite.config.ts`）；頁面自己寫的路徑從 `src/base.ts` 的 `BASE` 接上去（`import.meta.env.BASE_URL`，建置時寫死；Node 裡的測試沒有建置，是 `/`）。引擎自己的測試頁（mode engine，`pnpm test:e2e`）照舊在 `/`。API（`/api/v1/…`）和清冊鏡像（`/crl/…`）的路徑不變。
+
+完成畫面的「打開這張島民證明」「怎麼驗證」現在連到說明頁（`/proof/help.html?topic=…`），不是 `/p/…`；寫在畫面上的連結 `iamreal.tw/p/<島民編號>` 和複製的 `https://iamreal.tw/p/<島民編號>` 是完整的網址，不受搬家影響。
 
 ## 每個平台不同的東西
 
@@ -166,15 +172,15 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 | 這張卡片的現況 | `POST /api/v1/card-state` | 格式：`last_card_proof`（日期或 null）、`proofs_on_last_date`（整數）、`platforms`（物件）、`count`、`head`（64 個十六進位數字）；平台表上每個有一項的平台，那一項要讀得懂：`current`、`last_declared` 是 null 或合那個平台的格式，`switch_count` 是 0 到 5 的整數，`correction_date` 是日期或 null。裝置不認得的平台那一項：`current` 是 null 就忽略；有帳號就原樣保留，但平台代號和帳號要過最低限度的檢查；那一項不是物件、沒有 `current` 都當成讀不懂。名冊規則產生不出來的組合當成讀不懂的回應（`malformed_response`）：有 `current` 而 `last_declared` 不同；`last_declared` 和 `correction_date` 只有一個有值；沒有帳號卻有更換次數；有帳號而沒有 `last_card_proof`；`correction_date` 晚於 `last_card_proof`；任何日期晚於今天加 3 天（`spec/roster-rules.md`「How far dates are trusted」）；`proofs_on_last_date` 沒有 `last_card_proof` 時不是 0、有的時候不在 1 到 3 之間（`src/spec/roster-rules.ts` 的 `possibleSlot`、`possibleCard`）。每個平台會是哪一種（`first`、`refresh`、`correction`、`switch`、`withdraw`，或擋下）、還可以更換幾次（規則是 5 減掉次數）、今天改掉算不算更換（`correction_date` 是不是裝置自己的台灣今天）、今天是不是已經有 3 筆（`last_card_proof` 是今天而且 `proofs_on_last_date` 是 3），由裝置從這些事實和今天的日期自己算；`last_card_proof` 不是今天時，裝置不知道今天有幾筆，由後台的規則決定（送出時回 `daily_limit`）。不能做的清單引擎在 `choose` 拒絕，`proceed` 簽之前用當下的日期再算一次，和畫面說的不同就停。事實本身沒辦法檢查，見「已知的限制」 | `src/api.ts` 的 `requestCardState`、`src/spec/roster-rules.ts`、`src/flow.ts` 的 `confirmCard`、`consequenceOf`、`proceed` |
 | 清單裡沒有輸入的帳號 | 上一列（現在宣告的、原樣保留的） | 持卡人什麼都不改時，清單裡的帳號由伺服器的回答決定；清空一列時，被收回的帳號也是。伺服器謊報認不出持卡人（它已經知道這個匿名編號），只能讓清單少了帳號或多了帳號：第 5 步列出整份要簽的清單和每一列會發生什麼，**包含會被收回的**（漏洞 L2），持卡人看得到；`proceed(清單)` 要呼叫的程式傳回畫面上顯示、持卡人確認過的清單，和引擎算的不同就停，卡片不簽第二次 | `src/flow.ts` 的 `consequenceOf`、`proceed` |
 | 什麼時候向後台查現況 | （裝置決定） | 不需要簽章就能做的檢查全部通過之後，卡片才簽第一次、裝置才帶著匿名編號查現況：憑證的預先檢查、清冊下載並驗過、樹建完、序號不在樹裡、電路檔和通用參數的雜湊對。否則後台會看到「這個匿名編號查過現況、之後沒有下文」，能和它的鏡像給的清冊對起來（ADR-0015、ADR-0016）。檢查還沒完成時 `phase` 是 `checking`，畫面不顯示 PIN 欄位；`checksDone()` 通過後是 `ready_for_pin`。`confirmCard` 自己也先等這些檢查 | `src/flow.ts` 的 `startBackground`、`checksDone`、`confirmCard` |
-| 電路 | `/circuits/card_proof_rs2048.json`、`card_proof_rs4096.json` | SHA-256 寫死（`circuits/README.md`）；不同就停，在卡片簽章之前 | `src/prover/artifacts.ts` |
-| 通用參數 | `/crs/bn254_g1_compressed_2p18.dat`、`/crs/bn254_g2.dat` | SHA-256 寫死；核對過才交給 bb.js | `src/prover/artifacts.ts`、`src/prover/engine.ts` |
+| 電路 | `/proof/circuits/card_proof_rs2048.json`、`card_proof_rs4096.json` | SHA-256 寫死（`circuits/README.md`）；不同就停，在卡片簽章之前 | `src/prover/artifacts.ts` |
+| 通用參數 | `/proof/crs/bn254_g1_compressed_2p18.dat`、`/proof/crs/bn254_g2.dat` | SHA-256 寫死；核對過才交給 bb.js | `src/prover/artifacts.ts`、`src/prover/engine.ts` |
 | 送出的結果 | `POST /api/v1/records` | 狀態碼 `201` 就是記下了：`seq`、`record_hash` 讀不懂、或內容根本不是 JSON 物件，當成「記下了、讀不出每個平台記成什麼」；`kinds` 讀不懂也一樣；讀得懂就和第 5 步說的逐個平台比（「送出後比對」）；只顯示 | `src/api.ts` 的 `submitRecord`、`src/flow.ts` 的 `done` |
 | 什麼時候回答 | 每個請求 | 每個請求有時間上限，連回應的內容一起算；到了就中斷請求，當成沒有回應（`network`），和連不上走同一條路。設定、現況、題目、送出 30 秒（`API_TIMEOUT_MS`：都是小的 JSON，後台從記憶體回答或驗一份證明）；清冊的索引和清冊、電路檔、通用參數 5 分鐘（`FILE_TIMEOUT_MS`：讀卡時一起下載的 G2 清冊 16.9 MB、通用參數 8 MiB、電路檔 0.8 MB 約 26 MB，5 分鐘容得下約 0.7 Mbit/s；都在第一次簽章之前，沒有任何祕密在等它們）。兩次簽章之間的 5 分鐘不靠這些上限，見「PIN 經過哪些程式」 | `src/api.ts` 的 `withTimeout` |
 | 錯誤代碼 | 每個介面 | 只收 `[a-z_]{1,40}`，其他寫成 `http_狀態碼`；只回給呼叫的程式。送出時，沒有回應、`429`、`crl_stale` 以外的 5xx（`internal`）可以用 `resubmit()` 原封不動再送；其他代碼（包括 `503` `crl_stale`）結束流程 | `src/api.ts`、`src/flow.ts` 的 `submit` |
 
 **寫死在頁面裡的**：場合字串（`src/spec/scope.ts`）和建置用的名冊（`src/target.ts` 的 `ROSTER`：正式的建置是 `production`，測試的建置、本機用真卡片的建置是 `test`）、每個平台的名稱和寫法（`src/presentations/`，建置決定有哪幾份）、G2 和 G3 的發證金鑰（`src/issuers.ts`，和 `spec/vectors/issuers.json`、`crl/` 的憑證檔比對過）、電路和通用參數的 SHA-256、內建的 7 天、證明的設定（零知識、`noir-recursive`，`src/prover/prover.ts`）、證明的執行緒上限。
 
-**頁面本身**（HTML、JavaScript、bb.js 和 Noir 的 WebAssembly）和 API 從同一台伺服器來。只有電路檔和通用參數有寫死的 SHA-256；頁面的指令碼（`index.html` 的 `<script>` 沒有 `integrity`）、bb.js 的 WebAssembly（`/bb/barretenberg*.wasm.gz`，bb.js 自己用網址抓）、Noir 的兩個 WebAssembly（`/assets/acvm_js_bg-*.wasm`、`/assets/noirc_abi_wasm_bg-*.wasm`）都**沒有核對雜湊**。頁面和這些檔案由同一個來源提供時，這不多一個對手：能換掉 WebAssembly 的人也能換掉頁面本身，ADR-0016 的「代價」寫明了這個前提（用的頁面就是公開的這一份）。**頁面和靜態檔分開放時要補**（部署時要做的事）：放靜態檔的那一邊換掉 WebAssembly，就看得到證明的全部私有輸入，而換電路檔反而會被擋下。
+**頁面本身**（HTML、JavaScript、bb.js 和 Noir 的 WebAssembly）和 API 從同一台伺服器來。只有電路檔和通用參數有寫死的 SHA-256；頁面的指令碼（`index.html` 的 `<script>` 沒有 `integrity`）、bb.js 的 WebAssembly（`/proof/bb/barretenberg*.wasm.gz`，bb.js 自己用網址抓）、Noir 的兩個 WebAssembly（`/proof/assets/acvm_js_bg-*.wasm`、`/proof/assets/noirc_abi_wasm_bg-*.wasm`）都**沒有核對雜湊**。頁面和這些檔案由同一個來源提供時，這不多一個對手：能換掉 WebAssembly 的人也能換掉頁面本身，ADR-0016 的「代價」寫明了這個前提（用的頁面就是公開的這一份）。**頁面和靜態檔分開放時要補**（部署時要做的事）：放靜態檔的那一邊換掉 WebAssembly，就看得到證明的全部私有輸入，而換電路檔反而會被擋下。
 
 ## 停止的原因
 
@@ -241,7 +247,7 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ## 頁面需要的標頭
 
-伺服器對 `web/` 的每個檔案送三個標頭（`server/headers.go` 的 `pageHeaders`；`server/` 的測試檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
+伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（`server/headers.go` 的 `pageHeaders`；`server/` 的測試檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
 
 ### `Content-Security-Policy`
 
@@ -321,7 +327,7 @@ pnpm build            # 正式的建置，到 dist/
 `test/e2e/ui.ts`：
 
 1. 產生拋棄式的發證金鑰（G2、G3）、卡片和清冊（`test/fixtures/`）。
-2. 用建置標籤 `iamrealtest` 建置後台（`server/testissuers.go` 的 `-test-issuers`、`-test-moica`、`-test-clock`），用這兩把金鑰、一個假的內政部（給鏡像抓清冊）、測試的名冊（平台表是 `test-example` 和 `threads`）啟動；頁面用 `vite build --mode test` 建置（`test/e2e/target.ts` 換掉 `src/target.ts`：測試的名冊、測試的發證金鑰、假元件在 `http://localhost:61171`、PIN 等第二次簽章的上限 25 秒），由後台提供。
+2. 用建置標籤 `iamrealtest` 建置後台（`server/testissuers.go` 的 `-test-issuers`、`-test-moica`、`-test-clock`），用這兩把金鑰、一個假的內政部（給鏡像抓清冊）、測試的名冊（平台表是 `test-example` 和 `threads`）啟動；頁面用 `vite build --mode test` 建置（`test/e2e/target.ts` 換掉 `src/target.ts`：測試的名冊、測試的發證金鑰、假元件在 `http://localhost:61171`、PIN 等第二次簽章的上限 25 秒），由後台在 `/proof` 提供。
 3. 假元件（`test/e2e/fake-component.ts`）照真元件的訊息來回，用測試金鑰的卡片回答 `GetUserCert` 和 `MakeSignature`，PIN 錯、鎖卡回中華電信程式庫寫的代碼，並記下每一個請求。
 4. 用無頭 Chrome（`test/e2e/cdp.ts`，Chrome DevTools Protocol，不用套件）從畫面上點，滑鼠事件是真的（瀏覽器當成持卡人的點擊）。瀏覽器不解析 `localhost`、`127.0.0.1` 以外的名稱（`--host-resolver-rules`），預覽開的平台分頁連不出去。一張卡片一天最多 3 筆有效紀錄、更換一天算一次（同一天再改是更正），所以同一張卡片的紀錄分在九天：後台的時鐘（`-test-clock`）和頁面的時鐘（測試把頁面的 `Date.now` 換掉）一起往後撥整天，假的內政部每天發一份當天的清冊，後台的鏡像（`iamreal-server mirror`）抓下來。每次過卡都從第 1 步開始：第 1 步（兩段和上面兩行一樣顯眼的提醒、兩個問題、只有「下一步」）、第 2 步的六項由上到下一項一項完成（記下清單的每一個樣子：完成的在上、最多一項進行中、下面的沒有狀態）、不顯示姓名、第 3 步的姓名和三件事、「卡片簽章中……」、第一次簽章簽的是測試名冊的公開場合字串、每一步上方的「第 n 步，共 6 步」。每一次都檢查第 4 步每一列（名稱、欄位裡的帳號、下面的那一行、有沒有預覽）和上下的句子、第 5 步要簽的整份清單（每一列的名稱、平台代號、帳號、會發生什麼）、按鈕、清單下面的句子、第 6 步的標題、島民證明的清單、卡片頁的連結、名冊記下的每一列、換卡的提醒、收回的連結、別的卡片也宣告了。
    - 第 0 天：第一次宣告一個平台（先輸入一次錯的 PIN；三次點擊各先被瀏覽器擋一次；什麼都沒填按「下一步」是「請至少填一個帳號。」；格式不對的帳號按「預覽個人檔案」：那一列下面是格式的提示、沒有開分頁；`@Alice` 按預覽：頁面呼叫 `window.open("https://www.threads.com/@alice", "_blank", "noopener,noreferrer")`，開出一個拿不到這一頁的新分頁，這一頁自己沒有對別處發請求；`test-example` 格式不對時那一列下面是「帳號的格式不對。請照平台上顯示的帳號填。」；「複製連結」把 `https://iamreal.tw/p/<島民編號>` 寫進剪貼簿；「打開這張島民證明」「怎麼驗證」指到說明頁；記號的動畫）、再次過卡什麼都不改（後台的表把顯示名稱都改掉，畫面照樣寫頁面自己的名稱；第一次送出被丟掉，「再試一次」完成）、當天更正（「今天才宣告的帳號，這次改掉不另外算一次更換。」，名冊記下 `correction`）、今天已經 3 筆（清單照樣顯示、不能改，只有「回到開頭」，沒有第二次簽章）。
@@ -334,10 +340,10 @@ pnpm build            # 正式的建置，到 dist/
    - 之後：鎖卡（句子在 PIN 欄位下面，「確認卡片」不能按，「上一步」可以）；PIN 含 `+`、`%`、全形數字（畫面的那一句、元件沒收到簽章的請求）；現況的回答沒有 `platforms`（PIN 欄位下面「伺服器的回應不正確……（代碼 malformed_response）」，沒有清單）；題目的日期不是今天（「連上島民的伺服器」停住，只有「再讀一次卡片」）；送出時後台說題目過期（`challenge_unknown`，只有「再讀一次卡片」，PIN 要重新輸入）；按「確認卡片」後拖住現況的回答，期間 PIN 欄位、「確認卡片」、「上一步」都不能按，再輸入、再按一次，卡片只簽一次、只有一個 `card-state`；每一種在輸入 PIN 之前停下的情況，各自的句子寫在清單的哪一項下面：元件不回應、沒有讀卡機、沒有卡片、卡片沒有憑證、過期、還沒生效、不是國民正卡、格式不支援、兩張憑證都通過、不是內政部簽發、電路檔內容不符、後台不回應、平台表讀不懂（每一列的格式都不是 `[…]{m,n}`）、在清冊上、清冊 5 天沒更新、鏡像沒有可用的清冊、清冊比這台電腦用過的舊。每一種都檢查那一項寫「停在這裡」、下面的項目沒有狀態、沒有 PIN 欄位、卡片沒有簽、沒有 `card-state` 請求、「再讀一次卡片」可以按。
    - 快照重驗之後，另外兩張卡片：一張宣告 `@zoe`、另一張也宣告 `@zoe`（`account_cards` 2：「還有別的卡片也宣告了 @zoe。……」）；第二張再次過卡時把回應的 `kinds` 換成一個不認得的種類（「名冊已經記下這次過卡」和「這一頁讀不出伺服器回報每個帳號記成什麼。……」，島民證明照樣顯示）；第二張再過一次卡時把回應換成讀不懂的 `201`（同樣是「名冊已經記下這次過卡」，不是失敗）；第一張再次過卡時讓第一次送出到達後台、把回答丟掉，按「再試一次」：後台回 `challenge_used`，頁面再查一次現況、清單相符，到完成的畫面（「名冊已經記下這次過卡」），名冊只多一筆。
    - 再一張新的卡片，後台的平台表只留 Threads：第 4 步只有 Threads 一列，標題是「你的 Threads 帳號」、上方是「填上你要宣告的 Threads 帳號。」、下方是「一張卡片只能宣告一個 Threads 帳號，……」，第 5 步是「按下後，名冊會公開記下這張卡片宣告的帳號：」、「這個 Threads 帳號會公開列在島民證明上。」（沒有「這些帳號會公開列在……」）、按鈕「宣告這個帳號」，第 6 步是「把下面的連結放在這個 Threads 帳號的個人檔案上。……」、「有一張有效的自然人憑證宣告了這個帳號：」和「……更新這個帳號的日期。」。（後台的表少了 `test-example`、卡片在那裡有帳號的那一案，照超過一個平台的寫法。）每一次完成都檢查第 6 步下面的三點（清單變成空的時只有「你不需要相信我們……」）。
-   - 最後，正式的建置（`vite build --mode production`）用一個本機的小伺服器帶著頁面的標頭提供，只開到第 1 步、什麼都不按：寫出 Threads 的那一句，沒有「你宣告的帳號會公開列在……」；對元件的網址（`localhost:61161`）的請求一律擋下並計數，應該是 0。
+   - 最後，正式的建置（`vite build --mode production`）用一個本機的小伺服器帶著頁面的標頭在 `/proof` 提供，只開到第 1 步、什麼都不按：寫出 Threads 的那一句，沒有「你宣告的帳號會公開列在……」；對元件的網址（`localhost:61161`）的請求一律擋下並計數，應該是 0。
 5. 出每日快照，用 `iamreal-verify` 重驗：名冊成立，每一筆有效，十四筆每個平台的種類和畫面第 6 步顯示的相同，最後的現況（這張卡片的清單 `test-example:a-b`、`threads:frank`，上次過卡是第 7 天）和畫面最後顯示的相同，畫面上的島民編號是這張卡片的。
 
-6. 頁面的標頭（含 `Cross-Origin-Opener-Policy`）、跨來源隔離、多執行緒；沒有違反 CSP；頁面和它的 worker 只連到自己的網域、元件的視窗只連到元件；一次元件的請求一個視窗（被擋的點擊沒有開出視窗；PIN 不送時，點擊開的視窗沒用就關掉），上一個視窗關了才開下一個；沒有不帶 PIN 的簽章請求；用過 PIN 之後、PIN 等太久之後頁面上找不到它；姓名在第 3 步之後不在頁面上；瀏覽器的儲存空間只有清冊編號。
+6. 頁面的標頭（含 `Cross-Origin-Opener-Policy`）、跨來源隔離、多執行緒；沒有違反 CSP；頁面和它的 worker 只連到自己的網域、元件的視窗只連到元件；在自己的網域上只拿 `/proof`、`/proof/` 底下的檔案（程式、電路、通用參數、WebAssembly 都在那裡）、`/api/` 和 `/crl/`；一次元件的請求一個視窗（被擋的點擊沒有開出視窗；PIN 不送時，點擊開的視窗沒用就關掉），上一個視窗關了才開下一個；沒有不帶 PIN 的簽章請求；用過 PIN 之後、PIN 等太久之後頁面上找不到它；姓名在第 3 步之後不在頁面上；瀏覽器的儲存空間只有清冊編號。
 
 截圖在 `test-output/ui/screens/`，重驗的輸出在 `test-output/ui/verify.json`。
 
@@ -379,6 +385,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（`card-proof.md` 的六步）、`messages.ts`（停止原因、清單每一項的狀態、第 4 步的清單和每一列的那一行、第 5 步要簽的清單、完成的畫面對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`logo.ts`（記號，用 DOM 畫的 SVG；台灣的輪廓取自 Natural Earth 的公有領域地圖資料）、`help.ts`、`style.css`（顏色、版面、清單的勾和轉圈、完成的動畫；不載入字體檔） |
 | `src/platforms.ts`、`src/presentations/` | 寫死在裝置上的每個平台的名稱和寫法（每個平台一份）、島民網站的網域和卡片頁的路徑（見「每個平台不同的東西」） |
 | `src/index.ts` | 引擎的入口：`startEngine()`（進頁面呼叫一次）、`createCardProof()`（每次過卡，用同一個引擎）。名冊（`src/target.ts`）、同網域的 fetch、時鐘、儲存 |
+| `src/base.ts` | 頁面和它的檔案放在哪個路徑底下（建置的 `base`，見「網址」） |
 | `src/target.ts`、`src/target-local.ts` | 名冊（場合字串由它決定）、裝置認得的平台、發證金鑰、元件的網址、PIN 等第二次簽章的上限；測試的建置換成 `test/e2e/target.ts`，本機用真卡片的建置（`localcard`）換成 `src/target-local.ts`（只有名冊和平台和正式的不同） |
 | `src/flow.ts` | 過卡的狀態機：`readCard` → `checksDone` → `confirmCard(pin)` → `choose(每個平台輸入的帳號)`（↔ `back()`）→ `proceed(清單)` → 完成；`resubmit`、`cancel`；`phase` 說現在在哪一步；PIN 等第二次簽章的上限 `IDLE_MS`；送出後比對 |
 | `src/spec/` | 規格裡的算法：base32、題目、日期、場合字串、帳號名稱的格式和平台代號（`username-format.ts`）、宣告碼（整份清單）、匿名編號和 10 個字元的短編號、名冊規則的事先計算（每個名額的事件規則、整份清單、規則產生不出來的狀態） |

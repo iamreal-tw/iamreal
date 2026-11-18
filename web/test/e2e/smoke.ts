@@ -5,7 +5,7 @@
 // started, that no Content-Security-Policy was violated and that the page
 // connected only to its own origin.
 //
-//   node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/
+//   node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/proof
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

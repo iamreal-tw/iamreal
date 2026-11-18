@@ -119,7 +119,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	fs.SetOutput(stderr)
 	data := fs.String("data", "", "the data `directory` (required)")
 	addr := fs.String("addr", "127.0.0.1:8080", "the address to listen on")
-	web := fs.String("web", "", "a `directory` of static files served at / (the build of web/)")
+	web := fs.String("web", "", "a `directory` of static files served at /proof (the build of web/: its index.html at /proof, the rest under /proof/)")
 	kind := rosterFlag(fs)
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")

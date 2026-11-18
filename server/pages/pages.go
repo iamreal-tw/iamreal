@@ -1,9 +1,13 @@
-// Package pages makes the pages visitors read, as whole HTML documents
-// with no script: the page of a card (/p/<short ID>), the page of an
-// account (/threads/@<name>) and the roster page (/roster), and the one
-// style sheet they share. Every word on them is from design/copy/
-// (proof-page.md, account-page.md, roster-page.md) and is written in the
-// templates, not here.
+// Package pages makes the pages visitors read, as whole HTML documents:
+// the home page (/), the FAQ (/faq), how to verify (/verify), hanging a
+// proof on a profile (/hang, /hang/<short ID>), the page of a card
+// (/p/<short ID>), the page of an account (/threads/@<name>) and the
+// roster page (/roster), the one style sheet they share and the one small
+// script of /verify and /hang/<short ID> (the copy buttons). Every other
+// page has no script. Every word on them is from design/copy/ (home.md,
+// faq.md, verify.md, hang.md, proof-page.md, account-page.md,
+// roster-page.md) and is written in the templates; the titles of the link
+// previews are here.
 //
 // This package only turns data into HTML. The server (server/visitor.go)
 // reads the store, reads the URL and writes the response; a test can make
@@ -36,10 +40,24 @@ var CSS []byte
 const CSSPath = "/pages.css"
 
 // CSSETag is the entity tag of CSS, for revalidation.
-var CSSETag = func() string {
-	sum := sha256.Sum256(CSS)
+var CSSETag = etag(CSS)
+
+// CopyJS is the script of the copy buttons, served at CopyJSPath and
+// loaded by /verify and /hang/<short ID> only.
+//
+//go:embed copy.js
+var CopyJS []byte
+
+// CopyJSPath is the path the server serves CopyJS at.
+const CopyJSPath = "/copy.js"
+
+// CopyJSETag is the entity tag of CopyJS.
+var CopyJSETag = etag(CopyJS)
+
+func etag(b []byte) string {
+	sum := sha256.Sum256(b)
 	return `"` + hex.EncodeToString(sum[:8]) + `"`
-}()
+}
 
 // Platform is the one platform the pages show: the first version lists
 // Threads only (design/copy/proof-page.md). The other platforms of a test
@@ -61,9 +79,9 @@ var templates = func() map[string]*template.Template {
 		"unknownEvent": func(e string) (string, error) { return "", fmt.Errorf("pages: no words for the event %q", e) },
 	}
 	out := map[string]*template.Template{}
-	for _, name := range []string{"proof", "proof-missing", "account", "account-not-a-name", "roster"} {
+	for _, name := range []string{"home", "faq", "verify", "hang", "proof", "proof-missing", "account", "account-not-a-name", "roster"} {
 		out[name] = template.Must(template.New(name).Funcs(funcs).ParseFS(templateFiles,
-			"templates/layout.html", "templates/parts.html", "templates/"+name+".html"))
+			"templates/layout.html", "templates/parts.html", "templates/faq-answers.html", "templates/"+name+".html"))
 	}
 	return out
 }()
@@ -72,18 +90,27 @@ var templates = func() map[string]*template.Template {
 type document struct {
 	Site
 	// Title is the title of the link preview (og:title); the <title> is
-	// Title followed by ｜島民.
-	Title string
-	// Preview is true to write og:title and og:site_name.
-	Preview bool
-	CSS     string
+	// Title followed by ｜島民, or TabTitle if it is not "".
+	Title    string
+	TabTitle string
+	// Preview is true to write og:title and og:site_name, and
+	// og:description if Description is not "".
+	Preview     bool
+	Description string
+	CSS         string
+	// Script is the path of the page's one script, or "" for none.
+	Script  string
 	Kind    string // which page: the class of <body>
 	Content any
 }
 
 func render(w io.Writer, name string, site Site, title string, preview bool, content any) error {
+	return renderDocument(w, name, document{Site: site, Title: title, Preview: preview, Content: content})
+}
+
+func renderDocument(w io.Writer, name string, d document) error {
 	var b bytes.Buffer
-	d := document{Site: site, Title: title, Preview: preview, CSS: CSSPath, Kind: name, Content: content}
+	d.CSS, d.Kind = CSSPath, name
 	if err := templates[name].ExecuteTemplate(&b, "layout", d); err != nil {
 		return err
 	}
@@ -148,6 +175,67 @@ func prefix(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// ---- The home page, the FAQ, how to verify, hanging a proof -----------------
+
+// HomePage is the home page (design/copy/home.md).
+type HomePage struct {
+	Declared, Recent int // Counts, as the roster page shows them
+}
+
+// The home page's link preview: its title, the <title> and the first
+// screen's two lines as one sentence (home.md, 連結被貼出去時的預覽).
+const (
+	homeTitle       = "島民"
+	homeTabTitle    = "島民｜iamreal.tw"
+	homeDescription = "讓 Threads 上的人知道，你是真的台灣人。用自然人憑證證明，除了 Threads 帳號名稱，不會揭露任何個資。"
+)
+
+// Render writes the page.
+func (p HomePage) Render(w io.Writer, site Site) error {
+	return renderDocument(w, "home", document{Site: site, Title: homeTitle, TabTitle: homeTabTitle, Preview: true, Description: homeDescription, Content: p})
+}
+
+// FAQPage is the FAQ page (design/copy/faq.md).
+type FAQPage struct{}
+
+// Render writes the page.
+func (FAQPage) Render(w io.Writer, site Site) error {
+	return render(w, "faq", site, "常見問題", true, nil)
+}
+
+// VerifyPage is how to verify (design/copy/verify.md). It loads CopyJS.
+type VerifyPage struct{}
+
+// Render writes the page.
+func (VerifyPage) Render(w io.Writer, site Site) error {
+	return renderDocument(w, "verify", document{Site: site, Title: "怎麼驗證", Preview: true, Script: CopyJSPath})
+}
+
+// HangPage is hanging a proof on a profile (design/copy/hang.md): with
+// ShortID and the card's account on Threads (/hang/<short ID>), part 2 and
+// part 3, loading CopyJS; with neither (/hang), the page as it is from the
+// home page, with no script.
+type HangPage struct {
+	ShortID string
+	Account string
+}
+
+// Render writes the page. Account must be "" or in the Threads format, and
+// ShortID a short ID with it.
+func (p HangPage) Render(w io.Writer, site Site) error {
+	d := document{Site: site, Title: "把島民證明掛到個人檔案", Preview: true, Content: p}
+	if p.Account != "" || p.ShortID != "" {
+		if !ValidUsername(p.Account) {
+			return fmt.Errorf("pages: %q is not in the Threads format", p.Account)
+		}
+		if s, ok := verifier.ReadShortIDInURL(p.ShortID); !ok || s != p.ShortID {
+			return fmt.Errorf("pages: %q is not a short ID", p.ShortID)
+		}
+		d.Script = CopyJSPath
+	}
+	return renderDocument(w, "hang", d)
 }
 
 // ---- The page of a card -----------------------------------------------------

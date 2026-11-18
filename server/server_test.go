@@ -318,10 +318,10 @@ func TestStaticFiles(t *testing.T) {
 		{"/crl/", 404, ""}, // no directory listing
 		{"/roster/heads.jsonl", 200, "application/jsonl"},
 		{"/roster/", 404, ""},
-		{"/", 200, "text/html; charset=utf-8"},
-		{"/assets/a.js", 200, "text/javascript; charset=utf-8"},
-		{"/assets/", 404, ""},
-		{"/nothing", 404, ""},
+		{"/proof", 200, "text/html; charset=utf-8"},
+		{"/proof/assets/a.js", 200, "text/javascript; charset=utf-8"},
+		{"/proof/assets/", 404, ""},
+		{"/proof/nothing", 404, ""},
 	} {
 		rec := h.raw("GET", x.path, "")
 		if rec.Code != x.status || (x.contentType != "" && rec.Header().Get("Content-Type") != x.contentType) {
@@ -332,7 +332,7 @@ func TestStaticFiles(t *testing.T) {
 		}
 		// The page's headers go with the web directory's files, not with the
 		// mirror or the roster.
-		page := !strings.HasPrefix(x.path, "/crl/") && !strings.HasPrefix(x.path, "/roster/")
+		page := strings.HasPrefix(x.path, "/proof")
 		for k, v := range pageHeaders {
 			if got := rec.Header().Get(k); (got == v) != page {
 				t.Errorf("%s: %s is %q", x.path, k, got)
@@ -345,10 +345,10 @@ func TestStaticFiles(t *testing.T) {
 	if rec := h.raw("POST", "/crl/index.jsonl", ""); rec.Code != 405 {
 		t.Errorf("POST: %d", rec.Code)
 	}
-	// Without a web directory, / is not found.
+	// Without a web directory, /proof is not found.
 	h.http = h.server.routes(crlDir(h.data), rosterDir(h.data), "")
-	if rec := h.raw("GET", "/", ""); rec.Code != 404 {
-		t.Errorf("/ without web: %d", rec.Code)
+	if rec := h.raw("GET", "/proof", ""); rec.Code != 404 {
+		t.Errorf("/proof without web: %d", rec.Code)
 	}
 }
 

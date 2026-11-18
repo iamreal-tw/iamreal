@@ -12,7 +12,9 @@ package main
 // accounts that may be shown that way: those of large organisations or
 // public bodies, never a person's; <missing> is a name no account has, to
 // see the embed fail. IAMREAL_PAGES_PREVIEW_EMPTY=1 serves an empty roster
-// instead. The paths it serves are printed at the start.
+// instead. IAMREAL_PAGES_PREVIEW_WEB=<directory> serves a build of web/ at
+// /proof too (the pages only: nothing behind them takes a card proof). The
+// paths it serves are printed at the start.
 
 import (
 	"fmt"
@@ -37,7 +39,7 @@ func TestPagesPreview(t *testing.T) {
 	var paths []string
 	if os.Getenv("IAMREAL_PAGES_PREVIEW_EMPTY") != "" {
 		h = pagesWorld(t, today)
-		paths = []string{"/roster"}
+		paths = []string{"/", "/roster", "/hang"}
 	} else {
 		names := strings.Split(os.Getenv("IAMREAL_PAGES_PREVIEW_ACCOUNTS"), ",")
 		if len(names) != 4 {
@@ -72,10 +74,15 @@ func TestPagesPreview(t *testing.T) {
 			t.Fatal(err)
 		}
 		paths = []string{
+			"/", "/faq", "/verify", "/hang", "/hang/7K2Q9FM4XD",
 			"/p/7K2Q9FM4XD", "/p/2HD5WN0J8C", "/p/9VQ4KD7T2M", "/p/M4T8XR6PZ1", "/p/5TCW8B3NQE", "/p/ZZZZZZZZZZ",
 			"/threads/@" + b, "/threads/@" + a, "/threads/@nobody.here", "/threads/@a-b",
 			"/roster", "/roster?after=" + pages.FormatPosition(first[len(first)-1].Position()), "/roster?q=a-b",
 		}
+	}
+	if web := os.Getenv("IAMREAL_PAGES_PREVIEW_WEB"); web != "" {
+		h.http = h.server.routes(crlDir(h.data), rosterDir(h.data), web)
+		paths = append(paths, ProofPath)
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

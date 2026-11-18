@@ -34,6 +34,7 @@
 // platform's prefix, hint and address from src/platforms.ts. ids and data-*
 // attributes are for the headless browser test and hold no value.
 import { type CardProofFlow, type CardStatus, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, createCardProof, presentationOf } from "../index.ts";
+import { BASE } from "../base.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
@@ -78,7 +79,7 @@ const STEPS = 6;
 
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
   // A new tab: leaving this page would end the card proof.
-  return el("a", { attrs: { href: `/help.html?topic=${topic}`, target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
+  return el("a", { attrs: { href: `${BASE}help.html?topic=${topic}`, target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
 }
 
 function say(s: Sentence): DocumentFragment {

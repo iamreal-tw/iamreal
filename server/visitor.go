@@ -12,18 +12,22 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// The pages visitors read (server/pages): the page of a card, the page of
-// an account and the roster page. They are made from the store's views on
-// each request, so a record shows on the next page opened after it is
-// written. Nothing here reads the rules' state in memory.
+// The pages visitors read (server/pages): the home page, the FAQ, how to
+// verify, hanging a proof on a profile, the page of a card, the page of an
+// account and the roster page. The pages that show the roster are made
+// from the store's views on each request, so a record shows on the next
+// page opened after it is written (the home page's and the roster page's
+// counts at most countsMaxAge later). Nothing here reads the rules' state
+// in memory.
 
 // visitorHeaders are sent, besides responseHeaders, with the visitors'
-// pages and their style sheet; server/README.md explains them. They are
-// not the card proof pages' (pageHeaders), which are left as they are.
+// pages, their style sheet and their script; server/README.md explains
+// them. They are not the card proof pages' (pageHeaders), which are left
+// as they are.
 //
-//   - Content-Security-Policy: no script at all; the style sheet and images
-//     of this origin; frames from https://www.threads.com only (the
-//     profile); forms sent to this origin only (the lookup box).
+//   - Content-Security-Policy: no script; the style sheet and images of
+//     this origin; frames from https://www.threads.com only (the profile);
+//     forms sent to this origin only (the lookup box).
 //   - No Cross-Origin-Embedder-Policy nor Document-Isolation-Policy: the
 //     Threads frame would be blocked.
 var visitorHeaders = map[string]string{
@@ -33,6 +37,19 @@ var visitorHeaders = map[string]string{
 	"Cross-Origin-Opener-Policy": "same-origin",
 	"Cache-Control":              "no-cache",
 }
+
+// scriptPageHeaders are visitorHeaders with script-src 'self': for the two
+// pages that load the copy buttons' script (pages.CopyJSPath), /verify and
+// /hang/<short ID>. Only scripts of this origin, which is that one file:
+// no inline script, no other site's.
+var scriptPageHeaders = func() map[string]string {
+	h := map[string]string{}
+	for k, v := range visitorHeaders {
+		h[k] = v
+	}
+	h["Content-Security-Policy"] = strings.Replace(visitorHeaders["Content-Security-Policy"], "default-src 'none'; ", "default-src 'none'; script-src 'self'; ", 1)
+	return h
+}()
 
 // countsMaxAge is how long the roster page may show the same counts before
 // they are computed again.
@@ -66,7 +83,17 @@ func (s *Server) visitorPages() *visitorPages {
 
 // handler returns h with the visitors' headers, for GET and HEAD only.
 func (v *visitorPages) handler(h func(w http.ResponseWriter, r *http.Request)) http.Handler {
-	return withHeaders(visitorHeaders, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return v.handlerWith(visitorHeaders, h)
+}
+
+// scriptHandler is handler for the pages that load the copy buttons'
+// script.
+func (v *visitorPages) scriptHandler(h func(w http.ResponseWriter, r *http.Request)) http.Handler {
+	return v.handlerWith(scriptPageHeaders, h)
+}
+
+func (v *visitorPages) handlerWith(headers map[string]string, h func(w http.ResponseWriter, r *http.Request)) http.Handler {
+	return withHeaders(headers, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -102,8 +129,77 @@ func pageName(p string) string {
 		return "card"
 	case strings.HasPrefix(p, "/threads/"):
 		return "account"
+	case p == "/hang" || strings.HasPrefix(p, "/hang/"):
+		return "hang"
+	case p == "/":
+		return "home"
+	case p == "/faq", p == "/verify":
+		return p[1:]
 	}
 	return "roster"
+}
+
+// GET /: the home page (design/copy/home.md), with the roster page's
+// counts.
+func (v *visitorPages) home(w http.ResponseWriter, r *http.Request) {
+	var p pages.HomePage
+	var err error
+	if p.Declared, p.Recent, err = v.countsOf(v.today()); err != nil {
+		v.internal(w, r, "counts", err)
+		return
+	}
+	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return p.Render(b, v.site) })
+}
+
+// GET /faq: the FAQ (design/copy/faq.md).
+func (v *visitorPages) faq(w http.ResponseWriter, r *http.Request) {
+	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return pages.FAQPage{}.Render(b, v.site) })
+}
+
+// GET /verify: how to verify (design/copy/verify.md).
+func (v *visitorPages) verify(w http.ResponseWriter, r *http.Request) {
+	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return pages.VerifyPage{}.Render(b, v.site) })
+}
+
+// GET /hang: hanging a proof on a profile, without a proof
+// (design/copy/hang.md, 從首頁點進來時).
+func (v *visitorPages) hangWithout(w http.ResponseWriter, r *http.Request) {
+	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return pages.HangPage{}.Render(b, v.site) })
+}
+
+// GET /hang/<short ID>: hanging the proof of a card on its account's
+// profile (design/copy/hang.md, parts 2 and 3). The short ID is read as
+// /p/ reads it, and another spelling redirected (301) to its one spelling.
+// A short ID that does not read, resolves to no card or to several, or to
+// a card with no account on Threads, is redirected (302) to /hang.
+func (v *visitorPages) hang(w http.ResponseWriter, r *http.Request) {
+	typed := strings.TrimPrefix(r.URL.Path, "/hang/")
+	short, ok := verifier.ReadShortIDInURL(typed)
+	if ok && short != typed {
+		http.Redirect(w, r, "/hang/"+short, http.StatusMovedPermanently)
+		return
+	}
+	account := ""
+	if ok {
+		cards, err := v.s.cfg.Store.Cards(v.scope, short)
+		if err != nil {
+			v.internal(w, r, "cards", err)
+			return
+		}
+		if len(cards) == 1 {
+			for _, slot := range cards[0].Slots {
+				if slot.Platform == pages.Platform {
+					account = slot.Current
+				}
+			}
+		}
+	}
+	if account == "" {
+		http.Redirect(w, r, "/hang", http.StatusFound)
+		return
+	}
+	p := pages.HangPage{ShortID: short, Account: account}
+	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return p.Render(b, v.site) })
 }
 
 func (v *visitorPages) today() verifier.Date { return taiwanDate(v.s.cfg.Now()) }
@@ -210,8 +306,9 @@ func (v *visitorPages) roster(w http.ResponseWriter, r *http.Request) {
 	v.write(w, r, http.StatusOK, func(b *bytes.Buffer) error { return p.Render(b, v.site) })
 }
 
-// countsOf returns the counts of the roster page, computed again at most
-// every countsMaxAge, and at once when the date in Taiwan changes.
+// countsOf returns the counts of the roster page and the home page,
+// computed again at most every countsMaxAge, and at once when the date in
+// Taiwan changes.
 func (v *visitorPages) countsOf(today verifier.Date) (declared, recent int, err error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -233,4 +330,11 @@ func (v *visitorPages) css(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("ETag", pages.CSSETag)
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(pages.CSS))
+}
+
+// copyJS serves the copy buttons' script, with an ETag for revalidation.
+func (v *visitorPages) copyJS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("ETag", pages.CopyJSETag)
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(pages.CopyJS))
 }
