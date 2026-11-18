@@ -586,11 +586,6 @@ body.home section + section {
   margin: 0;
 }
 
-.mini-more {
-  color: var(--teal);
-  font-size: 15px;
-}
-
 .big-heading {
   margin: 34px 0 14px;
   font-size: 24px;

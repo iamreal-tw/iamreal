@@ -149,7 +149,7 @@ func TestHomePage(t *testing.T) {
 	}
 	// The small proof is not a link yet.
 	mini := regexp.MustCompile(`(?s)<div class="mini-proof">.*?</div>`).FindString(page)
-	if mini == "" || strings.Contains(mini, "<a ") {
+	if mini == "" || strings.Contains(mini, "<a ") || strings.Contains(mini, "點進去看看") {
 		t.Errorf("the small proof: %q", mini)
 	}
 	// The preview, the <title> and the summary.
@@ -339,6 +339,7 @@ func TestVerifyPage(t *testing.T) {
 	}
 	want = append(want, copyLines(t, block(t, "verify.md", "3. ", 0))...)
 	want = append(want, copyLines(t, block(t, "verify.md", "3. ", 1))...)
+	want = append(want, copyLines(t, block(t, "verify.md", "3. ", 2))...)
 	want = append(want, copyLines(t, block(t, "verify.md", "4. ", 0))...)
 	wantLines(t, page, want)
 
@@ -347,8 +348,10 @@ func TestVerifyPage(t *testing.T) {
 	if prompt == nil || html.UnescapeString(prompt[1]) != strings.Join(block(t, "verify.md", "3. ", 1), "\n") {
 		t.Errorf("the prompt is not verify.md's: %q", prompt)
 	}
-	// Its copy button, shown by the script; 已複製 as card-proof.json writes it.
-	if !strings.Contains(page, `<button type="button" class="copy" data-copy="prompt" data-copied="`+copiedWord(t)+`" hidden>`) {
+	// Its copy button (verify.md, section 3), shown by the script; 已複製
+	// as verify.md and card-proof.json write it.
+	button := copyLines(t, block(t, "verify.md", "3. ", 2))
+	if len(button) != 1 || !strings.Contains(page, `<button type="button" class="copy" data-copy="prompt" data-copied="`+copiedWord(t, "verify.md")+`" hidden>`+button[0]+`</button>`) {
 		t.Error("no copy button for the prompt")
 	}
 	link := `<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md">cmd/iamreal-verify</a>`
@@ -362,9 +365,11 @@ func TestVerifyPage(t *testing.T) {
 	wantPreview(t, page, title, true, site)
 }
 
-// copiedWord is what a copy button reads once it has copied: card-proof.json's.
-func copiedWord(t *testing.T) string {
+// copiedWord is what a copy button reads once it has copied, as file
+// writes it (按了之後按鈕寫「…」): card-proof.json's.
+func copiedWord(t *testing.T, file string) string {
 	t.Helper()
+	m := regexp.MustCompile(`按了之後按鈕寫「([^」]*)」`).FindStringSubmatch(readCopy(t, file))
 	var c struct {
 		Done struct {
 			Copied string `json:"copied"`
@@ -377,8 +382,8 @@ func copiedWord(t *testing.T) string {
 	if err := json.Unmarshal(b, &c); err != nil {
 		t.Fatal(err)
 	}
-	if c.Done.Copied != "已複製" {
-		t.Fatalf("card-proof.json's copied is %q", c.Done.Copied)
+	if m == nil || m[1] != c.Done.Copied || c.Done.Copied != "已複製" {
+		t.Fatalf("%s: %v; card-proof.json's copied is %q", file, m, c.Done.Copied)
 	}
 	return c.Done.Copied
 }
@@ -396,8 +401,8 @@ func TestHangPage(t *testing.T) {
 	three := block(t, "hang.md", "3. ", 0)
 	wantLines(t, page, append(copyLines(t, two, "@alice", "@carol.tw"), copyLines(t, three)...))
 	for _, want := range []string{
-		`<p class="backlink" id="link">https://iamreal.tw/p/7K2Q9FM4XD</p>`,
-		`<button type="button" class="copy button" data-copy="link" data-copied="` + copiedWord(t) + `" hidden>複製連結</button>`,
+		`<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>`,
+		`<button type="button" class="copy button" data-copy-text="https://iamreal.tw/p/7K2Q9FM4XD" data-copied="` + copiedWord(t, "hang.md") + `" hidden>複製連結</button>`,
 		`<a class="button quiet" href="https://www.threads.com/@carol.tw" target="_blank" rel="noopener noreferrer">打開 Threads</a>`,
 		`<a href="/p/7K2Q9FM4XD">打開你的島民證明</a>`,
 		`<span class="account">@carol.tw</span>`,
@@ -406,7 +411,11 @@ func TestHangPage(t *testing.T) {
 			t.Errorf("no %s", want)
 		}
 	}
-	notOnPage(t, page, "還沒有島民證明？")
+	notOnPage(t, page, "還沒有島民證明？", "https://")
+	// What 複製連結 copies, as hang.md writes it.
+	if !strings.Contains(copySection(t, "hang.md", "2. "), "`https://iamreal.tw/p/7K2Q9FM4XD`") {
+		t.Error("hang.md does not say what 複製連結 copies")
+	}
 	title, site, _ := previewLines(t, "hang.md")
 	wantPreview(t, page, title, true, site)
 }
