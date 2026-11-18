@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -253,50 +254,82 @@ func TestViewsCounts(t *testing.T) {
 	f.checkRebuild()
 }
 
-// The latest slots, a page at a time: by the seq of the record that
-// started them, latest first. A refresh does not bring a slot back up; a
-// new account does.
+// The latest slots, a page at a time: by the date from which each gives
+// its place to its account, latest first, and the same date by the seq of
+// that record. A record dated a day back sorts by its date, not its seq.
+// A refresh does not bring a slot back up; a new account does.
 func TestViewsRecent(t *testing.T) {
 	f := newFixture(t, verifier.Test)
 	var cards []string
-	for i := uint64(1); i <= 5; i++ {
-		cards = append(cards, cardID(20+i, 1))
-		f.add(cards[i-1], "2026-11-10", "threads:u"+string(rune('0'+i)))
+	for i, d := range []string{"2026-11-10", "2026-11-10", "2026-11-11", "2026-11-09", "2026-11-11"} {
+		cards = append(cards, cardID(uint64(21+i), 1))
+		f.add(cards[i], d, fmt.Sprintf("threads:u%d", i+1)) // seq i+1
 	}
-	page := func(before uint64, n int) []string {
+	page := func(before RecentPosition, n int) ([]string, RecentPosition) {
 		got, err := f.s.Recent(testScope, "threads", before, n)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var out []string
+		var last RecentPosition
 		for _, r := range got {
 			out = append(out, r.Username)
+			last = r.Position()
 		}
-		return out
+		return out, last
 	}
-	if got := page(0, 2); !same(got, []string{"u5", "u4"}) {
-		t.Errorf("first page: %v", got)
+	all, _ := page(RecentPosition{}, 5)
+	if want := []string{"u5", "u3", "u2", "u1", "u4"}; !same(all, want) {
+		t.Errorf("exactly all: %v, want %v", all, want)
 	}
-	if got := page(4, 2); !same(got, []string{"u3", "u2"}) {
-		t.Errorf("after seq 4: %v", got)
+	var got []string
+	var at RecentPosition
+	for i, want := range [][]string{{"u5", "u3"}, {"u2", "u1"}, {"u4"}, nil} {
+		got, at = page(at, 2)
+		if !same(got, want) {
+			t.Errorf("page %d: %v, want %v", i+1, got, want)
+		}
+		if got == nil {
+			break
+		}
 	}
-	if got := page(2, 2); !same(got, []string{"u1"}) {
-		t.Errorf("after seq 2: %v", got)
+	// After a position inside a date: the rest of that date, then the
+	// dates before.
+	if got, _ := page(RecentPosition{Since: date(t, "2026-11-11"), SinceSeq: 5}, 2); !same(got, []string{"u3", "u2"}) {
+		t.Errorf("after u5: %v", got)
 	}
-	if got := page(1, 2); len(got) != 0 {
-		t.Errorf("after the last: %v", got)
-	}
-	if got := page(0, 5); !same(got, []string{"u5", "u4", "u3", "u2", "u1"}) {
-		t.Errorf("exactly all: %v", got)
-	}
-	f.add(cards[0], "2026-11-11", "threads:u1")  // refresh: stays last
-	f.add(cards[1], "2026-11-11", "threads:u2b") // switch: first
-	f.add(cards[2], "2026-11-11")                // withdraw: gone
-	if got := page(0, 10); !same(got, []string{"u2b", "u5", "u4", "u1"}) {
+	f.add(cards[0], "2026-11-12", "threads:u1")  // refresh: stays where it was
+	f.add(cards[1], "2026-11-12", "threads:u2b") // switch: first
+	f.add(cards[2], "2026-11-12")                // withdraw: gone
+	if got, _ := page(RecentPosition{}, 10); !same(got, []string{"u2b", "u5", "u1", "u4"}) {
 		t.Errorf("after changes: %v", got)
 	}
-	if got, err := f.s.Recent(testScope, "test-example", 0, 10); err != nil || len(got) != 0 {
+	if got, err := f.s.Recent(testScope, "test-example", RecentPosition{}, 10); err != nil || len(got) != 0 {
 		t.Errorf("another platform: %v %v", got, err)
+	}
+	f.check(date(t, "2026-11-12"))
+	f.checkRebuild()
+}
+
+// The first card proof is the earliest date among the card's valid
+// records, which is not always the date of its first record: dates can
+// step back.
+func TestViewsFirstCardProof(t *testing.T) {
+	f := newFixture(t, verifier.Test)
+	card := cardID(50, 1)
+	f.add(card, "2026-11-10", "threads:alice")
+	f.add(card, "2026-11-08", "threads:alice") // two days back: allowed
+	f.add(card, "2026-11-11", "threads:alice")
+	cards, err := f.s.Cards(testScope, verifier.ShortID(card))
+	if err != nil || len(cards) != 1 {
+		t.Fatalf("%+v %v", cards, err)
+	}
+	if got := cards[0]; got.FirstCardProof.String() != "2026-11-08" || got.LastCardProof.String() != "2026-11-11" || got.CardProofs != 3 {
+		t.Errorf("%+v", got)
+	}
+	hist, err := f.s.History(testScope, card)
+	if err != nil || len(hist) != 3 || hist[len(hist)-1].Date != cards[0].FirstCardProof {
+		t.Errorf("the last row of the history: %+v %v", hist, err)
 	}
 	f.check(date(t, "2026-11-11"))
 	f.checkRebuild()
@@ -556,7 +589,7 @@ func TestViewQueriesUseIndexes(t *testing.T) {
 		{"slots", querySlots, []any{testScope, "X"}},
 		{"History", queryHistory, []any{testScope, "X"}},
 		{"AccountCards", queryAccountCards, []any{testScope, "threads", "alice"}},
-		{"Recent", queryRecent, []any{testScope, "threads", 100, 50}},
+		{"Recent", queryRecent, []any{testScope, "threads", 20000, 100, 50}},
 		{"Counts", queryCounts, []any{1, testScope, "threads"}},
 	} {
 		rows, err := f.s.db.Query("EXPLAIN QUERY PLAN "+q.sql, q.args...)

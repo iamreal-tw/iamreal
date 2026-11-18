@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iamreal-tw/iamreal/server/store"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -33,7 +34,7 @@ func viewsOf(t *testing.T, h *harness, today string, cards []string, accounts ..
 		out += fmt.Sprintf("account %s %s %+v\n", a.Platform, a.Username, got)
 	}
 	for _, p := range verifier.Platforms(verifier.Test) {
-		recent, err := st.Recent(testScope, p.ID, 0, 100)
+		recent, err := st.Recent(testScope, p.ID, store.RecentPosition{}, 100)
 		if err != nil {
 			t.Fatal(err)
 		}

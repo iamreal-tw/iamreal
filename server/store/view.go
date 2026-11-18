@@ -136,9 +136,10 @@ func (c SlotChange) Event() string {
 // CardSummary is one card as the views have it.
 type CardSummary struct {
 	ScopedID string
-	// FirstCardProof is the date of the card's first valid record, in seq
-	// order. Dates can step back around midnight, so a later record can
-	// have an earlier date.
+	// FirstCardProof is the earliest date among the card's valid records:
+	// the date of the last record of History. Dates can step back around
+	// midnight, so it is not always the date of the first record in seq
+	// order.
 	FirstCardProof verifier.Date
 	// LastCardProof is the card's last_card_proof: the latest date among
 	// its valid records.
@@ -191,12 +192,27 @@ type AccountCard struct {
 // latest ones.
 type RecentSlot struct {
 	// SinceSeq is the seq of the record that started the slot giving its
-	// place to Username, and Since its date. Pass the SinceSeq of the last
+	// place to Username, and Since its date. Pass the Position of the last
 	// one to Recent to get the ones after it.
 	SinceSeq uint64
 	Since    verifier.Date
 	Username string
 	ScopedID string
+}
+
+// RecentPosition is a place in the list of the latest slots: Recent
+// returns the slots after it, those whose (Since, SinceSeq) is below it.
+// The zero RecentPosition is the start of the list. On one platform of a
+// scope no two slots have the same SinceSeq (a record is of one card and
+// names at most one account per platform), so a position is one slot.
+type RecentPosition struct {
+	Since    verifier.Date
+	SinceSeq uint64
+}
+
+// Position returns the place of r in the list of the latest slots.
+func (r RecentSlot) Position() RecentPosition {
+	return RecentPosition{Since: r.Since, SinceSeq: r.SinceSeq}
 }
 
 // RecentDays is how far back Counts looks for a recent card proof: a

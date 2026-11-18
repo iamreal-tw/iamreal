@@ -52,8 +52,8 @@ type fixture struct {
 	n       uint64
 
 	// Kept by the fixture from the rules' state, not from the views.
-	since    map[slotKey]sinceAt // the record from which the slot's current account is current
-	first    map[cardKey]verifier.Date
+	since    map[slotKey]sinceAt       // the record from which the slot's current account is current
+	first    map[cardKey]verifier.Date // the earliest date of the card's valid records
 	proofs   map[cardKey]int
 	history  map[cardKey][]HistoryRecord
 	declared map[[3]string]bool // (scope, platform, username) ever declared
@@ -169,7 +169,7 @@ func (f *fixture) write(r *verifier.Record) roster.RecordResult {
 func (f *fixture) keep(r *verifier.Record, res roster.RecordResult, before, after roster.CardState) {
 	d, _ := r.Date()
 	ck := cardKey{r.ScopeString, r.ScopedID}
-	if _, ok := f.first[ck]; !ok {
+	if first, ok := f.first[ck]; !ok || d < first {
 		f.first[ck] = d
 	}
 	f.proofs[ck]++
@@ -320,7 +320,12 @@ func (f *fixture) check(todays ...verifier.Date) {
 					want = append(want, RecentSlot{SinceSeq: since.seq, Since: since.date, Username: u, ScopedID: k.scopedID})
 				}
 			}
-			sort.Slice(want, func(i, j int) bool { return want[i].SinceSeq > want[j].SinceSeq })
+			sort.Slice(want, func(i, j int) bool {
+				if want[i].Since != want[j].Since {
+					return want[i].Since > want[j].Since
+				}
+				return want[i].SinceSeq > want[j].SinceSeq
+			})
 			if got := f.allRecent(scope, p.ID, 3); !same(got, want) {
 				f.t.Errorf("Recent(%s):\n got %s\nwant %s", p.ID, js(got), js(want))
 			}
@@ -332,7 +337,7 @@ func (f *fixture) check(todays ...verifier.Date) {
 func (f *fixture) allRecent(scope, platform string, n int) []RecentSlot {
 	f.t.Helper()
 	var out []RecentSlot
-	var before uint64
+	var before RecentPosition
 	for {
 		page, err := f.s.Recent(scope, platform, before, n)
 		if err != nil {
@@ -345,7 +350,7 @@ func (f *fixture) allRecent(scope, platform string, n int) []RecentSlot {
 		if len(page) < n {
 			return out
 		}
-		before = page[len(page)-1].SinceSeq
+		before = page[len(page)-1].Position()
 	}
 }
 

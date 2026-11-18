@@ -147,12 +147,12 @@ func TestMeasureViews(t *testing.T) {
 		return len(got)
 	})
 	measure("Recent (first 50)", func() int {
-		got, err := f.s.Recent(scope, "threads", 0, 50)
+		got, err := f.s.Recent(scope, "threads", RecentPosition{}, 50)
 		must(err)
 		return len(got)
 	})
 	measure("Recent (50 from the middle)", func() int {
-		got, err := f.s.Recent(scope, "threads", uint64(rng.Intn(int(records))+1), 50)
+		got, err := f.s.Recent(scope, "threads", RecentPosition{Since: start.AddDays(rng.Intn(300)), SinceSeq: records}, 50)
 		must(err)
 		return len(got)
 	})

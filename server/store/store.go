@@ -36,9 +36,12 @@ type Store interface {
 	// for r (ErrViewMismatch otherwise) and the views must reflect every
 	// earlier record (ErrViewsBehind otherwise).
 	//
-	// The server always passes v. A nil v appends the record alone: the
-	// views then stay at the record before (ViewSeq) until AddViews brings
-	// them up; tests use it to write records past the server.
+	// Only tests pass a nil v, to write records past the server (some of
+	// them invalid, which have no view). The server passes a View with
+	// every record it appends. A nil v appends the record alone: the views
+	// then stay at the record before (ViewSeq), every later Append with a
+	// View fails with ErrViewsBehind, and the next start of the server
+	// catches the views up (AddViews, in server.New).
 	Append(r *verifier.Record, v *View) error
 
 	// ViewSeq returns the seq of the last record the views reflect: they
@@ -78,12 +81,13 @@ type Store interface {
 	AccountCards(scopeString, platform, username string) ([]AccountCard, error)
 
 	// Recent returns at most n slots of scope scopeString on platform that
-	// have an account now, latest first by the seq of the record that
-	// started them giving their place to it (RecentSlot.SinceSeq). before
-	// = 0 starts from the latest; otherwise only slots with SinceSeq below
-	// before are returned, so passing the SinceSeq of the last slot
-	// returned gives the next ones.
-	Recent(scopeString, platform string, before uint64, n int) ([]RecentSlot, error)
+	// have an account now, latest first by the date from which each gives
+	// its place to it (RecentSlot.Since), and slots of the same date by the
+	// seq of that record (SinceSeq), latest first. The zero before starts
+	// from the latest; otherwise only the slots after before are returned,
+	// so passing the Position of the last slot returned gives the next
+	// ones.
+	Recent(scopeString, platform string, before RecentPosition, n int) ([]RecentSlot, error)
 
 	// Counts returns, for scope scopeString and platform: declared, the
 	// number of cards whose slot on the platform has an account now; and

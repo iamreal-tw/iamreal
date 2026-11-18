@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS view_cards (
 	scope_string    TEXT NOT NULL,
 	scoped_id       TEXT NOT NULL,
 	short_id        TEXT NOT NULL, -- the first 10 characters of scoped_id
-	first_date      INTEGER NOT NULL,
+	first_date      INTEGER NOT NULL, -- the earliest date among its valid records
 	last_card_proof INTEGER NOT NULL,
 	card_proofs     INTEGER NOT NULL,
 	PRIMARY KEY (scope_string, scoped_id)
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS view_slots (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS view_slots_account ON view_slots
 	(scope_string, platform, current, since_date, since_seq, last_card_proof) WHERE current IS NOT NULL;
-CREATE INDEX IF NOT EXISTS view_slots_recent ON view_slots
-	(scope_string, platform, since_seq, since_date, current) WHERE current IS NOT NULL;
+CREATE INDEX IF NOT EXISTS view_slots_latest ON view_slots
+	(scope_string, platform, since_date, since_seq, current) WHERE current IS NOT NULL;
 CREATE INDEX IF NOT EXISTS view_slots_recency ON view_slots
 	(scope_string, platform, last_card_proof, current) WHERE current IS NOT NULL;
 
@@ -92,9 +92,9 @@ const (
 	queryAccountCards = `SELECT scoped_id, since_date, since_seq, last_card_proof FROM view_slots INDEXED BY view_slots_account
 		WHERE scope_string = ? AND platform = ? AND current = ?
 		ORDER BY since_date, since_seq`
-	queryRecent = `SELECT since_seq, since_date, current, scoped_id FROM view_slots INDEXED BY view_slots_recent
-		WHERE scope_string = ? AND platform = ? AND current IS NOT NULL AND since_seq < ?
-		ORDER BY since_seq DESC LIMIT ?`
+	queryRecent = `SELECT since_seq, since_date, current, scoped_id FROM view_slots INDEXED BY view_slots_latest
+		WHERE scope_string = ? AND platform = ? AND current IS NOT NULL AND (since_date, since_seq) < (?, ?)
+		ORDER BY since_date DESC, since_seq DESC LIMIT ?`
 	queryCounts = `SELECT COUNT(*), COALESCE(SUM(last_card_proof >= ?), 0) FROM view_slots INDEXED BY view_slots_recency
 		WHERE scope_string = ? AND platform = ? AND current IS NOT NULL`
 )
@@ -122,6 +122,7 @@ func writeView(tx execer, v *View) error {
 	if _, err := tx.Exec(`INSERT INTO view_cards (scope_string, scoped_id, short_id, first_date, last_card_proof, card_proofs)
 		VALUES (?, ?, ?, ?, ?, 1)
 		ON CONFLICT (scope_string, scoped_id) DO UPDATE SET
+			first_date = MIN(first_date, excluded.first_date),
 			last_card_proof = excluded.last_card_proof, card_proofs = card_proofs + 1`,
 		v.ScopeString, v.ScopedID, verifier.ShortID(v.ScopedID), int64(v.Date), int64(v.LastCardProof)); err != nil {
 		return err
@@ -318,13 +319,14 @@ func (s *SQLite) AccountCards(scopeString, platform, username string) ([]Account
 	return out, rows.Err()
 }
 
-// Recent reads the index view_slots_recent, backwards (it covers the
+// Recent reads the index view_slots_latest, backwards (it covers the
 // query).
-func (s *SQLite) Recent(scopeString, platform string, before uint64, n int) ([]RecentSlot, error) {
-	if before == 0 || before > math.MaxInt64 {
-		before = math.MaxInt64
+func (s *SQLite) Recent(scopeString, platform string, before RecentPosition, n int) ([]RecentSlot, error) {
+	date, seq := int64(before.Since), int64(before.SinceSeq)
+	if before == (RecentPosition{}) || before.SinceSeq > math.MaxInt64 {
+		date, seq = math.MaxInt64, math.MaxInt64
 	}
-	rows, err := s.db.Query(queryRecent, scopeString, platform, int64(before), n)
+	rows, err := s.db.Query(queryRecent, scopeString, platform, date, seq, n)
 	if err != nil {
 		return nil, err
 	}
