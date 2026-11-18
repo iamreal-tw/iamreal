@@ -178,6 +178,35 @@ var (
 	descMeta  = regexp.MustCompile(`(?i)name="description"|og:description|og:image`)
 )
 
+// wantPreview checks the page's <title> (title followed by ｜島民) and, if
+// preview, its og:title (title) and og:site_name (site); without preview,
+// that it has neither.
+func wantPreview(t *testing.T, page, title string, preview bool, site string) {
+	t.Helper()
+	if got := firstMatch(titleTag, page); got != title+"｜島民" {
+		t.Errorf("<title> %q, want %q", got, title+"｜島民")
+	}
+	if !preview {
+		if strings.Contains(page, "og:") {
+			t.Error("a link preview on the page")
+		}
+		return
+	}
+	if got := firstMatch(ogTitle, page); got != title {
+		t.Errorf("og:title %q, want %q", got, title)
+	}
+	if got := firstMatch(ogSite, page); got != site {
+		t.Errorf("og:site_name %q, want %q", got, site)
+	}
+}
+
+// previewOf reads the 標題 and 網站 lines of a copy file's preview block.
+func previewOf(t *testing.T, file, heading string) (title, site string) {
+	t.Helper()
+	b := block(t, file, heading, 0)
+	return strings.TrimPrefix(b[0], "標題："), strings.TrimPrefix(b[1], "網站：")
+}
+
 func firstMatch(re *regexp.Regexp, s string) string {
 	m := re.FindStringSubmatch(s)
 	if m == nil {
@@ -364,17 +393,28 @@ func TestProofPage(t *testing.T) {
 		t.Error("全部紀錄 is not in a closed <details>")
 	}
 	// The preview (section 8).
-	preview := codeBlocks(copySection(t, "proof-page.md", "8. "))[0]
-	wantTitle := strings.TrimPrefix(preview[0], "標題：")
-	wantSite := strings.TrimPrefix(preview[1], "網站：")
-	if got := firstMatch(titleTag, page); got != wantTitle {
-		t.Errorf("<title> %q, want %q", got, wantTitle)
+	title, site := previewOf(t, "proof-page.md", "8. ")
+	wantPreview(t, page, title, true, site)
+	// The account fits the full size.
+	if !strings.Contains(page, `<span class="account">@alice</span>`) {
+		t.Error("@alice is not at the full size")
 	}
-	if got := firstMatch(ogTitle, page); got != wantTitle {
-		t.Errorf("og:title %q, want %q", got, wantTitle)
+}
+
+// An account longer than 18 characters is written one size smaller.
+func TestProofPageLongAccount(t *testing.T) {
+	c18, c19 := cardStarting(t, cardA), cardStarting(t, cardB)
+	h := pagesWorld(t, "2026-11-18",
+		r("2026-11-01", c18, "threads:"+strings.Repeat("a", 18)),
+		r("2026-11-01", c19, "threads:"+strings.Repeat("b", 19)),
+	)
+	_, page := h.get("/p/" + cardA)
+	if !strings.Contains(page, `<span class="account">@`+strings.Repeat("a", 18)+`</span>`) {
+		t.Error("18 characters are not at the full size")
 	}
-	if got := firstMatch(ogSite, page); got != wantSite {
-		t.Errorf("og:site_name %q, want %q", got, wantSite)
+	_, page = h.get("/p/" + cardB)
+	if !strings.Contains(page, `<span class="account long">@`+strings.Repeat("b", 19)+`</span>`) {
+		t.Error("19 characters are not one size smaller")
 	}
 }
 
@@ -509,9 +549,7 @@ func TestProofPageWithdrawn(t *testing.T) {
 	if strings.Contains(page, "<iframe") {
 		t.Error("an embed on the page of a withdrawn card")
 	}
-	if got, want := firstMatch(titleTag, page), specialTitles(t)[0]; got != want {
-		t.Errorf("title %q, want %q", got, want)
-	}
+	wantPreview(t, page, specialTitles(t)[0], true, "島民 iamreal.tw")
 }
 
 // A short ID of two cards (section 7): both, sorted by scoped ID, each
@@ -543,9 +581,7 @@ func TestProofPageTwoCards(t *testing.T) {
 	if n, m := strings.Count(squash(visibleText(page)), five), strings.Count(squash(visibleText(page)), fiveA); n != 1 || m != 1 {
 		t.Errorf("section 5 %d times, 5a %d times", n, m)
 	}
-	if got, want := firstMatch(titleTag, page), specialTitles(t)[1]; got != want {
-		t.Errorf("title %q, want %q", got, want)
-	}
+	wantPreview(t, page, specialTitles(t)[1], true, "島民 iamreal.tw")
 }
 
 // A short ID that resolves to no card, or does not read (section 9): 404.
@@ -562,12 +598,7 @@ func TestProofPageMissing(t *testing.T) {
 		if !strings.Contains(page, `<a href="/roster#q">查一個 Threads 帳號</a>`) {
 			t.Errorf("/p/%s: no link to the lookup", typed)
 		}
-		if got, want := firstMatch(titleTag, page), specialTitles(t)[2]; got != want {
-			t.Errorf("title %q, want %q", got, want)
-		}
-		if got := firstMatch(ogTitle, page); got != specialTitles(t)[2] {
-			t.Errorf("og:title %q", got)
-		}
+		wantPreview(t, page, specialTitles(t)[2], true, "島民 iamreal.tw")
 	}
 	for typed, to := range map[string]string{
 		"7k2q9fm4xd": "/p/7K2Q9FM4XD", "7K2Q9FM4XO": "/p/7K2Q9FM4X0", "lK2Q9FM4XD": "/p/1K2Q9FM4XD",
@@ -598,21 +629,23 @@ func TestAccountPage(t *testing.T) {
 		if !strings.Contains(page, `<a href="/p/7K2Q9FM4XD">看這張島民證明</a>`) {
 			t.Error("no link to the card")
 		}
-		if got := firstMatch(titleTag, page); got != "Threads 的 @alice｜島民" {
-			t.Errorf("title %q", got)
-		}
-		if strings.Contains(page, "og:") {
-			t.Error("a preview on the page of an account")
-		}
+		title, site := previewOf(t, "account-page.md", "5. ")
+		wantPreview(t, page, title, true, site)
 	})
 	t.Run("two, by the date from which", func(t *testing.T) {
 		// Card B's last card proof is the more recent; it is second all
-		// the same. account-page.md's example has B from 2026-05-10, before
-		// A, but lists it second: here B is from 2026-09-01.
+		// the same.
 		h, _, _ := exampleCards(t, true)
 		_, page := h.get("/threads/@alice")
-		wantLines(t, page, copyLines(t, block(t, "account-page.md", "2. ", 0), "2026-05-10", "2026-09-01"))
+		wantLines(t, page, copyLines(t, block(t, "account-page.md", "2. ", 0)))
 		wantEmbed(t, page, "alice")
+	})
+	t.Run("last card proof today", func(t *testing.T) {
+		c := cardStarting(t, cardA)
+		h := pagesWorld(t, "2026-11-18", r("2026-11-18", c, "threads:alice"))
+		_, page := h.get("/threads/@alice")
+		wantLines(t, page, append([]string{"島民編號 7K2Q9FM4XD 開頭 2026-11-18 起"}, copyLines(t, block(t, "account-page.md", "1. ", 1))...))
+		notOnPage(t, page, "0 天前")
 	})
 	t.Run("none", func(t *testing.T) {
 		h, _, _ := exampleCards(t, true)
@@ -643,15 +676,20 @@ func TestAccountPageNames(t *testing.T) {
 			t.Errorf("@%s: %d %q", typed, rec.Code, rec.Header().Get("Location"))
 		}
 	}
-	// Not in the Threads format: 404, with the words of no card.
-	for inURL, name := range map[string]string{
-		"a-b": "a-b", "": "", "a%20b": "a b", strings.Repeat("a", 31): strings.Repeat("a", 31), "%C3%A5lice": "ålice", "a/b": "a/b",
-	} {
+	// Not in the Threads format: 404, the page of section 4, with no embed
+	// and no preview; the name is not written back.
+	words := copyLines(t, block(t, "account-page.md", "4. ", 0))
+	for _, inURL := range []string{"a-b", "", "a%20b", strings.Repeat("a", 31), "%C3%A5lice", "a/b"} {
 		status, page := h.get("/threads/@" + inURL)
 		if status != 404 {
-			t.Errorf("@%s: %d", name, status)
+			t.Errorf("@%s: %d", inURL, status)
 		}
-		wantLines(t, page, copyLines(t, block(t, "account-page.md", "3. ", 0), "@alice", "@"+name))
+		wantLines(t, page, words)
+		notOnPage(t, page, copyLines(t, block(t, "account-page.md", "3. ", 0))[1])
+		if !strings.Contains(page, `<a href="/roster#q">查一個 Threads 帳號</a>`) || strings.Contains(page, "<iframe") {
+			t.Errorf("@%s: no link to the lookup, or an embed", inURL)
+		}
+		wantPreview(t, page, words[0], false, "")
 	}
 	if rec := h.raw("GET", "/threads/alice", ""); rec.Code != 404 {
 		t.Errorf("without @: %d", rec.Code)
@@ -692,22 +730,26 @@ func TestRosterPage(t *testing.T) {
 			t.Errorf("no %s", want)
 		}
 	}
-	if got := firstMatch(titleTag, page); got != "名冊｜島民" {
-		t.Errorf("title %q", got)
+	title, site := previewOf(t, "roster-page.md", "連結被貼出去時的預覽")
+	wantPreview(t, page, title, true, site)
+	if strings.Contains(page, "<iframe") {
+		t.Error("an embed on the roster page")
 	}
-	if strings.Contains(page, "<iframe") || strings.Contains(page, "og:") {
-		t.Error("an embed or a preview on the roster page")
-	}
+	notOnPage(t, page, block(t, "roster-page.md", "清單", 0)[0])
 }
 
+// No card yet: one sentence where the list is, without the sentence above
+// the list and without 更多.
 func TestRosterPageEmpty(t *testing.T) {
 	h := pagesWorld(t, "2026-11-18")
 	status, page := h.get("/roster")
 	if status != 200 {
 		t.Fatal(status)
 	}
-	wantLines(t, page, []string{"現在有 0 張島民證明，其中 0 張在過去三個月內過卡。", "最近換出的島民證明"})
-	notOnPage(t, page, "更多")
+	all := copyLines(t, codeBlocks(readCopy(t, "roster-page.md"))[0], "1,284", "0", "1,031", "0")
+	want := append(append(append([]string{}, all[:5]...), copyLines(t, block(t, "roster-page.md", "清單", 0))...), all[len(all)-1])
+	wantLines(t, page, want)
+	notOnPage(t, page, all[5], "更多")
 	if strings.Contains(page, "<li>") {
 		t.Error("a row with no card")
 	}
@@ -746,24 +788,40 @@ func TestRosterPageMore(t *testing.T) {
 }
 
 // The lookup box: a name, with or without @ and in any case, goes to its
-// page (303); anything else shows the roster page with one more line.
+// page (303), also with spaces around it; nothing is the roster page as it
+// is; anything else shows the roster page with one more line, and what was
+// typed in the box.
 func TestRosterPageLookup(t *testing.T) {
 	h, _, _ := exampleCards(t, false)
-	for q, to := range map[string]string{"alice": "/threads/@alice", "%40Alice": "/threads/@alice", "@CAROL.tw": "/threads/@carol.tw"} {
+	for q, to := range map[string]string{
+		"alice": "/threads/@alice", "%40Alice": "/threads/@alice", "@CAROL.tw": "/threads/@carol.tw",
+		"%20alice%20": "/threads/@alice", "%20%40Alice%09": "/threads/@alice", "%E3%80%80alice": "/threads/@alice",
+	} {
 		rec := h.raw("GET", "/roster?q="+q, "")
 		if rec.Code != 303 || rec.Header().Get("Location") != to {
 			t.Errorf("q=%s: %d %q", q, rec.Code, rec.Header().Get("Location"))
 		}
 	}
-	const bad = "Threads 的帳號名稱只有英文字母、數字、句點和底線。"
-	_, page := h.get("/roster")
-	notOnPage(t, page, bad)
-	for _, q := range []string{"a-b", "", "%40", "alice%20", "%40%40alice"} {
+	bad := block(t, "roster-page.md", "查詢", 0)[0]
+	for _, q := range []string{"", "%20%20", "%40", "%20%40%20"} {
+		status, page := h.get("/roster?q=" + q)
+		if status != 200 {
+			t.Errorf("q=%s: %d", q, status)
+		}
+		notOnPage(t, page, bad)
+		if !strings.Contains(page, `name="q" value=""`) {
+			t.Errorf("q=%s: the box is not empty", q)
+		}
+	}
+	for q, kept := range map[string]string{"a-b": "a-b", "%40%40alice": "@alice", "a%20b": "a b", "%40%C3%A5lice%20": "ålice"} {
 		status, page := h.get("/roster?q=" + q)
 		if status != 200 {
 			t.Errorf("q=%s: %d", q, status)
 		}
 		wantLines(t, page, []string{"查一個 Threads 帳號", "@查", bad, "最近換出的島民證明"})
+		if !strings.Contains(page, `name="q" value="`+kept+`"`) {
+			t.Errorf("q=%s: the box does not keep %q", q, kept)
+		}
 	}
 }
 

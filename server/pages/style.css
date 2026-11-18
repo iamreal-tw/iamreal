@@ -157,6 +157,12 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+/* An account longer than 18 characters: one size smaller, and broken
+   anywhere only when even that does not fit. */
+.title .account.long {
+  font-size: 28px;
+}
+
 .lookup .title .account {
   display: inline;
   font-size: inherit;
@@ -200,7 +206,7 @@ h2 {
   font-family: var(--mono);
   font-size: 15px;
   letter-spacing: 0.02em;
-  margin: 0 0 8px;
+  margin: 0 0 14px;
   padding: 6px 12px;
   background: var(--white);
   border: 1px solid var(--line);
@@ -210,15 +216,17 @@ h2 {
 
 /* The profile on Threads. A fixed height that holds three lines of bio and
    two links; more than that scrolls inside the frame, rather than cut a
-   link off. */
+   link off. The embed's page is white below its own card, so the frame
+   is drawn as one white box around all of it. */
 iframe.threads-profile {
   display: block;
   width: 100%;
   max-width: 558px;
   height: 360px;
   margin: 0 0 10px;
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
 }
 
 /* The record ------------------------------------------------------------------------ */
@@ -436,6 +444,10 @@ iframe.threads-profile {
 @media (max-width: 480px) {
   .title .account {
     font-size: 32px;
+  }
+
+  .title .account.long {
+    font-size: 22px;
   }
 
   iframe.threads-profile {

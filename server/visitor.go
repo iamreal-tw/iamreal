@@ -147,7 +147,7 @@ func (v *visitorPages) proof(w http.ResponseWriter, r *http.Request) {
 // GET /threads/@<name>: the page of a Threads account
 // (design/copy/account-page.md), 200 whether or not a card gives its place
 // to it. A name with uppercase letters is redirected (301) to lowercase; a
-// name not in the Threads format is 404.
+// name not in the Threads format has a page of its own (section 4), 404.
 func (v *visitorPages) account(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/threads/")
 	typed, found := strings.CutPrefix(rest, "@")
@@ -157,8 +157,7 @@ func (v *visitorPages) account(w http.ResponseWriter, r *http.Request) {
 	}
 	name := pages.LowerASCII(typed)
 	if !pages.ValidUsername(name) {
-		p := pages.AccountPage{Username: typed}
-		v.write(w, r, http.StatusNotFound, func(b *bytes.Buffer) error { return p.RenderUnknownFormat(b, v.site) })
+		v.write(w, r, http.StatusNotFound, func(b *bytes.Buffer) error { return pages.NotAName{}.Render(b, v.site) })
 		return
 	}
 	if name != typed {
@@ -176,14 +175,14 @@ func (v *visitorPages) account(w http.ResponseWriter, r *http.Request) {
 
 // GET /roster: the roster page (design/copy/roster-page.md). ?after= lists
 // the slots after a place in the list (the link 更多); ?q= is the lookup
-// box: a Threads name, with or without a leading @ and in any case, is
-// redirected (303) to its page; anything else shows the page with a line
-// under the box.
+// box (roster-page.md, 查詢): with the spaces around it and a leading @
+// taken off, a Threads name in any case is redirected (303) to its page;
+// nothing left shows the page as it is; anything else shows the page with
+// what was typed in the box and a line under it.
 func (v *visitorPages) roster(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	p := pages.RosterPage{}
-	if query.Has("q") {
-		typed := strings.TrimPrefix(query.Get("q"), "@")
+	if typed := strings.TrimPrefix(strings.TrimSpace(query.Get("q")), "@"); typed != "" {
 		if name := pages.LowerASCII(typed); pages.ValidUsername(name) {
 			http.Redirect(w, r, "/threads/@"+name, http.StatusSeeOther)
 			return
@@ -193,7 +192,7 @@ func (v *visitorPages) roster(w http.ResponseWriter, r *http.Request) {
 	var after store.RecentPosition
 	if !p.BadQuery && query.Has("after") {
 		// A place that does not read lists from the start.
-		after, _ = pages.ParsePosition(query.Get("after"))
+		after, p.After = pages.ParsePosition(query.Get("after"))
 	}
 	slots, err := v.s.cfg.Store.Recent(v.scope, pages.Platform, after, pages.PageSize+1)
 	if err != nil {

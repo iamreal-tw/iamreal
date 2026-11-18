@@ -15,6 +15,9 @@
 </section>
 <section class="latest">
 <h2>最近換出的島民證明</h2>
+{{- if .Empty}}
+<p>名冊上還沒有島民證明。</p>
+{{- else}}
 <p class="small">列在這裡，只代表有一張自然人憑證把名額給了這個帳號。帳號主人承不承認，要點進那一張看。</p>
 <ul class="rows">
 {{- range .Rows}}
@@ -23,6 +26,7 @@
 </ul>
 {{- if .More}}
 <p class="more"><a href="/roster?after={{.More}}">更多</a></p>
+{{- end}}
 {{- end}}
 </section>
 <section class="download">

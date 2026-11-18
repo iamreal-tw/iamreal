@@ -61,7 +61,7 @@ var templates = func() map[string]*template.Template {
 		"unknownEvent": func(e string) (string, error) { return "", fmt.Errorf("pages: no words for the event %q", e) },
 	}
 	out := map[string]*template.Template{}
-	for _, name := range []string{"proof", "proof-missing", "account", "roster"} {
+	for _, name := range []string{"proof", "proof-missing", "account", "account-not-a-name", "roster"} {
 		out[name] = template.Must(template.New(name).Funcs(funcs).ParseFS(templateFiles,
 			"templates/layout.html", "templates/parts.html", "templates/"+name+".html"))
 	}
@@ -71,16 +71,19 @@ var templates = func() map[string]*template.Template {
 // document is what the layout of every page reads.
 type document struct {
 	Site
-	Title   string
-	OGTitle bool // write og:title and og:site_name (the page of a card)
+	// Title is the title of the link preview (og:title); the <title> is
+	// Title followed by ｜島民.
+	Title string
+	// Preview is true to write og:title and og:site_name.
+	Preview bool
 	CSS     string
 	Kind    string // which page: the class of <body>
 	Content any
 }
 
-func render(w io.Writer, name string, site Site, title string, og bool, content any) error {
+func render(w io.Writer, name string, site Site, title string, preview bool, content any) error {
 	var b bytes.Buffer
-	d := document{Site: site, Title: title, OGTitle: og, CSS: CSSPath, Kind: name, Content: content}
+	d := document{Site: site, Title: title, Preview: preview, CSS: CSSPath, Kind: name, Content: content}
 	if err := templates[name].ExecuteTemplate(&b, "layout", d); err != nil {
 		return err
 	}
@@ -177,6 +180,9 @@ type cardView struct {
 	ShortID string
 	// Account is the card's account on Threads now; "" if it has none.
 	Account string
+	// LongAccount is true for an account longer than LongAccount
+	// characters, written one size smaller.
+	LongAccount bool
 	// Withdrawn is the account of the latest withdrawal on Threads, for a
 	// card with no account now; "" if there is none.
 	Withdrawn string
@@ -188,6 +194,11 @@ type cardView struct {
 	Rows      []historyRow
 }
 
+// LongAccount is the longest account, in characters, written at the full
+// size on the first screen of the page of a card; a longer one is written
+// one size smaller, so that on a phone it stays on one line where it can.
+const LongAccount = 18
+
 type historyRow struct {
 	Date   string
 	Event  string // store.Event*
@@ -195,7 +206,8 @@ type historyRow struct {
 	After  string
 }
 
-// Title is the page's <title> and og:title (proof-page.md, section 8).
+// Title is the title of the page's link preview (proof-page.md, section
+// 8); the <title> adds ｜島民.
 func (p ProofPage) Title() string {
 	switch {
 	case len(p.Cards) > 1:
@@ -249,6 +261,7 @@ func (p ProofPage) Render(w io.Writer, site Site) error {
 		if v.Account != "" && !ValidUsername(v.Account) {
 			return fmt.Errorf("pages: card %s has an account not in the Threads format", c.Summary.ScopedID)
 		}
+		v.LongAccount = len(v.Account) > LongAccount
 		for _, r := range c.History {
 			for _, ch := range r.Changes {
 				if ch.Platform != Platform {
@@ -300,21 +313,25 @@ type accountRow struct {
 	Last    Days
 }
 
-// Title is the page's <title>.
-func (p AccountPage) Title() string { return "Threads 的 @" + p.Username + "｜島民" }
+// Title is the title of the page's link preview (account-page.md, section
+// 5); the <title> adds ｜島民.
+func (p AccountPage) Title() string { return "Threads 的 @" + p.Username }
 
 // Render writes the page. Username must be in the Threads format.
 func (p AccountPage) Render(w io.Writer, site Site) error {
 	if !ValidUsername(p.Username) {
 		return fmt.Errorf("pages: %q is not in the Threads format", p.Username)
 	}
-	return render(w, "account", site, p.Title(), false, p.content())
+	return render(w, "account", site, p.Title(), true, p.content())
 }
 
-// RenderUnknownFormat writes the page of a name that is not in the Threads
-// format: the page of an account with no card, which has no embed.
-func (p AccountPage) RenderUnknownFormat(w io.Writer, site Site) error {
-	return render(w, "account", site, p.Title(), false, accountContent{Username: p.Username})
+// NotAName is the page of a name that cannot be a Threads username
+// (account-page.md, section 4). It does not write the name.
+type NotAName struct{}
+
+// Render writes the page.
+func (NotAName) Render(w io.Writer, site Site) error {
+	return render(w, "account-not-a-name", site, "Threads 沒有這樣的帳號名稱", false, nil)
 }
 
 func (p AccountPage) content() accountContent {
@@ -347,6 +364,9 @@ type RosterPage struct {
 	Slots []store.RecentSlot
 	// More is true if there are slots after the last one listed.
 	More bool
+	// After is true if the list starts after a place (?after=), not at the
+	// latest slot.
+	After bool
 	// Query is what the visitor typed in the lookup box, for a lookup that
 	// is not in the Threads format (BadQuery); "" otherwise.
 	Query    string
@@ -356,6 +376,7 @@ type RosterPage struct {
 type rosterContent struct {
 	Declared, Recent int
 	Rows             []rosterRow
+	Empty            bool   // the roster has no slot with an account
 	More             string // the value of ?after= for the next ones; "" if none
 	Query            string
 	BadQuery         bool
@@ -369,14 +390,14 @@ type rosterRow struct {
 
 // Render writes the page.
 func (p RosterPage) Render(w io.Writer, site Site) error {
-	c := rosterContent{Declared: p.Declared, Recent: p.Recent, Query: p.Query, BadQuery: p.BadQuery}
+	c := rosterContent{Declared: p.Declared, Recent: p.Recent, Query: p.Query, BadQuery: p.BadQuery, Empty: len(p.Slots) == 0 && !p.After}
 	for _, s := range p.Slots {
 		c.Rows = append(c.Rows, rosterRow{Since: s.Since.String(), Username: s.Username, ShortID: verifier.ShortID(s.ScopedID)})
 	}
 	if p.More && len(p.Slots) > 0 {
 		c.More = FormatPosition(p.Slots[len(p.Slots)-1].Position())
 	}
-	return render(w, "roster", site, "名冊｜島民", false, c)
+	return render(w, "roster", site, "名冊", true, c)
 }
 
 // FormatPosition writes a place in the list of the latest slots as the

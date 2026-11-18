@@ -105,7 +105,7 @@ func TestRenderAlone(t *testing.T) {
 	render(func(b *bytes.Buffer) error {
 		return AccountPage{Username: "alice", Cards: []store.AccountCard{{ScopedID: idA, Since: today, LastCardProof: today}}, Today: today}.Render(b, site)
 	})
-	render(func(b *bytes.Buffer) error { return AccountPage{Username: `<script>`}.RenderUnknownFormat(b, site) })
+	render(func(b *bytes.Buffer) error { return NotAName{}.Render(b, site) })
 	render(func(b *bytes.Buffer) error { return RosterPage{Query: `"><script>`, BadQuery: true}.Render(b, site) })
 	inline := regexp.MustCompile(`(?i)<\s*script|<\s*style|\sstyle\s*=|\son[a-z]+\s*=`)
 	for _, p := range pages {
