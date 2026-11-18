@@ -43,12 +43,24 @@ func TestVectorsOneAtATime(t *testing.T) {
 				if err != nil || !again.Equal(checked) {
 					t.Fatalf("seq %d: Check twice: %+v, then %+v (%v)", rec.Seq, checked, again, err)
 				}
+				// CheckWithCard gives the same answer, and for a valid
+				// record the card's state that Apply then makes.
+				withCard, card, err := x.CheckWithCard(rec)
+				if err != nil || !withCard.Equal(checked) {
+					t.Fatalf("seq %d: CheckWithCard %+v, Check %+v (%v)", rec.Seq, withCard, checked, err)
+				}
 				applied, err := x.Apply(rec)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if !applied.Equal(checked) {
 					t.Errorf("seq %d: Check %+v, Apply %+v", rec.Seq, checked, applied)
+				}
+				if applied.Valid && !reflect.DeepEqual(card, x.Card(rec.ScopeString, rec.ScopedID)) {
+					t.Errorf("seq %d: CheckWithCard's card %+v, Card after Apply %+v", rec.Seq, card, x.Card(rec.ScopeString, rec.ScopedID))
+				}
+				if !applied.Valid && !reflect.DeepEqual(card, roster.CardState{}) {
+					t.Errorf("seq %d: invalid, but CheckWithCard gave a card %+v", rec.Seq, card)
 				}
 				got = append(got, resultOf(applied))
 			}

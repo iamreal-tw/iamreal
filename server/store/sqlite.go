@@ -59,7 +59,7 @@ func Open(path string) (*SQLite, error) {
 	// One connection: every read and write of this process is one after
 	// the other, which is what an append-only chain needs.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + viewSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: %s: %w", path, err)
 	}
@@ -136,7 +136,10 @@ func (s *SQLite) Records(first, last uint64) ([]*verifier.Record, error) {
 	return out, rows.Err()
 }
 
-func (s *SQLite) Append(r *verifier.Record) error {
+func (s *SQLite) Append(r *verifier.Record, v *View) error {
+	if v != nil && (v.Seq != r.Seq || v.ScopeString != r.ScopeString || v.ScopedID != r.ScopedID) {
+		return ErrViewMismatch
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -149,6 +152,13 @@ func (s *SQLite) Append(r *verifier.Record) error {
 	}
 	if r.Seq != count+1 || r.Prev != h {
 		return ErrNotNext
+	}
+	if v != nil {
+		if at, err := viewSeq(tx); err != nil {
+			return err
+		} else if at != count {
+			return ErrViewsBehind
+		}
 	}
 	res, err := tx.Exec(`UPDATE challenges SET accepted = 1 WHERE challenge = ? AND accepted = 0`, r.Challenge)
 	if err != nil {
@@ -163,6 +173,11 @@ func (s *SQLite) Append(r *verifier.Record) error {
 		r.Seq, r.Prev, r.ScopeString, r.ScopedID, verifier.AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof)
 	if err != nil {
 		return err
+	}
+	if v != nil {
+		if err := writeView(tx, v); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

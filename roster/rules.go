@@ -234,6 +234,18 @@ func (x *Rules) Check(r *verifier.Record) (RecordResult, error) {
 	return res, err
 }
 
+// CheckWithCard returns what Check returns and, for a valid record, the
+// state its card would have after it: what Card would return once r is
+// applied. For an invalid record the state is the zero CardState. Nothing
+// changes.
+func (x *Rules) CheckWithCard(r *verifier.Record) (RecordResult, CardState, error) {
+	res, next, err := x.check(r)
+	if err != nil || !res.Valid {
+		return res, CardState{}, err
+	}
+	return res, cardStateOf(next), nil
+}
+
 // Apply applies r as the next record and returns its result. A valid record
 // changes the state of its card, on every platform at once; an invalid one
 // changes nothing but marks its challenge as used (check 2). On an error
@@ -428,6 +440,11 @@ func (x *Rules) Card(scopeString, scopedID string) CardState {
 	if cs == nil {
 		cs = x.newCard()
 	}
+	return cardStateOf(cs)
+}
+
+// cardStateOf copies cs into a CardState.
+func cardStateOf(cs *cardState) CardState {
 	out := CardState{Slots: map[string]Slot{}}
 	for p, s := range cs.slots {
 		slot := Slot{SwitchCount: s.switchCount}

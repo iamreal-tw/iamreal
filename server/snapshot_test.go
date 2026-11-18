@@ -48,7 +48,7 @@ func (h *harness) appendDirect(card string, accounts []verifier.Account, date, r
 	if err := h.store.AddChallenge(r.Challenge, h.clock.Now()); err != nil {
 		h.t.Fatal(err)
 	}
-	if err := h.store.Append(r); err != nil {
+	if err := h.store.Append(r, nil); err != nil {
 		h.t.Fatal(err)
 	}
 	return r

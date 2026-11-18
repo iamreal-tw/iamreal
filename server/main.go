@@ -125,6 +125,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
 	runMirror := fs.Bool("mirror", true, "fetch MOICA's CRLs at start and every hour")
 	restrictLate := fs.Bool("restrict-late-switches", false, "refuse the fourth and fifth switch of a slot (switch_restricted); accepted by default, as the roster rules do")
+	rebuildViews := fs.Bool("rebuild-views", false, "empty the views for the pages and rebuild them from every record before starting")
 	applyTest := addTestOptions(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -166,6 +167,12 @@ func serve(args []string, stderr io.Writer, d deps) int {
 		return fail(err)
 	}
 	defer st.Close()
+	if *rebuildViews {
+		if err := st.ResetViews(); err != nil {
+			return fail(err)
+		}
+		logger.Info("views emptied; rebuilding them from the records")
+	}
 
 	s, err := New(Config{
 		Roster: r, Store: st, CRLDir: crlDir(*data), Proofs: proofs,
@@ -176,7 +183,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 		return fail(err)
 	}
 	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "head", s.head, "version", version(),
-		"restrict_late_switches", *restrictLate)
+		"restrict_late_switches", *restrictLate, "views_written_from", s.viewsFrom)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
