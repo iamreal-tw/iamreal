@@ -91,8 +91,8 @@
 這一頁上線之前要先有：
 
 - 公開的程式庫已經公開
-- 名冊和廢止清冊的存檔有公開的下載位置
-- `cmd/iamreal-verify/README.md` 寫得讓 AI 程式助理照著做得完（下載的位置、`bb` 怎麼取得）
+- 名冊和廢止清冊的存檔放上 `data.iamreal.tw`（ADR-0027）
+- `cmd/iamreal-verify/README.md` 寫得讓 AI 程式助理照著做得完（下載的網址 `data.iamreal.tw`、`bb` 怎麼取得）
 
 ## 還沒做的
 
