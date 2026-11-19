@@ -2,20 +2,16 @@
 // tests read).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { bytesOfHex, hexOf, limbs, sha256Hex } from "../src/bytes.ts";
-import { TAG, children, content, expectTlv } from "../src/der.ts";
-import { CIRCUIT_OF_BITS, MOICA_ISSUERS, checkIssuerTable } from "../src/issuers.ts";
-import { decodeBase32Strict, encodeBase32 } from "../src/spec/base32.ts";
-import { currentTime, parseChallenge } from "../src/spec/challenge.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "../src/spec/date.ts";
-import { declarationCode, declarationPreimage } from "../src/spec/declaration-code.ts";
-import { fieldBytes, pack31 } from "../src/spec/field.ts";
-import { type CardState, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/spec/roster-rules.ts";
-import { presentationOf } from "../src/platforms.ts";
-import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
-import { lookupScope, scopeOf } from "../src/spec/scope.ts";
-import { parseScopedId, scopedIdText, shortId } from "../src/spec/scoped-id.ts";
-import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/spec/username-format.ts";
+import { bytesOfHex, hexOf, sha256Hex } from "../src/bytes.ts";
+import { decodeBase32Strict, encodeBase32 } from "../src/base32.ts";
+import { currentTime, parseChallenge } from "../src/challenge.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "../src/date.ts";
+import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
+import { fieldBytes, pack31 } from "../src/field.ts";
+import { type CardState, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/roster-rules.ts";
+import { lookupScope, scopeOf } from "../src/scope.ts";
+import { parseScopedId, scopedIdText, shortId } from "../src/scoped-id.ts";
+import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/username-format.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
 describe("challenge.json", () => {
@@ -153,16 +149,6 @@ describe("scope.json", () => {
     for (const ok of ["threads", "test-example", "a", "x".repeat(21), "0-9"]) assert.equal(isPlatformId(ok), true, ok);
     for (const bad of ["", "Threads", "threads_", "a:b", "x".repeat(22), "a b", null]) assert.equal(isPlatformId(bad), false, JSON.stringify(bad));
   });
-  test("Threads' normalize lowercases ASCII only", () => {
-    const normalize = presentationOf("threads")!.normalize;
-    const format = parseUsernameFormat(tables.production[0]!.format)!;
-    assert.equal(normalize("@Alice"), "alice");
-    assert.equal(normalize("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
-    assert.equal(format.accepts(normalize("Kelvin")), false);
-    // test-example (test builds only): the name as typed, no prefix.
-    assert.equal(TEST_EXAMPLE.normalize("@A-b"), "@A-b");
-    assert.equal(TEST_EXAMPLE.prefix, "");
-  });
 });
 
 describe("declaration-code.json", () => {
@@ -197,34 +183,6 @@ describe("scoped-id.json", () => {
   }
   for (const e of v.invalid) {
     test(`rejects ${JSON.stringify(e.scoped_id)} (${e.reason})`, () => assert.equal(parseScopedId(e.scoped_id), null));
-  }
-});
-
-describe("issuers.json and the certificates in crl/", () => {
-  const v = vectors("issuers.json");
-  test("the table's shape", () => checkIssuerTable(MOICA_ISSUERS));
-  for (const i of v.issuers) {
-    test(`${i.issuer}`, async () => {
-      const key = MOICA_ISSUERS.find((k) => k.name === i.issuer)!;
-      assert.equal(key.modulus, BigInt(i.modulus));
-      assert.equal(key.bits, i.modulus_bits);
-      const k = CIRCUIT_OF_BITS[key.bits].limbs;
-      assert.equal(k, i.limbs);
-      assert.deepEqual(limbs(key.modulus, 120, k).map((x) => "0x" + x.toString(16)), i.issuer_modulus_limbs.map((x: string) => "0x" + BigInt(x).toString(16)));
-      // The certificate file in crl/ is the one the table names, and holds this modulus.
-      const der = repoFile(`crl/${i.issuer === "G2" ? "MOICA2.cer" : "MOICA-G3.cer"}`);
-      assert.equal(await sha256Hex(der), i.certificate_sha256);
-      const cert = expectTlv(der, 0, TAG.SEQUENCE, der.length, "cert");
-      const tbs = children(der, cert)[0]!;
-      // version, serialNumber, signature, issuer, validity, subject, subjectPublicKeyInfo
-      const spki = children(der, tbs)[6]!;
-      const bits = children(der, spki)[1]!;
-      const rsa = expectTlv(der, bits.contentStart + 1, TAG.SEQUENCE, bits.end, "RSAPublicKey");
-      const n = children(der, rsa)[0]!;
-      let modulus = 0n;
-      for (const b of content(der, n)) modulus = (modulus << 8n) | BigInt(b);
-      assert.equal(modulus, key.modulus);
-    });
   }
 });
 

@@ -15,7 +15,7 @@
 // device does not know: an account on it is kept as it is, shown by its ID,
 // and cannot be changed (src/flow.ts). The server's display name is not
 // shown. The scope string is not a platform's: there is one for the public
-// roster (src/spec/scope.ts).
+// roster (protocol/src/scope.ts).
 import { PRESENTATIONS } from "./target.ts";
 
 export interface Presentation {

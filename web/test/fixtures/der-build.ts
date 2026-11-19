@@ -1,5 +1,5 @@
 // DER writing for test fixtures (certificates and CRLs made with test keys).
-import { bytesOfHex, concatBytes } from "../../src/bytes.ts";
+import { bytesOfHex, concatBytes } from "iamreal-protocol/bytes.ts";
 
 export function tlv(tag: number, content: Uint8Array): Uint8Array {
   const len = content.length;

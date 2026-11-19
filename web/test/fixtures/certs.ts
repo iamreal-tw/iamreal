@@ -2,7 +2,7 @@
 // issued by a throwaway test key. Ported from zkid-noir tests/lib/cert.mjs
 // (itself from PSE's testCert.ts), so the bytes the circuit sees have the same
 // structure as in the circuit's own tests. No real certificate is involved.
-import { concatBytes } from "../../src/bytes.ts";
+import { concatBytes } from "iamreal-protocol/bytes.ts";
 import { type TestKey, ascii, hex, seq, signed, tlv, utf8 } from "./der-build.ts";
 
 function rdn(oid: number[], stringTag: number, value: string): Uint8Array {

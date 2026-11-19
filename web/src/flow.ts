@@ -55,11 +55,11 @@
 //
 // Where each value comes from and goes to:
 //   scope string     the public roster's, fixed for the page's roster
-//                    (spec/scope.ts); never from a server
+//                    (protocol/src/scope.ts); never from a server
 //   platform table   the server's config: which platforms are offered,
 //                    their display names, their `username` formats (read by
-//                    the device itself, spec/username-format.ts). Not where
-//                    the scope string comes from
+//                    the device itself, protocol/src/username-format.ts).
+//                    Not where the scope string comes from
 //   the list         the card's state (card-state), as the cardholder
 //                    edits it; accounts on platforms the device does not
 //                    know are kept as they are
@@ -83,15 +83,15 @@ import { ArtifactError, CIRCUITS } from "./prover/artifacts.ts";
 import { circuitInputs, circuitOf, expectedPublicInputs, wipeInputs } from "./prover/inputs.ts";
 import type { Prover, ThreadMode } from "./prover/prover.ts";
 import { PROOF_BYTES } from "./prover/prover.ts";
-import { parseChallenge, currentTime } from "./spec/challenge.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "./spec/date.ts";
-import { type Account, declarationCode } from "./spec/declaration-code.ts";
-import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, dailyLimitReached, slotOutcome } from "./spec/roster-rules.ts";
-import { type Roster, scopeOf } from "./spec/scope.ts";
-import { scopedId, scopedIdText, shortId } from "./spec/scoped-id.ts";
-import { byPlatform } from "./spec/username-format.ts";
+import { parseChallenge, currentTime } from "iamreal-protocol/challenge.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
+import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
+import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, dailyLimitReached, slotOutcome } from "iamreal-protocol/roster-rules.ts";
+import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
+import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
+import { byPlatform } from "iamreal-protocol/username-format.ts";
 import type { CrlNumberStore } from "./storage.ts";
-import { bytesOfBigint, equalBytes, wipe } from "./bytes.ts";
+import { bytesOfBigint, equalBytes, wipe } from "iamreal-protocol/bytes.ts";
 
 /** Why the flow stopped. Returned to the caller; never sent to the server (ADR-0016). */
 export type Stop =

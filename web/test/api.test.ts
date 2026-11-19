@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { API_TIMEOUT_MS, FILE_TIMEOUT_MS, type Fetch, ServerError, getBytes, requestCardState, requestChallenge, requestConfig } from "../src/api.ts";
-import { dayOf } from "../src/spec/date.ts";
+import { dayOf } from "iamreal-protocol/date.ts";
 
 const TODAY = dayOf(2026, 11, 16);
 
