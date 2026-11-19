@@ -72,5 +72,5 @@ status: accepted
 - **多依賴一項 GitHub 的服務。** 一個工作最長 6 小時（[limits](https://docs.github.com/en/actions/reference/limits)）；排程在尖峰時會延後，公開的程式庫 60 天沒有活動時排程會被停掉（[schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)）；快取 7 天沒有被讀就刪掉，一個程式庫上限 10 GB（[dependency caching](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)）。排程沒跑要有人知道，和「沒有通過時通知營運者」一起在監控的決定裡定。快取不見的後果是一次整份重驗。
 - **後台每天把整張卡片狀態表讀出來寫成檔案，要多久還沒有量。** 量出來會卡住寫入，就改成分幾天輪完一遍。
 - **「從備份換回那一檔」的備份放在哪裡**，在備份和還原的決定裡定。
-- **Go 的重驗指令是這個做法的前提。** 它留多久在[上線之後，Go 的重驗工具和名冊規則留多久](https://github.com/iamreal-tw/iamreal/issues/29)決定；不留的話，這一份要重開。
+- **Go 的重驗指令是這個做法的前提。** 它不設期限地留著；要拿掉，先要有另一份獨立的實作，不然這一份要重開（ADR-0030）。
 - 「每日快照」不再指一個步驟。快照是名冊到某一天指紋檔那一行為止的那一段（`GLOSSARY.md`）。

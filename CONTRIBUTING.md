@@ -25,7 +25,8 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 ## 規則和算法只有一份
 
-- 名冊規則只在 `roster/`。後台和指令呼叫它，自己不判斷一筆紀錄有效或無效
+- 名冊規則有兩份實作：Go 的 `roster/`（重驗的指令用）和 TypeScript 的（後台和裝置共用）。後台、裝置和指令呼叫它，自己不判斷一筆紀錄有效或無效
+- 改名冊規則時，`spec/roster-rules.md`、`spec/vectors/`、Go、TypeScript 在同一個 PR 改好，名冊規則的版本號加一號（ADR-0030）
 - 兩種以上語言都實作的算法，測試讀 `spec/vectors/` 裡同一份標準答案
 
 ## 頁面
