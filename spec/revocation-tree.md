@@ -112,8 +112,9 @@ whose date fits is enough.
   CRL still passes. After them, no card proof is accepted until a new CRL
   appears. The bound may be widened later: records valid under 3 days stay
   valid under a wider bound. Narrowing it can change the result of records
-  already written, so a narrower bound takes effect from an effective date
-  ([`roster-rules.md`](roster-rules.md), "Changing these rules").
+  already written; if it changes any, the narrower bound takes effect from
+  an effective date ([`roster-rules.md`](roster-rules.md), "Changing these
+  rules").
 
 ## Who checks what
 

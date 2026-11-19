@@ -75,6 +75,6 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 ## Consequences
 
 - **程式庫公開之前，GitHub 的幾項設定還不能用。** 免費方案的私有程式庫沒有 environment 的 secrets、部署前要人核准、只允許標籤部署的規則（[deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)）。公開之前只有測試網站，測試的權杖先放在程式庫的 secrets；正式名冊開張當天建立兩個 environment、把測試的權杖搬進去、做正式的權杖。
-- **Durable Object 的遷移要什麼權限，文件沒有寫。** 施工時實測；`Editor` 做不到時，用上面「臨時做一把」的做法。2026-11-19 實測：只有 `Editor` 權限的權杖跑得了建立類別的遷移，改名和刪除類別的沒有試過（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。
+- **Durable Object 的遷移要什麼權限，文件沒有寫。** 施工時實測；`Editor` 做不到時，用上面「臨時做一把」的做法。2026-11-19 實測：只有 `Editor` 權限的權杖跑得了建立類別的 migration，改名和刪除類別的沒有試過（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。
 - **外人的 PR 在合併之前跑不到部署；合併之後才部署。** 有問題要等合併到 `main`、部署到測試網站才看得到。
 - **可重現的建置和檔案雜湊**要做到「任何人能拿一個提交自己建置、和網站送出的檔案比對」，不靠部署紀錄。
