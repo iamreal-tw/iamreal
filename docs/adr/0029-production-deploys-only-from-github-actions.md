@@ -29,12 +29,13 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 | 帳號 | GitHub 組織的 owner、Cloudflare 帳號的 Super Administrator、網域註冊商、註冊網域的信箱 | 營運者本人，用實體安全金鑰登入。不產生能代表這些帳號的長期權杖 |
 | 正式部署 | Cloudflare 權杖，只有正式的 Worker 的 `Editor` | 只放在 GitHub 的 `production` environment |
 | 測試部署 | Cloudflare 權杖，只有測試的 Worker 的 `Editor`，兩把 | 一把放 GitHub 的 `test` environment，一把放營運者電腦上的 `.env.local`；可以分別撤銷 |
+| 抄副本 | 副本那一家的短期身分，只能新增和讀副本，不能刪（ADR-0033） | 不存放：抄副本的工作流程每次用 GitHub 的 OIDC 換，限定它自己的 environment |
 | 不用金鑰 | PR 的檢查、每天的重驗（ADR-0025）、抄指紋檔（ADR-0027） | |
 
 - **營運者的電腦上不用 `wrangler login`。** 它的授權不能只給一個 Worker（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）；電腦上跑的程式和 coding agent 就碰得到正式網站。
 - **營運者電腦上的 coding agent 不推版本標籤、不核准正式部署。** 電腦上的 `gh` 登入的是營運者，GitHub 分不出核准的是人還是 agent，所以靠營運者本機的設定擋。
 - **部署的權杖做不到的事，營運者在 Cloudflare 的儀表板手動做**：建立 Worker、自訂網域、R2 儲存桶和它的 CORS、WAF 和限流的規則。只給一個 Worker 的權杖建立不了新的 Worker，也改不了自訂網域（[Workers authorization](https://developers.cloudflare.com/workers/authorization/workers/)）。這些事一年做不到幾次，步驟寫在營運者的說明裡。要比 `Editor` 大的權限時，臨時做一把權杖，用完刪掉。
-- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。
+- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。唯一的例外是從副本換回一個檔：營運者臨時做一把只能寫這個儲存桶的權杖，換完刪掉（ADR-0033）。
 - **`iamreal-tw/fingerprints` 只有它自己的排程用自己的 `GITHUB_TOKEN` 提交。** 外人對它開的 PR 不合併：那份檔案只該由排程寫。
 - **GitHub 組織和 Cloudflare 帳號的 admin 只有營運者一個人。** 營運者自己進不去時，靠備用碼和實體安全金鑰。
 
@@ -48,10 +49,11 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 
 ## 緊急時
 
-只有兩件事可以不經過 Actions，直接在 Cloudflare 的儀表板做：
+只有三件事可以不經過 Actions，由營運者直接做：
 
 - **退回舊版。** 儀表板可以退回最近 100 個版本之一，不用重新上傳，Cloudflare 記下是誰退的（[rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)）。
 - **停止收過卡**（ADR-0025）。
+- **從副本換回一個名冊檔或清冊檔**（ADR-0033）。
 
 做完之後開一張公開的 issue，寫明做了什麼、為什麼。其他任何變更都經過 Actions。
 
