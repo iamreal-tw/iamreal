@@ -1369,7 +1369,7 @@
       ]
     },
     {
-      "name": "order is by seq; the last card proof date is the latest date",
+      "name": "order is by seq: a record dated before its card's last card proof is date_order; the last card proof stays the latest date",
       "roster": "production",
       "events": [
         {
@@ -1420,13 +1420,8 @@
         },
         {
           "seq": 2,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
+          "valid": false,
+          "reason": "date_order"
         }
       ],
       "state": [
@@ -3164,6 +3159,661 @@
       ]
     },
     {
+      "name": "date_order: a record dated a day before its card's last card proof; another card on that date is not affected",
+      "roster": "production",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-02.JXFJ20V02FY3A509SZ0273P64G",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "bob"
+            }
+          ],
+          "challenge": "2026-06-01.9E6REKX0V08NGEBP0T669JVQV4",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-01.SRKMBW1WRTCBNMQD9M8Q7QE4JM",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "bob"
+            }
+          ],
+          "challenge": "2026-06-01.FZR27A777Z96JRAD6GN3W0053W",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "valid": false,
+          "reason": "date_order"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "cards": [
+            {
+              "scoped_id": "0400000000000000000000000000000000000000000000000000",
+              "last_card_proof": "2026-06-01",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "bob"
+                }
+              ],
+              "proofs_on_last_date": 2,
+              "slots": {
+                "threads": {
+                  "current": "bob",
+                  "last_declared": "bob",
+                  "switch_count": 0,
+                  "correction_date": "2026-06-01"
+                }
+              }
+            },
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "last_card_proof": "2026-06-02",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "alice"
+                }
+              ],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": "alice",
+                  "last_declared": "alice",
+                  "switch_count": 0,
+                  "correction_date": "2026-06-02"
+                }
+              }
+            }
+          ],
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-06-02"
+                }
+              ]
+            },
+            {
+              "platform": "threads",
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
+                  "last_card_proof": "2026-06-01"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "daily_limit counts the records of the card's last card proof: the fourth that date is daily_limit, an earlier date is date_order, a later date starts again",
+      "roster": "production",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-01.PG6V8MG1DH0PZ094MZWNXYC9H0",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-02.JHCF377PJA0Z217G05J10KEBXM",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-02.HW5A2G1MWR250YP4PQXXMRB99C",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-02.D0F1XZ4QCYVQ4M7VZ03TG7CV18",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-02.GZQF6JG7F6TS0EF6DN12HY4MZC",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-01.AHVYCXK6BTMR4EX4W8HAXV2ESG",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-06-03.DSGH6WKD63W7THBPAHPQ9TBT3G",
+          "date": "2026-06-03",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-03"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        },
+        {
+          "seq": 5,
+          "valid": false,
+          "reason": "daily_limit"
+        },
+        {
+          "seq": 6,
+          "valid": false,
+          "reason": "date_order"
+        },
+        {
+          "seq": 7,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "last_card_proof": "2026-06-03",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "alice"
+                }
+              ],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": "alice",
+                  "last_declared": "alice",
+                  "switch_count": 0,
+                  "correction_date": "2026-06-01"
+                }
+              }
+            }
+          ],
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-06-03"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a record dated before its card's last card proof that the event rules would block is date_order: check 4 comes before switch_limit",
+      "roster": "production",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "a"
+            }
+          ],
+          "challenge": "2026-06-01.APJX1SX3P5B7MXQMP2ETTY4HAC",
+          "date": "2026-06-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-01"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "b"
+            }
+          ],
+          "challenge": "2026-06-02.AD9SAQ71DAKFEVDGAEYDAE3HR8",
+          "date": "2026-06-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-02"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "c"
+            }
+          ],
+          "challenge": "2026-06-03.9S92ZK5Y7C6FMPTGZ1C3GSC3TC",
+          "date": "2026-06-03",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-03"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "d"
+            }
+          ],
+          "challenge": "2026-06-04.KA02H484CNX1768ZGHSWTB8T5R",
+          "date": "2026-06-04",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-04"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "e"
+            }
+          ],
+          "challenge": "2026-06-05.2GD8AH8SN10XZ8ZCRC51Y7WF6M",
+          "date": "2026-06-05",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-05"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "f"
+            }
+          ],
+          "challenge": "2026-06-06.PSJ7ABYRZKCT10EB18FS1B5CX8",
+          "date": "2026-06-06",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-06"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "g"
+            }
+          ],
+          "challenge": "2026-06-05.JZRP4W886ACNMKV4089Z0RZGK4",
+          "date": "2026-06-05",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-05"
+          ]
+        },
+        {
+          "seq": 8,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "g"
+            }
+          ],
+          "challenge": "2026-06-07.2VB5RJDG289DRD6JS9SJPA7P88",
+          "date": "2026-06-07",
+          "verifies": true,
+          "crl_dates": [
+            "2026-06-07"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 5,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 7,
+          "valid": false,
+          "reason": "date_order"
+        },
+        {
+          "seq": 8,
+          "valid": false,
+          "reason": "switch_limit"
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "cards": [
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "last_card_proof": "2026-06-06",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "f"
+                }
+              ],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": "f",
+                  "last_declared": "f",
+                  "switch_count": 5,
+                  "correction_date": "2026-06-06"
+                }
+              }
+            }
+          ],
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "f",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-06-06"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "a record that does not verify is `proof` even if its challenge was used before",
       "roster": "production",
       "events": [
@@ -4716,7 +5366,7 @@
       ]
     },
     {
-      "name": "daily_limit: dates stepping back a day around midnight count per date",
+      "name": "around midnight: records dated the day before their card's last card proof are date_order, not daily_limit; the last date still allows three",
       "roster": "production",
       "events": [
         {
@@ -4889,18 +5539,13 @@
         },
         {
           "seq": 4,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
+          "valid": false,
+          "reason": "date_order"
         },
         {
           "seq": 5,
           "valid": false,
-          "reason": "daily_limit"
+          "reason": "date_order"
         },
         {
           "seq": 6,
@@ -4968,7 +5613,7 @@
       ]
     },
     {
-      "name": "proofs_on_last_date counts only the records of the latest date",
+      "name": "a record dated a day before its card's last card proof is date_order; proofs_on_last_date stays 1",
       "roster": "production",
       "events": [
         {
@@ -5019,13 +5664,8 @@
         },
         {
           "seq": 2,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "refresh"
-            }
-          ]
+          "valid": false,
+          "reason": "date_order"
         }
       ],
       "state": [
@@ -6579,13 +7219,8 @@
         },
         {
           "seq": 3,
-          "valid": true,
-          "kinds": [
-            {
-              "platform": "threads",
-              "kind": "switch"
-            }
-          ]
+          "valid": false,
+          "reason": "date_order"
         },
         {
           "seq": 4,
@@ -6676,16 +7311,16 @@
               "accounts": [
                 {
                   "platform": "threads",
-                  "username": "carol"
+                  "username": "bob"
                 }
               ],
               "proofs_on_last_date": 1,
               "slots": {
                 "threads": {
-                  "current": "carol",
-                  "last_declared": "carol",
-                  "switch_count": 2,
-                  "correction_date": "2026-01-02"
+                  "current": "bob",
+                  "last_declared": "bob",
+                  "switch_count": 1,
+                  "correction_date": "2026-01-03"
                 }
               }
             }
@@ -6693,15 +7328,21 @@
           "accounts": [
             {
               "platform": "threads",
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-01-03"
+                }
+              ]
+            },
+            {
+              "platform": "threads",
               "username": "carol",
               "cards": [
                 {
                   "scoped_id": "0400000000000000000000000000000000000000000000000000",
                   "last_card_proof": "2026-01-02"
-                },
-                {
-                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
-                  "last_card_proof": "2026-01-03"
                 }
               ]
             },

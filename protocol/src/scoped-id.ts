@@ -1,6 +1,6 @@
 // The scoped ID (spec/scoped-id.md): computed from the card's signature over
 // the scope string, written as text, and its short ID.
-import { bigintOfBytes, bytesOfBigint, limbs } from "../bytes.ts";
+import { bigintOfBytes, bytesOfBigint, limbs } from "./bytes.ts";
 import { decodeBase32Strict, encodeBase32 } from "./base32.ts";
 import { P } from "./field.ts";
 

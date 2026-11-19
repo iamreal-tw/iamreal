@@ -1,6 +1,6 @@
 // The BN254 scalar field and the 32-byte form of a public input
 // (spec/scoped-id.md, spec/proof-verification.md).
-import { bytesOfBigint } from "../bytes.ts";
+import { bytesOfBigint } from "./bytes.ts";
 
 export const P = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001n;
 

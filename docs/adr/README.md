@@ -80,7 +80,6 @@
 | 0021 | `GET /api/v1/head` 和 `card-state` 的 `head` 回的是目前存著的全部紀錄的名冊指紋，不是最近一次公布的那一行 | [#70](https://github.com/iamreal-tw/iamreal/issues/70) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
-| 0024 | 規則沒有這一條 | [#28](https://github.com/iamreal-tw/iamreal/issues/28) |
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53)，備份在 [#51](https://github.com/iamreal-tw/iamreal/issues/51) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
@@ -89,13 +88,12 @@
 | 0031 | 規格還沒寫這個承諾 | [#45](https://github.com/iamreal-tw/iamreal/issues/45) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
-`CLAUDE.md` 的目錄表列了 `protocol/` 和 `worker/`，這兩個目錄還沒建：共用的 TypeScript 現在在 `web/src/spec/`，重寫後台的第一步是把它搬到 `protocol/`。
+`CLAUDE.md` 的目錄表列了 `worker/`，這個目錄還沒建：後台現在是 Go 的 `server/`。
 
 ## 還沒定
 
 施工時碰到這些，停下來問，不要自己定。
 
-- `protocol/`、`web/`、`worker/` 要不要共用一個根目錄的 pnpm workspace
 - 連線紀錄和每天的總數存在哪裡、誰讀得到、到期怎麼刪（ADR-0022、ADR-0032；[#20](https://github.com/iamreal-tw/iamreal/issues/20)）
 - 重驗沒有通過、排程沒跑時怎麼通知營運者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
 - 備份放在哪裡、怎麼還原（ADR-0025；[#51](https://github.com/iamreal-tw/iamreal/issues/51)）

@@ -3,11 +3,11 @@
 // ADR-0008 to ADR-0011), validity on today's date in Taiwan, and MOICA's
 // signature (spec/issuers.md). A card that cannot pass is told so here, and
 // the reason goes back to the caller only (ADR-0016).
-import { equalBytes } from "./bytes.ts";
+import { equalBytes } from "iamreal-protocol/bytes.ts";
 import { DerError, TAG, children, content, expectTlv, oidString, readTlv, whole } from "./der.ts";
 import { type IssuerKey, importRsaKey, rsaVerify } from "./issuers.ts";
-import { currentTime } from "./spec/challenge.ts";
-import type { Day } from "./spec/date.ts";
+import { currentTime } from "iamreal-protocol/challenge.ts";
+import type { Day } from "iamreal-protocol/date.ts";
 
 /** Why no certificate on the card can make a card proof. */
 export type CertificateProblem =

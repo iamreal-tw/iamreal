@@ -20,10 +20,10 @@
 //                    is read: about 26 MB, which 5 minutes allow down to
 //                    about 0.7 Mbit/s. They are all fetched before the first
 //                    signature, so nothing secret waits on them.
-import type { Account } from "./spec/declaration-code.ts";
-import { type Day, parseDay } from "./spec/date.ts";
-import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "./spec/roster-rules.ts";
-import { type UsernameFormat, isAnyUsername, isPlatformId, parseUsernameFormat } from "./spec/username-format.ts";
+import type { Account } from "iamreal-protocol/declaration-code.ts";
+import { type Day, parseDay } from "iamreal-protocol/date.ts";
+import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/roster-rules.ts";
+import { type UsernameFormat, isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
 export const API_TIMEOUT_MS = 30_000;
@@ -162,7 +162,7 @@ function isDisplayName(x: unknown): x is string {
  * `GET /api/v1/config`: the CRL age bound the server announces, and its copy
  * of the platform table. The table is a convenience for the device
  * (docs/api/card-proof.md): which scope string the card signs is never taken
- * from it (src/spec/scope.ts).
+ * from it (protocol/src/scope.ts).
  *
  *   - `crl_max_age_days` is a non-negative integer, or the answer is not read.
  *   - `platforms` is a list. Every element that names a platform ID (a
@@ -171,8 +171,8 @@ function isDisplayName(x: unknown): x is string {
  *   - A row is read if it is an object whose `platform` is a platform ID,
  *     `display_name` a string without control characters, and
  *     `username_format` a format in the one form `[…]{m,n}`
- *     (spec/username-format.ts). Another row is a platform the device does
- *     not know. Fields the device does not know are ignored.
+ *     (protocol/src/username-format.ts). Another row is a platform the
+ *     device does not know. Fields the device does not know are ignored.
  *   - No row it can read: the table is not read (`malformed_response`); the
  *     device has nothing to offer and nothing to check an account against.
  */
@@ -223,8 +223,8 @@ export interface CardStateResponse extends CardState {
  *   - An entry of a platform the device does not know: with `current` null,
  *     ignored; with `current` set, kept as it is if the platform ID and the
  *     account pass the checks every platform satisfies
- *     (spec/username-format.ts), otherwise the answer is not read. An entry
- *     that is not an object, or has no `current`, is not read.
+ *     (protocol/src/username-format.ts), otherwise the answer is not read.
+ *     An entry that is not an object, or has no `current`, is not read.
  *   - A state the roster rules cannot produce (possibleSlot, possibleCard,
  *     with `today`, the device's Taiwan date) is not read either.
  *

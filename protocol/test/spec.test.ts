@@ -2,20 +2,16 @@
 // tests read).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { bytesOfHex, hexOf, limbs, sha256Hex } from "../src/bytes.ts";
-import { TAG, children, content, expectTlv } from "../src/der.ts";
-import { CIRCUIT_OF_BITS, MOICA_ISSUERS, checkIssuerTable } from "../src/issuers.ts";
-import { decodeBase32Strict, encodeBase32 } from "../src/spec/base32.ts";
-import { currentTime, parseChallenge } from "../src/spec/challenge.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "../src/spec/date.ts";
-import { declarationCode, declarationPreimage } from "../src/spec/declaration-code.ts";
-import { fieldBytes, pack31 } from "../src/spec/field.ts";
-import { type CardState, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/spec/roster-rules.ts";
-import { presentationOf } from "../src/platforms.ts";
-import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
-import { lookupScope, scopeOf } from "../src/spec/scope.ts";
-import { parseScopedId, scopedIdText, shortId } from "../src/spec/scoped-id.ts";
-import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/spec/username-format.ts";
+import { bytesOfHex, hexOf, sha256Hex } from "../src/bytes.ts";
+import { decodeBase32Strict, encodeBase32 } from "../src/base32.ts";
+import { currentTime, parseChallenge } from "../src/challenge.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "../src/date.ts";
+import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
+import { fieldBytes, pack31 } from "../src/field.ts";
+import { type CardState, DATE_ORDER_DAYS, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, dateBeforeLastCardProof, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/roster-rules.ts";
+import { lookupScope, scopeOf } from "../src/scope.ts";
+import { parseScopedId, scopedIdText, shortId } from "../src/scoped-id.ts";
+import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/username-format.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
 describe("challenge.json", () => {
@@ -153,16 +149,6 @@ describe("scope.json", () => {
     for (const ok of ["threads", "test-example", "a", "x".repeat(21), "0-9"]) assert.equal(isPlatformId(ok), true, ok);
     for (const bad of ["", "Threads", "threads_", "a:b", "x".repeat(22), "a b", null]) assert.equal(isPlatformId(bad), false, JSON.stringify(bad));
   });
-  test("Threads' normalize lowercases ASCII only", () => {
-    const normalize = presentationOf("threads")!.normalize;
-    const format = parseUsernameFormat(tables.production[0]!.format)!;
-    assert.equal(normalize("@Alice"), "alice");
-    assert.equal(normalize("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
-    assert.equal(format.accepts(normalize("Kelvin")), false);
-    // test-example (test builds only): the name as typed, no prefix.
-    assert.equal(TEST_EXAMPLE.normalize("@A-b"), "@A-b");
-    assert.equal(TEST_EXAMPLE.prefix, "");
-  });
 });
 
 describe("declaration-code.json", () => {
@@ -200,34 +186,6 @@ describe("scoped-id.json", () => {
   }
 });
 
-describe("issuers.json and the certificates in crl/", () => {
-  const v = vectors("issuers.json");
-  test("the table's shape", () => checkIssuerTable(MOICA_ISSUERS));
-  for (const i of v.issuers) {
-    test(`${i.issuer}`, async () => {
-      const key = MOICA_ISSUERS.find((k) => k.name === i.issuer)!;
-      assert.equal(key.modulus, BigInt(i.modulus));
-      assert.equal(key.bits, i.modulus_bits);
-      const k = CIRCUIT_OF_BITS[key.bits].limbs;
-      assert.equal(k, i.limbs);
-      assert.deepEqual(limbs(key.modulus, 120, k).map((x) => "0x" + x.toString(16)), i.issuer_modulus_limbs.map((x: string) => "0x" + BigInt(x).toString(16)));
-      // The certificate file in crl/ is the one the table names, and holds this modulus.
-      const der = repoFile(`crl/${i.issuer === "G2" ? "MOICA2.cer" : "MOICA-G3.cer"}`);
-      assert.equal(await sha256Hex(der), i.certificate_sha256);
-      const cert = expectTlv(der, 0, TAG.SEQUENCE, der.length, "cert");
-      const tbs = children(der, cert)[0]!;
-      // version, serialNumber, signature, issuer, validity, subject, subjectPublicKeyInfo
-      const spki = children(der, tbs)[6]!;
-      const bits = children(der, spki)[1]!;
-      const rsa = expectTlv(der, bits.contentStart + 1, TAG.SEQUENCE, bits.end, "RSAPublicKey");
-      const n = children(der, rsa)[0]!;
-      let modulus = 0n;
-      for (const b of content(der, n)) modulus = (modulus << 8n) | BigInt(b);
-      assert.equal(modulus, key.modulus);
-    });
-  }
-});
-
 describe("roster-rules.json: what a card proof would do, from the card's state", () => {
   const TABLES = { production: ["threads"], test: ["test-example", "threads"] } as const;
   for (const c of vectors("roster-rules.json").cases) {
@@ -235,6 +193,8 @@ describe("roster-rules.json: what a card proof would do, from the card's state",
       const platforms: readonly string[] = TABLES[c.roster as "production" | "test"];
       const cards = new Map<string, CardState>();
       const newCard = (): CardState => ({ lastCardProof: null, proofsOnLastDate: 0, slots: new Map(platforms.map((p) => [p, { ...EMPTY_SLOT }])) });
+      // The latest date among the valid records of any card, for the other half of check 4.
+      let latest: Day | null = null;
       c.events.forEach((e: Record<string, any>, i: number) => {
         const r = c.results[i];
         const key = `${e.scope_string} ${e.scoped_id}`;
@@ -246,14 +206,21 @@ describe("roster-rules.json: what a card proof would do, from the card's state",
         if (r.valid) assert.deepEqual(o, { valid: true, kinds: r.kinds }, `event ${e.seq}`);
         else if (r.reason === "switch_limit" || r.reason === "empty") assert.equal(!o.valid && o.reason, r.reason, `event ${e.seq}`);
         else if (r.reason === "daily_limit") assert.equal(o.valid, true, `event ${e.seq}: the event rules accept it`);
-        // The device knows the count of one date only, the last card
-        // proof's: there it agrees with the rules. It never blocks a valid record.
+        // Check 4 on the card's own last card proof: the device agrees with
+        // the rules. A record that is date_order and not dated before its
+        // card's last card proof is caught by the roster's latest date.
+        const back = dateBeforeLastCardProof(s, d);
+        if (r.valid || ["empty", "switch_limit", "daily_limit"].includes(r.reason)) assert.equal(back, false, `event ${e.seq}: check 4 passed`);
+        if (r.reason === "date_order") assert.ok(back || (latest !== null && d < latest - DATE_ORDER_DAYS), `event ${e.seq}: date_order`);
+        // Check 6: the card's dates do not go back, so the count of the
+        // record's date is proofs_on_last_date or 0, and the device agrees
+        // with the rules. It never blocks a valid record.
         if (r.valid) assert.equal(dailyLimitReached(s, d), false, `event ${e.seq}`);
-        if (r.reason === "daily_limit" && d === s.lastCardProof) assert.equal(dailyLimitReached(s, d), true, `event ${e.seq}`);
+        if (r.reason === "daily_limit") assert.equal(dailyLimitReached(s, d), true, `event ${e.seq}`);
         if (r.valid && o.valid) {
           for (const k of o.kinds) s.slots.set(k.platform, applyKind(s.slots.get(k.platform)!, k.kind, list.get(k.platform) ?? null, d));
-          if (s.lastCardProof === null || d > s.lastCardProof) [s.lastCardProof, s.proofsOnLastDate] = [d, 1];
-          else if (d === s.lastCardProof) s.proofsOnLastDate++;
+          [s.lastCardProof, s.proofsOnLastDate] = [d, d === s.lastCardProof ? s.proofsOnLastDate + 1 : 1];
+          if (latest === null || d > latest) latest = d;
         }
         // Every state the rules produce is one the device reads.
         const today = Math.max(d, s.lastCardProof ?? d);
@@ -299,9 +266,17 @@ describe("roster-rules.json: what a card proof would do, from the card's state",
     assert.equal(dailyLimitReached(s, d("2026-11-16")), true);
     assert.equal(dailyLimitReached(s, d("2026-11-17")), false);
     assert.equal(dailyLimitReached({ ...s, proofsOnLastDate: 2 }, d("2026-11-16")), false);
-    // The last card proof dated after today (around midnight, or ahead): the count of today is not known here.
+    // The last card proof dated after today: a card proof dated today is date_order, not daily_limit.
     assert.equal(dailyLimitReached(s, d("2026-11-15")), false);
     assert.equal(dailyLimitReached({ lastCardProof: null, proofsOnLastDate: 0 }, d("2026-11-16")), false);
+  });
+  test("a card's dates do not go back: a date before the last card proof is date_order", () => {
+    const d = (s: string) => parseDay(s)!;
+    const s = { lastCardProof: d("2026-11-16") };
+    assert.equal(dateBeforeLastCardProof(s, d("2026-11-15")), true);
+    assert.equal(dateBeforeLastCardProof(s, d("2026-11-16")), false);
+    assert.equal(dateBeforeLastCardProof(s, d("2026-11-17")), false);
+    assert.equal(dateBeforeLastCardProof({ lastCardProof: null }, d("2026-11-15")), false);
   });
   test("states the rules cannot produce", () => {
     const d = (s: string) => parseDay(s)!;

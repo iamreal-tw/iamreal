@@ -11,7 +11,7 @@
 import { BackendType, Barretenberg, UltraHonkBackend } from "@aztec-foundation/bb.js";
 import { Noir, acvm, abi } from "@noir-lang/noir_js";
 import type { Fetch } from "../api.ts";
-import { bigintOfBytes, bytesOfBigint } from "../bytes.ts";
+import { bigintOfBytes, bytesOfBigint } from "iamreal-protocol/bytes.ts";
 import type { CircuitName } from "../issuers.ts";
 import { CRS, CRS_POINTS, type CompiledCircuit, fetchChecked, loadCircuit } from "./artifacts.ts";
 import { PROOF_BYTES, type ProofResult, type Prover, type ThreadMode, VERIFIER_TARGET } from "./prover.ts";

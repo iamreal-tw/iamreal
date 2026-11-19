@@ -137,9 +137,9 @@ func (c SlotChange) Event() string {
 type CardSummary struct {
 	ScopedID string
 	// FirstCardProof is the earliest date among the card's valid records:
-	// the date of the last record of History. Dates can step back around
-	// midnight, so it is not always the date of the first record in seq
-	// order.
+	// the date of the last record of History. A card's dates do not go back
+	// (spec/roster-rules.md, check 4), so it is the date of its first valid
+	// record.
 	FirstCardProof verifier.Date
 	// LastCardProof is the card's last_card_proof: the latest date among
 	// its valid records.

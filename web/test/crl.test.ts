@@ -3,13 +3,13 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { describe, test } from "node:test";
-import { bytesOfHex, sha256Hex } from "../src/bytes.ts";
+import { bytesOfHex, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { KEY_WORDS, Unusable, parseCrl, usableCrl, wordsOfKey } from "../src/crl/crl.ts";
 import { chooseFromIndex } from "../src/crl/revocation.ts";
 import { type TreeResult, buildPart, checkAbsence } from "../src/crl/tree.ts";
-import { formatDay, taiwanDayOfSeconds } from "../src/spec/date.ts";
-import { scopedId, signatureLimbs } from "../src/spec/scoped-id.ts";
+import { formatDay, taiwanDayOfSeconds } from "iamreal-protocol/date.ts";
+import { scopedId, signatureLimbs } from "iamreal-protocol/scoped-id.ts";
 import { poseidon } from "./bb.ts";
 import { repoFile, vectors } from "./vectors.ts";
 

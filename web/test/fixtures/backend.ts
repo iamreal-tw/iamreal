@@ -6,15 +6,15 @@
 //
 // It keeps a small roster of its own, for one card: what the default answers
 // to card-state and to a submission say, by the event rules of
-// spec/roster-rules.md (src/spec/roster-rules.ts), so that card proofs one
+// spec/roster-rules.md (protocol/src/roster-rules.ts), so that card proofs one
 // after the other see each other. It verifies nothing: no proof, no
 // challenge, no root. A test that sets `cardState` answers card-state with it
 // as it is, and the default submission's kinds are then computed against it
 // (and the roster of its own is left as it was).
-import { sha256Hex } from "../../src/bytes.ts";
-import { encodeBase32 } from "../../src/spec/base32.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "../../src/spec/date.ts";
-import { type SlotState, applyKind, dailyLimitReached, listOutcome } from "../../src/spec/roster-rules.ts";
+import { sha256Hex } from "iamreal-protocol/bytes.ts";
+import { encodeBase32 } from "iamreal-protocol/base32.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
+import { type SlotState, applyKind, dailyLimitReached, listOutcome } from "iamreal-protocol/roster-rules.ts";
 
 export interface LoggedRequest {
   method: string;
