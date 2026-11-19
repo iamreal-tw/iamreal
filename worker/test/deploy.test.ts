@@ -80,5 +80,6 @@ test("the builds the tests make run wrangler in the same environment, without a 
 test("the command deploys the test environment and names nothing else", () => {
   // test/build.ts adds `--dry-run --outdir` to these, so the build test/bundle.test.ts looks at is
   // this command's. An `--alias` or `--define` added here would change that build.
-  assert.deepEqual(DEPLOY_ARGS, ["deploy", "--env", "test"]);
+  // Why `--experimental-provision=false`: scripts/deploy.ts, at DEPLOY_ARGS.
+  assert.deepEqual(DEPLOY_ARGS, ["deploy", "--env", "test", "--experimental-provision=false"]);
 });

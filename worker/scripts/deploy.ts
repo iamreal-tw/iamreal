@@ -4,8 +4,20 @@
 // build the tests look at from the same arguments and the same environment
 // (plus `--dry-run`), so a change here is a change in what they check.
 
-/** The arguments after `wrangler` that upload the test environment. */
-export const DEPLOY_ARGS: readonly string[] = ["deploy", "--env", "test"];
+/**
+ * The arguments after `wrangler` that upload the test environment.
+ *
+ * `--experimental-provision=false`: wrangler 4.160.1 otherwise asks
+ * Cloudflare whether each bound resource exists before it uploads, to
+ * create the ones that do not. The deploy token may not read R2 (ADR-0029),
+ * that question is answered "Authentication error [code: 10000]", and
+ * wrangler stops there (seen on the first deploy, 2026-11-19, when the
+ * Worker did not have the binding yet). The bucket is made in the
+ * dashboard, never by a deploy, so there is nothing to ask. The flag is a
+ * hidden one of wrangler, true by default; what is uploaded is the same
+ * with and without it. README.md, "第一次部署量到的", has the details.
+ */
+export const DEPLOY_ARGS: readonly string[] = ["deploy", "--env", "test", "--experimental-provision=false"];
 
 /** What deploying needs from `.env.local`. */
 export interface DeployToken {

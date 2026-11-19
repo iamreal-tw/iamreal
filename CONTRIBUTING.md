@@ -65,6 +65,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 - 讀公開的頁面；被要求登入、註冊、送表單，或被擋下來時，停在那裡，把它當成結果寫下來
 - 請求用一般的 `User-Agent`，內容不帶這個專案的名稱和任何人的個人資料
+  - 例外：後台的清冊鏡像對內政部送的請求。照 Cloudflare 的文件，Worker 送出的每個請求會被加上 `CF-Worker` 標頭，值是 Worker 所在 zone 的名稱，在這裡會是 `iamreal.tw`（[Cloudflare HTTP headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/)）；程式拿不掉它，營運者知道並接受。程式自己加的內容照上面那一句
 - 本機的測試頁用 `http://127.0.0.1:<埠>` 開
 
 ## 寫進這個程式庫的字
