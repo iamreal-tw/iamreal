@@ -95,16 +95,18 @@
 
 · 因為送出太多請求被擋下時，只記上面那些欄位，不記內容。
 
+· 頁面送出的計數（見下面「Cookie 和計數」）也是一個請求：計數的內容和 IP 位址記在同一筆，同樣留 31 天。
+
 · IP 位址只用來限制每個來源的請求次數、擋下濫用的連線、查問題。名冊上的紀錄不會因為 IP 位址被標記或移除：證明成立的紀錄就算數。
 
 · 每天各國家、各網路業者的請求數和失敗數永久保存，裡面沒有 IP 位址。
 
 名冊的順序是公開的，照時間就對得回是哪一筆紀錄。所以這 31 天內，營運者手上有「哪個帳號的紀錄，從哪個 IP 位址、在什麼時間送出」。從公司、學校、機關的網路過卡，會被看出是從哪個單位的網路送出的。在意的話，請經 VPN 過卡。
 
-有些請求不經過營運者的程式，直接由 Cloudflare 回答：下載名冊和廢止清冊（data.iamreal.tw，包括過卡時頁面自動下載的廢止清冊）、過卡頁面的程式和電路檔，以及 Cloudflare 的快取直接回答的頁面。這些不在上面的連線紀錄裡；Cloudflare 的後台同樣列得出它們的來源 IP 位址、網址和時間，營運者看得到，留 31 天。
+有些請求不經過營運者的程式，直接由 Cloudflare 回答：下載名冊和廢止清冊（data.iamreal.tw，包括過卡時頁面自動下載的廢止清冊）、過卡頁面的程式和電路檔，以及 Cloudflare 的快取直接回答的頁面。這些不在上面的連線紀錄裡（頁面打開後送出的計數在）；Cloudflare 的後台同樣列得出它們的來源 IP 位址、網址和時間，營運者看得到，留 31 天。
 ```
 
-依據：ADR-0022（欄位、31 天、失敗的請求記內文、IP 的用途、每天的統計）、ADR-0026 的「連線紀錄」（被擋的請求不記內文）、ADR-0027（下載不經過 Worker）、ADR-0023（快取、Static Assets）。
+依據：ADR-0022（欄位、31 天、失敗的請求記內文、IP 的用途、每天的統計）、ADR-0032（計數的內容進連線紀錄）、ADR-0026 的「連線紀錄」（被擋的請求不記內文）、ADR-0027（下載不經過 Worker）、ADR-0023（快取、Static Assets）。
 
 ## 6. Cloudflare
 
@@ -117,17 +119,33 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、名冊和連線紀錄
 
 「它的隱私權政策」連到 https://www.cloudflare.com/privacypolicy/ 。架構見 ADR-0023；儲存的位置不能固定在亞洲，見[整個後台放在 Cloudflare 上，有哪些元件可用、各有什麼限制](https://github.com/iamreal-tw/iamreal/issues/6)。
 
-## 7. Cookie
+## 7. Cookie 和計數
 
 ```
-平常不放 cookie，也不用任何分析或追蹤的工具。
+不放 cookie，也不在你的瀏覽器裡放任何用來認出你的編號。頁面上沒有其他公司的分析或追蹤程式。
+
+為了知道網站哪裡不好用，頁面會自己向營運者的後台送出計數：
+
+· 打開了哪一種頁面：首頁、島民證明、查詢頁、名冊頁、常見問題、隱私權說明、過卡。打開島民證明時，連同是哪一張
+· 從哪個網站連過來，只記網域，例如 google.com；是不是在某個 app 裡打開的
+· 過卡走到哪一步，停下來時的錯誤代碼
+· 按了哪些按鈕，例如「開始過卡」
+· 瀏覽器和作業系統的種類，不含版本
+
+計數的內容只能是事先定好的代號，沒有你輸入的字，也沒有卡片上的任何內容。裡面沒有認得出你的東西，營運者看不出兩次計數是不是同一個人；所以瀏覽器設了「不要追蹤」時，計數照樣送出。
+
+每一次計數是一個請求，和其他請求一樣進連線紀錄，連同 IP 位址留 31 天。營運者另外把計數加總成每天的次數，永久保存；裡面沒有 IP 位址，也沒有是哪一張島民證明。所以「哪一張島民證明在哪一天被看了幾次」，營運者只查得到最近 31 天。
+
+這些數字只有營運者看得到。
 
 例外：網站被大量的請求灌爆時，營運者會暫時打開 Cloudflare 的檢查頁，事後公告開了多久。這段期間打開首頁、島民證明、查詢頁或名冊頁，要先通過一次檢查；通過後 Cloudflare 放一個 cf_clearance cookie，只用來記得你通過了檢查，預設 30 分鐘後失效。過卡和下載名冊不受影響。
 ```
 
-依據：ADR-0026 的「緊急時的挑戰頁」。
+「例外：」之前是 ADR-0032，之後是 ADR-0026 的「緊急時的挑戰頁」。這一段的每一項和後台實際收的計數一致；計數多一種、保存的期限改了，先改 ADR-0032 和這一段。
 
-「平常不放 cookie」成立的條件：Cloudflare 只在打開特定功能時放 cookie（[Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/)）。所以 Bot Fight Mode、Bot Management、Waiting Room、Load Balancer 的 session affinity、Sequence rules 都不開，限流規則不用 `cf.unique_visitor_id`（會放 `_cfuvid`）。要開其中任何一個，先改這一段。
+「不放 cookie」成立的條件：Cloudflare 只在打開特定功能時放 cookie（[Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/)）。所以 Bot Fight Mode、Bot Management、Waiting Room、Load Balancer 的 session affinity、Sequence rules 都不開，限流規則不用 `cf.unique_visitor_id`（會放 `_cfuvid`）。要開其中任何一個，先改這一段。
+
+「頁面上沒有其他公司的分析或追蹤程式」成立的條件：Cloudflare Web Analytics 不開（自動注入會在頁面上加 Cloudflare 的程式，[Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/)）。要開，先改這一段。
 
 ## 8. 看島民證明的人
 
@@ -199,12 +217,13 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、名冊和連線紀錄
 ```
 · 名冊、雜湊清單、每天的名冊指紋、廢止清冊的存檔：永久。這是任何人能重驗的前提。
 · 每天公開的卡片狀態檔：7 天。
-· 連線紀錄，包括沒有成功的過卡送出的內容：31 天。
+· 連線紀錄，包括沒有成功的過卡送出的內容和頁面送出的計數：31 天。
 · 每天各國家、各網路業者的請求數和失敗數：永久，裡面沒有 IP 位址。
+· 計數加總成的每天的次數：永久，裡面沒有 IP 位址，也沒有是哪一張島民證明。
 · 測試網站的測試名冊會不定期清空。清空之後，上面的紀錄和島民證明就找不到了；別人下載過的副本收不回來。
 ```
 
-依據：ADR-0027（公開的檔案除了卡片狀態檔都永久保留）、ADR-0025（卡片狀態檔留 7 天）、ADR-0022、ADR-0028（測試名冊不定期清空）。
+依據：ADR-0027（公開的檔案除了卡片狀態檔都永久保留）、ADR-0025（卡片狀態檔留 7 天）、ADR-0022、ADR-0032（計數）、ADR-0028（測試名冊不定期清空）。
 
 ## 14. 你的權利，和這份說明的修改
 
