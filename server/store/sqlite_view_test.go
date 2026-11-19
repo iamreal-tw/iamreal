@@ -46,7 +46,10 @@ func TestViewsHistoryOfOneCard(t *testing.T) {
 	add("2026-11-09", "threads:dave")  // 8 another account, a later date: a switch
 	add("2026-11-09")                  // 9 withdraw
 	add("2026-11-09", "threads:erin")  // 10 another account, the date of the switch: a correction
-	add("2026-11-08", "threads:erin")  // 11 a day back (allowed): a refresh
+	// A day back: date_order (a card's dates do not go back), not written.
+	if res := f.write(f.record(scope, card, "2026-11-08", accountsOf("threads:erin"))); res.Valid || res.Reason != roster.CodeDateOrder {
+		t.Fatalf("a day back: %+v", res)
+	}
 
 	type row struct {
 		seq                 uint64
@@ -57,7 +60,6 @@ func TestViewsHistoryOfOneCard(t *testing.T) {
 		{10, "2026-11-09", EventCorrectionAfterWithdrawal, "dave", "erin"},
 		{9, "2026-11-09", EventWithdraw, "dave", ""},
 		{8, "2026-11-09", EventSwitchAfterWithdrawal, "carol", "dave"},
-		{11, "2026-11-08", EventRefresh, "erin", "erin"},
 		{7, "2026-11-08", EventWithdraw, "carol", ""},
 		{6, "2026-11-07", EventRedeclare, "carol", "carol"},
 		{5, "2026-11-06", EventWithdraw, "carol", ""},
@@ -87,7 +89,7 @@ func TestViewsHistoryOfOneCard(t *testing.T) {
 		t.Fatalf("Cards: %+v %v", cards, err)
 	}
 	wantCard := CardSummary{
-		ScopedID: card, FirstCardProof: date(t, "2026-03-02"), LastCardProof: date(t, "2026-11-09"), CardProofs: 11,
+		ScopedID: card, FirstCardProof: date(t, "2026-03-02"), LastCardProof: date(t, "2026-11-09"), CardProofs: 10,
 		Slots: []SlotSummary{{Platform: "threads", Current: "erin", Since: date(t, "2026-11-09"), SinceSeq: 10, SwitchCount: 2}},
 	}
 	if !same(cards[0], wantCard) {
@@ -312,23 +314,26 @@ func TestViewsRecent(t *testing.T) {
 }
 
 // The first card proof is the earliest date among the card's valid
-// records, which is not always the date of its first record: dates can
-// step back.
+// records. A card's dates do not go back (spec/roster-rules.md, check 4),
+// so it is the date of its first valid record; a record dated back is not
+// written.
 func TestViewsFirstCardProof(t *testing.T) {
 	f := newFixture(t, verifier.Test)
 	card := cardID(50, 1)
 	f.add(card, "2026-11-10", "threads:alice")
-	f.add(card, "2026-11-08", "threads:alice") // two days back: allowed
+	if res := f.write(f.record(testScope, card, "2026-11-08", accountsOf("threads:alice"))); res.Valid || res.Reason != roster.CodeDateOrder {
+		t.Fatalf("two days back: %+v", res)
+	}
 	f.add(card, "2026-11-11", "threads:alice")
 	cards, err := f.s.Cards(testScope, verifier.ShortID(card))
 	if err != nil || len(cards) != 1 {
 		t.Fatalf("%+v %v", cards, err)
 	}
-	if got := cards[0]; got.FirstCardProof.String() != "2026-11-08" || got.LastCardProof.String() != "2026-11-11" || got.CardProofs != 3 {
+	if got := cards[0]; got.FirstCardProof.String() != "2026-11-10" || got.LastCardProof.String() != "2026-11-11" || got.CardProofs != 2 {
 		t.Errorf("%+v", got)
 	}
 	hist, err := f.s.History(testScope, card)
-	if err != nil || len(hist) != 3 || hist[len(hist)-1].Date != cards[0].FirstCardProof {
+	if err != nil || len(hist) != 2 || hist[len(hist)-1].Date != cards[0].FirstCardProof {
 		t.Errorf("the last row of the history: %+v %v", hist, err)
 	}
 	f.check(date(t, "2026-11-11"))
