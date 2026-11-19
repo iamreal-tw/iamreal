@@ -162,7 +162,7 @@ func (s *Server) postCardState(r *http.Request) reply {
 
 	s.mu.RLock()
 	card := s.rules.Card(f["scope_string"], f["scoped_id"])
-	out := cardState{ProofsOnLastDate: card.ProofsOnLastDate, Platforms: map[string]slotState{}, Count: s.count, Head: s.head}
+	out := cardState{ProofsOnLastDate: card.ProofsOnLastDate, Platforms: map[string]slotState{}, Count: s.count, Head: s.fingerprint}
 	s.mu.RUnlock()
 
 	if card.LastCardProof != nil {
@@ -206,7 +206,8 @@ func (s *Server) getConfig(*http.Request) reply {
 	return ok(http.StatusOK, out)
 }
 
-// head is the response of GET /api/v1/head.
+// head is the response of GET /api/v1/head. Head is the roster fingerprint
+// of every record so far; the field keeps its old name in this backend.
 type head struct {
 	Count uint64 `json:"count"`
 	Head  string `json:"head"`
@@ -216,7 +217,7 @@ type head struct {
 func (s *Server) getHead(*http.Request) reply {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return ok(http.StatusOK, head{s.count, s.head})
+	return ok(http.StatusOK, head{s.count, s.fingerprint})
 }
 
 // internal logs an error of the server itself, with the request ID, and

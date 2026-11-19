@@ -13,7 +13,10 @@ import (
 
 // The two tables. A record's columns are its fields as written in its line
 // (spec/record.md); accounts is the list from `[` to `]`, as in the line. Its
-// hash is not stored, since it is computed from them.
+// hash is not stored, since it is computed from them. The column prev is
+// what is left of the field of that name, which records no longer have
+// (ADR-0021): it stays so that data files written before still open, is
+// written as ” and is never read.
 // A challenge is stored from the moment it is issued until it is deleted
 // after it expired (see DeleteChallengesIssuedBefore).
 const schema = `
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS challenges (
 ) STRICT;
 `
 
-const recordColumns = `seq, prev, scope_string, scoped_id, accounts, challenge, issuer, smt_root, circuit, proof`
+const recordColumns = `seq, scope_string, scoped_id, accounts, challenge, issuer, smt_root, circuit, proof`
 
 // SQLite is the Store kept in one SQLite file.
 type SQLite struct {
@@ -88,19 +91,14 @@ type queryer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-func (s *SQLite) Head() (uint64, string, error) { return head(s.db) }
+func (s *SQLite) Count() (uint64, error) { return count(s.db) }
 
-func head(q queryer) (uint64, string, error) {
-	r, err := scanRecord(q.QueryRow(`SELECT ` + recordColumns + ` FROM records ORDER BY seq DESC LIMIT 1`))
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, verifier.GenesisPrev, nil
-	}
-	if err != nil {
-		return 0, "", err
-	}
+func count(q queryer) (uint64, error) {
 	// seq runs from 1 without gaps (Append checks it), so the last seq is
 	// the number of records.
-	return r.Seq, r.Hash(), nil
+	var n uint64
+	err := q.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM records`).Scan(&n)
+	return n, err
 }
 
 type scanner interface{ Scan(dest ...any) error }
@@ -108,7 +106,7 @@ type scanner interface{ Scan(dest ...any) error }
 func scanRecord(row scanner) (*verifier.Record, error) {
 	r := &verifier.Record{}
 	var accounts string
-	err := row.Scan(&r.Seq, &r.Prev, &r.ScopeString, &r.ScopedID, &accounts,
+	err := row.Scan(&r.Seq, &r.ScopeString, &r.ScopedID, &accounts,
 		&r.Challenge, &r.Issuer, &r.SMTRoot, &r.Circuit, &r.Proof)
 	if err != nil {
 		return nil, err
@@ -146,17 +144,17 @@ func (s *SQLite) Append(r *verifier.Record, v *View) error {
 	}
 	defer tx.Rollback() // does nothing after Commit
 
-	count, h, err := head(tx)
+	n, err := count(tx)
 	if err != nil {
 		return err
 	}
-	if r.Seq != count+1 || r.Prev != h {
+	if r.Seq != n+1 {
 		return ErrNotNext
 	}
 	if v != nil {
 		if at, err := viewSeq(tx); err != nil {
 			return err
-		} else if at != count {
+		} else if at != n {
 			return ErrViewsBehind
 		}
 	}
@@ -169,8 +167,8 @@ func (s *SQLite) Append(r *verifier.Record, v *View) error {
 	} else if n != 1 {
 		return ErrChallengeNotOpen
 	}
-	_, err = tx.Exec(`INSERT INTO records (`+recordColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.Seq, r.Prev, r.ScopeString, r.ScopedID, verifier.AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof)
+	_, err = tx.Exec(`INSERT INTO records (prev, `+recordColumns+`) VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.Seq, r.ScopeString, r.ScopedID, verifier.AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof)
 	if err != nil {
 		return err
 	}

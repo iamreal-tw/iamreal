@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -17,17 +18,17 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// The published roster (spec/record.md, "The published roster").
+// The published roster (spec/record.md, "The published roster"): the
+// roster files and record hash lists come from roster.DirectoryFiles.
 const (
-	linesPerFile  = 1000
-	headsFileName = "heads.jsonl"
+	fingerprintsFileName = "fingerprints.jsonl"
+	hashListDir          = "hashes"
 )
 
-// rosterFileName is the name of the file of the roster directory that
-// starts with the record of seq first.
-func rosterFileName(first uint64) string { return fmt.Sprintf("%016d.jsonl", first) }
-
-var rosterFilePattern = regexp.MustCompile(`^[0-9]{16}\.jsonl$`)
+var (
+	rosterFilePattern = regexp.MustCompile(`^[0-9]{16}\.jsonl$`)
+	hashListPattern   = regexp.MustCompile(`^[0-9]{16}\.txt$`)
+)
 
 // snapshotConfig is what the daily snapshot needs.
 type snapshotConfig struct {
@@ -37,7 +38,7 @@ type snapshotConfig struct {
 	OutDir string               // the roster directory to publish into
 	Proofs roster.ProofVerifier // the real verifier: every proof is verified again
 	Keys   []crl.NamedKey       // the issuer keys the CRLs are checked with
-	Today  verifier.Date        // the date in Taiwan, for heads.jsonl
+	Today  verifier.Date        // the date in Taiwan, for fingerprints.jsonl
 	Out    io.Writer            // what was published
 	Err    io.Writer            // progress and problems
 }
@@ -53,10 +54,11 @@ const (
 // publishes it only if every record is valid (ADR-0014): every proof is
 // verified again with bb, and the CRL archive's index is rebuilt from the
 // CRL files. Then it writes the roster directory, one file per 1,000
-// records, and adds today's line to heads.jsonl.
+// records, and its record hash lists, and adds today's line to
+// fingerprints.jsonl.
 //
-// A full file already published is never written again; it must have the
-// same bytes. Nothing is written if anything is wrong, and the exit code
+// A full file or list already published is never written again; it must
+// have the same bytes. Nothing is written if anything is wrong, and the exit code
 // says why.
 func snapshot(c snapshotConfig) int {
 	refuse := func(format string, args ...any) int {
@@ -72,23 +74,24 @@ func snapshot(c snapshotConfig) int {
 	// The roster file: every record, in order, up to the count read first.
 	// The server may append while this runs; those records wait for the
 	// next snapshot.
-	count, _, err := c.Store.Head()
+	count, err := c.Store.Count()
 	if err != nil {
 		return fail(err)
 	}
-	var lines [][]byte
-	var hashes []string
-	for first := uint64(1); first <= count; first += linesPerFile {
-		records, err := c.Store.Records(first, min(first+linesPerFile-1, count))
+	var all []*verifier.Record
+	var file []byte
+	fingerprints := []string{roster.EmptyFingerprint} // fingerprints[n]: of the first n records
+	for first := uint64(1); first <= count; first += roster.LinesPerFile {
+		records, err := c.Store.Records(first, min(first+roster.LinesPerFile-1, count))
 		if err != nil {
 			return fail(err)
 		}
 		for _, r := range records {
-			lines = append(lines, r.Line())
-			hashes = append(hashes, r.Hash())
+			all = append(all, r)
+			file = append(file, r.Line()...)
+			fingerprints = append(fingerprints, roster.NextFingerprint(fingerprints[len(fingerprints)-1], r.Hash()))
 		}
 	}
-	file := bytes.Join(lines, nil)
 
 	// The CRL archive, rebuilt from its files.
 	fmt.Fprintln(c.Err, "snapshot: rebuilding the CRL archive's index from its CRLs")
@@ -104,7 +107,7 @@ func snapshot(c snapshotConfig) int {
 	}
 
 	// The rules, with every proof verified again.
-	fmt.Fprintf(c.Err, "snapshot: re-verifying %d records\n", len(lines))
+	fmt.Fprintf(c.Err, "snapshot: re-verifying %d records\n", len(all))
 	rep, err := roster.Check(file, c.Roster, c.Proofs, &crlIndex{archive: archive})
 	if err != nil {
 		return fail(err)
@@ -125,120 +128,120 @@ func snapshot(c snapshotConfig) int {
 
 	// What is already published must be the beginning of what is published
 	// now.
-	heads, err := readHeads(filepath.Join(c.OutDir, headsFileName))
+	lines, err := readFingerprints(filepath.Join(c.OutDir, fingerprintsFileName))
 	if err != nil {
-		return refuse("%s: %v", headsFileName, err)
+		return refuse("%s: %v", fingerprintsFileName, err)
 	}
-	newLine := headsLine{Date: c.Today, Count: uint64(len(lines)), Head: rep.Head}
-	for i, h := range heads {
-		if h.Count > uint64(len(lines)) || (h.Count > 0 && h.Head != hashes[h.Count-1]) || (h.Count == 0 && h.Head != verifier.GenesisPrev) {
-			return refuse("%s line %d (%s, %d records) is not a head of this roster", headsFileName, i+1, h.Date, h.Count)
+	newLine := fingerprintLine{Date: c.Today, Count: uint64(len(all)), Fingerprint: rep.Fingerprint}
+	for i, h := range lines {
+		if h.Count > uint64(len(all)) || h.Fingerprint != fingerprints[h.Count] {
+			return refuse("%s line %d (%s, %d records) is not a fingerprint of this roster", fingerprintsFileName, i+1, h.Date, h.Count)
 		}
 	}
-	if len(heads) > 0 {
-		last := heads[len(heads)-1]
+	if len(lines) > 0 {
+		last := lines[len(lines)-1]
 		if last.Date == c.Today {
 			if last == newLine {
-				fmt.Fprintf(c.Out, "already published today: %d records, head %s\n", newLine.Count, newLine.Head)
+				fmt.Fprintf(c.Out, "already published today: %d records, fingerprint %s\n", newLine.Count, newLine.Fingerprint)
 				return snapshotPublished
 			}
-			return refuse("%s already has a line for %s (%d records); a date appears at most once", headsFileName, c.Today, last.Count)
+			return refuse("%s already has a line for %s (%d records); a date appears at most once", fingerprintsFileName, c.Today, last.Count)
 		}
 		if last.Date > c.Today {
-			return refuse("%s has a line for %s, after today (%s)", headsFileName, last.Date, c.Today)
+			return refuse("%s has a line for %s, after today (%s)", fingerprintsFileName, last.Date, c.Today)
 		}
 	}
-	files, err := planRosterFiles(c.OutDir, lines)
+	files, err := planDirectoryFiles(c.OutDir, roster.DirectoryFiles(all))
 	if err != nil {
 		return refuse("%v", err)
 	}
 
-	// Write: the roster files first, then the heads line that covers them.
-	if err := os.MkdirAll(c.OutDir, 0o755); err != nil {
+	// Write: the roster files and their lists first, then the fingerprint
+	// line that covers them.
+	if err := os.MkdirAll(filepath.Join(c.OutDir, hashListDir), 0o755); err != nil {
 		return fail(err)
 	}
 	for _, f := range files {
-		if err := writeFileAtomic(filepath.Join(c.OutDir, f.name), f.content); err != nil {
+		if err := writeFileAtomic(filepath.Join(c.OutDir, filepath.FromSlash(f.Name)), f.Data); err != nil {
 			return fail(err)
 		}
 	}
-	var headsFile []byte
-	for _, h := range heads {
-		headsFile = append(headsFile, h.line()...)
+	var fingerprintFile []byte
+	for _, h := range lines {
+		fingerprintFile = append(fingerprintFile, h.line()...)
 	}
-	headsFile = append(headsFile, newLine.line()...)
-	if err := writeFileAtomic(filepath.Join(c.OutDir, headsFileName), headsFile); err != nil {
+	fingerprintFile = append(fingerprintFile, newLine.line()...)
+	if err := writeFileAtomic(filepath.Join(c.OutDir, fingerprintsFileName), fingerprintFile); err != nil {
 		return fail(err)
 	}
-	fmt.Fprintf(c.Out, "published %s: %d records, head %s\n", c.Today, newLine.Count, newLine.Head)
+	fmt.Fprintf(c.Out, "published %s: %d records, fingerprint %s\n", c.Today, newLine.Count, newLine.Fingerprint)
 	return snapshotPublished
 }
 
-type rosterFile struct {
-	name    string
-	content []byte
-}
-
-// planRosterFiles returns the files of the roster directory to write for
-// these lines, leaving out those already there with the same bytes. A file
+// planDirectoryFiles returns the roster files and record hash lists to
+// write, leaving out those already there with the same bytes. A file
 // already there must be the beginning of the file it will be (the last
-// file grows until it is full); any other file of the directory's form is
-// an error, since the roster only grows.
-func planRosterFiles(dir string, lines [][]byte) ([]rosterFile, error) {
+// file and its list grow until they are full); any other file of the
+// directory's form is an error, since the roster only grows.
+func planDirectoryFiles(dir string, files []roster.File) ([]roster.File, error) {
 	want := map[string][]byte{}
-	var order []string
-	for first := 0; first < len(lines); first += linesPerFile {
-		name := rosterFileName(uint64(first + 1))
-		want[name] = bytes.Join(lines[first:min(first+linesPerFile, len(lines))], nil)
-		order = append(order, name)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
+	for _, f := range files {
+		want[f.Name] = f.Data
 	}
 	have := map[string][]byte{}
-	for _, e := range entries {
-		if !rosterFilePattern.MatchString(e.Name()) {
-			continue
-		}
-		if _, ok := want[e.Name()]; !ok {
-			return nil, fmt.Errorf("%s is published but is not a file of this roster", e.Name())
-		}
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
+	for _, sub := range []struct {
+		dir     string
+		pattern *regexp.Regexp
+	}{{"", rosterFilePattern}, {hashListDir, hashListPattern}} {
+		entries, err := os.ReadDir(filepath.Join(dir, sub.dir))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
-		if !bytes.HasPrefix(want[e.Name()], b) {
-			return nil, fmt.Errorf("%s is published with other bytes than this roster's", e.Name())
+		for _, e := range entries {
+			if !sub.pattern.MatchString(e.Name()) {
+				continue
+			}
+			name := path.Join(sub.dir, e.Name())
+			if _, ok := want[name]; !ok {
+				return nil, fmt.Errorf("%s is published but is not a file of this roster", name)
+			}
+			b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil {
+				return nil, err
+			}
+			if !bytes.HasPrefix(want[name], b) {
+				return nil, fmt.Errorf("%s is published with other bytes than this roster's", name)
+			}
+			have[name] = b
 		}
-		have[e.Name()] = b
 	}
-	var out []rosterFile
-	for _, name := range order {
-		if !bytes.Equal(have[name], want[name]) {
-			out = append(out, rosterFile{name, want[name]})
+	var out []roster.File
+	for _, f := range files {
+		if !bytes.Equal(have[f.Name], f.Data) {
+			out = append(out, f)
 		}
 	}
 	return out, nil
 }
 
-// headsLine is one line of heads.jsonl (spec/record.md, "Heads file").
-type headsLine struct {
-	Date  verifier.Date
-	Count uint64
-	Head  string
+// fingerprintLine is one line of fingerprints.jsonl (spec/record.md,
+// "Fingerprint file").
+type fingerprintLine struct {
+	Date        verifier.Date
+	Count       uint64
+	Fingerprint string
 }
 
-func (h headsLine) line() []byte {
-	return fmt.Appendf(nil, `{"date":"%s","count":%d,"head":"%s"}`+"\n", h.Date, h.Count, h.Head)
+func (h fingerprintLine) line() []byte {
+	return fmt.Appendf(nil, `{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", h.Date, h.Count, h.Fingerprint)
 }
 
-var headsLinePattern = regexp.MustCompile(`^\{"date":"([0-9-]{10})","count":([0-9]{1,16}),"head":"([0-9a-f]{64})"\}\n$`)
+var fingerprintLinePattern = regexp.MustCompile(`^\{"date":"([0-9-]{10})","count":([0-9]{1,16}),"fingerprint":"([0-9a-f]{64})"\}\n$`)
 
-// readHeads reads heads.jsonl, checking that every line is in its one
-// spelling, that dates increase and that counts do not decrease. A missing
-// file has no lines.
-func readHeads(path string) ([]headsLine, error) {
+// readFingerprints reads fingerprints.jsonl, checking that every line is in
+// its one spelling, that dates increase and that counts do not decrease. A
+// missing file has no lines.
+func readFingerprints(path string) ([]fingerprintLine, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -246,7 +249,7 @@ func readHeads(path string) ([]headsLine, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []headsLine
+	var out []fingerprintLine
 	for n := 1; len(data) > 0; n++ {
 		end := bytes.IndexByte(data, '\n') + 1
 		if end == 0 {
@@ -254,7 +257,7 @@ func readHeads(path string) ([]headsLine, error) {
 		}
 		raw := data[:end]
 		data = data[end:]
-		m := headsLinePattern.FindSubmatch(raw)
+		m := fingerprintLinePattern.FindSubmatch(raw)
 		if m == nil {
 			return nil, fmt.Errorf("line %d is not in the form of the spec", n)
 		}
@@ -266,7 +269,7 @@ func readHeads(path string) ([]headsLine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %v", n, err)
 		}
-		h := headsLine{d, count, string(m[3])}
+		h := fingerprintLine{d, count, string(m[3])}
 		if !bytes.Equal(h.line(), raw) {
 			return nil, fmt.Errorf("line %d is not in its one spelling", n)
 		}

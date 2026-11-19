@@ -215,7 +215,6 @@ func main() {
 
 	// The roster.
 	var roster []byte
-	prev := verifier.GenesisPrev
 	for i, rec := range records {
 		o := out.Records[i]
 		// zkid-noir's reference tree and crl/ agree on the root.
@@ -245,7 +244,7 @@ func main() {
 			}
 		}
 		rr := &verifier.Record{
-			Seq: uint64(i + 1), Prev: prev, ScopeString: scope, ScopedID: verifier.ScopedIDText(f),
+			Seq: uint64(i + 1), ScopeString: scope, ScopedID: verifier.ScopedIDText(f),
 			Accounts: rec.accounts, Challenge: in.Records[i].Challenge, Issuer: rec.issuer,
 			SMTRoot: o.SMTRoot, Circuit: vk, Proof: base64.StdEncoding.EncodeToString(proof),
 		}
@@ -253,7 +252,6 @@ func main() {
 			fatalf("record %d is not well formed: %v", i+1, err)
 		}
 		roster = append(roster, rr.Line()...)
-		prev = rr.Hash()
 	}
 	write(filepath.Join(dir, "roster.jsonl"), roster)
 	write(filepath.Join(dir, "zkid-noir-commit"), []byte(out.Commit+"\n"))

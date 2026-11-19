@@ -8,7 +8,7 @@ import (
 
 func wellFormed() *Record {
 	return &Record{
-		Seq: 1, Prev: GenesisPrev, ScopeString: "iamreal:public:0_______________",
+		Seq: 1, ScopeString: "iamreal:public:0_______________",
 		ScopedID:  "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
 		Accounts:  []Account{{"threads", "alice"}},
 		Challenge: "2026-11-16.000G40R40M30E209185GR38E1W", Issuer: "G3",

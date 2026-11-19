@@ -146,7 +146,7 @@ not know" is one that has no row it can read in the platform table of
 
 Submits one card proof: the card's whole list of accounts.
 
-- Request: the fields of a record except `seq` and `prev`
+- Request: the fields of a record except `seq`
   ([`spec/record.md`](../../spec/record.md)):
 
   ```
@@ -331,7 +331,7 @@ What the device does with what it cannot read:
 |---|---|
 | `/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `/crl/SHA256.crl` | One CRL of the archive, the original bytes; `SHA256` is the file's SHA-256 as 64 lowercase hex digits |
-| `/roster/` | The roster directory and `heads.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+| `/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
 
 What the device does with the CRL: takes from the index the usable line of
 its issuer with the highest `crl_number`, downloads that file, and checks

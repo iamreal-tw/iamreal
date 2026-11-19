@@ -182,7 +182,7 @@ func serve(args []string, stderr io.Writer, d deps) int {
 	if err != nil {
 		return fail(err)
 	}
-	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "head", s.head, "version", version(),
+	logger.Info("roster loaded", "roster", r.String(), "count", s.count, "fingerprint", s.fingerprint, "version", version(),
 		"restrict_late_switches", *restrictLate, "views_written_from", s.viewsFrom)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -44,8 +44,11 @@ type Server struct {
 	mu    sync.RWMutex
 	rules *roster.Rules // the rules applied to every record so far
 	count uint64        // the number of records
-	head  string        // the record hash of the last record
-	crls  *crlIndex     // the mirror's index, read again for each card proof
+	// fingerprint is the roster fingerprint of every record so far. The
+	// API still calls it head (GET /api/v1/head, card-state), until the
+	// new backend replaces this one.
+	fingerprint string
+	crls        *crlIndex // the mirror's index, read again for each card proof
 
 	// viewsFrom is the seq of the first record whose views New wrote
 	// (0: none; the views were already up to date). main logs it.
@@ -65,9 +68,9 @@ func (alreadyVerified) VerifyRecord(*verifier.Record) error { return nil }
 // New starts a server on the records in cfg.Store. It reads every record
 // in order and computes the state with roster.Rules, checking each line as
 // a re-verifier would (roster.ReadLine) and each root against the CRL
-// mirror. Proofs are not verified again. If any record is malformed,
-// breaks the chain or is invalid, New returns an error naming it, and the
-// server does not start.
+// mirror. Proofs are not verified again. If any record is malformed, out
+// of seq order or invalid, New returns an error naming it, and the server
+// does not start.
 //
 // The views (store.View) are brought up to date on the way: for every
 // record after the store's ViewSeq, New writes what the record changes, as
@@ -75,13 +78,13 @@ func (alreadyVerified) VerifyRecord(*verifier.Record) error { return nil }
 // an upgrade that adds the views, or after ResetViews, this builds them
 // from every record.
 func New(cfg Config) (*Server, error) {
-	s := &Server{cfg: cfg, head: verifier.GenesisPrev, crls: newCRLIndex(cfg.CRLDir)}
+	s := &Server{cfg: cfg, fingerprint: roster.EmptyFingerprint, crls: newCRLIndex(cfg.CRLDir)}
 	if err := s.crls.reload(); err != nil {
 		return nil, fmt.Errorf("CRL mirror: %w", err)
 	}
 	s.rules = roster.NewRules(cfg.Roster, alreadyVerified{}, s.crls)
 
-	count, head, err := cfg.Store.Head()
+	count, err := cfg.Store.Count()
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +110,8 @@ func New(cfg Config) (*Server, error) {
 			return nil, err
 		}
 	}
-	if s.count != count || s.head != head {
-		return nil, fmt.Errorf("the store has %d records with head %s, but reading them gave %d with head %s", count, head, s.count, s.head)
+	if s.count != count {
+		return nil, fmt.Errorf("the store has %d records, but reading them gave %d", count, s.count)
 	}
 	return s, nil
 }
@@ -116,7 +119,7 @@ func New(cfg Config) (*Server, error) {
 // load applies one stored record at startup and, if withView, computes
 // what it changes in the views (written by writePendingViews).
 func (s *Server) load(r *verifier.Record, withView bool) error {
-	if _, broken := roster.ReadLine(r.Line(), s.cfg.Roster, int(s.count+1), s.head); broken != nil {
+	if _, broken := roster.ReadLine(r.Line(), s.cfg.Roster, int(s.count+1)); broken != nil {
 		return fmt.Errorf("record %d: the roster is broken there: %v", s.count+1, broken)
 	}
 	var before roster.CardState
@@ -140,7 +143,7 @@ func (s *Server) load(r *verifier.Record, withView bool) error {
 			s.viewsFrom = r.Seq
 		}
 	}
-	s.count, s.head = r.Seq, r.Hash()
+	s.count, s.fingerprint = r.Seq, roster.NextFingerprint(s.fingerprint, r.Hash())
 	return nil
 }
 

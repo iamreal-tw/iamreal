@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iamreal-tw/iamreal/roster"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -85,13 +86,13 @@ func TestConfigAndHead(t *testing.T) {
 		t.Errorf("config body %s", raw)
 	}
 	status, body = h.do("GET", "/api/v1/head", "")
-	if status != 200 || body["count"] != 0.0 || body["head"] != verifier.GenesisPrev {
+	if status != 200 || body["count"] != 0.0 || body["head"] != roster.EmptyFingerprint {
 		t.Errorf("empty head: %d %v", status, body)
 	}
 	h.mustSubmit(h.sub(newCard(), rootOf(t, g3CRL(t)), "threads:alice"), "threads first")
 	recs := h.checkChain()
 	_, body = h.do("GET", "/api/v1/head", "")
-	if body["count"] != 1.0 || body["head"] != recs[0].Hash() {
+	if body["count"] != 1.0 || body["head"] != roster.Fingerprint(recs) {
 		t.Errorf("head: %v", body)
 	}
 }
@@ -246,7 +247,7 @@ func TestCardState(t *testing.T) {
 	want := map[string]any{
 		"last_card_proof": nil, "proofs_on_last_date": 0.0,
 		"platforms": map[string]any{"test-example": neverUsed, "threads": neverUsed},
-		"count":     0.0, "head": verifier.GenesisPrev,
+		"count":     0.0, "head": roster.EmptyFingerprint,
 	}
 	if status != 200 || !reflect.DeepEqual(body, want) {
 		t.Errorf("no record: %d %v", status, body)
@@ -265,7 +266,7 @@ func TestCardState(t *testing.T) {
 			"test-example": map[string]any{"current": "a-b", "last_declared": "a-b", "switch_count": 0.0, "correction_date": "2026-11-21"},
 			"threads":      map[string]any{"current": nil, "last_declared": "bob", "switch_count": 1.0, "correction_date": "2026-11-21"},
 		},
-		"count": 4.0, "head": recs[3].Hash(),
+		"count": 4.0, "head": roster.Fingerprint(recs),
 	}
 	if status != 200 || !reflect.DeepEqual(body, want) {
 		t.Errorf("after the withdrawal: %d %v", status, body)
@@ -560,7 +561,7 @@ func TestProof(t *testing.T) {
 	s := h.sub(newCard(), rootOf(t, crl), "threads:alice")
 	s.Proof = badProof
 	h.wantError(s, 400, "proof")
-	if count, _, _ := h.store.Head(); count != 0 {
+	if count, _ := h.store.Count(); count != 0 {
 		t.Errorf("%d records", count)
 	}
 }

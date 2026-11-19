@@ -24,15 +24,10 @@ const (
 	MaxSeq = 1<<53 - 1
 )
 
-// GenesisPrev is `prev` of the record with `seq` 1, and the head of the empty
-// roster.
-var GenesisPrev = strings.Repeat("0", 64)
-
 // Record is one record of a roster (spec/record.md, "Fields"), its values
 // written exactly as in its line.
 type Record struct {
 	Seq         uint64
-	Prev        string
 	ScopeString string
 	ScopedID    string
 	// Accounts is the whole list of accounts the card declares once the
@@ -60,7 +55,6 @@ func (r *Record) Line() []byte {
 		b.WriteString(value)
 		b.WriteByte('"')
 	}
-	str("prev", r.Prev)
 	str("scope_string", r.ScopeString)
 	str("scoped_id", r.ScopedID)
 	b.WriteString(`,"accounts":`)
@@ -75,10 +69,10 @@ func (r *Record) Line() []byte {
 }
 
 // HashPreimage returns the bytes hashed into the record hash: the version
-// tag and the ten fields as written in the line, separated by LF.
+// tag and the nine fields as written in the line, separated by LF.
 func (r *Record) HashPreimage() []byte {
 	return []byte(strings.Join([]string{
-		RecordVersion, strconv.FormatUint(r.Seq, 10), r.Prev, r.ScopeString, r.ScopedID,
+		RecordVersion, strconv.FormatUint(r.Seq, 10), r.ScopeString, r.ScopedID,
 		AccountsText(r.Accounts), r.Challenge, r.Issuer, r.SMTRoot, r.Circuit, r.Proof,
 	}, "\n"))
 }
@@ -94,7 +88,7 @@ func (r *Record) Equal(o *Record) bool {
 			return false
 		}
 	}
-	return r.Seq == o.Seq && r.Prev == o.Prev && r.ScopeString == o.ScopeString && r.ScopedID == o.ScopedID &&
+	return r.Seq == o.Seq && r.ScopeString == o.ScopeString && r.ScopedID == o.ScopedID &&
 		r.Challenge == o.Challenge && r.Issuer == o.Issuer && r.SMTRoot == o.SMTRoot &&
 		r.Circuit == o.Circuit && r.Proof == o.Proof
 }
@@ -132,9 +126,6 @@ func decodeProof(s string) ([]byte, error) {
 func (r *Record) CheckValues(roster Roster) error {
 	if r.Seq < 1 || r.Seq > MaxSeq {
 		return errors.New("seq: not from 1 to 2^53 − 1")
-	}
-	if !isLowerHex(r.Prev, 64) {
-		return errors.New("prev: not 64 lowercase hex digits")
 	}
 	scope, ok := LookupScope(roster, r.ScopeString)
 	if !ok {
@@ -207,7 +198,7 @@ func ParseLine(line []byte, roster Roster) (*Record, error) {
 func recordFromMembers(members []jsonMember) (*Record, error) {
 	r := &Record{}
 	strs := map[string]*string{
-		"prev": &r.Prev, "scope_string": &r.ScopeString, "scoped_id": &r.ScopedID,
+		"scope_string": &r.ScopeString, "scoped_id": &r.ScopedID,
 		"challenge": &r.Challenge, "issuer": &r.Issuer, "smt_root": &r.SMTRoot,
 		"circuit": &r.Circuit, "proof": &r.Proof,
 	}
@@ -242,7 +233,7 @@ func recordFromMembers(members []jsonMember) (*Record, error) {
 		}
 		*p = m.value.text
 	}
-	if len(seen) != 10 || !seen["seq"] || !seen["accounts"] {
+	if len(seen) != 9 || !seen["seq"] || !seen["accounts"] {
 		return nil, errors.New("missing key")
 	}
 	return r, nil

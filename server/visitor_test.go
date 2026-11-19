@@ -933,8 +933,8 @@ func TestVisitorHeadersAndRoutes(t *testing.T) {
 	h, _, _ := exampleCards(t, false)
 	web := t.TempDir()
 	os.WriteFile(filepath.Join(web, "index.html"), []byte("<p>page</p>"), 0o644)
-	os.WriteFile(filepath.Join(rosterDir(h.data), "heads.jsonl"), []byte("x\n"), 0o644)
-	os.WriteFile(filepath.Join(rosterDir(h.data), "0000000000000001.jsonl"), []byte("y\n"), 0o644)
+	os.WriteFile(filepath.Join(rosterDir(h.data), "fingerprints.jsonl"), []byte("x\n"), 0o644)
+	os.WriteFile(filepath.Join(rosterDir(h.data), "0000000000000000.jsonl"), []byte("y\n"), 0o644)
 	h.http = h.server.routes(crlDir(h.data), rosterDir(h.data), web)
 
 	css := h.raw("GET", "/pages.css", "")
@@ -950,7 +950,7 @@ func TestVisitorHeadersAndRoutes(t *testing.T) {
 		t.Errorf("revalidating the style sheet: %d", again.Code)
 	}
 
-	for path, body := range map[string]string{"/roster/heads.jsonl": "x\n", "/roster/0000000000000001.jsonl": "y\n"} {
+	for path, body := range map[string]string{"/roster/fingerprints.jsonl": "x\n", "/roster/0000000000000000.jsonl": "y\n"} {
 		rec := h.raw("GET", path, "")
 		if rec.Code != 200 || rec.Body.String() != body || rec.Header().Get("Content-Type") != "application/jsonl" {
 			t.Errorf("%s: %d %q", path, rec.Code, rec.Body.String())

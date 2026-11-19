@@ -1,7 +1,7 @@
 // Command iamreal-verify re-verifies a roster file, or a published roster
-// directory and its heads file: whether the roster as a whole is valid, the
-// result of each record, and the state of every card and account
-// (spec/roster-rules.md). See README.md.
+// directory with its record hash lists and fingerprint file: whether the
+// roster as a whole is valid, the result of each record, and the state of
+// every card and account (spec/roster-rules.md). See README.md.
 package main
 
 import (
@@ -21,7 +21,7 @@ import (
 // Exit codes.
 const (
 	exitAllValid = 0 // the file is valid and every record is valid
-	exitInvalid  = 1 // the file is broken, a record is invalid, the CRL archive's index differs from its files, or the heads file has a problem
+	exitInvalid  = 1 // the file is broken, a record is invalid, the CRL archive's index differs from its files, or a record hash list or the fingerprint file has a problem
 	exitError    = 2 // the check could not be made
 )
 
@@ -194,21 +194,31 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	// The heads file of a valid roster directory: every line is checked
-	// against the records; every problem is reported.
-	var headsProblems []string
-	headsLines := 0
+	// The record hash lists and the fingerprint file of a valid roster
+	// directory: each is checked against the records; every problem is
+	// reported.
+	var dirProblems []string
 	if isDir && rep.Broken == nil {
 		records, _, _ := roster.ReadFile(data, r) // valid: Check read it
-		if headsProblems, headsLines, err = checkHeads(input, records); err != nil {
+		listProblems, lists, err := checkHashLists(input, records)
+		if err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 			return exitError
 		}
-		for _, p := range headsProblems {
+		fpProblems, fpLines, err := checkFingerprints(input, records)
+		if err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+			return exitError
+		}
+		dirProblems = append(listProblems, fpProblems...)
+		for _, p := range dirProblems {
 			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
 		}
-		if len(headsProblems) == 0 {
-			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every head is the roster's\n", headsFileName, headsLines)
+		if len(listProblems) == 0 {
+			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the roster's\n", hashListDir, lists)
+		}
+		if len(fpProblems) == 0 {
+			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, fpLines)
 		}
 	}
 	if *asJSON {
@@ -220,7 +230,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if rep.Broken != nil || len(diffs) > 0 || len(headsProblems) > 0 {
+	if rep.Broken != nil || len(diffs) > 0 || len(dirProblems) > 0 {
 		return exitInvalid
 	}
 	for _, res := range rep.State.Records {
@@ -244,7 +254,7 @@ func writeText(w io.Writer, rep *roster.Report) error {
 		p.f("roster file: broken at line %d: %s (%v)\n", rep.Broken.Line, rep.Broken.Code, rep.Broken.Err)
 		return p.err
 	}
-	p.f("roster file: valid\nrecords: %d\nhead: %s\n", rep.Records, rep.Head)
+	p.f("roster file: valid\nrecords: %d\nfingerprint: %s\n", rep.Records, rep.Fingerprint)
 	if len(rep.State.Records) > 0 {
 		p.f("\nrecords:\n")
 	}
@@ -298,12 +308,12 @@ func (p *printer) f(format string, args ...any) {
 // spec/vectors/roster-rules.json ("results", "state"), without the items of
 // a card's state that the output does not list (proofs_on_last_date, slots).
 type jsonReport struct {
-	Valid   bool         `json:"valid"`
-	Line    int          `json:"line,omitempty"`
-	Code    string       `json:"code,omitempty"`
-	Head    string       `json:"head,omitempty"`
-	Results []jsonResult `json:"results,omitempty"`
-	State   *[]jsonScope `json:"state,omitempty"`
+	Valid       bool         `json:"valid"`
+	Line        int          `json:"line,omitempty"`
+	Code        string       `json:"code,omitempty"`
+	Fingerprint string       `json:"fingerprint,omitempty"`
+	Results     []jsonResult `json:"results,omitempty"`
+	State       *[]jsonScope `json:"state,omitempty"`
 }
 
 type jsonResult struct {
@@ -351,7 +361,7 @@ func writeJSON(w io.Writer, rep *roster.Report) error {
 	if rep.Broken != nil {
 		out.Line, out.Code = rep.Broken.Line, rep.Broken.Code
 	} else {
-		out.Valid, out.Head = true, rep.Head
+		out.Valid, out.Fingerprint = true, rep.Fingerprint
 		out.Results = []jsonResult{}
 		for _, res := range rep.State.Records {
 			jr := jsonResult{Seq: res.Seq, Valid: res.Valid, Reason: res.Reason}

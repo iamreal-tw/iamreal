@@ -296,7 +296,7 @@ func main() {
 			Challenge: rec.Challenge, Issuer: rec.Issuer,
 			SMTRoot: o.SMTRoot, Circuit: vk, Proof: base64.StdEncoding.EncodeToString(proof),
 		}
-		check := &verifier.Record{Seq: 1, Prev: verifier.GenesisPrev, ScopeString: scope, ScopedID: b.ScopedID,
+		check := &verifier.Record{Seq: 1, ScopeString: scope, ScopedID: b.ScopedID,
 			Accounts: accounts, Challenge: rec.Challenge, Issuer: rec.Issuer,
 			SMTRoot: o.SMTRoot, Circuit: vk, Proof: b.Proof}
 		if err := check.CheckValues(verifier.Test); err != nil {

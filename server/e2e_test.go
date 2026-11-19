@@ -231,14 +231,16 @@ func TestEndToEnd(t *testing.T) {
 	if err := verify.Run(); err != nil {
 		t.Fatalf("iamreal-verify: %v\n%s\n%s", err, stdout.String(), stderr.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte("heads.jsonl: 1 line(s), every head is the roster's")) {
-		t.Errorf("iamreal-verify did not check the heads file:\n%s", stderr.String())
+	for _, w := range []string{"fingerprints.jsonl: 1 line(s), every fingerprint is the roster's", "hashes/: 1 list(s), every list is the roster's"} {
+		if !bytes.Contains(stderr.Bytes(), []byte(w)) {
+			t.Errorf("iamreal-verify did not say %q:\n%s", w, stderr.String())
+		}
 	}
 	var report struct {
-		Valid   bool             `json:"valid"`
-		Head    string           `json:"head"`
-		Results []map[string]any `json:"results"`
-		State   json.RawMessage  `json:"state"`
+		Valid       bool             `json:"valid"`
+		Fingerprint string           `json:"fingerprint"`
+		Results     []map[string]any `json:"results"`
+		State       json.RawMessage  `json:"state"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatal(err)
@@ -253,7 +255,7 @@ func TestEndToEnd(t *testing.T) {
 			want = append(want, p.Result)
 		}
 	}
-	if !report.Valid || report.Head != recs[10].Hash() || !reflect.DeepEqual(kinds, want) {
+	if !report.Valid || report.Fingerprint != roster.Fingerprint(recs) || !reflect.DeepEqual(kinds, want) {
 		t.Errorf("iamreal-verify: %s\nkinds %q\nwant %q", stdout.String(), kinds, want)
 	}
 	// The same state as the server's.
