@@ -79,5 +79,7 @@ PR 的說明照 `/pr` 的格式，「Evidence」列出下面每一項的結果�
 
 - `go build ./...`、`go vet -tags iamrealtest ./...`、`gofmt -l .`
 - `go test -count=1 -tags iamrealtest ./...`（要設 `IAMREAL_BB` 指到 `bb`）
-- 動到 `web/` 時：`pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
+- 動到 `protocol/` 時：在 `protocol/` 跑 `pnpm typecheck`、`pnpm test`，再跑下面 `web/` 和 `worker/` 的那幾項（兩邊都引用它）
+- 動到 `web/` 時：在 `web/` 跑 `pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
+- 動到 `worker/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`
 - 動到畫面時：桌機和手機寬度的截圖

@@ -43,7 +43,7 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 
 - **要 Workers 的付費方案。** 免費方案每個請求的 CPU 時間是 10 ms，驗一筆約 12 ms（[limits](https://developers.cloudflare.com/workers/platform/limits/)）。
 - **驗證和清冊鏡像各放在換得掉的介面後面。** 超過 Workers 的限制時，改成在 Cloudflare Containers 跑原生的 `bb` 和 Go 的 `crl/`，其他部分不動。
-- **清冊鏡像在 Worker 裡做得完，但讀清冊時不能每一筆建一個物件。** 本機的 workerd 裡，一次排程抓兩份清冊、存 R2、驗章、建樹共 35 秒，樹根和 Go 的 `crl/` 相同；每小時一次的排程上限 15 分鐘（[實測](https://github.com/iamreal-tw/iamreal/issues/26)、[limits](https://developers.cloudflare.com/workers/platform/limits/)）。照 `web/src/crl/crl.ts` 的寫法讀 G2 要 132 MB，超過 Worker 的 128 MB；鍵直接寫進 `Uint32Array` 時全程約 35 MB。Poseidon2 用驗證證明的同一份 WASM。建樹時分組做、組和組之間讓出執行緒，免得擋住同一個實例裡的請求。Cloudflare 上真的 CPU 時間、抓不抓得到內政部的 `http://` 網址，部署到測試網站時確認。
+- **清冊鏡像在 Worker 裡做得完，但讀清冊時不能每一筆建一個物件。** 本機的 workerd 裡，一次排程抓兩份清冊、存 R2、驗章、建樹共 35 秒，樹根和 Go 的 `crl/` 相同；每小時一次的排程上限 15 分鐘（[實測](https://github.com/iamreal-tw/iamreal/issues/26)、[limits](https://developers.cloudflare.com/workers/platform/limits/)）。照 `web/src/crl/crl.ts` 的寫法讀 G2 要 132 MB，超過 Worker 的 128 MB；鍵直接寫進 `Uint32Array` 時全程約 35 MB。Poseidon2 用驗證證明的同一份 WASM。建樹時分組做、組和組之間讓出執行緒，免得擋住同一個實例裡的請求。Cloudflare 上真的 CPU 時間、抓不抓得到內政部的 `http://` 網址，部署到測試網站時確認。2026-11-19 第一次部署：兩個網址都抓得到（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）；那時的排程只抓和存，一次的 CPU 時間 72 毫秒，驗章和建樹的還沒量到。
 - **WASM 的驗證要照實測的兩條做**：任何例外都算拒絕，並丟掉那個實例；呼叫之前先做 `verifier/verify.go` 在呼叫 `bb` 之前做的檢查。
 - **名冊規則有兩份實作**，Go 的在 `roster/`，TypeScript 的給後台和裝置用，兩份讀 `spec/vectors/` 同一份標準答案。規則要改時兩邊一起改。
 - **名冊檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改。完整重驗在哪裡跑、多久一次，已經定在 ADR-0025（討論在[名冊變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)）。

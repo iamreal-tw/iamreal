@@ -111,7 +111,10 @@ whose date fits is enough.
   (CPS v2.1 section 4.9.7). Within the 3 days, a card revoked after the last
   CRL still passes. After them, no card proof is accepted until a new CRL
   appears. The bound may be widened later: records valid under 3 days stay
-  valid under a wider bound. Narrowing it would invalidate old records.
+  valid under a wider bound. Narrowing it can change the result of records
+  already written; if it changes any, the narrower bound takes effect from
+  an effective date ([`roster-rules.md`](roster-rules.md), "Changing these
+  rules").
 
 ## Who checks what
 
