@@ -136,12 +136,14 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、名冊和連線紀錄
 
 每一次計數是一個請求，和其他請求一樣進連線紀錄，連同 IP 位址留 31 天。營運者另外把計數加總成每天的次數，永久保存；裡面沒有 IP 位址，也沒有是哪一張島民證明。所以「哪一張島民證明在哪一天被看了幾次」，營運者只查得到最近 31 天。
 
+過卡停下來時，計數裡有停在哪一步和原因的代號，沒有是哪一張卡片。原因是卡片已被廢止或暫時停用時，這 31 天內營運者看得出某個 IP 位址有一張這樣的卡片，看不出是哪一張。
+
 這些數字只有營運者看得到。
 
 例外：網站被大量的請求灌爆時，營運者會暫時打開 Cloudflare 的檢查頁，事後公告開了多久。這段期間打開首頁、島民證明、查詢頁或名冊頁，要先通過一次檢查；通過後 Cloudflare 放一個 cf_clearance cookie，只用來記得你通過了檢查，預設 30 分鐘後失效。過卡和下載名冊不受影響。
 ```
 
-「例外：」之前是 ADR-0032，之後是 ADR-0026 的「緊急時的挑戰頁」。這一段的每一項和後台實際收的計數一致；計數多一種、保存的期限改了，先改 ADR-0032 和這一段。
+「例外：」之前是 ADR-0032，之後是 ADR-0026 的「緊急時的挑戰頁」。「過卡停下來時」那一段是 ADR-0016（2026-11-19 改）。這一段的每一項和後台實際收的計數一致；計數多一種、保存的期限改了，先改 ADR-0032 和這一段。
 
 「不放 cookie」成立的條件：Cloudflare 只在打開特定功能時放 cookie（[Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/)）。所以 Bot Fight Mode、Bot Management、Waiting Room、Load Balancer 的 session affinity、Sequence rules 都不開，限流規則不用 `cf.unique_visitor_id`（會放 `_cfuvid`）。要開其中任何一個，先改這一段。
 

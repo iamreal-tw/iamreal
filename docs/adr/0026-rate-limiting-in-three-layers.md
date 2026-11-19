@@ -4,6 +4,8 @@ status: accepted
 
 # 限流分三層，被打時過卡先讓路
 
+> 補充：Worker 裡分開算的請求多一種，計數（ADR-0032）。
+
 會打到 Durable Object 的請求，由三層限流擋：Cloudflare 自動的 DDoS 防護、一條 WAF 的限流規則、Worker 裡的 Rate Limiting binding。請求多到撐不住時，先放掉過卡，留住訪客的頁面；全站的總量上限擋在「開始過卡」，持卡人在插卡之前就知道現在人太多。
 
 ADR-0023 讓讀取和寫入擠在同一個 Durable Object：題目、卡片現況、送出不能快取，訪客的頁面在網址每個都不同時快取幫不上。一個 Durable Object 的軟上限是每秒 1,000 個請求，做的事越多越低（[limits](https://developers.cloudflare.com/durable-objects/platform/limits/)、[rules of Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/)）；用量估計的頁面尖峰也是每秒 1,000 個（[用量估計](https://github.com/iamreal-tw/iamreal/issues/2)）。
@@ -44,7 +46,7 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 
 ## 不碰 Durable Object 就能回答的先回答
 
-- **格式不對的網址直接 `404`**：短編號不是 10 個 Crockford base32 字元、帳號不合平台的格式，Worker 不問 Durable Object。
+- **格式不對的網址直接 `404`**：短編號照 ADR-0020 的讀法換算之後（不分大小寫，`O` 讀成 `0`，`I` 和 `L` 讀成 `1`）不是 10 個 Crockford base32 字元、帳號不合平台的格式，Worker 不問 Durable Object。
 - **查不到的頁面和查得到的一樣快取 60 秒。** 回應自己帶 `Cache-Control`；沒帶時，Workers 的快取把 `404` 放 3 分鐘（[Workers cache](https://developers.cloudflare.com/workers/cache/configuration/)）。
 
 ## 被擋的人看到什麼
@@ -90,7 +92,7 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 - **過卡的頁面改請求的順序**：`GET /api/v1/config` 移到按下「開始」之後、讀卡之前；它的 `503` 在讀卡之前顯示「現在人太多」。`docs/api/card-proof.md` 在 `config`、`card-state` 加上 `429`、`503`，每個 `429` 附 `Retry-After`。
 - **通過開始那一關的人，之後仍可能遇到 Durable Object 撐不住。** 那時已經插過卡；畫面讓他重試，不必重新開始。
 - **隱私權說明加挑戰頁的那一段**，和平常不放 cookie 的說法放在一起。
-- **還沒查到、要在測試版的網站上看的**：WAF 的限流規則會不會連快取命中的請求一起算（所以外層的上限訂得比 Worker 寬很多）；Workers 的快取哪些方案能用、快取命中時 WAF 還跑不跑；Rate Limiting binding 的計數存在哪裡、留多久。
+- **還沒查到、要在測試網站上看的**：WAF 的限流規則會不會連快取命中的請求一起算（所以外層的上限訂得比 Worker 寬很多）；Workers 的快取哪些方案能用、快取命中時 WAF 還跑不跑；Rate Limiting binding 的計數存在哪裡、留多久。
 - **頁面真的被輪著打時**，先打開挑戰頁，再把頁面的資料搬出 Durable Object；搬到 KV 還是 D1（ADR-0023 寫的是 D1），到時候再定，資料都從紀錄重建得出來。讀取量量出來撐不到尖峰時也一樣。為了改得快，施工時頁面讀資料經過一個換得掉的介面。這一份的三層不變。
 - **挑戰頁開著的期間**，訪客要先過一次檢查；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽。
 - 查詢介面的金鑰怎麼申請、額度多少，跟查詢介面一起定。

@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: accepted（部分由 ADR-0025、ADR-0026 取代）
 ---
 
 # 後台全部放在 Cloudflare，用 TypeScript 重寫
+
+> Consequences 裡留待決定的三件事後來定了：完整重驗在哪裡跑（ADR-0025）、每張卡片的狀態怎麼存（ADR-0024 和它的票）、頁面的資料撐不住時搬去哪裡（ADR-0026 改成 KV 或 D1，到時候再定）。公開的檔案放在 `data.iamreal.tw`（ADR-0027）。下面寫「`server/` 用 TypeScript 重寫」的地方，新的後台放在 `worker/`（見 Consequences 最後一條）。其餘有效。
 
 後台整個放在 Cloudflare 上，沒有自己管的機器。`server/` 用 TypeScript 重寫成一個 Worker 專案；`verifier/`、`roster/`、`crl/`、`cmd/` 的 Go 程式留著，當獨立的重驗工具。
 
@@ -44,8 +46,8 @@ status: accepted
 - **清冊鏡像在 Worker 裡做得完，但讀清冊時不能每一筆建一個物件。** 本機的 workerd 裡，一次排程抓兩份清冊、存 R2、驗章、建樹共 35 秒，樹根和 Go 的 `crl/` 相同；每小時一次的排程上限 15 分鐘（[實測](https://github.com/iamreal-tw/iamreal/issues/26)、[limits](https://developers.cloudflare.com/workers/platform/limits/)）。照 `web/src/crl/crl.ts` 的寫法讀 G2 要 132 MB，超過 Worker 的 128 MB；鍵直接寫進 `Uint32Array` 時全程約 35 MB。Poseidon2 用驗證證明的同一份 WASM。建樹時分組做、組和組之間讓出執行緒，免得擋住同一個實例裡的請求。Cloudflare 上真的 CPU 時間、抓不抓得到內政部的 `http://` 網址，部署到測試網站時確認。
 - **WASM 的驗證要照實測的兩條做**：任何例外都算拒絕，並丟掉那個實例；呼叫之前先做 `verifier/verify.go` 在呼叫 `bb` 之前做的檢查。
 - **名冊規則有兩份實作**，Go 的在 `roster/`，TypeScript 的給後台和裝置用，兩份讀 `spec/vectors/` 同一份標準答案。規則要改時兩邊一起改。
-- **名冊檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改，完整重驗在哪裡跑、多久一次，在[名冊變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)決定。
-- **現況不放記憶體。** Durable Object 閒置時會被移出記憶體，名冊規則要的每張卡片的狀態存在它的 SQLite，寫入時只讀寫那一張卡片。存法在[名冊規則要的每張卡片狀態怎麼存](https://github.com/iamreal-tw/iamreal/issues/9)決定。
-- **讀取和寫入擠在同一個 Durable Object。** 大量請求打不同的網址時快取幫不上，Durable Object 忙不過來，頁面和過卡會一起失敗；已經寫入的紀錄不會掉。靠限流和查不到的結果也快取來擋；讀取量量出來撐不到尖峰，或真的被這樣打過，就把衍生表複製到 D1。
+- **名冊檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改。完整重驗在哪裡跑、多久一次，已經定在 ADR-0025（討論在[名冊變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)）。
+- **現況不放記憶體。** Durable Object 閒置時會被移出記憶體，名冊規則要的每張卡片的狀態存在它的 SQLite，寫入時只讀寫那一張卡片。存法已經定了：狀態自己一張表、一張卡片一列、和紀錄同一個交易寫入，結論在[名冊規則要的每張卡片狀態怎麼存](https://github.com/iamreal-tw/iamreal/issues/9)；順帶改的規則是 ADR-0024。
+- **讀取和寫入擠在同一個 Durable Object。** 大量請求打不同的網址時快取幫不上，Durable Object 忙不過來，頁面和過卡會一起失敗；已經寫入的紀錄不會掉。靠限流和查不到的結果也快取來擋；讀取量量出來撐不到尖峰，或真的被這樣打過，就把衍生表複製到 D1（ADR-0026 改成搬到 KV 還是 D1 到時候再定）。
 - **儲存的位置不能固定在台灣。** 亞洲只有盡量的提示（[data location](https://developers.cloudflare.com/durable-objects/reference/data-location/)）。放在上面的資料大多本來就公開；不公開的是還沒用掉的題目和連線紀錄（ADR-0022）。隱私權說明照實寫。
-- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** `CLAUDE.md` 的目錄表和「Go 的程式是同一個模組」那幾句跟著改。
+- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** 目錄 2026-11-19 定了，寫在 `CLAUDE.md` 的目錄表：TypeScript 的後台放 `worker/`，比對期間不和 Go 的 `server/` 同名；後台和裝置共用的 TypeScript（名冊規則和其他照 `spec/` 寫的算法）放 `protocol/`，`worker/` 和 `web/` 都引用它、互不引用。`server/` 刪掉時，從目錄表拿掉那一列。

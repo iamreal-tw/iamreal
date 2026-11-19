@@ -126,7 +126,7 @@ iamreal 的賣點是不需要相信營運者。畫面的工作是把事實交給
 
 | 層 | 內容 | 放哪裡 |
 |---|---|---|
-| 原則 | 這一份和 `GLOSSARY.md` | `docs/design/` |
+| 原則 | 這一份和 `GLOSSARY.md` | `docs/design/`；`GLOSSARY.md` 在根目錄 |
 | 文字 | 畫面上每一句給人看的話，各平台共用一份 | `design/copy/` |
 | 視覺 | 顏色、字級、間距、元件 | `design/tokens.json` |
 
