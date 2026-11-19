@@ -84,7 +84,7 @@
 頁面上沒有 Threads 的程式，也不會把你看的是哪一頁告訴 Threads。
 ```
 
-之後的隱私權說明連到這一題。
+隱私權說明的第 8 段「看島民證明的人」連到這一題（`privacy.md`）。
 
 這一題在頁面上的 `id`：`threads-knows`，連到這一題寫 `/faq#threads-knows`。
 
