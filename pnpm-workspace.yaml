@@ -1,6 +1,16 @@
 packages:
   - protocol
   - web
+  - worker
 
 # Do not install versions published less than 7 days ago.
 minimumReleaseAge: 10080
+
+# No package's install script runs; these three have one, and it is not
+# needed: esbuild and workerd get their executable from the package of the
+# platform (an optional dependency), and msgpackr-extract is an optional
+# native speed-up that msgpackr works without.
+ignoredBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - workerd

@@ -1,0 +1,27 @@
+// The Worker project (README.md, "設定檔"). The top level is what every
+// environment shares; each environment is one block under "env". There is no
+// "build": deploying runs no command of this repository.
+{
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  // wrangler sends Cloudflare no usage report.
+  "send_metrics": false,
+  // The roster's Durable Object keeps its state in SQLite (ADR-0023).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Roster"] }],
+  "env": {
+    // The test site (ADR-0028).
+    "test": {
+      "name": "iamreal-test",
+      // Only the custom domain test.iamreal.tw, which is set in the dashboard (ADR-0029).
+      "workers_dev": false,
+      "preview_urls": false,
+      // The CRL mirror, every hour.
+      "triggers": { "crons": ["0 * * * *"] },
+      "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
+      // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
+      "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],
+      // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
+      "vars": { "ROSTER_OBJECT_NAME": "test-1" }
+    }
+  }
+}

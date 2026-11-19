@@ -43,7 +43,7 @@
 - 目錄在第一次需要時才建立，建立時附 `README.md`：這個目錄讓人檢查什麼、怎麼單獨執行
 - Go 的程式是同一個模組，`go.mod` 在根目錄；`verifier/` 和 `roster/` 要能不帶後台單獨編譯
 - Go 的 `verifier/`、`roster/`、`crl/`、`cmd/` 是後台以外的第二份實作，每天的重驗用它（ADR-0025、ADR-0030）。Go 不引用 TypeScript，TypeScript 不引用 Go；兩邊只共用 `spec/`
-- `worker/` 還沒建。建之前，後台是 Go 的 `server/`
+- `worker/` 現在只有骨架（清冊鏡像的排程、測試專用的建置）。它做完之前，後台是 Go 的 `server/`
 - 做任何畫面、寫任何介面文字之前，先讀 `docs/design/principles.md`
 - 兩種以上語言都要實作的算法，測試一律讀 `spec/vectors/` 裡同一份標準答案
 
