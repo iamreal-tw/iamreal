@@ -83,11 +83,11 @@
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53)，備份在 [#51](https://github.com/iamreal-tw/iamreal/issues/51) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
-| 0028 | 沒有測試網站 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
+| 0028 | 測試網站只部署了 `worker/` 的骨架：每個網址回 `404`，不能過卡，沒有測試名冊和它的標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
-`worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 的權杖跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。後台現在還是 Go 的 `server/`。
+`worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。後台現在還是 Go 的 `server/`。
 
 ## 還沒定
 
