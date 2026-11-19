@@ -80,7 +80,6 @@
 | 0021 | 紀錄帶 `prev`，公布鏈尾檔 `heads.jsonl` | [#18](https://github.com/iamreal-tw/iamreal/issues/18) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
-| 0024 | 規則沒有這一條 | [#28](https://github.com/iamreal-tw/iamreal/issues/28) |
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53)，備份在 [#51](https://github.com/iamreal-tw/iamreal/issues/51) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |

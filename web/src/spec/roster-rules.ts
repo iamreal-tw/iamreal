@@ -98,11 +98,22 @@ export function listOutcome(slots: ReadonlyMap<string, SlotState>, list: Readonl
 }
 
 /**
+ * True if a card proof dated `day` is `date_order` by the card's own half of
+ * check 4: the card has a valid record of a later date, and a card's dates do
+ * not go back (spec/roster-rules.md, ADR-0024). The other half, 4 days
+ * before the latest date of any card, needs the whole roster and is not
+ * computed here.
+ */
+export function dateBeforeLastCardProof(state: { lastCardProof: Day | null }, day: Day): boolean {
+  return state.lastCardProof !== null && day < state.lastCardProof;
+}
+
+/**
  * True if the card has 3 valid records dated `day`, so that no card proof of
- * any kind is valid on `day` (check 6, `daily_limit`). The state tells the
- * count of one date only, `last_card_proof`'s; for any other date this is
- * false, and the server's rules decide (a record dated a day before
- * `last_card_proof`, around midnight, can still be the fourth of its date).
+ * any kind is valid on `day` (check 6, `daily_limit`). A card's dates do not
+ * go back (check 4), so the count of `day` is `proofs_on_last_date` when
+ * `day` is `last_card_proof` and 0 when it is later; a `day` before it is
+ * `date_order` (dateBeforeLastCardProof), and this is false.
  */
 export function dailyLimitReached(state: { lastCardProof: Day | null; proofsOnLastDate: number }, day: Day): boolean {
   return state.lastCardProof === day && state.proofsOnLastDate >= MAX_PER_DATE;
