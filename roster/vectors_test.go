@@ -1,7 +1,8 @@
 package roster_test
 
-// Tests against spec/vectors/record.json ("files") and
-// spec/vectors/roster-rules.json. Every case runs as a subtest.
+// Tests against spec/vectors/record.json (the roster fingerprints, "files"
+// and the published roster) and spec/vectors/roster-rules.json. Every case
+// runs as a subtest.
 
 import (
 	"crypto/sha256"
@@ -47,13 +48,13 @@ func TestVectorsRecordFiles(t *testing.T) {
 	var v struct {
 		Tokens map[string]string `json:"tokens"`
 		Files  []struct {
-			Name    string `json:"name"`
-			Roster  string `json:"roster"`
-			Content string `json:"content"`
-			Valid   bool   `json:"valid"`
-			Head    string `json:"head"`
-			Line    int    `json:"line"`
-			Code    string `json:"code"`
+			Name        string `json:"name"`
+			Roster      string `json:"roster"`
+			Content     string `json:"content"`
+			Valid       bool   `json:"valid"`
+			Fingerprint string `json:"fingerprint"`
+			Line        int    `json:"line"`
+			Code        string `json:"code"`
 		} `json:"files"`
 	}
 	load(t, "record.json", &v)
@@ -63,7 +64,7 @@ func TestVectorsRecordFiles(t *testing.T) {
 			for k, val := range v.Tokens {
 				content = strings.ReplaceAll(content, k, val)
 			}
-			records, head, broken := roster.ReadFile([]byte(content), rosterOf(t, f.Roster))
+			records, fingerprint, broken := roster.ReadFile([]byte(content), rosterOf(t, f.Roster))
 			if !f.Valid {
 				if broken == nil {
 					t.Fatalf("valid, want broken at line %d with %s", f.Line, f.Code)
@@ -76,8 +77,8 @@ func TestVectorsRecordFiles(t *testing.T) {
 			if broken != nil {
 				t.Fatalf("broken: %v", broken)
 			}
-			if head != f.Head {
-				t.Errorf("head %s, want %s", head, f.Head)
+			if fingerprint != f.Fingerprint {
+				t.Errorf("fingerprint %s, want %s", fingerprint, f.Fingerprint)
 			}
 			if strings.Count(content, "\n") != len(records) {
 				t.Errorf("%d records", len(records))
@@ -203,7 +204,7 @@ func caseRecords(t *testing.T, c rulesCase) ([]*verifier.Record, fakeProofs, fak
 	var records []*verifier.Record
 	for _, e := range c.Events {
 		rec := &verifier.Record{
-			Seq: e.Seq, Prev: verifier.GenesisPrev, ScopeString: e.ScopeString, ScopedID: e.ScopedID,
+			Seq: e.Seq, ScopeString: e.ScopeString, ScopedID: e.ScopedID,
 			Accounts: accountsOf(e.Accounts), Challenge: e.Challenge, Issuer: "G3",
 			SMTRoot: rootOf(e.Seq), Circuit: strings.Repeat("0", 64), Proof: proof,
 		}

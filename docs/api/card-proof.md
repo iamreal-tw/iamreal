@@ -91,8 +91,11 @@ for all of them (ADR-0017).
     `null`. It is not sent a second time in another form.
   - The dates of the individual switches are not sent. The rules do not
     read them; they are in the roster.
-  - `count` and `head` are the number of records and the head the answer
-    was computed at.
+  - `count` is the number of records the answer was computed at, and
+    `head` the roster fingerprint of those records
+    ([`spec/record.md`](../../spec/record.md)): of every record stored at
+    that moment, not the last line published in `fingerprints.jsonl`. The
+    name `head` is from before ADR-0021; the new backend changes it.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 The server sends facts, not conclusions. The device computes the rest from
@@ -100,7 +103,7 @@ them and from today's date in Taiwan by its own clock:
 
 | What the cardholder is told | How the device gets it |
 |---|---|
-| Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier |
+| Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier. If it is later, a card proof dated today is `date_order` (a card's dates do not go back) |
 | Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
 | Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
 | What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
@@ -146,7 +149,7 @@ not know" is one that has no row it can read in the platform table of
 
 Submits one card proof: the card's whole list of accounts.
 
-- Request: the fields of a record except `seq` and `prev`
+- Request: the fields of a record except `seq`
   ([`spec/record.md`](../../spec/record.md)):
 
   ```
@@ -210,7 +213,8 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
-  | `400` | `date_order`, `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
+  | `400` | `date_order` | The roster rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the roster, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
+  | `400` | `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `403` | `switch_restricted` | The roster rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
   | `429` | `rate_limited` | |
@@ -323,7 +327,12 @@ What the device does with what it cannot read:
 
 ## `GET /api/v1/head`
 
-- Response `200`: `{"count":138,"head":"…"}`
+- Response `200`: `{"count":138,"head":"…"}`: the number of records stored
+  now and their roster fingerprint
+  ([`spec/record.md`](../../spec/record.md)), not the last line published
+  in `fingerprints.jsonl`. ADR-0021 has the API show only the last
+  fingerprint published and its count; the new backend makes that change,
+  and changes the name `head`.
 
 ## Static files
 
@@ -331,7 +340,7 @@ What the device does with what it cannot read:
 |---|---|
 | `/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `/crl/SHA256.crl` | One CRL of the archive, the original bytes; `SHA256` is the file's SHA-256 as 64 lowercase hex digits |
-| `/roster/` | The roster directory and `heads.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+| `/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
 
 What the device does with the CRL: takes from the index the usable line of
 its issuer with the highest `crl_number`, downloads that file, and checks

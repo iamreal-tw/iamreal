@@ -25,9 +25,8 @@ archive of MOICA's CRLs. Nothing comes from the server.
 |---|---|
 | Every line is well formed ([`record.md`](record.md), "Lines and files") | `line` |
 | The `seq` of the n-th line is n | `seq` |
-| Every `prev` equals the record hash of the line before it | `prev` |
 
-Lines are checked one at a time, in order. For each line the three checks
+Lines are checked one at a time, in order. For each line the two checks
 run in the order of the table; the first failure ends the check, and the file
 is reported as broken with that line's number (counting from 1) and the
 code. Bytes after the last `LF`, an empty line and a byte order mark fail the
@@ -65,13 +64,22 @@ challenge was used before; its challenge still counts as used.
 | 1 | The record verifies ([`record.md`](record.md), "Verifying a record") | `proof` |
 | 2 | Its `challenge` appears in no earlier record, valid or invalid, of any card | `challenge_reused` |
 | 3 | Its `smt_root` is recognized for its `issuer` and date ([`revocation-tree.md`](revocation-tree.md)) | `root` |
-| 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card | `date_order` |
+| 4 | Its date is no earlier than 4 days before the latest date among the earlier valid records, of any card, and no earlier than its card's `last_card_proof` | `date_order` |
 | 5 | The event rules below, for the state of its card | `empty` or `switch_limit` |
 | 6 | Fewer than 3 earlier valid records of its card have its date | `daily_limit` |
 
 The **date** `d` of a record is the date in its challenge. Order is always by
-`seq`, never by date. Dates can step backwards by a day around midnight,
-because the challenge is dated when it is issued.
+`seq`, never by date. Across the roster, dates can step backwards by a day
+around midnight, because the challenge is dated when it is issued. Within one
+card they cannot (check 4): a card that took one challenge before midnight
+and one after, and sent the later-dated one first, cannot send the earlier
+one; its record is `date_order`, and the cardholder makes the card proof
+again. A cardholder who takes one challenge at a time never meets this,
+because the server dates each challenge with the current date.
+
+By check 4, the earlier valid records of the card that have the date `d` are
+the `proofs_on_last_date` of the card when `d` is its `last_card_proof`, and
+none when `d` is later. Check 6 asks only that.
 
 **A record is valid as a whole or invalid as a whole.** There is no record
 that takes effect on one platform and not on another.
@@ -135,8 +143,9 @@ once. A record with one blocked platform changes nothing on any platform. A
 record that the event rules would accept, but that is the fourth of its card
 and date, is invalid with `daily_limit` and changes nothing.
 
-**Every valid record**: the card's `last_card_proof = max(last_card_proof,
-d)`, and `proofs_on_last_date` follows from it.
+**Every valid record**: the card's `last_card_proof = d`, which check 4
+makes no earlier than it was. `proofs_on_last_date` grows by 1 if `d` was
+already the `last_card_proof`, and is 1 otherwise.
 
 A valid record always has at least one kind. `refresh` covers both an
 account that stays (the entry equals `current`) and an account declared
@@ -231,6 +240,10 @@ About the card:
   platforms. A day is a date in Taiwan, as in every challenge. Records
   blocked by another rule do not count, and the server does not append them
   anyway.
+- **The dates of a card's valid records never go back.** Taken in `seq`
+  order, each is the same as the one before or later (check 4). So
+  `last_card_proof` is the date of the card's last valid record, and the
+  only date whose count can still grow is that one.
 - **The switch limit counts per platform ID.** It holds per service only as
   long as one service has one row in the platform table
   ([`scope.md`](scope.md), "Adding a platform").
@@ -248,7 +261,7 @@ An invalid record changes one thing: its challenge counts as used (check
   `correction_date`, on any platform, including the platforms where its
   list asked for nothing new;
 - not the card's `last_card_proof` or `proofs_on_last_date`;
-- not the latest valid date that check 4 compares with.
+- not the latest valid date of the roster that check 4 compares with.
 
 So a list with one change that is not allowed cannot carry another change
 through, cannot make the card look recent, cannot use up a switch or a place
@@ -276,7 +289,7 @@ a date after the card signed. But the server chooses the date when it issues
 the challenge, and a modified device would sign a challenge with any date on
 which the certificate is valid. One record dated years ahead would keep the
 card looking recent until then, and a change dated back to the day of an
-old switch would pass as a correction. Two checks bound this.
+old switch would pass as a correction. Checks 3 and 4 bound this.
 
 - **Into the future: at most 3 days** (check 3). A record's date is at most
   3 days after the date of the CRL behind its root, and MOICA has not signed
@@ -286,12 +299,31 @@ old switch would pass as a correction. Two checks bound this.
   ahead, plus one day around midnight, so an honest record is never caught by
   a record dated ahead of it. Check 3 alone would not stop dates in the past:
   old CRLs stay recognized so that old records keep verifying.
+- **Not before the card's own `last_card_proof`** (check 4). A card proof
+  that was signed but never appended can be sent later, by whoever holds
+  it. Once the card has a valid record of a later date, a record of an
+  earlier date is invalid, whoever sends it. The records in the roster are
+  public, with their proofs, so anyone can also send a copy of one; a copy
+  is caught by check 2, whatever its date.
+
+The card's own bound does not replace the 4 days. A card that has made no
+card proof for a long time has its `last_card_proof` on the date of its
+last record, which can be the date of its last switch; a change dated back
+to that date would pass the card's own bound and count as a correction.
+Only the bound relative to the whole roster stops it. It also bounds the
+date of a card's first record, which has no `last_card_proof` to compare
+with.
+
+A card whose record is dated ahead cannot make a card proof with an earlier
+date until that date comes. Dating a record ahead takes the operator and a
+modified device together, and it holds back only that card, by at most 3
+days (check 3).
 
 Within the bounds, an operator working with a modified device can make a
 card's `last_card_proof` look up to 3 days more recent than it is.
 `last_card_proof` belongs to the card, so this covers the card's accounts
-on every platform; the bound is the same 3 days. Both checks compare dates
-across all cards.
+on every platform; the bound is the same 3 days. Checks 3 and 4 compare
+dates across all cards; only the card's own bound is per card.
 
 The same pair can make corrections on days that are not the day of the
 switch, by issuing challenges with the switch's date for a few days around
@@ -301,8 +333,8 @@ corrections, and the switch count is not a matter of dates at all. A
 cardholder alone cannot do this: the server dates every challenge with the
 current date.
 
-If the bound of check 3 is ever widened, the bound of check 4 widens with it
-(one day more).
+If the bound of check 3 is ever widened, the 4 days of check 4 widen with
+it (one day more).
 
 ## Output
 
@@ -346,12 +378,85 @@ carry the date.
   ([`docs/api/card-proof.md`](../docs/api/card-proof.md)). That is a rule of
   the server, not of the roster: a record that is in the roster is judged by
   these rules only, and the limit that everyone can check is 5.
+  Such a rule of the server is not covered by "Changing these rules": when
+  it changes, no record already written changes.
 - Which platforms exist is a table of [`scope.md`](scope.md), not something
   computed from the records. A record that lists a platform outside the
   table is a malformed line, not an invalid record.
 - A record does not say which state of the card the cardholder saw before
   signing. Two card proofs of one card made from the same earlier state are
   applied in `seq` order, and the later list replaces the earlier.
+
+## Changing these rules
+
+These rules may change after launch. A change keeps two things of every
+record already written (ADR-0031):
+
+- its result: valid or invalid, its kinds, its reason code;
+- its line: still well formed.
+
+**By default a change applies to every record**, including the ones already
+written. It may do so only if, under the new rules, every record already
+written gets the same result as under the old ones; the old version can
+then be dropped. If any record gets a different result, the new rules take
+effect from an **effective date** `D` instead: a record dated `D` or later
+is judged by the new version, a record dated before `D` by the old one. The
+date is the record's date, the date in its challenge, as everywhere in
+these rules.
+
+- **Once an effective date is used, every version stays.** Computing the
+  state from the first record, or rebuilding the state of every card from
+  the records, picks the version for each record by its date. Both
+  implementations of these rules (ADR-0030) keep every version for good.
+- **A card never goes back from a new version to an old one.** The dates of
+  a card's valid records only stay the same or move forward, by the
+  condition of check 4 on the card's own `last_card_proof` (ADR-0024). A
+  record of the card dated earlier can still be written; it is invalid,
+  with `date_order`. Records of different cards dated before and after `D`
+  can interleave in `seq` order; the result is still fixed.
+- **`D` is at least 3 days after the deploy to the production site**, and is
+  announced on the site when the change is merged. There is no other
+  period of notice. If the deploy cannot be made in time, another change
+  moves `D` later, before `D` arrives.
+- **Whether the results are the same is a comparison, not a judgement.**
+  Before a change is merged, the latest production roster is computed under
+  the old and the new version and compared record by record
+  ([`CONTRIBUTING.md`](../CONTRIBUTING.md)). If every result is the same,
+  the change applies to every record; otherwise it has an effective date.
+  After the deploy, the re-verification from the first record that a new
+  version number of these rules starts (ADR-0025) is the last check. If a
+  record written between that roster and the deploy gets a different
+  result, the operator stops accepting card proofs, goes back to the code
+  of the old version, and makes the change again with an effective date.
+
+These rules do not have a table of versions yet (which version applies from
+which date). It is added the first time an effective date is needed, and
+adding it changes the result of no record. A version is numbered by the
+version number of these rules (ADR-0025, ADR-0030).
+
+The tables of [`scope.md`](scope.md) that these rules read only widen and
+grow, so that every record already written stays well formed ("Changing
+the tables").
+
+### When proofs can no longer be trusted
+
+This is the one exception. If a circuit lacks a constraint, if Barretenberg
+accepts a proof it should not, or if a MOICA issuer key leaks, someone can
+make valid proofs in bulk. Forged records then re-verify like real ones,
+and the promise above cannot keep them valid for good. The records of one
+circuit, or all the records, may then be voided:
+
+- **The condition can be computed from public data only.** For now it is
+  either "the records of this circuit" (every record carries its own
+  `circuit`) or "all the records". Never a range of dates, because nobody
+  knows from which day the flaw was used. Never single records the operator
+  judges to be forged, because a re-verifier cannot check that judgement.
+- The operator first stops accepting card proofs (ADR-0025). Whether to
+  void records in bulk and keep the scoped IDs, or to start over with a new
+  scope string ([`scope.md`](scope.md), "Starting over"), depends on the
+  flaw, and is decided in an ADR of its own.
+- The mechanism for voiding is added when it is needed. This exception and
+  its limits are written in these rules from their first version.
 
 ## Test vectors
 

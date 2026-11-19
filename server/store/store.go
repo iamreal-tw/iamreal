@@ -16,12 +16,10 @@ import (
 // Store is the server's data.
 //
 // The roster is append-only: records are added one at a time, in seq order,
-// each with prev equal to the record hash of the one before it, and never
-// changed or removed (ADR-0005).
+// and never changed or removed (ADR-0005).
 type Store interface {
-	// Head returns the number of records and the head: the record hash of
-	// the last record, or 64 zeros for an empty roster.
-	Head() (count uint64, head string, err error)
+	// Count returns the number of records.
+	Count() (uint64, error)
 
 	// Records returns the records with seq from first to last, both
 	// included, in seq order. It returns fewer if the roster ends earlier.
@@ -30,8 +28,7 @@ type Store interface {
 	// Append adds r as the next record, marks its challenge as accepted
 	// and, if v is not nil, writes what r changes in the views (v, from
 	// NewView), all in one transaction: all happen or none does. r.Seq
-	// must be the number of records plus one and r.Prev the head
-	// (ErrNotNext otherwise), and the challenge must be issued and not yet
+	// must be the number of records plus one (ErrNotNext otherwise), and the challenge must be issued and not yet
 	// accepted (ErrChallengeNotOpen otherwise). If v is not nil, it must be
 	// for r (ErrViewMismatch otherwise) and the views must reflect every
 	// earlier record (ErrViewsBehind otherwise).
@@ -123,8 +120,8 @@ type Challenge struct {
 }
 
 var (
-	// ErrNotNext is returned by Append for a record whose seq or prev does
-	// not continue the roster.
+	// ErrNotNext is returned by Append for a record whose seq does not
+	// continue the roster.
 	ErrNotNext = errors.New("store: the record does not continue the roster")
 	// ErrChallengeNotOpen is returned by Append when the record's challenge
 	// is not stored or was already accepted.

@@ -10,7 +10,7 @@
 
 | 檔案 | 規格 | 內容 |
 |---|---|---|
-| `roster-rules.ts` | `spec/roster-rules.md` | 名冊規則的事先計算：每個名額的事件規則（`slotOutcome`、`applyKind`）、整份清單（`listOutcome`）、當天的筆數（`dailyLimitReached`）、規則產生不出來的狀態（`possibleSlot`、`possibleCard`）、更換的次數上限 |
+| `roster-rules.ts` | `spec/roster-rules.md` | 名冊規則的事先計算：每個名額的事件規則（`slotOutcome`、`applyKind`）、整份清單（`listOutcome`）、當天的筆數（`dailyLimitReached`）、日期是否早於這張卡片的上次過卡日（`dateBeforeLastCardProof`）、規則產生不出來的狀態（`possibleSlot`、`possibleCard`）、更換的次數上限 |
 | `scope.ts` | `spec/scope.md` | 每份名冊的場合字串（公開名冊、測試名冊），寫死在這裡，不從後台或網址來（ADR-0016） |
 | `username-format.ts` | `spec/scope.md`「Platforms」 | 帳號名稱的格式 `[…]{m,n}`，自己逐字解析，不交給正規表示式引擎；平台代號；裝置不認得的平台上帳號最低限度的檢查 |
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
@@ -48,6 +48,6 @@ pnpm test
 - `scope.json`：兩個場合字串和打包值；平台代號；帳號名稱照它的平台的格式（格式字串從 `spec/scope.md` 的平台表讀出來，交給 `username-format.ts` 自己解析，和標準答案逐案相同；格式字串不是那一種寫法時讀不懂）
 - `declaration-code.json`：整份清單的原文、SHA-256、宣告碼、打包值
 - `scoped-id.json`：匿名編號的文字寫法、短編號 10 個字元、讀不懂的寫法
-- `roster-rules.json`：每個案例重播事件：每一筆清單算出的每個平台的種類和標準答案的 `kinds` 相同，`switch_limit`、`empty` 也相同；`daily_limit` 的紀錄，事件規則本身接受，日期是 `last_card_proof` 的時候算得出今天已經 3 筆；有效的紀錄從不擋；重播出的每張卡片的清單、`last_card_proof`、`proofs_on_last_date` 和每個名額的 `current`、`last_declared`、`switch_count`、`correction_date` 和標準答案相同；規則產生得出來的每個狀態都讀得懂
+- `roster-rules.json`：每個案例重播事件：每一筆清單算出的每個平台的種類和標準答案的 `kinds` 相同，`switch_limit`、`empty` 也相同；`daily_limit` 的紀錄，事件規則本身接受，也算得出那一天已經 3 筆（一張卡片的日期不往回，所以 `daily_limit` 的日期一定是 `last_card_proof`）；`date_order` 的紀錄，日期早於這張卡片的 `last_card_proof` 時算得出來（`dateBeforeLastCardProof`），不是的就早於名冊上最晚的有效日期 4 天以上；有效的紀錄和停在檢查 4 之後的紀錄，不說日期往回；有效的紀錄從不擋；重播出的每張卡片的清單、`last_card_proof`、`proofs_on_last_date` 和每個名額的 `current`、`last_declared`、`switch_count`、`correction_date` 和標準答案相同；規則產生得出來的每個狀態都讀得懂
 
 另外測台灣的日期、事件規則在一個名額上的每一種情況、一天 3 筆、規則產生不出來的狀態。

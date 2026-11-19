@@ -417,7 +417,6 @@ func TestVectorsIssuers(t *testing.T) {
 // vectorRecord is a record as record.json writes it.
 type vectorRecord struct {
 	Seq         uint64          `json:"seq"`
-	Prev        string          `json:"prev"`
 	ScopeString string          `json:"scope_string"`
 	ScopedID    string          `json:"scoped_id"`
 	Accounts    []vectorAccount `json:"accounts"`
@@ -430,10 +429,9 @@ type vectorRecord struct {
 
 // recordVectors is spec/vectors/record.json with its tokens replaced.
 type recordVectors struct {
-	Version     string            `json:"version"`
-	Tokens      map[string]string `json:"tokens"`
-	GenesisPrev string            `json:"genesis_prev"`
-	Chains      []struct {
+	Version string            `json:"version"`
+	Tokens  map[string]string `json:"tokens"`
+	Rosters []struct {
 		Roster  string `json:"roster"`
 		Records []struct {
 			Record         vectorRecord `json:"record"`
@@ -442,8 +440,7 @@ type recordVectors struct {
 			PreimageSHA256 string       `json:"preimage_sha256"`
 			RecordHash     string       `json:"record_hash"`
 		} `json:"records"`
-		Head string `json:"head"`
-	} `json:"chains"`
+	} `json:"rosters"`
 	WellFormedLines []struct {
 		Roster string `json:"roster"`
 		Line   string `json:"line"`
@@ -474,10 +471,10 @@ func loadRecordVectors(t *testing.T, path string) *recordVectors {
 		}
 		return s
 	}
-	for i := range v.Chains {
-		for j := range v.Chains[i].Records {
-			v.Chains[i].Records[j].Line = sub(v.Chains[i].Records[j].Line)
-			v.Chains[i].Records[j].Record.Proof = sub(v.Chains[i].Records[j].Record.Proof)
+	for i := range v.Rosters {
+		for j := range v.Rosters[i].Records {
+			v.Rosters[i].Records[j].Line = sub(v.Rosters[i].Records[j].Line)
+			v.Rosters[i].Records[j].Record.Proof = sub(v.Rosters[i].Records[j].Record.Proof)
 		}
 	}
 	for i := range v.WellFormedLines {
@@ -493,9 +490,6 @@ func TestVectorsRecord(t *testing.T) {
 	v := loadRecordVectors(t, filepath.Join(vectorsDir, "record.json"))
 	if v.Version != verifier.RecordVersion {
 		t.Errorf("version %q", v.Version)
-	}
-	if v.GenesisPrev != verifier.GenesisPrev {
-		t.Errorf("genesis prev %q", v.GenesisPrev)
 	}
 	t.Run("tokens", func(t *testing.T) {
 		for _, k := range []string{"@PROOF1@", "@PROOF2@", "@PROOF3@"} {
@@ -513,13 +507,12 @@ func TestVectorsRecord(t *testing.T) {
 			}
 		}
 	})
-	for _, chain := range v.Chains {
-		roster := rosterOf(t, chain.Roster)
-		prev := verifier.GenesisPrev
-		for _, c := range chain.Records {
-			t.Run(fmt.Sprintf("chain/%s/seq%d", chain.Roster, c.Record.Seq), func(t *testing.T) {
+	for _, rs := range v.Rosters {
+		roster := rosterOf(t, rs.Roster)
+		for _, c := range rs.Records {
+			t.Run(fmt.Sprintf("rosters/%s/seq%d", rs.Roster, c.Record.Seq), func(t *testing.T) {
 				cr := c.Record
-				r := &verifier.Record{Seq: cr.Seq, Prev: cr.Prev, ScopeString: cr.ScopeString, ScopedID: cr.ScopedID,
+				r := &verifier.Record{Seq: cr.Seq, ScopeString: cr.ScopeString, ScopedID: cr.ScopedID,
 					Accounts: accountsOf(cr.Accounts), Challenge: cr.Challenge, Issuer: cr.Issuer,
 					SMTRoot: cr.SMTRoot, Circuit: cr.Circuit, Proof: cr.Proof}
 				if got := verifier.AccountsText(r.Accounts); got != c.AccountsText {
@@ -542,17 +535,8 @@ func TestVectorsRecord(t *testing.T) {
 				if got := r.Hash(); got != c.RecordHash {
 					t.Errorf("record hash %s, want %s", got, c.RecordHash)
 				}
-				if r.Prev != prev {
-					t.Errorf("prev %s, want %s", r.Prev, prev)
-				}
-				prev = r.Hash()
 			})
 		}
-		t.Run("chain/"+chain.Roster+"/head", func(t *testing.T) {
-			if prev != chain.Head {
-				t.Errorf("head %s, want %s", prev, chain.Head)
-			}
-		})
 	}
 	for i, c := range v.WellFormedLines {
 		t.Run(fmt.Sprintf("well_formed/%d", i), func(t *testing.T) {
@@ -572,14 +556,14 @@ func TestVectorsRecord(t *testing.T) {
 			}
 		})
 	}
-	// v.Files is run by the roster package, which reads whole files.
+	// The roster fingerprints, v.Files and the published roster are run by
+	// the roster package, which reads whole files.
 }
 
 // testRecord returns a well-formed production record to change one field of.
 func testRecord() *verifier.Record {
 	return &verifier.Record{
 		Seq:         1,
-		Prev:        verifier.GenesisPrev,
 		ScopeString: "iamreal:public:0_______________",
 		ScopedID:    "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
 		Accounts:    []verifier.Account{{Platform: "threads", Username: "alice"}},

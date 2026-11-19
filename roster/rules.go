@@ -37,7 +37,7 @@ const (
 	RootBefore = 1
 	RootAfter  = 3
 	// A record's date is no earlier than DateOrderDays before the latest
-	// date among the earlier valid records (check 4).
+	// date among the earlier valid records, of any card (check 4).
 	DateOrderDays = 4
 	// At most MaxSwitches switches on each platform, for good ("Switches
 	// and corrections"). A correction is not counted.
@@ -154,49 +154,45 @@ type slotState struct {
 	correctionDate *verifier.Date
 }
 
+// cardState holds exactly the items of the State table of
+// spec/roster-rules.md: the card's own two, and one slot per platform.
 type cardState struct {
 	slots         map[string]*slotState // one per platform of the table
 	lastCardProof *verifier.Date
-	// perDate is the number of valid records of each date (check 6 and
-	// proofs_on_last_date). Dates more than DateOrderDays before the last
-	// record counted are dropped: check 4 rejects any later record dated
-	// that early before check 6 would ask, and last_card_proof is never
-	// earlier than that record.
-	perDate map[verifier.Date]int
+	// proofsOnLastDate is the number of valid records dated lastCardProof.
+	// A card's dates do not go back (check 4), so it is the only count check
+	// 6 can ask for.
+	proofsOnLastDate int
 }
 
 func (cs *cardState) clone() *cardState {
 	c := &cardState{
-		slots:         make(map[string]*slotState, len(cs.slots)),
-		lastCardProof: cs.lastCardProof,
-		perDate:       make(map[verifier.Date]int, len(cs.perDate)+1),
+		slots:            make(map[string]*slotState, len(cs.slots)),
+		lastCardProof:    cs.lastCardProof,
+		proofsOnLastDate: cs.proofsOnLastDate,
 	}
 	for p, s := range cs.slots {
 		ns := *s
 		c.slots[p] = &ns
 	}
-	for d, n := range cs.perDate {
-		c.perDate[d] = n
-	}
 	return c
 }
 
-// count adds a valid record dated d, and drops the dates no later record
-// can have (see perDate).
-func (cs *cardState) count(d verifier.Date) {
-	cs.perDate[d]++
-	for e := range cs.perDate {
-		if e < d.AddDays(-DateOrderDays) {
-			delete(cs.perDate, e)
-		}
+// onDate returns the number of valid records of the card dated d, for a d
+// that check 4 accepts (not before lastCardProof): proofsOnLastDate if d is
+// lastCardProof, 0 if it is later.
+func (cs *cardState) onDate(d verifier.Date) int {
+	if cs.lastCardProof != nil && *cs.lastCardProof == d {
+		return cs.proofsOnLastDate
 	}
+	return 0
 }
 
 // Rules applies the rules to one record at a time, in seq order, and keeps
 // the state they compute. Apply (a whole roster file) is a loop over it, and
 // the server uses it for each record it appends, so both run the same code.
 //
-// Rules does not check the file as a whole (well-formed lines, seq, prev);
+// Rules does not check the file as a whole (well-formed lines, seq);
 // ReadFile and ReadLine do.
 type Rules struct {
 	roster      verifier.Roster
@@ -220,7 +216,7 @@ func NewRules(r verifier.Roster, proofs ProofVerifier, crls CRLArchive) *Rules {
 }
 
 func (x *Rules) newCard() *cardState {
-	cs := &cardState{slots: map[string]*slotState{}, perDate: map[verifier.Date]int{}}
+	cs := &cardState{slots: map[string]*slotState{}}
 	for _, p := range x.platforms {
 		cs.slots[p.ID] = &slotState{}
 	}
@@ -328,14 +324,19 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	if !ok {
 		return invalid(CodeRoot, "")
 	}
-	// 4. Its date is no earlier than 4 days before the latest valid date.
+	// 4. Its date is no earlier than 4 days before the latest valid date,
+	// and no earlier than its card's last card proof.
 	if x.latestValid != nil && d < x.latestValid.AddDays(-DateOrderDays) {
 		return invalid(CodeDateOrder, fmt.Sprintf("latest earlier valid date %s", x.latestValid))
+	}
+	cs := x.cards[cardKey{r.ScopeString, r.ScopedID}]
+	if cs != nil && cs.lastCardProof != nil && d < *cs.lastCardProof {
+		return invalid(CodeDateOrder, fmt.Sprintf("last card proof %s", cs.lastCardProof))
 	}
 	// 5. The event rules, on every platform of the table, on a copy of the
 	// card's state. One blocked platform blocks the record.
 	next := x.newCard()
-	if cs := x.cards[cardKey{r.ScopeString, r.ScopedID}]; cs != nil {
+	if cs != nil {
 		next = cs.clone()
 	}
 	var kinds []PlatformKind
@@ -354,13 +355,12 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	}
 	// 6. Fewer than 3 earlier valid records of its card have its date. The
 	// effects of the event rules (on the copy) are dropped.
-	if next.perDate[d] >= MaxPerDate {
-		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", next.perDate[d], d))
+	n := next.onDate(d)
+	if n >= MaxPerDate {
+		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", n, d))
 	}
-	next.count(d)
-	if next.lastCardProof == nil || d > *next.lastCardProof {
-		next.lastCardProof = &d
-	}
+	// Check 4 made d no earlier than last_card_proof.
+	next.lastCardProof, next.proofsOnLastDate = &d, n+1
 	res.Valid, res.Kinds = true, kinds
 	return res, next, nil
 }
@@ -465,7 +465,7 @@ func cardStateOf(cs *cardState) CardState {
 	if cs.lastCardProof != nil {
 		d := *cs.lastCardProof
 		out.LastCardProof = &d
-		out.ProofsOnLastDate = cs.perDate[d]
+		out.ProofsOnLastDate = cs.proofsOnLastDate
 	}
 	return out
 }
@@ -554,16 +554,16 @@ func (x *Rules) output() []ScopeState {
 
 // Report is the result of re-verifying a roster file.
 type Report struct {
-	Broken  *Broken // nil if the file is valid
-	Head    string  // the head of a valid file
-	Records int     // the number of records of a valid file
-	State   *State  // the rules applied to a valid file
+	Broken      *Broken // nil if the file is valid
+	Fingerprint string  // the roster fingerprint of a valid file
+	Records     int     // the number of records of a valid file
+	State       *State  // the rules applied to a valid file
 }
 
 // Check reads a roster file of roster r and, if it is valid, applies the
 // rules to it.
 func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Report, error) {
-	records, head, broken := ReadFile(data, r)
+	records, fingerprint, broken := ReadFile(data, r)
 	if broken != nil {
 		return &Report{Broken: broken}, nil
 	}
@@ -571,5 +571,5 @@ func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive
 	if err != nil {
 		return nil, err
 	}
-	return &Report{Head: head, Records: len(records), State: st}, nil
+	return &Report{Fingerprint: fingerprint, Records: len(records), State: st}, nil
 }

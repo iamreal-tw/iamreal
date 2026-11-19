@@ -146,7 +146,7 @@ func TestCard(t *testing.T) {
 		{nil, "2026-03-03.G9PYF6T6FCEQ2GH6DG2XHGFV74"},
 	} {
 		r := &verifier.Record{
-			Seq: uint64(i + 1), Prev: verifier.GenesisPrev, ScopeString: scope, ScopedID: id,
+			Seq: uint64(i + 1), ScopeString: scope, ScopedID: id,
 			Accounts: e.accounts, Challenge: e.challenge, Issuer: "G3",
 			SMTRoot: rootOf(1), Circuit: strings.Repeat("0", 64), Proof: proof,
 		}

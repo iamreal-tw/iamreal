@@ -25,6 +25,10 @@ circuit cannot close.
 - The verification key is the same for the zero-knowledge and the
   non-zero-knowledge settings. It therefore cannot tell the two apart; the
   checks below do.
+- A circuit used by records already written stops being accepted for them
+  only when proofs themselves can no longer be trusted. Those records are
+  then handled as [`roster-rules.md`](roster-rules.md), "When proofs can no
+  longer be trusted", says.
 
 ## Public inputs
 
