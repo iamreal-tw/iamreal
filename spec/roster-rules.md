@@ -377,9 +377,11 @@ these rules.
   the records, picks the version for each record by its date. Both
   implementations of these rules (ADR-0030) keep every version for good.
 - **A card never goes back from a new version to an old one.** The dates of
-  a card only stay the same or move forward (ADR-0024). Records of
-  different cards dated before and after `D` can interleave in `seq` order;
-  the result is still fixed.
+  a card's valid records only stay the same or move forward, by the
+  condition of check 4 on the card's own `last_card_proof` (ADR-0024). A
+  record of the card dated earlier can still be written; it is invalid,
+  with `date_order`. Records of different cards dated before and after `D`
+  can interleave in `seq` order; the result is still fixed.
 - **`D` is at least 3 days after the deploy to the production site**, and is
   announced on the site when the change is merged. There is no other
   period of notice. If the deploy cannot be made in time, another change
@@ -400,12 +402,9 @@ which date). It is added the first time an effective date is needed, and
 adding it changes the result of no record. A version is numbered by the
 version number of these rules (ADR-0025, ADR-0030).
 
-The tables these rules read only widen and grow: platform IDs, `username`
-formats and scope strings are never narrowed or removed
-([`scope.md`](scope.md), "Starting over"). A record already written that a
-narrower table did not accept would make its line malformed and the whole
-roster file broken ([`record.md`](record.md)). Lines are checked before
-these rules run, so an effective date cannot help.
+The tables of [`scope.md`](scope.md) that these rules read only widen and
+grow, so that every record already written stays well formed ("Changing
+the tables").
 
 ### When proofs can no longer be trusted
 
@@ -425,7 +424,7 @@ circuit, or all the records, may then be voided:
   scope string ([`scope.md`](scope.md), "Starting over"), depends on the
   flaw, and is decided in an ADR of its own.
 - The mechanism for voiding is added when it is needed. This exception and
-  its limits hold from the first version of these rules.
+  its limits are written in these rules from their first version.
 
 ## Test vectors
 

@@ -71,13 +71,6 @@ Retiring the scope voids the slots of every platform together (ADR-0017):
 the new version gives every card a new scoped ID, and every cardholder
 declares again on every platform. One platform cannot start over by itself.
 
-The tables of this document only widen and grow: the accepted scope
-strings, the platform IDs and the `username` formats. Nothing is narrowed
-or removed, so that every record already written stays well formed
-([`roster-rules.md`](roster-rules.md), "Changing these rules"). Retiring a
-scope closes it to later records only; the records it accepted stay well
-formed.
-
 ## Platforms
 
 A platform is the service an account is on. A roster accepts records only
@@ -158,11 +151,7 @@ computed. A platform where `Alice` and `alice` are different accounts would
 allow uppercase in its row instead.
 
 The format of a platform is fixed when its row is added. It may be widened
-later (old records stay valid), never narrowed. A record already written
-whose `username` a narrower format did not match would make its line
-malformed and the whole roster file broken ([`record.md`](record.md)). The
-format is checked before the roster rules run, so an effective date
-([`roster-rules.md`](roster-rules.md), "Changing these rules") cannot help.
+later (old records stay valid), never narrowed ("Changing the tables").
 If a platform narrows its own names, the row keeps its format; whether new
 declarations of names the platform no longer allows are refused is a rule
 of the server, not of the roster. The Threads row is
@@ -177,6 +166,21 @@ Every format is written as one character class followed by one length
 range, `[…]{m,n}`: which characters, and how many. A device gets the
 formats from the server as these strings and reads this one form itself, so
 a row never needs more of a regular expression language than that.
+
+## Changing the tables
+
+The tables of this document only widen and grow: the accepted scope
+strings, the platform IDs and the `username` formats. A row is added or a
+format widened; nothing is narrowed or removed. Retiring a scope ("Starting
+over") closes it to later records only; the records it accepted stay well
+formed.
+
+Every record already written must stay well formed whatever changes later
+([`roster-rules.md`](roster-rules.md), "Changing these rules"). A record
+whose scope string, platform ID or `username` a narrower table did not
+accept would make its line malformed and the whole roster file broken
+([`record.md`](record.md)). Lines are checked before the roster rules run,
+so an effective date cannot help.
 
 ## Packing
 
