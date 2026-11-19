@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -21,7 +22,6 @@ import (
 
 const (
 	fingerprintsFileName = "fingerprints.jsonl"
-	hashListDir          = "hashes"
 	// codeDirectory is the code of a roster directory that breaks the
 	// rules of the directory itself. The spec says such a directory is
 	// broken "like a malformed line" but gives it no code of its own.
@@ -33,7 +33,8 @@ const (
 // (fingerprints.jsonl among them) are not part of the roster file.
 var rosterFilePattern = regexp.MustCompile(`^[0-9]{16}\.jsonl$`)
 
-// hashListPattern matches the names of the record hash lists in hashes/.
+// hashListPattern matches the names of the record hash lists in
+// roster.HashListDir.
 var hashListPattern = regexp.MustCompile(`^[0-9]{16}\.txt$`)
 
 // readDirectory reads a roster directory and returns the roster file, the
@@ -91,17 +92,16 @@ func readDirectory(dir string) ([]byte, *roster.Broken, error) {
 }
 
 // checkHashLists checks the record hash lists of a roster directory against
-// the roster's records: every list is in hashes/ with the bytes written
-// from the records, and there is no list without a roster file. It returns
-// every problem, one per list, in name order, and the number of lists.
+// the roster's records: every list is in roster.HashListDir with the bytes
+// written from the records, and there is no list without a roster file. It
+// returns every problem, one per list, in name order, and the number of
+// lists.
 func checkHashLists(dir string, records []*verifier.Record) ([]string, int, error) {
 	want := map[string][]byte{}
-	for _, f := range roster.DirectoryFiles(records) {
-		if filepath.Dir(f.Name) == hashListDir {
-			want[filepath.Base(f.Name)] = f.Data
-		}
+	for _, p := range roster.DirectoryFiles(records) {
+		want[path.Base(p.HashList.Name)] = p.HashList.Data
 	}
-	listDir := filepath.Join(dir, hashListDir)
+	listDir := filepath.Join(dir, roster.HashListDir)
 	entries, err := os.ReadDir(listDir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, 0, err
@@ -122,20 +122,20 @@ func checkHashLists(dir string, records []*verifier.Record) ([]string, int, erro
 	sort.Strings(names)
 	var problems []string
 	for _, name := range names {
-		path := hashListDir + "/" + name
+		listPath := path.Join(roster.HashListDir, name)
 		w, ok := want[name]
 		switch {
 		case !ok:
-			problems = append(problems, path+" has no roster file")
+			problems = append(problems, listPath+" has no roster file")
 		case !found[name]:
-			problems = append(problems, path+" is missing")
+			problems = append(problems, listPath+" is missing")
 		default:
 			got, err := os.ReadFile(filepath.Join(listDir, name))
 			if err != nil {
 				return nil, 0, err
 			}
 			if !bytes.Equal(got, w) {
-				problems = append(problems, path+" is not the record hash list of the roster")
+				problems = append(problems, listPath+" is not the record hash list of the roster")
 			}
 		}
 	}
@@ -149,8 +149,8 @@ type fingerprintLine struct {
 	Fingerprint string
 }
 
-func (h fingerprintLine) line() []byte {
-	return fmt.Appendf(nil, `{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", h.Date, h.Count, h.Fingerprint)
+func (fl fingerprintLine) line() []byte {
+	return fmt.Appendf(nil, `{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", fl.Date, fl.Count, fl.Fingerprint)
 }
 
 var fingerprintLinePattern = regexp.MustCompile(`^\{"date":"([0-9-]{10})","count":([0-9]{1,16}),"fingerprint":"([0-9a-f]{64})"\}\n$`)
@@ -185,15 +185,15 @@ func checkFingerprints(dir string, records []*verifier.Record) ([]string, int, e
 		}
 		raw := data[:end]
 		data = data[end:]
-		h, err := parseFingerprintLine(raw)
+		fl, err := parseFingerprintLine(raw)
 		if err == nil {
-			err = h.check(prev, fingerprints)
+			err = fl.check(prev, fingerprints)
 		}
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s line %d: %v", fingerprintsFileName, n, err))
 			continue
 		}
-		prev = &h
+		prev = &fl
 	}
 	return problems, n, nil
 }
@@ -213,28 +213,28 @@ func parseFingerprintLine(raw []byte) (fingerprintLine, error) {
 	if err != nil {
 		return fingerprintLine{}, fmt.Errorf("count: %v", err)
 	}
-	h := fingerprintLine{d, count, string(m[3])}
-	if !bytes.Equal(h.line(), raw) {
+	fl := fingerprintLine{d, count, string(m[3])}
+	if !bytes.Equal(fl.line(), raw) {
 		return fingerprintLine{}, errors.New("not in its one spelling")
 	}
-	return h, nil
+	return fl, nil
 }
 
-// check checks h against the line before it (nil for the first) and the
+// check checks fl against the line before it (nil for the first) and the
 // roster fingerprints of the roster: fingerprints[c] is that of the first c
 // records.
-func (h fingerprintLine) check(prev *fingerprintLine, fingerprints []string) error {
-	if prev != nil && h.Date <= prev.Date {
-		return fmt.Errorf("date %s is not after %s", h.Date, prev.Date)
+func (fl fingerprintLine) check(prev *fingerprintLine, fingerprints []string) error {
+	if prev != nil && fl.Date <= prev.Date {
+		return fmt.Errorf("date %s is not after %s", fl.Date, prev.Date)
 	}
-	if prev != nil && h.Count < prev.Count {
-		return fmt.Errorf("count %d is less than %d", h.Count, prev.Count)
+	if prev != nil && fl.Count < prev.Count {
+		return fmt.Errorf("count %d is less than %d", fl.Count, prev.Count)
 	}
-	if h.Count >= uint64(len(fingerprints)) {
-		return fmt.Errorf("count %d, but the roster has %d records", h.Count, len(fingerprints)-1)
+	if fl.Count >= uint64(len(fingerprints)) {
+		return fmt.Errorf("count %d, but the roster has %d records", fl.Count, len(fingerprints)-1)
 	}
-	if want := fingerprints[h.Count]; h.Fingerprint != want {
-		return fmt.Errorf("fingerprint %s is not the roster fingerprint of the first %d records, %s", h.Fingerprint, h.Count, want)
+	if want := fingerprints[fl.Count]; fl.Fingerprint != want {
+		return fmt.Errorf("fingerprint %s is not the roster fingerprint of the first %d records, %s", fl.Fingerprint, fl.Count, want)
 	}
 	return nil
 }

@@ -86,8 +86,9 @@ func cut(n int) map[string][]byte {
 // first n records.
 func published(n int) map[string][]byte {
 	files := map[string][]byte{}
-	for _, f := range roster.DirectoryFiles(longRoster()[:n]) {
-		files[f.Name] = f.Data
+	for _, p := range roster.DirectoryFiles(longRoster()[:n]) {
+		files[p.RosterFile.Name] = p.RosterFile.Data
+		files[p.HashList.Name] = p.HashList.Data
 	}
 	return files
 }

@@ -185,7 +185,7 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("card proof %d (%v): %d %v, want %d %s", i+1, p.Body.Accounts, status, out, p.Status, p.Result)
 		}
 	}
-	recs := h.checkChain()
+	recs := h.checkRoster()
 	if len(recs) != 11 {
 		t.Fatalf("%d records", len(recs))
 	}

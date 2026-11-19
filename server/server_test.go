@@ -15,7 +15,7 @@ import (
 )
 
 // Two card proofs submitted at the same time get consecutive seq numbers
-// and the chain does not break; of two with the same challenge, one is
+// and the roster stays valid; of two with the same challenge, one is
 // accepted.
 func TestConcurrentSubmissions(t *testing.T) {
 	crl := g3CRL(t)
@@ -50,7 +50,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 		}
 		seen[seqs[i]] = true
 	}
-	if recs := h.checkChain(); len(recs) != n {
+	if recs := h.checkRoster(); len(recs) != n {
 		t.Errorf("%d records", len(recs))
 	}
 
@@ -73,7 +73,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 	if strings.Count(joined, `"kind":"first"`) != 1 || strings.Count(joined, `"error":"challenge_used"`) != 1 {
 		t.Errorf("same challenge twice: %v", results)
 	}
-	if recs := h.checkChain(); len(recs) != n+1 {
+	if recs := h.checkRoster(); len(recs) != n+1 {
 		t.Errorf("%d records", len(recs))
 	}
 }

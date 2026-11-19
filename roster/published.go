@@ -44,9 +44,13 @@ const LinesPerFile = 1000
 // follows the first before records: before in 16 digits, then ".jsonl".
 func RosterFileName(before uint64) string { return fmt.Sprintf("%016d.jsonl", before) }
 
+// HashListDir is the subdirectory of the roster directory that holds the
+// record hash lists.
+const HashListDir = "hashes"
+
 // HashListName is the path, in the roster directory, of the record hash
 // list of the roster file RosterFileName(before).
-func HashListName(before uint64) string { return fmt.Sprintf("hashes/%016d.txt", before) }
+func HashListName(before uint64) string { return fmt.Sprintf("%s/%016d.txt", HashListDir, before) }
 
 // File is one file of the published roster: its path in the roster
 // directory, with "/" between directories, and its bytes.
@@ -55,12 +59,19 @@ type File struct {
 	Data []byte
 }
 
+// DirectoryPart is one roster file of the published roster and its record
+// hash list.
+type DirectoryPart struct {
+	RosterFile File
+	HashList   File
+}
+
 // DirectoryFiles returns the roster files and the record hash lists of the
 // published roster of records, which are the roster from seq 1, in order:
-// each roster file followed by its list. The fingerprint file is not among
-// them: its lines depend on the days the roster was published.
-func DirectoryFiles(records []*verifier.Record) []File {
-	var out []File
+// one part per roster file. The fingerprint file is not among them: its
+// lines depend on the days the roster was published.
+func DirectoryFiles(records []*verifier.Record) []DirectoryPart {
+	var out []DirectoryPart
 	fp := EmptyFingerprint
 	for before := 0; before < len(records); before += LinesPerFile {
 		end := min(before+LinesPerFile, len(records))
@@ -72,9 +83,10 @@ func DirectoryFiles(records []*verifier.Record) []File {
 			list = append(list, h+"\n"...)
 			fp = NextFingerprint(fp, h)
 		}
-		out = append(out,
-			File{RosterFileName(uint64(before)), file},
-			File{HashListName(uint64(before)), list})
+		out = append(out, DirectoryPart{
+			RosterFile: File{RosterFileName(uint64(before)), file},
+			HashList:   File{HashListName(uint64(before)), list},
+		})
 	}
 	return out
 }

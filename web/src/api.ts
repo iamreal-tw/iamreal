@@ -281,7 +281,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
   return { lastCardProof, proofsOnLastDate, slots, kept, count: b.count as number, head: b.head as string };
 }
 
-/** The fields of a record except `seq` and `prev` (spec/record.md). */
+/** The fields of a record except `seq` (spec/record.md). */
 export interface Submission {
   scope_string: string;
   scoped_id: string;

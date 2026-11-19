@@ -109,13 +109,12 @@ func TestVectorsDirectory(t *testing.T) {
 				}
 				files[f.Name] = b
 			}
-			for i, f := range roster.DirectoryFiles(records) {
-				if i%2 == 1 {
-					if want := d.HashLists[i/2]; f.Name != want.Name || sha256Hex(f.Data) != want.SHA256 {
-						t.Fatalf("list %s, want %s with SHA-256 %s", f.Name, want.Name, want.SHA256)
-					}
-					files[f.Name] = f.Data
+			for i, p := range roster.DirectoryFiles(records) {
+				l := p.HashList
+				if want := d.HashLists[i]; l.Name != want.Name || sha256Hex(l.Data) != want.SHA256 {
+					t.Fatalf("list %s, want %s with SHA-256 %s", l.Name, want.Name, want.SHA256)
 				}
+				files[l.Name] = l.Data
 			}
 			fps := fmt.Sprintf(`{"date":"2026-11-16","count":%d,"fingerprint":"%s"}`+"\n", d.Count, d.Fingerprint)
 			code, out, errOut := runDir(t, writeDir(t, files, fps), "-json")

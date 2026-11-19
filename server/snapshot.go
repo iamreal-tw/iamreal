@@ -20,10 +20,7 @@ import (
 
 // The published roster (spec/record.md, "The published roster"): the
 // roster files and record hash lists come from roster.DirectoryFiles.
-const (
-	fingerprintsFileName = "fingerprints.jsonl"
-	hashListDir          = "hashes"
-)
+const fingerprintsFileName = "fingerprints.jsonl"
 
 var (
 	rosterFilePattern = regexp.MustCompile(`^[0-9]{16}\.jsonl$`)
@@ -133,9 +130,9 @@ func snapshot(c snapshotConfig) int {
 		return refuse("%s: %v", fingerprintsFileName, err)
 	}
 	newLine := fingerprintLine{Date: c.Today, Count: uint64(len(all)), Fingerprint: rep.Fingerprint}
-	for i, h := range lines {
-		if h.Count > uint64(len(all)) || h.Fingerprint != fingerprints[h.Count] {
-			return refuse("%s line %d (%s, %d records) is not a fingerprint of this roster", fingerprintsFileName, i+1, h.Date, h.Count)
+	for i, fl := range lines {
+		if fl.Count > uint64(len(all)) || fl.Fingerprint != fingerprints[fl.Count] {
+			return refuse("%s line %d (%s, %d records) is not a fingerprint of this roster", fingerprintsFileName, i+1, fl.Date, fl.Count)
 		}
 	}
 	if len(lines) > 0 {
@@ -158,7 +155,7 @@ func snapshot(c snapshotConfig) int {
 
 	// Write: the roster files and their lists first, then the fingerprint
 	// line that covers them.
-	if err := os.MkdirAll(filepath.Join(c.OutDir, hashListDir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(c.OutDir, roster.HashListDir), 0o755); err != nil {
 		return fail(err)
 	}
 	for _, f := range files {
@@ -167,8 +164,8 @@ func snapshot(c snapshotConfig) int {
 		}
 	}
 	var fingerprintFile []byte
-	for _, h := range lines {
-		fingerprintFile = append(fingerprintFile, h.line()...)
+	for _, fl := range lines {
+		fingerprintFile = append(fingerprintFile, fl.line()...)
 	}
 	fingerprintFile = append(fingerprintFile, newLine.line()...)
 	if err := writeFileAtomic(filepath.Join(c.OutDir, fingerprintsFileName), fingerprintFile); err != nil {
@@ -183,7 +180,11 @@ func snapshot(c snapshotConfig) int {
 // already there must be the beginning of the file it will be (the last
 // file and its list grow until they are full); any other file of the
 // directory's form is an error, since the roster only grows.
-func planDirectoryFiles(dir string, files []roster.File) ([]roster.File, error) {
+func planDirectoryFiles(dir string, parts []roster.DirectoryPart) ([]roster.File, error) {
+	var files []roster.File
+	for _, p := range parts {
+		files = append(files, p.RosterFile, p.HashList)
+	}
 	want := map[string][]byte{}
 	for _, f := range files {
 		want[f.Name] = f.Data
@@ -192,7 +193,7 @@ func planDirectoryFiles(dir string, files []roster.File) ([]roster.File, error) 
 	for _, sub := range []struct {
 		dir     string
 		pattern *regexp.Regexp
-	}{{"", rosterFilePattern}, {hashListDir, hashListPattern}} {
+	}{{"", rosterFilePattern}, {roster.HashListDir, hashListPattern}} {
 		entries, err := os.ReadDir(filepath.Join(dir, sub.dir))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
@@ -232,8 +233,8 @@ type fingerprintLine struct {
 	Fingerprint string
 }
 
-func (h fingerprintLine) line() []byte {
-	return fmt.Appendf(nil, `{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", h.Date, h.Count, h.Fingerprint)
+func (fl fingerprintLine) line() []byte {
+	return fmt.Appendf(nil, `{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", fl.Date, fl.Count, fl.Fingerprint)
 }
 
 var fingerprintLinePattern = regexp.MustCompile(`^\{"date":"([0-9-]{10})","count":([0-9]{1,16}),"fingerprint":"([0-9a-f]{64})"\}\n$`)
@@ -269,20 +270,20 @@ func readFingerprints(path string) ([]fingerprintLine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %v", n, err)
 		}
-		h := fingerprintLine{d, count, string(m[3])}
-		if !bytes.Equal(h.line(), raw) {
+		fl := fingerprintLine{d, count, string(m[3])}
+		if !bytes.Equal(fl.line(), raw) {
 			return nil, fmt.Errorf("line %d is not in its one spelling", n)
 		}
 		if len(out) > 0 {
 			prev := out[len(out)-1]
-			if h.Date <= prev.Date {
-				return nil, fmt.Errorf("line %d: date %s is not after %s", n, h.Date, prev.Date)
+			if fl.Date <= prev.Date {
+				return nil, fmt.Errorf("line %d: date %s is not after %s", n, fl.Date, prev.Date)
 			}
-			if h.Count < prev.Count {
-				return nil, fmt.Errorf("line %d: count %d is less than %d", n, h.Count, prev.Count)
+			if fl.Count < prev.Count {
+				return nil, fmt.Errorf("line %d: count %d is less than %d", n, fl.Count, prev.Count)
 			}
 		}
-		out = append(out, h)
+		out = append(out, fl)
 	}
 	return out, nil
 }

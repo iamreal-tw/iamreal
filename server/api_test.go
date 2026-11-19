@@ -90,7 +90,7 @@ func TestConfigAndHead(t *testing.T) {
 		t.Errorf("empty head: %d %v", status, body)
 	}
 	h.mustSubmit(h.sub(newCard(), rootOf(t, g3CRL(t)), "threads:alice"), "threads first")
-	recs := h.checkChain()
+	recs := h.checkRoster()
 	_, body = h.do("GET", "/api/v1/head", "")
 	if body["count"] != 1.0 || body["head"] != roster.Fingerprint(recs) {
 		t.Errorf("head: %v", body)
@@ -258,7 +258,7 @@ func TestCardState(t *testing.T) {
 	h.mustSubmit(h.sub(card, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch")
 	h.mustSubmit(h.sub(card, root, "test-example:a-b"), "test-example refresh, threads withdraw")
 	h.mustSubmit(h.sub(newCard(), root, "threads:alice"), "threads first") // another card
-	recs := h.checkChain()
+	recs := h.checkRoster()
 	status, body = ask()
 	want = map[string]any{
 		"last_card_proof": "2026-11-21", "proofs_on_last_date": 2.0,
@@ -730,7 +730,7 @@ func TestEmptyAndSwitchLimit(t *testing.T) {
 	// the sixth switch stays blocked.
 	h.mustSubmit(h.sub(card, root, "threads:h"), "threads refresh")
 	h.wantError(h.sub(card, root, "threads:i"), 400, "switch_limit")
-	if recs := h.checkChain(); len(recs) != 12 {
+	if recs := h.checkRoster(); len(recs) != 12 {
 		t.Errorf("%d records; rejected card proofs must not be appended", len(recs))
 	}
 }
@@ -766,7 +766,7 @@ func TestSwitchRestricted(t *testing.T) {
 				h.wantError(fourth, 403, "switch_restricted")
 				// The whole list is refused, nothing recorded; the challenge
 				// stays usable, and a list without the switch is accepted.
-				if n := len(h.checkChain()); n != 7 {
+				if n := len(h.checkRoster()); n != 7 {
 					t.Errorf("%d records", n)
 				}
 				fourth.Accounts = list("test-example:c-d")
@@ -812,7 +812,7 @@ func TestDailyLimit(t *testing.T) {
 	h.wantError(h.sub(card, root), 400, "daily_limit")
 	// Another card on the same day is not limited.
 	h.mustSubmit(h.sub(newCard(), root, "threads:alice"), "threads first")
-	if recs := h.checkChain(); len(recs) != 4 {
+	if recs := h.checkRoster(); len(recs) != 4 {
 		t.Errorf("%d records; rejected card proofs must not be appended", len(recs))
 	}
 	if out := state(); out["proofs_on_last_date"] != 3.0 || current(out, "threads") != nil {

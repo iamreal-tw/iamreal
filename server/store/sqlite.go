@@ -16,7 +16,7 @@ import (
 // hash is not stored, since it is computed from them. The column prev is
 // what is left of the field of that name, which records no longer have
 // (ADR-0021): it stays so that data files written before still open, is
-// written as ” and is never read.
+// written as the empty string and is never read.
 // A challenge is stored from the moment it is issued until it is deleted
 // after it expired (see DeleteChallengesIssuedBefore).
 const schema = `
@@ -60,7 +60,7 @@ func Open(path string) (*SQLite, error) {
 		return nil, err
 	}
 	// One connection: every read and write of this process is one after
-	// the other, which is what an append-only chain needs.
+	// the other, which is what an append-only roster needs.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema + viewSchema); err != nil {
 		db.Close()

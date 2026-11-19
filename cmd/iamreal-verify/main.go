@@ -215,7 +215,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
 		}
 		if len(listProblems) == 0 {
-			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the roster's\n", hashListDir, lists)
+			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the roster's\n", roster.HashListDir, lists)
 		}
 		if len(fpProblems) == 0 {
 			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, fpLines)

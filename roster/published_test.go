@@ -121,12 +121,12 @@ func TestVectorsFingerprint(t *testing.T) {
 			if got != rs.Fingerprint {
 				t.Errorf("ReadFile: fingerprint %s, want %s", got, rs.Fingerprint)
 			}
-			files := roster.DirectoryFiles(records)
-			if len(files) != 2 || files[1].Name != "hashes/0000000000000000.txt" {
-				t.Fatalf("files %v", names(files))
+			parts := roster.DirectoryFiles(records)
+			if len(parts) != 1 || parts[0].HashList.Name != "hashes/0000000000000000.txt" {
+				t.Fatalf("files %v", names(parts))
 			}
-			if string(files[1].Data) != rs.HashList {
-				t.Errorf("hash list\n%s\nwant\n%s", files[1].Data, rs.HashList)
+			if string(parts[0].HashList.Data) != rs.HashList {
+				t.Errorf("hash list\n%s\nwant\n%s", parts[0].HashList.Data, rs.HashList)
 			}
 		})
 	}
@@ -140,10 +140,10 @@ func TestVectorsFingerprint(t *testing.T) {
 	}
 }
 
-func names(files []roster.File) []string {
+func names(parts []roster.DirectoryPart) []string {
 	var out []string
-	for _, f := range files {
-		out = append(out, f.Name)
+	for _, p := range parts {
+		out = append(out, p.RosterFile.Name, p.HashList.Name)
 	}
 	return out
 }
@@ -153,16 +153,16 @@ func TestVectorsDirectory(t *testing.T) {
 	all := v.generated(t, 2001)
 	for _, d := range v.Generated.Directories {
 		t.Run(d.Name, func(t *testing.T) {
-			files := roster.DirectoryFiles(all[:d.Count])
+			parts := roster.DirectoryFiles(all[:d.Count])
 			var want []string
 			for i := range d.Files {
 				want = append(want, d.Files[i].Name, d.HashLists[i].Name)
 			}
-			if got := names(files); strings.Join(got, " ") != strings.Join(want, " ") {
+			if got := names(parts); strings.Join(got, " ") != strings.Join(want, " ") {
 				t.Fatalf("files %v, want %v", got, want)
 			}
 			for i, f := range d.Files {
-				got := files[2*i]
+				got := parts[i].RosterFile
 				if n := strings.Count(string(got.Data), "\n"); n != f.Lines {
 					t.Errorf("%s: %d lines, want %d", f.Name, n, f.Lines)
 				}
@@ -174,11 +174,12 @@ func TestVectorsDirectory(t *testing.T) {
 				}
 			}
 			for i, h := range d.HashLists {
-				got := strings.Split(strings.TrimSuffix(string(files[2*i+1].Data), "\n"), "\n")
+				list := parts[i].HashList.Data
+				got := strings.Split(strings.TrimSuffix(string(list), "\n"), "\n")
 				if len(got) != h.Lines || got[0] != h.FirstLine || got[len(got)-1] != h.LastLine {
 					t.Errorf("%s: %d lines from %s to %s, want %d from %s to %s", h.Name, len(got), got[0], got[len(got)-1], h.Lines, h.FirstLine, h.LastLine)
 				}
-				if s := sha256Hex(files[2*i+1].Data); s != h.SHA256 {
+				if s := sha256Hex(list); s != h.SHA256 {
 					t.Errorf("%s: SHA-256 %s, want %s", h.Name, s, h.SHA256)
 				}
 			}

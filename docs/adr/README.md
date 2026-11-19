@@ -77,6 +77,7 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
+| 0021 | `GET /api/v1/head` 和 `card-state` 的 `head` 回的是目前存著的全部紀錄的名冊指紋，不是最近一次公布的那一行 | [#70](https://github.com/iamreal-tw/iamreal/issues/70) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
 | 0024 | 規則沒有這一條 | [#28](https://github.com/iamreal-tw/iamreal/issues/28) |

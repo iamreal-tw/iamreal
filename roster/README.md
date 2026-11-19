@@ -9,7 +9,7 @@
 | 檔案 | 內容 |
 |---|---|
 | `file.go` | `ReadFile`：整份檔案的檢查。逐行、照表格的順序（`line`、`seq`），回報第一個失敗的行號和代碼；有效的檔案回傳紀錄和名冊指紋。一行的檢查是 `ReadLine`，後台寫入每一筆之前也用它 |
-| `published.go` | 名冊指紋（`NextFingerprint`、`Fingerprint`，`spec/record.md`「Record hash and the roster fingerprint」）和公布的名冊（`DirectoryFiles`：每 1,000 筆一個名冊檔，檔名是這一檔之前的筆數，每個名冊檔配一份雜湊清單）。重驗指令拿它核對雜湊清單，後台的每日快照拿它寫檔 |
+| `published.go` | 名冊指紋（`NextFingerprint`、`Fingerprint`，`spec/record.md`「Record hash and the roster fingerprint」）和公布的名冊（`DirectoryFiles`：每 1,000 筆一個名冊檔，檔名是這一檔之前的筆數；每個名冊檔和它的雜湊清單是一組 `DirectoryPart`；雜湊清單的目錄名稱是 `HashListDir`）。重驗指令拿它核對雜湊清單，後台的每日快照拿它寫檔 |
 | `rules.go` | `Rules`：一次套用一筆。`NewRules(roster, …)` 帶名冊的種類，因為事件規則要看平台表上的每個平台。每筆紀錄依序跑六項檢查（`proof`、`challenge_reused`、`root`、`date_order`、`empty`／`switch_limit`、`daily_limit`）。第 5 項對平台表上的每個平台（照代號排）拿清單裡那個平台的帳號和名額在這筆之前的狀態比，全部算在副本上：任何一個平台被擋下，整筆 `switch_limit`；每個平台都沒有結果，整筆 `empty`；否則有效，結果是每個平台的（平台、種類、帳號），種類照事件表第一個符合的列：`first`、`refresh`、`correction`（名額最後一次 `first` 或 `switch` 的日期就是這筆的日期時，換帳號不計次）、`switch`（每個平台終身 `MaxSwitches` = 5 次，沒有時間窗口）、擋下，清單裡沒有的平台是 `withdraw`。有效才一次寫回所有平台。`Check` 只回答「這一筆接在後面會怎樣」、不改狀態；`CheckWithCard` 是同一個答案，有效時再加上這張卡片套用後的狀態（和套用後 `Card` 回傳的相同），也不改狀態，後台寫衍生表用；`Apply` 套用；`Card` 回傳一張卡片的狀態（`last_card_proof`、那一天的有效紀錄筆數，和平台表上每個平台一個名額：現在的帳號、上次宣告的帳號、`switch_count`、`correction_date`）；`AccountCards(場合, 平台, 帳號名稱)` 回傳目前在那個平台宣告這個帳號的卡片數（後台送出成功的回應裡的 `account_cards`），從套用時維護的索引回答，不掃過所有卡片；`State` 輸出每張卡片（現在的清單）和每個帳號（平台、帳號名稱）的現況，排序一律照位元組。整份名冊的 `Apply` 就是對每一筆呼叫 `Rules.Apply`，`Check` 把檔案的檢查和規則接起來 |
 
 **規則只有一份。** 後台（`server/`）不自己寫任何一條規則：開機時用 `Rules.Apply` 從頭重算，收到一筆時先用 `Rules.Check` 問會不會有效，寫進資料庫後再 `Rules.Apply`。重驗的人用 `Check`（整份檔案），走的是同一份程式。

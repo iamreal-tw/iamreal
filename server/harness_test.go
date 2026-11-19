@@ -392,10 +392,10 @@ func (h *harness) rosterFile() []byte {
 	return out
 }
 
-// checkChain checks that the stored records form a valid roster file whose
+// checkRoster checks that the stored records form a valid roster file whose
 // roster fingerprint the server reports (GET /api/v1/head still calls it
 // head).
-func (h *harness) checkChain() []*verifier.Record {
+func (h *harness) checkRoster() []*verifier.Record {
 	h.t.Helper()
 	recs, fp, broken := roster.ReadFile(h.rosterFile(), h.roster)
 	if broken != nil {
