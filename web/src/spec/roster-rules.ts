@@ -27,6 +27,12 @@ export const EMPTY_SLOT: Readonly<SlotState> = Object.freeze({ current: null, la
 
 /** At most 3 valid records of a card have the same date (check 6, `daily_limit`). */
 export const MAX_PER_DATE = 3;
+/**
+ * A record's date is no earlier than this many days before the latest date
+ * among the earlier valid records, of any card (check 4, `date_order`). That
+ * half of check 4 needs the whole roster and is not computed here.
+ */
+export const DATE_ORDER_DAYS = 4;
 /** A card has 5 switches on each platform, for good (spec/roster-rules.md, "Switches and corrections"). */
 export const MAX_SWITCHES = 5;
 /**

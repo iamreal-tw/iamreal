@@ -300,11 +300,12 @@ old switch would pass as a correction. Checks 3 and 4 bound this.
   ahead, plus one day around midnight, so an honest record is never caught by
   a record dated ahead of it. Check 3 alone would not stop dates in the past:
   old CRLs stay recognized so that old records keep verifying.
-- **Not before the card's own `last_card_proof`** (check 4). Records and
-  their proofs are public, and a card proof that was signed but never
-  appended can turn up later. Once the card has a valid record of a later
-  date, a record of an earlier date is invalid, whoever sends it. A copy of
-  a record that is in the roster already is caught by check 2.
+- **Not before the card's own `last_card_proof`** (check 4). A card proof
+  that was signed but never appended can be sent later, by whoever holds
+  it. Once the card has a valid record of a later date, a record of an
+  earlier date is invalid, whoever sends it. The records in the roster are
+  public, with their proofs, so anyone can also send a copy of one; a copy
+  is caught by check 2, whatever its date.
 
 The card's own bound does not replace the 4 days. A card that has made no
 card proof for a long time has its `last_card_proof` on the date of its

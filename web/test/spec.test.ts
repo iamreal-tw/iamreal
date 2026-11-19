@@ -10,7 +10,7 @@ import { currentTime, parseChallenge } from "../src/spec/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "../src/spec/date.ts";
 import { declarationCode, declarationPreimage } from "../src/spec/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/spec/field.ts";
-import { type CardState, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, dateBeforeLastCardProof, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/spec/roster-rules.ts";
+import { type CardState, DATE_ORDER_DAYS, EMPTY_SLOT, type SlotState, applyKind, dailyLimitReached, dateBeforeLastCardProof, listOutcome, possibleCard, possibleSlot, slotOutcome } from "../src/spec/roster-rules.ts";
 import { presentationOf } from "../src/platforms.ts";
 import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
 import { lookupScope, scopeOf } from "../src/spec/scope.ts";
@@ -253,7 +253,7 @@ describe("roster-rules.json: what a card proof would do, from the card's state",
         // card's last card proof is caught by the roster's latest date.
         const back = dateBeforeLastCardProof(s, d);
         if (r.valid || ["empty", "switch_limit", "daily_limit"].includes(r.reason)) assert.equal(back, false, `event ${e.seq}: check 4 passed`);
-        if (r.reason === "date_order") assert.ok(back || (latest !== null && d < latest - 4), `event ${e.seq}: date_order`);
+        if (r.reason === "date_order") assert.ok(back || (latest !== null && d < latest - DATE_ORDER_DAYS), `event ${e.seq}: date_order`);
         // Check 6: the card's dates do not go back, so the count of the
         // record's date is proofs_on_last_date or 0, and the device agrees
         // with the rules. It never blocks a valid record.

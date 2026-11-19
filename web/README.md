@@ -388,7 +388,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `src/base.ts` | 頁面和它的檔案放在哪個路徑底下（建置的 `base`，見「網址」） |
 | `src/target.ts`、`src/target-local.ts` | 名冊（場合字串由它決定）、裝置認得的平台、發證金鑰、元件的網址、PIN 等第二次簽章的上限；測試的建置換成 `test/e2e/target.ts`，本機用真卡片的建置（`localcard`）換成 `src/target-local.ts`（只有名冊和平台和正式的不同） |
 | `src/flow.ts` | 過卡的狀態機：`readCard` → `checksDone` → `confirmCard(pin)` → `choose(每個平台輸入的帳號)`（↔ `back()`）→ `proceed(清單)` → 完成；`resubmit`、`cancel`；`phase` 說現在在哪一步；PIN 等第二次簽章的上限 `IDLE_MS`；送出後比對 |
-| `src/spec/` | 規格裡的算法：base32、題目、日期、場合字串、帳號名稱的格式和平台代號（`username-format.ts`）、宣告碼（整份清單）、匿名編號和 10 個字元的短編號、名冊規則的事先計算（每個名額的事件規則、整份清單、規則產生不出來的狀態） |
+| `src/spec/` | 規格裡的算法：base32、題目、日期、場合字串、帳號名稱的格式和平台代號（`username-format.ts`）、宣告碼（整份清單）、匿名編號和 10 個字元的短編號、名冊規則的事先計算（每個名額的事件規則、整份清單、今天是否已經 3 筆、日期是否早於這張卡片的上次過卡日（`dateBeforeLastCardProof`，流程沒有用它）、規則產生不出來的狀態） |
 | `src/certificate.ts`、`src/der.ts` | 讀憑證、照電路的走法預先檢查、選出要用的那一張、驗發證金鑰的章 |
 | `src/issuers.ts` | G2、G3 的發證金鑰，WebCrypto 的 RSA 驗章 |
 | `src/crl/` | 讀清冊並判斷可不可用、從鏡像找清冊並檢查、樹、建樹的 worker |
