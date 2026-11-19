@@ -63,6 +63,7 @@
 - 限流分三層；被打時過卡先讓路；全站的總量上限擋在 `GET /api/v1/config`。[ADR-0026](0026-rate-limiting-in-three-layers.md)
 - 測試網站是同一個 Worker 專案的另一個環境，只收真卡片，不定期清空。[ADR-0028](0028-test-site-is-a-second-environment.md)
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
+- 名冊目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從名冊重算；重建卡片狀態走「從名冊重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-roster-and-crl-archive.md)
 
 ## 隱私和營運者看得到什麼
 
@@ -80,11 +81,12 @@
 | 0021 | `GET /api/v1/head` 和 `card-state` 的 `head` 回的是目前存著的全部紀錄的名冊指紋，不是最近一次公布的那一行 | [#70](https://github.com/iamreal-tw/iamreal/issues/70) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
-| 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53)，備份在 [#51](https://github.com/iamreal-tw/iamreal/issues/51) |
+| 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 測試網站只部署了 `worker/` 的骨架：每個網址回 `404`，不能過卡，沒有測試名冊和它的標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
+| 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | 票還沒開，從 [#51](https://github.com/iamreal-tw/iamreal/issues/51) 拆 |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
 `worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。後台現在還是 Go 的 `server/`。
@@ -95,7 +97,6 @@
 
 - 連線紀錄和每天的總數存在哪裡、誰讀得到、到期怎麼刪（ADR-0022、ADR-0032；[#20](https://github.com/iamreal-tw/iamreal/issues/20)）
 - 重驗沒有通過、排程沒跑時怎麼通知營運者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
-- 備份放在哪裡、怎麼還原（ADR-0025；[#51](https://github.com/iamreal-tw/iamreal/issues/51)）
 - 頁面的資料撐不住時搬到 KV 還是 D1（ADR-0026）
 - 正式名冊開張當天，測試名冊怎麼處理（ADR-0028）
 - 其他服務的場合：格式保留了 `S` 開頭（ADR-0007），算式和整個做法還沒有設計；公開名冊和其他服務的場合之間要不要讓人自願連起來也沒有設計（ADR-0013）
