@@ -1,0 +1,22 @@
+{
+  "name": "iamreal-worker",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#target": "./src/target.ts"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types scripts/dev.ts",
+    "typecheck": "wrangler types --env test --strict-vars=false && tsc -p . && tsc -p test",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "deploy:test": "node --experimental-strip-types scripts/deploy-test.ts"
+  },
+  "dependencies": {
+    "iamreal-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2",
+    "wrangler": "4.160.1"
+  }
+}

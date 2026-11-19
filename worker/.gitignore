@@ -1,0 +1,6 @@
+# wrangler's working files: local builds and the simulated bindings' data.
+.wrangler/
+# The types of the Workers runtime and of the bindings, written by `wrangler types` (pnpm typecheck).
+worker-configuration.d.ts
+# Test runs: the builds the tests make.
+test-output/
