@@ -85,7 +85,6 @@
 | 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 沒有測試網站 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
-| 0031 | 規格還沒寫這個承諾 | [#45](https://github.com/iamreal-tw/iamreal/issues/45) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
 `CLAUDE.md` 的目錄表列了 `worker/`，這個目錄還沒建：後台現在是 Go 的 `server/`。
