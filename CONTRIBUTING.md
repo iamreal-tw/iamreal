@@ -45,6 +45,20 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - 用精確的版本，lockfile 進版控
 - 選發布滿 7 天的版本
 
+## 部署會執行到的東西
+
+合併到 `main` 會部署測試網站，推版本標籤會部署正式網站；部署的工作拿著部署的權杖（ADR-0029）。所以 PR 動到下面任何一項，要逐行看，PR 的說明寫出改了什麼、為什麼：
+
+- `.github/workflows/` 裡的任何檔案
+- 工作流程用的 action：一律釘在完整的 commit SHA，不用標籤或分支
+- 工作流程用 `pull_request_target` 觸發，或把 secrets 交給建置、測試的步驟：不接受
+- wrangler 的設定檔，特別是 `build.command`：部署時會執行它（[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)）
+- `package.json` 的 `scripts`，特別是 `preinstall`、`install`、`postinstall`、`prepare`：安裝套件時就會執行
+- 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
+- 部署的工作會呼叫的任何腳本
+
+審外人的 PR 時，`/code-review` 照這份清單列出動到哪幾項、每一項改了什麼；動到任何一項，維護者自己看過才合併。
+
 ## 工作時對外的請求
 
 - 讀公開的頁面；被要求登入、註冊、送表單，或被擋下來時，停在那裡，把它當成結果寫下來
