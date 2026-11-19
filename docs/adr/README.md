@@ -77,7 +77,7 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
-| 0021 | 紀錄帶 `prev`，公布鏈尾檔 `heads.jsonl` | [#18](https://github.com/iamreal-tw/iamreal/issues/18) |
+| 0021 | `GET /api/v1/head` 和 `card-state` 的 `head` 回的是目前存著的全部紀錄的名冊指紋，不是最近一次公布的那一行 | [#70](https://github.com/iamreal-tw/iamreal/issues/70) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53)，備份在 [#51](https://github.com/iamreal-tw/iamreal/issues/51) |

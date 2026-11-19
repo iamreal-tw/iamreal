@@ -11,7 +11,7 @@ import (
 )
 
 // recordKeys are the string fields of a submitted record: every field of a
-// record except seq and prev, which the server fills in, and accounts, which
+// record except seq, which the server fills in, and accounts, which
 // is a list (docs/api/card-proof.md).
 var recordKeys = []string{"scope_string", "scoped_id", "challenge", "issuer", "smt_root", "circuit", "proof"}
 
@@ -89,9 +89,9 @@ func (s *Server) postRecord(r *http.Request) reply {
 		ScopeString: f["scope_string"], ScopedID: f["scoped_id"], Accounts: accounts,
 		Challenge: f["challenge"], Issuer: f["issuer"], SMTRoot: f["smt_root"], Circuit: f["circuit"], Proof: f["proof"],
 	}
-	// seq and prev are not known yet; CheckValues needs some value for them.
+	// seq is not known yet; CheckValues needs some value for it.
 	withSeq := *rec
-	withSeq.Seq, withSeq.Prev = next, verifier.GenesisPrev
+	withSeq.Seq = next
 	if err := withSeq.CheckValues(s.cfg.Roster); err != nil {
 		return fail(http.StatusBadRequest, errMalformed)
 	}
@@ -137,8 +137,8 @@ func (s *Server) postRecord(r *http.Request) reply {
 	}
 
 	// 5. The roster rules, on the record as it would be written.
-	rec.Seq, rec.Prev = s.count+1, s.head
-	if _, broken := roster.ReadLine(rec.Line(), s.cfg.Roster, int(rec.Seq), s.head); broken != nil {
+	rec.Seq = s.count + 1
+	if _, broken := roster.ReadLine(rec.Line(), s.cfg.Roster, int(rec.Seq)); broken != nil {
 		return s.internal(r, "line", broken) // the format was checked in step 1
 	}
 	res, after, err := s.rules.CheckWithCard(rec)
@@ -179,8 +179,9 @@ func (s *Server) postRecord(r *http.Request) reply {
 		s.cfg.Log.Error("stopping: the rules applied the record differently from how they checked it", "seq", rec.Seq)
 		os.Exit(1)
 	}
-	s.count, s.head = rec.Seq, rec.Hash()
-	out := accepted{Seq: rec.Seq, RecordHash: s.head, Kinds: []acceptedKind{}}
+	hash := rec.Hash()
+	s.count, s.fingerprint = rec.Seq, roster.NextFingerprint(s.fingerprint, hash)
+	out := accepted{Seq: rec.Seq, RecordHash: hash, Kinds: []acceptedKind{}}
 	for _, k := range res.Kinds {
 		out.Kinds = append(out.Kinds, acceptedKind{
 			Platform: k.Platform, Kind: k.Kind, Username: k.Username,

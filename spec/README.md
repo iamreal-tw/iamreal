@@ -13,7 +13,7 @@ there are the names used here.
 | [`challenge.md`](challenge.md) | The challenge: format, date, `current_time` | Draft |
 | [`declaration-code.md`](declaration-code.md) | How the declaration code is computed from a card's list of accounts | Draft |
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
-| [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the chain, how to verify it | Draft |
+| [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the roster fingerprint, the published roster, how to verify it | Draft |
 | [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot and 5 switches per card and platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |

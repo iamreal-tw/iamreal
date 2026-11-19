@@ -131,15 +131,15 @@ func (f *fixture) add(card, date string, accounts ...string) roster.RecordResult
 	return res
 }
 
-// write gives r the next seq and prev and, if the rules accept it, writes
+// write gives r the next seq and, if the rules accept it, writes
 // it with its view as the server does. An invalid record is not written.
 func (f *fixture) write(r *verifier.Record) roster.RecordResult {
 	f.t.Helper()
-	count, head, err := f.s.Head()
+	count, err := f.s.Count()
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	r.Seq, r.Prev = count+1, head
+	r.Seq = count + 1
 	before := f.rules.Card(r.ScopeString, r.ScopedID)
 	res, after, err := f.rules.CheckWithCard(r)
 	if err != nil {

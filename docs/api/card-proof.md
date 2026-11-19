@@ -91,8 +91,11 @@ for all of them (ADR-0017).
     `null`. It is not sent a second time in another form.
   - The dates of the individual switches are not sent. The rules do not
     read them; they are in the roster.
-  - `count` and `head` are the number of records and the head the answer
-    was computed at.
+  - `count` is the number of records the answer was computed at, and
+    `head` the roster fingerprint of those records
+    ([`spec/record.md`](../../spec/record.md)): of every record stored at
+    that moment, not the last line published in `fingerprints.jsonl`. The
+    name `head` is from before ADR-0021; the new backend changes it.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 The server sends facts, not conclusions. The device computes the rest from
@@ -146,7 +149,7 @@ not know" is one that has no row it can read in the platform table of
 
 Submits one card proof: the card's whole list of accounts.
 
-- Request: the fields of a record except `seq` and `prev`
+- Request: the fields of a record except `seq`
   ([`spec/record.md`](../../spec/record.md)):
 
   ```
@@ -324,7 +327,12 @@ What the device does with what it cannot read:
 
 ## `GET /api/v1/head`
 
-- Response `200`: `{"count":138,"head":"…"}`
+- Response `200`: `{"count":138,"head":"…"}`: the number of records stored
+  now and their roster fingerprint
+  ([`spec/record.md`](../../spec/record.md)), not the last line published
+  in `fingerprints.jsonl`. ADR-0021 has the API show only the last
+  fingerprint published and its count; the new backend makes that change,
+  and changes the name `head`.
 
 ## Static files
 
@@ -332,7 +340,7 @@ What the device does with what it cannot read:
 |---|---|
 | `/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `/crl/SHA256.crl` | One CRL of the archive, the original bytes; `SHA256` is the file's SHA-256 as 64 lowercase hex digits |
-| `/roster/` | The roster directory and `heads.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+| `/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
 
 What the device does with the CRL: takes from the index the usable line of
 its issuer with the highest `crl_number`, downloads that file, and checks

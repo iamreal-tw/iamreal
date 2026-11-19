@@ -111,17 +111,16 @@ func testVerifier(t *testing.T, d *proofData, cfg verifier.Config) *verifier.Ver
 	return v
 }
 
-// records returns the test proofs as a chain of records of a test roster.
+// records returns the test proofs as the records of a test roster.
 func records(t *testing.T, d *proofData) []*verifier.Record {
 	t.Helper()
 	var out []*verifier.Record
-	prev := verifier.GenesisPrev
 	for i, p := range d.Records {
 		n, _ := new(big.Int).SetString(p.Nullifier, 16)
 		f, _ := verifier.FieldFromBigInt(n)
 		c := circuitOf(t, p.Circuit)
 		r := &verifier.Record{
-			Seq: uint64(i + 1), Prev: prev, ScopeString: d.ScopeString, ScopedID: verifier.ScopedIDText(f),
+			Seq: uint64(i + 1), ScopeString: d.ScopeString, ScopedID: verifier.ScopedIDText(f),
 			Accounts: accountsOf(p.Accounts), Challenge: p.Challenge, Issuer: p.Issuer,
 			SMTRoot: d.SMTRoot, Circuit: c.VKSHA256,
 			Proof: base64.StdEncoding.EncodeToString(readTestdata(t, p.Circuit+".proof")),
@@ -130,7 +129,6 @@ func records(t *testing.T, d *proofData) []*verifier.Record {
 			t.Fatalf("record %d is not well formed: %v", i+1, err)
 		}
 		out = append(out, r)
-		prev = r.Hash()
 	}
 	return out
 }

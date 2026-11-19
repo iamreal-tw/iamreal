@@ -192,7 +192,7 @@ func (cs *cardState) onDate(d verifier.Date) int {
 // the state they compute. Apply (a whole roster file) is a loop over it, and
 // the server uses it for each record it appends, so both run the same code.
 //
-// Rules does not check the file as a whole (well-formed lines, seq, prev);
+// Rules does not check the file as a whole (well-formed lines, seq);
 // ReadFile and ReadLine do.
 type Rules struct {
 	roster      verifier.Roster
@@ -554,16 +554,16 @@ func (x *Rules) output() []ScopeState {
 
 // Report is the result of re-verifying a roster file.
 type Report struct {
-	Broken  *Broken // nil if the file is valid
-	Head    string  // the head of a valid file
-	Records int     // the number of records of a valid file
-	State   *State  // the rules applied to a valid file
+	Broken      *Broken // nil if the file is valid
+	Fingerprint string  // the roster fingerprint of a valid file
+	Records     int     // the number of records of a valid file
+	State       *State  // the rules applied to a valid file
 }
 
 // Check reads a roster file of roster r and, if it is valid, applies the
 // rules to it.
 func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Report, error) {
-	records, head, broken := ReadFile(data, r)
+	records, fingerprint, broken := ReadFile(data, r)
 	if broken != nil {
 		return &Report{Broken: broken}, nil
 	}
@@ -571,5 +571,5 @@ func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive
 	if err != nil {
 		return nil, err
 	}
-	return &Report{Head: head, Records: len(records), State: st}, nil
+	return &Report{Fingerprint: fingerprint, Records: len(records), State: st}, nil
 }

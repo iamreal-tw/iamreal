@@ -85,7 +85,7 @@ func TestText(t *testing.T) {
 	code, out, _ := runWith(t, threeRecords(t), allVerify{}, everyRoot{})
 	want := `roster file: valid
 records: 3
-head: e839e5c6796a90cfce7bbfaf4c548c6849d340ab757384593f9d9318ab42fab0
+fingerprint: d12c22458126fee296b6216503b96ffe9c7ed37f7e8f8bb7f6f61b9c8b7d070b
 
 records:
   1 valid threads first
@@ -115,13 +115,11 @@ func sameDay(t *testing.T) []byte {
 		t.Fatal(broken)
 	}
 	var file []byte
-	prev := verifier.GenesisPrev
 	for i := 1; i <= 4; i++ {
 		r := *records[0]
-		r.Seq, r.Prev, r.Accounts = uint64(i), prev, []verifier.Account{{Platform: "threads", Username: "alice"}}
+		r.Seq, r.Accounts = uint64(i), []verifier.Account{{Platform: "threads", Username: "alice"}}
 		r.Challenge = "2026-11-16." + verifier.EncodeBase32(bytes.Repeat([]byte{byte(i)}, 16))
 		file = append(file, r.Line()...)
-		prev = r.Hash()
 	}
 	return file
 }
@@ -159,16 +157,14 @@ func TestCorrection(t *testing.T) {
 		t.Fatal(broken)
 	}
 	var file []byte
-	prev := verifier.GenesisPrev
 	for i, step := range []struct{ username, date string }{
 		{"alice", "2026-11-16"}, {"bob", "2026-11-16"}, {"carol", "2027-01-01"},
 	} {
 		r := *records[0]
-		r.Seq, r.Prev = uint64(i+1), prev
+		r.Seq = uint64(i + 1)
 		r.Accounts = []verifier.Account{{Platform: "threads", Username: step.username}}
 		r.Challenge = step.date + "." + verifier.EncodeBase32(bytes.Repeat([]byte{byte(i + 1)}, 16))
 		file = append(file, r.Line()...)
-		prev = r.Hash()
 	}
 	code, out, _ := runWith(t, file, allVerify{}, everyRoot{})
 	for _, line := range []string{"  1 valid threads first\n", "  2 valid threads correction\n", "  3 valid threads switch\n"} {
@@ -194,15 +190,15 @@ func TestCorrection(t *testing.T) {
 func TestJSONShape(t *testing.T) {
 	_, out, _ := runWith(t, threeRecords(t), allVerify{}, everyRoot{}, "-json")
 	var got struct {
-		Valid   bool              `json:"valid"`
-		Head    string            `json:"head"`
-		Results []json.RawMessage `json:"results"`
-		State   []json.RawMessage `json:"state"`
+		Valid       bool              `json:"valid"`
+		Fingerprint string            `json:"fingerprint"`
+		Results     []json.RawMessage `json:"results"`
+		State       []json.RawMessage `json:"state"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatal(err)
 	}
-	if !got.Valid || len(got.Results) != 3 || got.Head == "" {
+	if !got.Valid || len(got.Results) != 3 || got.Fingerprint != "d12c22458126fee296b6216503b96ffe9c7ed37f7e8f8bb7f6f61b9c8b7d070b" {
 		t.Errorf("%s", out)
 	}
 }
@@ -228,7 +224,7 @@ func TestNoArchive(t *testing.T) {
 
 func TestEmptyRoster(t *testing.T) {
 	code, out, _ := runWith(t, nil, allVerify{}, everyRoot{})
-	if code != exitAllValid || !strings.Contains(out, "head: "+verifier.GenesisPrev) {
+	if code != exitAllValid || !strings.Contains(out, "fingerprint: "+roster.EmptyFingerprint) {
 		t.Errorf("exit %d: %s", code, out)
 	}
 }

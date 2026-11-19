@@ -60,7 +60,7 @@ const ProofPath = "/proof"
 //
 //	/api/       the API (api.go)
 //	/crl/       the CRL mirror: index.jsonl and SHA256.crl
-//	/roster/    the published roster: the roster directory and heads.jsonl
+//	/roster/    the published roster: the roster directory, hashes/ and fingerprints.jsonl
 //	/           the home page (visitor.go; only / itself)
 //	/faq        the FAQ
 //	/verify     how to verify

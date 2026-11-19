@@ -15,7 +15,7 @@ import (
 )
 
 // Two card proofs submitted at the same time get consecutive seq numbers
-// and the chain does not break; of two with the same challenge, one is
+// and the roster stays valid; of two with the same challenge, one is
 // accepted.
 func TestConcurrentSubmissions(t *testing.T) {
 	crl := g3CRL(t)
@@ -50,7 +50,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 		}
 		seen[seqs[i]] = true
 	}
-	if recs := h.checkChain(); len(recs) != n {
+	if recs := h.checkRoster(); len(recs) != n {
 		t.Errorf("%d records", len(recs))
 	}
 
@@ -73,7 +73,7 @@ func TestConcurrentSubmissions(t *testing.T) {
 	if strings.Count(joined, `"kind":"first"`) != 1 || strings.Count(joined, `"error":"challenge_used"`) != 1 {
 		t.Errorf("same challenge twice: %v", results)
 	}
-	if recs := h.checkChain(); len(recs) != n+1 {
+	if recs := h.checkRoster(); len(recs) != n+1 {
 		t.Errorf("%d records", len(recs))
 	}
 }
@@ -115,9 +115,8 @@ func TestStartRefusesInvalidRecord(t *testing.T) {
 
 	// A record written past the server: the empty list of a card that
 	// declares no account.
-	_, head := mustHead(t, h)
 	r := &verifier.Record{
-		Seq: 2, Prev: head, ScopeString: testScope, ScopedID: newCard(),
+		Seq: 2, ScopeString: testScope, ScopedID: newCard(),
 		Challenge: h.challenge(), Issuer: "G3", SMTRoot: root, Circuit: circuitOf("G3"), Proof: goodProof,
 	}
 	if err := h.store.Append(r, nil); err != nil {
@@ -159,15 +158,6 @@ func TestStartRefusesBrokenRoster(t *testing.T) {
 	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "record 1: the roster is broken there") {
 		t.Errorf("%v", err)
 	}
-}
-
-func mustHead(t *testing.T, h *harness) (uint64, string) {
-	t.Helper()
-	count, head, err := h.store.Head()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return count, head
 }
 
 // The log of card-state and records has nothing that identifies the
@@ -302,7 +292,9 @@ func TestStaticFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(web, "index.html"), []byte("<p>page</p>"), 0o644)
 	os.Mkdir(filepath.Join(web, "assets"), 0o755)
 	os.WriteFile(filepath.Join(web, "assets", "a.js"), []byte("1"), 0o644)
-	os.WriteFile(filepath.Join(rosterDir(h.data), "heads.jsonl"), []byte("x\n"), 0o644)
+	os.WriteFile(filepath.Join(rosterDir(h.data), "fingerprints.jsonl"), []byte("x\n"), 0o644)
+	os.Mkdir(filepath.Join(rosterDir(h.data), "hashes"), 0o755)
+	os.WriteFile(filepath.Join(rosterDir(h.data), "hashes", "0000000000000000.txt"), []byte("x\n"), 0o644)
 	os.WriteFile(filepath.Join(crlDir(h.data), ".tmp-123"), []byte("half"), 0o644)
 	h.http = h.server.routes(crlDir(h.data), rosterDir(h.data), web)
 
@@ -316,7 +308,8 @@ func TestStaticFiles(t *testing.T) {
 		{"/crl/" + name, 200, "application/pkix-crl"},
 		{"/crl/.tmp-123", 404, ""},
 		{"/crl/", 404, ""}, // no directory listing
-		{"/roster/heads.jsonl", 200, "application/jsonl"},
+		{"/roster/fingerprints.jsonl", 200, "application/jsonl"},
+		{"/roster/hashes/0000000000000000.txt", 200, "text/plain; charset=utf-8"},
 		{"/roster/", 404, ""},
 		{"/proof", 200, "text/html; charset=utf-8"},
 		{"/proof/assets/a.js", 200, "text/javascript; charset=utf-8"},

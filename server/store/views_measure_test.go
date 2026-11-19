@@ -62,7 +62,7 @@ func TestMeasureViews(t *testing.T) {
 			}
 		}
 	}
-	records, _, _ := f.s.Head()
+	records, _ := f.s.Count()
 	t.Logf("built %d cards, %d records in %v", n, records, time.Since(t0).Round(time.Millisecond))
 	today := start.AddDays(300)
 

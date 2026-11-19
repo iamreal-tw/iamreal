@@ -433,11 +433,11 @@ func (p vectorProofs) VerifyRecord(r *verifier.Record) error {
 func (f *fixture) next(card, date string, accounts ...string) (*verifier.Record, *View) {
 	f.t.Helper()
 	r := f.record(testScope, card, date, accountsOf(accounts...))
-	count, head, err := f.s.Head()
+	count, err := f.s.Count()
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	r.Seq, r.Prev = count+1, head
+	r.Seq = count + 1
 	before := f.rules.Card(r.ScopeString, r.ScopedID)
 	res, after, err := f.rules.CheckWithCard(r)
 	if err != nil || !res.Valid {
@@ -457,7 +457,7 @@ func (f *fixture) next(card, date string, accounts ...string) (*verifier.Record,
 // as they were.
 func unchanged(t *testing.T, f *fixture, count uint64, views []string, r *verifier.Record) {
 	t.Helper()
-	if n, _, err := f.s.Head(); err != nil || n != count {
+	if n, err := f.s.Count(); err != nil || n != count {
 		t.Errorf("records: %d (%v), want %d", n, err, count)
 	}
 	if got := dumpViews(t, f.s); !same(got, views) {

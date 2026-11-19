@@ -93,7 +93,7 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 
 沒給 `IAMREAL_CRS` 時，測試自己寫出 `bn254_g1.dat`（上面那 64 個位元組），`New` 照樣檢查 SHA-256。
 
-**標準答案**（`vectors_test.go`）：`spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`、`record.json` 每一個案例各是一個子測試。`scope.json` 的場合、平台、帳號名稱各自也經過一行紀錄的檢查；`declaration-code.json` 比對原文、雜湊、宣告碼、打包值，以及從紀錄重建的最後一個公開輸入；`record.json` 的兩條鏈（正式名冊、測試名冊）比對清單的寫法、整行、雜湊和鏈尾，每一行寫法錯的行都要被拒絕。`record.json` 的 `files` 由 `roster/` 跑。
+**標準答案**（`vectors_test.go`）：`spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`、`record.json` 每一個案例各是一個子測試。`scope.json` 的場合、平台、帳號名稱各自也經過一行紀錄的檢查；`declaration-code.json` 比對原文、雜湊、宣告碼、打包值，以及從紀錄重建的最後一個公開輸入；`record.json` 的 `rosters`（正式名冊、測試名冊）比對清單的寫法、整行和紀錄的雜湊，每一行寫法錯的行都要被拒絕。`record.json` 的名冊指紋、`files` 和公布的名冊由 `roster/` 跑。
 
 `internal_test.go` 另外測：平台表（代號的格式、不重複、正式名冊沒有 `test-` 開頭的、`Platforms` 照代號排序）；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
 

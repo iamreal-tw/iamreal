@@ -25,9 +25,8 @@ archive of MOICA's CRLs. Nothing comes from the server.
 |---|---|
 | Every line is well formed ([`record.md`](record.md), "Lines and files") | `line` |
 | The `seq` of the n-th line is n | `seq` |
-| Every `prev` equals the record hash of the line before it | `prev` |
 
-Lines are checked one at a time, in order. For each line the three checks
+Lines are checked one at a time, in order. For each line the two checks
 run in the order of the table; the first failure ends the check, and the file
 is reported as broken with that line's number (counting from 1) and the
 code. Bytes after the last `LF`, an empty line and a byte order mark fail the
