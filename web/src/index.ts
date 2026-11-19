@@ -70,7 +70,7 @@ export {
   type Progress,
 } from "./flow.ts";
 export type { AcceptedKind, PlatformRow } from "./api.ts";
-export type { Account } from "./spec/declaration-code.ts";
+export type { Account } from "iamreal-protocol/declaration-code.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
 export { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "./platforms.ts";
 export type { Prover, ThreadMode } from "./prover/prover.ts";

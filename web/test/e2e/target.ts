@@ -7,7 +7,7 @@ import type { IssuerKey } from "../../src/issuers.ts";
 import type { Presentation } from "../../src/platforms.ts";
 import { TEST_EXAMPLE } from "../../src/presentations/test-example.ts";
 import { THREADS } from "../../src/presentations/threads.ts";
-import type { Roster } from "../../src/spec/scope.ts";
+import type { Roster } from "iamreal-protocol/scope.ts";
 
 /** The test roster: the card signs `iamreal-test:public:0__________`. */
 export const ROSTER: Roster = "test";

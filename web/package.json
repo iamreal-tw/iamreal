@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@aztec-foundation/bb.js": "6.0.0",
-    "@noir-lang/noir_js": "1.0.0"
+    "@noir-lang/noir_js": "1.0.0",
+    "iamreal-protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

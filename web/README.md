@@ -2,15 +2,15 @@
 
 **這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開持卡人的裝置。** 這裡是從「讀到卡片上的憑證」到「送出證明」之間，在持卡人的瀏覽器裡做的每一件事：過卡的引擎（`src/`，不含畫面）、內政部元件的橋接（`src/card/hipki.ts`）、過卡的畫面（`src/ui/`）。
 
-程式照 `spec/` 和 `docs/api/card-proof.md` 實作，不引用 `server/`。裝置上的保護照 ADR-0015、ADR-0016：保護持卡人、對抗伺服器的限制寫死在這裡，伺服器只能讓它更嚴。
+程式照 `spec/` 和 `docs/api/card-proof.md` 實作，規格裡的算法引用 `protocol/`，不引用 `server/`。裝置上的保護照 ADR-0015、ADR-0016：保護持卡人、對抗伺服器的限制寫死在這裡，伺服器只能讓它更嚴。
 
 ## 在本機用真卡片過卡
 
 需要 Node 22（22.6 以上）、pnpm 10、Go 1.26、`bb` 6.0.0（取得方式見 `verifier/README.md`）、讀卡機和內政部的元件（HiPKI，`http://localhost:61161`）。
 
 ```
+pnpm install --frozen-lockfile             # 在根目錄：pnpm workspace，web/ 和 protocol/ 一起裝
 cd web
-pnpm install --frozen-lockfile
 IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄>
 ```
 
@@ -49,8 +49,8 @@ IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄
 
 公開名冊只有一個場合（ADR-0017），一次過卡處理這張卡片的整份帳號清單，沒有選平台的畫面。
 
-- **場合字串**只有一個，寫死在 `src/spec/scope.ts`：正式的建置是 `iamreal:public:0_______________`，測試的建置是 `iamreal-test:public:0__________`（`src/target.ts` 的 `ROSTER`，測試的建置換成 `test/e2e/target.ts`）。**不從伺服器、平台表或網址來**（ADR-0016）。
-- **有哪些平台、帳號名稱的格式**：從後台的平台表來（`GET /api/v1/config` 的 `platforms`，`src/api.ts` 的 `requestConfig`），讀取卡片時和清冊、電路檔一起拿，在第一次簽章之前。格式只收規格限定的那一種寫法 `[…]{m,n}`，由 `src/spec/username-format.ts` 自己逐字解析，**不交給正規表示式引擎**（後台送任意的表示式，各家引擎的差異、故意寫得很慢的表示式都碰不到）。讀不懂的那一列，那個平台就是「裝置不認得的平台」；一列都讀不懂、沒有 `platforms`、平台代號重複或沒有照順序，整張表讀不懂，停在「連上島民的伺服器」（「伺服器的回應不正確……（代碼 malformed_response）」），不要 PIN。表裡的 `display_name` 照規則檢查讀不讀得懂，**不顯示**。
+- **場合字串**只有一個，寫死在 `protocol/src/scope.ts`：正式的建置是 `iamreal:public:0_______________`，測試的建置是 `iamreal-test:public:0__________`（`src/target.ts` 的 `ROSTER`，測試的建置換成 `test/e2e/target.ts`）。**不從伺服器、平台表或網址來**（ADR-0016）。
+- **有哪些平台、帳號名稱的格式**：從後台的平台表來（`GET /api/v1/config` 的 `platforms`，`src/api.ts` 的 `requestConfig`），讀取卡片時和清冊、電路檔一起拿，在第一次簽章之前。格式只收規格限定的那一種寫法 `[…]{m,n}`，由 `protocol/src/username-format.ts` 自己逐字解析，**不交給正規表示式引擎**（後台送任意的表示式，各家引擎的差異、故意寫得很慢的表示式都碰不到）。讀不懂的那一列，那個平台就是「裝置不認得的平台」；一列都讀不懂、沒有 `platforms`、平台代號重複或沒有照順序，整張表讀不懂，停在「連上島民的伺服器」（「伺服器的回應不正確……（代碼 malformed_response）」），不要 PIN。表裡的 `display_name` 照規則檢查讀不讀得懂，**不顯示**。
 - **寫死在裝置上的每個平台的東西**（`src/platforms.ts`，每個平台一份在 `src/presentations/`）：名稱（Threads）、帳號前面的字（`@`）、輸入的整理（去掉一個前綴、ASCII 大寫改小寫）、格式不對時的提示（`card-proof.json` 的 `formats` 裡的鍵；沒有的平台用「帳號的格式不對。請照平台上顯示的帳號填。」）、帳號公開頁面的網址（`profileUrl`，沒有的平台就不顯示「預覽個人檔案」）。建置決定有哪幾份（`src/target.ts` 的 `PRESENTATIONS`）：正式的建置只有 Threads；測試的建置和本機用真卡片的建置多 `test-example`（`src/presentations/test-example.ts`，正式的建置不含，`test/build.test.ts` 檢查）。**一個平台可以編輯，要後台的表有它讀得懂的那一列，而且裝置有它自己的那一份**（`FlowDeps.knownPlatforms`）。
 - **裝置不認得的平台**（後台的表沒有它讀得懂的那一列，或裝置沒有它自己的那一份）：卡片在那裡沒有帳號就不顯示；有帳號，第 4 步顯示成不能修改的一列（後台回的平台代號和帳號原樣，空白也照原樣顯示），下面一句「這一頁還不認得這個平台。……」，送出的清單原樣帶著它、照平台代號的位元組順序排進去：少了它就等於收回它。引擎只做每個帳號都滿足的最低限度的檢查（平台代號 1 到 21 個 `a-z0-9-`，帳號名稱是 1 個以上可印出的 ASCII、不含 `"` 和 `\`），不合就當成現況讀不懂。
 - **平台表上有、這張卡片的現況裡沒有那一項的平台**：不提供（`docs/api/card-proof.md`）。
@@ -155,21 +155,21 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 | 卡片的兩個簽章 | 卡片（`Card.sign`） | 只進證明的私有輸入。場合字串的簽章在裝置上算成匿名編號。流程物件手上的那一份在送出後、取消、流程停下時清成 0；交給電路的輸入在算完證明後覆寫掉（見「已知的限制」） |
 | 帳號清單 | 這張卡片的現況（`card-state`），持卡人在第 4 步改；裝置不認得的平台上的帳號原樣保留 | 宣告碼、紀錄（送出時）；按「預覽個人檔案」時，只有那一列的帳號放進平台帳號頁面的網址，在新分頁開（見「預覽個人檔案」） |
 | 平台表（有哪些平台、帳號名稱的格式） | 後台（`GET /api/v1/config`） | 只用來決定提供哪些平台和檢查輸入的帳號；不決定場合字串；顯示名稱不用 |
-| 匿名編號 | 裝置自己算（`spec/scoped-id.ts`） | `POST /api/v1/card-state` 的內容（不放網址）；紀錄 |
-| 場合字串 | 寫死的公開名冊的那一個（`src/spec/scope.ts`，名冊由建置決定：`src/target.ts` 的 `ROSTER`） | 卡片簽；紀錄 |
-| `current_time` | 裝置的時鐘，絕對時間換成 UTC+8 的日期（`src/spec/date.ts`），不用裝置設定的時區 | 證明的公開輸入 |
+| 匿名編號 | 裝置自己算（`protocol/src/scoped-id.ts`） | `POST /api/v1/card-state` 的內容（不放網址）；紀錄 |
+| 場合字串 | 寫死的公開名冊的那一個（`protocol/src/scope.ts`，名冊由建置決定：`src/target.ts` 的 `ROSTER`） | 卡片簽；紀錄 |
+| `current_time` | 裝置的時鐘，絕對時間換成 UTC+8 的日期（`protocol/src/date.ts`），不用裝置設定的時區 | 證明的公開輸入 |
 | 失敗的原因 | 裝置自己的檢查 | 只回給呼叫的程式（`FlowStop`）。沒有任何請求帶著它，也不寫進任何紀錄（`test/flow.test.ts` 每一個失敗的測試都檢查） |
 
 ## 從伺服器拿到的值，裝置怎麼檢查（ADR-0016 落到程式上）
 
 | 值 | 從哪裡拿 | 裝置怎麼檢查 | 程式 |
 |---|---|---|---|
-| 題目 | `POST /api/v1/challenges` | 整個字串符合唯一寫法（格式、字母表、最後一個字的補位是 0、日期存在、年份 2000 到 2049）；日期是裝置時鐘的台灣今天，否則停下，卡片不簽第二次。`current_time` 用裝置自己的日期 | `src/spec/challenge.ts`、`src/flow.ts` 的 `proceed` |
+| 題目 | `POST /api/v1/challenges` | 整個字串符合唯一寫法（格式、字母表、最後一個字的補位是 0、日期存在、年份 2000 到 2049）；日期是裝置時鐘的台灣今天，否則停下，卡片不簽第二次。`current_time` 用裝置自己的日期 | `protocol/src/challenge.ts`、`src/flow.ts` 的 `proceed` |
 | 清冊可以多舊 `crl_max_age_days` | `GET /api/v1/config` | 非負整數；`L` = 它和內建的 7 取小（伺服器回 365 也只用 7）；讀不懂就停 | `src/api.ts` 的 `requestConfig`、`src/crl/revocation.ts` 的 `crlMaxAge` |
 | 存檔索引 | `/crl/index.jsonl` | 只用來找檔案：自己那把發證金鑰、可用、`crl_number` 最高的那一行的 `sha256`。樹根、日期等其他欄位都不讀。編號最高的有兩個不同檔案時停下 | `src/crl/revocation.ts` 的 `chooseFromIndex` |
 | 廢止清冊 | `/crl/SHA256.crl` | 檔案的 SHA-256 等於檔名；嚴格的 DER；用寫死的發證金鑰（WebCrypto）驗內政部的章；「Which CRLs」的每一條，原因代碼和順序和 `crl/` 相同；編號不低於這台裝置記住的最高編號；台灣今天減清冊日期不超過 `L` 天；樹自己建 | `src/crl/crl.ts`、`src/crl/revocation.ts`、`src/crl/tree.ts` |
-| 平台表 | `GET /api/v1/config` 的 `platforms` | 是清單；寫了平台代號的每一項要照代號嚴格遞增（重複就是兩個答案，整張表讀不懂）；一列要讀得懂：平台代號 1 到 21 個 `a-z0-9-`、顯示名稱是 1 到 100 個字元且沒有控制字元、格式是 `[…]{m,n}` 那一種寫法（自己逐字解析：類別裡 `x-y` 是範圍、其他字元照字面；含 `"`、`\`、控制字元、空白、非 ASCII、`[`、開頭的 `^` 的類別不讀；`1 ≤ m ≤ n`、不帶前導零）。讀不懂的一列是裝置不認得的平台；一列都讀不懂就停（`malformed_response`），在第一次簽章之前。**不從這張表拿場合字串，也不顯示它的 `display_name`**：平台的名稱寫死在裝置上（漏洞 M10 的「給錯的顯示名稱」因此不成立；第 5 步仍在名稱旁邊寫出平台代號）。裝置沒有自己那一份的平台，即使這一列讀得懂，也是裝置不認得的平台 | `src/api.ts` 的 `requestConfig`、`src/spec/username-format.ts` |
-| 這張卡片的現況 | `POST /api/v1/card-state` | 格式：`last_card_proof`（日期或 null）、`proofs_on_last_date`（整數）、`platforms`（物件）、`count`、`head`（64 個十六進位數字）；平台表上每個有一項的平台，那一項要讀得懂：`current`、`last_declared` 是 null 或合那個平台的格式，`switch_count` 是 0 到 5 的整數，`correction_date` 是日期或 null。裝置不認得的平台那一項：`current` 是 null 就忽略；有帳號就原樣保留，但平台代號和帳號要過最低限度的檢查；那一項不是物件、沒有 `current` 都當成讀不懂。名冊規則產生不出來的組合當成讀不懂的回應（`malformed_response`）：有 `current` 而 `last_declared` 不同；`last_declared` 和 `correction_date` 只有一個有值；沒有帳號卻有更換次數；有帳號而沒有 `last_card_proof`；`correction_date` 晚於 `last_card_proof`；任何日期晚於今天加 3 天（`spec/roster-rules.md`「How far dates are trusted」）；`proofs_on_last_date` 沒有 `last_card_proof` 時不是 0、有的時候不在 1 到 3 之間（`src/spec/roster-rules.ts` 的 `possibleSlot`、`possibleCard`）。每個平台會是哪一種（`first`、`refresh`、`correction`、`switch`、`withdraw`，或擋下）、還可以更換幾次（規則是 5 減掉次數）、今天改掉算不算更換（`correction_date` 是不是裝置自己的台灣今天）、今天是不是已經有 3 筆（`last_card_proof` 是今天而且 `proofs_on_last_date` 是 3），由裝置從這些事實和今天的日期自己算。一張卡片的日期不往回（`spec/roster-rules.md` 檢查 4）：`last_card_proof` 早於今天時，今天是 0 筆；晚於今天時，日期是今天的紀錄是 `date_order`，裝置不先擋，由後台的規則決定（送出時回 `date_order`；`src/spec/roster-rules.ts` 的 `dateBeforeLastCardProof` 算得出來，流程沒有用它）。不能做的清單引擎在 `choose` 拒絕，`proceed` 簽之前用當下的日期再算一次，和畫面說的不同就停。事實本身沒辦法檢查，見「已知的限制」 | `src/api.ts` 的 `requestCardState`、`src/spec/roster-rules.ts`、`src/flow.ts` 的 `confirmCard`、`consequenceOf`、`proceed` |
+| 平台表 | `GET /api/v1/config` 的 `platforms` | 是清單；寫了平台代號的每一項要照代號嚴格遞增（重複就是兩個答案，整張表讀不懂）；一列要讀得懂：平台代號 1 到 21 個 `a-z0-9-`、顯示名稱是 1 到 100 個字元且沒有控制字元、格式是 `[…]{m,n}` 那一種寫法（自己逐字解析：類別裡 `x-y` 是範圍、其他字元照字面；含 `"`、`\`、控制字元、空白、非 ASCII、`[`、開頭的 `^` 的類別不讀；`1 ≤ m ≤ n`、不帶前導零）。讀不懂的一列是裝置不認得的平台；一列都讀不懂就停（`malformed_response`），在第一次簽章之前。**不從這張表拿場合字串，也不顯示它的 `display_name`**：平台的名稱寫死在裝置上（漏洞 M10 的「給錯的顯示名稱」因此不成立；第 5 步仍在名稱旁邊寫出平台代號）。裝置沒有自己那一份的平台，即使這一列讀得懂，也是裝置不認得的平台 | `src/api.ts` 的 `requestConfig`、`protocol/src/username-format.ts` |
+| 這張卡片的現況 | `POST /api/v1/card-state` | 格式：`last_card_proof`（日期或 null）、`proofs_on_last_date`（整數）、`platforms`（物件）、`count`、`head`（64 個十六進位數字）；平台表上每個有一項的平台，那一項要讀得懂：`current`、`last_declared` 是 null 或合那個平台的格式，`switch_count` 是 0 到 5 的整數，`correction_date` 是日期或 null。裝置不認得的平台那一項：`current` 是 null 就忽略；有帳號就原樣保留，但平台代號和帳號要過最低限度的檢查；那一項不是物件、沒有 `current` 都當成讀不懂。名冊規則產生不出來的組合當成讀不懂的回應（`malformed_response`）：有 `current` 而 `last_declared` 不同；`last_declared` 和 `correction_date` 只有一個有值；沒有帳號卻有更換次數；有帳號而沒有 `last_card_proof`；`correction_date` 晚於 `last_card_proof`；任何日期晚於今天加 3 天（`spec/roster-rules.md`「How far dates are trusted」）；`proofs_on_last_date` 沒有 `last_card_proof` 時不是 0、有的時候不在 1 到 3 之間（`protocol/src/roster-rules.ts` 的 `possibleSlot`、`possibleCard`）。每個平台會是哪一種（`first`、`refresh`、`correction`、`switch`、`withdraw`，或擋下）、還可以更換幾次（規則是 5 減掉次數）、今天改掉算不算更換（`correction_date` 是不是裝置自己的台灣今天）、今天是不是已經有 3 筆（`last_card_proof` 是今天而且 `proofs_on_last_date` 是 3），由裝置從這些事實和今天的日期自己算。一張卡片的日期不往回（`spec/roster-rules.md` 檢查 4）：`last_card_proof` 早於今天時，今天是 0 筆；晚於今天時，日期是今天的紀錄是 `date_order`，裝置不先擋，由後台的規則決定（送出時回 `date_order`；`protocol/src/roster-rules.ts` 的 `dateBeforeLastCardProof` 算得出來，流程沒有用它）。不能做的清單引擎在 `choose` 拒絕，`proceed` 簽之前用當下的日期再算一次，和畫面說的不同就停。事實本身沒辦法檢查，見「已知的限制」 | `src/api.ts` 的 `requestCardState`、`protocol/src/roster-rules.ts`、`src/flow.ts` 的 `confirmCard`、`consequenceOf`、`proceed` |
 | 清單裡沒有輸入的帳號 | 上一列（現在宣告的、原樣保留的） | 持卡人什麼都不改時，清單裡的帳號由伺服器的回答決定；清空一列時，被收回的帳號也是。伺服器謊報認不出持卡人（它已經知道這個匿名編號），只能讓清單少了帳號或多了帳號：第 5 步列出整份要簽的清單和每一列會發生什麼，**包含會被收回的**（漏洞 L2），持卡人看得到；`proceed(清單)` 要呼叫的程式傳回畫面上顯示、持卡人確認過的清單，和引擎算的不同就停，卡片不簽第二次 | `src/flow.ts` 的 `consequenceOf`、`proceed` |
 | 什麼時候向後台查現況 | （裝置決定） | 不需要簽章就能做的檢查全部通過之後，卡片才簽第一次、裝置才帶著匿名編號查現況：憑證的預先檢查、清冊下載並驗過、樹建完、序號不在樹裡、電路檔和通用參數的雜湊對。否則後台會看到「這個匿名編號查過現況、之後沒有下文」，能和它的鏡像給的清冊對起來（ADR-0015、ADR-0016）。檢查還沒完成時 `phase` 是 `checking`，畫面不顯示 PIN 欄位；`checksDone()` 通過後是 `ready_for_pin`。`confirmCard` 自己也先等這些檢查 | `src/flow.ts` 的 `startBackground`、`checksDone`、`confirmCard` |
 | 電路 | `/proof/circuits/card_proof_rs2048.json`、`card_proof_rs4096.json` | SHA-256 寫死（`circuits/README.md`）；不同就停，在卡片簽章之前 | `src/prover/artifacts.ts` |
@@ -178,7 +178,7 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 | 什麼時候回答 | 每個請求 | 每個請求有時間上限，連回應的內容一起算；到了就中斷請求，當成沒有回應（`network`），和連不上走同一條路。設定、現況、題目、送出 30 秒（`API_TIMEOUT_MS`：都是小的 JSON，後台從記憶體回答或驗一份證明）；清冊的索引和清冊、電路檔、通用參數 5 分鐘（`FILE_TIMEOUT_MS`：讀卡時一起下載的 G2 清冊 16.9 MB、通用參數 8 MiB、電路檔 0.8 MB 約 26 MB，5 分鐘容得下約 0.7 Mbit/s；都在第一次簽章之前，沒有任何祕密在等它們）。兩次簽章之間的 5 分鐘不靠這些上限，見「PIN 經過哪些程式」 | `src/api.ts` 的 `withTimeout` |
 | 錯誤代碼 | 每個介面 | 只收 `[a-z_]{1,40}`，其他寫成 `http_狀態碼`；只回給呼叫的程式。送出時，沒有回應、`429`、`crl_stale` 以外的 5xx（`internal`）可以用 `resubmit()` 原封不動再送；其他代碼（包括 `503` `crl_stale`）結束流程 | `src/api.ts`、`src/flow.ts` 的 `submit` |
 
-**寫死在頁面裡的**：場合字串（`src/spec/scope.ts`）和建置用的名冊（`src/target.ts` 的 `ROSTER`：正式的建置是 `production`，測試的建置、本機用真卡片的建置是 `test`）、每個平台的名稱和寫法（`src/presentations/`，建置決定有哪幾份）、G2 和 G3 的發證金鑰（`src/issuers.ts`，和 `spec/vectors/issuers.json`、`crl/` 的憑證檔比對過）、電路和通用參數的 SHA-256、內建的 7 天、證明的設定（零知識、`noir-recursive`，`src/prover/prover.ts`）、證明的執行緒上限。
+**寫死在頁面裡的**：場合字串（`protocol/src/scope.ts`）和建置用的名冊（`src/target.ts` 的 `ROSTER`：正式的建置是 `production`，測試的建置、本機用真卡片的建置是 `test`）、每個平台的名稱和寫法（`src/presentations/`，建置決定有哪幾份）、G2 和 G3 的發證金鑰（`src/issuers.ts`，和 `spec/vectors/issuers.json`、`crl/` 的憑證檔比對過）、電路和通用參數的 SHA-256、內建的 7 天、證明的設定（零知識、`noir-recursive`，`src/prover/prover.ts`）、證明的執行緒上限。
 
 **頁面本身**（HTML、JavaScript、bb.js 和 Noir 的 WebAssembly）和 API 從同一台伺服器來。只有電路檔和通用參數有寫死的 SHA-256；頁面的指令碼（`index.html` 的 `<script>` 沒有 `integrity`）、bb.js 的 WebAssembly（`/proof/bb/barretenberg*.wasm.gz`，bb.js 自己用網址抓）、Noir 的兩個 WebAssembly（`/proof/assets/acvm_js_bg-*.wasm`、`/proof/assets/noirc_abi_wasm_bg-*.wasm`）都**沒有核對雜湊**。頁面和這些檔案由同一個來源提供時，這不多一個對手：能換掉 WebAssembly 的人也能換掉頁面本身，ADR-0016 的「代價」寫明了這個前提（用的頁面就是公開的這一份）。**頁面和靜態檔分開放時要補**（部署時要做的事）：放靜態檔的那一邊換掉 WebAssembly，就看得到證明的全部私有輸入，而換電路檔反而會被擋下。
 
@@ -282,8 +282,8 @@ default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; con
 需要 Node 22（22.6 以上）、pnpm 10。
 
 ```
+pnpm install --frozen-lockfile     # 在根目錄：pnpm workspace，web/ 和 protocol/ 一起裝
 cd web
-pnpm install --frozen-lockfile
 pnpm fetch-crs        # 下載通用參數到 crs/（不進版控），核對 SHA-256
 pnpm typecheck
 pnpm test             # Node 裡的測試，約 20 秒（含一次正式的建置）
@@ -300,7 +300,7 @@ pnpm build            # 正式的建置，到 dist/
 
 | 檔案 | 測什麼 |
 |---|---|
-| `test/spec.test.ts` | `spec/vectors/` 的 `challenge.json`、`scope.json`（兩個場合字串；平台代號；帳號名稱照它的平台的格式：格式字串從 `spec/scope.md` 的平台表讀出來，交給 `src/spec/username-format.ts` 自己解析，和標準答案逐案相同；格式字串不是那一種寫法時讀不懂）、`declaration-code.json`（整份清單的原文、SHA-256、宣告碼、打包值）、`scoped-id.json`（短編號 10 個字元）、`issuers.json`（加上 `crl/` 的兩張發證憑證）、`roster-rules.json`（每個案例重播事件：裝置對每一筆清單算出的每個平台的種類和標準答案的 `kinds` 相同，`switch_limit`、`empty` 也相同；`daily_limit` 的紀錄，事件規則本身接受，裝置也算得出那一天已經 3 筆（一張卡片的日期不往回，所以 `daily_limit` 的日期一定是 `last_card_proof`）；`date_order` 的紀錄，日期早於這張卡片的 `last_card_proof` 時裝置也算得出（`dateBeforeLastCardProof`），不是的就早於名冊上最晚的有效日期 4 天以上；有效的紀錄和停在檢查 4 之後的紀錄，裝置不說日期往回；有效的紀錄裝置從不擋；重播出的每張卡片的清單、`last_card_proof`、`proofs_on_last_date` 和每個名額的 `current`、`last_declared`、`switch_count`、`correction_date` 和標準答案相同；規則產生得出來的每個狀態裝置都讀得懂）。標準答案直接讀那些檔案，不複製 |
+| `test/tables.test.ts` | 寫死在頁面裡的表對 `spec/`：`issuers.json`（G2、G3 的發證金鑰，加上 `crl/` 的兩張發證憑證）；Threads 的輸入整理只把 ASCII 改小寫，整理後的帳號照 `spec/scope.md` 平台表的格式檢查；`test-example` 照輸入原樣、沒有前綴。規格裡的算法對 `spec/vectors/` 的測試在 `protocol/`（見 `protocol/README.md`） |
 | `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；分份建樹和一次建的結果相同；索引怎麼選 |
 | `test/certificate.test.ts` | 照電路的走法預先檢查憑證：國民正卡通過；加密用憑證被跳過；過期（含到期日當天最後一秒）、還沒生效、外來人口、`cardHolderRank`、4096 位元的卡片金鑰、發證者名稱太長、金鑰用途不在第三個、不是兩把發證金鑰簽的，各自回對應的原因 |
 | `test/copy.test.ts` | `design/copy/card-proof.json` 和 `card-proof.md` 的句子兩個方向都相同（Markdown 的每個程式碼區塊和表格裡畫面的那幾欄；剩下的只能是照原樣顯示的值和畫按鈕、清單的符號，見「畫面和引擎怎麼分層」）；`src/ui/` 和 HTML 裡沒有中日韓文字 |
@@ -388,7 +388,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `src/base.ts` | 頁面和它的檔案放在哪個路徑底下（建置的 `base`，見「網址」） |
 | `src/target.ts`、`src/target-local.ts` | 名冊（場合字串由它決定）、裝置認得的平台、發證金鑰、元件的網址、PIN 等第二次簽章的上限；測試的建置換成 `test/e2e/target.ts`，本機用真卡片的建置（`localcard`）換成 `src/target-local.ts`（只有名冊和平台和正式的不同） |
 | `src/flow.ts` | 過卡的狀態機：`readCard` → `checksDone` → `confirmCard(pin)` → `choose(每個平台輸入的帳號)`（↔ `back()`）→ `proceed(清單)` → 完成；`resubmit`、`cancel`；`phase` 說現在在哪一步；PIN 等第二次簽章的上限 `IDLE_MS`；送出後比對 |
-| `src/spec/` | 規格裡的算法：base32、題目、日期、場合字串、帳號名稱的格式和平台代號（`username-format.ts`）、宣告碼（整份清單）、匿名編號和 10 個字元的短編號、名冊規則的事先計算（每個名額的事件規則、整份清單、今天是否已經 3 筆、日期是否早於這張卡片的上次過卡日（`dateBeforeLastCardProof`，流程沒有用它）、規則產生不出來的狀態） |
+| `protocol/`（另一個目錄） | 規格裡的算法：base32、題目、日期、場合字串、帳號名稱的格式和平台代號（`username-format.ts`）、宣告碼（整份清單）、匿名編號和 10 個字元的短編號、名冊規則的事先計算（每個名額的事件規則、整份清單、今天是否已經 3 筆、日期是否早於這張卡片的上次過卡日（`dateBeforeLastCardProof`，流程沒有用它）、規則產生不出來的狀態）、位元組的小工具。`web/` 用 workspace 的方式引用它（`iamreal-protocol/…`），見 `protocol/README.md` |
 | `src/certificate.ts`、`src/der.ts` | 讀憑證、照電路的走法預先檢查、選出要用的那一張、驗發證金鑰的章 |
 | `src/issuers.ts` | G2、G3 的發證金鑰，WebCrypto 的 RSA 驗章 |
 | `src/crl/` | 讀清冊並判斷可不可用、從鏡像找清冊並檢查、樹、建樹的 worker |
@@ -400,7 +400,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `scripts/` | 下載通用參數、從 `nargo` 的輸出寫出 `circuits/` 的檔案、在本機整條跑（`local.ts`） |
 | `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器；`test/e2e/` 是無頭瀏覽器的測試、假元件、量測 |
 
-執行時的依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和電路的程式庫釘的相同）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，`pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本。沒有介面框架；DER 自己解析。
+執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和電路的程式庫釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
 
 ## 已知的限制
 

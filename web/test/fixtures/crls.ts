@@ -1,6 +1,6 @@
 // CRLs in MOICA's layout (v2, authorityKeyIdentifier and cRLNumber, each
 // entry a non-critical reasonCode), signed by a test key.
-import { sha256Hex } from "../../src/bytes.ts";
+import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { type TestKey, hex, integer, seq, seqOf, signed, tlv, utcTime } from "./der-build.ts";
 import { name } from "./certs.ts";
 

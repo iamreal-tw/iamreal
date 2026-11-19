@@ -14,7 +14,7 @@ import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
 import type { Presentation } from "./platforms.ts";
 import { TEST_EXAMPLE } from "./presentations/test-example.ts";
 import { THREADS } from "./presentations/threads.ts";
-import type { Roster } from "./spec/scope.ts";
+import type { Roster } from "iamreal-protocol/scope.ts";
 
 /** The test roster: never the public roster's scope string. */
 export const ROSTER: Roster = "test";

@@ -3,9 +3,9 @@
 // mirror's index, download it, and check everything itself. The index is
 // used only to find the file.
 import { type Fetch, ServerError, getBytes } from "../api.ts";
-import { sha256Hex } from "../bytes.ts";
+import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { type IssuerKey, importRsaKey } from "../issuers.ts";
-import { type Day, taiwanDayOfSeconds } from "../spec/date.ts";
+import { type Day, taiwanDayOfSeconds } from "iamreal-protocol/date.ts";
 import type { CrlNumberStore } from "../storage.ts";
 import { Unusable, type UsableCrl, usableCrl } from "./crl.ts";
 

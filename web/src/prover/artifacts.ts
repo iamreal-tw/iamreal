@@ -3,7 +3,7 @@
 // other bytes stops the card proof; it cannot choose the circuit or the CRS.
 import { type Fetch, getBytes } from "../api.ts";
 import { BASE } from "../base.ts";
-import { sha256Hex } from "../bytes.ts";
+import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import type { CircuitName } from "../issuers.ts";
 
 /** circuits/README.md: the compiled circuits of zkid-noir 497b610, stripped. */

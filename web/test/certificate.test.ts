@@ -3,9 +3,9 @@
 // the certificate among those on the card.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { concatBytes } from "../src/bytes.ts";
+import { concatBytes } from "iamreal-protocol/bytes.ts";
 import { selectCertificate, walkTbs } from "../src/certificate.ts";
-import { parseDay } from "../src/spec/date.ts";
+import { parseDay } from "iamreal-protocol/date.ts";
 import {
   AUTHORITY_KEY_ID,
   CERT_POLICIES,
