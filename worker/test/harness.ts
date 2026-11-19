@@ -9,15 +9,19 @@ import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
-import { type TestIssuer, WORKER_DIR, buildWorker } from "./build.ts";
+import type { IssuerKey, IssuerName } from "../src/issuers.ts";
+import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
+import { WORKER_DIR, buildWorker } from "./build.ts";
 
 /** The cron expression of the test environment (wrangler.jsonc). */
 export const HOURLY = "0 * * * *";
 
-export type IssuerName = "G2" | "G3";
-
-/** The path of each issuer's CRL on the fake MOICA (test-build/target.ts). */
-const CRL_PATHS: Readonly<Record<IssuerName, string>> = { G2: "/g2/complete.crl", G3: "/g3/complete.crl" };
+/** What the fake MOICA does with a request for one issuer key's CRL. */
+type Answer =
+  | { readonly kind: "body"; readonly body: Uint8Array }
+  | { readonly kind: "status"; readonly status: number }
+  | { readonly kind: "cut"; readonly sent: Uint8Array; readonly contentLength: number | undefined }
+  | { readonly kind: "stall"; readonly sent: Uint8Array | undefined };
 
 /** One request the fake MOICA received. */
 export interface MoicaRequest {
@@ -27,12 +31,12 @@ export interface MoicaRequest {
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
 }
 
-/** A local server in MOICA's place: one CRL per issuer key, or an error status. */
+/** A local server in MOICA's place: one CRL per issuer key, or one of the ways an answer goes wrong. */
 export class FakeMoica {
   readonly origin: string;
   readonly requests: MoicaRequest[] = [];
   readonly #server: Server;
-  readonly #answers = new Map<string, Uint8Array | number>();
+  readonly #answers = new Map<string, Answer>();
 
   private constructor(server: Server) {
     this.#server = server;
@@ -45,24 +49,54 @@ export class FakeMoica {
     const moica = new FakeMoica(server);
     server.on("request", (req, res) => {
       const path = req.url ?? "";
-      const issuer = (Object.keys(CRL_PATHS) as IssuerName[]).find((i) => CRL_PATHS[i] === path);
+      const issuer = (Object.keys(TEST_CRL_PATHS) as IssuerName[]).find((i) => TEST_CRL_PATHS[i] === path);
       moica.requests.push({ issuer, path, userAgent: req.headers["user-agent"], headers: req.headers });
       const answer = moica.#answers.get(path);
+      const type = { "Content-Type": "application/pkix-crl" };
       if (answer === undefined) return void res.writeHead(404).end();
-      if (typeof answer === "number") return void res.writeHead(answer).end("error");
-      res.writeHead(200, { "Content-Type": "application/pkix-crl" }).end(answer);
+      switch (answer.kind) {
+        case "status":
+          return void res.writeHead(answer.status).end("error");
+        case "body":
+          return void res.writeHead(200, { ...type, "Content-Length": answer.body.length }).end(answer.body);
+        case "cut":
+          // Without Content-Length, Node sends the body chunked.
+          res.writeHead(200, { ...type, ...(answer.contentLength !== undefined && { "Content-Length": answer.contentLength }) });
+          return void res.write(answer.sent, () => res.socket?.destroy());
+        case "stall":
+          if (answer.sent === undefined) return; // not even the status line
+          res.writeHead(200, { ...type, "Content-Length": answer.sent.length + 1000 });
+          return void res.write(answer.sent);
+      }
     });
     return moica;
   }
 
   /** From now on this issuer's address gives these bytes. */
   serve(issuer: IssuerName, body: Uint8Array): void {
-    this.#answers.set(CRL_PATHS[issuer], body);
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "body", body });
   }
 
   /** From now on this issuer's address answers with this HTTP status. */
   fail(issuer: IssuerName, status: number): void {
-    this.#answers.set(CRL_PATHS[issuer], status);
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "status", status });
+  }
+
+  /**
+   * From now on this issuer's address answers 200, sends `sent` and closes
+   * the connection: with a Content-Length that promised `contentLength`
+   * bytes, or chunked, without the chunk that ends the body.
+   */
+  cutOff(issuer: IssuerName, sent: Uint8Array, contentLength: number | "chunked"): void {
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "cut", sent, contentLength: contentLength === "chunked" ? undefined : contentLength });
+  }
+
+  /**
+   * From now on this issuer's address keeps the connection open and sends
+   * nothing more: nothing at all, or 200 and `sent` of a longer body.
+   */
+  stall(issuer: IssuerName, sent?: Uint8Array): void {
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "stall", sent });
   }
 
   async close(): Promise<void> {
@@ -102,13 +136,13 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-let issuers: TestIssuer[] | undefined;
+let issuers: IssuerKey[] | undefined;
 
 /**
  * The test's issuer keys: made on the spot, once per process, and the
  * private halves are dropped here (ADR-0028).
  */
-export function testIssuers(): TestIssuer[] {
+export function testIssuers(): IssuerKey[] {
   issuers ??= ([["G2", 2048], ["G3", 4096]] as const).map(([name, bits]) => {
     const { publicKey } = generateKeyPairSync("rsa", { modulusLength: bits, publicExponent: 65537 });
     const n = publicKey.export({ format: "jwk" }).n!;
@@ -117,15 +151,20 @@ export function testIssuers(): TestIssuer[] {
   return issuers;
 }
 
+export interface StartOptions {
+  /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
+  readonly crlTimeoutMs?: number;
+}
+
 /** Builds the test build and starts it in the local workerd, with a fake MOICA that has no CRL yet. */
-export async function startWorker(): Promise<TestWorker> {
+export async function startWorker(options: StartOptions = {}): Promise<TestWorker> {
   const moica = await FakeMoica.start();
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "worker-"));
   const server = createTestHarness({ root: WORKER_DIR, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
-    buildWorker("test", dir, { moica: moica.origin, issuers: testIssuers() });
+    buildWorker("test", dir, { moica: moica.origin, issuers: testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000 });
     ({ url } = await server.listen());
   } catch (e) {
     await moica.close();

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, describe, test } from "node:test";
+import type { IssuerName } from "../src/issuers.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
@@ -102,7 +103,7 @@ describe("when MOICA answers with an error", () => {
 
         assert.equal((await worker.runSchedule()).outcome, "exception");
 
-        assert.deepEqual(worker.moica.requests.map((r) => r.issuer), ["G2", "G3"]);
+        assert.deepEqual(worker.moica.requests.map((r) => r.issuer).sort(), ["G2", "G3"]);
         assert.deepEqual((await worker.files()).map((f) => f.key), [nameOf(crl)]);
       } finally {
         await worker.close();
@@ -116,8 +117,100 @@ describe("when MOICA answers with an error", () => {
       worker.moica.fail("G2", 500);
       // G3's address has no file: 404.
       assert.equal((await worker.runSchedule()).outcome, "exception");
-      assert.deepEqual(worker.moica.requests.map((r) => r.issuer), ["G2", "G3"]);
+      assert.deepEqual(worker.moica.requests.map((r) => r.issuer).sort(), ["G2", "G3"]);
       assert.deepEqual(await worker.files(), []);
+    } finally {
+      await worker.close();
+    }
+  });
+});
+
+describe("when MOICA's answer is not a complete one", () => {
+  const PART = bytes("x".repeat(100));
+  const other = (issuer: IssuerName): IssuerName => (issuer === "G2" ? "G3" : "G2");
+
+  /** One run in which `issuer` goes wrong as `arrange` says and the other key's CRL is there: only that one is stored. */
+  async function onlyTheOtherIsStored(issuer: IssuerName, arrange: (worker: TestWorker) => void): Promise<void> {
+    const worker = await startWorker({ crlTimeoutMs: 1500 });
+    try {
+      arrange(worker);
+      worker.moica.serve(other(issuer), G3_FIRST);
+      const started = Date.now();
+
+      assert.equal((await worker.runSchedule()).outcome, "exception");
+
+      assert.ok(Date.now() - started < 10_000, "the run ends soon after the limit");
+      assert.deepEqual((await worker.files()).map((f) => f.key), [nameOf(G3_FIRST)]);
+      const failed = worker.logLines().filter((l) => l.includes("crl_mirror")).map((l) => JSON.parse(l) as { issuer: string; result: string }).filter((l) => l.result === "failed");
+      assert.deepEqual(failed.map((l) => l.issuer), [issuer]);
+    } finally {
+      await worker.close();
+    }
+  }
+
+  for (const issuer of ["G2", "G3"] as const) {
+    test(`${issuer} never answers: the other CRL is stored without waiting for it, and ${issuer} fails when the limit has passed`, async () => {
+      const worker = await startWorker({ crlTimeoutMs: 3000 });
+      try {
+        worker.moica.stall(issuer);
+        worker.moica.serve(other(issuer), G3_FIRST);
+        const started = Date.now();
+        const run = worker.runSchedule();
+
+        // The other CRL is there well before the limit.
+        let keys: string[] = [];
+        while (keys.length === 0 && Date.now() - started < 2000) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          keys = (await worker.files()).map((f) => f.key);
+        }
+        assert.deepEqual(keys, [nameOf(G3_FIRST)]);
+        assert.ok(Date.now() - started < 2500, "stored before the limit");
+
+        assert.equal((await run).outcome, "exception");
+        assert.ok(Date.now() - started < 12_000, "the run ends soon after the limit");
+        assert.deepEqual((await worker.files()).map((f) => f.key), [nameOf(G3_FIRST)]);
+      } finally {
+        await worker.close();
+      }
+    });
+  }
+
+  test("an answer that stops in the middle and stays open fails when the limit has passed", () => onlyTheOtherIsStored("G2", (w) => w.moica.stall("G2", PART)));
+
+  test("an answer cut off before its Content-Length is not stored", () => onlyTheOtherIsStored("G2", (w) => w.moica.cutOff("G2", PART, 1000)));
+
+  test("an answer of 200 with no bytes is not stored", () => onlyTheOtherIsStored("G3", (w) => w.moica.serve("G3", new Uint8Array(0))));
+
+  test("a chunked answer cut off before its end looks complete to the Worker, and what arrived is stored", async () => {
+    // Not what one would want, but what happens: the local workerd reports no error for a chunked body
+    // whose connection closes before the last chunk, so nothing at the level of HTTP tells it from a
+    // complete answer (src/mirror.ts). Such a file is not a CRL MOICA signed; the signature check, when
+    // the mirror has one, is what refuses it. If this test fails, the runtime started reporting the
+    // error: say so in src/mirror.ts and README.md.
+    const worker = await startWorker();
+    try {
+      worker.moica.cutOff("G2", PART, "chunked");
+      worker.moica.serve("G3", G3_FIRST);
+
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+
+      assert.deepEqual((await worker.files()).map((f) => f.key), [nameOf(PART), nameOf(G3_FIRST)].sort());
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("a complete answer of 200 that is no CRL is stored all the same", async () => {
+    // Usable or not, every file is kept; telling them apart is for the code that will write the index.
+    const worker = await startWorker();
+    try {
+      const html = bytes("<!doctype html><title>Service unavailable</title>");
+      worker.moica.serve("G2", html);
+      worker.moica.serve("G3", G3_FIRST);
+
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+
+      assert.deepEqual((await worker.files()).map((f) => f.key), [nameOf(html), nameOf(G3_FIRST)].sort());
     } finally {
       await worker.close();
     }

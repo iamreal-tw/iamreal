@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "node --experimental-strip-types scripts/dev.ts",
-    "typecheck": "wrangler types --env test --strict-vars=false && tsc -p . && tsc -p test",
+    "typecheck": "WRANGLER_SEND_METRICS=false WRANGLER_HIDE_BANNER=true wrangler types --env test --strict-vars=false && tsc -p . && tsc -p test",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "deploy:test": "node --experimental-strip-types scripts/deploy-test.ts"
   },
