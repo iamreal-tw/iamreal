@@ -80,5 +80,8 @@ test("the builds the tests make run wrangler in the same environment, without a 
 test("the command deploys the test environment and names nothing else", () => {
   // test/build.ts adds `--dry-run --outdir` to these, so the build test/bundle.test.ts looks at is
   // this command's. An `--alias` or `--define` added here would change that build.
-  assert.deepEqual(DEPLOY_ARGS, ["deploy", "--env", "test"]);
+  // `--experimental-provision=false`: wrangler does not ask Cloudflare whether the R2 bucket is
+  // there, and creates none. The token may not read R2 (ADR-0029), and without this the first
+  // deploy stopped at that question (README.md, "第一次部署量到的").
+  assert.deepEqual(DEPLOY_ARGS, ["deploy", "--env", "test", "--experimental-provision=false"]);
 });
