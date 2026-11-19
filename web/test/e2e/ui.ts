@@ -71,8 +71,8 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../../src/platforms.ts";
-import { scopeOf } from "../../src/spec/scope.ts";
-import { shortId } from "../../src/spec/scoped-id.ts";
+import { scopeOf } from "iamreal-protocol/scope.ts";
+import { shortId } from "iamreal-protocol/scoped-id.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { COPY, fill } from "../../src/ui/copy.ts";
 import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, buildTbs, certificate, name, subjectDirectoryAttributes } from "../fixtures/certs.ts";
@@ -93,7 +93,7 @@ if (!BB) throw new Error("set IAMREAL_BB to the bb 6.0.0 executable (verifier/RE
 const COMPONENT_PORT = 61171;
 const COMPONENT = `http://localhost:${COMPONENT_PORT}`;
 const PIN = "834271";
-/** The test roster's scope string: the first signature signs it (src/spec/scope.ts). */
+/** The test roster's scope string: the first signature signs it (protocol/src/scope.ts). */
 const SCOPE = scopeOf("test");
 /** The test roster's platform table, as the server's config sends it (spec/scope.md). */
 const EXAMPLE = "test-example";

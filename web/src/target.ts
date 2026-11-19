@@ -12,7 +12,7 @@ import { IDLE_MS } from "./flow.ts";
 import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
 import type { Presentation } from "./platforms.ts";
 import { THREADS } from "./presentations/threads.ts";
-import type { Roster } from "./spec/scope.ts";
+import type { Roster } from "iamreal-protocol/scope.ts";
 
 /**
  * The roster the card proof is for: the card signs its scope string, the

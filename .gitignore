@@ -8,5 +8,8 @@ CLAUDE.local.md
 *.pem
 *.db
 
+# packages of the pnpm workspace (pnpm-workspace.yaml)
+node_modules/
+
 # OS and editor
 .DS_Store

@@ -2,7 +2,7 @@
 // in for G2 (2048) and G3 (4096), one card with a signing and an encryption
 // certificate, CRLs signed by the issuer, and the mirror's index. Runs in
 // Node (tests) and writes what the headless browser test needs.
-import { sha256Hex } from "../../src/bytes.ts";
+import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import type { IssuerKey, IssuerName } from "../../src/issuers.ts";
 import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./certs.ts";
 import { indexLine, makeCrl } from "./crls.ts";

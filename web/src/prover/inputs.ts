@@ -1,12 +1,12 @@
 // The circuit's inputs (zkid-noir tests/lib/inputs.mjs, noirCardProofInputs)
 // and the public inputs the device expects the proof to carry
 // (spec/proof-verification.md, "Public inputs").
-import { bigintOfBytes, limbs } from "../bytes.ts";
+import { bigintOfBytes, limbs } from "iamreal-protocol/bytes.ts";
 import type { CardCertificate } from "../certificate.ts";
 import { MAX_TBS_LEN } from "../certificate.ts";
 import type { AbsenceProof } from "../crl/tree.ts";
 import { CIRCUIT_OF_BITS, type CircuitName } from "../issuers.ts";
-import { pack31 } from "../spec/field.ts";
+import { pack31 } from "iamreal-protocol/field.ts";
 
 const hex = (x: bigint): string => "0x" + x.toString(16);
 

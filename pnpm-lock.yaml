@@ -6,7 +6,16 @@ settings:
 
 importers:
 
-  .:
+  protocol:
+    devDependencies:
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
+  web:
     dependencies:
       '@aztec-foundation/bb.js':
         specifier: 6.0.0
@@ -14,6 +23,9 @@ importers:
       '@noir-lang/noir_js':
         specifier: 1.0.0
         version: 1.0.0
+      iamreal-protocol:
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/node':
         specifier: 22.20.5

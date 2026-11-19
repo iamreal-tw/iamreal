@@ -1,7 +1,7 @@
 // Poseidon2 for the tree, from Barretenberg (bb.js): the same implementation
 // the proof uses (ADR-0015), not a second one to keep in step with the
 // circuit. Node values stay 32-byte arrays; no bigint per hash.
-import { bigintOfBytes, bytesOfBigint } from "../bytes.ts";
+import { bigintOfBytes, bytesOfBigint } from "iamreal-protocol/bytes.ts";
 import { KEY_WORDS } from "./crl.ts";
 import type { TreeHasher } from "./tree.ts";
 

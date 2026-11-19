@@ -66,7 +66,7 @@ test("the local build (pnpm local): MOICA's keys and component, nothing of the t
   const code = await codeOf("localcard");
   realCardOnly(code, "localcard");
   // The roster of src/target-local.ts: the test one. Both scope strings are in the table of
-  // src/spec/scope.ts; the target picks the test one (checked in Node below).
+  // protocol/src/scope.ts; the target picks the test one (checked in Node below).
   assert.ok(code.includes("iamreal-test:public:0__________"), "the test roster's scope string");
   assert.ok(code.includes("Example (no real service)"), "the local build knows test-example");
 });
@@ -74,7 +74,7 @@ test("the local build (pnpm local): MOICA's keys and component, nothing of the t
 test("the local target signs the test roster's scope string; the production target the public roster's", async () => {
   const local = await import("../src/target-local.ts");
   const production = await import("../src/target.ts");
-  const { scopeOf } = await import("../src/spec/scope.ts");
+  const { scopeOf } = await import("iamreal-protocol/scope.ts");
   assert.equal(scopeOf(local.ROSTER), "iamreal-test:public:0__________");
   assert.equal(scopeOf(production.ROSTER), "iamreal:public:0_______________");
   assert.deepEqual(local.ISSUERS, production.ISSUERS);

@@ -5,7 +5,7 @@
 // Tests build the flow with throwaway keys instead (test/), the way
 // verifier/'s tests inject theirs; the production entry point (index.ts)
 // passes MOICA_ISSUERS and nothing else.
-import { bytesOfBigint } from "./bytes.ts";
+import { bytesOfBigint } from "iamreal-protocol/bytes.ts";
 
 export type IssuerName = "G2" | "G3";
 export type CircuitName = "card_proof_rs2048" | "card_proof_rs4096";

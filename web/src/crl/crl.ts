@@ -2,7 +2,7 @@
 // (spec/revocation-tree.md, "Which CRLs"). Same rules and the same reason
 // codes, in the same order, as crl/crl.go; the tests run both against
 // crl/testdata/.
-import { equalBytes } from "../bytes.ts";
+import { equalBytes } from "iamreal-protocol/bytes.ts";
 import { DerError, TAG, type Tlv, children, content, expectTlv, oidString, readTime, readTlv, whole } from "../der.ts";
 import { rsaVerify } from "../issuers.ts";
 

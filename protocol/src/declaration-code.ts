@@ -1,7 +1,7 @@
 // The declaration code (spec/declaration-code.md): the 31 bytes the card
 // signs the second time. It states the card's whole list of accounts, one
 // account at most on each platform, in ascending order of the platform ID.
-import { asciiBytes, sha256 } from "../bytes.ts";
+import { asciiBytes, sha256 } from "./bytes.ts";
 import { encodeBase32 } from "./base32.ts";
 
 /** One account of a record's list (spec/record.md, "The account list"). */

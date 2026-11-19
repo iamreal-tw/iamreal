@@ -10,8 +10,8 @@ import type { PlatformRow } from "../src/api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../src/flow.ts";
 import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "../src/platforms.ts";
 import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
-import { scopeOf } from "../src/spec/scope.ts";
-import { parseUsernameFormat } from "../src/spec/username-format.ts";
+import { scopeOf } from "iamreal-protocol/scope.ts";
+import { parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 import { COPY, fill } from "../src/ui/copy.ts";
 import {
   type ItemState,
