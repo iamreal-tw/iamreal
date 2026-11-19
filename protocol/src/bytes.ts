@@ -55,7 +55,7 @@ export function concatBytes(...parts: Uint8Array[]): Uint8Array {
 
 /** SHA-256 with WebCrypto (browser and Node). */
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", data as BufferSource));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", data as Uint8Array<ArrayBuffer>));
 }
 
 export async function sha256Hex(data: Uint8Array): Promise<string> {

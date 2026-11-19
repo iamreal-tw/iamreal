@@ -19,7 +19,7 @@
 | `date.ts` | | 日期換成天數、台灣的日期（UTC+8，不看裝置的時區） |
 | `base32.ts` | | 題目和匿名編號用的 base32，只認一種寫法 |
 | `field.ts` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
-| `bytes.ts` | | 位元組和整數的小工具、SHA-256 |
+| `bytes.ts` | | 共用的位元組和整數小工具、SHA-256。不對應哪一份 `spec/`：上面幾個檔用到其中一部分，`wipe`、`equalBytes`、`concatBytes` 等只有 `web/` 用。從 `web/` 整個檔一起搬過來，是為了不留兩份 |
 
 ## 怎麼引用
 
