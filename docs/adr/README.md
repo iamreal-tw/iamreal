@@ -77,7 +77,6 @@
 
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
-| 0021 | 紀錄帶 `prev`，公布鏈尾檔 `heads.jsonl` | [#18](https://github.com/iamreal-tw/iamreal/issues/18) |
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
 | 0024 | 規則沒有這一條 | [#28](https://github.com/iamreal-tw/iamreal/issues/28) |
