@@ -89,7 +89,7 @@
 | 0031 | 規格還沒寫這個承諾 | [#45](https://github.com/iamreal-tw/iamreal/issues/45) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
-`CLAUDE.md` 的目錄表列了 `worker/`，這個目錄還沒建：後台現在是 Go 的 `server/`。
+`worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），還沒有部署：後台現在是 Go 的 `server/`。
 
 ## 還沒定
 
