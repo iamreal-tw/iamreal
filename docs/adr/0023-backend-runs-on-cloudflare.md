@@ -4,7 +4,7 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 
 # 後台全部放在 Cloudflare，用 TypeScript 重寫
 
-> Consequences 裡留待決定的三件事後來定了：完整重驗在哪裡跑（ADR-0025）、每張卡片的狀態怎麼存（ADR-0024 和它的票）、頁面的資料撐不住時搬去哪裡（ADR-0026 改成 KV 或 D1，到時候再定）。公開的檔案放在 `data.iamreal.tw`（ADR-0027）。其餘有效。
+> Consequences 裡留待決定的三件事後來定了：完整重驗在哪裡跑（ADR-0025）、每張卡片的狀態怎麼存（ADR-0024 和它的票）、頁面的資料撐不住時搬去哪裡（ADR-0026 改成 KV 或 D1，到時候再定）。公開的檔案放在 `data.iamreal.tw`（ADR-0027）。下面寫「`server/` 用 TypeScript 重寫」的地方，新的後台放在 `worker/`（見 Consequences 最後一條）。其餘有效。
 
 後台整個放在 Cloudflare 上，沒有自己管的機器。`server/` 用 TypeScript 重寫成一個 Worker 專案；`verifier/`、`roster/`、`crl/`、`cmd/` 的 Go 程式留著，當獨立的重驗工具。
 
@@ -50,4 +50,4 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 - **現況不放記憶體。** Durable Object 閒置時會被移出記憶體，名冊規則要的每張卡片的狀態存在它的 SQLite，寫入時只讀寫那一張卡片。存法已經定了：狀態自己一張表、一張卡片一列、和紀錄同一個交易寫入，結論在[名冊規則要的每張卡片狀態怎麼存](https://github.com/iamreal-tw/iamreal/issues/9)；順帶改的規則是 ADR-0024。
 - **讀取和寫入擠在同一個 Durable Object。** 大量請求打不同的網址時快取幫不上，Durable Object 忙不過來，頁面和過卡會一起失敗；已經寫入的紀錄不會掉。靠限流和查不到的結果也快取來擋；讀取量量出來撐不到尖峰，或真的被這樣打過，就把衍生表複製到 D1（ADR-0026 改成搬到 KV 還是 D1 到時候再定）。
 - **儲存的位置不能固定在台灣。** 亞洲只有盡量的提示（[data location](https://developers.cloudflare.com/durable-objects/reference/data-location/)）。放在上面的資料大多本來就公開；不公開的是還沒用掉的題目和連線紀錄（ADR-0022）。隱私權說明照實寫。
-- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** `CLAUDE.md` 的目錄表和「Go 的程式是同一個模組」那幾句跟著改。
+- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** 目錄 2026-11-19 定了，寫在 `CLAUDE.md` 的目錄表：TypeScript 的後台放 `worker/`，比對期間不和 Go 的 `server/` 同名；後台和裝置共用的 TypeScript（名冊規則和其他照 `spec/` 寫的算法）放 `protocol/`，`worker/` 和 `web/` 都引用它、互不引用。`server/` 刪掉時，從目錄表拿掉那一列。

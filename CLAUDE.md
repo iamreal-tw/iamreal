@@ -30,16 +30,20 @@
 | 目錄 | 內容 | 讓人能檢查的事 | 可以引用 |
 |---|---|---|---|
 | `spec/` | 協定規格和標準答案 | 不同的實作算出相同的答案 | 無 |
-| `verifier/` | 驗證核心和獨立的重驗指令 | 任何人都能重驗一筆紀錄 | Barretenberg 的驗證程式 |
-| `roster/` | 名冊規則的參考實作 | 拿快照重算，得到相同的現況 | `verifier/` |
+| `verifier/` | 驗證核心和獨立的重驗指令（Go） | 任何人都能重驗一筆紀錄 | Barretenberg 的驗證程式 |
+| `roster/` | 名冊規則的第二份實作（Go） | 拿快照重算，得到相同的現況 | `verifier/` |
 | `design/` | 各平台共用的介面文字和設計語彙 | 各平台說同一句話、長得一樣 | 無 |
-| `crl/` | 廢止清冊的樹的建樹程式 | 拿內政部的清冊能重建相同的樹根 | 無 |
-| `cmd/` | 重驗名冊、重算樹根的指令 | 任何人都能從命令列重驗 | `verifier/`、`roster/`、`crl/` |
-| `server/` | 後台 | 規則有照做 | `verifier/`、`roster/` |
-| `web/`、`android/`、`ios/` | 持卡人裝置上執行的程式 | 憑證、公鑰、簽章、PIN 沒有離開裝置 | 不引用 `server/` |
+| `crl/` | 廢止清冊的樹的建樹程式（Go） | 拿內政部的清冊能重建相同的樹根 | 無 |
+| `cmd/` | 重驗名冊、重算樹根的指令（Go） | 任何人都能從命令列重驗 | `verifier/`、`roster/`、`crl/` |
+| `protocol/` | `spec/` 的 TypeScript 實作：名冊規則、場合字串、宣告碼、匿名編號、題目 | 後台和裝置用的是同一份規則 | 無 |
+| `worker/` | 後台（TypeScript，Cloudflare 的 Worker 專案，ADR-0023） | 規則有照做 | `protocol/` |
+| `server/` | 舊的後台（Go），只當 `worker/` 逐案比對的對照，比對通過後刪掉 | `worker/` 的每一筆判斷和它相同 | `verifier/`、`roster/`、`crl/` |
+| `web/`、`android/`、`ios/` | 持卡人裝置上執行的程式 | 憑證、公鑰、簽章、PIN 沒有離開裝置 | `protocol/`；不引用 `worker/`、`server/` |
 
 - 目錄在第一次需要時才建立，建立時附 `README.md`：這個目錄讓人檢查什麼、怎麼單獨執行
 - Go 的程式是同一個模組，`go.mod` 在根目錄；`verifier/` 和 `roster/` 要能不帶後台單獨編譯
+- Go 的 `verifier/`、`roster/`、`crl/`、`cmd/` 是後台以外的第二份實作，每天的重驗用它（ADR-0025、ADR-0030）。Go 不引用 TypeScript，TypeScript 不引用 Go；兩邊只共用 `spec/`
+- `protocol/` 和 `worker/` 還沒建。建之前，共用的 TypeScript 在 `web/src/spec/`，後台是 Go 的 `server/`
 - 做任何畫面、寫任何介面文字之前，先讀 `docs/design/principles.md`
 - 兩種以上語言都要實作的算法，測試一律讀 `spec/vectors/` 裡同一份標準答案
 

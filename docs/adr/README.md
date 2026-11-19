@@ -59,7 +59,7 @@
 
 ## 後台和部署
 
-- 後台全部放在 Cloudflare，用 TypeScript 重寫：一份名冊一個 Durable Object，紀錄的正本在 R2，證明在 Worker 裡驗。[ADR-0023](0023-backend-runs-on-cloudflare.md)
+- 後台全部放在 Cloudflare，用 TypeScript 重寫：一份名冊一個 Durable Object，紀錄的正本在 R2，證明在 Worker 裡驗。新的後台放 `worker/`，和裝置共用的 TypeScript 放 `protocol/`。[ADR-0023](0023-backend-runs-on-cloudflare.md)
 - 限流分三層；被打時過卡先讓路；全站的總量上限擋在 `GET /api/v1/config`。[ADR-0026](0026-rate-limiting-in-three-layers.md)
 - 測試網站是同一個 Worker 專案的另一個環境，只收真卡片，不定期清空。[ADR-0028](0028-test-site-is-a-second-environment.md)
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
@@ -89,13 +89,13 @@
 | 0031 | 規格還沒寫這個承諾 | [#45](https://github.com/iamreal-tw/iamreal/issues/45) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | 還沒有票 |
 
-`CLAUDE.md` 的目錄表（`server/` 可以引用 `verifier/`、`roster/`；Go 的程式是同一個模組）描述的是 Go 的後台，Go 的 `server/` 刪掉時跟著改（ADR-0023）。
+`CLAUDE.md` 的目錄表列了 `protocol/` 和 `worker/`，這兩個目錄還沒建：共用的 TypeScript 現在在 `web/src/spec/`，重寫後台的第一步是把它搬到 `protocol/`。
 
 ## 還沒定
 
 施工時碰到這些，停下來問，不要自己定。
 
-- TypeScript 的名冊規則後台和裝置共用一份（ADR-0023、ADR-0030），放在哪個目錄、目錄表怎麼寫
+- `protocol/`、`web/`、`worker/` 要不要共用一個根目錄的 pnpm workspace
 - 連線紀錄和每天的總數存在哪裡、誰讀得到、到期怎麼刪（ADR-0022、ADR-0032；[#20](https://github.com/iamreal-tw/iamreal/issues/20)）
 - 重驗沒有通過、排程沒跑時怎麼通知營運者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
 - 備份放在哪裡、怎麼還原（ADR-0025；[#51](https://github.com/iamreal-tw/iamreal/issues/51)）
