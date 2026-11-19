@@ -14,7 +14,7 @@ status: accepted
 - **紀錄的正本**：R2 上的名冊目錄。Durable Object 只留還沒寫滿一檔的紀錄；寫滿 1,000 筆，把那一檔寫到 R2，讀回來核對後才刪掉自己的那 1,000 筆。檔名和內容都從紀錄算得出來，重做的結果相同。
 - **驗證證明**：在 Worker 裡驗，不在 Durable Object 裡。送出一筆時，Worker 先請 Durable Object 檢查題目並算一次送出，自己驗證明，再請 Durable Object 檢查清冊樹根和名冊規則後寫入。檢查的順序和 `docs/api/card-proof.md` 相同。
 - **訪客的頁面**：衍生表在同一個 Durable Object，和紀錄在同一個交易裡更新。Worker 產生 HTML，產生好的頁面在 Cloudflare 的快取最多放 60 秒。題目、卡片現況、送出不快取。
-- **清冊鏡像**：Cron Trigger 每小時抓內政部的清冊，原始檔存 R2，驗章、建樹、算樹根。
+- **清冊鏡像**：Cron Trigger 每小時抓內政部的清冊，原始檔存 R2；檔案和上一次相同就停，不同才驗章、建樹、算樹根。
 - **名冊指紋**：Durable Object 每寫入一筆就更新滾動的雜湊（ADR-0021），每天台灣時間換日時在指紋檔加一行。
 - **靜態檔**：過卡的頁面（`web/` 建置出來的檔案、電路檔、通用參數）用 Workers Static Assets；清冊、名冊目錄、雜湊清單、指紋檔放 R2。這些下載不經過後台的程式。
 - **部署**：一個 Worker 專案，過卡的頁面和後台同一個提交、同一次部署。
@@ -40,7 +40,8 @@ status: accepted
 ## Consequences
 
 - **要 Workers 的付費方案。** 免費方案每個請求的 CPU 時間是 10 ms，驗一筆約 12 ms（[limits](https://developers.cloudflare.com/workers/platform/limits/)）。
-- **驗證和清冊鏡像各放在換得掉的介面後面。** 超過 Workers 的限制時，改成在 Cloudflare Containers 跑原生的 `bb` 和 Go 的 `crl/`，其他部分不動。清冊鏡像在 Worker 裡的運算時間和記憶體還沒有量：Go 版建一份 G2 清冊的樹約 200 MB（`crl/README.md`），Worker 的上限是 128 MB。
+- **驗證和清冊鏡像各放在換得掉的介面後面。** 超過 Workers 的限制時，改成在 Cloudflare Containers 跑原生的 `bb` 和 Go 的 `crl/`，其他部分不動。
+- **清冊鏡像在 Worker 裡做得完，但讀清冊時不能每一筆建一個物件。** 本機的 workerd 裡，一次排程抓兩份清冊、存 R2、驗章、建樹共 35 秒，樹根和 Go 的 `crl/` 相同；每小時一次的排程上限 15 分鐘（[實測](https://github.com/iamreal-tw/iamreal/issues/26)、[limits](https://developers.cloudflare.com/workers/platform/limits/)）。照 `web/src/crl/crl.ts` 的寫法讀 G2 要 132 MB，超過 Worker 的 128 MB；鍵直接寫進 `Uint32Array` 時全程約 35 MB。Poseidon2 用驗證證明的同一份 WASM。建樹時分組做、組和組之間讓出執行緒，免得擋住同一個實例裡的請求。Cloudflare 上真的 CPU 時間、抓不抓得到內政部的 `http://` 網址，部署到測試網站時確認。
 - **WASM 的驗證要照實測的兩條做**：任何例外都算拒絕，並丟掉那個實例；呼叫之前先做 `verifier/verify.go` 在呼叫 `bb` 之前做的檢查。
 - **名冊規則有兩份實作**，Go 的在 `roster/`，TypeScript 的給後台和裝置用，兩份讀 `spec/vectors/` 同一份標準答案。規則要改時兩邊一起改。
 - **名冊檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改，完整重驗在哪裡跑、多久一次，在[名冊變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)決定。
