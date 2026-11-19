@@ -81,4 +81,4 @@ data.iamreal.tw/
 - **`iamreal-verify` 內建預設網址 `https://data.iamreal.tw/`**，有選項可以換成別的網址（測試名冊、別人架的鏡像）。下載的網址寫在 `cmd/iamreal-verify/README.md`；「怎麼驗證」的提示詞不改，它只指到那份說明。名冊頁的「下載整份名冊」連到那份說明講下載的一段。
 - **`spec/record.md` 要改**：檔名改成這一檔之前的筆數；寫明重驗的人只核對到指紋檔那一行的筆數；指紋檔另外放在哪裡改成指向這一份。`spec/revocation-tree.md` 的「存檔公開在哪裡」也改成指向這一份。
 - **抄指紋的排程失敗、沒跑時要有人知道**，和每天的重驗沒有通過一樣，在監控的決定裡定。
-- **誰能寫這個儲存桶、誰能推送到 `iamreal-tw/fingerprints`**，在部署和金鑰分層的決定裡定。
+- **只有 Worker 透過 binding 寫這個儲存桶；`iamreal-tw/fingerprints` 只有它自己的排程提交**（ADR-0029）。
