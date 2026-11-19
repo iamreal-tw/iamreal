@@ -346,12 +346,86 @@ carry the date.
   ([`docs/api/card-proof.md`](../docs/api/card-proof.md)). That is a rule of
   the server, not of the roster: a record that is in the roster is judged by
   these rules only, and the limit that everyone can check is 5.
+  Such a rule of the server is not covered by "Changing these rules": when
+  it changes, no record already written changes.
 - Which platforms exist is a table of [`scope.md`](scope.md), not something
   computed from the records. A record that lists a platform outside the
   table is a malformed line, not an invalid record.
 - A record does not say which state of the card the cardholder saw before
   signing. Two card proofs of one card made from the same earlier state are
   applied in `seq` order, and the later list replaces the earlier.
+
+## Changing these rules
+
+These rules may change after launch. A change keeps two things of every
+record already written (ADR-0031):
+
+- its result: valid or invalid, its kinds, its reason code;
+- its line: still well formed.
+
+**By default a change applies to every record**, including the ones already
+written. It may do so only if, under the new rules, every record already
+written gets the same result as under the old ones; the old version can
+then be dropped. If any record gets a different result, the new rules take
+effect from an **effective date** `D` instead: a record dated `D` or later
+is judged by the new version, a record dated before `D` by the old one. The
+date is the record's date, the date in its challenge, as everywhere in
+these rules.
+
+- **Once an effective date is used, every version stays.** Computing the
+  state from the first record, or rebuilding the state of every card from
+  the records, picks the version for each record by its date. Both
+  implementations of these rules (ADR-0030) keep every version for good.
+- **A card never goes back from a new version to an old one.** The dates of
+  a card only stay the same or move forward (ADR-0024). Records of
+  different cards dated before and after `D` can interleave in `seq` order;
+  the result is still fixed.
+- **`D` is at least 3 days after the deploy to the production site**, and is
+  announced on the site when the change is merged. There is no other
+  period of notice. If the deploy cannot be made in time, another change
+  moves `D` later, before `D` arrives.
+- **Whether the results are the same is a comparison, not a judgement.**
+  Before a change is merged, the latest production roster is computed under
+  the old and the new version and compared record by record
+  ([`CONTRIBUTING.md`](../CONTRIBUTING.md)). If every result is the same,
+  the change applies to every record; otherwise it has an effective date.
+  After the deploy, the re-verification from the first record that a new
+  version number of these rules starts (ADR-0025) is the last check. If a
+  record written between that roster and the deploy gets a different
+  result, the operator stops accepting card proofs, goes back to the code
+  of the old version, and makes the change again with an effective date.
+
+These rules do not have a table of versions yet (which version applies from
+which date). It is added the first time an effective date is needed, and
+adding it changes the result of no record. A version is numbered by the
+version number of these rules (ADR-0025, ADR-0030).
+
+The tables these rules read only widen and grow: platform IDs, `username`
+formats and scope strings are never narrowed or removed
+([`scope.md`](scope.md), "Starting over"). A record already written that a
+narrower table did not accept would make its line malformed and the whole
+roster file broken ([`record.md`](record.md)). Lines are checked before
+these rules run, so an effective date cannot help.
+
+### When proofs can no longer be trusted
+
+This is the one exception. If a circuit lacks a constraint, if Barretenberg
+accepts a proof it should not, or if a MOICA issuer key leaks, someone can
+make valid proofs in bulk. Forged records then re-verify like real ones,
+and the promise above cannot keep them valid for good. The records of one
+circuit, or all the records, may then be voided:
+
+- **The condition can be computed from public data only.** For now it is
+  either "the records of this circuit" (every record carries its own
+  `circuit`) or "all the records". Never a range of dates, because nobody
+  knows from which day the flaw was used. Never single records the operator
+  judges to be forged, because a re-verifier cannot check that judgement.
+- The operator first stops accepting card proofs (ADR-0025). Whether to
+  void records in bulk and keep the scoped IDs, or to start over with a new
+  scope string ([`scope.md`](scope.md), "Starting over"), depends on the
+  flaw, and is decided in an ADR of its own.
+- The mechanism for voiding is added when it is needed. This exception and
+  its limits hold from the first version of these rules.
 
 ## Test vectors
 

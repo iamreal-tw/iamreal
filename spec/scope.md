@@ -71,6 +71,13 @@ Retiring the scope voids the slots of every platform together (ADR-0017):
 the new version gives every card a new scoped ID, and every cardholder
 declares again on every platform. One platform cannot start over by itself.
 
+The tables of this document only widen and grow: the accepted scope
+strings, the platform IDs and the `username` formats. Nothing is narrowed
+or removed, so that every record already written stays well formed
+([`roster-rules.md`](roster-rules.md), "Changing these rules"). Retiring a
+scope closes it to later records only; the records it accepted stay well
+formed.
+
 ## Platforms
 
 A platform is the service an account is on. A roster accepts records only
@@ -151,7 +158,14 @@ computed. A platform where `Alice` and `alice` are different accounts would
 allow uppercase in its row instead.
 
 The format of a platform is fixed when its row is added. It may be widened
-later (old records stay valid), never narrowed. The Threads row is
+later (old records stay valid), never narrowed. A record already written
+whose `username` a narrower format did not match would make its line
+malformed and the whole roster file broken ([`record.md`](record.md)). The
+format is checked before the roster rules run, so an effective date
+([`roster-rules.md`](roster-rules.md), "Changing these rules") cannot help.
+If a platform narrows its own names, the row keeps its format; whether new
+declarations of names the platform no longer allows are refused is a rule
+of the server, not of the roster. The Threads row is
 provisional: lowercase letters, digits, `.` and `_`, 1 to 30 characters,
 to be confirmed against the platform's published rules before launch.
 
