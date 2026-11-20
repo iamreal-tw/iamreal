@@ -20,6 +20,13 @@ barretenberg-rs = { version = "=6.0.0", default-features = false, features = ["f
 serde = "=1.0.229"
 serde_json = "=1.0.154"
 sha2 = "=0.11.1"
+# Noir v1.0.0, the version web/ pins: the ACVM solves the witness.
+acvm = "=1.0.0"
+bn254_blackbox_solver = "=1.0.0"
+# What a compiled circuit and a witness are wrapped in (base64, gzip). The
+# ACVM already brings both, in these versions (Noir v1.0.0's Cargo.lock).
+base64 = "=0.23.1"
+flate2 = "=1.1.10"
 
 [profile.release]
 opt-level = 3
