@@ -224,7 +224,7 @@ Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'
 2. 用 `crl.RebuildArchive` 從清冊檔案重建索引（重新驗章、建樹）。和 `index.jsonl` 有任何不同就不發布。
 3. 用 `roster.Check` 完整重算：每一份證明都用 `bb` 重驗。名冊不成立、或有任何無效的紀錄，就不發布，印出是哪一筆、哪個代碼（ADR-0014）。
 4. 已經公布的檔案必須是現在名冊的開頭：寫滿的檔和雜湊清單位元組相同，最後一個檔和它的清單是現在那一份的開頭；`fingerprints.jsonl` 的每一行都要是這份名冊在那個筆數的名冊指紋。不是的話不發布。
-5. 寫名冊目錄和雜湊清單（`roster.DirectoryFiles`：每 1,000 筆一檔，檔名是這一檔之前的筆數寫成 16 位數字），**寫滿的檔和清單不重寫**；最後在 `fingerprints.jsonl` 加今天（台灣日期）一行。
+5. 寫名冊目錄和雜湊清單（`roster.DirectoryFiles`：每 1,000 筆一檔，檔名是這一檔之前的筆數寫成 16 位數字），**寫滿的檔和清單不重寫**；再寫今天的卡片狀態檔 `card-state/<日期>.jsonl`（`spec/roster-rules.md`「The card state file」，內容是第 3 步重算出來的每張卡片的狀態；`iamreal-verify` 對指紋檔最後一行那天沒有卡片狀態檔的目錄會報問題）；最後在 `fingerprints.jsonl` 加今天（台灣日期）一行。
 
 結束碼：`0` 發布了（或今天已經發布過同一個名冊指紋，什麼都不用做）；`1` 有東西不對，什麼都沒寫；`2` 沒辦法檢查（讀不到檔案、`bb` 不對）。同一天第二次跑、但名冊多了紀錄時，因為一個日期只能有一行，結束碼是 `1`。
 

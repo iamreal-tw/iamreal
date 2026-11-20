@@ -57,6 +57,10 @@ const (
 // A full file or list already published is never written again; it must
 // have the same bytes. Nothing is written if anything is wrong, and the exit code
 // says why.
+// cardStateDir is the subdirectory of the roster directory that holds the
+// card state files, one per date (ADR-0027).
+const cardStateDir = "card-state"
+
 func snapshot(c snapshotConfig) int {
 	refuse := func(format string, args ...any) int {
 		fmt.Fprintf(c.Err, "snapshot: "+format+"\n", args...)
@@ -162,6 +166,16 @@ func snapshot(c snapshotConfig) int {
 		if err := writeFileAtomic(filepath.Join(c.OutDir, filepath.FromSlash(f.Name)), f.Data); err != nil {
 			return fail(err)
 		}
+	}
+	// The card state file of today, before today's line (ADR-0027): the
+	// states of the re-verification just made, which are the ones this
+	// snapshot publishes the roster by. iamreal-verify reports a line
+	// whose date has no card state file.
+	if err := os.MkdirAll(filepath.Join(c.OutDir, cardStateDir), 0o755); err != nil {
+		return fail(err)
+	}
+	if err := writeFileAtomic(filepath.Join(c.OutDir, cardStateDir, c.Today.String()+".jsonl"), roster.CardStateFile(rep.Cards)); err != nil {
+		return fail(err)
 	}
 	var fingerprintFile []byte
 	for _, fl := range lines {
