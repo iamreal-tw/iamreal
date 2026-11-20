@@ -4,9 +4,11 @@
 // the deployed Worker has, and accepts or refuses it as the Go backend's
 // TestEndToEnd expects. Nothing here stands in for the verifier.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { WORKER_DIR } from "./build.ts";
 import { CARD_PROOF_TESTDATA, cardProofIssuers } from "./crls.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { type Submission, cardState, checkRoster, kindsOf, submit } from "./records.ts";
@@ -99,5 +101,47 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
       },
       count: 11,
     });
+  });
+
+  // The roster the test above wrote, published, and re-verified by the command as anyone runs it: built from
+  // cmd/iamreal-verify, with the native `bb` verifying every proof again. Its one option beyond the default reading is
+  // the test build's `-test-issuers`, for the throwaway keys the testdata's cards and CRLs are signed by.
+  const bb = process.env.IAMREAL_BB;
+  const hasGo = spawnSync("go", ["version"]).status === 0;
+  test("published at the next midnight, the roster passes Go's iamreal-verify with the native bb: every proof, the CRL archive, the card state file", { skip: bb === undefined ? "IAMREAL_BB is not set" : false }, async () => {
+    assert.ok(hasGo, "IAMREAL_BB is set and go is not installed: this must run here");
+    await worker.setClock(new Date("2026-11-25T00:00:05+08:00"));
+    await worker.roster.runAlarm();
+    const files = await worker.files();
+    assert.deepEqual(files.map((f) => f.key).filter((key) => key.startsWith("roster/")), ["roster/0000000000000000.jsonl", "roster/card-state/2026-11-25.jsonl", "roster/fingerprints.jsonl", "roster/hashes/0000000000000000.txt"]);
+
+    mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
+    const out = mkdtempSync(join(WORKER_DIR, "test-output", "published-real-"));
+    try {
+      for (const f of files) {
+        mkdirSync(dirname(join(out, "data", f.key)), { recursive: true });
+        writeFileSync(join(out, "data", f.key), f.bytes);
+      }
+      // bb verify reads only the first G1 point of the CRS, (1, 2) (spec/proof-verification.md, "The CRS").
+      mkdirSync(join(out, "crs"));
+      const point = Buffer.alloc(64);
+      point[31] = 1;
+      point[63] = 2;
+      writeFileSync(join(out, "crs", "bn254_g1.dat"), point);
+      const command = join(out, "iamreal-verify");
+      const build = spawnSync("go", ["build", "-tags", "iamrealtest", "-o", command, "./cmd/iamreal-verify"], { cwd: join(WORKER_DIR, ".."), encoding: "utf8" });
+      assert.equal(build.status, 0, build.stderr);
+      const run = spawnSync(command, ["-bb", bb!, "-crs", join(out, "crs"), "-roster", "test", "-json", "-test-issuers", CARD_PROOF_TESTDATA, "-data", join(out, "data")], { encoding: "utf8" });
+      assert.equal(run.status, 0, `${run.stdout.slice(0, 2000)}\n${run.stderr}`);
+      const verified = JSON.parse(run.stdout) as { valid: boolean; results: { seq: number; valid: boolean }[] };
+      assert.equal(verified.valid, true);
+      assert.deepEqual(verified.results.map((r) => [r.seq, r.valid]), Array.from({ length: 11 }, (_, i) => [i + 1, true]));
+      assert.match(run.stderr, /fingerprints\.jsonl: 1 line\(s\), every fingerprint is the roster's/);
+      assert.match(run.stderr, /hashes\/: 1 list\(s\), every list is the roster's/);
+      assert.ok(run.stderr.includes("card-state/2026-11-25.jsonl: count 11 of fingerprints.jsonl, 11 record(s) re-verified: 2 card(s) the same, 0 skipped\n"), run.stderr);
+      rmSync(out, { recursive: true, force: true });
+    } catch (e) {
+      throw new Error(`${e instanceof Error ? e.message : String(e)}\nThe copy of the bucket is kept in ${out}`, { cause: e });
+    }
   });
 });
