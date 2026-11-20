@@ -5,6 +5,9 @@
 // setting (ADR-0028); and its other modules are the proof verifier's files
 // with their SHA-256 (engine-files.ts).
 //
+// And the configuration it is uploaded with gives an invocation the CPU
+// time a round of the CRL mirror counts on (`checkCpuLimit`).
+//
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
 // `buildDeploy`). test/bundle.test.ts runs each on a fresh deploy build, and
@@ -19,7 +22,9 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unstable_readConfig } from "wrangler";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
+import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -154,6 +159,27 @@ export function checkEngineFiles(b: BuildContents): void {
   assert.deepEqual(b.files, engineFiles(), "the deploy build's other modules are the proof verifier's files");
 }
 
+/**
+ * `limits.cpu_ms` of the test environment, read from wrangler.jsonc the way
+ * wrangler reads it for `--env test`: the value the upload sends
+ * (deploy.ts, `uploadArgs`). `undefined` if the configuration sets none.
+ */
+export function configuredCpuMs(): number | undefined {
+  // The file's one warning, that the top level has no name, is wrangler's to print when it bundles.
+  const config = unstable_readConfig({ config: join(REPO, "worker", "wrangler.jsonc"), env: "test" }, { hideWarnings: true });
+  return config.limits?.cpu_ms;
+}
+
+/**
+ * The CPU time the configuration gives one invocation is the one a round
+ * of the CRL mirror counts on (src/round-budget.ts). With less, a round is
+ * stopped in the middle of a tree: with none set, after 30 seconds, before
+ * the first tree is built.
+ */
+export function checkCpuLimit(cpuMs: number | undefined): void {
+  assert.equal(cpuMs, ROUND_CPU_MS, "limits.cpu_ms of the test environment is the CPU time a round of the CRL mirror counts on");
+}
+
 /** Every check above on the build in `dir`; throws on the first that fails. */
 export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   const b = readBuild(dir);
@@ -162,4 +188,5 @@ export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   checkNothingOfTheTestBuild(b);
   checkBindings(wranglerOutput);
   checkEngineFiles(b);
+  checkCpuLimit(configuredCpuMs());
 }

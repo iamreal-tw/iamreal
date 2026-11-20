@@ -22,6 +22,16 @@
 // round says so, goes on with the others, and the next round tries it
 // again.
 //
+// A round may be stopped at any moment: Cloudflare ends an invocation that
+// has used its CPU time (wrangler.jsonc, "limits"). Every line written
+// until then stays, and the roster's object has heard of it; the file whose
+// tree was being built is stored and gets its line in a later round. So
+// that a round is not stopped, it does not start another of the files an
+// earlier round left unless it still has the time the largest takes
+// (src/round-budget.ts). The files it fetched itself it always does: if
+// those two do not fit into one invocation, no round can do them
+// (ADR-0023 says what then).
+//
 // The index is one object, replaced whole, so nobody reads half of one; and
 // it is replaced only if it is still the object that was read, so two
 // rounds at once do not lose each other's lines (`ArchiveIndex`).
@@ -114,7 +124,11 @@ export interface MirrorParts {
   readonly bucket: R2Bucket;
   /** How long to wait for one source, in milliseconds. */
   readonly timeoutMs: number;
-  /** For how long a round goes on starting files an earlier round left without a line, in milliseconds. */
+  /**
+   * For how long a round goes on starting files an earlier round left
+   * without a line, in milliseconds: what the round may use, less what the
+   * largest file takes (src/round-budget.ts).
+   */
   readonly catchUpMs: number;
   /** The issuer keys a CRL's signature is checked against, in order. */
   readonly issuers: readonly IssuerKey[];
@@ -306,6 +320,11 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
   const fresh = new Set(sources.flatMap((s) => (s.result === "failed" ? [] : [s.sha256])).filter((sha256) => stored.has(sha256) && !listed.has(sha256)));
   const older = [...stored.keys()].filter((sha256) => !listed.has(sha256) && !fresh.has(sha256)).sort((a, b) => stored.get(b)! - stored.get(a)! || (a < b ? -1 : 1));
   for (const sha256 of [...fresh, ...older]) {
+    // This round's files are always done. Another of the older ones is
+    // started only while the round has time left for the largest
+    // (`catchUpMs`). The time is the clock's, since the round began on the
+    // archive: a Worker cannot read its CPU time, and from here on it never
+    // uses more CPU time than the clock shows.
     if (!fresh.has(sha256) && Date.now() - started >= parts.catchUpMs) break;
     try {
       const result = await indexFile(parts, sha256);

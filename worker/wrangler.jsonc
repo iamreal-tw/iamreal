@@ -17,6 +17,11 @@
       "preview_urls": false,
       // The CRL mirror, every hour.
       "triggers": { "crons": ["0 * * * *"] },
+      // The CPU time of one invocation: 5 minutes, the most there is. Without it an invocation
+      // gets 30 seconds, less than the tree of one CRL takes (README.md, "Cloudflare 上第一次建樹").
+      // A round of the mirror counts on this number (src/round-budget.ts); a deploy build with
+      // another one does not pass its checks (scripts/deploy-build-checks.ts).
+      "limits": { "cpu_ms": 300000 },
       "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],

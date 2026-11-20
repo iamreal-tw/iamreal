@@ -25,8 +25,9 @@ export const CRL_SOURCES: readonly CrlSource[] = Object.freeze([
  * 5 minutes. MOICA's G2 CRL was about 17 MB on 2026-11-16, which takes 5
  * minutes at 0.5 Mbit/s, far slower than a data centre's connection; and
  * the sources are asked at the same time, so a run stays well inside the
- * 15 minutes a scheduled Worker may take
- * (https://developers.cloudflare.com/workers/platform/limits/). The test
+ * 15 minutes a scheduled Worker may take by the clock
+ * (https://developers.cloudflare.com/workers/platform/limits/, "Wall time
+ * limits by invocation type"); waiting for an answer is not CPU time. The test
  * build waits a second or two instead, so that its tests of the limit do
  * not take minutes.
  */
@@ -34,15 +35,15 @@ export const CRL_TIMEOUT_MS: number = 5 * 60 * 1000;
 
 /**
  * For how long a round of the mirror goes on starting files that an
- * earlier round left without a line of the index: 5 minutes. The files
- * fetched in this round always get theirs. A round may use 15 minutes of
- * CPU time (https://developers.cloudflare.com/workers/platform/limits/),
- * and the tree of MOICA's G2 CRL takes about half a minute in the local
- * workerd; so an archive that lost its whole index gets it back over
- * several rounds, each of which ends in time, and every line a round wrote
- * stays. The test build sets its own, so that a test can reach the limit.
+ * earlier round left without a line of the index: 2.5 minutes, the 5
+ * minutes of CPU time an invocation has less the 2.5 minutes kept back for
+ * the largest CRL's tree (src/round-budget.ts). The files fetched in this
+ * round always get theirs. So an archive that lost its whole index gets it
+ * back over several rounds, each of which ends in time, and every line a
+ * round wrote stays. The test build sets its own, so that a test can reach
+ * the limit.
  */
-export const CRL_CATCH_UP_MS: number = 5 * 60 * 1000;
+export { CRL_CATCH_UP_MS } from "./round-budget.ts";
 
 /** The time. */
 export function now(): Date {
