@@ -140,6 +140,25 @@ mkdir "$tmp/project"
 sed 's|SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;|SWIFT_OBJC_BRIDGING_HEADER = Other/Bridge.h;|' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"
 expect "another bridging header in the project" "bridging header" IAMREAL_PROJECT_FILE="$tmp/project/project.pbxproj"
 
+rm -rf "$tmp/config"
+cp -R "$here/Config" "$tmp/config"
+printf 'OTHER_SWIFT_FLAGS = -import-objc-header Other.h\n' >> "$tmp/config/Shared.xcconfig"
+expect "another header through an .xcconfig" "bridging header" IAMREAL_CONFIG_DIR="$tmp/config"
+
+# Names that only end like a forbidden one are let through.
+source_with 'func f() { fingerprint(); publicInputs(); hexdump() }'
+if out=$(IAMREAL_APP_SOURCES="$tmp/src" "$here/check-app.sh" "$tmp/app/IamrealApp.app" 2>&1); then
+  echo "ok: fingerprint(, publicInputs( and hexdump( are not logs"
+else
+  echo "not ok: fingerprint(, publicInputs( and hexdump( are not logs:"
+  printf '%s\n' "$out" | sed 's/^/    /'
+  failed=1
+fi
+source_with 'func f() { Swift.print("x") }'
+expect "Swift.print in the sources" "Swift.print(" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'func f() { fputs("x", stderr) }'
+expect "fputs to stderr in the sources" "fputs(" IAMREAL_APP_SOURCES="$tmp/src"
+
 rm -rf "$tmp/project"
 mkdir "$tmp/project"
 sed 's/isa = PBXProject;/isa = PBXProject; packageReferences = ( XCRemoteSwiftPackageReference );/' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"

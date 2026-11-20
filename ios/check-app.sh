@@ -26,8 +26,9 @@
 # change hides from these patterns. It guards against slips; it does not
 # replace reading the change.
 #
-# IAMREAL_APP_SOURCES and IAMREAL_PROJECT_FILE replace the sources and the
-# project file it reads: check-app-test.sh uses them.
+# IAMREAL_APP_SOURCES, IAMREAL_PROJECT_FILE and IAMREAL_CONFIG_DIR replace the
+# sources, the project file and the directory of .xcconfig files it reads:
+# check-app-test.sh uses them.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -36,6 +37,7 @@ app=${1:?usage: check-app.sh <path to IamrealApp.app>}
 app=${app%/}
 sources=${IAMREAL_APP_SOURCES:-$here/App}
 project=${IAMREAL_PROJECT_FILE:-$here/IamrealApp.xcodeproj/project.pbxproj}
+config=${IAMREAL_CONFIG_DIR:-$here/Config}
 problems=0
 
 problem() {
@@ -109,27 +111,32 @@ if grep -q -E "XCRemoteSwiftPackageReference|XCLocalSwiftPackageReference|XCSwif
   problem "the project names a Swift package"
 fi
 
-# The sources. Each pattern is a fixed string.
+# The sources. Each pattern is an extended regular expression; B is what may
+# stand before a name (the start of the line or a character that is not part
+# of a name), so that fingerprint( is not print(.
+B='(^|[^A-Za-z0-9_])'
 forbidden() {
   why=$1
   where=$2
   shift 2
+  [ -d "$where" ] || { problem "$where is not there"; return; }
   for pattern in "$@"; do
-    found=$(grep -r -n -F -- "$pattern" "$where" || true)
-    [ -z "$found" ] || problem "$why: \"$pattern\" in $(printf '%s\n' "$found" | head -n 1)"
+    found=$(grep -r -n -E -- "$pattern" "$where" || true)
+    [ -z "$found" ] || problem "$why: $(printf '%s\n' "$found" | head -n 1)"
   done
 }
 forbidden "an identifier of the device or of advertising" "$sources" \
-  identifierForVendor AdSupport ASIdentifierManager AppTrackingTransparency ATTrackingManager
+  'identifierForVendor|AdSupport|ASIdentifierManager|AppTrackingTransparency|ATTrackingManager'
 forbidden "a log or standard output (a release build writes none)" "$sources" \
-  "print(" "debugPrint(" "dump(" "NSLog(" "os_log(" "Logger(" OSLog os_signpost \
-  "printf(" "puts(" "fwrite(" "FileHandle.standard" stdout stderr \
-  "fatalError(" "preconditionFailure(" "assertionFailure("
+  "$B(print|debugPrint|dump|NSLog|os_log|os_signpost|Logger|printf|puts|fputs|fwrite|fatalError|preconditionFailure|assertionFailure)\\(" \
+  "$B(OSLog|stdout|stderr)([^A-Za-z0-9_]|\$)" \
+  'FileHandle\.standard'
 forbidden "C reached another way than App/Bridge.h" "$sources" \
-  "@_silgen_name" "@_cdecl" "@_extern" dlsym dlopen bbapi
+  "@_silgen_name|@_cdecl|@_extern|$B(dlsym|dlopen|bbapi)"
 for crate in checks prover; do
   forbidden "the core writes to standard output" "$repo/device-core/$crate/src" \
-    "println!" "eprintln!" "print!" "eprint!" "dbg!"
+    "$B(println|eprintln|print|eprint|dbg)!" \
+    "$B(stdout|stderr)\\(\\)"
 done
 
 # C only through App/Bridge.h, which is the one #include.
@@ -141,7 +148,7 @@ else
   code=$(grep -v -E '^[[:space:]]*(//.*)?$' "$sources/Bridge.h" || true)
   [ "$code" = '#include "iamreal_device_core.h"' ] || problem "App/Bridge.h is more than the #include of iamreal_device_core.h"
 fi
-headers=$(grep -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" | tr -d '\t' | sort -u)
-[ "$headers" = 'SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;' ] || problem "the project's bridging header is not App/Bridge.h alone: $headers"
+headers=$(grep -h -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort -u)
+[ "$headers" = 'SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;' ] || problem "the bridging header of the project and of Config/ is not App/Bridge.h alone: $headers"
 
 exit $problems

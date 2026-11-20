@@ -81,7 +81,7 @@ xcodebuild test -project IamrealApp.xcodeproj -scheme IamrealApp \
 
 - `build-core.sh` 先下載 Barretenberg 的靜態函式庫（`device-core/fetch-barretenberg.sh`）和參數檔（`device-core/fetch-crs.sh`），兩者都核對 SHA-256 才用，再用 `cargo build --locked --release` 編出 `device-core/target/<target>/release/libiamreal_device_core.a`。Xcode 專案連結的就是那個位置的檔，所以改了 `device-core/` 要重跑它。它不放進 Xcode 的建置階段：下載不該發生在 Xcode 的建置裡，Xcode 給建置階段的環境變數（`SDKROOT` 等）也是給 iOS 的，不是給 cargo 在 Mac 上跑的建置腳本的。
 - `xcodebuild test` 建置 app、跑 `check-app.sh`、在模擬器上跑 `Tests/`。
-- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面三行，再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/` 或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
+- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/` 或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
 
 要在模擬器上看畫面：用 Xcode 打開 `IamrealApp.xcodeproj` 按執行，或 `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/IamrealApp.app` 再 `xcrun simctl launch booted tw.iamreal.app.test`。
 
@@ -102,7 +102,7 @@ app 的最後一個建置階段跑 `check-app.sh`，不過就是建置失敗。�
 - 內建的電路檔、驗證金鑰和程式庫裡的逐位元組相同，參數檔的 SHA-256 等於 `device-core/crs.sha256`
 - app 裡沒有任何執行檔連結 `AdSupport` 或 `AppTrackingTransparency`；沒有 `Frameworks/`；專案檔沒有 Swift 套件。這是「沒有第三方 SDK」能從建置看出來的部分
 - 原始碼沒有 `identifierForVendor`
-- `App/` 的原始碼沒有寫 log 或標準輸出的呼叫（`print`、`NSLog`、`os_log`、`Logger`、`FileHandle.standardError`、`fatalError` 等），Debug 也沒有；`device-core/` 兩個套件的 `src/` 沒有 `println!`、`eprintln!`、`dbg!`。所以 release build 自己不輸出 log
+- `App/` 的原始碼沒有寫 log 或標準輸出的呼叫（`print`、`NSLog`、`os_log`、`Logger`、`FileHandle.standardError`、`fatalError` 等），Debug 也沒有；`device-core/` 兩個套件的 `src/` 沒有 `println!`、`eprintln!`、`dbg!`，也沒有拿 `stdout()`、`stderr()`。所以 release build 自己不輸出 log
 - 原始碼只經過 `App/Bridge.h` 碰 C：它是專案唯一的 bridging header，內容只有引入 `device-core/` 標頭檔的那一行，`App/` 裡沒有別的 C、Objective-C 或 module map。靜態函式庫裡還有 Barretenberg 自己的 C 函式，app 不准呼叫（`device-core/README.md`「Poseidon2 不開放成 C 函式」）
 
 這些檢查是照字面找，防的是手誤，不能代替逐行看。看不到的有兩件：
