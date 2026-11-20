@@ -1,0 +1,967 @@
+{
+  "spec": "min-app",
+  "status": "draft",
+  "note": "Each case: the parsed body of GET /api/v1/config, the app's platform, the app's own build number, the device clock's time (now: seconds since the epoch, UTC; now_in_taiwan only for reading), and the verdict. from is given for ok_until.",
+  "cases": [
+    {
+      "name": "android, smaller build, the last second before the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 11,
+      "now": 1803830399,
+      "now_in_taiwan": "2027-02-28T23:59:59+08:00",
+      "result": "ok_until",
+      "from": "2027-03-01"
+    },
+    {
+      "name": "android, smaller build, the first second of the start date (still 2027-02-28 in UTC)",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 11,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "android, smaller build, a week before",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 11,
+      "now": 1803096000,
+      "now_in_taiwan": "2027-02-20T12:00:00+08:00",
+      "result": "ok_until",
+      "from": "2027-03-01"
+    },
+    {
+      "name": "android, smaller build, months after",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 11,
+      "now": 1811822400,
+      "now_in_taiwan": "2027-06-01T12:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "android, much smaller build, on the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 1,
+      "now": 1803873600,
+      "now_in_taiwan": "2027-03-01T12:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "android, equal build, on the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "android, equal build, before the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830399,
+      "now_in_taiwan": "2027-02-28T23:59:59+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "android, larger build, on the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 13,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "ios, smaller build, the last second before the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 8,
+      "now": 1803830399,
+      "now_in_taiwan": "2027-02-28T23:59:59+08:00",
+      "result": "ok_until",
+      "from": "2027-03-01"
+    },
+    {
+      "name": "ios, smaller build, the first second of the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 8,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "ios, equal build, on the start date",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "ios reads its own number, not android's",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 11,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "android reads its own number, not ios's",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "a start date in the past with the lowest build stops nothing",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 1,
+            "from": "2026-11-20"
+          },
+          "ios": {
+            "build": 1,
+            "from": "2026-11-20"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 1,
+      "now": 1811822400,
+      "now_in_taiwan": "2027-06-01T12:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "the whole config as the server sends it",
+      "config": {
+        "crl_max_age_days": 3,
+        "platforms": [
+          {
+            "platform": "threads",
+            "display_name": "Threads",
+            "username_format": "[a-z0-9._]{1,30}"
+          }
+        ],
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 8,
+      "now": 1803096000,
+      "now_in_taiwan": "2027-02-20T12:00:00+08:00",
+      "result": "ok_until",
+      "from": "2027-03-01"
+    },
+    {
+      "name": "the largest build",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 2100000000,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 2099999999,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "stop"
+    },
+    {
+      "name": "a start date on a leap day",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2028-02-29"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 8,
+      "now": 1811822400,
+      "now_in_taiwan": "2027-06-01T12:00:00+08:00",
+      "result": "ok_until",
+      "from": "2028-02-29"
+    },
+    {
+      "name": "a member of min_app for another platform is ignored",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          },
+          "harmonyos": {
+            "build": 3,
+            "from": "2027-01-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "the other app's entry is not read, even when it cannot be read",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": "nine"
+        }
+      },
+      "platform": "android",
+      "app_build": 11,
+      "now": 1803830399,
+      "now_in_taiwan": "2027-02-28T23:59:59+08:00",
+      "result": "ok_until",
+      "from": "2027-03-01"
+    },
+    {
+      "name": "the other app's entry is not read, even when it is missing",
+      "config": {
+        "min_app": {
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "a member of the entry other than build and from is ignored",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01",
+            "note": "anything"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "a member of the config other than min_app is ignored",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        },
+        "something_new": [
+          1,
+          2
+        ]
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "ok"
+    },
+    {
+      "name": "no min_app",
+      "config": {
+        "crl_max_age_days": 3,
+        "platforms": []
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "min_app is null",
+      "config": {
+        "min_app": null
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "min_app is an array",
+      "config": {
+        "min_app": [
+          {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        ]
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "min_app is a string",
+      "config": {
+        "min_app": "12"
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "the config is not an object",
+      "config": [
+        {
+          "min_app": {
+            "android": {
+              "build": 12,
+              "from": "2027-03-01"
+            },
+            "ios": {
+              "build": 9,
+              "from": "2027-03-01"
+            }
+          }
+        }
+      ],
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "no entry for this app",
+      "config": {
+        "min_app": {
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "this app's entry is null",
+      "config": {
+        "min_app": {
+          "android": null,
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "this app's entry is a number",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": 9
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "this app's entry is an array",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": [
+            9,
+            "2027-03-01"
+          ]
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "the key is not lowercase",
+      "config": {
+        "min_app": {
+          "Android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "no build",
+      "config": {
+        "min_app": {
+          "android": {
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is a string",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": "12",
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is not a whole number",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12.5,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 13,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is 0",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 0,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is negative",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": -1,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is above the largest",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 2100000001,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is null",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": null,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "build is true",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": true,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "unreadable even when this app's build is larger",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": "1",
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 99,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "no from",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from is null",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": null
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 13,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from is a number",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": 20270301
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from without leading zeros",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-3-1"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from is a date that does not exist",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-02-30"
+          }
+        }
+      },
+      "platform": "ios",
+      "app_build": 9,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from carries a time",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01T00:00:00+08:00"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from is after 2049",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2050-01-01"
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    },
+    {
+      "name": "from has a space after it",
+      "config": {
+        "min_app": {
+          "android": {
+            "build": 12,
+            "from": "2027-03-01 "
+          },
+          "ios": {
+            "build": 9,
+            "from": "2027-03-01"
+          }
+        }
+      },
+      "platform": "android",
+      "app_build": 12,
+      "now": 1803830400,
+      "now_in_taiwan": "2027-03-01T00:00:00+08:00",
+      "result": "unreadable"
+    }
+  ]
+}

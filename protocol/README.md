@@ -19,6 +19,7 @@
 | `scoped-id.ts` | `spec/scoped-id.md` | 匿名編號、它的文字寫法和 10 個字元的短編號 |
 | `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
 | `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）。後台寫入一筆時用它 |
+| `min-app.ts` | `spec/min-app.md` | 最低版本：app 怎麼讀 `config` 的 `min_app`，這一版照常過卡、先提醒從哪天起不能過卡、還是停下來。網頁版不讀它；後台（`worker/`）的測試拿它讀自己送出的值 |
 | `date.ts` | | 日期換成天數、台灣的日期（UTC+8，不看裝置的時區） |
 | `base32.ts` | | 題目和匿名編號用的 base32，只認一種寫法 |
 | `field.ts` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
@@ -51,6 +52,7 @@ pnpm test
 - `scope.json`：兩個場合字串和打包值；每份名冊的平台表（`platformsOf`）和標準答案、`spec/scope.md` 的表相同（代號、顯示名稱、格式）；平台代號；帳號名稱照它的平台的格式（格式字串從 `spec/scope.md` 的平台表讀出來，交給 `username-format.ts` 自己解析，和標準答案逐案相同；格式字串不是那一種寫法時讀不懂）
 - `declaration-code.json`：整份清單的原文、SHA-256、宣告碼、打包值
 - `scoped-id.json`：匿名編號的文字寫法、短編號 10 個字元、讀不懂的寫法
+- `min-app.json`：每個案例的 `config`、平台、app 自己的版本、裝置時鐘的時間，讀出來的結果（照常、照常但先提醒起算日、停下來、讀不懂）和標準答案相同
 
 `test/roster-rules.test.ts`：
 

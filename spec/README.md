@@ -18,6 +18,7 @@ there are the names used here.
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
+| [`min-app.md`](min-app.md) | The minimum app version in the server's `config`: how an app reads `min_app`, and when it goes on, warns or stops | Draft |
 
 The public roster is one scope shared by every public platform: a card has
 one scoped ID there and one slot on each platform (ADR-0017). One card
