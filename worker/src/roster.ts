@@ -36,7 +36,7 @@ import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfShortId, Counts } from "./page-data.ts";
-import { CACHE_FULL_FILE, FULL_FILE_RETRY_MS, type FileBucket, ROSTER_DIRECTORY, readFullFile, writeAndReadBack } from "./roster-files.ts";
+import { CACHE_FULL_FILE, FULL_FILE_RETRY_MS, type FileBucket, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, readFullFile, writeAndReadBack } from "./roster-files.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfShortId, clearViews, counts, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
@@ -768,8 +768,8 @@ export class Roster extends DurableObject<Env> {
     if (at !== length) throw new Error("the stored lines are shorter than they were counted");
 
     const bucket = this.bucket();
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, CACHE_FULL_FILE);
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), CACHE_FULL_FILE);
+    await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
+    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_FULL_FILE, contentType: TYPE_TEXT });
     const sha256 = await sha256Hex(file);
 
     this.ctx.storage.transactionSync(() => {

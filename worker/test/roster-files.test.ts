@@ -15,7 +15,7 @@ import { EMPTY_FINGERPRINT, LINES_PER_FILE, hashList, hashListName, nextFingerpr
 import { WORKER_DIR } from "./build.ts";
 import { type StoredFile, type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, cardStarting } from "./pages.ts";
-import { DAY_MS, IMMUTABLE, START, type Submission, TEST_SCOPE, cardState, checkRoster, freshRoster, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw } from "./records.ts";
+import { DAY_MS, HASH_LIST_TYPE, IMMUTABLE, ROSTER_FILE_TYPE, START, type Submission, TEST_SCOPE, cardState, checkRoster, freshRoster, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -100,6 +100,7 @@ describe("the 1,000th record fills a roster file", () => {
     assert.equal(text(file), full.map((row) => row.line).join(""), "the roster file is the stored lines, one after the other");
     assert.equal(text(hashes), hashList(EMPTY_FINGERPRINT, full.map((row) => row.record_hash)), "the record hash list is the fingerprint before the file and the stored record hashes");
     assert.deepEqual([file.cacheControl, hashes.cacheControl], [IMMUTABLE, IMMUTABLE]);
+    assert.deepEqual([file.contentType, hashes.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
 
     // The object keeps none of the 1,000, and still says what the roster is as a whole.
     await worker.roster.runAlarm(); // waits for the move that put the list there, if it is still deleting
@@ -165,7 +166,7 @@ describe("the 1,000th record fills a roster file", () => {
       await worker.issueChallenge();
     }
 
-    await worker.putFile(FILE, file.bytes, IMMUTABLE);
+    await worker.putFile(FILE, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
     await worker.roster.restart();
     await worker.roster.viewsFilled();
     assert.deepEqual(await worker.roster.views(), views);
@@ -303,6 +304,7 @@ describe("a full roster file that cannot be moved", () => {
     assert.equal(notMoved(), 6);
     const written = await directory();
     assert.deepEqual([text(written.get(rosterFileName(0))!), text(written.get(hashListName(0))!)], [fileText, listText]);
+    assert.deepEqual([written.get(rosterFileName(0))!.contentType, written.get(hashListName(0))!.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
     await kept(LINES_PER_FILE + 1);
     await worker.roster.restart();
     await worker.setClock(new Date(time));
@@ -313,6 +315,7 @@ describe("a full roster file that cannot be moved", () => {
     assert.deepEqual([...files.keys()], [rosterFileName(0), hashListName(0)]);
     assert.deepEqual([text(files.get(rosterFileName(0))!), text(files.get(hashListName(0))!)], [fileText, listText]);
     assert.deepEqual([files.get(rosterFileName(0))!.cacheControl, files.get(hashListName(0))!.cacheControl], [IMMUTABLE, IMMUTABLE]);
+    assert.deepEqual([files.get(rosterFileName(0))!.contentType, files.get(hashListName(0))!.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
     assert.deepEqual((await worker.roster.stored()).records.map((row) => row.seq), [LINES_PER_FILE + 1]);
     assert.equal((await checkRoster(worker)).length, LINES_PER_FILE + 1);
     assert.equal(notMoved(), 6);

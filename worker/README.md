@@ -198,19 +198,27 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 名冊每 1,000 筆切一檔（`spec/record.md`「The published roster」）。一檔寫滿之後，名冊的 Durable Object 把它和它的雜湊清單寫進資料儲存桶（ADR-0027），讀回來核對過，才刪掉自己存的那 1,000 筆。程式在 [`src/roster.ts`](src/roster.ts) 的 `#moveFile` 和 [`src/roster-files.ts`](src/roster-files.ts)；檔名和雜湊清單的寫法在 `protocol/`（`rosterFileName`、`hashListName`、`hashList`），拿 `spec/vectors/record.json` 的名冊目錄核對。測試在 [`test/roster-files.test.ts`](test/roster-files.test.ts)。
 
-| R2 的物件 | 內容 | `Cache-Control` |
-|---|---|---|
-| `roster/0000000000000000.jsonl`、`roster/0000000000001000.jsonl`…… | 寫滿的名冊檔：1,000 筆紀錄的那一行，照序號接起來 | `public, max-age=31536000, immutable` |
-| `roster/hashes/0000000000000000.txt`…… | 那一檔的雜湊清單：第一行是前一檔結尾的名冊指紋（第一檔是 64 個 0），之後每筆紀錄的雜湊一行 | `public, max-age=31536000, immutable` |
+| R2 的物件 | 內容 | `Cache-Control` | `Content-Type` |
+|---|---|---|---|
+| `roster/0000000000000000.jsonl`、`roster/0000000000001000.jsonl`…… | 寫滿的名冊檔：1,000 筆紀錄的那一行，照序號接起來 | `public, max-age=31536000, immutable` | `application/x-ndjson` |
+| `roster/hashes/0000000000000000.txt`…… | 那一檔的雜湊清單：第一行是前一檔結尾的名冊指紋（第一檔是 64 個 0），之後每筆紀錄的雜湊一行 | `public, max-age=31536000, immutable` | `text/plain; charset=utf-8` |
 
-寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。**還沒寫滿的最後一檔、指紋檔、卡片狀態檔現在都不寫**（[#70](https://github.com/iamreal-tw/iamreal/issues/70)），所以資料網域上現在只會有寫滿的檔，`iamreal-verify` 對它會報少了 `fingerprints.jsonl`。
+寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。
+
+`Content-Type` 寫入時一起設（營運者 2026-11-20 決定，[#149](https://github.com/iamreal-tw/iamreal/issues/149)），兩個字串定義在 `src/roster-files.ts` 一處，之後名冊目錄裡其他 `.jsonl` 的檔用同一個：
+
+- 雜湊清單是給人拿來核對的文字，標 `text/plain; charset=utf-8`，瀏覽器點開就直接顯示。
+- 名冊檔標 `application/x-ndjson`。這不是 IANA 註冊的型別，只是這種一行一個 JSON 的檔常見的寫法；`iamreal-verify` 和照規格讀名冊的人都不看它。
+- 清冊存檔（`crl/` 底下）的物件寫入時沒有設 `Content-Type`，已經寫出去的不動，所以兩邊不同。
+
+**還沒寫滿的最後一檔、指紋檔、卡片狀態檔現在都不寫**（[#70](https://github.com/iamreal-tw/iamreal/issues/70)），所以資料網域上現在只會有寫滿的檔，`iamreal-verify` 對它會報少了 `fingerprints.jsonl`。
 
 **寫入第 1,000 筆的回應不等 R2。** 紀錄在寫入的交易提交時就算寫入了（[寫入是一個交易](#寫入是一個交易)），搬檔是之後的事：寫滿一檔的那一筆只多做一件事，把物件的 alarm 設好（約 1 秒後響），alarm 設不成也不影響那一筆的 `201`。搬檔是 `timedWork()` 的一件（[過期的題目怎麼刪](#過期的題目怎麼刪)），alarm 響的時候做。寫 R2 是非同步的，放不進寫入一筆的那個 SQLite 交易；等 R2 的時候，物件照常收別的請求，新的紀錄屬於下一檔，搬檔不讀它們。
 
 搬一檔的步驟，照順序：
 
 1. 從存著的 1,000 筆組出名冊檔和雜湊清單的位元組。只用存著的東西，所以重做一次組出來的位元組相同
-2. 寫名冊檔，讀回來，逐位元組比對，`Cache-Control` 也比對
+2. 寫名冊檔，讀回來，逐位元組比對，`Cache-Control` 和 `Content-Type` 也比對
 3. 寫雜湊清單，讀回來，同樣比對
 4. 一個交易裡：`full_files` 記下這一檔（它之前的筆數、結尾的名冊指紋、檔案的 SHA-256），刪掉 `records` 裡的那 1,000 筆
 
@@ -826,7 +834,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 驗一份證明 | `worker.verify(電路名稱, 證明, 公開輸入)`，回 `true` 或 `false` |
 | 做一份測試金鑰簽的清冊 | [`test/crls.ts`](test/crls.ts) 的 `makeCrl({ issuer, number, thisUpdate, serials })`，交給 `worker.moica.serve` |
 | 名冊的 Durable Object 知道的最新清冊 | `worker.newestCrls()` |
-| 把儲存桶弄成上一輪做到一半的樣子 | `worker.putFile(檔名, 內容)`、`worker.deleteFile(檔名)`；`worker.putFile(檔名, 內容, Cache-Control)` 連標頭一起放 |
+| 把儲存桶弄成上一輪做到一半的樣子 | `worker.putFile(檔名, 內容)`、`worker.deleteFile(檔名)`；`worker.putFile(檔名, 內容, Cache-Control, Content-Type)` 連標頭一起放 |
 | 假的內政部不帶 `Content-Length` | `worker.moica.serve("G2", 位元組, "chunked")` |
 | 改一輪補舊檔的界線 | `startWorker({ crlCatchUpMs: 0 })`，預設是部署的 2.5 分鐘 |
 | 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
@@ -1006,7 +1014,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/crl-tree.ts` | 從鍵算樹根 |
 | `src/crl-index.ts` | 索引的寫法和順序、最新兩份可用的清冊 |
 | `src/roster.ts` | 名冊的 Durable Object：建表、發題目、算送出的次數、寫入一筆、讀卡片現況、刪過期的題目、把寫滿的名冊檔搬到 R2、重建衍生表、存鏡像交給它的最新清冊 |
-| `src/roster-files.ts` | 名冊目錄在資料儲存桶裡的位置和 `Cache-Control`；寫一個物件並讀回來核對；讀回一個寫滿的名冊檔 |
+| `src/roster-files.ts` | 名冊目錄在資料儲存桶裡的位置、`Cache-Control` 和 `Content-Type`；寫一個物件並讀回來核對；讀回一個寫滿的名冊檔 |
 | `src/card-table.ts` | 卡片狀態表：建表的程式，讀（連同檢查）和寫一張卡片的狀態 |
 | `src/slot-json.ts` | 一個名額寫成 JSON 的那一種寫法：`card-state` 的回應和卡片狀態表共用 |
 | `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表、有沒有更換政策 |

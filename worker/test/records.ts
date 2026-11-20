@@ -166,6 +166,9 @@ export async function wantError(worker: TestWorker, s: Submission, status: numbe
 
 /** The `Cache-Control` of a full roster file and of its record hash list in the data bucket (ADR-0027). */
 export const IMMUTABLE = "public, max-age=31536000, immutable";
+/** The `Content-Type` of a roster file in the data bucket, and of a record hash list. */
+export const ROSTER_FILE_TYPE = "application/x-ndjson";
+export const HASH_LIST_TYPE = "text/plain; charset=utf-8";
 
 /**
  * Checks the whole roster, the full roster files in the data bucket and
@@ -211,6 +214,7 @@ export async function checkRoster(worker: TestWorker, kind: "test" | "production
     const list = bucket.get(`roster/${hashListName(before)}`);
     assert.ok(file && list, `the roster file after ${before} records and its record hash list are in the bucket`);
     assert.deepEqual([file.cacheControl, list.cacheControl], [IMMUTABLE, IMMUTABLE]);
+    assert.deepEqual([file.contentType, list.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
     const lines = new TextDecoder().decode(file.bytes).split("\n");
     assert.equal(lines.pop(), "", "a roster file ends with LF");
     assert.equal(lines.length, LINES_PER_FILE, "the lines of a full file");

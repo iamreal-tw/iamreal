@@ -118,15 +118,16 @@ export interface StoredFile {
   readonly key: string;
   readonly bytes: Uint8Array;
   readonly cacheControl: string | undefined;
+  readonly contentType: string | undefined;
   readonly uploaded: Date;
 }
 
 /** What the tests use of an R2 bucket binding. */
 interface Bucket {
-  put(key: string, value: Uint8Array | string, options?: { httpMetadata?: { cacheControl?: string } }): Promise<unknown>;
+  put(key: string, value: Uint8Array | string, options?: { httpMetadata?: { cacheControl?: string; contentType?: string } }): Promise<unknown>;
   delete(key: string): Promise<void>;
   list(options?: { prefix?: string; cursor?: string }): Promise<{ objects: { key: string }[]; truncated: boolean; cursor?: string }>;
-  get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { cacheControl?: string }; uploaded: Date } | null>;
+  get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { cacheControl?: string; contentType?: string }; uploaded: Date } | null>;
 }
 
 export interface TestWorker {
@@ -142,10 +143,11 @@ export interface TestWorker {
   /**
    * Puts a file into the simulated R2 bucket, or takes one out, behind the
    * Worker's back: how a test leaves the bucket as a round that broke off
-   * would have left it. `cacheControl` is the `Cache-Control` the file
-   * carries; without it, none.
+   * would have left it. `cacheControl` and `contentType` are the
+   * `Cache-Control` and the `Content-Type` the file carries; without
+   * them, none.
    */
-  putFile(key: string, bytes: Uint8Array | string, cacheControl?: string): Promise<void>;
+  putFile(key: string, bytes: Uint8Array | string, cacheControl?: string, contentType?: string): Promise<void>;
   deleteFile(key: string): Promise<void>;
   /**
    * What the roster's Durable Object knows of the CRL archive, through the
@@ -427,7 +429,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       for (const key of keys.sort()) {
         const object = await DATA.get(key);
         if (!object) throw new Error(`${key} was listed but is not there`);
-        out.push({ key, bytes: new Uint8Array(await object.arrayBuffer()), cacheControl: object.httpMetadata?.cacheControl, uploaded: new Date(object.uploaded) });
+        out.push({ key, bytes: new Uint8Array(await object.arrayBuffer()), cacheControl: object.httpMetadata?.cacheControl, contentType: object.httpMetadata?.contentType, uploaded: new Date(object.uploaded) });
       }
       return out;
     },
@@ -460,8 +462,8 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 200) throw new Error(`verifying: HTTP ${res.status} ${await res.text()}`);
       return ((await res.json()) as { verified: boolean }).verified;
     },
-    async putFile(key, bytes, cacheControl) {
-      await (await worker.getEnv()).DATA.put(key, bytes, cacheControl === undefined ? {} : { httpMetadata: { cacheControl } });
+    async putFile(key, bytes, cacheControl, contentType) {
+      await (await worker.getEnv()).DATA.put(key, bytes, { httpMetadata: { ...(cacheControl !== undefined && { cacheControl }), ...(contentType !== undefined && { contentType }) } });
     },
     async deleteFile(key) {
       await (await worker.getEnv()).DATA.delete(key);

@@ -22,6 +22,26 @@ export const ROSTER_DIRECTORY = "roster/";
 export const CACHE_FULL_FILE = "public, max-age=31536000, immutable";
 
 /**
+ * The `Content-Type` of the roster directory's files of lines of JSON
+ * (`.jsonl`): the roster files, and whatever else of the directory is
+ * written in that form. It is not a type registered with IANA, only the
+ * usual name for such a file; nothing that reads the roster depends on it.
+ */
+export const TYPE_JSON_LINES = "application/x-ndjson";
+
+/**
+ * The `Content-Type` of a record hash list (`.txt`): text a person checks
+ * a hash against, which a browser then shows as it is.
+ */
+export const TYPE_TEXT = "text/plain; charset=utf-8";
+
+/** The headers an object of the roster directory is written with. */
+export interface FileHeaders {
+  readonly cacheControl: string;
+  readonly contentType: string;
+}
+
+/**
  * How long after a full roster file could not be moved to the data bucket
  * the object tries again: one minute. Long enough that the second try is
  * never the second write of an object within a second, which R2 refuses
@@ -35,17 +55,17 @@ export type FileBucket = Pick<R2Bucket, "put" | "get">;
 
 /**
  * Writes an object and reads it back: it returns only once the bucket gives
- * exactly these bytes under this key, with this `Cache-Control`. Otherwise
+ * exactly these bytes under this key, with these headers. Otherwise
  * it throws; the message names the key and nothing of the content.
  *
  * Writing the same bytes again leaves the same object, so a caller that
  * does not know how far an earlier try came simply calls this again.
  */
-export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, cacheControl: string): Promise<void> {
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl } });
+export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders): Promise<void> {
+  await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType } });
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
-  if (stored.httpMetadata?.cacheControl !== cacheControl) throw new Error(`${key} does not carry the Cache-Control it was written with`);
+  if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
   if (!(await isBytes(stored.body, bytes))) throw new Error(`${key} read back is not the bytes that were written`);
 }
 
