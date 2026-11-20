@@ -99,3 +99,28 @@ jobs:
       - name: web/ test
         working-directory: web
         run: pnpm test
+
+  # device-core/: the Rust core of the apps. It installs no package of npm and
+  # uses no bb: the Barretenberg it links is the static library that
+  # fetch-barretenberg.sh downloads and checks against barretenberg.sha256.
+  device-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install libc++ (Barretenberg's static library is built with it)
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
+      - name: Install the Rust of rust-toolchain.toml
+        working-directory: device-core
+        run: rustup toolchain install
+      - name: cargo fmt --check
+        working-directory: device-core
+        run: cargo fmt --check
+      - name: cargo clippy
+        working-directory: device-core
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo clippy --locked --release --all-targets -- -D warnings
+      - name: cargo test
+        working-directory: device-core
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test --locked --release

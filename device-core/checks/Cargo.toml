@@ -1,0 +1,17 @@
+[package]
+name = "iamreal-device-checks"
+description = "The algorithms of spec/ and the checks made on the device, without any native library"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# No dependencies: SHA-256 and Poseidon2 come from the caller (src/hash.rs).
+
+[dev-dependencies]
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"

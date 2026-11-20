@@ -33,7 +33,7 @@ declaration code, not in the scope string.
 `poseidon2-constants.json` belong to `scoped-id.md` and
 `revocation-tree.md`; `card-state-file.json` belongs to `roster-rules.md`
 ("The card state file"). Every implementation (Go,
-TypeScript, and later the mobile apps) runs its tests against these same
+TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 
