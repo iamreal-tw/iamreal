@@ -333,7 +333,9 @@ records keep verifying.
   the fingerprint at the counts where files begin and end, and roster
   directories of 0, 1, 1,000, 1,001 and 2,001 records: the name, first
   `seq`, number of lines and SHA-256 of each roster file, and the same for
-  each record hash list with its first and last line;
+  each record hash list with its first and last line, and the name and
+  content of the fingerprint file of the directory published once, on
+  2026-11-16, with every record;
 - `fingerprint_files`: fingerprint files checked against the production
   roster of `rosters`, valid or with the first line that fails.
 
