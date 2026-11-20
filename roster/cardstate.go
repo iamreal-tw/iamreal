@@ -184,9 +184,9 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 		return row, fmt.Errorf("scope_string: not an accepted scope of the %s roster", r)
 	}
 	if _, err := verifier.ParseScopedID(v.ScopedID); err != nil {
-		return row, err
+		return row, err // it says scoped_id
 	}
-	lastSeq, err := count(v.LastSeq, 1)
+	lastSeq, err := boundedInt(v.LastSeq, 1)
 	if err != nil {
 		return row, fmt.Errorf("last_seq: %v", err)
 	}
@@ -197,7 +197,7 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 	if err != nil {
 		return row, fmt.Errorf("last_card_proof: %v", err)
 	}
-	proofs, err := count(v.ProofsOnLastDate, 0)
+	proofs, err := boundedInt(v.ProofsOnLastDate, 0)
 	if err != nil {
 		return row, fmt.Errorf("proofs_on_last_date: %v", err)
 	}
@@ -220,7 +220,7 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 				return row, fmt.Errorf("slots: %s: a username not in the format %s", id, p.UsernameFormat)
 			}
 		}
-		n, err := count(s.SwitchCount, 0)
+		n, err := boundedInt(s.SwitchCount, 0)
 		if err != nil {
 			return row, fmt.Errorf("slots: %s: switch_count: %v", id, err)
 		}
@@ -240,10 +240,10 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 	return row, nil
 }
 
-// count reads a decimal integer from least to verifier.MaxSeq (2^53 − 1).
+// boundedInt reads a decimal integer from least to verifier.MaxSeq (2^53 − 1).
 // A spelling other than the template's (leading zeros, 1.0, 1e0) is left
 // to the byte comparison, as long as it is such an integer.
-func count(n json.Number, least uint64) (uint64, error) {
+func boundedInt(n json.Number, least uint64) (uint64, error) {
 	v, err := strconv.ParseUint(n.String(), 10, 64)
 	if err != nil || v < least || v > verifier.MaxSeq {
 		return 0, fmt.Errorf("not a decimal integer from %d to 2^53 − 1", least)
@@ -316,6 +316,9 @@ func CompareCardStates(file []CardRow, count, applied uint64, computed []CardRow
 		p := cards[cardKey{k.ScopeString, k.ScopedID}]
 		o := CardOutcome{ScopeString: k.ScopeString, ScopedID: k.ScopedID}
 		switch {
+		case p.file != nil && p.file.LastSeq > count:
+			o.Outcome = OutcomeDifferent
+			o.Differences = []string{fmt.Sprintf("the row's last_seq %d is beyond the file's count %d", p.file.LastSeq, count)}
 		case p.file != nil && p.file.LastSeq > applied:
 			o.Outcome = OutcomeSkipped
 		case p.computed != nil && p.computed.LastSeq > count:

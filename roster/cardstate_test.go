@@ -5,6 +5,7 @@ package roster_test
 // the comparison ("comparisons").
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -28,6 +29,7 @@ type cardStateFileCase struct {
 	Name            string   `json:"name"`
 	Roster          string   `json:"roster"`
 	Content         string   `json:"content"`
+	ContentHex      string   `json:"content_hex"`
 	Valid           bool     `json:"valid"`
 	Cards           []rowOut `json:"cards"`
 	Line            int      `json:"line"`
@@ -57,14 +59,37 @@ type comparisonCase struct {
 func loadCardStateVectors(t *testing.T) ([]cardStateFileCase, []comparisonCase) {
 	t.Helper()
 	var v struct {
-		Files       []cardStateFileCase `json:"files"`
-		Comparisons []comparisonCase    `json:"comparisons"`
+		RulesVersion *int                `json:"rules_version"`
+		Files        []cardStateFileCase `json:"files"`
+		Comparisons  []comparisonCase    `json:"comparisons"`
 	}
 	load(t, "card-state-file.json", &v)
 	if len(v.Files) == 0 || len(v.Comparisons) == 0 {
 		t.Fatal("no cases")
 	}
+	// The files of roster-rules.json's cases are computed by one version of
+	// the rules, as roster-rules.json's are (version_test.go).
+	if v.RulesVersion == nil || *v.RulesVersion != roster.RulesVersion {
+		t.Fatalf("RulesVersion is %d, spec/vectors/card-state-file.json has %v", roster.RulesVersion, v.RulesVersion)
+	}
 	return v.Files, v.Comparisons
+}
+
+// bytes returns the file's bytes: content_hex if the vector has it (bytes
+// that are not UTF-8), otherwise the UTF-8 of content.
+func (f cardStateFileCase) bytes(t *testing.T) []byte {
+	t.Helper()
+	if f.ContentHex == "" {
+		return []byte(f.Content)
+	}
+	if f.Content != "" {
+		t.Fatal("both content and content_hex")
+	}
+	b, err := hex.DecodeString(f.ContentHex)
+	if err != nil {
+		t.Fatalf("content_hex: %v", err)
+	}
+	return b
 }
 
 // rowsOut writes rows in the shape of the vectors, without the slots in the
@@ -95,7 +120,7 @@ func TestVectorsCardStateFileRead(t *testing.T) {
 	files, _ := loadCardStateVectors(t)
 	for _, f := range files {
 		t.Run(f.Name, func(t *testing.T) {
-			rows, b := roster.ReadCardStateFile([]byte(f.Content), rosterOf(t, f.Roster))
+			rows, b := roster.ReadCardStateFile(f.bytes(t), rosterOf(t, f.Roster))
 			if !f.Valid {
 				if b == nil {
 					t.Fatalf("valid, want broken at line %d with %s", f.Line, f.Code)

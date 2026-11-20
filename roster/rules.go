@@ -513,13 +513,22 @@ func (x *Rules) AccountCards(scopeString, platform, username string) int {
 // Apply applies the rules to the records of a valid roster file of roster
 // r, in order: Rules.Apply on each record.
 func Apply(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*State, error) {
+	x, err := applyAll(records, r, proofs, crls)
+	if err != nil {
+		return nil, err
+	}
+	return x.State(), nil
+}
+
+// applyAll returns the rules after Rules.Apply on each record, in order.
+func applyAll(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Rules, error) {
 	x := NewRules(r, proofs, crls)
 	for _, rec := range records {
 		if _, err := x.Apply(rec); err != nil {
 			return nil, err
 		}
 	}
-	return x.State(), nil
+	return x, nil
 }
 
 func rootRecognized(crls CRLArchive, r *verifier.Record, d verifier.Date) (bool, error) {
@@ -602,11 +611,9 @@ func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive
 	if broken != nil {
 		return &Report{Broken: broken}, nil
 	}
-	x := NewRules(r, proofs, crls)
-	for _, rec := range records {
-		if _, err := x.Apply(rec); err != nil {
-			return nil, err
-		}
+	x, err := applyAll(records, r, proofs, crls)
+	if err != nil {
+		return nil, err
 	}
 	return &Report{Fingerprint: fingerprint, Records: len(records), State: x.State(), Cards: x.CardRows()}, nil
 }
