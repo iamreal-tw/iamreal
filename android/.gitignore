@@ -1,0 +1,6 @@
+# Gradle's and the build's output
+.gradle/
+build/
+local.properties
+# Zig and the parameter files, downloaded and checked by fetch-zig.sh and fetch-crs.sh
+vendor/

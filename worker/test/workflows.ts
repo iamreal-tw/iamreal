@@ -227,6 +227,25 @@ export const DEVICE_CORE_JOB = "device-core";
 /** How a step of that job gets Barretenberg: the directory the script prints, and nothing if the script fails. */
 export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && ';
 
+/**
+ * The other job that does not check bb's SHA-256: android/ runs no bb
+ * either. Its Barretenberg comes from the same script, which
+ * android/build-native.sh calls.
+ */
+export const ANDROID_JOB = "android";
+/** The one line of that job that runs Gradle: the wrapper of the repository, with the runner's JDK 17. */
+export const GRADLE_BUILD = 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build';
+/**
+ * The Gradle the wrapper downloads and the SHA-256 it checks the download
+ * against, and the SHA-256 of the wrapper's own jar in the repository, the
+ * first code of android/ a build runs. Both are the ones Gradle publishes
+ * for this version (https://gradle.org/release-checksums/);
+ * test/workflows.test.ts checks the files of android/gradle/wrapper/ against them.
+ */
+export const GRADLE_VERSION = "9.9.1";
+export const GRADLE_DISTRIBUTION_SHA256 = "d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228";
+export const GRADLE_WRAPPER_JAR_SHA256 = "621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8";
+
 /** What each action may be given, exactly. */
 const WITH: Readonly<Record<string, YamlMap>> = {
   "actions/checkout": { "persist-credentials": "false" },
@@ -406,7 +425,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -425,6 +444,15 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
         if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
         for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+      } else if (f === "checks.yml" && name === ANDROID_JOB) {
+        const steps = job.steps.filter(isMap);
+        if (!steps.some((s) => s.run === GRADLE_BUILD && s["working-directory"] === "android")) j("does not build with the Gradle wrapper of android/");
+        for (const s of steps) {
+          const r = s.run;
+          if (typeof r !== "string") continue;
+          if (/gradle/i.test(r) && r !== GRADLE_BUILD) j(`Gradle run another way: ${r}`);
+          if (/BB_LIB_DIR|BARRETENBERG_VERSION|\bzig\b/i.test(r)) j(`Barretenberg or Zig from somewhere other than the scripts: ${r}`);
+        }
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

@@ -31,7 +31,7 @@
 | `field.rs` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
 | `hash.rs` | | 呼叫的人要提供的兩個雜湊 |
 
-還沒有的（各有自己的票）：選憑證和檢查憑證、廢止清冊、建樹、電路輸入、名冊規則、檢查後台的回應、「檢查都通過了」的結果、算見證和證明、Android 和 iOS 的建置。
+還沒有的（各有自己的票）：選憑證和檢查憑證、廢止清冊、建樹、電路輸入、名冊規則、檢查後台的回應、「檢查都通過了」的結果、算見證和證明、iOS 的建置。Android 的建置在 `android/`。
 
 ## C 函式的慣例
 
@@ -141,6 +141,6 @@ cargo test --locked -p iamreal-device-checks
 
 - **`strip = "symbols"` 會把靜態函式庫對外的函式也拿掉。** `Cargo.toml` 的 release 設定用 `strip = "debuginfo"`；符號由 app 自己的連結去掉。`panic = "unwind"` 也不能改：C 函式靠它接住 panic
 - **Barretenberg 自己決定的執行緒數在 Mac 上偏低**，證明慢 2 到 3 倍；要由核心依核心數設定。這裡還沒有算證明，留給加上證明的那張票
-- **Android 的 libc++。** Aztec 給 Android 的靜態函式庫用的是 LLVM 的 libc++（`std::__1`），NDK 的是 `std::__ndk1`，兩者連結不起來；量測時用 Aztec 編 Barretenberg 的同一版 Zig 連結，把 libc++ 靜態連進 `.so`。留給 Android 建置的那張票
+- **Android 的 libc++。** Aztec 給 Android 的靜態函式庫用的是 LLVM 的 libc++（`std::__1`），NDK 的是 `std::__ndk1`，兩者連結不起來；量測時用 Aztec 編 Barretenberg 的同一版 Zig 連結，把 libc++ 靜態連進 `.so`。Android 的建置照這個做（`android/build-native.sh`、`android/README.md`「原生的函式庫」）
 
 Linux 的靜態函式庫同樣要 LLVM 的 libc++（不是 GCC 的 libstdc++），所以上面要裝 `libc++-dev`。

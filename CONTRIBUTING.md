@@ -87,4 +87,5 @@ PR 的說明照 `/pr` 的格式，「Evidence」列出下面每一項的結果�
 - 動到 `web/` 時：在 `web/` 跑 `pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
 - 動到 `worker/` 或 `.github/workflows/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`（工作流程的檢查在 `worker/test/workflows.test.ts`）
 - 動到 `device-core/` 或 `spec/vectors/` 時：在 `device-core/` 跑 `cargo fmt --check`、`cargo clippy --locked --release --all-targets -- -D warnings`、`cargo test --locked --release`（要設 `BB_LIB_DIR`，見 `device-core/README.md`）
+- 動到 `android/`、`device-core/` 或 `spec/vectors/` 時：在 `android/` 跑 `./gradlew build`（要先跑 `./fetch-crs.sh`，見 `android/README.md`）
 - 動到畫面時：桌機和手機寬度的截圖
