@@ -588,6 +588,25 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.close();
     }
   });
+
+  test("challenges issued more often than the alarm's least wait do not keep pushing the alarm away: work that is due runs within seconds", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await issue(worker);
+      // Work that is due now, while a challenge is issued every 300 ms for three seconds: each of them sets the alarm.
+      await worker.roster.setExtraWork(START, DAY);
+      for (let i = 0; i < 10; i++) {
+        await issue(worker);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      // The alarm is then the challenges' own again.
+      await alarmIsAhead(worker, 10, "once the other work ran");
+    } finally {
+      await worker.close();
+    }
+  });
 });
 
 /** The one line the back end wrote about each of its own failures, in order. */

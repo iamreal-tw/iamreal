@@ -224,6 +224,12 @@ export function clearViews(sql: SqlStorage): void {
   sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
 }
 
+/** A line of the roster file, the LF included, with the `seq` its record must have. */
+export interface NumberedLine {
+  readonly seq: number;
+  readonly line: string;
+}
+
 /** The roster rules' state of every card met so far while the views are written again, by scope string and scoped ID. */
 export type CardsSoFar = Map<string, CardState>;
 
@@ -242,7 +248,7 @@ export type CardsSoFar = Map<string, CardState>;
  * that is not well formed, or a record the rules do not take, throws: the
  * transaction then leaves the views as they were before this run.
  */
-export function writeViewsOf(sql: SqlStorage, kind: RosterKind, platforms: readonly PlatformRow[], cards: CardsSoFar, lines: Iterable<{ readonly seq: number; readonly line: string }>): void {
+export function writeViewsOf(sql: SqlStorage, kind: RosterKind, platforms: readonly PlatformRow[], cards: CardsSoFar, lines: Iterable<NumberedLine>): void {
   for (const row of lines) {
     const record: RosterRecord | null = readRecordLine(kind, row.line);
     const date = record === null ? null : parseChallenge(record.challenge);
@@ -257,7 +263,7 @@ export function writeViewsOf(sql: SqlStorage, kind: RosterKind, platforms: reado
 }
 
 /** The rows of the records table (roster.ts), in the order of `seq`, as `writeViewsOf` takes them. */
-export function storedLines(sql: SqlStorage): Iterable<{ seq: number; line: string }> {
+export function storedLines(sql: SqlStorage): Iterable<NumberedLine> {
   return sql.exec<{ seq: number; line: string }>("SELECT seq, line FROM records ORDER BY seq");
 }
 

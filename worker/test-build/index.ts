@@ -52,8 +52,8 @@ import { proofVerifier } from "../src/in-worker.ts";
 import type { FileBucket } from "../src/roster-files.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import { VIEW_TABLE_KEYS, viewOf, writeView } from "../src/views.ts";
-import type { BucketFault, CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
+import { VIEW_TABLE_KEYS, clearViews, viewOf, writeView } from "../src/views.ts";
+import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -151,7 +151,12 @@ export class Roster extends DeployedRoster {
       put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
         if (key !== fault.key) return real.put(key, value, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
-        const written = await real.put(key, fault.how === "put writes other bytes" ? value.subarray(0, -1) : value, options);
+        const headers = options.httpMetadata as R2HTTPMetadata;
+        const stored = fault.how === "put writes another Cache-Control" ? { ...options, httpMetadata: { ...headers, cacheControl: "public, max-age=60" } } : fault.how === "put writes another Content-Type" ? { ...options, httpMetadata: { ...headers, contentType: "application/octet-stream" } } : options;
+        if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
+        // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
+        if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
+        const written = await real.put(key, value, stored);
         if (fault.how === "put loses its answer") throw new Error("the test loses the answer of this write");
         return written;
       },
@@ -195,8 +200,13 @@ export class Roster extends DeployedRoster {
     return [...this.#extraRuns];
   }
 
-  /** Runs the alarm now, whatever time it is set for. */
+  /**
+   * Runs the alarm now, whatever time it is set for. As when it rings by
+   * itself, the alarm that was set is spent first: the handler then finds
+   * none set, and sets the next one.
+   */
   async testRunAlarm(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
     await this.alarm();
   }
 
@@ -273,9 +283,12 @@ export class Roster extends DeployedRoster {
    * them. The object fills them from its records when it starts again.
    */
   testClearViews(): void {
-    const sql = this.ctx.storage.sql;
-    for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
-    sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
+    this.ctx.storage.transactionSync(() => clearViews(this.ctx.storage.sql));
+  }
+
+  /** How many records the object keeps, and the first and the last `seq` among them. */
+  testKept(): KeptRecords {
+    return this.ctx.storage.sql.exec<{ count: number; first: number | null; last: number | null }>("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS last FROM records").one();
   }
 
   /** Waits until the object has filled its views, or has given up (src/roster.ts, `viewsFilling`). */
@@ -405,7 +418,9 @@ export default {
    *   answers once the running object has filled them or given up.
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
-   *   fingerprint of its row of the roster.
+   *   fingerprint of its row of the roster. `GET /__test/roster/kept`
+   *   answers a KeptRecords: only how many it keeps, and from which `seq`
+   *   to which.
    * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
    *   object waits that long before it hashes a record it is asked to
    *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
@@ -508,6 +523,7 @@ export default {
       return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
     }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "GET /__test/roster/kept") return json(await testRosterOf(env).testKept());
     if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
     if (route === "DELETE /__test/roster/views") {
       await testRosterOf(env).testClearViews();

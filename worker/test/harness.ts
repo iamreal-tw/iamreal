@@ -13,7 +13,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { BucketFault, CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -314,6 +314,13 @@ export interface TestWorker {
      */
     stored(): Promise<StoredRoster>;
     /**
+     * How many records the object keeps, and the first and the last `seq`
+     * among them (test build, `GET /__test/roster/kept`): for a roster
+     * that keeps more than `stored()` can answer with, which is some 1,600
+     * records (an answer of more than 32 MiB does not come back).
+     */
+    kept(): Promise<KeptRecords>;
+    /**
      * From now on the object waits this many milliseconds before it hashes
      * a record it is asked to write (test build,
      * `PUT /__test/roster/hash-delay`): other requests run during the wait,
@@ -334,7 +341,7 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-export type { BucketFault, CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
+export type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -566,6 +573,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/stored");
         if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredRoster;
+      },
+      async kept() {
+        const res = await server.fetch("/__test/roster/kept");
+        if (res.status !== 200) throw new Error(`reading what the roster keeps: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as KeptRecords;
       },
       async setHashDelay(ms) {
         const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });

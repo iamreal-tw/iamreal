@@ -70,6 +70,8 @@ const notMoved = (): number => worker.logLines().filter((line) => line.includes(
 // The tests of this group go on from each other, on one roster: filling a file takes a thousand records.
 describe("the 1,000th record fills a roster file", () => {
   const card = cardStarting(CARD_A);
+  // Three cards that declare in the first file and change their list in the second: a correction, a switch, a withdrawal.
+  const [corrects, switches, withdraws] = [newCard(), newCard(), newCard()];
   let root: string;
 
   test("the file and its record hash list are in the bucket, the object keeps none of its records, and the roster goes on", async () => {
@@ -78,6 +80,7 @@ describe("the 1,000th record fills a roster file", () => {
     root = await publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: tw("2026-11-16", "05:00:00"), serials: [11, 12] });
     await worker.setClock(tw("2026-11-16", "12:00:00"));
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
+    for (const other of [corrects, switches, withdraws]) await mustSubmit(worker, await sub(worker, other, root, "threads:alice"), "threads first");
     await fillTo(root, LINES_PER_FILE - 1);
     assert.deepEqual([...(await directory()).keys()], [], "a file that is not full is not in the bucket");
     assert.equal((await checkRoster(worker)).length, LINES_PER_FILE - 1);
@@ -128,8 +131,16 @@ describe("the 1,000th record fills a roster file", () => {
   const notFilled = (): number => worker.logLines().filter((line) => line.includes('"views_not_filled"')).length;
 
   test("the views, cleared, are written again from the bucket's roster file and the object's records: row for row what they were", async () => {
+    // Records of every kind whose card's earlier records are in the file that was moved: a correction on the day of the
+    // first declaration, and the day after a switch, a withdrawal and a refresh.
+    await mustSubmit(worker, await sub(worker, corrects, root, "threads:carol"), "threads correction");
+    await worker.setClock(tw("2026-11-17", "12:00:00"));
+    await mustSubmit(worker, await sub(worker, switches, root, "threads:bob"), "threads switch");
+    await mustSubmit(worker, await sub(worker, withdraws, root), "threads withdraw");
+    await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads refresh");
     const views = await worker.roster.views();
-    assert.deepEqual(views.view_state, [{ id: 1, seq: LINES_PER_FILE + 1 }]);
+    assert.deepEqual(views.view_state, [{ id: 1, seq: LINES_PER_FILE + 5 }]);
+    assert.deepEqual([...new Set(views.view_history!.map((row) => row.kind))].sort(), ["correction", "first", "refresh", "switch", "withdraw"]);
     const pages = [await page("/"), await page(`/p/${CARD_A}`)];
 
     await worker.roster.clearViews();
@@ -141,7 +152,7 @@ describe("the 1,000th record fills a roster file", () => {
 
     // And the roster goes on from them.
     const next = await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads refresh");
-    assert.deepEqual([next.seq, next.kinds[0].account_cards], [LINES_PER_FILE + 2, LINES_PER_FILE]);
+    assert.deepEqual([next.seq, next.kinds[0].account_cards], [LINES_PER_FILE + 6, LINES_PER_FILE - 3]);
   });
 
   test("a roster file the bucket does not have as it was written fills no views: no page, no record, until the file is back", async () => {
@@ -172,7 +183,7 @@ describe("the 1,000th record fills a roster file", () => {
     assert.deepEqual(await worker.roster.views(), views);
     assert.deepEqual([await page("/"), await page(`/p/${CARD_A}`)], pages);
     await mustSubmit(worker, submission, "threads first");
-    assert.equal((await checkRoster(worker)).length, LINES_PER_FILE + 3);
+    assert.equal((await checkRoster(worker)).length, LINES_PER_FILE + 7);
   });
 
   // Go's re-verifying command reads the directory. Without go this is skipped on a developer's machine; where it
@@ -212,15 +223,55 @@ describe("the 1,000th record fills a roster file", () => {
       // Both lists are the roster's; the one thing the command misses is the fingerprint file, which is published once a day.
       assert.match(said, /hashes\/: 2 list\(s\), every list is the roster's/);
       assert.deepEqual(said.split("\n").filter((line) => /missing|not the record hash list|has no roster file|broken/.test(line)), ["iamreal-verify: fingerprints.jsonl is missing"]);
-      // What Go computes of the card that has three records is what the back end answers for it.
+      // What Go computes of the card that has four records is what the back end answers for it.
       const cards = verified.state.find((scope) => scope.scope_string === TEST_SCOPE)!.cards;
-      assert.equal(cards.length, 2 * LINES_PER_FILE - 2);
+      // The card that has four records, and the three that have two.
+      assert.equal(cards.length, 2 * LINES_PER_FILE - 6);
       const state = await cardState(worker, card);
       assert.deepEqual(cards.find((c) => c.scoped_id === card), { scoped_id: card, last_card_proof: state.last_card_proof, accounts: [{ platform: "threads", username: "alice" }] });
       rmSync(out, { recursive: true, force: true });
     } catch (e) {
       throw new Error(`${e instanceof Error ? e.message : String(e)}\nThe directory and what Go printed are kept in ${out}`, { cause: e });
     }
+  });
+
+  test("views that could not be filled from the bucket are tried again a minute later, without the object starting again", async () => {
+    const views = await worker.roster.views();
+    const pages = [await page("/"), await page(`/p/${CARD_A}`)];
+    const second = `roster/${rosterFileName(LINES_PER_FILE)}`;
+    const file = (await directory()).get(rosterFileName(LINES_PER_FILE))!;
+    let time = tw("2026-11-17", "12:00:00").getTime();
+    const aMinuteLater = async (): Promise<void> => {
+      time += 60 * 1000;
+      await worker.setClock(new Date(time));
+      await worker.roster.runAlarm();
+      await worker.roster.viewsFilled();
+    };
+
+    // The second file is gone when the object starts: the views stop at the end of the first, and no page is shown.
+    await worker.deleteFile(second);
+    await worker.roster.clearViews();
+    await worker.roster.restart();
+    await worker.roster.viewsFilled();
+    const lines = notFilled();
+    assert.deepEqual((await worker.roster.views()).view_state, [{ id: 1, seq: LINES_PER_FILE }]);
+    await wantUnavailable("/");
+
+    // An alarm before the minute is over does not try; the one after it does, and says that it failed again.
+    await worker.roster.runAlarm();
+    assert.equal(notFilled(), lines);
+    await aMinuteLater();
+    assert.equal(notFilled(), lines + 1);
+    await wantUnavailable("/");
+
+    // The file is back: the next try fills the views, and the pages and records go on, the object never having started again.
+    await worker.putFile(second, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
+    await aMinuteLater();
+    assert.equal(notFilled(), lines + 1);
+    assert.deepEqual(await worker.roster.views(), views);
+    assert.deepEqual([await page("/"), await page(`/p/${CARD_A}`)], pages);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    assert.equal((await checkRoster(worker)).length, 2 * LINES_PER_FILE + 2);
   });
 
   test("no address of the Worker gives a roster file or a record hash list", async () => {
@@ -276,7 +327,13 @@ describe("a full roster file that cannot be moved", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads refresh");
     await kept(LINES_PER_FILE + 1);
 
-    // The roster file is written with other bytes: it does not read back as written, and no list is written after it.
+    // The bucket is sent other bytes than the object meant: it refuses them by their SHA-256, and nothing wrong is ever under the file's name.
+    await worker.roster.setBucketFault({ key: FILE, how: "put sends other bytes" });
+    await tryAgain();
+    assert.deepEqual([...(await directory()).keys()], []);
+    await kept(LINES_PER_FILE + 1);
+
+    // The bucket stores other bytes than it was sent: the file does not read back as written, and no list is written after it.
     await worker.roster.setBucketFault({ key: FILE, how: "put writes other bytes" });
     await tryAgain();
     assert.deepEqual([...(await directory()).keys()], [rosterFileName(0)]);
@@ -287,6 +344,17 @@ describe("a full roster file that cannot be moved", () => {
     await worker.roster.setBucketFault({ key: FILE, how: "get fails" });
     await tryAgain();
     await kept(LINES_PER_FILE + 1);
+
+    // The roster file is written with its bytes and another header: read back, it is not as it was to be written.
+    for (const how of ["put writes another Cache-Control", "put writes another Content-Type"] as const) {
+      await worker.roster.setBucketFault({ key: FILE, how });
+      await tryAgain();
+      const files = await directory();
+      assert.deepEqual([...files.keys()], [rosterFileName(0)]);
+      assert.equal(text(files.get(rosterFileName(0))!), fileText);
+      assert.notDeepEqual([files.get(rosterFileName(0))!.cacheControl, files.get(rosterFileName(0))!.contentType], [IMMUTABLE, ROSTER_FILE_TYPE]);
+      await kept(LINES_PER_FILE + 1);
+    }
 
     // The roster file is there, and its list cannot be written, or does not read back as written.
     for (const how of ["put fails", "put writes other bytes"] as const) {
@@ -301,7 +369,7 @@ describe("a full roster file that cannot be moved", () => {
     // Both are written, and the object stops before it deletes its records: it lost the answer of the last write, and is started again.
     await worker.roster.setBucketFault({ key: LIST, how: "put loses its answer" });
     await tryAgain();
-    assert.equal(notMoved(), 6);
+    assert.equal(notMoved(), 9);
     const written = await directory();
     assert.deepEqual([text(written.get(rosterFileName(0))!), text(written.get(hashListName(0))!)], [fileText, listText]);
     assert.deepEqual([written.get(rosterFileName(0))!.contentType, written.get(hashListName(0))!.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
@@ -309,15 +377,43 @@ describe("a full roster file that cannot be moved", () => {
     await worker.roster.restart();
     await worker.setClock(new Date(time));
 
-    // The object that started again moves the file, the same bytes, and only then keeps none of its records.
+    // The first file still cannot be moved when the second is full: the object keeps both, and every record after them.
+    await worker.roster.setBucketFault({ key: FILE, how: "put fails" });
+    await fillTo(root, 2 * LINES_PER_FILE + 5);
     await worker.roster.runAlarm();
+    assert.equal(notMoved(), 10);
+    assert.deepEqual(await worker.roster.kept(), { count: 2 * LINES_PER_FILE + 5, first: 1, last: 2 * LINES_PER_FILE + 5 });
+    assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), hashListName(0)], "nothing of the second file is in the bucket before the first is moved");
+
+    // Once the bucket takes the file, both are moved, the earlier first and with the same bytes, and only their records are deleted.
+    await worker.roster.setBucketFault(null);
+    await tryAgain();
     const files = await directory();
-    assert.deepEqual([...files.keys()], [rosterFileName(0), hashListName(0)]);
+    assert.deepEqual([...files.keys()], [rosterFileName(0), rosterFileName(LINES_PER_FILE), hashListName(0), hashListName(LINES_PER_FILE)]);
+    assert.deepEqual(await worker.roster.kept(), { count: 5, first: 2 * LINES_PER_FILE + 1, last: 2 * LINES_PER_FILE + 5 });
     assert.deepEqual([text(files.get(rosterFileName(0))!), text(files.get(hashListName(0))!)], [fileText, listText]);
     assert.deepEqual([files.get(rosterFileName(0))!.cacheControl, files.get(hashListName(0))!.cacheControl], [IMMUTABLE, IMMUTABLE]);
     assert.deepEqual([files.get(rosterFileName(0))!.contentType, files.get(hashListName(0))!.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
-    assert.deepEqual((await worker.roster.stored()).records.map((row) => row.seq), [LINES_PER_FILE + 1]);
-    assert.equal((await checkRoster(worker)).length, LINES_PER_FILE + 1);
-    assert.equal(notMoved(), 6);
+    assert.equal((await checkRoster(worker)).length, 2 * LINES_PER_FILE + 5);
+    assert.equal(notMoved(), 10);
+  });
+});
+
+describe("a roster file fills while challenges keep being issued", () => {
+  test("a challenge every 300 ms, each of which sets the object's alarm, does not keep the file in the object", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await fillTo(root, LINES_PER_FILE);
+    const names = [rosterFileName(0), hashListName(0)];
+    let moved = false;
+    for (let i = 0; i < 20 && !moved; i++) {
+      await worker.issueChallenge();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      moved = JSON.stringify([...(await directory()).keys()]) === JSON.stringify(names);
+    }
+    assert.ok(moved, "the file is in the bucket within six seconds of challenges");
+    await worker.roster.runAlarm();
+    assert.deepEqual((await worker.roster.stored()).records, []);
+    assert.equal((await checkRoster(worker)).length, LINES_PER_FILE);
   });
 });

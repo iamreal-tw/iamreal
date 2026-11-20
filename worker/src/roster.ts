@@ -28,7 +28,6 @@ import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RecordFields, type RosterRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
@@ -237,6 +236,14 @@ export interface TimedWork {
 /** The least the alarm waits, so that work that stays due cannot make the alarm spin. */
 const MIN_ALARM_WAIT_MS = 1000;
 
+/** How long after views could not be filled the object tries again: one minute, as for a full file that could not be moved. */
+const VIEWS_RETRY_MS = 60 * 1000;
+
+/** The one line the object writes when something of its own fails: which, and the class of the error. Never the error's message, which may quote what was being handled. */
+function logFailure(event: string, e: unknown): void {
+  console.error(JSON.stringify({ event, error: e instanceof Error ? e.name : "unknown" }));
+}
+
 /**
  * The roster's Durable Object. (`Roster` is this class everywhere in
  * worker/; protocol/'s type of that name, which roster, is `RosterKind`
@@ -246,7 +253,7 @@ export class Roster extends DurableObject<Env> {
   /**
    * The settings the object started with. This and the other `protected`
    * members below (`challengeRandom`, `hashOf`, `ruleState`,
-   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`, `bucket`) are `protected`
+   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`, `bucket`, `viewsFilling`) are `protected`
    * and not private for one reader: the object of the test build
    * (README.md, "三樣不是設定值的東西"), the only class that extends this
    * one. Nothing else overrides or calls them from outside this file.
@@ -271,17 +278,20 @@ export class Roster extends DurableObject<Env> {
    * Worker answers as its own failure. Challenges, card states and the CRL
    * archive do not read the views and go on. It is decided when the object
    * starts, and becomes true once more only when views that were behind
-   * are filled (`#fillViews`); the next start decides again.
+   * are filled (`#fillViews`), at the start or at a later try; the next
+   * start decides again.
    */
   #viewsAtLastRecord: boolean;
   /**
-   * The filling of views that were behind when the object started; it ends
-   * when they are filled or could not be, and never fails. Already ended
-   * for an object that found its views at the last record. `protected` so
-   * that the test build can wait for it; nothing else reads it from
-   * outside this file.
+   * The last filling of views that were behind: the one begun when the
+   * object started, or a later try of it. It ends when they are filled or
+   * could not be, and never fails. Already ended for an object that found
+   * its views at the last record. `protected` so that the test build can
+   * wait for it; nothing else reads it from outside this file.
    */
-  protected readonly viewsFilling: Promise<void>;
+  protected viewsFilling: Promise<void>;
+  /** When views that could not be filled are tried again, on the object's clock; null when no try is owed. Kept in memory. */
+  #fillAgainAt: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -329,10 +339,13 @@ export class Roster extends DurableObject<Env> {
    *   "頁面用的衍生表", has the sentence of Cloudflare's documentation),
    *   and this takes longer the more files the roster has.
    *
-   * It can fail: a file the bucket does not have as it was written, a line
-   * this build does not read, a record its rules do not take. The object
-   * runs all the same, with views it does not use; one line says so, and
-   * the next start tries again. It never throws.
+   * It can fail: the bucket does not answer, or does not have a file as it
+   * was written; a line this build does not read, a record its rules do
+   * not take. The object runs all the same, with views it does not use;
+   * one line says so, and it is tried again a minute later (`#viewsBehind`)
+   * and at the next start: a bucket that did not answer may answer then.
+   * What is wrong with the records or the build fails again each time,
+   * with its line. It never throws.
    */
   async #fillViews(): Promise<void> {
     const sql = this.ctx.storage.sql;
@@ -360,10 +373,31 @@ export class Roster extends DurableObject<Env> {
       }
       if (viewSeq(sql) !== this.#rosterRow().count) throw new Error("the views are not at the last record after they were filled");
       this.#viewsAtLastRecord = true;
+      this.#fillAgainAt = null;
     } catch (e) {
-      console.error(JSON.stringify({ event: "views_not_filled", error: e instanceof Error ? e.name : "unknown" }));
+      logFailure("views_not_filled", e);
+      this.#fillAgainAt = now().getTime() + VIEWS_RETRY_MS;
+      // The alarm for the next try, once the constructor has returned (`timedWork` is a subclass's to override too).
+      await Promise.resolve();
+      await this.#setAlarmWithoutFailing();
     }
   }
+
+  /**
+   * Filling views that could not be filled, again: due a minute after a
+   * filling failed, and not at all otherwise. A move of full files that is
+   * going on ends first, so that the files and the records are not moved
+   * under the filling.
+   */
+  #viewsBehind: TimedWork = {
+    due: () => this.#fillAgainAt,
+    run: async () => {
+      this.#fillAgainAt = null;
+      await this.#moving?.catch(() => undefined);
+      this.viewsFilling = this.#fillViews();
+      await this.viewsFilling;
+    },
+  };
 
   /** For a method about to read the views, or to write a record with them: throws if they are not at the last record. */
   #checkViews(): void {
@@ -453,21 +487,22 @@ export class Roster extends DurableObject<Env> {
       if (answer.outcome === "the count moved") continue;
       // The record that fills a roster file: the file is due for the data bucket (`#fullFiles`). The record is
       // written whatever becomes of that, so its answer waits for the alarm to be set and for nothing more.
-      if (answer.outcome === "written" && answer.record.seq % LINES_PER_FILE === 0) await this.#setAlarmAfterAWrite();
+      if (answer.outcome === "written" && answer.record.seq % LINES_PER_FILE === 0) await this.#setAlarmWithoutFailing();
       return answer;
     }
   }
 
   /**
-   * Sets the alarm once a record is written, without ever failing the
-   * record's answer: the record is in the roster by then. An alarm that
-   * could not be set is set by whatever next sets it (the next challenge).
+   * Sets the alarm without ever failing what asked for it: a record that
+   * is in the roster by then, a filling of the views that has ended. An
+   * alarm that could not be set is set by whatever next sets it (the next
+   * challenge).
    */
-  async #setAlarmAfterAWrite(): Promise<void> {
+  async #setAlarmWithoutFailing(): Promise<void> {
     try {
       await this.setAlarmForTimedWork();
     } catch (e) {
-      console.error(JSON.stringify({ event: "alarm_not_set", error: e instanceof Error ? e.name : "unknown" }));
+      logFailure("alarm_not_set", e);
     }
   }
 
@@ -703,7 +738,7 @@ export class Roster extends DurableObject<Env> {
         await this.#moveFullFiles();
       } catch (e) {
         this.#moveAgainAt = time + FULL_FILE_RETRY_MS;
-        console.error(JSON.stringify({ event: "full_file_not_moved", error: e instanceof Error ? e.name : "unknown" }));
+        logFailure("full_file_not_moved", e);
       }
     },
   };
@@ -768,10 +803,8 @@ export class Roster extends DurableObject<Env> {
     if (at !== length) throw new Error("the stored lines are shorter than they were counted");
 
     const bucket = this.bucket();
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
+    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
     await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_FULL_FILE, contentType: TYPE_TEXT });
-    const sha256 = await sha256Hex(file);
-
     this.ctx.storage.transactionSync(() => {
       sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
       sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
@@ -780,12 +813,21 @@ export class Roster extends DurableObject<Env> {
 
   /** Every piece of timed work of the object (TimedWork). Whatever comes to need the alarm is added here. */
   protected timedWork(): readonly TimedWork[] {
-    return [this.#expiredChallenges, this.#fullFiles];
+    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles];
   }
 
   /**
    * Sets the alarm for the earliest piece of timed work, or removes it if
    * none has anything to do. Called whenever a `due()` may have changed.
+   *
+   * An alarm that is already set for that time or sooner is left as it is.
+   * Setting it again would move it at least `MIN_ALARM_WAIT_MS` ahead of
+   * now each time, and this is called for every challenge issued: with
+   * work that is due and challenges coming more often than that, the alarm
+   * would never ring. An alarm left sooner than the work needs rings with
+   * nothing due, and is then set for the right time. While the alarm's own
+   * handler runs there is no alarm to leave (`getAlarm` gives null), so
+   * the handler's own call always sets the next one.
    *
    * The wait is measured on the object's clock and set on the runtime's;
    * the two differ only in the test build.
@@ -793,7 +835,9 @@ export class Roster extends DurableObject<Env> {
   protected async setAlarmForTimedWork(): Promise<void> {
     const dues = this.timedWork().map((work) => work.due()).filter((due) => due !== null);
     if (dues.length === 0) return this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.setAlarm(Date.now() + Math.max(MIN_ALARM_WAIT_MS, Math.min(...dues) - now().getTime()));
+    const wanted = Date.now() + Math.max(MIN_ALARM_WAIT_MS, Math.min(...dues) - now().getTime());
+    const set = await this.ctx.storage.getAlarm();
+    if (set === null || set > wanted) await this.ctx.storage.setAlarm(wanted);
   }
 
   /** The alarm: each piece of timed work that is due runs once, and the alarm is set again. */

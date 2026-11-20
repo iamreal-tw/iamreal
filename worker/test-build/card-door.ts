@@ -75,9 +75,27 @@ export interface StoredRoster {
  * way, or, with null, none does.
  *
  *   - "put fails": the write throws, and nothing is written;
+ *   - "put sends other bytes": the bucket is sent the bytes without their
+ *     last one, with whatever checksum the object gave for the whole;
  *   - "put writes other bytes": the write stores the bytes without their
- *     last one, and says it went well;
+ *     last one, whatever checksum the object gave, and says it went well;
+ *   - "put writes another Cache-Control", "put writes another
+ *     Content-Type": the write stores the bytes with another value of that
+ *     header, and says it went well;
  *   - "put loses its answer": the write stores the bytes, and throws;
  *   - "get fails": the read throws.
  */
-export type BucketFault = { readonly key: string; readonly how: "put fails" | "put writes other bytes" | "put loses its answer" | "get fails" } | null;
+export type BucketFault = { readonly key: string; readonly how: "put fails" | "put sends other bytes" | "put writes other bytes" | "put writes another Cache-Control" | "put writes another Content-Type" | "put loses its answer" | "get fails" } | null;
+
+/**
+ * What `GET /__test/roster/kept` answers: how many records the roster's
+ * object keeps, and the first and the last `seq` among them (null without
+ * one). For a roster that keeps more than `GET /__test/roster/stored` can
+ * answer with: that one sends every line, some 20 KB each, and an answer
+ * of more than 32 MiB does not come back from the object.
+ */
+export interface KeptRecords {
+  readonly count: number;
+  readonly first: number | null;
+  readonly last: number | null;
+}

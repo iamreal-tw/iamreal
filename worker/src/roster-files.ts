@@ -54,26 +54,35 @@ export const FULL_FILE_RETRY_MS = 60 * 1000;
 export type FileBucket = Pick<R2Bucket, "put" | "get">;
 
 /**
- * Writes an object and reads it back: it returns only once the bucket gives
- * exactly these bytes under this key, with these headers. Otherwise
- * it throws; the message names the key and nothing of the content.
+ * Writes an object and reads it back: it returns, with the SHA-256 of the
+ * bytes, only once the bucket gives exactly these bytes under this key,
+ * with these headers. Otherwise it throws; the message names the key and
+ * nothing of the content.
+ *
+ * The bucket is given the SHA-256 with the bytes, to check what it
+ * received by (README.md, "寫滿的名冊檔搬到 R2", says what is known of
+ * that): bytes that changed on the way are then not stored at all, where
+ * the reading back alone would find them only once they are under the
+ * object's public name.
  *
  * Writing the same bytes again leaves the same object, so a caller that
  * does not know how far an earlier try came simply calls this again.
  */
-export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders): Promise<void> {
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType } });
+export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders): Promise<string> {
+  const sha256 = await sha256Hex(bytes);
+  await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256 });
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
   if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
   if (!(await isBytes(stored.body, bytes))) throw new Error(`${key} read back is not the bytes that were written`);
+  return sha256;
 }
 
 /** Whether a stream gives exactly `bytes`. It is compared as it comes, so that the object is not held in memory a second time. */
 async function isBytes(stream: ReadableStream<Uint8Array>, bytes: Uint8Array): Promise<boolean> {
   let at = 0;
   let same = true;
-  // The stream is read to its end even after a difference: an R2 body left unread holds its connection.
+  // The stream is read to its end, also after the first difference.
   for await (const chunk of stream) {
     if (!same) continue;
     if (at + chunk.length > bytes.length) same = false;
