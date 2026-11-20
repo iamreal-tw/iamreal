@@ -19,6 +19,8 @@ const ext = (oid: string, value: Uint8Array, critical = false): Uint8Array =>
 export const AKI = ext("551d23", seq(tlv(0x80, new Uint8Array(20).fill(0xa1))));
 /** issuingDistributionPoint with onlyContainsUserCerts: a partitioned CRL. */
 export const IDP = ext("551d1c", seq(hex("8101ff")));
+/** deltaCRLIndicator with BaseCRLNumber 1: a delta CRL. Not critical, so that it is the reason and not its criticality. */
+export const DELTA = ext("551d1b", integer(1n));
 const REASON = ext("551d15", hex("0a0101"));
 
 export async function makeCrl(o: CrlOptions): Promise<Uint8Array> {
