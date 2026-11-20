@@ -26,11 +26,32 @@ import { EVERY_RESPONSE, PROOF_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADER
 const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
 
 /**
- * `assets.run_worker_first` of wrangler.jsonc: the Worker runs for every
- * path but the files' own. A request for one of those never runs it,
- * whether the file is there or not.
+ * `assets.run_worker_first` of wrangler.jsonc: the Worker runs first for
+ * every path but the files' own, where Static Assets looks for a file
+ * first. In the local workerd a request for one of those never runs the
+ * Worker, whether the file is there or not. On Cloudflare that is not
+ * confirmed for a file that is not there: by the documentation such a
+ * request may be handed to the Worker (README.md, "Static Assets"). The
+ * Worker cannot send a file either way: it has no binding to them.
  */
 export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/pages.css", "!/proof", "!/proof/*"];
+
+/**
+ * Every file of site/ a deploy uploads, by its path under site/, sorted:
+ * the style sheet and the two files of rules. There is no build of web/
+ * under site/proof/ yet; the deploy that puts one there (#69) changes this
+ * list. site/proof/ is not in the repository (.gitignore), so on a computer
+ * it can hold anything: a deploy build made there does not pass with a file
+ * that is not listed here (deploy-build-checks.ts, `checkSiteFiles`).
+ */
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "pages.css"];
+
+/**
+ * The SHA-256 of site/pages.css, the one file of site/ that is not written
+ * here: a deploy uploads the style sheet that was reviewed. Change it with
+ * the file (`shasum -a 256 site/pages.css`).
+ */
+export const PAGES_CSS_SHA256 = "fac8914e64556eb62ce23073445dfd323f36c5a7ec140a2b1ca2adf27600fc06";
 
 /** Which roster a site is of (wrangler.jsonc, `ROSTER_KIND`). */
 export type RosterKind = "test" | "production";
@@ -42,8 +63,10 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
  * The text of site/_headers for a site of that kind of roster.
  *
  * - /proof and everything under it: the card proof page's headers
- *   (`PROOF_PAGE_HEADERS`). A rule matches whether or not there is a file,
- *   so a 404, a redirect and a 405 under /proof have them too.
+ *   (`PROOF_PAGE_HEADERS`). In the local workerd a rule matches whether or
+ *   not there is a file, so a 404, a redirect and a 405 under /proof have
+ *   them too; on Cloudflare that is not confirmed (README.md, "Static
+ *   Assets").
  * - /pages.css: the visitors' pages' headers (`VISITOR_HEADERS`), and
  *   `STYLE_SHEET_CACHE` in place of the Cache-Control Static Assets sends by
  *   itself (taken off with "!", then set: two values would be joined).

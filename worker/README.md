@@ -313,7 +313,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 重建失敗時寫一行 `{event: "views_not_filled", error}`。物件每次啟動都再試一次；原因排除後（例如部署了讀得懂那一筆的程式），下一次啟動就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的 `records` 列，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式；但已經過卡的人查得到現況，名冊本身（紀錄、卡片狀態、名冊指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是名冊規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **紀錄搬到 R2 之後**（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）Durable Object 裡不再有全部的紀錄，這個重建要改成也讀 R2 的名冊檔；在那之前紀錄都在 `records` 表。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引。這張票只做了首頁和島民證明要的查詢；查詢頁和名冊頁要的索引（`view_slots_account`、`view_slots_latest`）已經建了。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引。這張票只做了首頁和島民證明要的查詢；`view_slots_account` 現在是數卡片在用（`accountCards`，[寫入是一個交易](#寫入是一個交易)），查詢頁之後也用它；名冊頁要的 `view_slots_latest` 已經建了，還沒有查詢用到。
 
 ### 測試名冊的標示
 
@@ -355,7 +355,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### Static Assets
 
-`wrangler.jsonc` 最上層的 `assets` 指到 [`site/`](site)。這些檔案由 Cloudflare 直接送，**請求不跑 Worker**（ADR-0023「靜態檔」：這些下載不經過後台的程式）。要保住的是：持卡人拿到的過卡頁面就是建置出來的那些檔，後台沒有一段程式能對不同的人送不同的內容。
+`wrangler.jsonc` 最上層的 `assets` 指到 [`site/`](site)。這些檔案由 Cloudflare 直接送，**檔案的請求不跑 Worker**（ADR-0023「靜態檔」：這些下載不經過後台的程式）。要保住的是：持卡人拿到的過卡頁面就是建置出來的那些檔，後台沒有一段程式能對不同的人送不同的內容。這件事靠兩樣：這幾個路徑先找檔案、找到就直接送；Worker 沒有 binding，讀不到檔。下面寫的行為都是在本機的 workerd 上看到的；Cloudflare 上哪些還沒確認，列在這一節後面。
 
 | `site/` 裡的 | 是什麼 |
 |---|---|
@@ -366,15 +366,19 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 `_headers` 和 `_redirects` 是給 Static Assets 讀的規則，本身不會被送出去。
 
-**現在沒有任何部署會放東西進 `site/proof/`**：測試網站的建置模式還沒有（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），正式的建置簽的是正式名冊的場合字串，不能放上測試網站。所以部署出去的 `/proof` 和它底下的網址是 `404`（帶同一組標頭），首頁的「我要換島民證明」點過去也是。
+**現在部署上去的檔案只有 `pages.css`、`_headers`、`_redirects`，`site/proof/` 是空的**：測試網站的建置模式還沒有（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），正式的建置簽的是正式名冊的場合字串，不能放上測試網站。
+
+- `site/proof/` 不進版控，所以一台電腦上的那個目錄裡可以有任何東西，而 wrangler 上傳的是它在 `site/` 找到的每個檔。部署前的檢查因此核對 `site/` 裡的檔案恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那三個，`pages.css` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`：`site/proof/` 有任何檔、多一個別的檔、樣式表被改過，本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都停在檢查。改樣式表時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css`）。
+- [#69](https://github.com/iamreal-tw/iamreal/issues/69) 把 `web/` 的建置放進來時，要改的就是 `SITE_FILES` 這一條（和工作流程）。
+- 所以部署出去的 `/proof` 和它底下的網址沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`。本機的 workerd 上那是 Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭；Cloudflare 上是不是這樣還沒確認，可能是 Worker 回的「找不到這一頁」（見下面「還沒確認的」）。
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：Worker 只對這幾個路徑以外的請求執行。`!` 開頭的是排除，排除優先。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：檔案在就送，不在就由 Static Assets 自己回 `404`（空的內容）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
+- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時是不是也這樣，還沒確認。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。說明頁留在 `/proof/help.html`。
-- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上，這三種回應線上帶不帶，還沒確認。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
 
 沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走，`/proof/help.html` 變成 `307` 到 `/proof/help`，首頁和過卡頁面連到說明頁的每個連結都多轉一次。
 
@@ -405,9 +409,27 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 **只在本機的 workerd 上看過，Cloudflare 上還沒確認的**：
 
 - `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 寫在 `_headers` 裡，線上會不會照樣送出。本機有送；文件沒有列出不能設的標頭，也沒有提到這兩個。部署後第一件要看的是 `/pages.css` 的回應有沒有 `Cross-Origin-Opener-Policy`（現在線上只有這個檔）。
-- 排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，還是會轉給 Worker。本機是前者。轉給 Worker 的話，Worker 回的是它對不認得的路徑回的 `404`，沒有 `/proof` 的那一組標頭；兩種情況 Worker 都送不出檔案。
+- **排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，還是轉給 Worker。** 本機是前者。Cloudflare 的文件有三句，讀起來不完全一致：
+  - 排除的路徑「will follow the default asset-first routing behavior」（[Configuration and Bindings](https://developers.cloudflare.com/workers/static-assets/binding/)）。
+  - 預設的行為是「If no asset matches, Cloudflare invokes that version's `fetch()` handler. … A missing asset does not automatically produce a `404` response.」（[Worker script](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)）。
+  - 排除的樣式「will continue to serve assets correctly, as requests are directed to assets, without invoking your Worker script」（[Billing and Limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)，講的是超過免費額度時）。
+
+  照前兩句讀，線上檔案不存在時會轉給 Worker。那時候回的是 Worker 的「找不到這一頁」（`404`），帶訪客頁面的標頭、快取 60 秒，不是 `/proof` 的那一組；現在部署出去的 `/proof`（沒有建置）就會是這一頁。所以「後台的程式不能決定 `/proof` 送什麼」只在檔案存在時成立：檔案在，直接送，不跑 Worker；檔案不在，可能由 Worker 回一頁 `404`。兩種情況 Worker 都送不出檔案（沒有 binding），也改不了一個存在的檔。
+- **`_headers` 套不套在不是檔案的回應上**：`/proof/` 的 `301`、不存在的檔的 `404`、其他方法的 `405`。本機都有。文件只說規則套在「static asset responses」上，轉址那一頁只說「Redirects execute before headers, so in the case of a request matching rules in both files, the redirect will win out」，沒有講這幾種回應帶不帶。
 - `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
 - 第一次帶 Static Assets 的部署：只能部署 `iamreal-test` 的那把權杖能不能上傳檔案，還沒試過。
+
+**合併後第一次部署要看的**（結果記回這一節）：
+
+| 請求 | 看什麼 |
+|---|---|
+| `GET /pages.css` | `200`；有沒有 `Cross-Origin-Opener-Policy: same-origin`、`Content-Security-Policy`、`Referrer-Policy`、`X-Content-Type-Options`、`X-Robots-Tag: noindex`；`Cache-Control` 是不是只有 `no-cache` |
+| `GET /proof` | 回什麼：空的 `404` 帶 `/proof` 的三個標頭（Static Assets 回的），還是「找不到這一頁」帶訪客頁面的標頭（轉給了 Worker） |
+| `GET /proof/nothing.js` | 同上；帶 `/proof` 的標頭時，`Document-Isolation-Policy` 有沒有在裡面 |
+| `GET /proof/`（不跟著轉） | 是不是 `301` 到 `/proof`；帶不帶 `/proof` 的標頭 |
+| `POST /proof/nothing.js` | `404` 還是 `405`，誰回的 |
+
+`/proof` 轉給了 Worker 的話，這一節、`wrangler.jsonc` 的註解和 `test/proof-files.test.ts` 裡「沒有建置時」的那個測試描述的就只是本機的行為，要照線上的改寫；檔案存在時的行為要等 `site/proof/` 有檔（#69）才看得到。
 
 **加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式名冊的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
 
@@ -443,7 +465,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
   - `wrangler.jsonc` 裡用測試名冊的環境，`TEST_ROSTER_CLEARED_ON` 是日曆上有的日期，讀法和 Worker 執行時相同（`checkClearedOn`）。寫錯的話部署出去的測試網站全部回 `500`，這一項讓它在部署前就被擋下
-  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `ROSTER_KIND` 寫出來的逐字相同，`site/_redirects` 也是。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、或測試網站的 `_headers` 少了 `noindex`，都過不了
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `ROSTER_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡的檔案恰好是 `pages.css`、`_headers`、`_redirects`，`pages.css` 的 SHA-256 是 `scripts/site-files.ts` 寫的那一個。所以 `site/proof/` 裡留著東西、把設定改回「每個請求先跑 Worker」、手改一個標頭、或測試網站的 `_headers` 少了 `noindex`，都過不了
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
 **驗證證明的程式兩種建置相同，測試專用的建置預設用的也是真的那一個；它另外能在測試明確要求時（`PUT /__test/verifier`）把 `records` 用的驗證器換成替身，替身進不了部署的那一包。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，送出一筆時呼叫驗證的也是它的 `proofVerifier`。測試專用的建置可以把 `records` 用的驗證器換成只看第一個位元組的那一個（上面的 `PUT /__test/verifier`），預設不換，重啟整個 Worker 之後也變回真的（[`test/records.test.ts`](test/records.test.ts) 有這兩個案例）；換上的那一個在 `test-build/index.ts`，不在這六個檔裡。部署的那一包沒有它：進入點是 `src/index.ts`，`scripts/deploy-build-checks.ts` 的 `checkNothingOfTheTestBuild` 不准那一包裡有 `/__test/`、`test-build` 這些字。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
@@ -565,7 +587,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **它不只管排程。** 這是每一次呼叫的上限：每個 HTTP 請求一樣是 300,000 毫秒；名冊的 Durable Object 也是，它的每次呼叫和 alarm 用同一個設定（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are Worker scripts, and have the same per invocation CPU limits as any Workers do」，2026-11-20 讀的）。所以一個請求能讓後台算多久，現在是程式擋，不是這個上限擋。
 - **現在可以接受的理由**：請求的內容最多讀 64 KiB（`src/api.ts` 的 `MAX_BODY_BYTES`），超過就拒絕；四個介面做的事和內容的大小無關或只和這 64 KiB 有關。送出一筆（[送出一筆](#送出一筆)）每次驗一筆證明，工作量是固定的，本機約 15 ms（[量到的](#量到的)），而且一個題目最多驗 5 次。Durable Object 裡沒有照請求內容放大的計算：寫入一筆和頁面的每個查詢各走索引；一個短編號對到的卡片通常只有一張，島民證明要讀的是那張卡片的全部紀錄，一張卡片一天最多 3 筆。頁面只收 `GET`，不讀請求的內容。之後加的介面要守住這一點：有哪個請求能讓後台算上幾秒，這個上限就不再是它的保護。
 
-之後加正式環境，是在 `env` 底下多一段，程式不用改。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
+之後加正式環境，是在 `env` 底下多一段；Worker 的程式不用改，但 Static Assets 的檔案要分開：兩種名冊的 `_headers` 不同，共用同一個 `site/` 過不了部署前的檢查（[Static Assets](#static-assets)「加正式環境時」），`test/environments.test.ts` 也要加對應的一段。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
 ## 排程做什麼
 
@@ -828,6 +850,7 @@ pnpm run deploy:test
 - npm 上的 pnpm 10.16.1：沒有核對雜湊
 - `pnpm-lock.yaml` 裡的套件，包括 wrangler：pnpm 核對 lockfile 記的雜湊，所以換來源換不了內容，但 lockfile 本身就是提交的一部分
 - `pnpm-workspace.yaml`：安裝時一定會讀，設定能改裝進來的套件（例如 `patchedDependencies` 加一個 `patches/` 的修補，在 `--ignore-scripts --ignore-pnpmfile` 之下照樣套到 wrangler 上，試過）。`test/workflows.test.ts` 確認它只有現在的三個鍵、lockfile 沒有 `patchedDependencies` 這類段落、程式庫沒有追蹤 `.npmrc`、`.pnpmfile.cjs`、`patches/`、`worker/` 底下的 `.env*`
+- `worker/site/`：Static Assets 的檔案（`pages.css`、`_headers`、`_redirects`）。它們不在 `build` 工作交出來的那一包裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這三個檔（`checkSiteFiles`）
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
 [`test/workflows.ts`](test/workflows.ts) 是工作流程的白名單：`deploy-test.yml` 的兩個工作必須逐字是那裡寫的（上傳那一行由 `uploadArgs` 組出來），PR 的兩個檢查工作流程 `checks.yml`、`checks-browser.yml` 的每個鍵、action、`with`、`env`、`working-directory` 都要在清單裡，觸發條件逐字照寫（`paths` 只准在 `checks-browser.yml`，內容逐字等於 `BROWSER_PATHS`），`concurrency` 的群組各自不同，整個 `.github/workflows/` 有 `secrets` 這個字的行（註解也算）恰好是上傳那一步的兩行。檔案用一個只讀 YAML 一小部分的讀法讀，那部分以外的寫法都算問題；檔裡只准可列印的 ASCII 和換行，註解也一樣，空白只認 ASCII 的空格（不然 U+00A0 這類空白開頭、接著 `#` 的一行，這裡當成註解，libyaml 這類照 YAML 規格只認 ASCII 空白的解析器卻會把它接到上一行的值後面，折進 `run`（#39 第二輪審查用 libyaml 實測））。它防手誤和明顯的改動，不能代替逐行看；它看不到什麼，寫在那個檔的開頭。

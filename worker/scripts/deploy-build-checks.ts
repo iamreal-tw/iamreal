@@ -24,14 +24,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
-import { RUN_WORKER_FIRST, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -267,6 +267,10 @@ export interface ConfiguredSite {
   /** The text of `_headers` and of `_redirects` in `assets.directory`; null if the file is not there. */
   readonly headers: string | null;
   readonly redirects: string | null;
+  /** Every file under `assets.directory`, by its path under it, sorted: what wrangler finds there to upload. */
+  readonly files: readonly string[];
+  /** The SHA-256 of `pages.css` there; null if the file is not there. */
+  readonly styleSheetSha256: string | null;
 }
 
 /**
@@ -281,13 +285,14 @@ export function configuredSites(): Record<string, ConfiguredSite> {
   const out: Record<string, ConfiguredSite> = {};
   for (const env of Object.keys(rawConfig.env ?? {})) {
     const config = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
-    const directory = config.assets?.directory;
+    // wrangler resolves the directory against the configuration file's.
+    const directory = config.assets?.directory === undefined ? undefined : join(dirname(WRANGLER_CONFIG), config.assets.directory);
     const textOf = (name: string): string | null => {
       if (directory === undefined) return null;
-      // wrangler resolves the directory against the configuration file's.
-      const path = join(dirname(WRANGLER_CONFIG), directory, name);
+      const path = join(directory, name);
       return existsSync(path) ? readFileSync(path, "utf8") : null;
     };
+    const css = directory === undefined ? undefined : join(directory, "pages.css");
     out[env] = {
       kind: config.vars.ROSTER_KIND,
       runWorkerFirst: config.assets?.run_worker_first,
@@ -296,6 +301,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       notFoundHandling: config.assets?.not_found_handling,
       headers: textOf("_headers"),
       redirects: textOf("_redirects"),
+      files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).sort(),
+      styleSheetSha256: css === undefined || !existsSync(css) ? null : createHash("sha256").update(readFileSync(css)).digest("hex"),
     };
   }
   return out;
@@ -303,11 +310,17 @@ export function configuredSites(): Record<string, ConfiguredSite> {
 
 /**
  * In every environment, Cloudflare sends the card proof page's files and
- * the style sheet itself, and the Worker's code has no part in it
- * (README.md, "Static Assets"):
+ * the style sheet itself, and the Worker's code has no part in what a file
+ * is sent as (README.md, "Static Assets"):
  *
- *   - a request for one of them never runs the Worker (`RUN_WORKER_FIRST`),
- *     and the Worker has no binding to read them by;
+ *   - their paths are kept out of the Worker's (`RUN_WORKER_FIRST`), and
+ *     the Worker has no binding to read them by. In the local workerd a
+ *     request for one of those paths never runs the Worker; on Cloudflare
+ *     that is not confirmed for a file that is not there (README.md);
+ *   - the files of the directory are the ones listed (`SITE_FILES`) and no
+ *     other, and the style sheet is the one with the SHA-256 written down
+ *     (`PAGES_CSS_SHA256`): what a computer has under site/proof/, which is
+ *     not in the repository, is not uploaded with a deploy made there;
  *   - a path is a file's own or nothing, but for the redirects of
  *     site-files.ts (`SITE_REDIRECTS`);
  *   - their headers are the ones written from src/headers.ts for the
@@ -328,6 +341,8 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.ok(site.kind === "test" || site.kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
     assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} roster's site`);
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
+    assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets are the ones scripts/site-files.ts lists, no more and no fewer`);
+    assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
   }
 }
 
