@@ -8,10 +8,11 @@ import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
+import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { CardToWrite, TestSettings } from "../test-build/card-door.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -167,6 +168,23 @@ export interface TestWorker {
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
   /**
+   * Asks `POST /api/v1/challenges` for a challenge and returns it. With
+   * `randomHex`, 16 bytes in hex, the challenge has those bytes in place of
+   * random ones (test build, `PUT /__test/roster/next-random`): how a test
+   * gets the challenge a proof was made for, or the same challenges in two
+   * runs.
+   */
+  issueChallenge(randomHex?: string): Promise<string>;
+  /**
+   * Which proof verifier `records` asks from now on (test build,
+   * `PUT /__test/verifier`): "real" is the deployed Worker's, and what a
+   * test worker starts with; "stand-in" judges a proof by its first byte
+   * alone (0 accepted, 1 rejected, 2 the verifier cannot run, 3 accepted
+   * with the clock a millisecond later), for the
+   * tests that are about everything but the proof.
+   */
+  setVerifier(which: "real" | "stand-in"): Promise<void>;
+  /**
    * Asks the Worker's proof verifier (src/in-worker.ts) through the test
    * build's `POST /__test/verify`: true if the proof is accepted.
    */
@@ -199,18 +217,50 @@ export interface TestWorker {
      */
     setStoredSchemaVersion(to: "another" | "the build's"): Promise<void>;
     /**
-     * The challenges the object still holds, read from its storage. A
-     * stopgap: no endpoint shows yet whether a challenge is known. When
-     * submitting a record does (`challenge_unknown`, #67), the tests ask
-     * that and this goes.
+     * Changes the version of the roster rules the object's stored state
+     * says it was computed by: to another one than the build's, or back
+     * (test build, `PUT /__test/roster/rules-version`). The object compares
+     * when it starts: `restart()` after this.
      */
-    storedChallenges(): Promise<string[]>;
+    setStoredRulesVersion(to: "another" | "the build's"): Promise<void>;
     /**
-     * Writes the state of a card as a valid record would leave it, with the
-     * object's own code (test build, `PUT /__test/roster/card`). Until
-     * submitting a record writes it (#67).
+     * From now on every write of the object to this table fails (or, for
+     * `challenges.accepted`, only marking a challenge as accepted), or, with
+     * null, none does (test build, `PUT /__test/roster/fail-writes`).
+     */
+    failWritesTo(what: "records" | "cards" | "roster" | "challenges" | "challenges.accepted" | null): Promise<void>;
+    /**
+     * Runs the roster rules for one event of spec/vectors/roster-rules.json
+     * on the state the object stores, keeps what a valid one leaves, and
+     * returns the result (test build, `POST /__test/roster/rule-event`).
+     */
+    applyRuleEvent(event: RuleEvent): Promise<{ valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] }>;
+    /**
+     * Of the challenges `POST /api/v1/challenges` has given out through
+     * `fetch` or `issueChallenge` since this worker started, the ones the
+     * back end still takes a submission for, sorted. It asks the API: for
+     * each, a `POST /api/v1/records` with that challenge and a proof that
+     * does not verify, which is `challenge_unknown` for a challenge the back
+     * end does not know (never issued by this roster, expired, deleted) and
+     * `proof` or `challenge_attempts` for one it knows. Each question counts
+     * as a submission of the challenge.
+     */
+    knownChallenges(): Promise<string[]>;
+    /**
+     * Writes a row of the card state table as it is given (test build,
+     * `PUT /__test/roster/card`): for the stored states no request to this
+     * build can leave, a broken one or one from before a platform was added.
      */
     writeCard(card: CardToWrite): Promise<void>;
+    /**
+     * Makes the stored slots of one card of the test roster text that is
+     * not JSON (test build, `POST /__test/roster/break-card`): what reads
+     * that row then fails, `card-state` for the card and whatever looks at
+     * every card of its scope. `mendCard` puts the slots back as they
+     * were.
+     */
+    breakCard(scopedId: string): Promise<void>;
+    mendCard(scopedId: string): Promise<void>;
     /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/roster/break`). */
     breakTables(): Promise<void>;
     /**
@@ -220,11 +270,28 @@ export interface TestWorker {
      * this.
      */
     dropNewestCrls(): Promise<void>;
+    /**
+     * The rows the object keeps of its records, in the order of `seq`, and
+     * the count and the roster fingerprint of its row of the roster (test
+     * build, `GET /__test/roster/stored`). `checkRoster` of test/records.ts
+     * is what checks them.
+     */
+    stored(): Promise<StoredRoster>;
+    /**
+     * From now on the object waits this many milliseconds before it hashes
+     * a record it is asked to write (test build,
+     * `PUT /__test/roster/hash-delay`): other requests run during the wait,
+     * which they do not during the hash itself in the local workerd. Kept
+     * in memory: gone when the object starts again.
+     */
+    setHashDelay(ms: number): Promise<void>;
+    /** How many times the object has hashed a record since it started: more than the submissions it was asked to write, if any was hashed again for another `seq`. */
+    hashes(): Promise<number>;
   };
   close(): Promise<void>;
 }
 
-export type { CardToWrite, TestSettings };
+export type { CardToWrite, RuleEvent, StoredRoster, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -267,13 +334,23 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     settings = next;
   };
   const rosterObject = (): { name: string } => ({ name: settings.ROSTER_OBJECT_NAME ?? DEPLOYED_ROSTER_OBJECT });
+  /** Every challenge `POST /api/v1/challenges` has given out through this object. */
+  const issued: string[] = [];
+  const fetch = async (input: string, init?: RequestInit): Promise<Response> => {
+    const res = (await server.fetch(input, init as never)) as unknown as Response;
+    if (res.status === 200 && init?.method === "POST" && input === "/api/v1/challenges") {
+      const body = (await res.clone().json()) as { challenge?: unknown };
+      if (typeof body.challenge === "string") issued.push(body.challenge);
+    }
+    return res;
+  };
   if (options.settings !== undefined) await setSettings(options.settings);
 
   return {
     setSettings,
     url,
     moica,
-    fetch: (input, init) => server.fetch(input, init as never) as unknown as Promise<Response>,
+    fetch,
     runSchedule: () => worker.scheduled({ cron: HOURLY, scheduledTime: new Date() }),
     async files(prefix = "") {
       const { DATA } = await worker.getEnv();
@@ -297,6 +374,19 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 204) throw new Error(`setting the clock: HTTP ${res.status}`);
     },
     logLines: () => server.getLogs().map((l) => l.message),
+    async issueChallenge(randomHex) {
+      if (randomHex !== undefined) {
+        const set = await server.fetch("/__test/roster/next-random", { method: "PUT", body: randomHex });
+        if (set.status !== 204) throw new Error(`setting the next challenge's bytes: HTTP ${set.status}`);
+      }
+      const res = await fetch("/api/v1/challenges", { method: "POST" });
+      if (res.status !== 200) throw new Error(`asking for a challenge: HTTP ${res.status} ${await res.text()}`);
+      return ((await res.json()) as { challenge: string }).challenge;
+    },
+    async setVerifier(which) {
+      const res = await server.fetch("/__test/verifier", { method: "PUT", body: which });
+      if (res.status !== 204) throw new Error(`choosing the verifier: HTTP ${res.status}`);
+    },
     async verify(circuit, proof, publicInputs) {
       const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
       const res = await server.fetch("/__test/verify", { method: "POST", body: JSON.stringify({ circuit, proof: hex(proof), publicInputs: publicInputs.map(hex) }) });
@@ -346,13 +436,66 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/schema-version", { method: "PUT", body: JSON.stringify({ to }) });
         if (res.status !== 204) throw new Error(`changing the stored schema version: HTTP ${res.status}`);
       },
-      async storedChallenges() {
-        const storage = await worker.getDurableObjectStorage("ROSTER" as never, rosterObject());
-        return (await storage.exec<{ challenge: string }>("SELECT challenge FROM challenges ORDER BY challenge")).map((row) => row.challenge);
+      async setStoredRulesVersion(to) {
+        const res = await server.fetch("/__test/roster/rules-version", { method: "PUT", body: JSON.stringify({ to }) });
+        if (res.status !== 204) throw new Error(`changing the stored rules version: HTTP ${res.status}`);
+      },
+      async failWritesTo(what) {
+        const res = await server.fetch("/__test/roster/fail-writes", { method: "PUT", body: JSON.stringify({ what }) });
+        if (res.status !== 204) throw new Error(`making writes fail: HTTP ${res.status} ${await res.text()}`);
+      },
+      async applyRuleEvent(event) {
+        const res = await server.fetch("/__test/roster/rule-event", { method: "POST", body: JSON.stringify(event) });
+        if (res.status !== 200) throw new Error(`applying a rule event: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as { valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] };
+      },
+      async knownChallenges() {
+        const known: string[] = [];
+        for (const challenge of issued) {
+          const production = (settings.ROSTER_KIND ?? "test") === "production";
+          const body = {
+            scope_string: production ? "iamreal:public:0_______________" : "iamreal-test:public:0__________",
+            scoped_id: "0400000000000000000000000000000000000000000000000000",
+            accounts: [],
+            challenge,
+            issuer: "G3",
+            smt_root: "0".repeat(64),
+            circuit: CIRCUITS.card_proof_rs4096.verificationKeySha256,
+            // Placeholder bytes: no proof for the real verifier, and rejected by the stand-in (first byte 1).
+            proof: Buffer.concat([Buffer.from([1]), Buffer.alloc(14655)]).toString("base64"),
+          };
+          const res = await server.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(body) });
+          const { error } = (await res.json()) as { error?: string };
+          if (error === "proof" || error === "challenge_attempts") known.push(challenge);
+          else if (error !== "challenge_unknown") throw new Error(`asking whether a challenge is known: HTTP ${res.status} ${error}`);
+        }
+        return known.sort();
       },
       async writeCard(card) {
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
+      },
+      async stored() {
+        const res = await server.fetch("/__test/roster/stored");
+        if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as StoredRoster;
+      },
+      async setHashDelay(ms) {
+        const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });
+        if (res.status !== 204) throw new Error(`setting the wait before a hash: HTTP ${res.status}`);
+      },
+      async hashes() {
+        const res = await server.fetch("/__test/roster/hash-delay");
+        if (res.status !== 200) throw new Error(`reading the number of hashes: HTTP ${res.status}`);
+        return ((await res.json()) as { hashes: number }).hashes;
+      },
+      async breakCard(scopedId) {
+        const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: false }) });
+        if (res.status !== 204) throw new Error(`breaking a card's row: HTTP ${res.status}`);
+      },
+      async mendCard(scopedId) {
+        const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: true }) });
+        if (res.status !== 204) throw new Error(`mending a card's row: HTTP ${res.status}`);
       },
       async breakTables() {
         const res = await server.fetch("/__test/roster/break", { method: "POST" });

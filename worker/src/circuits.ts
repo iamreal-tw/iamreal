@@ -10,12 +10,15 @@
 
 export const CIRCUITS = {
   card_proof_rs2048: {
-    /** How many public inputs a proof of this circuit has. */
+    /** The issuer key whose cards prove with this circuit, and no other (spec/record.md, "Accepted circuits"). */
+    issuer: "G2",
+    /** How many public inputs a proof of this circuit has: the limbs of the issuer key's modulus, 120 bits each, and five more. */
     publicInputCount: 23,
-    /** SHA-256 of the verification key, verifier/vk/<name>.vk. */
+    /** SHA-256 of the verification key, verifier/vk/<name>.vk: the `circuit` field of a record. */
     verificationKeySha256: "816406c75c5422cefab5acd70276f3dc8ce5d269736aefd9795e230569bd3ac8",
   },
   card_proof_rs4096: {
+    issuer: "G3",
     publicInputCount: 40,
     verificationKeySha256: "bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2",
   },

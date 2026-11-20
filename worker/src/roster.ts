@@ -1,24 +1,31 @@
 // One roster is one Durable Object, the roster's only writer (ADR-0023).
-// So far it issues challenges, answers for the state of a card, and keeps
-// the newest CRLs the CRL mirror tells it of; nothing writes a record yet,
-// so every card is one without a record.
+// It issues challenges, counts the submissions of each, writes the records,
+// answers for the state of a card, and keeps the newest CRLs the CRL mirror
+// tells it of.
 //
 // What it keeps, in its SQLite:
 //
 //   challenges   the challenges it issued that have not expired
+//   records      the records, each as its line of the roster file
 //   cards        the roster rules' state of each card (card-table.ts)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
 //
 // Nothing here is derived for a page: those tables are separate, and can be
 // rebuilt from the records, which the rules' state cannot be thrown away for.
+//
+// Whether a record is valid is never decided here: that is the roster rules'
+// (protocol/, applyRecord), called with the state this object keeps. What
+// this file decides is the back end's own: the challenge, which roots it
+// takes today, and its policy on switches (docs/api/card-proof.md).
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
-import { formatDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type CardState, RULES_VERSION } from "iamreal-protocol/roster-rules.ts";
-import { CARD_TABLE, readCard } from "./card-table.ts";
+import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
+import { EMPTY_FINGERPRINT, type RecordFields, type RosterRecord, nextFingerprint, readRecordLine, recordHash, recordLine } from "iamreal-protocol/record.ts";
+import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
+import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
@@ -29,11 +36,22 @@ import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
  */
 export const CHALLENGE_LIFETIME_MS = 10 * 60 * 1000;
 
+/** A challenge can be submitted at most this many times (docs/api/card-proof.md): the sixth submission is `challenge_attempts`. */
+export const MAX_SUBMISSIONS = 5;
+
 /**
- * The roster fingerprint of the empty roster: 64 zeros (spec/record.md,
- * "Record hash and the roster fingerprint").
+ * No card proof is accepted when the newest CRL of the issuer is more than
+ * this many days old (spec/revocation-tree.md, "Who checks what"); `config`
+ * announces it to devices.
  */
-const EMPTY_FINGERPRINT = "0".repeat(64);
+export const CRL_MAX_AGE_DAYS = 3;
+
+/**
+ * The first switch of a slot that the back end's policy on late switches
+ * refuses when it is on: the fourth (settings.ts, `restrictLateSwitches`).
+ * The roster rules allow five.
+ */
+export const RESTRICTED_FROM = 4;
 
 /**
  * The tables. Every statement can run again on an object that has them.
@@ -43,6 +61,13 @@ const EMPTY_FINGERPRINT = "0".repeat(64);
  * `submissions` how many times it was submitted (at most 5 count);
  * `accepted` is 1 once a record was written for it. Expired rows are deleted
  * (the timed work below), so a challenge that is not here is unknown.
+ *
+ * records: one row per record of the roster. `seq` is the record's; `line`
+ * its line of the roster file, the LF included, so that the roster file is
+ * the lines in the order of `seq`, one after the other (spec/record.md,
+ * "Lines and files"); `record_hash` its record hash; `fingerprint` the
+ * roster fingerprint once it is added, `fingerprint(seq)`. The table came
+ * after the first three, with SCHEMA_VERSION unchanged.
  *
  * roster: exactly one row (`id` 1), written when the object first starts.
  * `count` is the number of records; `fingerprint` their roster fingerprint;
@@ -67,6 +92,12 @@ const TABLES: readonly string[] = [
      accepted    INTEGER NOT NULL DEFAULT 0
    ) WITHOUT ROWID`,
   "CREATE INDEX IF NOT EXISTS challenges_issued ON challenges (issued_ms)",
+  `CREATE TABLE IF NOT EXISTS records (
+     seq         INTEGER PRIMARY KEY,
+     line        TEXT    NOT NULL,
+     record_hash TEXT    NOT NULL,
+     fingerprint TEXT    NOT NULL
+   )`,
   CARD_TABLE,
   `CREATE TABLE IF NOT EXISTS roster (
      id                INTEGER PRIMARY KEY CHECK (id = 1),
@@ -114,6 +145,38 @@ export const SCHEMA_VERSION = 1;
  */
 export const OTHER_SCHEMA = "the object's tables were made by another SCHEMA_VERSION";
 
+/** Why the object does not take a submission: the roster is paused, or the challenge is not one to submit (docs/api/card-proof.md). */
+export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
+
+/** Why the object does not write a record whose proof verified, in the order of docs/api/card-proof.md. */
+export type RecordRefusal = "paused" | "challenge_unknown" | "challenge_used" | "crl_stale" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit" | "switch_restricted";
+
+/** What a record that was written did on one platform (docs/api/card-proof.md, `kinds`). */
+export interface AcceptedKind {
+  readonly platform: string;
+  readonly kind: Kind;
+  /** The account: the one the list has for the platform, or for `withdraw` the one that was withdrawn. */
+  readonly username: string;
+  /** The number of cards whose `current` on the platform is that username, in the record's scope, once the record is applied. */
+  readonly accountCards: number;
+}
+
+/** A record that was written. */
+export interface Accepted {
+  readonly seq: number;
+  readonly recordHash: string;
+  /** In ascending order of platform; at least one. */
+  readonly kinds: readonly AcceptedKind[];
+}
+
+/** What `accept` answers: the record that was written, or why none was. */
+export type AcceptAnswer = { readonly outcome: "written"; readonly record: Accepted } | { readonly outcome: "refused"; readonly code: RecordRefusal };
+
+const refused = (code: RecordRefusal): AcceptAnswer => ({ outcome: "refused", code });
+
+/** What one try of `accept` at a count gives: an answer, or that the count is no longer the one the record's `seq` was taken from. */
+type AcceptTry = AcceptAnswer | { readonly outcome: "the count moved" };
+
 /** What `card-state` is answered from. */
 export interface CardStateAnswer {
   /** The state of the card as the rules left it, or null if it has no valid record. */
@@ -145,16 +208,32 @@ const MIN_ALARM_WAIT_MS = 1000;
  * here: settings.ts.)
  */
 export class Roster extends DurableObject<Env> {
-  readonly #settings: RosterSettings;
+  /**
+   * The settings the object started with. This and the other `protected`
+   * members below (`challengeRandom`, `hashOf`, `ruleState`,
+   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`) are `protected`
+   * and not private for one reader: the object of the test build
+   * (README.md, "三樣不是設定值的東西"), the only class that extends this
+   * one. Nothing else overrides or calls them from outside this file.
+   */
+  protected readonly settings: RosterSettings;
   /** Whether the object's tables were made by this build's SCHEMA_VERSION. */
   readonly #tablesAreThisVersion: boolean;
+  /**
+   * Whether the stored state of the cards was computed by another version
+   * of the roster rules than this build's (spec/roster-rules.md, "The
+   * version number"). The object then issues no challenge and takes no
+   * submission, so that no record is written from a state the rules of this
+   * build did not leave; everything else goes on.
+   */
+  readonly #paused: boolean;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // Before anything is read or written: with settings that do not fit each
     // other (settings.ts) the object does not start. The Worker reads the
     // same settings before it asks the object, so it does not get this far.
-    this.#settings = rosterSettingsOf(env);
+    this.settings = rosterSettingsOf(env);
     const sql = ctx.storage.sql;
     for (const statement of TABLES) sql.exec(statement);
     // A new roster: no record, a state computed by the rules of this build,
@@ -166,8 +245,9 @@ export class Roster extends DurableObject<Env> {
       RULES_VERSION,
       SCHEMA_VERSION,
     );
-    const { schema_version } = sql.exec<{ schema_version: number }>("SELECT schema_version FROM roster WHERE id = 1").one();
+    const { schema_version, rules_version } = sql.exec<{ schema_version: number; rules_version: number }>("SELECT schema_version, rules_version FROM roster WHERE id = 1").one();
     this.#tablesAreThisVersion = schema_version === SCHEMA_VERSION;
+    this.#paused = rules_version !== RULES_VERSION;
   }
 
   /** For a method about to read or write the tables: throws if they were made by another SCHEMA_VERSION. */
@@ -178,26 +258,196 @@ export class Roster extends DurableObject<Env> {
   /**
    * Issues a challenge (spec/challenge.md): today's date in Taiwan at this
    * moment and 16 random bytes. It is stored with the time before it is
-   * given out, so a challenge anybody holds is one this object knows.
+   * given out, so a challenge anybody holds is one this object knows. None
+   * is issued while the roster is paused: the challenge is then null.
    */
-  async issueChallenge(): Promise<string> {
+  async issueChallenge(): Promise<{ challenge: string | null }> {
     this.#checkTables();
+    if (this.#paused) return { challenge: null };
     const issued = now().getTime();
-    const challenge = `${formatDay(taiwanDay(issued))}.${encodeBase32(crypto.getRandomValues(new Uint8Array(16)))}`;
+    const challenge = `${formatDay(taiwanDay(issued))}.${encodeBase32(this.challengeRandom())}`;
     // A date outside 2000 to 2049 is not a challenge.
     if (parseChallenge(challenge) === null) throw new Error("the date is not one a challenge can have");
     this.ctx.storage.sql.exec("INSERT INTO challenges (challenge, issued_ms) VALUES (?, ?)", challenge, issued);
     await this.setAlarmForTimedWork();
-    return challenge;
+    return { challenge };
+  }
+
+  /** The 16 random bytes of a new challenge. `protected` so that the test build can choose them, by overriding this; nothing else does. */
+  protected challengeRandom(): Uint8Array {
+    return crypto.getRandomValues(new Uint8Array(16));
+  }
+
+  /**
+   * Counts one submission of a challenge, before its proof is verified, and
+   * says whether the submission goes on. In the order of
+   * docs/api/card-proof.md: a challenge this object did not issue, or issued
+   * 10 minutes ago or more, is `challenge_unknown`; one a record was written
+   * for is `challenge_used`, and is not counted; the sixth submission and
+   * every later one is `challenge_attempts`.
+   */
+  beginSubmission(challenge: string): "ok" | SubmissionRefusal {
+    this.#checkTables();
+    if (this.#paused) return "paused";
+    const row = this.#challenge(challenge);
+    if (row === null) return "challenge_unknown";
+    if (row.accepted) return "challenge_used";
+    this.ctx.storage.sql.exec("UPDATE challenges SET submissions = submissions + 1 WHERE challenge = ?", challenge);
+    return row.submissions + 1 > MAX_SUBMISSIONS ? "challenge_attempts" : "ok";
+  }
+
+  /** The row of a challenge that has not expired at this moment, or null: not issued here, expired, or already deleted. */
+  #challenge(challenge: string): { submissions: number; accepted: boolean } | null {
+    const row = this.ctx.storage.sql.exec<{ issued_ms: number; submissions: number; accepted: number }>("SELECT issued_ms, submissions, accepted FROM challenges WHERE challenge = ?", challenge).toArray()[0];
+    if (row === undefined || now().getTime() - row.issued_ms >= CHALLENGE_LIFETIME_MS) return null;
+    return { submissions: row.submissions, accepted: row.accepted !== 0 };
+  }
+
+  /**
+   * Writes a record whose proof the Worker verified, if it is one to write.
+   * `fields` are the record's fields except `seq`, each in its format. In
+   * the order of docs/api/card-proof.md: the challenge again (a record may
+   * have been written for it, or it may have expired, while the proof was
+   * being verified); the back end's rule on `smt_root`; the roster rules;
+   * the back end's policy on switches.
+   *
+   * The record's `seq` is the count of records plus one, and its hash needs
+   * the `seq`. Hashing gives way to other requests, so the hash is computed
+   * for the count as it is, and everything else, from the checks to the
+   * write, then runs without giving way, and only if the count is still
+   * that one; otherwise it starts over. So no two records get the same
+   * `seq`, and each is checked against the state the one before it left.
+   */
+  async accept(fields: RecordFields): Promise<AcceptAnswer> {
+    this.#checkTables();
+    if (this.#paused) return refused("paused");
+    for (;;) {
+      const { count, fingerprint } = this.#rosterRow();
+      const record: RosterRecord = { ...fields, seq: count + 1 };
+      const hash = await this.hashOf(record);
+      const answer = this.#acceptAt(record, hash, await nextFingerprint(fingerprint, hash));
+      if (answer.outcome !== "the count moved") return answer;
+    }
+  }
+
+  /**
+   * The record hash of a record (protocol/, recordHash). A method of its
+   * own for the test build alone, whose object overrides it to wait before
+   * the hash, so that other requests run in between, which is what the
+   * check of the count in `accept` is for. Nothing else overrides or calls
+   * it.
+   */
+  protected hashOf(record: RosterRecord): Promise<string> {
+    return recordHash(record);
+  }
+
+  #rosterRow(): { count: number; fingerprint: string } {
+    return this.ctx.storage.sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM roster WHERE id = 1").one();
+  }
+
+  /**
+   * The checks and the write of `accept`, for a record whose `seq`, hash and
+   * roster fingerprint were computed at a count of `record.seq − 1`. Nothing
+   * here waits, so no other request runs in between.
+   *
+   * Everything that can fail once the rules accepted the record is inside
+   * the transaction, the answer included: a record is never written
+   * without its answer, and nothing after the transaction can fail.
+   */
+  #acceptAt(record: RosterRecord, hash: string, fingerprint: string): AcceptTry {
+    const sql = this.ctx.storage.sql;
+    if (this.#rosterRow().count !== record.seq - 1) return { outcome: "the count moved" };
+    const { kind, platforms } = this.settings;
+    const date = parseChallenge(record.challenge);
+    if (date === null || (record.issuer !== "G2" && record.issuer !== "G3")) throw new Error("the record's fields are not in their formats");
+
+    // The challenge, at this moment.
+    const challenge = this.#challenge(record.challenge);
+    if (challenge === null) return refused("challenge_unknown");
+    if (challenge.accepted) return refused("challenge_used");
+
+    // The back end's rule on the root: one of the two newest CRLs of the issuer, the newest at most 3 days old.
+    const newest = this.newestCrls()[record.issuer].map((crl) => ({ root: crl.root, date: crlDay(crl.crlDate) }));
+    if (newest.length === 0 || taiwanDay(now().getTime()) > newest[0]!.date + CRL_MAX_AGE_DAYS) return refused("crl_stale");
+    const crlDates = newest.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
+    if (crlDates.length === 0) return refused("root");
+
+    // The roster rules, on the state this object keeps.
+    const { card: before, latestValidDate } = this.ruleState(record.scopeString, record.scopedId);
+    const outcome = applyRecord({ platforms, record: { accounts: record.accounts, date, verifies: true }, card: before, latestValidDate, challengeUsed: challenge.accepted, crlDates });
+    if (!outcome.result.valid) {
+      const { reason } = outcome.result;
+      // The Worker verified the proof, and the challenge was looked at above.
+      if (reason === "proof" || reason === "challenge_reused") throw new Error("the roster rules refused what was already checked");
+      return refused(reason);
+    }
+    const { kinds } = outcome.result;
+
+    // The back end's policy, if it is on: never a record without a switch.
+    if (this.settings.restrictLateSwitches && usesRestrictedSwitch(before, kinds)) return refused("switch_restricted");
+
+    // The line as anyone reading the roster file will check it (spec/record.md, "Check a line").
+    const line = recordLine(record);
+    if (readRecordLine(kind, line) === null) throw new Error("the record's line is not a well-formed line of the roster");
+
+    // The account of each kind: the one the list has for the platform, or for `withdraw` the one the slot had.
+    const accounts = kinds.map(({ platform, kind: what }) => {
+      const username = (what === "withdraw" ? before.slots.get(platform)?.current : record.accounts.find((a) => a.platform === platform)?.username) ?? null;
+      if (username === null) throw new Error("a kind without an account");
+      return { platform, kind: what, username };
+    });
+
+    // One transaction: the record with its `seq`, the card's state, the roster's row, the challenge. The answer counts
+    // the cards of each account in the state the record leaves, so it is made in the transaction too: if the count
+    // fails, the record is not written.
+    const written = this.ctx.storage.transactionSync((): Accepted => {
+      sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
+      this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
+      sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
+      sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
+      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.#accountCards(record.scopeString, a.platform, a.username) })) };
+    });
+    return { outcome: "written", record: written };
+  }
+
+  /**
+   * What the roster rules read of this roster besides the record itself
+   * (protocol/, applyRecord): the state of the record's card, the empty
+   * state for a card without a valid record, and the latest date among the
+   * valid records.
+   *
+   * `protected`, like `keepRuleState`, so that the test build runs the
+   * roster rules on the stored state through the same reading and writing
+   * (its `testApplyRuleEvent` calls both). Neither is overridden.
+   */
+  protected ruleState(scopeString: string, scopedId: string): { card: CardState; latestValidDate: Day | null } {
+    const { platforms } = this.settings;
+    const { latest_valid_date } = this.ctx.storage.sql.exec<{ latest_valid_date: string | null }>("SELECT latest_valid_date FROM roster WHERE id = 1").one();
+    const latestValidDate = latest_valid_date === null ? null : parseDay(latest_valid_date);
+    if (latest_valid_date !== null && latestValidDate === null) throw new Error("roster: latest_valid_date is not a date");
+    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? newCard(platforms), latestValidDate };
+  }
+
+  /** Keeps what the roster rules left after a valid record, `seq` being that record's: the state of its card and the latest valid date. */
+  protected keepRuleState(scopeString: string, scopedId: string, card: CardState, seq: number, latestValidDate: Day | null): void {
+    writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
+    this.ctx.storage.sql.exec("UPDATE roster SET latest_valid_date = ? WHERE id = 1", latestValidDate === null ? null : formatDay(latestValidDate));
+  }
+
+  /**
+   * The number of cards of a scope whose `current` on a platform is this
+   * username. It reads every card's row: the tables a page reads will have
+   * this number by account (#68), and this then asks them.
+   */
+  #accountCards(scopeString: string, platform: string, username: string): number {
+    return this.ctx.storage.sql.exec<{ cards: number }>("SELECT COUNT(*) AS cards FROM cards WHERE scope_string = ? AND json_extract(slots, ?) = ?", scopeString, `$."${platform}".current`, username).one().cards;
   }
 
   /** The state of one card and the number of records it was computed at. */
   cardState(scopeString: string, scopedId: string): CardStateAnswer {
     this.#checkTables();
-    const { platforms } = this.#settings;
-    const sql = this.ctx.storage.sql;
-    const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
-    return { card: readCard(sql, platforms, scopeString, scopedId)?.card ?? null, count };
+    const { platforms } = this.settings;
+    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? null, count: this.#rosterRow().count };
   }
 
   /**
@@ -280,6 +530,22 @@ export class Roster extends DurableObject<Env> {
     }
     await this.setAlarmForTimedWork();
   }
+}
+
+/** A CRL date as the mirror told it, as a day. */
+function crlDay(crlDate: string): Day {
+  const day = parseDay(crlDate);
+  if (day === null) throw new Error("newest_crls: crl_date is not a date");
+  return day;
+}
+
+/**
+ * Whether a record with these kinds, applied to a card whose state before
+ * it is `card`, has a switch that becomes the fourth or a later switch of
+ * its slot: what the policy on late switches refuses.
+ */
+function usesRestrictedSwitch(card: CardState, kinds: readonly PlatformKind[]): boolean {
+  return kinds.some((k) => k.kind === "switch" && (card.slots.get(k.platform) ?? EMPTY_SLOT).switchCount + 1 >= RESTRICTED_FROM);
 }
 
 /**

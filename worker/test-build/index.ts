@@ -1,51 +1,103 @@
 // The entry point of the test build (test/build.ts): the Worker of
 // src/index.ts, and in front of it the switches the tests need that the
-// deployed Worker must not have: the clock, the environment's settings,
-// doors to the roster's Durable Object, and two doors to what has no API of
-// its own yet, the proof verifier and what the roster's object knows of
-// the CRL archive. Never in the deployed build (test/bundle.test.ts).
+// deployed Worker must not have. Never in the deployed build
+// (test/bundle.test.ts).
 //
-// Those two doors call the same verifier and the same method the deployed
-// Worker has (src/in-worker.ts, src/roster.ts); nothing of them is replaced
-// here. They are temporary: once the real API verifies a submitted record's
-// proof and checks its root against the newest CRLs (#67), the tests go
-// through that and the doors go.
-//
-// The doors to the roster's object do what no request can do yet or ever.
-// The object of the test build is the deployed one (src/roster.ts) with
-// eight methods added: run its alarm now; read when the alarm is set for;
-// write the state of a card (until submitting a record does, #67); break
-// its tables, to see what the API answers when the back end itself fails;
-// give it a second piece of timed work, and read when that one ran, to see
-// that two pieces share the one alarm without disturbing each other; and
-// change the version its tables say they were made by; and drop the table
-// of the newest CRLs, to see an object made before that table get it.
-//
-// The settings a test replaces (`ROSTER_KIND`, `ROSTER_OBJECT_NAME`) are
-// kept here, in memory, and laid over the environment the Worker and the
-// object are given. wrangler.jsonc is not touched: the deployed settings
-// are the ones the deploy build reads.
+// - The clock, and the environment's settings. The settings a test replaces
+//   are kept here, in memory, and laid over the environment the Worker and
+//   the object are given. wrangler.jsonc is not touched: the deployed
+//   settings are the ones the deploy build reads.
+// - Which proof verifier `records` asks. A test worker starts with the one
+//   the deployed Worker has (src/in-worker.ts), and the tests about proofs
+//   keep it. A proof takes a real card's keys and seconds to make, so the
+//   tests about everything else (the challenge, the CRLs, the roster rules,
+//   the write) switch to a stand-in that judges a proof by its first byte
+//   (and on one value of it moves the clock, as a verification that took time),
+//   as the Go backend's tests do (server/harness_test.go, fakeProofs). The
+//   stand-in is behind the same interface the deployed Worker names its
+//   verifier by (src/index.ts, `API_PARTS`).
+// - A door to the proof verifier itself, for inputs no record can carry
+//   (public inputs that are not a record's), and one to what the roster's
+//   object knows of the CRL archive. Both call what the deployed Worker has;
+//   nothing of them is replaced here.
+// - Doors to the roster's object, for what no request can do. The object of
+//   the test build is the deployed one (src/roster.ts) with methods added:
+//   run its alarm now and read when it is set for; give it a second piece
+//   of timed work; choose the random bytes of the next challenge, so that a
+//   test gets the challenge a proof was made for; change the versions its
+//   tables say they were made by and computed by; write a row of the card
+//   state table as it is given, for the states the rules cannot leave;
+//   break its tables, or one card's row, or make every write to one of them fail, to see what
+//   the API answers when the back end itself fails; drop the table of the
+//   newest CRLs; and run the roster rules on the object's stored state for
+//   an event the API would never write (an invalid record of a roster);
+//   read the rows it keeps of its records and of the roster as a whole,
+//   which no endpoint shows yet; and wait before it hashes a record, so
+//   that requests sent at once do cross where the deployed object lets
+//   them (in the local workerd the hash alone does not let another in).
 import { bytesOfHex } from "iamreal-protocol/bytes.ts";
+import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import type { CardState, SlotState } from "iamreal-protocol/roster-rules.ts";
+import type { RosterRecord } from "iamreal-protocol/record.ts";
+import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
+import { type ApiParts, api, isApiPath } from "../src/api.ts";
 import { writeCard } from "../src/card-table.ts";
+import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import type { CardToWrite, TestSettings } from "./card-door.ts";
-import { setTestClock } from "./target.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "./card-door.ts";
+import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
 
 /** The environment with the settings the test replaced. */
 const testEnv = (env: Env): Env => ({ ...env, ...testSettings });
 
+/**
+ * The stand-in verifier: it looks at nothing but the proof's first byte. 0
+ * is accepted, 1 is rejected, and on 2 it cannot run, as the Worker's
+ * verifier when Barretenberg does not start (src/engine.ts). 3 is accepted
+ * after the test clock is moved one millisecond on: a verification that
+ * took time, for the challenge that expires during it.
+ */
+const STAND_IN: ApiParts = {
+  verifier: {
+    async verify(_circuit, proof) {
+      if (proof[0] === 2) throw new EngineError("the stand-in verifier does not start on this proof", true);
+      if (proof[0] === 3) setTestClock(now().getTime() + 1);
+      return proof[0] !== 1;
+    },
+  },
+};
+
+let standIn = false;
+
+/**
+ * What a test can make every write to fail on: a table the object writes,
+ * or only the mark that a record was written for a challenge (the column
+ * `accepted`), which leaves counting a submission as it is.
+ */
+const FAILING_WRITES = {
+  records: "ON records",
+  cards: "ON cards",
+  roster: "ON roster",
+  challenges: "ON challenges",
+  "challenges.accepted": "OF accepted ON challenges",
+} as const;
+type FailingWrite = keyof typeof FAILING_WRITES;
+
 export class Roster extends DeployedRoster {
   /** The second piece of timed work: when it is next due, how long after each run it is due again, and when it ran. */
   #extraDue: number | null = null;
   #extraEvery = 0;
   readonly #extraRuns: number[] = [];
+  /** The random bytes of the next challenge, if the test chose them. */
+  #nextRandom: Uint8Array | null = null;
+  /** How long the object waits before it hashes a record, in milliseconds, and how many records it has hashed. */
+  #hashDelayMs = 0;
+  #hashes = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, testEnv(env));
@@ -60,6 +112,34 @@ export class Roster extends DeployedRoster {
       },
     };
     return [...super.timedWork(), extra];
+  }
+
+  protected override challengeRandom(): Uint8Array {
+    const chosen = this.#nextRandom;
+    this.#nextRandom = null;
+    return chosen ?? super.challengeRandom();
+  }
+
+  protected override async hashOf(record: RosterRecord): Promise<string> {
+    this.#hashes++;
+    // A timer, unlike the hash, lets the requests that are waiting run.
+    if (this.#hashDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#hashDelayMs));
+    return super.hashOf(record);
+  }
+
+  /** From now on the object waits this long before it hashes a record. */
+  testSetHashDelay(ms: number): void {
+    this.#hashDelayMs = ms;
+  }
+
+  /** How many times the object has hashed a record since it started. */
+  testHashes(): number {
+    return this.#hashes;
+  }
+
+  /** The next challenge has these 16 bytes in place of random ones. */
+  testSetNextRandom(random: Uint8Array): void {
+    this.#nextRandom = random;
   }
 
   /** Gives the object a second piece of timed work, due at `due` and then every `every` milliseconds. */
@@ -84,7 +164,7 @@ export class Roster extends DeployedRoster {
     return this.ctx.storage.getAlarm();
   }
 
-  /** Writes the state of a card as a valid record with this `seq` would leave it (src/card-table.ts). */
+  /** Writes a row of the card state table as it is given (src/card-table.ts): how a test stores a state the rules cannot have left. */
   testWriteCard(scopeString: string, scopedId: string, card: CardState, seq: number): void {
     writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
   }
@@ -94,15 +174,91 @@ export class Roster extends DeployedRoster {
     this.ctx.storage.sql.exec("UPDATE roster SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
   }
 
+  /** Makes the version of the roster rules the stored state says it was computed by another one than the build's, or the build's. Takes effect when the object starts again. */
+  testSetStoredRulesVersion(to: "another" | "the build's"): void {
+    this.ctx.storage.sql.exec("UPDATE roster SET rules_version = ? WHERE id = 1", to === "another" ? RULES_VERSION + 1 : RULES_VERSION);
+  }
+
   /** Drops the table of the newest CRLs: the object is then as one made by a build that did not have it yet. */
   testDropNewestCrls(): void {
     this.ctx.storage.sql.exec("DROP TABLE newest_crls");
+  }
+
+  /**
+   * Makes the stored slots of one card text that is not JSON, by putting
+   * `not JSON` in front of them, so that reading the row fails; or, with
+   * `mend`, takes that away again, which leaves the row as it was. Throws
+   * if there is no such row.
+   */
+  testBreakCard(scopeString: string, scopedId: string, mend: boolean): void {
+    const sql = this.ctx.storage.sql;
+    const { rowsWritten } = mend
+      ? sql.exec("UPDATE cards SET slots = substr(slots, 9) WHERE scope_string = ? AND scoped_id = ? AND slots LIKE 'not JSON%'", scopeString, scopedId)
+      : sql.exec("UPDATE cards SET slots = 'not JSON' || slots WHERE scope_string = ? AND scoped_id = ? AND slots NOT LIKE 'not JSON%'", scopeString, scopedId);
+    if (rowsWritten !== 1) throw new Error("no such row");
   }
 
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
   testBreak(): void {
     this.ctx.storage.sql.exec("DROP TABLE challenges");
     this.ctx.storage.sql.exec("DROP TABLE cards");
+  }
+
+  /**
+   * From now on every write to `what` fails, or, with null, none does: a
+   * trigger in the object's own SQLite, so that the write fails where the
+   * storage would fail it, in the middle of whatever was being written.
+   */
+  testFailWritesTo(what: FailingWrite | null): void {
+    const sql = this.ctx.storage.sql;
+    sql.exec("DROP TRIGGER IF EXISTS test_fail_insert");
+    sql.exec("DROP TRIGGER IF EXISTS test_fail_update");
+    if (what === null) return;
+    if (!Object.hasOwn(FAILING_WRITES, what)) throw new Error("not something the object writes");
+    const fail = "BEGIN SELECT RAISE(ABORT, 'the test makes this write fail'); END";
+    sql.exec(`CREATE TRIGGER test_fail_update BEFORE UPDATE ${FAILING_WRITES[what]} ${fail}`);
+    if (what !== "challenges.accepted") sql.exec(`CREATE TRIGGER test_fail_insert BEFORE INSERT ${FAILING_WRITES[what]} ${fail}`);
+  }
+
+  /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
+  testStored(): StoredRoster {
+    const sql = this.ctx.storage.sql;
+    return {
+      records: sql.exec<{ seq: number; line: string; record_hash: string; fingerprint: string }>("SELECT seq, line, record_hash, fingerprint FROM records ORDER BY seq").toArray(),
+      roster: sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM roster WHERE id = 1").one(),
+    };
+  }
+
+  /**
+   * Runs the roster rules for one event of spec/vectors/roster-rules.json on
+   * the state the object stores, and keeps what a valid one leaves: the
+   * same reading and the same writing of the state as for a submitted
+   * record (src/roster.ts, `ruleState`, `keepRuleState`). The answers the
+   * rules take from outside the roster come with the event. Which
+   * challenges were used is kept in a table of the test's own, since the
+   * back end never writes an invalid record and so keeps no challenge of
+   * one.
+   */
+  testApplyRuleEvent(e: RuleEvent): RecordResult {
+    const sql = this.ctx.storage.sql;
+    sql.exec("CREATE TABLE IF NOT EXISTS test_used_challenges (challenge TEXT PRIMARY KEY) WITHOUT ROWID");
+    const date = parseChallenge(e.challenge);
+    if (date === null) throw new Error("the event's challenge is not a challenge");
+    const challengeUsed = sql.exec("SELECT 1 FROM test_used_challenges WHERE challenge = ?", e.challenge).toArray().length > 0;
+    const { card, latestValidDate } = this.ruleState(e.scope_string, e.scoped_id);
+    const outcome = applyRecord({
+      platforms: this.settings.platforms,
+      record: { accounts: e.accounts, date, verifies: e.verifies },
+      card,
+      latestValidDate,
+      challengeUsed,
+      crlDates: e.crl_dates.map((d) => parseDay(d)!),
+    });
+    this.ctx.storage.transactionSync(() => {
+      if (outcome.result.valid) this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+      sql.exec("INSERT OR IGNORE INTO test_used_challenges (challenge) VALUES (?)", e.challenge);
+    });
+    return outcome.result;
   }
 }
 
@@ -119,16 +275,38 @@ export default {
    * - `PUT /__test/settings` with a TestSettings replaces settings of the
    *   environment from now on. An object that is running keeps the ones it
    *   started with until it starts again.
+   * - `PUT /__test/verifier` with `real` or `stand-in` chooses the proof
+   *   verifier `records` asks from now on.
    * - `POST /__test/roster/alarm` runs the alarm of the roster's object;
    *   `GET` answers `{alarm}`, the time it is set for or null.
    * - `PUT /__test/roster/extra-work` with `{due, every}` gives the object a
    *   second piece of timed work; `GET` answers `{runs}`, when it ran.
-   * - `PUT /__test/roster/card` writes the state of a card (CardToWrite).
-   * - `PUT /__test/roster/schema-version` with `{to}`, "another" or "the
-   *   build's", changes the version the object's tables say they were made by.
+   * - `PUT /__test/roster/next-random` with 16 bytes in hex: the next
+   *   challenge the object issues has them in place of random bytes.
+   * - `PUT /__test/roster/card` writes a row of the card state table
+   *   (CardToWrite).
+   * - `PUT /__test/roster/schema-version` and
+   *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
+   *   build's", change the version the object's tables say they were made
+   *   by, and the version of the rules its state says it was computed by.
    * - `POST /__test/roster/break` drops the tables the API reads.
+   * - `POST /__test/roster/break-card` with `{scope_string, scoped_id,
+   *   mend}` makes the stored slots of that card text that is not JSON, or,
+   *   with `mend` true, what they were before that.
+   * - `PUT /__test/roster/fail-writes` with `{what}`, a table, or
+   *   `challenges.accepted`, or null: every write to it fails from now on,
+   *   or none does.
    * - `POST /__test/roster/drop-newest-crls` drops the table of the newest
    *   CRLs, as on an object made before the build had it.
+   * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
+   *   rules for it on the object's stored state and answers the result.
+   * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
+   *   object keeps of its records, and the count and the roster
+   *   fingerprint of its row of the roster.
+   * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
+   *   object waits that long before it hashes a record it is asked to
+   *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
+   *   how many times it has hashed one.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
    * - `GET /__test/newest-crls` answers what the roster's object knows of
@@ -149,6 +327,12 @@ export default {
       testSettings = (await request.json()) as TestSettings;
       return done();
     }
+    if (route === "PUT /__test/verifier") {
+      const which = await request.text();
+      if (which !== "real" && which !== "stand-in") return new Response(null, { status: 400 });
+      standIn = which === "stand-in";
+      return done();
+    }
     const env = testEnv(deployedEnv);
     if (route === "POST /__test/roster/alarm") {
       await testRosterOf(env).testRunAlarm();
@@ -161,6 +345,12 @@ export default {
       return done();
     }
     if (route === "GET /__test/roster/extra-work") return json({ runs: await testRosterOf(env).testExtraWorkRuns() });
+    if (route === "PUT /__test/roster/next-random") {
+      const random = bytesOfHex(await request.text());
+      if (random.length !== 16) return new Response(null, { status: 400 });
+      await testRosterOf(env).testSetNextRandom(random);
+      return done();
+    }
     if (route === "PUT /__test/roster/card") {
       const body = (await request.json()) as CardToWrite;
       const slots = new Map<string, SlotState>();
@@ -177,19 +367,44 @@ export default {
       await testRosterOf(env).testSetStoredSchemaVersion(to);
       return done();
     }
+    if (route === "PUT /__test/roster/rules-version") {
+      const { to } = (await request.json()) as { to: "another" | "the build's" };
+      await testRosterOf(env).testSetStoredRulesVersion(to);
+      return done();
+    }
     if (route === "POST /__test/roster/break") {
       await testRosterOf(env).testBreak();
+      return done();
+    }
+    if (route === "POST /__test/roster/break-card") {
+      const { scope_string, scoped_id, mend } = (await request.json()) as { scope_string: string; scoped_id: string; mend: boolean };
+      await testRosterOf(env).testBreakCard(scope_string, scoped_id, mend);
+      return done();
+    }
+    if (route === "PUT /__test/roster/fail-writes") {
+      const { what } = (await request.json()) as { what: FailingWrite | null };
+      await testRosterOf(env).testFailWritesTo(what);
       return done();
     }
     if (route === "POST /__test/roster/drop-newest-crls") {
       await testRosterOf(env).testDropNewestCrls();
       return done();
     }
+    if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
+    if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "PUT /__test/roster/hash-delay") {
+      const ms = Number(await request.text());
+      if (!Number.isSafeInteger(ms) || ms < 0) return new Response(null, { status: 400 });
+      await testRosterOf(env).testSetHashDelay(ms);
+      return done();
+    }
+    if (route === "GET /__test/roster/hash-delay") return json({ hashes: await testRosterOf(env).testHashes() });
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });
     }
     if (route === "GET /__test/newest-crls") return json(await rosterOf(env).newestCrls());
+    if (standIn && isApiPath(pathname)) return api(request, env, STAND_IN);
     return worker.fetch(request, env, ctx);
   },
   /** The schedule, with the settings the test replaced. */

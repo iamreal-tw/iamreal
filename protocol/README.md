@@ -18,6 +18,7 @@
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
 | `scoped-id.ts` | `spec/scoped-id.md` | 匿名編號、它的文字寫法和 10 個字元的短編號 |
 | `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
+| `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）。後台寫入一筆時用它 |
 | `date.ts` | | 日期換成天數、台灣的日期（UTC+8，不看裝置的時區） |
 | `base32.ts` | | 題目和匿名編號用的 base32，只認一種寫法 |
 | `field.ts` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
@@ -57,5 +58,9 @@ pnpm test
 - 規則的版本號：`RULES_VERSION` 等於 `spec/roster-rules.md` 寫的那一版，也等於 `roster-rules.json` 的 `rules_version`。Go 的 `roster/version_test.go` 拿 `roster.RulesVersion` 比同樣兩個地方
 - `applyRecord` 本身：六個檢查的先後、檢查 3 和檢查 4 的邊界、無效的紀錄原樣交回收到的狀態、同樣的輸入算兩次結果相同而且輸入沒被改、狀態裡沒有的平台當成空的名額；清單裡有平台表以外的平台、同一個平台兩次、沒照平台排序、帳號不合它那個平台的格式，都在檢查 1 之前就是錯誤，不給代碼；一份清單錯了好幾處時，丟的是和 Go 的 `roster/` 相同的那一種
 - `applyList`：事件規則在一個名額上的每一種情況和之後的名額、被擋的平台、一天 3 筆
+
+`test/record.test.ts`：
+
+- `record.json`：兩份名冊的每一筆紀錄，清單的寫法、名冊檔的那一行、紀錄雜湊、加上它之後的名冊指紋都和標準答案相同；每一行格式正確的都讀得出來，重寫一次位元組相同；71 種格式不對的行都讀不出來。名冊檔和名冊目錄的案例（`files`、`generated_roster`、`fingerprint_files`）這裡還沒有讀：切檔和公布在後台還沒做
 
 另外測台灣的日期（`test/spec.test.ts`）和規則產生不出來的狀態（`test/roster-rules.test.ts`）。

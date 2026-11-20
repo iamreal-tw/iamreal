@@ -4,14 +4,14 @@
 
 ## 現在有什麼
 
-還沒做完：清冊鏡像和過卡前半段的三個介面有了，送出一筆和頁面還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
+還沒做完：清冊鏡像和過卡的四個介面有了（發題目、卡片現況、送出一筆、設定），頁面和公布名冊還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
 
 | 有 | 還沒有 |
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | 在 Cloudflare 上跑過的紀錄：這一版還沒部署 |
-| 名冊的 Durable Object：題目表、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | 寫入紀錄：還沒有任何東西會寫卡片狀態表，所以每張卡片都是沒過過卡的樣子 |
-| API 的三個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`GET /api/v1/config` | `POST /api/v1/records`、`GET /api/v1/fingerprint`；限流；存著的規則版本和程式不同時的 `paused` |
-| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過 | 呼叫驗證的程式：送出一筆時驗證 |
+| 名冊的 Durable Object：題目表、紀錄、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | 把紀錄搬到 R2、每天公布名冊（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）：紀錄現在全部留在 Durable Object |
+| API 的四個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | `GET /api/v1/fingerprint`；限流 |
+| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | 頁面用的衍生表（[#68](https://github.com/iamreal-tw/iamreal/issues/68)） |
 | 測試專用的建置和測試的工具 | 任何頁面：`/api/` 以外的每個網址都回 `404` |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
@@ -55,11 +55,12 @@ pnpm typecheck   # 型別檢查
 - 介面會讀的請求內容最多 64 KB（65,536 個位元組），超過就是 `malformed`，多的部分不讀。`challenges` 不讀內容，送什麼、多長都不看。巢狀超過 16 層的 JSON 也是 `malformed`。
 - 讀 JSON 用自己寫的讀法（`src/json.ts`）：`JSON.parse` 遇到重複的鍵會留下後面那個而不報錯，這裡重複的鍵一律拒絕（ADR-0014）。多一個鍵、少一個鍵、鍵的大小寫不同、值不是字串、物件後面還有東西、不是 UTF-8、開頭有位元組順序記號，都是 `malformed`。
 
-### 三個介面
+### 四個介面
 
 | 介面 | 誰回答 | 做法 |
 |---|---|---|
-| `POST /api/v1/challenges` | Durable Object | 日期是發出那一刻的台灣日期，加 16 個隨機位元組；先存進題目表再回。請求的內容不讀 |
+| `POST /api/v1/challenges` | Durable Object | 日期是發出那一刻的台灣日期，加 16 個隨機位元組；先存進題目表再回。請求的內容不讀。存著的規則版本和程式的不同時不發，回 `503` `paused` |
+| `POST /api/v1/records` | Worker 和 Durable Object 各兩段 | 見[送出一筆](#送出一筆) |
 | `POST /api/v1/card-state` | Worker 檢查格式，Durable Object 讀卡片狀態表 | 場合字串不是這份名冊的、匿名編號不是它唯一的寫法，都是 `malformed`，不問 Durable Object。平台表的每個平台一項；存著的狀態沒有某個平台的名額時，那一項是沒用過的名額。回應沒有 `head` |
 | `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表 |
 
@@ -76,11 +77,11 @@ pnpm typecheck   # 型別檢查
 
 執行時不符的話：
 
-- 三個介面（`challenges`、`card-state`、`config`）一律回 `500`，寫一行 `where` 是 `settings` 的紀錄。三個介面都是先讀設定才做別的事。
+- 四個介面（`challenges`、`card-state`、`records`、`config`）一律回 `500`，寫一行 `where` 是 `settings` 的紀錄。每個介面都是先讀設定才做別的事。
 - Worker 不去問 Durable Object。Durable Object 自己啟動時也讀同一處，設定不對就不啟動，不建表、不讀不寫。
 - 設定改對之後照常，物件裡原有的東西都還在。
 
-之後的介面（`records`、頁面）只要經過 `rosterSettingsOf` 取得設定，就有同樣的檢查。
+之後的介面（頁面）只要經過 `rosterSettingsOf` 取得設定，就有同樣的檢查。
 
 ### 讀卡片狀態時的檢查
 
@@ -100,12 +101,14 @@ pnpm typecheck   # 型別檢查
 | 表 | 一列是什麼 | 欄位 |
 |---|---|---|
 | `challenges` | 一個發出、還沒過期的題目 | `challenge`、`issued_ms`（發出的時間）、`submissions`（送出的次數）、`accepted`（是否已接受） |
+| `records` | 一筆紀錄 | `seq`、`line`（它在名冊檔裡的那一行，含結尾的換行；照序號接起來就是名冊檔）、`record_hash`、`fingerprint`（加上這一筆之後的名冊指紋） |
 | `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
 | `roster` | 整份名冊，只有一列 | `count`（筆數）、`fingerprint`（名冊指紋）、`latest_valid_date`（名冊上最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/roster-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
 - 這張表只放名冊規則的狀態，和之後頁面用的衍生表分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
-- `submissions`、`accepted`、`last_seq`、`fingerprint`、`latest_valid_date` 現在沒有程式會改：那是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）的事。`rules_version` 在物件第一次啟動時記下當時程式的版本號；拿它和程式的版本比、不同就不收過卡，也是 #67 的事。
+- `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，是為了之後切檔時拿得到每一檔開頭的名冊指紋（`spec/record.md`「Record hash lists」），不必從頭重算。
+- `rules_version` 在物件第一次啟動時記下當時程式的版本號；和程式的不同時不收過卡（見下面）。
 
 ### 兩個版本號
 
@@ -115,7 +118,7 @@ pnpm typecheck   # 型別檢查
 |---|---|---|
 | 程式裡的常數 | `protocol/` 的 `RULES_VERSION` | `src/roster.ts` 的 `SCHEMA_VERSION`，現在是 1 |
 | 什麼時候加一號 | 名冊規則改了、存著的卡片狀態因此失效（`spec/roster-rules.md`「The version number」） | **改到任何一張已經存在的表**：加欄位、拿掉欄位、欄位的意思變了、改主鍵。只是多一張新的表、多一個索引不用加：建表的程式會在沒有它們的物件上補上 |
-| 存著的和程式的不同時 | 不收過卡，回 `503` `paused`，頁面照常；狀態從紀錄重建之後才收。[#67](https://github.com/iamreal-tw/iamreal/issues/67) 做 | Durable Object 的每個方法都不讀不寫，丟錯誤；`challenges` 和 `card-state` 回 `500`，那一行紀錄的 `where` 是 `schema`。alarm 響了也什麼都不做 |
+| 存著的和程式的不同時 | 不收過卡：`challenges` 和 `records` 回 `503` `paused`，不發題目、不計次、不寫入；`card-state` 和 `config` 照常。`records` 的請求本身讀不懂時（`malformed`、`scope`、`platform`）仍然先回那個代碼，那一段不問 Durable Object。這不是後台出錯，不寫那一行紀錄 | Durable Object 的每個方法都不讀不寫，丟錯誤；`challenges`、`card-state`、`records` 回 `500`，那一行紀錄的 `where` 是 `schema`。alarm 響了也什麼都不做 |
 | 怎麼處理 | 重建狀態（[#51](https://github.com/iamreal-tw/iamreal/issues/51)） | 現在沒有搬移表的程式。處理的方法是清空測試名冊：換一個 `ROSTER_OBJECT_NAME`（維持 `test-` 開頭）。真正的搬移留給 [#118](https://github.com/iamreal-tw/iamreal/issues/118)，封閉試用之前定 |
 
 兩件事不共用代碼：`paused` 是規則的版本，`schema` 是表的版本。
@@ -136,14 +139,57 @@ pnpm typecheck   # 型別檢查
 
 現在只有一件：刪過期的題目，到期時間是最舊那個題目發出後 10 分鐘。之後每天換日的工作（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）是在 `timedWork()` 多列一件；它占著 alarm 不會讓題目晚刪。測試用測試專用的建置多塞一件假的工作來確認這一點（`test/api.test.ts`）。所以題目表裡只有最近 10 分鐘左右發的題目。
 
+## 送出一筆
+
+`POST /api/v1/records`：一次過卡，帶這張卡片的整份帳號清單。檢查的順序照 [`docs/api/card-proof.md`](../docs/api/card-proof.md)，第一個不過的就是回應的代碼。Worker 和名冊的 Durable Object 之間分四段：
+
+| | 誰 | 做什麼 | 停在這裡的代碼 |
+|---|---|---|---|
+| 1 | Worker（`src/submission.ts`） | 讀請求、檢查每個欄位的格式。不問 Durable Object，不算一次送出 | `malformed`、`scope`、`platform` |
+| 2 | Durable Object（`beginSubmission`） | 檢查題目，算一次送出 | `paused`、`challenge_unknown`、`challenge_used`、`challenge_attempts` |
+| 3 | Worker（`src/record-proof.ts`） | 從紀錄的欄位重建公開輸入，驗證證明。在 Durable Object 外面做，驗證的時候名冊不被佔住 | `proof` |
+| 4 | Durable Object（`accept`） | 再看一次題目；檢查清冊；套名冊規則；套後台自己的更換政策；寫入 | `challenge_unknown`、`challenge_used`、`crl_stale`、`root`、`date_order`、`empty`、`switch_limit`、`daily_limit`、`switch_restricted` |
+
+- **後台自己不判斷一筆紀錄有效或無效。** 第 4 段把存著的卡片狀態、名冊上最晚的有效日期、樹根對到的清冊日期交給 `protocol/` 的 `applyRecord`，照它的結果回。這個檔自己決定的只有後台自己的事：題目、今天收哪些樹根、更換政策。
+- **題目**：發出滿 10 分鐘就是不認得（剛好 10 分鐘也是）。已經寫入過一筆的題目是 `challenge_used`，不計次。第 6 次送出起是 `challenge_attempts`：第 2 段每通過一次就加一，不管後來停在哪一段，第 4 段再看題目時擋下的（`challenge_used`、`challenge_unknown`）和回 `500` 的（驗證器跑不起來、第 4 段出錯）也算。第 1 段擋下的、`paused` 的、第 2 段就是 `challenge_unknown` 或 `challenge_used` 的不計次；計次的那一次寫入自己失敗（`500`）也沒有計到。
+- **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：`server/submit.go` 只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
+- **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新兩份其中一份的樹根，是 `root`。名冊規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
+- **更換政策**（`switch_restricted`）：預設沒有。環境變數 `RESTRICT_LATE_SWITCHES` 是 `"true"` 時，名冊規則接受、但其中有一個更換是那個名額的第 4 次或第 5 次的紀錄，回 `403`。`wrangler.jsonc` 沒有設這個值；要開的話在設定檔加一行，並把它加進 `scripts/deploy-build-checks.ts` 允許的清單。這個值只寫在 `wrangler.jsonc`，不用 `wrangler secret` 設：部署前的檢查讀的是設定檔和 wrangler 列出的 binding，看不到另外設在 Worker 上的 secret，用 secret 開的政策就沒有人在 PR 裡看過。值不是 `"true"` 也不是 `"false"` 時每個介面都回 `500`。
+- **驗證器跑不起來**（`EngineError`，見[驗證證明](#驗證證明)）不是拒絕也不是通過：回 `500`，那一行紀錄的 `where` 是 `verifier`，不問 Durable Object 寫任何東西。這一次送出已經在第 2 段算了一次。
+
+### 寫入是一個交易
+
+第 4 段每一項都過了之後，在一個交易裡（`transactionSync`）寫四樣，寫完才回應：
+
+1. 紀錄：序號、它在名冊檔裡的那一行（`protocol/` 的 `recordLine`）、紀錄雜湊、加上它之後的名冊指紋
+2. 這張卡片的狀態，和它最後一筆有效紀錄的序號
+3. 名冊的那一列：筆數、名冊指紋、名冊上最晚的有效日期
+4. 題目標成已接受
+
+任何一步丟例外，四樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 讓每一步各失敗一次來確認。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
+
+**交易提交之後沒有會丟例外的程式。** `201` 的回答（每個平台是哪個帳號、有幾張卡片宣告它）在交易結束前就做好：帳號在交易之前取，數卡片在交易裡、寫完卡片狀態之後做。數卡片要讀同一個場合每張卡片存著的名額，其中一列壞掉時它會丟例外；這時四樣都不留下，回 `500`，不會出現「紀錄寫進去了、題目標成用過了，裝置卻拿到 `500`」。這一次送出已經在第 2 段算了一次。測試把另一張卡片存著的名額改成不是 JSON 的字來確認。
+
+**營運上的後果**：數卡片（`#accountCards`）在交易裡掃同一個場合每一張卡片存著的 `slots`。只要其中一列壞掉，那個場合的每一筆送出都回 `500`、什麼都不寫、那一次照樣計次，直到那一列修好為止。後台自己不會寫出壞的列（寫的是名冊規則交出來的狀態）；頁面用的衍生表（[#68](https://github.com/iamreal-tw/iamreal/issues/68)）有了之後，這個掃描換成查那張表，這件事留給那張票（維護者 2026-11-20 決定）。
+
+**序號**是寫入那一刻的筆數加一。紀錄雜湊要用到序號，而算雜湊（WebCrypto）是非同步的，所以做法是：先照現在的筆數算好雜湊和名冊指紋，接著從檢查到寫入一口氣做完、中間不等任何東西，而且一開始先確認筆數沒有變；變了就重算。所以不會有兩筆拿到同一個序號，每一筆都是照前一筆留下的狀態檢查的。本機的 workerd 裡算雜湊不會讓別的請求插進來（20 個請求同時送，筆數也不會在這中間改變），所以測試專用的建置可以讓 Durable Object 在算雜湊之前先等幾毫秒（`PUT /__test/roster/hash-delay`；`src/roster.ts` 的 `hashOf` 就是為了這個拆出來的，只有測試專用的建置覆寫它）：等的時候別的請求會插進來，20 個同時送的請求就會拿著同一個筆數算雜湊。測試確認這時 20 筆仍然各拿到一個序號、存下來的名冊檔驗得過，而且有紀錄重算過。拿掉確認筆數的那一行，這個測試會看到 `500`（序號重複的那一筆因為主鍵寫不進去）。
+
+`account_cards`（回應裡每個平台有幾張卡片宣告同一個帳號）現在是掃卡片狀態表算的，每寫一筆掃一次。頁面用的衍生表（[#68](https://github.com/iamreal-tw/iamreal/issues/68)）有了之後改查那張表。
+
+紀錄現在全部留在 Durable Object 的 `records` 表；寫滿 1,000 筆搬到 R2、每天公布，是 [#70](https://github.com/iamreal-tw/iamreal/issues/70)。在那之前，寫進去的那一行、每一筆的紀錄雜湊和名冊指紋、名冊那一列的筆數和名冊指紋，部署的後台沒有任何介面讀得到。測試從測試專用建置的 `GET /__test/roster/stored` 讀出來，[`test/records.ts`](test/records.ts) 的 `checkRoster` 只拿存著的每一行，用 `protocol/` 照 `spec/record.md` 重算：每一行讀得過（「Check a line」）、序號從 1 連續、紀錄雜湊和每一筆之後的名冊指紋都對、名冊那一列的筆數和指紋是最後一筆的。它對應 Go 舊後台測試的 `checkRoster`（`server/harness_test.go`），用在同時送出、`empty` 和 `switch_limit`、`switch_restricted`、`daily_limit` 的案例。
+
 ## 三樣不是設定值的東西
 
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
 
 - [`src/target.ts`](src/target.ts) 是部署用的那一份：內政部的兩把發證金鑰（[`src/issuers.ts`](src/issuers.ts)，測試拿 `spec/vectors/issuers.json` 核對）、內政部的兩個清冊網址（和 [`crl/README.md`](../crl/README.md) 寫的相同）、真的時鐘。其他程式用 `#target` 這個名字引用它（`package.json` 的 `imports`）。
-- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個還沒有自己的 API 的入口：`POST /__test/verify` 讓測試呼叫得到驗證證明，`GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `src/roster.ts` 的 `newestCrls`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證和清冊的檢查之後，測試改走真的介面，兩個都拿掉。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上八個只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候、用 `src/card-table.ts` 的 `writeCard` 寫一張卡片的狀態、把題目表和卡片狀態表丟掉（看後台自己出錯時回什麼）、多塞一件假的定時工作、讀那件工作什麼時候跑過、把存著的表的版本改成另一個數字、把最新清冊的那張表丟掉（看沒有這張表的舊物件啟動時補上它）。**寫卡片狀態的入口是暫時的**：#67 之後卡片的狀態由送出一筆寫入，測試改走真的介面。部署的那一包沒有這八個方法，也沒有 `writeCard`（還沒有程式呼叫它）。
-  - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例用它測。
+- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和三個常設的入口，各測一件 `records` 看不到或到不了的事：
+  - `POST /__test/verify` 讓測試直接呼叫驗證證明，呼叫的就是 `src/in-worker.ts` 的 `proofVerifier`，沒有換掉任何一部分。`records` 到不了的：和原生的 `bb verify` 逐案比對的 1,128 案，大多是任何一筆紀錄都帶不出來的公開輸入。
+  - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
+  - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
+  - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件，對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
@@ -155,7 +201,7 @@ pnpm typecheck   # 型別檢查
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
-**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，雖然還沒有程式呼叫驗證。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
+**驗證證明的程式兩種建置相同，測試專用的建置預設用的也是真的那一個；它另外能在測試明確要求時（`PUT /__test/verifier`）把 `records` 用的驗證器換成替身，替身進不了部署的那一包。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，送出一筆時呼叫驗證的也是它的 `proofVerifier`。測試專用的建置可以把 `records` 用的驗證器換成只看第一個位元組的那一個（上面的 `PUT /__test/verifier`），預設不換，重啟整個 Worker 之後也變回真的（[`test/records.test.ts`](test/records.test.ts) 有這兩個案例）；換上的那一個在 `test-build/index.ts`，不在這六個檔裡。部署的那一包沒有它：進入點是 `src/index.ts`，`scripts/deploy-build-checks.ts` 的 `checkNothingOfTheTestBuild` 不准那一包裡有 `/__test/`、`test-build` 這些字。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
 
 `target.ts` 還有兩樣時間，也是測試專用的建置會換的：等內政部一份清冊最久等多久（部署的是 5 分鐘，測試換成一兩秒，測逾時才不用等幾分鐘），和一輪鏡像補之前留下的檔最久補多久（部署的是 2.5 分鐘，寫在 [`src/round-budget.ts`](src/round-budget.ts)，`target.ts` 引用它；測試可以設成別的數字來測這條界線）。
 
@@ -177,7 +223,7 @@ interface ProofVerifier {
 
 - `circuit` 是電路的名稱，`card_proof_rs2048` 或 `card_proof_rs4096`；`publicInputs` 每個值是 32 個位元組、大端序，照電路的順序。
 - 回 `true` 是通過，`false` 是拒絕。請求本身有任何不對都是拒絕，不丟例外：不認得的名稱、長度不對的證明、個數或大小不對的公開輸入、不小於模數的值、驗不過的證明、讓 Barretenberg 丟例外的證明。
-- **跑不起來不是拒絕，也不是通過。** 驗證器自己跑不起來（WASM 實例化失敗、載入通用參數失敗）時 `verify` 丟例外（`EngineError`，`notStarted` 是 `true`），不回任何結果；那和證明無關，沒有任何輸入會造成它。呼叫的人不可以把它當成通過：#67 要把它處理成「這一筆不接受、不寫入」，是後台自己的錯誤，不是 `proof` 這個拒絕代碼。下一次呼叫會重新試著實例化。[`test/engine.test.ts`](test/engine.test.ts) 確認這條路不會回 `true`，也不會回 `false`。
+- **跑不起來不是拒絕，也不是通過。** 驗證器自己跑不起來（WASM 實例化失敗、載入通用參數失敗）時 `verify` 丟例外（`EngineError`，`notStarted` 是 `true`），不回任何結果；那和證明無關，沒有任何輸入會造成它。呼叫的人不可以把它當成通過：送出一筆時這一筆不接受、不寫入，回 `500`（見[送出一筆](#送出一筆)），是後台自己的錯誤，不是 `proof` 這個拒絕代碼。下一次呼叫會重新試著實例化。[`test/engine.test.ts`](test/engine.test.ts) 確認這條路不會回 `true`，也不會回 `false`。
 - Barretenberg 回的不是預期的那一種答覆、或答覆裡沒有結果時，算拒絕，並丟掉那個實例。
 - 在 Worker 裡驗的那一個是 [`src/in-worker.ts`](src/in-worker.ts) 的 `proofVerifier`。之後改走 Containers 跑原生的 `bb`，換掉的是它，其他程式不動。
 
@@ -264,13 +310,13 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
 | `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
-| `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，三個介面都回 `500` |
+| `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，四個介面都回 `500` |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
 
 - **為什麼在最上層**：鏡像的一輪照這個數字留餘裕（`src/round-budget.ts` 的 `ROUND_CPU_MS`），那是程式裡的常數，每個環境都一樣。wrangler 4.160.1 讀設定時，`limits` 是環境沒寫就沿用最上層的那一種欄位（`wrangler-dist/cli.js` 的 `normalizeAndValidateLimits` 呼叫 `inheritable`：先拿環境自己的，沒有才拿最上層的），所以之後加的環境不用再寫一次就有。[`test/environments.test.ts`](test/environments.test.ts) 釘住最上層是 300,000、環境自己沒有另外寫、每個環境照 wrangler 的讀法讀到的都是 300,000；部署前的檢查對每個環境再核對一次。
 - **它不只管排程。** 這是每一次呼叫的上限：每個 HTTP 請求一樣是 300,000 毫秒；名冊的 Durable Object 也是，它的每次呼叫和 alarm 用同一個設定（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are Worker scripts, and have the same per invocation CPU limits as any Workers do」，2026-11-20 讀的）。所以一個請求能讓後台算多久，現在是程式擋，不是這個上限擋。
-- **現在可以接受的理由**：請求的內容最多讀 64 KiB（`src/api.ts` 的 `MAX_BODY_BYTES`），超過就拒絕；三個介面做的事和內容的大小無關或只和這 64 KiB 有關；驗一筆證明的工作量是固定的，本機約 15 ms（[量到的](#量到的)；部署的那一包還沒有介面呼叫驗證，送出一筆的介面 [#67](https://github.com/iamreal-tw/iamreal/issues/67) 接上之後才有）。Durable Object 裡沒有照請求內容放大的計算。之後加的介面要守住這一點：有哪個請求能讓後台算上幾秒，這個上限就不再是它的保護。
+- **現在可以接受的理由**：請求的內容最多讀 64 KiB（`src/api.ts` 的 `MAX_BODY_BYTES`），超過就拒絕；四個介面做的事和內容的大小無關或只和這 64 KiB 有關。送出一筆（[送出一筆](#送出一筆)）每次驗一筆證明，工作量是固定的，本機約 15 ms（[量到的](#量到的)），而且一個題目最多驗 5 次。Durable Object 裡沒有照請求內容放大的計算；寫入一筆時掃同一個場合的卡片狀態表，花的時間跟著卡片數長，不跟著請求長，[#68](https://github.com/iamreal-tw/iamreal/issues/68) 的衍生表會換掉它。之後加的介面要守住這一點：有哪個請求能讓後台算上幾秒，這個上限就不再是它的保護。
 
 之後加正式環境，是在 `env` 底下多一段，程式不用改。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
@@ -325,7 +371,7 @@ interface KnownCrl {
 type NewestCrls = { G2: KnownCrl[]; G3: KnownCrl[] }; // 每把最多兩份，最新的在前
 ```
 
-Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（樹根是不是這兩份之一、最新那一份是不是太舊）還沒做，在 [#67](https://github.com/iamreal-tw/iamreal/issues/67)。
+Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（樹根是不是這兩份之一、最新那一份是不是太舊）用的就是它（見[送出一筆](#送出一筆)）。
 
 只要有一份清冊沒抓到、有一個檔沒補上行、索引沒寫成、或沒交給 Durable Object，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次；做得到的部分照樣做完。
 
@@ -463,9 +509,19 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
 | 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
 | 跑 Durable Object 的 alarm、看它設在多久之後 | `worker.roster.runAlarm()`、`worker.roster.alarmInMs()` |
-| 寫一張卡片的狀態 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。暫時的，到 #67 為止 |
-| Durable Object 還留著哪些題目 | `worker.roster.storedChallenges()`，直接讀它的儲存。暫時的：現在沒有介面看得出一個題目還認不認得，#67 的 `challenge_unknown` 做好之後改問介面 |
+| 要一個題目 | `worker.issueChallenge()`；`worker.issueChallenge(十六進位的 16 個位元組)` 指定題目的亂數那一段 |
+| 換 `records` 用的驗證器 | `worker.setVerifier("stand-in")`、`("real")` |
+| 送出一筆、看卡片現況、發一份清冊、換一份空的名冊 | [`test/records.ts`](test/records.ts) 的 `sub`、`submit`、`mustSubmit`、`wantError`、`cardState`、`publishCrl`、`day`、`freshRoster` |
+| 寫卡片狀態表的一列 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。只用在名冊規則不會留下的狀態（壞掉的、少了某個平台的名額的）和那些壞掉的案例的起點；其他規則會留下的狀態用 `sub`、`mustSubmit` 真的送出 |
+| 後台還認得哪些題目 | `worker.roster.knownChallenges()`：問 `records`，回 `challenge_unknown` 的就是不認得。問一次算一次送出 |
+| 讓某一張表的寫入失敗 | `worker.roster.failWritesTo("cards")`，`(null)` 恢復 |
+| 把存著的規則版本改成另一個數字、改回來 | `worker.roster.setStoredRulesVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
+| 對存著的狀態跑一筆標準答案的事件 | `worker.roster.applyRuleEvent(事件)` |
 | 讓後台自己出錯 | `worker.roster.breakTables()` |
+| 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
+| 讀存著的紀錄和名冊那一列、照規格重算 | `worker.roster.stored()` 讀出來；`test/records.ts` 的 `checkRoster(worker)` 重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |
+| 讓同時送出的請求真的交錯 | `worker.roster.setHashDelay(毫秒)`：算紀錄雜湊之前先等；`worker.roster.hashes()` 是算過幾次 |
+| 驗證花了時間的證明 | `test/records.ts` 的 `SLOW_PROOF`（替身驗證器）：通過，但時鐘往後 1 毫秒 |
 | 把存著的表的版本改成另一個數字、改回來 | `worker.roster.setStoredSchemaVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
 | 多塞一件定時的工作、看它什麼時候跑過 | `worker.roster.setExtraWork(到期的時間, 間隔)`、`worker.roster.extraWorkRuns()` |
 | 換掉環境的設定 | `startWorker({ settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "…" } })`，或啟動後 `worker.setSettings({…})`；已經在跑的 Durable Object 要 `worker.roster.restart()` 才讀到新的 |
@@ -606,22 +662,24 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 |---|---|
 | `wrangler.jsonc` | Worker 專案的設定 |
 | `src/index.ts` | 進入點：HTTP（`/api/` 交給 `src/api.ts`，其他回 `404`）和排程 |
-| `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、三個介面、後台自己出錯時的那一行 |
+| `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、四個介面、後台自己出錯時的那一行 |
+| `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
+| `src/record-proof.ts` | 從一筆紀錄的欄位重建公開輸入、交給驗證器 |
 | `src/json.ts` | 讀請求的 JSON，鍵重複就拒絕 |
 | `src/mirror.ts` | 清冊鏡像：介面 `CrlMirror` 和在 Worker 裡做的那一個 |
 | `src/crl.ts`、`src/crl-time.ts` | 讀一份清冊：可不可用、原因代碼、索引那一行的欄位、樹的鍵 |
 | `src/crl-tree.ts` | 從鍵算樹根 |
 | `src/crl-index.ts` | 索引的寫法和順序、最新兩份可用的清冊 |
-| `src/roster.ts` | 名冊的 Durable Object：建表、發題目、讀卡片現況、刪過期的題目、存鏡像交給它的最新清冊 |
+| `src/roster.ts` | 名冊的 Durable Object：建表、發題目、算送出的次數、寫入一筆、讀卡片現況、刪過期的題目、存鏡像交給它的最新清冊 |
 | `src/card-table.ts` | 卡片狀態表：建表的程式，讀（連同檢查）和寫一張卡片的狀態 |
 | `src/slot-json.ts` | 一個名額寫成 JSON 的那一種寫法：`card-state` 的回應和卡片狀態表共用 |
-| `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表 |
+| `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表、有沒有更換政策 |
 | `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限、補舊檔的界線 |
 | `src/round-budget.ts` | 鏡像一輪假設自己拿得到的 CPU 時間（和 `wrangler.jsonc` 的 `limits.cpu_ms` 相同）、留給最大一份清冊的時間、補舊檔的界線 |
 | `src/in-worker.ts` | 在 Worker 裡用的 `proofVerifier` 和 `poseidon2Hash`：把下面幾個檔和 WASM 檔、驗證金鑰接起來，只有它引用 `generated/` |
 | `src/verify.ts` | 驗證證明的介面 `ProofVerifier`、呼叫 Barretenberg 之前的檢查 |
 | `src/poseidon2.ts` | Poseidon2 的雜湊 |
-| `src/circuits.ts` | 接受的電路：名稱、公開輸入的個數、驗證金鑰的 SHA-256。`worker/` 裡電路的清單只有這一份 |
+| `src/circuits.ts` | 接受的電路：名稱、哪一把發證金鑰、公開輸入的個數、驗證金鑰的 SHA-256。`worker/` 裡電路的清單只有這一份 |
 | `src/engine.ts`、`src/barretenberg.ts` | Barretenberg 的實例（丟例外或答覆不對就換）、WASM 的載入程式 |
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
@@ -630,7 +688,10 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
 | `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔和補它們的界線、建樹到一半被停掉的一輪、兩輪同時寫索引 |
-| `test/api.test.ts` | 三個介面和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
+| `test/api.test.ts` | `challenges`、`card-state`、`config` 和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
+| `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的 `server/api_test.go` 的案例），用只看第一個位元組的驗證器 |
+| `test/records-real.test.ts` | `server/testdata/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器 |
+| `test/records-storage.test.ts` | 同時送出時序號連續、每筆之間重啟、寫到一半失敗、`paused`、`spec/vectors/roster-rules.json` 配 Durable Object 的儲存 |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；每個環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
