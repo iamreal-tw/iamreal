@@ -45,3 +45,60 @@ test("no workflow is triggered by pull_request_target or workflow_run, which run
     for (const line of w.lines) assert.doesNotMatch(code(line), /pull_request_target|workflow_run/, `${w.file}: ${line.trim()}`);
   }
 });
+
+/** The lines of a workflow without comments and blank lines, each with the job it is in ("" outside the jobs). */
+function linesByJob(w: Workflow): { job: string; line: string }[] {
+  let inJobs = false;
+  let job = "";
+  const out: { job: string; line: string }[] = [];
+  for (const line of w.lines.map((l) => code(l).trimEnd())) {
+    if (line.trim() === "") continue;
+    if (/^\S/.test(line)) {
+      inJobs = line === "jobs:";
+      job = "";
+    } else if (inJobs && /^ {2}\S/.test(line)) {
+      const m = /^ {2}([\w-]+):$/.exec(line);
+      assert.ok(m, `${w.file}: a job is written \`  name:\`, not ${line}`);
+      job = m[1]!;
+    }
+    out.push({ job, line });
+  }
+  return out;
+}
+
+/** The block of `key` at the top level: its own line and the lines under it, without comments and blank lines. */
+function topLevel(w: Workflow, key: string): string[] {
+  const lines = linesByJob(w).map((l) => l.line);
+  const start = lines.indexOf(`${key}:`);
+  if (start < 0) return [];
+  const end = lines.findIndex((l, i) => i > start && /^\S/.test(l));
+  return lines.slice(start, end < 0 ? undefined : end);
+}
+
+function workflow(file: string): Workflow {
+  const w = workflows().find((w) => w.file === file);
+  assert.ok(w, `.github/workflows/${file}`);
+  return w;
+}
+
+/** Every line of every workflow that refers to a secret, with its file and its job. */
+function secretsReferred(): { file: string; job: string; line: string }[] {
+  return workflows().flatMap((w) =>
+    linesByJob(w)
+      .filter((l) => /\bsecrets\b/.test(l.line))
+      .map((l) => ({ file: w.file, job: l.job, line: l.line.trim() })),
+  );
+}
+
+test("a pull request's checks are triggered by pull_request only, can only read and refer to no secret", () => {
+  const w = workflow("checks.yml");
+  assert.deepEqual(topLevel(w, "on"), ["on:", "  pull_request:"]);
+  assert.deepEqual(topLevel(w, "permissions"), ["permissions:", "  contents: read"]);
+  // No job asks for more than the workflow gives.
+  const jobPermissions = linesByJob(w).filter((l) => l.job !== "" && /^\s*permissions:/.test(l.line));
+  assert.deepEqual(jobPermissions, []);
+  assert.deepEqual(
+    secretsReferred().filter((s) => s.file === w.file),
+    [],
+  );
+});
