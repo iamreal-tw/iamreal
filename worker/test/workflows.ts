@@ -297,9 +297,9 @@ const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[acti
  * the default branch (usually `main`)", and a cache a pull request's run
  * makes "can only be restored by re-runs of the pull request"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
- * A merge group's run is on a branch of this repository with a pull
- * request's change in it, and that page does not say what its caches are
- * scoped to; so checks.yml saves nothing at all. It uses
+ * A merge group's run is on a temporary branch of this repository with a
+ * pull request's change in it; no rule here rests on what its caches would
+ * be scoped to, because checks.yml saves nothing at all. It uses
  * `actions/cache/restore`, which "works similarly to the `cache` action
  * except that it doesn't have a post step to save the cache"
  * (https://github.com/actions/cache/blob/v6.1.0/restore/README.md). The
@@ -567,6 +567,26 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(v).filter((k) => !allowed.includes(k));
 
 /**
+ * The problems with caches (CACHE_USE), read line by line as written, so that
+ * it holds whatever job or step the line is in. A line with `actions/cache`
+ * in it that is not a comment is a use of a cache action. The caches the
+ * other actions keep are off where they are used: WITH gives setup-node
+ * `package-manager-cache: false` and setup-go `cache: false`, exactly.
+ */
+function cacheProblems(file: string, text: string): string[] {
+  const problems: string[] = [];
+  for (const [i, l] of text.split("\n").entries()) {
+    if (!/actions\/cache/.test(l) || /^ *#/.test(l)) continue;
+    const action = /uses: (actions\/cache(?:\/[\w.-]+)*)@/.exec(l)?.[1] ?? "actions/cache";
+    const p = (s: string): number => problems.push(`${file}: line ${i + 1}: uses ${action}${s}`);
+    const use = CACHE_USE[file];
+    if (use === undefined) p(": this workflow may use no cache");
+    else if (use === "restore" && action !== CACHE_ACTION.restore) p(", which saves a cache: this workflow may only restore one");
+  }
+  return problems;
+}
+
+/**
  * The problems in a set of workflow files, by file name. None, for files
  * that keep to everything described at the top of this file.
  */
@@ -592,6 +612,8 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!m || !known || known.sha !== m[2] || known.version !== m[3]) problems.push(`${f}: not an action of the list at its commit: ${l.replace(/^ +| +$/g, "")}`);
     }
   }
+
+  for (const f of names) problems.push(...cacheProblems(f, files[f]!));
 
   for (const f of names) {
     let doc: Yaml;
@@ -619,7 +641,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
+    // Whatever saves a cache runs on pushes to main and nothing else: on any other event (a pull
+    // request, a merge group, a run started by hand on a branch) the code that runs before the
+    // save is not main's. With the rule for every file above (permissions exactly contents: read)
+    // and SECRET_LINES, the step that saves holds no secret and a token that can only read.
+    if (CACHE_USE[f] === "save" && !same(doc.on, CACHE_ON)) p(`saves a cache and is not triggered by a push to main only: ${JSON.stringify(doc.on)}`);
     if (f === CACHE_WORKFLOW) {
+      if (!same(doc.concurrency, { group: CACHE_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${CACHE_GROUP}, one run at a time and none cancelled`);
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, CACHE_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
