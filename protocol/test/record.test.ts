@@ -2,7 +2,8 @@
 // against spec/vectors/record.json, the file the Go tests read.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { EMPTY_FINGERPRINT, FINGERPRINT_VERSION, accountsText, nextFingerprint, readRecordLine, recordHash, recordLine } from "../src/record.ts";
+import { sha256Hex } from "../src/bytes.ts";
+import { EMPTY_FINGERPRINT, FINGERPRINT_VERSION, LINES_PER_FILE, accountsText, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "../src/record.ts";
 import { vectors } from "./vectors.ts";
 
 const v = vectors("record.json");
@@ -52,4 +53,47 @@ describe("record.json", () => {
   for (const c of v.malformed_lines) {
     test(`malformed (${c.reason}), ${c.roster} roster`, () => assert.equal(readRecordLine(c.roster, filled(c.line)), null));
   }
+});
+
+describe("record.json, the roster directory of a generated roster", () => {
+  const g = v.generated_roster;
+  const lineOf = (seq: number): string => filled(g.line_template.split("@SEQ@").join(String(seq)));
+
+  test("a full file has 1,000 lines", () => assert.equal(LINES_PER_FILE, 1000));
+
+  for (const d of g.directories) {
+    test(`${d.name}: the name and the bytes of each roster file and of each record hash list`, async () => {
+      // The roster's lines, record hashes and fingerprints, from the line the vectors generate it from.
+      const lines: string[] = [];
+      const hashes: string[] = [];
+      const fingerprints = [EMPTY_FINGERPRINT];
+      for (let seq = 1; seq <= d.count; seq++) {
+        const record = readRecordLine(d.roster, lineOf(seq));
+        assert.notEqual(record, null);
+        lines.push(recordLine(record!));
+        hashes.push(await recordHash(record!));
+        fingerprints.push(await nextFingerprint(fingerprints[seq - 1]!, hashes[seq - 1]!));
+      }
+      assert.equal(fingerprints[d.count], d.fingerprint);
+      const files = [];
+      const lists = [];
+      for (let before = 0; before < d.count; before += LINES_PER_FILE) {
+        const end = Math.min(before + LINES_PER_FILE, d.count);
+        const file = lines.slice(before, end).join("");
+        const list = hashList(fingerprints[before]!, hashes.slice(before, end));
+        files.push({ name: rosterFileName(before), first_seq: before + 1, lines: end - before, sha256: await sha256Hex(new TextEncoder().encode(file)) });
+        const listLines = list.split("\n");
+        assert.equal(listLines.pop(), "", "a list ends with LF");
+        lists.push({ name: hashListName(before), lines: listLines.length, first_line: listLines[0], last_line: listLines.at(-1), sha256: await sha256Hex(new TextEncoder().encode(list)) });
+      }
+      assert.deepEqual(files, d.files);
+      assert.deepEqual(lists, d.hash_lists);
+    });
+  }
+
+  test("the record hash list of each roster of three records", async () => {
+    for (const roster of v.rosters) {
+      assert.equal(hashList(EMPTY_FINGERPRINT, roster.records.map((r: { record_hash: string }) => r.record_hash)), roster.hash_list);
+    }
+  });
 });

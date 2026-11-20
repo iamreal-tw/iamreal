@@ -6,7 +6,9 @@
 // What it keeps, in its SQLite:
 //
 //   challenges   the challenges it issued that have not expired
-//   records      the records, each as its line of the roster file
+//   records      the records of the roster files that are not in the data
+//                bucket yet, each as its line of the roster file
+//   full_files   the full roster files that were moved to the data bucket
 //   cards        the roster rules' state of each card (card-table.ts)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
@@ -26,15 +28,16 @@ import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { EMPTY_FINGERPRINT, type RecordFields, type RosterRecord, nextFingerprint, readRecordLine, recordHash, recordLine } from "iamreal-protocol/record.ts";
+import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RecordFields, type RosterRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
 import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfShortId, Counts } from "./page-data.ts";
+import { CACHE_FULL_FILE, FULL_FILE_RETRY_MS, type FileBucket, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, readFullFile, writeAndReadBack } from "./roster-files.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
-import { VIEW_TABLES, accountCards, cardsOfShortId, counts, rebuildViews, viewOf, viewSeq, writeView } from "./views.ts";
+import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfShortId, clearViews, counts, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
 /**
  * A challenge can be used for less than this long after it is issued
@@ -68,12 +71,26 @@ export const RESTRICTED_FROM = 4;
  * `accepted` is 1 once a record was written for it. Expired rows are deleted
  * (the timed work below), so a challenge that is not here is unknown.
  *
- * records: one row per record of the roster. `seq` is the record's; `line`
- * its line of the roster file, the LF included, so that the roster file is
- * the lines in the order of `seq`, one after the other (spec/record.md,
- * "Lines and files"); `record_hash` its record hash; `fingerprint` the
- * roster fingerprint once it is added, `fingerprint(seq)`. The table came
- * after the first three, with SCHEMA_VERSION unchanged.
+ * records: one row per record that is not in a roster file of the data
+ * bucket yet: the records of the last roster file, which is not full, and
+ * of a full one until it is moved (`#moveFile`). `seq` is the record's;
+ * `line` its line of the roster file, the LF included, so that a roster
+ * file is its lines in the order of `seq`, one after the other
+ * (spec/record.md, "Lines and files"); `record_hash` its record hash;
+ * `fingerprint` the roster fingerprint once it is added,
+ * `fingerprint(seq)`. The table came after the first three, with
+ * SCHEMA_VERSION unchanged.
+ *
+ * full_files: one row per full roster file that is in the data bucket and
+ * whose records this object therefore no longer keeps (spec/record.md, "The
+ * published roster"). `records_before` is the number of records before the
+ * file, the number in its name; `fingerprint_after` the roster fingerprint
+ * at its end, `fingerprint(records_before + 1000)`, which is the first line
+ * of the next file's record hash list; `file_sha256` the SHA-256 of the
+ * file's bytes as they were written and read back. The files are those of
+ * `records_before` 0, 1000, 2000 and so on, without a gap, and the rows of
+ * `records` begin right after the last of them. The table came after the
+ * others, with SCHEMA_VERSION unchanged.
  *
  * roster: exactly one row (`id` 1), written when the object first starts.
  * `count` is the number of records; `fingerprint` their roster fingerprint;
@@ -103,6 +120,11 @@ const TABLES: readonly string[] = [
      line        TEXT    NOT NULL,
      record_hash TEXT    NOT NULL,
      fingerprint TEXT    NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS full_files (
+     records_before    INTEGER PRIMARY KEY,
+     fingerprint_after TEXT    NOT NULL,
+     file_sha256       TEXT    NOT NULL
    )`,
   CARD_TABLE,
   `CREATE TABLE IF NOT EXISTS roster (
@@ -214,6 +236,14 @@ export interface TimedWork {
 /** The least the alarm waits, so that work that stays due cannot make the alarm spin. */
 const MIN_ALARM_WAIT_MS = 1000;
 
+/** How long after views could not be filled the object tries again: one minute, as for a full file that could not be moved. */
+const VIEWS_RETRY_MS = 60 * 1000;
+
+/** The one line the object writes when something of its own fails: which, and the class of the error. Never the error's message, which may quote what was being handled. */
+function logFailure(event: string, e: unknown): void {
+  console.error(JSON.stringify({ event, error: e instanceof Error ? e.name : "unknown" }));
+}
+
 /**
  * The roster's Durable Object. (`Roster` is this class everywhere in
  * worker/; protocol/'s type of that name, which roster, is `RosterKind`
@@ -223,7 +253,7 @@ export class Roster extends DurableObject<Env> {
   /**
    * The settings the object started with. This and the other `protected`
    * members below (`challengeRandom`, `hashOf`, `ruleState`,
-   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`) are `protected`
+   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`, `bucket`, `viewsFilling`) are `protected`
    * and not private for one reader: the object of the test build
    * (README.md, "三樣不是設定值的東西"), the only class that extends this
    * one. Nothing else overrides or calls them from outside this file.
@@ -246,10 +276,22 @@ export class Roster extends DurableObject<Env> {
    * not found), and a record could not be written with its change to them:
    * the pages' reads and a submission then throw `VIEWS_BEHIND`, which the
    * Worker answers as its own failure. Challenges, card states and the CRL
-   * archive do not read the views and go on. It is decided once, when the
-   * object starts; the next start decides again.
+   * archive do not read the views and go on. It is decided when the object
+   * starts, and becomes true once more only when views that were behind
+   * are filled (`#fillViews`), at the start or at a later try; the next
+   * start decides again.
    */
-  readonly #viewsAtLastRecord: boolean;
+  #viewsAtLastRecord: boolean;
+  /**
+   * The last filling of views that were behind: the one begun when the
+   * object started, or a later try of it. It ends when they are filled or
+   * could not be, and never fails. Already ended for an object that found
+   * its views at the last record. `protected` so that the test build can
+   * wait for it; nothing else reads it from outside this file.
+   */
+  protected viewsFilling: Promise<void>;
+  /** When views that could not be filled are tried again, on the object's clock; null when no try is owed. Kept in memory. */
+  #fillAgainAt: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -274,24 +316,88 @@ export class Roster extends DurableObject<Env> {
     // Views that are not at the last record are written again from the records: an object that has records
     // from before it had the views, or whose views were cleared. Not while the roster is paused: the stored
     // records were then taken by other rules than the ones this build would compute their kinds by.
-    //
-    // Writing them again can fail: a stored line this build does not read, a record its rules do not take. The
-    // object starts all the same, with views it does not use (`#viewsAtLastRecord`): the transaction leaves them
-    // as they were, one line says so, and the next start tries again.
-    let atLastRecord = false;
-    if (this.#tablesAreThisVersion) {
-      atLastRecord = viewSeq(sql) === this.#rosterRow().count;
-      if (!atLastRecord && !this.#paused) {
-        try {
-          ctx.storage.transactionSync(() => rebuildViews(sql, this.settings.kind, this.settings.platforms));
-          atLastRecord = true;
-        } catch (e) {
-          console.error(JSON.stringify({ event: "views_not_filled", error: e instanceof Error ? e.name : "unknown" }));
-        }
-      }
-    }
-    this.#viewsAtLastRecord = atLastRecord;
+    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#rosterRow().count;
+    this.viewsFilling = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused ? this.#fillViews() : Promise.resolve();
+    ctx.waitUntil(this.viewsFilling);
   }
+
+  /**
+   * Clears the views and writes them again from every record of the
+   * roster, in the order of `seq`: the full roster files in the data
+   * bucket, each checked against the SHA-256 it was written with, then the
+   * records this object keeps.
+   *
+   * - An object that keeps all its records does this in one transaction and
+   *   without waiting for anything: it is done before the constructor
+   *   returns, and a failure leaves the views as they were.
+   * - With roster files in the bucket it reads them one at a time and
+   *   writes each in a transaction of its own, so the views are behind
+   *   while it runs and stay behind if it breaks off: until it ends well,
+   *   what needs the views throws `VIEWS_BEHIND`. The object answers
+   *   meanwhile. It is not held back with `blockConcurrencyWhile`: an
+   *   object is reset when that takes more than 30 seconds (README.md,
+   *   "頁面用的衍生表", has the sentence of Cloudflare's documentation),
+   *   and this takes longer the more files the roster has.
+   *
+   * It can fail: the bucket does not answer, or does not have a file as it
+   * was written; a line this build does not read, a record its rules do
+   * not take. The object runs all the same, with views it does not use;
+   * one line says so, and it is tried again a minute later (`#viewsBehind`)
+   * and at the next start: a bucket that did not answer may answer then.
+   * What is wrong with the records or the build fails again each time,
+   * with its line. It never throws.
+   */
+  async #fillViews(): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    const { kind, platforms } = this.settings;
+    const cards: CardsSoFar = new Map();
+    try {
+      const files = sql.exec<{ records_before: number; file_sha256: string }>("SELECT records_before, file_sha256 FROM full_files ORDER BY records_before").toArray();
+      if (files.length === 0) {
+        this.ctx.storage.transactionSync(() => {
+          clearViews(sql);
+          writeViewsOf(sql, kind, platforms, cards, storedLines(sql));
+        });
+      } else {
+        this.ctx.storage.transactionSync(() => clearViews(sql));
+        // The bucket is asked for once the constructor has returned: `bucket` is a subclass's to override, and
+        // an object of a subclass is not whole before that.
+        await Promise.resolve();
+        for (const [i, file] of files.entries()) {
+          if (file.records_before !== i * LINES_PER_FILE) throw new Error("the full files are not one after the other");
+          const lines = await readFullFile(this.bucket(), file.records_before, file.file_sha256);
+          this.ctx.storage.transactionSync(() => writeViewsOf(sql, kind, platforms, cards, lines.map((line, n) => ({ seq: file.records_before + n + 1, line }))));
+        }
+        // Nothing waits from here on: the records this object keeps are the ones after the last file read.
+        this.ctx.storage.transactionSync(() => writeViewsOf(sql, kind, platforms, cards, storedLines(sql)));
+      }
+      if (viewSeq(sql) !== this.#rosterRow().count) throw new Error("the views are not at the last record after they were filled");
+      this.#viewsAtLastRecord = true;
+      this.#fillAgainAt = null;
+    } catch (e) {
+      logFailure("views_not_filled", e);
+      this.#fillAgainAt = now().getTime() + VIEWS_RETRY_MS;
+      // The alarm for the next try. A filling that failed before it waited for anything is still inside the
+      // constructor, and the alarm is set once that has returned, for the same reason as above (`timedWork`).
+      await Promise.resolve();
+      await this.#setAlarmWithoutFailing();
+    }
+  }
+
+  /**
+   * Filling views that could not be filled, again: due a minute after a
+   * filling failed, and not at all otherwise. No move of full files goes on
+   * meanwhile: both are pieces of the alarm's work, which runs one piece
+   * after the other.
+   */
+  #viewsBehind: TimedWork = {
+    due: () => this.#fillAgainAt,
+    run: async () => {
+      this.#fillAgainAt = null;
+      this.viewsFilling = this.#fillViews();
+      await this.viewsFilling;
+    },
+  };
 
   /** For a method about to read the views, or to write a record with them: throws if they are not at the last record. */
   #checkViews(): void {
@@ -378,7 +484,25 @@ export class Roster extends DurableObject<Env> {
       const record: RosterRecord = { ...fields, seq: count + 1 };
       const hash = await this.hashOf(record);
       const answer = this.#acceptAt(record, hash, await nextFingerprint(fingerprint, hash));
-      if (answer.outcome !== "the count moved") return answer;
+      if (answer.outcome === "the count moved") continue;
+      // The record that fills a roster file: the file is due for the data bucket (`#fullFiles`). The record is
+      // written whatever becomes of that, so its answer waits for the alarm to be set and for nothing more.
+      if (answer.outcome === "written" && answer.record.seq % LINES_PER_FILE === 0) await this.#setAlarmWithoutFailing();
+      return answer;
+    }
+  }
+
+  /**
+   * Sets the alarm without ever failing what asked for it: a record that
+   * is in the roster by then, a filling of the views that has ended. An
+   * alarm that could not be set is set by whatever next sets it (the next
+   * challenge).
+   */
+  async #setAlarmWithoutFailing(): Promise<void> {
+    try {
+      await this.setAlarmForTimedWork();
+    } catch (e) {
+      logFailure("alarm_not_set", e);
     }
   }
 
@@ -576,14 +700,135 @@ export class Roster extends DurableObject<Env> {
     },
   };
 
+  /**
+   * The data bucket, for the files of the roster directory. `protected` so
+   * that the test build can make a write or a read of it go wrong, by
+   * overriding this; nothing else does.
+   */
+  protected bucket(): FileBucket {
+    return this.env.DATA;
+  }
+
+  /**
+   * The number of records before the first roster file that is full and
+   * still in this object, or null if the object keeps no full file: its
+   * rows of `records` begin at that file, and the roster has all 1,000
+   * records of it.
+   */
+  #firstFullFile(): number | null {
+    const { first } = this.ctx.storage.sql.exec<{ first: number | null }>("SELECT MIN(seq) AS first FROM records").one();
+    return first !== null && this.#rosterRow().count >= first - 1 + LINES_PER_FILE ? first - 1 : null;
+  }
+
+  /** When a full file that could not be moved is tried again, on the object's clock. Kept in memory: an object that starts again tries at once. */
+  #moveAgainAt = 0;
+  /** The move of the full files that is going on, if one is. */
+  #moving: Promise<void> | null = null;
+
+  /**
+   * Moving the roster files that are full to the data bucket: due as soon
+   * as the object keeps a full file, and after a failure a minute later.
+   * A failure is this piece's own: one line says so, and the alarm goes on
+   * to the other pieces.
+   */
+  #fullFiles: TimedWork = {
+    due: () => (this.#firstFullFile() === null ? null : this.#moveAgainAt),
+    run: async (time) => {
+      try {
+        await this.#moveFullFiles();
+      } catch (e) {
+        this.#moveAgainAt = time + FULL_FILE_RETRY_MS;
+        logFailure("full_file_not_moved", e);
+      }
+    },
+  };
+
+  /**
+   * Moves every full roster file this object still keeps to the data
+   * bucket, the earliest first. One move at a time: whoever asks while one
+   * is going on waits for that one.
+   */
+  #moveFullFiles(): Promise<void> {
+    this.#moving ??= (async () => {
+      // Not while the views are being filled from the files and the records as they are now.
+      await this.viewsFilling;
+      for (let before = this.#firstFullFile(); before !== null; before = this.#firstFullFile()) await this.#moveFile(before);
+    })().finally(() => {
+      this.#moving = null;
+    });
+    return this.#moving;
+  }
+
+  /**
+   * Moves one full roster file, the one that follows the first `before`
+   * records: writes the file and its record hash list to the data bucket,
+   * each read back and compared byte for byte, and only then deletes the
+   * file's 1,000 records here (ADR-0027).
+   *
+   * - The roster file is written before its list: at no moment does the
+   *   bucket hold a list without a roster file (spec/record.md, "Record
+   *   hash lists").
+   * - Both are computed from the stored records alone, so a move that
+   *   broke off anywhere is simply made again, and writes the same bytes.
+   * - The records are deleted in the transaction that notes the file in
+   *   `full_files`: the object keeps a record or knows its file, never
+   *   neither.
+   *
+   * A record can be written while this waits for the bucket; it belongs to
+   * a later file, and nothing here reads it.
+   */
+  async #moveFile(before: number): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    const last = before + LINES_PER_FILE;
+    if (before % LINES_PER_FILE !== 0) throw new Error("the stored records do not begin at a roster file");
+    // The first line of the list: the roster fingerprint at the end of the file before, which is no longer in `records`.
+    const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
+    if (fingerprintBefore === undefined) throw new Error("the file before the first stored record is not among the full files");
+    const { lines, length } = sql.exec<{ lines: number; length: number | null }>("SELECT COUNT(*) AS lines, SUM(LENGTH(CAST(line AS BLOB))) AS length FROM records WHERE seq > ? AND seq <= ?", before, last).one();
+    if (lines !== LINES_PER_FILE || length === null) throw new Error("the stored records of a full file are not 1,000");
+
+    // The file is some 20 MB: its lines are written into one buffer, without a second copy as text.
+    const file = new Uint8Array(length);
+    const encoder = new TextEncoder();
+    const hashes: string[] = [];
+    let at = 0;
+    let fingerprintAfter = "";
+    for (const row of sql.exec<{ line: string; record_hash: string; fingerprint: string }>("SELECT line, record_hash, fingerprint FROM records WHERE seq > ? AND seq <= ? ORDER BY seq", before, last)) {
+      const { read, written } = encoder.encodeInto(row.line, file.subarray(at));
+      if (read !== row.line.length) throw new Error("the stored lines are longer than they were counted");
+      at += written;
+      hashes.push(row.record_hash);
+      fingerprintAfter = row.fingerprint;
+    }
+    if (at !== length) throw new Error("the stored lines are shorter than they were counted");
+
+    const bucket = this.bucket();
+    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
+    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_FULL_FILE, contentType: TYPE_TEXT });
+    this.ctx.storage.transactionSync(() => {
+      sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
+      sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
+    });
+  }
+
   /** Every piece of timed work of the object (TimedWork). Whatever comes to need the alarm is added here. */
   protected timedWork(): readonly TimedWork[] {
-    return [this.#expiredChallenges];
+    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles];
   }
 
   /**
    * Sets the alarm for the earliest piece of timed work, or removes it if
    * none has anything to do. Called whenever a `due()` may have changed.
+   *
+   * An alarm that is already set for that time or sooner is left as it is.
+   * Setting it again would move it at least `MIN_ALARM_WAIT_MS` ahead of
+   * now each time, and this is called for every challenge issued: with
+   * work that is due and challenges coming more often than that, the alarm
+   * would never ring. An alarm left sooner than the work needs rings with
+   * nothing due, and is then set for the right time. The alarm that rang is
+   * no longer set while its handler runs, so when the handler ends, having
+   * called this last, an alarm is set that is no later than the work needs:
+   * the one this call sets, or a sooner one set while the handler ran.
    *
    * The wait is measured on the object's clock and set on the runtime's;
    * the two differ only in the test build.
@@ -591,7 +836,9 @@ export class Roster extends DurableObject<Env> {
   protected async setAlarmForTimedWork(): Promise<void> {
     const dues = this.timedWork().map((work) => work.due()).filter((due) => due !== null);
     if (dues.length === 0) return this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.setAlarm(Date.now() + Math.max(MIN_ALARM_WAIT_MS, Math.min(...dues) - now().getTime()));
+    const wanted = Date.now() + Math.max(MIN_ALARM_WAIT_MS, Math.min(...dues) - now().getTime());
+    const set = await this.ctx.storage.getAlarm();
+    if (set === null || set > wanted) await this.ctx.storage.setAlarm(wanted);
   }
 
   /** The alarm: each piece of timed work that is due runs once, and the alarm is set again. */
