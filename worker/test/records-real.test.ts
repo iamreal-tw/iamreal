@@ -113,7 +113,11 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
     await worker.setClock(new Date("2026-11-25T00:00:05+08:00"));
     await worker.roster.runAlarm();
     const files = await worker.files();
-    assert.deepEqual(files.map((f) => f.key).filter((key) => key.startsWith("roster/")), ["roster/0000000000000000.jsonl", "roster/card-state/2026-11-25.jsonl", "roster/fingerprints.jsonl", "roster/hashes/0000000000000000.txt"]);
+    // The object's own alarm may have published on an earlier date of the test above, when that took long enough for
+    // it to ring: there is then a line and a card state file for that date too. The last line is today's either way.
+    const names = files.map((f) => f.key);
+    for (const name of ["roster/0000000000000000.jsonl", "roster/card-state/2026-11-25.jsonl", "roster/fingerprints.jsonl", "roster/hashes/0000000000000000.txt"]) assert.ok(names.includes(name), name);
+    assert.match(new TextDecoder().decode(files.find((f) => f.key === "roster/fingerprints.jsonl")!.bytes), /\{"date":"2026-11-25","count":11,"fingerprint":"[0-9a-f]{64}"\}\n$/);
 
     mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
     const out = mkdtempSync(join(WORKER_DIR, "test-output", "published-real-"));
@@ -136,7 +140,7 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
       const verified = JSON.parse(run.stdout) as { valid: boolean; results: { seq: number; valid: boolean }[] };
       assert.equal(verified.valid, true);
       assert.deepEqual(verified.results.map((r) => [r.seq, r.valid]), Array.from({ length: 11 }, (_, i) => [i + 1, true]));
-      assert.match(run.stderr, /fingerprints\.jsonl: 1 line\(s\), every fingerprint is the roster's/);
+      assert.match(run.stderr, /fingerprints\.jsonl: [1-5] line\(s\), every fingerprint is the roster's/);
       assert.match(run.stderr, /hashes\/: 1 list\(s\), every list is the roster's/);
       assert.ok(run.stderr.includes("card-state/2026-11-25.jsonl: count 11 of fingerprints.jsonl, 11 record(s) re-verified: 2 card(s) the same, 0 skipped\n"), run.stderr);
       rmSync(out, { recursive: true, force: true });

@@ -2,10 +2,11 @@
 
 Status: **Draft**. The interface between the cardholder's device (`web/`,
 later the apps) and the server for one card proof. There are two servers
-for now: the Worker (`worker/`), which has `challenges`, `card-state`,
-`records` and `config`; and the Go backend (`server/`), kept for comparison
-until the Worker has the rest, which has every endpoint here but not the
-code `paused`, and still sends `head` (noted where it differs). Terms follow
+for now: the Worker (`worker/`), which has every endpoint here; and the Go
+backend (`server/`), kept for comparison until the Worker has the rest of
+the site, which has not the code `paused`, has `GET /api/v1/head` in place
+of `fingerprint`, and still sends `head` with `card-state` (noted where it
+differs). Terms follow
 [`GLOSSARY.md`](../../GLOSSARY.md). The formats of the values are defined in
 [`spec/`](../../spec/README.md); this document only says which request
 carries which value.
@@ -374,14 +375,25 @@ What the device does with what it cannot read:
   (`card-state`, above).
 - **A field it does not know**: the device ignores it.
 
-## `GET /api/v1/head`
+## `GET /api/v1/fingerprint`
 
-- Response `200`: `{"count":138,"head":"…"}`: the number of records stored
-  now and their roster fingerprint
-  ([`spec/record.md`](../../spec/record.md)), not the last line published
-  in `fingerprints.jsonl`. ADR-0021 has the API show only the last
-  fingerprint published and its count; the new backend makes that change,
-  and changes the name `head`.
+- Response `200`: `{"date":"2026-11-20","count":138,"fingerprint":"…"}`:
+  the last line of the fingerprint file the server published
+  ([`spec/record.md`](../../spec/record.md), "The published roster"), with
+  the fields of that line: the date in Taiwan on which it was written, the
+  number of records at that moment, and their roster fingerprint
+  (ADR-0021). It is the line as the published file has it: a line the
+  server has decided on and not yet written to the file is not answered.
+- A roster that was never published:
+  `{"date":null,"count":0,"fingerprint":"0000…0000"}`, no date, no record,
+  and the roster fingerprint of the empty roster (64 zeros).
+- It says nothing of the records written since that line: `count` here can
+  be less than the `count` of `card-state`.
+- It is answered while the roster is paused.
+- The Go backend (`server/`), kept only for comparison, has
+  `GET /api/v1/head` instead: `{"count":138,"head":"…"}`, the number of
+  records stored now and their roster fingerprint, not the last line
+  published.
 
 ## Public files
 

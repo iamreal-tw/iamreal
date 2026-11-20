@@ -18,7 +18,7 @@
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
 | `scoped-id.ts` | `spec/scoped-id.md` | 匿名編號、它的文字寫法和 10 個字元的短編號 |
 | `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
-| `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）；名冊目錄的切法（`LINES_PER_FILE`）、名冊檔和雜湊清單的檔名（`rosterFileName`、`hashListName`）、雜湊清單的寫法（`hashList`）。後台寫入一筆、把寫滿的名冊檔搬到 R2 時用它 |
+| `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）；名冊目錄的切法（`LINES_PER_FILE`）、名冊檔和雜湊清單的檔名（`rosterFileName`、`hashListName`）、雜湊清單的寫法（`hashList`）；指紋檔的檔名和一行的寫法（`FINGERPRINT_FILE_NAME`、`fingerprintLine`）。後台寫入一筆、把寫滿的名冊檔搬到 R2、每天公布時用它 |
 | `card-state-file.ts` | `spec/roster-rules.md`「The card state file」 | 卡片狀態檔：`cardStateFile` 收每張有過有效紀錄的卡片（狀態和它最後一筆有效紀錄的序號），照樣板寫出整個檔，卡片自己排序、初始狀態的名額不列；`readCardStateFile` 讀一個檔的位元組（`Uint8Array`，下載到什麼就給什麼，不先解碼：解碼會把位元組順序記號吃掉、把不是 UTF-8 的位元組換掉），每一列解析、檢查每個值、照樣板重寫一次比對，再檢查列的順序，回每一列，或第一個不對的行號和代碼（`line`、`order`）。`cardStateFile` 回的是字串，每個字都是 ASCII，檔案的位元組就是它的 UTF-8。只檢查每個值各自的格式，不判斷這一列是不是規則留得下來的狀態：這個檔是拿來讓人比出存錯的狀態的。後台每天寫出這個檔時用它（還沒接上） |
 | `date.ts` | | 日期換成天數、台灣的日期（UTC+8，不看裝置的時區） |
 | `base32.ts` | | 題目和匿名編號用的 base32，只認一種寫法 |
@@ -62,7 +62,7 @@ pnpm test
 
 `test/record.test.ts`：
 
-- `record.json`：兩份名冊的每一筆紀錄，清單的寫法、名冊檔的那一行、紀錄雜湊、加上它之後的名冊指紋都和標準答案相同；每一行格式正確的都讀得出來，重寫一次位元組相同；71 種格式不對的行都讀不出來。`generated_roster` 的五個名冊目錄（0、1、1,000、1,001、2,001 筆）：每個名冊檔和每份雜湊清單的檔名、行數、第一行和最後一行、SHA-256 都和標準答案相同；兩份三筆的名冊的雜湊清單（`hash_list`）也是。名冊檔成立或不成立的案例和指紋檔的案例（`files`、`fingerprint_files`、名冊目錄裡的 `fingerprint_file`）這裡還沒有讀：後台不照「Check a file」檢查整份名冊檔（它重建衍生表時會把寫滿的檔整個讀回來，核對的是 SHA-256 和行數，再一行一行讀），每天公布還沒做
+- `record.json`：兩份名冊的每一筆紀錄，清單的寫法、名冊檔的那一行、紀錄雜湊、加上它之後的名冊指紋都和標準答案相同；每一行格式正確的都讀得出來，重寫一次位元組相同；71 種格式不對的行都讀不出來。`generated_roster` 的五個名冊目錄（0、1、1,000、1,001、2,001 筆）：每個名冊檔和每份雜湊清單的檔名、行數、第一行和最後一行、SHA-256 都和標準答案相同；兩份三筆的名冊的雜湊清單（`hash_list`）也是。指紋檔的一行（`fingerprintLine`）：五個名冊目錄的 `fingerprint_file` 和 `fingerprint_files` 裡每一份合格的指紋檔，每一行從日期、筆數、名冊指紋重寫出來位元組相同。名冊檔成立或不成立的案例和不合格的指紋檔（`files`、`fingerprint_files` 的其餘案例）這裡沒有讀：後台只寫指紋檔、不讀它，也不照「Check a file」檢查整份名冊檔（它重建衍生表時會把寫滿的檔整個讀回來，核對的是 SHA-256 和行數，再一行一行讀）；檢查這些的是 Go 的 `iamreal-verify`
 
 `test/card-state-file.test.ts`：
 
