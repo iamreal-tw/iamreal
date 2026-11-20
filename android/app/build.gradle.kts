@@ -2,6 +2,8 @@
 // one Android version the app is built for, how the native library and the
 // bundled files get into the installer, and the checks of what was built.
 import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 import javax.inject.Inject
@@ -19,6 +21,11 @@ val minApi = 29
 val bundledLists = files(rootProject.file("bundled.sha256"), rootProject.file("../device-core/crs.sha256"))
 // The one app this directory builds (ADR-0036).
 val appId = "tw.iamreal.app.test"
+// The ABIs of each kind of build: what goes out is for phones only; a debug build is also for the emulator on x86-64.
+val releaseAbis = listOf("arm64-v8a")
+val debugAbis = listOf("arm64-v8a", "x86_64")
+// The libraries the app may carry: Kotlin's own, and the annotations it names. No SDK of anyone else.
+val allowedLibraries = listOf("org.jetbrains.kotlin:kotlin-stdlib", "org.jetbrains:annotations")
 // The permissions the merged manifest may ask for. None yet.
 val allowedPermissions = emptyList<String>()
 
@@ -40,11 +47,11 @@ android {
     buildTypes {
         debug {
             // For a phone on a cable and for the emulator.
-            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+            ndk { abiFilters += debugAbis }
         }
         release {
             // What goes out: phones only.
-            ndk { abiFilters += "arm64-v8a" }
+            ndk { abiFilters += releaseAbis }
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
         }
@@ -180,6 +187,18 @@ abstract class CheckManifest : DefaultTask() {
     }
 }
 
+/** Fails when the app carries a library that is not on the list: an SDK of someone else, or anything that came with one. */
+abstract class CheckLibraries : DefaultTask() {
+    @get:Input abstract val libraries: SetProperty<String>
+    @get:Input abstract val allowed: ListProperty<String>
+
+    @TaskAction
+    fun check() {
+        val extra = libraries.get() - allowed.get().toSet()
+        if (extra.isNotEmpty()) throw GradleException("the app carries libraries that are not in app/build.gradle.kts: $extra")
+    }
+}
+
 /**
  * Fails when an installer is not what goes out (README.md, "建置時的檢查"):
  * a native library for anything but the ABIs given, or any but ours; a
@@ -262,7 +281,7 @@ androidComponents {
     onVariants { variant ->
         val name = variant.name.replaceFirstChar { it.uppercase() }
         val release = variant.buildType == "release"
-        val variantAbis = if (release) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64")
+        val variantAbis = if (release) releaseAbis else debugAbis
 
         val native = tasks.register<BuildNative>("buildNative$name") {
             abis = variantAbis
@@ -291,15 +310,27 @@ androidComponents {
             abis = variantAbis
             silent = release
         }
-        tasks.named("check") { dependsOn(checkManifest, checkApk) }
+        val checkLibraries = tasks.register<CheckLibraries>("checkLibraries$name") {
+            libraries = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map { root ->
+                val seen = mutableSetOf<ResolvedComponentResult>()
+                fun walk(c: ResolvedComponentResult) {
+                    if (seen.add(c)) c.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { walk(it.selected) }
+                }
+                walk(root)
+                (seen - root).map { it.moduleVersion!!.let { m -> "${m.group}:${m.name}" } }.toSet()
+            }
+            allowed = allowedLibraries
+        }
+        tasks.named("check") { dependsOn(checkManifest, checkApk, checkLibraries) }
         // Whoever assembles an installer, a job that uploads included, gets it checked.
-        tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(checkManifest, checkApk) }
+        tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(checkManifest, checkApk, checkLibraries) }
     }
 }
 
 // The unit tests run on the JVM of this machine, against the same Rust and the same JNI layer built for it.
 tasks.withType<Test>().configureEach {
-    dependsOn(buildNativeHost)
+    // The library is an input: a change in device-core/ or jni/ runs the tests again.
+    inputs.files(buildNativeHost)
     systemProperty("java.library.path", layout.buildDirectory.dir("native/host").get().asFile.path)
     systemProperty("iamreal.vectors", rootProject.file("../spec/vectors").path)
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)

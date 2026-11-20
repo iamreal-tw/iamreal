@@ -236,11 +236,12 @@ export const ANDROID_JOB = "android";
 /** The one line of that job that runs Gradle: the wrapper of the repository, with the runner's JDK 17. */
 export const GRADLE_BUILD = 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build';
 /** How that job gets the NDK, the platform and the build tools android/app/build.gradle.kts names, with the SDK manager the runner has. */
-export const ANDROID_SDK_PARTS = 'yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
+export const ANDROID_SDK_PARTS = '$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
 /**
  * The Gradle the wrapper downloads and the SHA-256 it checks the download
- * against, and the SHA-256 of the wrapper's own jar in the repository, the
- * first code of android/ a build runs. Both are the ones Gradle publishes
+ * against, and the SHA-256 of the wrapper's own jar in the repository, which
+ * android/gradlew (a shell script, read like any other of the repository)
+ * starts. Both are the ones Gradle publishes
  * for this version (https://gradle.org/release-checksums/);
  * test/workflows.test.ts checks the files of android/gradle/wrapper/ against them.
  */

@@ -15,6 +15,7 @@ import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
 import {
+  ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
   CHECK_BB,
@@ -244,14 +245,33 @@ test("deploying runs no command of the repository: the wrangler configuration ha
 test("the Gradle wrapper of android/ is the one of the Gradle it names: its jar and the distribution's SHA-256 are the published ones", () => {
   const wrapper = join(REPO, "android", "gradle", "wrapper");
   assert.equal(createHash("sha256").update(readFileSync(join(wrapper, "gradle-wrapper.jar"))).digest("hex"), GRADLE_WRAPPER_JAR_SHA256);
-  const properties = readFileSync(join(wrapper, "gradle-wrapper.properties"), "utf8").split("\n");
-  assert.ok(properties.includes(`distributionUrl=https\\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip`));
-  assert.ok(properties.includes(`distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}`));
-  assert.equal(properties.filter((l) => /^distribution(Url|Sha256Sum)=/.test(l)).length, 2);
-  // Every plugin and library Gradle downloads is checked against the list in the repository.
+  // The whole file, line by line: a second distributionUrl, however it is spelled, is a line more.
+  assert.deepEqual(readFileSync(join(wrapper, "gradle-wrapper.properties"), "utf8").split("\n"), [
+    "distributionBase=GRADLE_USER_HOME",
+    "distributionPath=wrapper/dists",
+    `distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}`,
+    `distributionUrl=https\\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip`,
+    "networkTimeout=10000",
+    "retries=0",
+    "retryBackOffMs=500",
+    "validateDistributionUrl=true",
+    "zipStoreBase=GRADLE_USER_HOME",
+    "zipStorePath=wrapper/dists",
+    "",
+  ]);
+  // Every plugin and library Gradle downloads is checked against the SHA-256 in the repository:
+  // no signature stands in for one, and nothing is exempt.
   const verification = readFileSync(join(REPO, "android", "gradle", "verification-metadata.xml"), "utf8");
   assert.ok(verification.includes("<verify-metadata>true</verify-metadata>"));
-  assert.ok(!/<trust\b|<trusted-artifacts|<ignored-key/.test(verification), "no artifact is exempt from the check");
+  assert.ok(verification.includes("<verify-signatures>false</verify-signatures>"));
+  assert.ok(!/<trust|<ignored-key|<key-server/.test(verification), "no artifact is exempt from the check");
+  assert.ok(!/<(md5|sha1|pgp)\b/.test(verification), "SHA-256 only");
+  // The parts of the SDK the job installs are the ones the build names.
+  const build = readFileSync(join(REPO, "android", "app", "build.gradle.kts"), "utf8");
+  const named = (re: RegExp): string => re.exec(build)![1]!;
+  assert.ok(ANDROID_SDK_PARTS.includes(`"ndk;${named(/ndkVersion = "([^"]+)"/)}"`));
+  assert.ok(ANDROID_SDK_PARTS.includes(`"platforms;android-${named(/compileSdk = (\d+)/)}"`));
+  assert.ok(ANDROID_SDK_PARTS.includes(`"build-tools;${named(/buildToolsVersion = "([^"]+)"/)}"`));
 });
 
 test("no file in the repository changes what the deploy job installs or what wrangler loads", () => {

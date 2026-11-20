@@ -84,7 +84,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`
 - **測試 app 不提正式的環境**（`checkApk`）：dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式名冊的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照名冊的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試名冊的那一條。`.so` 裡兩份名冊的場合字串都有（核心是同一份），Kotlin 只傳得出測試名冊的數字
 - **release build 不輸出 log**：R8 拿掉對 `android.util.Log` 的呼叫（`app/proguard-rules.pro`）；之後 `checkApk` 看 release 的 dex，還提到 `android.util.Log`、`java.io.PrintStream`（`System.out`、`System.err`、`println`）、`java.util.logging.Logger`、`printStackTrace` 就失敗
-- **沒有第三方 SDK**：app 用到的程式庫只有 Kotlin 的標準函式庫。沒有 AndroidX、沒有 Google Play services。畫面用 Android 內建的元件
+- **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 列的，現在是 Kotlin 的標準函式庫和它引用的標註。沒有 AndroidX、沒有 Google Play services。畫面用 Android 內建的元件
 
 這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log（app 當掉時系統會記下例外的堆疊；核心的例外只有代碼）、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。
 
@@ -149,7 +149,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
    $ANDROID_HOME/platform-tools/adb shell am start -n tw.iamreal.app.test/tw.iamreal.app.MainActivity
    ```
 
-畫面上是兩行：`idc_self_check 0` 和 `idc_scope_string iamreal-test:public:0__________`。
+畫面上是兩行：`idc_self_check 0` 和 `idc_scope_string 0 iamreal-test:public:0__________`（函式的名稱、它回的代碼、它給的值）。
 
 同時接著手機、開著模擬器時，`adb` 要用 `-s <序號>` 指定裝到哪一個。
 

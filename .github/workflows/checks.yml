@@ -145,7 +145,7 @@ jobs:
         working-directory: device-core
         run: rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android
       - name: Install the parts of the Android SDK that android/app/build.gradle.kts names
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null
       - name: Get the parameter files
         working-directory: device-core
         run: ./fetch-crs.sh

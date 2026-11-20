@@ -11,7 +11,7 @@ import kotlin.concurrent.thread
  * The shell: one screen that shows the core was called. It is not a screen
  * of the card proof and holds no sentence for a cardholder: two lines, the
  * code idc_self_check answered and the scope string the core has for this
- * app's roster. The screens of the card proof replace it.
+ * app's roster, each after the code of its call. The screens of the card proof replace it.
  */
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,12 +25,22 @@ class MainActivity : Activity() {
         setContentView(text)
         thread {
             val lines = try {
-                DeviceCore.selfCheck()
-                "idc_self_check 0\nidc_scope_string ${String(DeviceCore.scopeString(), Charsets.US_ASCII)}"
-            } catch (e: DeviceCoreException) {
-                "idc_self_check ${e.code}"
+                listOf(
+                    line("idc_self_check") { DeviceCore.selfCheck(); "" },
+                    line("idc_scope_string") { String(DeviceCore.scopeString(), Charsets.US_ASCII) },
+                ).joinToString("\n")
+            } catch (e: LinkageError) {
+                // The library is not in the installer, or it is not the one the JNI layer was built for.
+                "System.loadLibrary ${e.javaClass.simpleName}"
             }
             runOnUiThread { text.text = lines }
         }
+    }
+
+    /** `name 0`, then what the call gave; or `name` and the code the core answered with. */
+    private fun line(name: String, call: () -> String): String = try {
+        "$name 0 ${call()}".trimEnd()
+    } catch (e: DeviceCoreException) {
+        "$name ${e.code}"
     }
 }
