@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { createTestHarness } from "wrangler";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
+import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
 import type { CardToWrite, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
@@ -237,7 +238,7 @@ export interface StartOptions {
    * (`ROSTER_OBJECT_NAME`). The configuration file is not changed.
    */
   readonly settings?: TestSettings;
-  /** For how long a round goes on starting files an earlier round left without a line, in milliseconds. By default the deployed build's 5 minutes. */
+  /** For how long a round goes on starting files an earlier round left without a line, in milliseconds. By default the deployed build's (src/round-budget.ts). */
   readonly crlCatchUpMs?: number;
   /** The issuer keys of the build, one G2 and one G3. By default the test's own, which sign the CRLs of test/crls.ts. */
   readonly issuers?: readonly IssuerKey[];
@@ -251,7 +252,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   const server = createTestHarness({ root: WORKER_DIR, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
-    buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000, crlCatchUpMs: options.crlCatchUpMs ?? 5 * 60 * 1000 });
+    buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000, crlCatchUpMs: options.crlCatchUpMs ?? CRL_CATCH_UP_MS });
     ({ url } = await server.listen());
   } catch (e) {
     await moica.close();

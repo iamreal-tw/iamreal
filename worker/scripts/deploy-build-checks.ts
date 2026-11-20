@@ -5,6 +5,9 @@
 // setting (ADR-0028); and its other modules are the proof verifier's files
 // with their SHA-256 (engine-files.ts).
 //
+// And the configuration it is uploaded with gives an invocation the CPU
+// time a round of the CRL mirror counts on (`checkCpuLimit`).
+//
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
 // `buildDeploy`). test/bundle.test.ts runs each on a fresh deploy build, and
@@ -19,7 +22,9 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
+import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -154,6 +159,39 @@ export function checkEngineFiles(b: BuildContents): void {
   assert.deepEqual(b.files, engineFiles(), "the deploy build's other modules are the proof verifier's files");
 }
 
+const WRANGLER_CONFIG = join(REPO, "worker", "wrangler.jsonc");
+
+/**
+ * `limits.cpu_ms` of every environment of wrangler.jsonc, each read the
+ * way wrangler reads it for `--env <name>`: the value an upload of that
+ * environment sends (deploy.ts, `uploadArgs`). `undefined` where neither
+ * the environment nor the top level sets one.
+ *
+ * This reads the configuration file with wrangler's own code, in this
+ * process, not in a child: it starts no command and sends no request.
+ */
+export function configuredCpuMs(): Record<string, number | undefined> {
+  const { rawConfig } = experimental_readRawConfig({ config: WRANGLER_CONFIG });
+  const out: Record<string, number | undefined> = {};
+  for (const env of Object.keys(rawConfig.env ?? {})) {
+    // The file's one warning, that the top level has no name, is wrangler's to print when it bundles.
+    out[env] = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true }).limits?.cpu_ms;
+  }
+  return out;
+}
+
+/**
+ * The CPU time the configuration gives one invocation is, in every
+ * environment, the one a round of the CRL mirror counts on
+ * (src/round-budget.ts). With less, a round is stopped in the middle of a
+ * tree: with none set, after about 30 seconds, before the first tree is
+ * built.
+ */
+export function checkCpuLimit(cpuMs: Readonly<Record<string, number | undefined>>): void {
+  assert.ok(Object.keys(cpuMs).length > 0, "wrangler.jsonc has an environment");
+  for (const [env, ms] of Object.entries(cpuMs)) assert.equal(ms, ROUND_CPU_MS, `limits.cpu_ms of the ${env} environment is the CPU time a round of the CRL mirror counts on`);
+}
+
 /** Every check above on the build in `dir`; throws on the first that fails. */
 export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   const b = readBuild(dir);
@@ -162,4 +200,5 @@ export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   checkNothingOfTheTestBuild(b);
   checkBindings(wranglerOutput);
   checkEngineFiles(b);
+  checkCpuLimit(configuredCpuMs());
 }
