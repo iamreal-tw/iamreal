@@ -12,6 +12,7 @@
 // character, a non-ASCII character. A class that starts with `^` or holds
 // `[` or `]` is not read either: a regular expression engine would read it
 // otherwise, and the server's own check is not this reader.
+import { byBytes } from "./bytes.ts";
 
 export interface UsernameFormat {
   /** The format as the server wrote it. */
@@ -107,5 +108,5 @@ export function isAnyUsername(s: unknown): s is string {
 
 /** Compares platform IDs by their byte values (ASCII order), as every list is ordered. */
 export function byPlatform(a: { platform: string }, b: { platform: string }): number {
-  return a.platform < b.platform ? -1 : a.platform > b.platform ? 1 : 0;
+  return byBytes(a.platform, b.platform);
 }

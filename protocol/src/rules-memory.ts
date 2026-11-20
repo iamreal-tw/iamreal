@@ -1,14 +1,15 @@
-// The roster rules with the state kept in memory: the way to compute a whole
-// roster from its first record. Everything the rules decide is applyRecord
+// The roster rules with their state kept in memory: the way to compute the
+// state of every card from the first record of a roster. It keeps no record. Everything the rules decide is applyRecord
 // (roster-rules.ts); this file only keeps what that function asks its caller
 // to keep between records: each card's state, the roster's latest valid
 // date, the challenges used.
+import { byBytes } from "./bytes.ts";
 import { parseChallenge } from "./challenge.ts";
 import type { Day } from "./date.ts";
 import { type Account, type CardState, type RecordOutcome, applyRecord, newCard } from "./roster-rules.ts";
 
 /** A well-formed record, with the two answers the rules take from outside the roster. */
-export interface MemoryRecord {
+export interface MemoryRulesRecord {
   scopeString: string;
   scopedId: string;
   /** In its one spelling (spec/challenge.md); its date is the record's date. */
@@ -39,9 +40,7 @@ export interface OutputScope {
   accounts: OutputAccount[];
 }
 
-const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
-export class MemoryRoster {
+export class MemoryRules {
   private readonly platforms: readonly string[];
   /** Scope string, then scoped ID. */
   private readonly cards = new Map<string, Map<string, CardState>>();
@@ -57,11 +56,12 @@ export class MemoryRoster {
   /**
    * Applies `r` as the next record. A valid record changes the state of its
    * card; an invalid one changes nothing but marks its challenge as used.
-   * Throws, and changes nothing, for what is not a well-formed record of the
-   * roster: a challenge not in its one spelling, a list naming a platform
-   * outside the table or one platform twice.
+   * Throws, and changes nothing (not the count, not the challenges used),
+   * for what is not a well-formed record of the roster: a challenge not in
+   * its one spelling, a list naming a platform outside the table or one
+   * platform twice, or not in ascending order of platform.
    */
-  apply(r: MemoryRecord): RecordOutcome {
+  apply(r: MemoryRulesRecord): RecordOutcome {
     const date = parseChallenge(r.challenge);
     if (date === null) throw new Error("roster rules: the challenge is not in its one spelling");
     const outcome = applyRecord({

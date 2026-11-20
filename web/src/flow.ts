@@ -828,18 +828,18 @@ export class CardProofFlow {
     // The roster rules (checks 5 and 6), on the slots the server reported. A
     // platform the device does not know has only its account: kept as it is,
     // it is the account declared there, whatever the rest of its slot says.
-    const before = new Map<string, SlotState>(
-      status.slots.map((s) => [s.platform, s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT)]),
+    const before = new Map<string, { slot: SlotState; row: PlatformRow | null }>(
+      status.slots.map((s) => [s.platform, { row: s.row, slot: s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT) }]),
     );
-    const card = { lastCardProof: state.lastCardProof, proofsOnLastDate: state.proofsOnLastDate, slots: before };
-    const { result, blockedPlatform } = applyList([...before.keys()], card, accounts, today);
-    if (!result.valid) throw new FlowStop(result.reason === "switch_limit" ? { code: "blocked", reason: result.reason, platform: blockedPlatform! } : { code: "blocked", reason: result.reason });
+    const card = { lastCardProof: state.lastCardProof, proofsOnLastDate: state.proofsOnLastDate, slots: new Map([...before].map(([p, b]) => [p, b.slot])) };
+    const { result } = applyList([...before.keys()], card, accounts, today);
+    if (!result.valid) throw new FlowStop(result.reason === "switch_limit" ? { code: "blocked", reason: result.reason, platform: result.blockedPlatform } : { code: "blocked", reason: result.reason });
     const rows: ConsequenceRow[] = result.kinds.map(({ platform, kind }) => {
-      const slot = before.get(platform)!;
+      const { slot, row } = before.get(platform)!;
       const entry = list.get(platform) ?? null;
       return {
         platform,
-        row: status.slots.find((s) => s.platform === platform)!.row,
+        row,
         username: kind === "withdraw" ? slot.current! : entry!,
         kind,
         current: slot.current,

@@ -3,9 +3,10 @@
 // and the three facts about the rest of the roster the checks read, and gives
 // the record's result and the state of the card after it. It does not know
 // where the state is kept. The server (one card's state read from and written
-// to storage), a recomputation from the first record (roster-memory.ts) and
+// to storage), a recomputation from the first record (rules-memory.ts) and
 // the device (applyList: what a list would do, from the facts the server
 // reports about one card, docs/api/card-proof.md) all run this code.
+import { byBytes } from "./bytes.ts";
 import type { Day } from "./date.ts";
 
 /**
@@ -32,6 +33,9 @@ export interface CardState {
   proofsOnLastDate: number;
   slots: ReadonlyMap<string, SlotState>;
 }
+
+/** The card's own items of its state, without its slots. */
+export type CardItems = Pick<CardState, "lastCardProof" | "proofsOnLastDate">;
 
 export const EMPTY_SLOT: Readonly<SlotState> = Object.freeze({ current: null, lastDeclared: null, switchCount: 0, correctionDate: null });
 
@@ -80,12 +84,22 @@ export type ListReason = "empty" | "switch_limit" | "daily_limit";
 /**
  * The result of one record: valid with its kinds, in ascending order of
  * platform and at least one, or invalid with its reason code.
+ *
+ * `blockedPlatform`, with `switch_limit`, is the first platform blocked. It
+ * is an explanation for people: the reason code is the whole result of an
+ * invalid record (spec/roster-rules.md, "Output").
  */
-export type RecordResult<R extends Reason = Reason> = { valid: true; kinds: PlatformKind[] } | { valid: false; reason: R };
+export type RecordResult<R extends Reason = Reason> =
+  | { valid: true; kinds: PlatformKind[] }
+  | (R extends "switch_limit" ? { valid: false; reason: "switch_limit"; blockedPlatform: string } : { valid: false; reason: R });
 
 /** A record as the rules read it: a well-formed record of the roster. */
 export interface RuleRecord {
-  /** Its list. A platform outside the table, or twice, is not a record: applyRecord throws. */
+  /**
+   * Its list, in ascending order of platform. A platform outside the table
+   * or twice, or a list in another order, is not a record: applyRecord
+   * throws before any check.
+   */
   accounts: readonly Account[];
   /** Its date: the date in its challenge. */
   date: Day;
@@ -122,8 +136,6 @@ export interface ListOutcome<R extends Reason = Reason> {
    * for every platform of the table.
    */
   card: CardState;
-  /** For `switch_limit`, the first platform blocked; otherwise null. For people: not part of the result. */
-  blockedPlatform: string | null;
 }
 
 export interface RecordOutcome extends ListOutcome {
@@ -135,8 +147,6 @@ export interface RecordOutcome extends ListOutcome {
 export function newCard(platforms: readonly string[]): CardState {
   return { lastCardProof: null, proofsOnLastDate: 0, slots: new Map(platforms.map((p) => [p, { ...EMPTY_SLOT }])) };
 }
-
-const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * The event rules for one slot (spec/roster-rules.md, "Event rules"):
@@ -154,44 +164,66 @@ function applyEntry(slot: SlotState, entry: string | null, day: Day): { kind: Ki
 }
 
 /**
- * Checks 5 and 6 and the effects of a valid record: the event rules on every
- * platform of the table, whether the list has an entry for it or not, then
- * the card's 3 records a date. It is the second half of applyRecord, for a
- * record that passed checks 1 to 4; `date` is then no earlier than the
- * card's `lastCardProof`.
+ * What the rules are never asked about (spec/roster-rules.md, "What an
+ * invalid record changes"): a list that names a platform outside the table
+ * or one platform twice, or is not in ascending order of platform, and a
+ * state with a slot outside the table. Such a list is a malformed line, not
+ * an invalid record: this throws, and no check runs. Go's roster/ stops the
+ * same way, before check 1.
  *
- * The device calls it by itself for what a list would do today: of checks 1
- * to 4 it could compute only the card's own half of check 4, and it leaves
- * that one to the server too (web/README.md).
+ * Returns the table in ascending order and the list by platform.
  */
-export function applyList(platforms: readonly string[], card: CardState, accounts: readonly Account[], date: Day): ListOutcome<ListReason> {
+function readList(platforms: readonly string[], card: CardState, accounts: readonly Account[]): { table: string[]; list: Map<string, string> } {
   const table = [...platforms].sort(byBytes);
   const list = new Map<string, string>();
+  let last: string | null = null;
   for (const a of accounts) {
     if (!table.includes(a.platform)) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)}, a platform outside the table`);
     if (list.has(a.platform)) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)} twice`);
+    if (last !== null && !(last < a.platform)) throw new Error("roster rules: the list is not in ascending order of platform");
     list.set(a.platform, a.username);
+    last = a.platform;
   }
   for (const p of card.slots.keys()) {
     if (!table.includes(p)) throw new Error(`roster rules: the card's state has a slot on ${JSON.stringify(p)}, a platform outside the table`);
   }
-  const invalid = (reason: ListReason, blockedPlatform: string | null = null): ListOutcome<ListReason> => ({ result: { valid: false, reason }, card, blockedPlatform });
+  return { table, list };
+}
 
+/** Checks 5 and 6 and the effects of a valid record, for a list readList accepted. */
+function checkList(table: readonly string[], card: CardState, list: ReadonlyMap<string, string>, date: Day): ListOutcome<ListReason> {
   // 5. The event rules, on a copy. One blocked platform blocks the record.
   const slots = new Map<string, SlotState>();
   const kinds: PlatformKind[] = [];
   for (const platform of table) {
     const before = card.slots.get(platform) ?? EMPTY_SLOT;
     const o = applyEntry(before, list.get(platform) ?? null, date);
-    if (o === "blocked") return invalid("switch_limit", platform);
+    if (o === "blocked") return { result: { valid: false, reason: "switch_limit", blockedPlatform: platform }, card };
     slots.set(platform, o === null ? { ...before } : o.slot);
     if (o !== null) kinds.push({ platform, kind: o.kind });
   }
-  if (kinds.length === 0) return invalid("empty");
+  if (kinds.length === 0) return { result: { valid: false, reason: "empty" }, card };
   // 6. Fewer than 3 earlier valid records of its card have its date.
   const onDate = card.lastCardProof === date ? card.proofsOnLastDate : 0;
-  if (onDate >= MAX_PER_DATE) return invalid("daily_limit");
-  return { result: { valid: true, kinds }, card: { lastCardProof: date, proofsOnLastDate: onDate + 1, slots }, blockedPlatform: null };
+  if (onDate >= MAX_PER_DATE) return { result: { valid: false, reason: "daily_limit" }, card };
+  return { result: { valid: true, kinds }, card: { lastCardProof: date, proofsOnLastDate: onDate + 1, slots } };
+}
+
+/**
+ * Checks 5 and 6 and the effects of a valid record: the event rules on every
+ * platform of the table, whether the list has an entry for it or not, then
+ * the card's 3 records a date. It is the second half of applyRecord, for a
+ * record that passed checks 1 to 4; `date` is then no earlier than the
+ * card's `lastCardProof`. Like applyRecord, it throws for a list that is not
+ * a record's.
+ *
+ * The device calls it by itself for what a list would do today: of checks 1
+ * to 4 it could compute only the card's own half of check 4, and it leaves
+ * that one to the server too (web/README.md).
+ */
+export function applyList(platforms: readonly string[], card: CardState, accounts: readonly Account[], date: Day): ListOutcome<ListReason> {
+  const { table, list } = readList(platforms, card, accounts);
+  return checkList(table, card, list, date);
 }
 
 /**
@@ -203,11 +235,13 @@ export function applyList(platforms: readonly string[], card: CardState, account
  * What the caller keeps between records: the card's state (`card` of the
  * outcome), the roster's latest valid date (`latestValidDate` of the
  * outcome) and, whatever the result, that the record's challenge is used.
+ * When it throws, the input was not a record, and the caller keeps nothing.
  */
 export function applyRecord(input: RecordInput): RecordOutcome {
   const { platforms, record, card, latestValidDate, challengeUsed, crlDates } = input;
   const { date } = record;
-  const invalid = (reason: Reason): RecordOutcome => ({ result: { valid: false, reason }, card, latestValidDate, blockedPlatform: null });
+  const { table, list } = readList(platforms, card, record.accounts);
+  const invalid = (reason: Exclude<Reason, ListReason>): RecordOutcome => ({ result: { valid: false, reason }, card, latestValidDate });
   // 1. The record verifies.
   if (!record.verifies) return invalid("proof");
   // 2. Its challenge appears in no earlier record.
@@ -219,7 +253,7 @@ export function applyRecord(input: RecordInput): RecordOutcome {
   if (latestValidDate !== null && date < latestValidDate - DATE_ORDER_DAYS) return invalid("date_order");
   if (card.lastCardProof !== null && date < card.lastCardProof) return invalid("date_order");
   // 5 and 6.
-  const o = applyList(platforms, card, record.accounts, date);
+  const o = checkList(table, card, list, date);
   return { ...o, latestValidDate: o.result.valid && (latestValidDate === null || date > latestValidDate) ? date : latestValidDate };
 }
 
@@ -231,7 +265,7 @@ export function applyRecord(input: RecordInput): RecordOutcome {
  * `proofs_on_last_date` when `day` is `last_card_proof` and 0 when it is
  * later; a `day` before it is `date_order`, and this is false.
  */
-export function dailyLimitReached(state: { lastCardProof: Day | null; proofsOnLastDate: number }, day: Day): boolean {
+export function dailyLimitReached(state: CardItems, day: Day): boolean {
   return state.lastCardProof === day && state.proofsOnLastDate >= MAX_PER_DATE;
 }
 
@@ -269,7 +303,8 @@ export function possibleSlot(slot: SlotState, lastCardProof: Day | null): boolea
  * (check 6), so it is 0 without `last_card_proof` and 1 to 3 with it; and no
  * date is more than MAX_DAYS_AHEAD days after today.
  */
-export function possibleCard(lastCardProof: Day | null, proofsOnLastDate: number, today: Day): boolean {
+export function possibleCard(card: CardItems, today: Day): boolean {
+  const { lastCardProof, proofsOnLastDate } = card;
   if (!Number.isSafeInteger(proofsOnLastDate)) return false;
   if (lastCardProof === null) return proofsOnLastDate === 0;
   if (proofsOnLastDate < 1 || proofsOnLastDate > MAX_PER_DATE) return false;

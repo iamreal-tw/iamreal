@@ -247,7 +247,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
   // A count: an integer; possibleCard then bounds it.
   if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) bad();
   const proofsOnLastDate = b.proofs_on_last_date as number;
-  if (!possibleCard(lastCardProof, proofsOnLastDate, today)) bad();
+  if (!possibleCard({ lastCardProof, proofsOnLastDate }, today)) bad();
   if (!isObject(b.platforms)) bad();
   const entries = b.platforms as Record<string, unknown>;
 

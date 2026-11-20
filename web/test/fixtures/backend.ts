@@ -88,8 +88,16 @@ export class FakeBackend {
     this.card = newCard(this.table().map((r) => r.platform));
   }
 
+  /**
+   * The platform table of this server's roster: the one its `config` sends
+   * (`config` whole, else `platforms`), or TEST_PLATFORMS when the test made
+   * that answer something that is not a table.
+   */
   private table(): readonly PlatformTableRow[] {
-    return Array.isArray(this.opts.platforms) ? (this.opts.platforms as PlatformTableRow[]) : TEST_PLATFORMS;
+    const o = this.opts;
+    const sent = "config" in o ? (o.config as { platforms?: unknown } | null)?.platforms : o.platforms;
+    const rows = Array.isArray(sent) ? sent.filter((r): r is PlatformTableRow => typeof r === "object" && r !== null && typeof r.platform === "string") : [];
+    return rows.length > 0 ? rows : TEST_PLATFORMS;
   }
 
   /** The card-state answer of the roster of its own. */
@@ -117,11 +125,12 @@ export class FakeBackend {
     const accounts = Array.isArray(body.accounts) ? (body.accounts as { platform: string; username: string }[]) : [];
     const list = new Map(accounts.map((a) => [a.platform, a.username]));
     const d = parseDay(String(body.challenge).slice(0, 10)) ?? taiwanDay(this.opts.clock());
-    // The roster rules for a roster of one card, with the answers this
-    // server does not check: the record verifies, its challenge is new, its
-    // root is recognized.
+    // The roster rules for a roster of one card, on this server's platform
+    // table, with the answers this server does not check: the record
+    // verifies, its challenge is new, its root is recognized. A list that is
+    // not a record's (a platform outside the table) makes applyRecord throw.
     const o = applyRecord({
-      platforms: [...new Set([...card.slots.keys(), ...list.keys()])],
+      platforms: this.table().map((r) => r.platform),
       record: { accounts, date: d, verifies: true },
       card,
       latestValidDate: card.lastCardProof,
