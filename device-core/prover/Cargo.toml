@@ -11,9 +11,21 @@ publish.workspace = true
 # staticlib: what the apps link. rlib: what tests/ uses.
 crate-type = ["staticlib", "rlib"]
 
+[features]
+# For this directory's tests only: makes `pub` what lets a caller open a
+# session that trusts other issuer keys, and reach Poseidon2 and the tree
+# without a session. The library the apps link is built without it, so
+# Rust code that depends on this crate gets the C functions and nothing
+# else, unless it turns this feature on itself (README.md, "檢查都通過了").
+testing = []
+
 [dependencies]
 iamreal-device-checks = { path = "../checks" }
 barretenberg-rs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+
+[dev-dependencies]
+# The tests of tests/ are built against the library with `testing`.
+iamreal-device-core = { path = ".", features = ["testing"] }

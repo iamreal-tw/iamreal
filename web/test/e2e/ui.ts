@@ -1983,7 +1983,7 @@ async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected
   const signs = componentCount("MakeSignature");
   const cardStates = cardStateCount();
   const r = await readCard();
-  // An answer of the server the page cannot read: its request ID on the next line (research/57, 14).
+  // An answer of the server the page cannot read: its request ID on the next line.
   const why = o.requestId ? r.why.split("\n")[0] : r.why;
   const idLine = o.requestId ? (r.why.split("\n")[1] ?? "") : "";
   check(!r.done && r.item === item && why === expected, `${label}: under "${item}": "${r.why}"`);

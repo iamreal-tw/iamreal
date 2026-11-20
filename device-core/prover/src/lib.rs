@@ -5,14 +5,24 @@
 //!
 //! Nothing here does I/O: bytes in, bytes out. No function takes a PIN.
 //!
-//! What is `pub` in Rust and not `extern "C"` ([`hashes`]) is for this
-//! crate's tests. The apps reach only the C functions: Poseidon2 is not
-//! one of them, so an app cannot compute a scoped ID by itself (ADR-0034,
-//! "核心擋住的順序").
+//! Without the feature `testing`, the C functions are all this crate
+//! gives: Poseidon2 is not one of them, and the one that computes a
+//! scoped ID takes a session that passed every check (ADR-0034, "核心擋住
+//! 的順序"). The feature is for this crate's tests, which need Poseidon2
+//! and the tree by themselves and a session that trusts test keys.
 
-pub mod hashes;
+mod alloc;
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+/// Declares a module that is `pub` only with the feature `testing`.
+macro_rules! for_tests {
+    ($($name:ident),*) => {$(
+        #[cfg(feature = "testing")]
+        pub mod $name;
+        #[cfg(not(feature = "testing"))]
+        mod $name;
+    )*};
+}
+for_tests!(artifacts, hashes, quiet, session, tree);
 
 use iamreal_device_checks::challenge::parse_challenge;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
@@ -34,6 +44,8 @@ pub const IDC_ERR_ARGUMENT: i32 = 1;
 pub const IDC_ERR_INPUT: i32 = 2;
 /// The core failed: a panic, or Barretenberg did not answer.
 pub const IDC_ERR_INTERNAL: i32 = 3;
+/// The session has not passed the checks this function needs first.
+pub const IDC_ERR_REFUSED: i32 = 4;
 
 /// The production roster.
 pub const IDC_ROSTER_PRODUCTION: u32 = 0;
@@ -53,30 +65,30 @@ const EMPTY: IdcBuf = IdcBuf {
     len: 0,
 };
 
+/// Runs `f` and returns its code.
+fn code(f: impl FnOnce() -> Result<(), i32>) -> i32 {
+    match quiet::guarded(f) {
+        Ok(()) => IDC_OK,
+        Err(code) => code,
+    }
+}
+
 /// Runs `f` and puts its bytes in `*out`. `*out` is empty unless the
-/// result is `IDC_OK`. A panic stops here: it never crosses into C.
+/// result is `IDC_OK`.
 fn output(out: *mut IdcBuf, f: impl FnOnce() -> Result<Vec<u8>, i32>) -> i32 {
     if out.is_null() {
         return IDC_ERR_ARGUMENT;
     }
     // SAFETY: `out` is not null, and the caller gives a pointer to an `idc_buf` it may write.
     unsafe { out.write(EMPTY) };
-    match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(Ok(bytes)) => {
-            let boxed = bytes.into_boxed_slice();
-            let len = boxed.len();
-            let ptr = Box::into_raw(boxed).cast::<u8>();
-            // SAFETY: as above.
-            unsafe { out.write(IdcBuf { ptr, len }) };
-            IDC_OK
-        }
-        Ok(Err(code)) => code,
-        Err(payload) => {
-            // Dropping what a panic carried could panic again.
-            std::mem::forget(payload);
-            IDC_ERR_INTERNAL
-        }
-    }
+    code(|| {
+        let boxed = f()?.into_boxed_slice();
+        let len = boxed.len();
+        let ptr = Box::into_raw(boxed).cast::<u8>();
+        // SAFETY: as above.
+        unsafe { out.write(IdcBuf { ptr, len }) };
+        Ok(())
+    })
 }
 
 /// The `len` bytes at `ptr` the caller passed in, for the length of the call.
@@ -150,16 +162,15 @@ const SELF_CHECK_HASH: [u8; 32] = [
 /// no input.
 #[unsafe(no_mangle)]
 pub extern "C" fn idc_self_check() -> i32 {
-    let check = || hashes::Barretenberg::new()?.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]);
-    match catch_unwind(check) {
-        Ok(Ok(hash)) if hash == SELF_CHECK_HASH => IDC_OK,
-        Ok(_) => IDC_ERR_INTERNAL,
-        Err(payload) => {
-            // As in `output`.
-            std::mem::forget(payload);
-            IDC_ERR_INTERNAL
+    code(|| {
+        let hash = hashes::Barretenberg::new()
+            .and_then(|mut bb| bb.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]));
+        if hash == Ok(SELF_CHECK_HASH) {
+            Ok(())
+        } else {
+            Err(IDC_ERR_INTERNAL)
         }
-    }
+    })
 }
 
 /// The scope string a card signs for `roster`: 31 bytes in `*out`.
@@ -275,6 +286,182 @@ pub unsafe extern "C" fn idc_declaration_code(
         )
         .map_err(|_| IDC_ERR_INPUT)?;
         Ok(code.to_vec())
+    })
+}
+
+/// Opens a session for one card proof on `roster` and puts the number
+/// that names it in `*out`: never 0. The session checks against MOICA's
+/// keys and the files written into the core. Close it with
+/// [`idc_session_close`], whatever happened in between.
+///
+/// # Safety
+/// `out` is null or points to a `uint64_t` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
+    if out.is_null() {
+        return IDC_ERR_ARGUMENT;
+    }
+    // SAFETY: `out` is not null, and the caller's to write.
+    unsafe { out.write(0) };
+    code(|| {
+        let handle = session::open(roster_of(roster)?, session::Trust::built_in());
+        // SAFETY: as above.
+        unsafe { out.write(handle) };
+        Ok(())
+    })
+}
+
+/// Closes a session: the certificate, the name on it and everything the
+/// core computed from them are overwritten with zeros and released. A
+/// number that names no session (0, or one already closed) does nothing.
+#[unsafe(no_mangle)]
+pub extern "C" fn idc_session_close(session: u64) {
+    let _ = code(|| {
+        session::close(session);
+        Ok(())
+    });
+}
+
+/// See [`session::add_certificate`].
+///
+/// # Safety
+/// `certificate` points to `certificate_len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_add_certificate(
+    session: u64,
+    certificate: *const u8,
+    certificate_len: usize,
+) -> i32 {
+    code(|| {
+        // SAFETY: the caller's promise.
+        let certificate = unsafe { input(certificate, certificate_len)? };
+        session::add_certificate(session, certificate)
+    })
+}
+
+/// See [`session::check_certificates`].
+///
+/// # Safety
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_certificates(
+    session: u64,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || session::check_certificates(session, now))
+}
+
+/// See [`session::choose_crl`].
+///
+/// # Safety
+/// `index` points to `index_len` bytes; `out` is null or points to an
+/// `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_choose_crl(
+    session: u64,
+    index: *const u8,
+    index_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let index = unsafe { input(index, index_len)? };
+        session::choose_crl(session, index)
+    })
+}
+
+/// See [`session::check_crl`].
+///
+/// # Safety
+/// `crl`, `config` and `highest` point to as many bytes as their lengths
+/// say; `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_crl(
+    session: u64,
+    crl: *const u8,
+    crl_len: usize,
+    config: *const u8,
+    config_len: usize,
+    highest: *const u8,
+    highest_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (crl, config, highest) = unsafe {
+            (
+                input(crl, crl_len)?,
+                input(config, config_len)?,
+                input(highest, highest_len)?,
+            )
+        };
+        session::check_crl(session, crl, config, highest)
+    })
+}
+
+/// See [`session::build_tree`].
+#[unsafe(no_mangle)]
+pub extern "C" fn idc_session_build_tree(session: u64) -> i32 {
+    code(|| session::build_tree(session))
+}
+
+/// See [`session::check_artifacts`].
+///
+/// # Safety
+/// Each pointer points to as many bytes as its length says.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_artifacts(
+    session: u64,
+    circuit: *const u8,
+    circuit_len: usize,
+    verification_key: *const u8,
+    verification_key_len: usize,
+    crs_g1: *const u8,
+    crs_g1_len: usize,
+    crs_g2: *const u8,
+    crs_g2_len: usize,
+) -> i32 {
+    code(|| {
+        // SAFETY: the caller's promise.
+        let (circuit, verification_key, crs_g1, crs_g2) = unsafe {
+            (
+                input(circuit, circuit_len)?,
+                input(verification_key, verification_key_len)?,
+                input(crs_g1, crs_g1_len)?,
+                input(crs_g2, crs_g2_len)?,
+            )
+        };
+        session::check_artifacts(session, circuit, verification_key, crs_g1, crs_g2)
+    })
+}
+
+/// See [`session::check_date`].
+///
+/// # Safety
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_date(session: u64, now: i64, out: *mut IdcBuf) -> i32 {
+    output(out, || session::check_date(session, now))
+}
+
+/// See [`session::card_state_request`].
+///
+/// # Safety
+/// `scope_signature` points to `scope_signature_len` bytes; `out` is null
+/// or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_card_state_request(
+    session: u64,
+    now: i64,
+    scope_signature: *const u8,
+    scope_signature_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let scope_signature = unsafe { input(scope_signature, scope_signature_len)? };
+        session::card_state_request(session, now, scope_signature)
     })
 }
 
