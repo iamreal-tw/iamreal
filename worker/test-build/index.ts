@@ -65,9 +65,19 @@ const STAND_IN: ApiParts = {
 
 let standIn = false;
 
-/** The tables a test can make every write to fail on. */
-const WRITTEN_TABLES = ["records", "cards", "roster", "challenges"] as const;
-type WrittenTable = (typeof WRITTEN_TABLES)[number];
+/**
+ * What a test can make every write to fail on: a table the object writes,
+ * or only the mark that a record was written for a challenge (the column
+ * `accepted`), which leaves counting a submission as it is.
+ */
+const FAILING_WRITES = {
+  records: "ON records",
+  cards: "ON cards",
+  roster: "ON roster",
+  challenges: "ON challenges",
+  "challenges.accepted": "OF accepted ON challenges",
+} as const;
+type FailingWrite = keyof typeof FAILING_WRITES;
 
 export class Roster extends DeployedRoster {
   /** The second piece of timed work: when it is next due, how long after each run it is due again, and when it ran. */
@@ -152,16 +162,19 @@ export class Roster extends DeployedRoster {
   }
 
   /**
-   * From now on every write to `table` fails, or, with null, none does: a
+   * From now on every write to `what` fails, or, with null, none does: a
    * trigger in the object's own SQLite, so that the write fails where the
    * storage would fail it, in the middle of whatever was being written.
    */
-  testFailWritesTo(table: WrittenTable | null): void {
+  testFailWritesTo(what: FailingWrite | null): void {
     const sql = this.ctx.storage.sql;
-    for (const t of WRITTEN_TABLES) for (const on of ["INSERT", "UPDATE"]) sql.exec(`DROP TRIGGER IF EXISTS test_fail_${t}_${on}`);
-    if (table === null) return;
-    if (!WRITTEN_TABLES.includes(table)) throw new Error("not a table the object writes");
-    for (const on of ["INSERT", "UPDATE"]) sql.exec(`CREATE TRIGGER test_fail_${table}_${on} BEFORE ${on} ON ${table} BEGIN SELECT RAISE(ABORT, 'the test makes this write fail'); END`);
+    sql.exec("DROP TRIGGER IF EXISTS test_fail_insert");
+    sql.exec("DROP TRIGGER IF EXISTS test_fail_update");
+    if (what === null) return;
+    if (!Object.hasOwn(FAILING_WRITES, what)) throw new Error("not something the object writes");
+    const fail = "BEGIN SELECT RAISE(ABORT, 'the test makes this write fail'); END";
+    sql.exec(`CREATE TRIGGER test_fail_update BEFORE UPDATE ${FAILING_WRITES[what]} ${fail}`);
+    if (what !== "challenges.accepted") sql.exec(`CREATE TRIGGER test_fail_insert BEFORE INSERT ${FAILING_WRITES[what]} ${fail}`);
   }
 
   /**
@@ -225,8 +238,9 @@ export default {
    *   build's", change the version the object's tables say they were made
    *   by, and the version of the rules its state says it was computed by.
    * - `POST /__test/roster/break` drops the tables the API reads.
-   * - `PUT /__test/roster/fail-writes` with `{table}`, a table's name or
-   *   null: every write to that table fails from now on, or none does.
+   * - `PUT /__test/roster/fail-writes` with `{what}`, a table, or
+   *   `challenges.accepted`, or null: every write to it fails from now on,
+   *   or none does.
    * - `POST /__test/roster/drop-newest-crls` drops the table of the newest
    *   CRLs, as on an object made before the build had it.
    * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
@@ -301,8 +315,8 @@ export default {
       return done();
     }
     if (route === "PUT /__test/roster/fail-writes") {
-      const { table } = (await request.json()) as { table: WrittenTable | null };
-      await testRosterOf(env).testFailWritesTo(table);
+      const { what } = (await request.json()) as { what: FailingWrite | null };
+      await testRosterOf(env).testFailWritesTo(what);
       return done();
     }
     if (route === "POST /__test/roster/drop-newest-crls") {

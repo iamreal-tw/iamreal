@@ -19,6 +19,7 @@ import {
   cardState,
   circuitOf,
   day,
+  freshRoster,
   kindsOf,
   list,
   mustSubmit,
@@ -37,22 +38,8 @@ const PRODUCTION_SCOPE = "iamreal:public:0_______________";
 const TEN_MINUTES = 10 * 60 * 1000;
 
 let worker: TestWorker;
-let rosters = 0;
 
-/**
- * A roster without a record and an archive without a CRL, at noon of
- * 2026-11-20 in Taiwan: a new object, and an empty bucket.
- */
-async function fresh(settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean } = {}): Promise<void> {
-  for (const file of await worker.files()) await worker.deleteFile(file.key);
-  rosters++;
-  await worker.setSettings({
-    ROSTER_KIND: settings.kind ?? "test",
-    ROSTER_OBJECT_NAME: settings.kind === "production" ? `roster-${rosters}` : `test-records-${rosters}`,
-    ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }),
-  });
-  await worker.setClock(START);
-}
+const fresh = (settings: Parameters<typeof freshRoster>[1] = {}): Promise<string> => freshRoster(worker, settings);
 
 before(async () => {
   worker = await startWorker();
@@ -495,8 +482,7 @@ describe("the back end's policy on switches", () => {
   });
 
   test("a value of the setting that is neither true nor false: nothing answers", async () => {
-    await fresh();
-    await worker.setSettings({ ROSTER_KIND: "test", ROSTER_OBJECT_NAME: `test-records-${rosters}`, RESTRICT_LATE_SWITCHES: "yes" });
+    await worker.setSettings({ ROSTER_KIND: "test", ROSTER_OBJECT_NAME: await fresh(), RESTRICT_LATE_SWITCHES: "yes" });
     for (const [method, path] of [["POST", "/api/v1/challenges"], ["GET", "/api/v1/config"], ["POST", "/api/v1/records"]] as const) assert.equal((await worker.fetch(path, { method })).status, 500, path);
   });
 });

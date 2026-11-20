@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { createTestHarness } from "wrangler";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
-import type { CardToWrite, TestSettings } from "../test-build/card-door.ts";
+import type { CardToWrite, RuleEvent, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -214,6 +214,25 @@ export interface TestWorker {
      */
     setStoredSchemaVersion(to: "another" | "the build's"): Promise<void>;
     /**
+     * Changes the version of the roster rules the object's stored state
+     * says it was computed by: to another one than the build's, or back
+     * (test build, `PUT /__test/roster/rules-version`). The object compares
+     * when it starts: `restart()` after this.
+     */
+    setStoredRulesVersion(to: "another" | "the build's"): Promise<void>;
+    /**
+     * From now on every write of the object to this table fails (or, for
+     * `challenges.accepted`, only marking a challenge as accepted), or, with
+     * null, none does (test build, `PUT /__test/roster/fail-writes`).
+     */
+    failWritesTo(what: "records" | "cards" | "roster" | "challenges" | "challenges.accepted" | null): Promise<void>;
+    /**
+     * Runs the roster rules for one event of spec/vectors/roster-rules.json
+     * on the state the object stores, keeps what a valid one leaves, and
+     * returns the result (test build, `POST /__test/roster/rule-event`).
+     */
+    applyRuleEvent(event: RuleEvent): Promise<{ valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] }>;
+    /**
      * The challenges the object still holds, read from its storage. A
      * stopgap: no endpoint shows yet whether a challenge is known. When
      * submitting a record does (`challenge_unknown`, #67), the tests ask
@@ -239,7 +258,7 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-export type { CardToWrite, TestSettings };
+export type { CardToWrite, RuleEvent, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -373,6 +392,19 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async setStoredSchemaVersion(to) {
         const res = await server.fetch("/__test/roster/schema-version", { method: "PUT", body: JSON.stringify({ to }) });
         if (res.status !== 204) throw new Error(`changing the stored schema version: HTTP ${res.status}`);
+      },
+      async setStoredRulesVersion(to) {
+        const res = await server.fetch("/__test/roster/rules-version", { method: "PUT", body: JSON.stringify({ to }) });
+        if (res.status !== 204) throw new Error(`changing the stored rules version: HTTP ${res.status}`);
+      },
+      async failWritesTo(what) {
+        const res = await server.fetch("/__test/roster/fail-writes", { method: "PUT", body: JSON.stringify({ what }) });
+        if (res.status !== 204) throw new Error(`making writes fail: HTTP ${res.status} ${await res.text()}`);
+      },
+      async applyRuleEvent(event) {
+        const res = await server.fetch("/__test/roster/rule-event", { method: "POST", body: JSON.stringify(event) });
+        if (res.status !== 200) throw new Error(`applying a rule event: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as { valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] };
       },
       async storedChallenges() {
         const storage = await worker.getDurableObjectStorage("ROSTER" as never, rosterObject());

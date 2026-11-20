@@ -92,6 +92,22 @@ export const CRL_TIME = new Date("2026-11-19T21:00:00Z");
 export const START = new Date("2026-11-20T12:00:00+08:00");
 export const DAY_MS = 24 * 3600 * 1000;
 
+let rosters = 0;
+
+/**
+ * From now on the Worker serves a roster without a record and an archive
+ * without a CRL, at noon of 2026-11-20 in Taiwan: a roster's object with a
+ * new name, and an empty bucket. Returns the object's name.
+ */
+export async function freshRoster(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean } = {}): Promise<string> {
+  for (const file of await worker.files()) await worker.deleteFile(file.key);
+  rosters++;
+  const name = settings.kind === "production" ? `roster-${rosters}` : `test-records-${rosters}`;
+  await worker.setSettings({ ROSTER_KIND: settings.kind ?? "test", ROSTER_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }) });
+  await worker.setClock(START);
+  return name;
+}
+
 /** A moment given in Taiwan time. */
 export const tw = (date: string, time: string): Date => new Date(`${date}T${time}+08:00`);
 
