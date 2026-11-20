@@ -10,8 +10,8 @@
 //                bucket yet, each as its line of the roster file
 //   full_files   the full roster files that were moved to the data bucket
 //   cards        the roster rules' state of each card (card-table.ts)
-//   card_snapshot  a copy of `cards` while the roster is being published
-//                (card-table.ts, `snapshotCards`)
+//   cards_copy   a copy of `cards`, only while the roster is being
+//                published (card-table.ts, `copyCards`)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
 //   published    the lines of the fingerprint file: the days the roster was
@@ -37,7 +37,7 @@ import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamr
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
-import { CARD_TABLE, dropCardSnapshot, readCard, snapshotCards, snapshotRows, writeCard } from "./card-table.ts";
+import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfShortId, Counts } from "./page-data.ts";
@@ -956,13 +956,15 @@ export class Roster extends DurableObject<Env> {
    *   3. the line of the date: the row of `published`, then the
    *      fingerprint file with it.
    *
-   * - **One moment.** The count, the roster fingerprint, the lines of the
-   *   last file and the state of every card are read without waiting for
-   *   anything in between (`#readForPublication`), and only then is the
-   *   bucket written: the card state file is the states after exactly the
-   *   line's `count` records (spec/roster-rules.md, "The card state
-   *   file"). Records written while the bucket is written wait for the
-   *   next date.
+   * - **One moment.** The count and the roster fingerprint are read, and
+   *   the card state table copied, without waiting for anything in
+   *   between (`#publicationMoment`). Everything is written from that
+   *   moment: the last file from the records up to the count, which never
+   *   change, and the card state file from the copy, so that it is the
+   *   states after exactly the line's `count` records (spec/roster-rules.md,
+   *   "The card state file"). Records written while the bucket is written
+   *   wait for the next date. The copy is dropped when the publication
+   *   ends, whether the row was written or it broke off.
    * - **The line comes last**, and not at all if anything before it
    *   failed: every record a line covers can be downloaded when the line
    *   is there. A publication that broke off before the row was written is
@@ -996,8 +998,8 @@ export class Roster extends DurableObject<Env> {
         sql.exec("INSERT INTO published (date, count, fingerprint, in_bucket) VALUES (?, ?, ?, 0)", formatDay(moment.date), moment.count, moment.fingerprint);
       }
     } finally {
-      // Whether the line was written or the publication broke off: the next one makes a snapshot of its own.
-      dropCardSnapshot(sql);
+      // Whether the line was written or the publication broke off: the next one makes a copy of its own.
+      dropCardsCopy(sql);
     }
     await this.#writeFingerprintFile();
   }
@@ -1005,10 +1007,10 @@ export class Roster extends DurableObject<Env> {
   /**
    * The moment the roster is published as, for today's date in Taiwan, or
    * null if today's line is written already: the count and the roster
-   * fingerprint, and a snapshot of the card state table (`snapshotCards`),
+   * fingerprint, and a copy of the card state table (`copyCards`),
    * all without waiting for anything in between. What the publication
    * writes afterwards is read from these alone: the records up to the
-   * count, which never change, and the snapshot.
+   * count, which never change, and the copy.
    */
   #publicationMoment(): { date: Day; count: number; fingerprint: string } | null {
     const sql = this.ctx.storage.sql;
@@ -1019,7 +1021,7 @@ export class Roster extends DurableObject<Env> {
       throw new Error("the roster is already published for a later date than today");
     }
     const { count, fingerprint } = this.#rosterRow();
-    snapshotCards(sql);
+    copyCards(sql);
     return { date, count, fingerprint };
   }
 
@@ -1048,9 +1050,9 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * Writes the card state file of `date` from the snapshot of the card
+   * Writes the card state file of `date` from the copy of the card
    * state table, one batch of rows at a time, holding no more than one
-   * batch however many cards there are. The snapshot is read twice: once
+   * batch however many cards there are. The copy is read twice: once
    * for the length and the SHA-256 of the file, which are given to the
    * bucket with it, then as the stream that is written. Every row is
    * checked as it is written (protocol/, `cardStateFileWriter`), so a row
@@ -1071,7 +1073,7 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * The card state file of the snapshot of the card state table, as one
+   * The card state file of the copy of the card state table, as one
    * chunk of bytes for each batch of `CARD_STATE_BATCH` rows. Each batch is
    * read when the chunk before it has been taken.
    */
@@ -1080,7 +1082,7 @@ export class Roster extends DurableObject<Env> {
     const write = cardStateFileWriter(this.settings.kind);
     const encoder = new TextEncoder();
     for (let after: CardRow | null = null; ; ) {
-      const rows = snapshotRows(sql, after, CARD_STATE_BATCH);
+      const rows = copiedCards(sql, after, CARD_STATE_BATCH);
       if (rows.length === 0) return;
       let text = "";
       for (const row of rows) text += write(row);

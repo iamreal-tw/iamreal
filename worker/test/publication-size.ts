@@ -4,7 +4,7 @@
 // the test roster's object with made-up cards through the test build's door,
 // then times, from here:
 //
-//   - copying the card state table to its snapshot, and dropping it, alone
+//   - copying the card state table, and dropping the copy, alone
 //     (each three times);
 //   - the whole publication at midnight, the alarm's run;
 //   - the longest a request to the object waited during the publication:
@@ -61,11 +61,11 @@ try {
   const tables = await worker.roster.tables();
   for (let run = 1; run <= 3; run++) {
     start = process.hrtime.bigint();
-    await worker.roster.snapshot(false);
+    await worker.roster.cardsCopy(false);
     const copied = ms(start);
     start = process.hrtime.bigint();
-    await worker.roster.snapshot(true);
-    console.log(`snapshot, run ${run}: copied in ${copied.toFixed(0)} ms, dropped in ${ms(start).toFixed(0)} ms`);
+    await worker.roster.cardsCopy(true);
+    console.log(`copy, run ${run}: copied in ${copied.toFixed(0)} ms, dropped in ${ms(start).toFixed(0)} ms`);
   }
 
   await worker.setClock(tw("2026-11-21", "00:00:00"));
@@ -95,7 +95,7 @@ try {
   const written = files[0]!.bytes;
   assert.equal(written.length, expected.length, "the length of the card state file");
   assert.ok(Buffer.from(written).equals(Buffer.from(expected)), "the card state file is the one cardStateFile writes");
-  assert.deepEqual(await worker.roster.tables(), tables, "no snapshot is left");
+  assert.deepEqual(await worker.roster.tables(), tables, "no copy is left");
   console.log(`the card state file (${written.length} bytes) is, byte for byte, the one cardStateFile writes for the same cards`);
 } finally {
   await worker.close();

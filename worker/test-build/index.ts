@@ -45,7 +45,7 @@ import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
-import { dropCardSnapshot, snapshotCards, writeCard } from "../src/card-table.ts";
+import { copyCards, dropCardsCopy, writeCard } from "../src/card-table.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
@@ -265,10 +265,10 @@ export class Roster extends DeployedRoster {
     });
   }
 
-  /** Copies the card state table to its snapshot, as a publication does (src/card-table.ts, `snapshotCards`), or drops the snapshot: how a measurement times either alone. */
-  testSnapshot(drop: boolean): void {
-    if (drop) dropCardSnapshot(this.ctx.storage.sql);
-    else snapshotCards(this.ctx.storage.sql);
+  /** Copies the card state table, as a publication does (src/card-table.ts, `copyCards`), or drops the copy: how a measurement times either alone. */
+  testCardsCopy(drop: boolean): void {
+    if (drop) dropCardsCopy(this.ctx.storage.sql);
+    else copyCards(this.ctx.storage.sql);
   }
 
   /** Makes the stored version of the tables another one than the build's, or the build's. Takes effect when the object starts again. */
@@ -446,9 +446,8 @@ export default {
    * - `PUT /__test/roster/card` writes a row of the card state table
    *   (CardToWrite); `PUT /__test/roster/cards`, a list of them, in one
    *   transaction.
-   * - `POST /__test/roster/snapshot` with `{drop}` copies the card state
-   *   table to its snapshot, as a publication does, or with `drop` true
-   *   drops the snapshot.
+   * - `POST /__test/roster/cards-copy` with `{drop}` copies the card state
+   *   table as a publication does, or with `drop` true drops the copy.
    * - `PUT /__test/roster/schema-version` and
    *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
    *   build's", change the version the object's tables say they were made
@@ -552,9 +551,9 @@ export default {
       else await roster.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
       return done();
     }
-    if (route === "POST /__test/roster/snapshot") {
+    if (route === "POST /__test/roster/cards-copy") {
       const { drop } = (await request.json()) as { drop: boolean };
-      await testRosterOf(env).testSnapshot(drop);
+      await testRosterOf(env).testCardsCopy(drop);
       return done();
     }
     if (route === "PUT /__test/roster/schema-version") {

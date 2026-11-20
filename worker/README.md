@@ -110,6 +110,7 @@ pnpm typecheck   # 型別檢查
 | `first_day` | 只有一列：名冊從哪一天之後開始公布 | `date`（物件第一次用會公布的程式啟動那一天的台灣日期） |
 | `full_files` | 一個已經搬到 R2 的寫滿的名冊檔 | `records_before`（這一檔之前的筆數，就是檔名裡的數字）、`fingerprint_after`（這一檔結尾的名冊指紋）、`file_sha256`（寫進 R2、讀回來核對過的那一檔的 SHA-256） |
 | `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
+| `cards_copy` | 公布途中才有：卡片狀態表在公布那一刻的複本，欄位和 `cards` 相同 | 同 `cards` |
 | `roster` | 整份名冊，只有一列 | `count`（筆數）、`fingerprint`（名冊指紋）、`latest_valid_date`（名冊上最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/roster-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
@@ -117,6 +118,7 @@ pnpm typecheck   # 型別檢查
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布名冊](#每天換日公布名冊)）。
+- `cards_copy` 是換日公布寫卡片狀態檔用的（[#183](https://github.com/iamreal-tw/iamreal/issues/183)），不是一直在的表：公布那一刻建、公布結束就刪，表的版本沒有變（[每天換日公布名冊](#每天換日公布名冊)「同一刻」）。除了公布，沒有程式讀它。
 - `rules_version` 在物件第一次啟動時記下當時程式的版本號；和程式的不同時不收過卡（見下面）。
 
 ### 兩個版本號
@@ -251,7 +253,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 ### 每天換日公布名冊
 
-名冊每天公布一次（ADR-0027「每天換日時」；`spec/record.md`「What is published when」）：台灣的日期換了之後，物件的 alarm 第一次響的時候。程式在 [`src/roster.ts`](src/roster.ts) 的 `#dailyPublication`、`#publish`、`#readForPublication`、`#fingerprintFileToWrite`、`#writeFingerprintFile`；指紋檔那一行的寫法在 `protocol/`（`fingerprintLine`），卡片狀態檔的寫法也是（`cardStateFile`，`spec/roster-rules.md`「The card state file」）。測試在 [`test/publication.test.ts`](test/publication.test.ts)、[`test/publication-verify.test.ts`](test/publication-verify.test.ts)。
+名冊每天公布一次（ADR-0027「每天換日時」；`spec/record.md`「What is published when」）：台灣的日期換了之後，物件的 alarm 第一次響的時候。程式在 [`src/roster.ts`](src/roster.ts) 的 `#dailyPublication`、`#publish`、`#publicationMoment`、`#writeLastFile`、`#writeCardStateFile`、`#fingerprintFileToWrite`、`#writeFingerprintFile`，卡片狀態表的複本在 [`src/card-table.ts`](src/card-table.ts)；指紋檔那一行的寫法在 `protocol/`（`fingerprintLine`），卡片狀態檔的寫法也是（一次寫一列的 `cardStateFileWriter`，`spec/roster-rules.md`「The card state file」）。測試在 [`test/publication.test.ts`](test/publication.test.ts)、[`test/publication-verify.test.ts`](test/publication-verify.test.ts)。
 
 一次公布照順序做：
 
@@ -267,9 +269,10 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 | `roster/card-state/<日期>.jsonl` | 那一刻每張有過有效紀錄的卡片一列 | `public, max-age=60` | `application/x-ndjson` |
 | `roster/fingerprints.jsonl` | 每個公布過的日期一行：日期、筆數、名冊指紋 | `public, max-age=60` | `application/x-ndjson` |
 
-每個物件都和搬檔一樣寫：帶 SHA-256、讀回來逐位元組和標頭都核對。
+最後一檔、雜湊清單、指紋檔都和搬檔一樣寫：帶 SHA-256、讀回來逐位元組和標頭都核對。卡片狀態檔用串流寫（[大小的上限](#每天換日公布名冊)那一段）：一樣帶 SHA-256，讀回來比長度、SHA-256 和標頭。
 
-- **同一刻。** 筆數、名冊指紋、最後一檔的每一行、每張卡片的狀態，是在同一段不等任何東西的程式裡讀出來的（`#readForPublication`，中間沒有 `await`），讀完才開始寫 R2。所以卡片狀態檔就是那一行 `count` 筆之後的狀態，這是它的格式要的。寫 R2 的那段時間照常收紀錄，那些紀錄等下一次公布。測試讓第一個物件的寫入慢下來、中間寫入一筆，確認四個物件裡都沒有它。
+- **同一刻。** 日期、筆數、名冊指紋和卡片狀態表的複本，是在同一段不等任何東西的程式裡取的（`#publicationMoment`，中間沒有 `await`）。複本是用 SQLite 把卡片狀態表整張複製成另一張表 `cards_copy`，資料不經過 JavaScript。之後的讀和寫都可以等：最後一檔用 `seq` 不超過那一刻筆數的紀錄組成（紀錄只往後加，那些不會變，所以不需要複本），卡片狀態檔只從複本讀。所以卡片狀態檔就是那一行 `count` 筆之後的狀態，這是它的格式要的。寫 R2 的那段時間照常收紀錄，那些紀錄等下一次公布。測試讓最後一檔的寫入慢下來、中間寫入一筆，又讓卡片狀態檔的寫入慢下來、中間寫入兩筆（改一張檔裡有的卡片、一張新卡片），確認都不在當天公布的東西裡；後面那一種也在 `test/publication-verify.test.ts` 交給 `iamreal-verify` 重驗。
+- **複本用完就刪。** 那一列寫進 `published` 之後馬上刪掉；公布中斷時也刪。物件在公布途中停掉留下的複本不拿來用：下一次公布先刪掉再複製。複本只有公布讀，查卡片、過卡讀的都是 `cards`。
 - **沒有最後一檔可寫的時候不寫。** 筆數剛好是 1,000 的倍數時，每一檔都寫滿、都搬走了；筆數是 0 時一檔都沒有（規格：沒有空的名冊檔）。卡片狀態檔和指紋檔的那一行照寫，空的名冊是一個 0 位元組的卡片狀態檔和「筆數 0、64 個 0」的一行。
 - **那一行最後寫，前面有一步沒成就不寫。** 指紋檔的一行涵蓋的每一筆紀錄，在那一行出現時都下載得到。
 - **一個日期的那一行，由物件裡的一列決定**（`published` 表）。第 3 步分兩下：先寫那一列，再把指紋檔寫出去。
@@ -286,7 +289,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 這個檢查擋的只有每天公布寫的四樣。寫滿的名冊檔照搬：換了物件名稱沒清儲存桶時，新名冊寫滿的檔會蓋掉舊名冊同名的檔。
 - **寫入那一行之前再看一次日期**：寫 R2 的時候剛好跨過午夜的話，這一次不算，一分鐘後照新的日期重做。一行的日期是它寫入那天的台灣日期。
 - **失敗**：寫一行 `{"event":"roster_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做。一件失敗不擋別的定時工作，各自算各自的一分鐘（[過期的題目怎麼刪](#過期的題目怎麼刪)）。
-- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每分鐘一行 `roster_not_published`。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。現在沒有東西會通知營運者「今天沒有公布」（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每分鐘一行 `roster_not_published`。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。現在沒有東西會通知營運者「今天沒有公布」（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
 
 **什麼時候公布**
 
@@ -296,22 +299,26 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 - **`paused`**（存著的規則版本和程式的不同）：不公布，寫滿的檔照搬。那時存著的卡片狀態是另一版規則算的，公布出去會被當成這一版的。恢復之後照常：下一次 alarm 就公布當天的。
 - 最後一檔和寫滿之後的那一檔同名，所以最後一檔只在這件定時工作裡寫：一次 alarm 裡的工作一件做完才做下一件，不會落在搬檔「核對過」和「刪掉紀錄」之間（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。公布和搬檔會在不同時候寫同一個檔名，兩者的先後靠的就是這一點，程式裡沒有另外的鎖：一個物件的 alarm 不會同時跑兩個（[Alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)：「Only one instance of `alarm()` will ever run at a given time per Durable Object instance.」，2026-11-20 讀的），而一次 alarm 裡的定時工作是依序做的。公布寫了最後一檔之後不到一秒，那一檔剛好寫滿、搬檔寫同一個檔名的話，會碰到 R2 一秒一次的限制：搬檔那一次失敗，一分鐘後重做。
 
-**大小的上限**（都沒有在 Cloudflare 上量過，也沒有在 workerd 裡量過）
+**大小的上限**（在本機的 workerd 上量過；Cloudflare 上還沒量，[#196](https://github.com/iamreal-tw/iamreal/issues/196)）
 
-一次公布在讀出的那一刻把要寫的東西都組好放在記憶體裡，寫完才放掉。同時在記憶體裡的有：
+一次公布在記憶體裡握著的東西不隨卡片數長大：
 
-- **卡片狀態檔。** 一次讀出整張卡片狀態表（`everyCard`：每張卡片一個物件、每個用過的名額一項的 `Map`），交給 `protocol/` 的 `cardStateFile` 排序、組成一個字串，再編成位元組。
-  - 量過的只有中間那一步：在 Node 22 裡，卡片的資料先備好，量呼叫 `cardStateFile` 加編成位元組前後多用的記憶體（`heapUsed` 加 `arrayBuffers`），中間沒有強制回收，所以含還沒回收的垃圾、是偏高的數字。5 萬張卡片（每張一個 Threads 名額，檔案 17.6 MB，一列約 352 位元組）多用約 110 MB；15 萬張約 330 MB。
-  - 沒量的：`everyCard` 從 SQLite 讀出每一列、解 JSON、建 `Map` 的那一份（上面的量法把它算在量之前）；workerd 的記憶體用量和 Node 是不是差不多。
-- **最後一檔和它的雜湊清單。** 最多 999 行、約 20 MB。組的時候同時有三份：讀出來的每一行、接起來的字串、編成的位元組，約 60 MB；寫 R2 的時候留著位元組那一份。搬檔（`#moveFile`）是直接寫進一塊緩衝區、沒有中間的字串，這裡沒有照做。沒有量過。
-- 兩樣是同時握著的：最後一檔快寫滿的那一天，卡片狀態檔能用的就少約 60 MB。
+- **卡片狀態檔**從複本一批 1,000 列讀、一批寫（`#cardStateChunks`），同時在記憶體裡的只有一批的列、文字和位元組，一批幾百 KB。每一批是一次獨立的查詢，讀完才交出去，等 R2 的時候沒有開著的查詢。
+  - 複本讀兩遍：第一遍算長度和 SHA-256（`crypto.DigestStream`），第二遍當串流寫給 R2（`writeStreamAndReadBack`）。R2 只收知道長度的串流，所以串流接過一個給定長度的 `FixedLengthStream`；R2 照樣收到 SHA-256，收到的不是那些位元組就不存，串流給的位元組數不對也不存。讀回來時一樣邊讀邊算 SHA-256，比長度、SHA-256 和標頭，不握著寫出去的位元組。
+  - 這幾件在本機的 workerd 上試過（2026-11-21）：給長度的串流 `put` 寫得進去，邊讀邊算的 SHA-256 和整塊算的相同；SHA-256 給錯、長度不符時 `put` 失敗，儲存桶裡沒有那個物件；沒給長度的串流 `put` 直接被拒。
+- **最後一檔**最多 999 行，和搬檔一樣直接寫進一塊緩衝區（`#storedFile`），只有一份位元組，快寫滿時約 20 MB；它和雜湊清單寫完、放掉之後才開始寫卡片狀態檔。
+- 複本在 SQLite 裡複製，不經過 JavaScript。SQLite 複製時用的記憶體算不算在 isolate 的 128 MB 裡（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的），還沒量（#196）。
 
-Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的），Durable Object 也照這個上限（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are a special kind of Worker, so Workers limits also apply.」，2026-11-20 讀的）。照上面的數字，這個做法大約撐到一兩萬張卡片，最後一檔接近寫滿時更少。**正式名冊到一萬張之前要先改成一邊讀一邊寫**（[#183](https://github.com/iamreal-tw/iamreal/issues/183)；卡片狀態表本來就照檔案要的順序排）。測試名冊離這個數字很遠。
+**本機 workerd 上量到的**（2026-11-21，Apple Silicon 的 Mac）：
 
-**撞到上限時會怎樣**（照程式和文件推的，沒有試過）：
+- 量法：[`test/publication-size.ts`](test/publication-size.ts)，`node --experimental-strip-types test/publication-size.ts [卡片數]`。它不是 `pnpm test` 的一部分。它透過測試建置的門把假卡片直接寫進測試名冊物件的卡片狀態表（名冊沒有紀錄，所以公布不寫最後一檔），從 Node 這邊計時：單獨複製卡片狀態表、刪掉複本各三次，和台灣午夜的一次 alarm（整次公布）；公布期間每 10 ms 對物件送一個請求，記最久等了多久。最後比 R2 裡的卡片狀態檔和 `cardStateFile` 對同樣的卡片一次組出來的。
+- 20 萬張卡片（每張一個 Threads 名額，三張有一張另有 test-example 名額；卡片狀態檔 68.7 MB）：
+  - 複製卡片狀態表 377 到 761 ms（三次，第一次最久），刪掉 17 到 19 ms
+  - 整次公布 4.8 秒
+  - R2 裡的卡片狀態檔逐位元組等於 `cardStateFile` 一次組出來的；公布完物件的資料庫裡沒有複本
+- **公布期間物件不收請求。** 上面那個請求等了 4.8 秒，就是整次公布：複本讀第一遍是純計算，中間不等任何東西；本機的 workerd 上，物件在寫 R2、讀回來的時候也不收請求。後面這件不是這個做法才有的：舊的做法（一次組出整個檔再寫）在 2 萬張卡片時一樣，一個請求等到寫完 R2（整次 363 ms 裡等了 347 ms）。Cloudflare 上是不是這樣、過卡的請求會等多久，要在 #196 量。
 
-- 不會寫出截斷的檔。每個物件的位元組先在記憶體裡整個組好、算好 SHA-256 才交給 R2，組到一半就沒有東西可寫；指紋檔的那一行排在最後。
-- 但不只是「那天沒公布」。同一頁文件寫超過上限時「the Workers runtime lets in-flight requests complete and creates a new isolate for subsequent requests」；Durable Object 那時怎樣，文件沒有另外寫。物件換了 isolate 的話，記憶體裡的東西都沒了，包括「一分鐘後再試」的那個時間，所以公布馬上又到期、又撞一次。那段時間送到同一個 isolate 的過卡請求可能跟著失敗。這會一直重複，直到程式改成一邊讀一邊寫。所以上面那個門檻要在碰到之前處理，不能等它發生。
+**撞到上限時會怎樣**（照程式和文件推的，沒有試過）：不會寫出截斷的檔。卡片狀態檔寫到一半斷掉時，R2 收到的位元組數或 SHA-256 不對，不存（測試讓寫入在串流中間斷掉，儲存桶裡沒有那個檔、指紋檔沒有那一行、複本沒有留下，重做時照重做那一刻的名冊）；其他物件先在記憶體裡組好、算好 SHA-256 才交給 R2。指紋檔的那一行排在最後。同一頁文件寫超過記憶體上限時「the Workers runtime lets in-flight requests complete and creates a new isolate for subsequent requests」：物件換了 isolate 的話，記憶體裡「一分鐘後再試」的時間也沒了，公布馬上又到期、又撞一次。
 
 - **指紋檔**一天多一行，一行 110 個位元組上下：一年約 40 KB，一次公布讀它三次（開始前看一次、寫之前再看一次、寫完讀回核對一次）、整個重寫一次。
 
@@ -325,7 +332,7 @@ Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.
 
 | | [`test/publication-verify.test.ts`](test/publication-verify.test.ts) | [`test/records-real.test.ts`](test/records-real.test.ts) 的第二項 |
 |---|---|---|
-| 名冊 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋。有更正、更換、收回、兩個平台 | `server/testdata/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
+| 名冊 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋，是在最後一次公布寫卡片狀態檔的途中寫進來的（改一張檔裡有的卡片、一張新卡片）。有更正、更換、收回、兩個平台 | `server/testdata/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
 | 證明 | 佔位的位元組；後台用替身驗證器，Go 用它測試的假驗證器 | 真的證明；後台用部署的驗證器，Go 用原生的 `bb`（要設 `IAMREAL_BB`） |
 | 清冊存檔 | 後台的鏡像從假的內政部抓來寫進 R2 的；Go 用測試的發證金鑰重新驗章、建樹 | 同左，發證金鑰是 `server/testdata/` 的 |
 | Go 怎麼跑 | `go test -run '^TestWorkerData$' ./cmd/iamreal-verify`：指令的 `run`，只給 `-roster test -data <R2 的模擬抄下來的目錄>` | `go build -tags iamrealtest` 建出來的執行檔，`-data` 加測試建置才有的 `-test-issuers` |
@@ -611,7 +618,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`），或一次寫一批（`PUT /__test/roster/cards`，只給量測用，見[每天換日公布名冊](#每天換日公布名冊)「大小的上限」）；單獨複製卡片狀態表或刪掉複本（`POST /__test/roster/cards-copy`，也只給量測用）；列出物件資料庫裡的表（`GET /__test/roster/tables`，看公布完沒有留下複本）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、寫到串流中間斷掉、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_ROSTER_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
