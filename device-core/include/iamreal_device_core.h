@@ -89,9 +89,13 @@ int32_t idc_declaration_code(uint32_t roster,
  * sent it.
  * card_state_json: the answer of POST /api/v1/card-state, as the server
  * sent it.
+ * known_platforms_json: the platforms the app has its own definition of
+ * (its names, how it writes an account), a JSON array of platform IDs, none
+ * twice. Built into the app, never from the server.
  * accounts_json: the cardholder's list for the platforms offered, in the
  * shape of a record's accounts (ascending order of platform, each platform
- * at most once). The kept accounts are not in it: the core adds them.
+ * at most once), each username as typed after the app tidied it. The kept
+ * accounts are not in it: the core adds them.
  * now: seconds since 1970-01-01T00:00:00Z by the device's clock; the date
  * is the one in Taiwan.
  *
@@ -105,10 +109,13 @@ int32_t idc_declaration_code(uint32_t roster,
  * does". valid false is not offered for signing.
  *
  * IDC_ERR_INPUT when the table or the state cannot be read, when the list
- * names a platform that is not offered or is not in the shape above, or
- * when now is outside the years 2000 to 2049 in Taiwan. */
+ * names a platform that is not offered or is not in the shape above (a
+ * mistake of the app, but one the core sees only in the bytes), when the
+ * known platforms are not in the shape above, or when now is outside the
+ * years 2000 to 2049 in Taiwan. */
 int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_json_len,
                              const uint8_t *card_state_json, size_t card_state_json_len,
+                             const uint8_t *known_platforms_json, size_t known_platforms_json_len,
                              const uint8_t *accounts_json, size_t accounts_json_len,
                              int64_t now, idc_buf *out);
 

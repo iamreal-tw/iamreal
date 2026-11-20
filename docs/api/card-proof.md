@@ -137,6 +137,9 @@ a state that hides an account would lead to a list without it, which
 withdraws it; a wrong `correction_date` would present a switch as free. The
 cardholder sees the list before signing, and the roster would show what the
 server answered wrongly.
+[`spec/list-consequence.md`](../../spec/list-consequence.md) defines how the
+device reads this answer and the platform table of `config`, and what it
+computes for a list, with test vectors.
 
 What the device does with what it cannot read. "A platform the device does
 not know" is one that has no row it can read in the platform table of
@@ -156,8 +159,8 @@ not know" is one that has no row it can read in the platform table of
   `null`**: the device ignores it and does not offer the platform.
 - **A platform of the table has no entry**: the device does not offer it.
 - **No response, a response without `platforms`, or one in which it cannot
-  read `last_card_proof`, `proofs_on_last_date` or the entry of a platform
-  it knows**: the device treats the state as unread and does not go on to
+  read `last_card_proof`, `proofs_on_last_date`, `count` or the entry of a
+  platform it knows**: the device treats the state as unread and does not go on to
   the declaration. Without the state it cannot build the list.
 - **A field it does not know, in the response or inside an entry it can
   otherwise read**: the device ignores the field.

@@ -57,11 +57,11 @@ pub enum Consequence {
     Username { platform: String },
 }
 
-/// The list names a platform that is not offered: a mistake of the
-/// program, not of the cardholder (step 1). Or the list is not in ascending
-/// order of platform, or names one twice.
+/// The list names a platform that is not offered (step 1), or is not in
+/// ascending order of platform, or names one twice: a mistake of the
+/// program, not of the cardholder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NotAList;
+pub struct NotOffered;
 
 /// What `list` does. `offered` are the rows of the table with a slot in
 /// `state.card`, in ascending order of platform.
@@ -70,12 +70,12 @@ pub fn list_consequence(
     state: &ReadState,
     list: &[Account],
     today: Date,
-) -> Result<Consequence, NotAList> {
+) -> Result<Consequence, NotOffered> {
     let ascending = list.windows(2).all(|w| w[0].platform < w[1].platform);
     let row_of = |a: &Account| offered.iter().find(|p| p.id() == a.platform);
     // 1. Every platform of the list is offered.
     if !ascending || list.iter().any(|a| row_of(a).is_none()) {
-        return Err(NotAList);
+        return Err(NotOffered);
     }
     // 2. Every username is in its platform's format.
     if let Some(a) = list
@@ -107,7 +107,8 @@ pub fn list_consequence(
     accounts.sort_by(|a, b| a.platform.cmp(&b.platform));
 
     // 4 and 5. Checks 5 and 6.
-    let outcome = apply_list(&table, &card, &accounts, today).map_err(|_: NotARecord| NotAList)?;
+    let outcome =
+        apply_list(&table, &card, &accounts, today).map_err(|_: NotARecord| NotOffered)?;
     let kinds = match outcome.result {
         RecordResult::Valid(kinds) => kinds,
         RecordResult::Invalid(reason) => return Ok(Consequence::Invalid(reason)),

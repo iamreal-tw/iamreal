@@ -21,13 +21,20 @@ follow [`GLOSSARY.md`](../GLOSSARY.md).
   server sent it.
 - **The card's state**: the answer of `POST /api/v1/card-state`, as the
   server sent it.
+- **The platforms the device has its own definition of**: the platform IDs
+  for which the client has its own name and way of writing an account
+  ([`docs/api/card-proof.md`](../docs/api/card-proof.md), `config`). They
+  are built into the client, never taken from the server.
 - **Today**: the date in Taiwan (UTC+8) by the device's clock.
 - **The cardholder's list**: one account for some of the platforms offered
-  (below), at most one per platform, in ascending order of platform. The
-  accounts on platforms the device does not know are not in it.
+  (below), at most one per platform, in ascending order of platform. A
+  `username` here is any string, as the cardholder typed it after the
+  client tidied it. The accounts on platforms the device does not know are
+  not in it.
 
 Every answer is one JSON value. A number is read by its value: `1` and
-`1.0` are the same count, and a count is a number with no fraction.
+`1.0` are the same count. A count is a number with no fraction from 0 to
+2^53 − 1.
 
 ## Reading the platform table
 
@@ -41,8 +48,10 @@ The table is read element by element:
    ([`scope.md`](scope.md), "Platforms") and its `display_name` is a
    display name: a string of 1 to 100 UTF-16 code units, with no character
    below U+0020, none from U+007F to U+009F, and neither U+2028 nor U+2029.
-   A platform that is named but not in a row is one the device **does not
-   know**, as is a platform the table does not name.
+3. The device **knows** a platform that is in a row and that it has its
+   own definition of. Every other platform is one it **does not know**: a
+   platform named but not in a row, a row it has no definition of, a
+   platform the table does not name.
 
 The table **cannot be read** if it is not an array, if the platforms named
 are not in strictly ascending order (by byte value; a platform named twice
@@ -60,9 +69,9 @@ The answer **cannot be read** unless all of the following hold:
   "State"): `proofs_on_last_date` is 0 when `last_card_proof` is null, and
   1 to 3 otherwise; and `last_card_proof` is at most 3 days after today
   (the bound of check 3).
-- **Every row of the table that has an entry in `platforms`**: the entry
-  is an object with `current` and `last_declared` (null, or a `username` in
-  the row's format), `switch_count` (a count from 0 to 5) and
+- **Every platform the device knows that has an entry in `platforms`**:
+  the entry is an object with `current` and `last_declared` (null, or a
+  `username` in the row's format), `switch_count` (a count from 0 to 5) and
   `correction_date` (a date or null), and the slot is possible: `current`,
   when not null, equals `last_declared`; `last_declared` and
   `correction_date` are both null or both not; `switch_count` is 0 when
@@ -77,8 +86,9 @@ The answer **cannot be read** unless all of the following hold:
 Fields the device does not know are ignored, in the answer and in an entry
 it reads.
 
-The platforms **offered** are the rows of the table that have an entry in
-`platforms`, in ascending order. A row without an entry is not offered.
+The platforms **offered** are the platforms the device knows that have an
+entry in `platforms`, in ascending order. A platform the device knows
+without an entry is not offered.
 
 ## What the list does
 
@@ -133,8 +143,16 @@ has the two answers as the server sent them (`platforms`, `card_state`),
   `switch_limit`;
 - `{"valid": true, "accounts": …, "rows": …, "first_record": …}`.
 
-The answers in the file are JSON values, so the file cannot hold an
-answer with a key twice in one object; how a client's JSON parser treats
-one is outside these vectors. The cases are made by
+Each case also has `known_platforms`, the platforms the device has its
+own definition of.
+
+## Outside these rules
+
+The server never sends a JSON answer with a key twice in one object, a
+string with an unpaired surrogate (`"\ud800"`), a number beyond the range
+of a 64-bit float, or arrays and objects nested more than 128 deep. How a
+client reads one is not defined here, and the vectors have none: a
+JavaScript client's parser reads them, `device-core/` refuses the whole
+answer. The cases are made by
 `web/test/generate/list-consequence.ts`, whose expected results are written
 by hand and checked against `web/` before the file is written.

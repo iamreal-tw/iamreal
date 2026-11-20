@@ -296,8 +296,8 @@ fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> SlotOutcome {
 }
 
 /// Reads the list against the table, account by account: its platform, its
-/// place after the account before, its username (the order Go's `roster/`
-/// and TypeScript's `protocol/` report in). Gives the table's IDs in
+/// place after the account before, its username. A list that fails is not
+/// a record ("What an invalid record changes"). Gives the table's IDs in
 /// ascending order and the list by platform.
 fn read_list<'a>(
     platforms: &[Platform],

@@ -46,8 +46,10 @@ int main(void) {
     static const char state[] =
         "{\"last_card_proof\":null,\"proofs_on_last_date\":0,\"platforms\":{\"threads\":"
         "{\"current\":null,\"last_declared\":null,\"switch_count\":0,\"correction_date\":null}},\"count\":0}";
+    static const char known[] = "[\"threads\"]";
     if (idc_list_consequence((const uint8_t *)platforms, strlen(platforms), (const uint8_t *)state,
-                             strlen(state), (const uint8_t *)accounts, strlen(accounts),
+                             strlen(state), (const uint8_t *)known, strlen(known),
+                             (const uint8_t *)accounts, strlen(accounts),
                              INT64_C(1794801600), &out) != IDC_OK) return 11;
     /* What it holds is checked in tests/c_list_consequence.rs; here, that the call links. */
     if (out.ptr == NULL || out.len == 0) return 12;

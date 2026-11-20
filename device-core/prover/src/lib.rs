@@ -183,18 +183,16 @@ pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 
 /// Reads the list a C function takes: a JSON array of
 /// `{"platform":"…","username":"…"}`, the shape of a record's `accounts`
 /// (spec/record.md). Each account has exactly these two keys, each once,
-/// both strings, the platform a platform ID and the username one any
-/// platform could have: a list has one reading.
+/// both strings, the platform a platform ID: a list has one reading. The
+/// username is any string; each function says what it accepts.
 fn accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
     let account = |a: &Json| {
         let a = a.as_object().filter(|a| a.len() == 2)?;
         let platform = a.get("platform")?.as_str()?;
         let username = a.get("username")?.as_str()?;
-        (is_platform_id(platform.as_bytes()) && is_any_username(username.as_bytes())).then(|| {
-            roster_rules::Account {
-                platform: platform.to_owned(),
-                username: username.to_owned(),
-            }
+        is_platform_id(platform.as_bytes()).then(|| roster_rules::Account {
+            platform: platform.to_owned(),
+            username: username.to_owned(),
         })
     };
     Json::parse(json)
@@ -202,6 +200,27 @@ fn accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
         .and_then(Json::as_array)
         .and_then(|list| list.iter().map(account).collect())
         .ok_or(IDC_ERR_INPUT)
+}
+
+/// The platform IDs a C function takes as a JSON array of strings, each a
+/// platform ID, none twice.
+fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
+    let ids: Vec<String> = Json::parse(json)
+        .as_ref()
+        .and_then(Json::as_array)
+        .and_then(|ids| {
+            ids.iter()
+                .map(|id| id.as_str().filter(|id| is_platform_id(id.as_bytes())))
+                .map(|id| id.map(str::to_owned))
+                .collect()
+        })
+        .ok_or(IDC_ERR_INPUT)?;
+    let distinct: std::collections::BTreeSet<&String> = ids.iter().collect();
+    if distinct.len() == ids.len() {
+        Ok(ids)
+    } else {
+        Err(IDC_ERR_INPUT)
+    }
 }
 
 /// The declaration code (spec/declaration-code.md) of a list of accounts
@@ -235,6 +254,9 @@ pub unsafe extern "C" fn idc_declaration_code(
             )
         };
         let list = accounts_of(accounts_json)?;
+        if !list.iter().all(|a| is_any_username(a.username.as_bytes())) {
+            return Err(IDC_ERR_INPUT);
+        }
         let accounts: Vec<Account<'_>> = list
             .iter()
             .map(|a| Account {
@@ -261,10 +283,13 @@ pub unsafe extern "C" fn idc_declaration_code(
 ///   server sent it.
 /// - `card_state_json`: the answer of `POST /api/v1/card-state`, as the
 ///   server sent it.
+/// - `known_platforms_json`: the platforms the app has its own definition
+///   of (its names, how it writes an account), a JSON array of platform
+///   IDs, none twice. Built into the app, never from the server.
 /// - `accounts_json`: the cardholder's list for the platforms offered, in
 ///   the shape of a record's `accounts` (ascending order of platform, each
-///   platform at most once). The kept accounts are not in it: the core adds
-///   them.
+///   platform at most once), each `username` as typed after the app tidied
+///   it. The kept accounts are not in it: the core adds them.
 /// - `now`: seconds since 1970-01-01T00:00:00Z by the device's clock; the
 ///   date is the one in Taiwan.
 ///
@@ -283,11 +308,14 @@ pub unsafe extern "C" fn idc_declaration_code(
 /// offered for signing.
 ///
 /// `IDC_ERR_INPUT` when the table or the state cannot be read, when the
-/// list names a platform that is not offered or is not in the shape above,
-/// or when `now` is outside the years 2000 to 2049 in Taiwan.
+/// list names a platform that is not offered or is not in the shape above
+/// (`not_offered` in spec/vectors/list-consequence.json: a mistake of the
+/// app, but one the core sees only in the bytes), when the known platforms
+/// are not in the shape above, or when `now` is outside the years 2000 to
+/// 2049 in Taiwan.
 ///
 /// # Safety
-/// The three inputs point to as many bytes as their lengths say; `out` is
+/// The four inputs point to as many bytes as their lengths say; `out` is
 /// null or points to an `idc_buf` the core may write.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
@@ -296,6 +324,8 @@ pub unsafe extern "C" fn idc_list_consequence(
     platforms_json_len: usize,
     card_state_json: *const u8,
     card_state_json_len: usize,
+    known_platforms_json: *const u8,
+    known_platforms_json_len: usize,
     accounts_json: *const u8,
     accounts_json_len: usize,
     now: i64,
@@ -303,18 +333,23 @@ pub unsafe extern "C" fn idc_list_consequence(
 ) -> i32 {
     output(out, || {
         // SAFETY: the caller's promise.
-        let (platforms_json, card_state_json, accounts_json) = unsafe {
+        let (platforms_json, card_state_json, known_platforms_json, accounts_json) = unsafe {
             (
                 input(platforms_json, platforms_json_len)?,
                 input(card_state_json, card_state_json_len)?,
+                input(known_platforms_json, known_platforms_json_len)?,
                 input(accounts_json, accounts_json_len)?,
             )
         };
         let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
-        let table = Json::parse(platforms_json)
+        let known = platform_ids_of(known_platforms_json)?;
+        let table: Vec<_> = Json::parse(platforms_json)
             .as_ref()
             .and_then(read_platforms)
-            .ok_or(IDC_ERR_INPUT)?;
+            .ok_or(IDC_ERR_INPUT)?
+            .into_iter()
+            .filter(|row| known.iter().any(|id| id == row.id()))
+            .collect();
         let (state, offered) = Json::parse(card_state_json)
             .and_then(|state| read_card_state(&state, &table, today))
             .ok_or(IDC_ERR_INPUT)?;

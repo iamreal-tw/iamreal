@@ -23,7 +23,20 @@ fn noon(date: &str) -> i64 {
     (i64::from(d.day_number()) + 10_957) * 86_400 + 4 * 3600
 }
 
+/// Both platforms of spec/scope.md: the ones the test build of an app has its own definition of.
+const KNOWN: &[u8] = br#"["test-example","threads"]"#;
+
 fn call(platforms: &[u8], card_state: &[u8], accounts: &[u8], now: i64) -> Result<Value, i32> {
+    call_knowing(platforms, card_state, KNOWN, accounts, now)
+}
+
+fn call_knowing(
+    platforms: &[u8],
+    card_state: &[u8],
+    known: &[u8],
+    accounts: &[u8],
+    now: i64,
+) -> Result<Value, i32> {
     let mut out = IdcBuf {
         ptr: std::ptr::null_mut(),
         len: 0,
@@ -34,6 +47,8 @@ fn call(platforms: &[u8], card_state: &[u8], accounts: &[u8], now: i64) -> Resul
             platforms.len(),
             card_state.as_ptr(),
             card_state.len(),
+            known.as_ptr(),
+            known.len(),
             accounts.as_ptr(),
             accounts.len(),
             now,
@@ -199,11 +214,12 @@ fn every_case_of_list_consequence_json() {
     assert!(!cases.is_empty());
     for c in cases {
         let name = text(c, "name");
-        let got = consequence(
-            &c["platforms"],
-            &c["card_state"],
-            &c["accounts"],
-            text(c, "today"),
+        let got = call_knowing(
+            c["platforms"].to_string().as_bytes(),
+            c["card_state"].to_string().as_bytes(),
+            c["known_platforms"].to_string().as_bytes(),
+            c["accounts"].to_string().as_bytes(),
+            noon(text(c, "today")),
         );
         let want = &c["result"];
         if want.get("unread").is_some() || want.get("not_offered").is_some() {
@@ -307,81 +323,85 @@ fn the_date_is_taiwan_s_whatever_the_time_zone_of_the_device() {
 }
 
 #[test]
+fn the_known_platforms_are_a_list_of_platform_ids() {
+    let now = noon("2026-11-16");
+    let bob = br#"[{"platform":"threads","username":"bob"}]"#;
+    for known in [
+        &br#"["threads"]"#[..],
+        br#"["threads","test-example"]"#,
+        br#"[]"#,
+    ] {
+        let got = call_knowing(THREADS.as_bytes(), BOB.as_bytes(), known, bob, now);
+        let offered = known.windows(9).any(|w| w == b"\"threads\"");
+        assert_eq!(got.is_ok(), offered, "{}", String::from_utf8_lossy(known));
+    }
+    for known in [
+        &br#"["threads","threads"]"#[..],
+        br#"["Threads"]"#,
+        br#"[1]"#,
+        br#""threads""#,
+        b"",
+    ] {
+        assert_eq!(
+            call_knowing(THREADS.as_bytes(), BOB.as_bytes(), known, b"[]", now),
+            Err(IDC_ERR_INPUT),
+            "{}",
+            String::from_utf8_lossy(known)
+        );
+    }
+}
+
+#[test]
 fn null_pointers_are_refused() {
-    let null = std::ptr::null();
+    let now = noon("2026-11-16");
+    let inputs: [&[u8]; 4] = [THREADS.as_bytes(), BOB.as_bytes(), KNOWN, b"[]"];
     let mut out = IdcBuf {
         ptr: std::ptr::null_mut(),
         len: 0,
     };
-    let (p, s, a) = (THREADS.as_bytes(), BOB.as_bytes(), b"[]");
-    let now = noon("2026-11-16");
-    unsafe {
-        assert_eq!(
-            idc_list_consequence(
-                null,
-                1,
-                s.as_ptr(),
-                s.len(),
-                a.as_ptr(),
-                a.len(),
-                now,
-                &mut out
-            ),
-            IDC_ERR_ARGUMENT
-        );
-        assert_eq!(
-            idc_list_consequence(
-                p.as_ptr(),
-                p.len(),
-                null,
-                1,
-                a.as_ptr(),
-                a.len(),
-                now,
-                &mut out
-            ),
-            IDC_ERR_ARGUMENT
-        );
-        assert_eq!(
-            idc_list_consequence(
-                p.as_ptr(),
-                p.len(),
-                s.as_ptr(),
-                s.len(),
-                null,
-                1,
-                now,
-                &mut out
-            ),
-            IDC_ERR_ARGUMENT
-        );
-        assert_eq!(
-            idc_list_consequence(
-                p.as_ptr(),
-                p.len(),
-                s.as_ptr(),
-                s.len(),
-                a.as_ptr(),
-                a.len(),
-                now,
-                std::ptr::null_mut()
-            ),
-            IDC_ERR_ARGUMENT
-        );
-        // (NULL, 0) is no bytes: not JSON.
-        assert_eq!(
-            idc_list_consequence(
-                p.as_ptr(),
-                p.len(),
-                s.as_ptr(),
-                s.len(),
-                null,
-                0,
-                now,
-                &mut out
-            ),
-            IDC_ERR_INPUT
-        );
+    let run = |pointers: [*const u8; 4], out: *mut IdcBuf| unsafe {
+        idc_list_consequence(
+            pointers[0],
+            inputs[0].len(),
+            pointers[1],
+            inputs[1].len(),
+            pointers[2],
+            inputs[2].len(),
+            pointers[3],
+            inputs[3].len(),
+            now,
+            out,
+        )
+    };
+    let pointers = inputs.map(<[u8]>::as_ptr);
+    assert_eq!(run(pointers, &mut out), IDC_OK);
+    unsafe { idc_buf_free(&mut out) };
+    for i in 0..4 {
+        let mut with_null = pointers;
+        with_null[i] = std::ptr::null();
+        assert_eq!(run(with_null, &mut out), IDC_ERR_ARGUMENT, "input {i}");
+        assert!(out.ptr.is_null() && out.len == 0);
     }
-    assert!(out.ptr.is_null() && out.len == 0);
+    assert_eq!(run(pointers, std::ptr::null_mut()), IDC_ERR_ARGUMENT);
+    // (NULL, 0) is no bytes: not JSON.
+    let mut empty = IdcBuf {
+        ptr: std::ptr::null_mut(),
+        len: 0,
+    };
+    let code = unsafe {
+        idc_list_consequence(
+            pointers[0],
+            inputs[0].len(),
+            pointers[1],
+            inputs[1].len(),
+            pointers[2],
+            inputs[2].len(),
+            std::ptr::null(),
+            0,
+            now,
+            &mut empty,
+        )
+    };
+    assert_eq!(code, IDC_ERR_INPUT);
+    assert!(empty.ptr.is_null() && empty.len == 0);
 }

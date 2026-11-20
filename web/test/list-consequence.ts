@@ -4,14 +4,20 @@
 // consequenceOfChoice (src/flow.ts). The generator (test/generate/) and the
 // test (list-consequence.test.ts) both use it.
 import { parseDay } from "iamreal-protocol/date.ts";
+import { scopeOf } from "iamreal-protocol/scope.ts";
 import type { Account } from "iamreal-protocol/roster-rules.ts";
 import { type CardStateResponse, type Config, requestCardState, requestConfig } from "../src/api.ts";
 import { type Choice, FlowStop, consequenceOfChoice, statusOf } from "../src/flow.ts";
 
-/** A case's input: the two answers as the server sent them, today's date in Taiwan, the cardholder's list. */
+/**
+ * A case's input: the two answers as the server sent them, the platforms
+ * the device has its own definition of, today's date in Taiwan, the
+ * cardholder's list.
+ */
 export interface ListConsequenceCase {
   platforms: unknown;
   card_state: unknown;
+  known_platforms: string[];
   today: string;
   accounts: Account[];
 }
@@ -48,13 +54,17 @@ export async function listConsequenceResult(c: ListConsequenceCase): Promise<Lis
   } catch {
     return { unread: "platforms" };
   }
+  // The rows of the platforms the device has its own definition of, as src/flow.ts takes them.
+  const known = new Set(c.known_platforms);
+  const table = config.platforms.filter((r) => known.has(r.platform));
   let state: CardStateResponse;
   try {
-    state = await requestCardState(answer(c.card_state), "iamreal:public:0_______________", SCOPED_ID, config.platforms, today);
+    // The consequence does not read the scope string.
+    state = await requestCardState(answer(c.card_state), scopeOf("production"), SCOPED_ID, table, today);
   } catch {
     return { unread: "card_state" };
   }
-  const status = statusOf(state, config.platforms, SCOPED_ID, today);
+  const status = statusOf(state, table, SCOPED_ID, today);
   // The screen offers every platform of the table with an entry in the state, empty unless the list names it.
   const entries: Record<string, string> = Object.fromEntries(status.slots.filter((s) => s.row !== null).map((s) => [s.platform, ""]));
   for (const a of c.accounts) entries[a.platform] = a.username;

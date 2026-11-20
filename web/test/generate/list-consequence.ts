@@ -11,8 +11,10 @@ import { type ListConsequenceCase, type ListConsequenceResult, type ResultRow, l
 
 const out = new URL("../../../spec/vectors/list-consequence.json", import.meta.url);
 
-interface Case extends ListConsequenceCase {
+interface Case extends Omit<ListConsequenceCase, "known_platforms"> {
   name: string;
+  /** Both platforms of spec/scope.md unless the case says otherwise. */
+  known_platforms?: string[];
   result: ListConsequenceResult;
 }
 
@@ -234,6 +236,33 @@ const cases: Case[] = [
     result: valid([acc("example", "Bob Example"), acc("threads", "bob")], [row("example", "refresh", "Bob Example", "Bob Example", null, null, false), row("threads", "refresh", "bob", "bob")]),
   },
   {
+    name: "a row of the table the device has no definition of is a platform it does not know",
+    platforms: TEST,
+    known_platforms: ["threads"],
+    card_state: state({ "test-example": { current: "carol", last_declared: "carol", switch_count: 0, correction_date: "2026-03-02" }, threads: BOB }),
+    today: TODAY,
+    accounts: [acc("threads", "bob")],
+    result: valid([acc("test-example", "carol"), acc("threads", "bob")], [row("test-example", "refresh", "carol", "carol", null, null, false), row("threads", "refresh", "bob", "bob")]),
+  },
+  {
+    name: "a row the device has no definition of, without an account: not offered, no row",
+    platforms: TEST,
+    known_platforms: ["threads"],
+    card_state: state({ "test-example": { ...BOB, current: null, last_declared: "carol" }, threads: BOB }),
+    today: TODAY,
+    accounts: [acc("threads", "bob")],
+    result: valid([acc("threads", "bob")], [row("threads", "refresh", "bob", "bob")]),
+  },
+  {
+    name: "a row the device has no definition of cannot be named by the list",
+    platforms: TEST,
+    known_platforms: ["threads"],
+    card_state: state({ "test-example": EMPTY, threads: BOB }),
+    today: TODAY,
+    accounts: [acc("test-example", "carol"), acc("threads", "bob")],
+    result: { not_offered: true },
+  },
+  {
     name: "a platform of the table without an entry in the state is not offered",
     platforms: TEST,
     card_state: state({ threads: BOB }),
@@ -275,6 +304,16 @@ const cases: Case[] = [
     accounts: [acc("threads", "Bob")],
     result: { valid: false, reason: "username", platform: "threads" },
   },
+  ...["王小明", 'a"b', "a b", "a\\b", "bob\n", "x".repeat(31)].map(
+    (u): Case => ({
+      name: `a username outside its platform's format: ${JSON.stringify(u)}`,
+      platforms: PRODUCTION,
+      card_state: state({ threads: BOB }),
+      today: TODAY,
+      accounts: [acc("threads", u)],
+      result: { valid: false, reason: "username", platform: "threads" },
+    }),
+  ),
   {
     name: "two usernames outside their formats: the first platform in ascending order",
     platforms: TEST,
@@ -317,6 +356,34 @@ cases.push(
   readsTable("a display name with DEL", named("Th\u007freads"), false),
   readsTable("a display name with a space and non-ASCII", named("Threads 脆"), true),
 );
+// The one form of a format, `[…]{m,n}` (spec/scope.md). Each readable one accepts `bob`.
+const formatted = (username_format: string) => [{ ...THREADS, username_format }];
+for (const f of ["[a-z]{1,9}", "[-a-z]{1,3}", "[a-z-]{3,3}", "[a-cb-o]{1,999999999}", "[bo]{3,3}"]) cases.push(readsTable(`the format ${f}`, formatted(f), true));
+for (const f of [
+  "[^a-z]{1,9}",
+  "[!-~]{1,9}",
+  "[a-z]{01,9}",
+  "[a-z]{1,1234567890}",
+  "[o-b]{1,3}",
+  "[a-z ]{1,9}",
+  '[a-z"]{1,9}',
+  "[a-z\\]{1,9}",
+  "[a-z\t]{1,9}",
+  "[a-zé]{1,9}",
+  "[a-z]{0,9}",
+  "[a-z]{9,1}",
+  "[a-z]{1,9}x",
+  "x[a-z]{1,9}",
+  "[a-z[]{1,9}",
+  "[a-z]{1}",
+  "[a-z]{1,}",
+  "[a-z]{,9}",
+  "[]{1,9}",
+  "[a-z]+",
+  "[a-z]{1,9}{1,9}",
+]) {
+  cases.push(readsTable(`the format ${JSON.stringify(f)}`, formatted(f), false));
+}
 
 // --- Reading the card's state -----------------------------------------------
 
@@ -338,6 +405,10 @@ cases.push(
   readsState("without platforms", without(base, "platforms"), false),
   readsState("without count", without(base, "count"), false),
   readsState("a negative count", { ...base, count: -1 }, false),
+  readsState("a count of 2^53 - 1", { ...base, count: 2 ** 53 - 1 }, true),
+  readsState("a count of 2^53", { ...base, count: 2 ** 53 }, false),
+  readsState("proofs_on_last_date 1 without a last card proof", state({ threads: EMPTY }, null, 1), false),
+  readsState("a date that does not exist", state({ threads: bob({ correction_date: "2026-02-30" }) }), false),
   readsState("a count with a fraction", { ...base, count: 1.5 }, false),
   readsState("proofs_on_last_date with a fraction", { ...base, proofs_on_last_date: 1.5 }, false),
   readsState("proofs_on_last_date a string", { ...base, proofs_on_last_date: "1" }, false),
@@ -374,16 +445,17 @@ const names = new Set<string>();
 for (const c of cases) {
   assert.ok(!names.has(c.name), `two cases named ${c.name}`);
   names.add(c.name);
-  const { name, result, ...input } = c;
-  assert.deepEqual(await listConsequenceResult(input), result, name);
+  c.known_platforms ??= ["test-example", "threads"];
+  const { name, result, known_platforms, ...rest } = c;
+  assert.deepEqual(await listConsequenceResult({ ...rest, known_platforms }), result, name);
 }
 
 const file = {
   spec: "list-consequence",
   status: "draft",
-  note: "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit`, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
+  note: "Each case: `platforms` is the `platforms` of GET /api/v1/config and `card_state` the answer of POST /api/v1/card-state, as the server sent them; `known_platforms` the platforms the device has its own definition of; `today` the device's date in Taiwan; `accounts` the cardholder's list for the platforms offered. `result` is one of: `unread` (which answer the device cannot read); `not_offered` (the list names a platform that is not offered: a mistake of the program, not of the cardholder); `valid: false` with `reason` (`empty`, `switch_limit` with `platform`, `daily_limit`, or `username` with `platform`); `valid: true` with the list the card signs, a row per platform the list does something on, and `first_record`. null means none.",
   generated_by: "web/test/generate/list-consequence.ts",
-  cases: cases.map(({ name, platforms, card_state, today, accounts, result }) => ({ name, platforms, card_state, today, accounts, result })),
+  cases: cases.map(({ name, platforms, card_state, known_platforms, today, accounts, result }) => ({ name, platforms, card_state, known_platforms, today, accounts, result })),
 };
 writeFileSync(out, JSON.stringify(file, null, 2) + "\n");
 console.log(`${cases.length} cases written to spec/vectors/list-consequence.json`);
