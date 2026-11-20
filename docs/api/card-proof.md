@@ -1,7 +1,11 @@
 # Card proof API
 
 Status: **Draft**. The interface between the cardholder's device (`web/`,
-later the apps) and the server (`server/`) for one card proof. Terms follow
+later the apps) and the server for one card proof. There are two servers
+for now: the Worker (`worker/`), which so far has `challenges`, `card-state`
+and `config`; and the Go backend (`server/`), kept for comparison until the
+Worker has the rest, which has every endpoint here, `records` among them,
+and still sends `head` (noted where it differs). Terms follow
 [`GLOSSARY.md`](../../GLOSSARY.md). The formats of the values are defined in
 [`spec/`](../../spec/README.md); this document only says which request
 carries which value.
@@ -14,6 +18,7 @@ record is or how it is verified. It can change without invalidating records.
 - Same origin as the page. No cookies, no credentials, no CORS headers.
 - Requests and responses are JSON (`application/json`, UTF-8) unless stated.
 - Responses carry `Cache-Control: no-store`, except the static files.
+- Every response carries `X-Content-Type-Options: nosniff`.
 - **A request that carries a scoped ID is a `POST` with the scoped ID in the
   body, never in the URL.**
 - **No request's IP address is logged**, by the application, the reverse
@@ -28,9 +33,20 @@ record is or how it is verified. It can change without invalidating records.
   same ID with the time, the endpoint, the status and the error code, and
   nothing that came in the request. The device shows the ID next to an error
   from the server, so that a cardholder can report it.
-- A request body is at most 64 KB; a larger one is `400` `malformed`.
-- Besides the codes listed per endpoint: `404` `not_found`, `405`
-  `method_not_allowed`, `500` `internal`.
+- A request body that the endpoint reads is at most 64 KB (65,536 bytes); a
+  larger one is `400` `malformed`. `challenges` takes no body and does not
+  read one: whatever is sent with it, of any length, is ignored.
+- A body that is read is `400` `malformed` unless it is UTF-8 without a byte
+  order mark and one JSON value with nothing but whitespace around it. No
+  request nests arrays and objects more than 3 deep; one that nests more
+  than 16 deep is `malformed` whatever else it holds. What each endpoint
+  requires of the value is under "Reading the request" (`records`) and holds
+  for `card-state` too: exactly the keys listed, each once, spelled as
+  shown.
+- Besides the codes listed per endpoint: `404` `not_found` for a path that
+  is no endpoint; `405` `method_not_allowed` for an endpoint asked with
+  another method, with the header `Allow` naming the one it takes; `500`
+  `internal`.
 - An error is a 4xx or 5xx status with `{"error":"CODE"}`. The device shows a
   message for the code. It does not report failures of its own (a card that
   cannot pass, a challenge it refused) to the server (ADR-0016).
