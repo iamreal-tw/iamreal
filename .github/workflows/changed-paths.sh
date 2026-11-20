@@ -46,8 +46,10 @@ for check in $checks; do
   patterns=${!name}
   [ -n "$patterns" ] || { echo "$name is empty" >&2; exit 1; }
   for pattern in $patterns; do
-    case "${pattern%/\*\*}" in
-      '' | *[!A-Za-z0-9._/-]*) echo "$name: a pattern that is not a path or <directory>/**: $pattern" >&2; exit 1 ;;
+    # As pathsProblems of worker/test/workflows.ts: parts of letters, digits, `.`, `_`, `-`,
+    # with one `/` between them, none of them `.` or `..`, then `/**` or nothing.
+    case "/${pattern%/\*\*}/" in
+      *[!A-Za-z0-9._/-]* | *//* | */./* | */../*) echo "$name: a pattern that is not a path or <directory>/**" >&2; exit 1 ;;
     esac
   done
   why=
@@ -57,14 +59,17 @@ for check in $checks; do
       if [ "$directory" = "$pattern" ]; then
         if [ "$file" = "$pattern" ]; then why="$file"; fi
       else
-        case "$file" in "$directory"/*) why="$file is in $pattern" ;; esac
+        case "$file" in "$directory"/*) why="$file" ;; esac
       fi
       if [ -n "$why" ]; then break 2; fi
     done
   done < "$changed"
   if [ -n "$why" ]; then
     echo "$check=true" >> "$GITHUB_OUTPUT"
-    echo "$check: runs ($why)"
+    # A file's name is the pull request's to choose. Every character of it outside printable
+    # ASCII is printed as `?`: a name with a new line and `::` in it must not put a line of its
+    # own in the log, where the runner reads workflow commands.
+    echo "$check: runs ($(printf %s "$why" | tr -c '[:print:]' '?') matches $pattern)"
   else
     echo "$check=false" >> "$GITHUB_OUTPUT"
     echo "$check: skipped (the pull request changes no file of $name)"

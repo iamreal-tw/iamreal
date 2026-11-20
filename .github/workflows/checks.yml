@@ -83,10 +83,10 @@ jobs:
       EVENT_NAME: ${{ github.event_name }}
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum cmd/** crl/** roster/** server/** verifier/** spec/** design/copy/** web/README.md docs/adr/0004-scoped-ids-and-proofs-are-public.md protocol/package.json web/package.json worker/package.json"
-      TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum protocol/** worker/** web/** design/** spec/** cmd/** crl/** roster/** server/** verifier/** android/** ios/** device-core/** .github/workflows/** docs/adr/0004-scoped-ids-and-proofs-are-public.md"
-      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/**"
-      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/copy/**"
+      GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes cmd/** crl/** roster/** server/** verifier/** spec/** design/copy/** web/README.md docs/adr/0004-scoped-ids-and-proofs-are-public.md protocol/package.json web/package.json worker/package.json"
+      TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes protocol/** worker/** web/** design/** spec/** cmd/** crl/** roster/** server/** verifier/** android/** ios/** device-core/** .github/workflows/** docs/adr/0004-scoped-ids-and-proofs-are-public.md"
+      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/**"
+      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/copy/**"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,7 +103,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: The changes job succeeded
-        run: test "${{ needs.changes.result }}" = success
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -134,7 +136,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: The changes job succeeded
-        run: test "${{ needs.changes.result }}" = success
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -186,7 +190,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: The changes job succeeded
-        run: test "${{ needs.changes.result }}" = success
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -222,7 +228,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: The changes job succeeded
-        run: test "${{ needs.changes.result }}" = success
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

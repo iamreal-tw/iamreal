@@ -33,6 +33,7 @@ import {
   EVERY_CHECK_PATHS,
   matchesPaths,
   pathsEnvName,
+  pathsProblems,
   REQUIRED_CHECKS,
   type Yaml,
   readYaml,
@@ -74,7 +75,7 @@ const GO_JOB = "  go:\n    needs: changes\n";
 const jobIf = (check: string): string => `    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.${check} == 'true')\n`;
 const GO_IF = jobIf("go");
 /** The first step of every required check, as written there. */
-const CHANGES_SUCCEEDED = '      - name: The changes job succeeded\n        run: test "${{ needs.changes.result }}" = success\n';
+const CHANGES_SUCCEEDED = '      - name: The changes job succeeded\n        env:\n          CHANGES_RESULT: ${{ needs.changes.result }}\n        run: test "$CHANGES_RESULT" = success\n';
 const GO_HEAD = `${GO_JOB}${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`;
 const CHANGES_CHECKOUT = "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n          fetch-depth: 0\n";
 const CHANGES_RUN = "        run: bash .github/workflows/changed-paths.sh\n";
@@ -246,7 +247,9 @@ const CHANGES: Record<string, Change[]> = {
   "160 a required check that reads another check's output": [replace(C, jobIf("android"), jobIf("go"))],
   "161 a required check skipped when its output is true": [replace(C, GO_IF, GO_IF.replace("== 'true'", "!= 'true'"))],
   "162 a required check without the step that fails unless the changes job succeeded": [replace(C, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n`)],
-  "163 a required check whose first step succeeds whatever the changes job did": [replace(C, 'run: test "${{ needs.changes.result }}" = success\n', 'run: test "${{ needs.changes.result }}" != skipped\n')],
+  "163 a required check whose first step succeeds whatever the changes job did": [replace(C, 'run: test "$CHANGES_RESULT" = success\n', 'run: test "$CHANGES_RESULT" != skipped\n')],
+  "182 the changes job's result put into the first step's command, not its env": [replace(C, CHANGES_SUCCEEDED, '      - name: The changes job succeeded\n        run: test "${{ needs.changes.result }}" = success\n')],
+  "183 the first step reading another job's result": [replace(C, "          CHANGES_RESULT: ${{ needs.changes.result }}\n", "          CHANGES_RESULT: ${{ needs.typescript.result }}\n")],
   "164 the step about the changes job after the others": [replace(C, `${CHANGES_SUCCEEDED}      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n`, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${CHANGES_SUCCEEDED}`)],
   "165 a required check whose if reads something else": [replace(C, GO_IF, GO_IF.replace("always() &&", "always() && github.actor != 'x' &&"))],
   "166 a required check that reports success when it fails": [replace(C, GO_JOB, `${GO_JOB}    continue-on-error: true\n`)],
@@ -580,8 +583,21 @@ test("the lists of the required checks: one for each, every one with the paths e
     const problems = workflowProblems(files, lists);
     assert.ok(problems.some((x) => /is not in the list|not a path or <directory>|not one for each required check/.test(x)), `${what}: ${problems.join("; ")}`);
   }
-  // Written out, not read from EVERY_CHECK_PATHS: what the ticket says is in every list, and the script.
-  for (const p of [".github/workflows/checks.yml", ".github/workflows/changed-paths.sh", "worker/test/workflows.ts", "worker/test/workflows.test.ts", "pnpm-lock.yaml", "pnpm-workspace.yaml", "go.mod", "go.sum"]) {
+  // A directory written without /**: the script takes it for one file's name, and it matches nothing.
+  const isDirectory = (path: string): boolean => existsSync(join(REPO, path)) && statSync(join(REPO, path)).isDirectory();
+  assert.ok(isDirectory("spec/vectors") && !isDirectory("go.mod"), "the check sees the repository's directories");
+  for (const [check, path] of [
+    ["go", "spec/vectors"],
+    ["android", "device-core"],
+    ["typescript", ".github/workflows"],
+  ] as const) {
+    const problems = pathsProblems(withList(check, [...CHECK_PATHS[check]!, path]), isDirectory);
+    assert.ok(problems.some((x) => x.includes(`${check}: a directory without /**: ${path}`)), `${check} ${path}: ${problems.join("; ")}`);
+  }
+  assert.deepEqual(pathsProblems(CHECK_PATHS, isDirectory), []);
+  // Written out, not read from EVERY_CHECK_PATHS: what the ticket says is in every list, the script, and
+  // the files at the root that, once added, change how every check installs, builds or checks out.
+  for (const p of [".github/workflows/checks.yml", ".github/workflows/changed-paths.sh", "worker/test/workflows.ts", "worker/test/workflows.test.ts", "pnpm-lock.yaml", "pnpm-workspace.yaml", "go.mod", "go.sum", ...ROOT_FILES]) {
     assert.ok(EVERY_CHECK_PATHS.includes(p), p);
     for (const check of REQUIRED_CHECKS) assert.ok(CHECK_PATHS[check]!.includes(p), `${check}: ${p}`);
   }
@@ -592,6 +608,9 @@ test(".github/workflows/ holds the workflows and the one script the changes job 
   // Like the workflows: printable ASCII only. It is read line by line with them (CONTRIBUTING.md).
   assert.equal(/[^\x20-\x7e\n]/.exec(readFileSync(join(WORKFLOWS_DIR, CHANGED_PATHS_NAME), "utf8")), null);
 });
+
+/** Files at the root that are not there now, and that would change every check if a pull request added them. */
+const ROOT_FILES = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
 
 /** The lists as the changes job of checks.yml is given them: the `*_PATHS` of its env. */
 function listsOfTheChangesJob(): Record<string, string> {
@@ -680,6 +699,8 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["the circuits", ["web/circuits/x.json"], ["typescript", "device-core", "android"]],
     ["a directory whose name starts like one of a list", ["specs/x.md", "webx/y.ts", "cmd.md"], []],
     ["a document and the Worker", ["docs/b.md", "worker/src/x.ts"], ["typescript"]],
+    ...ROOT_FILES.map((f): [string, Op[], string[]] => [`${f} at the root`, [f], ALL]),
+    ["a package.json and a .cargo/config.toml that are not the root's", ["docs/package.json", "docs/.cargo/config.toml"], []],
     ["nothing", [], []],
   ];
   let head = fork;
@@ -700,6 +721,25 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     );
   }
 
+  // A file name is the pull request's to choose: one with a new line and `::` in it must not reach
+  // the log as a line of its own, where the runner would take it for a workflow command.
+  git("checkout", "--quiet", "--force", "-B", "pr", fork);
+  git("clean", "--quiet", "-fd");
+  write("spec/x\n::error::made up.md", "changed\n");
+  write("docs/y\n::add-mask::z.md", "changed\n");
+  const odd = run({ EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: commit("file names with a new line") });
+  assert.equal(odd.status, 0, odd.log);
+  assert.deepEqual(odd.outputs, { go: "true", typescript: "true", "device-core": "true", android: "false" });
+  assert.deepEqual(
+    odd.log.split("\n").filter((l) => !/^(go|typescript|device-core|android): (runs|skipped) \(/.test(l) && l !== ""),
+    [],
+    odd.log,
+  );
+  assert.ok(!/[^\x20-\x7e\n]/.test(odd.log) && odd.log.includes("spec/x"), odd.log);
+  git("checkout", "--quiet", "--force", "-B", "pr", fork);
+  git("clean", "--quiet", "-fd");
+  head = fork;
+
   // The merge queue: every check, and no commit is looked at.
   const queue = run({ EVENT_NAME: "merge_group", BASE_SHA: "", HEAD_SHA: "" });
   assert.equal(queue.status, 0, queue.log);
@@ -719,6 +759,11 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["a pattern with one star", { ...pr, ANDROID_PATHS: "android/** web/*.ts" }],
     ["a pattern with ** in the middle", { ...pr, GO_PATHS: "cmd/**/x.go" }],
     ["a pattern for everything", { ...pr, GO_PATHS: "**" }],
+    ["a pattern that goes up", { ...pr, GO_PATHS: "cmd/../docs/**" }],
+    ["a pattern that starts by going up", { ...pr, GO_PATHS: "../x" }],
+    ["a pattern from the root", { ...pr, GO_PATHS: "/cmd/**" }],
+    ["a pattern with an empty part", { ...pr, GO_PATHS: "cmd//x.go" }],
+    ["a pattern that ends with a slash", { ...pr, GO_PATHS: "cmd/" }],
     ["an empty list", { ...pr, DEVICE_CORE_PATHS: "" }],
     ["a list that is not given", pr, withoutAndroid],
   ];

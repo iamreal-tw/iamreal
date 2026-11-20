@@ -446,7 +446,17 @@ export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || gith
  * check uses, as far as reading the sources finds it (.github/README.md
  * says what that does not find).
  */
-/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, and the Go module. */
+/**
+ * Files at the root that are not in the repository now, and that would
+ * change every check if a pull request added one: where and how pnpm
+ * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
+ * workspace (go.work), a cargo configuration every cargo run below the
+ * root would read (.cargo/config.toml), and how git checks files out
+ * (.gitattributes). A pattern for a file that is not there matches the pull
+ * request that adds it.
+ */
+export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
+/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and the files above. */
 export const EVERY_CHECK_PATHS: readonly string[] = [
   ".github/workflows/checks.yml",
   ".github/workflows/changed-paths.sh",
@@ -456,6 +466,7 @@ export const EVERY_CHECK_PATHS: readonly string[] = [
   "pnpm-workspace.yaml",
   "go.mod",
   "go.sum",
+  ...ROOT_FILES_PATHS,
 ];
 /**
  * The go job: every directory with a Go package, what their tests read
@@ -508,18 +519,27 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
 export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**"];
 /** The android job: the app, the Rust it links, the files Gradle bundles into the app, and the ones its unit tests read. */
 export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/copy/**"];
+/** A list of patterns for each required check, by the check's name. */
+export type CheckLists = Readonly<Record<string, readonly string[]>>;
 /** Each required check's list. */
-export const CHECK_PATHS: Readonly<Record<string, readonly string[]>> = { go: GO_PATHS, typescript: TYPESCRIPT_PATHS, "device-core": DEVICE_CORE_PATHS, android: ANDROID_PATHS };
+export const CHECK_PATHS: CheckLists = { go: GO_PATHS, typescript: TYPESCRIPT_PATHS, "device-core": DEVICE_CORE_PATHS, android: ANDROID_PATHS };
 
 /** Whether `path`, from the repository's root, matches one of `patterns`, each of the two forms above. */
 export const matchesPaths = (patterns: readonly string[], path: string): boolean => patterns.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
 
-/** The problems in the lists themselves: a pattern of another form, or a list without the paths every list has. */
-export function pathsProblems(lists: Readonly<Record<string, readonly string[]>>): string[] {
+/**
+ * The problems in the lists themselves: a pattern of another form, a list
+ * without the paths every list has, or, where `isDirectory` says which
+ * paths are directories of the repository, a directory written without
+ * `/**`, which the script takes for one file's name and which then matches
+ * nothing.
+ */
+export function pathsProblems(lists: CheckLists, isDirectory: (path: string) => boolean = () => false): string[] {
   const problems: string[] = [];
   if (!same(Object.keys(lists).sort(), [...REQUIRED_CHECKS].sort())) problems.push(`the lists are not one for each required check: ${Object.keys(lists).join(", ")}`);
   for (const [check, list] of Object.entries(lists)) {
-    for (const p of list) if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*(\/\*\*)?$/.test(p)) problems.push(`${check}: not a path or <directory>/**: ${p}`);
+    for (const p of list) if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*(\/\*\*)?$/.test(p) || p.split("/").some((part) => part === "." || part === "..")) problems.push(`${check}: not a path or <directory>/**: ${p}`);
+    for (const p of list) if (!p.endsWith("/**") && isDirectory(p)) problems.push(`${check}: a directory without /**: ${p}`);
     for (const p of EVERY_CHECK_PATHS) if (!list.includes(p)) problems.push(`${check}: ${p} is not in the list`);
   }
   return problems;
@@ -539,7 +559,7 @@ export const pathsEnvName = (check: string): string => `${check.toUpperCase().re
  * there. The event's name and the two commits reach the script through env,
  * not through the text of a command.
  */
-export const changesJob = (lists: Readonly<Record<string, readonly string[]>>): YamlMap => ({
+export const changesJob = (lists: CheckLists): YamlMap => ({
   "runs-on": "ubuntu-24.04",
   "timeout-minutes": "5",
   outputs: Object.fromEntries(REQUIRED_CHECKS.map((c) => [c, `\${{ steps.paths.outputs.${c} }}`])),
@@ -557,9 +577,11 @@ export const changesJob = (lists: Readonly<Record<string, readonly string[]>>): 
 /**
  * The first step of every required check: it fails unless the changes job
  * succeeded. With the job's `if` (below) this is what makes a required
- * check fail, not skip, when the changes job fails or is cancelled.
+ * check fail, not skip, when the changes job fails or is cancelled. The
+ * result reaches the command through env, like everything the changes job
+ * is given.
  */
-export const CHANGES_SUCCEEDED_STEP: YamlMap = { name: "The changes job succeeded", run: 'test "${{ needs.changes.result }}" = success' };
+export const CHANGES_SUCCEEDED_STEP: YamlMap = { name: "The changes job succeeded", env: { CHANGES_RESULT: "${{ needs.changes.result }}" }, run: 'test "$CHANGES_RESULT" = success' };
 
 /** What a job's `if` is evaluated in: the changes job's result and outputs, the event, and whether the run was cancelled. */
 export interface IfState {
@@ -747,7 +769,7 @@ const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(
  * The problems in a set of workflow files, by file name. None, for files
  * that keep to everything described at the top of this file.
  */
-export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: Readonly<Record<string, readonly string[]>> = CHECK_PATHS): string[] {
+export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: CheckLists = CHECK_PATHS): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
   if (!same(names, ["checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
