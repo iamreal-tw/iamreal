@@ -11,7 +11,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
@@ -19,23 +19,25 @@ import {
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
+  CHANGED_PATHS_SCRIPT,
+  CHANGES_JOB,
   CHECK_BB,
+  CHECK_PATHS,
   CHECKS_GROUP,
   CHECKS_ON,
+  type CheckLists,
+  EVERY_CHECK_PATHS,
   GRADLE_BUILD,
   GRADLE_DISTRIBUTION_SHA256,
   GRADLE_VERSION,
   GRADLE_WRAPPER_JAR_SHA256,
   INSTALL_PNPM,
   IOS_PATHS,
-  CHANGES_JOB,
-  CHECK_PATHS,
-  EVERY_CHECK_PATHS,
+  REQUIRED_CHECKS,
+  type Yaml,
   matchesPaths,
   pathsEnvName,
   pathsProblems,
-  REQUIRED_CHECKS,
-  type Yaml,
   readYaml,
   workflowProblems,
 } from "./workflows.ts";
@@ -43,7 +45,7 @@ import {
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
 /** The one file of .github/workflows/ that is not a workflow: the script the changes job of checks.yml runs. */
-const CHANGED_PATHS_NAME = "changed-paths.sh";
+const CHANGED_PATHS_NAME = basename(CHANGED_PATHS_SCRIPT);
 
 function realFiles(): Record<string, string> {
   return Object.fromEntries(
@@ -437,6 +439,25 @@ function workspacePackages(): Map<string, string> {
  * (Chrome, Go, bb). So this is one more reminder, not the list: whoever
  * makes the tests use another directory adds it to the paths.
  */
+/**
+ * What one source's text names, as written there: the specifiers of its
+ * imports (`from "..."`, `import("...")`, `import "..."`) and of the HTML's
+ * `<script src>` (from the root of web/, written `./...`), the paths of
+ * `new URL("../...", import.meta.url)` up to the first `${`, and the
+ * packages of `"go", [... "./<package>"`. The one place these writings are
+ * read, for the browser tests' paths and for the typescript check's.
+ */
+function namesIn(text: string): { specifiers: string[]; urls: string[]; goPackages: string[] } {
+  return {
+    specifiers: [
+      ...[...text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]!),
+      ...[...text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!.replace(/^\//, "./")),
+    ],
+    urls: [...text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)].map((m) => m[1]!),
+    goPackages: [...text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)].map((m) => m[1]!),
+  };
+}
+
 function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
   const web = join(REPO, "web");
   const packages = workspacePackages();
@@ -459,11 +480,8 @@ function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
     if (seen.has(file)) continue;
     seen.add(file);
     const text = readFileSync(file, "utf8");
-    const specifiers = [
-      ...[...text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]!),
-      ...[...text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!.replace(/^\//, "./")),
-    ];
-    for (const s of specifiers) {
+    const names = namesIn(text);
+    for (const s of names.specifiers) {
       let target: string | undefined;
       if (s.startsWith(".")) target = resolve(dirname(file), s);
       else {
@@ -481,12 +499,12 @@ function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
     for (const m of text.matchAll(/\bjoin\(\s*repo\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
     for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\."\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
     for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\.\/([^"/]+)/g)) used.add(m[1]!);
-    for (const m of text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)) {
+    for (const url of names.urls) {
       // `new URL(\`../../${path}\`)` (web/test/vectors.ts) names the repository's root and no more: say so.
-      const named = top(resolve(dirname(file), m[1]!));
+      const named = top(resolve(dirname(file), url));
       used.add(named === "" ? `(somewhere in the repository, by ${relative(REPO, file)})` : named);
     }
-    for (const m of text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)) goPackages.add(m[1]!);
+    for (const g of names.goPackages) goPackages.add(g);
   }
   for (const f of seen) used.add(top(f));
   return { used, goPackages };
@@ -553,8 +571,7 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
   for (const m of check.matchAll(/^\S+ ((?:web|verifier)\/\S+)$/gm)) read.add(m[1]!);
   for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
   assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
-  const covered = (path: string): boolean => IOS_PATHS.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
-  assert.deepEqual([...read].filter((p) => !covered(p)), []);
+  assert.deepEqual([...read].filter((p) => !matchesPaths(IOS_PATHS, p)), []);
 });
 
 // Skipping by path (#206): the lists of the four required checks, the script that reads them, and
@@ -562,8 +579,8 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
 
 test("the lists of the required checks: one for each, every one with the paths every check has, in the two forms the script reads", () => {
   const files = realFiles();
-  const withList = (check: string, list: readonly string[]): Record<string, readonly string[]> => ({ ...CHECK_PATHS, [check]: list });
-  const without = (check: string, path: string): Record<string, readonly string[]> => {
+  const withList = (check: string, list: readonly string[]): CheckLists => ({ ...CHECK_PATHS, [check]: list });
+  const without = (check: string, path: string): CheckLists => {
     assert.ok(CHECK_PATHS[check]!.includes(path), `${check} has ${path}`);
     return withList(check, CHECK_PATHS[check]!.filter((p) => p !== path));
   };
@@ -821,21 +838,20 @@ function namedByTypeScript(files: readonly string[]): { paths: Set<string>; goPa
   for (const f of files.filter((x) => /\.(ts|mjs|js|html)$/.test(x))) {
     const file = join(REPO, f);
     const text = readFileSync(file, "utf8");
-    for (const m of text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
-      const s = m[1]!;
+    const names = namesIn(text);
+    for (const s of names.specifiers) {
       if (s.startsWith(".")) add(resolve(dirname(file), s));
       else {
         const name = [...packages.keys()].find((n) => s === n || s.startsWith(`${n}/`));
         if (name !== undefined) add(packages.get(name)!);
       }
     }
-    for (const m of text.matchAll(/<script[^>]*\bsrc="\/?([^"]+)"/g)) add(resolve(dirname(file), m[1]!));
     for (const m of text.matchAll(/\bjoin\(\s*(REPO|repo|WORKER_DIR|web|here)\s*((?:,\s*"[^"]*"\s*)+)/g)) {
       const found = inRepo(resolve(bases[m[1]!]!(file), ...[...m[2]!.matchAll(/"([^"]*)"/g)].map((x) => x[1]!)));
       if (found !== undefined) paths.add(found);
     }
-    for (const m of text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)) add(resolve(dirname(file), m[1]!));
-    for (const m of text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)) goPackages.add(m[1]!);
+    for (const url of names.urls) add(resolve(dirname(file), url));
+    for (const g of names.goPackages) goPackages.add(g);
   }
   return { paths, goPackages };
 }

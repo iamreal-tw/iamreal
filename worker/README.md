@@ -345,14 +345,14 @@ Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.
 | 2 | 一串固定種子產生的長序列，`protocol/` 的規則配記憶體（`MemoryRules`），以 Go 的 `roster/` 當答案 | `test/sequence.test.ts` |
 | 3 | 同一串，配 Durable Object 的儲存，每一筆之間重啟名冊的 Durable Object | `test/sequence.test.ts` |
 
-第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，每個 PR 都跑（不到 1 秒）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
+第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，改到 `typescript` 清單的 PR 和合併佇列都跑（不到 1 秒；清單見 `.github/README.md`「必要檢查在 PR 階段照路徑跳過」，`worker/` 整個在裡面）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
 
 ```sh
 node --experimental-strip-types --test test/sequence.test.ts                             # 第 2 層
 IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.test.ts  # 第 2、3 層
 ```
 
-**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層每個 PR 擋著，存了再讀的不同由第 1 層每個 PR 擋著（標準答案的每一案，每筆之間重啟）；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
+**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層擋著，存了再讀的不同由第 1 層擋著（標準答案的每一案，每筆之間重啟），兩層都在改到 `typescript` 清單的 PR 和合併佇列跑；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
 
 要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
 
@@ -697,7 +697,7 @@ IAMREAL_BB=/path/to/bb pnpm test                                                
 IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.ts        # 只跑比對
 ```
 
-`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。GitHub Actions 上，每個 PR 的 `typescript` 工作（`.github/workflows/checks.yml`）設了兩樣，會跑到它；`web/` 的兩套瀏覽器測試在另一個工作流程，只在它們用到的檔改了才跑（`.github/README.md`）。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
+`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。GitHub Actions 上，`typescript` 工作（`.github/workflows/checks.yml`；改到它的清單的 PR 和合併佇列都跑）設了兩樣，會跑到它；`web/` 的兩套瀏覽器測試在另一個工作流程，只在它們用到的檔改了才跑（`.github/README.md`）。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
 
 1. 用一個頂替 `bb` 的腳本跑 `go test ./verifier`，留下每次交給 `bb verify` 的驗證金鑰、證明、公開輸入，再把同樣的參數交給真的 `bb`。內容相同的算一案。Go 的測試裡有亂數的證明，所以每次跑的案例不完全相同。
 2. 加上 Go 在呼叫 `bb` 之前就擋掉、所以腳本看不到的那幾種，每個電路 16 案：公開輸入加上 `p`、等於 `p`、`2^256 − 1`、個數多一個少一個、沒有、少一個位元組；證明是空的、多或少一個位元組、多或少一個值、非零知識的證明；別的電路的驗證金鑰（配原本的公開輸入、配那個電路的公開輸入）。
