@@ -20,8 +20,13 @@
       "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],
-      // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
-      "vars": { "ROSTER_OBJECT_NAME": "test-1" }
+      "vars": {
+        // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
+        "ROSTER_OBJECT_NAME": "test-1",
+        // Which roster this environment serves, "test" or "production". It selects the scope
+        // string and the platform table, which are written in protocol/ (src/api.ts, rosterKindOf).
+        "ROSTER_KIND": "test"
+      }
     }
   }
 }

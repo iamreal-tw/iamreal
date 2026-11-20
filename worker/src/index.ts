@@ -1,6 +1,8 @@
-// The Worker (ADR-0023). So far: the hourly CRL mirror and the roster's
-// Durable Object as an empty class. It has no page and no API yet.
+// The Worker (ADR-0023). So far: the first endpoints of the API (api.ts),
+// the hourly CRL mirror, and the roster's Durable Object (roster.ts). It has
+// no page yet.
 import { CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#target";
+import { api, isApiPath } from "./api.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { mirrorCrls } from "./mirror.ts";
 
@@ -10,7 +12,8 @@ export { Roster } from "./roster.ts";
 checkIssuerTable(ISSUERS);
 
 export default {
-  async fetch(_request, _env, _ctx): Promise<Response> {
+  async fetch(request, env, _ctx): Promise<Response> {
+    if (isApiPath(new URL(request.url).pathname)) return api(request, env);
     return new Response(null, { status: 404 });
   },
 

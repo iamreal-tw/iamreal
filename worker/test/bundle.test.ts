@@ -110,11 +110,11 @@ test("the deploy build holds nothing of the test build", () => {
   for (const s of TEST_ONLY) assert.ok(!deploy.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
 });
 
-test("the test environment's only settings are the roster's object, the data bucket and the object's name", () => {
+test("the test environment's only settings are the roster's object, the data bucket, the object's name and which roster it is", () => {
   // So the issuer keys, MOICA's addresses and the clock cannot be read from a setting: there is none
   // to read them from. (A secret set on the Worker with `wrangler secret` is not in the configuration
   // and is not seen here.)
-  assert.deepEqual(bindingsIn(deploy.output), { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable" });
+  assert.deepEqual(bindingsIn(deploy.output), { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable" });
 });
 
 test("the test build holds another key, the fake MOICA and the clock's switch: the checks above can fail", () => {
