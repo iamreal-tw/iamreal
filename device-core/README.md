@@ -79,7 +79,7 @@
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
-**關卡不靠「app 只呼叫 C 函式」。** 這個套件對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用這個套件的 Rust 程式（例如用 Rust 寫的 JNI 層）拿到的也只有 C 函式，順序寫錯時一樣被擋。它擋的仍然是寫錯，不是存心繞過：自己另外引用 `barretenberg-rs`、或自己開 `testing` 的程式，核心擋不了，要靠審查。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
+**關卡擋的是 Kotlin、Swift 經 C 函式寫錯順序，不擋存心引用 Rust 套件的人。** `prover/` 對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用它的 Rust 程式（例如用 Rust 寫的 JNI 層）拿到的也只有 C 函式。但 `checks/` 的 `scoped_id` 是 `pub`（`prover/` 要用），收任何一個 Poseidon2；自己另外引用 `checks/` 和 `barretenberg-rs`、或自己開 `testing` 的 Rust 程式，不經過 session 也算得出匿名編號。那一種要靠審查 `android/`、`ios/` 引用了什麼。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
 
 ### 清掉
 
