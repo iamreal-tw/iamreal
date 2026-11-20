@@ -29,10 +29,11 @@ case $platform in
 esac
 
 archive=barretenberg-static-$platform.tar.gz
-line=$(grep -F "  $archive" "$here/barretenberg.sha256") || {
-  echo "fetch-barretenberg: $archive is not in barretenberg.sha256" >&2
+line=$(awk -v archive="$archive" '$2 == archive' "$here/barretenberg.sha256")
+if [ "$(printf '%s\n' "$line" | grep -c .)" != 1 ]; then
+  echo "fetch-barretenberg: $archive is not in barretenberg.sha256 exactly once" >&2
   exit 1
-}
+fi
 
 dir=$here/vendor/barretenberg/$platform
 if [ -f "$dir/libbb-external.a" ] && [ -f "$dir/.sha256" ] && [ "$(cat "$dir/.sha256")" = "$line" ]; then

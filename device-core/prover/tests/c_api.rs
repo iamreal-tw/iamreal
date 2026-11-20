@@ -201,6 +201,18 @@ fn null_pointers_are_refused() {
             ),
             IDC_ERR_ARGUMENT
         );
+        // A length no buffer has is refused before anything is read.
+        assert_eq!(
+            idc_declaration_code(
+                IDC_ROSTER_TEST,
+                one.as_ptr(),
+                usize::MAX,
+                CHALLENGE.as_ptr(),
+                CHALLENGE.len(),
+                &mut out
+            ),
+            IDC_ERR_ARGUMENT
+        );
         // No bytes may be passed as (NULL, 0): here the empty input is not JSON.
         assert_eq!(
             idc_declaration_code(

@@ -235,6 +235,8 @@ export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && ex
 export const ANDROID_JOB = "android";
 /** The one line of that job that runs Gradle: the wrapper of the repository, with the runner's JDK 17. */
 export const GRADLE_BUILD = 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build';
+/** How that job gets the NDK, the platform and the build tools android/app/build.gradle.kts names, with the SDK manager the runner has. */
+export const ANDROID_SDK_PARTS = 'yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
 /**
  * The Gradle the wrapper downloads and the SHA-256 it checks the download
  * against, and the SHA-256 of the wrapper's own jar in the repository, the
@@ -257,6 +259,45 @@ const WITH: Readonly<Record<string, YamlMap>> = {
 
 const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
+
+/**
+ * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
+ * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
+ * checked; so the job is written out here instead of being described by rules.
+ */
+export const DEVICE_CORE_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
+    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo test --locked --release` },
+  ],
+};
+
+/**
+ * The android job of checks.yml, exactly, written out for the same reason
+ * as the device-core job: what it runs is the Gradle wrapper of android/
+ * (`build`: both installers, the unit tests, lint, the checks of what was
+ * built), and everything it links or bundles comes from a script that
+ * checks a SHA-256 (android/build-native.sh calls fetch-barretenberg.sh
+ * and fetch-zig.sh).
+ */
+export const ANDROID_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
+    { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
+    { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
+    { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
+  ],
+};
 
 /** The line of the upload step: the arguments of `uploadArgs` (scripts/deploy.ts), with wrangler kept quiet. */
 export const UPLOAD = `${Object.entries(WRANGLER_QUIET)
@@ -440,19 +481,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         }
       }
       if (f === "checks.yml" && name === DEVICE_CORE_JOB) {
-        // Every step that runs cargo with Barretenberg gets it from the script that checks its SHA-256.
-        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
-        if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
-        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+        // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
+        // (where .cargo/config.toml is read) with the library the script checked.
+        if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (f === "checks.yml" && name === ANDROID_JOB) {
-        const steps = job.steps.filter(isMap);
-        if (!steps.some((s) => s.run === GRADLE_BUILD && s["working-directory"] === "android")) j("does not build with the Gradle wrapper of android/");
-        for (const s of steps) {
-          const r = s.run;
-          if (typeof r !== "string") continue;
-          if (/gradle/i.test(r) && r !== GRADLE_BUILD) j(`Gradle run another way: ${r}`);
-          if (/BB_LIB_DIR|BARRETENBERG_VERSION|\bzig\b/i.test(r)) j(`Barretenberg or Zig from somewhere other than the scripts: ${r}`);
-        }
+        // Exactly the steps written above: Gradle is the wrapper of android/, and Barretenberg, Zig
+        // and the parameter files come from the scripts that check their SHA-256.
+        if (!same(job, ANDROID_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

@@ -167,12 +167,15 @@ const CHANGES: Record<string, Change[]> = {
   "99 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
   "100 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
   "101 the device-core job taking Barretenberg without the script": [replace(C, 'run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test', "run: BARRETENBERG_VERSION=6.0.0 cargo test")],
-  "102 a job of checks.yml other than device-core and android without the check of bb": [replace(C, "\n  android:\n", "\n  android-2:\n")],
-  "103 the android job running a Gradle that is not the wrapper": [replace(C, `run: ${GRADLE_BUILD}`, 'run: JAVA_HOME="$JAVA_HOME_17_X64" gradle build')],
-  "104 the android job running the wrapper with something more": [replace(C, `run: ${GRADLE_BUILD}`, `run: ${GRADLE_BUILD} --init-script x.gradle`)],
-  "105 the android job running the wrapper of another directory": [replace(C, `        working-directory: android\n        run: ${GRADLE_BUILD}`, `        working-directory: web\n        run: ${GRADLE_BUILD}`)],
-  "106 the android job taking Barretenberg without the script": [replace(C, "        working-directory: android\n        run: ./fetch-crs.sh", "        working-directory: android\n        run: BB_LIB_DIR=/tmp/bb ./fetch-crs.sh")],
-  "107 the android job with a Zig that is not the one of fetch-zig.sh": [replace(C, "        working-directory: android\n        run: ./fetch-crs.sh", "        working-directory: android\n        run: sudo snap install zig && ./fetch-crs.sh")],
+  "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
+  "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x cargo test")],
+  "104 one more step in the device-core job": [replace(C, "      - name: cargo fmt --check\n", "      - run: rm .cargo/config.toml\n        working-directory: device-core\n      - name: cargo fmt --check\n")],
+  "105 a job of checks.yml other than device-core and android without the check of bb": [replace(C, "\n  android:\n", "\n  android-2:\n")],
+  "106 the android job running a Gradle that is not the wrapper": [replace(C, `run: ${GRADLE_BUILD}`, 'run: JAVA_HOME="$JAVA_HOME_17_X64" gradle build')],
+  "107 the android job running the wrapper with something more": [replace(C, `run: ${GRADLE_BUILD}`, `run: ${GRADLE_BUILD} --init-script x.gradle`)],
+  "108 the android job running the wrapper of another directory": [replace(C, `        working-directory: android\n        run: ${GRADLE_BUILD}`, `        working-directory: web\n        run: ${GRADLE_BUILD}`)],
+  "109 one more step in the android job": [replace(C, "      - name: gradlew build\n", "      - run: sudo snap install zig\n      - name: gradlew build\n")],
+  "110 the android job without the parameter files' script": [replace(C, "        working-directory: device-core\n        run: ./fetch-crs.sh", "        working-directory: device-core\n        run: curl -o vendor/crs/bn254_g2.dat https://example.com/g2.dat")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and

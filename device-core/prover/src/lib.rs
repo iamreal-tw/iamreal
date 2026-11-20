@@ -153,7 +153,12 @@ pub extern "C" fn idc_self_check() -> i32 {
     let check = || hashes::Barretenberg::new()?.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]);
     match catch_unwind(check) {
         Ok(Ok(hash)) if hash == SELF_CHECK_HASH => IDC_OK,
-        _ => IDC_ERR_INTERNAL,
+        Ok(_) => IDC_ERR_INTERNAL,
+        Err(payload) => {
+            // As in `output`.
+            std::mem::forget(payload);
+            IDC_ERR_INTERNAL
+        }
     }
 }
 

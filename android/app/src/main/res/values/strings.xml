@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The name of the service (design/copy/). -->
-    <string name="app_name">島民證明</string>
+    <!-- The name under the icon: the name of the service (design/copy/card-proof.md) and that this is the test app. The same as the iOS test app. -->
+    <string name="app_name">島民證明 測試</string>
 </resources>
