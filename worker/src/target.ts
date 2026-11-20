@@ -1,7 +1,7 @@
 // What the Worker trusts that the test build replaces: the issuer keys,
 // where MOICA publishes its CRLs, and the clock; and how long the mirror
-// waits and how long it catches up, which the test build shortens. None of the three is a
-// setting (ADR-0028). This file is the deployed build's: the rest of src/
+// waits and how long it catches up, which the test build shortens. None of
+// the three is a setting (ADR-0028). This file is the deployed build's: the rest of src/
 // imports it as `#target` (package.json, "imports"). The test build puts
 // test-build/target.ts in its place (test/build.ts); test/bundle.test.ts
 // checks that the deployed build holds nothing of that one.
