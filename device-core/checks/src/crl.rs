@@ -339,7 +339,7 @@ impl UsableCrl {
 
     /// The CRL date, `YYYY-MM-DD`.
     pub fn crl_date(&self) -> String {
-        let (year, month, day) = der::civil_from_days(self.crl_day());
+        let (year, month, day) = crate::date::civil_from_days(self.crl_day());
         format!("{year:04}-{month:02}-{day:02}")
     }
 }

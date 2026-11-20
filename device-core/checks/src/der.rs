@@ -2,6 +2,8 @@
 //! definite lengths in their shortest form, nothing running past the end
 //! of the element that contains it. Enough for certificates and CRLs.
 
+use crate::date::{days_from_civil, days_in_month};
+
 /// The bytes are not DER as this reader accepts it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotDer;
@@ -134,49 +136,6 @@ pub fn is_oid(bytes: &[u8]) -> bool {
     last & 0x80 == 0
 }
 
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-fn days_in_month(year: i64, month: i64) -> i64 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ if is_leap(year) => 29,
-        _ => 28,
-    }
-}
-
-/// The number of days from 1970-01-01 to a date of the Gregorian calendar.
-pub fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    // Years start in March, so that the leap day is the last day of one.
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let year_of_era = y.rem_euclid(400);
-    let day_of_year = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-/// The date, as (year, month, day), of a number of days from 1970-01-01.
-pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let day_of_era = z.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let shifted_month = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-    let month = if shifted_month < 10 {
-        shifted_month + 3
-    } else {
-        shifted_month - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year, month, day)
-}
-
 /// A UTCTime `YYMMDDHHMMSSZ` (years 50 to 99 are 19xx) or a
 /// GeneralizedTime `YYYYMMDDHHMMSSZ`, as seconds since 1970-01-01T00:00:00Z.
 /// Only these two spellings, of a time that exists; a GeneralizedTime
@@ -214,21 +173,4 @@ pub fn read_time(der: &[u8], t: &Tlv) -> Result<i64, NotDer> {
         return Err(NotDer);
     }
     Ok(days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn days_and_dates_agree() {
-        assert_eq!(days_from_civil(1970, 1, 1), 0);
-        assert_eq!(days_from_civil(2000, 1, 1), 10_957);
-        assert_eq!(days_from_civil(2026, 11, 16), 20_773);
-        for days in [-800_000, -1, 0, 59, 60, 10_957, 11_016, 20_773, 2_932_896] {
-            let (y, m, d) = civil_from_days(days);
-            assert_eq!(days_from_civil(y, m, d), days);
-        }
-        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
-    }
 }

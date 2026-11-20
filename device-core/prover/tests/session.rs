@@ -31,7 +31,7 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
 fn noon(date: &str) -> i64 {
     let number = |range: std::ops::Range<usize>| date[range].parse::<i64>().unwrap();
     let days =
-        iamreal_device_checks::der::days_from_civil(number(0..4), number(5..7), number(8..10));
+        iamreal_device_checks::date::days_from_civil(number(0..4), number(5..7), number(8..10));
     days * 86_400 + 4 * 3_600
 }
 
@@ -762,6 +762,13 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
             "{now}"
         );
     }
+    // The certificates added do not stay in the core after such a call.
+    session.add_certificate(&card.certificate).unwrap();
+    assert_eq!(session.check_certificates(0), Err(IDC_ERR_ARGUMENT));
+    assert_eq!(
+        session.check_certificates(card.now).unwrap(),
+        json!({ "ok": false, "problem": "no_certificate" })
+    );
     // A remembered CRL number that is not a number.
     card.check_certificate(&session);
     card.check_crl(&session);

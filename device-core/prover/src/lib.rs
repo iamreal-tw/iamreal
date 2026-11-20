@@ -29,7 +29,7 @@ use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 
 /// The version of the C functions: the number the header gives as
 /// `IDC_ABI_VERSION`. It goes up when a function changes or goes away.
-pub const IDC_ABI_VERSION: u32 = 2;
+pub const IDC_ABI_VERSION: u32 = 1;
 
 /// The function did what it is for.
 pub const IDC_OK: i32 = 0;

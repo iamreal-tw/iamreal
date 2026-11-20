@@ -189,9 +189,8 @@ fn today(now: i64) -> Result<Date, i32> {
     Date::in_taiwan(now).ok_or(IDC_ERR_ARGUMENT)
 }
 
-fn bytes_of(result: Value) -> Vec<u8> {
-    // Writing a value built here to memory does not fail.
-    serde_json::to_vec(&result).unwrap_or_default()
+fn bytes_of(result: Value) -> Result<Vec<u8>, i32> {
+    serde_json::to_vec(&result).map_err(|_| IDC_ERR_INTERNAL)
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -223,7 +222,14 @@ pub fn add_certificate(handle: u64, certificate: &[u8]) -> Result<(), i32> {
 /// call starts the session over with the certificates added since.
 pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
-        let today = today(now)?;
+        let today = match today(now) {
+            Ok(today) => today,
+            Err(code) => {
+                // The copies do not stay, whatever the answer.
+                session.forget_offered();
+                return Err(code);
+            }
+        };
         session.certificate = None;
         session.artifacts_checked = false;
         session.forget_crl();
@@ -232,7 +238,7 @@ pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
             select_certificate(&offered, today, &session.trust.issuer_keys(), &mut Sha2)
         };
         session.forget_offered();
-        Ok(bytes_of(match selection {
+        bytes_of(match selection {
             Selection::Chosen { index, certificate } => {
                 let result = json!({
                     "ok": true,
@@ -259,7 +265,7 @@ pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
                 }
                 result
             }
-        }))
+        })
     })
 }
 
@@ -319,7 +325,7 @@ pub fn choose_crl(handle: u64, index: &[u8]) -> Result<Vec<u8>, i32> {
                 issuer.as_str(),
             )
         });
-        Ok(bytes_of(match choice {
+        bytes_of(match choice {
             Some(choice) => {
                 let result = json!({
                     "ok": true,
@@ -330,7 +336,7 @@ pub fn choose_crl(handle: u64, index: &[u8]) -> Result<Vec<u8>, i32> {
                 result
             }
             None => json!({ "ok": false, "problem": "crl_unavailable" }),
-        }))
+        })
     })
 }
 
@@ -391,6 +397,8 @@ pub fn check_crl(
         let (Some(certificate), Some(choice)) = (&session.certificate, &session.crl_choice) else {
             return Err(IDC_ERR_REFUSED);
         };
+        // The file chosen from the index stays; what an earlier file gave
+        // does not.
         session.crl_keys = None;
         session.path = None;
         let remembered = |number: Option<&CrlNumber>| match number {
@@ -400,7 +408,7 @@ pub fn check_crl(
         let failed = |mut result: Value| {
             result["ok"] = false.into();
             result["highest_after"] = remembered(highest.as_ref());
-            Ok(bytes_of(result))
+            bytes_of(result)
         };
         let Some(server_days) = server_max_age_days(config) else {
             return failed(json!({ "problem": "malformed_response" }));
@@ -449,11 +457,11 @@ pub fn check_crl(
         };
         // A serial number is in the tree exactly when it is one of the keys.
         if crl.keys.contains(&certificate.serial()) {
-            return Ok(bytes_of(json!({
+            return bytes_of(json!({
                 "ok": false,
                 "problem": "revoked",
                 "highest_after": highest_after.as_str(),
-            })));
+            }));
         }
         let result = json!({
             "ok": true,
@@ -463,7 +471,7 @@ pub fn check_crl(
             "highest_after": highest_after.as_str(),
         });
         session.crl_keys = Some(crl.keys);
-        Ok(bytes_of(result))
+        bytes_of(result)
     })
 }
 
@@ -515,7 +523,7 @@ pub fn check_artifacts(
             .as_ref()
             .ok_or(IDC_ERR_REFUSED)?
             .issuer();
-        session.artifacts_checked = session.trust.artifacts.are(
+        session.artifacts_checked = session.trust.artifacts.match_files(
             issuer,
             circuit,
             verification_key,
@@ -555,8 +563,6 @@ pub fn card_state_request(handle: u64, scope_signature: &[u8]) -> Result<Vec<u8>
         let text = scoped_id_text(&id).ok_or(IDC_ERR_INTERNAL)?;
         // The scope string is ASCII.
         let scope = std::str::from_utf8(scope).map_err(|_| IDC_ERR_INTERNAL)?;
-        Ok(bytes_of(
-            json!({ "scope_string": scope, "scoped_id": text }),
-        ))
+        bytes_of(json!({ "scope_string": scope, "scoped_id": text }))
     })
 }

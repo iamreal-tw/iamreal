@@ -41,8 +41,14 @@ pub fn build_tree_in_parts(
             .collect();
         threads
             .into_iter()
-            // A thread that panicked gave no part.
-            .map(|thread| thread.join().unwrap_or(Err(TreeError::Hash)))
+            .map(|thread| {
+                thread.join().unwrap_or_else(|payload| {
+                    // A thread that panicked gave no part. What the panic
+                    // carried is not read, and dropping it could panic.
+                    std::mem::forget(payload);
+                    Err(TreeError::Hash)
+                })
+            })
             .collect()
     });
     combine(

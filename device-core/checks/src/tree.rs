@@ -37,7 +37,7 @@ impl From<HashFailed> for TreeError {
 }
 
 /// Where the target's path ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum PathEnd {
     Empty,
     Leaf(Key),

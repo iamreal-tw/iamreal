@@ -31,7 +31,7 @@ extern "C" {
 #endif
 
 /* The version of these functions. It goes up when one changes or goes away. */
-#define IDC_ABI_VERSION 2
+#define IDC_ABI_VERSION 1
 
 /* The function did what it is for. */
 #define IDC_OK 0
@@ -109,8 +109,10 @@ int32_t idc_declaration_code(uint32_t roster,
  * prover/src/session.rs.
  *
  * `now` is the device's clock, in seconds since 1970-01-01T00:00:00Z; the
- * core takes the date in Taiwan from it. IDC_ERR_ARGUMENT for a clock
- * outside the years 2000 to 2049, and for a number that names no session.
+ * core takes the date in Taiwan from it. IDC_ERR_ARGUMENT for a number
+ * that names no session, and for a clock outside the years 2000 to 2049:
+ * no certificate is valid then, and the app says to check the phone's
+ * clock. The certificates added are overwritten in that case too.
  *
  * One call at a time runs on a session; a second call waits. Every idc_buf
  * a session function fills is the caller's to give back with idc_buf_free.

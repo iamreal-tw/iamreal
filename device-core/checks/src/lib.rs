@@ -6,7 +6,10 @@
 //! has no dependencies and no `unsafe`, so it can also be built for wasm.
 //!
 //! Errors are fixed names. They never carry a value read from a card, a
-//! certificate, a CRL or an account.
+//! certificate, a CRL or an account. An answer that stops the card proof
+//! carries its reason code and the details the specification says are
+//! reported with it (a certificate's dates, CRL numbers, a number of
+//! days), and nothing else.
 
 pub mod base32;
 pub mod certificate;

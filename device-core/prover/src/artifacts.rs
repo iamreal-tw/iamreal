@@ -62,7 +62,7 @@ impl Artifacts {
 
     /// Whether the four files are the ones written here, for the circuit
     /// of `issuer`.
-    pub fn are(
+    pub fn match_files(
         &self,
         issuer: IssuerName,
         circuit: &[u8],

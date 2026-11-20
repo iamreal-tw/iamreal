@@ -6,7 +6,8 @@ use crate::field::Fe;
 
 pub const MAX_SERIAL_BYTES: usize = 20;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Without `Debug`: a certificate's serial number is not to be printed.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Key {
     /// Bits 128 to 159.
     high: u32,

@@ -4,7 +4,6 @@
 
 use crate::crl::{CrlNumber, Unusable, UsableCrl, usable_crl};
 use crate::date::Date;
-use crate::der::days_from_civil;
 use crate::hash::Sha256;
 use crate::issuers::IssuerKey;
 
@@ -91,7 +90,9 @@ pub fn choose_from_index<'a>(
 }
 
 /// Why the device does not use the file: the reason codes of the
-/// specification, with the details it reports.
+/// specification, with the details the specification says are reported
+/// (two CRL numbers, a number of days). An answer for the screen, not an
+/// error: nothing else read from the CRL is in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CrlProblem {
     /// The file's SHA-256 is not the one the index gave.
@@ -116,15 +117,6 @@ impl CrlProblem {
             CrlProblem::Stale { .. } => "crl_stale",
         }
     }
-}
-
-/// The number of days from 1970-01-01 to `date`.
-fn day_of(date: Date) -> i64 {
-    days_from_civil(
-        i64::from(date.year()),
-        i64::from(date.month()),
-        i64::from(date.day()),
-    )
 }
 
 /// Checks the file the device downloaded, in the order of the
@@ -154,7 +146,7 @@ pub fn check_crl_file(
         });
     }
     // A CRL date after today is not stale.
-    let days = day_of(today) - crl.crl_day();
+    let days = today.days_since_1970() - crl.crl_day();
     if days > 0 && days.unsigned_abs() > max_age_days {
         return Err(CrlProblem::Stale { days, max_age_days });
     }

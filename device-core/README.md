@@ -74,7 +74,7 @@
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。
+- **時間由 app 給。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；憑證和清冊各收一次 `now`，流程跨過台灣的午夜時兩步用的是各自那一刻的日期。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
@@ -133,7 +133,7 @@
 
 **版本。** `IDC_ABI_VERSION` 在函式改了或拿掉時加一號；`idc_abi_version()` 回傳連結進來的函式庫是哪一版，app 可以在啟動時比對標頭檔的數字。
 
-**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，`idc_` 的函式裡沒有 Poseidon2，app 就不能靠它們自己算匿名編號（ADR-0034「核心擋住的順序」）。這一條擋的是寫錯順序，不是擋存心繞過：靜態函式庫裡還有 Barretenberg 自己的 C 函式（`bbapi`），所以 app 的程式只准呼叫標頭檔裡 `idc_` 開頭的函式，審 `android/`、`ios/` 時要看這一點。算匿名編號的 C 函式只有 `idc_session_card_state_request`，它收一個四步都通過的 session。`prover/src/hashes.rs`、`tree.rs`、`session::open` 在 Rust 裡是 `pub`，那是給這個目錄的測試用的，app 看不到。
+**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，`idc_` 的函式裡沒有 Poseidon2，app 就不能靠它們自己算匿名編號（ADR-0034「核心擋住的順序」）。這一條擋的是寫錯順序，不是擋存心繞過：靜態函式庫裡還有 Barretenberg 自己的 C 函式（`bbapi`），所以 app 的程式只准呼叫標頭檔裡 `idc_` 開頭的函式，審 `android/`、`ios/` 時要看這一點。算匿名編號的 C 函式只有 `idc_session_card_state_request`，它收一個四步都通過的 session。`prover/src/hashes.rs`、`tree.rs`、`session::open` 在 Rust 裡是 `pub`，那是給這個目錄的測試用的，Kotlin、Swift、C 都叫不到。Android 的 JNI 那一層要用 C 寫、只呼叫 `idc_` 的函式；用 Rust 寫而且引用這個套件的話，這幾個 `pub` 它都叫得到，關卡就擋不住它。
 
 Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函式；那一層在 `android/`，照同樣的規矩釋放和清除。
 

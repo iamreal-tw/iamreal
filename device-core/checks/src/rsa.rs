@@ -3,9 +3,11 @@
 //! ("Issuer") states it. Verification only: there is no private key here.
 //!
 //! The arithmetic is written out so that this half of the core has no
-//! dependencies. It has no branch and no memory access that depends on the
-//! signature, and what it computes from the signature is overwritten
-//! before it returns: the card's own signatures are checked with it too.
+//! dependencies. The card's own signatures are checked with it too, so
+//! the modular arithmetic has no branch and no memory access that depends
+//! on the signature (the one branch is whether the signature is below the
+//! modulus at all), and what is computed from the signature is
+//! overwritten before the function returns.
 
 /// The DigestInfo of SHA-256, with its NULL parameters.
 const DIGEST_INFO: [u8; 19] = [
