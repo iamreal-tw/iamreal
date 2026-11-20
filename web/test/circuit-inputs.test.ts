@@ -26,7 +26,10 @@ function canonical(map: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** The Taiwan date of a `current_time` (YYMMDD155959). */
-const dayOfCurrentTime = (t: string): number => dayOf(2000 + Number(t.slice(0, 2)), Number(t.slice(2, 4)), Number(t.slice(4, 6)));
+function dayOfCurrentTime(t: number): number {
+  const s = String(t);
+  return dayOf(2000 + Number(s.slice(0, 2)), Number(s.slice(2, 4)), Number(s.slice(4, 6)));
+}
 
 describe("circuit-inputs.json", async () => {
   const v = vectors("circuit-inputs.json");

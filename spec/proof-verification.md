@@ -6,8 +6,9 @@ How to verify the proof of a record: the circuits, the public inputs, how
 they are encoded, and the checks a verifier makes before and around the
 proving system's verifier. [`record.md`](record.md) says where each public
 input comes from; this document says how to hand them to the verifier and
-what to watch for. [`circuit-inputs.md`](circuit-inputs.md) is the device's
-side: the inputs it gives the circuit and the public inputs it expects. A verifier that skips one of these checks has a hole the
+what to watch for. [`circuit-inputs.md`](circuit-inputs.md) is the
+device's side: the inputs it gives the circuit and the public inputs it
+expects. A verifier that skips one of these checks has a hole the
 circuit cannot close.
 
 ## Circuits and proving system

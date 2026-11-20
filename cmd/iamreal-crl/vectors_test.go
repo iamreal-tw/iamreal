@@ -35,6 +35,38 @@ type testIssuer struct {
 	Modulus string `json:"modulus"`
 }
 
+// The CRLs of revocation-tree.json.
+type vectorCRL struct {
+	Name   string `json:"name"`
+	Issuer string `json:"issuer"`
+	CRL    string `json:"crl"`
+	Root   string `json:"root"`
+}
+
+type treeVectors struct {
+	Issuers []testIssuer `json:"issuers"`
+	CRLs    []vectorCRL  `json:"crls"`
+	Cases   []struct {
+		Label  string      `json:"label"`
+		CRL    string      `json:"crl"`
+		Serial string      `json:"serial"`
+		InTree bool        `json:"in_tree"`
+		Path   *vectorPath `json:"path"`
+	} `json:"cases"`
+}
+
+// crlsByName loads revocation-tree.json and indexes its CRLs by name.
+func crlsByName(t *testing.T) (treeVectors, map[string]vectorCRL) {
+	t.Helper()
+	var v treeVectors
+	loadVectors(t, "revocation-tree.json", &v)
+	m := map[string]vectorCRL{}
+	for _, c := range v.CRLs {
+		m[c.Name] = c
+	}
+	return v, m
+}
+
 func loadVectors(t *testing.T, name string, v any) {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(vectorsDir, name))
@@ -124,29 +156,8 @@ func samePath(t *testing.T, got, want vectorPath) {
 }
 
 func TestVectorsRevocationTree(t *testing.T) {
-	var v struct {
-		TestIssuers []testIssuer `json:"issuers"`
-		CRLs        []struct {
-			Name   string `json:"name"`
-			Issuer string `json:"issuer"`
-			CRL    string `json:"crl"`
-			Root   string `json:"root"`
-		} `json:"crls"`
-		Cases []struct {
-			Label  string      `json:"label"`
-			CRL    string      `json:"crl"`
-			Serial string      `json:"serial"`
-			InTree bool        `json:"in_tree"`
-			Path   *vectorPath `json:"path"`
-		} `json:"cases"`
-	}
-	loadVectors(t, "revocation-tree.json", &v)
-	keys := keyFiles(t, v.TestIssuers)
-	type crlFile struct{ issuer, der, root string }
-	crls := map[string]crlFile{}
-	for _, c := range v.CRLs {
-		crls[c.Name] = crlFile{c.Issuer, c.CRL, c.Root}
-	}
+	v, crls := crlsByName(t)
+	keys := keyFiles(t, v.Issuers)
 	if len(v.Cases) == 0 {
 		t.Fatal("no cases")
 	}
@@ -156,7 +167,7 @@ func TestVectorsRevocationTree(t *testing.T) {
 			if !ok {
 				t.Fatalf("no CRL %q", c.CRL)
 			}
-			got, err := proveVector(t, keys, f.issuer, f.der, c.Serial)
+			got, err := proveVector(t, keys, f.Issuer, f.CRL, c.Serial)
 			if c.InTree {
 				if !errors.Is(err, crl.ErrInTree) {
 					t.Errorf("in the tree: prove gives %v", err)
@@ -167,41 +178,38 @@ func TestVectorsRevocationTree(t *testing.T) {
 				t.Fatal(err)
 			}
 			samePath(t, got, *c.Path)
-			if c.Path.Root != f.root {
-				t.Errorf("the path's root %s is not the CRL's %s", c.Path.Root, f.root)
+			if c.Path.Root != f.Root {
+				t.Errorf("the path's root %s is not the CRL's %s", c.Path.Root, f.Root)
 			}
 		})
 	}
 }
 
-// The paths in circuit-inputs.json are the paths of their certificate's
-// serial number in a CRL of revocation-tree.json.
+// The path of each case of circuit-inputs.json is the path of its
+// certificate's serial number in the CRL it names.
 func TestVectorsCircuitInputsPaths(t *testing.T) {
-	var tree struct {
-		TestIssuers []testIssuer `json:"issuers"`
-		CRLs        []struct {
-			Issuer string `json:"issuer"`
-			CRL    string `json:"crl"`
-			Root   string `json:"root"`
-		} `json:"crls"`
-	}
-	loadVectors(t, "revocation-tree.json", &tree)
+	tree, crls := crlsByName(t)
 	var v struct {
-		TestIssuers []testIssuer `json:"issuers"`
-		Cases       []struct {
+		Issuers []testIssuer `json:"issuers"`
+		Cases   []struct {
 			Label       string     `json:"label"`
 			Issuer      string     `json:"issuer"`
 			Certificate string     `json:"certificate"`
+			CRL         string     `json:"crl"`
 			Path        vectorPath `json:"path"`
 		} `json:"cases"`
 	}
 	loadVectors(t, "circuit-inputs.json", &v)
-	if !reflect.DeepEqual(v.TestIssuers, tree.TestIssuers) {
+	if !reflect.DeepEqual(v.Issuers, tree.Issuers) {
 		t.Fatal("the two files have different test issuers")
 	}
-	keys := keyFiles(t, tree.TestIssuers)
+	keys := keyFiles(t, tree.Issuers)
 	for _, c := range v.Cases {
 		t.Run(c.Label, func(t *testing.T) {
+			f, ok := crls[c.CRL]
+			if !ok || f.Issuer != c.Issuer {
+				t.Fatalf("no CRL %q of %s", c.CRL, c.Issuer)
+			}
 			der, err := hex.DecodeString(c.Certificate)
 			if err != nil {
 				t.Fatal(err)
@@ -210,18 +218,11 @@ func TestVectorsCircuitInputsPaths(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, f := range tree.CRLs {
-				if f.Issuer != c.Issuer || f.Root != c.Path.Root {
-					continue
-				}
-				got, err := proveVector(t, keys, f.Issuer, f.CRL, cert.SerialNumber.Text(16))
-				if err != nil {
-					t.Fatal(err)
-				}
-				samePath(t, got, c.Path)
-				return
+			got, err := proveVector(t, keys, f.Issuer, f.CRL, cert.SerialNumber.Text(16))
+			if err != nil {
+				t.Fatal(err)
 			}
-			t.Errorf("no CRL of %s in revocation-tree.json has the root %s", c.Issuer, c.Path.Root)
+			samePath(t, got, c.Path)
 		})
 	}
 }

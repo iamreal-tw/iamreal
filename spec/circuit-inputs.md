@@ -61,9 +61,11 @@ circuit's RSA check takes next to each modulus. The card's modulus is not an
 input: the circuit reads it from `tbs`, at the position its walk of the
 structure finds it.
 
-A `tbsCertificate` longer than 1,536 bytes does not fit. The device's checks
-of the certificate stop such a card before the PIN, so the device never
-reaches this step with one.
+The circuit accepts a `tbs_len` of at most 1,527: the reference circom
+circuit takes the SHA-256-padded `tbsCertificate` in a 1,536-byte buffer,
+and the padding adds at least 9 bytes. The device's checks of the
+certificate stop a longer one before the PIN, so the device never reaches
+this step with one.
 
 ## Public inputs the device expects
 
@@ -93,9 +95,16 @@ issued by test keys (not MOICA's), one for each circuit, with their paths,
 signatures and `current_time`, the whole input map and the expected public
 inputs. The circuits in [`../web/circuits/`](../web/circuits) accept each
 input map, and compute the last three public inputs as listed. Each path is
-the path of the certificate's serial number in one of the CRLs of
-[`vectors/revocation-tree.json`](vectors/revocation-tree.json).
+the path of the certificate's serial number in the CRL the case names in
+[`vectors/revocation-tree.json`](vectors/revocation-tree.json). How
+`current_time` follows from a challenge and the declaration code from the
+accounts have their own vectors, in
+[`vectors/challenge.json`](vectors/challenge.json) and
+[`vectors/declaration-code.json`](vectors/declaration-code.json); here they
+are given.
 
-In the vectors, `tbs`, `scope` and `declaration_code` are written as hex
-strings of their bytes, `tbs` with its zeros; every other number, limbs
-included, as a 0x-prefixed field element of 64 hex digits.
+A case's `current_time` is a JSON number, the decimal `YYMMDDHHMMSS`. In
+its `inputs`, `tbs`, `scope` and `declaration_code` are written as hex
+strings of their bytes, `tbs` with its zeros; `tbs_len` is a JSON number and
+`smt_is_old0` a boolean; every other value, each limb included, is a
+0x-prefixed field element of 64 hex digits.

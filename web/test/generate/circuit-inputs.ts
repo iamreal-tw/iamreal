@@ -33,7 +33,7 @@ import type { IssuerName } from "../../src/issuers.ts";
 import { circuitInputs, circuitOf, expectedPublicInputs } from "../../src/prover/inputs.ts";
 import { poseidon } from "../bb.ts";
 import { makeCrl } from "../fixtures/crls.ts";
-import { type TestKey, signWith } from "../fixtures/der-build.ts";
+import { signWith } from "../fixtures/der-build.ts";
 import { type World, makeWorld, randomSerials } from "../fixtures/world.ts";
 
 const GENERATED_BY = "web/test/generate/circuit-inputs.ts";
@@ -50,8 +50,9 @@ const thisUpdate = new Date("2026-11-15T16:30:00Z");
 const challenge = "2026-11-16.000G40R40M30E209185GR38E1W";
 
 const g3 = await makeWorld({ issuer: "G3" });
-const g2 = await makeWorld({ issuer: "G2" });
-const card = g3.serial;
+// A longer name, so that the two certificates differ in length.
+const g2 = await makeWorld({ issuer: "G2", name: "測試用戶之二" });
+const cardSerial = g3.serial;
 const issuers = (["G2", "G3"] as const).map((name) => ({ issuer: name, modulus_bits: g3.issuerKeys[name].bits, modulus: "0x" + g3.issuerKeys[name].modulus.toString(16) }));
 
 // ---------------------------------------------------------------- the tree
@@ -65,7 +66,7 @@ interface CrlSpec {
 
 // The card's serial number shares its lowest 40 bits with these keys, so its
 // path runs past the random keys to depth 40.
-const near = (bits: number[]): bigint => bits.reduce((k, b) => k ^ (1n << BigInt(b)), card);
+const near = (bits: number[]): bigint => bits.reduce((k, b) => k ^ (1n << BigInt(b)), cardSerial);
 const random = randomSerials(200, 7n);
 const crlSpecs: CrlSpec[] = [
   {
@@ -76,7 +77,7 @@ const crlSpecs: CrlSpec[] = [
   },
   {
     name: "g2-empty",
-    what: "200 serials like MOICA's, and two that share the card's lowest 40 bits and differ from it in bit 40: the card's path ends in an empty subtree at depth 41, after zero siblings",
+    what: "200 serials like MOICA's, and two that share the card's lowest 40 bits and differ from it in bit 40: past the random keys the card's path runs on with zero siblings to depth 40, and ends in an empty subtree at depth 41",
     issuer: "G2",
     serials: [...randomSerials(200, 11n), near([40]), near([40, 41])],
   },
@@ -113,7 +114,7 @@ for (const [i, s] of crlSpecs.entries()) {
   crls.set(s.name, { der, root: r.inTree ? r.root : r.proof.root, keys: crl.keys, count: crl.count, spec: s });
 }
 
-async function prove(crlName: string, serial: bigint): Promise<{ inTree: true } | { inTree: false; proof: AbsenceProof }> {
+async function pathOrInTree(crlName: string, serial: bigint): Promise<{ inTree: true } | { inTree: false; proof: AbsenceProof }> {
   const c = crls.get(crlName)!;
   const results = [];
   for (const n of [1, 2, 4]) results.push(await buildWith(Array.from({ length: n }, () => p.runner()), c.keys, c.count, serial));
@@ -126,17 +127,17 @@ async function prove(crlName: string, serial: bigint): Promise<{ inTree: true } 
 }
 
 const treeCases: { label: string; crl: string; serial: bigint; expect: "old_leaf" | "empty" | "in_tree" }[] = [
-  { label: "the card's serial: the path ends at a leaf of another key", crl: "g3-leaf", serial: card, expect: "old_leaf" },
-  { label: "the card's serial: the path ends in an empty subtree", crl: "g2-empty", serial: card, expect: "empty" },
+  { label: "the card's serial: the path ends at a leaf of another key", crl: "g3-leaf", serial: cardSerial, expect: "old_leaf" },
+  { label: "the card's serial: the path ends in an empty subtree", crl: "g2-empty", serial: cardSerial, expect: "empty" },
   { label: "a revoked serial: in the tree, no path", crl: "g3-leaf", serial: random[17]!, expect: "in_tree" },
   { label: "a serial of 20 bytes, not in the tree", crl: "g3-leaf", serial: (0x7fn << 152n) | 0x0123456789abcdef0123456789abcdefn, expect: "old_leaf" },
-  { label: "an empty CRL: root 0, every sibling 0", crl: "g3-empty-list", serial: card, expect: "empty" },
+  { label: "an empty CRL: root 0, every sibling 0", crl: "g3-empty-list", serial: cardSerial, expect: "empty" },
 ];
 
 const treeVectors = [];
 const paths = new Map<string, AbsenceProof>();
 for (const c of treeCases) {
-  const r = await prove(c.crl, c.serial);
+  const r = await pathOrInTree(c.crl, c.serial);
   if (c.expect === "in_tree") {
     assert.equal(r.inTree, true, c.label);
     treeVectors.push({ label: c.label, crl: c.crl, serial: "0x" + c.serial.toString(16), in_tree: true });
@@ -172,16 +173,14 @@ const scope = asciiBytes(scopeString);
 const code = await declarationCode(scopeString, [{ platform: "threads", username: "alice" }], challenge);
 
 async function circuitCase(label: string, world: World, crlName: string) {
-  const issuers = world.issuers;
-  const checked = await checkCertificate(world.signingCert, day, issuers);
+  const checked = await checkCertificate(world.signingCert, day, world.issuers);
   assert.equal(checked.ok, true);
-  if (!checked.ok) throw new Error();
+  if (!checked.ok) throw new Error(`${label}: the certificate does not pass`);
   const cert = checked.cert;
   const tree = paths.get(`${crlName} ${cert.serial}`)!;
   assert.ok(tree, `no path for ${label}`);
-  const card: TestKey = world.card;
-  const scopeSignature = await signWith(card, scope);
-  const declarationCodeSignature = await signWith(card, code);
+  const scopeSignature = await signWith(world.card, scope);
+  const declarationCodeSignature = await signWith(world.card, code);
   const ct = currentTime(day);
   const inputs = circuitInputs({ cert, tree, currentTime: ct, scope, scopeSignature, declarationCode: code, declarationCodeSignature });
   const id = await scopedId(scopeSignature, hash2);
@@ -206,8 +205,9 @@ async function circuitCase(label: string, world: World, crlName: string) {
     issuer: cert.issuer.name,
     circuit,
     certificate: hexOf(world.signingCert),
+    crl: crlName,
     path: pathOf(tree),
-    current_time: ct.toString(),
+    current_time: Number(ct),
     scope_string: scopeString,
     scope_signature: hexOf(scopeSignature),
     declaration_code: new TextDecoder().decode(code),
@@ -221,9 +221,9 @@ const circuitVectors = {
   spec: "circuit-inputs",
   status: "draft",
   note:
-    "Each case: a certificate (DER, hex) issued by one of `issuers` (test keys, not MOICA's), the path of its serial number (revocation-tree.json), `current_time`, and the card's signatures (hex) over the scope string and the declaration code; " +
+    "Each case: a certificate (DER, hex) issued by one of `issuers` (test keys, not MOICA's; exponent 65537), the path of its serial number in the CRL `crl` of revocation-tree.json, `current_time` (a JSON number, spec/challenge.md), and the card's signatures (hex) over the scope string and the declaration code; " +
     "`inputs` is the circuit's input map and `public_inputs` the public inputs the proof must carry, in order. " +
-    "In `inputs`, `tbs`, `scope` and `declaration_code` are byte arrays written as hex; every other number is 0x-prefixed, 64 hex digits, big-endian. " +
+    "In `inputs`, `tbs`, `scope` and `declaration_code` are byte arrays written as hex, `tbs_len` is a JSON number, `smt_is_old0` a boolean, and every other value (a field element or a list of limbs) is 0x-prefixed, 64 hex digits, big-endian. " +
     "The circuits in web/circuits/ accept every case.",
   issuers,
   generated_by: GENERATED_BY,
