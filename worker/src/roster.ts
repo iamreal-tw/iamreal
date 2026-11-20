@@ -154,6 +154,9 @@ export const SCHEMA_VERSION = 1;
  */
 export const OTHER_SCHEMA = "the object's tables were made by another SCHEMA_VERSION";
 
+/** What the object throws for what needs the views while they are not at the last record (`#viewsAtLastRecord`). */
+export const VIEWS_BEHIND = "the object's views are not at its last record";
+
 /** Why the object does not take a submission: the roster is paused, or the challenge is not one to submit (docs/api/card-proof.md). */
 export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
 
@@ -236,6 +239,17 @@ export class Roster extends DurableObject<Env> {
    * build did not leave; everything else goes on.
    */
   readonly #paused: boolean;
+  /**
+   * Whether the views the pages read (views.ts) reflect every record, as
+   * the object found or made them when it started. When they do not, a page
+   * would show a roster that is not this one (no card at all, or a card as
+   * not found), and a record could not be written with its change to them:
+   * the pages' reads and a submission then throw `VIEWS_BEHIND`, which the
+   * Worker answers as its own failure. Challenges, card states and the CRL
+   * archive do not read the views and go on. It is decided once, when the
+   * object starts; the next start decides again.
+   */
+  readonly #viewsAtLastRecord: boolean;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -260,9 +274,29 @@ export class Roster extends DurableObject<Env> {
     // Views that are not at the last record are written again from the records: an object that has records
     // from before it had the views, or whose views were cleared. Not while the roster is paused: the stored
     // records were then taken by other rules than the ones this build would compute their kinds by.
-    if (this.#tablesAreThisVersion && !this.#paused && viewSeq(sql) !== this.#rosterRow().count) {
-      ctx.storage.transactionSync(() => rebuildViews(sql, this.settings.kind, this.settings.platforms));
+    //
+    // Writing them again can fail: a stored line this build does not read, a record its rules do not take. The
+    // object starts all the same, with views it does not use (`#viewsAtLastRecord`): the transaction leaves them
+    // as they were, one line says so, and the next start tries again.
+    let atLastRecord = false;
+    if (this.#tablesAreThisVersion) {
+      atLastRecord = viewSeq(sql) === this.#rosterRow().count;
+      if (!atLastRecord && !this.#paused) {
+        try {
+          ctx.storage.transactionSync(() => rebuildViews(sql, this.settings.kind, this.settings.platforms));
+          atLastRecord = true;
+        } catch (e) {
+          console.error(JSON.stringify({ event: "views_not_filled", error: e instanceof Error ? e.name : "unknown" }));
+        }
+      }
     }
+    this.#viewsAtLastRecord = atLastRecord;
+  }
+
+  /** For a method about to read the views, or to write a record with them: throws if they are not at the last record. */
+  #checkViews(): void {
+    this.#checkTables();
+    if (!this.#viewsAtLastRecord) throw new Error(VIEWS_BEHIND);
   }
 
   /** For a method about to read or write the tables: throws if they were made by another SCHEMA_VERSION. */
@@ -304,6 +338,8 @@ export class Roster extends DurableObject<Env> {
   beginSubmission(challenge: string): "ok" | SubmissionRefusal {
     this.#checkTables();
     if (this.#paused) return "paused";
+    // Before the submission is counted: a record could not be written, and the challenge stays as it was.
+    this.#checkViews();
     const row = this.#challenge(challenge);
     if (row === null) return "challenge_unknown";
     if (row.accepted) return "challenge_used";
@@ -336,6 +372,7 @@ export class Roster extends DurableObject<Env> {
   async accept(fields: RecordFields): Promise<AcceptAnswer> {
     this.#checkTables();
     if (this.#paused) return refused("paused");
+    this.#checkViews();
     for (;;) {
       const { count, fingerprint } = this.#rosterRow();
       const record: RosterRecord = { ...fields, seq: count + 1 };
@@ -458,13 +495,13 @@ export class Roster extends DurableObject<Env> {
    * on today's date in Taiwan (page-data.ts, `PageData`).
    */
   pageCounts(platform: string): Counts {
-    this.#checkTables();
+    this.#checkViews();
     return counts(this.ctx.storage.sql, scopeOf(this.settings.kind), platform, taiwanDay(now().getTime()));
   }
 
   /** The cards of a short ID in the roster's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
   pageCards(shortId: string): CardsOfShortId {
-    this.#checkTables();
+    this.#checkViews();
     return { today: taiwanDay(now().getTime()), cards: cardsOfShortId(this.ctx.storage.sql, scopeOf(this.settings.kind), shortId) };
   }
 

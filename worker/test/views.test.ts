@@ -128,21 +128,82 @@ describe("the views written again from the records", () => {
     assert.deepEqual([answer.seq, answer.kinds[0].account_cards], [17, 3]);
   });
 
-  test("a paused roster does not fill them: its records were taken by other rules than this build's", async () => {
+  /** What a page answers when the back end itself fails: 500, plain text, never kept by a cache. */
+  const wantUnavailable = async (path: string): Promise<void> => {
+    const res = await worker.fetch(path);
+    assert.deepEqual([res.status, res.headers.get("cache-control"), await res.text()], [500, "no-store", "internal error\n"], path);
+  };
+
+  test("a paused roster does not fill them, and with views that are not at its last record it shows no page: not 0 cards, not a card that is not found", async () => {
     await everyKind();
     const views = await worker.roster.views();
-    await worker.roster.clearViews();
+    const pages = await Promise.all(["/", `/p/${CARD_A}`].map(pageOf));
+    const card = (await checkRoster(worker))[0]!.scopedId;
+    const state = await cardState(worker, card);
+    // Paused with views that are whole: the pages go on.
     await worker.roster.setStoredRulesVersion("another");
     await worker.roster.restart();
     try {
+      assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
+      // Paused with views that were cleared: its records were taken by other rules than this build's, so they are not filled.
+      await worker.roster.clearViews();
+      await worker.roster.restart();
       assert.deepEqual((await worker.roster.views()).view_state, [{ id: 1, seq: 0 }]);
-      // The pages go on, from what the views have.
-      assert.equal((await pageOf("/"))[0], 200);
+      for (const path of ["/", `/p/${CARD_A}`, "/p/E000000000"]) await wantUnavailable(path);
+      // A short ID that does not read needs no roster, and what is no page is still the 404 page.
+      assert.equal((await worker.fetch("/p/nothing")).status, 404);
+      assert.equal((await worker.fetch("/nothing")).status, 404);
+      // The API says what a paused roster says.
+      assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 503);
+      assert.deepEqual(await cardState(worker, card), state);
     } finally {
       await worker.roster.setStoredRulesVersion("the build's");
       await worker.roster.restart();
     }
     assert.deepEqual(await worker.roster.views(), views);
+    assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
+  });
+
+  test("when filling them fails the object still starts: the pages and a submission are 500, challenges and card states go on, and the next start fills them", async () => {
+    await everyKind();
+    const views = await worker.roster.views();
+    const pages = await Promise.all(["/", `/p/${CARD_A}`].map(pageOf));
+    const root = await publishCrl(worker, { issuer: "G3", number: parseDay("2026-11-18")!, thisUpdate: tw("2026-11-18", "05:00:00"), serials: [11, 12] });
+    const stored = await checkRoster(worker);
+    const card = stored[0]!.scopedId;
+    const state = await cardState(worker, card);
+    await worker.roster.clearViews();
+    await worker.roster.failWritesTo("view_cards");
+    await worker.roster.restart();
+    try {
+      // Nothing of a half-filled view is kept.
+      assert.deepEqual((await worker.roster.views()).view_state, [{ id: 1, seq: 0 }]);
+      assert.deepEqual([(await worker.roster.views()).view_cards, (await worker.roster.views()).view_history], [[], []]);
+      for (const path of ["/", `/p/${CARD_A}`, "/p/E000000000"]) await wantUnavailable(path);
+      // A challenge is issued and a card's state is read as before.
+      const submission = await sub(worker, newCard(), root, "threads:alice");
+      assert.deepEqual(await cardState(worker, card), state);
+      // A submission is the back end's own failure, as docs/api/card-proof.md writes it; nothing is written and the challenge is not used up.
+      const logged = worker.logLines().length;
+      const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(submission) });
+      assert.deepEqual([res.status, res.headers.get("cache-control"), JSON.parse(await res.text())], [500, "no-store", { error: "internal" }]);
+      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "roster", error: "Error" }]);
+      assert.deepEqual(await checkRoster(worker), stored);
+      // Each start tries again, and says so in one line.
+      await worker.roster.restart();
+      await wantUnavailable("/");
+      assert.ok(worker.logLines().filter((l) => l === JSON.stringify({ event: "views_not_filled", error: "Error" })).length >= 2);
+
+      await worker.roster.failWritesTo(null);
+      await worker.roster.restart();
+      assert.deepEqual(await worker.roster.views(), views);
+      assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
+      // The submission that was refused is written now: its challenge was neither marked nor counted out.
+      const answer = await mustSubmit(worker, submission, "threads first");
+      assert.deepEqual([answer.seq, answer.kinds[0].account_cards], [17, 3]);
+    } finally {
+      await worker.roster.failWritesTo(null);
+    }
   });
 });
 
