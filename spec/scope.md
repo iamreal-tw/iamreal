@@ -207,5 +207,6 @@ bound to the proof only through the declaration code.
 
 [`vectors/scope.json`](vectors/scope.json): the accepted scope strings with
 their packed values; strings that are not accepted, with the reason;
-platform IDs accepted and not accepted by each roster; usernames valid and
+platform IDs accepted and not accepted by each roster, the accepted ones
+with their display name and `username` format; usernames valid and
 invalid for the format of each platform.

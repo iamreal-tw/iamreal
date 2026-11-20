@@ -1,7 +1,7 @@
 {
   "spec": "scope",
   "status": "draft",
-  "note": "`platforms`: the platform IDs each roster accepts, and IDs it does not. `usernames`: each against the format of its platform (spec/scope.md, \"The `username` format\"); test-example is a platform of test rosters only.",
+  "note": "`platforms`: the platform IDs each roster accepts, each with its display name and its `username` format as the table writes them, and IDs it does not. `usernames`: each against the format of its platform (spec/scope.md, \"The `username` format\"); test-example is a platform of test rosters only.",
   "scopes": [
     {
       "roster": "production",
@@ -81,19 +81,22 @@
       "roster": "production",
       "platform": "threads",
       "accepted": true,
-      "display_name": "Threads"
+      "display_name": "Threads",
+      "username_format": "[a-z0-9._]{1,30}"
     },
     {
       "roster": "test",
       "platform": "test-example",
       "accepted": true,
-      "display_name": "Example (no real service)"
+      "display_name": "Example (no real service)",
+      "username_format": "[a-z0-9-]{1,20}"
     },
     {
       "roster": "test",
       "platform": "threads",
       "accepted": true,
-      "display_name": "Threads"
+      "display_name": "Threads",
+      "username_format": "[a-z0-9._]{1,30}"
     },
     {
       "roster": "production",

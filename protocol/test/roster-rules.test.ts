@@ -4,11 +4,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Day, formatDay, parseDay } from "../src/date.ts";
+import { platformsOf } from "../src/platforms.ts";
 import { MemoryRules } from "../src/rules-memory.ts";
 import { type CardState, EMPTY_SLOT, RULES_VERSION, type RecordInput, type SlotState, applyList, applyRecord, dailyLimitReached, newCard, possibleCard, possibleSlot } from "../src/roster-rules.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
-const TABLES = { production: ["threads"], test: ["test-example", "threads"] } as const;
+/** The two tables of spec/scope.md: the production roster's (threads) and a test roster's (test-example, threads). */
+const PRODUCTION = platformsOf("production");
+const TEST = platformsOf("test");
 
 const day = (s: string): Day => parseDay(s)!;
 const dateText = (d: Day | null): string | null => (d === null ? null : formatDay(d));
@@ -41,7 +44,7 @@ describe("the version number of the rules", () => {
 describe("roster-rules.json: every case, record by record, through the state in memory", () => {
   for (const c of vectors("roster-rules.json").cases) {
     test(c.name, () => {
-      const roster = new MemoryRules(TABLES[c.roster as "production" | "test"]);
+      const roster = new MemoryRules(platformsOf(c.roster));
       assert.equal(c.events.length, c.results.length);
       c.events.forEach((e: Record<string, any>, i: number) => {
         const before = roster.card(e.scope_string, e.scoped_id);
@@ -85,7 +88,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
   const alice: SlotState = { current: "alice", lastDeclared: "alice", switchCount: 1, correctionDate: day("2026-03-02") };
   const card = (o: Partial<SlotState> = {}, lastCardProof = day("2026-11-04"), proofsOnLastDate = 1): CardState => ({ lastCardProof, proofsOnLastDate, slots: new Map([["threads", { ...alice, ...o }]]) });
   const input = (o: Partial<RecordInput> = {}, accounts = [{ platform: "threads", username: "bob" }], verifies = true): RecordInput => ({
-    platforms: ["threads"],
+    platforms: PRODUCTION,
     record: { accounts, date: today, verifies },
     card: card(),
     latestValidDate: day("2026-11-15"),
@@ -103,7 +106,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
   });
 
   test("the first record of a card and of the roster", () => {
-    assert.deepEqual(applyRecord(input({ card: newCard(["threads"]), latestValidDate: null })), {
+    assert.deepEqual(applyRecord(input({ card: newCard(PRODUCTION), latestValidDate: null })), {
       result: { valid: true, kinds: [{ platform: "threads", kind: "first" }] },
       card: { lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", { current: "bob", lastDeclared: "bob", switchCount: 0, correctionDate: today }]]) },
       latestValidDate: today,
@@ -179,12 +182,12 @@ describe("applyRecord: one record, the state of its card, three facts about the 
   });
 
   test("a platform of the table without a slot in the state has the empty slot; the state after has every platform", () => {
-    const o = applyRecord(input({ platforms: ["threads", "test-example"], card: card() }, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "alice" }]));
+    const o = applyRecord(input({ platforms: [...TEST].reverse(), card: card() }, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "alice" }]));
     assert.deepEqual(o.result, { valid: true, kinds: [{ platform: "test-example", kind: "first" }, { platform: "threads", kind: "refresh" }] });
     assert.deepEqual([...o.card.slots.keys()], ["test-example", "threads"]);
     assert.deepEqual(o.card.slots.get("test-example"), { current: "carol", lastDeclared: "carol", switchCount: 0, correctionDate: today });
     // Left alone, the new platform has no kind and stays empty.
-    const left = applyRecord(input({ platforms: ["threads", "test-example"], card: card() }, [{ platform: "threads", username: "alice" }]));
+    const left = applyRecord(input({ platforms: [...TEST].reverse(), card: card() }, [{ platform: "threads", username: "alice" }]));
     assert.deepEqual(left.result, { valid: true, kinds: [{ platform: "threads", kind: "refresh" }] });
     assert.deepEqual(left.card.slots.get("test-example"), EMPTY_SLOT);
   });
@@ -193,7 +196,9 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     const outside = [{ platform: "example", username: "bob" }];
     const twice = [{ platform: "threads", username: "bob" }, { platform: "threads", username: "carol" }];
     const unordered = [{ platform: "threads", username: "bob" }, { platform: "test-example", username: "carol" }];
-    const two = { platforms: ["test-example", "threads"] };
+    const two = { platforms: TEST };
+    // threads has no `-`; test-example has it (spec/scope.md).
+    const format = [{ platform: "threads", username: "a-b" }];
     // Each of checks 1 to 4 would fail first; none gives the record a code.
     const failing: [string, Partial<RecordInput>, boolean][] = [
       ["every check passes", {}, true],
@@ -207,11 +212,33 @@ describe("applyRecord: one record, the state of its card, three facts about the 
       assert.throws(() => applyRecord(input(o, outside, verifies)), /outside the table/, label);
       assert.throws(() => applyRecord(input(o, twice, verifies)), /twice/, label);
       assert.throws(() => applyRecord(input({ ...two, ...o }, unordered, verifies)), /ascending order/, label);
+      assert.throws(() => applyRecord(input(o, format, verifies)), /not in the format of threads/, label);
       assert.throws(() => applyRecord(input({ ...o, card: { ...(o.card ?? card()), slots: new Map([["example", { ...alice }]]) } }, undefined, verifies)), /outside the table/, label);
     }
-    assert.throws(() => applyList(["threads"], card(), outside, today), /outside the table/);
-    assert.throws(() => applyList(["threads"], card(), twice, today), /twice/);
-    assert.throws(() => applyList(["test-example", "threads"], card(), unordered, today), /ascending order/);
+    assert.throws(() => applyList(PRODUCTION, card(), outside, today), /outside the table/);
+    assert.throws(() => applyList(PRODUCTION, card(), twice, today), /twice/);
+    assert.throws(() => applyList(TEST, card(), unordered, today), /ascending order/);
+    assert.throws(() => applyList(PRODUCTION, card(), format, today), /not in the format of threads/);
+    // The same username on the platform whose format has it is a record.
+    assert.equal(applyList(TEST, newCard(TEST), [{ platform: "test-example", username: "a-b" }], today).result.valid, true);
+  });
+
+  test("a list wrong in several ways: the first thing wrong, account by account, as Go's roster/ reports it", () => {
+    const err = (accounts: { platform: string; username: string }[]) => {
+      try {
+        applyList(TEST, newCard(TEST), accounts, today);
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "no error";
+    };
+    // Per account: the platform, then its place after the one before, then its username.
+    assert.match(err([{ platform: "example", username: "A" }]), /outside the table/);
+    assert.match(err([{ platform: "threads", username: "A" }, { platform: "example", username: "bob" }]), /not in the format of threads/);
+    assert.match(err([{ platform: "threads", username: "bob" }, { platform: "threads", username: "A" }]), /twice/);
+    assert.match(err([{ platform: "threads", username: "bob" }, { platform: "test-example", username: "A" }]), /ascending order/);
+    assert.match(err([{ platform: "threads", username: "bob" }, { platform: "example", username: "A" }]), /outside the table/);
+    assert.match(err([{ platform: "test-example", username: "a-b" }, { platform: "threads", username: "a-b" }]), /not in the format of threads/);
   });
 });
 
@@ -219,7 +246,7 @@ describe("applyList: checks 5 and 6, what the device computes before signing", (
   const today = day("2026-11-16");
   const slot = (o: Partial<SlotState>): SlotState => ({ current: "alice", lastDeclared: "alice", switchCount: 1, correctionDate: day("2026-03-02"), ...o });
   const one = (s: SlotState, entry: string | null, lastCardProof: Day | null = day("2026-11-04"), n = 1) =>
-    applyList(["threads"], { lastCardProof, proofsOnLastDate: n, slots: new Map([["threads", s]]) }, entry === null ? [] : [{ platform: "threads", username: entry }], today);
+    applyList(PRODUCTION, { lastCardProof, proofsOnLastDate: n, slots: new Map([["threads", s]]) }, entry === null ? [] : [{ platform: "threads", username: entry }], today);
   const kindOf = (s: SlotState, entry: string | null) => {
     const o = one(s, entry);
     return o.result.valid ? o.result.kinds.map((k) => k.kind).join() : o.result.reason;
@@ -250,7 +277,7 @@ describe("applyList: checks 5 and 6, what the device computes before signing", (
 
   test("a blocked platform names itself and blocks the other platforms' changes", () => {
     const card: CardState = { lastCardProof: day("2026-11-04"), proofsOnLastDate: 1, slots: new Map([["test-example", { ...EMPTY_SLOT }], ["threads", slot({ switchCount: 5 })]]) };
-    const o = applyList(["test-example", "threads"], card, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "bob" }], today);
+    const o = applyList(TEST, card, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "bob" }], today);
     assert.deepEqual(o, { result: { valid: false, reason: "switch_limit", blockedPlatform: "threads" }, card });
   });
 
@@ -308,7 +335,7 @@ describe("the state in memory", () => {
   const second = "2026-01-01.6X8F69SF344E6ZS8XB8ADN57VG";
 
   test("not a well-formed record: an error, and nothing changes", () => {
-    const rules = new MemoryRules(["threads"]);
+    const rules = new MemoryRules(PRODUCTION);
     assert.equal(rules.apply({ ...r, challenge: first }).result.valid, true);
     const snapshot = () => JSON.stringify([rules.count, rules.latestValidDate, rules.output(), [...rules.card(r.scopeString, r.scopedId).slots]]);
     const before = snapshot();
@@ -319,6 +346,7 @@ describe("the state in memory", () => {
     for (const o of [{}, { verifies: false }, { crlDates: [] }]) {
       assert.throws(() => rules.apply({ ...r, ...o, challenge: second, accounts: outside }), /outside the table/);
       assert.throws(() => rules.apply({ ...r, ...o, challenge: second, accounts: twice }), /twice/);
+      assert.throws(() => rules.apply({ ...r, ...o, challenge: second, accounts: [{ platform: "threads", username: "a-b" }] }), /not in the format of threads/);
     }
     assert.throws(() => rules.apply({ ...r, challenge: first, accounts: outside }), /outside the table/);
     assert.equal(snapshot(), before);

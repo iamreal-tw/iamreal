@@ -89,7 +89,7 @@ import { type Account, declarationCode } from "iamreal-protocol/declaration-code
 import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/roster-rules.ts";
 import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
-import { byPlatform } from "iamreal-protocol/username-format.ts";
+import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
 import type { CrlNumberStore } from "./storage.ts";
 import { bytesOfBigint, equalBytes, wipe } from "iamreal-protocol/bytes.ts";
 
@@ -832,7 +832,11 @@ export class CardProofFlow {
       status.slots.map((s) => [s.platform, { row: s.row, slot: s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT) }]),
     );
     const card = { lastCardProof: state.lastCardProof, proofsOnLastDate: state.proofsOnLastDate, slots: new Map([...before].map(([p, b]) => [p, b.slot])) };
-    const { result } = applyList([...before.keys()], card, accounts, today);
+    // The table the rules go through: the rows the device read from the
+    // server, and for a platform it does not know a row that takes the
+    // account as kept (it was checked as any username when it was read).
+    const table = status.slots.map((s) => s.row ?? keptRow(s.platform));
+    const { result } = applyList(table, card, accounts, today);
     if (!result.valid) throw new FlowStop(result.reason === "switch_limit" ? { code: "blocked", reason: result.reason, platform: result.blockedPlatform } : { code: "blocked", reason: result.reason });
     const rows: ConsequenceRow[] = result.kinds.map(({ platform, kind }) => {
       const { slot, row } = before.get(platform)!;
@@ -1106,6 +1110,17 @@ export class CardProofFlow {
   async threadMode(): Promise<ThreadMode> {
     return this.deps.prover.ready();
   }
+}
+
+/**
+ * The row the roster rules get for a platform the device does not know: the
+ * server's table has no row the device can read, so it has no format to
+ * check. Every username the device kept passed isAnyUsername when the
+ * card's state was read (api.ts); the rules are given exactly that check.
+ * It is never shown and never offered.
+ */
+function keptRow(platform: string): PlatformRow {
+  return { platform, displayName: platform, format: { text: "", min: 1, max: Number.MAX_SAFE_INTEGER, accepts: isAnyUsername } };
 }
 
 /** The card's state as the screen shows it, with what the device computes from it on `today`. */

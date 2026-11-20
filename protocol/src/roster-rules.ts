@@ -8,6 +8,7 @@
 // reports about one card, docs/api/card-proof.md) all run this code.
 import { byBytes } from "./bytes.ts";
 import type { Day } from "./date.ts";
+import type { PlatformRow } from "./platforms.ts";
 
 /**
  * The version number of these rules (spec/roster-rules.md, "The version
@@ -97,8 +98,8 @@ export type RecordResult<R extends Reason = Reason> =
 export interface RuleRecord {
   /**
    * Its list, in ascending order of platform. A platform outside the table
-   * or twice, or a list in another order, is not a record: applyRecord
-   * throws before any check.
+   * or twice, a list in another order, or a username outside the format of
+   * its platform is not a record: applyRecord throws before any check.
    */
   accounts: readonly Account[];
   /** Its date: the date in its challenge. */
@@ -108,8 +109,8 @@ export interface RuleRecord {
 }
 
 export interface RecordInput {
-  /** The platform IDs of the roster's table (spec/scope.md), in any order. */
-  platforms: readonly string[];
+  /** The roster's platform table (spec/scope.md; platformsOf of platforms.ts), in any order. */
+  platforms: readonly PlatformRow[];
   record: RuleRecord;
   /**
    * The state of the record's card before it; newCard for a card without a
@@ -144,8 +145,8 @@ export interface RecordOutcome extends ListOutcome {
 }
 
 /** The state of a card without a valid record: nothing, and an empty slot for every platform. */
-export function newCard(platforms: readonly string[]): CardState {
-  return { lastCardProof: null, proofsOnLastDate: 0, slots: new Map(platforms.map((p) => [p, { ...EMPTY_SLOT }])) };
+export function newCard(platforms: readonly PlatformRow[]): CardState {
+  return { lastCardProof: null, proofsOnLastDate: 0, slots: new Map(platforms.map((p) => [p.platform, { ...EMPTY_SLOT }])) };
 }
 
 /**
@@ -166,28 +167,35 @@ function applyEntry(slot: SlotState, entry: string | null, day: Day): { kind: Ki
 /**
  * What the rules are never asked about (spec/roster-rules.md, "What an
  * invalid record changes"): a list that names a platform outside the table
- * or one platform twice, or is not in ascending order of platform, and a
- * state with a slot outside the table. Such a list is a malformed line, not
- * an invalid record: this throws, and no check runs. Go's roster/ stops the
- * same way, before check 1.
+ * or one platform twice, is not in ascending order of platform, or has a
+ * username outside the format of its platform; and a state with a slot
+ * outside the table. Such a list is a malformed line, not an invalid record:
+ * this throws, and no check runs.
  *
- * Returns the table in ascending order and the list by platform.
+ * Go's roster/ stops the same way before check 1 (verifier.CheckAccounts),
+ * and for a list wrong in several ways both report the same thing: account
+ * by account, its platform, then its place after the account before, then
+ * its username.
+ *
+ * Returns the IDs of the table in ascending order and the list by platform.
  */
-function readList(platforms: readonly string[], card: CardState, accounts: readonly Account[]): { table: string[]; list: Map<string, string> } {
-  const table = [...platforms].sort(byBytes);
+function readList(platforms: readonly PlatformRow[], card: CardState, accounts: readonly Account[]): { table: string[]; list: Map<string, string> } {
+  const rows = new Map(platforms.map((p) => [p.platform, p]));
   const list = new Map<string, string>();
   let last: string | null = null;
   for (const a of accounts) {
-    if (!table.includes(a.platform)) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)}, a platform outside the table`);
-    if (list.has(a.platform)) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)} twice`);
+    const row = rows.get(a.platform);
+    if (row === undefined) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)}, a platform outside the table`);
+    if (last === a.platform) throw new Error(`roster rules: the list names ${a.platform} twice`);
     if (last !== null && !(last < a.platform)) throw new Error("roster rules: the list is not in ascending order of platform");
+    if (!row.format.accepts(a.username)) throw new Error(`roster rules: a username not in the format of ${a.platform}`);
     list.set(a.platform, a.username);
     last = a.platform;
   }
   for (const p of card.slots.keys()) {
-    if (!table.includes(p)) throw new Error(`roster rules: the card's state has a slot on ${JSON.stringify(p)}, a platform outside the table`);
+    if (!rows.has(p)) throw new Error(`roster rules: the card's state has a slot on ${JSON.stringify(p)}, a platform outside the table`);
   }
-  return { table, list };
+  return { table: [...rows.keys()].sort(byBytes), list };
 }
 
 /** Checks 5 and 6 and the effects of a valid record, for a list readList accepted. */
@@ -221,7 +229,7 @@ function checkList(table: readonly string[], card: CardState, list: ReadonlyMap<
  * to 4 it could compute only the card's own half of check 4, and it leaves
  * that one to the server too (web/README.md).
  */
-export function applyList(platforms: readonly string[], card: CardState, accounts: readonly Account[], date: Day): ListOutcome<ListReason> {
+export function applyList(platforms: readonly PlatformRow[], card: CardState, accounts: readonly Account[], date: Day): ListOutcome<ListReason> {
   const { table, list } = readList(platforms, card, accounts);
   return checkList(table, card, list, date);
 }
