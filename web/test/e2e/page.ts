@@ -2,7 +2,7 @@
 // and same-origin fetch, with a fake card of test keys and test issuer keys.
 // It runs the card proofs the fixture asks for in one page load (reusing the
 // one engine, ADR-0013), then reports what happened to the test server.
-import { sameOriginFetch } from "../../src/api.ts";
+import { dataOriginFetch, sameOriginFetch } from "../../src/api.ts";
 import { FakeCard } from "../../src/card/fake.ts";
 import { startTreeBuilder, treeWorkerCount } from "../../src/crl/parallel.ts";
 import { CardProofFlow, FlowStop } from "../../src/flow.ts";
@@ -67,6 +67,8 @@ async function main() {
         issuers,
         knownPlatforms: new Set(["test-example", "threads"]),
         fetch: sameOriginFetch,
+        // The test's server plays the data domain too: the page's own origin.
+        dataFetch: dataOriginFetch(""),
         clock: () => Date.now(),
         store: localStorageStore(),
         card,

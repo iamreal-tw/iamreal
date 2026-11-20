@@ -3,7 +3,7 @@
 // test checks that README.md quotes it exactly.
 
 export const CONTENT_SECURITY_POLICY =
-  "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; " +
+  "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; " +
   "img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 /**

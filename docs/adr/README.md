@@ -83,7 +83,7 @@
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
-| 0027 | 檔案在後台的 `/roster/` 底下 | [#34](https://github.com/iamreal-tw/iamreal/issues/34)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
+| 0027 | 名冊目錄、指紋檔、卡片狀態檔還在舊後台的 `/roster/` 底下；資料網域上只有 Worker 鏡像的清冊檔，沒有清冊存檔的索引；指紋檔沒有另一份 | [#65](https://github.com/iamreal-tw/iamreal/issues/65)、[#70](https://github.com/iamreal-tw/iamreal/issues/70)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 測試網站只部署了 `worker/` 的骨架：每個網址回 `404`，不能過卡，沒有測試名冊和它的標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |

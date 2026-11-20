@@ -1,7 +1,8 @@
 // src/target.ts of the build for a real card on this computer (`pnpm local`,
 // vite.config.ts, mode "localcard"): everything the page trusts is the
 // production build's (MOICA's issuer keys, the component at
-// http://localhost:61161, the 5-minute wait) except the roster. The card
+// http://localhost:61161, the 5-minute wait) except the roster and where
+// the CRL archive is (the local server, not the data domain). The card
 // signs the test roster's scope string, `iamreal-test:public:0__________`,
 // so that a card proof made while trying the page out gives the card a
 // scoped ID unrelated to the one it has in the public roster
@@ -25,5 +26,8 @@ export const PRESENTATIONS: readonly Presentation[] = Object.freeze([TEST_EXAMPL
 export const ISSUERS: readonly IssuerKey[] = MOICA_ISSUERS;
 
 export const COMPONENT_ORIGIN = "http://localhost:61161";
+
+/** The local server serves the CRL archive itself: the page's own origin. */
+export const DATA_ORIGIN = "";
 
 export const IDLE_LIMIT_MS: number = IDLE_MS;

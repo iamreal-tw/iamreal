@@ -334,13 +334,22 @@ What the device does with what it cannot read:
   fingerprint published and its count; the new backend makes that change,
   and changes the name `head`.
 
-## Static files
+## Public files
 
-| Path | Content |
+The CRL archive and the published roster are not served by the server.
+They are files on their own domain, `https://data.iamreal.tw/`, downloaded
+without going through the server's code (ADR-0027). The test site's are on
+`https://test-data.iamreal.tw/`, in the same layout (ADR-0028).
+
+| URL | Content |
 |---|---|
-| `/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
-| `/crl/SHA256.crl` | One CRL of the archive, the original bytes; `SHA256` is the file's SHA-256 as 64 lowercase hex digits |
-| `/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+| `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
+| `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
+| `https://data.iamreal.tw/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+
+Only `GET` from the card proof page's origin is allowed across origins
+(CORS), and the page's `Content-Security-Policy` lets it connect to this
+one domain besides its own (`web/README.md`).
 
 What the device does with the CRL: takes from the index the usable line of
 its issuer with the highest `crl_number`, downloads that file, and checks
