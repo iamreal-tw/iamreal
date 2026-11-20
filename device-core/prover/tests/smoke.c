@@ -39,27 +39,44 @@ int main(void) {
   if (out.ptr != NULL || out.len != 0) return 9;
   if (idc_scope_string(2, &out) != IDC_ERR_ARGUMENT) return 10;
 
+  /* A first declaration on a card without a record, on 2026-11-16 in Taiwan. */
+  {
+    static const char platforms[] =
+        "[{\"platform\":\"threads\",\"display_name\":\"Threads\",\"username_format\":\"[a-z0-9._]{1,30}\"}]";
+    static const char state[] =
+        "{\"last_card_proof\":null,\"proofs_on_last_date\":0,\"platforms\":{\"threads\":"
+        "{\"current\":null,\"last_declared\":null,\"switch_count\":0,\"correction_date\":null}},\"count\":0}";
+    static const char known[] = "[\"threads\"]";
+    if (idc_list_consequence((const uint8_t *)platforms, strlen(platforms), (const uint8_t *)state,
+                             strlen(state), (const uint8_t *)known, strlen(known),
+                             (const uint8_t *)accounts, strlen(accounts),
+                             INT64_C(1794801600), &out) != IDC_OK) return 11;
+    /* What it holds is checked in tests/c_list_consequence.rs; here, that the call links. */
+    if (out.ptr == NULL || out.len == 0) return 12;
+    idc_buf_free(&out);
+  }
+
   /* A session that checked nothing gives no scoped ID. */
   {
     static const uint8_t signature[256] = {1};
     idc_session session = 0;
-    if (idc_session_open(IDC_ROSTER_TEST, &session) != IDC_OK || session == 0) return 11;
-    if (idc_session_card_state_request(session, 1794800000, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 12;
-    if (out.ptr != NULL || out.len != 0) return 13;
-    if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 14;
-    if (idc_session_check_artifacts(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0) != IDC_ERR_REFUSED) return 15;
+    if (idc_session_open(IDC_ROSTER_TEST, &session) != IDC_OK || session == 0) return 13;
+    if (idc_session_card_state_request(session, 1794800000, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 14;
+    if (out.ptr != NULL || out.len != 0) return 15;
+    if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 16;
+    if (idc_session_check_artifacts(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0) != IDC_ERR_REFUSED) return 17;
     /* Nor a proof. */
     if (idc_session_records_request(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0, (const uint8_t *)accounts,
                                     strlen(accounts), (const uint8_t *)challenge, strlen(challenge), signature,
-                                    sizeof signature, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 19;
-    if (out.ptr != NULL || out.len != 0) return 20;
+                                    sizeof signature, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 18;
+    if (out.ptr != NULL || out.len != 0) return 19;
     /* No certificate: the card proof stops with a reason code. */
-    if (idc_session_check_certificates(session, 1794800000, &out) != IDC_OK) return 16;
-    if (!same(&out, "{\"ok\":false,\"problem\":\"no_certificate\"}")) return 17;
+    if (idc_session_check_certificates(session, 1794800000, &out) != IDC_OK) return 20;
+    if (!same(&out, "{\"ok\":false,\"problem\":\"no_certificate\"}")) return 21;
     idc_buf_free(&out);
     idc_session_close(session);
     idc_session_close(session);
-    if (idc_session_build_tree(session) != IDC_ERR_ARGUMENT) return 18;
+    if (idc_session_build_tree(session) != IDC_ERR_ARGUMENT) return 22;
   }
   return 0;
 }
