@@ -104,6 +104,8 @@ Noir 的 ACVM（算見證）在算證明的那張票才加，版本是 `v1.0.0`�
 
 腳本下載、核對 SHA-256、解開到 `vendor/barretenberg/<平台>/`（`.gitignore` 排除），印出那個目錄。雜湊不對就停，不解開。
 
+app 要包進安裝檔的參數檔（ADR-0035）也不進版控：`./fetch-crs.sh` 下載 Barretenberg 的通用參數前 2^18 個點（壓縮格式）和 G2 的那一個點，核對 `crs.sha256`，寫到 `vendor/crs/`，印出那個目錄。兩個檔和雜湊與網頁版的 `web/scripts/fetch-crs.mjs` 相同。
+
 `barretenberg-rs` 的建置腳本在沒有設 `BB_LIB_DIR` 時會自己下載函式庫，而且不核對。所以 `.cargo/config.toml` 把 `BB_LIB_DIR` 預設成一個沒有函式庫的位置：忘了設的建置會停下來，不會去下載。建置時把它設成腳本印出來的目錄。
 
 ## 怎麼單獨建置和測試

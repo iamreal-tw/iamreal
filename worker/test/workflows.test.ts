@@ -30,6 +30,7 @@ test("the workflows keep to the rules", () => {
 const D = "deploy-test.yml";
 const C = "checks.yml";
 const B = "checks-browser.yml";
+const I = "checks-ios.yml";
 const BROWSER_JOB = "  browser:\n    runs-on: ubuntu-24.04\n";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SECRET = "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}";
@@ -155,6 +156,21 @@ const CHANGES: Record<string, Change[]> = {
   "99 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
   "100 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
   "101 the device-core job taking Barretenberg without the script": [replace(C, 'run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test', "run: BARRETENBERG_VERSION=6.0.0 cargo test")],
+  "102 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - .github/workflows/checks-ios.yml\n", "")],
+  "103 a path less in checks-ios.yml": [replace(I, "      - device-core/**\n", "")],
+  "104 checks-ios.yml on pull_request_target": [replace(I, "  pull_request:\n", "  pull_request_target:\n")],
+  "105 checks-ios.yml on another runner": [replace(I, "    runs-on: xcode-27\n", "    runs-on: macos-latest\n")],
+  "106 a job of checks.yml on the macOS runner": [replace(C, GO_JOB, "  go:\n    runs-on: xcode-27\n")],
+  "107 another Xcode in checks-ios.yml": [replace(I, "Xcode_27.2.app", "Xcode.app")],
+  "108 a secret in the env of checks-ios.yml": [replace(I, "env:\n", "env:\n  T: ${{ secrets.X }}\n")],
+  "109 checks-ios.yml with write permissions": [replace(I, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "110 checks-ios.yml in the concurrency group of checks.yml": [replace(I, "  group: checks-ios-", "  group: checks-")],
+  "111 the iOS job without the script that gets Barretenberg checked": [replace(I, "        run: ./build-core.sh simulator\n", "        run: cargo build\n")],
+  "112 the iOS job taking Barretenberg from somewhere else": [replace(I, "        run: ./build-core.sh simulator\n", "        run: ./build-core.sh simulator && BB_LIB_DIR=/tmp/x cargo build\n")],
+  "113 a step of the iOS job in another directory": [replace(I, "        working-directory: ios\n        run: ./build-core.sh", "        working-directory: ios/build\n        run: ./build-core.sh")],
+  "114 an action not in the list in checks-ios.yml": [replace(I, "      - name: Build device-core/ for the simulator\n", `      - uses: maxim-lobanov/setup-xcode@${SHA} # v1.6.0\n      - name: Build device-core/ for the simulator\n`)],
+  "115 the Xcode of checks-ios.yml in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n`)],
+  "116 checks-ios.yml without its Xcode": [replace(I, "  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n", "  OTHER: x\n")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -194,6 +210,9 @@ test("the reader reads the part of YAML the workflows are written in, values as 
   assert.equal(paths[0], "web/**");
   assert.equal(paths.at(-1), ".github/workflows/checks-browser.yml");
   assert.deepEqual(Object.keys(browserDoc.jobs as object), ["browser"]);
+  const iosDoc = readYaml(realFiles()[I]!) as Record<string, Yaml>;
+  assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, ["ios/**", "device-core/**", ".github/workflows/checks-ios.yml"]);
+  assert.deepEqual(Object.keys(iosDoc.jobs as object), ["ios"]);
   const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;
   assert.deepEqual(browser.env, { CHROME: "/usr/bin/google-chrome" });
   assert.ok((browser.steps as Record<string, Yaml>[]).some((s) => s.run === '"$CHROME" --version'));

@@ -207,6 +207,24 @@ export const BROWSER_PATHS: readonly string[] = [
   ".github/workflows/checks-browser.yml",
 ];
 
+/**
+ * The paths whose change runs the iOS check (checks-ios.yml), exactly: the
+ * app, the core it links, and the workflow itself (issue #155: macOS
+ * minutes count for more, so the check runs only for these).
+ */
+export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", ".github/workflows/checks-ios.yml"];
+/** The runner of the iOS check, and the one Xcode it builds with (ios/README.md). */
+export const IOS_RUNNER = "xcode-27";
+export const IOS_DEVELOPER_DIR = "/Applications/Xcode_27.2.app/Contents/Developer";
+/**
+ * How the iOS job gets Barretenberg and the CRS: ios/build-core.sh, which
+ * calls device-core/fetch-barretenberg.sh and device-core/fetch-crs.sh (each
+ * checks a SHA-256 before use) and then cargo. Like the device-core job, it
+ * runs no bb.
+ */
+export const IOS_JOB = "ios";
+export const BUILD_IOS_CORE = "./build-core.sh simulator";
+
 export const NODE_VERSION = "22.23.4";
 export const PNPM_VERSION = "10.16.1";
 /** How every job installs pnpm: from npm's registry, named here so no `.npmrc` can point elsewhere, running no install script. */
@@ -288,14 +306,15 @@ export const SECRET_LINES: readonly string[] = [
 ];
 
 /**
- * The two workflows of a pull request's checks: each one's trigger, its
+ * The three workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
- * exactly, and its concurrency group. The groups differ: "concurrency group
+ * exactly, its concurrency group, and its runner when that is not
+ * ubuntu-24.04. The groups differ: "concurrency group
  * names must be unique across workflows to avoid canceling in-progress jobs
  * or runs from other workflows"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  */
-const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string }>> = {
+const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly runsOn?: string }>> = {
   "checks.yml": {
     on: { pull_request: null },
     env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
@@ -306,6 +325,12 @@ const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly 
     env: { IAMREAL_BB: BB_PATH },
     jobEnv: { CHROME: "/usr/bin/google-chrome" },
     group: "checks-browser-${{ github.event.pull_request.number }}",
+  },
+  "checks-ios.yml": {
+    on: { pull_request: { paths: [...IOS_PATHS] } },
+    env: { DEVELOPER_DIR: IOS_DEVELOPER_DIR },
+    group: "checks-ios-${{ github.event.pull_request.number }}",
+    runsOn: IOS_RUNNER,
   },
 };
 
@@ -320,7 +345,7 @@ const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(
 export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["checks-browser.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, ["checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -376,7 +401,8 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     // (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
     // `paths` only where the rules say, as they say: a path left out is a check that does not run.
     if (!same(doc.on, rules.on)) p(`not triggered by pull_request only, as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
-    if (doc.env !== undefined && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
+    // checks-ios.yml must have its env: without DEVELOPER_DIR the runner's default Xcode builds the app.
+    if ((doc.env !== undefined || f === "checks-ios.yml") && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
     if (!same(doc.concurrency, { group: rules.group, "cancel-in-progress": "true" })) p(`concurrency is not group ${rules.group}, cancelling the run before`);
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
       p("no jobs");
@@ -390,7 +416,8 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       }
       const wrongJob = extra(job, ["name", "runs-on", "timeout-minutes", "env", "steps"]);
       if (wrongJob.length) j(`keys not allowed: ${wrongJob.join(", ")}`);
-      if (job["runs-on"] !== "ubuntu-24.04") j("runs-on is not ubuntu-24.04");
+      const runsOn = rules.runsOn ?? "ubuntu-24.04";
+      if (job["runs-on"] !== runsOn) j(`runs-on is not ${runsOn}`);
       if (job.env !== undefined && !same(job.env, rules.jobEnv)) j("an env other than the one in test/workflows.ts");
       if (!Array.isArray(job.steps) || job.steps.length === 0) {
         j("no steps");
@@ -406,7 +433,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, ios");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -425,6 +452,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
         if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
         for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+      } else if (f === "checks-ios.yml" && name === IOS_JOB) {
+        // The one step that gets Barretenberg is the script that has it checked; no other step names another.
+        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
+        if (!runs.includes(BUILD_IOS_CORE)) j("does not get Barretenberg through build-core.sh");
+        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r)) j(`Barretenberg from somewhere else: ${r}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

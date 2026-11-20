@@ -6,6 +6,7 @@
 |---|---|---|
 | [`workflows/checks.yml`](workflows/checks.yml) | 每個 PR（`pull_request`） | `CONTRIBUTING.md`「完成的定義」的 Go、`protocol/`、`worker/`、`web/` 的型別檢查和 Node 裡的測試：`go`、`typescript` 兩個工作。只能讀，不引用任何 secret |
 | [`workflows/checks-browser.yml`](workflows/checks-browser.yml) | PR 改到它用到的檔時（`pull_request` 的 `paths`） | `web/` 的 `pnpm test:e2e`、`pnpm test:ui`：`browser` 一個工作。只能讀，不引用任何 secret |
+| [`workflows/checks-ios.yml`](workflows/checks-ios.yml) | PR 改到 `ios/`、`device-core/` 或這個檔時（`pull_request` 的 `paths`） | 在 macOS 上編 `device-core/` 給模擬器、建置 `ios/` 的 app、在模擬器上跑它的測試：`ios` 一個工作（`ios/README.md`）。只能讀，不引用任何 secret |
 | [`workflows/deploy-test.yml`](workflows/deploy-test.yml) | 推到 `main` | 打包、檢查，再把那一包上傳到測試網站 |
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。程式庫公開之前，Actions 的用量算在組織免費方案每月含的額度裡，用完之後就不能再跑（GitHub 的文件：免費方案的組織每月含 12 美元的用量，標準的 Linux runner 每分鐘 0.006 美元；沒有付款方式時，「usage is blocked once you consume the included compute usage」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)）。只動 `worker/` 或文件的 PR 和它們無關。
@@ -30,7 +31,7 @@
 - **#69 之後要把 `worker/**` 加進清單。** 那時 `web/` 的端到端測試改成對 Worker 跑，用到 `worker/`。#69 的人要自己同時改 `checks-browser.yml` 和 `worker/test/workflows.ts` 的 `BROWSER_PATHS`；用上面找得到的寫法引用 `worker/` 時，測試會失敗提醒，用找不到的寫法就不會。
 - **被 `paths` 濾掉的工作流程不會回報檢查。** 它的檢查停在「Pending」，要求它通過的 PR 不能合併（同一節）。現在 `main` 沒有設必要檢查；之後要把檢查設成必要的，`checks-browser.yml` 不能直接列進去，要另想辦法（例如改成同一個工作流程裡一個判斷的工作加 `if`，讓它每次都回報）。
 
-兩個 PR 的工作流程的 `concurrency` 群組名稱不同：群組在所有工作流程之間共用，「concurrency group names must be unique across workflows to avoid canceling in-progress jobs or runs from other workflows」（[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency)）。
+三個 PR 的工作流程的 `concurrency` 群組名稱不同：群組在所有工作流程之間共用，「concurrency group names must be unique across workflows to avoid canceling in-progress jobs or runs from other workflows」（[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency)）。
 
 怎麼部署、上傳那一步還信任什麼：[`worker/README.md`「從 GitHub Actions 部署」](../worker/README.md#從-github-actions-部署)。
 
