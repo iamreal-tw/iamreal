@@ -128,9 +128,9 @@ export const OG_TITLE = /<meta property="og:title" content="([^"]*)">/;
 export const OG_SITE = /<meta property="og:site_name" content="([^"]*)">/;
 export const OG_DESCRIPTION = /<meta property="og:description" content="([^"]*)">/;
 
-/** Checks the page's <title> (`title` followed by ｜島民), its og:title (`title`) and its og:site_name (`site`). */
+/** Checks the page's <title> (`title` followed by ｜島民證明), its og:title (`title`) and its og:site_name (`site`). */
 export function wantPreview(page: string, title: string, site: string): void {
-  assert.equal(firstMatch(TITLE_TAG, page), `${title}｜島民`, "<title>");
+  assert.equal(firstMatch(TITLE_TAG, page), `${title}｜島民證明`, "<title>");
   assert.equal(firstMatch(OG_TITLE, page), title, "og:title");
   assert.equal(firstMatch(OG_SITE, page), site, "og:site_name");
 }
