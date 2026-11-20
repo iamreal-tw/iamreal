@@ -74,11 +74,11 @@
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給，一個 session 只取一次。** `idc_session_check_certificates` 收 `now`（裝置的時鐘，1970 年起的秒數），核心換成台灣的日期，不看裝置的時區；清冊多舊算過期用的是同一天，和網頁版一樣。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說。
+- **時間由 app 給，一個 session 只取一次。** `idc_session_check_certificates` 收 `now`（裝置的時鐘，1970 年起的秒數），核心換成台灣的日期，不看裝置的時區；清冊多舊算過期用的是同一天（網頁版在這兩步也只取一次）。通過的 session 沒有期限：網頁版在拿題目之前和第二次簽章之前，會用當時的日期再看一次憑證的效期和清冊的日期，這裡還沒有，要在算證明的那張票用題目的日期補上。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
-**關卡不靠「app 只呼叫 C 函式」。** 這個套件對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用這個套件的 Rust 程式（例如用 Rust 寫的 JNI 層）也繞不過去。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
+**關卡不靠「app 只呼叫 C 函式」。** 這個套件對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用這個套件的 Rust 程式（例如用 Rust 寫的 JNI 層）拿到的也只有 C 函式，順序寫錯時一樣被擋。它擋的仍然是寫錯，不是存心繞過：自己另外引用 `barretenberg-rs`、或自己開 `testing` 的程式，核心擋不了，要靠審查。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
 
 ### 清掉
 

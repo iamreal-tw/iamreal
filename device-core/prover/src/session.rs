@@ -222,7 +222,8 @@ pub fn add_certificate(handle: u64, certificate: &[u8]) -> Result<(), i32> {
 /// - `{"ok":false,"problem":"expired","not_after":"…"}`
 ///
 /// The session keeps the chosen certificate and wipes the others. A second
-/// call starts the session over with the certificates added since.
+/// call starts the session over with the certificates added since; one
+/// that is refused for its clock only wipes those certificates.
 pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
         let today = match today(now) {

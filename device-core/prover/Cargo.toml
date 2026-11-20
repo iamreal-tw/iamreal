@@ -15,8 +15,8 @@ crate-type = ["staticlib", "rlib"]
 # For this directory's tests only: makes `pub` what lets a caller open a
 # session that trusts other issuer keys, and reach Poseidon2 and the tree
 # without a session. The library the apps link is built without it, so
-# Rust code that depends on this crate cannot go around the checks either
-# (README.md, "檢查都通過了").
+# Rust code that depends on this crate gets the C functions and nothing
+# else, unless it turns this feature on itself (README.md, "檢查都通過了").
 testing = []
 
 [dependencies]
