@@ -140,6 +140,8 @@ int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_jso
  *                                        the date has changed
  *   idc_session_card_state_request       only after 1 to 4 all passed,
  *                                        on the date they hold for
+ *   idc_session_records_request          likewise, on the date of the
+ *                                        challenge: the proof
  *
  * Step 1 again starts the session over; step 2 again forgets the tree.
  *
@@ -260,6 +262,50 @@ int32_t idc_session_check_date(idc_session session, int64_t now, idc_buf *out);
 int32_t idc_session_card_state_request(idc_session session, int64_t now,
                                        const uint8_t *scope_signature, size_t scope_signature_len,
                                        idc_buf *out);
+
+/* The body of POST /api/v1/records in *out: the fields of a record except
+ * seq (spec/record.md), with the proof, made here from the session's
+ * certificate and path.
+ *   circuit, verification_key, crs_g1, crs_g2:
+ *                 the four files of step 4, passed again: the core kept
+ *                 none of them, and checks their SHA-256 again before it
+ *                 uses them. The first proof of the process hands the
+ *                 common reference string to Barretenberg, which keeps it.
+ *   accounts_json: the whole list the card declares, as for
+ *                 idc_declaration_code
+ *   challenge:    the challenge as the server issued it
+ *   scope_signature, declaration_code_signature:
+ *                 the card's signatures over idc_scope_string and over
+ *                 idc_declaration_code of this list and challenge (256
+ *                 bytes each)
+ * The proof takes seconds, on as many threads as the device has cores, and
+ * several hundred MiB (issue #88): call it from a background thread. One
+ * proof is made at a time; a second call waits. The core compares the
+ * proof's public inputs with the ones it expects and returns nothing if
+ * any differs.
+ *
+ * IDC_ERR_REFUSED unless steps 1 to 4 all passed and the challenge's date
+ * is the date they hold for (idc_session_check_date): the record is dated
+ * the challenge's date, so this function takes no clock.
+ * IDC_ERR_INPUT when a file is not the one written into the core (step 4
+ * must then pass again), the list or the challenge is not what
+ * idc_declaration_code takes, a signature is not the card's over its
+ * message, or the circuit has no proof for these inputs.
+ * The core keeps no copy of either signature: its own copies, the
+ * circuit's inputs and the witness are overwritten before the call
+ * returns. What Barretenberg (C++) copied of the witness is not reached
+ * (device-core/README.md, "清掉"). The caller overwrites its own. */
+int32_t idc_session_records_request(idc_session session,
+                                    const uint8_t *circuit, size_t circuit_len,
+                                    const uint8_t *verification_key, size_t verification_key_len,
+                                    const uint8_t *crs_g1, size_t crs_g1_len,
+                                    const uint8_t *crs_g2, size_t crs_g2_len,
+                                    const uint8_t *accounts_json, size_t accounts_json_len,
+                                    const uint8_t *challenge, size_t challenge_len,
+                                    const uint8_t *scope_signature, size_t scope_signature_len,
+                                    const uint8_t *declaration_code_signature,
+                                    size_t declaration_code_signature_len,
+                                    idc_buf *out);
 
 #ifdef __cplusplus
 }

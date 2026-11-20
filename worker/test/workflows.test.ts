@@ -154,9 +154,9 @@ const CHANGES: Record<string, Change[]> = {
   "98 a job of checks-browser.yml without the check of bb": [replace(B, '        run: echo "5bbb', '        run: echo "0bbb')],
   "99 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
   "100 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
-  "101 the device-core job taking Barretenberg without the script": [replace(C, 'run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test', "run: BARRETENBERG_VERSION=6.0.0 cargo test")],
-  "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
-  "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x cargo test")],
+  "101 the device-core job taking Barretenberg without the script": [replace(C, 'run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && IAMREAL_BB= cargo test', "run: BARRETENBERG_VERSION=6.0.0 cargo test")],
+  "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
+  "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && IAMREAL_BB= cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x IAMREAL_BB= cargo test")],
   "104 one more step in the device-core job": [replace(C, "      - name: cargo fmt --check\n", "      - run: rm .cargo/config.toml\n        working-directory: device-core\n      - name: cargo fmt --check\n")],
 };
 

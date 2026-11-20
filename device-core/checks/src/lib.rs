@@ -14,6 +14,7 @@
 pub mod base32;
 pub mod certificate;
 pub mod challenge;
+pub mod circuit_inputs;
 pub mod crl;
 pub mod date;
 pub mod declaration_code;

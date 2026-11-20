@@ -221,7 +221,10 @@ export const CHECK_BB = `echo "${BB_AMD64_LINUX_SHA256}  $IAMREAL_BB" | sha256su
  * The one job that does not check bb's SHA-256: device-core/ runs no bb. The
  * Barretenberg it links is the static library device-core/fetch-barretenberg.sh
  * downloads, whose SHA-256 that script checks against
- * device-core/barretenberg.sha256 before unpacking it.
+ * device-core/barretenberg.sha256 before unpacking it. Its tests hand their
+ * proofs to bb only when IAMREAL_BB names one, so cargo test runs with it
+ * empty; device-core/fetch-crs.sh downloads the common reference string and
+ * checks it against device-core/crs.sha256.
  */
 export const DEVICE_CORE_JOB = "device-core";
 /** How a step of that job gets Barretenberg: the directory the script prints, and nothing if the script fails. */
@@ -253,7 +256,8 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
     { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
     { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
     { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
-    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo test --locked --release` },
+    { name: "Fetch the common reference string", "working-directory": "device-core", run: "./fetch-crs.sh" },
+    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release` },
   ],
 };
 

@@ -24,12 +24,15 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use base64::Engine;
 use iamreal_device_checks::certificate::{
     CardCertificate, Selection, is_card_signature, select_certificate,
 };
-use iamreal_device_checks::challenge::current_time;
+use iamreal_device_checks::challenge::{current_time, parse_challenge};
+use iamreal_device_checks::circuit_inputs::circuit_inputs;
 use iamreal_device_checks::crl::CrlNumber;
 use iamreal_device_checks::date::Date;
+use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::issuers::{IssuerKey, IssuerName, MOICA_ISSUERS};
 use iamreal_device_checks::key::Key;
 use iamreal_device_checks::revocation::{
@@ -43,6 +46,8 @@ use serde_json::{Value, json};
 
 use crate::artifacts::{self, Artifacts};
 use crate::hashes::{Barretenberg, Sha2};
+use crate::proof::prove;
+use crate::witness::{Circuit, WitnessError};
 use crate::{IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_INTERNAL, IDC_ERR_REFUSED};
 
 /// What a session checks against. An app's sessions use [`Trust::built_in`]
@@ -101,7 +106,6 @@ struct Session {
 /// What a session that passed every check holds.
 struct Passed<'a> {
     certificate: &'a CardCertificate,
-    #[allow(dead_code)] // The proof's inputs (the ticket that adds the proof).
     path: &'a AbsenceProof,
 }
 
@@ -638,15 +642,189 @@ pub fn card_state_request(handle: u64, now: i64, scope_signature: &[u8]) -> Resu
         if !is_card_signature(passed.certificate, scope, scope_signature, &mut Sha2) {
             return Err(IDC_ERR_INPUT);
         }
-        // A signature that verifies is 256 bytes.
-        let mut signature: [u8; SIGNATURE_LENGTH] =
-            scope_signature.try_into().map_err(|_| IDC_ERR_INPUT)?;
-        let id = Barretenberg::new().and_then(|mut hash| scoped_id(&signature, &mut hash));
-        wipe(&mut signature);
-        let id = id.map_err(|_| IDC_ERR_INTERNAL)?;
+        let id = scoped_id_of(scope_signature)?;
         let text = scoped_id_text(&id).ok_or(IDC_ERR_INTERNAL)?;
         // The scope string is ASCII.
         let scope = std::str::from_utf8(scope).map_err(|_| IDC_ERR_INTERNAL)?;
         bytes_of(json!({ "scope_string": scope, "scoped_id": text }))
+    })
+}
+
+/// `IDC_ERR_REFUSED` unless the session passed every check on its date.
+/// The C function asks this before it reads anything else it was given.
+pub fn require_passed(handle: u64) -> Result<(), i32> {
+    with(handle, |session| {
+        session
+            .today
+            .and_then(|today| session.passed(today))
+            .map(|_| ())
+            .ok_or(IDC_ERR_REFUSED)
+    })
+}
+
+/// The four files the app carries (ADR-0035), as it passes them to a call.
+pub struct Files<'a> {
+    /// The compiled circuit of the certificate's issuer.
+    pub circuit: &'a [u8],
+    pub verification_key: &'a [u8],
+    pub crs_g1: &'a [u8],
+    pub crs_g2: &'a [u8],
+}
+
+/// The scoped ID of a signature that verified (256 bytes). The copy made
+/// here is overwritten.
+fn scoped_id_of(signature: &[u8]) -> Result<[u8; 32], i32> {
+    let mut signature: [u8; SIGNATURE_LENGTH] = signature.try_into().map_err(|_| IDC_ERR_INPUT)?;
+    let id = Barretenberg::new().and_then(|mut hash| scoped_id(&signature, &mut hash));
+    wipe(&mut signature);
+    id.map_err(|_| IDC_ERR_INTERNAL)
+}
+
+/// The body of `POST /api/v1/records` (docs/api/card-proof.md): the
+/// fields of a record except `seq` (spec/record.md), with the proof made
+/// here from the session's certificate and path, the card's two
+/// signatures and the challenge.
+///
+/// - `files`: the same four files as step 4, checked against the SHA-256
+///   written into the core once more, because the core kept none of them.
+/// - `accounts`: the whole list the card declares, in the record's order.
+/// - `challenge`: as the server issued it; its date gives `current_time`.
+/// - `scope_signature`, `declaration_code_signature`: the card's
+///   signatures over the scope string of the session's roster and over
+///   the declaration code of `accounts` and `challenge`.
+///
+/// The proof's public inputs are compared with the ones the core expects
+/// (spec/circuit-inputs.md); nothing is returned if any differs. The core
+/// keeps neither signature: its copies, the circuit's inputs and the
+/// witness are overwritten before this returns.
+///
+/// `IDC_ERR_REFUSED` unless the session passed every check and the
+/// challenge's date is the date its checks hold for: the record is dated
+/// the challenge's date, so this function takes no clock. A card proof
+/// can cross midnight; [`check_date`] moves the session to the new date,
+/// before the app asks for the challenge.
+/// `IDC_ERR_INPUT` when a file is not the one written into the core (step
+/// 4 must then pass again), the challenge is not in its one spelling, the
+/// list has no declaration code, a signature is not the card's over its
+/// message, or the circuit has no proof for these inputs.
+pub fn records_request(
+    handle: u64,
+    files: &Files<'_>,
+    accounts: &[Account<'_>],
+    challenge: &[u8],
+    scope_signature: &[u8],
+    declaration_code_signature: &[u8],
+) -> Result<Vec<u8>, i32> {
+    with(handle, |session| {
+        // Whatever else is passed in, a session that passed nothing
+        // refuses.
+        if session
+            .today
+            .and_then(|today| session.passed(today))
+            .is_none()
+        {
+            return Err(IDC_ERR_REFUSED);
+        }
+        let issuer = session
+            .certificate
+            .as_ref()
+            .ok_or(IDC_ERR_REFUSED)?
+            .issuer();
+        session.artifacts_checked = session.trust.artifacts.match_files(
+            issuer,
+            files.circuit,
+            files.verification_key,
+            files.crs_g1,
+            files.crs_g2,
+            &mut Sha2,
+        );
+        if !session.artifacts_checked {
+            return Err(IDC_ERR_INPUT);
+        }
+        // The record is dated the challenge's date: the session's checks
+        // hold for that date, or there is no proof.
+        let date = parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
+        let passed = session.passed(date).ok_or(IDC_ERR_REFUSED)?;
+        let scope = scope_string(session.roster);
+        let code =
+            declaration_code(scope, accounts, challenge, &mut Sha2).map_err(|_| IDC_ERR_INPUT)?;
+        // Each of the card's signatures is checked before it is used.
+        if !is_card_signature(passed.certificate, scope, scope_signature, &mut Sha2)
+            || !is_card_signature(
+                passed.certificate,
+                &code,
+                declaration_code_signature,
+                &mut Sha2,
+            )
+        {
+            return Err(IDC_ERR_INPUT);
+        }
+        let id = scoped_id_of(scope_signature)?;
+        let issuers = session.trust.issuer_keys();
+        let issuer_key = issuers
+            .iter()
+            .find(|key| key.name == issuer)
+            .ok_or(IDC_ERR_INTERNAL)?;
+        // Signatures that verified are 256 bytes.
+        let mut signatures: [[u8; SIGNATURE_LENGTH]; 2] = [
+            scope_signature.try_into().map_err(|_| IDC_ERR_INPUT)?,
+            declaration_code_signature
+                .try_into()
+                .map_err(|_| IDC_ERR_INPUT)?,
+        ];
+        let inputs = circuit_inputs(
+            passed.certificate,
+            issuer_key.modulus,
+            passed.path,
+            current_time(date),
+            scope,
+            &signatures[0],
+            &code,
+            &signatures[1],
+        );
+        for signature in &mut signatures {
+            wipe(signature);
+        }
+        // The checks of the certificate and the tree leave no other case.
+        let inputs = inputs.ok_or(IDC_ERR_INTERNAL)?;
+        // The file is the one written into the core: it is a circuit.
+        let circuit = Circuit::read(files.circuit).map_err(|_| IDC_ERR_INTERNAL)?;
+        let mut witness = circuit.solve(&inputs).map_err(|error| match error {
+            WitnessError::Unsatisfied => IDC_ERR_INPUT,
+            WitnessError::Circuit => IDC_ERR_INTERNAL,
+        })?;
+        let proof = prove(
+            circuit.bytecode(),
+            files.verification_key,
+            &witness,
+            files.crs_g1,
+            files.crs_g2,
+        );
+        wipe(&mut witness);
+        let proof = proof.map_err(|_| IDC_ERR_INTERNAL)?;
+        // A proof that says anything else is not sent
+        // (spec/circuit-inputs.md, "Public inputs the device expects").
+        if proof.public_inputs != inputs.expected_public_inputs(&id) {
+            return Err(IDC_ERR_INTERNAL);
+        }
+        let text = |bytes: &[u8]| {
+            std::str::from_utf8(bytes)
+                .map(str::to_string)
+                .map_err(|_| IDC_ERR_INTERNAL)
+        };
+        let accounts: Vec<Value> = accounts
+            .iter()
+            .map(|a| json!({ "platform": a.platform, "username": a.username }))
+            .collect();
+        bytes_of(json!({
+            "scope_string": text(scope)?,
+            "scoped_id": scoped_id_text(&id).ok_or(IDC_ERR_INTERNAL)?,
+            "accounts": accounts,
+            "challenge": text(challenge)?,
+            "issuer": issuer.as_str(),
+            "smt_root": hex(&passed.path.root),
+            "circuit": hex(&session.trust.artifacts.circuit_of(issuer).verification_key),
+            "proof": base64::engine::general_purpose::STANDARD.encode(&proof.proof),
+        }))
     })
 }

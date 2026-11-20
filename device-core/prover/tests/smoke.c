@@ -65,13 +65,18 @@ int main(void) {
     if (out.ptr != NULL || out.len != 0) return 15;
     if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 16;
     if (idc_session_check_artifacts(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0) != IDC_ERR_REFUSED) return 17;
+    /* Nor a proof. */
+    if (idc_session_records_request(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0, (const uint8_t *)accounts,
+                                    strlen(accounts), (const uint8_t *)challenge, strlen(challenge), signature,
+                                    sizeof signature, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 18;
+    if (out.ptr != NULL || out.len != 0) return 19;
     /* No certificate: the card proof stops with a reason code. */
-    if (idc_session_check_certificates(session, 1794800000, &out) != IDC_OK) return 18;
-    if (!same(&out, "{\"ok\":false,\"problem\":\"no_certificate\"}")) return 19;
+    if (idc_session_check_certificates(session, 1794800000, &out) != IDC_OK) return 20;
+    if (!same(&out, "{\"ok\":false,\"problem\":\"no_certificate\"}")) return 21;
     idc_buf_free(&out);
     idc_session_close(session);
     idc_session_close(session);
-    if (idc_session_build_tree(session) != IDC_ERR_ARGUMENT) return 20;
+    if (idc_session_build_tree(session) != IDC_ERR_ARGUMENT) return 22;
   }
   return 0;
 }
