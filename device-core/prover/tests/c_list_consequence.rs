@@ -19,8 +19,8 @@ use serde_json::{Value, json};
 /// Seconds since 1970-01-01T00:00:00Z at noon in Taiwan on `date`.
 fn noon(date: &str) -> i64 {
     let d = Date::parse(date.as_bytes()).unwrap();
-    // 2000-01-01 is day 10957 after 1970-01-01; noon in Taiwan is 04:00 UTC.
-    (i64::from(d.day_number()) + 10_957) * 86_400 + 4 * 3600
+    // Noon in Taiwan is 04:00 UTC.
+    d.days_since_1970() * 86_400 + 4 * 3600
 }
 
 /// Both platforms of spec/scope.md: the ones the test build of an app has its own definition of.

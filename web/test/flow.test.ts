@@ -1342,7 +1342,7 @@ describe("a card proof that crosses midnight", () => {
     assertNothingHeld(s.flow, "stopped");
   });
 
-  // research/57: the list re-checked before midnight, the challenge back after it, dated the next day.
+  // The list re-checked before midnight, the challenge back after it, dated the next day.
   test("midnight passes while the challenge is on its way: the list is worked out again on its date, and not signed", async () => {
     const s = await setup({
       echoPublicInputs: true,
@@ -1852,7 +1852,7 @@ describe("a resubmission answered challenge_used (a fake server)", () => {
   });
 });
 
-// research/57 (15): the PIN is held until the second signature and no longer. Dropping it
+// The PIN is held until the second signature and no longer. Dropping it
 // before the submission (dropSecrets) would hide a flow that kept it through the proof.
 describe("the PIN after the second signature", () => {
   test("dropped as soon as the card signed the declaration code: not held while the proof is made", async () => {

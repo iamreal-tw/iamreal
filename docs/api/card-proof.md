@@ -333,15 +333,30 @@ Submits one card proof: the card's whole list of accounts.
 - Response `200`:
 
   ```
-  {"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}
+  {"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":12,"from":"2027-03-01"},"ios":{"build":9,"from":"2027-03-01"}}}
   ```
 
   - `platforms` is the platform table of this roster
     ([`spec/scope.md`](../../spec/scope.md)), one element per row, in
     ascending order of `platform`: the platform ID, the display name, and
     the `username` format exactly as written in the table.
+  - `min_app` is the minimum app version
+    ([`spec/min-app.md`](../../spec/min-app.md), ADR-0035): for the Android
+    app and the iOS app, the lowest build that may still do a card proof
+    (`build`) and the date in Taiwan that bound starts on (`from`). The
+    production site and the test site each have their own values. The Go
+    backend does not send it.
 
 The device asks for it at every card proof, before it shows the list.
+
+What an app does with `min_app`: reads its own entry (`android` or `ios`) and
+compares its own build with it, as [`spec/min-app.md`](../../spec/min-app.md)
+says. Before `from`, a lower build goes on and says from which date it can
+no longer do a card proof; from `from` on, it stops before it asks for the
+PIN or reads the card. A `min_app` it cannot read stops it the same way.
+The web page does not read it: the page comes from the server at every card
+proof, so it has no version to be too old. The server does not look at app
+versions when it accepts a card proof.
 
 What the device does with `crl_max_age_days`: uses the smaller of this
 number and its built-in 7
@@ -374,6 +389,9 @@ What the device does with what it cannot read:
 - **No response, or no `platforms` it can read**: the device does not go on
   to the declaration. It has nothing to offer and nothing to check an
   account against.
+- **An app, with no `min_app` it can read**: it does not go on
+  ([`spec/min-app.md`](../../spec/min-app.md)). Only its own entry is
+  read; the rest of `min_app` is ignored.
 - **A row it cannot read** (a key missing, a format not in the form
   above): the platform of that row is one the device does not know
   (`card-state`, above).

@@ -53,7 +53,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | 4 | `not_usable_duplicate_extension` | 清冊本身的同一個延伸欄位出現兩次 |
 | 5 | `not_usable_critical_extension` | 清冊本身有關鍵延伸欄位，不論是哪一個（`authorityKeyIdentifier`、`cRLNumber` 標成關鍵也算） |
 | 6 | `not_usable_delta` | 差異清冊（有 `deltaCRLIndicator`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
-| 7 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
+| 7 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 5 列擋下）。第 6、7 列是同一步：兩個延伸欄位都有時，清冊裡排在前面的那一個決定代碼 |
 | 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER |
 | 9 | `not_usable_duplicate_extension`、`not_usable_critical_extension` 或 `not_usable_serial` | 某一筆的延伸欄位出現兩次、某一筆有關鍵延伸欄位（不論是哪一個，所以帶關鍵 `certificateIssuer` 的間接清冊、`reasonCode` 標成關鍵的清冊都不可用）、或某一筆的序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組）。逐筆檢查，第一個有問題的那一筆決定代碼；同一筆裡照這個順序 |
 | 10 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |

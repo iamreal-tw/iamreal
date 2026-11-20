@@ -55,5 +55,23 @@ int main(void) {
     if (out.ptr == NULL || out.len == 0) return 12;
     idc_buf_free(&out);
   }
+
+  /* A session that checked nothing gives no scoped ID. */
+  {
+    static const uint8_t signature[256] = {1};
+    idc_session session = 0;
+    if (idc_session_open(IDC_ROSTER_TEST, &session) != IDC_OK || session == 0) return 13;
+    if (idc_session_card_state_request(session, 1794800000, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 14;
+    if (out.ptr != NULL || out.len != 0) return 15;
+    if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 16;
+    if (idc_session_check_artifacts(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0) != IDC_ERR_REFUSED) return 17;
+    /* No certificate: the card proof stops with a reason code. */
+    if (idc_session_check_certificates(session, 1794800000, &out) != IDC_OK) return 18;
+    if (!same(&out, "{\"ok\":false,\"problem\":\"no_certificate\"}")) return 19;
+    idc_buf_free(&out);
+    idc_session_close(session);
+    idc_session_close(session);
+    if (idc_session_build_tree(session) != IDC_ERR_ARGUMENT) return 20;
+  }
   return 0;
 }

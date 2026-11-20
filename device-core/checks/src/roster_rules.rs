@@ -28,16 +28,16 @@ pub const RULES_VERSION: u32 = 1;
 pub const MAX_PER_DATE: u32 = 3;
 /// A record's date is no earlier than this many days before the latest date
 /// among the earlier valid records, of any card (check 4, `date_order`).
-pub const DATE_ORDER_DAYS: i32 = 4;
+pub const DATE_ORDER_DAYS: i64 = 4;
 /// A card has 5 switches on each platform, for good ("Switches and corrections").
 pub const MAX_SWITCHES: u32 = 5;
 /// A record's date is at most 3 days after the date of the CRL behind its
 /// root ("How far dates are trusted"); no date in the roster is later than
 /// today plus this.
-pub const MAX_DAYS_AHEAD: i32 = 3;
+pub const MAX_DAYS_AHEAD: i64 = 3;
 /// A record's date is at most this many days before the date of the CRL
 /// behind its root (spec/revocation-tree.md, "Which roots a record may use").
-pub const ROOT_DAYS_BEFORE: i32 = 1;
+pub const ROOT_DAYS_BEFORE: i64 = 1;
 
 /// What a valid record does on one platform ("Event rules").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -430,7 +430,7 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
             latest_valid_date,
         })
     };
-    let d = date.day_number();
+    let d = date.days_since_1970();
     // 1. The record verifies.
     if !verifies {
         return invalid(Reason::Proof);
@@ -441,7 +441,7 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
     }
     // 3. Its root is recognized for its issuer and date.
     let fits = |crl: &Date| {
-        let c = crl.day_number();
+        let c = crl.days_since_1970();
         c - ROOT_DAYS_BEFORE <= d && d <= c + MAX_DAYS_AHEAD
     };
     if !crl_dates.iter().any(fits) {
@@ -449,7 +449,7 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
     }
     // 4. Its date is no earlier than 4 days before the latest valid date,
     // and no earlier than its card's last card proof.
-    if latest_valid_date.is_some_and(|l| d < l.day_number() - DATE_ORDER_DAYS)
+    if latest_valid_date.is_some_and(|l| d < l.days_since_1970() - DATE_ORDER_DAYS)
         || card.last_card_proof.is_some_and(|l| date < l)
     {
         return invalid(Reason::DateOrder);
@@ -509,7 +509,7 @@ pub fn possible_card(last_card_proof: Option<Date>, proofs_on_last_date: u32, to
         None => proofs_on_last_date == 0,
         Some(last) => {
             (1..=MAX_PER_DATE).contains(&proofs_on_last_date)
-                && last.day_number() <= today.day_number() + MAX_DAYS_AHEAD
+                && last.days_since_1970() <= today.days_since_1970() + MAX_DAYS_AHEAD
         }
     }
 }

@@ -159,6 +159,14 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}}
 	add("idp-noncritical", "issuingDistributionPoint marked non-critical", false, "not_usable_partitioned", c)
+	// Both: checks 6 and 7 are one step, and the extension that comes first
+	// in the CRL decides (spec/revocation-tree.md, "Reason codes").
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}, {ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
+	add("idp-then-delta", "issuingDistributionPoint before deltaCRLIndicator, both non-critical: the first of the two decides", false, "not_usable_partitioned", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Value: Integer(4659)}, {ID: OIDIssuingDistributionPoint, Value: idp}}
+	add("delta-then-idp", "deltaCRLIndicator before issuingDistributionPoint, both non-critical: the first of the two decides", false, "not_usable_delta", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Critical: true, Value: []byte{5, 0}}}
 	add("unknown-critical", "an unknown critical CRL extension", false, "not_usable_critical_extension", c)
