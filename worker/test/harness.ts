@@ -12,7 +12,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "../test-build/card-door.ts";
+import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -236,6 +236,12 @@ export interface TestWorker {
      */
     applyRuleEvent(event: RuleEvent): Promise<{ valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] }>;
     /**
+     * The latest valid date the roster rules read for a card, and the cards
+     * of every declared account of its scope as the object counts them
+     * (test build, `POST /__test/roster/rule-state`).
+     */
+    ruleState(scopeString: string, scopedId: string): Promise<RuleStateAnswer>;
+    /**
      * Of the challenges `POST /api/v1/challenges` has given out through
      * `fetch` or `issueChallenge` since this worker started, the ones the
      * back end still takes a submission for, sorted. It asks the API: for
@@ -291,7 +297,7 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-export type { CardToWrite, RuleEvent, StoredRoster, TestSettings };
+export type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -474,6 +480,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async writeCard(card) {
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
+      },
+      async ruleState(scopeString, scopedId) {
+        const res = await server.fetch("/__test/roster/rule-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) });
+        if (res.status !== 200) throw new Error(`reading the rule state: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as RuleStateAnswer;
       },
       async stored() {
         const res = await server.fetch("/__test/roster/stored");

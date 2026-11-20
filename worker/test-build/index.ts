@@ -30,14 +30,16 @@
 //   break its tables, or one card's row, or make every write to one of them fail, to see what
 //   the API answers when the back end itself fails; drop the table of the
 //   newest CRLs; and run the roster rules on the object's stored state for
-//   an event the API would never write (an invalid record of a roster);
+//   an event the API would never write (an invalid record of a roster),
+//   and read the latest valid date and the cards of each account as the
+//   object reads and counts them;
 //   read the rows it keeps of its records and of the roster as a whole,
 //   which no endpoint shows yet; and wait before it hashes a record, so
 //   that requests sent at once do cross where the deployed object lets
 //   them (in the local workerd the hash alone does not let another in).
-import { bytesOfHex } from "iamreal-protocol/bytes.ts";
+import { byBytes, bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
-import { parseDay } from "iamreal-protocol/date.ts";
+import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
@@ -47,7 +49,7 @@ import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "./card-door.ts";
+import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -230,6 +232,26 @@ export class Roster extends DeployedRoster {
   }
 
   /**
+   * What the stored state says besides the cards' rows (RuleStateAnswer):
+   * the latest valid date as `ruleState` reads it, and the cards of each
+   * account as `accountCards` counts them. Which accounts there are is read
+   * here from the rows; the count is the deployed query's.
+   */
+  testRuleState(scopeString: string, scopedId: string): RuleStateAnswer {
+    const { latestValidDate } = this.ruleState(scopeString, scopedId);
+    const accounts: { platform: string; username: string; account_cards: number }[] = [];
+    for (const platform of this.settings.platforms.map((p) => p.platform).sort(byBytes)) {
+      const declared = this.ctx.storage.sql
+        .exec<{ username: string }>("SELECT DISTINCT json_extract(slots, ?) AS username FROM cards WHERE scope_string = ? AND json_extract(slots, ?) IS NOT NULL", `$."${platform}".current`, scopeString, `$."${platform}".current`)
+        .toArray()
+        .map((r) => r.username)
+        .sort(byBytes);
+      for (const username of declared) accounts.push({ platform, username, account_cards: this.accountCards(scopeString, platform, username) });
+    }
+    return { latest_valid_date: latestValidDate === null ? null : formatDay(latestValidDate), accounts };
+  }
+
+  /**
    * Runs the roster rules for one event of spec/vectors/roster-rules.json on
    * the state the object stores, and keeps what a valid one leaves: the
    * same reading and the same writing of the state as for a submitted
@@ -300,6 +322,9 @@ export default {
    *   CRLs, as on an object made before the build had it.
    * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
    *   rules for it on the object's stored state and answers the result.
+   * - `POST /__test/roster/rule-state` with `{scope_string, scoped_id}`
+   *   answers a RuleStateAnswer: the latest valid date the rules read for
+   *   that card, and the cards of every declared account of the scope.
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster.
@@ -391,6 +416,10 @@ export default {
       return done();
     }
     if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
+    if (route === "POST /__test/roster/rule-state") {
+      const { scope_string, scoped_id } = (await request.json()) as { scope_string: string; scoped_id: string };
+      return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
+    }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
     if (route === "PUT /__test/roster/hash-delay") {
       const ms = Number(await request.text());
