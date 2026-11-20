@@ -149,11 +149,12 @@ const digit = (der: Uint8Array, at: number): number => {
 const two = (der: Uint8Array, at: number): number => digit(der, at) * 10 + digit(der, at + 1);
 
 /**
- * The UTCTime or GeneralizedTime last read, as seconds since the epoch:
- * the spellings of spec/revocation-tree.md, "Times", which are a little
- * more than DER (UTCTime with or without seconds, and either type with `Z`
- * or with an offset `±hhmm` that is not zero). Anything else is not DER.
- * crl/testdata/times/ has a file for each.
+ * The UTCTime or GeneralizedTime last read, as seconds since the epoch.
+ * The spellings read are those the Go crl/ reads, which are a little more
+ * than DER: UTCTime with or without seconds, and either type with `Z` or
+ * with an offset `±hhmm` that is not zero. Anything else is not DER.
+ * crl/testdata/times/ has a file for each, with what both give. The spec
+ * does not say yet which spellings are accepted; #120 will narrow them.
  */
 function time(der: Uint8Array): number {
   let at = lastFrom;

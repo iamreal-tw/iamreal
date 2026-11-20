@@ -10,8 +10,9 @@ import (
 )
 
 // Every CRL of testdata/times gives the index line expected.json holds:
-// how thisUpdate and nextUpdate are read and written
-// (spec/revocation-tree.md, "Times"). worker/ reads the same files.
+// how thisUpdate and nextUpdate are read and written today. worker/ reads
+// the same files, so the two give the same lines. The spec does not say
+// yet which spellings of a time are accepted (testdata/times/generate.go).
 func TestTimeSpellings(t *testing.T) {
 	var cases []struct {
 		Name   string `json:"name"`

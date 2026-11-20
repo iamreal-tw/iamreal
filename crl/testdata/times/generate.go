@@ -1,16 +1,23 @@
 //go:build ignore
 
 // Writes the synthetic CRLs of this directory and expected.json: CRLs whose
-// thisUpdate or nextUpdate is spelled in one of the ways
-// spec/revocation-tree.md ("Times") accepts or refuses, each with the line
-// of the archive index it must give. Run from the repository root:
+// thisUpdate or nextUpdate is spelled in one of many ways, each with the
+// line of the archive index that crl/ gives it today. Run from the
+// repository root:
 //
 //	go run ./crl/testdata/times/generate.go
 //
-// The answers are written out below, by hand from the spec; this program
-// stops if crl/ gives any other line. Each run signs with a new key that is
-// not kept and that nobody trusts, so every file changes, no file is a
-// usable CRL, and every line that is read at all says
+// What these cases record is that crl/ and worker/ read and write times the
+// same way: both run their tests over this directory. They are not answers
+// of the spec. spec/revocation-tree.md does not say yet which spellings of
+// a time are accepted; #120 will narrow them to those of RFC 5280, and the
+// answers here change with it. web/ reads times more narrowly today (only
+// with seconds and Z) and does not read these cases.
+//
+// The lines are written out below by hand, as what crl/ is meant to give
+// now; this program stops if crl/ gives any other line. Each run signs with
+// a new key that is not kept and that nobody trusts, so every file changes,
+// no file is a usable CRL, and every line that is read at all says
 // "-not_usable_signature": what is checked here is how the times are read
 // and written.
 package main
