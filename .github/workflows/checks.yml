@@ -5,6 +5,19 @@
 # runs only on pull requests that change a file they use, not in the queue.
 # The workflows are ASCII only, comments included (worker/test/workflows.ts).
 #
+# Skipping by path (#206). On a pull request the changes job lists the files
+# the pull request changes and each of the four required checks runs only
+# when one of them is in its list (the lists: worker/test/workflows.ts, given
+# to the changes job as its env; the script: changed-paths.sh, beside this
+# file). A check skipped by its `if` reports success, so the pull request can
+# still be merged ("Troubleshooting required status checks", "Handling
+# skipped but required checks"). On merge_group every check runs, whatever
+# the changes job says: a file missing from a list cannot turn main red.
+# Every `if` starts with always(), and every check's first step fails unless
+# the changes job succeeded: without them a check would be skipped, and
+# report success, when the changes job fails (same page: "The dependent job
+# is skipped and may not block merging").
+#
 # Triggered by pull_request, never pull_request_target: a pull request from a
 # fork gets no secret and a read-only GITHUB_TOKEN (GitHub's "Events that
 # trigger workflows", pull_request, "Workflows in forked repositories").
@@ -62,10 +75,44 @@ env:
   WRANGLER_HIDE_BANNER: "true"
 
 jobs:
+  # Which of the required checks below run. It uses no action but GitHub's
+  # checkout, with the whole history: the script compares the pull request's
+  # head with its merge base with the base branch.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.paths.outputs.go }}
+      typescript: ${{ steps.paths.outputs.typescript }}
+      device-core: ${{ steps.paths.outputs.device-core }}
+      android: ${{ steps.paths.outputs.android }}
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes cmd/** crl/** roster/** server/** verifier/** spec/** design/copy/** web/README.md docs/adr/0004-scoped-ids-and-proofs-are-public.md protocol/package.json web/package.json worker/package.json"
+      TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes protocol/** worker/** web/** design/** spec/** cmd/** crl/** roster/** server/** verifier/** android/** ios/** device-core/** .github/workflows/** docs/adr/0004-scoped-ids-and-proofs-are-public.md"
+      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/** .github/workflows/cache.yml"
+      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/copy/** .github/workflows/cache.yml"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Which checks the changed paths call for
+        id: paths
+        run: bash .github/workflows/changed-paths.sh
+
   go:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.go == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -90,9 +137,15 @@ jobs:
       - run: go test -count=1 -tags iamrealtest ./...
 
   typescript:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.typescript == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -141,9 +194,15 @@ jobs:
   # on main, for exactly the files hashed in the keys (no restore-keys); with
   # no cache the job builds everything, as before.
   device-core:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.device-core == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -190,9 +249,15 @@ jobs:
   # libraries, the wrapper's distribution and target/ are not checked again
   # (.github/README.md, on caches).
   android:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.android == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

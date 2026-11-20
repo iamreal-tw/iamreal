@@ -646,6 +646,298 @@ export const CHECKS_ON: Yaml = { pull_request: null, merge_group: { types: ["che
 export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || github.ref }}";
 
 /**
+ * Skipping by path (#206). On a pull request each required check runs only
+ * when the pull request changes a file its list below names; in the merge
+ * queue all four always run, so a file missing from a list cannot turn main
+ * red. When "A job is skipped by a conditional", "The job reports "Success""
+ * (https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks#handling-skipped-but-required-checks).
+ *
+ * The lists have the format of BROWSER_PATHS and IOS_PATHS and are matched
+ * the same way: a pattern matches the whole path from the repository's root,
+ * and `**` matches any characters, `/` included. Only two forms are written
+ * here, and `pathsProblems` turns away any other: a path with no wildcard
+ * (that one file), and `<directory>/**` (every file under it). The lists are
+ * given to the changes job as its env, each joined with spaces, and
+ * .github/workflows/changed-paths.sh reads them from there: there is no
+ * second copy. test/workflows.test.ts checks that each list holds what its
+ * check uses, as far as reading the sources finds it (.github/README.md
+ * says what that does not find).
+ */
+/**
+ * Files at the root that are not in the repository now, and that would
+ * change every check if a pull request added one: where and how pnpm
+ * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
+ * workspace (go.work), a cargo configuration every cargo run below the
+ * root would read (.cargo/config.toml), and how git checks files out
+ * (.gitattributes). A pattern for a file that is not there matches the pull
+ * request that adds it.
+ */
+export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
+/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and the files above. */
+export const EVERY_CHECK_PATHS: readonly string[] = [
+  ".github/workflows/checks.yml",
+  ".github/workflows/changed-paths.sh",
+  "worker/test/workflows.ts",
+  "worker/test/workflows.test.ts",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "go.mod",
+  "go.sum",
+  ...ROOT_FILES_PATHS,
+];
+/**
+ * The go job: every directory with a Go package, what their tests read
+ * (the vectors and the specifications they quote, the copy, web/README.md's
+ * headers, the ADR the site links to), and the package.json files
+ * `pnpm install --frozen-lockfile` compares the lockfile with (bb comes from it).
+ */
+export const GO_PATHS: readonly string[] = [
+  ...EVERY_CHECK_PATHS,
+  "cmd/**",
+  "crl/**",
+  "roster/**",
+  "server/**",
+  "verifier/**",
+  "spec/**",
+  "design/copy/**",
+  "web/README.md",
+  "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "protocol/package.json",
+  "web/package.json",
+  "worker/package.json",
+];
+/**
+ * The typescript job: the three packages, what their tests read, the Go
+ * programs worker/'s tests build and run, and android/, ios/, device-core/
+ * and the workflows, which test/workflows.test.ts reads. That is every
+ * directory of the repository but docs/, and of docs/ the one ADR the
+ * sources of the Go server name (its tests are not run here; the file is
+ * listed all the same).
+ */
+export const TYPESCRIPT_PATHS: readonly string[] = [
+  ...EVERY_CHECK_PATHS,
+  "protocol/**",
+  "worker/**",
+  "web/**",
+  "design/**",
+  "spec/**",
+  "cmd/**",
+  "crl/**",
+  "roster/**",
+  "server/**",
+  "verifier/**",
+  "android/**",
+  "ios/**",
+  "device-core/**",
+  ".github/workflows/**",
+  "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+];
+/**
+ * The device-core job: the Rust, the files of the repository its tests
+ * read, and cache.yml, which is hashed into the key of the caches the job
+ * restores (a change to it is a job that builds from nothing).
+ */
+export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**", ".github/workflows/cache.yml"];
+/** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, and cache.yml, hashed into the keys of its caches like device-core's. */
+export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/copy/**", ".github/workflows/cache.yml"];
+/** A list of patterns for each required check, by the check's name. */
+export type CheckLists = Readonly<Record<string, readonly string[]>>;
+/** Each required check's list. */
+export const CHECK_PATHS: CheckLists = { go: GO_PATHS, typescript: TYPESCRIPT_PATHS, "device-core": DEVICE_CORE_PATHS, android: ANDROID_PATHS };
+
+/** Whether `path`, from the repository's root, matches one of `patterns`, each of the two forms above. */
+export const matchesPaths = (patterns: readonly string[], path: string): boolean => patterns.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
+
+/**
+ * The problems in the lists themselves: a pattern of another form, a list
+ * without the paths every list has, a list without a file that is hashed
+ * into the key of a cache its job restores (a change to that file changes
+ * what the job restores, so the job runs), or, where `isDirectory` says which
+ * paths are directories of the repository, a directory written without
+ * `/**`, which the script takes for one file's name and which then matches
+ * nothing.
+ */
+export function pathsProblems(lists: CheckLists, isDirectory: (path: string) => boolean = () => false): string[] {
+  const problems: string[] = [];
+  if (!same(Object.keys(lists).sort(), [...REQUIRED_CHECKS].sort())) problems.push(`the lists are not one for each required check: ${Object.keys(lists).join(", ")}`);
+  for (const [check, list] of Object.entries(lists)) {
+    for (const p of list) if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*(\/\*\*)?$/.test(p) || p.split("/").some((part) => part === "." || part === "..")) problems.push(`${check}: not a path or <directory>/**: ${p}`);
+    for (const p of list) if (!p.endsWith("/**") && isDirectory(p)) problems.push(`${check}: a directory without /**: ${p}`);
+    for (const p of EVERY_CHECK_PATHS) if (!list.includes(p)) problems.push(`${check}: ${p} is not in the list`);
+    // The files a key of the job's caches hashes, as written in the key: `hashFiles('<file>', ...)`.
+    const hashed = new Set(Object.values(CACHES_OF_JOB[check] ?? {}).flatMap((c) => [...(/hashFiles\(([^)]*)\)/.exec(c.key)?.[1] ?? "").matchAll(/'([^']*)'/g)].map((m) => m[1]!)));
+    for (const f of hashed) if (!matchesPaths(list, f)) problems.push(`${check}: ${f} is in the key of a cache the job restores, and not in the list`);
+  }
+  return problems;
+}
+
+/** The job of checks.yml that decides which required checks run, and the script it runs. */
+export const CHANGES_JOB = "changes";
+export const CHANGED_PATHS_SCRIPT = ".github/workflows/changed-paths.sh";
+/** The name of the env variable that hands a check's list to the script: GO_PATHS, DEVICE_CORE_PATHS. */
+export const pathsEnvName = (check: string): string => `${check.toUpperCase().replaceAll("-", "_")}_PATHS`;
+/**
+ * The changes job, exactly, for these lists. It uses one action, GitHub's
+ * own checkout, with the whole history (`fetch-depth: 0`): the script
+ * compares the pull request's head with its merge base with the base branch
+ * (`git diff base...head`, the "three-dot diff" GitHub's own `paths` filter
+ * uses for pull requests), and both commits and what lies between must be
+ * there. The event's name and the two commits reach the script through env,
+ * not through the text of a command.
+ */
+export const changesJob = (lists: CheckLists): YamlMap => ({
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "5",
+  outputs: Object.fromEntries(REQUIRED_CHECKS.map((c) => [c, `\${{ steps.paths.outputs.${c} }}`])),
+  env: {
+    EVENT_NAME: "${{ github.event_name }}",
+    BASE_SHA: "${{ github.event.pull_request.base.sha }}",
+    HEAD_SHA: "${{ github.event.pull_request.head.sha }}",
+    ...Object.fromEntries(REQUIRED_CHECKS.map((c) => [pathsEnvName(c), (lists[c] ?? []).join(" ")])),
+  },
+  steps: [
+    { uses: uses("actions/checkout"), with: { "persist-credentials": "false", "fetch-depth": "0" } },
+    { name: "Which checks the changed paths call for", id: "paths", run: `bash ${CHANGED_PATHS_SCRIPT}` },
+  ],
+});
+/**
+ * The first step of every required check: it fails unless the changes job
+ * succeeded. With the job's `if` (below) this is what makes a required
+ * check fail, not skip, when the changes job fails or is cancelled. The
+ * result reaches the command through env, like everything the changes job
+ * is given.
+ */
+export const CHANGES_SUCCEEDED_STEP: YamlMap = { name: "The changes job succeeded", env: { CHANGES_RESULT: "${{ needs.changes.result }}" }, run: 'test "$CHANGES_RESULT" = success' };
+
+/** What a job's `if` is evaluated in: the changes job's result and outputs, the event, and whether the run was cancelled. */
+export interface IfState {
+  readonly result: "success" | "failure" | "cancelled" | "skipped";
+  readonly outputs: Readonly<Record<string, string>>;
+  readonly event: string;
+  readonly runCancelled: boolean;
+}
+
+/**
+ * Whether a job with this `if` runs in `state`. Reads a small part of
+ * GitHub's expressions (strings in single quotes, `==`, `!=`, `!`, `&&`,
+ * `||`, parentheses, the status functions, `needs.changes.result`,
+ * `needs.changes.outputs.<name>`, `github.event_name`) and throws for
+ * anything else. As GitHub does: strings compare without regard to case, an
+ * empty string is false, and an `if` that calls no status function is
+ * `success() && (...)`: "A default status check of success() is applied
+ * unless you include one of these functions"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions).
+ */
+export function jobRuns(expression: string, state: IfState): boolean {
+  const t = (expression.match(/\s+|&&|\|\||==|!=|[()!]|'[^']*'|[A-Za-z_][A-Za-z0-9_.-]*|./g) ?? []).filter((x) => !/^\s+$/.test(x));
+  let i = 0;
+  let statusFunction = false;
+  type Value = string | boolean;
+  const truthy = (v: Value): boolean => v !== false && v !== "";
+  const take = (x: string): void => {
+    if (t[i] !== x) throw new Error(`${x} expected, not ${t[i] ?? "the end"}`);
+    i++;
+  };
+  const primary = (): Value => {
+    const x = t[i++];
+    if (x === undefined) throw new Error("it ends early");
+    if (x === "(") {
+      const v = or();
+      take(")");
+      return v;
+    }
+    if (x.startsWith("'") && x.length >= 2) return x.slice(1, -1);
+    if (t[i] === "(") {
+      i++;
+      take(")");
+      statusFunction = true;
+      if (x === "always") return true;
+      if (x === "cancelled") return state.runCancelled;
+      if (x === "success") return !state.runCancelled && state.result === "success";
+      if (x === "failure") return !state.runCancelled && state.result === "failure";
+      throw new Error(`a function not read here: ${x}`);
+    }
+    if (x === "needs.changes.result") return state.result;
+    if (x === "github.event_name") return state.event;
+    if (x.startsWith("needs.changes.outputs.")) return state.outputs[x.slice("needs.changes.outputs.".length)] ?? "";
+    throw new Error(`not read here: ${x}`);
+  };
+  const unary = (): Value => {
+    if (t[i] !== "!") return primary();
+    i++;
+    return !truthy(unary());
+  };
+  const comparison = (): Value => {
+    const a = unary();
+    const op = t[i];
+    if (op !== "==" && op !== "!=") return a;
+    i++;
+    const b = unary();
+    if (typeof a !== "string" || typeof b !== "string") throw new Error("a comparison of something other than two strings");
+    return (a.toLowerCase() === b.toLowerCase()) === (op === "==");
+  };
+  const and = (): Value => {
+    let v = comparison();
+    while (t[i] === "&&") {
+      i++;
+      const w = comparison();
+      if (truthy(v)) v = w;
+    }
+    return v;
+  };
+  function or(): Value {
+    let v = and();
+    while (t[i] === "||") {
+      i++;
+      const w = and();
+      if (!truthy(v)) v = w;
+    }
+    return v;
+  }
+  const value = or();
+  if (i < t.length) throw new Error(`something after the expression: ${t[i]}`);
+  return (statusFunction || (!state.runCancelled && state.result === "success")) && truthy(value);
+}
+
+/**
+ * The problems in how a required check of checks.yml depends on the changes
+ * job. It must need that job and no other, start with the step above, and
+ * have an `if` under which, whatever the other checks' outputs and whether
+ * or not the run was cancelled:
+ * - it runs on every event other than pull_request (the merge queue);
+ * - it runs whenever the changes job did not succeed, so that the first
+ *   step fails it. Without always(), when "A job depends on a failed job",
+ *   "The dependent job is skipped and may not block merging" (the table of
+ *   the page quoted above, which says to "Use always() with needs for
+ *   required checks that depend on other jobs");
+ * - it runs when the changes job's output for it is `true`.
+ */
+export function requiredCheckProblems(name: string, job: YamlMap): string[] {
+  const problems: string[] = [];
+  if (job.needs !== CHANGES_JOB) problems.push(`does not need the ${CHANGES_JOB} job, and only it`);
+  if (!Array.isArray(job.steps) || !same(job.steps[0], CHANGES_SUCCEEDED_STEP)) problems.push(`the first step is not the one that fails unless the ${CHANGES_JOB} job succeeded`);
+  if (typeof job.if !== "string") return [...problems, "no if"];
+  const others = REQUIRED_CHECKS.filter((c) => c !== name);
+  const skipped = new Set<string>();
+  try {
+    for (const result of ["success", "failure", "cancelled", "skipped"] as const)
+      for (const event of ["pull_request", "merge_group"])
+        for (const runCancelled of [false, true])
+          for (const own of ["true", "false", ""])
+            for (const other of ["true", "false"]) {
+              const outputs = { ...Object.fromEntries(others.map((c) => [c, other])), [name]: own };
+              if (jobRuns(job.if, { result, outputs, event, runCancelled })) continue;
+              if (event !== "pull_request") skipped.add("can be skipped on merge_group");
+              if (result !== "success") skipped.add(`is skipped, not failed, when the ${CHANGES_JOB} job's result is ${result}`);
+              if (own === "true") skipped.add(`can be skipped when the ${CHANGES_JOB} job says it runs`);
+            }
+  } catch (e) {
+    problems.push(`an if not read here (${(e as Error).message}): ${job.if}`);
+  }
+  return [...problems, ...skipped];
+}
+
+/**
  * The three workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
  * exactly, its concurrency group, and its runner when that is not
@@ -655,7 +947,8 @@ export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || gith
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  *
  * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
- * they are the checks main requires. checks-browser.yml and checks-ios.yml
+ * they are the checks main requires; with them, the changes job that
+ * decides which of them a pull request runs (#206). checks-browser.yml and checks-ios.yml
  * do not run in the merge queue (#180).
  */
 const PULL_REQUEST_RULES: Readonly<
@@ -727,7 +1020,7 @@ function cacheProblems(file: string, text: string): string[] {
  * The problems in a set of workflow files, by file name. None, for files
  * that keep to everything described at the top of this file.
  */
-export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
+export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: CheckLists = CHECK_PATHS): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
   if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
@@ -810,12 +1103,25 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       continue;
     }
     const required = rules.requiredChecks;
-    if (required !== undefined && !same(Object.keys(doc.jobs).sort(), [...required].sort())) p(`the jobs are not exactly the checks main requires, ${required.join(", ")}: ${Object.keys(doc.jobs).join(", ")}`);
-    for (const [name, job] of Object.entries(doc.jobs)) {
+    if (required !== undefined && !same(Object.keys(doc.jobs).sort(), [...required, CHANGES_JOB].sort())) p(`the jobs are not exactly the checks main requires, ${required.join(", ")}, and ${CHANGES_JOB}: ${Object.keys(doc.jobs).join(", ")}`);
+    if (required !== undefined) for (const x of pathsProblems(checkPaths)) p(x);
+    for (const [name, whole] of Object.entries(doc.jobs)) {
       const j = (s: string): number => p(`job ${name}: ${s}`);
-      if (!isMap(job)) {
+      if (!isMap(whole)) {
         j("not a map");
         continue;
+      }
+      let job = whole;
+      if (required !== undefined && name === CHANGES_JOB) {
+        // Exactly the job written above: one action, GitHub's checkout, then the script, with the lists of this file.
+        if (!same(job, changesJob(checkPaths))) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+        continue;
+      }
+      if (required !== undefined) {
+        // How the check depends on the changes job is looked at here; the rest of the job, below, as it was before that job.
+        for (const x of requiredCheckProblems(name, job)) j(x);
+        const { needs: _needs, if: _if, ...rest } = job;
+        job = { ...rest, ...(Array.isArray(job.steps) ? { steps: job.steps.slice(1) } : {}) };
       }
       // A job's name is the name its check reports: none where main requires the checks by id.
       const wrongJob = extra(job, [...(required === undefined ? ["name"] : []), "runs-on", "timeout-minutes", "env", "steps"]);

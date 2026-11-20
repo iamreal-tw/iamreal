@@ -9,22 +9,28 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
 import {
+  ACTIONS,
   ANDROID_CACHES,
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   CACHE_KEY_FILES,
   BROWSER_PATHS,
-  ACTIONS,
+  CHANGED_PATHS_SCRIPT,
+  CHANGES_JOB,
   CHECK_BB,
-  DEVICE_CORE_CACHES,
+  CHECK_PATHS,
   CHECKS_GROUP,
   CHECKS_ON,
+  type CheckLists,
+  DEVICE_CORE_CACHES,
+  EVERY_CHECK_PATHS,
   GRADLE_BUILD,
   GRADLE_DISTRIBUTION_SHA256,
   GRADLE_VERSION,
@@ -33,15 +39,24 @@ import {
   IOS_PATHS,
   REQUIRED_CHECKS,
   type Yaml,
+  matchesPaths,
+  pathsEnvName,
+  pathsProblems,
   readYaml,
   workflowProblems,
 } from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
+/** The one file of .github/workflows/ that is not a workflow: the script the changes job of checks.yml runs. */
+const CHANGED_PATHS_NAME = basename(CHANGED_PATHS_SCRIPT);
 
 function realFiles(): Record<string, string> {
-  return Object.fromEntries(readdirSync(WORKFLOWS_DIR).map((f) => [f, readFileSync(join(WORKFLOWS_DIR, f), "utf8")]));
+  return Object.fromEntries(
+    readdirSync(WORKFLOWS_DIR)
+      .filter((f) => f !== CHANGED_PATHS_NAME)
+      .map((f) => [f, readFileSync(join(WORKFLOWS_DIR, f), "utf8")]),
+  );
 }
 
 test("the workflows keep to the rules", () => {
@@ -61,7 +76,15 @@ const UPLOAD_RUN = "        run: WRANGLER_SEND_METRICS=false WRANGLER_HIDE_BANNE
 const DOWNLOAD = "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n";
 const BUILD_JOB = "  build:\n    runs-on: ubuntu-24.04\n";
 const DEPLOY_JOB = "  deploy:\n    needs: build\n";
-const GO_JOB = "  go:\n    runs-on: ubuntu-24.04\n";
+const GO_JOB = "  go:\n    needs: changes\n";
+/** The `if` of a required check of checks.yml, as written there (#206). */
+const jobIf = (check: string): string => `    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.${check} == 'true')\n`;
+const GO_IF = jobIf("go");
+/** The first step of every required check, as written there. */
+const CHANGES_SUCCEEDED = '      - name: The changes job succeeded\n        env:\n          CHANGES_RESULT: ${{ needs.changes.result }}\n        run: test "$CHANGES_RESULT" = success\n';
+const GO_HEAD = `${GO_JOB}${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`;
+const CHANGES_CHECKOUT = "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n          fetch-depth: 0\n";
+const CHANGES_RUN = "        run: bash .github/workflows/changed-paths.sh\n";
 /** How checks.yml is triggered by the merge queue (#180), as written there. */
 const MERGE_GROUP = "  merge_group:\n    types:\n      - checks_requested\n";
 
@@ -104,7 +127,7 @@ const CHANGES: Record<string, Change[]> = {
   "13 a new workflow: escaped pull_request_target, write-all": [addFile("third.yml", 'name: third\non:\n  "pull_request\\x5ftarget":\npermissions: write-all\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n')],
   "14 a new workflow: on issue_comment and workflow_dispatch, write-all": [addFile("third.yml", "name: third\non: [issue_comment, workflow_dispatch]\npermissions: write-all\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
   "15 permissions: write-all in the deploy job": [replace(D, DEPLOY_JOB, `${DEPLOY_JOB}    permissions: write-all\n`)],
-  "16 a quoted \"permissions\" in a job of checks.yml": [replace(C, GO_JOB, '  go:\n    "permissions": write-all\n    runs-on: ubuntu-24.04\n')],
+  "16 a quoted \"permissions\" in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    "permissions": write-all\n`)],
   "17 before the upload: npm ci": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - run: npm ci\n`)],
   "18 before the upload: bash scripts/x.sh": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - run: bash scripts/anything.sh\n`)],
   "19 before the upload: pnpm deploy:test": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - run: pnpm -C worker deploy:test\n`)],
@@ -186,7 +209,7 @@ const CHANGES: Record<string, Change[]> = {
   "106 a path less in checks-ios.yml": [replace(I, "      - device-core/**\n", "")],
   "107 checks-ios.yml on pull_request_target": [replace(I, "  pull_request:\n", "  pull_request_target:\n")],
   "108 checks-ios.yml on another runner": [replace(I, "    runs-on: xcode-27\n", "    runs-on: macos-latest\n")],
-  "109 a job of checks.yml on the macOS runner": [replace(C, GO_JOB, "  go:\n    runs-on: xcode-27\n")],
+  "109 a job of checks.yml on the macOS runner": [replace(C, `${GO_IF}    runs-on: ubuntu-24.04\n`, `${GO_IF}    runs-on: xcode-27\n`)],
   "110 another Xcode in checks-ios.yml": [replace(I, "Xcode_27.2.app", "Xcode.app")],
   "111 a secret in the env of checks-ios.yml": [replace(I, "env:\n", "env:\n  T: ${{ secrets.X }}\n")],
   "112 checks-ios.yml with write permissions": [replace(I, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
@@ -210,12 +233,47 @@ const CHANGES: Record<string, Change[]> = {
   "132 checks.yml on merge_group only, so a pull request gets no checks": [replace(C, "  pull_request:\n", "")],
   "133 merge_group in checks.yml with another activity type": [replace(C, MERGE_GROUP, `${MERGE_GROUP}      - destroyed\n`)],
   "134 checks.yml's group by pull request number, so the merge groups' runs share one and cancel each other": [replace(C, `  group: ${CHECKS_GROUP}\n`, "  group: checks-${{ github.event.pull_request.number }}\n")],
-  "135 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    runs-on: ubuntu-24.04\n")],
+  "135 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    needs: changes\n")],
   "136 a job of checks.yml given a name, which is the name its check reports": [replace(C, GO_JOB, `${GO_JOB}    name: Go\n`)],
   "137 one job more in checks.yml than the checks main requires": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
   "138 a secret in the env at the top of checks.yml, which a merge group's run would be given": [replace(C, '  WRANGLER_HIDE_BANNER: "true"\n', `  WRANGLER_HIDE_BANNER: "true"\n  T: ${SECRET}\n`)],
   "139 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
   "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
+  // Skipping by path (#206): a required check runs through the changes job, always in the merge queue, and fails when that job fails.
+  "200 a required check that does not go through the changes job": [replace(C, GO_HEAD, "  go:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n")],
+  "201 a required check that does not need the changes job, whose result and output are then empty": [replace(C, GO_JOB, "  go:\n")],
+  "202 a required check that needs another job": [replace(C, GO_JOB, "  go:\n    needs: typescript\n")],
+  "203 a required check with no if: skipped when the changes job fails": [replace(C, GO_IF, "")],
+  "204 a required check whose if has no status function: skipped when the changes job fails": [replace(C, GO_IF, "    if: needs.changes.outputs.go == 'true'\n")],
+  "205 a required check whose if does not look at the changes job's result: skipped when that job fails": [replace(C, GO_IF, "    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.go == 'true')\n")],
+  "206 a required check with success() for always(): skipped when the changes job fails": [replace(C, GO_IF, GO_IF.replace("always()", "success()"))],
+  "207 a required check with !cancelled() for always(): skipped when the run is cancelled before the changes job ends": [replace(C, GO_IF, `    if: "${GO_IF.slice("    if: ".length, -1).replace("always()", "!cancelled()")}"\n`)],
+  "208 a required check that can be skipped on merge_group": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.go == 'true')\n")],
+  "209 a required check that runs on merge_group only when the changes job says so": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || (github.event_name != 'pull_request' && needs.changes.outputs.go == 'true') || needs.changes.outputs.go == 'true')\n")],
+  "210 a required check that reads another check's output": [replace(C, jobIf("android"), jobIf("go"))],
+  "211 a required check skipped when its output is true": [replace(C, GO_IF, GO_IF.replace("== 'true'", "!= 'true'"))],
+  "212 a required check without the step that fails unless the changes job succeeded": [replace(C, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n`)],
+  "213 a required check whose first step succeeds whatever the changes job did": [replace(C, 'run: test "$CHANGES_RESULT" = success\n', 'run: test "$CHANGES_RESULT" != skipped\n')],
+  "232 the changes job's result put into the first step's command, not its env": [replace(C, CHANGES_SUCCEEDED, '      - name: The changes job succeeded\n        run: test "${{ needs.changes.result }}" = success\n')],
+  "233 the first step reading another job's result": [replace(C, "          CHANGES_RESULT: ${{ needs.changes.result }}\n", "          CHANGES_RESULT: ${{ needs.typescript.result }}\n")],
+  "214 the step about the changes job after the others": [replace(C, `${CHANGES_SUCCEEDED}      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n`, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${CHANGES_SUCCEEDED}`)],
+  "215 a required check whose if reads something else": [replace(C, GO_IF, GO_IF.replace("always() &&", "always() && github.actor != 'x' &&"))],
+  "216 a required check that reports success when it fails": [replace(C, GO_JOB, `${GO_JOB}    continue-on-error: true\n`)],
+  "217 the changes job with an action that is not GitHub's, in place of the checkout": [replace(C, CHANGES_CHECKOUT, `      - uses: dorny/paths-filter@${SHA} # v3.0.2\n`)],
+  "218 the changes job with an action that is not GitHub's, after the checkout": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: tj-actions/changed-files@${SHA} # v46.0.5\n`)],
+  "219 the changes job with an action of the list that it does not need": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: 22.23.4\n          package-manager-cache: false\n`)],
+  "220 the changes job running a command other than the script": [replace(C, CHANGES_RUN, '        run: echo "go=false" >> "$GITHUB_OUTPUT"\n')],
+  "221 the changes job running the script and something more": [replace(C, CHANGES_RUN, "        run: bash .github/workflows/changed-paths.sh || true\n")],
+  "222 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
+  "223 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
+  "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** roster/**", " crl/** roster/**")],
+  "225 a path more in a list the changes job is given": [replace(C, ' design/copy/** .github/workflows/cache.yml"\n', ' design/copy/** .github/workflows/cache.yml docs/**"\n')],
+  "226 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
+  "227 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
+  "228 the changes job with an if": [replace(C, "  changes:\n", "  changes:\n    if: github.event_name == 'pull_request'\n")],
+  "229 the changes job that cannot fail": [replace(C, "  changes:\n", "  changes:\n    continue-on-error: true\n")],
+  "230 no changes job": [replace(C, "  changes:\n", "  other:\n")],
+  "231 the commits put into the script's command, not its env": [replace(C, CHANGES_RUN, "        run: BASE_SHA=${{ github.event.pull_request.base.sha }} bash .github/workflows/changed-paths.sh\n")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -258,7 +316,7 @@ const cacheStep = (action: string, cache: { readonly path: string; readonly key:
 const GO_BUILD = "      - run: go build ./...\n";
 const AFTER_CHECKOUT = "          persist-credentials: false\n";
 const CHECKOUT = `      - uses: actions/checkout@${ACTIONS["actions/checkout"]!.sha} # ${ACTIONS["actions/checkout"]!.version}\n        with:\n${AFTER_CHECKOUT}`;
-const ANDROID_STEPS_START = `  android:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHECKOUT}`;
+const ANDROID_STEPS_START = `  android:\n    needs: changes\n${jobIf("android")}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}${CHECKOUT}`;
 const GRADLE_CLEANUP = `      - name: Leave Gradle's lock files and gc.properties out of the cache\n        run: find "$HOME/.gradle/caches" -type f \\( -name "*.lock" -o -name gc.properties \\) -delete\n`;
 const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
 const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
@@ -446,7 +504,7 @@ test("every file the caches' keys hash is there: hashFiles would leave a misspel
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
   assert.deepEqual(doc.on, CHECKS_ON);
-  assert.deepEqual(Object.keys(doc.jobs as object), REQUIRED_CHECKS);
+  assert.deepEqual(Object.keys(doc.jobs as object), [CHANGES_JOB, ...REQUIRED_CHECKS]);
   const browserDoc = readYaml(realFiles()[B]!) as Record<string, Yaml>;
   // `paths`: a list of strings under pull_request, each as written (`**` is no special character in YAML here).
   const paths = (browserDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths as string[];
@@ -583,6 +641,25 @@ function workspacePackages(): Map<string, string> {
  * (Chrome, Go, bb). So this is one more reminder, not the list: whoever
  * makes the tests use another directory adds it to the paths.
  */
+/**
+ * What one source's text names, as written there: the specifiers of its
+ * imports (`from "..."`, `import("...")`, `import "..."`) and of the HTML's
+ * `<script src>` (from the root of web/, written `./...`), the paths of
+ * `new URL("../...", import.meta.url)` up to the first `${`, and the
+ * packages of `"go", [... "./<package>"`. The one place these writings are
+ * read, for the browser tests' paths and for the typescript check's.
+ */
+function namesIn(text: string): { specifiers: string[]; urls: string[]; goPackages: string[] } {
+  return {
+    specifiers: [
+      ...[...text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]!),
+      ...[...text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!.replace(/^\//, "./")),
+    ],
+    urls: [...text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)].map((m) => m[1]!),
+    goPackages: [...text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)].map((m) => m[1]!),
+  };
+}
+
 function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
   const web = join(REPO, "web");
   const packages = workspacePackages();
@@ -605,11 +682,8 @@ function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
     if (seen.has(file)) continue;
     seen.add(file);
     const text = readFileSync(file, "utf8");
-    const specifiers = [
-      ...[...text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]!),
-      ...[...text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!.replace(/^\//, "./")),
-    ];
-    for (const s of specifiers) {
+    const names = namesIn(text);
+    for (const s of names.specifiers) {
       let target: string | undefined;
       if (s.startsWith(".")) target = resolve(dirname(file), s);
       else {
@@ -627,12 +701,12 @@ function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
     for (const m of text.matchAll(/\bjoin\(\s*repo\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
     for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\."\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
     for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\.\/([^"/]+)/g)) used.add(m[1]!);
-    for (const m of text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)) {
+    for (const url of names.urls) {
       // `new URL(\`../../${path}\`)` (web/test/vectors.ts) names the repository's root and no more: say so.
-      const named = top(resolve(dirname(file), m[1]!));
+      const named = top(resolve(dirname(file), url));
       used.add(named === "" ? `(somewhere in the repository, by ${relative(REPO, file)})` : named);
     }
-    for (const m of text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)) goPackages.add(m[1]!);
+    for (const g of names.goPackages) goPackages.add(g);
   }
   for (const f of seen) used.add(top(f));
   return { used, goPackages };
@@ -699,6 +773,455 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
   for (const m of check.matchAll(/^\S+ ((?:web|verifier)\/\S+)$/gm)) read.add(m[1]!);
   for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
   assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
-  const covered = (path: string): boolean => IOS_PATHS.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
-  assert.deepEqual([...read].filter((p) => !covered(p)), []);
+  assert.deepEqual([...read].filter((p) => !matchesPaths(IOS_PATHS, p)), []);
+});
+
+// Skipping by path (#206): the lists of the four required checks, the script that reads them, and
+// what each check uses.
+
+test("the lists of the required checks: one for each, every one with the paths every check has, in the two forms the script reads", () => {
+  const files = realFiles();
+  const withList = (check: string, list: readonly string[]): CheckLists => ({ ...CHECK_PATHS, [check]: list });
+  const without = (check: string, path: string): CheckLists => {
+    assert.ok(CHECK_PATHS[check]!.includes(path), `${check} has ${path}`);
+    return withList(check, CHECK_PATHS[check]!.filter((p) => p !== path));
+  };
+  // Each altered set of lists is turned away, for what is wrong with the lists.
+  for (const [what, lists] of Object.entries({
+    "a list without the lockfile": without("android", "pnpm-lock.yaml"),
+    "a list without the workflow": without("go", ".github/workflows/checks.yml"),
+    "a list without these rules": without("device-core", "worker/test/workflows.ts"),
+    "a pattern with one star, which the script does not read": withList("typescript", [...CHECK_PATHS.typescript!, "web/*.ts"]),
+    "a pattern with ** in the middle": withList("typescript", [...CHECK_PATHS.typescript!, "web/**/x.ts"]),
+    "a negated pattern": withList("go", [...CHECK_PATHS.go!, "!web/README.md"]),
+    "a pattern from the root": withList("go", [...CHECK_PATHS.go!, "/cmd/**"]),
+    "a pattern for everything": withList("go", [...CHECK_PATHS.go!, "**"]),
+    "a pattern with a space, which would be two in the env": withList("go", [...CHECK_PATHS.go!, "cmd/a b"]),
+    "no list for a check": Object.fromEntries(Object.entries(CHECK_PATHS).filter(([c]) => c !== "android")),
+  })) {
+    const problems = workflowProblems(files, lists);
+    assert.ok(problems.some((x) => /is not in the list|not a path or <directory>|not one for each required check/.test(x)), `${what}: ${problems.join("; ")}`);
+  }
+  // A file hashed into the key of a job's caches changes what the job restores: a pull request
+  // that changes it runs the job. Each altered list leaves out one such file.
+  for (const [check, list, file] of [
+    ["device-core", CHECK_PATHS["device-core"]!.filter((p) => p !== ".github/workflows/cache.yml"), ".github/workflows/cache.yml"],
+    ["android", CHECK_PATHS.android!.filter((p) => p !== ".github/workflows/cache.yml"), ".github/workflows/cache.yml"],
+    ["android", CHECK_PATHS.android!.filter((p) => p !== "device-core/**"), "device-core/Cargo.lock"],
+    ["android", CHECK_PATHS.android!.map((p) => (p === "android/**" ? "android/app/**" : p)), "android/gradle/verification-metadata.xml"],
+    ["device-core", CHECK_PATHS["device-core"]!.map((p) => (p === "device-core/**" ? "device-core/checks/**" : p)), "device-core/rust-toolchain.toml"],
+  ] as const) {
+    const problems = workflowProblems(files, withList(check, list));
+    assert.ok(problems.some((x) => x.includes(`${check}: ${file} is in the key of a cache the job restores, and not in the list`)), `${check} without ${file}: ${problems.join("; ")}`);
+  }
+  // A directory written without /**: the script takes it for one file's name, and it matches nothing.
+  const isDirectory = (path: string): boolean => existsSync(join(REPO, path)) && statSync(join(REPO, path)).isDirectory();
+  assert.ok(isDirectory("spec/vectors") && !isDirectory("go.mod"), "the check sees the repository's directories");
+  for (const [check, path] of [
+    ["go", "spec/vectors"],
+    ["android", "device-core"],
+    ["typescript", ".github/workflows"],
+  ] as const) {
+    const problems = pathsProblems(withList(check, [...CHECK_PATHS[check]!, path]), isDirectory);
+    assert.ok(problems.some((x) => x.includes(`${check}: a directory without /**: ${path}`)), `${check} ${path}: ${problems.join("; ")}`);
+  }
+  assert.deepEqual(pathsProblems(CHECK_PATHS, isDirectory), []);
+  // Written out, not read from EVERY_CHECK_PATHS: what the ticket says is in every list, the script, and
+  // the files at the root that, once added, change how every check installs, builds or checks out.
+  for (const p of [".github/workflows/checks.yml", ".github/workflows/changed-paths.sh", "worker/test/workflows.ts", "worker/test/workflows.test.ts", "pnpm-lock.yaml", "pnpm-workspace.yaml", "go.mod", "go.sum", ...ROOT_FILES]) {
+    assert.ok(EVERY_CHECK_PATHS.includes(p), p);
+    for (const check of REQUIRED_CHECKS) assert.ok(CHECK_PATHS[check]!.includes(p), `${check}: ${p}`);
+  }
+});
+
+test(".github/workflows/ holds the workflows and the one script the changes job runs", () => {
+  assert.deepEqual(readdirSync(WORKFLOWS_DIR).sort(), [...Object.keys(realFiles()), CHANGED_PATHS_NAME].sort());
+  // Like the workflows: printable ASCII only. It is read line by line with them (CONTRIBUTING.md).
+  assert.equal(/[^\x20-\x7e\n]/.exec(readFileSync(join(WORKFLOWS_DIR, CHANGED_PATHS_NAME), "utf8")), null);
+});
+
+/** Files at the root that are not there now, and that would change every check if a pull request added them. */
+const ROOT_FILES = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
+
+/** The lists as the changes job of checks.yml is given them: the `*_PATHS` of its env. */
+function listsOfTheChangesJob(): Record<string, string> {
+  const doc = readYaml(realFiles()[C]!) as { jobs: Record<string, { env: Record<string, string> }> };
+  const lists = Object.fromEntries(Object.entries(doc.jobs[CHANGES_JOB]!.env).filter(([k]) => k.endsWith("_PATHS")));
+  assert.deepEqual(Object.keys(lists), REQUIRED_CHECKS.map(pathsEnvName));
+  return lists;
+}
+
+test("changed-paths.sh, with the lists the changes job is given: a check runs when the pull request changes a file of its list, and every check runs in the merge queue", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "iamreal-changed-paths-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const gitEnv = {
+    PATH: process.env.PATH ?? "",
+    HOME: dir,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_AUTHOR_NAME: "a",
+    GIT_AUTHOR_EMAIL: "a@example.invalid",
+    GIT_COMMITTER_NAME: "a",
+    GIT_COMMITTER_EMAIL: "a@example.invalid",
+  };
+  const repo = join(dir, "repo");
+  mkdirSync(repo);
+  const git = (...args: string[]): string => execFileSync("git", args, { cwd: repo, env: gitEnv, encoding: "utf8" }).trim();
+  const write = (path: string, text: string): void => {
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
+    writeFileSync(join(repo, path), text);
+  };
+  const commit = (message: string): string => {
+    git("add", "--all");
+    git("commit", "--quiet", "--message", message);
+    return git("rev-parse", "HEAD");
+  };
+  git("init", "--quiet", "--initial-branch=main");
+  for (const f of ["README.md", "crl/old.go", "device-core/gone.rs", "web/page.ts", "docs/a.md"]) write(f, "1\n");
+  const fork = commit("where the pull request starts");
+  // The base branch moves on after the pull request started: that change is not the pull request's.
+  write("web/page.ts", "2\n");
+  write("android/new.kt", "2\n");
+  const base = commit("the base branch, later");
+
+  const script = join(WORKFLOWS_DIR, CHANGED_PATHS_NAME);
+  const lists = listsOfTheChangesJob();
+  let n = 0;
+  const run = (env: Record<string, string>, given: Record<string, string> = lists): { status: number | null; outputs: Record<string, string>; log: string } => {
+    const output = join(dir, `output-${n++}`);
+    writeFileSync(output, "");
+    const r = spawnSync("bash", [script], { cwd: repo, env: { ...gitEnv, ...given, GITHUB_OUTPUT: output, ...env }, encoding: "utf8" });
+    const lines = readFileSync(output, "utf8").split("\n").filter(Boolean);
+    return { status: r.status, outputs: Object.fromEntries(lines.map((l) => l.split("=") as [string, string])), log: r.stdout + r.stderr };
+  };
+  const ALL = [...REQUIRED_CHECKS];
+  const every = (value: string): Record<string, string> => Object.fromEntries(ALL.map((c) => [c, value]));
+  type Op = (() => void) | string;
+  const remove = (path: string) => (): void => rmSync(join(repo, path));
+  const move = (from: string, to: string) => (): void => {
+    mkdirSync(dirname(join(repo, to)), { recursive: true });
+    renameSync(join(repo, from), join(repo, to));
+  };
+  // Each case: what the pull request does (a path is a file written), and the checks that run. The
+  // expected checks are written out here, not worked out from the lists.
+  const cases: [string, Op[], string[]][] = [
+    ["documents only", ["docs/b.md", "README.md", "docs/adr/0001-x.md", "CONTRIBUTING.md", ".github/README.md"], []],
+    ["a document whose name has a space and characters outside ASCII", ["docs/文件 說明.md"], []],
+    ["a vector whose name has a space and characters outside ASCII", ["spec/vectors/文 件.json"], ALL],
+    ["go.mod", ["go.mod"], ALL],
+    ["a go.mod that is not the root's", ["docs/go.mod"], []],
+    ["the lockfile", ["pnpm-lock.yaml"], ALL],
+    ["the workflow", [".github/workflows/checks.yml"], ALL],
+    ["the script", [".github/workflows/changed-paths.sh"], ALL],
+    ["the rules", ["worker/test/workflows.ts"], ALL],
+    ["another workflow", [".github/workflows/checks-ios.yml"], ["typescript"]],
+    ["the workflow that saves the caches the device-core and android jobs restore", [".github/workflows/cache.yml"], ["typescript", "device-core", "android"]],
+    ["the Worker", ["worker/src/x.ts"], ["typescript"]],
+    ["the page", ["web/src/x.ts"], ["typescript"]],
+    ["the page's README, whose headers the Go server's tests read", ["web/README.md"], ["go", "typescript"]],
+    ["the ADR the Go server's site links to", ["docs/adr/0004-scoped-ids-and-proofs-are-public.md"], ["go", "typescript"]],
+    ["the Go server", ["server/x.go"], ["go", "typescript"]],
+    ["the app for Android", ["android/app/x.kt"], ["typescript", "android"]],
+    ["the app for iOS", ["ios/x.swift"], ["typescript"]],
+    ["the Rust core", ["device-core/checks/src/x.rs"], ["typescript", "device-core", "android"]],
+    ["a file of the Rust core deleted", [remove("device-core/gone.rs")], ["typescript", "device-core", "android"]],
+    ["a Go file moved out to docs/: it counts under its old name", [move("crl/old.go", "docs/old.go")], ["go", "typescript"]],
+    ["the copy", ["design/copy/app.md"], ["go", "typescript", "android"]],
+    ["a specification", ["spec/roster-rules.md"], ["go", "typescript", "device-core"]],
+    ["the circuits", ["web/circuits/x.json"], ["typescript", "device-core", "android"]],
+    ["a directory whose name starts like one of a list", ["specs/x.md", "webx/y.ts", "cmd.md"], []],
+    ["a document and the Worker", ["docs/b.md", "worker/src/x.ts"], ["typescript"]],
+    ...ROOT_FILES.map((f): [string, Op[], string[]] => [`${f} at the root`, [f], ALL]),
+    ["a package.json and a .cargo/config.toml that are not the root's", ["docs/package.json", "docs/.cargo/config.toml"], []],
+    ["nothing", [], []],
+  ];
+  let head = fork;
+  for (const [what, ops, runs] of cases) {
+    git("checkout", "--quiet", "--force", "-B", "pr", fork);
+    git("clean", "--quiet", "-fd");
+    for (const op of ops) typeof op === "string" ? write(op, "changed\n") : op();
+    head = ops.length === 0 ? fork : commit(what);
+    const r = run({ EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head });
+    assert.equal(r.status, 0, `${what}: ${r.log}`);
+    assert.deepEqual(r.outputs, Object.fromEntries(ALL.map((c) => [c, String(runs.includes(c))])), `${what}: ${r.log}`);
+    // The rules' own reading of the lists says the same.
+    const changed = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", `${base}...${head}`], { cwd: repo, env: gitEnv, encoding: "utf8" }).split("\0").filter(Boolean);
+    assert.deepEqual(
+      ALL.filter((c) => changed.some((f) => matchesPaths(CHECK_PATHS[c]!, f))),
+      runs,
+      what,
+    );
+  }
+
+  // A file name is the pull request's to choose: one with a new line and `::` in it must not reach
+  // the log as a line of its own, where the runner would take it for a workflow command.
+  git("checkout", "--quiet", "--force", "-B", "pr", fork);
+  git("clean", "--quiet", "-fd");
+  write("spec/x\n::error::made up.md", "changed\n");
+  write("docs/y\n::add-mask::z.md", "changed\n");
+  const odd = run({ EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: commit("file names with a new line") });
+  assert.equal(odd.status, 0, odd.log);
+  assert.deepEqual(odd.outputs, { go: "true", typescript: "true", "device-core": "true", android: "false" });
+  assert.deepEqual(
+    odd.log.split("\n").filter((l) => !/^(go|typescript|device-core|android): (runs|skipped) \(/.test(l) && l !== ""),
+    [],
+    odd.log,
+  );
+  assert.ok(!/[^\x20-\x7e\n]/.test(odd.log) && odd.log.includes("spec/x"), odd.log);
+  git("checkout", "--quiet", "--force", "-B", "pr", fork);
+  git("clean", "--quiet", "-fd");
+  head = fork;
+
+  // The merge queue: every check, and no commit is looked at.
+  const queue = run({ EVENT_NAME: "merge_group", BASE_SHA: "", HEAD_SHA: "" });
+  assert.equal(queue.status, 0, queue.log);
+  assert.deepEqual(queue.outputs, every("true"));
+  // Any other event too: only pull_request skips. `head` here changes nothing of any list.
+  assert.deepEqual(run({ EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head }).outputs, every("false"));
+  assert.deepEqual(run({ EVENT_NAME: "push", BASE_SHA: base, HEAD_SHA: head }).outputs, every("true"));
+
+  // What goes wrong stops the script, so that the changes job fails and the required checks with it.
+  const pr = { EVENT_NAME: "pull_request", BASE_SHA: base, HEAD_SHA: head };
+  const { ANDROID_PATHS: _android, ...withoutAndroid } = lists;
+  const failures: [string, Record<string, string>, Record<string, string>?][] = [
+    ["a base commit that is not there", { ...pr, BASE_SHA: "0123456789abcdef0123456789abcdef01234567" }],
+    ["no base commit", { ...pr, BASE_SHA: "" }],
+    ["no head commit", { ...pr, HEAD_SHA: "" }],
+    ["no event name", { ...pr, EVENT_NAME: "" }],
+    ["a pattern with one star", { ...pr, ANDROID_PATHS: "android/** web/*.ts" }],
+    ["a pattern with ** in the middle", { ...pr, GO_PATHS: "cmd/**/x.go" }],
+    ["a pattern for everything", { ...pr, GO_PATHS: "**" }],
+    ["a pattern that goes up", { ...pr, GO_PATHS: "cmd/../docs/**" }],
+    ["a pattern that starts by going up", { ...pr, GO_PATHS: "../x" }],
+    ["a pattern from the root", { ...pr, GO_PATHS: "/cmd/**" }],
+    ["a pattern with an empty part", { ...pr, GO_PATHS: "cmd//x.go" }],
+    ["a pattern that ends with a slash", { ...pr, GO_PATHS: "cmd/" }],
+    ["an empty list", { ...pr, DEVICE_CORE_PATHS: "" }],
+    ["a list that is not given", pr, withoutAndroid],
+  ];
+  for (const [what, env, given] of failures) {
+    const r = run(env, given);
+    assert.notEqual(r.status, 0, `${what}: ${r.log}`);
+    assert.notDeepEqual(Object.keys(r.outputs), ALL, `${what}: the script wrote an answer for every check`);
+  }
+});
+
+/** The tracked files under `dirs`, from the repository's root. */
+function trackedFiles(...dirs: string[]): string[] {
+  const found = execFileSync("git", ["-C", REPO, "ls-files", "-z", "--", ...dirs], { encoding: "utf8" }).split("\0").filter(Boolean);
+  assert.ok(found.length > 0, `the check read the tracked files of ${dirs.join(", ")}`);
+  return found;
+}
+
+/** `path` from the repository's root, if it is a file or directory of the repository other than the root; else nothing. */
+function inRepo(path: string): string | undefined {
+  const r = relative(REPO, path);
+  return r !== "" && !r.startsWith("..") && existsSync(path) ? r.split(sep).join("/") : undefined;
+}
+
+/** Whether `list` holds `path`: a file, or a directory, every file of which it must then hold. */
+const holds = (list: readonly string[], path: string): boolean => matchesPaths(list, path) || matchesPaths(list, `${path}/`);
+
+/**
+ * The files and directories of the repository that TypeScript sources name,
+ * and the Go packages they build, test or run. Found by reading `files`
+ * (.ts, .mjs, .js, .html), the same writings as the check of the browser
+ * tests' paths above, on every tracked source and not only the ones the
+ * browser tests reach:
+ * - an import with a relative path, or with the name of a package of the
+ *   workspace; the HTML's `<script src>`;
+ * - `join(<base>, "<part>", ...)` where the base is `REPO` or `repo` (the
+ *   root), `WORKER_DIR` (worker/), `web` (web/) or `here` (the file's
+ *   directory), the names these sources use, with the parts written as
+ *   strings;
+ * - `new URL("../...", import.meta.url)`, up to the first `${`;
+ * - `"go", [... "./<package>"`.
+ * A path that names no file or directory of the repository (an output
+ * directory, the root itself) is left out. Not seen: what the check of the
+ * browser tests' paths does not see either (.github/README.md).
+ */
+function namedByTypeScript(files: readonly string[]): { paths: Set<string>; goPackages: Set<string> } {
+  const packages = workspacePackages();
+  const bases: Record<string, (file: string) => string> = { REPO: () => REPO, repo: () => REPO, WORKER_DIR: () => WORKER_DIR, web: () => join(REPO, "web"), here: dirname };
+  const paths = new Set<string>();
+  const goPackages = new Set<string>();
+  /** A path, or where it stops in the middle of a name (`../spec/vectors/${name}`), the directory it is in. */
+  const add = (path: string): void => {
+    const found = inRepo(path) ?? inRepo(dirname(path));
+    if (found !== undefined) paths.add(found);
+  };
+  for (const f of files.filter((x) => /\.(ts|mjs|js|html)$/.test(x))) {
+    const file = join(REPO, f);
+    const text = readFileSync(file, "utf8");
+    const names = namesIn(text);
+    for (const s of names.specifiers) {
+      if (s.startsWith(".")) add(resolve(dirname(file), s));
+      else {
+        const name = [...packages.keys()].find((n) => s === n || s.startsWith(`${n}/`));
+        if (name !== undefined) add(packages.get(name)!);
+      }
+    }
+    for (const m of text.matchAll(/\bjoin\(\s*(REPO|repo|WORKER_DIR|web|here)\s*((?:,\s*"[^"]*"\s*)+)/g)) {
+      const found = inRepo(resolve(bases[m[1]!]!(file), ...[...m[2]!.matchAll(/"([^"]*)"/g)].map((x) => x[1]!)));
+      if (found !== undefined) paths.add(found);
+    }
+    for (const url of names.urls) add(resolve(dirname(file), url));
+    for (const g of names.goPackages) goPackages.add(g);
+  }
+  return { paths, goPackages };
+}
+
+/**
+ * The files and directories of the repository that Go sources name outside
+ * their own directory: a string that starts with `../`, and
+ * `filepath.Join("..", "<part>", ...)` with the parts written as strings,
+ * both from the file's directory (where `go test` runs a package's tests).
+ * Not seen: a path put together any other way, and what a test is handed
+ * through the environment.
+ */
+function namedByGo(files: readonly string[]): Set<string> {
+  const paths = new Set<string>();
+  for (const f of files.filter((x) => x.endsWith(".go"))) {
+    const file = join(REPO, f);
+    const text = readFileSync(file, "utf8");
+    const add = (path: string): void => {
+      const found = inRepo(resolve(dirname(file), path));
+      if (found !== undefined) paths.add(found);
+    };
+    for (const m of text.matchAll(/"((?:\.\.\/)+[^"\s]*)"/g)) add(m[1]!);
+    for (const m of text.matchAll(/filepath\.Join\(\s*("\.\."\s*(?:,\s*"[^"]*"\s*)*)/g)) add([...m[1]!.matchAll(/"([^"]*)"/g)].map((x) => x[1]!).join("/"));
+  }
+  return paths;
+}
+
+/** The directories, from the root, of the packages of this module that `packages` are or import, their tests' imports included. */
+function goDirectories(packages: readonly string[]): string[] {
+  const format = '{{if .Module}}{{if eq .Module.Path "github.com/iamreal-tw/iamreal"}}{{.Dir}}{{end}}{{end}}';
+  const dirs = execFileSync("go", ["list", "-tags", "iamrealtest", "-test", "-deps", "-f", format, ...packages], { cwd: REPO, encoding: "utf8" });
+  return [...new Set(dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep).join("/")))];
+}
+
+const skipWithoutGo = (what: string): { skip: string | false } => ({ skip: !hasGo && !goRequired ? `go is not installed: ${what}` : false });
+
+test("the go check runs when anything it uses changes: every directory with a Go package, and every file their sources name, is in its list", skipWithoutGo("the Go packages are not looked at"), () => {
+  assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
+  const list = CHECK_PATHS.go!;
+  const dirs = goDirectories(["./..."]);
+  for (const d of ["server", "verifier", "cmd/iamreal-verify", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+  const named = namedByGo(trackedFiles(...new Set(dirs.map((d) => d.split("/")[0]!))));
+  for (const p of ["spec/vectors", "design/copy", "web/README.md", "spec/roster-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  assert.deepEqual(
+    [...dirs, ...named].filter((p) => !holds(list, p)),
+    [],
+  );
+  // The job installs the packages, for bb: pnpm compares the lockfile with these.
+  for (const p of ["protocol/package.json", "web/package.json", "worker/package.json"]) assert.ok(list.includes(p), p);
+});
+
+test("the typescript check runs when anything it uses changes: every file and directory the sources of protocol/, worker/ and web/ name is in its list", () => {
+  const list = CHECK_PATHS.typescript!;
+  const { paths, goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
+  for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
+  assert.ok(goPackages.has("./verifier") && goPackages.has("./cmd/iamreal-crl") && goPackages.has("./roster"), `the check read the Go commands: ${[...goPackages].join(", ")}`);
+  assert.deepEqual(
+    [...paths].filter((p) => !holds(list, p)),
+    [],
+  );
+});
+
+test(
+  "the typescript check runs when the Go programs its tests build, test and run change: their packages' directories, and what those sources name, are in its list",
+  skipWithoutGo("the Go packages the tests of worker/ and web/ use are not looked at"),
+  () => {
+    assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
+    const list = CHECK_PATHS.typescript!;
+    const { goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
+    const dirs = goDirectories([...goPackages]);
+    for (const d of ["server", "verifier", "cmd/iamreal-verify", "cmd/iamreal-crl", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+    const named = namedByGo(trackedFiles(...dirs).filter((f) => dirs.includes(dirname(f))));
+    assert.ok(named.has("spec/vectors"), `the check read the Go sources: ${[...named].join(", ")}`);
+    assert.deepEqual(
+      ["go.mod", "go.sum", ...dirs, ...named].filter((p) => !holds(list, p)),
+      [],
+    );
+  },
+);
+
+/**
+ * The files and directories of the repository that device-core/'s sources
+ * name: in the Rust, `repo_file("<path>")` and
+ * `repo_file(&format!("<path>{...}"))` (a path from the root, up to the
+ * first `{`), `vectors("<name>")` (spec/vectors/), `.join("../...")` from
+ * the crate's directory (CARGO_MANIFEST_DIR) and `include_str!`,
+ * `include_bytes!` from the file's; in a Cargo.toml, `path = "..."`.
+ * Not seen: a path put together any other way, what a build script or a
+ * macro of a dependency reads, and what the two fetch scripts download
+ * (they check a SHA-256 kept in device-core/).
+ */
+function namedByDeviceCore(): Set<string> {
+  const paths = new Set<string>();
+  const add = (path: string): void => {
+    const found = inRepo(path) ?? inRepo(dirname(path));
+    if (found !== undefined) paths.add(found);
+  };
+  for (const f of trackedFiles("device-core")) {
+    const file = join(REPO, f);
+    if (f.endsWith("Cargo.toml")) for (const m of readFileSync(file, "utf8").matchAll(/\bpath\s*=\s*"([^"]+)"/g)) add(resolve(dirname(file), m[1]!));
+    if (!f.endsWith(".rs")) continue;
+    const text = readFileSync(file, "utf8");
+    let crate = dirname(file);
+    while (!existsSync(join(crate, "Cargo.toml"))) crate = dirname(crate);
+    for (const m of text.matchAll(/\brepo_file\(\s*(?:&format!\(\s*)?"([^"{]+)/g)) add(join(REPO, m[1]!));
+    for (const m of text.matchAll(/\bvectors\(\s*"([^"{]+)/g)) add(join(REPO, "spec", "vectors", m[1]!));
+    for (const m of text.matchAll(/\.join\(\s*"((?:\.\.\/?)+[^"]*)"/g)) {
+      const found = inRepo(resolve(crate, m[1]!));
+      if (found !== undefined) paths.add(found);
+    }
+    for (const m of text.matchAll(/\binclude_(?:str|bytes)!\(\s*"([^"]+)"/g)) add(resolve(dirname(file), m[1]!));
+  }
+  return paths;
+}
+
+test("the device-core check runs when anything it uses changes: every file and directory its sources name is in its list", () => {
+  const list = CHECK_PATHS["device-core"]!;
+  const named = namedByDeviceCore();
+  for (const p of ["spec/vectors", "spec/roster-rules.md", "crl/testdata", "web/circuits", "verifier/vk", "device-core/checks", "device-core/include"]) {
+    assert.ok([...named].some((x) => x === p || x.startsWith(`${p}/`)), `the check found ${p}: ${[...named].join(", ")}`);
+  }
+  assert.deepEqual(
+    [...named].filter((p) => !holds(list, p)),
+    [],
+  );
+  assert.ok(list.includes("device-core/**"));
+});
+
+test("the android check runs when anything it uses changes: every file and directory its Gradle scripts and build-native.sh name is in its list, with all of android/ and device-core/", () => {
+  // Found by reading android/'s Gradle scripts (`rootProject.file("<path>")`, from android/, and
+  // `core.resolve("<path>")`, from device-core/) and shell scripts (`$here/<path>`, from the
+  // script's directory, and `$core/<path>`, from device-core/). A path put together any other way,
+  // and what the Android Gradle plugin reads by convention (all of it under android/), is not seen.
+  const list = CHECK_PATHS.android!;
+  const named = new Set<string>();
+  const add = (path: string): void => {
+    const found = inRepo(path);
+    if (found !== undefined) named.add(found);
+  };
+  const android = join(REPO, "android");
+  const core = join(REPO, "device-core");
+  for (const f of trackedFiles("android")) {
+    if (!/\.(kts|sh)$/.test(f)) continue;
+    const file = join(REPO, f);
+    const text = readFileSync(file, "utf8");
+    for (const m of text.matchAll(/rootProject\.file\(\s*"([^"]+)"/g)) add(resolve(android, m[1]!));
+    for (const m of text.matchAll(/\bcore\.resolve\(\s*"([^"]+)"/g)) add(resolve(core, m[1]!));
+    for (const m of text.matchAll(/\$here\/([A-Za-z0-9_./-]+)/g)) add(resolve(dirname(file), m[1]!));
+    for (const m of text.matchAll(/\$core\/([A-Za-z0-9_./-]+)/g)) add(resolve(core, m[1]!));
+  }
+  for (const p of ["device-core", "device-core/Cargo.lock", "device-core/fetch-barretenberg.sh", "web/circuits", "verifier/vk", "spec/vectors", "design/copy/app.md", "android/jni", "android/bundled.sha256"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  assert.deepEqual(
+    [...named].filter((p) => !holds(list, p)),
+    [],
+  );
+  // The app links device-core/ and bundles the files its proofs need: the whole of each.
+  for (const p of ["android/**", "device-core/**", "web/circuits/**", "verifier/vk/**"]) assert.ok(list.includes(p), p);
 });
