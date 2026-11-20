@@ -109,7 +109,8 @@ int32_t idc_declaration_code(uint32_t roster,
  * prover/src/session.rs.
  *
  * `now` is the device's clock, in seconds since 1970-01-01T00:00:00Z; the
- * core takes the date in Taiwan from it. IDC_ERR_ARGUMENT for a number
+ * core takes the date in Taiwan from it, once: the CRL is checked on the
+ * date the certificate was checked on. IDC_ERR_ARGUMENT for a number
  * that names no session, and for a clock outside the years 2000 to 2049:
  * no certificate is valid then, and the app says to check the phone's
  * clock. The certificates added are overwritten in that case too.
@@ -154,8 +155,8 @@ int32_t idc_session_check_certificates(idc_session session, int64_t now, idc_buf
 int32_t idc_session_choose_crl(idc_session session,
                                const uint8_t *index, size_t index_len, idc_buf *out);
 
-/* Step 2, second half ("Checking the file"), and whether the certificate
- * is on the CRL.
+/* Step 2, second half ("Checking the file"), on the date of step 1, and
+ * whether the certificate is on the CRL.
  *   crl:     the body of <sha256>.crl
  *   config:  the body of GET /api/v1/config; crl_max_age_days is read
  *   highest: the highest CRL number this device remembers for the issuer,
@@ -172,7 +173,6 @@ int32_t idc_session_choose_crl(idc_session session,
  * IDC_ERR_INPUT when `highest` is not a number in decimal. */
 int32_t idc_session_check_crl(idc_session session,
                               const uint8_t *crl, size_t crl_len,
-                              int64_t now,
                               const uint8_t *config, size_t config_len,
                               const uint8_t *highest, size_t highest_len,
                               idc_buf *out);

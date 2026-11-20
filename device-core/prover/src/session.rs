@@ -16,8 +16,8 @@
 //! other way: what "passed" means is kept here, not in a value the app
 //! could build.
 //!
-//! What is `pub` here and not `extern "C"` is for this directory's tests:
-//! they open a session that trusts test keys ([`open`]) and then go
+//! This module is `pub` only with the feature `testing`: this directory's
+//! tests open a session that trusts test keys ([`open`]) and then go
 //! through the C functions like an app.
 
 use std::collections::HashMap;
@@ -80,8 +80,10 @@ struct Session {
     trust: Trust,
     /// The certificates the card returned, until they are checked.
     offered: Vec<Vec<u8>>,
-    /// Step 1.
+    /// Step 1, and the date in Taiwan it was checked on: every later
+    /// check of the session uses that date.
     certificate: Option<CardCertificate>,
+    today: Option<Date>,
     /// Step 2: the file chosen from the index, then the keys of the CRL
     /// that passed.
     crl_choice: Option<IndexChoice>,
@@ -143,6 +145,7 @@ pub fn open(roster: Roster, trust: Trust) -> u64 {
         trust,
         offered: Vec::new(),
         certificate: None,
+        today: None,
         crl_choice: None,
         crl_keys: None,
         path: None,
@@ -231,6 +234,7 @@ pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
             }
         };
         session.certificate = None;
+        session.today = Some(today);
         session.artifacts_checked = false;
         session.forget_crl();
         let selection = {
@@ -352,11 +356,11 @@ pub fn server_max_age_days(config: &[u8]) -> Option<u64> {
 }
 
 /// Step 2, second half: checks the file the app downloaded
-/// (spec/device-checks.md, "Checking the file"), then whether the
-/// certificate's serial number is among its serial numbers.
+/// (spec/device-checks.md, "Checking the file"), on the date the
+/// certificate was checked on, then whether the certificate's serial
+/// number is among its serial numbers.
 ///
 /// - `file`: the body of `<sha256>.crl`, for the `sha256` the choice gave.
-/// - `now`: seconds since 1970-01-01T00:00:00Z, from the device's clock.
 /// - `config`: the body of `GET /api/v1/config`; only `crl_max_age_days`
 ///   is read here.
 /// - `highest`: the highest CRL number this device remembers for the
@@ -379,12 +383,10 @@ pub fn server_max_age_days(config: &[u8]) -> Option<u64> {
 pub fn check_crl(
     handle: u64,
     file: &[u8],
-    now: i64,
     config: &[u8],
     highest: &[u8],
 ) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
-        let today = today(now)?;
         let highest = match highest {
             [] => None,
             digits => Some(
@@ -394,7 +396,9 @@ pub fn check_crl(
                     .ok_or(IDC_ERR_INPUT)?,
             ),
         };
-        let (Some(certificate), Some(choice)) = (&session.certificate, &session.crl_choice) else {
+        let (Some(certificate), Some(today), Some(choice)) =
+            (&session.certificate, session.today, &session.crl_choice)
+        else {
             return Err(IDC_ERR_REFUSED);
         };
         // The file chosen from the index stays; what an earlier file gave

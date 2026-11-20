@@ -104,14 +104,13 @@ impl Session {
         json_of(finish(code, out))
     }
 
-    fn check_crl(&self, crl: &[u8], now: i64, config: &[u8], highest: &[u8]) -> Result<Value, i32> {
+    fn check_crl(&self, crl: &[u8], config: &[u8], highest: &[u8]) -> Result<Value, i32> {
         let mut out = empty();
         let code = unsafe {
             idc_session_check_crl(
                 self.0,
                 crl.as_ptr(),
                 crl.len(),
-                now,
                 config.as_ptr(),
                 config.len(),
                 highest.as_ptr(),
@@ -198,9 +197,10 @@ fn choosing_and_checking_the_certificate() {
     }
 }
 
-/// A session whose certificate was issued with `issuer`: the first two
-/// cases of the vectors are a G3 and a G2 certificate.
-fn session_with_certificate(v: &Value, issuer: &str) -> Session {
+/// A session whose certificate was issued with `issuer` and checked on
+/// `today`: the first two cases of the vectors are a G3 and a G2
+/// certificate.
+fn session_with_certificate(v: &Value, issuer: &str, today: &str) -> Session {
     let case = cases(&v["certificate"], "cases")
         .iter()
         .find(|c| {
@@ -211,9 +211,7 @@ fn session_with_certificate(v: &Value, issuer: &str) -> Session {
     session
         .add_certificate(&unhex(case["certificates"][0].as_str().unwrap()))
         .unwrap();
-    let result = session
-        .check_certificates(noon(text(case, "today")))
-        .unwrap();
+    let result = session.check_certificates(noon(today)).unwrap();
     assert_eq!(result["ok"], true);
     session
 }
@@ -222,7 +220,7 @@ fn session_with_certificate(v: &Value, issuer: &str) -> Session {
 fn choosing_a_file_from_the_index() {
     let v = vectors("device-checks.json");
     for case in cases(&v["crl"], "index") {
-        let session = session_with_certificate(&v, text(case, "issuer"));
+        let session = session_with_certificate(&v, text(case, "issuer"), "2026-11-16");
         let result = session.choose_crl(text(case, "index").as_bytes()).unwrap();
         let mut expected = case["result"].clone();
         expected["ok"] = Value::from(expected.get("problem").is_none());
@@ -248,7 +246,8 @@ fn which_crl_the_device_uses_and_when_it_refuses_one() {
             assert_eq!(expected["problem"], "crl_unavailable", "{what}");
             assert_eq!(expected["highest_after"], case["highest"], "{what}");
         };
-        let session = session_with_certificate(&v, text(case, "issuer"));
+        // The CRL is checked on the date the certificate was checked on.
+        let session = session_with_certificate(&v, text(case, "issuer"), text(case, "today"));
         let Some(index) = served(&case["mirror"], "index.jsonl") else {
             unavailable();
             continue;
@@ -270,12 +269,7 @@ fn which_crl_the_device_uses_and_when_it_refuses_one() {
         });
         let highest = case["highest"].as_str().unwrap_or("");
         let result = session
-            .check_crl(
-                &file,
-                noon(text(case, "today")),
-                config.to_string().as_bytes(),
-                highest.as_bytes(),
-            )
+            .check_crl(&file, config.to_string().as_bytes(), highest.as_bytes())
             .unwrap();
         assert_eq!(&result, expected, "{what}");
     }
@@ -298,21 +292,15 @@ fn a_config_whose_age_bound_is_not_read_stops_before_any_crl_is_used() {
         if read.is_some() {
             continue;
         }
-        let session = session_with_certificate(&v, text(crl_case, "issuer"));
+        let session =
+            session_with_certificate(&v, text(crl_case, "issuer"), text(crl_case, "today"));
         let choice = session.choose_crl(&index).unwrap();
         let file = served(
             &crl_case["mirror"],
             &format!("{}.crl", text(&choice, "sha256")),
         )
         .unwrap();
-        let result = session
-            .check_crl(
-                &file,
-                noon(text(crl_case, "today")),
-                config.as_bytes(),
-                b"99",
-            )
-            .unwrap();
+        let result = session.check_crl(&file, config.as_bytes(), b"99").unwrap();
         assert_eq!(
             result,
             json!({ "ok": false, "problem": "malformed_response", "highest_after": "99" })
@@ -467,7 +455,7 @@ impl Card {
         );
         let choice = session.choose_crl(index.as_bytes()).unwrap();
         assert_eq!(choice["ok"], true, "{}", self.label);
-        let result = session.check_crl(&self.crl, self.now, CONFIG, b"").unwrap();
+        let result = session.check_crl(&self.crl, CONFIG, b"").unwrap();
         assert_eq!(result["ok"], true, "{}: {result}", self.label);
     }
 
@@ -679,7 +667,7 @@ fn each_step_waits_for_the_steps_before_it() {
     let session = card.session();
     assert_eq!(session.choose_crl(b""), Err(IDC_ERR_REFUSED));
     assert_eq!(
-        session.check_crl(&card.crl, card.now, CONFIG, b""),
+        session.check_crl(&card.crl, CONFIG, b""),
         Err(IDC_ERR_REFUSED)
     );
     assert_eq!(session.build_tree(), Err(IDC_ERR_REFUSED));
@@ -687,7 +675,7 @@ fn each_step_waits_for_the_steps_before_it() {
 
     card.check_certificate(&session);
     assert_eq!(
-        session.check_crl(&card.crl, card.now, CONFIG, b""),
+        session.check_crl(&card.crl, CONFIG, b""),
         Err(IDC_ERR_REFUSED)
     );
     assert_eq!(session.build_tree(), Err(IDC_ERR_REFUSED));
@@ -696,9 +684,7 @@ fn each_step_waits_for_the_steps_before_it() {
     card.check_crl(&session);
     let mut other_file = card.crl.clone();
     other_file.push(0);
-    let result = session
-        .check_crl(&other_file, card.now, CONFIG, b"")
-        .unwrap();
+    let result = session.check_crl(&other_file, CONFIG, b"").unwrap();
     assert_eq!(
         result,
         json!({ "ok": false, "problem": "crl_hash", "highest_after": null })
@@ -709,6 +695,28 @@ fn each_step_waits_for_the_steps_before_it() {
     session.build_tree().unwrap();
     // The tree of a CRL is built once.
     assert_eq!(session.build_tree(), Err(IDC_ERR_REFUSED));
+}
+
+#[test]
+fn the_crl_is_checked_on_the_date_the_certificate_was_checked_on() {
+    let card = &cards()[0];
+    let session = card.session();
+    card.check_certificate(&session);
+    card.check_crl(&session);
+    // The same card and the same CRL, 30 days later by the device's clock.
+    session.add_certificate(&card.certificate).unwrap();
+    let later = session.check_certificates(card.now + 30 * 86_400).unwrap();
+    assert_eq!(later["ok"], true);
+    let index = format!(
+        "{{\"issuer\":\"{}\",\"crl_number\":\"1\",\"sha256\":\"{}\",\"root\":\"{}\"}}\n",
+        text(&later, "issuer"),
+        hex(&sha256(&card.crl)),
+        "0".repeat(64),
+    );
+    assert_eq!(session.choose_crl(index.as_bytes()).unwrap()["ok"], true);
+    let result = session.check_crl(&card.crl, CONFIG, b"").unwrap();
+    assert_eq!(result["problem"], "crl_stale", "{result}");
+    assert_eq!(result["max_age_days"], 7);
 }
 
 #[test]
@@ -727,7 +735,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
         assert_eq!(session.check_certificates(card.now), Err(IDC_ERR_ARGUMENT));
         assert_eq!(session.choose_crl(b""), Err(IDC_ERR_ARGUMENT));
         assert_eq!(
-            session.check_crl(&card.crl, card.now, CONFIG, b""),
+            session.check_crl(&card.crl, CONFIG, b""),
             Err(IDC_ERR_ARGUMENT)
         );
         assert_eq!(session.build_tree(), Err(IDC_ERR_ARGUMENT));
@@ -756,11 +764,6 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
             Err(IDC_ERR_ARGUMENT),
             "{now}"
         );
-        assert_eq!(
-            session.check_crl(&card.crl, now, CONFIG, b""),
-            Err(IDC_ERR_ARGUMENT),
-            "{now}"
-        );
     }
     // The certificates added do not stay in the core after such a call.
     session.add_certificate(&card.certificate).unwrap();
@@ -774,7 +777,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
     card.check_crl(&session);
     for highest in ["-", "01", "1.0", " 1", "\u{ff11}"] {
         assert_eq!(
-            session.check_crl(&card.crl, card.now, CONFIG, highest.as_bytes()),
+            session.check_crl(&card.crl, CONFIG, highest.as_bytes()),
             Err(IDC_ERR_INPUT),
             "{highest:?}"
         );

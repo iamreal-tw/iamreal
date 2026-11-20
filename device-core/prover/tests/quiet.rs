@@ -5,7 +5,8 @@
 //! The test runs itself again as another process, to read what that
 //! process wrote.
 
-use iamreal_device_core::{IDC_ERR_INTERNAL, guarded};
+use iamreal_device_core::IDC_ERR_INTERNAL;
+use iamreal_device_core::quiet::guarded;
 
 const INSIDE: &str = "MARKER-OF-A-PANIC-INSIDE-THE-CORE";
 const OUTSIDE: &str = "MARKER-OF-A-PANIC-OUTSIDE-THE-CORE";

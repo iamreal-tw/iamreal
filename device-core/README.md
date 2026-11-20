@@ -74,11 +74,11 @@
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；憑證和清冊各收一次 `now`，流程跨過台灣的午夜時兩步用的是各自那一刻的日期。
+- **時間由 app 給，一個 session 只取一次。** `idc_session_check_certificates` 收 `now`（裝置的時鐘，1970 年起的秒數），核心換成台灣的日期，不看裝置的時區；清冊多舊算過期用的是同一天，和網頁版一樣。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
-測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的）。`session::open` 在 Rust 裡是 `pub`，收一張發證金鑰的表；它不是 C 函式，app 叫不到。測試用它開 session，之後每一步都走 C 函式。
+**關卡不靠「app 只呼叫 C 函式」。** 這個套件對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用這個套件的 Rust 程式（例如用 Rust 寫的 JNI 層）也繞不過去。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
 
 ### 清掉
 
@@ -133,7 +133,7 @@
 
 **版本。** `IDC_ABI_VERSION` 在函式改了或拿掉時加一號；`idc_abi_version()` 回傳連結進來的函式庫是哪一版，app 可以在啟動時比對標頭檔的數字。
 
-**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，`idc_` 的函式裡沒有 Poseidon2，app 就不能靠它們自己算匿名編號（ADR-0034「核心擋住的順序」）。這一條擋的是寫錯順序，不是擋存心繞過：靜態函式庫裡還有 Barretenberg 自己的 C 函式（`bbapi`），所以 app 的程式只准呼叫標頭檔裡 `idc_` 開頭的函式，審 `android/`、`ios/` 時要看這一點。算匿名編號的 C 函式只有 `idc_session_card_state_request`，它收一個四步都通過的 session。`prover/src/hashes.rs`、`tree.rs`、`session::open` 在 Rust 裡是 `pub`，那是給這個目錄的測試用的，Kotlin、Swift、C 都叫不到。Android 的 JNI 那一層要用 C 寫、只呼叫 `idc_` 的函式；用 Rust 寫而且引用這個套件的話，這幾個 `pub` 它都叫得到，關卡就擋不住它。
+**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，`idc_` 的函式裡沒有 Poseidon2，app 就不能靠它們自己算匿名編號（ADR-0034「核心擋住的順序」）。這一條擋的是寫錯順序，不是擋存心繞過：靜態函式庫裡還有 Barretenberg 自己的 C 函式（`bbapi`），所以 app 的程式只准呼叫標頭檔裡 `idc_` 開頭的函式，審 `android/`、`ios/` 時要看這一點。算匿名編號的 C 函式只有 `idc_session_card_state_request`，它收一個四步都通過的 session。Rust 裡的 Poseidon2（`prover/src/hashes.rs`）不是 `pub`，只有測試用的 feature `testing` 開了才是（見「檢查都通過了」）。
 
 Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函式；那一層在 `android/`，照同樣的規矩釋放和清除。
 
@@ -158,6 +158,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 - **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次、多出來的鍵都不收；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
 - `checks/` 的測試另外用 `sha2`、`serde_json`（只在測試）
 - 上面幾個帶進來的套件和版本在 `Cargo.lock`（進版控）。建置一律加 `--locked`
+- `prover/` 的 `[dev-dependencies]` 引用自己並開 feature `testing`（見「檢查都通過了」），`Cargo.lock` 裡因此多一行自己的名字，沒有多任何套件
 
 Noir 的 ACVM（算見證）在算證明的那張票才加，版本是 `v1.0.0`，和 `web/` 釘的 `@noir-lang/noir_js` 相同。
 

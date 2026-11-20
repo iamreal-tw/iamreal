@@ -174,7 +174,6 @@ fn check_crl(handle: u64, crl: &[u8], config: &[u8], highest: &[u8]) -> (i32, Ve
             handle,
             crl.as_ptr(),
             crl.len(),
-            NOW,
             config.as_ptr(),
             config.len(),
             highest.as_ptr(),

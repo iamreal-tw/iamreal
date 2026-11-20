@@ -42,3 +42,18 @@ impl Drop for Quiet {
         IN_CORE.set(self.was);
     }
 }
+
+/// Runs `f` the way every C function runs its work: a panic stops here,
+/// prints nothing and becomes `IDC_ERR_INTERNAL`; it never crosses into C.
+pub fn guarded<T>(f: impl FnOnce() -> Result<T, i32>) -> Result<T, i32> {
+    let _quiet = enter();
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(result) => result,
+        Err(payload) => {
+            // What a panic carried is not read, and dropping it could
+            // panic again.
+            std::mem::forget(payload);
+            Err(crate::IDC_ERR_INTERNAL)
+        }
+    }
+}

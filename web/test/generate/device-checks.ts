@@ -35,7 +35,7 @@ import {
   name,
   subjectDirectoryAttributes,
 } from "../fixtures/certs.ts";
-import { IDP, indexLine, makeCrl } from "../fixtures/crls.ts";
+import { DELTA, IDP, indexLine, makeCrl } from "../fixtures/crls.ts";
 import { SHA256_WITH_RSA, type TestKey, hex, makeKey, seq, signWith, tlv } from "../fixtures/der-build.ts";
 
 const out = new URL("../../../spec/vectors/device-checks.json", import.meta.url);
@@ -322,6 +322,18 @@ await crlCase(
   () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_signature", highest_after: null }),
 );
 await crlCase("a partitioned CRL", { crls: [G3_100(0, { extraExtensions: [IDP] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_partitioned", highest_after: null }));
+await crlCase("a delta CRL", { crls: [G3_100(0, { extraExtensions: [DELTA] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_delta", highest_after: null }));
+// Both extensions: the one that comes first in the CRL decides (spec/revocation-tree.md, rows 6 and 7).
+await crlCase(
+  "issuingDistributionPoint before deltaCRLIndicator: partitioned",
+  { crls: [G3_100(0, { extraExtensions: [IDP, DELTA] })] },
+  () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_partitioned", highest_after: null }),
+);
+await crlCase(
+  "deltaCRLIndicator before issuingDistributionPoint: delta",
+  { crls: [G3_100(0, { extraExtensions: [DELTA, IDP] })] },
+  () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_delta", highest_after: null }),
+);
 await crlCase(
   "the file's SHA-256 is not the one in its name",
   { crls: [G3_100(0, { serve: await makeCrl({ issuer: g3, serials: [5n], crlNumber: 100n, thisUpdate: crlTime(0) }) })] },

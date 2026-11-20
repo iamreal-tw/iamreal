@@ -5,20 +5,24 @@
 //!
 //! Nothing here does I/O: bytes in, bytes out. No function takes a PIN.
 //!
-//! What is `pub` in Rust and not `extern "C"` ([`hashes`], [`tree`], and
-//! opening a [`session`] that trusts other keys) is for this crate's
-//! tests. The apps reach only the C functions: Poseidon2 is not one of
-//! them, and the one that computes a scoped ID takes a session that
-//! passed every check (ADR-0034, "核心擋住的順序").
+//! Without the feature `testing`, the C functions are all this crate
+//! gives: Poseidon2 is not one of them, and the one that computes a
+//! scoped ID takes a session that passed every check (ADR-0034, "核心擋住
+//! 的順序"). The feature is for this crate's tests, which need Poseidon2
+//! and the tree by themselves and a session that trusts test keys.
 
 mod alloc;
-pub mod artifacts;
-pub mod hashes;
-mod quiet;
-pub mod session;
-pub mod tree;
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+/// Declares a module that is `pub` only with the feature `testing`.
+macro_rules! for_tests {
+    ($($name:ident),*) => {$(
+        #[cfg(feature = "testing")]
+        pub mod $name;
+        #[cfg(not(feature = "testing"))]
+        mod $name;
+    )*};
+}
+for_tests!(artifacts, hashes, quiet, session, tree);
 
 use iamreal_device_checks::challenge::parse_challenge;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
@@ -61,25 +65,9 @@ const EMPTY: IdcBuf = IdcBuf {
     len: 0,
 };
 
-/// Runs `f` the way every C function runs its work: a panic stops here,
-/// prints nothing and becomes `IDC_ERR_INTERNAL`; it never crosses into C.
-/// `pub` for this crate's tests.
-pub fn guarded<T>(f: impl FnOnce() -> Result<T, i32>) -> Result<T, i32> {
-    let _quiet = quiet::enter();
-    match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(result) => result,
-        Err(payload) => {
-            // What a panic carried is not read, and dropping it could
-            // panic again.
-            std::mem::forget(payload);
-            Err(IDC_ERR_INTERNAL)
-        }
-    }
-}
-
 /// Runs `f` and returns its code.
 fn code(f: impl FnOnce() -> Result<(), i32>) -> i32 {
-    match guarded(f) {
+    match quiet::guarded(f) {
         Ok(()) => IDC_OK,
         Err(code) => code,
     }
@@ -393,7 +381,6 @@ pub unsafe extern "C" fn idc_session_check_crl(
     session: u64,
     crl: *const u8,
     crl_len: usize,
-    now: i64,
     config: *const u8,
     config_len: usize,
     highest: *const u8,
@@ -409,7 +396,7 @@ pub unsafe extern "C" fn idc_session_check_crl(
                 input(highest, highest_len)?,
             )
         };
-        session::check_crl(session, crl, now, config, highest)
+        session::check_crl(session, crl, config, highest)
     })
 }
 

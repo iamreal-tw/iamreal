@@ -360,11 +360,14 @@ pub fn check_crl(
         return Err(Unusable::Signature);
     }
     check_extensions(&crl.extensions)?;
-    if crl.extensions.iter().any(|e| e.oid == OID_DELTA) {
-        return Err(Unusable::Delta);
-    }
-    if crl.extensions.iter().any(|e| e.oid == OID_PARTITIONED) {
-        return Err(Unusable::Partitioned);
+    // Of the two, the one that comes first in the CRL decides.
+    for extension in &crl.extensions {
+        if extension.oid == OID_DELTA {
+            return Err(Unusable::Delta);
+        }
+        if extension.oid == OID_PARTITIONED {
+            return Err(Unusable::Partitioned);
+        }
     }
     let crl_number = crl
         .extensions
