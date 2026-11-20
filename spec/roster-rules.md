@@ -544,7 +544,8 @@ It needs:
   as that line is written. Whether the line's fingerprint is right is a
   check of the fingerprint file ([`record.md`](record.md)), reported by
   itself. The file is not compared when there is not exactly one such
-  line. With none, there is nothing to say which records the file covers;
+  line, counting only lines written to the fingerprint file's template
+  (a line that is not is a problem of the fingerprint file). With none, there is nothing to say which records the file covers;
   that is not a difference, because the file is written before its line
   (ADR-0027). With two or more, the fingerprint file is broken, and that
   is what the re-verifier reports.
@@ -604,7 +605,11 @@ Why each line is there:
    card has no valid record after its own `last_seq`, which is at most
    `count`. Every item must be equal, `last_seq` included. A row that
    names an earlier record than the card's last valid one is `different`:
-   the file missed a record it was to cover.
+   the file missed a record it was to cover. That is so once N is at least
+   `count`. With a smaller N the re-verifier's state is the card's after
+   the first N records only, and `same` is not yet the last word: a valid
+   record of the card between N and `count` that the row missed shows as
+   `different` when N has reached it.
 
 The outcome of a card is one of the seven lines for every combination of
 a row or none, the row's `last_seq` against `count` and N, a state of the
