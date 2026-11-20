@@ -6,6 +6,7 @@ package main
 // valid first declaration of its own card.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -82,17 +83,37 @@ func TestCardState(t *testing.T) {
 	}
 }
 
+// A row beyond the count of its file is different, whatever the records
+// re-verified: the file was to hold the states after the first count.
+func TestCardStateBeyondTheCount(t *testing.T) {
+	// The file of a count of 5 has the rows of 7 records.
+	rows := cardRows(t, 7)
+	code, _, errOut := runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-20": roster.CardStateFile(rows)}), cardStateFingerprints))
+	if code != exitInvalid || !strings.Contains(errOut, "5 card(s) the same, 0 skipped, 2 different\n") {
+		t.Errorf("exit %d\n%s", code, errOut)
+	}
+	for _, row := range rows {
+		if row.LastSeq > 5 && !strings.Contains(errOut, "card "+row.ScopeString+" "+row.ScopedID+" is different: the row's last_seq "+fmt.Sprint(row.LastSeq)+" is beyond the file's count 5\n") {
+			t.Errorf("seq %d not named\n%s", row.LastSeq, errOut)
+		}
+	}
+}
+
 // Cards beyond what either side covers are skipped, not a failure.
 func TestCardStateSkipped(t *testing.T) {
-	// Rows whose last_seq is beyond the records re-verified (the roster
-	// has 5 published, the file was written at 7).
-	code, _, errOut := runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-20": roster.CardStateFile(cardRows(t, 7))}), cardStateFingerprints))
-	if code != exitAllValid || !strings.Contains(errOut, "5 card(s) the same, 2 skipped\n") {
-		t.Errorf("rows beyond the records: exit %d\n%s", code, errOut)
+	// The re-verifier is behind the file: the fingerprint file's line says
+	// 7, the roster has 5. The rows of records 6 and 7 are within the count
+	// and beyond the records re-verified. (The fingerprint file's count
+	// beyond the roster is a problem of its own.)
+	fps := fingerprints(fingerprintEntry("2026-11-19", 3), fingerprintEntry("2026-11-20", 7))
+	_, _, errOut := runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-20": roster.CardStateFile(cardRows(t, 7))}), fps))
+	if !strings.Contains(errOut, "card-state/2026-11-20.jsonl: count 7 of fingerprints.jsonl, 5 record(s) re-verified: 5 card(s) the same, 2 skipped\n") ||
+		strings.Contains(errOut, "is different") || !strings.Contains(errOut, "count 7, but the roster has 5 records") {
+		t.Errorf("rows beyond the records:\n%s", errOut)
 	}
 	// The file of an earlier date, given by -card-state: the cards whose
 	// last valid record is after its count (3) are skipped.
-	code, _, errOut = runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-19": roster.CardStateFile(cardRows(t, 3))}), cardStateFingerprints), "-card-state", "2026-11-19")
+	code, _, errOut := runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-19": roster.CardStateFile(cardRows(t, 3))}), cardStateFingerprints), "-card-state", "2026-11-19")
 	if code != exitAllValid || !strings.Contains(errOut, "card-state/2026-11-19.jsonl: count 3 of fingerprints.jsonl, 5 record(s) re-verified: 3 card(s) the same, 2 skipped\n") {
 		t.Errorf("an earlier date: exit %d\n%s", code, errOut)
 	}
@@ -111,6 +132,15 @@ func TestCardStateNotCompared(t *testing.T) {
 	code, _, errOut = runDir(t, dir, "-card-state", "2026-11-18")
 	if code != exitAllValid || !strings.Contains(errOut, "fingerprints.jsonl has no line dated 2026-11-18: card-state/2026-11-18.jsonl is not compared\n") {
 		t.Errorf("no line: exit %d\n%s", code, errOut)
+	}
+	// Two lines of the date: the fingerprint file is broken, and says no
+	// one count; the file is not read. The fingerprint file's check reports
+	// the line.
+	twoLines := fingerprints(fingerprintEntry("2026-11-19", 3), fingerprintEntry("2026-11-20", 5), fingerprintEntry("2026-11-20", 5))
+	code, _, errOut = runDir(t, writeDir(t, cardStateFiles(t, map[string][]byte{"2026-11-20": []byte("not read")}), twoLines))
+	if code != exitInvalid || !strings.Contains(errOut, "fingerprints.jsonl has 2 lines dated 2026-11-20: card-state/2026-11-20.jsonl is not compared\n") ||
+		strings.Contains(errOut, "card-state/2026-11-20.jsonl: broken") || !strings.Contains(errOut, "fingerprints.jsonl line 3: date 2026-11-20 is not after 2026-11-20") {
+		t.Errorf("two lines: exit %d\n%s", code, errOut)
 	}
 	// No fingerprint file: no date, nothing compared.
 	code, _, errOut = runDir(t, writeDir(t, cardStateFiles(t, nil), "-"))
