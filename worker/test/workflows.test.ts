@@ -7,14 +7,14 @@
 // test/workflows.ts lists what it does not see. Each altered copy below is
 // a change the rules must turn away; all of them are.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
-import { BB_AMD64_LINUX_SHA256, CHECK_BB, INSTALL_PNPM, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
+import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, CHECK_BB, INSTALL_PNPM, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
@@ -29,6 +29,8 @@ test("the workflows keep to the rules", () => {
 
 const D = "deploy-test.yml";
 const C = "checks.yml";
+const B = "checks-browser.yml";
+const BROWSER_JOB = "  browser:\n    runs-on: ubuntu-24.04\n";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SECRET = "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}";
 const UPLOAD_ENV = `        env:\n          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}\n          CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n`;
@@ -130,7 +132,26 @@ const CHANGES: Record<string, Change[]> = {
   "64 a character outside ASCII": [replace(C, "      - run: go build ./...", "      - run: go build ./...\u2028      - run: node x.js")],
   "65 a key with a space before its colon": [replace(C, "    timeout-minutes: 30\n", "    timeout-minutes : 30\n")],
   "66 a step in the build job that a later step depends on, with a secret by another name": [replace(D, "      - run: pnpm install --frozen-lockfile\n", `      - run: pnpm install --frozen-lockfile\n        env:\n          T: \${{ secrets.OTHER }}\n`)],
-  "67 another directory in a step of checks.yml": [replace(C, "        working-directory: web\n        run: pnpm fetch-crs", "        working-directory: ..\n        run: pnpm fetch-crs")],
+  "67 another directory in a step of checks-browser.yml": [replace(B, "        working-directory: web\n        run: pnpm fetch-crs", "        working-directory: ..\n        run: pnpm fetch-crs")],
+  "80 paths in checks.yml": [replace(C, "on:\n  pull_request:\n", "on:\n  pull_request:\n    paths:\n      - web/**\n")],
+  "81 paths in deploy-test.yml": [replace(D, "    branches:\n      - main\n", "    branches:\n      - main\n    paths:\n      - worker/**\n")],
+  "82 paths-ignore in checks-browser.yml": [replace(B, "    paths:\n", "    paths-ignore:\n")],
+  "83 a path less in checks-browser.yml": [replace(B, "      - spec/**\n", "")],
+  "84 a path more in checks-browser.yml": [replace(B, "      - web/**\n", "      - web/**\n      - docs/**\n")],
+  "85 a negated path in checks-browser.yml": [replace(B, "      - web/**\n", "      - web/**\n      - '!web/README.md'\n")],
+  "86 checks-browser.yml on pull_request_target": [replace(B, "  pull_request:\n", "  pull_request_target:\n")],
+  "87 checks-browser.yml also on push": [replace(B, "on:\n", "on:\n  push:\n")],
+  "88 checks-browser.yml in the concurrency group of checks.yml": [replace(B, "  group: checks-browser-", "  group: checks-")],
+  "89 checks-browser.yml without cancelling the run before": [replace(B, "  cancel-in-progress: true\n", "  cancel-in-progress: false\n")],
+  "90 permissions in the job of checks-browser.yml": [replace(B, BROWSER_JOB, `${BROWSER_JOB}    permissions: write-all\n`)],
+  "91 checks-browser.yml with write permissions": [replace(B, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "92 a secret in the job's env of checks-browser.yml": [replace(B, "      CHROME: /usr/bin/google-chrome\n", "      CHROME: /usr/bin/google-chrome\n      T: ${{ secrets.X }}\n")],
+  "93 checkout with a ref in checks-browser.yml": [replace(B, "          persist-credentials: false\n", "          persist-credentials: false\n          ref: main\n")],
+  "94 an action not in the list in checks-browser.yml": [replace(B, "      - name: Chrome\n", `      - uses: actions/github-script@${SHA} # v9.0.0\n      - name: Chrome\n`)],
+  "95 CHROME back in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      CHROME: /usr/bin/google-chrome\n`)],
+  "96 the WRANGLER values in checks-browser.yml": [replace(B, "env:\n  # bb", 'env:\n  WRANGLER_SEND_METRICS: "false"\n  # bb')],
+  "97 a fourth workflow": [addFile("checks-other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
+  "98 a job of checks-browser.yml without the check of bb": [replace(B, '        run: echo "5bbb', '        run: echo "0bbb')],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -163,8 +184,14 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
   assert.deepEqual(doc.on, { pull_request: null });
-  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript", "browser"]);
-  const browser = (doc.jobs as Record<string, Record<string, Yaml>>).browser!;
+  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript"]);
+  const browserDoc = readYaml(realFiles()[B]!) as Record<string, Yaml>;
+  // `paths`: a list of strings under pull_request, each as written (`**` is no special character in YAML here).
+  const paths = (browserDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths as string[];
+  assert.equal(paths[0], "web/**");
+  assert.equal(paths.at(-1), ".github/workflows/checks-browser.yml");
+  assert.deepEqual(Object.keys(browserDoc.jobs as object), ["browser"]);
+  const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;
   assert.deepEqual(browser.env, { CHROME: "/usr/bin/google-chrome" });
   assert.ok((browser.steps as Record<string, Yaml>[]).some((s) => s.run === '"$CHROME" --version'));
   assert.deepEqual(readYaml("a: 'it''s # not a comment' # a comment\nb:\n  - x\n  - y: z\n    w: v\n"), { a: "it's # not a comment", b: ["x", { y: "z", w: "v" }] });
@@ -214,3 +241,146 @@ test("pnpm-workspace.yaml and the lockfile hold no setting that changes the pack
     .map((l) => l.replace(/:.*$/, ""));
   assert.deepEqual(lockKeys, ["lockfileVersion", "settings", "importers", "packages", "snapshots"]);
 });
+
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    return statSync(p).isDirectory() ? filesUnder(p) : [p];
+  });
+}
+
+/** The workspace's packages (pnpm-workspace.yaml): each one's name in its package.json, and its directory. */
+function workspacePackages(): Map<string, string> {
+  const workspace = readYaml(readFileSync(join(REPO, "pnpm-workspace.yaml"), "utf8")) as { packages: string[] };
+  const found = new Map<string, string>();
+  for (const dir of workspace.packages) {
+    const pkg = JSON.parse(readFileSync(join(REPO, dir, "package.json"), "utf8")) as { name: string };
+    found.set(pkg.name, join(REPO, dir));
+  }
+  assert.ok(found.size > 1, "the check read the workspace's packages");
+  return found;
+}
+
+/**
+ * What the browser tests (web/'s `pnpm test:e2e` and `pnpm test:ui`,
+ * test/e2e/run.ts and ui.ts) use, found by reading their source, from every
+ * file of web/src/, web/test/e2e/, web/vite.config.ts and the pages' HTML
+ * in web/ (Vite builds the page from them), and the files those import:
+ *
+ * - `files`: the files reached by an import written `from "…"`,
+ *   `import("…")` or `import "…"` with a relative path (JSON included), or
+ *   with the name of a package of the workspace (`iamreal-protocol/…` is
+ *   protocol/src/…); and by the HTML's `<script src>`;
+ * - `named`: the top-level directories in `join(repo, "<dir>"…)`,
+ *   `join(web, "..", "<dir>"…)`, `join(web, "../<dir>"…)` (each also broken
+ *   over lines), `new URL("../…", import.meta.url)`, and the directory of a
+ *   workspace package imported by name;
+ * - `goPackages`: the packages in `"go", [… "./<package>"`.
+ *
+ * Not seen (tried in the review of #123): a path written as a template
+ * string (`${repo}/docs`), joined with `+`, or put together some other way
+ * when the tests run; an import with a query (`?raw`); CSS `@import`; a Go
+ * package named through a variable; what the programs the tests start read
+ * at run time (the Go server reads only the directories the test hands
+ * it); npm packages (the lockfile stands for them); the tools on the runner
+ * (Chrome, Go, bb). So this is one more reminder, not the list: whoever
+ * makes the tests use another directory adds it to the paths.
+ */
+function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
+  const web = join(REPO, "web");
+  const packages = workspacePackages();
+  const roots = [
+    ...filesUnder(join(web, "src")),
+    ...filesUnder(join(web, "test", "e2e")),
+    join(web, "vite.config.ts"),
+    ...readdirSync(web)
+      .filter((f) => f.endsWith(".html"))
+      .map((f) => join(web, f)),
+  ].filter((f) => /\.(ts|js|mjs|html)$/.test(f));
+  assert.ok(roots.some((f) => f.endsWith("index.html")), "the check read the pages' HTML");
+  const top = (path: string): string => relative(REPO, path).split(sep)[0]!;
+  const seen = new Set<string>();
+  const used = new Set<string>();
+  const goPackages = new Set<string>();
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = readFileSync(file, "utf8");
+    const specifiers = [
+      ...[...text.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]!),
+      ...[...text.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]!.replace(/^\//, "./")),
+    ];
+    for (const s of specifiers) {
+      let target: string | undefined;
+      if (s.startsWith(".")) target = resolve(dirname(file), s);
+      else {
+        const name = [...packages.keys()].find((n) => s === n || s.startsWith(`${n}/`));
+        if (name !== undefined) {
+          const dir = packages.get(name)!;
+          used.add(top(dir));
+          const rest = s.slice(name.length + 1);
+          // iamreal-protocol's "exports": "./*.ts" is "./src/*.ts".
+          target = [join(dir, "src", rest), join(dir, rest)].find((t) => rest !== "" && existsSync(t));
+        }
+      }
+      if (target !== undefined && existsSync(target) && statSync(target).isFile()) queue.push(target);
+    }
+    for (const m of text.matchAll(/\bjoin\(\s*repo\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
+    for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\."\s*,\s*"([^"/]+)/g)) used.add(m[1]!);
+    for (const m of text.matchAll(/\bjoin\(\s*web\s*,\s*"\.\.\/([^"/]+)/g)) used.add(m[1]!);
+    for (const m of text.matchAll(/new URL\(\s*["'`]((?:\.\.\/)+[^"'`$]*)/g)) {
+      // `new URL(\`../../${path}\`)` (web/test/vectors.ts) names the repository's root and no more: say so.
+      const named = top(resolve(dirname(file), m[1]!));
+      used.add(named === "" ? `(somewhere in the repository, by ${relative(REPO, file)})` : named);
+    }
+    for (const m of text.matchAll(/"go",\s*\[[^\]]*?"(\.\/[\w./-]+)"/g)) goPackages.add(m[1]!);
+  }
+  for (const f of seen) used.add(top(f));
+  return { used, goPackages };
+}
+
+/** Whether `top`, a top-level directory or file, is in the paths. */
+const inPaths = (top: string): boolean => BROWSER_PATHS.includes(existsSync(join(REPO, top)) && statSync(join(REPO, top)).isDirectory() ? `${top}/**` : top);
+
+test("the browser tests run when anything they use changes: each top-level directory and file their source names is in the paths", () => {
+  const { used } = readBrowserTests();
+  // The check sees the page, the shared rules and the screen's sentences.
+  for (const d of ["web", "protocol", "design", "verifier"]) assert.ok(used.has(d), `the check found ${d}`);
+  assert.deepEqual(
+    [...used].filter((u) => !inPaths(u)),
+    [],
+  );
+  // What is installed and how: the lockfile and the workspace, and this workflow itself.
+  for (const p of ["pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/checks-browser.yml"]) assert.ok(BROWSER_PATHS.includes(p), p);
+});
+
+/** Whether `go` runs here. */
+const hasGo = ((): boolean => {
+  const r = spawnSync("go", ["version"], { encoding: "utf8" });
+  return r.error === undefined && r.status === 0;
+})();
+// Without Go the test of the Go packages is skipped, on a computer. Where the
+// whole check is expected (CI, which GitHub Actions sets, or IAMREAL_BB, set
+// where the tests that run bb and Go are meant to run) a missing Go fails it
+// instead of skipping it.
+const goRequired = Boolean(process.env.CI) || Boolean(process.env.IAMREAL_BB);
+
+test(
+  "the browser tests run when the Go programs they build change: the directories of those packages and of every package they import are in the paths",
+  { skip: !hasGo && !goRequired ? "go is not installed: the Go packages the browser tests build are not looked at" : false },
+  () => {
+    assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
+    const { goPackages } = readBrowserTests();
+    assert.ok(goPackages.has("./server") && goPackages.has("./cmd/iamreal-verify"), "the check read the Go builds");
+    const format = '{{if .Module}}{{if eq .Module.Path "github.com/iamreal-tw/iamreal"}}{{.Dir}}{{end}}{{end}}';
+    const dirs = execFileSync("go", ["list", "-tags", "iamrealtest", "-deps", "-f", format, ...goPackages], { cwd: REPO, encoding: "utf8" });
+    const used = new Set(["go.mod", "go.sum", ...dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep)[0]!)]);
+    for (const d of ["server", "verifier", "cmd", "crl", "roster"]) assert.ok(used.has(d), `the check found ${d}`);
+    assert.deepEqual(
+      [...used].filter((u) => !inPaths(u)),
+      [],
+    );
+  },
+);
