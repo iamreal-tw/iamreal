@@ -212,6 +212,8 @@ abstract class CheckApk : DefaultTask() {
     @get:InputFiles abstract val lists: ConfigurableFileCollection
     @get:Input abstract val abis: ListProperty<String>
     @get:Input abstract val silent: Property<Boolean>
+    @get:Input abstract val id: Property<String>
+    @get:Input abstract val allowed: ListProperty<String>
 
     @TaskAction
     fun check() {
@@ -231,6 +233,17 @@ abstract class CheckApk : DefaultTask() {
             if (aab.isPresent && modules != setOf("base")) problems += "the modules are $modules, not base alone"
             val names = all.filter { it.startsWith(top) }.map { it.removePrefix(top) }
             val read = { name: String -> zip.getInputStream(zip.getEntry(top + name)).use { it.readBytes() } }
+
+            if (aab.isPresent) {
+                // The manifest a bundle carries is not text, but the names in it are: the app's
+                // identifier, and any permission it asks for.
+                val manifest = String(read("manifest/AndroidManifest.xml"), Charsets.ISO_8859_1)
+                if (!manifest.contains(id.get())) problems += "the manifest is not of ${id.get()}"
+                if (manifest.contains("AD_ID")) problems += "the manifest names AD_ID"
+                val asked = Regex("[A-Za-z0-9_.]+\\.permission\\.[A-Za-z0-9_.]+").findAll(manifest).map { it.value }.toSet()
+                val extra = asked - allowed.get().toSet()
+                if (extra.isNotEmpty()) problems += "the manifest asks for permissions that are not in app/build.gradle.kts: $extra"
+            }
 
             val libs = names.filter { it.startsWith("lib/") }.sorted()
             val wantLibs = abis.get().map { "lib/$it/libiamreal_device_core_jni.so" }.sorted()
@@ -320,6 +333,8 @@ androidComponents {
             lists.from(bundledLists)
             abis = variantAbis
             silent = release
+            id = appId
+            allowed = allowedPermissions
         }
         val checkLibraries = tasks.register<CheckLibraries>("checkLibraries$name") {
             // Every file the app is packaged with, by where it came from: a module of a repository
@@ -337,6 +352,8 @@ androidComponents {
             lists.from(bundledLists)
             abis = variantAbis
             silent = release
+            id = appId
+            allowed = allowedPermissions
         }
         // Whoever makes an installer gets it checked, whichever task makes it: an APK
         // (assemble, package) or the bundle Google Play takes (bundle).
