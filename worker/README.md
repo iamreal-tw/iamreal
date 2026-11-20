@@ -138,15 +138,17 @@ pnpm typecheck   # 型別檢查
 一個 Durable Object 同一時間只能排一個 alarm，再呼叫 `setAlarm` 會蓋掉原來的（[Alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)：「Each Durable Object is able to schedule a single alarm at a time by calling `setAlarm()`」「If you call `setAlarm` when there is already one scheduled, it will override the existing alarm」，2026-11-20 讀的）。所以定時的工作不各自設 alarm，而是照同一個形狀寫（`src/roster.ts` 的 `TimedWork`）：
 
 - 每一件工作回答兩件事：自己下一次什麼時候到期（沒事可做就說沒有）、到期時做什麼。它不知道別的工作。
-- 物件的 alarm 永遠設在所有工作裡最早到期的那一個；都沒事可做就沒有 alarm。任何一件工作的到期時間可能變了（例如發了一個題目），就重設一次。
+- 物件的 alarm 不晚於所有工作裡最早到期的那一個；都沒事可做就沒有 alarm。任何一件工作的到期時間可能變了（例如發了一個題目），就看一次要不要重設（`setAlarmForTimedWork`）。
+- **已經有一個不晚於要設的時間的 alarm 時，不重設。** 每次設都至少設在 1 秒後（免得一件一直到期的工作讓 alarm 空轉），而每發一個題目就會看一次：如果每次都重設，題目發得比一秒一個密的時候，alarm 會一直被往後推、永遠不響，到期的工作（搬檔、之後的換日）就一直不做。留下來的 alarm 可能比需要的早（例如到期時間後來往後了），那一次響了沒有工作到期，再設成對的時間，只是多醒一次。alarm 自己的處理函式執行時讀不到已設的 alarm（同一頁：「If `getAlarm` is called while an `alarm` is already running, it returns `null` unless `setAlarm` has also been called since the alarm handler started running」），所以處理函式最後那一次一定會設下一個。
 - alarm 響的時候，到期的工作各做一次，沒到期的不做，然後重設。
 
-現在有兩件：
+現在有三件：
 
 - 刪過期的題目，到期時間是最舊那個題目發出後 10 分鐘。所以題目表裡只有最近 10 分鐘左右發的題目。
+- 衍生表重建失敗之後再試一次（[頁面用的衍生表](#頁面用的衍生表)）：失敗後一分鐘到期；沒有失敗過就沒有這件事。
 - 把寫滿的名冊檔搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）：物件裡有寫滿的檔就到期；搬不成時，到期時間是一分鐘後。
 
-之後每天換日的工作（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）是在 `timedWork()` 再列一件。一件工作占著 alarm 不會讓別的晚做，一件工作失敗也不會讓排在它後面的不做：測試用測試專用的建置多塞一件假的工作來確認（`test/api.test.ts`、`test/roster-files.test.ts`）。
+之後每天換日的工作（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）是在 `timedWork()` 再列一件。一件工作占著 alarm 不會讓別的晚做，一件工作失敗也不會讓排在它後面的不做，題目每 300 毫秒發一個時到期的工作照樣在幾秒內做：測試用測試專用的建置多塞一件假的工作來確認（`test/api.test.ts`），搬檔本身也測一次（`test/roster-files.test.ts`）。過期的題目有沒有被刪，從介面看不出來（過期的題目不管刪了沒有都是不認得），所以這一點是用那件假的工作確認的。
 
 alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上面那一頁，2026-11-20 讀的：「Retries are performed using exponential backoff starting at a 2 second delay from the first failure with up to 6 retries allowed」，並建議「catch any exceptions inside your `alarm()` handler and schedule a new alarm before returning」）。所以會失敗的工作自己接住例外、自己定下一次的時間，不靠那 6 次。
 
@@ -213,30 +215,31 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 **還沒寫滿的最後一檔、指紋檔、卡片狀態檔現在都不寫**（[#70](https://github.com/iamreal-tw/iamreal/issues/70)），所以資料網域上現在只會有寫滿的檔，`iamreal-verify` 對它會報少了 `fingerprints.jsonl`。
 
-**寫入第 1,000 筆的回應不等 R2。** 紀錄在寫入的交易提交時就算寫入了（[寫入是一個交易](#寫入是一個交易)），搬檔是之後的事：寫滿一檔的那一筆只多做一件事，把物件的 alarm 設好（約 1 秒後響），alarm 設不成也不影響那一筆的 `201`。搬檔是 `timedWork()` 的一件（[過期的題目怎麼刪](#過期的題目怎麼刪)），alarm 響的時候做。寫 R2 是非同步的，放不進寫入一筆的那個 SQLite 交易；等 R2 的時候，物件照常收別的請求，新的紀錄屬於下一檔，搬檔不讀它們。
+**寫入第 1,000 筆的回應不等 R2。** 紀錄在寫入的交易提交時就算寫入了（[寫入是一個交易](#寫入是一個交易)），搬檔是之後的事：寫滿一檔的那一筆只多做一件事，把物件的 alarm 設好（約 1 秒後響），alarm 設不成也不影響那一筆的 `201`：那時寫一行 `{"event":"alarm_not_set","error":"Error"}`，下一次發題目時會再設。搬檔是 `timedWork()` 的一件（[過期的題目怎麼刪](#過期的題目怎麼刪)），alarm 響的時候做。寫 R2 是非同步的，放不進寫入一筆的那個 SQLite 交易；等 R2 的時候，物件照常收別的請求，新的紀錄屬於下一檔，搬檔不讀它們。
 
 搬一檔的步驟，照順序：
 
 1. 從存著的 1,000 筆組出名冊檔和雜湊清單的位元組。只用存著的東西，所以重做一次組出來的位元組相同
-2. 寫名冊檔，讀回來，逐位元組比對，`Cache-Control` 和 `Content-Type` 也比對
+2. 寫名冊檔，連同它的 SHA-256 一起交給 R2；讀回來，逐位元組比對，`Cache-Control` 和 `Content-Type` 也比對
 3. 寫雜湊清單，讀回來，同樣比對
 4. 一個交易裡：`full_files` 記下這一檔（它之前的筆數、結尾的名冊指紋、檔案的 SHA-256），刪掉 `records` 裡的那 1,000 筆
 
 - **先寫名冊檔，再寫清單。** 規格說沒有名冊檔的雜湊清單是一個問題（「There is no list without a roster file」），所以任何時刻儲存桶裡不會有清單而沒有它的名冊檔。兩步之間有名冊檔而沒有清單的那一段，那一檔還沒被任何一行指紋檔涵蓋：指紋檔的那一行要等兩個物件都寫好才會有（每天公布的那一步，還沒做）。
-- **任何一步失敗，紀錄不刪。** 寫不進去、讀不回來、讀回來的位元組或標頭不同，都停在那一步，寫一行 `{"event":"full_file_not_moved","error":"Error"}`（`error` 是例外的類別名稱），一分鐘後重做。重做是整個再來一次：兩個物件都重寫，位元組和沒失敗時相同。一分鐘是為了避開 R2 的限制：同一個物件一秒最多寫一次，超過回 `429`（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)：「Maximum concurrent writes to the same object name (key)：1 per second」，2026-11-20 讀的）。
+- **任何一步失敗，紀錄不刪。** 寫不進去、R2 收到的位元組和 SHA-256 不符、讀不回來、讀回來的位元組或標頭不同，都停在那一步，寫一行 `{"event":"full_file_not_moved","error":"Error"}`（`error` 是例外的類別名稱），一分鐘後重做。重做是整個再來一次：兩個物件都重寫，位元組和沒失敗時相同。一分鐘是為了避開 R2 的限制：同一個物件一秒最多寫一次，超過回 `429`（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)：「Maximum concurrent writes to the same object name (key)：1 per second」，2026-11-20 讀的）。
 - **寫完 R2、還沒刪就重啟**：物件重新啟動後紀錄還在，照上面重做一次，兩個物件被同樣的位元組重寫，然後才刪。「一分鐘後」只記在記憶體裡，重啟之後的第一個 alarm 就會做。
+- **寫入時帶著 SHA-256**（`put` 的 `sha256` 選項）。只靠讀回來核對的話，錯的位元組要等寫進去之後才看得出來，那時它已經帶著一年的快取標頭在公開的網址上，至少留到一分鐘後重寫。R2 的文件寫這個選項是「A SHA-256 hash to use to check the received object's integrity」（[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)，2026-11-20 讀的），沒有寫不符時會怎樣。**不符時的行為是在本機的 workerd 上看到的，Cloudflare 上還沒確認**：`put` 丟例外（「The SHA-256 checksum you specified did not match what we received」），物件沒有被寫入。所以讀回來核對照樣留著：它不靠這個選項，也管得到「R2 存下來的和它收到的不同」和標頭。
 - **讀回來核對靠得住的理由**：R2 的寫入是強一致的，寫入成功之後的讀取一定看得到新的物件（[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)：「R2 writes are strongly consistent. Once the Promise resolves, all subsequent read operations will see this key value pair globally」，2026-11-20 讀的）。
 - **同時只有一次搬檔。** 物件在記憶體裡記著正在進行的那一次；搬檔還沒結束時再被觸發（測試直接跑 alarm 時會發生），等的是同一次。一次搬檔把物件裡寫滿的檔由前往後都搬完。
 - **失敗不影響別的。** 搬不成時紀錄照常寫入、題目照常過期、頁面照常：頁面只讀衍生表。物件裡會多留紀錄，直到搬成。
 - **`paused` 時照樣搬**：搬檔不套名冊規則，只搬已經寫入的那幾行。
 
-**之後換日的工作要用到的**：指紋檔的一行要涵蓋的紀錄，在寫那一行之前都要下載得到，所以換日的工作要先確定寫滿的檔都搬完了（`#moveFullFiles`），再寫最後一檔。最後一檔的雜湊清單第一行，是 `full_files` 最後一列的 `fingerprint_after`。最後一檔寫滿之後，同一個檔名會被搬檔蓋成 1,000 行、標一年的那一份。
+**之後換日的工作要用到的**：指紋檔的一行要涵蓋的紀錄，在寫那一行之前都要下載得到，所以換日的工作要先確定寫滿的檔都搬完了（`#moveFullFiles`），再寫最後一檔。最後一檔的雜湊清單第一行，是 `full_files` 最後一列的 `fingerprint_after`。最後一檔寫滿之後，同一個檔名會被搬檔蓋成 1,000 行、標一年的那一份。**最後一檔和寫滿的檔同名，所以最後一檔只能從 alarm 的定時工作裡寫**：定時工作在一次 alarm 裡一件做完才做下一件，寫最後一檔就不會落在搬檔「讀回來核對過」和「刪掉紀錄」之間；從別的地方寫，可能把剛核對過的 1,000 行蓋成比較短的舊檔，而物件接著就刪了那 1,000 筆。
 
-**記憶體**：一檔約 20 MB（一筆約 20 KB，幾乎都是證明）。組檔時各行直接寫進一塊緩衝區，讀回來是邊讀邊比，不另外存一份；重建衍生表時一次讀一檔。
+**記憶體**：一檔約 20 MB（一筆約 20 KB，幾乎都是證明）。搬檔時各行直接寫進一塊緩衝區，寫入後讀回來是邊讀邊比，不另外存一份。重建衍生表的那條路不一樣：一次讀一檔，但那一檔同時有位元組、解出來的字串和切好的 1,000 行在記憶體裡，另外有一張每張卡片一項的表（規則的狀態），隨卡片數變大、沒有上限。都沒有量過。
 
 **只在本機的 workerd 上跑過，Cloudflare 上還沒看過的**：一次寫一個 20 MB 的物件、讀回來要多久；搬檔時物件的記憶體高點；R2 寫入失敗時實際丟的是什麼。測試名冊現在不到 1,000 筆，第一次寫滿時要看 `wrangler tail` 有沒有 `full_file_not_moved`，和 `test-data.iamreal.tw/roster/0000000000000000.jsonl` 的回應標頭。
 
-**Go 讀得懂**：`test/roster-files.test.ts` 寫入 2,001 筆，把 R2 的模擬裡的名冊目錄抄到一個目錄，跑 `go test -run '^TestWorkerDirectory$' ./cmd/iamreal-verify`（環境變數 `IAMREAL_WORKER_DIRECTORY` 指到那個目錄；[`cmd/iamreal-verify/worker_directory_test.go`](../cmd/iamreal-verify/worker_directory_test.go)）。那個測試用 `iamreal-verify` 讀名冊目錄的同一段程式，配它自己測試用的假驗證器和假清冊存檔（證明是佔位的位元組）：兩檔 2,000 筆讀得過、每一筆有效、名冊指紋和這裡算的相同、兩份雜湊清單和它從紀錄重寫的逐位元組相同、一張有三筆紀錄的卡片算出來的現況和 `card-state` 相同。它唯一報的問題是少了 `fingerprints.jsonl`。要有 `go`；沒有時跳過，設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗。用真的 `bb`、真的清冊存檔、指紋檔、卡片狀態檔走完整條路的比對，等每天公布做好。
+**Go 讀得懂**：`test/roster-files.test.ts` 寫入 2,001 筆，把 R2 的模擬裡的名冊目錄抄到一個目錄，跑 `go test -run '^TestWorkerDirectory$' ./cmd/iamreal-verify`（環境變數 `IAMREAL_WORKER_DIRECTORY` 指到那個目錄；[`cmd/iamreal-verify/worker_directory_test.go`](../cmd/iamreal-verify/worker_directory_test.go)）。那個測試用 `iamreal-verify` 讀名冊目錄的同一段程式，配它自己測試用的假驗證器和假清冊存檔（證明是佔位的位元組）：兩檔 2,000 筆讀得過、每一筆有效、名冊指紋和這裡算的相同、兩份雜湊清單和它從紀錄重寫的逐位元組相同、一張有四筆紀錄的卡片算出來的現況和 `card-state` 相同。它唯一報的問題是少了 `fingerprints.jsonl`。要有 `go`；沒有時跳過，設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗。用真的 `bb`、真的清冊存檔、指紋檔、卡片狀態檔走完整條路的比對，等每天公布做好。
 
 ### 名冊規則和 Go 的 `roster/` 逐筆比對
 
@@ -281,6 +284,8 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|---|
 | `events.json` | `name`、`roster`、`events`（事件的欄位相同） | `checkpoint_every`：每幾筆列一次帳號 |
 | `answers.json` | 上面三項、`results`、`state`（最後的現況，寫法相同） | `rules_version`；每一筆一項的 `cards`（這一筆之後那張卡片的狀態，寫法和標準答案的 `slots` 相同）和 `latest_valid_dates`（到這一筆為止有效紀錄最晚的日期；`roster.Rules` 沒有匯出它，由 Go 的測試照規格的定義從 `Rules` 判為有效的紀錄的日期取）；`checkpoints`（每 `checkpoint_every` 筆和最後一筆之後，每個有卡片宣告的帳號和 `AccountCards` 數的卡片數） |
+
+**這一層測不到搬檔。** 長序列走 `rule-event`，不寫 `records`，所以 10,000 筆裡沒有一檔會寫滿。它確認的是卡片狀態存了再讀沒有被改壞；寫滿的檔搬到 R2 之後名冊、卡片現況、衍生表還對，是 [`test/roster-files.test.ts`](test/roster-files.test.ts) 負責的（`checkRoster`、`card-state`、頁面、衍生表逐列比對）。
 
 **這一層沒比到的。** `rule-event` 和真的送出一筆共用的只有讀狀態、寫狀態那兩段（`src/roster.ts` 的 `ruleState`、`keepRuleState`）、寫衍生表的那兩段（`src/views.ts` 的 `viewOf`、`writeView`）和 `protocol/` 的 `applyRecord`。送出一筆的第 4 段（`#acceptAt`）其餘的部分這裡都沒走到：
 
@@ -359,14 +364,15 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是名冊規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
 - **可以整份重建。** 物件啟動時，衍生表反映到的筆數和名冊的筆數不同就清掉重寫（`src/roster.ts` 的 `#fillViews`）：照序號讀每一行，用 `protocol/` 的 `applyList`（名冊規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
-  - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。
-  - **有名冊檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔，仍然算沒跟上，下一次啟動從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨名冊的檔數變長。重建進行中不搬檔。
+  - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
+  - **有名冊檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨名冊的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
-- **衍生表沒跟上時**（物件啟動時決定；從 R2 重建做完的那一刻改成跟上）：衍生表反映到的筆數和名冊的筆數不同，而且重建失敗、從 R2 的重建還沒做完，或正在 `paused` 不能重建。這時候物件照樣啟動，但不用衍生表：
+- **重建失敗會自己再試。** 失敗後一分鐘再做一次（`timedWork()` 的一件），物件每次啟動也做一次；成功的那一刻頁面和送出就恢復，不必重啟物件。讀 R2 的失敗有會自己好的（逾時、暫時的錯誤），所以要再試。資料或程式造成的失敗（R2 裡的檔不見或被改過、這一版讀不懂的一行、規則不接受的一筆）再試也不會好：物件醒著的時候**每分鐘寫一行 `views_not_filled`**，每次都把衍生表清空重做到失敗的地方，直到原因排除。有檔在 R2 時每一次重試會重讀前面的每一檔。
+- **衍生表沒跟上時**（物件啟動時決定；重建做完的那一刻改成跟上）：衍生表反映到的筆數和名冊的筆數不同，而且重建失敗、從 R2 的重建還沒做完，或正在 `paused` 不能重建。這時候物件照樣啟動，但不用衍生表：
   - 首頁和島民證明回 `500`（純文字，`no-store`）。不拿沒跟上的衍生表出頁面：那會是「現在有 0 張」，或把一張存在的島民證明說成找不到，還被快取 60 秒。格式不對的短編號和「找不到這一頁」不問名冊，照常。
   - 送出一筆（`POST /api/v1/records`）回 `500` `internal`，和後台自己出錯時相同（`docs/api/card-proof.md`），什麼都不寫，題目不算用過、也不算送過一次。`paused` 時照舊是 `503` `paused`。
   - 拿題目、讀卡片現況、清冊鏡像照常：它們不讀衍生表。
-  - 重建失敗時寫一行 `{event: "views_not_filled", error}`。物件每次啟動都再試一次；原因排除後（例如部署了讀得懂那一筆的程式），下一次啟動就補上。
+  - 重建失敗時寫一行 `{event: "views_not_filled", error}`。一分鐘後和每次啟動都再試一次（上一條）；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個名冊檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的名冊檔，不受影響；但已經過卡的人查得到現況，名冊本身（紀錄、卡片狀態、名冊指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是名冊規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。名冊長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
 - 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引。這張票只做了首頁和島民證明要的查詢；`view_slots_account` 現在是數卡片在用（`accountCards`，[寫入是一個交易](#寫入是一個交易)），查詢頁之後也用它；名冊頁要的 `view_slots_latest` 已經建了，還沒有查詢用到。
@@ -513,7 +519,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、寫進去的位元組不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_ROSTER_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -857,7 +863,8 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 讓後台自己出錯 | `worker.roster.breakTables()` |
 | 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
 | 讀存著的紀錄和名冊那一列、照規格重算整份名冊 | `worker.roster.stored()` 讀出物件裡還留著的；`test/records.ts` 的 `checkRoster(worker)` 連同 R2 裡寫滿的名冊檔和雜湊清單，重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |
-| 讓搬名冊檔的某一步出錯 | `worker.roster.setBucketFault({ key, how })`，`(null)` 恢復；`how` 是 `put fails`、`put writes other bytes`、`put loses its answer`、`get fails`。記在記憶體裡，物件重啟就沒有了 |
+| 讓搬名冊檔的某一步出錯 | `worker.roster.setBucketFault({ key, how })`，`(null)` 恢復；`how` 是 `put fails`、`put sends other bytes`（送給儲存桶的位元組少一個，SHA-256 照原樣帶）、`put writes other bytes`（儲存桶存下的位元組少一個）、`put writes another Cache-Control`、`put writes another Content-Type`、`put loses its answer`、`get fails`。記在記憶體裡，物件重啟就沒有了 |
+| 物件裡還留著幾筆紀錄、從哪一筆到哪一筆 | `worker.roster.kept()`。`stored()` 把每一行都傳回來，一行約 20 KB，物件的回應超過 32 MiB（約 1,600 筆）就回不來；物件裡卡著兩檔以上時用這個 |
 | 等衍生表從 R2 重建完 | `worker.roster.viewsFilled()` |
 | 讓同時送出的請求真的交錯 | `worker.roster.setHashDelay(毫秒)`：算紀錄雜湊之前先等；`worker.roster.hashes()` 是算過幾次 |
 | 驗證花了時間的證明 | `test/records.ts` 的 `SLOW_PROOF`（替身驗證器）：通過，但時鐘往後 1 毫秒 |
@@ -1043,7 +1050,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`、跳脫、方法、測試名冊的標示；讀 `design/copy/` 的工具 |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
-| `test/roster-files.test.ts` | 寫滿 1,000 筆的名冊檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；衍生表從 R2 重建；Worker 沒有送名冊檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
+| `test/roster-files.test.ts` | 寫滿 1,000 筆的名冊檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、失敗後一分鐘重試；Worker 沒有送名冊檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
 | `test/sequence.test.ts`、`test/sequence.ts` | 固定種子的長序列：產生器，Go 的 `roster/` 算的答案，配記憶體和配 Durable Object 的儲存逐筆比對（要有 `go`） |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；每個環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
