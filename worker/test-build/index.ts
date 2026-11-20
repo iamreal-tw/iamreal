@@ -11,7 +11,8 @@
 //   the deployed Worker has (src/in-worker.ts), and the tests about proofs
 //   keep it. A proof takes a real card's keys and seconds to make, so the
 //   tests about everything else (the challenge, the CRLs, the roster rules,
-//   the write) switch to a stand-in that judges a proof by its first byte,
+//   the write) switch to a stand-in that judges a proof by its first byte
+//   (and on one value of it moves the clock, as a verification that took time),
 //   as the Go backend's tests do (server/harness_test.go, fakeProofs). The
 //   stand-in is behind the same interface the deployed Worker names its
 //   verifier by (src/index.ts, `API_PARTS`).
@@ -47,7 +48,7 @@ import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "./card-door.ts";
-import { setTestClock } from "./target.ts";
+import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
 
@@ -57,12 +58,15 @@ const testEnv = (env: Env): Env => ({ ...env, ...testSettings });
 /**
  * The stand-in verifier: it looks at nothing but the proof's first byte. 0
  * is accepted, 1 is rejected, and on 2 it cannot run, as the Worker's
- * verifier when Barretenberg does not start (src/engine.ts).
+ * verifier when Barretenberg does not start (src/engine.ts). 3 is accepted
+ * after the test clock is moved one millisecond on: a verification that
+ * took time, for the challenge that expires during it.
  */
 const STAND_IN: ApiParts = {
   verifier: {
     async verify(_circuit, proof) {
       if (proof[0] === 2) throw new EngineError("the stand-in verifier does not start on this proof", true);
+      if (proof[0] === 3) setTestClock(now().getTime() + 1);
       return proof[0] !== 1;
     },
   },

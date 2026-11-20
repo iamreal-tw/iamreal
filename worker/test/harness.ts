@@ -178,7 +178,8 @@ export interface TestWorker {
    * Which proof verifier `records` asks from now on (test build,
    * `PUT /__test/verifier`): "real" is the deployed Worker's, and what a
    * test worker starts with; "stand-in" judges a proof by its first byte
-   * alone (0 accepted, 1 rejected, 2 the verifier cannot run), for the
+   * alone (0 accepted, 1 rejected, 2 the verifier cannot run, 3 accepted
+   * with the clock a millisecond later), for the
    * tests that are about everything but the proof.
    */
   setVerifier(which: "real" | "stand-in"): Promise<void>;

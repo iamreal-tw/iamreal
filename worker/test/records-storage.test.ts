@@ -223,6 +223,8 @@ describe("a stored state computed by another version of the roster rules", () =>
     assert.deepEqual([challenge.status, JSON.parse(await challenge.text())], [503, { error: "paused" }]);
     // More often than a challenge can be submitted: none of these counts (see the end).
     for (let i = 0; i < 6; i++) await wantError(worker, s, 503, "paused");
+    // Paused comes before the challenge: one this roster never issued gets the same answer, not `challenge_unknown`.
+    await wantError(worker, { ...s, challenge: `2026-11-20.${"0".repeat(26)}` }, 503, "paused");
     // What is wrong with the request itself is still said first: that needs no roster.
     await wantError(worker, { ...s, issuer: "G4" }, 400, "malformed");
     await wantError(worker, { ...s, accounts: list("instagram:alice") }, 400, "platform");

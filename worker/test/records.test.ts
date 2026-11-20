@@ -25,6 +25,8 @@ import {
   list,
   mustSubmit,
   newCard,
+  SLOW_PROOF,
+  UNVERIFIABLE_PROOF,
   proofText,
   publishCrl,
   publishG3,
@@ -75,7 +77,8 @@ describe("reading the request: malformed, scope, platform", () => {
       "challenge padding bits": { challenge: `${good.challenge.slice(0, 36)}1` },
       "challenge date": { challenge: `2026-02-29${good.challenge.slice(10)}` },
       issuer: { issuer: "G4" },
-      "smt_root uppercase": { smt_root: good.smt_root.replace(/[a-f]/, (c) => c.toUpperCase()).padEnd(64, "A").slice(0, 63) + "A" },
+      // In lowercase it is a root in its format (the number 10): only the case is wrong.
+      "smt_root uppercase": { smt_root: `${"0".repeat(63)}A` },
       "smt_root not below p": { smt_root: "f".repeat(64) },
       circuit: { circuit: good.circuit.slice(0, 63) },
       "proof one byte short": { proof: Buffer.alloc(14655).toString("base64") },
@@ -233,6 +236,28 @@ describe("the challenge", () => {
     await wantError(worker, { ...s, accounts: list("threads:alice") }, 400, "challenge_attempts");
   });
 
+  test("one that expires while its proof is being verified is challenge_unknown at the write: nothing is written, and the submission counted", async () => {
+    await fresh();
+    const root = await publishG3(worker);
+    // With time left, a proof that takes the verifier a millisecond is written like any other.
+    await mustSubmit(worker, { ...(await sub(worker, newCard(), root, "threads:alice")), proof: SLOW_PROOF }, "threads first");
+
+    // (That moved the clock a millisecond.) A challenge issued at START:
+    await worker.setClock(START);
+    const s = await sub(worker, newCard(), root, "threads:alice");
+    // One millisecond before its 10 minutes it passes the first look. The verdict comes at 10 minutes exactly.
+    await worker.setClock(new Date(START.getTime() + TEN_MINUTES - 1));
+    await wantError(worker, { ...s, proof: SLOW_PROOF }, 400, "challenge_unknown");
+    assert.equal((await checkRoster(worker)).length, 1);
+    assert.equal((await state(s.scoped_id)).last_card_proof, null);
+
+    // It was one of the challenge's five: within the 10 minutes again, four more that fail, and the next is one too many.
+    await worker.setClock(START);
+    for (let i = 0; i < 4; i++) await wantError(worker, { ...s, proof: BAD_PROOF }, 400, "proof");
+    await wantError(worker, s, 400, "challenge_attempts");
+    assert.equal(await count(), 1);
+  });
+
   test("the same challenge submitted twice at once is accepted once", async () => {
     await fresh();
     const root = await publishG3(worker);
@@ -274,9 +299,10 @@ describe("the proof", () => {
     assert.equal(await count(), 0);
   });
 
-  test("when the verifier cannot run: 500, one line that says it was the verifier, nothing written, and the challenge still usable", async () => {
+  test("when the verifier cannot run: 500, one line that says it was the verifier, nothing written, the challenge still usable, and the submission counted", async () => {
     await fresh();
-    const s = await sub(worker, newCard(), await publishG3(worker), "threads:alice");
+    const root = await publishG3(worker);
+    const s = await sub(worker, newCard(), root, "threads:alice");
     const before = worker.logLines().length;
     const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify({ ...s, proof: proofText(2) }) });
     assert.equal(res.status, 500);
@@ -286,6 +312,12 @@ describe("the proof", () => {
     assert.equal(await count(), 0);
     assert.equal((await state(s.scoped_id)).last_card_proof, null);
     await mustSubmit(worker, s, "threads first");
+
+    // Each such submission is one of the challenge's five: after five of them, a proof that verifies is one too many.
+    const other = await sub(worker, newCard(), root, "threads:alice");
+    for (let i = 0; i < 5; i++) assert.deepEqual(await submit(worker, { ...other, proof: UNVERIFIABLE_PROOF }), { status: 500, body: { error: "internal" } });
+    await wantError(worker, other, 400, "challenge_attempts");
+    assert.equal((await checkRoster(worker)).length, 1);
   });
 });
 
@@ -317,6 +349,8 @@ describe("the CRLs", () => {
     await wantError(worker, await sub(worker, newCard(), root, "threads:alice"), 503, "crl_stale");
     // Stale comes before the root, and before the roster rules.
     await wantError(worker, await sub(worker, newCard(), `${"0".repeat(63)}1`), 503, "crl_stale");
+    // The proof comes before stale: a record that does not verify is `proof` whatever the age of the CRLs.
+    await wantError(worker, { ...(await sub(worker, newCard(), root, "threads:alice")), proof: BAD_PROOF }, 400, "proof");
     // A newer CRL with the same tree: the root is accepted again.
     await publishCrl(worker, { issuer: "G3", number: 2, thisUpdate: new Date(CRL_TIME.getTime() + 4 * DAY_MS), serials: [11, 12] });
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");

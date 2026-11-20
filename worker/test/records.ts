@@ -74,9 +74,11 @@ export const circuitOf = (issuer: IssuerName): string => (issuer === "G2" ? CIRC
 /**
  * Placeholder proof bytes in a record's spelling, for the stand-in verifier
  * (test-build/index.ts): it accepts a proof whose first byte is 0, rejects
- * one whose first byte is 1, and cannot run on one whose first byte is 2.
+ * one whose first byte is 1, cannot run on one whose first byte is 2, and
+ * accepts one whose first byte is 3 with the Worker's clock a millisecond
+ * later than it was.
  */
-export function proofText(first: 0 | 1 | 2, second = 0): string {
+export function proofText(first: 0 | 1 | 2 | 3, second = 0): string {
   const bytes = Buffer.alloc(14656);
   bytes[0] = first;
   bytes[1] = second;
@@ -86,6 +88,8 @@ export function proofText(first: 0 | 1 | 2, second = 0): string {
 export const GOOD_PROOF = proofText(0);
 export const BAD_PROOF = proofText(1);
 export const UNVERIFIABLE_PROOF = proofText(2);
+/** A proof that verifies, the verdict coming one millisecond of the Worker's clock after the verifier was asked. */
+export const SLOW_PROOF = proofText(3);
 
 /** The CRLs most tests use are dated 2026-11-20 in Taiwan: `thisUpdate` 2026-11-19 21:00 UTC is 05:00 there. */
 export const CRL_TIME = new Date("2026-11-19T21:00:00Z");
