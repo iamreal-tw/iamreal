@@ -78,15 +78,17 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 ## 建置時的檢查
 
-`./gradlew build` 會跑，只做安裝檔（`assembleDebug`、`assembleRelease`）時也會跑；任何一項不過就失敗（`app/build.gradle.kts`）：
+`./gradlew build` 會跑，只做 APK（`assembleDebug`、`assembleRelease`）時也會跑；任何一項不過就失敗（`app/build.gradle.kts`）。它們看的是 APK；上傳到 Google Play 用的 bundle（`bundleRelease`）這裡不看，上傳的工作要自己檢查：
 
 - **合併後的 manifest**（`checkManifest`）：識別碼不是 `tw.iamreal.app.test` 就失敗；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的（現在是空的）。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`
 - **測試 app 不提正式的環境**（`checkApk`）：dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式名冊的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照名冊的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試名冊的那一條。`.so` 裡兩份名冊的場合字串都有（核心是同一份），Kotlin 只傳得出測試名冊的數字
 - **release build 不輸出 log**：R8 拿掉對 `android.util.Log` 的呼叫（`app/proguard-rules.pro`）；之後 `checkApk` 看 release 的 dex，還提到 `android.util.Log`、`java.io.PrintStream`（`System.out`、`System.err`、`println`）、`java.util.logging.Logger`、`printStackTrace` 就失敗
-- **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 列的，現在是 Kotlin 的標準函式庫和它引用的標註。沒有 AndroidX、沒有 Google Play services。畫面用 Android 內建的元件
+- **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 列的，現在是 Kotlin 的標準函式庫和它引用的標註；以檔案加進來的 jar、aar 也算，同樣不過。沒有 AndroidX、沒有 Google Play services。畫面用 Android 內建的元件
 
-這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log（app 當掉時系統會記下例外的堆疊；核心的例外只有代碼）、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。
+這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log（app 當掉時系統會記下例外的堆疊；核心的例外只有代碼）、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。`.so` 向 libc 要的函式裡有 `syslog`、`fprintf`、`socket`、`connect`（Barretenberg 和 libc++ 帶進來的），app 沒有網路的權限時 `socket` 連不出去。
+
+安裝檔裡另外有 AGP 自己放的兩個小檔：`META-INF/com/android/build/gradle/app-metadata.properties`（AGP 的版本）和 `META-INF/version-control-info.textproto`（建置時的 git 提交）。
 
 ## 工具和套件
 
@@ -131,7 +133,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案（`scope.json`、`declaration-code.json`），不複製。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案（`scope.json`、`declaration-code.json`），不複製。`AppNameTest` 讀 `design/copy/card-proof.md`，核對圖示下面的名稱是服務的名稱加「 測試」。
 
 測到的：Kotlin 到 JNI 到核心這條路、代碼變成例外、傳進去的位元組呼叫後沒有被改。測不到的：Android 上的 `.so`（Zig 連結的那一個）。那一個要在模擬器或手機上打開 app 看。
 

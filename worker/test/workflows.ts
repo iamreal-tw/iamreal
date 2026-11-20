@@ -9,7 +9,8 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs must be exactly the ones written here.
+// workflow's two jobs, and the device-core and android jobs of checks.yml,
+// must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:

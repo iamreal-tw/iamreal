@@ -30,8 +30,8 @@ class MainActivity : Activity() {
                     line("idc_scope_string") { String(DeviceCore.scopeString(), Charsets.US_ASCII) },
                 ).joinToString("\n")
             } catch (e: LinkageError) {
-                // The library is not in the installer, or it is not the one the JNI layer was built for.
-                "System.loadLibrary ${e.javaClass.simpleName}"
+                // The library is not in the installer, is not the one the JNI layer was built for, or lacks a function.
+                "DeviceCore ${e.javaClass.simpleName}"
             }
             runOnUiThread { text.text = lines }
         }

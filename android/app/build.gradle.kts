@@ -2,8 +2,7 @@
 // one Android version the app is built for, how the native library and the
 // bundled files get into the installer, and the checks of what was built.
 import com.android.build.api.artifact.SingleArtifact
-import org.gradle.api.artifacts.result.ResolvedComponentResult
-import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 import javax.inject.Inject
@@ -311,18 +310,18 @@ androidComponents {
             silent = release
         }
         val checkLibraries = tasks.register<CheckLibraries>("checkLibraries$name") {
-            libraries = variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map { root ->
-                val seen = mutableSetOf<ResolvedComponentResult>()
-                fun walk(c: ResolvedComponentResult) {
-                    if (seen.add(c)) c.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { walk(it.selected) }
-                }
-                walk(root)
-                (seen - root).map { it.moduleVersion!!.let { m -> "${m.group}:${m.name}" } }.toSet()
+            // Every file the app is packaged with, by where it came from: a module of a repository
+            // as group:name, anything else (a jar or an aar given as a file) as Gradle names it.
+            libraries = variant.runtimeConfiguration.incoming.artifacts.resolvedArtifacts.map { artifacts ->
+                artifacts.map { it.id.componentIdentifier }
+                    .map { if (it is ModuleComponentIdentifier) "${it.group}:${it.module}" else it.displayName }
+                    .toSet()
             }
             allowed = allowedLibraries
         }
         tasks.named("check") { dependsOn(checkManifest, checkApk, checkLibraries) }
-        // Whoever assembles an installer, a job that uploads included, gets it checked.
+        // Whoever assembles an APK gets it checked. A bundle (bundleRelease, what Google Play takes)
+        // is not looked at here: the job that uploads one has to check it.
         tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(checkManifest, checkApk, checkLibraries) }
     }
 }
@@ -335,6 +334,7 @@ tasks.withType<Test>().configureEach {
     systemProperty("iamreal.vectors", rootProject.file("../spec/vectors").path)
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)
     systemProperty("iamreal.strings", file("src/main/res/values/strings.xml").path)
+    inputs.file(file("src/main/res/values/strings.xml"))
     inputs.dir(rootProject.file("../spec/vectors"))
     inputs.file(rootProject.file("../design/copy/card-proof.md"))
 }
