@@ -41,11 +41,15 @@ pub fn scoped_id(
         state = state.and_then(|s| {
             let mut inputs = [s, *limb];
             let next = hash.poseidon2(&inputs);
-            crate::wipe(&mut inputs[1]);
+            for input in &mut inputs {
+                crate::wipe(input);
+            }
             next
         });
     }
-    // The limbs are the signature. What the caller's hash copied is the caller's to wipe.
+    // The limbs are the signature, and every state before the last is
+    // computed from it. What the caller's hash copied is the caller's to
+    // wipe; if that hash panics, nothing here is wiped.
     for limb in &mut limbs {
         crate::wipe(limb);
     }
@@ -70,7 +74,9 @@ pub fn parse_scoped_id(text: &[u8]) -> Option<Fe> {
     is_field_element(&id).then_some(id)
 }
 
-/// The first 10 characters of a scoped ID's text form.
+/// The first 10 characters of a scoped ID's text form; `None` for a text
+/// shorter than that, which is not a scoped ID (protocol/ returns the
+/// shorter text as it is).
 pub fn short_id(text: &str) -> Option<&str> {
     text.get(..SHORT_ID_LENGTH)
 }

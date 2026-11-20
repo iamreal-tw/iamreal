@@ -239,6 +239,24 @@ const WITH: Readonly<Record<string, YamlMap>> = {
 const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
 
+/**
+ * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
+ * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
+ * checked; so the job is written out here instead of being described by rules.
+ */
+export const DEVICE_CORE_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
+    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo test --locked --release` },
+  ],
+};
+
 /** The line of the upload step: the arguments of `uploadArgs` (scripts/deploy.ts), with wrangler kept quiet. */
 export const UPLOAD = `${Object.entries(WRANGLER_QUIET)
   .map(([k, v]) => `${k}=${v}`)
@@ -421,10 +439,9 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         }
       }
       if (f === "checks.yml" && name === DEVICE_CORE_JOB) {
-        // Every step that runs cargo with Barretenberg gets it from the script that checks its SHA-256.
-        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
-        if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
-        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+        // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
+        // (where .cargo/config.toml is read) with the library the script checked.
+        if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }
