@@ -170,7 +170,7 @@ pnpm typecheck   # 型別檢查
 
 **交易提交之後沒有會丟例外的程式。** `201` 的回答（每個平台是哪個帳號、有幾張卡片宣告它）在交易結束前就做好：帳號在交易之前取，數卡片在交易裡、寫完卡片狀態之後做。數卡片要讀同一個場合每張卡片存著的名額，其中一列壞掉時它會丟例外；這時四樣都不留下，回 `500`，不會出現「紀錄寫進去了、題目標成用過了，裝置卻拿到 `500`」。這一次送出已經在第 2 段算了一次。測試把另一張卡片存著的名額改成不是 JSON 的字來確認。
 
-**營運上的後果**：數卡片（`#accountCards`）在交易裡掃同一個場合每一張卡片存著的 `slots`。只要其中一列壞掉，那個場合的每一筆送出都回 `500`、什麼都不寫、那一次照樣計次，直到那一列修好為止。後台自己不會寫出壞的列（寫的是名冊規則交出來的狀態）；頁面用的衍生表（[#68](https://github.com/iamreal-tw/iamreal/issues/68)）有了之後，這個掃描換成查那張表，這件事留給那張票（維護者 2026-11-20 決定）。
+**營運上的後果**：數卡片（`accountCards`）在交易裡掃同一個場合每一張卡片存著的 `slots`。只要其中一列壞掉，那個場合的每一筆送出都回 `500`、什麼都不寫、那一次照樣計次，直到那一列修好為止。後台自己不會寫出壞的列（寫的是名冊規則交出來的狀態）；頁面用的衍生表（[#68](https://github.com/iamreal-tw/iamreal/issues/68)）有了之後，這個掃描換成查那張表，這件事留給那張票（維護者 2026-11-20 決定）。
 
 **序號**是寫入那一刻的筆數加一。紀錄雜湊要用到序號，而算雜湊（WebCrypto）是非同步的，所以做法是：先照現在的筆數算好雜湊和名冊指紋，接著從檢查到寫入一口氣做完、中間不等任何東西，而且一開始先確認筆數沒有變；變了就重算。所以不會有兩筆拿到同一個序號，每一筆都是照前一筆留下的狀態檢查的。本機的 workerd 裡算雜湊不會讓別的請求插進來（20 個請求同時送，筆數也不會在這中間改變），所以測試專用的建置可以讓 Durable Object 在算雜湊之前先等幾毫秒（`PUT /__test/roster/hash-delay`；`src/roster.ts` 的 `hashOf` 就是為了這個拆出來的，只有測試專用的建置覆寫它）：等的時候別的請求會插進來，20 個同時送的請求就會拿著同一個筆數算雜湊。測試確認這時 20 筆仍然各拿到一個序號、存下來的名冊檔驗得過，而且有紀錄重算過。拿掉確認筆數的那一行，這個測試會看到 `500`（序號重複的那一筆因為主鍵寫不進去）。
 
@@ -194,35 +194,65 @@ pnpm typecheck   # 型別檢查
 node --experimental-strip-types --test test/sequence.test.ts
 ```
 
-要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。比的是名冊規則和狀態的儲存，不驗證證明：檢查 1 和檢查 3 的答案（`verifies`、`crl_dates`）是事件自己帶的，和標準答案的事件一樣。
+要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
 
 做的事：
 
-1. **產生一串紀錄。** [`test/sequence.ts`](test/sequence.ts) 的 `generateSequence` 從種子（現在是 1）產生 10,000 筆測試名冊（兩個平台）的事件。它不知道規則，只記得每張卡片在每個平台想宣告哪個帳號，讓規則的各種情況常常發生：160 張卡片，同一時間只有 8 張在送、每 64 筆換一張；每個平台 4 個帳號名稱；一天約 18 筆，日期大多是當天，常常是前一天（午夜前拿的題目），有時往回 2 到 8 天（沒超過和超過檢查 4 的 4 天）、有時往後 1 到 3 天；有時是空的清單、重送最近 30 筆之一的題目、證明不過、沒有一份清冊的日期對得上（含差一天就對得上的）。亂數是自己寫的 mulberry32，不用語言內建的，所以同一個種子在任何機器、任何版本的 Node 都產生同一串；同一個種子長一點的序列，開頭就是短的那一串。
-2. **Go 算答案。** 序列寫成 `spec/vectors/roster-rules.json` 一個案例的樣子（`events.json`：`name`、`roster`、`events`，事件的欄位和標準答案的事件相同），放在暫存目錄。測試跑 `go test -count=1 -run '^TestSequenceAnswers$' ./roster`，環境變數 `IAMREAL_ROSTER_SEQUENCE` 指到那個目錄。`roster/sequence_test.go` 用 `roster.Rules` 一筆一筆套用，寫 `answers.json`：同一個案例，加上每一筆的結果（`results`）、每一筆之後那張卡片的狀態（`cards`）、最後的現況（`state`，寫法和標準答案的相同）和規則的版本號。Go 和 TypeScript 互不引用，只共用 `spec/`，所以交換的格式就是兩邊本來都讀的標準答案的格式；找到不一致時，最小的重現案例可以直接寫成標準答案的一案。兩個檔都不進版控：比對全部相同時刪掉，有不同時留著，失敗的訊息寫著路徑。
-3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、`proofs_on_last_date`、每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`；沒有有效紀錄的卡片是空的狀態）。記憶體那一次另外比最後的現況（每張卡片的清單，每個帳號底下的卡片）。Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/roster/rule-event`（讀狀態、寫狀態用的是送出一筆的同一段程式），接著重啟名冊的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片。
-4. **遇到第一筆不同就停**，訊息寫第幾筆、哪張卡片、哪個欄位、兩邊的值，例如（把 `src/card-table.ts` 寫入的 `proofs_on_last_date` 故意改成最多 2 時）：
+1. **產生一串紀錄。** [`test/sequence.ts`](test/sequence.ts) 的 `generateSequence` 從種子（現在是 1）產生 10,000 筆測試名冊（兩個平台）的事件。它不知道規則，只記得每張卡片在每個平台想宣告哪個帳號，讓規則的各種情況常常發生：160 張卡片，同一時間只有 8 張在送、每 64 筆換一張，偶爾是剛離開的卡片回來送一筆、日期是 4 天前；每個平台 4 個帳號名稱；一天約 18 筆，日期大多是當天，常常是前一天（午夜前拿的題目），有時往回 2 到 8 天（沒超過和超過檢查 4 的 4 天）、有時往後 1 到 3 天；有時是空的清單、重送最近 30 筆之一的題目、證明不過、沒有一份清冊的日期對得上（含差一天就對得上的）。亂數是自己寫的 mulberry32，只用 32 位元的整數運算，不用 Node 內建的，所以同一個種子產生的序列不隨 Node 的版本改變；同一個種子長一點的序列，開頭就是短的那一串。
+2. **Go 算答案。** 測試把序列寫進 `worker/test-output/sequence-…/events.json`，跑 `go test -count=1 -run '^TestSequenceAnswers$' ./roster`，環境變數 `IAMREAL_ROSTER_SEQUENCE` 指到那個目錄。`roster/sequence_test.go` 用 `roster.Rules` 一筆一筆套用，寫同一個目錄的 `answers.json`。兩個檔的格式見下面「交換的檔」。`test-output/` 不進版控（`worker/.gitignore`）：每一項都過時刪掉這個目錄；有任何一項失敗（包括 Go 那邊失敗、最後的現況不同）時留著，失敗的訊息寫著路徑。
+3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、`proofs_on_last_date`、每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`；沒有有效紀錄的卡片是空的狀態）。
+   - 記憶體那一次另外每一筆比名冊上最晚的有效日期，每 100 筆比一次每個帳號底下的卡片數（`account_cards`），最後比整個現況（每張卡片的清單，每個帳號底下的卡片）。
+   - Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/roster/rule-event`，接著重啟名冊的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片。每 100 筆（共 100 次，最後一筆也是）再從 `POST /__test/roster/rule-state` 讀名冊上最晚的有效日期（`ruleState` 讀出來給規則的那一個）和每個帳號底下的卡片數（部署的 `accountCards` 那一句查詢數的，就是 `201` 回應裡的 `account_cards`），和 Go 的比。
+4. **遇到第一筆不同就停**，訊息寫第幾筆、哪張卡片、哪個欄位、兩邊的值，例如（把 `accountCards` 的查詢故意改成最多回 1 時）：
 
    ```
-   record 20 of 10000 (seq 20), card NH6H290YAE6AE92AWH6JMHETSR9RH0N8ADK1WRS9Z8GZ5B9APG00, card.proofs_on_last_date: Go 3, Durable Object 2. The events and Go's answers are kept in /…/iamreal-sequence-…
+   record 100 of 10000 (seq 100), card 52BSJ2X5Y0JK8VWSEYGDKTAPYQ6GHCSF333XYD5WCR8C8ZYWNW00, accounts[0].account_cards: Go 3, Durable Object 1. The events and Go's answers are kept in /…/worker/test-output/sequence-…
    ```
 
    Durable Object 讀不出那張卡片時（存著的狀態不合規則，`card-state` 回 `500`，見[讀卡片狀態時的檢查](#讀卡片狀態時的檢查)），訊息寫第幾筆、哪張卡片。
-5. **印出統計。** 每個代碼、每個種類（和每個平台的每個種類）出現幾次；每個代碼、每個種類都要至少 100 次，否則失敗。換了種子或改了產生器時，這一項確認序列還涵蓋每一種情況。
+5. **印出統計，設下限。** 每個代碼、每個平台的每個種類都要至少 100 次。另外數下面幾種情境，下限約是種子 1 實際次數的四分之三，換了種子或改了產生器時確認序列還涵蓋它們。情境從事件和 Go 的答案數，不用 `protocol/`（`test/sequence.ts` 的 `scenarios`）。
 
-2026-11-20 跑的結果（種子 1，10,000 筆）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，最後的現況也相同。有效 4,742 筆、無效 5,258 筆：
+**交換的檔**是這兩個測試檔之間的約定（`roster/sequence_test.go`、`test/sequence.ts`），不在 `spec/` 裡。它們以 `spec/vectors/roster-rules.json` 一個案例的樣子為底，因為 Go 和 TypeScript 互不引用、只共用 `spec/`，這是兩邊本來都讀的格式；找到不一致時，最小的重現案例可以直接寫成標準答案的一案。多出來的欄位：
+
+| 檔 | 和標準答案的案例相同的 | 多出來的 |
+|---|---|---|
+| `events.json` | `name`、`roster`、`events`（事件的欄位相同） | `checkpoint_every`：每幾筆列一次帳號 |
+| `answers.json` | 上面三項、`results`、`state`（最後的現況，寫法相同） | `rules_version`；每一筆一項的 `cards`（這一筆之後那張卡片的狀態，寫法和標準答案的 `slots` 相同）和 `latest_valid_dates`（到這一筆為止有效紀錄最晚的日期；`roster.Rules` 沒有匯出它，由 Go 的測試照規格的定義從 `Rules` 判為有效的紀錄的日期取）；`checkpoints`（每 `checkpoint_every` 筆和最後一筆之後，每個有卡片宣告的帳號和 `AccountCards` 數的卡片數） |
+
+**這一層沒比到的。** `rule-event` 和真的送出一筆共用的只有讀狀態、寫狀態那兩段（`src/roster.ts` 的 `ruleState`、`keepRuleState`）和 `protocol/` 的 `applyRecord`。送出一筆的第 4 段（`#acceptAt`）其餘的部分這裡都沒走到：
+
+- 題目表：`challenge_unknown`、`challenge_used`、計次。用過的題目記在測試專用建置自己的表（`test_used_challenges`），`challenge_reused` 比的是那張表配規則的檢查 2
+- 清冊的政策：`crl_stale`、只認最新兩份清冊的樹根
+- 更換政策 `switch_restricted`
+- 寫 `records`、名冊那一列的 `count`、`fingerprint` 的交易
+- 數 `account_cards` 的查詢在寫入的交易裡跑的那一次（這裡比的是同一句查詢，在交易外面另外叫）
+
+`proof` 和 `root` 兩邊都照事件的旗標回答（`verifies`、`crl_dates`），不驗證證明，也不讀清冊，所以比到的是檢查的先後和檢查 3 的日期範圍（清冊日期的前 1 天到後 3 天），不是驗證器和清冊存檔。這些由 `test/records.test.ts`（每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容）、`test/records-real.test.ts`（真的證明和鏡像抓的清冊）和 `test/records-storage.test.ts`（同時送出、寫到一半失敗、`paused`）守著。
+
+2026-11-20 跑的結果（種子 1，10,000 筆）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，100 次的名冊最晚有效日期和帳號的卡片數也相同，最後的現況也相同。有效 4,766 筆、無效 5,234 筆：
 
 | 代碼 | 筆數 | | 種類 | 次數（`test-example`／`threads`） |
 |---|---|---|---|---|
-| `proof` | 287 | | `first` | 320（160／160） |
-| `challenge_reused` | 294 | | `refresh` | 4,923（2,430／2,493） |
-| `root` | 286 | | `correction` | 249（121／128） |
-| `date_order` | 1,502 | | `switch` | 1,431（728／703） |
-| `empty` | 320 | | `withdraw` | 1,028（512／516） |
-| `switch_limit` | 1,392 | | | |
-| `daily_limit` | 1,177 | | | |
+| `proof` | 313 | | `first` | 320（160／160） |
+| `challenge_reused` | 279 | | `refresh` | 5,014（2,534／2,480） |
+| `root` | 292 | | `correction` | 255（127／128） |
+| `date_order` | 1,611 | | `switch` | 1,420（699／721） |
+| `empty` | 233 | | `withdraw` | 929（457／472） |
+| `switch_limit` | 1,311 | | | |
+| `daily_limit` | 1,195 | | | |
 
-量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：整個檔約 100 秒。Go 算答案（含編譯測試）約 1 秒，記憶體 0.06 秒，Durable Object 約 97 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返。
+| 情境 | 怎麼數 | 次數 | 下限 |
+|---|---|---|---|
+| 跨午夜 | 有效，日期是名冊上最晚有效日期的前一天 | 842 | 630 |
+| 日期往回超過 4 天 | `date_order`，日期早於名冊上最晚有效日期超過 4 天 | 408 | 300 |
+| 剛好往回 4 天而有效 | 有效，日期剛好是名冊上最晚有效日期的 4 天前 | 79 | 60 |
+| 第 5 次更換 | 一個 `switch` 讓那個名額的 `switch_count` 變成 5 | 223 | 165 |
+| 第 6 次被擋 | `switch_limit` | 1,311 | 980 |
+| 當天更正 | `correction`，任何平台 | 255 | 190 |
+| 全部收回後再宣告 | 有效、清單不是空的，那張卡片之前有有效紀錄、一個帳號都沒宣告 | 307 | 230 |
+| 帳號被兩張以上的卡宣告 | 有效，之後清單裡有一個帳號被兩張以上的卡宣告 | 4,414 | 3,300 |
+
+量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：單獨跑這個檔約 107 秒。Go 算答案（含編譯測試）約 0.7 秒，記憶體 0.07 秒，Durable Object 約 106 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返，加上 100 次讀 `rule-state`。
 
 ## 三樣不是設定值的東西
 
@@ -234,7 +264,7 @@ node --experimental-strip-types --test test/sequence.test.ts
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -563,6 +593,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 讓某一張表的寫入失敗 | `worker.roster.failWritesTo("cards")`，`(null)` 恢復 |
 | 把存著的規則版本改成另一個數字、改回來 | `worker.roster.setStoredRulesVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
 | 對存著的狀態跑一筆標準答案的事件 | `worker.roster.applyRuleEvent(事件)` |
+| 讀名冊上最晚的有效日期、每個帳號底下的卡片數 | `worker.roster.ruleState(場合字串, 匿名編號)` |
 | 讓後台自己出錯 | `worker.roster.breakTables()` |
 | 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
 | 讀存著的紀錄和名冊那一列、照規格重算 | `worker.roster.stored()` 讀出來；`test/records.ts` 的 `checkRoster(worker)` 重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |

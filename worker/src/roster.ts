@@ -405,7 +405,7 @@ export class Roster extends DurableObject<Env> {
       this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
       sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
-      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.#accountCards(record.scopeString, a.platform, a.username) })) };
+      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })) };
     });
     return { outcome: "written", record: written };
   }
@@ -438,8 +438,12 @@ export class Roster extends DurableObject<Env> {
    * The number of cards of a scope whose `current` on a platform is this
    * username. It reads every card's row: the tables a page reads will have
    * this number by account (#68), and this then asks them.
+   *
+   * `protected`, like `ruleState`, so that the test build counts the cards
+   * of each account with this same query when it compares the stored state
+   * with Go's roster/ (its `testRuleState`). It is not overridden.
    */
-  #accountCards(scopeString: string, platform: string, username: string): number {
+  protected accountCards(scopeString: string, platform: string, username: string): number {
     return this.ctx.storage.sql.exec<{ cards: number }>("SELECT COUNT(*) AS cards FROM cards WHERE scope_string = ? AND json_extract(slots, ?) = ?", scopeString, `$."${platform}".current`, username).one().cards;
   }
 

@@ -1,12 +1,21 @@
 // The long sequence of records that Go's roster/ and protocol/'s rules are
-// compared on (test/sequence.test.ts, #73): the generator, the answers in
-// the spelling of spec/vectors/roster-rules.json, and the comparison of
-// one record's answers.
+// compared on (test/sequence.test.ts, #73): the generator, the files
+// exchanged with Go, the counts printed, and the comparison of one
+// record's answers.
+//
+// The files are events.json and answers.json, in the shape of a case of
+// spec/vectors/roster-rules.json extended with fields that are not in
+// spec/ (Sequence, GoAnswers): an agreement between this file and
+// roster/sequence_test.go only.
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { type Day, dayOf, formatDay, parseDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
+import type { CardState, Kind, Reason } from "iamreal-protocol/roster-rules.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedIdText } from "iamreal-protocol/scoped-id.ts";
+import { type SlotJson, slotToJson } from "../src/slot-json.ts";
+
+export type { SlotJson };
 
 /** An event of spec/vectors/roster-rules.json: a well-formed record with the answers of checks 1 and 3. */
 export interface SequenceEvent {
@@ -20,25 +29,28 @@ export interface SequenceEvent {
   crl_dates: string[];
 }
 
-/** A sequence: a case of the vectors without its answers. */
+/**
+ * events.json: a case of the vectors without its answers, and
+ * `checkpoint_every`, how often Go lists the accounts (not in spec/).
+ */
 export interface Sequence {
   name: string;
   roster: "test";
   events: SequenceEvent[];
+  checkpoint_every: number;
 }
 
 /**
  * The random numbers of the generator: mulberry32, a 32-bit state that
- * every call adds 0x6D2B79F5 to and mixes. Written here rather than taken
- * from the language, so that one seed gives the same sequence on every
- * machine and every version of Node; any language with 32-bit integer
- * arithmetic can run it.
+ * every call adds 0x6D2B79F5 to and mixes, with 32-bit integer operations
+ * only. Written here rather than taken from Node, so that the sequence of a
+ * seed does not depend on the version of Node.
  */
 function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
+  let state = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -46,9 +58,9 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
- * How the generator behaves. Tuned so that a sequence of 10,000 records
- * has every reason code and every kind at least 100 times
- * (test/sequence.test.ts prints the counts).
+ * How the generator behaves. Tuned so that the sequence of seed 1 and
+ * 10,000 records has every reason code, and every kind on every platform, at
+ * least 100 times (test/sequence.test.ts prints the counts).
  */
 const SHAPE = {
   /**
@@ -74,12 +86,19 @@ const SHAPE = {
   noProof: 0.03,
   /** The chance that no CRL behind the record's root fits its date. */
   noRoot: 0.03,
+  /**
+   * The chance that a record is of a card that left the window not long
+   * ago (one of the 20 before it), dated 4 days before the day: a card of
+   * the window has almost always a record of a later date, so this is how
+   * a record exactly 4 days back is often valid (check 4's bound).
+   */
+  comeBack: 0.04,
 };
 
 /**
  * The record's date against the day: mostly the day, often the day before
- * (a challenge taken before midnight), sometimes a few days back (more than
- * check 4's 4 days or less), sometimes up to 3 days ahead.
+ * (a challenge taken before midnight), sometimes 2 to 4 days back (within
+ * check 4's 4 days) or 5 to 8 (beyond them), sometimes 1 to 3 days ahead.
  */
 function dateOffset(rand: () => number): number {
   const r = rand();
@@ -113,7 +132,7 @@ function crlDates(rand: () => number, d: Day): Day[] {
  * dates back and forth around a day that moves on slowly. A longer sequence
  * of the same seed starts with the shorter one.
  */
-export function generateSequence({ seed, length }: { seed: number; length: number }): Sequence {
+export function generateSequence({ seed, length, checkpointEvery = 100 }: { seed: number; length: number; checkpointEvery?: number }): Sequence {
   const rand = mulberry32(seed);
   const bytes = (n: number): Uint8Array => Uint8Array.from({ length: n }, () => Math.floor(rand() * 256));
   const platforms = platformsOf("test").map((p) => p.platform);
@@ -128,17 +147,19 @@ export function generateSequence({ seed, length }: { seed: number; length: numbe
   const events: SequenceEvent[] = [];
   for (let i = 0; i < length; i++) {
     if (rand() < SHAPE.nextDay) day++;
-    const card = cards[(Math.floor(i / SHAPE.slide) + Math.floor(rand() * SHAPE.window)) % SHAPE.cards]!;
+    const from = Math.floor(i / SHAPE.slide);
+    const comesBack = rand() < SHAPE.comeBack;
+    const index = comesBack ? from - 1 - Math.floor(rand() * 20) : from + Math.floor(rand() * SHAPE.window);
+    const card = cards[((index % SHAPE.cards) + SHAPE.cards) % SHAPE.cards]!;
     for (const p of platforms) {
       const r = rand();
       if (r < SHAPE.changeAccount) card.wants.set(p, pick(SHAPE.usernames));
       else if (r < SHAPE.changeAccount + SHAPE.dropAccount) card.wants.set(p, null);
     }
     const accounts = rand() < SHAPE.emptyList ? [] : platforms.flatMap((p) => (card.wants.get(p) ? [{ platform: p, username: card.wants.get(p)! }] : []));
-    const challenge = challenges.length > 0 && rand() < SHAPE.reuseChallenge ? pick(challenges.slice(-30)) : `${formatDay(day + dateOffset(rand))}.${encodeBase32(bytes(16))}`;
+    const challenge = challenges.length > 0 && rand() < SHAPE.reuseChallenge ? pick(challenges.slice(-30)) : `${formatDay(day + (comesBack ? -4 : dateOffset(rand)))}.${encodeBase32(bytes(16))}`;
     challenges.push(challenge);
     const date = challenge.slice(0, 10);
-    const d = parseDay(date)!;
     events.push({
       seq: i + 1,
       scope_string: scopeOf("test"),
@@ -147,18 +168,10 @@ export function generateSequence({ seed, length }: { seed: number; length: numbe
       challenge,
       date,
       verifies: rand() >= SHAPE.noProof,
-      crl_dates: crlDates(rand, d).map(formatDay),
+      crl_dates: crlDates(rand, parseDay(date)!).map(formatDay),
     });
   }
-  return { name: `sequence of seed ${seed}`, roster: "test", events };
-}
-
-/** A slot in the spelling of the vectors' `state` (and of `card-state`'s `platforms`). */
-export interface SlotJson {
-  current: string | null;
-  last_declared: string | null;
-  switch_count: number;
-  correction_date: string | null;
+  return { name: `sequence of seed ${seed}`, roster: "test", events, checkpoint_every: checkpointEvery };
 }
 
 /** A card's state after a record: last_card_proof null for a card without a valid record. */
@@ -166,6 +179,15 @@ export interface CardJson {
   last_card_proof: string | null;
   proofs_on_last_date: number;
   slots: Record<string, SlotJson>;
+}
+
+/** A card's state (protocol/) in the spelling of the vectors' `state`; a slot in the one spelling the back end has (src/slot-json.ts). */
+export function cardJsonOf(card: CardState): CardJson {
+  return {
+    last_card_proof: card.lastCardProof === null ? null : formatDay(card.lastCardProof),
+    proofs_on_last_date: card.proofsOnLastDate,
+    slots: Object.fromEntries([...card.slots].map(([p, s]) => [p, slotToJson(s)])),
+  };
 }
 
 /** A record's result in the spelling of the vectors' `results`, without `seq`. */
@@ -181,24 +203,44 @@ export interface Answer {
   card: CardJson;
 }
 
+/** An account and the number of cards that declare it now: `account_cards`. */
+export interface AccountCount {
+  scope_string: string;
+  platform: string;
+  username: string;
+  account_cards: number;
+}
+
 /**
- * What Go's roster/ writes for a sequence (roster/sequence_test.go,
- * answers.json): the case of the vectors with its `results` and final
- * `state`, and `cards`, the state of each record's card after it.
+ * answers.json, what Go's roster/ writes for a sequence
+ * (roster/sequence_test.go): the case of the vectors with its `results` and
+ * final `state`, and, not in spec/: `rules_version`; for each record,
+ * `cards`, the state of its card after it, and `latest_valid_dates`, the
+ * latest date among the valid records up to it; and `checkpoints`, every
+ * declared account with its number of cards, after every
+ * `checkpoint_every` records and after the last.
  */
-export interface GoAnswers extends Omit<Sequence, "roster"> {
+export interface GoAnswers {
   rules_version: number;
+  name: string;
   roster: string;
+  events: SequenceEvent[];
   results: (ResultJson & { seq: number })[];
   cards: (CardJson & { scope_string: string; scoped_id: string })[];
+  latest_valid_dates: (string | null)[];
+  checkpoints: { after: number; accounts: AccountCount[] }[];
   state: unknown[];
 }
 
-/** The reason codes of spec/roster-rules.md, "Per record", and the kinds of "Event rules". */
-export const REASONS = ["proof", "challenge_reused", "root", "date_order", "empty", "switch_limit", "daily_limit"] as const;
-export const KINDS = ["first", "refresh", "correction", "switch", "withdraw"] as const;
+/**
+ * The reason codes of spec/roster-rules.md, "Per record", and the kinds of
+ * "Event rules": every one of protocol/'s types, and no other (a code added
+ * there and not here fails the type check).
+ */
+export const REASONS = Object.keys({ proof: 0, challenge_reused: 0, root: 0, date_order: 0, empty: 0, switch_limit: 0, daily_limit: 0 } satisfies Record<Reason, 0>) as Reason[];
+export const KINDS = Object.keys({ first: 0, refresh: 0, correction: 0, switch: 0, withdraw: 0 } satisfies Record<Kind, 0>) as Kind[];
 
-/** How many records have each reason code, and how many (platform, kind) pairs each kind, on each platform and in all. */
+/** How many records have each reason code, and how many (platform, kind) pairs each kind, in all and on each platform (`platform kind`). */
 export function statistics(results: readonly ResultJson[]): { valid: number; reasons: Record<string, number>; kinds: Record<string, number>; byPlatform: Record<string, number> } {
   const reasons: Record<string, number> = Object.fromEntries(REASONS.map((r) => [r, 0]));
   const kinds: Record<string, number> = Object.fromEntries(KINDS.map((k) => [k, 0]));
@@ -218,7 +260,72 @@ export function statistics(results: readonly ResultJson[]): { valid: number; rea
   return { valid, reasons, kinds, byPlatform };
 }
 
-/** The first field where two answers differ: a path such as `card.slots.threads.switch_count`, and both values. */
+/** The cases of spec/roster-rules.md a sequence must hold often (scenarios). */
+export type Scenario =
+  | "around_midnight"
+  | "more_than_4_days_back"
+  | "exactly_4_days_back_valid"
+  | "fifth_switch"
+  | "sixth_switch_blocked"
+  | "correction"
+  | "declared_again_after_withdrawing_all"
+  | "account_of_several_cards";
+
+/**
+ * How many times each case happens in a sequence, read from its events and
+ * Go's answers (the roster's latest valid date before each record, the
+ * state of each card after each record), not from protocol/:
+ *
+ * - `around_midnight`: a valid record dated the day before the roster's latest valid date
+ * - `more_than_4_days_back`: a `date_order` record dated more than 4 days before it
+ * - `exactly_4_days_back_valid`: a valid record dated exactly 4 days before it
+ * - `fifth_switch`: a switch that makes the slot's `switch_count` 5
+ * - `sixth_switch_blocked`: a `switch_limit` record
+ * - `correction`: a correction, on any platform
+ * - `declared_again_after_withdrawing_all`: a valid record that declares an account, of a card that had valid records and declared nothing
+ * - `account_of_several_cards`: a valid record after which an account of its list is declared by 2 cards or more
+ */
+export function scenarios(events: readonly SequenceEvent[], answers: Pick<GoAnswers, "results" | "cards" | "latest_valid_dates">): Record<Scenario, number> {
+  const count: Record<Scenario, number> = {
+    around_midnight: 0,
+    more_than_4_days_back: 0,
+    exactly_4_days_back_valid: 0,
+    fifth_switch: 0,
+    sixth_switch_blocked: 0,
+    correction: 0,
+    declared_again_after_withdrawing_all: 0,
+    account_of_several_cards: 0,
+  };
+  /** Each card's state after its last record so far, by scope and scoped ID. */
+  const cards = new Map<string, CardJson>();
+  events.forEach((e, i) => {
+    const result = answers.results[i]!;
+    const before = i === 0 ? null : answers.latest_valid_dates[i - 1]!;
+    const back = before === null ? null : parseDay(before)! - parseDay(e.date)!;
+    const cardKey = `${e.scope_string} ${e.scoped_id}`;
+    const cardBefore = cards.get(cardKey);
+    const after = answers.cards[i]!;
+    cards.set(cardKey, after);
+    if (!result.valid) {
+      if (result.reason === "date_order" && back !== null && back > 4) count.more_than_4_days_back++;
+      if (result.reason === "switch_limit") count.sixth_switch_blocked++;
+      return;
+    }
+    if (back === 1) count.around_midnight++;
+    if (back === 4) count.exactly_4_days_back_valid++;
+    for (const k of result.kinds ?? []) {
+      if (k.kind === "switch" && after.slots[k.platform]!.switch_count === 5) count.fifth_switch++;
+      if (k.kind === "correction") count.correction++;
+    }
+    const declaredNothing = cardBefore !== undefined && cardBefore.last_card_proof !== null && Object.values(cardBefore.slots).every((s) => s.current === null);
+    if (declaredNothing && e.accounts.length > 0) count.declared_again_after_withdrawing_all++;
+    const shared = e.accounts.some((a) => [...cards].filter(([key, c]) => key.startsWith(`${e.scope_string} `) && c.slots[a.platform]?.current === a.username).length >= 2);
+    if (shared) count.account_of_several_cards++;
+  });
+  return count;
+}
+
+/** Where two values differ: a path such as `card.slots.threads.switch_count`, and both values. */
 export interface Difference {
   field: string;
   want: unknown;
@@ -228,22 +335,23 @@ export interface Difference {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const key = (path: string, k: string): string => (/^[a-z_][a-z0-9_]*$/.test(k) ? `${path}.${k}` : `${path}[${JSON.stringify(k)}]`);
 
-function differ(path: string, want: unknown, got: unknown): Difference | null {
+/** The first place, in the order of `want`, where `got` differs from it, the path starting with `field`; null if they are the same. */
+export function difference(field: string, want: unknown, got: unknown): Difference | null {
   if (Array.isArray(want) && Array.isArray(got)) {
     for (let i = 0; i < Math.max(want.length, got.length); i++) {
-      const d = differ(`${path}[${i}]`, want[i], got[i]);
+      const d = difference(`${field}[${i}]`, want[i], got[i]);
       if (d) return d;
     }
     return null;
   }
   if (isObject(want) && isObject(got)) {
     for (const k of [...new Set([...Object.keys(want), ...Object.keys(got)])]) {
-      const d = differ(key(path, k), want[k], got[k]);
+      const d = difference(key(field, k), want[k], got[k]);
       if (d) return d;
     }
     return null;
   }
-  return Object.is(want, got) ? null : { field: path, want, got };
+  return Object.is(want, got) ? null : { field, want, got };
 }
 
 /**
@@ -252,5 +360,5 @@ function differ(path: string, want: unknown, got: unknown): Difference | null {
  * reason and the kinds.
  */
 export function firstDifference(want: Answer, got: Answer): Difference | null {
-  return differ("result", want.result, got.result) ?? differ("card", want.card, got.card);
+  return difference("result", want.result, got.result) ?? difference("card", want.card, got.card);
 }
