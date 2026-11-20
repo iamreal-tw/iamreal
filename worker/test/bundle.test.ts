@@ -10,9 +10,12 @@
 // way (an array of numbers, pieces put together when the Worker runs) is
 // not.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { basename } from "node:path";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { VK_SHA256, WASM_FILE, WASM_SHA256, vkFile } from "../scripts/engine-files.ts";
 import { type TestBuildValues, WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./harness.ts";
 
@@ -28,6 +31,8 @@ interface Build {
   readonly code: string;
   /** What wrangler printed. */
   readonly output: string;
+  /** The modules that are not JavaScript: the name each was imported by, and its SHA-256. */
+  readonly files: Readonly<Record<string, string>>;
 }
 
 function build(kind: "deploy" | "test", values: TestBuildValues): Build {
@@ -37,7 +42,13 @@ function build(kind: "deploy" | "test", values: TestBuildValues): Build {
     const output = kind === "deploy" ? buildWorker("deploy", out) : buildWorker("test", out, values);
     const files = filesUnder(out).filter((f) => !/\.map$|README\.md$/.test(f));
     assert.ok(files.length > 0, `${kind}: the build has files`);
-    return { code: files.map((f) => readFileSync(f, "utf8")).join("\n"), output };
+    const others = files.filter((f) => !f.endsWith(".js"));
+    return {
+      code: files.map((f) => readFileSync(f, "utf8")).join("\n"),
+      output,
+      // wrangler names such a module `<hash>-<the file's name>`.
+      files: Object.fromEntries(others.map((f) => [basename(f).replace(/^[0-9a-f]{40}-/, ""), createHash("sha256").update(readFileSync(f)).digest("hex")])),
+    };
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
@@ -115,4 +126,14 @@ test("the test build holds another key, the fake MOICA and the clock's switch: t
   assert.notDeepEqual(runs, moduliInSpec().sort());
   assert.notDeepEqual(urlsIn(testBuild.code), addressesInCrlReadme().sort());
   assert.deepEqual(bindingsIn(testBuild.output), bindingsIn(deploy.output));
+});
+
+test("the proof verifier's files in a build are Barretenberg's module and the two verification keys, each with its SHA-256", () => {
+  const checked = { [WASM_FILE]: WASM_SHA256, ...Object.fromEntries(Object.entries(VK_SHA256).map(([circuit, sha]) => [vkFile(circuit), sha])) };
+  // The test build calls the verifier (test-build/index.ts), so it holds the files.
+  assert.deepEqual(build("test", values).files, checked);
+  // The deployed Worker has nothing that calls the verifier yet, so the
+  // bundler leaves it out. Once it verifies submissions (#67), its files
+  // must be these same ones.
+  if (Object.keys(deploy.files).length > 0) assert.deepEqual(deploy.files, checked);
 });
