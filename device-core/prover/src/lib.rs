@@ -22,7 +22,7 @@ macro_rules! for_tests {
         mod $name;
     )*};
 }
-for_tests!(artifacts, hashes, quiet, session, tree);
+for_tests!(artifacts, hashes, proof, quiet, session, tree, witness);
 
 use iamreal_device_checks::challenge::parse_challenge;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
@@ -239,6 +239,15 @@ fn accounts_of(json: &[u8]) -> Result<Vec<AccountJson>, i32> {
     }
 }
 
+fn accounts(list: &[AccountJson]) -> Vec<Account<'_>> {
+    list.iter()
+        .map(|a| Account {
+            platform: &a.platform,
+            username: &a.username,
+        })
+        .collect()
+}
+
 /// The declaration code (spec/declaration-code.md) of a list of accounts
 /// and a challenge, in the scope of `roster`: 31 bytes in `*out`, the
 /// second message the card signs.
@@ -270,17 +279,10 @@ pub unsafe extern "C" fn idc_declaration_code(
             )
         };
         let list = accounts_of(accounts_json)?;
-        let accounts: Vec<Account<'_>> = list
-            .iter()
-            .map(|a| Account {
-                platform: &a.platform,
-                username: &a.username,
-            })
-            .collect();
         parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
         let code = declaration_code(
             scope_string(roster),
-            &accounts,
+            &accounts(&list),
             challenge,
             &mut hashes::Sha2,
         )
@@ -462,6 +464,61 @@ pub unsafe extern "C" fn idc_session_card_state_request(
         // SAFETY: the caller's promise.
         let scope_signature = unsafe { input(scope_signature, scope_signature_len)? };
         session::card_state_request(session, now, scope_signature)
+    })
+}
+
+/// See [`session::records_request`]. It makes the proof: seconds, on as
+/// many threads as the device has cores. Call it from a background thread.
+///
+/// # Safety
+/// Each pointer points to as many bytes as its length says; `out` is null
+/// or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_records_request(
+    session: u64,
+    circuit: *const u8,
+    circuit_len: usize,
+    verification_key: *const u8,
+    verification_key_len: usize,
+    crs_g1: *const u8,
+    crs_g1_len: usize,
+    crs_g2: *const u8,
+    crs_g2_len: usize,
+    accounts_json: *const u8,
+    accounts_json_len: usize,
+    challenge: *const u8,
+    challenge_len: usize,
+    scope_signature: *const u8,
+    scope_signature_len: usize,
+    declaration_code_signature: *const u8,
+    declaration_code_signature_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (files, accounts_json, challenge, scope_signature, declaration_code_signature) = unsafe {
+            (
+                session::Files {
+                    circuit: input(circuit, circuit_len)?,
+                    verification_key: input(verification_key, verification_key_len)?,
+                    crs_g1: input(crs_g1, crs_g1_len)?,
+                    crs_g2: input(crs_g2, crs_g2_len)?,
+                },
+                input(accounts_json, accounts_json_len)?,
+                input(challenge, challenge_len)?,
+                input(scope_signature, scope_signature_len)?,
+                input(declaration_code_signature, declaration_code_signature_len)?,
+            )
+        };
+        let list = accounts_of(accounts_json)?;
+        session::records_request(
+            session,
+            &files,
+            &accounts(&list),
+            challenge,
+            scope_signature,
+            declaration_code_signature,
+        )
     })
 }
 
