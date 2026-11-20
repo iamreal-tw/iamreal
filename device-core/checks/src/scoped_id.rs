@@ -38,9 +38,14 @@ pub fn scoped_id(
     let mut limbs = signature_limbs(signature);
     let mut state: Result<Fe, HashFailed> = Ok([0u8; 32]);
     for limb in &limbs {
-        state = state.and_then(|s| hash.poseidon2(&[s, *limb]));
+        state = state.and_then(|s| {
+            let mut inputs = [s, *limb];
+            let next = hash.poseidon2(&inputs);
+            crate::wipe(&mut inputs[1]);
+            next
+        });
     }
-    // The limbs are the signature.
+    // The limbs are the signature. What the caller's hash copied is the caller's to wipe.
     for limb in &mut limbs {
         crate::wipe(limb);
     }

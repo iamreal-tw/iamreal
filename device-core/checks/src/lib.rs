@@ -19,7 +19,8 @@ pub mod scoped_id;
 pub mod username_format;
 
 /// Overwrites `bytes` with zeros: for signatures, certificates and what is
-/// computed from them, once they are no longer needed.
+/// computed from them, once they are no longer needed. As far as safe Rust
+/// goes: the compiler is asked, not forced, to keep the write.
 pub fn wipe(bytes: &mut [u8]) {
     bytes.fill(0);
     // Keeps the compiler from dropping the write as dead.

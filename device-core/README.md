@@ -11,7 +11,7 @@
 | 目錄 | 套件 | 內容 | 依賴 |
 |---|---|---|---|
 | `checks/` | `iamreal-device-checks` | 不碰 Barretenberg 的一半：`spec/` 的算法，之後加上裝置上的檢查。不做 I/O，沒有 `unsafe`（`unsafe_code = "forbid"`）。SHA-256 和 Poseidon2 由呼叫的人傳進來（`src/hash.rs` 的兩個 trait），和 `protocol/` 的做法相同，所以之後編得成 wasm | 沒有執行期的套件 |
-| `prover/` | `iamreal-device-core` | 算證明的一半：連結 Barretenberg 預先編好的靜態函式庫，提供 Poseidon2（Barretenberg）和 SHA-256（`sha2`），之後加上見證、證明、平行建樹。對 Kotlin、Swift 開放的 C 函式都在這裡，app 連結的是它編出來的 `libiamreal_device_core.a` | `checks/`、`barretenberg-rs`、`sha2`、`serde_json` |
+| `prover/` | `iamreal-device-core` | 算證明的一半：連結 Barretenberg 預先編好的靜態函式庫，提供 Poseidon2（Barretenberg）和 SHA-256（`sha2`），之後加上見證、證明、平行建樹。對 Kotlin、Swift 開放的 C 函式都在這裡，app 連結的是它編出來的 `libiamreal_device_core.a` | `checks/`、`barretenberg-rs`、`sha2`、`serde_json`、`serde` |
 
 `checks/` 要能不帶 Barretenberg 單獨編譯和測試：`cargo test -p iamreal-device-checks` 不需要下面的靜態函式庫。
 
@@ -39,7 +39,7 @@
 
 **名稱。** 函式是 `idc_` 開頭，常數是 `IDC_` 開頭。
 
-**進來的位元組：指標加長度。** 核心只在這一次呼叫裡讀，不留指標；函式的說明沒有寫「核心留一份」的，核心也不留複本。進來的緩衝區從頭到尾是呼叫的人的：誰配置誰釋放，裡面是簽章或憑證時，呼叫的人用完自己清掉。沒有位元組可以傳 `(NULL, 0)`。
+**進來的位元組：指標加長度。** 核心只在這一次呼叫裡讀，不留指標；函式的說明沒有寫「核心留一份」的，核心也不留複本。進來的緩衝區從頭到尾是呼叫的人的：誰配置誰釋放，裡面是簽章或憑證時，呼叫的人用完自己清掉。核心自己複製出來的，核心用完蓋成零；交給 Barretenberg 的那一份由 `barretenberg-rs` 配置和釋放，核心蓋不到（匿名編號的 C 函式那張票要處理）。沒有位元組可以傳 `(NULL, 0)`。
 
 **出去的位元組：`idc_buf`。** 核心配置、填好 `ptr` 和 `len`。呼叫的人讀完（要留就自己複製一份），用 `idc_buf_free` 還給核心，每一塊還一次。`idc_buf_free` 先把內容蓋成零再釋放，並把 `idc_buf` 設成空的，所以同一個 `idc_buf` 再呼叫一次不會出事。不要用 `free()` 釋放它。
 
@@ -60,13 +60,13 @@
 
 **名冊是數字。** `IDC_ROSTER_PRODUCTION`（0）、`IDC_ROSTER_TEST`（1）。一個 app 建置時就定了是哪一份（ADR-0036），每次呼叫都傳那一個；場合字串由核心照這個數字拿寫死的那一條。
 
-**執行緒。** 每個函式可以在任何執行緒呼叫，做完才回來；核心不保留跨呼叫的全域狀態。會算很久的（之後的建樹、證明）由 app 放到背景的執行緒。
+**執行緒。** 每個函式可以在任何執行緒呼叫，做完才回來；這裡的 Rust 不保留跨呼叫的狀態，每次呼叫各自開一個 Barretenberg 的介面（`barretenberg-rs` 的說明：一個介面只給一個執行緒用）。會算很久的（之後的建樹、證明）由 app 放到背景的執行緒。
 
 **不做 I/O。** 沒有函式收 PIN、開檔案、連網路、碰 NFC；核心也不讀時鐘，需要現在的時間時由呼叫的人傳進來。
 
 **版本。** `IDC_ABI_VERSION` 在函式改了或拿掉時加一號；`idc_abi_version()` 回傳連結進來的函式庫是哪一版，app 可以在啟動時比對標頭檔的數字。
 
-**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，app 拿不到 Poseidon2，就不能自己算匿名編號（ADR-0034「核心擋住的順序」）。現在匿名編號只在 Rust 裡（`checks/src/scoped_id.rs`），還沒有 C 函式：它要等「檢查都通過了」的結果做出來，收那個結果才算。`prover/src/hashes.rs` 在 Rust 裡是 `pub`，那是給這個目錄的測試用的，app 看不到。
+**Poseidon2 不開放成 C 函式。** 匿名編號要用 Poseidon2 算，`idc_` 的函式裡沒有 Poseidon2，app 就不能靠它們自己算匿名編號（ADR-0034「核心擋住的順序」）。這一條擋的是寫錯順序，不是擋存心繞過：靜態函式庫裡還有 Barretenberg 自己的 C 函式（`bbapi`），所以 app 的程式只准呼叫標頭檔裡 `idc_` 開頭的函式，審 `android/`、`ios/` 時要看這一點。現在匿名編號只在 Rust 裡（`checks/src/scoped_id.rs`），還沒有 C 函式：它要等「檢查都通過了」的結果做出來，收那個結果才算。`prover/src/hashes.rs` 在 Rust 裡是 `pub`，那是給這個目錄的測試用的，app 看不到。
 
 Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函式；那一層在 `android/`，照同樣的規矩釋放和清除。
 
@@ -87,8 +87,9 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 - **Rust 1.99.1**（`rust-toolchain.toml`；2026-10-15 發布）。有 rustup 的機器在這個目錄下跑 `cargo` 就會用它
 - **`barretenberg-rs` 6.0.0**（只開 `ffi`）：呼叫 Barretenberg。版本和 `web/` 釘的 `@aztec-foundation/bb.js` 相同（ADR-0034）
 - **`sha2` 0.11.1**：SHA-256（宣告碼）。Noir `v1.0.0` 的 ACVM 用的也是這一版
-- **`serde_json` 1.0.154**：讀 C 函式收到的 JSON；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這一版
-- 上面三個帶進來的套件和版本在 `Cargo.lock`（進版控）。建置一律加 `--locked`
+- **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次、多出來的鍵都不收；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
+- `checks/` 的測試另外用 `sha2`、`serde_json`（只在測試）
+- 上面幾個帶進來的套件和版本在 `Cargo.lock`（進版控）。建置一律加 `--locked`
 
 Noir 的 ACVM（算見證）在算證明的那張票才加，版本是 `v1.0.0`，和 `web/` 釘的 `@noir-lang/noir_js` 相同。
 
@@ -111,7 +112,7 @@ Noir 的 ACVM（算見證）在算證明的那張票才加，版本是 `v1.0.0`�
 
 ```
 cd device-core
-export BB_LIB_DIR="$(./fetch-barretenberg.sh)"
+BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR
 cargo fmt --check
 cargo clippy --locked --release --all-targets -- -D warnings
 cargo test --locked --release

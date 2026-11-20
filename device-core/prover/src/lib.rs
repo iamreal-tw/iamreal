@@ -71,7 +71,11 @@ fn output(out: *mut IdcBuf, f: impl FnOnce() -> Result<Vec<u8>, i32>) -> i32 {
             IDC_OK
         }
         Ok(Err(code)) => code,
-        Err(_) => IDC_ERR_INTERNAL,
+        Err(payload) => {
+            // Dropping what a panic carried could panic again.
+            std::mem::forget(payload);
+            IDC_ERR_INTERNAL
+        }
     }
 }
 
@@ -88,7 +92,11 @@ unsafe fn input<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], i32> {
             Err(IDC_ERR_ARGUMENT)
         };
     }
-    // SAFETY: the caller's promise.
+    // A slice is never longer than `isize::MAX` bytes.
+    if isize::try_from(len).is_err() {
+        return Err(IDC_ERR_ARGUMENT);
+    }
+    // SAFETY: the caller's promise, and the length was checked.
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
@@ -156,30 +164,61 @@ pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 
     output(out, || Ok(scope_string(roster_of(roster)?).to_vec()))
 }
 
-/// The account list as the C functions take it: a JSON array of
-/// `{"platform":"…","username":"…"}`, the shape of a record's `accounts`
-/// (spec/record.md).
-fn accounts_of(json: &serde_json::Value) -> Result<Vec<Account<'_>>, i32> {
-    let list = json.as_array().ok_or(IDC_ERR_INPUT)?;
-    list.iter()
-        .map(|item| {
-            let object = item
-                .as_object()
-                .filter(|o| o.len() == 2)
-                .ok_or(IDC_ERR_INPUT)?;
-            let field = |key| {
-                object
-                    .get(key)
-                    .and_then(|v| v.as_str())
-                    .ok_or(IDC_ERR_INPUT)
-            };
-            let (platform, username) = (field("platform")?, field("username")?);
-            if !is_platform_id(platform.as_bytes()) || !is_any_username(username.as_bytes()) {
-                return Err(IDC_ERR_INPUT);
+/// One account of the list a C function takes: `{"platform":"…","username":"…"}`,
+/// the shape of a record's `accounts` (spec/record.md). Exactly these two
+/// keys, each once, both strings: a list has one reading.
+struct AccountJson {
+    platform: String,
+    username: String,
+}
+
+impl<'de> serde::Deserialize<'de> for AccountJson {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Keys;
+        impl<'de> serde::de::Visitor<'de> for Keys {
+            type Value = AccountJson;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an account")
             }
-            Ok(Account { platform, username })
-        })
-        .collect()
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<AccountJson, A::Error> {
+                use serde::de::Error;
+                let (mut platform, mut username) = (None, None);
+                while let Some(key) = map.next_key::<String>()? {
+                    let slot = match key.as_str() {
+                        "platform" => &mut platform,
+                        "username" => &mut username,
+                        _ => return Err(A::Error::custom("a key that is not of an account")),
+                    };
+                    if slot.replace(map.next_value::<String>()?).is_some() {
+                        return Err(A::Error::custom("a key twice"));
+                    }
+                }
+                match (platform, username) {
+                    (Some(platform), Some(username)) => Ok(AccountJson { platform, username }),
+                    _ => Err(A::Error::custom("a key is missing")),
+                }
+            }
+        }
+        deserializer.deserialize_map(Keys)
+    }
+}
+
+/// Reads the JSON array of accounts and checks each value's form.
+fn accounts_of(json: &[u8]) -> Result<Vec<AccountJson>, i32> {
+    let list: Vec<AccountJson> = serde_json::from_slice(json).map_err(|_| IDC_ERR_INPUT)?;
+    let well_formed = |a: &AccountJson| {
+        is_platform_id(a.platform.as_bytes()) && is_any_username(a.username.as_bytes())
+    };
+    if list.iter().all(well_formed) {
+        Ok(list)
+    } else {
+        Err(IDC_ERR_INPUT)
+    }
 }
 
 /// The declaration code (spec/declaration-code.md) of a list of accounts
@@ -212,9 +251,14 @@ pub unsafe extern "C" fn idc_declaration_code(
                 input(challenge, challenge_len)?,
             )
         };
-        let json: serde_json::Value =
-            serde_json::from_slice(accounts_json).map_err(|_| IDC_ERR_INPUT)?;
-        let accounts = accounts_of(&json)?;
+        let list = accounts_of(accounts_json)?;
+        let accounts: Vec<Account<'_>> = list
+            .iter()
+            .map(|a| Account {
+                platform: &a.platform,
+                username: &a.username,
+            })
+            .collect();
         parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
         let code = declaration_code(
             scope_string(roster),

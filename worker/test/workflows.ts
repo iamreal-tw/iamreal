@@ -224,6 +224,8 @@ export const CHECK_BB = `echo "${BB_AMD64_LINUX_SHA256}  $IAMREAL_BB" | sha256su
  * device-core/barretenberg.sha256 before unpacking it.
  */
 export const DEVICE_CORE_JOB = "device-core";
+/** How a step of that job gets Barretenberg: the directory the script prints, and nothing if the script fails. */
+export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && ';
 
 /** What each action may be given, exactly. */
 const WITH: Readonly<Record<string, YamlMap>> = {
@@ -418,7 +420,12 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
           }
         }
       }
-      if (!checksBb && !(f === "checks.yml" && name === DEVICE_CORE_JOB)) j("does not check bb's SHA-256");
+      if (f === "checks.yml" && name === DEVICE_CORE_JOB) {
+        // Every step that runs cargo with Barretenberg gets it from the script that checks its SHA-256.
+        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
+        if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
+        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+      } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }
   return problems;

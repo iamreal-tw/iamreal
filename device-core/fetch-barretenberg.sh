@@ -24,8 +24,12 @@ else
   esac
 fi
 
+case $platform in
+  *[!a-z0-9_-]* | "") echo "fetch-barretenberg: not the name of a platform" >&2; exit 1 ;;
+esac
+
 archive=barretenberg-static-$platform.tar.gz
-line=$(grep "  $archive\$" "$here/barretenberg.sha256") || {
+line=$(grep -F "  $archive" "$here/barretenberg.sha256") || {
   echo "fetch-barretenberg: $archive is not in barretenberg.sha256" >&2
   exit 1
 }

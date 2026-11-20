@@ -120,7 +120,7 @@ jobs:
         run: cargo fmt --check
       - name: cargo clippy
         working-directory: device-core
-        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" cargo clippy --locked --release --all-targets -- -D warnings
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo clippy --locked --release --all-targets -- -D warnings
       - name: cargo test
         working-directory: device-core
-        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" cargo test --locked --release
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test --locked --release

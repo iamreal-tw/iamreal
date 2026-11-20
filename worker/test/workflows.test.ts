@@ -151,9 +151,10 @@ const CHANGES: Record<string, Change[]> = {
   "95 CHROME back in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      CHROME: /usr/bin/google-chrome\n`)],
   "96 the WRANGLER values in checks-browser.yml": [replace(B, "env:\n  # bb", 'env:\n  WRANGLER_SEND_METRICS: "false"\n  # bb')],
   "97 a fourth workflow": [addFile("checks-other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
-  "98 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
-  "99 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
   "98 a job of checks-browser.yml without the check of bb": [replace(B, '        run: echo "5bbb', '        run: echo "0bbb')],
+  "99 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
+  "100 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
+  "101 the device-core job taking Barretenberg without the script": [replace(C, 'run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test', "run: BARRETENBERG_VERSION=6.0.0 cargo test")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
