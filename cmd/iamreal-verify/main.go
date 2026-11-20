@@ -24,7 +24,7 @@ import (
 // Exit codes.
 const (
 	exitAllValid = 0 // the file is valid and every record is valid
-	exitInvalid  = 1 // the file is broken, a record is invalid, the CRL archive's index differs from its files, or a record hash list or the fingerprint file has a problem
+	exitInvalid  = 1 // the file is broken, a record is invalid, the CRL archive's index differs from its files, a record hash list or the fingerprint file has a problem, or the card state file is broken or has a card that differs
 	exitError    = 2 // the check could not be made
 )
 
@@ -115,6 +115,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	data := fs.String("data", defaultData, "`URL or directory` of the published files, without a roster file: the roster directory under roster/, the CRL archive under crl/")
 	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+", for a roster file or directory; without it no root is recognized")
 	trustIndex := fs.Bool("crl-trust-index", false, "read only the archive's index, without checking it against the CRL files")
+	cardState := fs.String("card-state", "", "`date` (YYYY-MM-DD) of the card state file to compare, for a roster directory; by default that of the fingerprint file's last line")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] [roster file | roster directory | -]")
 		fs.PrintDefaults()
@@ -177,6 +178,19 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 		dirSrc, crlSrc, without = src.sub("roster"), src.sub("crl"), noneWithoutCount
 		fmt.Fprintf(stderr, "iamreal-verify: reading the published files at %s\n", src)
+	}
+	var cardStateDate *verifier.Date // the date asked for by -card-state
+	if *cardState != "" {
+		if dirSrc == nil {
+			fmt.Fprintln(stderr, "iamreal-verify: -card-state goes with a roster directory or -data: a roster file has no fingerprint file")
+			return exitError
+		}
+		date, err := verifier.ParseDate(*cardState)
+		if err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: -card-state %q: %v\n", *cardState, err)
+			return exitError
+		}
+		cardStateDate = &date
 	}
 	if *trustIndex && *archiveDir == "" && crlSrc == nil {
 		fmt.Fprintln(stderr, "iamreal-verify: -crl-trust-index needs -crl-archive")
@@ -277,6 +291,19 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		if len(fpProblems) == 0 {
 			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, len(splitLines(pub.fingerprints.data)))
 		}
+		// The card state file of a date, against the states computed.
+		csProblems, csSummary, err := checkCardState(dirSrc, pub, r, rep, cardStateDate)
+		if err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
+			return exitError
+		}
+		for _, p := range csProblems {
+			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
+		}
+		if csSummary != "" {
+			fmt.Fprintf(stderr, "iamreal-verify: %s\n", csSummary)
+		}
+		dirProblems = append(dirProblems, csProblems...)
 	}
 	if *asJSON {
 		err = writeJSON(stdout, rep)

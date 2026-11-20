@@ -44,7 +44,7 @@
 - 目錄在第一次需要時才建立，建立時附 `README.md`：這個目錄讓人檢查什麼、怎麼單獨執行
 - Go 的程式是同一個模組，`go.mod` 在根目錄；`verifier/` 和 `roster/` 要能不帶後台單獨編譯
 - Go 的 `verifier/`、`roster/`、`crl/`、`cmd/` 是後台以外的第二份實作，每天的重驗用它（ADR-0025、ADR-0030）。Go、TypeScript、Rust（`device-core/`，ADR-0034）的實作互不引用，只共用 `spec/`
-- `worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明有了；其餘的訪客頁面、公布名冊、限流還沒有（`worker/README.md`「現在有什麼」）。測試網站跑的是它；Go 的 `server/` 只當逐案比對的對照
+- `worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明、每天公布名冊有了；其餘的訪客頁面、限流還沒有（`worker/README.md`「現在有什麼」）。測試網站跑的是它；Go 的 `server/` 只當逐案比對的對照
 - 做任何畫面、寫任何介面文字之前，先讀 `docs/design/principles.md`
 - 兩種以上語言都要實作的算法，測試一律讀 `spec/vectors/` 裡同一份標準答案
 
