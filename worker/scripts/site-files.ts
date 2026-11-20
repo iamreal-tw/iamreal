@@ -29,10 +29,10 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * `assets.run_worker_first` of wrangler.jsonc: the Worker runs first for
  * every path but the files' own, where Static Assets looks for a file
  * first. In the local workerd a request for one of those never runs the
- * Worker, whether the file is there or not. On Cloudflare that is not
- * confirmed for a file that is not there: by the documentation such a
- * request may be handed to the Worker (README.md, "Static Assets"). The
- * Worker cannot send a file either way: it has no binding to them.
+ * Worker, whether the file is there or not. On Cloudflare that was seen
+ * for a file that is not there, and not yet for one that is (README.md,
+ * "Static Assets"). The Worker cannot send a file either way: it has no
+ * binding to them.
  */
 export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/pages.css", "!/proof", "!/proof/*"];
 
@@ -65,8 +65,8 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
  * - /proof and everything under it: the card proof page's headers
  *   (`PROOF_PAGE_HEADERS`). In the local workerd a rule matches whether or
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
- *   them too; on Cloudflare that is not confirmed (README.md, "Static
- *   Assets").
+ *   them too. On Cloudflare the 404 and the redirect were seen to; the
+ *   405 needs a file to be there (README.md, "Static Assets").
  * - /pages.css: the visitors' pages' headers (`VISITOR_HEADERS`), and
  *   `STYLE_SHEET_CACHE` in place of the Cache-Control Static Assets sends by
  *   itself (taken off with "!", then set: two values would be joined).

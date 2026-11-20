@@ -355,7 +355,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### Static Assets
 
-`wrangler.jsonc` 最上層的 `assets` 指到 [`site/`](site)。這些檔案由 Cloudflare 直接送，**檔案的請求不跑 Worker**（ADR-0023「靜態檔」：這些下載不經過後台的程式）。要保住的是：持卡人拿到的過卡頁面就是建置出來的那些檔，後台沒有一段程式能對不同的人送不同的內容。這件事靠兩樣：這幾個路徑先找檔案、找到就直接送；Worker 沒有 binding，讀不到檔。下面寫的行為都是在本機的 workerd 上看到的；Cloudflare 上哪些還沒確認，列在這一節後面。
+`wrangler.jsonc` 最上層的 `assets` 指到 [`site/`](site)。這些檔案由 Cloudflare 直接送，**檔案的請求不跑 Worker**（ADR-0023「靜態檔」：這些下載不經過後台的程式）。要保住的是：持卡人拿到的過卡頁面就是建置出來的那些檔，後台沒有一段程式能對不同的人送不同的內容。這件事靠兩樣：這幾個路徑先找檔案、找到就直接送；Worker 沒有 binding，讀不到檔。下面寫的行為是在本機的 workerd 上看到的；其中沒有建置時的那些，Cloudflare 上也看過了，結果相同。看過的和還沒確認的列在這一節後面。
 
 | `site/` 裡的 | 是什麼 |
 |---|---|
@@ -370,15 +370,15 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - `site/proof/` 不進版控，所以一台電腦上的那個目錄裡可以有任何東西，而 wrangler 上傳的是它在 `site/` 找到的每個檔。部署前的檢查因此核對 `site/` 裡的檔案恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那三個，`pages.css` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`：`site/proof/` 有任何檔、多一個別的檔、樣式表被改過，本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都停在檢查。改樣式表時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css`）。
 - [#69](https://github.com/iamreal-tw/iamreal/issues/69) 把 `web/` 的建置放進來時，要改的就是 `SITE_FILES` 這一條（和工作流程）。
-- 所以部署出去的 `/proof` 和它底下的網址沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`。本機的 workerd 上那是 Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭；Cloudflare 上是不是這樣還沒確認，可能是 Worker 回的「找不到這一頁」（見下面「還沒確認的」）。
+- 所以部署出去的 `/proof` 和它底下的網址沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`。那是 Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭，沒有跑 Worker；本機的 workerd 和 Cloudflare 上都是這樣（見下面「Cloudflare 上看過的」）。
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時是不是也這樣，還沒確認。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
+- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。說明頁留在 `/proof/help.html`。
-- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上，這三種回應線上帶不帶，還沒確認。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶，`405` 還沒看過（要有檔案才有 `405`）。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
 
 沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走，`/proof/help.html` 變成 `307` 到 `/proof/help`，首頁和過卡頁面連到說明頁的每個連結都多轉一次。
 
@@ -406,30 +406,34 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - [HTML handling](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/)：`none` 時只有檔案自己的路徑送得出檔案；其他三種會用 `307` 轉走 `.html` 和 `index.html`。
 - [Billing and Limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)：對靜態檔的請求免費、不限次數；排除的樣式把請求導向檔案，不執行 Worker。
 
-**只在本機的 workerd 上看過，Cloudflare 上還沒確認的**：
+**Cloudflare 上看過的**（2026-11-20，[#142](https://github.com/iamreal-tw/iamreal/pull/142) 合併後的第一次部署，`test.iamreal.tw`；線上的檔案只有 `pages.css`，`site/proof/` 是空的）：
 
-- `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 寫在 `_headers` 裡，線上會不會照樣送出。本機有送；文件沒有列出不能設的標頭，也沒有提到這兩個。部署後第一件要看的是 `/pages.css` 的回應有沒有 `Cross-Origin-Opener-Policy`（現在線上只有這個檔）。
-- **排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，還是轉給 Worker。** 本機是前者。Cloudflare 的文件有三句，讀起來不完全一致：
+| 請求 | 線上回的 | 和本機 |
+|---|---|---|
+| 部署 | 成功：只能部署 `iamreal-test` 的那把權杖可以上傳 Static Assets 的檔案 | |
+| `GET /pages.css` | `200`；`Content-Security-Policy`、`Cross-Origin-Opener-Policy: same-origin`、`Referrer-Policy`、`X-Content-Type-Options`、`X-Robots-Tag: noindex` 都有；`Cache-Control` 只有 `no-cache` | 標頭相同。`Content-Type` 線上是 `text/css`，本機是 `text/css; charset=utf-8` |
+| `GET /proof`、`GET /proof/nothing.js` | 空的 `404`，帶 `/proof` 的那一組標頭（`Document-Isolation-Policy` 在裡面）。是 Static Assets 回的：Worker 的「找不到這一頁」有內容、帶訪客頁面的標頭和 `Cache-Control` | 相同 |
+| `GET /proof/`、`GET /proof/index.html`（不跟著轉） | `301` 到 `/proof`，帶 `/proof` 的那一組標頭 | 相同 |
+| `POST /proof`、`POST /proof/nothing.js` | 空的 `404`，帶 `/proof` 的那一組標頭 | 相同（檔案不在時，其他方法也是 `404`） |
+| `POST /proof/`（不跟著轉） | `301` 到 `/proof` | 相同 |
+
+所以：
+
+- `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 寫在 `_headers` 裡，線上照樣送出。
+- **排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，不轉給 Worker。** Cloudflare 的文件有三句，讀起來不完全一致；線上的行為是第一句和第三句照字面、而「asset-first」裡沒有第二句說的那一步：
   - 排除的路徑「will follow the default asset-first routing behavior」（[Configuration and Bindings](https://developers.cloudflare.com/workers/static-assets/binding/)）。
   - 預設的行為是「If no asset matches, Cloudflare invokes that version's `fetch()` handler. … A missing asset does not automatically produce a `404` response.」（[Worker script](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)）。
   - 排除的樣式「will continue to serve assets correctly, as requests are directed to assets, without invoking your Worker script」（[Billing and Limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)，講的是超過免費額度時）。
 
-  照前兩句讀，線上檔案不存在時會轉給 Worker。那時候回的是 Worker 的「找不到這一頁」（`404`），帶訪客頁面的標頭、快取 60 秒，不是 `/proof` 的那一組；現在部署出去的 `/proof`（沒有建置）就會是這一頁。所以「後台的程式不能決定 `/proof` 送什麼」只在檔案存在時成立：檔案在，直接送，不跑 Worker；檔案不在，可能由 Worker 回一頁 `404`。兩種情況 Worker 都送不出檔案（沒有 binding），也改不了一個存在的檔。
-- **`_headers` 套不套在不是檔案的回應上**：`/proof/` 的 `301`、不存在的檔的 `404`、其他方法的 `405`。本機都有。文件只說規則套在「static asset responses」上，轉址那一頁只說「Redirects execute before headers, so in the case of a request matching rules in both files, the redirect will win out」，沒有講這幾種回應帶不帶。
+  這是看到的行為，文件沒有保證；部署前後的檢查沒有一項會發現它變了。它變了的話，檔案不存在的 `/proof` 網址會由 Worker 回「找不到這一頁」；Worker 仍然送不出檔案（沒有 binding），也改不了一個存在的檔。
+- `_headers` 的規則套在不是檔案的回應上：`301` 和不存在的檔的 `404` 都帶。
+
+**Cloudflare 上還沒確認的**（都要 `site/proof/` 有檔才看得到，[#69](https://github.com/iamreal-tw/iamreal/issues/69)）：
+
+- 檔案存在時直接送、不跑 Worker。
 - `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
-- 第一次帶 Static Assets 的部署：只能部署 `iamreal-test` 的那把權杖能不能上傳檔案，還沒試過。
-
-**合併後第一次部署要看的**（結果記回這一節）：
-
-| 請求 | 看什麼 |
-|---|---|
-| `GET /pages.css` | `200`；有沒有 `Cross-Origin-Opener-Policy: same-origin`、`Content-Security-Policy`、`Referrer-Policy`、`X-Content-Type-Options`、`X-Robots-Tag: noindex`；`Cache-Control` 是不是只有 `no-cache` |
-| `GET /proof` | 回什麼：空的 `404` 帶 `/proof` 的三個標頭（Static Assets 回的），還是「找不到這一頁」帶訪客頁面的標頭（轉給了 Worker） |
-| `GET /proof/nothing.js` | 同上；帶 `/proof` 的標頭時，`Document-Isolation-Policy` 有沒有在裡面 |
-| `GET /proof/`（不跟著轉） | 是不是 `301` 到 `/proof`；帶不帶 `/proof` 的標頭 |
-| `POST /proof/nothing.js` | `404` 還是 `405`，誰回的 |
-
-`/proof` 轉給了 Worker 的話，這一節、`wrangler.jsonc` 的註解和 `test/proof-files.test.ts` 裡「沒有建置時」的那個測試描述的就只是本機的行為，要照線上的改寫；檔案存在時的行為要等 `site/proof/` 有檔（#69）才看得到。
+- 存在的檔用 `POST` 等其他方法是不是 `405`，帶不帶 `/proof` 的標頭。本機是、有帶。
+- 上面「和 Worker 自己送的時候不同的地方」那張表裡 `307` 的那一列，和 `ETag`、`304`。
 
 **加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式名冊的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
 
