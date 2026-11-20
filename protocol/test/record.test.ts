@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { sha256Hex } from "../src/bytes.ts";
-import { EMPTY_FINGERPRINT, FINGERPRINT_VERSION, LINES_PER_FILE, accountsText, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "../src/record.ts";
+import { parseDay } from "../src/date.ts";
+import { EMPTY_FINGERPRINT, FINGERPRINT_VERSION, FINGERPRINT_FILE_NAME, LINES_PER_FILE, accountsText, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "../src/record.ts";
 import { vectors } from "./vectors.ts";
 
 const v = vectors("record.json");
@@ -95,5 +96,35 @@ describe("record.json, the roster directory of a generated roster", () => {
     for (const roster of v.rosters) {
       assert.equal(hashList(EMPTY_FINGERPRINT, roster.records.map((r: { record_hash: string }) => r.record_hash)), roster.hash_list);
     }
+  });
+});
+
+describe("record.json, the fingerprint file", () => {
+  test("the line of each generated roster directory, published once on 2026-11-16 with every record", () => {
+    for (const d of v.generated_roster.directories) {
+      assert.equal(d.fingerprint_file.name, FINGERPRINT_FILE_NAME);
+      assert.equal(fingerprintLine({ date: parseDay("2026-11-16")!, count: d.count, fingerprint: d.fingerprint }), d.fingerprint_file.content, d.name);
+    }
+  });
+
+  test("every line of every valid fingerprint file, written again from its date, count and fingerprint", () => {
+    const valid = v.fingerprint_files.filter((f: { valid: boolean }) => f.valid);
+    assert.ok(valid.length >= 3);
+    for (const f of valid) {
+      const lines = (f.content as string).split("\n").slice(0, -1);
+      assert.ok(lines.length > 0);
+      const again = lines.map((line) => {
+        const { date, count, fingerprint } = JSON.parse(line) as { date: string; count: number; fingerprint: string };
+        return fingerprintLine({ date: parseDay(date)!, count, fingerprint });
+      });
+      assert.equal(again.join(""), f.content, f.name);
+    }
+  });
+
+  test("a count or a fingerprint outside its format is not written", () => {
+    const date = parseDay("2026-11-16")!;
+    assert.throws(() => fingerprintLine({ date, count: -1, fingerprint: EMPTY_FINGERPRINT }));
+    assert.throws(() => fingerprintLine({ date, count: 1.5, fingerprint: EMPTY_FINGERPRINT }));
+    assert.throws(() => fingerprintLine({ date, count: 1, fingerprint: EMPTY_FINGERPRINT.toUpperCase().replace("0", "A") }));
   });
 });

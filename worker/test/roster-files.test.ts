@@ -52,10 +52,16 @@ const FULL_FILE_RETRY_MS = 60 * 1000;
 const FILE = `roster/${rosterFileName(0)}`;
 const LIST = `roster/${hashListName(0)}`;
 
-/** Waits until the bucket's roster directory has exactly these files, for at most ten seconds. */
+/**
+ * Waits until the full roster files and their record hash lists in the
+ * bucket are exactly these, for at most ten seconds. What the daily
+ * publication writes (README.md, "每天換日公布名冊") is not among them: a
+ * roster whose date changes during a test is published by its own alarm,
+ * and those files do not carry the full files' `Cache-Control`.
+ */
 async function untilDirectoryIs(names: readonly string[]): Promise<Map<string, StoredFile>> {
   for (let tries = 0; ; tries++) {
-    const files = await directory();
+    const files = new Map([...(await directory())].filter(([, file]) => file.cacheControl === IMMUTABLE));
     if (tries === 100 || JSON.stringify([...files.keys()]) === JSON.stringify(names)) {
       assert.deepEqual([...files.keys()], names);
       return files;

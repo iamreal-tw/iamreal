@@ -66,9 +66,10 @@ func under(dir string, files map[string][]byte) map[string][]byte {
 }
 
 // dataFiles is a data domain: the published roster of the first n records
-// of longRoster, the fingerprint file fps, and an empty CRL archive index.
+// of longRoster, the fingerprint file fps with the card state file of its
+// last line, and an empty CRL archive index.
 func dataFiles(n int, fps string) map[string][]byte {
-	files := under("roster", published(n))
+	files := under("roster", withCardState(published(n), fps))
 	files["roster/"+fingerprintsFileName] = []byte(fps)
 	files["crl/"+crl.IndexFileName] = nil
 	return files
@@ -198,6 +199,19 @@ func testDataDomain(t *testing.T) map[string][]byte {
 		files["roster/"+p.HashList.Name] = p.HashList.Data
 	}
 	files["roster/"+fingerprintsFileName] = fmt.Appendf(nil, `{"date":"2026-11-24","count":3,"fingerprint":"%s"}`+"\n", fp)
+	// The card state file the server writes with that line: the states
+	// after the three records, by the rules with the archive of testdata/.
+	crls, _, err := openArchive(testIssuerKeys)(filepath.Join("testdata", "archive"), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := roster.NewRules(verifier.Test, allVerify{}, crls)
+	for _, r := range records {
+		if res, err := x.Apply(r); err != nil || !res.Valid {
+			t.Fatalf("seq %d: %v %v", r.Seq, res, err)
+		}
+	}
+	files["roster/card-state/2026-11-24.jsonl"] = roster.CardStateFile(x.CardRows())
 	for _, name := range []string{crlA, crlB, crlC, crl.IndexFileName} {
 		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
 		if err != nil {

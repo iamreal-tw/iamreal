@@ -15,6 +15,7 @@
 import { ISSUERS } from "#target";
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
+import { EMPTY_FINGERPRINT } from "iamreal-protocol/record.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
@@ -228,6 +229,17 @@ async function getConfig(_request: Request, env: Env): Promise<Reply> {
   });
 }
 
+/**
+ * `GET /api/v1/fingerprint`: the last line the roster's object wrote to
+ * the fingerprint file, its date, count and roster fingerprint (ADR-0021); for a roster never published, no date, no record and the
+ * roster fingerprint of the empty roster.
+ */
+async function getFingerprint(_request: Request, env: Env): Promise<Reply> {
+  settings(env);
+  const line = await askRoster(() => rosterOf(env).lastPublished());
+  return ok(line === null ? { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT } : { date: formatDay(line.date), count: line.count, fingerprint: line.fingerprint });
+}
+
 /** What the API is given besides the environment: the pieces that are behind an interface, so that each can be replaced by itself. */
 export interface ApiParts {
   /** Verifies the proof of a submitted record (verify.ts). */
@@ -244,6 +256,7 @@ const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
   ["/api/v1/card-state", { method: "POST", handle: postCardState }],
   ["/api/v1/records", { method: "POST", handle: postRecord }],
   ["/api/v1/config", { method: "GET", handle: getConfig }],
+  ["/api/v1/fingerprint", { method: "GET", handle: getFingerprint }],
 ]);
 
 /** Whether the API answers for this path: everything under /api/. */
