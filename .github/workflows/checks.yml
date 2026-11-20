@@ -4,7 +4,8 @@
 # Triggered by pull_request only, never pull_request_target: a pull request
 # from a fork gets no secret and a read-only GITHUB_TOKEN. Nothing here
 # refers to a secret, and nothing is cached, so a pull request writes nothing
-# another run reads. worker/test/workflows.test.ts checks this file against
+# another run reads (GitHub's "Events that trigger workflows", pull_request,
+# "Workflows in forked repositories"). worker/test/workflows.test.ts checks this file against
 # the rules in worker/test/workflows.ts.
 name: checks
 

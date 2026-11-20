@@ -298,6 +298,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     }
     if (f !== "checks.yml") continue;
 
+    // Not pull_request_target, workflow_run or any other: "secrets are not passed to the runner
+    // when a workflow is triggered from a forked repository" and "The GITHUB_TOKEN has read-only
+    // permissions in pull requests from forked repositories" hold for pull_request, while "The
+    // workflow started by the workflow_run event is able to access secrets and write tokens"
+    // (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
     if (!same(doc.on, { pull_request: null })) p("not triggered by pull_request only");
     if (doc.env !== undefined && !same(doc.env, CHECKS_ENV)) p("the env at the top is not the one in test/workflows.ts");
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
