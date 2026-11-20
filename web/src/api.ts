@@ -22,8 +22,9 @@
 //                    signature, so nothing secret waits on them.
 import type { Account } from "iamreal-protocol/declaration-code.ts";
 import { type Day, parseDay } from "iamreal-protocol/date.ts";
+import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/roster-rules.ts";
-import { type UsernameFormat, isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
+import { isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
 export const API_TIMEOUT_MS = 30_000;
@@ -132,14 +133,13 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
   return body.challenge;
 }
 
-/** A row of the platform table the device can read (docs/api/card-proof.md, `config`). */
-export interface PlatformRow {
-  /** The platform ID. */
-  readonly platform: string;
-  /** The display name, as the server sends it; the screen shows the ID beside it before the card signs. */
-  readonly displayName: string;
-  readonly format: UsernameFormat;
-}
+/**
+ * A row of the platform table the device can read (docs/api/card-proof.md,
+ * `config`): the row type of protocol/, which the roster rules take. The
+ * display name is as the server sends it; the screen shows the ID beside it
+ * before the card signs.
+ */
+export type { PlatformRow };
 
 export interface Config {
   /** `crl_max_age_days`; the caller takes the smaller of it and the built-in 7 (crl/revocation.ts). */
@@ -247,7 +247,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
   // A count: an integer; possibleCard then bounds it.
   if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) bad();
   const proofsOnLastDate = b.proofs_on_last_date as number;
-  if (!possibleCard(lastCardProof, proofsOnLastDate, today)) bad();
+  if (!possibleCard({ lastCardProof, proofsOnLastDate }, today)) bad();
   if (!isObject(b.platforms)) bad();
   const entries = b.platforms as Record<string, unknown>;
 

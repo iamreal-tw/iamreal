@@ -75,3 +75,8 @@ export function limbs(value: bigint, bits: number, count: number): bigint[] {
 export function wipe(bytes: Uint8Array | undefined | null): void {
   bytes?.fill(0);
 }
+
+/** Compares two ASCII strings by their byte values, as every list of the specification is sorted. */
+export function byBytes(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}

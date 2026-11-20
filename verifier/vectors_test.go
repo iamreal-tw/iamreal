@@ -124,7 +124,11 @@ func TestVectorsScope(t *testing.T) {
 			Platform    string `json:"platform"`
 			Accepted    bool   `json:"accepted"`
 			DisplayName string `json:"display_name"`
-			Reason      string `json:"reason"`
+			// UsernameFormat, of an accepted platform: the format as the
+			// table writes it. protocol/'s table is checked against the
+			// same field (protocol/test/spec.test.ts).
+			UsernameFormat string `json:"username_format"`
+			Reason         string `json:"reason"`
 		} `json:"platforms"`
 		Usernames []struct {
 			Platform string `json:"platform"`
@@ -172,6 +176,9 @@ func TestVectorsScope(t *testing.T) {
 				listed[c.Roster]++
 				if p.DisplayName != c.DisplayName {
 					t.Errorf("display name %q, want %q", p.DisplayName, c.DisplayName)
+				}
+				if c.UsernameFormat == "" || p.UsernameFormat != c.UsernameFormat {
+					t.Errorf("username format %q, want %q", p.UsernameFormat, c.UsernameFormat)
 				}
 			}
 			// The same answer through the line check, with a username

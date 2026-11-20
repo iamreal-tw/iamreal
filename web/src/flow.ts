@@ -86,10 +86,10 @@ import { PROOF_BYTES } from "./prover/prover.ts";
 import { parseChallenge, currentTime } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
-import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, dailyLimitReached, slotOutcome } from "iamreal-protocol/roster-rules.ts";
+import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/roster-rules.ts";
 import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
-import { byPlatform } from "iamreal-protocol/username-format.ts";
+import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
 import type { CrlNumberStore } from "./storage.ts";
 import { bytesOfBigint, equalBytes, wipe } from "iamreal-protocol/bytes.ts";
 
@@ -823,29 +823,34 @@ export class CardProofFlow {
     }
     for (const k of state.kept) list.set(k.platform, k.username);
 
-    const rows: ConsequenceRow[] = [];
-    for (const s of status.slots) {
-      const slot: SlotState = s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT);
-      const entry = list.get(s.platform) ?? null;
-      const o = slotOutcome(slot, entry, today);
-      if (o.kind === "blocked") throw new FlowStop({ code: "blocked", reason: "switch_limit", platform: s.platform });
-      if (o.kind === "none") continue;
-      const replaced = o.kind === "switch" || o.kind === "correction" ? (slot.current ?? slot.lastDeclared) : null;
-      rows.push({
-        platform: s.platform,
-        row: s.row,
-        username: o.kind === "withdraw" ? slot.current! : entry!,
-        kind: o.kind,
-        current: slot.current,
-        previous: replaced,
-        switchesLeftAfter: o.kind === "switch" ? MAX_SWITCHES - slot.switchCount - 1 : null,
-      });
-    }
-    // The roster rules: no kind on any platform is a record that states nothing.
-    if (rows.length === 0) throw new FlowStop({ code: "blocked", reason: "empty" });
-    // Check 6 after the event rules, in the order of the rules.
-    if (dailyLimitReached(state, today)) throw new FlowStop({ code: "blocked", reason: "daily_limit" });
     const accounts = [...list].map(([platform, username]) => Object.freeze({ platform, username })).sort(byPlatform);
+
+    // The roster rules (checks 5 and 6), on the slots the server reported. A
+    // platform the device does not know has only its account: kept as it is,
+    // it is the account declared there, whatever the rest of its slot says.
+    const before = new Map<string, { slot: SlotState; row: PlatformRow | null }>(
+      status.slots.map((s) => [s.platform, { row: s.row, slot: s.row === null ? { current: s.current, lastDeclared: s.current, switchCount: 0, correctionDate: null } : (state.slots.get(s.platform) ?? EMPTY_SLOT) }]),
+    );
+    const card = { lastCardProof: state.lastCardProof, proofsOnLastDate: state.proofsOnLastDate, slots: new Map([...before].map(([p, b]) => [p, b.slot])) };
+    // The table the rules go through: the rows the device read from the
+    // server, and for a platform it does not know a row that takes the
+    // account as kept (it was checked as any username when it was read).
+    const table = status.slots.map((s) => s.row ?? keptRow(s.platform));
+    const { result } = applyList(table, card, accounts, today);
+    if (!result.valid) throw new FlowStop(result.reason === "switch_limit" ? { code: "blocked", reason: result.reason, platform: result.blockedPlatform } : { code: "blocked", reason: result.reason });
+    const rows: ConsequenceRow[] = result.kinds.map(({ platform, kind }) => {
+      const { slot, row } = before.get(platform)!;
+      const entry = list.get(platform) ?? null;
+      return {
+        platform,
+        row,
+        username: kind === "withdraw" ? slot.current! : entry!,
+        kind,
+        current: slot.current,
+        previous: kind === "switch" || kind === "correction" ? (slot.current ?? slot.lastDeclared) : null,
+        switchesLeftAfter: kind === "switch" ? MAX_SWITCHES - slot.switchCount - 1 : null,
+      };
+    });
     // What the screen shows is what the card signs: the rows that are not a
     // withdrawal are the list, account by account, in its order.
     if (!sameList(rows.filter((r) => r.kind !== "withdraw"), accounts)) throw new FlowStop({ code: "state" });
@@ -1105,6 +1110,17 @@ export class CardProofFlow {
   async threadMode(): Promise<ThreadMode> {
     return this.deps.prover.ready();
   }
+}
+
+/**
+ * The row the roster rules get for a platform the device does not know: the
+ * server's table has no row the device can read, so it has no format to
+ * check. Every username the device kept passed isAnyUsername when the
+ * card's state was read (api.ts); the rules are given exactly that check.
+ * It is never shown and never offered.
+ */
+function keptRow(platform: string): PlatformRow {
+  return { platform, displayName: platform, format: { text: "", min: 1, max: Number.MAX_SAFE_INTEGER, accepts: isAnyUsername } };
 }
 
 /** The card's state as the screen shows it, with what the device computes from it on `today`. */
