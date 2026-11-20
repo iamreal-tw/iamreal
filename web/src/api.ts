@@ -228,7 +228,6 @@ export interface CardStateResponse extends CardState {
    */
   kept: Account[];
   count: number;
-  head: string;
 }
 
 /**
@@ -238,7 +237,7 @@ export interface CardStateResponse extends CardState {
  * what a list would do itself, but cannot check it (README, known limits).
  *
  *   - `last_card_proof` (a date or null), `proofs_on_last_date` (an
- *     integer), `platforms` (an object), `count` and `head` must be read.
+ *     integer), `platforms` (an object) and `count` must be read.
  *   - The entry of every platform of `table` that has one must be read:
  *     `current` and `last_declared` null or in the platform's format,
  *     `switch_count` an integer from 0 to 5, `correction_date` a date or
@@ -265,7 +264,6 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
     return d === null ? bad() : d;
   };
   if (!Number.isSafeInteger(b.count) || (b.count as number) < 0) bad();
-  if (typeof b.head !== "string" || !/^[0-9a-f]{64}$/.test(b.head)) bad();
   if (!("last_card_proof" in b)) bad();
   const lastCardProof = day(b.last_card_proof);
   // A count: an integer; possibleCard then bounds it.
@@ -302,7 +300,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
     if (lastCardProof === null) bad();
     kept.push(Object.freeze({ platform: id, username: current as string }));
   }
-  return { lastCardProof, proofsOnLastDate, slots, kept, count: b.count as number, head: b.head as string };
+  return { lastCardProof, proofsOnLastDate, slots, kept, count: b.count as number };
 }
 
 /** The fields of a record except `seq` (spec/record.md). */

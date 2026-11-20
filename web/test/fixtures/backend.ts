@@ -125,7 +125,6 @@ export class FakeBackend {
         [...c.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: s.correctionDate === null ? null : formatDay(s.correctionDate) }]),
       ),
       count: this.submissions.length,
-      head: "a".repeat(64),
     };
   }
 

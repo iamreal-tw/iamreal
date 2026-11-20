@@ -201,7 +201,6 @@ function cardState(o: { last_card_proof?: string | null; proofs_on_last_date?: u
     proofs_on_last_date: "proofs_on_last_date" in o ? o.proofs_on_last_date : last_card_proof ? 1 : 0,
     platforms: { "test-example": slot(), threads: slot(), ...platforms },
     count: 137,
-    head: "a".repeat(64),
     ...rest,
   };
 }
@@ -1437,7 +1436,6 @@ describe("a card-state answer the device cannot read, or the roster rules cannot
     ["an account not in its platform's format", withThreads(has("Alice!"))],
     ["an account in another platform's format", withThreads(has("a-b"))],
     ["a correction date not a date", withThreads(has("alice", { correction_date: "2026-3-2" }))],
-    ["no head", (({ head: _h, ...rest }) => rest)(cardState())],
     ["a count of records not a number", cardState({ count: "137" })],
     // A platform the device does not know.
     ["an account on a platform ID not in the platform syntax", cardState({ last_card_proof: D, platforms: { "X_new": { current: "zed" } } })],
