@@ -14,13 +14,17 @@
 #   of this repository, and the CRS has the SHA-256 of device-core/crs.sha256;
 # - nothing in the app links AdSupport or AppTrackingTransparency, the app
 #   embeds no framework and the project names no Swift package;
-# - the sources (App/) do not read identifierForVendor, do not write to a
-#   log (so a release build logs nothing), and reach C only through
-#   App/Bridge.h, which includes the header of device-core/ and nothing else.
+# - the sources (App/) do not read identifierForVendor and write nothing to
+#   a log or to standard output, and neither do the sources of device-core/
+#   (so a release build logs nothing of its own);
+# - the sources reach C only through App/Bridge.h: it is the project's
+#   bridging header, it is one #include of the header of device-core/, and
+#   App/ holds no other C, Objective-C or module map.
 #
-# What it does not see: what a release build prints from inside Barretenberg
-# (README.md, on logs), and anything a later change hides from these
-# patterns. It guards against slips; it does not replace reading the change.
+# What it does not see: what Barretenberg's own code prints, what Rust
+# prints when the core panics (README.md, on logs), and anything a later
+# change hides from these patterns. It guards against slips; it does not
+# replace reading the change.
 #
 # IAMREAL_APP_SOURCES and IAMREAL_PROJECT_FILE replace the sources and the
 # project file it reads: check-app-test.sh uses them.
@@ -29,6 +33,7 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$here/..
 app=${1:?usage: check-app.sh <path to IamrealApp.app>}
+app=${app%/}
 sources=${IAMREAL_APP_SOURCES:-$here/App}
 project=${IAMREAL_PROJECT_FILE:-$here/IamrealApp.xcodeproj/project.pbxproj}
 problems=0
@@ -50,7 +55,7 @@ done)
 [ -n "$binaries" ] || problem "no executable in $app"
 
 # Whether some executable of the app has these bytes in it.
-has() {
+executable_has() {
   echo "$binaries" | while read -r f; do
     if LC_ALL=C grep -q -a -F -- "$1" "$f"; then echo yes; fi
   done | grep -q yes
@@ -61,11 +66,15 @@ identifier=$(plist CFBundleIdentifier)
 if [ "$identifier" != tw.iamreal.app.test ]; then
   problem "the identifier is $identifier, not tw.iamreal.app.test: the only app built so far is the test app"
 fi
+# Xcode hands the build settings to this script: the environment of Config/.
+if [ "${IAMREAL_ENVIRONMENT-IAMREAL_ENV_TEST}" != IAMREAL_ENV_TEST ]; then
+  problem "the environment is $IAMREAL_ENVIRONMENT, not IAMREAL_ENV_TEST"
+fi
 for address in https://test.iamreal.tw https://test-data.iamreal.tw; do
-  has "$address" || problem "the executable does not have the address $address"
+  executable_has "$address" || problem "the executable does not have the address $address"
 done
 for address in https://iamreal.tw https://data.iamreal.tw; do
-  if has "$address"; then
+  if executable_has "$address"; then
     problem "the executable has the address of the production site, $address"
   fi
 done
@@ -91,13 +100,10 @@ while read -r want name; do
 done < "$repo/device-core/crs.sha256"
 
 # No advertising identifier, no third-party code.
-echo "$binaries" | while read -r f; do
+links=$(echo "$binaries" | while read -r f; do
   xcrun otool -L "$f" | grep -E "AdSupport|AppTrackingTransparency" | sed "s|^|${f#"$app"/} links |"
-done > "${TMPDIR:-/tmp}/check-app.$$"
-if [ -s "${TMPDIR:-/tmp}/check-app.$$" ]; then
-  problem "$(tr -s '\t\n' '  ' < "${TMPDIR:-/tmp}/check-app.$$")"
-fi
-rm -f "${TMPDIR:-/tmp}/check-app.$$"
+done | tr -s '\t\n' '  ')
+[ -z "$links" ] || problem "$links"
 [ ! -e "$app/Frameworks" ] || problem "the app embeds something in Frameworks/"
 if grep -q -E "XCRemoteSwiftPackageReference|XCLocalSwiftPackageReference|XCSwiftPackageProductDependency" "$project"; then
   problem "the project names a Swift package"
@@ -106,18 +112,36 @@ fi
 # The sources. Each pattern is a fixed string.
 forbidden() {
   why=$1
-  shift
+  where=$2
+  shift 2
   for pattern in "$@"; do
-    found=$(grep -r -n -F -- "$pattern" "$sources" || true)
+    found=$(grep -r -n -F -- "$pattern" "$where" || true)
     [ -z "$found" ] || problem "$why: \"$pattern\" in $(printf '%s\n' "$found" | head -n 1)"
   done
 }
-forbidden "an identifier of the device or of advertising" identifierForVendor AdSupport ASIdentifierManager AppTrackingTransparency ATTrackingManager
-forbidden "a log (a release build writes none)" "print(" "debugPrint(" "dump(" "NSLog(" "os_log(" "Logger(" OSLog "os_signpost"
-forbidden "C reached another way than App/Bridge.h" "@_silgen_name" "@_cdecl" "@_extern" dlsym dlopen bbapi
-if [ -f "$sources/Bridge.h" ]; then
-  includes=$(grep -E '^[[:space:]]*#[[:space:]]*(include|import)' "$sources/Bridge.h" || true)
-  [ "$includes" = '#include "iamreal_device_core.h"' ] || problem "App/Bridge.h includes something other than iamreal_device_core.h"
+forbidden "an identifier of the device or of advertising" "$sources" \
+  identifierForVendor AdSupport ASIdentifierManager AppTrackingTransparency ATTrackingManager
+forbidden "a log or standard output (a release build writes none)" "$sources" \
+  "print(" "debugPrint(" "dump(" "NSLog(" "os_log(" "Logger(" OSLog os_signpost \
+  "printf(" "puts(" "fwrite(" "FileHandle.standard" stdout stderr \
+  "fatalError(" "preconditionFailure(" "assertionFailure("
+forbidden "C reached another way than App/Bridge.h" "$sources" \
+  "@_silgen_name" "@_cdecl" "@_extern" dlsym dlopen bbapi
+for crate in checks prover; do
+  forbidden "the core writes to standard output" "$repo/device-core/$crate/src" \
+    "println!" "eprintln!" "print!" "eprint!" "dbg!"
+done
+
+# C only through App/Bridge.h, which is the one #include.
+other=$(find "$sources" -type f \( -name '*.h' -o -name '*.c' -o -name '*.m' -o -name '*.mm' -o -name '*.cpp' -o -name '*.modulemap' \) ! -path "$sources/Bridge.h")
+[ -z "$other" ] || problem "C, Objective-C or a module map in the sources other than Bridge.h: $(printf '%s\n' "$other" | head -n 1)"
+if [ ! -f "$sources/Bridge.h" ]; then
+  problem "no Bridge.h in the sources"
+else
+  code=$(grep -v -E '^[[:space:]]*(//.*)?$' "$sources/Bridge.h" || true)
+  [ "$code" = '#include "iamreal_device_core.h"' ] || problem "App/Bridge.h is more than the #include of iamreal_device_core.h"
 fi
+headers=$(grep -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" | tr -d '\t' | sort -u)
+[ "$headers" = 'SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;' ] || problem "the project's bridging header is not App/Bridge.h alone: $headers"
 
 exit $problems

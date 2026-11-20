@@ -31,6 +31,15 @@
 - **#69 之後要把 `worker/**` 加進清單。** 那時 `web/` 的端到端測試改成對 Worker 跑，用到 `worker/`。#69 的人要自己同時改 `checks-browser.yml` 和 `worker/test/workflows.ts` 的 `BROWSER_PATHS`；用上面找得到的寫法引用 `worker/` 時，測試會失敗提醒，用找不到的寫法就不會。
 - **被 `paths` 濾掉的工作流程不會回報檢查。** 它的檢查停在「Pending」，要求它通過的 PR 不能合併（同一節）。現在 `main` 沒有設必要檢查；之後要把檢查設成必要的，`checks-browser.yml` 不能直接列進去，要另想辦法（例如改成同一個工作流程裡一個判斷的工作加 `if`，讓它每次都回報）。
 
+**`checks-ios.yml`：runner、Xcode、模擬器的來源。** 這三個值寫死在工作流程檔和 `worker/test/workflows.ts`，來源是 GitHub 的 [actions/runner-images](https://github.com/actions/runner-images)（2026-11-20 讀）：
+
+- `runs-on: xcode-27`：[README 的「Available Images」](https://github.com/actions/runner-images/blob/main/README.md#available-images)列的標籤，Apple 晶片，標著 preview（[公告](https://github.com/actions/runner-images/issues/14404)）。標籤如果在正式推出時改名，這個工作會一直排隊，要跟著改
+- `/Applications/Xcode_27.2.app`（build 27B52）和 iOS 27.2 的模擬器 `iPhone 17`：[這個映像的說明](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)的「Xcode」和「Installed Simulators」。映像上也有 Rust 和 rustup
+- 選它是因為 `ios/` 是用同一版 Xcode（27.2，27B52）開發和測試的。另一個選擇是正式的 `macos-26`，上面最新的是 Xcode 26.6（[macos-26-arm64 的說明](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)）；`ios/` 沒有在 26.6 上建置過
+- 這個工作流程還沒有在 GitHub 上跑過（寫的時候分支還沒推送）；第一次跑的結果記在加它的 PR
+
+**`checks-ios.yml` 的 `paths` 比它的測試讀的窄。** 照「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」只列 `ios/`、`device-core/` 和工作流程檔自己（macOS 的分鐘數算得重）。iOS 的測試另外讀 `spec/vectors/scope.json`、`design/copy/test-site.md`、`design/copy/card-proof.md`、`web/scripts/fetch-crs.mjs`，app 包進 `web/circuits/`、`verifier/vk/` 的檔；只改這些的 PR 不會跑 iOS 的檢查，下一個動到 `ios/` 或 `device-core/` 的 PR 才會發現。`worker/test/workflows.test.ts` 對 `checks-browser.yml` 做的那種清單測試，iOS 這邊沒有。
+
 三個 PR 的工作流程的 `concurrency` 群組名稱不同：群組在所有工作流程之間共用，「concurrency group names must be unique across workflows to avoid canceling in-progress jobs or runs from other workflows」（[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency)）。
 
 怎麼部署、上傳那一步還信任什麼：[`worker/README.md`「從 GitHub Actions 部署」](../worker/README.md#從-github-actions-部署)。

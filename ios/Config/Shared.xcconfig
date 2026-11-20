@@ -6,8 +6,13 @@
 // number. build-core.sh reads this line for the Rust build.
 IPHONEOS_DEPLOYMENT_TARGET = 15.0
 
-// iPhone only: an iPad has no NFC reader for the card.
+// iPhone only: no iPad interface, and not offered to a Mac or a Vision Pro
+// as an iPhone app. An iPad can still install an iPhone app and run it in
+// compatibility mode; what keeps it off an iPad is requiring NFC in
+// UIRequiredDeviceCapabilities, which comes with reading the card (#174).
 TARGETED_DEVICE_FAMILY = 1
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
 
 // Where build-core.sh leaves the static library of device-core/. There is
 // no prebuilt Barretenberg for the simulator of an Intel Mac.

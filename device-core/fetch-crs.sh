@@ -37,7 +37,7 @@ fetch() {
     return 0
   fi
   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-    --user-agent crs-fetch --range "0-$((size - 1))" \
+    --user-agent crs-fetch --range "0-$((size - 1))" --max-filesize "$size" \
     --output "$tmp/$name" "$url"
   if [ "$(wc -c < "$tmp/$name" | tr -d ' ')" != "$size" ]; then
     echo "fetch-crs: $name is not $size bytes" >&2

@@ -1,6 +1,7 @@
 #!/bin/sh
 # The test of check-app.sh: it passes the app that was built, and turns away
-# each altered copy of it below, with the problem named.
+# each altered copy of it below, with the problem named. One thing it does
+# not try: an executable without the addresses of the test site.
 #
 #   ./check-app-test.sh <path to a built IamrealApp.app, for the simulator>
 set -u
@@ -80,11 +81,29 @@ for f in "$tmp/app/IamrealApp.app/IamrealApp.debug.dylib" "$tmp/app/IamrealApp.a
 done
 expect "the address of the production site" "https://iamreal.tw"
 
+copy
+for f in "$tmp/app/IamrealApp.app/IamrealApp.debug.dylib" "$tmp/app/IamrealApp.app/IamrealApp"; do
+  [ -f "$f" ] && printf 'https://data.iamreal.tw\0' >> "$f"
+done
+expect "the address of the production site's files" "https://data.iamreal.tw"
+
+copy
+expect "another environment" "IAMREAL_ENV_PRODUCTION" IAMREAL_ENVIRONMENT=IAMREAL_ENV_PRODUCTION
+
+copy
+printf x >> "$tmp/app/IamrealApp.app/bn254_g1_compressed_2p18.dat"
+expect "another G1 of the CRS" "bn254_g1_compressed_2p18.dat"
+
+copy
+xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator -dynamiclib -framework AppTrackingTransparency -o "$tmp/app/IamrealApp.app/Track.dylib" "$tmp/empty.c"
+expect "AppTrackingTransparency linked" "AppTrackingTransparency"
+
 # Sources that do what the app must not.
 copy
 source_with() {
   rm -rf "$tmp/src"
   mkdir "$tmp/src"
+  cp "$here/App/Bridge.h" "$tmp/src/Bridge.h"
   printf '%s\n' "$1" > "$tmp/src/X.swift"
 }
 source_with 'let id = UIDevice.current.identifierForVendor'
@@ -99,6 +118,27 @@ source_with 'func f() { NSLog("x") }'
 expect "NSLog in the sources" "NSLog(" IAMREAL_APP_SOURCES="$tmp/src"
 source_with '@_silgen_name("bbapi") func bbapi()'
 expect "a C function declared without the header" "@_silgen_name" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'func f() { FileHandle.standardError.write(Data()) }'
+expect "standard error in the sources" "FileHandle.standard" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'func f() { fatalError("x") }'
+expect "fatalError in the sources" "fatalError(" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'let x = 1'
+printf 'void bbapi(void);\n' >> "$tmp/src/Bridge.h"
+expect "a prototype written into Bridge.h" "Bridge.h is more than"  IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'let x = 1'
+printf '#include <stdio.h>\n' >> "$tmp/src/Bridge.h"
+expect "another header in Bridge.h" "Bridge.h is more than" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'let x = 1'
+: > "$tmp/src/Other.h"
+expect "a second header in the sources" "Other.h" IAMREAL_APP_SOURCES="$tmp/src"
+source_with 'let x = 1'
+rm "$tmp/src/Bridge.h"
+expect "no Bridge.h" "no Bridge.h" IAMREAL_APP_SOURCES="$tmp/src"
+
+rm -rf "$tmp/project"
+mkdir "$tmp/project"
+sed 's|SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;|SWIFT_OBJC_BRIDGING_HEADER = Other/Bridge.h;|' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"
+expect "another bridging header in the project" "bridging header" IAMREAL_PROJECT_FILE="$tmp/project/project.pbxproj"
 
 rm -rf "$tmp/project"
 mkdir "$tmp/project"

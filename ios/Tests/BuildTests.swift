@@ -8,7 +8,7 @@ final class BuildTests: XCTestCase {
     func testTheAppIsTheTestApp() throws {
         XCTAssertEqual(Bundle.main.bundleIdentifier, "tw.iamreal.app.test")
         XCTAssertEqual(AppEnvironment.site.absoluteString, "https://test.iamreal.tw")
-        XCTAssertEqual(AppEnvironment.data.absoluteString, "https://test-data.iamreal.tw")
+        XCTAssertEqual(AppEnvironment.publicFiles.absoluteString, "https://test-data.iamreal.tw")
     }
 
     func testTheCardSignsTheScopeStringOfTheTestRoster() throws {
@@ -58,15 +58,32 @@ final class BuildTests: XCTestCase {
 
     func testTheShellReportsThatTheCoreAnswers() throws {
         let report = CoreReport.make()
-        XCTAssertEqual(report.selfCheck, 0)
-        XCTAssertTrue(report.abiVersionMatches)
+        XCTAssertNil(report.selfCheckFailure)
+        XCTAssertEqual(report.abiVersion, DeviceCore.headerABIVersion)
         XCTAssertEqual(report.scopeString, try Repository.testScopeString())
-        XCTAssertEqual(report.bundledFiles, 6)
     }
 
     /// The one sentence on the shell's screen is in design/copy/.
     func testTheWordsOnTheScreenAreInDesignCopy() throws {
         let copy = try Repository.text("design/copy/test-site.md")
-        XCTAssertTrue(copy.contains("\n\(Copy.testRoster)\u{3000}"))
+        XCTAssertTrue(copy.contains("\n\(ScreenCopy.testRoster)\u{3000}"))
+    }
+
+    /// The name under the app's icon is what design/copy/ calls the app.
+    func testTheNameOfTheAppIsInDesignCopy() throws {
+        let name = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+        XCTAssertTrue(try Repository.text("design/copy/card-proof.md").contains("「\(name)」app"), name)
+    }
+
+    /// The hashes of the CRS are the ones the page's download checks.
+    func testTheCRSHashesAreTheOnesOfThePage() throws {
+        let page = try Repository.text("web/scripts/fetch-crs.mjs")
+        let lines = try Repository.text("device-core/crs.sha256").split(separator: "\n")
+        XCTAssertEqual(lines.count, 2)
+        for line in lines {
+            let parts = line.components(separatedBy: "  ")
+            XCTAssertTrue(page.contains("name: \"\(parts[1])\""), parts[1])
+            XCTAssertTrue(page.contains("sha256: \"\(parts[0])\""), parts[1])
+        }
     }
 }

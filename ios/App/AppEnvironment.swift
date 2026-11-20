@@ -9,7 +9,7 @@ enum AppEnvironment {
     /// The test site (ADR-0028).
     static let site = URL(string: "https://test.iamreal.tw")!
     /// Where the test site's public files are.
-    static let data = URL(string: "https://test-data.iamreal.tw")!
+    static let publicFiles = URL(string: "https://test-data.iamreal.tw")!
     /// The test roster: the card signs `iamreal-test:public:0`.
     static let roster = DeviceCore.Roster.test
     #else

@@ -213,7 +213,10 @@ export const BROWSER_PATHS: readonly string[] = [
  * minutes count for more, so the check runs only for these).
  */
 export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", ".github/workflows/checks-ios.yml"];
-/** The runner of the iOS check, and the one Xcode it builds with (ios/README.md). */
+/**
+ * The runner of the iOS check, and the one Xcode it builds with, by its path
+ * on that runner's image (.github/README.md gives the sources).
+ */
 export const IOS_RUNNER = "xcode-27";
 export const IOS_DEVELOPER_DIR = "/Applications/Xcode_27.2.app/Contents/Developer";
 /** The one job of checks-ios.yml. Like the device-core job, it runs no bb. */
@@ -347,7 +350,7 @@ export const SECRET_LINES: readonly string[] = [
  * or runs from other workflows"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  */
-const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly runsOn?: string }>> = {
+const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly runsOn?: string; readonly envRequired?: true }>> = {
   "checks.yml": {
     on: { pull_request: null },
     env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
@@ -364,6 +367,8 @@ const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly 
     env: { DEVELOPER_DIR: IOS_DEVELOPER_DIR },
     group: "checks-ios-${{ github.event.pull_request.number }}",
     runsOn: IOS_RUNNER,
+    // Without DEVELOPER_DIR the runner's default Xcode builds the app.
+    envRequired: true,
   },
 };
 
@@ -434,8 +439,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     // (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
     // `paths` only where the rules say, as they say: a path left out is a check that does not run.
     if (!same(doc.on, rules.on)) p(`not triggered by pull_request only, as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
-    // checks-ios.yml must have its env: without DEVELOPER_DIR the runner's default Xcode builds the app.
-    if ((doc.env !== undefined || f === "checks-ios.yml") && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
+    if ((doc.env !== undefined || rules.envRequired) && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
     if (!same(doc.concurrency, { group: rules.group, "cancel-in-progress": "true" })) p(`concurrency is not group ${rules.group}, cancelling the run before`);
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
       p("no jobs");

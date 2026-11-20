@@ -5,7 +5,8 @@
 //
 // IAMREAL_ENVIRONMENT is a compilation condition: App/AppEnvironment.swift
 // holds the site and the roster that go with it and does not compile
-// without one. check-app.sh checks the built app against the values here.
+// without one. check-app.sh has the identifier and the site of the test app
+// written in it, and turns away a build that is not that.
 #include "Shared.xcconfig"
 
 IAMREAL_BUNDLE_IDENTIFIER = tw.iamreal.app.test
