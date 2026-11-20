@@ -838,13 +838,7 @@ export class Roster extends DurableObject<Env> {
     const sql = this.ctx.storage.sql;
     const last = before + LINES_PER_FILE;
     if (before % LINES_PER_FILE !== 0) throw new Error("the stored records do not begin at a roster file");
-    // The first line of the list: the roster fingerprint at the end of the file before, which is no longer in `records`.
-    const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
-    if (fingerprintBefore === undefined) throw new Error("the file before the first stored record is not among the full files");
-    const { file, hashes, fingerprintAfter } = this.#storedFile(before, last);
-    const bucket = this.bucket();
-    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), new TextEncoder().encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_FULL_FILE, contentType: TYPE_TEXT });
+    const { sha256, fingerprintAfter } = await this.#writeRosterFile(before, last, CACHE_FULL_FILE);
     this.ctx.storage.transactionSync(() => {
       sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
       sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
@@ -852,14 +846,20 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * The roster file of the stored records after the first `before` up to
-   * `last`, both counts of records: its bytes, the record hash of each of
-   * its records and the roster fingerprint at its end. Throws unless the
-   * object keeps every one of those records. The file is up to some 20 MB:
-   * its lines are written into one buffer, without a second copy as text.
+   * Writes the roster file of the stored records after the first `before`
+   * up to `last`, both counts of records, and then its record hash list,
+   * each with `cacheControl`, each read back and compared byte for byte.
+   * Returns the SHA-256 of the file and the roster fingerprint at its end.
+   * Throws unless the object keeps every one of those records and knows
+   * the fingerprint at the end of the file before. The file is up to some
+   * 20 MB: its lines are written into one buffer, without a second copy as
+   * text, which is let go when this returns.
    */
-  #storedFile(before: number, last: number): { file: Uint8Array; hashes: string[]; fingerprintAfter: string } {
+  async #writeRosterFile(before: number, last: number, cacheControl: string): Promise<{ sha256: string; fingerprintAfter: string }> {
     const sql = this.ctx.storage.sql;
+    // The first line of the list: the roster fingerprint at the end of the file before, which is no longer in `records`.
+    const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
+    if (fingerprintBefore === undefined) throw new Error("the file before the roster file is not among the full files");
     const { lines, length } = sql.exec<{ lines: number; length: number | null }>("SELECT COUNT(*) AS lines, SUM(LENGTH(CAST(line AS BLOB))) AS length FROM records WHERE seq > ? AND seq <= ?", before, last).one();
     if (lines !== last - before) throw new Error("the stored records are not the records of the roster file");
     const file = new Uint8Array(length ?? 0);
@@ -875,7 +875,10 @@ export class Roster extends DurableObject<Env> {
       fingerprintAfter = row.fingerprint;
     }
     if (at !== file.length) throw new Error("the stored lines are shorter than they were counted");
-    return { file, hashes, fingerprintAfter };
+    const bucket = this.bucket();
+    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl, contentType: TYPE_JSON_LINES });
+    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl, contentType: TYPE_TEXT });
+    return { sha256, fingerprintAfter };
   }
 
   /**
@@ -1039,14 +1042,7 @@ export class Roster extends DurableObject<Env> {
     // Every full file is in the bucket by now (`#moveFullFiles`): the object keeps no record before the last file.
     const { earlier } = sql.exec<{ earlier: number }>("SELECT COUNT(*) AS earlier FROM records WHERE seq <= ?", before).one();
     if (earlier !== 0) throw new Error("the stored records are not those of the last roster file");
-    if (count === before) return;
-    // The first line of the list: the roster fingerprint at the end of the file before.
-    const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
-    if (fingerprintBefore === undefined) throw new Error("the file before the last roster file is not among the full files");
-    const { file, hashes } = this.#storedFile(before, count);
-    const bucket = this.bucket();
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), new TextEncoder().encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_DAILY, contentType: TYPE_TEXT });
+    if (count > before) await this.#writeRosterFile(before, count, CACHE_DAILY);
   }
 
   /**

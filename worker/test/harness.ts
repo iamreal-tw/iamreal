@@ -291,11 +291,11 @@ export interface TestWorker {
     /** Writes rows of the card state table as they are given, in one transaction (test build, `PUT /__test/roster/cards`): how a measurement fills it with many cards. */
     writeCards(cards: readonly CardToWrite[]): Promise<void>;
     /**
-     * Copies the card state table as a publication does,
-     * or with `drop` drops the copy (test build,
-     * `POST /__test/roster/cards-copy`): how a measurement times either alone.
+     * "copy": copies the card state table as a publication does; "drop":
+     * drops the copy (test build, `POST /__test/roster/cards-copy`). How a
+     * measurement times either alone.
      */
-    cardsCopy(drop: boolean): Promise<void>;
+    cardsCopy(what: "copy" | "drop"): Promise<void>;
     /**
      * Makes the stored slots of one card of the test roster text that is
      * not JSON (test build, `POST /__test/roster/break-card`): what reads
@@ -566,8 +566,8 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/cards", { method: "PUT", body: JSON.stringify(cards) });
         if (res.status !== 204) throw new Error(`writing cards: HTTP ${res.status}`);
       },
-      async cardsCopy(drop) {
-        const res = await server.fetch("/__test/roster/cards-copy", { method: "POST", body: JSON.stringify({ drop }) });
+      async cardsCopy(what) {
+        const res = await server.fetch("/__test/roster/cards-copy", { method: "POST", body: JSON.stringify({ what }) });
         if (res.status !== 204) throw new Error(`the copy of the card state table: HTTP ${res.status} ${await res.text()}`);
       },
       async ruleState(scopeString, scopedId) {

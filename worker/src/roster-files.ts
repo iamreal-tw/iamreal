@@ -96,9 +96,7 @@ export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: U
   const written = await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256, ...(onlyIf !== undefined && { onlyIf }) });
   // A write whose condition does not hold stores nothing and gives null.
   if (written === null) throw new Error(`${key} is no longer the object that was read: it was not written over`);
-  const stored = await bucket.get(key);
-  if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
-  if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
+  const stored = await readBack(bucket, key, headers);
   if (!(await isBytes(stored.body, bytes))) throw new Error(`${key} read back is not the bytes that were written`);
   return sha256;
 }
@@ -150,14 +148,20 @@ export async function writeStreamAndReadBack(bucket: FileBucket, key: string, bo
     await sized.cancel().catch(() => undefined);
     throw e;
   }
+  const stored = await readBack(bucket, key, headers);
+  const read = await lengthAndSha256(stored.body);
+  if (read.length !== body.length || read.sha256 !== body.sha256) throw new Error(`${key} read back is not the bytes that were written`);
+}
+
+/** The object just written under `key`, once it is there with these headers; otherwise this throws, its body unread. */
+async function readBack(bucket: FileBucket, key: string, headers: FileHeaders): Promise<R2ObjectBody> {
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
   if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) {
     await stored.body.cancel();
     throw new Error(`${key} does not carry the headers it was written with`);
   }
-  const read = await lengthAndSha256(stored.body);
-  if (read.length !== body.length || read.sha256 !== body.sha256) throw new Error(`${key} read back is not the bytes that were written`);
+  return stored;
 }
 
 /** Whether a stream gives exactly `bytes`. It is compared as it comes, so that the object is not held in memory a second time. */

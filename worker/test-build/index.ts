@@ -159,8 +159,10 @@ export class Roster extends DeployedRoster {
           }
           throw new Error("the test makes this write break off");
         }
-        if (fault.how === "put takes a while") await new Promise((resolve) => setTimeout(resolve, 600));
-        if (fault.how === "put takes a while") return real.put(key, sent, options);
+        if (fault.how === "put takes a while") {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          return real.put(key, sent, options);
+        }
         // The faults below change the bytes or the headers: a stream is read whole first (a test's files are small).
         const value = sent instanceof ReadableStream ? new Uint8Array(await new Response(sent).arrayBuffer()) : sent;
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
@@ -266,8 +268,8 @@ export class Roster extends DeployedRoster {
   }
 
   /** Copies the card state table, as a publication does (src/card-table.ts, `copyCards`), or drops the copy: how a measurement times either alone. */
-  testCardsCopy(drop: boolean): void {
-    if (drop) dropCardsCopy(this.ctx.storage.sql);
+  testCardsCopy(what: "copy" | "drop"): void {
+    if (what === "drop") dropCardsCopy(this.ctx.storage.sql);
     else copyCards(this.ctx.storage.sql);
   }
 
@@ -446,8 +448,8 @@ export default {
    * - `PUT /__test/roster/card` writes a row of the card state table
    *   (CardToWrite); `PUT /__test/roster/cards`, a list of them, in one
    *   transaction.
-   * - `POST /__test/roster/cards-copy` with `{drop}` copies the card state
-   *   table as a publication does, or with `drop` true drops the copy.
+   * - `POST /__test/roster/cards-copy` with `{what}`: "copy" copies the
+   *   card state table as a publication does, "drop" drops the copy.
    * - `PUT /__test/roster/schema-version` and
    *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
    *   build's", change the version the object's tables say they were made
@@ -552,8 +554,9 @@ export default {
       return done();
     }
     if (route === "POST /__test/roster/cards-copy") {
-      const { drop } = (await request.json()) as { drop: boolean };
-      await testRosterOf(env).testCardsCopy(drop);
+      const { what } = (await request.json()) as { what: "copy" | "drop" };
+      if (what !== "copy" && what !== "drop") return new Response(null, { status: 400 });
+      await testRosterOf(env).testCardsCopy(what);
       return done();
     }
     if (route === "PUT /__test/roster/schema-version") {

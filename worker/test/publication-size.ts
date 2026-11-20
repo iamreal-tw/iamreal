@@ -61,10 +61,10 @@ try {
   const tables = await worker.roster.tables();
   for (let run = 1; run <= 3; run++) {
     start = process.hrtime.bigint();
-    await worker.roster.cardsCopy(false);
+    await worker.roster.cardsCopy("copy");
     const copied = ms(start);
     start = process.hrtime.bigint();
-    await worker.roster.cardsCopy(true);
+    await worker.roster.cardsCopy("drop");
     console.log(`copy, run ${run}: copied in ${copied.toFixed(0)} ms, dropped in ${ms(start).toFixed(0)} ms`);
   }
 
@@ -84,7 +84,7 @@ try {
   const published = ms(start);
   publishing = false;
   await asking;
- console.log(`published in ${published.toFixed(0)} ms; the longest a request to the object waited meanwhile: ${longest.toFixed(0)} ms`);
+  console.log(`published in ${published.toFixed(0)} ms; the longest a request to the object waited meanwhile: ${longest.toFixed(0)} ms`);
 
   const files = await worker.files("roster/");
   assert.deepEqual(

@@ -144,7 +144,7 @@ export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], sco
 export function copyCards(sql: SqlStorage): void {
   dropCardsCopy(sql);
   sql.exec(`CREATE TABLE ${CARDS_COPY} ${CARD_COLUMNS}`);
-  sql.exec(`INSERT INTO ${CARDS_COPY} SELECT scope_string, scoped_id, last_card_proof, proofs_on_last_date, slots, last_seq FROM cards`);
+  sql.exec(`INSERT INTO ${CARDS_COPY} (scope_string, scoped_id, ${COLUMNS}) SELECT scope_string, scoped_id, ${COLUMNS} FROM cards`);
 }
 
 /** Drops the copy of the card state table, if there is one. */
