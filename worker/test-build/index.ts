@@ -29,7 +29,9 @@
 //   break its tables, or make every write to one of them fail, to see what
 //   the API answers when the back end itself fails; drop the table of the
 //   newest CRLs; and run the roster rules on the object's stored state for
-//   an event the API would never write (an invalid record of a roster).
+//   an event the API would never write (an invalid record of a roster);
+//   and read the rows it keeps of its records and of the roster as a
+//   whole, which no endpoint shows yet.
 import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
@@ -41,7 +43,7 @@ import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import type { CardToWrite, RuleEvent, TestSettings } from "./card-door.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "./card-door.ts";
 import { setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -177,6 +179,15 @@ export class Roster extends DeployedRoster {
     if (what !== "challenges.accepted") sql.exec(`CREATE TRIGGER test_fail_insert BEFORE INSERT ${FAILING_WRITES[what]} ${fail}`);
   }
 
+  /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
+  testStored(): StoredRoster {
+    const sql = this.ctx.storage.sql;
+    return {
+      records: sql.exec<{ seq: number; line: string; record_hash: string; fingerprint: string }>("SELECT seq, line, record_hash, fingerprint FROM records ORDER BY seq").toArray(),
+      roster: sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM roster WHERE id = 1").one(),
+    };
+  }
+
   /**
    * Runs the roster rules for one event of spec/vectors/roster-rules.json on
    * the state the object stores, and keeps what a valid one leaves: the
@@ -245,6 +256,9 @@ export default {
    *   CRLs, as on an object made before the build had it.
    * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
    *   rules for it on the object's stored state and answers the result.
+   * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
+   *   object keeps of its records, and the count and the roster
+   *   fingerprint of its row of the roster.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
    * - `GET /__test/newest-crls` answers what the roster's object knows of
@@ -324,6 +338,7 @@ export default {
       return done();
     }
     if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
+    if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });

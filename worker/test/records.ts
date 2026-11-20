@@ -3,6 +3,7 @@
 // through the Worker's HTTP (test/harness.ts).
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { EMPTY_FINGERPRINT, type RosterRecord, nextFingerprint, readRecordLine, recordHash } from "iamreal-protocol/record.ts";
 import { scopedIdText } from "iamreal-protocol/scoped-id.ts";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { IssuerName } from "../src/issuers.ts";
@@ -157,4 +158,41 @@ export async function mustSubmit(worker: TestWorker, s: Submission, kinds: strin
 /** Submits and expects this error. */
 export async function wantError(worker: TestWorker, s: Submission, status: number, code: string, what?: string): Promise<void> {
   assert.deepEqual(await submit(worker, s), { status, body: { error: code } }, what);
+}
+
+/**
+ * Checks what the roster's object stores of its records against
+ * spec/record.md, computing everything again from the stored lines alone,
+ * and returns the records:
+ *
+ *   - every `line` is a well-formed line of a roster file of `kind` ("Check
+ *     a line"), and the `seq`s are 1, 2, 3 and so on, in the row and in the
+ *     line;
+ *   - every `record_hash` is the hash of its line's record;
+ *   - every `fingerprint` is the roster fingerprint up to its record, each
+ *     computed from the one before, the first from 64 zeros;
+ *   - the row of the roster has the number of records and the last
+ *     fingerprint, and `card-state` reports the same number.
+ *
+ * It is the Go backend's `checkRoster` (server/harness_test.go), which asks
+ * the Go store for the same.
+ */
+export async function checkRoster(worker: TestWorker, kind: "test" | "production" = "test"): Promise<RosterRecord[]> {
+  const { records: rows, roster } = await worker.roster.stored();
+  const records: RosterRecord[] = [];
+  let fingerprint = EMPTY_FINGERPRINT;
+  for (const [i, row] of rows.entries()) {
+    const record = readRecordLine(kind, row.line);
+    if (record === null) throw new assert.AssertionError({ message: `the stored line of record ${i + 1} is not a well-formed line: ${row.line.slice(0, 200)}` });
+    assert.deepEqual([row.seq, record.seq], [i + 1, i + 1], "the stored `seq`s");
+    const hash = await recordHash(record);
+    assert.equal(row.record_hash, hash, `the stored record hash of record ${i + 1}`);
+    fingerprint = await nextFingerprint(fingerprint, hash);
+    assert.equal(row.fingerprint, fingerprint, `the stored roster fingerprint at record ${i + 1}`);
+    records.push(record);
+  }
+  assert.deepEqual(roster, { count: records.length, fingerprint }, "the row of the roster");
+  const scope = kind === "production" ? "iamreal:public:0_______________" : TEST_SCOPE;
+  assert.equal((await cardState(worker, newCard(), scope)).count, records.length, "the count `card-state` reports");
+  return records;
 }

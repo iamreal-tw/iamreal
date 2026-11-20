@@ -17,6 +17,7 @@ import {
   type Submission,
   TEST_SCOPE,
   cardState,
+  checkRoster,
   circuitOf,
   day,
   freshRoster,
@@ -242,6 +243,8 @@ describe("the challenge", () => {
       for (const a of answers) if (a.status === 400) assert.deepEqual(a.body, { error: "challenge_used" });
       assert.equal(await count(), round + 1);
     }
+    // One line for each round, and no trace of the two that were refused.
+    assert.equal((await checkRoster(worker)).length, 5);
   });
 });
 
@@ -406,6 +409,14 @@ describe("the roster rules", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:h"), "threads refresh");
     await wantError(worker, await sub(worker, card, root, "threads:i"), 400, "switch_limit");
     assert.equal(await count(), 12);
+    // The stored roster has the twelve records that were written, and nothing of the four that were refused.
+    const stored = await checkRoster(worker);
+    assert.equal(stored.length, 12);
+    assert.ok(stored.every((r) => r.scopedId === card));
+    assert.deepEqual(stored.map((r) => r.accounts.map((a) => `${a.platform}:${a.username}`).join(",")), [
+      "threads:a", "threads:b", "threads:c", "threads:d", "threads:e", "threads:f", "threads:g",
+      "test-example:a-b,threads:h", "test-example:c-d,threads:h", "test-example:c-d", "", "threads:h",
+    ]);
   });
 
   test("daily_limit: the fourth record of a card on one date; a challenge issued before midnight still counts for that date, and the next day is free again", async () => {
@@ -425,6 +436,7 @@ describe("the roster rules", () => {
     await wantError(worker, await sub(worker, card, root), 400, "daily_limit");
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
     assert.equal(await count(), 4);
+    assert.equal((await checkRoster(worker)).length, 4);
     assert.deepEqual([(await state(card)).proofs_on_last_date, (await slot(card, "threads")).current], [3, null]);
 
     await worker.setClock(tw("2026-11-21", "00:00:00"));
@@ -471,6 +483,7 @@ describe("the back end's policy on switches", () => {
     await wantError(worker, fourth, 403, "switch_restricted");
     assert.deepEqual(await state(card), before);
     assert.equal(await count(), 7);
+    assert.equal((await checkRoster(worker)).length, 7);
     await mustSubmit(worker, { ...fourth, accounts: list("test-example:c-d") }, "test-example refresh, threads withdraw");
     // The card's third record of the day was written: a fourth is the rules' daily_limit, not the policy's code.
     await wantError(worker, await sub(worker, card, root, "threads:e"), 400, "daily_limit");

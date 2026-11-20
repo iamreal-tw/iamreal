@@ -36,3 +36,13 @@ export interface TestSettings {
   /** The back end's policy on late switches (src/settings.ts): "true" turns it on. wrangler.jsonc does not set it. */
   readonly RESTRICT_LATE_SWITCHES?: string;
 }
+
+/**
+ * What `GET /__test/roster/stored` answers: the rows the roster's object
+ * keeps of its records, in the order of `seq`, and what its one row of the
+ * roster says of them. No endpoint of the deployed Worker shows these yet.
+ */
+export interface StoredRoster {
+  readonly records: readonly { readonly seq: number; readonly line: string; readonly record_hash: string; readonly fingerprint: string }[];
+  readonly roster: { readonly count: number; readonly fingerprint: string };
+}

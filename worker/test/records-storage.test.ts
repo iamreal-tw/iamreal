@@ -15,7 +15,7 @@ import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
 import type { CardState } from "iamreal-protocol/roster-rules.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
-import { type Answer, type Submission, cardState, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
+import { type Answer, type Submission, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -40,6 +40,15 @@ describe("records submitted at once", () => {
     assert.deepEqual(answers.map((a) => [a.body.seq, a.body.kinds[0].account_cards]).sort((x, y) => x[0] - y[0]), Array.from({ length: 20 }, (_, i) => [i + 1, i + 1]));
     assert.equal(await count(), 20);
     for (const s of submissions) assert.equal((await cardState(worker, s.scoped_id)).proofs_on_last_date, 1);
+    // What is stored is a roster file with its hashes and fingerprints, and each line is the submission that was answered with its `seq`.
+    const stored = await checkRoster(worker);
+    assert.equal(stored.length, 20);
+    for (const [i, s] of submissions.entries()) {
+      const { seq, ...fields } = stored[answers[i]!.body.seq - 1]!;
+      assert.deepEqual(fields, { scopeString: s.scope_string, scopedId: s.scoped_id, accounts: s.accounts, challenge: s.challenge, issuer: s.issuer, smtRoot: s.smt_root, circuit: s.circuit, proof: s.proof });
+      assert.equal(seq, answers[i]!.body.seq);
+    }
+    assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
   });
 
   test("20 requests of one card at the same moment: 3 records of that date, and 17 times daily_limit", async () => {
@@ -53,6 +62,7 @@ describe("records submitted at once", () => {
     for (const a of answers) if (a.status !== 201) assert.deepEqual(a, { status: 400, body: { error: "daily_limit" } });
     assert.equal(await count(), 3);
     assert.equal((await cardState(worker, card)).proofs_on_last_date, 3);
+    assert.equal((await checkRoster(worker)).length, 3);
   });
 });
 

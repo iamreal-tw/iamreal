@@ -11,7 +11,7 @@ import { createTestHarness } from "wrangler";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
-import type { CardToWrite, RuleEvent, TestSettings } from "../test-build/card-door.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -259,11 +259,18 @@ export interface TestWorker {
      * this.
      */
     dropNewestCrls(): Promise<void>;
+    /**
+     * The rows the object keeps of its records, in the order of `seq`, and
+     * the count and the roster fingerprint of its row of the roster (test
+     * build, `GET /__test/roster/stored`). `checkRoster` of test/records.ts
+     * is what checks them.
+     */
+    stored(): Promise<StoredRoster>;
   };
   close(): Promise<void>;
 }
 
-export type { CardToWrite, RuleEvent, TestSettings };
+export type { CardToWrite, RuleEvent, StoredRoster, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -446,6 +453,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async writeCard(card) {
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
+      },
+      async stored() {
+        const res = await server.fetch("/__test/roster/stored");
+        if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as StoredRoster;
       },
       async breakTables() {
         const res = await server.fetch("/__test/roster/break", { method: "POST" });
