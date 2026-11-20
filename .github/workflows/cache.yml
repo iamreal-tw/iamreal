@@ -21,9 +21,11 @@
 # deploy reads no cache.
 #
 # Each job builds what its job of checks.yml builds, with the same commands,
-# so that cargo finds in target/ what it would have built. The tests are
-# built, not run (--no-run): running them adds nothing to target/ that a
-# later run reuses. The keys hold the hash of every file that decides what
+# so that cargo finds in target/, and Gradle in its caches, what it would
+# have built or downloaded. device-core's tests are built, not run
+# (--no-run): running them adds nothing to target/ that a later run reuses.
+# android's job runs the whole `gradlew build`, with --no-daemon, so that no
+# Gradle is left running when the caches are saved. The keys hold the hash of every file that decides what
 # the dependencies are built from and with, and of this file, which holds
 # the commands; with no restore-keys a cache is restored for exactly those
 # files or not at all. A key that already has a cache is not saved again: the

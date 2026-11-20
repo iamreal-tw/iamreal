@@ -17,8 +17,8 @@
 // - what the commands of checks.yml run: they run the repository's code,
 //   by design, with no secret and a token that can only read;
 // - what the commands of cache.yml leave in the caches it saves: they run
-//   the code of main (device-core/'s build), and every later check that
-//   restores a cache builds on what that run left in it;
+//   the code of main (the builds of device-core/ and android/), and every
+//   later check that restores a cache builds on what that run left in it;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
@@ -557,11 +557,12 @@ export const CACHE_GROUP = "cache";
 /**
  * The jobs of cache.yml, exactly. Each compiles what its job of checks.yml
  * compiles, with the same commands in the same directory (the same
- * constants, above), so that the
- * target/ it saves is the one that job's cargo looks in: clippy's check of
- * every target and the tests, with --release. The tests are built and not
- * run (`--no-run`): running them leaves nothing in target/ that a later
- * run reuses. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
+ * constants, above), so that what it saves is what that job's cargo and
+ * Gradle look for. cache-device-core: clippy's check of every target and the
+ * tests, with --release; the tests are built and not run (`--no-run`):
+ * running them leaves nothing in target/ that a later run reuses.
+ * cache-android: the whole `gradlew build` of the android job, tests and
+ * lint included. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
  * below, on why names are unique across workflows).
  */
 export const CACHE_JOBS: YamlMap = {

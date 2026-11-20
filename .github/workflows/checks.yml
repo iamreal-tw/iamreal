@@ -180,6 +180,13 @@ jobs:
   # Gradle downloads is checked against android/gradle/verification-metadata.xml.
   # `build` assembles both installers, runs the unit tests on the JVM against
   # the same Rust, runs lint, and checks what was built (android/README.md).
+  # cargo's registry, the three directories of device-core/target/ it builds
+  # into, and Gradle's caches and wrapper are restored from the caches
+  # cache.yml saved on main, for exactly the files hashed in the keys (no
+  # restore-keys); with no cache the job builds everything, as before. Gradle
+  # checks a library from its cache against verification-metadata.xml too;
+  # the wrapper's distribution and target/ are not checked again
+  # (.github/README.md, on caches).
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
