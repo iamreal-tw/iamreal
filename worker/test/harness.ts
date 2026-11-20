@@ -8,6 +8,7 @@ import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
+import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import type { CardToWrite, RuleEvent, TestSettings } from "../test-build/card-door.ts";
@@ -233,16 +234,20 @@ export interface TestWorker {
      */
     applyRuleEvent(event: RuleEvent): Promise<{ valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] }>;
     /**
-     * The challenges the object still holds, read from its storage. A
-     * stopgap: no endpoint shows yet whether a challenge is known. When
-     * submitting a record does (`challenge_unknown`, #67), the tests ask
-     * that and this goes.
+     * Of the challenges `POST /api/v1/challenges` has given out through
+     * `fetch` or `issueChallenge` since this worker started, the ones the
+     * back end still takes a submission for, sorted. It asks the API: for
+     * each, a `POST /api/v1/records` with that challenge and a proof that
+     * does not verify, which is `challenge_unknown` for a challenge the back
+     * end does not know (never issued by this roster, expired, deleted) and
+     * `proof` or `challenge_attempts` for one it knows. Each question counts
+     * as a submission of the challenge.
      */
-    storedChallenges(): Promise<string[]>;
+    knownChallenges(): Promise<string[]>;
     /**
-     * Writes the state of a card as a valid record would leave it, with the
-     * object's own code (test build, `PUT /__test/roster/card`). Until
-     * submitting a record writes it (#67).
+     * Writes a row of the card state table as it is given (test build,
+     * `PUT /__test/roster/card`): for the stored states no request to this
+     * build can leave, a broken one or one from before a platform was added.
      */
     writeCard(card: CardToWrite): Promise<void>;
     /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/roster/break`). */
@@ -301,13 +306,23 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     settings = next;
   };
   const rosterObject = (): { name: string } => ({ name: settings.ROSTER_OBJECT_NAME ?? DEPLOYED_ROSTER_OBJECT });
+  /** Every challenge `POST /api/v1/challenges` has given out through this object. */
+  const issued: string[] = [];
+  const fetch = async (input: string, init?: RequestInit): Promise<Response> => {
+    const res = (await server.fetch(input, init as never)) as unknown as Response;
+    if (res.status === 200 && init?.method === "POST" && input === "/api/v1/challenges") {
+      const body = (await res.clone().json()) as { challenge?: unknown };
+      if (typeof body.challenge === "string") issued.push(body.challenge);
+    }
+    return res;
+  };
   if (options.settings !== undefined) await setSettings(options.settings);
 
   return {
     setSettings,
     url,
     moica,
-    fetch: (input, init) => server.fetch(input, init as never) as unknown as Promise<Response>,
+    fetch,
     runSchedule: () => worker.scheduled({ cron: HOURLY, scheduledTime: new Date() }),
     async files(prefix = "") {
       const { DATA } = await worker.getEnv();
@@ -336,7 +351,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const set = await server.fetch("/__test/roster/next-random", { method: "PUT", body: randomHex });
         if (set.status !== 204) throw new Error(`setting the next challenge's bytes: HTTP ${set.status}`);
       }
-      const res = await server.fetch("/api/v1/challenges", { method: "POST" });
+      const res = await fetch("/api/v1/challenges", { method: "POST" });
       if (res.status !== 200) throw new Error(`asking for a challenge: HTTP ${res.status} ${await res.text()}`);
       return ((await res.json()) as { challenge: string }).challenge;
     },
@@ -406,9 +421,27 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         if (res.status !== 200) throw new Error(`applying a rule event: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as { valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] };
       },
-      async storedChallenges() {
-        const storage = await worker.getDurableObjectStorage("ROSTER" as never, rosterObject());
-        return (await storage.exec<{ challenge: string }>("SELECT challenge FROM challenges ORDER BY challenge")).map((row) => row.challenge);
+      async knownChallenges() {
+        const known: string[] = [];
+        for (const challenge of issued) {
+          const production = (settings.ROSTER_KIND ?? "test") === "production";
+          const body = {
+            scope_string: production ? "iamreal:public:0_______________" : "iamreal-test:public:0__________",
+            scoped_id: "0400000000000000000000000000000000000000000000000000",
+            accounts: [],
+            challenge,
+            issuer: "G3",
+            smt_root: "0".repeat(64),
+            circuit: CIRCUITS.card_proof_rs4096.verificationKeySha256,
+            // Placeholder bytes: no proof for the real verifier, and rejected by the stand-in (first byte 1).
+            proof: Buffer.concat([Buffer.from([1]), Buffer.alloc(14655)]).toString("base64"),
+          };
+          const res = await server.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(body) });
+          const { error } = (await res.json()) as { error?: string };
+          if (error === "proof" || error === "challenge_attempts") known.push(challenge);
+          else if (error !== "challenge_unknown") throw new Error(`asking whether a challenge is known: HTTP ${res.status} ${error}`);
+        }
+        return known.sort();
       },
       async writeCard(card) {
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });

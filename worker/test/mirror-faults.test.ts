@@ -289,7 +289,7 @@ describe("the roster's object and the mirror", () => {
       await worker.roster.restart();
 
       assert.deepEqual(await worker.newestCrls(), { G2: [], G3: [] });
-      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      assert.deepEqual(await worker.roster.knownChallenges(), [challenge]);
       worker.moica.serve("G2", g2(81n));
       worker.moica.serve("G3", A);
       assert.equal((await worker.runSchedule()).outcome, "ok");
