@@ -157,12 +157,24 @@ func splitLines(data []byte) [][]byte {
 // beyond the roster on line 1.
 func publishedCount(fp []byte) *uint64 {
 	var count *uint64
-	for _, l := range splitLines(fp) {
-		if fl, err := parseFingerprintLine(l); err == nil && (count == nil || fl.Count > *count) {
+	for _, fl := range readableFingerprintLines(fp) {
+		if count == nil || fl.Count > *count {
 			count = &fl.Count
 		}
 	}
 	return count
+}
+
+// readableFingerprintLines returns the lines of a fingerprint file that are
+// as the spec writes them, in order; the others are left out.
+func readableFingerprintLines(fp []byte) []fingerprintLine {
+	var out []fingerprintLine
+	for _, l := range splitLines(fp) {
+		if fl, err := parseFingerprintLine(l); err == nil {
+			out = append(out, fl)
+		}
+	}
+	return out
 }
 
 // checkHashLists checks the record hash list of every roster file read

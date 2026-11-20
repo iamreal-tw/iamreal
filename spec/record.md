@@ -265,6 +265,12 @@ therefore hold more records than the `count` of the fingerprint file's last
 line: those records are not published yet. A re-verifier checks the roster
 up to that `count`.
 
+With the roster, the server publishes once a day the state it keeps of
+every card, as a card state file: the states after the first `count`
+records of that day's line. Its format, and how a re-verifier compares it
+with the states it computes from the roster, are in
+[`roster-rules.md`](roster-rules.md), "The card state file".
+
 ## Verifying a record
 
 The line is already well formed. A verifier, the server or anyone
