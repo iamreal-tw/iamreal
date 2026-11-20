@@ -121,7 +121,7 @@ export interface CrlCase {
   /** The issuer of the cardholder's certificate. */
   issuer: IssuerName;
   today: string;
-  /** `crl_max_age_days` of the server's config. */
+  /** `crl_max_age_days` of the server's config, a value the device reads (see MaxAgeCase). */
   server_max_age_days: number;
   /** The highest CRL number this device has used for the issuer, or null. */
   highest: string | null;

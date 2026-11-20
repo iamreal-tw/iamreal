@@ -173,9 +173,10 @@ L = min(crl_max_age_days, 7)
 than 2^53 − 1. A config with any other value (negative, a fraction, a
 string, `null`, larger) is not read at all: it is a malformed response
 (`malformed_response`, [`docs/api/card-proof.md`](../docs/api/card-proof.md)),
-and the card proof stops before any CRL is used. The server writes the number as plain digits; how a number written
-with a fraction or an exponent part that is an integer (`3.0`, `3e0`) is
-read is not specified, and the vectors contain none.
+and the card proof stops before any CRL is used. The server writes the
+number as plain digits; how a number written with a fraction or an exponent
+part that is an integer (`3.0`, `3e0`) is read is not specified, and the
+vectors contain none.
 
 7 is the bound built into the device. The server can make it stricter, never
 looser: a mirror that serves old CRLs could otherwise learn whether a card
@@ -263,9 +264,9 @@ number is in the tree, the card proof stops with `revoked`.
   `crl_max_age_days` (`server_max_age_days`), the remembered CRL number, and
   the mirror's answers by file name (`index.jsonl` and `<sha256>.crl`): the
   HTTP status and the body in hex; a name not listed is answered with `404`.
-  A request that gets no answer at all is not in the vectors. The result is the CRL used (its
-  number, CRL date and SHA-256) or the reason code with its details, and in
-  both cases the number remembered afterwards.
+  A request that gets no answer at all is not in the vectors. The result is
+  the CRL used (its number, CRL date and SHA-256) or the reason code with its
+  details, and in both cases the number remembered afterwards.
 
 Which CRLs are usable, case by case with their reason codes, is in
 [`../crl/testdata/`](../crl/testdata) (`expected.json`).

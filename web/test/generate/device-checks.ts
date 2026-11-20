@@ -129,11 +129,10 @@ async function rawSign(key: TestKey, digestInfo: Uint8Array): Promise<Uint8Array
   for (let e = d; e > 0n; e >>= 1n, base = (base * base) % key.modulus) if (e & 1n) r = (r * base) % key.modulus;
   return bytesOfBigint(r, k);
 }
-const G2_TBS = buildTbs({ spki: card.spki });
-const g2Digest = await sha256(G2_TBS);
+const g2Digest = await sha256(TBS);
 const withNull = concatBytes(hex("3031300d060960864801650304020105000420"), g2Digest);
-assert.deepEqual(await rawSign(g2, withNull), await signWith(g2, G2_TBS), "the written-out signature is the one WebCrypto makes");
-const noNull = await rawSign(g2, concatBytes(hex("302f300b0609608648016503040201") , hex("0420"), g2Digest));
+assert.deepEqual(await rawSign(g2, withNull), await signWith(g2, TBS), "the written-out signature is the one WebCrypto makes");
+const noNull = await rawSign(g2, concatBytes(hex("302f300b0609608648016503040201"), hex("0420"), g2Digest));
 /** A G2 certificate whose signature is written as itself plus the modulus, still 256 bytes. */
 async function signaturePlusModulus(): Promise<Uint8Array> {
   for (let i = 0; i < 200; i++) {
@@ -207,14 +206,24 @@ certCase(
 );
 certCase("a card modulus whose first byte is 7f: fewer than 2048 bits (row 9)", [await patched(K + 33, [0x7f])], fails("unsupported_format"));
 certCase("exponent 65539 (row 10)", [await patched(E + 4, [0x03])], fails("unsupported_format"));
+certCase(
+  "a tbs of fewer than 256 bytes: its header is not 30 82 (row 2)",
+  [await certificate(seq(hex("a003020102"), tlv(0x02, Uint8Array.of(1)), hex("300d06092a864886f70d01010b0500")), g3)],
+  fails("unsupported_format"),
+);
+certCase("a serial number of 0 bytes (row 4)", [await cert({ serial: new Uint8Array(0) })], fails("unsupported_format"));
+certCase("notAfter without its final Z (row 7)", [await cert({ notAfter: "3101011559590" })], fails("unsupported_format"));
+certCase("extensions tagged a4, not a3 (row 11)", [await patched(E + 5, [0xa4])], fails("unsupported_format"));
+certCase("extensions not a SEQUENCE, 31 82 (row 11)", [await patched(E + 9, [0x31])], fails("unsupported_format"));
+certCase("authorityKeyIdentifier of 21 bytes (row 12)", [await patched(E + 25, [0x15])], fails("unsupported_format"));
 certCase("the tbs ends 168 bytes after the exponent (row 16)", [await cutTo(E + 168)], passes());
 certCase("the tbs ends 167 bytes after the exponent (row 16)", [await cutTo(E + 167)], fails("unsupported_format"));
 certCase("the signatureAlgorithm outside the tbs is not read", [seq(TBS, hex("300d06092a864886f70d0101050500"), bitString(0, tbsSig))], passes());
 certCase("the signature's BIT STRING has 1 unused bit", [seq(TBS, SHA256_WITH_RSA, bitString(1, tbsSig))], fails("unsupported_format"));
-certCase("a G2 signature of 257 bytes, the first 00", [seq(G2_TBS, SHA256_WITH_RSA, bitString(0, concatBytes(Uint8Array.of(0), await signWith(g2, G2_TBS))))], fails("unknown_issuer"));
+certCase("a G2 signature of 257 bytes, the first 00", [seq(TBS, SHA256_WITH_RSA, bitString(0, concatBytes(Uint8Array.of(0), await signWith(g2, TBS))))], fails("unknown_issuer"));
 certCase("a G2 signature written as itself plus the modulus", [await signaturePlusModulus()], fails("unknown_issuer"));
-certCase("a G2 signature whose DigestInfo has no NULL parameters", [seq(G2_TBS, SHA256_WITH_RSA, bitString(0, noNull))], fails("unknown_issuer"));
-certCase("DER: a multi-byte tag", [seq(TBS, hex("3f010d300b06092a864886f70d01010b"), bitString(0, tbsSig))], fails("unsupported_format"));
+certCase("a G2 signature whose DigestInfo has no NULL parameters", [seq(TBS, SHA256_WITH_RSA, bitString(0, noNull))], fails("unknown_issuer"));
+certCase("DER: a multi-byte tag", [seq(TBS, hex("3f1f0d300b06092a864886f70d01010b"), bitString(0, tbsSig))], fails("unsupported_format"));
 certCase("DER: an indefinite length", [concatBytes(hex("3080"), TBS, SHA256_WITH_RSA, bitString(0, tbsSig), hex("0000"))], fails("unsupported_format"));
 certCase("DER: a long-form length below 128, 81 0d", [seq(TBS, hex("30810d06092a864886f70d01010b0500"), bitString(0, tbsSig))], fails("unsupported_format"));
 certCase(
@@ -239,16 +248,16 @@ interface MirrorCrl {
   extraExtensions?: Uint8Array[];
   /** The index line says this root (for example "-not_usable_signature"). */
   root?: string;
-  /** Serve these bytes under the file's name instead; null: not served (404). */
-  serve?: Uint8Array | null;
-  /** Answer the file's name with this status (and no body). */
+  /** Serve these bytes under the file's name instead. */
+  serve?: Uint8Array;
+  /** Answer the file's name with this status and no body; 404 leaves it out of the mirror. */
   status?: number;
 }
 
 interface MirrorOptions {
   /** The index's bytes from its text (default: UTF-8). */
   indexBytes?: (text: string) => Uint8Array;
-  /** Answer index.jsonl with this status (and no body); 404 is "not served". */
+  /** Answer index.jsonl with this status and no body; 404 leaves it out of the mirror. */
   indexStatus?: number;
 }
 
@@ -264,9 +273,8 @@ async function mirror(crls: MirrorCrl[], o: MirrorOptions): Promise<{ mirror: Mi
     lines.push(await indexLine({ issuer: c.issuer, crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, der, root: c.root ?? ROOT }));
     const sha = await sha256Hex(der);
     shas.push(sha);
-    const served = c.serve === undefined ? der : c.serve;
-    if (c.status !== undefined) files[`${sha}.crl`] = { status: c.status, body: "" };
-    else if (served !== null) files[`${sha}.crl`] = { status: 200, body: hexOf(served) };
+    if (c.status === undefined) files[`${sha}.crl`] = { status: 200, body: hexOf(c.serve ?? der) };
+    else if (c.status !== 404) files[`${sha}.crl`] = { status: c.status, body: "" };
   }
   const text = lines.map((l) => l + "\n").join("");
   const index = o.indexStatus !== undefined ? { status: o.indexStatus, body: "" } : { status: 200, body: hexOf((o.indexBytes ?? ((t) => new TextEncoder().encode(t)))(text)) };
@@ -319,11 +327,11 @@ await crlCase(
   { crls: [G3_100(0, { serve: await makeCrl({ issuer: g3, serials: [5n], crlNumber: 100n, thisUpdate: crlTime(0) }) })] },
   () => ({ ok: false, problem: "crl_hash", highest_after: null }),
 );
-await crlCase("the file is not served", { crls: [G3_100(0, { serve: null })] }, () => ({ ok: false, problem: "crl_unavailable", highest_after: null }));
+await crlCase("the file is not served", { crls: [G3_100(0, { status: 404 })] }, () => ({ ok: false, problem: "crl_unavailable", highest_after: null }));
 await crlCase("no line for the certificate's issuer", { crls: [{ issuer: "G2", crlNumber: 7n, thisUpdate: crlTime(0) }] }, () => ({ ok: false, problem: "crl_unavailable", highest_after: null }));
 await crlCase(
   "the line with the highest CRL number is used",
-  { crls: [G3_100(0), { issuer: "G3", crlNumber: 99n, thisUpdate: crlTime(1), serve: null }] },
+  { crls: [G3_100(0), { issuer: "G3", crlNumber: 99n, thisUpdate: crlTime(1), status: 404 }] },
   used("2026-11-16"),
 );
 await crlCase(
