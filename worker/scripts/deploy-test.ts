@@ -8,11 +8,16 @@
 // CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (scripts/deploy.ts).
 // `pnpm run deploy:test --dry-run` builds without uploading (and still
 // wants the two lines).
+//
+// Before wrangler runs, the proof verifier's files are checked against
+// their SHA-256 and written into `generated/` (scripts/engine-files.ts); a
+// file that does not match stops the deploy here.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEPLOY_ARGS, deployTokenOf, wranglerEnv } from "./deploy.ts";
+import { prepareEngineFiles } from "./engine-files.ts";
 
 const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ENV_FILE = join(WORKER_DIR, "..", ".env.local");
@@ -27,6 +32,8 @@ try {
 } catch {
   throw new Error(`${ENV_FILE} is missing: it holds CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID`);
 }
+
+prepareEngineFiles();
 
 const r = spawnSync(join(WORKER_DIR, "node_modules", ".bin", "wrangler"), [...DEPLOY_ARGS, ...extra], {
   cwd: WORKER_DIR,

@@ -12,9 +12,11 @@
     "deploy:test": "node --experimental-strip-types scripts/deploy-test.ts"
   },
   "dependencies": {
-    "iamreal-protocol": "workspace:*"
+    "iamreal-protocol": "workspace:*",
+    "msgpackr": "1.12.1"
   },
   "devDependencies": {
+    "@aztec-foundation/bb.js": "6.0.0",
     "@types/node": "22.20.5",
     "typescript": "7.0.2",
     "wrangler": "4.160.1"
