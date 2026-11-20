@@ -504,10 +504,13 @@ describe("the challenges the roster's object keeps", () => {
     }
   });
 
-  test("the object wakes itself to delete: it has no alarm until a challenge is issued, then one 10 minutes ahead, and none once nothing is left", async () => {
+  test("the object wakes itself to delete: until a challenge is issued its alarm is the daily publication's, at midnight in Taiwan; then it is 10 minutes ahead", async () => {
     const worker = await startWorker();
     try {
-      assert.equal(await worker.roster.alarmInMs(), null);
+      // Noon in Taiwan: an object that has only started has its alarm 12 hours ahead (README.md, "每天換日公布名冊").
+      await worker.setClock(tw("2026-11-20T12:00:00"));
+      const midnight = await worker.roster.alarmInMs();
+      assert.ok(midnight !== null && midnight > 11.9 * 3600_000 && midnight <= 12 * 3600_000, `the alarm is ${midnight} ms ahead`);
       await issue(worker);
       const wait = await worker.roster.alarmInMs();
       assert.ok(wait !== null && wait > 9 * 60_000 && wait <= 10 * 60_000, `the alarm is ${wait} ms ahead`);
@@ -536,8 +539,9 @@ describe("the object's timed work shares its one alarm", () => {
     const worker = await startWorker();
     try {
       await worker.setClock(START);
-      await worker.roster.setExtraWork(at(20 * 60), DAY);
-      await alarmIsAhead(worker, 20 * 60, "with only the other work");
+      // START is noon in Taiwan, and the object's own daily publication is due at midnight: the other work is due before that.
+      await worker.roster.setExtraWork(at(11 * 60), DAY);
+      await alarmIsAhead(worker, 11 * 60, "with only the other work");
 
       const challenge = await issue(worker);
       await alarmIsAhead(worker, 10, "once a challenge is issued");
@@ -548,7 +552,7 @@ describe("the object's timed work shares its one alarm", () => {
       assert.ok(!(await worker.roster.knownChallenges()).includes(challenge));
       // The other work was not due and did not run; the alarm is now its own.
       assert.deepEqual(await worker.roster.extraWorkRuns(), []);
-      await alarmIsAhead(worker, 19 * 60 + 50, "with the challenge gone");
+      await alarmIsAhead(worker, 10 * 60 + 50, "with the challenge gone");
     } finally {
       await worker.close();
     }
@@ -582,7 +586,8 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.roster.runAlarm();
       assert.deepEqual(await worker.roster.knownChallenges(), []);
       assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3)]);
-      await alarmIsAhead(worker, 24 * 60 - 7, "with only the other work left");
+      // The other work is due a day after it ran; before that comes midnight in Taiwan, 12 hours after START, and the daily publication.
+      await alarmIsAhead(worker, 12 * 60 - 10, "with the challenge gone and the other work a day ahead");
 
       // Both due at once: both run.
       const second = await issue(worker);
@@ -590,6 +595,40 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.roster.runAlarm();
       assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3), at(24 * 60 + 3)]);
       assert.ok(!(await worker.roster.knownChallenges()).includes(second));
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("an alarm that rings by itself sets the next one: after the work that was due, the alarm is the challenge's, with no request in between", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await issue(worker);
+      await worker.roster.setExtraWork(START, DAY);
+      // Nothing is asked of the object while its alarm rings, a second from now, so nothing but the alarm's own handler sets the next.
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      await alarmIsAhead(worker, 10, "once the alarm rang by itself");
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("challenges issued more often than the alarm's least wait do not keep pushing the alarm away: work that is due runs within seconds", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await issue(worker);
+      // Work that is due now, while a challenge is issued every 300 ms for three seconds: each of them sets the alarm.
+      await worker.roster.setExtraWork(START, DAY);
+      for (let i = 0; i < 10; i++) {
+        await issue(worker);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      // The alarm is then the challenges' own again.
+      await alarmIsAhead(worker, 10, "once the other work ran");
     } finally {
       await worker.close();
     }

@@ -4,6 +4,7 @@
 // again and comparing bytes.
 import { byBytes, sha256Hex } from "./bytes.ts";
 import { parseChallenge } from "./challenge.ts";
+import { type Day, formatDay } from "./date.ts";
 import { P } from "./field.ts";
 import { platformsOf } from "./platforms.ts";
 import { type Roster, lookupScope } from "./scope.ts";
@@ -129,6 +130,61 @@ export function recordHash(r: RosterRecord): Promise<string> {
 export function nextFingerprint(fingerprint: string, recordHashOfNext: string): Promise<string> {
   if (!LOWER_HEX_64.test(fingerprint) || !LOWER_HEX_64.test(recordHashOfNext)) throw new Error("not 64 lowercase hex digits");
   return sha256Hex(utf8(`${FINGERPRINT_VERSION}\n${fingerprint}\n${recordHashOfNext}`));
+}
+
+/** A full file of the roster directory has this many lines (spec/record.md, "The published roster"). */
+export const LINES_PER_FILE = 1000;
+
+/** `before`, the number of records before a roster file, as the 16 digits of its name. */
+function fileNumber(before: number): string {
+  if (!Number.isSafeInteger(before) || before < 0 || before % LINES_PER_FILE !== 0) throw new Error("not a number of records a roster file follows");
+  return String(before).padStart(16, "0");
+}
+
+/** The name, in the roster directory, of the roster file that follows the first `before` records: `before` in 16 digits, then `.jsonl`. */
+export function rosterFileName(before: number): string {
+  return `${fileNumber(before)}.jsonl`;
+}
+
+/** The path, in the roster directory, of the record hash list of the roster file `rosterFileName(before)`. */
+export function hashListName(before: number): string {
+  return `hashes/${fileNumber(before)}.txt`;
+}
+
+/**
+ * The record hash list of a roster file (spec/record.md, "Record hash
+ * lists"): `fingerprintBefore` is the roster fingerprint at the end of the
+ * file before it (EMPTY_FINGERPRINT for the first file), `recordHashes` the
+ * record hash of each of its lines, in order. Each value is followed by LF.
+ */
+export function hashList(fingerprintBefore: string, recordHashes: readonly string[]): string {
+  for (const value of [fingerprintBefore, ...recordHashes]) if (!LOWER_HEX_64.test(value)) throw new Error("not 64 lowercase hex digits");
+  return [fingerprintBefore, ...recordHashes].map((value) => `${value}\n`).join("");
+}
+
+/** The name of the fingerprint file in the roster directory (spec/record.md, "The published roster"). */
+export const FINGERPRINT_FILE_NAME = "fingerprints.jsonl";
+
+/** A line of the fingerprint file: the roster as it was published on one date in Taiwan. */
+export interface FingerprintLine {
+  /** The date in Taiwan on which the line was written. */
+  readonly date: Day;
+  /** The number of records at that moment. */
+  readonly count: number;
+  /** `fingerprint(count)`: 64 lowercase hex digits, EMPTY_FINGERPRINT for a count of 0. */
+  readonly fingerprint: string;
+}
+
+/**
+ * A line of the fingerprint file written from its template and followed by
+ * LF. Throws for a count that is not 0 to MAX_SEQ or a fingerprint that is
+ * not 64 lowercase hex digits; whether the fingerprint is the roster's is
+ * for whoever holds the roster.
+ */
+export function fingerprintLine(line: FingerprintLine): string {
+  if (!Number.isSafeInteger(line.count) || line.count < 0) throw new Error("not a number of records");
+  if (!LOWER_HEX_64.test(line.fingerprint)) throw new Error("not 64 lowercase hex digits");
+  return `{"date":"${formatDay(line.date)}","count":${line.count},"fingerprint":"${line.fingerprint}"}\n`;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
