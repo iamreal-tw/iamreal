@@ -39,6 +39,8 @@
 | `key.rs`、`tree.rs` | `spec/revocation-tree.md`「Tree」 | 樹的鍵；樹和「不在樹裡」的路徑，可以分幾份建再合起來 |
 | `circuit_inputs.rs` | `spec/circuit-inputs.md` | 電路的輸入（憑證、發證金鑰、路徑、`current_time`、兩個簽章各自切成的段，和兩個 Barrett 參數），以及裝置預期證明帶的公開輸入 |
 | `hex.rs` | | 寫在程式裡的十六進位常數 |
+| `roster_rules.rs` | `spec/roster-rules.md` | 名冊規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
+| `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更正、更換還是收回，更換之後還剩幾次；不認得的平台上的帳號照原樣留在清單裡 |
 
 | 檔案（`prover/src/`） | 內容 |
 |---|---|
@@ -51,8 +53,12 @@
 | `proof.rs` | 證明：Barretenberg 的 UltraHonk，固定用紀錄驗證時的那一組設定（零知識、Poseidon2）；設定執行緒數、不讓 Barretenberg 印東西 |
 | `alloc.rs` | 這個函式庫釋放的記憶體先蓋成零（見「清掉」） |
 | `quiet.rs` | 核心裡的 panic 不印任何東西 |
+| `json.rs` | 讀 C 函式收到的 JSON：同一個鍵寫兩次的不收，數字照它的值讀 |
+| `server_state.rs` | 讀後台的平台表和 `card-state` 的回應（`spec/list-consequence.md`），見下面 |
 
-還沒有的（各有自己的票）：名冊規則、檢查後台的回應（題目、現況、送出的回應）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
+讀後台回應的規則（`spec/list-consequence.md` 的「Reading the platform table」「Reading the card's state」）在 `prover/src/server_state.rs`，不在 `checks/`：它要讀 JSON，而 `checks/` 沒有執行期的套件。所以 `list-consequence.json` 的測試在 `prover/tests/`，要連結 Barretenberg 才跑得到。
+
+還沒有的（各有自己的票）：檢查後台其他的回應（題目、送出的回應）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
 
 ## 「檢查都通過了」
 
@@ -92,7 +98,7 @@
 1. session 四步都通過，否則 `IDC_ERR_REFUSED`。
 2. 四個檔再核對一次 SHA-256（ADR-0035）：第 4 步核對過之後核心沒有留下它們，這裡收到的是另一次交進來的位元組。不對是 `IDC_ERR_INPUT`，而且第 4 步要重新通過。
 3. 題目是唯一的寫法；它的日期決定 `current_time`，也是紀錄的日期。它要和 session 的日期相同，否則 `IDC_ERR_REFUSED`：過卡跨過午夜時，app 在拿題目之前先用 `idc_session_check_date` 把 session 移到新的一天（上面「時間由 app 給」）。這個函式因此不收 `now`。
-4. 帳號清單和題目算出宣告碼；兩個簽章分別是這張卡片對場合字串、對這個宣告碼簽的（`spec/device-checks.md`：卡片的每個簽章用之前都先驗）。不是就是 `IDC_ERR_INPUT`。清單裡的平台和帳號格式這裡只做每個平台都成立的檢查，名冊收不收是「名冊規則」那張票的事，後台也會擋。
+4. 帳號清單和題目算出宣告碼；兩個簽章分別是這張卡片對場合字串、對這個宣告碼簽的（`spec/device-checks.md`：卡片的每個簽章用之前都先驗）。不是就是 `IDC_ERR_INPUT`。清單裡的平台和帳號格式這裡只做每個平台都成立的檢查；名冊收不收，簽章之前由 `idc_list_consequence` 算（名冊規則的第 5、6 項），後台也會擋。
 5. 電路輸入（`spec/circuit-inputs.md`）、見證、證明。電路解不出見證是 `IDC_ERR_INPUT`：前面都過了還解不出來，是電路自己的檢查不成立。
 6. 證明帶的公開輸入和核心自己算的那一份逐一比對（發證金鑰、樹根、`current_time`、匿名編號、場合字串、宣告碼），有一個不同就什麼都不回（`IDC_ERR_INTERNAL`）。
 
@@ -168,6 +174,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_self_check` | 確認連結進來的 Barretenberg 有回應，算出的 Poseidon2 和 `spec/vectors/poseidon2.json` 的一個案例相同。不收輸入。給 app 啟動時和建置的檢查用 |
 | `idc_scope_string` | 這份名冊的場合字串（31 個位元組），卡片第一次簽的就是它 |
 | `idc_declaration_code` | 帳號清單和題目的宣告碼（31 個位元組），卡片第二次簽的就是它。清單沒照平台排序、同一個平台兩次、題目不是唯一的寫法，都是 `IDC_ERR_INPUT` |
+| `idc_list_consequence` | 持卡人改過的清單在每個平台上的後果（JSON），給確認的畫面（`spec/list-consequence.md`）。收 `config` 的 `platforms` 和 `card-state` 的回應（照後台送來的原樣）、app 有自己那一份的平台、持卡人的清單、裝置時鐘的現在；讀不懂的回應、清單裡不是提供改的平台，都是 `IDC_ERR_INPUT`。回傳卡片要簽的整份清單（交給 `idc_declaration_code`）和每一列，或不能簽的理由（`username`、`empty`、`switch_limit`、`daily_limit`）。形狀寫在標頭檔 |
 | `idc_session_*` | 一次過卡的檢查、「檢查都通過了」、查現況的請求、證明和送出的請求，見上面那一節的表。每一塊緩衝區由誰釋放寫在標頭檔每個函式的說明裡 |
 
 ## 套件和工具鏈
@@ -177,7 +184,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 - **Rust 1.99.1**（`rust-toolchain.toml`；2026-10-15 發布）。有 rustup 的機器在這個目錄下跑 `cargo` 就會用它
 - **`barretenberg-rs` 6.0.0**（只開 `ffi`）：呼叫 Barretenberg。版本和 `web/` 釘的 `@aztec-foundation/bb.js` 相同（ADR-0034）
 - **`sha2` 0.11.1**：SHA-256（宣告碼）。Noir `v1.0.0` 的 ACVM 用的也是這一版
-- **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次、多出來的鍵都不收；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
+- **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次的不收；多出來的鍵，帳號清單不收，後台的回應照 `docs/api/` 略過（`prover/src/json.rs`、`prover/src/server_state.rs`）；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
 - `checks/` 的測試另外用 `sha2`、`serde_json`（只在測試）
 - 上面幾個帶進來的套件和版本在 `Cargo.lock`（進版控）。建置一律加 `--locked`
 - `prover/` 的 `[dev-dependencies]` 引用自己並開 feature `testing`（見「檢查都通過了」），`Cargo.lock` 裡因此多一行自己的名字，沒有多任何套件
@@ -242,6 +249,8 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 - 沒有讀的：`poseidon2-constants.json`（Poseidon2 的置換是 Barretenberg 的，這裡沒有自己實作）
 - `prover/tests/vectors.rs`：`poseidon2.json` 的 `hash_2`、`hash_3`（Barretenberg 的 Poseidon2），和 `scoped_id`（簽章切出的 18 段、串起來的匿名編號）
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
+- `checks/tests/roster_rules.rs`（不需要 Barretenberg）：`roster-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/roster-rules.md` 寫的、標準答案帶的版本號相同
+- `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
 - `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）
 - `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替

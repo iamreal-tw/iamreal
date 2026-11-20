@@ -25,9 +25,9 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 ## 規則和算法只有一份
 
-- 名冊規則有兩份實作：Go 的 `roster/`（重驗的指令用）和 TypeScript 的 `protocol/`（後台和裝置共用）。後台、裝置和指令呼叫它，自己不判斷一筆紀錄有效或無效
-- 改名冊規則時，`spec/roster-rules.md`、`spec/vectors/`、Go、TypeScript 在同一個 PR 改好，名冊規則的版本號加一號（ADR-0030）
-- 改到名冊規則的函式（`protocol/` 的 `applyRecord`、`applyList`，Go 的 `roster/rules.go`）而版本號沒有加：PR 的說明寫明存著的卡片狀態為什麼不受影響。什麼樣的修改要加一號，寫在 `spec/roster-rules.md`「The version number」
+- 名冊規則有三份實作：Go 的 `roster/`（重驗的指令用）、TypeScript 的 `protocol/`（後台和網頁版共用）、Rust 的 `device-core/`（Android 和 iOS 共用，ADR-0034）。後台、裝置和指令呼叫它，自己不判斷一筆紀錄有效或無效
+- 改名冊規則時，`spec/roster-rules.md`、`spec/vectors/`、Go、TypeScript、Rust 在同一個 PR 改好，名冊規則的版本號加一號（ADR-0030）
+- 改到名冊規則的函式（`protocol/` 的 `applyRecord`、`applyList`，Go 的 `roster/rules.go`，Rust 的 `device-core/checks/src/roster_rules.rs`）而版本號沒有加：PR 的說明寫明存著的卡片狀態為什麼不受影響。什麼樣的修改要加一號，寫在 `spec/roster-rules.md`「The version number」
 - 改名冊規則的 PR 附上新舊兩版在最新正式名冊上逐筆比較的結果：全部相同才往回套用，否則寫明生效日（ADR-0031）
 - 兩種以上語言都實作的算法，測試讀 `spec/vectors/` 裡同一份標準答案
 - Go、TypeScript、Rust（`device-core/`，ADR-0034）的實作互不引用，只共用 `spec/`：不複製另一種語言的程式，也不從它產生。改 `spec/` 裡三種語言都有的算法時，規格、標準答案和三份實作在同一個 PR 改好
