@@ -8,3 +8,5 @@ iamreal-crl check -issuer G3 MOICA-G3-complete.crl
 ```
 
 測試時，`-key-g2 FILE`、`-key-g3 FILE` 讓測試用的金鑰代替內政部的 G2、G3 發證金鑰（`check`、`prove`、`index` 都可以用），標準錯誤會印一行 `WARNING`；索引裡用它驗過的行仍寫 `G2`、`G3`。見 `crl/README.md`「測試用的發證金鑰」。
+
+測試（`go test ./cmd/iamreal-crl`）另外拿 `spec/vectors/revocation-tree.json` 的每一份清冊跑 `prove`，路徑和標準答案相同、在樹裡的序號沒有證明；`spec/vectors/circuit-inputs.json` 每一案的路徑也是 `prove` 算出來的那一條。
