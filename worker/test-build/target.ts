@@ -9,6 +9,7 @@ import { TEST_CRL_PATHS } from "./crl-paths.ts";
 declare const __IAMREAL_TEST_ISSUERS__: IssuerKey[];
 declare const __IAMREAL_TEST_MOICA__: string;
 declare const __IAMREAL_TEST_CRL_TIMEOUT_MS__: number;
+declare const __IAMREAL_TEST_CRL_CATCH_UP_MS__: number;
 
 export const ISSUERS: readonly IssuerKey[] = __IAMREAL_TEST_ISSUERS__;
 
@@ -20,6 +21,9 @@ export const CRL_SOURCES: readonly CrlSource[] = [
 
 /** How long the mirror waits for the fake MOICA: short, so that a test of the limit does not take minutes. */
 export const CRL_TIMEOUT_MS: number = __IAMREAL_TEST_CRL_TIMEOUT_MS__;
+
+/** For how long a round goes on starting files left without a line: the test's choice. */
+export const CRL_CATCH_UP_MS: number = __IAMREAL_TEST_CRL_CATCH_UP_MS__;
 
 let testClock: number | undefined;
 

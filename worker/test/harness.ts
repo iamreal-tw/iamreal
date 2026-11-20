@@ -21,7 +21,7 @@ export const HOURLY = "0 * * * *";
 
 /** What the fake MOICA does with a request for one issuer key's CRL. */
 type Answer =
-  | { readonly kind: "body"; readonly body: Uint8Array }
+  | { readonly kind: "body"; readonly body: Uint8Array; readonly chunked: boolean }
   | { readonly kind: "status"; readonly status: number }
   | { readonly kind: "cut"; readonly sent: Uint8Array; readonly contentLength: number | undefined }
   | { readonly kind: "stall"; readonly sent: Uint8Array | undefined };
@@ -61,7 +61,8 @@ export class FakeMoica {
         case "status":
           return void res.writeHead(answer.status).end("error");
         case "body":
-          return void res.writeHead(200, { ...type, "Content-Length": answer.body.length }).end(answer.body);
+          // Without Content-Length, Node sends the body chunked.
+          return void res.writeHead(200, { ...type, ...(!answer.chunked && { "Content-Length": answer.body.length }) }).end(answer.body);
         case "cut":
           // Without Content-Length, Node sends the body chunked.
           res.writeHead(200, { ...type, ...(answer.contentLength !== undefined && { "Content-Length": answer.contentLength }) });
@@ -76,8 +77,8 @@ export class FakeMoica {
   }
 
   /** From now on this issuer's address gives these bytes. */
-  serve(issuer: IssuerName, body: Uint8Array): void {
-    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "body", body });
+  serve(issuer: IssuerName, body: Uint8Array, how: "with Content-Length" | "chunked" = "with Content-Length"): void {
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "body", body, chunked: how === "chunked" });
   }
 
   /** From now on this issuer's address answers with this HTTP status. */
@@ -167,6 +168,8 @@ export interface TestWorker {
 export interface StartOptions {
   /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
   readonly crlTimeoutMs?: number;
+  /** For how long a round goes on starting files an earlier round left without a line, in milliseconds. By default the deployed build's 5 minutes. */
+  readonly crlCatchUpMs?: number;
   /** The issuer keys of the build, one G2 and one G3. By default the test's own, which sign the CRLs of test/crls.ts. */
   readonly issuers?: readonly IssuerKey[];
 }
@@ -179,7 +182,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   const server = createTestHarness({ root: WORKER_DIR, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
-    buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000 });
+    buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000, crlCatchUpMs: options.crlCatchUpMs ?? 5 * 60 * 1000 });
     ({ url } = await server.listen());
   } catch (e) {
     await moica.close();

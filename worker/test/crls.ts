@@ -45,8 +45,8 @@ export function testdataIssuer(): IssuerKey {
   return { name: "G2", modulus: modulusOf(key), bits: 2048 };
 }
 
-// DER, as much as a CRL needs.
-const der = (tag: number, ...parts: Uint8Array[]): Uint8Array => {
+/** One DER element: the tag, the length, and the parts as its content. */
+export const der = (tag: number, ...parts: Uint8Array[]): Uint8Array => {
   const content = Buffer.concat(parts);
   const n = content.length;
   const length = n < 0x80 ? [n] : n < 0x100 ? [0x81, n] : n < 0x10000 ? [0x82, n >>> 8, n & 0xff] : [0x83, n >>> 16, (n >>> 8) & 0xff, n & 0xff];
@@ -70,12 +70,8 @@ export interface TestCrl {
   readonly thisUpdate: Date;
   /** The revoked serial numbers; none by default. */
   readonly serials?: readonly bigint[];
-  /**
-   * `thisUpdate` as these characters in place of the usual UTCTime, as a
-   * UTCTime (`utc`) or a GeneralizedTime (`generalized`): for times written
-   * in ways MOICA does not write them.
-   */
-  readonly thisUpdateAs?: { readonly utc: string } | { readonly generalized: string };
+  /** Extensions of the CRL after cRLNumber, each a whole `Extension` in DER. */
+  readonly moreExtensions?: readonly Uint8Array[];
 }
 
 /** A complete CRL (RFC 5280 section 5) in DER, signed by a test issuer key. */
@@ -87,10 +83,10 @@ export function makeCrl(c: TestCrl): Uint8Array {
     integer(1n), // v2
     SHA256_WITH_RSA,
     name,
-    c.thisUpdateAs === undefined ? utcTime(c.thisUpdate) : "utc" in c.thisUpdateAs ? der(0x17, Buffer.from(c.thisUpdateAs.utc)) : der(0x18, Buffer.from(c.thisUpdateAs.generalized)),
+    utcTime(c.thisUpdate),
     utcTime(new Date(c.thisUpdate.getTime() + 36 * 3600 * 1000)),
     ...(revoked.length > 0 ? [der(0x30, ...revoked)] : []),
-    der(0xa0, der(0x30, der(0x30, oid(0x55, 0x1d, 0x14), der(0x04, integer(c.number))))),
+    der(0xa0, der(0x30, der(0x30, oid(0x55, 0x1d, 0x14), der(0x04, integer(c.number))), ...(c.moreExtensions ?? []))),
   );
   const signature = sign("sha256", tbs, keys()[c.issuer].privateKey);
   return new Uint8Array(der(0x30, tbs, SHA256_WITH_RSA, der(0x03, Uint8Array.from([0]), signature)));

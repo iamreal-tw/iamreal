@@ -29,6 +29,8 @@ export interface TestBuildValues {
   readonly issuers: readonly IssuerKey[];
   /** How long the mirror waits for the fake MOICA, in milliseconds. */
   readonly crlTimeoutMs: number;
+  /** For how long a round of the mirror goes on starting files left without a line, in milliseconds. */
+  readonly crlCatchUpMs: number;
 }
 
 /** Makes a build in `outDir` and returns what wrangler printed (the bindings, among other things). */
@@ -46,6 +48,8 @@ export function buildWorker(kind: "deploy" | "test", outDir: string, values?: Te
       `__IAMREAL_TEST_MOICA__:${JSON.stringify(values!.moica)}`,
       "--define",
       `__IAMREAL_TEST_CRL_TIMEOUT_MS__:${JSON.stringify(values!.crlTimeoutMs)}`,
+      "--define",
+      `__IAMREAL_TEST_CRL_CATCH_UP_MS__:${JSON.stringify(values!.crlCatchUpMs)}`,
       "--define",
       `__IAMREAL_TEST_ISSUERS__:${JSON.stringify(values!.issuers)}`,
     );

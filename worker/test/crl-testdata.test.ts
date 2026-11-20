@@ -5,10 +5,9 @@
 // reason code, the root. Then the Go `iamreal-crl index` rebuilds the index
 // from the files the mirror stored, and the two must be the same bytes.
 //
-// The Go crl/ reads times a little more widely than DER allows (UTCTime
-// without seconds, offsets), and so must the mirror: a list of CRLs with
-// such times, signed by the test's G3 key, goes the same way, and here the
-// Go index is the only answer.
+// The CRLs of crl/testdata/times/ go the same way: times spelled in each
+// way the spec accepts or refuses, each with the line of the index it must
+// give (the Go crl/'s tests read the same file).
 //
 // The test build's G2 key is here the key that signed crl/testdata/ (only
 // its public half exists); its G3 key is the test's own.
@@ -42,54 +41,14 @@ const fileOf = (c: ExpectedCase): Uint8Array => new Uint8Array(readFileSync(join
 const NOT_DER = [new TextEncoder().encode("<!doctype html><title>Service unavailable</title>"), Uint8Array.from([0x30, 0x03, 0x02, 0x01]), new Uint8Array(1)];
 const G3_CRL = makeCrl({ issuer: "G3", number: 7n, thisUpdate: new Date("2026-11-19T16:00:00Z"), serials: [0x1234n, 0x5678n] });
 
-/** `thisUpdate` written in ways MOICA does not write it; what each gives is for the Go crl/ to say. */
-const TIMES: readonly ({ utc: string } | { generalized: string })[] = [
-  { utc: "2611191600Z" }, // without seconds
-  { utc: "261119160000+0800" },
-  { utc: "2611191600-0330" },
-  { utc: "261119160000+0000" }, // a zero offset is written Z
-  { utc: "261119160000-0000" },
-  { utc: "261119160000+2400" },
-  { utc: "261119160000-2430" },
-  { utc: "261119160000+2500" },
-  { utc: "261119160000+0860" },
-  { utc: "491231235959Z" }, // 2049
-  { utc: "500101000000Z" }, // 1950
-  { utc: "500101000000+0100" },
-  { utc: "680229120000Z" }, // 1968
-  { utc: "690101000000Z" }, // 1969
-  { utc: "991231235959-0001" },
-  { utc: "000229000000Z" }, // 2000 is a leap year
-  { utc: "270229000000Z" }, // 2027 is not
-  { utc: "261131000000Z" },
-  { utc: "261300000000Z" },
-  { utc: "260001000000Z" },
-  { utc: "261100000000Z" },
-  { utc: "261119240000Z" },
-  { utc: "261119236000Z" },
-  { utc: "261119235960Z" },
-  { utc: "261119160000" },
-  { utc: "261119160000z" },
-  { utc: "261119160000.5Z" },
-  { utc: "26111916000Z" },
-  { utc: "20261119160000Z" },
-  { utc: "2611191600 Z" },
-  { utc: "+61119160000Z" },
-  { generalized: "20261119160000Z" },
-  { generalized: "20261119160000+0800" },
-  { generalized: "202611191600Z" }, // GeneralizedTime needs its seconds
-  { generalized: "20261119160000.000Z" },
-  { generalized: "20261119160000" },
-  { generalized: "00000101000000+0100" }, // the year before year 0
-  { generalized: "00000229000000Z" },
-  { generalized: "09991231235959Z" },
-  { generalized: "99991231235959-0100" }, // year 10000
-  { generalized: "99991231160000Z" }, // year 10000 in Taiwan
-  { generalized: "19000229000000Z" }, // 1900 is not a leap year
-  { generalized: "24000229000000Z" },
-  { generalized: "261119160000Z" },
-];
-const TIMED = TIMES.map((thisUpdateAs, i) => makeCrl({ issuer: "G3", number: BigInt(1000 + i), thisUpdate: new Date("2026-11-19T16:00:00Z"), serials: [BigInt(i + 1)], thisUpdateAs }));
+/** crl/testdata/times/: CRLs whose times are spelled in each way spec/revocation-tree.md ("Times") accepts or refuses, with the line each must give. */
+interface TimeCase {
+  readonly name: string;
+  readonly sha256: string;
+  readonly line: string;
+}
+const timeCases = JSON.parse(readFileSync(join(CRL_TESTDATA, "times", "expected.json"), "utf8")) as TimeCase[];
+const TIMED = timeCases.map((c) => new Uint8Array(readFileSync(join(CRL_TESTDATA, "times", `${c.name}.crl`))));
 const OTHERS = [...NOT_DER, G3_CRL, ...TIMED];
 
 let worker: TestWorker;
@@ -127,6 +86,19 @@ test("every case of crl/testdata/expected.json: usable or not, the reason code a
   assert.equal(lines.size, cases.length + OTHERS.length);
 });
 
+test("every case of crl/testdata/times/expected.json: the line of the index is the one written there", () => {
+  assert.ok(timeCases.length >= 48, `${timeCases.length} cases`);
+  const lines = new Set(index.split("\n"));
+  for (const [i, c] of timeCases.entries()) {
+    assert.equal(sha256Hex(TIMED[i]!), c.sha256, `${c.name}: the file is the one expected.json describes`);
+    assert.ok(lines.has(c.line), `${c.name}: the index has no line ${c.line}; it has ${index.split("\n").find((l) => l.includes(c.sha256))}`);
+  }
+  // Both kinds are among them, and the times at the edges.
+  const refused = timeCases.filter((c) => c.line.includes("-not_usable_der")).length;
+  assert.ok(refused >= 10 && timeCases.length - refused >= 10, `${refused} of ${timeCases.length} refused`);
+  for (const edge of ['"this_update":"1950-01-01T00:00:00Z"', '"this_update":"-0001-12-31T23:00:00Z"', '"crl_date":"10000-01-01"', '"next_update":"0001-01-01T00:00:00Z"']) assert.ok(timeCases.some((c) => c.line.includes(edge)), edge);
+});
+
 test("the index the Go crl/ rebuilds from the files in the bucket is the same bytes", async (t) => {
   if (spawnSync("go", ["version"]).status !== 0) return t.skip("needs go");
   const dir = mkdtempSync(join(tmpdir(), "crl-archive-"));
@@ -141,11 +113,7 @@ test("the index the Go crl/ rebuilds from the files in the bucket is the same by
     assert.ok(go.status === 0 || go.status === 1, go.stderr);
     assert.equal(index, go.stdout);
     assert.equal(index.split("\n").length - 1, crls.length);
-    // The list of times holds both kinds: some the Go crl/ reads, some it does not.
-    const timed = TIMED.map((crl) => go.stdout.split("\n").find((l) => l.includes(sha256Hex(crl)))!);
-    const refused = timed.filter((l) => l.includes("-not_usable_der")).length;
-    assert.ok(refused >= 10 && timed.length - refused >= 10, `${refused} of ${timed.length} refused`);
-    for (const year of ["1950-01-01T00:00:00Z", "-0001-12-31T23:00:00Z", '"crl_date":"10000-01-01"']) assert.ok(timed.some((l) => l.includes(year)), year);
+
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

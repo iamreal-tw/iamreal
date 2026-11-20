@@ -3,8 +3,8 @@
 // after each round (src/mirror.ts). Records, challenges and card state come
 // with the API.
 import { DurableObject } from "cloudflare:workers";
-import type { KnownCrl, NewestCrls } from "./crl-index.ts";
-import type { IssuerName } from "./issuers.ts";
+import { type NewestCrls, newestOfEach } from "./crl-index.ts";
+import { ISSUER_NAMES } from "./issuers.ts";
 
 export class Roster extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -17,14 +17,16 @@ export class Roster extends DurableObject<Env> {
 
   /**
    * Replaces what the object knows of the CRL archive: for each issuer key,
-   * its two newest usable CRLs, the newest first. Called by the CRL mirror
-   * with what the index in the data bucket lists at that moment.
+   * its newest usable CRLs, the newest first. Called by the CRL mirror, each
+   * time with all of what the index in the data bucket lists at that moment
+   * (src/crl-index.ts, `newestCrls`, which is where "newest" and how many
+   * are decided).
    */
   setNewestCrls(newest: NewestCrls): void {
     this.ctx.storage.transactionSync(() => {
       this.ctx.storage.sql.exec("DELETE FROM newest_crls");
-      for (const issuer of ["G2", "G3"] as const) {
-        for (const [place, crl] of newest[issuer].slice(0, 2).entries()) {
+      for (const issuer of ISSUER_NAMES) {
+        for (const [place, crl] of newest[issuer].entries()) {
           this.ctx.storage.sql.exec("INSERT INTO newest_crls (issuer, place, root, crl_number, crl_date) VALUES (?, ?, ?, ?, ?)", issuer, place, crl.root, crl.crlNumber, crl.crlDate);
         }
       }
@@ -39,12 +41,12 @@ export class Roster extends DurableObject<Env> {
    * (spec/revocation-tree.md, "Who checks what").
    */
   newestCrls(): NewestCrls {
-    const of = (issuer: IssuerName): KnownCrl[] =>
+    return newestOfEach((issuer) =>
       this.ctx.storage.sql
         .exec<{ root: string; crl_number: string; crl_date: string }>("SELECT root, crl_number, crl_date FROM newest_crls WHERE issuer = ? ORDER BY place", issuer)
         .toArray()
-        .map((row) => ({ root: row.root, crlNumber: row.crl_number, crlDate: row.crl_date }));
-    return { G2: of("G2"), G3: of("G3") };
+        .map((row) => ({ root: row.root, crlNumber: row.crl_number, crlDate: row.crl_date })),
+    );
   }
 }
 

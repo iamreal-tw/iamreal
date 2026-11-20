@@ -2,7 +2,9 @@
 // one line per file, in one spelling and one order, and what the roster's
 // object is told of it. The Go crl/ (index.go) writes the same bytes from
 // the same files.
-import type { IssuerName } from "./issuers.ts";
+import { hexOf } from "iamreal-protocol/bytes.ts";
+import type { CrlReading } from "./crl.ts";
+import { ISSUER_NAMES, type IssuerName } from "./issuers.ts";
 
 /** One line of the index. Every field is the text of the line; `-` stands for a missing value. */
 export interface IndexLine {
@@ -14,6 +16,23 @@ export interface IndexLine {
   readonly sha256: string;
   /** The root, 64 hex digits; for a file that is not usable, `-` and the reason code. */
   readonly root: string;
+}
+
+/**
+ * The line of the file with this SHA-256, from what was read of it
+ * (src/crl.ts) and, if it is usable, the root of its tree as 32 big-endian
+ * bytes.
+ */
+export function lineOf(sha256: string, reading: CrlReading, root: Uint8Array | undefined): IndexLine {
+  return {
+    issuer: reading.issuer,
+    crlNumber: reading.crlNumber,
+    thisUpdate: reading.thisUpdate,
+    nextUpdate: reading.nextUpdate,
+    crlDate: reading.crlDate,
+    sha256,
+    root: root === undefined ? `-${reading.reason}` : hexOf(root),
+  };
 }
 
 /** Whether the line is of a usable CRL: its root is a root. */
@@ -84,13 +103,21 @@ export interface KnownCrl {
  */
 export type NewestCrls = Readonly<Record<IssuerName, readonly KnownCrl[]>>;
 
-/** The newest two usable CRLs of each issuer key among the lines. */
+/** How many CRLs of each issuer key count as its newest. */
+const NEWEST = 2;
+
+/** A `NewestCrls` from what `of` gives for each issuer key. */
+export function newestOfEach(of: (issuer: IssuerName) => readonly KnownCrl[]): NewestCrls {
+  return Object.fromEntries(ISSUER_NAMES.map((issuer) => [issuer, of(issuer)])) as NewestCrls;
+}
+
+/** The newest usable CRLs of each issuer key among the lines. */
 export function newestCrls(lines: readonly IndexLine[]): NewestCrls {
-  const of = (issuer: IssuerName): KnownCrl[] =>
+  return newestOfEach((issuer) =>
     lines
       .filter((l) => l.issuer === issuer && usable(l))
       .sort((a, b) => compareNumbers(b.crlNumber, a.crlNumber) || compareText(b.sha256, a.sha256))
-      .slice(0, 2)
-      .map((l) => ({ root: l.root, crlNumber: l.crlNumber, crlDate: l.crlDate }));
-  return { G2: of("G2"), G3: of("G3") };
+      .slice(0, NEWEST)
+      .map((l) => ({ root: l.root, crlNumber: l.crlNumber, crlDate: l.crlDate })),
+  );
 }

@@ -92,7 +92,7 @@ function bindingsIn(output: string): Record<string, string> {
   return found;
 }
 
-const values: TestBuildValues = { moica: "http://127.0.0.1:59999", issuers: testIssuers(), crlTimeoutMs: 1234 };
+const values: TestBuildValues = { moica: "http://127.0.0.1:59999", issuers: testIssuers(), crlTimeoutMs: 1234, crlCatchUpMs: 5678 };
 /** What only the test build holds. */
 const TEST_ONLY = [values.moica, "127.0.0.1", "localhost", "__IAMREAL_TEST", "/__test/", "setTestClock", "testClock", "test-build", "crl-paths", "/g2/complete.crl"];
 
