@@ -89,7 +89,11 @@ export type FileResult =
       readonly entries: number;
       readonly keys: number;
       readonly hashes: number;
-      /** Milliseconds: getting the file and reading it, signature included; then building the tree. */
+      /**
+       * Milliseconds: getting the file and reading it, signature included;
+       * then building the tree. Too little on Cloudflare, where the clock
+       * stands still while code runs (`indexFile`).
+       */
       readonly readMs: number;
       readonly treeMs: number;
     }
@@ -275,7 +279,31 @@ class ArchiveIndex {
  * goes. Throws only if the archive cannot be read at all.
  */
 async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[], files: FileResult[], errors: string[]): Promise<void> {
+  // Read after the first step's requests, so it is the time now (see `elapsedMs` below).
   const started = Date.now();
+  /**
+   * How long the round has been on the archive, by the clock. On
+   * Cloudflare the clock stands still while code runs: `Date.now()` "only
+   * advance[s] or increment[s] after I/O occurs"
+   * (https://developers.cloudflare.com/workers/runtime-apis/performance/),
+   * it "returns the time of the last I/O"
+   * (https://developers.cloudflare.com/workers/reference/security-model/;
+   * both read on 2026-11-20). In the local workerd it advances regardless,
+   * so no test here can see the difference. A tree is seconds of
+   * computing with no I/O, so the clock is read only after a request to
+   * the bucket made for this purpose, the cheapest there is. It does not
+   * rely on what else the loop did just before: a file that failed after
+   * its tree was built leaves no I/O behind it. If that request fails,
+   * the clock is read all the same, and may show too little.
+   */
+  const elapsedMs = async (): Promise<number> => {
+    try {
+      await parts.bucket.head(INDEX_KEY);
+    } catch {
+      // The index's own trouble is found where the index is read and written.
+    }
+    return Date.now() - started;
+  };
   /** Tells the roster's object what the index now lists; that it could not be told is said once. */
   let untold = false;
   const tell = async (index: ArchiveIndex): Promise<void> => {
@@ -324,8 +352,9 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
     // started only while the round has time left for the largest
     // (`catchUpMs`). The time is the clock's, since the round began on the
     // archive: a Worker cannot read its CPU time, and from here on it never
-    // uses more CPU time than the clock shows.
-    if (!fresh.has(sha256) && Date.now() - started >= parts.catchUpMs) break;
+    // uses more CPU time than the clock shows, as long as the clock is
+    // read right after I/O (`elapsedMs`).
+    if (!fresh.has(sha256) && (await elapsedMs()) >= parts.catchUpMs) break;
     try {
       const result = await indexFile(parts, sha256);
       await index.change((lines) => (lines.some((l) => l.sha256 === sha256) ? lines : [...lines, result.line]));
@@ -339,7 +368,15 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
   }
 }
 
-/** Reads one file of the archive and gives its line of the index. */
+/**
+ * Reads one file of the archive and gives its line of the index.
+ *
+ * `readMs` and `treeMs` are right in the local workerd only. On Cloudflare
+ * the clock does not advance while code runs (`indexArchive`, `elapsedMs`),
+ * and both are read after computing, with no I/O in between: there they
+ * may show far too little, down to 0. What a round used on Cloudflare is
+ * the CPU time the dashboard shows for the invocation.
+ */
 async function indexFile(parts: MirrorParts, sha256: string): Promise<FileResult & { result: "indexed" }> {
   const started = Date.now();
   const object = await parts.bucket.get(`crl/${sha256}.crl`);

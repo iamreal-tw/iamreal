@@ -8,6 +8,16 @@
   "send_metrics": false,
   // The roster's Durable Object keeps its state in SQLite (ADR-0023).
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Roster"] }],
+  // The CPU time one invocation may use, in every environment: 300,000 ms, the most that can
+  // be set. Without it the hourly schedule was stopped after about 30 seconds, less than the
+  // tree of one CRL takes; how much the schedule gets with it is not measured yet (README.md,
+  // "Cloudflare 上第一次建樹"). A round of the CRL mirror counts on this number
+  // (src/round-budget.ts); a configuration in which an environment has another one does not
+  // pass the checks of a deploy build (scripts/deploy-build-checks.ts).
+  // It is the limit of every invocation, not of the schedule alone: of each HTTP request, and
+  // of each call and alarm of the roster's Durable Object. A request can make the Worker
+  // compute for that long only if the code lets it: README.md, "設定檔", says why it cannot now.
+  "limits": { "cpu_ms": 300000 },
   "env": {
     // The test site (ADR-0028).
     "test": {
@@ -17,11 +27,6 @@
       "preview_urls": false,
       // The CRL mirror, every hour.
       "triggers": { "crons": ["0 * * * *"] },
-      // The CPU time of one invocation: 5 minutes, the most there is. Without it an invocation
-      // gets 30 seconds, less than the tree of one CRL takes (README.md, "Cloudflare 上第一次建樹").
-      // A round of the mirror counts on this number (src/round-budget.ts); a deploy build with
-      // another one does not pass its checks (scripts/deploy-build-checks.ts).
-      "limits": { "cpu_ms": 300000 },
       "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],

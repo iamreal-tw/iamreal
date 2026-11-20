@@ -166,16 +166,26 @@ describe("files an earlier round left without a line", () => {
 });
 
 describe("many files an earlier round left without a line, each with a tree that takes a second or two", () => {
-  const LIMIT_MS = 2000;
-  // Five of them take several times the limit, on any computer.
   const left = [51n, 52n, 53n, 54n, 55n].map(slowG3);
   const [freshG2, freshG3] = [g2(56n), g3(56n, [3n])];
   /** What the Worker logged for the files it gave a line, oldest first, with how long each took. */
   const indexedIn = (worker: TestWorker, from: number): { sha256: string; ms: number }[] =>
     worker.logLines().slice(from).filter((l) => l.includes('"crl_index"')).map((l) => JSON.parse(l) as { sha256: string; read_ms: number; tree_ms: number }).map((l) => ({ sha256: l.sha256, ms: l.read_ms + l.tree_ms }));
 
-  test("a round starts them for as long as its limit says and no longer; the next rounds go on from there, and every line stays", () =>
-    withWorker({ crlCatchUpMs: LIMIT_MS }, async (worker) => {
+  test("a round starts them for as long as its limit says and no longer; the next rounds go on from there, and every line stays", async () => {
+    // The limit is one and a half times what one of these trees takes on this computer, measured
+    // first: so a round has time to start two of the five, on a fast computer as on a slow one.
+    let oneTreeMs = 0;
+    await withWorker({}, async (worker) => {
+      worker.moica.serve("G2", g2(50n));
+      worker.moica.serve("G3", slowG3(50n));
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      oneTreeMs = indexedIn(worker, 0)[1]!.ms;
+    });
+    const LIMIT_MS = Math.ceil(1.5 * oneTreeMs);
+    assert.ok(LIMIT_MS > 0, "the tree took a time that can be measured");
+
+    await withWorker({ crlCatchUpMs: LIMIT_MS }, async (worker) => {
       for (const file of left) {
         await worker.putFile(nameOf(file), file);
         await sleep(50);
@@ -203,14 +213,15 @@ describe("many files an earlier round left without a line, each with a tree that
         done.push(...files.map((f) => f.sha256));
         // A round that left some stopped because of the time, not before it.
         if (done.length < left.length) assert.ok(took >= LIMIT_MS, `round ${round} left files after ${took} ms`);
-        if (round === 1) assert.ok(done.length < left.length, "one round does not do them all");
+        if (round === 1) assert.ok(done.length < left.length, `one round does not do them all (one tree took ${oneTreeMs} ms, the limit is ${LIMIT_MS} ms)`);
         // Every line written so far is in the index, this round's and the earlier rounds'.
         const index = await indexText(worker);
         assert.equal(index.split("\n").length - 1, 2 + done.length);
         for (const sha256 of done) assert.ok(index.includes(`"sha256":"${sha256}"`));
       }
       assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.crlNumber), ["56", "55"]);
-    }));
+    });
+  });
 
   test("this round's own two get their lines although the first alone takes longer than the limit", () =>
     withWorker({ crlCatchUpMs: 1 }, async (worker) => {
@@ -230,37 +241,55 @@ describe("many files an earlier round left without a line, each with a tree that
 });
 
 describe("a round that is stopped while it builds the second file's tree", () => {
-  test("the first file's line is in the index and the roster's object has heard of it; the next round gives the second its line", () =>
-    withWorker({}, async (worker) => {
-      const quick = g2(91n, [1n]);
-      const slow = slowG3(91n);
-      worker.moica.serve("G2", quick);
-      worker.moica.serve("G3", slow);
-      // The run does not end as a run that was let finish does: nothing here waits for it.
-      void worker.runSchedule().catch(() => {});
+  test("the first file's line is in the index and the roster's object has heard of it; the next round gives the second its line", async () => {
+    const quick = g2(91n, [1n]);
+    // Stopping the Worker takes a moment, in which a small tree could be finished after all. If
+    // that happens the tree is made twice as large and the round is run again in a new Worker.
+    for (let serials = 20_000; ; serials *= 2) {
+      assert.ok(serials <= 320_000, "the round could not be stopped before G3's tree was built");
+      const slow = g3(91n, Array.from({ length: serials }, (_, i) => (BigInt(i) << 64n) + 0x1_0000n + BigInt(i * 7919)));
+      const caught = await (async (): Promise<boolean> => {
+        const worker = await startWorker();
+        try {
+          worker.moica.serve("G2", quick);
+          worker.moica.serve("G3", slow);
+          const run = worker.runSchedule();
+          // Looked at only after the Worker is stopped; until then a failure of it is not an unhandled one.
+          run.catch(() => {});
 
-      let index = "";
-      for (const started = Date.now(); !index.includes(sha256Hex(quick)); index = await indexText(worker)) {
-        assert.ok(Date.now() - started < 20_000, "G2's line was written");
-        await sleep(10);
-      }
-      assert.ok(!index.includes(sha256Hex(slow)), "G3's tree is still being built");
-      // As Cloudflare stops an invocation that used up its CPU time: the Worker is gone, with whatever it was doing.
-      await worker.restart();
+          let index = "";
+          for (const started = Date.now(); !index.includes(sha256Hex(quick)); index = await indexText(worker)) {
+            assert.ok(Date.now() - started < 20_000, "G2's line was written");
+            await sleep(10);
+          }
+          // As Cloudflare stops an invocation that used up its CPU time: the Worker is gone, with whatever it was doing.
+          await worker.restart();
+          // A run that was let finish gives its outcome. This one gives none: it ended with the Worker.
+          const stopped = await run.then(() => false, () => true);
+          index = await indexText(worker);
+          if (!stopped || index.includes(sha256Hex(slow))) return false;
 
-      // Longer than the tree would have taken: the round did not go on somewhere.
-      await sleep(4000);
-      assert.equal(await indexText(worker), index, "the index is as the stopped round last wrote it");
-      assert.match((await rootOf(worker, quick)) ?? "", /^[0-9a-f]{64}$/);
-      assert.equal(await lineOf(worker, slow), undefined);
-      assert.ok((await worker.files("crl/")).some((f) => f.key === nameOf(slow)), "G3's file is stored");
-      const known = await worker.newestCrls();
-      assert.deepEqual([known.G2.map((c) => c.root), known.G3], [[await rootOf(worker, quick)], []]);
+          // What the stopped round left: G2's line and no other, G3's file, and a roster's object that knows of G2's CRL.
+          assert.equal(index.split("\n").length - 1, 1);
+          assert.match((await rootOf(worker, quick)) ?? "", /^[0-9a-f]{64}$/);
+          assert.ok((await worker.files("crl/")).some((f) => f.key === nameOf(slow)), "G3's file is stored");
+          const known = await worker.newestCrls();
+          assert.deepEqual([known.G2.map((c) => c.root), known.G3], [[await rootOf(worker, quick)], []]);
 
-      assert.equal((await worker.runSchedule()).outcome, "ok");
-      assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.root), [await rootOf(worker, slow)]);
-      assert.equal((await indexText(worker)).split("\n").length - 1, 2);
-    }));
+          // The next round finds G3's file without a line and gives it one; had the stopped round gone on, there would be nothing left to do.
+          const logged = indexedLog(worker).length;
+          assert.equal((await worker.runSchedule()).outcome, "ok");
+          assert.deepEqual(indexedLog(worker).slice(logged).map((l) => [l.result, l.sha256]), [["indexed", sha256Hex(slow)]]);
+          assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.root), [await rootOf(worker, slow)]);
+          assert.equal((await indexText(worker)).split("\n").length - 1, 2);
+          return true;
+        } finally {
+          await worker.close();
+        }
+      })();
+      if (caught) break;
+    }
+  });
 });
 
 describe("an archive of more files than one listing of the bucket gives", () => {

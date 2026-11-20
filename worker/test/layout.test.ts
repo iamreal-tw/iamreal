@@ -70,3 +70,13 @@ test("the proof verifier takes nothing from what the test build replaces", () =>
   const wiring = readFileSync(join(WORKER_DIR, "src", "in-worker.ts"), "utf8");
   for (const specifier of GENERATED) assert.ok(wiring.includes(`from "${specifier}"`), `src/in-worker.ts does not import ${specifier}`);
 });
+
+test("src/round-budget.ts imports nothing", () => {
+  // The checks of the configuration read the mirror's numbers from it, in
+  // Node (scripts/deploy-build-checks.ts, test/environments.test.ts). The
+  // rest of src/ is written against the types of the Workers runtime, which
+  // Node's side does not have: one import here would bring them in.
+  const source = readFileSync(join(WORKER_DIR, "src", "round-budget.ts"), "utf8");
+  assert.doesNotMatch(source, /^\s*(import|export)\b[^;]*\bfrom\b|\bimport\s*\(|\brequire\s*\(/m);
+  assert.match(source, /^export const ROUND_CPU_MS\b/m, "the check read the file");
+});
