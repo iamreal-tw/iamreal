@@ -138,6 +138,9 @@ CRL, checks MOICA's signature, and rebuilds the root.
   use a CRL with a lower one;
 - builds the tree and the proof of absence for its own serial number.
 
+Which file it takes from the index, the order of these checks and their
+reason codes are in [`device-checks.md`](device-checks.md), "The CRL".
+
 **Why the device has its own bound.** The mirror chooses which CRL a device
 gets. CRLs list suspended certificates only while they are suspended. A
 mirror serving one cardholder an older CRL would learn, from whether the card
