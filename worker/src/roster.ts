@@ -213,8 +213,8 @@ export class Roster extends DurableObject<Env> {
    * members below (`challengeRandom`, `hashOf`, `ruleState`,
    * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`) are `protected`
    * and not private for one reader: the object of the test build
-   * (test-build/index.ts), the only class that extends this one. Nothing
-   * else overrides or calls them from outside this file.
+   * (README.md, "三樣不是設定值的東西"), the only class that extends this
+   * one. Nothing else overrides or calls them from outside this file.
    */
   protected readonly settings: RosterSettings;
   /** Whether the object's tables were made by this build's SCHEMA_VERSION. */
@@ -273,7 +273,7 @@ export class Roster extends DurableObject<Env> {
     return { challenge };
   }
 
-  /** The 16 random bytes of a new challenge. `protected` so that the test build can choose them (test-build/index.ts overrides it); nothing else does. */
+  /** The 16 random bytes of a new challenge. `protected` so that the test build can choose them, by overriding this; nothing else does. */
   protected challengeRandom(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(16));
   }
@@ -332,10 +332,10 @@ export class Roster extends DurableObject<Env> {
 
   /**
    * The record hash of a record (protocol/, recordHash). A method of its
-   * own for the test build alone: test-build/index.ts overrides it to wait
-   * before the hash, so that other requests run in between, which is what
-   * the check of the count in `accept` is for. Nothing else overrides or
-   * calls it.
+   * own for the test build alone, whose object overrides it to wait before
+   * the hash, so that other requests run in between, which is what the
+   * check of the count in `accept` is for. Nothing else overrides or calls
+   * it.
    */
   protected hashOf(record: RosterRecord): Promise<string> {
     return recordHash(record);
@@ -418,8 +418,7 @@ export class Roster extends DurableObject<Env> {
    *
    * `protected`, like `keepRuleState`, so that the test build runs the
    * roster rules on the stored state through the same reading and writing
-   * (test-build/index.ts, `testApplyRuleEvent`, which calls both). Neither
-   * is overridden.
+   * (its `testApplyRuleEvent` calls both). Neither is overridden.
    */
   protected ruleState(scopeString: string, scopedId: string): { card: CardState; latestValidDate: Day | null } {
     const { platforms } = this.settings;

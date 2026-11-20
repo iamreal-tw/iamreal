@@ -234,15 +234,20 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `date_order` | The roster rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the roster, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
   | `400` | `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `403` | `switch_restricted` | The roster rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
-  | `503` | `crl_stale` | The newest CRL of the issuer is more than 3 days old; no card proof is accepted |
+  | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
   | `429` | `rate_limited` | |
 
   A submission that fails leaves the challenge usable, up to the 5
-  submissions. Every submission that gets as far as the challenge counts,
-  wherever it fails after that: a proof that does not verify, a root that
-  is not accepted, a list the roster rules refuse, an error of the server
-  itself. One that is `paused`, `challenge_unknown` or `challenge_used`
-  does not count.
+  submissions. The challenge is looked at twice (below), and a submission
+  counts once the challenge passed the first look, wherever it fails after
+  that: a proof that does not verify, `crl_stale`, a root that is not
+  accepted, a list the roster rules refuse, `switch_restricted`, a
+  `challenge_used` or `challenge_unknown` of the second look, and a `500`
+  when the server's verifier could not run or the record could not be
+  written. One that is `paused`, or `challenge_unknown` or `challenge_used`
+  at the first look, does not count. Neither does one the server fails on
+  (`500`) before it has counted it: it could not read its settings or what
+  it stores, or the write that counts the submission itself failed.
 
   **Reading the request**, and which of `malformed`, `scope` and `platform`
   it gets:
@@ -278,7 +283,10 @@ Submits one card proof: the card's whole list of accounts.
   at the moment the record is written. A challenge that passed the first
   time can be `challenge_used` the second time, when it was submitted twice
   at once and the other submission was written first; or
-  `challenge_unknown`, when its 10 minutes ran out in between. Of two
+  `challenge_unknown`, when its 10 minutes ran out in between: the second
+  look is by the server's clock at the moment of the write, so a challenge
+  submitted in its last moments can expire while the proof is being
+  verified. Nothing is written then, and the submission has counted. Of two
   submissions of one challenge at the same moment, at most one is written.
 
   **`paused`**: the server accepts no card proof for now, and issues no
