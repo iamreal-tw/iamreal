@@ -5,7 +5,7 @@
 // written.
 import { writeFileSync } from "node:fs";
 import { formatDay } from "../../src/date.ts";
-import { type AppPlatform, readMinApp } from "../../src/min-app.ts";
+import { type AppClient, minAppVerdict } from "../../src/min-app.ts";
 
 type Result = "ok" | "ok_until" | "stop" | "unreadable";
 const MIN = { android: { build: 12, from: "2027-03-01" }, ios: { build: 9, from: "2027-03-01" } };
@@ -16,12 +16,12 @@ const T: Record<string, [number, string]> = {
   noon_on: [1803873600, "2027-03-01T12:00:00+08:00"],
   later: [1811822400, "2027-06-01T12:00:00+08:00"],
 };
-const c = (name: string, config: unknown, platform: AppPlatform, app_build: number, t: keyof typeof T, result: Result, from?: string) => {
-  const x: Record<string, unknown> = { name, config, platform, app_build, now: T[t]![0], now_in_taiwan: T[t]![1], result };
+const c = (name: string, config: unknown, client: AppClient, app_build: number, t: keyof typeof T, result: Result, from?: string) => {
+  const x: Record<string, unknown> = { name, config, client, app_build, now: T[t]![0], now_in_taiwan: T[t]![1], result };
   if (from !== undefined) x.from = from;
   return x;
 };
-const withEntry = (platform: AppPlatform, entry: unknown) => ({ min_app: { ...MIN, [platform]: entry } });
+const withEntry = (client: AppClient, entry: unknown) => ({ min_app: { ...MIN, [client]: entry } });
 const cases = [
   // Read: the verdicts.
   c("android, smaller build, the last second before the start date", { min_app: MIN }, "android", 11, "before", "ok_until", "2027-03-01"),
@@ -42,7 +42,7 @@ const cases = [
   c("the largest build", withEntry("android", { build: 2100000000, from: "2027-03-01" }), "android", 2099999999, "on", "stop"),
   c("a start date on a leap day", withEntry("ios", { build: 9, from: "2028-02-29" }), "ios", 8, "later", "ok_until", "2028-02-29"),
   // Ignored.
-  c("a member of min_app for another platform is ignored", { min_app: { ...MIN, harmonyos: { build: 3, from: "2027-01-01" } } }, "android", 12, "on", "ok"),
+  c("a member of min_app for another client is ignored", { min_app: { ...MIN, harmonyos: { build: 3, from: "2027-01-01" } } }, "android", 12, "on", "ok"),
   c("the other app's entry is not read, even when it cannot be read", { min_app: { android: MIN.android, ios: "nine" } }, "android", 11, "before", "ok_until", "2027-03-01"),
   c("the other app's entry is not read, even when it is missing", { min_app: { ios: MIN.ios } }, "ios", 9, "on", "ok"),
   c("a member of the entry other than build and from is ignored", withEntry("android", { build: 12, from: "2027-03-01", note: "anything" }), "android", 12, "on", "ok"),
@@ -77,7 +77,7 @@ const cases = [
   c("from has a space after it", withEntry("android", { build: 12, from: "2027-03-01 " }), "android", 12, "on", "unreadable"),
 ];
 for (const x of cases) {
-  const v = readMinApp(x.config, x.platform as AppPlatform, x.app_build as number, (x.now as number) * 1000);
+  const v = minAppVerdict(x.config, x.client as AppClient, x.app_build as number, (x.now as number) * 1000);
   const got = v === null ? "unreadable" : v.kind === "ok_until" ? `ok_until ${formatDay(v.from)}` : v.kind;
   const want = x.result === "ok_until" ? `ok_until ${x.from}` : x.result;
   if (got !== want) throw new Error(`${x.name}: src/min-app.ts gives ${got}, the case says ${want}`);
@@ -85,7 +85,7 @@ for (const x of cases) {
 const doc = {
   spec: "min-app",
   status: "draft",
-  note: "Each case: the parsed body of GET /api/v1/config, the app's platform, the app's own build number, the device clock's time (now: seconds since the epoch, UTC; now_in_taiwan only for reading), and the verdict. from is given for ok_until.",
+  note: "Each case: the parsed body of GET /api/v1/config, the client (the app: android or ios), the app's own build number, the device clock's time (now: seconds since the epoch, UTC; now_in_taiwan only for reading), and the verdict. from is given for ok_until.",
   generated_by: "protocol/test/generate/min-app.ts",
   cases,
 };

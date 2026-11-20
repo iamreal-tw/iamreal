@@ -8,7 +8,7 @@ import { currentTime, parseChallenge } from "../src/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "../src/date.ts";
 import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/field.ts";
-import { readMinApp } from "../src/min-app.ts";
+import { minAppVerdict } from "../src/min-app.ts";
 import { platformsOf } from "../src/platforms.ts";
 import { lookupScope, scopeOf } from "../src/scope.ts";
 import { parseScopedId, readShortIdInUrl, scopedIdText, shortId } from "../src/scoped-id.ts";
@@ -38,8 +38,8 @@ describe("challenge.json", () => {
 
 describe("min-app.json", () => {
   for (const c of vectors("min-app.json").cases) {
-    test(`${c.platform} ${c.app_build}: ${c.name}`, () => {
-      const verdict = readMinApp(c.config, c.platform, c.app_build, c.now * 1000);
+    test(`${c.client} ${c.app_build}: ${c.name}`, () => {
+      const verdict = minAppVerdict(c.config, c.client, c.app_build, c.now * 1000);
       if (c.result === "unreadable") assert.equal(verdict, null);
       else if (c.result === "ok_until") assert.deepEqual(verdict?.kind === "ok_until" ? { ...verdict, from: formatDay(verdict.from) } : verdict, { kind: "ok_until", from: c.from });
       else assert.deepEqual(verdict, { kind: c.result });

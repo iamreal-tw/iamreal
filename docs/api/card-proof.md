@@ -344,7 +344,7 @@ Submits one card proof: the card's whole list of accounts.
 
 The device asks for it at every card proof, before it shows the list.
 
-What an app does with `min_app`: reads the entry of its own platform and
+What an app does with `min_app`: reads its own entry (`android` or `ios`) and
 compares its own build with it, as [`spec/min-app.md`](../../spec/min-app.md)
 says. Before `from`, a lower build goes on and says from which date it can
 no longer do a card proof; from `from` on, it stops before it asks for the
@@ -385,8 +385,8 @@ What the device does with what it cannot read:
   to the declaration. It has nothing to offer and nothing to check an
   account against.
 - **An app, with no `min_app` it can read**: it does not go on
-  ([`spec/min-app.md`](../../spec/min-app.md)). Only the entry of its own
-  platform is read; the rest of `min_app` is ignored.
+  ([`spec/min-app.md`](../../spec/min-app.md)). Only its own entry is
+  read; the rest of `min_app` is ignored.
 - **A row it cannot read** (a key missing, a format not in the form
   above): the platform of that row is one the device does not know
   (`card-state`, above).

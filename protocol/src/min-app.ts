@@ -4,8 +4,8 @@
 // its tests read what it sends with this.
 import { type Day, parseDay, taiwanDay } from "./date.ts";
 
-/** The apps' platforms: the member names of `min_app`. */
-export type AppPlatform = "android" | "ios";
+/** The clients that read `min_app` (GLOSSARY, "client"): the apps, the member names of `min_app`. */
+export type AppClient = "android" | "ios";
 
 /** One app's entry of `min_app`. */
 export interface MinAppEntry {
@@ -29,15 +29,15 @@ export type MinAppVerdict =
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 
 /**
- * The entry of `platform` in the parsed body of `config`, or null if the
+ * The entry of `client` in the parsed body of `config`, or null if the
  * field cannot be read (spec/min-app.md, "Reading it"). Every other member
  * is ignored.
  */
-export function readMinAppEntry(config: unknown, platform: AppPlatform): MinAppEntry | null {
+export function readMinAppEntry(config: unknown, client: AppClient): MinAppEntry | null {
   if (!isObject(config) || !Object.hasOwn(config, "min_app")) return null;
   const minApp = config["min_app"];
-  if (!isObject(minApp) || !Object.hasOwn(minApp, platform)) return null;
-  const entry = minApp[platform];
+  if (!isObject(minApp) || !Object.hasOwn(minApp, client)) return null;
+  const entry = minApp[client];
   if (!isObject(entry)) return null;
   const { build, from } = entry;
   if (typeof build !== "number" || !Number.isInteger(build) || build < 1 || build > MAX_BUILD) return null;
@@ -46,13 +46,13 @@ export function readMinAppEntry(config: unknown, platform: AppPlatform): MinAppE
 }
 
 /**
- * The verdict for an app of `platform` whose own build is `appBuild`, at the
+ * The verdict for the app `client` whose own build is `appBuild`, at the
  * device clock's `nowMs` (milliseconds since the epoch), from the parsed body
  * of `config`; null when the field cannot be read, and the app does not go on
  * (spec/min-app.md, "What the app does").
  */
-export function readMinApp(config: unknown, platform: AppPlatform, appBuild: number, nowMs: number): MinAppVerdict | null {
-  const entry = readMinAppEntry(config, platform);
+export function minAppVerdict(config: unknown, client: AppClient, appBuild: number, nowMs: number): MinAppVerdict | null {
+  const entry = readMinAppEntry(config, client);
   if (entry === null) return null;
   if (appBuild >= entry.build) return { kind: "ok" };
   return taiwanDay(nowMs) < entry.from ? { kind: "ok_until", from: entry.from } : { kind: "stop" };
