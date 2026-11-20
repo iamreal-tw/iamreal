@@ -110,7 +110,8 @@ export const RESTRICTED_FROM = 4;
  * fingerprint read at that moment. A row is written once and never changed
  * or deleted: the line of a date does not change. The table is the
  * fingerprint file's source; the file in the data bucket is written from
- * it, whole, and never read. `in_bucket` is 0 from the moment the row is
+ * it, whole, and read only to see that it is the beginning of what is
+ * written over it (`#fingerprintFileToWrite`). `in_bucket` is 0 from the moment the row is
  * written until the fingerprint file was written with its line and read
  * back, then 1. The table came after the others, with SCHEMA_VERSION
  * unchanged.
@@ -899,8 +900,9 @@ export class Roster extends DurableObject<Env> {
    *
    * Nothing here keeps two publications, or a publication and a move of a
    * full file, from running at once: an object has one alarm, whose
-   * handler does not run twice at once, and the handler runs the pieces of
-   * `timedWork()` one after the other. Both write the roster file of the
+   * handler does not run twice at once (README.md, "每天換日公布名冊",
+   * has the sentence of Cloudflare's documentation), and the handler runs
+   * the pieces of `timedWork()` one after the other. Both write the roster file of the
    * same name at different times, so this is what the order of their
    * writes rests on.
    */
@@ -952,7 +954,7 @@ export class Roster extends DurableObject<Env> {
    *   records it is refused"). If the fingerprint file could not be
    *   written after it, only the file is written again, from the table.
    * - **The fingerprint file is written from the table**, whole, and only
-   *   over a file that is the beginning of it (`#fingerprintFile`): no line
+   *   over a file that is the beginning of it (`#fingerprintFileToWrite`): no line
    *   that is in the bucket's file is ever taken out of it or changed. A
    *   file that has anything else stops the publication before it writes
    *   anything, of this date and of every later one, until somebody has
@@ -963,7 +965,7 @@ export class Roster extends DurableObject<Env> {
    */
   async #publish(): Promise<void> {
     const sql = this.ctx.storage.sql;
-    await this.#fingerprintFile();
+    await this.#fingerprintFileToWrite();
     await this.#moveFullFiles();
     const moment = this.#readForPublication();
     if (moment !== null) {
@@ -1021,7 +1023,7 @@ export class Roster extends DurableObject<Env> {
    * that is not the object's, is not: the object never takes a line out of
    * the published file, and never changes one.
    */
-  async #fingerprintFile(): Promise<{ file: Uint8Array; lastDate: string | null; behind: boolean }> {
+  async #fingerprintFileToWrite(): Promise<{ file: Uint8Array; lastDate: string | null; behind: boolean }> {
     const rows = this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string; in_bucket: number }>("SELECT date, count, fingerprint, in_bucket FROM published ORDER BY date").toArray();
     const file = new TextEncoder().encode(rows.map((row) => fingerprintLine(this.#lineOf(row))).join(""));
     const stored = await this.bucket().get(FINGERPRINT_FILE);
@@ -1039,7 +1041,7 @@ export class Roster extends DurableObject<Env> {
    * before the rows are marked as in the bucket.
    */
   async #writeFingerprintFile(): Promise<void> {
-    const { file, lastDate, behind } = await this.#fingerprintFile();
+    const { file, lastDate, behind } = await this.#fingerprintFileToWrite();
     if (!behind) return;
     await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, file, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
     // The rows that were written: one written meanwhile is not among them.

@@ -107,7 +107,7 @@ pnpm typecheck   # 型別檢查
 | `challenges` | 一個發出、還沒過期的題目 | `challenge`、`issued_ms`（發出的時間）、`submissions`（送出的次數）、`accepted`（是否已接受） |
 | `records` | 一筆還沒搬到 R2 的紀錄：還沒寫滿的最後一檔的每一筆，和寫滿了、還沒搬完的那一檔 | `seq`、`line`（它在名冊檔裡的那一行，含結尾的換行；照序號接起來就是名冊檔）、`record_hash`、`fingerprint`（加上這一筆之後的名冊指紋） |
 | `published` | 指紋檔的一行：名冊公布過的一天 | `date`（台灣日期）、`count`（那一刻的筆數）、`fingerprint`（那一刻的名冊指紋）、`in_bucket`（這一行是不是已經在儲存桶的指紋檔裡） |
-| `publication` | 只有一列：名冊從哪一天之後開始公布 | `since`（物件第一次用會公布的程式啟動那一天的台灣日期） |
+| `first_day` | 只有一列：名冊從哪一天之後開始公布 | `date`（物件第一次用會公布的程式啟動那一天的台灣日期） |
 | `full_files` | 一個已經搬到 R2 的寫滿的名冊檔 | `records_before`（這一檔之前的筆數，就是檔名裡的數字）、`fingerprint_after`（這一檔結尾的名冊指紋）、`file_sha256`（寫進 R2、讀回來核對過的那一檔的 SHA-256） |
 | `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
 | `roster` | 整份名冊，只有一列 | `count`（筆數）、`fingerprint`（名冊指紋）、`latest_valid_date`（名冊上最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
@@ -116,7 +116,7 @@ pnpm typecheck   # 型別檢查
 - 這張表只放名冊規則的狀態，和頁面用的衍生表（`view_` 開頭的四張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
-- `published` 和 `publication` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來（[每天換日公布名冊](#每天換日公布名冊)）。
+- `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布名冊](#每天換日公布名冊)）。
 - `rules_version` 在物件第一次啟動時記下當時程式的版本號；和程式的不同時不收過卡（見下面）。
 
 ### 兩個版本號
@@ -251,7 +251,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 ### 每天換日公布名冊
 
-名冊每天公布一次（ADR-0027「每天換日時」；`spec/record.md`「What is published when」）：台灣的日期換了之後，物件的 alarm 第一次響的時候。程式在 [`src/roster.ts`](src/roster.ts) 的 `#publication`、`#publish`、`#readForPublication`、`#writeFingerprintFile`；指紋檔那一行的寫法在 `protocol/`（`fingerprintLine`），卡片狀態檔的寫法也是（`cardStateFile`，`spec/roster-rules.md`「The card state file」）。測試在 [`test/publication.test.ts`](test/publication.test.ts)、[`test/publication-verify.test.ts`](test/publication-verify.test.ts)。
+名冊每天公布一次（ADR-0027「每天換日時」；`spec/record.md`「What is published when」）：台灣的日期換了之後，物件的 alarm 第一次響的時候。程式在 [`src/roster.ts`](src/roster.ts) 的 `#dailyPublication`、`#publish`、`#readForPublication`、`#fingerprintFileToWrite`、`#writeFingerprintFile`；指紋檔那一行的寫法在 `protocol/`（`fingerprintLine`），卡片狀態檔的寫法也是（`cardStateFile`，`spec/roster-rules.md`「The card state file」）。測試在 [`test/publication.test.ts`](test/publication.test.ts)、[`test/publication-verify.test.ts`](test/publication-verify.test.ts)。
 
 一次公布照順序做：
 
@@ -277,7 +277,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 那一列寫了之後：這個日期就算公布了，當天不再公布任何東西，那一行不再變。同一天後來又有紀錄，也等隔天（`spec/record.md`：同一個日期只公布一次）。
   - 那一列寫了、指紋檔沒寫成：一分鐘後只重寫指紋檔，內容是那一列記的（公布那一刻的筆數和指紋），最後一檔和卡片狀態檔不重寫。`GET /api/v1/fingerprint` 在指紋檔寫成之前回的還是前一行。
 - **後台不刪、不改任何一行已經公開的指紋。** 指紋檔每次整個從 `published` 表寫出來，但寫之前先讀儲存桶裡現有的那一份：現有的內容必須是要寫的內容的開頭。
-  - 是開頭的（檔不存在、是空的、少了後面幾行、斷在一行中間）：照表整個寫，少的行補回來。
+  - 是開頭的（檔不存在、是空的、少了後面幾行、斷在一行中間）：照表整個寫，少的行補回來。**補回來的時間是下一次公布**，通常是隔天的台灣午夜：物件只在有一行還沒寫進檔的時候才寫指紋檔，每一行都寫過之後，同一天的 alarm 和物件重啟都不會去看儲存桶。所以儲存桶裡的指紋檔被刪掉的話，最長約一天公開的指紋檔不在，那段時間 `iamreal-verify` 拿不到指紋檔；`GET /api/v1/fingerprint` 照常回答。
   - 不是的（有一行表裡沒有、或某一行和表裡的不同）：**這一次公布整個不做**，在寫任何東西之前就停：最後一檔、卡片狀態檔、那一列、指紋檔都不寫。寫一行 `{"event":"fingerprint_file_differs","error":"Error"}`（不含檔的內容），一分鐘後再看一次，直到有人處理。`GET /api/v1/fingerprint` 維持原樣。
   - 為什麼整個不做、不是只跳過第 3 步：儲存桶裡的指紋檔不是這個物件的，最可能的原因是整個名冊目錄是另一個物件寫的；那時連最後一檔和卡片狀態檔也不該蓋。
   - 那一列寫了、指紋檔還沒寫成的時候（上一條）也是同一個檢查：儲存桶的檔不是開頭就不寫，每分鐘一行。
@@ -290,10 +290,10 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 **什麼時候公布**
 
 - 到期的時間是「上一次公布的日期」隔天的台灣時間零點（UTC 16:00）；用的是物件的時鐘。alarm 設在那個時間，實際在它響的時候做。
-- **第一次**：物件第一次用這一版程式啟動的那一天不公布（`publication` 表記著那一天），從隔天零點開始。所以部署之後的第一行，是部署後第一個台灣午夜那一天的。
+- **第一次**：物件第一次用這一版程式啟動的那一天不公布（`first_day` 表記著那一天），從隔天零點開始。所以部署之後的第一行，是部署後第一個台灣午夜那一天的。
 - **alarm 晚響、或一整天都沒公布成**（一直失敗）：不補。下一次公布成的那一行寫的是那一天的日期，中間的日期沒有行。規格只要求日期一行比一行晚。
 - **`paused`**（存著的規則版本和程式的不同）：不公布，寫滿的檔照搬。那時存著的卡片狀態是另一版規則算的，公布出去會被當成這一版的。恢復之後照常：下一次 alarm 就公布當天的。
-- 最後一檔和寫滿之後的那一檔同名，所以最後一檔只在這件定時工作裡寫：一次 alarm 裡的工作一件做完才做下一件，不會落在搬檔「核對過」和「刪掉紀錄」之間（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。公布寫了最後一檔之後不到一秒，那一檔剛好寫滿、搬檔寫同一個檔名的話，會碰到 R2 一秒一次的限制：搬檔那一次失敗，一分鐘後重做。
+- 最後一檔和寫滿之後的那一檔同名，所以最後一檔只在這件定時工作裡寫：一次 alarm 裡的工作一件做完才做下一件，不會落在搬檔「核對過」和「刪掉紀錄」之間（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。公布和搬檔會在不同時候寫同一個檔名，兩者的先後靠的就是這一點，程式裡沒有另外的鎖：一個物件的 alarm 不會同時跑兩個（[Alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)：「Only one instance of `alarm()` will ever run at a given time per Durable Object instance.」，2026-11-20 讀的），而一次 alarm 裡的定時工作是依序做的。公布寫了最後一檔之後不到一秒，那一檔剛好寫滿、搬檔寫同一個檔名的話，會碰到 R2 一秒一次的限制：搬檔那一次失敗，一分鐘後重做。
 
 **大小的上限**（都沒有在 Cloudflare 上量過，也沒有在 workerd 裡量過）
 
@@ -305,14 +305,14 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 - **最後一檔和它的雜湊清單。** 最多 999 行、約 20 MB。組的時候同時有三份：讀出來的每一行、接起來的字串、編成的位元組，約 60 MB；寫 R2 的時候留著位元組那一份。搬檔（`#moveFile`）是直接寫進一塊緩衝區、沒有中間的字串，這裡沒有照做。沒有量過。
 - 兩樣是同時握著的：最後一檔快寫滿的那一天，卡片狀態檔能用的就少約 60 MB。
 
-Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的）。照上面的數字，這個做法大約撐到一兩萬張卡片，最後一檔接近寫滿時更少。**正式名冊到一萬張之前要先改成一邊讀一邊寫**（[#183](https://github.com/iamreal-tw/iamreal/issues/183)；卡片狀態表本來就照檔案要的順序排）。測試名冊離這個數字很遠。
+Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的），Durable Object 也照這個上限（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are a special kind of Worker, so Workers limits also apply.」，2026-11-20 讀的）。照上面的數字，這個做法大約撐到一兩萬張卡片，最後一檔接近寫滿時更少。**正式名冊到一萬張之前要先改成一邊讀一邊寫**（[#183](https://github.com/iamreal-tw/iamreal/issues/183)；卡片狀態表本來就照檔案要的順序排）。測試名冊離這個數字很遠。
 
 **撞到上限時會怎樣**（照程式和文件推的，沒有試過）：
 
 - 不會寫出截斷的檔。每個物件的位元組先在記憶體裡整個組好、算好 SHA-256 才交給 R2，組到一半就沒有東西可寫；指紋檔的那一行排在最後。
 - 但不只是「那天沒公布」。同一頁文件寫超過上限時「the Workers runtime lets in-flight requests complete and creates a new isolate for subsequent requests」；Durable Object 那時怎樣，文件沒有另外寫。物件換了 isolate 的話，記憶體裡的東西都沒了，包括「一分鐘後再試」的那個時間，所以公布馬上又到期、又撞一次。那段時間送到同一個 isolate 的過卡請求可能跟著失敗。這會一直重複，直到程式改成一邊讀一邊寫。所以上面那個門檻要在碰到之前處理，不能等它發生。
 
-- **指紋檔**一天多一行，一行 110 個位元組上下：一年約 40 KB，每天讀一次、整個重寫一次。
+- **指紋檔**一天多一行，一行 110 個位元組上下：一年約 40 KB，一次公布讀它三次（開始前看一次、寫之前再看一次、寫完讀回核對一次）、整個重寫一次。
 
 **部署後要營運者做的**
 
@@ -963,7 +963,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 多塞一件定時的工作、看它什麼時候跑過 | `worker.roster.setExtraWork(到期的時間, 間隔)`、`worker.roster.extraWorkRuns()` |
 | 換掉環境的設定 | `startWorker({ settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "…" } })`，或啟動後 `worker.setSettings({…})`；已經在跑的 Durable Object 要 `worker.roster.restart()` 才讀到新的 |
 
-**測試裡名冊也會自己公布。** 測試把時鐘撥到隔天之後，只要有任何請求讓物件重設 alarm（例如拿題目），alarm 約 1 秒後就會自己響、公布當天的名冊（[每天換日公布名冊](#每天換日公布名冊)），不必等測試去跑 alarm。所以跨日的測試不要斷言 `roster/` 底下恰好有哪些檔、或指紋檔恰好幾行，除非它自己控制公布（撥時鐘之後馬上 `runAlarm()`）。測試專用建置的 alarm 一次只跑一個：`runAlarm()` 和物件自己響的那一次排隊做，不會同時跑（`test-build/index.ts` 覆寫了 `alarm()`）。部署的程式沒有這個排隊，靠的是一個物件的 alarm 本來就不會同時跑兩個、定時的工作一件做完才做下一件；公布和搬檔會在不同時候寫同一個檔名，它們的先後就靠這一點。
+**測試裡名冊也會自己公布。** 測試把時鐘撥到隔天之後，只要有任何請求讓物件重設 alarm（例如拿題目），alarm 約 1 秒後就會自己響、公布當天的名冊（[每天換日公布名冊](#每天換日公布名冊)），不必等測試去跑 alarm。所以跨日的測試不要斷言 `roster/` 底下恰好有哪些檔、或指紋檔恰好幾行，除非它自己控制公布（撥時鐘之後馬上 `runAlarm()`）。測試專用建置的 alarm 一次只跑一個：`runAlarm()` 和物件自己響的那一次排隊做，不會同時跑（`test-build/index.ts` 覆寫了 `alarm()`）。部署的程式沒有這個排隊，靠的是一個物件的 alarm 本來就不會同時跑兩個（[每天換日公布名冊](#每天換日公布名冊)「什麼時候公布」最後一條引了文件的那一句）、定時的工作一件做完才做下一件。
 
 測試不對內政部送請求。測試用 Node 內建的 test runner，和 `protocol/`、`web/` 相同。
 
@@ -1143,7 +1143,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`、跳脫、方法、測試名冊的標示；讀 `design/copy/` 的工具 |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
-| `test/publication.test.ts` | 每天換日公布：空的名冊、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、那一行寫了就不變、指紋檔被改過會蓋回來、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
+| `test/publication.test.ts` | 每天換日公布：空的名冊、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
 | `test/publication-verify.test.ts` | 整條路的比對：假卡片寫三天 2,005 筆，Go 的 `iamreal-verify` 用預設的讀法重驗後台寫出來的整個資料網域（要有 `go`） |
 | `test/roster-files.test.ts` | 寫滿 1,000 筆的名冊檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、失敗後一分鐘重試；Worker 沒有送名冊檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
 | `test/sequence.test.ts`、`test/sequence.ts` | 固定種子的長序列：產生器，Go 的 `roster/` 算的答案，配記憶體和配 Durable Object 的儲存逐筆比對（要有 `go`） |

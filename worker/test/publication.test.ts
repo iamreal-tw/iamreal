@@ -327,6 +327,72 @@ describe("a publication that cannot be finished", () => {
     assert.deepEqual(file.slice(whole.length).split("\n").map((l) => (l === "" ? "" : JSON.parse(l).date)), [`2026-11-${date}`, ""]);
   });
 
+  test("a fingerprint file the object wrote without learning that it did is its own: the line whose write lost its answer is not taken for a foreign one", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const differs = (): number => worker.logLines().filter((l) => l.includes('"fingerprint_file_differs"')).length;
+    const lineDates = async (): Promise<unknown[]> => text((await directory()).get(FINGERPRINTS)!).split("\n").slice(0, -1).map((l) => [JSON.parse(l).date, JSON.parse(l).count]);
+    const logged = differs();
+
+    // The fingerprint file is stored with the new line, and the answer of the write is lost: the bucket has a line the
+    // object has not marked as written.
+    await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put loses its answer" });
+    await alarmAt("2026-11-21", "00:00:00");
+    assert.deepEqual(await lineDates(), [["2026-11-21", 1]]);
+    assert.equal(((await published()) as { date: unknown }).date, null, "the object has not read the line back");
+    // The next try finds its own file, writes it again, and the line is published.
+    await worker.roster.setBucketFault(null);
+    await alarmAt("2026-11-21", "00:01:00");
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+
+    // The same on the next date, with the object started again before it tries again, and a day gone by.
+    await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put loses its answer" });
+    await alarmAt("2026-11-22", "00:00:00");
+    assert.deepEqual(await lineDates(), [["2026-11-21", 1], ["2026-11-22", 1]]);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    await worker.roster.restart();
+    await day(worker, 2);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    await alarmAt("2026-11-23", "00:00:00");
+    assert.deepEqual(await lineDates(), [["2026-11-21", 1], ["2026-11-22", 1], ["2026-11-23", 2]]);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-23");
+    assert.equal(differs(), logged, "the object's own file was never taken for another's");
+  });
+
+  test("the bucket's fingerprint file is looked at again when it is written: one that changed while the other files were written is not written over", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    await alarmAt("2026-11-21", "00:00:00");
+    const whole = text((await directory()).get(FINGERPRINTS)!);
+    const foreign = whole + line("2026-11-21", 9, EMPTY_FINGERPRINT);
+    const differs = (): number => worker.logLines().filter((l) => l.includes('"fingerprint_file_differs"')).length;
+    const logged = differs();
+
+    // The publication of 2026-11-22 has looked at the bucket's file and is writing the card state file when a line
+    // that is not the object's appears in it.
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-22.jsonl", how: "put takes a while" });
+    await worker.setClock(tw("2026-11-22", "00:00:00"));
+    const publishing = worker.roster.runAlarm();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await worker.putFile(`roster/${FINGERPRINTS}`, foreign, MINUTE, ROSTER_FILE_TYPE);
+    await publishing;
+    await worker.roster.setBucketFault(null);
+    assert.equal(text((await directory()).get(FINGERPRINTS)!), foreign, "the file is not written over");
+    assert.equal(differs(), logged + 1);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+
+    // Once the file is the object's again, the line decided on 2026-11-22 is written with the next date's.
+    const before = await directory();
+    await alarmAt("2026-11-23", "00:00:00");
+    assert.deepEqual(await directory(), before);
+    await worker.putFile(`roster/${FINGERPRINTS}`, whole, MINUTE, ROSTER_FILE_TYPE);
+    await alarmAt("2026-11-23", "00:01:00");
+    assert.deepEqual(text((await directory()).get(FINGERPRINTS)!).split("\n").slice(0, -1).map((l) => JSON.parse(l).date), ["2026-11-21", "2026-11-22", "2026-11-23"]);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-23");
+  });
+
   test("the date changes while the bucket is being written: no line is written for the day that ended, and the next try publishes the new date", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);
@@ -351,7 +417,10 @@ describe("a publication that cannot be finished", () => {
     assert.equal(files.has("card-state/2026-11-22.jsonl"), true);
   });
 
-  test("alarms that ring at once at midnight publish once", async () => {
+  // What this shows is the test build's: there the alarm's handler runs one at a time, the alarm's own run and the
+  // ones a test starts (test-build/index.ts, `alarm`). The deployed object has nothing of the kind, and needs none:
+  // its alarm never runs twice at once.
+  test("alarms a test starts at once at midnight run one after the other, and publish once", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
