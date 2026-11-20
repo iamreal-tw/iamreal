@@ -49,6 +49,11 @@ const EXAMPLES: Record<string, string> = {
   domain: SITE_DOMAIN,
   // The one platform's name, where the screens speak of one platform.
   platform: "Threads",
+  // The app's: the start date of the minimum version, the store, where the card goes, the seconds of computing.
+  min_app_from: "2027-03-01",
+  store: "App Store",
+  spot: "手機背面的上方",
+  seconds: "5",
   // done.mismatch_expected: the sentences of step 5's row (a switch, and that it is a correction).
   expected: "更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。",
 };
@@ -157,6 +162,14 @@ test("every sentence of the screens in card-proof.md is in card-proof.json", () 
       .filter((t) => t !== "" && !VALUES.has(t));
     assert.deepEqual(left, [], `card-proof.md: "${line}" is not made of card-proof.json's entries`);
   }
+});
+
+// The app's sentences are the groups whose name starts with "app_". The
+// group "app" is the web page's: choosing a device and getting the app.
+test("the app's sentences never say 這台裝置 or 這台電腦", () => {
+  const app = entries().filter(([key]) => key.startsWith("app_"));
+  assert.ok(app.length > 0, "card-proof.json has no app_ group");
+  for (const [key, text] of app) assert.doesNotMatch(text, /這台裝置|這台電腦/, key);
 });
 
 test("the screen's files hold no sentence of their own", () => {

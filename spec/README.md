@@ -19,6 +19,7 @@ there are the names used here.
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
 | [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
+| [`circuit-inputs.md`](circuit-inputs.md) | What the device gives the circuit, from the certificate, the signatures and the path, and the public inputs it expects back | Draft |
 
 The public roster is one scope shared by every public platform: a card has
 one scoped ID there and one slot on each platform (ADR-0017). One card
@@ -32,7 +33,7 @@ declaration code, not in the scope string.
 `poseidon2-constants.json` belong to `scoped-id.md` and
 `revocation-tree.md`; `card-state-file.json` belongs to `roster-rules.md`
 ("The card state file"). Every implementation (Go,
-TypeScript, and later the mobile apps) runs its tests against these same
+TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 

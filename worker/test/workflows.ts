@@ -217,6 +217,16 @@ export const BB_AMD64_LINUX_SHA256 = "5bbb64800d431c6760a70d8723be4eaf37ed10e8fb
 export const BB_PATH = "${{ github.workspace }}/web/node_modules/@aztec-foundation/bb.js/build/amd64-linux/bb";
 export const CHECK_BB = `echo "${BB_AMD64_LINUX_SHA256}  $IAMREAL_BB" | sha256sum --check --strict`;
 
+/**
+ * The one job that does not check bb's SHA-256: device-core/ runs no bb. The
+ * Barretenberg it links is the static library device-core/fetch-barretenberg.sh
+ * downloads, whose SHA-256 that script checks against
+ * device-core/barretenberg.sha256 before unpacking it.
+ */
+export const DEVICE_CORE_JOB = "device-core";
+/** How a step of that job gets Barretenberg: the directory the script prints, and nothing if the script fails. */
+export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && ';
+
 /** What each action may be given, exactly. */
 const WITH: Readonly<Record<string, YamlMap>> = {
   "actions/checkout": { "persist-credentials": "false" },
@@ -228,6 +238,24 @@ const WITH: Readonly<Record<string, YamlMap>> = {
 
 const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
+
+/**
+ * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
+ * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
+ * checked; so the job is written out here instead of being described by rules.
+ */
+export const DEVICE_CORE_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
+    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo test --locked --release` },
+  ],
+};
 
 /** The line of the upload step: the arguments of `uploadArgs` (scripts/deploy.ts), with wrangler kept quiet. */
 export const UPLOAD = `${Object.entries(WRANGLER_QUIET)
@@ -396,7 +424,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -410,7 +438,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
           }
         }
       }
-      if (!checksBb) j("does not check bb's SHA-256");
+      if (f === "checks.yml" && name === DEVICE_CORE_JOB) {
+        // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
+        // (where .cargo/config.toml is read) with the library the script checked.
+        if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+      } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }
   return problems;
