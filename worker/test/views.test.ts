@@ -9,7 +9,7 @@ import { after, before, describe, test } from "node:test";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, pagesWorld, r } from "./pages.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import { cardState, checkRoster, freshRoster, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
+import { cardState, checkRoster, day, freshRoster, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -161,6 +161,10 @@ describe("the number of cards that declare an account", () => {
     assert.deepEqual(await cards(a), [["withdraw", "alice", 0]]);
     assert.deepEqual(await cards(b, "threads:alice"), [["correction", "alice", 1]]);
     assert.deepEqual(await cards(c, "test-example:alice", "threads:bob"), [["refresh", "alice", 1], ["first", "bob", 1]]);
+    // A day later another account is a switch: counted with the card that already declares it.
+    await day(worker, 1);
+    assert.deepEqual(await cards(b, "threads:bob"), [["switch", "bob", 2]]);
+    assert.deepEqual(await cards(c, "test-example:alice", "threads:alice"), [["refresh", "alice", 1], ["switch", "alice", 1]], "the account b left has no card but this one");
   });
 
   test("a card whose stored state is broken does not stop another card's card proof, and is still counted; its own is 500 and writes nothing", async () => {

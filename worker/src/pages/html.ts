@@ -1,7 +1,9 @@
 // HTML made of pieces: `html` is a template tag that escapes every value
 // put into it, so that nothing a visitor typed and nothing the roster holds
 // is ever read as markup. The only way around the escaping is a piece that
-// is already `Html`, which only this tag makes.
+// is already `Html`. This tag makes such pieces; the pages also make them
+// with `new Html(...)`, and only from text written in the code itself (the
+// logo, a fixed tag, nothing at all): never from a value.
 
 /** A piece of HTML: text that is already escaped where it has to be. */
 export class Html {
