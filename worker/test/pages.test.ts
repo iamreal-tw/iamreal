@@ -145,7 +145,7 @@ describe("the page of a card", () => {
     const two = block("proof-page.md", "2. ");
     notOnPage(page, one[0]!, one[1]!, [...one[5]!].slice(0, 10).join(""), two[1]!, two[2]!, "我要更新這張證明", block("proof-page.md", "3. ")[0]!);
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
-    wantPreview(page, specialTitles()[0]!, "島民 iamreal.tw");
+    wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
   });
 
   test("a short ID of two cards: section 7, both in the order of their scoped IDs, each under as many characters as tell them apart; sections 5 and 5a once", async () => {
@@ -168,7 +168,7 @@ describe("the page of a card", () => {
     ]);
     const text = squash(visibleText(page));
     for (const section of ["5. ", "5a. "]) assert.equal(text.split(squash(copyLines(block("proof-page.md", section))[0]!)).length - 1, 1, `section ${section}once`);
-    wantPreview(page, specialTitles()[1]!, "島民 iamreal.tw");
+    wantPreview(page, specialTitles()[1]!, "島民證明 iamreal.tw");
   });
 
   test("a short ID that resolves to no card, or does not read: 404 with section 9, what was typed written back; one that does not read is answered without the roster's object", async () => {
@@ -180,7 +180,7 @@ describe("the page of a card", () => {
       wantLines(page, copyLines(block("proof-page.md", "9. "), "7K2Q9FM4XD", typed));
       assert.ok(page.includes(`<span class="typed">${testSiteCardAddress(typed)}</span> 沒有對到任何一張自然人憑證。`), `/p/${typed}: the test site's own domain`);
       assert.ok(page.includes('<a href="/roster#q">查一個 Threads 帳號</a>'));
-      wantPreview(page, specialTitles()[2]!, "島民 iamreal.tw");
+      wantPreview(page, specialTitles()[2]!, "島民證明 iamreal.tw");
     }
 
     // With an object that answers nothing (its tables are of another version), a short ID that reads is 500
@@ -298,8 +298,8 @@ describe("the home page", () => {
     assert.equal(squash(visibleText(page)).split(squash(needs())).length - 1, 2);
 
     const { title, site, summary } = previewOf("home.md", "連結被貼出去時的預覽");
-    assert.equal(firstMatch(TITLE_TAG, page), "島民｜iamreal.tw");
-    assert.ok(copySection("home.md", "連結被貼出去時的預覽").includes("`島民｜iamreal.tw`"), "home.md gives the <title>");
+    assert.equal(firstMatch(TITLE_TAG, page), "島民證明｜iamreal.tw");
+    assert.ok(copySection("home.md", "連結被貼出去時的預覽").includes("`島民證明｜iamreal.tw`"), "home.md gives the <title>");
     assert.deepEqual([firstMatch(OG_TITLE, page), firstMatch(OG_SITE, page), firstMatch(OG_DESCRIPTION, page)], [title, site, summary]);
     const first = copyLines(block("home.md", "1. ", 0));
     assert.equal(summary, first[1]! + first[2]!, "the summary is the first screen's two lines");
@@ -441,8 +441,8 @@ describe("every page", () => {
       assert.equal(status, 404, path);
       wantLines(page, lines);
       assert.ok(page.includes('<h1 class="title">找不到這一頁</h1>') && page.includes('<a href="/">回到首頁</a>'), path);
-      assert.equal(firstMatch(TITLE_TAG, page), "找不到這一頁｜島民");
-      wantPreview(page, "找不到這一頁", "島民 iamreal.tw");
+      assert.equal(firstMatch(TITLE_TAG, page), "找不到這一頁｜島民證明");
+      wantPreview(page, "找不到這一頁", "島民證明 iamreal.tw");
     }
     // The roster is not asked: with an object that answers nothing, the page is the same.
     await worker.roster.setStoredSchemaVersion("another");

@@ -27,7 +27,7 @@ export interface Site {
 
 /** What the layout reads of a page. */
 export interface Document {
-  /** The title of the link preview (og:title); the <title> is it followed by ｜島民, or `tabTitle` if there is one. */
+  /** The title of the link preview (og:title); the <title> is it followed by ｜島民證明, or `tabTitle` if there is one. */
   readonly title: string;
   readonly tabTitle?: string;
   /** og:description, for the one page that has one. */
@@ -47,7 +47,7 @@ export const NEEDS = "需要實體的自然人憑證、讀卡機和電腦。";
 
 /** The navigation bar. The links come first in the document; on a narrow screen the style sheet puts them on a second row. */
 const NAV = html`<header class="top">
-<a class="home" href="/">${LOGO}<b>島民</b></a>
+<a class="home" href="/">${LOGO}<b>島民證明</b></a>
 <nav class="links">
 <a href="/verify">怎麼驗證</a>
 <a href="/roster">名冊</a>
@@ -59,7 +59,7 @@ const NAV = html`<header class="top">
 
 /** The foot. 怎麼準備 is the card proof's help page. */
 const FOOT = html`<footer class="foot">
-<span class="site"><b>島民</b> <span>iamreal.tw</span></span>
+<span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
 <a href="/roster">名冊</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 <a href="/proof/help.html?topic=prepare">怎麼準備</a>
@@ -74,9 +74,9 @@ export function layout(site: Site, d: Document): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-${test === null ? new Html("") : new Html('<meta name="robots" content="noindex">\n')}<title>${d.tabTitle ?? `${d.title}｜島民`}</title>
+${test === null ? new Html("") : new Html('<meta name="robots" content="noindex">\n')}<title>${d.tabTitle ?? `${d.title}｜島民證明`}</title>
 <meta property="og:title" content="${d.title}">
-<meta property="og:site_name" content="島民 iamreal.tw">
+<meta property="og:site_name" content="島民證明 iamreal.tw">
 ${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
 </head>
