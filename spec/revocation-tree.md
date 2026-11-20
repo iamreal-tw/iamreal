@@ -138,6 +138,9 @@ CRL, checks MOICA's signature, and rebuilds the root.
   use a CRL with a lower one;
 - builds the tree and the proof of absence for its own serial number.
 
+Which file it takes from the index, the order of these checks and their
+reason codes are in [`device-checks.md`](device-checks.md), "The CRL".
+
 **Why the device has its own bound.** The mirror chooses which CRL a device
 gets. CRLs list suspended certificates only while they are suspended. A
 mirror serving one cardholder an older CRL would learn, from whether the card
@@ -222,6 +225,11 @@ for it.
 
 [`vectors/poseidon2.json`](vectors/poseidon2.json), `revocation_tree`: small
 trees with their roots and proofs of absence.
+[`vectors/revocation-tree.json`](vectors/revocation-tree.json): CRLs in
+MOICA's layout, signed by test keys (not MOICA's), with their roots, and the
+proofs of absence of serial numbers in them, in the form of the circuit's
+inputs ([`circuit-inputs.md`](circuit-inputs.md)) that `iamreal-crl prove`
+prints; a serial number in the tree has none.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is

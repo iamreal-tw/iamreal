@@ -18,7 +18,9 @@ there are the names used here.
 | [`list-consequence.md`](list-consequence.md) | What a cardholder's list does, as the device shows it before the card signs: reading the platform table of `config` and the card's state, the list the card signs, one row per platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
+| [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
+| [`circuit-inputs.md`](circuit-inputs.md) | What the device gives the circuit, from the certificate, the signatures and the path, and the public inputs it expects back | Draft |
 
 The public roster is one scope shared by every public platform: a card has
 one scoped ID there and one slot on each platform (ADR-0017). One card

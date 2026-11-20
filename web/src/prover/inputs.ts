@@ -1,6 +1,6 @@
-// The circuit's inputs (zkid-noir tests/lib/inputs.mjs, noirCardProofInputs)
-// and the public inputs the device expects the proof to carry
-// (spec/proof-verification.md, "Public inputs").
+// The circuit's inputs and the public inputs the device expects the proof
+// to carry (spec/circuit-inputs.md; zkid-noir tests/lib/inputs.mjs,
+// noirCardProofInputs).
 import { bigintOfBytes, limbs } from "iamreal-protocol/bytes.ts";
 import type { CardCertificate } from "../certificate.ts";
 import { MAX_TBS_LEN } from "../certificate.ts";
