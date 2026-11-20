@@ -14,7 +14,24 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
-import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, IOS_PATHS, CHECK_BB, CHECKS_GROUP, CHECKS_ON, INSTALL_PNPM, REQUIRED_CHECKS, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
+import {
+  ANDROID_SDK_PARTS,
+  BB_AMD64_LINUX_SHA256,
+  BROWSER_PATHS,
+  CHECK_BB,
+  CHECKS_GROUP,
+  CHECKS_ON,
+  GRADLE_BUILD,
+  GRADLE_DISTRIBUTION_SHA256,
+  GRADLE_VERSION,
+  GRADLE_WRAPPER_JAR_SHA256,
+  INSTALL_PNPM,
+  IOS_PATHS,
+  REQUIRED_CHECKS,
+  type Yaml,
+  readYaml,
+  workflowProblems,
+} from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
@@ -177,18 +194,24 @@ const CHANGES: Record<string, Change[]> = {
   "118 the Xcode of checks-ios.yml in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n`)],
   "119 checks-ios.yml without its Xcode": [replace(I, "  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n", "  OTHER: x\n")],
   "120 one more step in the iOS job": [replace(I, "      - name: Build device-core/ for the simulator\n", "      - run: curl -o ../device-core/vendor/x https://example.invalid/x\n        working-directory: ios\n      - name: Build device-core/ for the simulator\n")],
+  "121 a job of checks.yml other than device-core and android without the check of bb": [replace(C, "\n  android:\n", "\n  android-2:\n")],
+  "122 the android job running a Gradle that is not the wrapper": [replace(C, `run: ${GRADLE_BUILD}`, 'run: JAVA_HOME="$JAVA_HOME_17_X64" gradle build')],
+  "123 the android job running the wrapper with something more": [replace(C, `run: ${GRADLE_BUILD}`, `run: ${GRADLE_BUILD} --init-script x.gradle`)],
+  "124 the android job running the wrapper of another directory": [replace(C, `        working-directory: android\n        run: ${GRADLE_BUILD}`, `        working-directory: web\n        run: ${GRADLE_BUILD}`)],
+  "125 one more step in the android job": [replace(C, "      - name: gradlew build\n", "      - run: sudo snap install zig\n      - name: gradlew build\n")],
+  "126 the android job without the parameter files' script": [replace(C, "        working-directory: device-core\n        run: ./fetch-crs.sh", "        working-directory: device-core\n        run: curl -o vendor/crs/bn254_g2.dat https://example.com/g2.dat")],
   // The merge queue (#180): checks.yml also runs on merge_group, and nothing else does.
   "130 deploy-test.yml also on merge_group": [replace(D, "on:\n  push:\n", `on:\n${MERGE_GROUP}  push:\n`)],
   "131 checks-browser.yml also on merge_group": [replace(B, "on:\n", `on:\n${MERGE_GROUP}`)],
-  "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
   "132 checks.yml on merge_group only, so a pull request gets no checks": [replace(C, "  pull_request:\n", "")],
   "133 merge_group in checks.yml with another activity type": [replace(C, MERGE_GROUP, `${MERGE_GROUP}      - destroyed\n`)],
   "134 checks.yml's group by pull request number, so the merge groups' runs share one and cancel each other": [replace(C, `  group: ${CHECKS_GROUP}\n`, "  group: checks-${{ github.event.pull_request.number }}\n")],
   "135 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    runs-on: ubuntu-24.04\n")],
   "136 a job of checks.yml given a name, which is the name its check reports": [replace(C, GO_JOB, `${GO_JOB}    name: Go\n`)],
-  "137 a fourth job in checks.yml": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
+  "137 one job more in checks.yml than the checks main requires": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
   "138 a secret in the env at the top of checks.yml, which a merge group's run would be given": [replace(C, '  WRANGLER_HIDE_BANNER: "true"\n', `  WRANGLER_HIDE_BANNER: "true"\n  T: ${SECRET}\n`)],
   "139 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
+  "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -255,6 +278,38 @@ test("deploying runs no command of the repository: the wrangler configuration ha
   // A command there would run in the step that has the token.
   const config = unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" });
   assert.equal(config.build.command, undefined);
+});
+
+test("the Gradle wrapper of android/ is the one of the Gradle it names: its jar and the distribution's SHA-256 are the published ones", () => {
+  const wrapper = join(REPO, "android", "gradle", "wrapper");
+  assert.equal(createHash("sha256").update(readFileSync(join(wrapper, "gradle-wrapper.jar"))).digest("hex"), GRADLE_WRAPPER_JAR_SHA256);
+  // The whole file, line by line: a second distributionUrl, however it is spelled, is a line more.
+  assert.deepEqual(readFileSync(join(wrapper, "gradle-wrapper.properties"), "utf8").split("\n"), [
+    "distributionBase=GRADLE_USER_HOME",
+    "distributionPath=wrapper/dists",
+    `distributionSha256Sum=${GRADLE_DISTRIBUTION_SHA256}`,
+    `distributionUrl=https\\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip`,
+    "networkTimeout=10000",
+    "retries=0",
+    "retryBackOffMs=500",
+    "validateDistributionUrl=true",
+    "zipStoreBase=GRADLE_USER_HOME",
+    "zipStorePath=wrapper/dists",
+    "",
+  ]);
+  // Every plugin and library Gradle downloads is checked against the SHA-256 in the repository:
+  // no signature stands in for one, and nothing is exempt.
+  const verification = readFileSync(join(REPO, "android", "gradle", "verification-metadata.xml"), "utf8");
+  assert.ok(verification.includes("<verify-metadata>true</verify-metadata>"));
+  assert.ok(verification.includes("<verify-signatures>false</verify-signatures>"));
+  assert.ok(!/<trust|<ignored-key|<key-server/.test(verification), "no artifact is exempt from the check");
+  assert.ok(!/<(md5|sha1|pgp)\b/.test(verification), "SHA-256 only");
+  // The parts of the SDK the job installs are the ones the build names.
+  const build = readFileSync(join(REPO, "android", "app", "build.gradle.kts"), "utf8");
+  const named = (re: RegExp): string => re.exec(build)![1]!;
+  assert.ok(ANDROID_SDK_PARTS.includes(`"ndk;${named(/ndkVersion = "([^"]+)"/)}"`));
+  assert.ok(ANDROID_SDK_PARTS.includes(`"platforms;android-${named(/compileSdk = (\d+)/)}"`));
+  assert.ok(ANDROID_SDK_PARTS.includes(`"build-tools;${named(/buildToolsVersion = "([^"]+)"/)}"`));
 });
 
 test("no file in the repository changes what the deploy job installs or what wrangler loads", () => {
