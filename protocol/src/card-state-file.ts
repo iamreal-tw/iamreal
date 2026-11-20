@@ -114,6 +114,32 @@ export function cardStateFile(roster: Roster, cards: Iterable<CardRow>): string 
   return lines.join("");
 }
 
+/**
+ * Writes a card state file of a roster of `roster` one row at a time, for
+ * cards that come already in the order of the file: each call takes the
+ * next card and returns its row, followed by LF. The rows returned, one
+ * after the other, are the bytes `cardStateFile` gives for the same cards
+ * (as ASCII text). No row at all is the empty file.
+ *
+ * Each row is checked as it is given, and the call throws, returning
+ * nothing, if a value is outside its format (as `cardStateFile`: the
+ * message names the item, never the card or the value) or if the card is
+ * not after the card of the last row returned: one out of order, or the
+ * same card twice. A caller that has not yet written anything of the file
+ * can so stop before its first byte; one that has must not use what it
+ * wrote.
+ */
+export function cardStateFileWriter(roster: Roster): (row: CardRow) => string {
+  let last: CardRow | null = null;
+  return (row) => {
+    const problem = rowProblem(roster, row);
+    if (problem !== null) throw new Error(`card state file: ${problem} of a card is not in its format`);
+    if (last !== null && byCard(last, row) >= 0) throw new Error("card state file: a card is not after the card before it");
+    last = row;
+    return rowLine(row);
+  };
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const stringOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
 
