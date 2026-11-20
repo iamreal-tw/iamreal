@@ -11,6 +11,7 @@
 | | |
 |---|---|
 | 識別碼 | `tw.iamreal.app.test` |
+| 圖示下面的名稱 | 島民證明 測試 |
 | 連哪裡 | `https://test.iamreal.tw`、`https://test-data.iamreal.tw` |
 | 簽的場合字串 | `iamreal-test:public:0` |
 
@@ -24,7 +25,7 @@
 | `jni/` | JNI 那一層（C）：把 `idc_` 的 C 函式包成 Kotlin 呼叫得到的函式。照 `device-core/README.md`「C 函式的慣例」釋放和清除；只呼叫 `idc_` 開頭的函式 |
 | `build-native.sh` | 編 `device-core/` 的靜態函式庫，和 JNI 那一層連結成 `libiamreal_device_core_jni.so` |
 | `fetch-zig.sh`、`zig.sha256` | 下載 Zig 0.15.1，核對 SHA-256 |
-| `fetch-crs.sh`、`bundled.sha256` | 下載參數檔；包進安裝檔的每個檔案的 SHA-256 |
+| `bundled.sha256` | 包進安裝檔的電路檔和驗證金鑰的 SHA-256。參數檔的在 `device-core/crs.sha256`，由 `device-core/fetch-crs.sh` 下載（和 iOS 共用） |
 | `app/build.gradle.kts` | 識別碼、`minSdk`、函式庫和內建的檔案怎麼進安裝檔、建置時的檢查 |
 | `gradle/verification-metadata.xml` | Gradle 下載的每個外掛和程式庫的 SHA-256 |
 
@@ -59,7 +60,7 @@ $NDK/llvm-readelf -r ../device-core/vendor/barretenberg/arm64-android/libbb-exte
 $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a/libiamreal_device_core_jni.so | grep TLS
 ```
 
-量測時的實驗 app（#88）用 26 連結，但裡面的函式庫是同一份，要的同樣是 29；Android 9 以下沒有實際裝過。殼在 API 29 的模擬器（`arm64-v8a`）上跑過 debug 和 release 兩種建置。
+量測時的實驗 app（#88）用 26 連結，但裡面的函式庫是同一份，要的同樣是 29；Android 9 以下沒有實際裝過。殼在 API 29 的模擬器（`arm64-v8a`）上跑過 debug 和 release 兩種建置。`x86_64` 的函式庫同樣有 `PT_TLS`，有編、有連結、有包進 debug 的安裝檔，但還沒有在 x86-64 的模擬器上載入過（這裡沒有那種電腦）。
 
 `targetSdk` 和 `compileSdk` 是 36。
 
@@ -71,20 +72,21 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 |---|---|
 | `card_proof_rs2048.json`、`card_proof_rs4096.json` | `web/circuits/`（進版控的那兩份） |
 | `card_proof_rs2048.vk`、`card_proof_rs4096.vk` | `verifier/vk/` |
-| `bn254_g1_compressed_2p18.dat`（8 MiB）、`bn254_g2.dat` | `fetch-crs.sh` 從 Aztec 的 CDN 下載到 `vendor/crs/`，和 `web/scripts/fetch-crs.mjs` 抓的是同樣的檔案 |
+| `bn254_g1_compressed_2p18.dat`（8 MiB）、`bn254_g2.dat` | `device-core/fetch-crs.sh` 從 Aztec 的 CDN 下載到 `device-core/vendor/crs/`，和 `web/scripts/fetch-crs.mjs` 抓的是同樣的檔案 |
 
-`bundled.sha256` 列出每一個的 SHA-256，數字和 `web/circuits/README.md`、`web/src/prover/artifacts.ts` 相同。建置時每個檔案先核對再複製（`bundleFiles`），做出安裝檔後再核對一次裡面的檔案（`checkApk`）。app 用它們之前，核心還會照寫死在 `device-core/` 的 SHA-256 再核對一次（ADR-0035）；那是算證明的票，現在的殼還不讀這些檔案。
+`bundled.sha256` 和 `device-core/crs.sha256` 列出每一個的 SHA-256，數字和 `web/circuits/README.md`、`web/src/prover/artifacts.ts` 相同。建置時每個檔案先核對再複製（`bundleFiles`），做出安裝檔後再核對一次裡面的檔案（`checkApk`）。app 用它們之前，核心還會照寫死在 `device-core/` 的 SHA-256 再核對一次（ADR-0035）；那是算證明的票，現在的殼還不讀這些檔案。
 
 ## 建置時的檢查
 
-`./gradlew build` 會跑，任何一項不過就失敗（`app/build.gradle.kts`）：
+`./gradlew build` 會跑，只做安裝檔（`assembleDebug`、`assembleRelease`）時也會跑；任何一項不過就失敗（`app/build.gradle.kts`）：
 
-- **合併後的 manifest**（`checkManifest`）：任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的（現在是空的）。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉
-- **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和 `bundled.sha256` 完全相同，不多不少；`.so` 沒有連結 `liblog`
-- **release build 不輸出 log**：R8 拿掉對 `android.util.Log` 的呼叫（`app/proguard-rules.pro`）；之後 `checkApk` 看 release 的 dex，還提到 `android.util.Log`、`java.io.PrintStream`（`println`）、`java.util.logging.Logger` 就失敗
+- **合併後的 manifest**（`checkManifest`）：識別碼不是 `tw.iamreal.app.test` 就失敗；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的（現在是空的）。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉
+- **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`
+- **測試 app 不提正式的環境**（`checkApk`）：dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式名冊的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照名冊的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試名冊的那一條。`.so` 裡兩份名冊的場合字串都有（核心是同一份），Kotlin 只傳得出測試名冊的數字
+- **release build 不輸出 log**：R8 拿掉對 `android.util.Log` 的呼叫（`app/proguard-rules.pro`）；之後 `checkApk` 看 release 的 dex，還提到 `android.util.Log`、`java.io.PrintStream`（`System.out`、`System.err`、`println`）、`java.util.logging.Logger`、`printStackTrace` 就失敗
 - **沒有第三方 SDK**：app 用到的程式庫只有 Kotlin 的標準函式庫。沒有 AndroidX、沒有 Google Play services。畫面用 Android 內建的元件
 
-這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。
+這些檢查看的是寫錯和不小心加進來的東西。它們看不到的：Android 系統自己寫的 log（app 當掉時系統會記下例外的堆疊；核心的例外只有代碼）、C 函式庫的 `syslog`（Barretenberg 連結到它，在 libc 裡，拿不掉）、`.so` 裡的程式用系統呼叫直接做的事。
 
 ## 工具和套件
 
@@ -115,8 +117,7 @@ Gradle 下載的每一個檔案（外掛、它們帶進來的套件、測試的�
 需要：JDK 17、Android SDK（`ANDROID_HOME` 指到它，上表的 NDK、build-tools、platform 裝好）、rustup、`curl`、一個 C 編譯器。Linux 另外要 LLVM 的 libc++（`libc++-dev`、`libc++abi-dev`）。不需要手機、卡片、後台、Node、Go。
 
 ```
-cd device-core && rustup target add aarch64-linux-android x86_64-linux-android && cd ../android
-./fetch-crs.sh
+cd device-core && rustup target add aarch64-linux-android x86_64-linux-android && ./fetch-crs.sh && cd ../android
 ./gradlew build
 ```
 
