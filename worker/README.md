@@ -4,14 +4,15 @@
 
 ## 現在有什麼
 
-清冊鏡像做完了，其他還是骨架。舊的後台 [`server/`](../server)（Go）還在，還是對照。
+還沒做完：清冊鏡像和過卡前半段的三個介面有了，送出一筆和頁面還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
 
 | 有 | 還沒有 |
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | 在 Cloudflare 上跑過的紀錄：這一版還沒部署 |
-| 名冊的 Durable Object：存著每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | 寫入紀錄、題目、卡片狀態 |
+| 名冊的 Durable Object：題目表、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | 寫入紀錄：還沒有任何東西會寫卡片狀態表，所以每張卡片都是沒過過卡的樣子 |
+| API 的三個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`GET /api/v1/config` | `POST /api/v1/records`、`GET /api/v1/fingerprint`；限流；存著的規則版本和程式不同時的 `paused` |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過 | 呼叫驗證的程式：送出一筆時驗證 |
-| 測試專用的建置和測試的工具 | 任何頁面和 API：每個網址都回 `404` |
+| 測試專用的建置和測試的工具 | 任何頁面：`/api/` 以外的每個網址都回 `404` |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
 
@@ -27,19 +28,129 @@ pnpm typecheck   # 型別檢查
 
 `pnpm dev` 啟動的是測試專用的建置，旁邊有一個假的內政部（本機的伺服器），所以不會對內政部送請求。它印出 Worker 的網址；按 Enter 跑一次排程，印出排程寫的紀錄和 R2 的模擬裡的檔案。R2 的模擬每次啟動都是空的。
 
+## 題目、卡片現況、設定
+
+介面的格式在 [`docs/api/card-proof.md`](../docs/api/card-proof.md)。這一節寫這個後台怎麼做。程式在 [`src/api.ts`](src/api.ts)、[`src/roster.ts`](src/roster.ts)、[`src/card-table.ts`](src/card-table.ts)、[`src/json.ts`](src/json.ts)；測試在 [`test/api.test.ts`](test/api.test.ts)，案例是從舊後台的 `server/api_test.go` 搬過來的。
+
+### `/api/` 底下每個回應
+
+- 都是 JSON，帶 `Cache-Control: no-store`、`X-Content-Type-Options: nosniff` 和自己的 `X-Request-Id`（8 個隨機位元組的十六進位）。不設 cookie，不送 CORS 標頭。
+- 不是介面的路徑回 `404` `not_found`；方法不對回 `405` `method_not_allowed`，帶 `Allow`。
+- **後台不存連線紀錄，也不為收到的請求寫任何一行。** 只有後台自己出錯（回 `500` `internal`）時寫一行，只在即時的輸出看得到，沒有開保存：
+
+  ```
+  {"event":"internal_error","id":"<請求編號>","endpoint":"/api/v1/challenges","where":"roster","error":"Error"}
+  ```
+
+  `endpoint` 只會是介面自己的路徑，`error` 是例外的類別名稱，`where` 是程式裡寫死的四個值之一：
+
+  | `where` | 意思 |
+  |---|---|
+  | `settings` | 設定不對：`ROSTER_KIND` 不是 `test` 也不是 `production`，或它和 `ROSTER_OBJECT_NAME` 對不上（見[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
+  | `schema` | 名冊的 Durable Object 裡的表是另一版建的（見[兩個版本號](#兩個版本號)） |
+  | `roster` | Durable Object 裡其他的錯，包括存著的卡片狀態壞了（見[讀卡片狀態時的檢查](#讀卡片狀態時的檢查)） |
+  | `handler` | 其他地方 |
+
+  例外的訊息不寫：訊息可能引用請求的內容。這一行沒有題目、匿名編號、帳號、對方的位址。
+- 介面會讀的請求內容最多 64 KB（65,536 個位元組），超過就是 `malformed`，多的部分不讀。`challenges` 不讀內容，送什麼、多長都不看。巢狀超過 16 層的 JSON 也是 `malformed`。
+- 讀 JSON 用自己寫的讀法（`src/json.ts`）：`JSON.parse` 遇到重複的鍵會留下後面那個而不報錯，這裡重複的鍵一律拒絕（ADR-0014）。多一個鍵、少一個鍵、鍵的大小寫不同、值不是字串、物件後面還有東西、不是 UTF-8、開頭有位元組順序記號，都是 `malformed`。
+
+### 三個介面
+
+| 介面 | 誰回答 | 做法 |
+|---|---|---|
+| `POST /api/v1/challenges` | Durable Object | 日期是發出那一刻的台灣日期，加 16 個隨機位元組；先存進題目表再回。請求的內容不讀 |
+| `POST /api/v1/card-state` | Worker 檢查格式，Durable Object 讀卡片狀態表 | 場合字串不是這份名冊的、匿名編號不是它唯一的寫法，都是 `malformed`，不問 Durable Object。平台表的每個平台一項；存著的狀態沒有某個平台的名額時，那一項是沒用過的名額。回應沒有 `head` |
+| `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表 |
+
+**平台表**寫在 [`protocol/src/platforms.ts`](../protocol/src/platforms.ts)，照名冊分兩張，內容和 `spec/scope.md` 的表一字不差（`protocol/` 的測試拿規格的 Markdown 核對）。後台只從 [`src/settings.ts`](src/settings.ts) 的 `rosterSettingsOf` 一個地方取得它：`config` 送給裝置的、`card-state` 列的、檢查存著的卡片狀態用的是同一張。這個環境用哪一份名冊，是設定 `ROSTER_KIND`（見[設定檔](#設定檔)）；設定只說是哪一份，表的內容不在設定裡。
+
+### 名冊和物件的名稱要對得上
+
+**命名規則：測試名冊的 Durable Object 名稱（`ROSTER_OBJECT_NAME`）一律以 `test-` 開頭；正式名冊的不可以以 `test-` 開頭。** 所以從名稱就看得出一個物件裡是哪一份名冊，設定錯了有兩層擋：
+
+| | 擋什麼 | 怎麼擋 |
+|---|---|---|
+| 合併之前 | 經過 PR 的設定錯誤 | [`test/environments.test.ts`](test/environments.test.ts) 用 wrangler 的讀法讀 `wrangler.jsonc`：`test` 環境的 `ROSTER_KIND` 必須是 `test`、`ROSTER_OBJECT_NAME` 必須以 `test-` 開頭、R2 的儲存桶必須是 `iamreal-test-data`。PR 的檢查會跑它。之後加正式環境時，這個測試要加對應的一段 |
+| 執行時 | 不經過 PR 的：從本機用改過的設定檔部署 | 後台取得設定的那一處（`src/settings.ts` 的 `rosterSettingsOf`）每次都檢查 `ROSTER_KIND` 合法、而且和 `ROSTER_OBJECT_NAME` 相符：`test` 配 `test-` 開頭的名稱，`production` 配不是 `test-` 開頭的名稱 |
+
+執行時不符的話：
+
+- 三個介面（`challenges`、`card-state`、`config`）一律回 `500`，寫一行 `where` 是 `settings` 的紀錄。三個介面都是先讀設定才做別的事。
+- Worker 不去問 Durable Object。Durable Object 自己啟動時也讀同一處，設定不對就不啟動，不建表、不讀不寫。
+- 設定改對之後照常，物件裡原有的東西都還在。
+
+之後的介面（`records`、頁面）只要經過 `rosterSettingsOf` 取得設定，就有同樣的檢查。
+
+### 讀卡片狀態時的檢查
+
+`src/card-table.ts` 的 `readCard` 讀出一列之後，照 `spec/roster-rules.md`「State」和這份名冊的平台表檢查，不合就丟例外，`card-state` 回 `500`；壞掉的狀態不交給任何人：
+
+- `last_card_proof` 是日期；`proofs_on_last_date` 是 1 到 3；`last_seq` 至少是 1
+- 每個名額的平台在平台表裡
+- `switch_count` 是 0 到 5；日期是日期；名額的各項彼此說得通，也和上次過卡日說得通（`protocol/` 的 `possibleSlot`：例如 `current` 有值時等於 `last_declared`、`correction_date` 不晚於上次過卡日）
+- `current` 和 `last_declared` 合那個平台的帳號格式
+
+3 和 5 這兩個上限用的是 `protocol/src/roster-rules.ts` 的常數。`writeCard` 寫入時不做這些檢查：它寫的是規則的函式交出來的狀態。
+
+### Durable Object 裡存的
+
+建表的程式在 `src/roster.ts` 的 `TABLES` 和 `src/card-table.ts` 的 `CARD_TABLE`，物件每次啟動時執行（`CREATE TABLE IF NOT EXISTS`）。
+
+| 表 | 一列是什麼 | 欄位 |
+|---|---|---|
+| `challenges` | 一個發出、還沒過期的題目 | `challenge`、`issued_ms`（發出的時間）、`submissions`（送出的次數）、`accepted`（是否已接受） |
+| `cards` | 一張有過有效紀錄的卡片 | `scope_string`、`scoped_id`、`last_card_proof`、`proofs_on_last_date`、`slots`、`last_seq`（這張卡片最後一筆有效紀錄的序號） |
+| `roster` | 整份名冊，只有一列 | `count`（筆數）、`fingerprint`（名冊指紋）、`latest_valid_date`（名冊上最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
+
+- `cards` 的欄位就是 `spec/roster-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
+- 這張表只放名冊規則的狀態，和之後頁面用的衍生表分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
+- `submissions`、`accepted`、`last_seq`、`fingerprint`、`latest_valid_date` 現在沒有程式會改：那是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）的事。`rules_version` 在物件第一次啟動時記下當時程式的版本號；拿它和程式的版本比、不同就不收過卡，也是 #67 的事。
+
+### 兩個版本號
+
+`roster` 那一列記著兩個版本號，都是物件第一次啟動時寫入當時程式的常數。那一列用 `INSERT OR IGNORE` 建，已經有了就不動：沒有任何程式會把存著的版本號改成新的。
+
+| | 規則的版本 `rules_version` | 表的版本 `schema_version` |
+|---|---|---|
+| 程式裡的常數 | `protocol/` 的 `RULES_VERSION` | `src/roster.ts` 的 `SCHEMA_VERSION`，現在是 1 |
+| 什麼時候加一號 | 名冊規則改了、存著的卡片狀態因此失效（`spec/roster-rules.md`「The version number」） | **改到任何一張已經存在的表**：加欄位、拿掉欄位、欄位的意思變了、改主鍵。只是多一張新的表、多一個索引不用加：建表的程式會在沒有它們的物件上補上 |
+| 存著的和程式的不同時 | 不收過卡，回 `503` `paused`，頁面照常；狀態從紀錄重建之後才收。[#67](https://github.com/iamreal-tw/iamreal/issues/67) 做 | Durable Object 的每個方法都不讀不寫，丟錯誤；`challenges` 和 `card-state` 回 `500`，那一行紀錄的 `where` 是 `schema`。alarm 響了也什麼都不做 |
+| 怎麼處理 | 重建狀態（[#51](https://github.com/iamreal-tw/iamreal/issues/51)） | 現在沒有搬移表的程式。處理的方法是清空測試名冊：換一個 `ROSTER_OBJECT_NAME`（維持 `test-` 開頭）。真正的搬移留給 [#118](https://github.com/iamreal-tw/iamreal/issues/118)，封閉試用之前定 |
+
+兩件事不共用代碼：`paused` 是規則的版本，`schema` 是表的版本。
+
+表的版本為什麼要擋：表是用 `CREATE TABLE IF NOT EXISTS` 建的，已經存在的表不會跟著程式變，新的程式會照新的欄位去讀舊的表。
+
+`config` 由 Worker 自己回答、不問 Durable Object，所以表的版本不同時它照常回 `200`；不是介面的路徑（`404`）、方法不對（`405`）也照常。
+
+### 過期的題目怎麼刪
+
+題目發出後不到 10 分鐘可以用；剛好 10 分鐘就是過期。Durable Object 用自己的 alarm 刪。
+
+一個 Durable Object 同一時間只能排一個 alarm，再呼叫 `setAlarm` 會蓋掉原來的（[Alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)：「Each Durable Object is able to schedule a single alarm at a time by calling `setAlarm()`」「If you call `setAlarm` when there is already one scheduled, it will override the existing alarm」，2026-11-20 讀的）。所以定時的工作不各自設 alarm，而是照同一個形狀寫（`src/roster.ts` 的 `TimedWork`）：
+
+- 每一件工作回答兩件事：自己下一次什麼時候到期（沒事可做就說沒有）、到期時做什麼。它不知道別的工作。
+- 物件的 alarm 永遠設在所有工作裡最早到期的那一個；都沒事可做就沒有 alarm。任何一件工作的到期時間可能變了（例如發了一個題目），就重設一次。
+- alarm 響的時候，到期的工作各做一次，沒到期的不做，然後重設。
+
+現在只有一件：刪過期的題目，到期時間是最舊那個題目發出後 10 分鐘。之後每天換日的工作（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）是在 `timedWork()` 多列一件；它占著 alarm 不會讓題目晚刪。測試用測試專用的建置多塞一件假的工作來確認這一點（`test/api.test.ts`）。所以題目表裡只有最近 10 分鐘左右發的題目。
+
 ## 三樣不是設定值的東西
 
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
 
 - [`src/target.ts`](src/target.ts) 是部署用的那一份：內政部的兩把發證金鑰（[`src/issuers.ts`](src/issuers.ts)，測試拿 `spec/vectors/issuers.json` 核對）、內政部的兩個清冊網址（和 [`crl/README.md`](../crl/README.md) 寫的相同）、真的時鐘。其他程式用 `#target` 這個名字引用它（`package.json` 的 `imports`）。
-- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個入口：`POST /__test/verify` 讓測試呼叫得到驗證證明，`GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊（這兩樣還沒有自己的 API）。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `src/roster.ts` 的 `newestCrls`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證和清冊的檢查之後，測試改走真的介面，兩個都拿掉。
+- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個還沒有自己的 API 的入口：`POST /__test/verify` 讓測試呼叫得到驗證證明，`GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `src/roster.ts` 的 `newestCrls`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證和清冊的檢查之後，測試改走真的介面，兩個都拿掉。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上八個只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候、用 `src/card-table.ts` 的 `writeCard` 寫一張卡片的狀態、把題目表和卡片狀態表丟掉（看後台自己出錯時回什麼）、多塞一件假的定時工作、讀那件工作什麼時候跑過、把存著的表的版本改成另一個數字、把最新清冊的那張表丟掉（看沒有這張表的舊物件啟動時補上它）。**寫卡片狀態的入口是暫時的**：#67 之後卡片的狀態由送出一筆寫入，測試改走真的介面。部署的那一包沒有這八個方法，也沒有 `writeCard`（還沒有程式呼叫它）。
+  - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
   - JavaScript 裡的網址只有內政部的兩個
   - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數，加上 Barretenberg 通用參數的那一個點（128 個位元組寫成十六進位，用它的 SHA-256 認，要恰好出現一次）。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
-  - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
+  - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
@@ -136,7 +247,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 - 扣掉往返，驗一筆約 15 ms，實例化約 2 ms。Worker 啟動後的第一筆（第一次實例化加驗證）往返 84 ms。
 - 在 Node 22 裡直接跑載入程式一次：實例化加載入通用參數 10 ms，第一筆驗證 26 ms，第二筆 13 ms；WASM 的記憶體實例化後是 2.5 MiB，驗完兩筆是 2.6 MiB。
-- 打包後的大小（部署的那一包，`wrangler deploy --dry-run` 印的）：17,976 KiB，gzip 後 4,027 KiB，幾乎都是 WASM。清冊鏡像做好之前，部署的那一包是 5.7 KiB；**這個大小的一包還沒有上傳到 Cloudflare 過**。
+- 打包後的大小（部署的那一包，`wrangler deploy --dry-run` 印的）：17,999 KiB，gzip 後 4,034 KiB，幾乎都是 WASM。清冊鏡像做好之前，部署的那一包是 23 KiB（gzip 後 8.4 KiB）；**這個大小的一包還沒有上傳到 Cloudflare 過**。
 
 ## 設定檔
 
@@ -151,7 +262,8 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
-| `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱 |
+| `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
+| `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，三個介面都回 `500` |
 
 之後加正式環境，是在 `env` 底下多一段，程式不用改。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
@@ -322,8 +434,16 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 把儲存桶弄成上一輪做到一半的樣子 | `worker.putFile(檔名, 內容)`、`worker.deleteFile(檔名)` |
 | 假的內政部不帶 `Content-Length` | `worker.moica.serve("G2", 位元組, "chunked")` |
 | 改一輪補舊檔的界線 | `startWorker({ crlCatchUpMs: 0 })`，預設是部署的 5 分鐘 |
-| 重啟 Worker 和 Durable Object | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
+| 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
 | 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
+| 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
+| 跑 Durable Object 的 alarm、看它設在多久之後 | `worker.roster.runAlarm()`、`worker.roster.alarmInMs()` |
+| 寫一張卡片的狀態 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。暫時的，到 #67 為止 |
+| Durable Object 還留著哪些題目 | `worker.roster.storedChallenges()`，直接讀它的儲存。暫時的：現在沒有介面看得出一個題目還認不認得，#67 的 `challenge_unknown` 做好之後改問介面 |
+| 讓後台自己出錯 | `worker.roster.breakTables()` |
+| 把存著的表的版本改成另一個數字、改回來 | `worker.roster.setStoredSchemaVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
+| 多塞一件定時的工作、看它什麼時候跑過 | `worker.roster.setExtraWork(到期的時間, 間隔)`、`worker.roster.extraWorkRuns()` |
+| 換掉環境的設定 | `startWorker({ settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "…" } })`，或啟動後 `worker.setSettings({…})`；已經在跑的 Durable Object 要 `worker.roster.restart()` 才讀到新的 |
 
 測試不對內政部送請求。測試用 Node 內建的 test runner，和 `protocol/`、`web/` 相同。
 
@@ -411,7 +531,7 @@ pnpm run deploy:test
 - 什麼時候非帶不可：Worker 上還沒有這個 binding 的時候，也就是第一次部署和之後新增 binding。照 wrangler 的程式讀，已部署的 Worker 上有同名、同 `bucket_name` 的 binding 時它不會去問 R2，所以之後不帶應該也過；這一點沒有試過。
 - 儲存桶是營運者在儀表板建的（ADR-0029），部署不該建任何資源，所以指令一律帶著。
 
-部署沒有動到儀表板上設的自訂網域。從本機 `curl` `https://test.iamreal.tw/`：部署前（14:29）回 `200`、`content-length: 12`，是部署前就在那個 Worker 上的程式；部署後（14:30）每個網址都回 `404`、沒有內容，就是骨架現在的行為。
+部署沒有動到儀表板上設的自訂網域。從本機 `curl` `https://test.iamreal.tw/`：部署前（14:29）回 `200`、`content-length: 12`，是部署前就在那個 Worker 上的程式；部署後（14:30）每個網址都回 `404`、沒有內容，就是骨架那時的行為。
 
 部署時 wrangler 印一則警告：設定檔最上層沒有 `name`。那是故意的（見「設定檔」）；有警告時 wrangler 會問 npm 有沒有新版（見「套件」）。
 
@@ -460,12 +580,17 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | 檔案 | 內容 |
 |---|---|
 | `wrangler.jsonc` | Worker 專案的設定 |
-| `src/index.ts` | 進入點：HTTP（現在都回 `404`）和排程 |
+| `src/index.ts` | 進入點：HTTP（`/api/` 交給 `src/api.ts`，其他回 `404`）和排程 |
+| `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、三個介面、後台自己出錯時的那一行 |
+| `src/json.ts` | 讀請求的 JSON，鍵重複就拒絕 |
 | `src/mirror.ts` | 清冊鏡像：介面 `CrlMirror` 和在 Worker 裡做的那一個 |
 | `src/crl.ts`、`src/crl-time.ts` | 讀一份清冊：可不可用、原因代碼、索引那一行的欄位、樹的鍵 |
 | `src/crl-tree.ts` | 從鍵算樹根 |
 | `src/crl-index.ts` | 索引的寫法和順序、最新兩份可用的清冊 |
-| `src/roster.ts` | 名冊的 Durable Object：現在只存最新的清冊 |
+| `src/roster.ts` | 名冊的 Durable Object：建表、發題目、讀卡片現況、刪過期的題目、存鏡像交給它的最新清冊 |
+| `src/card-table.ts` | 卡片狀態表：建表的程式，讀（連同檢查）和寫一張卡片的狀態 |
+| `src/slot-json.ts` | 一個名額寫成 JSON 的那一種寫法：`card-state` 的回應和卡片狀態表共用 |
+| `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表 |
 | `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限、補舊檔的界線 |
 | `src/in-worker.ts` | 在 Worker 裡用的 `proofVerifier` 和 `poseidon2Hash`：把下面幾個檔和 WASM 檔、驗證金鑰接起來，只有它引用 `generated/` |
 | `src/verify.ts` | 驗證證明的介面 `ProofVerifier`、呼叫 Barretenberg 之前的檢查 |
@@ -479,6 +604,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
 | `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔、兩輪同時寫索引 |
+| `test/api.test.ts` | 三個介面和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
+| `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
 | `test/*.test.ts` | 測試 |

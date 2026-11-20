@@ -1,11 +1,14 @@
-// The Worker (ADR-0023). So far: the hourly CRL mirror, and the roster's
-// Durable Object, which keeps what the mirror tells it. It has no page and
-// no API yet.
+// The Worker (ADR-0023). So far: the first endpoints of the API (api.ts),
+// the hourly CRL mirror (mirror.ts), and the roster's Durable Object
+// (roster.ts), which also keeps what the mirror tells it. It has no page
+// yet.
 import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#target";
+import { api, isApiPath } from "./api.ts";
 import { poseidon2Hash } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
 import { rosterOf } from "./roster.ts";
+import { rosterSettingsOf } from "./settings.ts";
 
 export { Roster } from "./roster.ts";
 
@@ -13,7 +16,8 @@ export { Roster } from "./roster.ts";
 checkIssuerTable(ISSUERS);
 
 export default {
-  async fetch(_request, _env, _ctx): Promise<Response> {
+  async fetch(request, env, _ctx): Promise<Response> {
+    if (isApiPath(new URL(request.url).pathname)) return api(request, env);
     return new Response(null, { status: 404 });
   },
 
@@ -28,6 +32,10 @@ export default {
       issuers: ISSUERS,
       hash: poseidon2Hash,
       tell: async (newest) => {
+        // The settings are read where everything reads them, before the
+        // object is asked: with settings that do not fit each other nothing
+        // is told (settings.ts).
+        rosterSettingsOf(env);
         await rosterOf(env).setNewestCrls(newest);
       },
     });

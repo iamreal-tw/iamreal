@@ -131,12 +131,17 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 
 /**
  * The test environment's only settings are the roster's object, the data
- * bucket and the object's name: so the issuer keys, MOICA's addresses and
- * the clock cannot be read from a setting. (A secret set on the Worker with
- * `wrangler secret` is not in the configuration and is not seen here.)
+ * bucket, the object's name and which roster it is: so the issuer keys,
+ * MOICA's addresses and the clock cannot be read from a setting. (A secret
+ * set on the Worker with `wrangler secret` is not in the configuration and
+ * is not seen here.)
  */
 export function checkBindings(wranglerOutput: string): void {
-  assert.deepEqual(bindingsIn(wranglerOutput), { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable" }, "the deploy build's bindings");
+  assert.deepEqual(
+    bindingsIn(wranglerOutput),
+    { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable" },
+    "the deploy build's bindings",
+  );
 }
 
 /**

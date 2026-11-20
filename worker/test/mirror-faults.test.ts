@@ -277,3 +277,62 @@ describe("an answer larger than a CRL can be", () => {
       assert.equal(await rootOf(worker, largest), "-not_usable_der");
     }));
 });
+
+describe("the roster's object and the mirror", () => {
+  const [A, B] = [g3(81n, [1n]), g3(82n, [1n, 2n])];
+  const numbers = async (worker: TestWorker): Promise<string[]> => (await worker.newestCrls()).G3.map((c) => c.crlNumber);
+
+  test("an object made before the table of the newest CRLs existed gets it when it starts, and keeps the rest", () =>
+    withWorker({}, async (worker) => {
+      const challenge = ((await (await worker.fetch("/api/v1/challenges", { method: "POST" })).json()) as { challenge: string }).challenge;
+      await worker.roster.dropNewestCrls();
+      await worker.roster.restart();
+
+      assert.deepEqual(await worker.newestCrls(), { G2: [], G3: [] });
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      worker.moica.serve("G2", g2(81n));
+      worker.moica.serve("G3", A);
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      assert.deepEqual(await numbers(worker), ["81"]);
+      assert.equal((await worker.fetch("/api/v1/challenges", { method: "POST" })).status, 200);
+    }));
+
+  test("tables made by another version than the build's: the object is told nothing and tells nothing, the index is written all the same, and the run shows as failed", () =>
+    withWorker({}, async (worker) => {
+      worker.moica.serve("G2", g2(81n));
+      worker.moica.serve("G3", A);
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      await worker.roster.setStoredSchemaVersion("another");
+      await worker.roster.restart();
+      worker.moica.serve("G3", B);
+
+      assert.equal((await worker.runSchedule()).outcome, "exception");
+      assert.match((await rootOf(worker, B)) ?? "", /^[0-9a-f]{64}$/, "the index lists the new CRL");
+      await assert.rejects(worker.newestCrls(), /HTTP 500/);
+
+      // With the build's version again: what it knew is as it was, and the next round tells it.
+      await worker.roster.setStoredSchemaVersion("the build's");
+      await worker.roster.restart();
+      assert.deepEqual(await numbers(worker), ["81"]);
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      assert.deepEqual(await numbers(worker), ["82", "81"]);
+    }));
+
+  test("settings that do not fit each other: the same", () =>
+    withWorker({}, async (worker) => {
+      worker.moica.serve("G2", g2(81n));
+      worker.moica.serve("G3", A);
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      // The production roster, with the name of a test roster's object.
+      await worker.setSettings({ ROSTER_KIND: "production" });
+      worker.moica.serve("G3", B);
+
+      assert.equal((await worker.runSchedule()).outcome, "exception");
+      assert.match((await rootOf(worker, B)) ?? "", /^[0-9a-f]{64}$/, "the index lists the new CRL");
+
+      await worker.setSettings({});
+      assert.deepEqual(await numbers(worker), ["81"]);
+      assert.equal((await worker.runSchedule()).outcome, "ok");
+      assert.deepEqual(await numbers(worker), ["82", "81"]);
+    }));
+});
