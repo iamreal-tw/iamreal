@@ -216,14 +216,8 @@ export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", ".githu
 /** The runner of the iOS check, and the one Xcode it builds with (ios/README.md). */
 export const IOS_RUNNER = "xcode-27";
 export const IOS_DEVELOPER_DIR = "/Applications/Xcode_27.2.app/Contents/Developer";
-/**
- * How the iOS job gets Barretenberg and the CRS: ios/build-core.sh, which
- * calls device-core/fetch-barretenberg.sh and device-core/fetch-crs.sh (each
- * checks a SHA-256 before use) and then cargo. Like the device-core job, it
- * runs no bb.
- */
+/** The one job of checks-ios.yml. Like the device-core job, it runs no bb. */
 export const IOS_JOB = "ios";
-export const BUILD_IOS_CORE = "./build-core.sh simulator";
 
 export const NODE_VERSION = "22.23.4";
 export const PNPM_VERSION = "10.16.1";
@@ -256,6 +250,45 @@ const WITH: Readonly<Record<string, YamlMap>> = {
 
 const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
+
+/**
+ * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
+ * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
+ * checked; so the job is written out here instead of being described by rules.
+ */
+export const DEVICE_CORE_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
+    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo test --locked --release` },
+  ],
+};
+
+/**
+ * The iOS job, exactly. ios/build-core.sh is the one step that gets
+ * Barretenberg and the CRS: it calls device-core/fetch-barretenberg.sh and
+ * device-core/fetch-crs.sh, which check each SHA-256 before use, then runs
+ * cargo in device-core/. Xcode links what that step left. The destination is
+ * a simulator the runner's image has (.github/README.md gives the source).
+ */
+const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
+export const IOS_JOB_STEPS: YamlMap = {
+  "runs-on": IOS_RUNNER,
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install the Rust of rust-toolchain.toml, with the simulator's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios-sim" },
+    { name: "Build device-core/ for the simulator", "working-directory": "ios", run: "./build-core.sh simulator" },
+    { name: "Build the app and run its tests in the simulator", "working-directory": "ios", run: `${XCODEBUILD} test` },
+    { name: "check-app.sh turns away what it should", "working-directory": "ios", run: "./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app" },
+    { name: "Build the release configuration, with its checks", "working-directory": "ios", run: `${XCODEBUILD} -configuration Release build` },
+  ],
+};
 
 /** The line of the upload step: the arguments of `uploadArgs` (scripts/deploy.ts), with wrangler kept quiet. */
 export const UPLOAD = `${Object.entries(WRANGLER_QUIET)
@@ -448,15 +481,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         }
       }
       if (f === "checks.yml" && name === DEVICE_CORE_JOB) {
-        // Every step that runs cargo with Barretenberg gets it from the script that checks its SHA-256.
-        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
-        if (!runs.some((r) => r.startsWith(FETCH_BARRETENBERG))) j("does not get Barretenberg from fetch-barretenberg.sh");
-        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r) && !r.startsWith(FETCH_BARRETENBERG)) j(`Barretenberg from somewhere else: ${r}`);
+        // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
+        // (where .cargo/config.toml is read) with the library the script checked.
+        if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (f === "checks-ios.yml" && name === IOS_JOB) {
-        // The one step that gets Barretenberg is the script that has it checked; no other step names another.
-        const runs = job.steps.filter(isMap).map((s) => s.run).filter((r): r is string => typeof r === "string");
-        if (!runs.includes(BUILD_IOS_CORE)) j("does not get Barretenberg through build-core.sh");
-        for (const r of runs) if (/BB_LIB_DIR|BARRETENBERG_VERSION/.test(r)) j(`Barretenberg from somewhere else: ${r}`);
+        // Exactly the steps written above, for the same reason: the one step that gets Barretenberg
+        // and the CRS is ios/build-core.sh, which has each checked before cargo or Xcode uses it.
+        if (!same(job, IOS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

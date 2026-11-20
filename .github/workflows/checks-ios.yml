@@ -51,7 +51,10 @@ jobs:
         run: ./build-core.sh simulator
       - name: Build the app and run its tests in the simulator
         working-directory: ios
-        run: xcodebuild test -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build
+        run: xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build test
       - name: check-app.sh turns away what it should
         working-directory: ios
         run: ./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app
+      - name: Build the release configuration, with its checks
+        working-directory: ios
+        run: xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build -configuration Release build

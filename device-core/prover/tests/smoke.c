@@ -26,7 +26,9 @@ int main(void) {
   if (out.ptr != NULL || out.len != 0) return 5;
   idc_buf_free(&out);
 
-  /* The example of spec/declaration-code.md. */
+  /* The example written out in spec/declaration-code.md. This program reads
+   * no file: tests/c_api.rs runs every case of spec/vectors/ through the
+   * same functions. */
   if (idc_declaration_code(IDC_ROSTER_PRODUCTION, (const uint8_t *)accounts, strlen(accounts),
                            (const uint8_t *)challenge, strlen(challenge), &out) != IDC_OK) return 6;
   if (!same(&out, "DYR31H79A046QB7TZR3EZ26GGF20ZV9")) return 7;

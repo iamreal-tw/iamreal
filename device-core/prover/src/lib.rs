@@ -136,22 +136,29 @@ pub unsafe extern "C" fn idc_buf_free(buf: *mut IdcBuf) {
     iamreal_device_checks::wipe(&mut bytes);
 }
 
+/// Poseidon2(1, 2). The test below reads it against the second case of
+/// `hash_2` in spec/vectors/poseidon2.json; it is written out here because
+/// the library reads no file.
+const SELF_CHECK_HASH: [u8; 32] = [
+    0x03, 0x86, 0x82, 0xaa, 0x1c, 0xb5, 0xae, 0x4e, 0x0a, 0x3f, 0x13, 0xda, 0x43, 0x2a, 0x95, 0xc7,
+    0x7c, 0x5c, 0x11, 0x1f, 0x6f, 0x03, 0x0f, 0xaf, 0x9c, 0xad, 0x64, 0x1c, 0xe1, 0xed, 0x73, 0x83,
+];
+
 /// Checks that the Barretenberg linked into this library answers and
 /// computes the Poseidon2 of spec/scoped-id.md: `IDC_OK`, or
 /// `IDC_ERR_INTERNAL`. For an app's start and for build checks; it takes
 /// no input.
 #[unsafe(no_mangle)]
 pub extern "C" fn idc_self_check() -> i32 {
-    // Poseidon2(1, 2), the second case of `hash_2` in spec/vectors/poseidon2.json.
-    const EXPECTED: [u8; 32] = [
-        0x03, 0x86, 0x82, 0xaa, 0x1c, 0xb5, 0xae, 0x4e, 0x0a, 0x3f, 0x13, 0xda, 0x43, 0x2a, 0x95,
-        0xc7, 0x7c, 0x5c, 0x11, 0x1f, 0x6f, 0x03, 0x0f, 0xaf, 0x9c, 0xad, 0x64, 0x1c, 0xe1, 0xed,
-        0x73, 0x83,
-    ];
     let check = || hashes::Barretenberg::new()?.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]);
     match catch_unwind(check) {
-        Ok(Ok(hash)) if hash == EXPECTED => IDC_OK,
-        _ => IDC_ERR_INTERNAL,
+        Ok(Ok(hash)) if hash == SELF_CHECK_HASH => IDC_OK,
+        Ok(_) => IDC_ERR_INTERNAL,
+        Err(payload) => {
+            // As in `output`.
+            std::mem::forget(payload);
+            IDC_ERR_INTERNAL
+        }
     }
 }
 
@@ -269,4 +276,27 @@ pub unsafe extern "C" fn idc_declaration_code(
         .map_err(|_| IDC_ERR_INPUT)?;
         Ok(code.to_vec())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_hash_of_the_self_check_is_the_one_of_the_vectors() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../spec/vectors/poseidon2.json");
+        let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let case = &v["hash_2"][1];
+        let one_two: Vec<&str> = case["inputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect();
+        assert_eq!(one_two, [format!("0x{:064x}", 1), format!("0x{:064x}", 2)]);
+        let written: String = super::SELF_CHECK_HASH
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(format!("0x{written}"), case["hash"].as_str().unwrap());
+    }
 }
