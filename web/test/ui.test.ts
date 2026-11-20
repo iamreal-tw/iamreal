@@ -158,11 +158,11 @@ describe("the lists of steps 2 and 5", () => {
   test("the labels are the copy's, in its order", () => {
     assert.deepEqual(
       READ_ITEMS.map((i) => (COPY.read as Record<string, string>)[i.key]),
-      ["連上內政部的元件", "找到讀卡機和卡片", "讀取卡片上的憑證", "檢查憑證", "連上島民的伺服器", "下載內政部的廢止清冊，確認憑證沒有被廢止"],
+      ["連上內政部的元件", "找到讀卡機和卡片", "讀取卡片上的憑證", "檢查憑證", "連上島民證明的伺服器", "下載內政部的廢止清冊，確認憑證沒有被廢止"],
     );
     assert.deepEqual(
       PROGRESS_ITEMS.map((i) => (COPY.progress as Record<string, string>)[i.key]),
-      ["連上島民的伺服器", "卡片簽章", "在這台裝置上計算，大約 10 到 30 秒", "送出"],
+      ["連上島民證明的伺服器", "卡片簽章", "在這台裝置上計算，大約 10 到 30 秒", "送出"],
     );
   });
 

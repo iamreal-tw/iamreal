@@ -1332,7 +1332,7 @@ await tryStep("everything withdrawn", async () => {
   await screenshot("withdraw-all-5-confirm");
   await finish({ label: "withdraw all", button: C.confirm.button_withdraw_all, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("bob"), [K.withdraw]]], screenshots: "withdraw-all" });
   const v = await doneSeen();
-  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero')`)) && v.link === "" && !v.main.includes(C.done.proof + "\n"), "everything withdrawn: no animation, no card, no link");
+  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero, [data-proof]')`)) && v.link === "", "everything withdrawn: no animation, no card, no link");
 });
 
 await tryStep("no account now: an empty list is refused; both declared again (not switches)", async () => {
@@ -1748,7 +1748,7 @@ await tryStep("the date changes while step 5 is up: not signed, stops.date_chang
     const before = await recordCount();
     await page.clickButton(C.confirm.button_declare);
     const d = await waitDoneOrMessage();
-    check(!d.done && d.item === "server" && d.message === C.stops.date_changed, `under 連上島民的伺服器: "${d.message}" (${d.item})`);
+    check(!d.done && d.item === "server" && d.message === C.stops.date_changed, `under 連上島民證明的伺服器: "${d.message}" (${d.item})`);
     check(JSON.stringify(await buttonTexts()) === JSON.stringify([A.restart]), `回到開頭 only: ${JSON.stringify(await buttonTexts())}`);
     await screenshot("date-changed-5-progress");
     await sleep(500);
@@ -1856,7 +1856,7 @@ await tryStep("a card's state the page cannot read (no platforms): stopped under
   await screenshot("state-unreadable-3-pin");
 });
 
-await tryStep("a challenge dated another day: stopped under 連上島民的伺服器", async () => {
+await tryStep("a challenge dated another day: stopped under 連上島民證明的伺服器", async () => {
   await toPin(fresh.spec());
   await confirmPin(PIN);
   await waitAccounts();
@@ -1874,7 +1874,7 @@ await tryStep("a challenge dated another day: stopped under 連上島民的伺�
   await page.clickButton(C.confirm.button_declare);
   const d = await waitDoneOrMessage();
   await undo();
-  check(!d.done && d.item === "server" && d.message === C.stops.date_mismatch, `challenge of another day, under 連上島民的伺服器: "${d.message}" (${d.item})`);
+  check(!d.done && d.item === "server" && d.message === C.stops.date_mismatch, `challenge of another day, under 連上島民證明的伺服器: "${d.message}" (${d.item})`);
   const list = await items("progress");
   check(JSON.stringify(list.map((i) => i.state)) === JSON.stringify(["halt", "", "", ""]), `in progress: 停在這裡, then nothing ${JSON.stringify(list.map((i) => i.state))}`);
   check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), "再讀一次卡片 only");

@@ -7,7 +7,7 @@
 「怎麼驗證」那一頁（`design/copy/verify.md` 第 3 塊）給的提示詞，逐字放在這裡，讓人可以對照兩邊有沒有被改過：
 
 ```
-請幫我驗證島民（iamreal）的公開名冊。
+請幫我驗證島民證明（iamreal）的公開名冊。
 1. 取得公開的程式庫 github.com/iamreal-tw/iamreal，
    讀 cmd/iamreal-verify/README.md。
 2. 照說明編譯 iamreal-verify，下載名冊和廢止清冊的存檔，完整重算。

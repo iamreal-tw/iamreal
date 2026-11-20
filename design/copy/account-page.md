@@ -89,8 +89,8 @@ Threads 的帳號名稱只有英文字母、數字、句點和底線。
 
 ```
 標題：Threads 的 @alice
-網站：島民 iamreal.tw
+網站：島民證明 iamreal.tw
 ```
 
 - 不寫摘要，不放圖
-- 分頁的標題是預覽的標題後面加「｜島民」：`Threads 的 @alice｜島民`
+- 分頁的標題是預覽的標題後面加「｜島民證明」：`Threads 的 @alice｜島民證明`

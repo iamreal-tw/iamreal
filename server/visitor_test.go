@@ -184,13 +184,13 @@ var (
 	imageMeta = regexp.MustCompile(`(?i)name="description"|og:image`)
 )
 
-// wantPreview checks the page's <title> (title followed by ｜島民) and, if
+// wantPreview checks the page's <title> (title followed by ｜島民證明) and, if
 // preview, its og:title (title) and og:site_name (site); without preview,
 // that it has neither.
 func wantPreview(t *testing.T, page, title string, preview bool, site string) {
 	t.Helper()
-	if got := firstMatch(titleTag, page); got != title+"｜島民" {
-		t.Errorf("<title> %q, want %q", got, title+"｜島民")
+	if got := firstMatch(titleTag, page); got != title+"｜島民證明" {
+		t.Errorf("<title> %q, want %q", got, title+"｜島民證明")
 	}
 	if !preview {
 		if strings.Contains(page, "og:") {
@@ -301,7 +301,7 @@ func withScript(path string) bool {
 var (
 	navHTML = `<header class="top">
 <a class="home" href="/"><svg class="logo"`
-	navLinks = `<b>島民</b></a>
+	navLinks = `<b>島民證明</b></a>
 <nav class="links">
 <a href="/verify">怎麼驗證</a>
 <a href="/roster">名冊</a>
@@ -311,7 +311,7 @@ var (
 <a class="button nav-button" href="/proof">我要換島民證明</a>
 </header>`
 	footHTML = `<footer class="foot">
-<span class="site"><b>島民</b> <span>iamreal.tw</span></span>
+<span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
 <a href="/roster">名冊</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 <a href="/proof/help.html?topic=prepare">怎麼準備</a>
@@ -612,7 +612,7 @@ func TestProofPageWithdrawn(t *testing.T) {
 	if strings.Contains(page, "<iframe") {
 		t.Error("an embed on the page of a withdrawn card")
 	}
-	wantPreview(t, page, specialTitles(t)[0], true, "島民 iamreal.tw")
+	wantPreview(t, page, specialTitles(t)[0], true, "島民證明 iamreal.tw")
 }
 
 // A short ID of two cards (section 7): both, sorted by scoped ID, each
@@ -644,7 +644,7 @@ func TestProofPageTwoCards(t *testing.T) {
 	if n, m := strings.Count(squash(visibleText(page)), five), strings.Count(squash(visibleText(page)), fiveA); n != 1 || m != 1 {
 		t.Errorf("section 5 %d times, 5a %d times", n, m)
 	}
-	wantPreview(t, page, specialTitles(t)[1], true, "島民 iamreal.tw")
+	wantPreview(t, page, specialTitles(t)[1], true, "島民證明 iamreal.tw")
 }
 
 // A short ID that resolves to no card, or does not read (section 9): 404.
@@ -661,7 +661,7 @@ func TestProofPageMissing(t *testing.T) {
 		if !strings.Contains(page, `<a href="/roster#q">查一個 Threads 帳號</a>`) {
 			t.Errorf("/p/%s: no link to the lookup", typed)
 		}
-		wantPreview(t, page, specialTitles(t)[2], true, "島民 iamreal.tw")
+		wantPreview(t, page, specialTitles(t)[2], true, "島民證明 iamreal.tw")
 	}
 	for typed, to := range map[string]string{
 		"7k2q9fm4xd": "/p/7K2Q9FM4XD", "7K2Q9FM4XO": "/p/7K2Q9FM4X0", "lK2Q9FM4XD": "/p/1K2Q9FM4XD",

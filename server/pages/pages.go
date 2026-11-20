@@ -90,7 +90,7 @@ var templates = func() map[string]*template.Template {
 type document struct {
 	Site
 	// Title is the title of the link preview (og:title); the <title> is
-	// Title followed by ｜島民, or TabTitle if it is not "".
+	// Title followed by ｜島民證明, or TabTitle if it is not "".
 	Title    string
 	TabTitle string
 	// Preview is true to write og:title and og:site_name, and
@@ -187,8 +187,8 @@ type HomePage struct {
 // The home page's link preview: its title, the <title> and the first
 // screen's two lines as one sentence (home.md, 連結被貼出去時的預覽).
 const (
-	homeTitle       = "島民"
-	homeTabTitle    = "島民｜iamreal.tw"
+	homeTitle       = "島民證明"
+	homeTabTitle    = "島民證明｜iamreal.tw"
 	homeDescription = "讓 Threads 上的人知道，你是真的台灣人。用自然人憑證證明，除了 Threads 帳號名稱，不會揭露任何個資。"
 )
 
@@ -295,7 +295,7 @@ type historyRow struct {
 }
 
 // Title is the title of the page's link preview (proof-page.md, section
-// 8); the <title> adds ｜島民.
+// 8); the <title> adds ｜島民證明.
 func (p ProofPage) Title() string {
 	switch {
 	case len(p.Cards) > 1:
@@ -402,7 +402,7 @@ type accountRow struct {
 }
 
 // Title is the title of the page's link preview (account-page.md, section
-// 5); the <title> adds ｜島民.
+// 5); the <title> adds ｜島民證明.
 func (p AccountPage) Title() string { return "Threads 的 @" + p.Username }
 
 // Render writes the page. Username must be in the Threads format.

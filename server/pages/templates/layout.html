@@ -4,10 +4,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{if .TabTitle}}{{.TabTitle}}{{else}}{{.Title}}｜島民{{end}}</title>
+<title>{{if .TabTitle}}{{.TabTitle}}{{else}}{{.Title}}｜島民證明{{end}}</title>
 {{- if .Preview}}
 <meta property="og:title" content="{{.Title}}">
-<meta property="og:site_name" content="島民 iamreal.tw">
+<meta property="og:site_name" content="島民證明 iamreal.tw">
 {{- if .Description}}
 <meta property="og:description" content="{{.Description}}">
 {{- end}}
@@ -35,7 +35,7 @@
      puts them on a second row, under the mark and the button. */}}
 {{define "nav" -}}
 <header class="top">
-<a class="home" href="/">{{template "logo"}}<b>島民</b></a>
+<a class="home" href="/">{{template "logo"}}<b>島民證明</b></a>
 <nav class="links">
 <a href="/verify">怎麼驗證</a>
 <a href="/roster">名冊</a>
@@ -50,7 +50,7 @@
      the card proof's help page. */}}
 {{define "foot" -}}
 <footer class="foot">
-<span class="site"><b>島民</b> <span>iamreal.tw</span></span>
+<span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
 <a href="/roster">名冊</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 <a href="/proof/help.html?topic=prepare">怎麼準備</a>
