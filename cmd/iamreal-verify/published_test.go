@@ -97,10 +97,12 @@ func TestDataURL(t *testing.T) {
 	if _, outFile, _ := runWith(t, lines(longRoster()), allVerify{}, everyRoot{}); outFile != out {
 		t.Errorf("the URL and the file give different output")
 	}
-	// No listing: the fingerprint file says which files there are.
+	// No listing: the fingerprint file says which files there are, and the
+	// date of its last line which card state file (not there: a 404).
 	want := []string{
 		"GET crl/index.jsonl",
 		"GET roster/0000000000000000.jsonl", "GET roster/0000000000001000.jsonl", "GET roster/0000000000002000.jsonl",
+		"GET roster/card-state/2026-11-20.jsonl",
 		"GET roster/fingerprints.jsonl",
 		"GET roster/hashes/0000000000000000.txt", "GET roster/hashes/0000000000001000.txt", "GET roster/hashes/0000000000002000.txt",
 	}
