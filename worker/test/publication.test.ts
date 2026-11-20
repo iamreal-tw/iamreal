@@ -393,6 +393,60 @@ describe("a publication that cannot be finished", () => {
     assert.equal(((await published()) as { date: unknown }).date, "2026-11-23");
   });
 
+  test("the fingerprint file is written only over the file that was looked at: one that changed between the look and the write stays, and is dealt with a minute later", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    await alarmAt("2026-11-21", "00:00:00");
+    const whole = text((await directory()).get(FINGERPRINTS)!);
+    const foreign = whole + line("2026-11-21", 9, EMPTY_FINGERPRINT);
+    const count = (event: string): number => worker.logLines().filter((l) => l.includes(`"${event}"`)).length;
+    const dates = async (): Promise<unknown[]> => text((await directory()).get(FINGERPRINTS)!).split("\n").slice(0, -1).map((l) => JSON.parse(l).date);
+    /** A publication at midnight of `date` whose write of the fingerprint file takes a while, during which `change` is done to the bucket's file. */
+    const publishWhile = async (date: string, change: () => Promise<void>): Promise<void> => {
+      await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put takes a while" });
+      await worker.setClock(tw(date, "00:00:00"));
+      const publishing = worker.roster.runAlarm();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await change();
+      await publishing;
+      await worker.roster.setBucketFault(null);
+    };
+
+    // Another's line appears in the file once the object has looked at it: the object's write does not happen.
+    const [failed, differed] = [count("roster_not_published"), count("fingerprint_file_differs")];
+    await publishWhile("2026-11-22", () => worker.putFile(`roster/${FINGERPRINTS}`, foreign, MINUTE, ROSTER_FILE_TYPE));
+    assert.equal(text((await directory()).get(FINGERPRINTS)!), foreign, "the file is not written over");
+    assert.deepEqual([count("roster_not_published"), count("fingerprint_file_differs")], [failed + 1, differed]);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    // A minute later the file is looked at again, and is not the object's.
+    await alarmAt("2026-11-22", "00:01:00");
+    assert.equal(text((await directory()).get(FINGERPRINTS)!), foreign);
+    assert.equal(count("fingerprint_file_differs"), differed + 1);
+
+    // The file is the object's again, and is deleted between the look and the write of the next try: that write does
+    // not happen either, on a file that is no longer the one looked at; the try after it writes every line.
+    await worker.putFile(`roster/${FINGERPRINTS}`, whole, MINUTE, ROSTER_FILE_TYPE);
+    await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put takes a while" });
+    await worker.setClock(tw("2026-11-22", "00:02:00"));
+    const trying = worker.roster.runAlarm();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await worker.deleteFile(`roster/${FINGERPRINTS}`);
+    await trying;
+    await worker.roster.setBucketFault(null);
+    assert.equal((await directory()).has(FINGERPRINTS), false);
+    assert.equal(count("roster_not_published"), failed + 2);
+    await alarmAt("2026-11-22", "00:03:00");
+    assert.deepEqual(await dates(), ["2026-11-21", "2026-11-22"]);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-22");
+
+    // And a file that appears where there was none when the object looked: not written over.
+    await worker.deleteFile(`roster/${FINGERPRINTS}`);
+    await publishWhile("2026-11-23", () => worker.putFile(`roster/${FINGERPRINTS}`, foreign, MINUTE, ROSTER_FILE_TYPE));
+    assert.equal(text((await directory()).get(FINGERPRINTS)!), foreign);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-22");
+  });
+
   test("the date changes while the bucket is being written: no line is written for the day that ended, and the next try publishes the new date", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);

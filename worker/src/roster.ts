@@ -1021,9 +1021,11 @@ export class Roster extends DurableObject<Env> {
    * end or ends inside a line are all beginnings, and are written over with
    * the whole. A file with a line the object does not keep, or with a line
    * that is not the object's, is not: the object never takes a line out of
-   * the published file, and never changes one.
+   * the published file, and never changes one. The ETag of the file that
+   * was compared comes with the answer (null when there was none), so that
+   * the write can be made over that file and no other.
    */
-  async #fingerprintFileToWrite(): Promise<{ file: Uint8Array; lastDate: string | null; behind: boolean }> {
+  async #fingerprintFileToWrite(): Promise<{ file: Uint8Array; lastDate: string | null; behind: boolean; etag: string | null }> {
     const rows = this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string; in_bucket: number }>("SELECT date, count, fingerprint, in_bucket FROM published ORDER BY date").toArray();
     const file = new TextEncoder().encode(rows.map((row) => fingerprintLine(this.#lineOf(row))).join(""));
     const stored = await this.bucket().get(FINGERPRINT_FILE);
@@ -1031,7 +1033,7 @@ export class Roster extends DurableObject<Env> {
       const there = new Uint8Array(await stored.arrayBuffer());
       if (there.length > file.length || there.some((byte, i) => byte !== file[i])) throw new FingerprintFileDiffers("the bucket's fingerprint file is not the beginning of the object's");
     }
-    return { file, lastDate: rows.at(-1)?.date ?? null, behind: rows.some((row) => row.in_bucket === 0) };
+    return { file, lastDate: rows.at(-1)?.date ?? null, behind: rows.some((row) => row.in_bucket === 0), etag: stored?.etag ?? null };
   }
 
   /**
@@ -1041,9 +1043,10 @@ export class Roster extends DurableObject<Env> {
    * before the rows are marked as in the bucket.
    */
   async #writeFingerprintFile(): Promise<void> {
-    const { file, lastDate, behind } = await this.#fingerprintFileToWrite();
+    const { file, lastDate, behind, etag } = await this.#fingerprintFileToWrite();
     if (!behind) return;
-    await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, file, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
+    // Only over the file that was just compared: one that changed since is not written over, and is compared at the next try.
+    await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, file, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES }, { etag });
     // The rows that were written: one written meanwhile is not among them.
     this.ctx.storage.sql.exec("UPDATE published SET in_bucket = 1 WHERE date <= ?", lastDate);
   }

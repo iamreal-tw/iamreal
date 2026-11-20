@@ -84,10 +84,18 @@ export type FileBucket = Pick<R2Bucket, "put" | "get">;
  *
  * Writing the same bytes again leaves the same object, so a caller that
  * does not know how far an earlier try came simply calls this again.
+ *
+ * With `over`, the object is written only over the one the caller read:
+ * the object of that ETag, or, with null, only where there is still no
+ * object. If the bucket holds anything else by then, nothing is written
+ * and this throws.
  */
-export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders): Promise<string> {
+export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders, over?: { readonly etag: string | null }): Promise<string> {
   const sha256 = await sha256Hex(bytes);
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256 });
+  const onlyIf = over === undefined ? undefined : over.etag === null ? new Headers({ "If-None-Match": "*" }) : { etagMatches: over.etag };
+  const written = await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256, ...(onlyIf !== undefined && { onlyIf }) });
+  // A write whose condition does not hold stores nothing and gives null.
+  if (written === null) throw new Error(`${key} is no longer the object that was read: it was not written over`);
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
   if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
