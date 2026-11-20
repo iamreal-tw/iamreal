@@ -48,6 +48,44 @@ device does not make a proof.
 
 The **CRL date** is `thisUpdate` converted to a date in Taiwan (UTC+8).
 
+### Times
+
+`thisUpdate`, `nextUpdate` and every entry's `revocationDate` are read the
+same way. A time is one of these spellings, and nothing else:
+
+| Type | Characters |
+|---|---|
+| UTCTime | `YYMMDDhhmmss` or `YYMMDDhhmm`, then the zone |
+| GeneralizedTime | `YYYYMMDDhhmmss`, then the zone |
+
+- Every field is that many digits. There is no fraction of a second.
+- The zone is `Z`, or an offset `+hhmm` or `-hhmm` with `hh` from 00 to 24
+  and `mm` from 00 to 59, not both zero. With an offset, the fields give the
+  local time, and the time is that minus the offset (`+0800` is 8 hours
+  ahead of UTC).
+- A UTCTime's year `YY` from 00 to 49 is 2000 to 2049, and from 50 to 99 is
+  1950 to 1999, as the fields give it, before the offset is applied.
+- The month is 01 to 12, the day is a day of that month in the proleptic
+  Gregorian calendar (year 0000 is a leap year), the hour is 00 to 23, and
+  the minute and the second are 00 to 59. A UTCTime without seconds has
+  second 00.
+
+This is wider than RFC 5280, which has only `Z` and always seconds: it is
+what the library `crl/` reads times with accepts, written down so that every
+implementation reads the same files the same way. The two CRLs MOICA
+published on 2026-11-19 spell every time as a UTCTime of twelve digits and
+`Z`.
+
+A file with a time spelled any other way is not a DER `CertificateList`
+(reason code `not_usable_der`, "Archive index").
+
+In the archive index a time is written in UTC as `YYYY-MM-DDTHH:MM:SSZ`, and
+the CRL date as `YYYY-MM-DD`. The year has four digits; a year after 9999
+has all its digits, and a year before 0000 is `-` and four digits (`-0001`
+is the year before 0000). `next_update` is `-` only when the CRL has no
+`nextUpdate` field: every time the field can hold is written, including
+`0001-01-01T00:00:00Z`.
+
 ## Tree
 
 **Key.** The serial number's content bytes (without the DER tag and length)
@@ -226,3 +264,7 @@ for it.
 trees with their roots and proofs of absence.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
+[`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
+usable, its reason code and its root (`expected.json`); and in `times/`,
+CRLs with times in each spelling of "Times", accepted or not, each with its
+line of the archive index.

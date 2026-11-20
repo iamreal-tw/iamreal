@@ -134,6 +134,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
 | `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間 |
 | `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、原因代碼、樹根） |
+| `testdata/times/` | 時間用各種寫法寫的自製清冊（規格「Times」收的和不收的），和 `expected.json`（每份在存檔索引裡的那一行）。`worker/` 的測試讀同一份 |
 
 ## 測試
 
@@ -145,6 +146,7 @@ go test ./crl/...
 - 樹和規格裡的遞迴定義（測試裡另寫一份慢的）在亂數的樹上比對；每份證明用電路的檢查方式（`assert_not_in_tree`）重算回樹根。
 - Poseidon2 另有一份 `math/big` 寫的慢版本（`poseidon2/reference_test.go`），兩份互相比對。
 - `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。原因代碼的順序也各有清冊：關鍵延伸欄位先於差異清冊和分段清冊、重複先於關鍵、清冊編號先於逐筆的檢查、同一筆裡關鍵先於序號、第一個有問題的那一筆決定。
+- `testdata/times/` 的每份清冊：它在存檔索引裡的那一行，包括 `nextUpdate` 剛好是 `0001-01-01T00:00:00Z`（Go 的零值）時照樣寫出來。
 - 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊
@@ -154,6 +156,14 @@ go run ./crl/testdata/generate.go
 ```
 
 每次產生新的金鑰和簽章，所以每個檔案都會變；私鑰不保留。產生後，`expected.json` 的樹根要拿另一份獨立的實作（例如電路程式庫裡的參考樹加 Barretenberg 的 Poseidon2）重算比對，再提交。
+
+`testdata/times/` 另外產生：
+
+```sh
+go run ./crl/testdata/times/generate.go
+```
+
+每一份該得到的那一行是照規格手寫在 `generate.go` 裡的；`crl/` 算出來的不同，它就停下來、不寫檔。簽章用一把當場產生、沒有人信任的金鑰（私鑰不保留），所以這些檔沒有一份可用：讀得懂的是 `-not_usable_signature`，時間寫法不收的是 `-not_usable_der`。這裡檢查的只有時間怎麼讀、怎麼寫。
 
 ## 第三方套件
 
