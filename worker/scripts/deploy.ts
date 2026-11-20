@@ -2,7 +2,10 @@
 // from running it: the arguments it gives wrangler, how it reads the token,
 // and the environment it runs wrangler in. test/build.ts makes the deploy
 // build the tests look at from the same arguments and the same environment
-// (plus `--dry-run`), so a change here is a change in what they check.
+// (plus `--dry-run`), so a change here is a change in what they check. The
+// workflow that deploys from GitHub Actions (.github/workflows/deploy-test.yml)
+// writes the same arguments out; test/workflows.test.ts fails when the two
+// differ.
 
 /**
  * The arguments after `wrangler` that upload the test environment.

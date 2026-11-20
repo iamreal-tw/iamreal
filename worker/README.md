@@ -11,7 +11,8 @@
 | 每小時的排程：抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl` | 驗清冊的簽章、建樹、清冊存檔的索引 `crl/index.jsonl` |
 | 名冊的 Durable Object：設定、binding、migration，類別是空的 | 寫入紀錄、題目、卡片狀態 |
 | 測試專用的建置和測試的工具 | 任何頁面和 API：每個網址都回 `404` |
-| 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | GitHub Actions 的工作流程 |
+| 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
+| 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
 
 ## 單獨執行
 
@@ -128,6 +129,15 @@ pnpm run deploy:test
 - 環境固定是測試環境。唯一接受的參數是 `--dry-run`：只打包，不上傳。
 - `--experimental-provision=false` 讓 wrangler 不問 Cloudflare 儲存桶在不在；為什麼要帶，見[下一節](#第一次部署量到的)。
 - 正式環境只從 GitHub Actions 部署，這裡沒有它的指令。
+
+### 從 GitHub Actions 部署
+
+合併到 `main` 時，[`.github/workflows/deploy-test.yml`](../.github/workflows/deploy-test.yml) 部署測試環境（ADR-0029）。兩個工作：
+
+1. `build`：沒有任何 secret。在這個目錄用和 `pnpm run deploy:test` 相同的參數（[`scripts/deploy.ts`](scripts/deploy.ts) 的 `DEPLOY_ARGS`）加 `--dry-run --outdir` 打包，和 [`test/bundle.test.ts`](test/bundle.test.ts) 檢查的是同一種建置。打出來的那一包交成 artifact。
+2. `deploy`：在 `build` 之後。只裝 wrangler，不跑任何套件的安裝腳本（`--ignore-scripts`），也不跑這個程式庫的任何腳本；拿到那一包，最後一步用 `wrangler deploy --no-bundle` 原樣上傳，binding 照 `wrangler.jsonc`。權杖只在這最後一步的環境裡：程式庫的 secrets `CLOUDFLARE_API_TOKEN_TEST`、`CLOUDFLARE_ACCOUNT_ID`，交給 wrangler 時的名稱是 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
+
+wrangler 在上傳之前會執行設定檔的 `build.command`，`--no-bundle` 也一樣，所以設定檔不能有它：有的話，那個指令會在拿著權杖的那一步執行。[`test/workflows.test.ts`](test/workflows.test.ts) 檢查這一點，也檢查工作流程的上面幾項：觸發條件、`permissions` 只給讀、只有 `deploy` 的最後一步引用這兩個 secret、之前沒有安裝腳本、打包的參數和 `DEPLOY_ARGS` 相同、每個 action 都釘完整的 commit SHA。PR 的檢查（`.github/workflows/checks.yml`）也由它檢查：只用 `pull_request` 觸發、只給讀、不引用 secret。
 
 ## 第一次部署量到的
 

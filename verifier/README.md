@@ -61,6 +61,8 @@ Poseidon2 和廢止清冊的樹不在這裡：驗證一筆紀錄不需要算它�
 
 其他平台的壓縮檔在同一個發布頁，SHA-256 還沒有記錄。`New` 會跑 `bb --version`，不是 `6.0.0` 就拒絕啟動。
 
+不另外下載也可以：`web/` 用的套件 `@aztec-foundation/bb.js` 6.0.0（`pnpm-lock.yaml`）附了四個平台的 `bb`，在根目錄 `pnpm install` 之後是 `web/node_modules/@aztec-foundation/bb.js/build/<平台>/bb`（`arm64-macos`、`amd64-macos`、`arm64-linux`、`amd64-linux`）。`arm64-macos` 那一個和上表壓縮檔裡的 `bb` 逐位元組相同（SHA-256 `f3af6634d08980744f6c9d18010f65b4fd2bbcf23f99e62fd81078ca9b35aa7e`）。GitHub Actions 上 PR 的檢查用 `amd64-linux` 那一個（`.github/workflows/checks.yml`）。
+
 ### 通用參數
 
 `bb verify` 只讀一個通用參數檔：
