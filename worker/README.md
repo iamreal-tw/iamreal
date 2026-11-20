@@ -18,7 +18,7 @@
 
 ## 單獨執行
 
-需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
+需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。有些測試另外要 Go：和原生 `bb` 逐案比對（`test/compare.test.ts`，另要 `IAMREAL_BB`，見「和原生的 `bb verify` 逐案比對」），和 `test/workflows.test.ts` 裡檢查 `web/` 瀏覽器測試的 `paths` 清單的那一項（`.github/README.md`）。前者沒設 `IAMREAL_BB` 時跳過；後者沒有 `go` 時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗（GitHub Actions 會設 `CI`），這樣 CI 上不會悄悄跳過。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
 
 ```sh
 pnpm dev         # 在本機的 workerd 啟動 Worker
