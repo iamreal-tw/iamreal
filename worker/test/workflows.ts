@@ -9,8 +9,8 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, and the device-core and android jobs of checks.yml,
-// must be exactly the ones written here.
+// workflow's two jobs, the device-core and android jobs of checks.yml, and
+// the jobs of cache.yml, must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -179,6 +179,10 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
   "actions/setup-go": { sha: "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e", version: "v7.0.0" },
   "actions/upload-artifact": { sha: "cf430e030ddbb5b0abf93d22962f4752f3646cd9", version: "v7.0.2" },
   "actions/download-artifact": { sha: "9000827ccba6bdab643e8b6fd33ac0654aef8333", version: "v8.0.2" },
+  // One repository, one commit: `actions/cache` restores and has a step after the job that saves;
+  // `actions/cache/restore` only restores. Which workflow may use which: CACHE_USE, below.
+  "actions/cache": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
+  "actions/cache/restore": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
 };
 
 /**
@@ -285,6 +289,56 @@ const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
 
 /**
+ * The caches (#203, ADR-0029).
+ *
+ * Who may write one: only cache.yml, which runs on pushes to main and on
+ * nothing else. GitHub scopes a cache to the branch of the run that made it:
+ * "Workflow runs can restore caches created in either the current branch or
+ * the default branch (usually `main`)", and a cache a pull request's run
+ * makes "can only be restored by re-runs of the pull request"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
+ * A merge group's run is on a branch of this repository with a pull
+ * request's change in it, and that page does not say what its caches are
+ * scoped to; so checks.yml saves nothing at all. It uses
+ * `actions/cache/restore`, which "works similarly to the `cache` action
+ * except that it doesn't have a post step to save the cache"
+ * (https://github.com/actions/cache/blob/v6.1.0/restore/README.md). The
+ * other workflows use no cache: the deploy must not depend on one, and the
+ * two that run by path are not what is slow to build.
+ *
+ * CACHE_USE: what each workflow may do with a cache. A file not named here
+ * may do nothing with one.
+ */
+export const CACHE_WORKFLOW = "cache.yml";
+export const CACHE_USE: Readonly<Record<string, "restore" | "save">> = { "checks.yml": "restore", [CACHE_WORKFLOW]: "save" };
+/** The action each use is written with. `actions/cache/save` is in no list: nothing here needs it. */
+const CACHE_ACTION = { restore: "actions/cache/restore", save: "actions/cache" } as const;
+
+/**
+ * The files whose hash is in the keys of device-core's caches: what decides
+ * which packages cargo builds, with which features and settings, with which
+ * Rust, and which Barretenberg they link. A key is one cache, restored for
+ * exactly these files or not at all: no `restore-keys`, so a run never gets
+ * a target/ built for another Cargo.lock or another Rust.
+ */
+const DEVICE_CORE_HASH =
+  "${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}";
+const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
+/**
+ * The caches, exactly: what a step that restores or saves one is given. One
+ * path each, because the reader of YAML here reads no value of several lines.
+ * cargo's registry holds the packages of Cargo.lock as downloaded (cargo
+ * checks each against the checksum in Cargo.lock when it unpacks it);
+ * device-core/target holds what was compiled.
+ */
+export const DEVICE_CORE_CACHES: readonly YamlMap[] = [
+  { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
+  { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
+];
+export const CACHES: readonly YamlMap[] = [...DEVICE_CORE_CACHES];
+const cacheSteps = (use: "restore" | "save", caches: readonly YamlMap[]): YamlMap[] => caches.map((c) => ({ uses: uses(CACHE_ACTION[use]), with: c }));
+
+/**
  * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
  * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
  * checked; so the job is written out here instead of being described by rules.
@@ -294,6 +348,7 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
   "timeout-minutes": "30",
   steps: [
     step("actions/checkout"),
+    ...cacheSteps("restore", DEVICE_CORE_CACHES),
     { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
     { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
     { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
@@ -383,6 +438,36 @@ export const DEPLOY_JOBS: YamlMap = {
         env: { CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}", CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" },
         run: UPLOAD,
       },
+    ],
+  },
+};
+
+/**
+ * How cache.yml is triggered and its concurrency group: pushes to main, one
+ * run at a time, none cancelled. The group's name is no other workflow's.
+ */
+export const CACHE_ON: Yaml = { push: { branches: ["main"] } };
+export const CACHE_GROUP = "cache";
+/**
+ * The jobs of cache.yml, exactly. Each compiles what its job of checks.yml
+ * compiles, with the same commands in the same directory, so that the
+ * target/ it saves is the one that job's cargo looks in: clippy's check of
+ * every target and the tests, with --release. The tests are built and not
+ * run (`--no-run`): running them leaves nothing in target/ that a later
+ * run reuses. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
+ * below, on why names are unique across workflows).
+ */
+export const CACHE_JOBS: YamlMap = {
+  "cache-device-core": {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "30",
+    steps: [
+      step("actions/checkout"),
+      ...cacheSteps("save", DEVICE_CORE_CACHES),
+      { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+      { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+      { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+      { name: "cargo test, built and not run", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release --no-run` },
     ],
   },
 };
@@ -488,7 +573,7 @@ const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(
 export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -502,7 +587,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
   for (const f of names) {
     for (const l of files[f]!.split("\n")) {
       if (!/uses/.test(l) || /^ *#/.test(l)) continue;
-      const m = /^ {6}- uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/.exec(l);
+      const m = /^ {6}- uses: ([\w.-]+\/[\w.-]+(?:\/[\w.-]+)?)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/.exec(l);
       const known = m && ACTIONS[m[1]!];
       if (!m || !known || known.sha !== m[2] || known.version !== m[3]) problems.push(`${f}: not an action of the list at its commit: ${l.replace(/^ +| +$/g, "")}`);
     }
@@ -532,6 +617,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === CACHE_WORKFLOW) {
+      if (doc.env !== undefined) p("an env at the top");
+      if (!same(doc.jobs, CACHE_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     const rules = PULL_REQUEST_RULES[f];
@@ -584,7 +674,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
-          else if (!same(s.with, WITH[action])) sp(`${action} is not given exactly ${JSON.stringify(WITH[action])}`);
+          else if (action in WITH ? !same(s.with, WITH[action]) : !CACHES.some((c) => same(s.with, c))) sp(`${action} is not given exactly ${JSON.stringify(WITH[action] ?? CACHES)}`);
         } else if (s.with !== undefined) sp("with but no uses");
         if (s.run !== undefined) {
           if (typeof s.run !== "string") sp("run is not one line");

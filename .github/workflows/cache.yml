@@ -1,0 +1,72 @@
+# Writes the caches the checks of a pull request restore (checks.yml), with
+# each push to main (ADR-0029). This is the only workflow that may write a
+# cache: checks.yml uses actions/cache/restore, which has no step that saves,
+# and deploy-test.yml, checks-browser.yml and checks-ios.yml use no cache at
+# all (worker/test/workflows.ts turns away a change to any of this).
+#
+# Why only here: "Workflow runs can restore caches created in either the
+# current branch or the default branch (usually main)", and a cache a pull
+# request's run creates is scoped to its merge ref and "can only be restored
+# by re-runs of the pull request" (GitHub's "Dependency caching",
+# "Restrictions for accessing a cache"). So what a run of checks.yml restores
+# was written by a run of this file on main, or by nothing. This file refers
+# to no secret and its token can only read: the step that saves holds no key.
+# What is left: code that got into main can leave something in a cache for
+# later checks. It is in main, so every later check runs it anyway; the
+# deploy reads no cache.
+#
+# Each job builds what its job of checks.yml builds, with the same commands,
+# so that cargo finds in target/ what it would have built. The tests are
+# built, not run (--no-run): running them adds nothing to target/ that a
+# later run reuses. The keys hold the hash of every file that decides what
+# the dependencies are built from and with; with no restore-keys a cache is
+# restored for exactly those files or not at all. A key that already has a
+# cache is not saved again: the job then restores it, builds the little that
+# changed and leaves the cache as it is.
+# ASCII only, comments included (worker/test/workflows.ts).
+name: cache
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One run at a time, the newest last; a running one is not stopped halfway,
+# so that pushes that follow each other closely still leave a cache.
+concurrency:
+  group: cache
+  cancel-in-progress: false
+
+jobs:
+  # What the device-core job of checks.yml compiles: clippy's check of every
+  # target and the tests, both with --release, in device-core/ with the
+  # Barretenberg fetch-barretenberg.sh checked.
+  cache-device-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target
+          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+      - name: Install libc++ (Barretenberg's static library is built with it)
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
+      - name: Install the Rust of rust-toolchain.toml
+        working-directory: device-core
+        run: rustup toolchain install
+      - name: cargo clippy
+        working-directory: device-core
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo clippy --locked --release --all-targets -- -D warnings
+      - name: cargo test, built and not run
+        working-directory: device-core
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release --no-run
