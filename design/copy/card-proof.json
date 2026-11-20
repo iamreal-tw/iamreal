@@ -212,6 +212,73 @@
     "mismatch_no_platform": "沒有這個平台",
     "mismatch_switch_used": "這次用掉了一次更換。"
   },
+  "app_before": {
+    "idle": "超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。",
+    "update_soon": "這一版的 app 從 {min_app_from} 起不能過卡。請在那之前到 {store} 更新。",
+    "update": "到 {store} 更新",
+    "too_old_title": "這一版不能過卡了",
+    "too_old": "從 {min_app_from} 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
+    "nothing_sent": "卡片還沒有被讀取，沒有任何東西送出去。",
+    "or_reader": "也可以用電腦和讀卡機，在 {domain} 過卡。",
+    "no_nfc_title": "這支手機不能感應卡片",
+    "no_nfc": "這支手機沒有 NFC，不能用 app 過卡。",
+    "no_nfc_reader": "可以用電腦和讀卡機，在 {domain} 過卡。"
+  },
+  "app_panel": {
+    "iphone_wait": "把自然人憑證貼在 iPhone 背面的上方",
+    "reading": "讀取中，不要移動卡片……",
+    "signing": "卡片簽章中，不要移動卡片……",
+    "read": "讀到了，可以拿開卡片",
+    "signed": "卡片簽好了，可以拿開卡片",
+    "android_wait_title": "把卡片貼在手機背面",
+    "android_wait": "自然人憑證平貼在手機背面的中間，不要移動。每支手機感應的位置不同，沒反應的話慢慢移動卡片找一下。",
+    "android_busy_title": "讀取中",
+    "android_done_title": "可以拿開卡片了"
+  },
+  "app_read": {
+    "how": "按「感應卡片」，再把自然人憑證平貼在{spot}，不要移動，直到畫面說可以拿開。這一步不用 PIN。",
+    "spot_iphone": "手機背面的上方",
+    "spot_android": "手機背面的中間",
+    "tap": "感應卡片，讀取卡片上的憑證",
+    "tap_card": "感應卡片",
+    "lift": "可以把卡片拿開了。",
+    "tap_again": "再感應一次",
+    "tap_card_again": "再感應一次卡片",
+    "press_again": "再按一次「感應卡片」",
+    "nfc_settings": "打開 NFC 設定"
+  },
+  "app_stops": {
+    "nfc_off": "手機的 NFC 關著。請打開 NFC，再按一次「感應卡片」。",
+    "read_dropped": "卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。",
+    "no_tap": "沒有感應到卡片。請再感應一次，把卡片平貼在{spot}。",
+    "no_certificate": "這張卡片上讀不到憑證。請確認感應的是自然人憑證。",
+    "crl_rollback": "拿到的廢止清冊比這支手機上次用過的舊，不能過卡。請稍後再試。",
+    "date_mismatch": "這支手機的日期和伺服器不一致，請檢查手機的時間。",
+    "other_card": "這不是剛才讀到的那張卡片，PIN 沒有送出。請換回剛才那張卡片，再感應一次。",
+    "pin_maybe_received": "感應在送出 PIN 的時候中斷了，不確定卡片有沒有收到。為了不在你不知道的時候多用掉一次 PIN 的錯誤次數，app 不會自動重送。請再輸入一次 PIN，再感應一次。",
+    "dropped_pin_kept": "卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。",
+    "other_card_last": "這不是一開始讀到的那張卡片，PIN 沒有送出。請換回那張卡片，再感應一次。",
+    "dropped": "卡片在感應途中離開了手機。請再感應一次。",
+    "tap_cancelled": "感應取消了，卡片沒有簽。"
+  },
+  "app_pin": {
+    "stays": "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
+    "need_pin": "請輸入 PIN。",
+    "signed": "卡片簽好了，正在查這張卡片目前宣告的帳號……"
+  },
+  "app_accounts": {
+    "preview": "預覽",
+    "preview_note": "預覽會在 {platform} 或瀏覽器開這個帳號的頁面，讓你確認沒有打錯。"
+  },
+  "app_progress": {
+    "keep_open": "請不要關閉 app，也不要切到別的 app。",
+    "sign": "感應卡片，卡片簽章",
+    "compute": "在這支手機上計算，大約 {seconds} 秒"
+  },
+  "app_done": {
+    "open_platform": "打開 {platform}",
+    "how_to_put": "複製連結之後，在 {platform} 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。"
+  },
   "not_in_card_proof_md": {
     "help_pending": "待補"
   }
