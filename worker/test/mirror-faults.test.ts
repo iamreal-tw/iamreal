@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
 import { der, makeCrl, testIssuerSpki } from "./crls.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
@@ -197,20 +197,30 @@ describe("files made to take long to read", () => {
     return { file: new Uint8Array(der(0x30, tbs, ALGORITHM, der(0x03, Uint8Array.from([0]), Buffer.alloc(256, 1)))), number: BigInt(`0x${content.toString("hex")}`).toString() };
   };
 
-  test("a cRLNumber of 400 KB and one of 3 MB: each gets its line in seconds, with the number in decimal, as the Go crl/ writes it", (t) =>
-    withWorker({}, async (worker) => {
-      const [small, large] = [withNumber(400_000), withNumber(3_000_000)];
+  describe("a cRLNumber of 400 KB and one of 3 MB", () => {
+    const [small, large] = [withNumber(400_000), withNumber(3_000_000)];
+    let worker: TestWorker;
+    let took = 0;
+    before(async () => {
+      worker = await startWorker();
       worker.moica.serve("G2", small.file);
       worker.moica.serve("G3", large.file);
       const started = Date.now();
       assert.equal((await worker.runSchedule()).outcome, "ok");
-      const took = Date.now() - started;
-      assert.ok(took < 60_000, `the round took ${took} ms`); // before the numbers were read in linear time, the smaller one alone took 26 seconds, and the larger would have taken many minutes
+      took = Date.now() - started;
+    });
+    after(() => worker.close());
 
+    test("each gets its line in seconds, with the number in decimal", async () => {
+      // Before the numbers were read in linear time, the smaller one alone took 26 seconds, and the larger would have taken many minutes.
+      assert.ok(took < 60_000, `the round took ${took} ms`);
       for (const { file, number } of [small, large]) {
         assert.equal(await lineOf(worker, file), `{"issuer":"-","crl_number":"${number}","this_update":"2026-11-19T16:00:00Z","next_update":"-","crl_date":"2026-11-20","sha256":"${sha256Hex(file)}","root":"-not_usable_signature"}`);
       }
-      if (spawnSync("go", ["version"]).status !== 0) return t.diagnostic("no go: the lines were not compared with the Go crl/'s");
+    });
+
+    test("the index is the same bytes as the Go crl/ writes for the two files", async (t) => {
+      if (spawnSync("go", ["version"]).status !== 0) return t.skip("needs go");
       const dir = mkdtempSync(join(tmpdir(), "crl-large-"));
       try {
         for (const { file } of [small, large]) writeFileSync(join(dir, `${sha256Hex(file)}.crl`), file);
@@ -220,7 +230,8 @@ describe("files made to take long to read", () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
-    }));
+    });
+  });
 
   test("30,000 extensions, the last of them a second cRLNumber: the line comes in seconds and says so", () =>
     withWorker({}, async (worker) => {

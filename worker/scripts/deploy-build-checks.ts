@@ -74,12 +74,18 @@ const KEY_SIZED = 170;
 
 /**
  * Every run of digits and letters in the code long enough to be an RSA
- * key, with string literals that the code joins by `+` put together first.
- * A run of hex or decimal digits is one of these too.
+ * key, as often as it is there, with string literals that the code joins
+ * by `+` put together first. A run of hex or decimal digits is one of
+ * these too.
  */
-export function keySizedRuns(code: string): string[] {
+function everyKeySizedRun(code: string): string[] {
   const joined = code.replace(/(["'`])\s*\+\s*\1/g, "");
-  return [...new Set([...joined.matchAll(new RegExp(`[A-Za-z0-9+/_=-]{${KEY_SIZED},}`, "g"))].map((m) => m[0].toLowerCase()))].sort();
+  return [...joined.matchAll(new RegExp(`[A-Za-z0-9+/_=-]{${KEY_SIZED},}`, "g"))].map((m) => m[0].toLowerCase());
+}
+
+/** The different runs of `everyKeySizedRun`, sorted. */
+export function keySizedRuns(code: string): string[] {
+  return [...new Set(everyKeySizedRun(code))].sort();
 }
 
 /** The bindings wrangler lists for a build: name and kind, from the table it prints. */
@@ -113,7 +119,9 @@ export const isCrsPoint = (run: string): boolean => /^[0-9a-f]{256}$/.test(run) 
 export function checkKeys(b: BuildContents): void {
   const runs = keySizedRuns(b.code);
   assert.deepEqual(runs.filter((run) => !isCrsPoint(run)), moduliInSpec().sort(), "the issuer keys in the deploy build are exactly the two of spec/vectors/issuers.json");
-  assert.equal(runs.filter(isCrsPoint).length, 1, "the deploy build holds the CRS point, once");
+  // Counted without leaving out repeats: the loader holds the point in one
+  // place, and a second copy would be code nobody has looked at.
+  assert.equal(everyKeySizedRun(b.code).filter(isCrsPoint).length, 1, "the deploy build holds the CRS point exactly once");
   for (const s of ["PRIVATE KEY", "PUBLIC KEY", "BEGIN CERTIFICATE", "pkcs8", "spki"]) assert.ok(!b.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
 }
 

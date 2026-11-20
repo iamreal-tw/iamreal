@@ -190,8 +190,15 @@ export function crlMirrorInWorker(parts: MirrorParts): CrlMirror {
  */
 class ArchiveIndex {
   readonly #bucket: R2Bucket;
-  /** The lines in the bucket: what the roster's object may be told of. */
+  /** The lines in the bucket: what the roster's object may be told of, while `known`. */
   lines: readonly IndexLine[] = [];
+  /**
+   * Whether `lines` are what the bucket holds. They are not once a write
+   * failed in a way that does not say whether it was done, and the index
+   * could not be read again either: then nobody is told anything until it
+   * is read.
+   */
+  known = false;
   /** The object's bytes as text and its ETag; `undefined` if there is no index. */
   #text: string | undefined;
   #etag: string | undefined;
@@ -212,6 +219,7 @@ class ArchiveIndex {
     this.#etag = object?.etag;
     // Only the lines written as the spec writes them count (src/crl-index.ts, `readIndex`).
     this.lines = readIndex(this.#text ?? "");
+    this.known = true;
   }
 
   /**
@@ -226,7 +234,16 @@ class ArchiveIndex {
       if (text === this.#text) return;
       // Written only over the object that was read, or only if there is still none.
       const onlyIf = this.#etag === undefined ? new Headers({ "If-None-Match": "*" }) : { etagMatches: this.#etag };
-      const written = await this.#bucket.put(INDEX_KEY, text, { httpMetadata: { cacheControl: CACHE_MINUTE }, onlyIf });
+      let written: R2Object | null;
+      try {
+        written = await this.#bucket.put(INDEX_KEY, text, { httpMetadata: { cacheControl: CACHE_MINUTE }, onlyIf });
+      } catch (e) {
+        // A write that throws may have been done all the same. What the
+        // bucket holds now is read again before anybody is told of it.
+        this.known = false;
+        await this.#read();
+        throw e;
+      }
       if (written !== null) {
         this.lines = readIndex(text);
         this.#text = text;
@@ -248,6 +265,8 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
   /** Tells the roster's object what the index now lists; that it could not be told is said once. */
   let untold = false;
   const tell = async (index: ArchiveIndex): Promise<void> => {
+    // Only what the bucket is known to hold is told (`ArchiveIndex`, `known`).
+    if (!index.known) return;
     try {
       await parts.tell(newestCrls(index.lines));
     } catch (e) {

@@ -58,6 +58,13 @@ test("the issuer keys in the deploy build are exactly the two of spec/vectors/is
   checkKeys(deploy);
 });
 
+test("the one other run as long as a key is the CRS point, and the deploy build holds it exactly once", () => {
+  const point = keySizedRuns(deploy.code).find(isCrsPoint);
+  assert.ok(point);
+  assert.throws(() => checkKeys({ ...deploy, code: `${deploy.code}\nconst again = "${point}";` }), /exactly once/);
+  assert.throws(() => checkKeys({ ...deploy, code: deploy.code.replace(point, "") }), /exactly once/);
+});
+
 test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
