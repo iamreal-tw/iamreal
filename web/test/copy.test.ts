@@ -164,9 +164,9 @@ test("every sentence of the screens in card-proof.md is in card-proof.json", () 
   }
 });
 
-// The app's sentences are the groups whose name starts with "app_" (the
-// group "app" is the web page's: choosing a device, before the app is out).
-test("the app's sentences say 這支手機, never 這台裝置 or 這台電腦", () => {
+// The app's sentences are the groups whose name starts with "app_". The
+// group "app" is the web page's: choosing a device and getting the app.
+test("the app's sentences never say 這台裝置 or 這台電腦", () => {
   const app = entries().filter(([key]) => key.startsWith("app_"));
   assert.ok(app.length > 0, "card-proof.json has no app_ group");
   for (const [key, text] of app) assert.doesNotMatch(text, /這台裝置|這台電腦/, key);
