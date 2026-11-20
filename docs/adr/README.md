@@ -65,6 +65,7 @@
 - 限流分三層；被打時過卡先讓路；全站的總量上限擋在 `GET /api/v1/config`。[ADR-0026](0026-rate-limiting-in-three-layers.md)
 - 測試網站是同一個 Worker 專案的另一個環境，只收真卡片，不定期清空。[ADR-0028](0028-test-site-is-a-second-environment.md)
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
+- app 傳到商店的每一個 build 只從 GitHub Actions 建置和上傳；測試 app 和正式 app 是兩個識別碼；Android 的簽章金鑰自己產生、不放在 GitHub；Android 能逐檔比對，iOS 比不了。[ADR-0036](0036-apps-built-and-uploaded-only-from-github-actions.md)
 - 名冊目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從名冊重算；重建卡片狀態走「從名冊重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-roster-and-crl-archive.md)
 
 ## 隱私和營運者看得到什麼
