@@ -41,7 +41,7 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 
 ## 外人的 PR
 
-- **工作流程只用 `pull_request` 觸發，不用 `pull_request_target`。** 從 fork 開的 PR，`pull_request` 拿不到 secrets，`GITHUB_TOKEN` 只能讀（[events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)）。`pull_request_target` 跑的是 `main` 上的工作流程、拿得到 secrets；在裡面 checkout 再執行 PR 的程式，就是讓外人的程式拿到金鑰（[Preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)）。
+- **PR 的檢查只用 `pull_request` 和 `merge_group` 觸發，不用 `pull_request_target`。** 從 fork 開的 PR，`pull_request` 拿不到 secrets，`GITHUB_TOKEN` 只能讀（[events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)）。`merge_group` 在營運者把 PR 排進合併佇列之後才跑；文件沒有說 fork 的這條限制也適用，所以這個工作流程本身不引用任何 secret、權杖只能讀、不用快取，改它的 PR 要逐行看（#180）。`pull_request_target` 跑的是 `main` 上的工作流程、拿得到 secrets；在裡面 checkout 再執行 PR 的程式，就是讓外人的程式拿到金鑰（[Preventing pwn requests](https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/)）。
 - **所有外部貢獻者的工作流程，都要營運者先核准才跑**（「Require approval for all external contributors」，[managing GitHub Actions settings](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository)）。
 - **PR 上只跑 `CONTRIBUTING.md`「完成的定義」那些檢查**，端到端測試用假卡片、在 CI 裡跑，不打已經部署的網站。
 - **建置和部署是兩個工作。** 部署的工作拿得到權杖，建置的工作拿不到。
