@@ -45,7 +45,7 @@ import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
-import { writeCard } from "../src/card-table.ts";
+import { dropCardSnapshot, snapshotCards, writeCard } from "../src/card-table.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
@@ -258,6 +258,19 @@ export class Roster extends DeployedRoster {
     writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
   }
 
+  /** Writes rows of the card state table as they are given, in one transaction: how a measurement fills the table with many cards. */
+  testWriteCards(cards: readonly { scopeString: string; scopedId: string; card: CardState; seq: number }[]): void {
+    this.ctx.storage.transactionSync(() => {
+      for (const c of cards) writeCard(this.ctx.storage.sql, c.scopeString, c.scopedId, c.card, c.seq);
+    });
+  }
+
+  /** Copies the card state table to its snapshot, as a publication does (src/card-table.ts, `snapshotCards`), or drops the snapshot: how a measurement times either alone. */
+  testSnapshot(drop: boolean): void {
+    if (drop) dropCardSnapshot(this.ctx.storage.sql);
+    else snapshotCards(this.ctx.storage.sql);
+  }
+
   /** Makes the stored version of the tables another one than the build's, or the build's. Takes effect when the object starts again. */
   testSetStoredSchemaVersion(to: "another" | "the build's"): void {
     this.ctx.storage.sql.exec("UPDATE roster SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
@@ -431,7 +444,11 @@ export default {
    * - `PUT /__test/roster/next-random` with 16 bytes in hex: the next
    *   challenge the object issues has them in place of random bytes.
    * - `PUT /__test/roster/card` writes a row of the card state table
-   *   (CardToWrite).
+   *   (CardToWrite); `PUT /__test/roster/cards`, a list of them, in one
+   *   transaction.
+   * - `POST /__test/roster/snapshot` with `{drop}` copies the card state
+   *   table to its snapshot, as a publication does, or with `drop` true
+   *   drops the snapshot.
    * - `PUT /__test/roster/schema-version` and
    *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
    *   build's", change the version the object's tables say they were made
@@ -517,15 +534,27 @@ export default {
       await testRosterOf(env).testSetNextRandom(random);
       return done();
     }
-    if (route === "PUT /__test/roster/card") {
-      const body = (await request.json()) as CardToWrite;
-      const slots = new Map<string, SlotState>();
-      for (const [platform, s] of Object.entries(body.platforms)) {
-        const slot = slotOfJson(s);
-        if (slot === null) return new Response(null, { status: 400 });
-        slots.set(platform, slot);
+    if (route === "PUT /__test/roster/card" || route === "PUT /__test/roster/cards") {
+      const many = route === "PUT /__test/roster/cards";
+      const body = (await request.json()) as CardToWrite | CardToWrite[];
+      const cards: { scopeString: string; scopedId: string; card: CardState; seq: number }[] = [];
+      for (const c of many ? (body as CardToWrite[]) : [body as CardToWrite]) {
+        const slots = new Map<string, SlotState>();
+        for (const [platform, s] of Object.entries(c.platforms)) {
+          const slot = slotOfJson(s);
+          if (slot === null) return new Response(null, { status: 400 });
+          slots.set(platform, slot);
+        }
+        cards.push({ scopeString: c.scope_string, scopedId: c.scoped_id, card: { lastCardProof: parseDay(c.last_card_proof), proofsOnLastDate: c.proofs_on_last_date, slots }, seq: c.seq });
       }
-      await testRosterOf(env).testWriteCard(body.scope_string, body.scoped_id, { lastCardProof: parseDay(body.last_card_proof), proofsOnLastDate: body.proofs_on_last_date, slots }, body.seq);
+      const roster = testRosterOf(env);
+      if (many) await roster.testWriteCards(cards);
+      else await roster.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
+      return done();
+    }
+    if (route === "POST /__test/roster/snapshot") {
+      const { drop } = (await request.json()) as { drop: boolean };
+      await testRosterOf(env).testSnapshot(drop);
       return done();
     }
     if (route === "PUT /__test/roster/schema-version") {
