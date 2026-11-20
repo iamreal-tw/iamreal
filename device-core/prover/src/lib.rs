@@ -228,7 +228,9 @@ fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
 /// second message the card signs.
 ///
 /// `accounts_json` is a JSON array of `{"platform":"…","username":"…"}` in
-/// ascending order of `platform`, each platform at most once; `challenge`
+/// ascending order of `platform`, each platform at most once, each
+/// `username` 1 or more printable ASCII characters without `"` and `\`
+/// (what every format allows at most, spec/scope.md); `challenge`
 /// is the challenge as the server issued it. `IDC_ERR_INPUT` when the list
 /// is not that, or the challenge is not in its one spelling.
 ///

@@ -1365,6 +1365,131 @@
       }
     },
     {
+      "name": "a kept account is checked only as any username, not against its row's format",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "test-example": {
+            "current": "Bob Example",
+            "last_declared": "Bob Example",
+            "switch_count": 0,
+            "correction_date": "2026-03-02"
+          },
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "accounts": [
+        {
+          "platform": "threads",
+          "username": "bob"
+        }
+      ],
+      "result": {
+        "valid": true,
+        "accounts": [
+          {
+            "platform": "test-example",
+            "username": "Bob Example"
+          },
+          {
+            "platform": "threads",
+            "username": "bob"
+          }
+        ],
+        "rows": [
+          {
+            "platform": "test-example",
+            "known": false,
+            "kind": "refresh",
+            "username": "Bob Example",
+            "current": "Bob Example",
+            "previous": null,
+            "switches_left": null
+          },
+          {
+            "platform": "threads",
+            "known": true,
+            "kind": "refresh",
+            "username": "bob",
+            "current": "bob",
+            "previous": null,
+            "switches_left": null
+          }
+        ],
+        "first_record": false
+      }
+    },
+    {
+      "name": "no definition for any platform of the table: nothing is offered, every account is kept",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [],
+      "today": "2026-11-16",
+      "accounts": [],
+      "result": {
+        "valid": true,
+        "accounts": [
+          {
+            "platform": "threads",
+            "username": "bob"
+          }
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": false,
+            "kind": "refresh",
+            "username": "bob",
+            "current": "bob",
+            "previous": null,
+            "switches_left": null
+          }
+        ],
+        "first_record": false
+      }
+    },
+    {
       "name": "a row the device has no definition of cannot be named by the list",
       "platforms": [
         {

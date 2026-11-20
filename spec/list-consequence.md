@@ -150,7 +150,8 @@ own definition of.
 
 The server never sends a JSON answer with a key twice in one object, a
 string with an unpaired surrogate (`"\ud800"`), a number beyond the range
-of a 64-bit float, or arrays and objects nested more than 128 deep. How a
+of a 64-bit float or with more digits than one holds, or arrays and
+objects nested more than 128 deep. How a
 client reads one is not defined here, and the vectors have none: a
 JavaScript client's parser reads them, `device-core/` refuses the whole
 answer. The cases are made by

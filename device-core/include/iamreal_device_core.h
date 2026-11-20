@@ -73,7 +73,8 @@ int32_t idc_scope_string(uint32_t roster, idc_buf *out);
  * message the card signs.
  *
  * accounts_json: a JSON array of {"platform":"...","username":"..."}, in
- * ascending order of platform, each platform at most once.
+ * ascending order of platform, each platform at most once, each username 1
+ * or more printable ASCII characters without '"' and '\'.
  * challenge: the challenge as the server issued it.
  * IDC_ERR_INPUT when the list is not that, or the challenge is not in its
  * one spelling. */

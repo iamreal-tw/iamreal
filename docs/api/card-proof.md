@@ -143,7 +143,8 @@ computes for a list, with test vectors.
 
 What the device does with what it cannot read. "A platform the device does
 not know" is one that has no row it can read in the platform table of
-`GET /api/v1/config`.
+`GET /api/v1/config`, or that the device has no definition of its own for
+(`config`, below).
 
 - **`current` is not `null` on a platform the device does not know**: the
   device keeps that account in the list exactly as it is, in its place in
