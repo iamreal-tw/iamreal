@@ -510,3 +510,284 @@ describe("the challenges the roster's object keeps", () => {
     }
   });
 });
+
+describe("the object's timed work shares its one alarm", () => {
+  const START = tw("2026-11-20T12:00:00");
+  const MINUTE = 60_000;
+  const DAY = 24 * 60 * MINUTE;
+  const at = (minutes: number): Date => new Date(START.getTime() + minutes * MINUTE);
+  /** The alarm is `minutes` ahead, give or take the seconds the test itself took. */
+  async function alarmIsAhead(worker: TestWorker, minutes: number, what: string): Promise<void> {
+    const wait = await worker.roster.alarmInMs();
+    assert.ok(wait !== null && wait > (minutes - 0.5) * MINUTE && wait <= minutes * MINUTE, `${what}: the alarm is ${wait} ms ahead, not ${minutes} minutes`);
+  }
+
+  test("other work that already holds the alarm, far ahead, does not keep an expired challenge: the alarm moves to the challenge's 10 minutes", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await worker.roster.setExtraWork(at(20 * 60), DAY);
+      await alarmIsAhead(worker, 20 * 60, "with only the other work");
+
+      const challenge = await issue(worker);
+      await alarmIsAhead(worker, 10, "once a challenge is issued");
+
+      await worker.setClock(at(10));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), []);
+      assert.ok(!(await worker.roster.storedChallenges()).includes(challenge));
+      // The other work was not due and did not run; the alarm is now its own.
+      assert.deepEqual(await worker.roster.extraWorkRuns(), []);
+      await alarmIsAhead(worker, 19 * 60 + 50, "with the challenge gone");
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("two pieces due at different times each run once, at their own time, and the alarm is always the earlier of the two", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      const challenge = await issue(worker);
+      await alarmIsAhead(worker, 10, "with only the challenge");
+      await worker.roster.setExtraWork(at(3), DAY);
+      await alarmIsAhead(worker, 3, "with other work due sooner");
+
+      // Woken before anything is due: nothing runs.
+      await worker.setClock(at(1));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.extraWorkRuns(), []);
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      await alarmIsAhead(worker, 2, "woken early");
+
+      // At 3 minutes the other work runs; the challenge is not touched.
+      await worker.setClock(at(3));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3)]);
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      await alarmIsAhead(worker, 7, "after the other work ran");
+
+      // At 10 minutes the challenge is deleted; the other work, due again a day later, does not run.
+      await worker.setClock(at(10));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), []);
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3)]);
+      await alarmIsAhead(worker, 24 * 60 - 7, "with only the other work left");
+
+      // Both due at once: both run.
+      const second = await issue(worker);
+      await worker.setClock(at(24 * 60 + 3));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3), at(24 * 60 + 3)]);
+      assert.ok(!(await worker.roster.storedChallenges()).includes(second));
+    } finally {
+      await worker.close();
+    }
+  });
+});
+
+/** The one line the back end wrote about each of its own failures, in order. */
+const failuresIn = (worker: TestWorker): { endpoint: string; where: string; error: string; id: string }[] =>
+  worker
+    .logLines()
+    .filter((l) => l.includes("internal_error"))
+    .map((l) => JSON.parse(l) as { endpoint: string; where: string; error: string; id: string });
+
+describe("a stored state of a card that the rules cannot have left", () => {
+  const GOOD = {
+    scope_string: TEST_SCOPE,
+    scoped_id: CARD,
+    seq: 7,
+    last_card_proof: "2026-11-19",
+    proofs_on_last_date: 2,
+    platforms: {
+      "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-04" },
+      threads: { current: "bob", last_declared: "bob", switch_count: 5, correction_date: "2026-11-19" },
+    },
+  };
+  const threads = (slot: { current?: string | null; last_declared?: string | null; switch_count?: number; correction_date?: string | null }): object => ({ ...GOOD, platforms: { ...GOOD.platforms, threads: { ...GOOD.platforms.threads, ...slot } } });
+  const BROKEN: Record<string, object> = {
+    "switch_count 99": threads({ switch_count: 99 }),
+    "switch_count 6, one more than the rules give": threads({ switch_count: 6 }),
+    "switch_count -1": threads({ switch_count: -1 }),
+    "switch_count 1.5": threads({ switch_count: 1.5 }),
+    "proofs_on_last_date 0": { ...GOOD, proofs_on_last_date: 0 },
+    "proofs_on_last_date 4, one more than the rules allow": { ...GOOD, proofs_on_last_date: 4 },
+    "the seq of the last record is 0": { ...GOOD, seq: 0 },
+    "an account not in the format of its platform: uppercase on threads": threads({ current: "Bob", last_declared: "Bob" }),
+    "an account in the format of another platform: a-b on threads": threads({ current: "a-b", last_declared: "a-b" }),
+    "an account with a line feed": threads({ current: "bob\n", last_declared: "bob\n" }),
+    "a withdrawn account not in the format": threads({ current: null, last_declared: "@bob" }),
+    "a slot on a platform outside the table": { ...GOOD, platforms: { ...GOOD.platforms, instagram: GOOD.platforms.threads } },
+    "current is not last_declared": threads({ current: "alice" }),
+    "an account without the date it was declared on": threads({ correction_date: null }),
+    "a correction_date after the last card proof": threads({ correction_date: "2026-11-20" }),
+    "switches without an account": threads({ current: null, last_declared: null, correction_date: null, switch_count: 1 }),
+  };
+
+  let worker: TestWorker;
+  before(async () => {
+    worker = await startWorker();
+    await worker.setClock(NOON);
+  });
+  after(() => worker.close());
+  const ask = (card: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: card }) });
+
+  test("the state every case below starts from is one the rules leave: it is answered", async () => {
+    await worker.roster.writeCard(GOOD);
+    const res = await ask(CARD);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await jsonOf(res), { last_card_proof: "2026-11-19", proofs_on_last_date: 2, platforms: GOOD.platforms, count: 0 });
+  });
+
+  for (const [name, card] of Object.entries(BROKEN)) {
+    test(`is not handed on: ${name} is 500, with one line that says the roster's object failed`, async () => {
+      await worker.roster.writeCard(card as never);
+      const before = failuresIn(worker).length;
+
+      const res = await ask(CARD);
+
+      assert.equal(res.status, 500);
+      assert.deepEqual(await jsonOf(res), { error: "internal" });
+      assert.deepEqual(failuresIn(worker).slice(before), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/card-state", where: "roster", error: "Error" }]);
+      // Another card is answered as before.
+      assert.equal((await ask(OTHER_CARD)).status, 200);
+    });
+  }
+
+  test("nothing of the broken state is in the log", () => {
+    const log = worker.logLines().join("\n");
+    for (const secret of [CARD, "Bob", "@bob", "instagram", "a-b", TEST_SCOPE]) assert.ok(!log.includes(secret), `the log holds ${secret}`);
+  });
+});
+
+describe("the setting that says which roster the environment serves", () => {
+  const cardState = (worker: TestWorker, scope: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scope, scoped_id: CARD }) });
+
+  for (const kind of ["staging", "", "Test", "production "]) {
+    test(`ROSTER_KIND ${JSON.stringify(kind)} names no roster: every endpoint is 500, and the line says it is the settings`, async () => {
+      const worker = await startWorker({ settings: { ROSTER_KIND: kind } });
+      try {
+        const answers = [
+          await worker.fetch("/api/v1/challenges", { method: "POST" }),
+          await cardState(worker, TEST_SCOPE),
+          await cardState(worker, PRODUCTION_SCOPE),
+          await worker.fetch("/api/v1/config"),
+        ];
+        for (const res of answers) {
+          assert.equal(res.status, 500);
+          assert.deepEqual(await jsonOf(res), { error: "internal" });
+        }
+        assert.deepEqual(
+          failuresIn(worker).map((l) => [l.endpoint, l.where, l.id]),
+          [
+            ["/api/v1/challenges", "settings", answers[0]!.headers.get("X-Request-Id")],
+            ["/api/v1/card-state", "settings", answers[1]!.headers.get("X-Request-Id")],
+            ["/api/v1/card-state", "settings", answers[2]!.headers.get("X-Request-Id")],
+            ["/api/v1/config", "settings", answers[3]!.headers.get("X-Request-Id")],
+          ],
+        );
+        // What does not need the settings is as ever.
+        assert.equal((await worker.fetch("/api/v1/nothing")).status, 404);
+        assert.equal((await worker.fetch("/api/v1/config", { method: "POST" })).status, 405);
+      } finally {
+        await worker.close();
+      }
+    });
+  }
+
+  test("the production roster: its table has threads only, it takes its own scope, and the test roster's scope is malformed", async () => {
+    const worker = await startWorker({ settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "production-of-the-test" } });
+    try {
+      await worker.setClock(NOON);
+      const config = await worker.fetch("/api/v1/config");
+      assert.equal(config.status, 200);
+      const text = await config.text();
+      assert.equal(text, '{"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}');
+      // The row is the one under "Production roster" in spec/scope.md, and no row is a test platform.
+      const spec = repoText("spec/scope.md");
+      assert.ok(spec.slice(spec.indexOf("**Production roster**", spec.indexOf("## Platforms")), spec.indexOf("**Test rosters only**", spec.indexOf("## Platforms"))).includes("| `threads` | Threads | `[a-z0-9._]{1,30}` |"));
+      assert.ok(!text.includes("test-"));
+
+      const state = await cardState(worker, PRODUCTION_SCOPE);
+      assert.equal(state.status, 200);
+      assert.deepEqual(await jsonOf(state), { last_card_proof: null, proofs_on_last_date: 0, platforms: { threads: NEVER_USED }, count: 0 });
+
+      const other = await cardState(worker, TEST_SCOPE);
+      assert.equal(other.status, 400);
+      assert.deepEqual(await jsonOf(other), { error: "malformed" });
+
+      assert.equal((await issue(worker)).slice(0, 10), "2026-11-20");
+
+      // A stored slot on a test platform is not a state of this roster.
+      await worker.roster.writeCard({
+        scope_string: PRODUCTION_SCOPE,
+        scoped_id: CARD,
+        seq: 1,
+        last_card_proof: "2026-11-19",
+        proofs_on_last_date: 1,
+        platforms: { "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" } },
+      });
+      assert.equal((await cardState(worker, PRODUCTION_SCOPE)).status, 500);
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("an object that holds the test roster does nothing once the setting says production: 500, nothing read or written, until the setting is put back", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(NOON);
+      const challenge = await issue(worker);
+      assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
+
+      // As a deploy with the wrong setting would: the setting changes and the object starts again.
+      await worker.setSettings({ ROSTER_KIND: "production" });
+      await worker.roster.restart();
+
+      const refused = [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, PRODUCTION_SCOPE)];
+      for (const res of refused) {
+        assert.equal(res.status, 500);
+        assert.deepEqual(await jsonOf(res), { error: "internal" });
+      }
+      assert.deepEqual(
+        failuresIn(worker).map((l) => [l.endpoint, l.where, l.id]),
+        [
+          ["/api/v1/challenges", "roster_kind", refused[0]!.headers.get("X-Request-Id")],
+          ["/api/v1/card-state", "roster_kind", refused[1]!.headers.get("X-Request-Id")],
+        ],
+      );
+      // No challenge was issued, and the alarm deletes none, however late it is.
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      await worker.setClock(new Date(NOON.getTime() + 60 * 60_000));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      // The test roster's scope is not the setting's: the Worker refuses it before it asks the object.
+      assert.equal((await cardState(worker, TEST_SCOPE)).status, 400);
+
+      // The setting put back, the object is the test roster's again, with what it had.
+      await worker.setClock(NOON);
+      await worker.setSettings({});
+      await worker.roster.restart();
+      assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
+      const next = await issue(worker);
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge, next].sort());
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("config does not ask the roster's object, so it cannot see that the object holds another roster: it answers with the setting's table", async () => {
+    const worker = await startWorker();
+    try {
+      await issue(worker);
+      await worker.setSettings({ ROSTER_KIND: "production" });
+      await worker.roster.restart();
+      const res = await worker.fetch("/api/v1/config");
+      assert.equal(res.status, 200);
+      assert.deepEqual(((await jsonOf(res)) as { platforms: { platform: string }[] }).platforms.map((p) => p.platform), ["threads"]);
+    } finally {
+      await worker.close();
+    }
+  });
+});

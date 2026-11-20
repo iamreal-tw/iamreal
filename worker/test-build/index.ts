@@ -1,9 +1,9 @@
 // The entry point of the test build (test/build.ts): the Worker of
 // src/index.ts, and in front of it the switches the tests need that the
-// deployed Worker must not have: the clock, doors to the roster's Durable
-// Object, and two doors to code that has no API of its own yet, the proof
-// verifier and the Poseidon2 hash. Never in the deployed build
-// (test/bundle.test.ts).
+// deployed Worker must not have: the clock, the environment's settings,
+// doors to the roster's Durable Object, and two doors to code that has no
+// API of its own yet, the proof verifier and the Poseidon2 hash. Never in
+// the deployed build (test/bundle.test.ts).
 //
 // The doors to the verifier and the hash call the same ones the deployed
 // Worker has (src/in-worker.ts); nothing of them is replaced here. They are
@@ -11,21 +11,67 @@
 // CRL mirror builds its tree (#67, #65), the tests go through those and
 // the doors go.
 //
-// The doors to the roster's object do what no request can do yet or ever:
-// run its alarm now, write the state of a card (until submitting a record
-// does, #67), and break its tables, to see what the API answers when the
-// back end itself fails. The object of the test build is the deployed one
-// (src/roster.ts) with these three methods added.
+// The doors to the roster's object do what no request can do yet or ever.
+// The object of the test build is the deployed one (src/roster.ts) with
+// six methods added: run its alarm now; read when the alarm is set for;
+// write the state of a card (until submitting a record does, #67); break
+// its tables, to see what the API answers when the back end itself fails;
+// and give it a second piece of timed work, and read when that one ran, to
+// see that two pieces share the one alarm without disturbing each other.
+//
+// The settings a test replaces (`ROSTER_KIND`, `ROSTER_OBJECT_NAME`) are
+// kept here, in memory, and laid over the environment the Worker and the
+// object are given. wrangler.jsonc is not touched: the deployed settings
+// are the ones the deploy build reads.
 import { bytesOfHex, hexOf } from "iamreal-protocol/bytes.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
 import type { CardState, SlotState } from "iamreal-protocol/roster-rules.ts";
 import { writeCard } from "../src/card-table.ts";
 import worker from "../src/index.ts";
 import { poseidon2Hash, proofVerifier } from "../src/in-worker.ts";
-import { Roster as DeployedRoster } from "../src/roster.ts";
+import { Roster as DeployedRoster, type TimedWork, rosterOf } from "../src/roster.ts";
+import { slotOfJson } from "../src/slot-json.ts";
+import type { CardToWrite, TestSettings } from "./card-door.ts";
 import { setTestClock } from "./target.ts";
 
+let testSettings: TestSettings = {};
+
+/** The environment with the settings the test replaced. */
+const testEnv = (env: Env): Env => ({ ...env, ...testSettings });
+
 export class Roster extends DeployedRoster {
+  /** The second piece of timed work: when it is next due, how long after each run it is due again, and when it ran. */
+  #extraDue: number | null = null;
+  #extraEvery = 0;
+  readonly #extraRuns: number[] = [];
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, testEnv(env));
+  }
+
+  protected override timedWork(): readonly TimedWork[] {
+    const extra: TimedWork = {
+      due: () => this.#extraDue,
+      run: (time) => {
+        this.#extraRuns.push(time);
+        this.#extraDue = this.#extraDue! + this.#extraEvery;
+      },
+    };
+    return [...super.timedWork(), extra];
+  }
+
+  /** Gives the object a second piece of timed work, due at `due` and then every `every` milliseconds. */
+  async testSetExtraWork(due: number, every: number): Promise<void> {
+    this.#extraDue = due;
+    this.#extraEvery = every;
+    await this.setAlarmForTimedWork();
+  }
+
+  /** The times, on the object's clock, at which the second piece of timed work ran. */
+  testExtraWorkRuns(): number[] {
+    return [...this.#extraRuns];
+  }
+
   /** Runs the alarm now, whatever time it is set for. */
   async testRunAlarm(): Promise<void> {
     await this.alarm();
@@ -48,27 +94,24 @@ export class Roster extends DeployedRoster {
   }
 }
 
-const testRosterOf = (env: Env): DurableObjectStub<Roster> => env.ROSTER.get(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME)) as unknown as DurableObjectStub<Roster>;
-
-/** What `PUT /__test/roster/card` takes: a card's state in the spelling of `card-state`'s answer, and where to write it. */
-interface CardDoorBody {
-  scope_string: string;
-  scoped_id: string;
-  seq: number;
-  last_card_proof: string;
-  proofs_on_last_date: number;
-  platforms: Record<string, { current: string | null; last_declared: string | null; switch_count: number; correction_date: string | null }>;
-}
+/** The roster's object (src/roster.ts, rosterOf), as the class of the test build. */
+const testRosterOf = (env: Env): DurableObjectStub<Roster> => rosterOf(env) as unknown as DurableObjectStub<Roster>;
 
 const json = (value: unknown, status = 200): Response => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+const done = (): Response => new Response(null, { status: 204 });
 
 export default {
   ...worker,
   /**
    * - `PUT /__test/clock` with milliseconds since the epoch sets the clock.
+   * - `PUT /__test/settings` with a TestSettings replaces settings of the
+   *   environment from now on. An object that is running keeps the ones it
+   *   started with until it starts again.
    * - `POST /__test/roster/alarm` runs the alarm of the roster's object;
    *   `GET` answers `{alarm}`, the time it is set for or null.
-   * - `PUT /__test/roster/card` writes the state of a card (CardDoorBody).
+   * - `PUT /__test/roster/extra-work` with `{due, every}` gives the object a
+   *   second piece of timed work; `GET` answers `{runs}`, when it ran.
+   * - `PUT /__test/roster/card` writes the state of a card (CardToWrite).
    * - `POST /__test/roster/break` drops the tables the API reads.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
@@ -77,39 +120,51 @@ export default {
    *
    * Anything else is the Worker's.
    */
-  async fetch(request, env, ctx): Promise<Response> {
+  async fetch(request, deployedEnv, ctx): Promise<Response> {
     const { pathname } = new URL(request.url);
-    if (pathname === "/__test/clock" && request.method === "PUT") {
+    const route = `${request.method} ${pathname}`;
+    if (route === "PUT /__test/clock") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms)) return new Response(null, { status: 400 });
       setTestClock(ms);
-      return new Response(null, { status: 204 });
+      return done();
     }
-    if (pathname === "/__test/roster/alarm" && request.method === "POST") {
+    if (route === "PUT /__test/settings") {
+      testSettings = (await request.json()) as TestSettings;
+      return done();
+    }
+    const env = testEnv(deployedEnv);
+    if (route === "POST /__test/roster/alarm") {
       await testRosterOf(env).testRunAlarm();
-      return new Response(null, { status: 204 });
+      return done();
     }
-    if (pathname === "/__test/roster/alarm" && request.method === "GET") {
-      return json({ alarm: await testRosterOf(env).testAlarmTime() });
+    if (route === "GET /__test/roster/alarm") return json({ alarm: await testRosterOf(env).testAlarmTime() });
+    if (route === "PUT /__test/roster/extra-work") {
+      const { due, every } = (await request.json()) as { due: number; every: number };
+      await testRosterOf(env).testSetExtraWork(due, every);
+      return done();
     }
-    if (pathname === "/__test/roster/card" && request.method === "PUT") {
-      const body = (await request.json()) as CardDoorBody;
+    if (route === "GET /__test/roster/extra-work") return json({ runs: await testRosterOf(env).testExtraWorkRuns() });
+    if (route === "PUT /__test/roster/card") {
+      const body = (await request.json()) as CardToWrite;
       const slots = new Map<string, SlotState>();
       for (const [platform, s] of Object.entries(body.platforms)) {
-        slots.set(platform, { current: s.current, lastDeclared: s.last_declared, switchCount: s.switch_count, correctionDate: s.correction_date === null ? null : parseDay(s.correction_date) });
+        const slot = slotOfJson(s);
+        if (slot === null) return new Response(null, { status: 400 });
+        slots.set(platform, slot);
       }
       await testRosterOf(env).testWriteCard(body.scope_string, body.scoped_id, { lastCardProof: parseDay(body.last_card_proof), proofsOnLastDate: body.proofs_on_last_date, slots }, body.seq);
-      return new Response(null, { status: 204 });
+      return done();
     }
-    if (pathname === "/__test/roster/break" && request.method === "POST") {
+    if (route === "POST /__test/roster/break") {
       await testRosterOf(env).testBreak();
-      return new Response(null, { status: 204 });
+      return done();
     }
-    if (pathname === "/__test/verify" && request.method === "POST") {
+    if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });
     }
-    if (pathname === "/__test/poseidon2" && request.method === "POST") {
+    if (route === "POST /__test/poseidon2") {
       const { inputs } = (await request.json()) as { inputs: string[] };
       try {
         return json({ hash: hexOf(poseidon2Hash(inputs.map(bytesOfHex))) });
@@ -118,5 +173,9 @@ export default {
       }
     }
     return worker.fetch(request, env, ctx);
+  },
+  /** The schedule, with the settings the test replaced. */
+  async scheduled(controller, deployedEnv): Promise<void> {
+    return worker.scheduled(controller, testEnv(deployedEnv));
   },
 } satisfies ExportedHandler<Env>;

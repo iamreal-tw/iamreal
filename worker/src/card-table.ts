@@ -11,17 +11,21 @@
 //   last_seq                               the `seq` of the card's last valid record
 //
 // `slots` is JSON, an object keyed by platform ID in ascending order, each
-// value with exactly `current`, `last_declared`, `switch_count` and
-// `correction_date`: the names and the spelling of `card-state`'s
-// `platforms` (docs/api/card-proof.md). A date is `YYYY-MM-DD`. Facts only:
-// how many switches a slot has used, never whether another is allowed.
+// value a slot in the back end's one spelling of it (slot-json.ts). A date
+// is `YYYY-MM-DD`. Facts only: how many switches a slot has used, never
+// whether another is allowed.
 //
 // A card without a valid record has no row. A row holds the slots the rules
 // gave it; a platform added to the table later has no entry in the rows
 // written before, and the rules read a missing slot as the empty one.
+//
+// A row is checked when it is read (readCard): a state the rules cannot
+// have left is not handed on.
 import { byBytes } from "iamreal-protocol/bytes.ts";
-import { type Day, formatDay, parseDay } from "iamreal-protocol/date.ts";
-import type { CardState, SlotState } from "iamreal-protocol/roster-rules.ts";
+import { formatDay, parseDay } from "iamreal-protocol/date.ts";
+import type { PlatformRow } from "iamreal-protocol/platforms.ts";
+import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/roster-rules.ts";
+import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
 
 export const CARD_TABLE = `
 CREATE TABLE IF NOT EXISTS cards (
@@ -40,35 +44,40 @@ export interface StoredCard {
   readonly lastSeq: number;
 }
 
-interface SlotJson {
-  current: string | null;
-  last_declared: string | null;
-  switch_count: number;
-  correction_date: string | null;
-}
-
-/** A stored row that is not what writeCard writes. The message names the column, never the card. */
+/**
+ * A stored row that is not one the rules can have left: the stored state is
+ * broken. The message names the column, never the card or a value.
+ */
 function corrupt(column: string): Error {
-  return new Error(`card state table: ${column} is not as written`);
-}
-
-function dayOfText(text: string, column: string): Day {
-  const day = parseDay(text);
-  if (day === null) throw corrupt(column);
-  return day;
+  return new Error(`card state table: ${column} is not a state the rules leave`);
 }
 
 const stringOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
 
-/** The state of the card, or null if it has no valid record. */
-export function readCard(sql: SqlStorage, scopeString: string, scopedId: string): StoredCard | null {
+/**
+ * The state of the card, or null if it has no valid record.
+ *
+ * Throws if the row is not a state the roster rules can have left for a
+ * card of this roster (spec/roster-rules.md, "State"; `platforms` is the
+ * roster's table):
+ *
+ *   - `last_card_proof` is a date; `proofs_on_last_date` is 1 to 3; `last_seq` is 1 or more;
+ *   - every slot is on a platform of the table;
+ *   - its `switch_count` is 0 to 5, its dates are dates, and its items fit
+ *     each other and the card's last card proof (protocol/, possibleSlot);
+ *   - `current` and `last_declared` are in the `username` format of the platform.
+ *
+ * The limits are the constants of protocol/, not numbers of this file.
+ */
+export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], scopeString: string, scopedId: string): StoredCard | null {
   const rows = sql.exec("SELECT last_card_proof, proofs_on_last_date, slots, last_seq FROM cards WHERE scope_string = ? AND scoped_id = ?", scopeString, scopedId).toArray();
   const row = rows[0];
   if (row === undefined) return null;
   const { last_card_proof, proofs_on_last_date, slots: slotsText, last_seq } = row;
-  if (typeof last_card_proof !== "string") throw corrupt("last_card_proof");
-  if (typeof proofs_on_last_date !== "number" || !Number.isSafeInteger(proofs_on_last_date)) throw corrupt("proofs_on_last_date");
-  if (typeof last_seq !== "number" || !Number.isSafeInteger(last_seq)) throw corrupt("last_seq");
+  const lastCardProof = typeof last_card_proof === "string" ? parseDay(last_card_proof) : null;
+  if (lastCardProof === null) throw corrupt("last_card_proof");
+  if (typeof proofs_on_last_date !== "number" || !Number.isSafeInteger(proofs_on_last_date) || proofs_on_last_date < 1 || proofs_on_last_date > MAX_PER_DATE) throw corrupt("proofs_on_last_date");
+  if (typeof last_seq !== "number" || !Number.isSafeInteger(last_seq) || last_seq < 1) throw corrupt("last_seq");
   if (typeof slotsText !== "string") throw corrupt("slots");
   let parsed: unknown;
   try {
@@ -79,18 +88,17 @@ export function readCard(sql: SqlStorage, scopeString: string, scopedId: string)
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw corrupt("slots");
   const slots = new Map<string, SlotState>();
   for (const [platform, s] of Object.entries(parsed as Record<string, Partial<SlotJson> | null>)) {
+    const tableRow = platforms.find((p) => p.platform === platform);
+    if (tableRow === undefined) throw corrupt("slots");
     if (typeof s !== "object" || s === null) throw corrupt("slots");
     const { current, last_declared, switch_count, correction_date } = s;
-    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date)) throw corrupt("slots");
-    if (typeof switch_count !== "number" || !Number.isSafeInteger(switch_count)) throw corrupt("slots");
-    slots.set(platform, {
-      current,
-      lastDeclared: last_declared,
-      switchCount: switch_count,
-      correctionDate: correction_date === null ? null : dayOfText(correction_date, "slots"),
-    });
+    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") throw corrupt("slots");
+    const slot = slotOfJson({ current, last_declared, switch_count, correction_date });
+    if (slot === null || !possibleSlot(slot, lastCardProof)) throw corrupt("slots");
+    for (const username of [slot.current, slot.lastDeclared]) if (username !== null && !tableRow.format.accepts(username)) throw corrupt("slots");
+    slots.set(platform, slot);
   }
-  return { card: { lastCardProof: dayOfText(last_card_proof, "last_card_proof"), proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
+  return { card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
 }
 
 /**
@@ -101,15 +109,7 @@ export function readCard(sql: SqlStorage, scopeString: string, scopedId: string)
 export function writeCard(sql: SqlStorage, scopeString: string, scopedId: string, card: CardState, seq: number): void {
   if (card.lastCardProof === null) throw new Error("card state table: a card without a valid record has no row");
   const slots: Record<string, SlotJson> = {};
-  for (const platform of [...card.slots.keys()].sort(byBytes)) {
-    const s = card.slots.get(platform)!;
-    slots[platform] = {
-      current: s.current,
-      last_declared: s.lastDeclared,
-      switch_count: s.switchCount,
-      correction_date: s.correctionDate === null ? null : formatDay(s.correctionDate),
-    };
-  }
+  for (const platform of [...card.slots.keys()].sort(byBytes)) slots[platform] = slotToJson(card.slots.get(platform)!);
   sql.exec(
     "INSERT OR REPLACE INTO cards (scope_string, scoped_id, last_card_proof, proofs_on_last_date, slots, last_seq) VALUES (?, ?, ?, ?, ?, ?)",
     scopeString,

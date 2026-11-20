@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
+import type { CardToWrite, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 
@@ -131,6 +132,12 @@ export interface TestWorker {
   files(prefix?: string): Promise<StoredFile[]>;
   /** From now on the Worker's clock shows `time`. */
   setClock(time: Date): Promise<void>;
+  /**
+   * From now on the environment has these settings in place of
+   * wrangler.jsonc's (test build, `PUT /__test/settings`). A roster's object
+   * that is running keeps the ones it started with until `roster.restart()`.
+   */
+  setSettings(settings: TestSettings): Promise<void>;
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
   /**
@@ -156,6 +163,15 @@ export interface TestWorker {
     /** How many milliseconds from now the object's alarm is set for, or null if it has none (test build, `GET /__test/roster/alarm`). */
     alarmInMs(): Promise<number | null>;
     /**
+     * Gives the object a second piece of timed work next to its own: due at
+     * `due` on the object's clock, and after each run due again `everyMs`
+     * later (test build, `PUT /__test/roster/extra-work`). It is kept in
+     * memory: gone when the object starts again.
+     */
+    setExtraWork(due: Date, everyMs: number): Promise<void>;
+    /** The times, on the object's clock, at which that second piece ran. */
+    extraWorkRuns(): Promise<Date[]>;
+    /**
      * The challenges the object still holds, read from its storage. A
      * stopgap: no endpoint shows yet whether a challenge is known. When
      * submitting a record does (`challenge_unknown`, #67), the tests ask
@@ -174,18 +190,10 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-/** A card's state in the spelling of `card-state`'s answer, the card it is of, and the `seq` of its last valid record. */
-export interface CardToWrite {
-  readonly scope_string: string;
-  readonly scoped_id: string;
-  readonly seq: number;
-  readonly last_card_proof: string;
-  readonly proofs_on_last_date: number;
-  readonly platforms: Readonly<Record<string, { current: string | null; last_declared: string | null; switch_count: number; correction_date: string | null }>>;
-}
+export type { CardToWrite, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
-const ROSTER_OBJECT = { name: "test-1" };
+const DEPLOYED_ROSTER_OBJECT = "test-1";
 
 let issuers: IssuerKey[] | undefined;
 
@@ -205,6 +213,12 @@ export function testIssuers(): IssuerKey[] {
 export interface StartOptions {
   /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
   readonly crlTimeoutMs?: number;
+  /**
+   * Settings of the environment to start with in place of wrangler.jsonc's:
+   * which roster (`ROSTER_KIND`) and the name of its object
+   * (`ROSTER_OBJECT_NAME`). The configuration file is not changed.
+   */
+  readonly settings?: TestSettings;
 }
 
 /** Builds the test build and starts it in the local workerd, with a fake MOICA that has no CRL yet. */
@@ -223,8 +237,17 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     throw e;
   }
   const worker = server.getWorker<{ DATA: Bucket }>();
+  let settings: TestSettings = {};
+  const setSettings = async (next: TestSettings): Promise<void> => {
+    const res = await server.fetch("/__test/settings", { method: "PUT", body: JSON.stringify(next) });
+    if (res.status !== 204) throw new Error(`replacing the settings: HTTP ${res.status}`);
+    settings = next;
+  };
+  const rosterObject = (): { name: string } => ({ name: settings.ROSTER_OBJECT_NAME ?? DEPLOYED_ROSTER_OBJECT });
+  if (options.settings !== undefined) await setSettings(options.settings);
 
   return {
+    setSettings,
     url,
     moica,
     fetch: (input, init) => server.fetch(input, init as never) as unknown as Promise<Response>,
@@ -263,7 +286,16 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       return ((await res.json()) as { hash: string }).hash;
     },
     roster: {
-      restart: () => worker.evictDurableObject("ROSTER" as never, ROSTER_OBJECT),
+      restart: () => worker.evictDurableObject("ROSTER" as never, rosterObject()),
+      async setExtraWork(due, everyMs) {
+        const res = await server.fetch("/__test/roster/extra-work", { method: "PUT", body: JSON.stringify({ due: due.getTime(), every: everyMs }) });
+        if (res.status !== 204) throw new Error(`setting the extra work: HTTP ${res.status}`);
+      },
+      async extraWorkRuns() {
+        const res = await server.fetch("/__test/roster/extra-work");
+        if (res.status !== 200) throw new Error(`reading the extra work: HTTP ${res.status}`);
+        return ((await res.json()) as { runs: number[] }).runs.map((ms) => new Date(ms));
+      },
       async runAlarm() {
         const res = await server.fetch("/__test/roster/alarm", { method: "POST" });
         if (res.status !== 204) throw new Error(`running the alarm: HTTP ${res.status}`);
@@ -275,7 +307,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         return alarm === null ? null : alarm - Date.now();
       },
       async storedChallenges() {
-        const storage = await worker.getDurableObjectStorage("ROSTER" as never, ROSTER_OBJECT);
+        const storage = await worker.getDurableObjectStorage("ROSTER" as never, rosterObject());
         return (await storage.exec<{ challenge: string }>("SELECT challenge FROM challenges ORDER BY challenge")).map((row) => row.challenge);
       },
       async writeCard(card) {

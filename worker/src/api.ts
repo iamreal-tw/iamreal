@@ -8,14 +8,19 @@
 // endpoint and where it failed, to the live log, which is not kept. That
 // line holds nothing that came in the request and nothing of the error's
 // own text, which could quote it.
+//
+// Every endpoint reads the environment's settings first (settings.ts): with
+// a `ROSTER_KIND` that names no roster, none of them answers anything but
+// `500`.
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
-import { type PlatformRow, platformsOf } from "iamreal-protocol/platforms.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
-import { type Roster as RosterKind, lookupScope } from "iamreal-protocol/scope.ts";
+import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { readStrings } from "./json.ts";
-import { rosterOf } from "./roster.ts";
+import { OTHER_ROSTER, rosterOf } from "./roster.ts";
+import { rosterSettingsOf } from "./settings.ts";
+import { type SlotJson, slotToJson } from "./slot-json.ts";
 
 /** The largest request body read, in bytes: a longer one is `malformed`. */
 export const MAX_BODY_BYTES = 64 * 1024;
@@ -38,42 +43,41 @@ const ok = (body: unknown): Reply => ({ status: 200, body });
 const fail = (status: number, code: string): Reply => ({ status, body: { error: code } });
 const MALFORMED = fail(400, "malformed");
 
-/** A failure of the back end itself; `where` is the step, written by this file. */
+/**
+ * Where the back end failed, as the one line about it says (`where`):
+ *
+ *   settings      `ROSTER_KIND` names no roster
+ *   roster_kind   the roster's object holds another roster than `ROSTER_KIND` names
+ *   roster        anything else in the roster's object, a stored state that is broken among it
+ *   handler       anywhere else
+ */
+type Where = "settings" | "roster_kind" | "roster" | "handler";
+
+/** A failure of the back end itself. */
 class Internal extends Error {
-  readonly where: string;
-  constructor(where: string, cause: unknown) {
+  readonly where: Where;
+  constructor(where: Where, cause: unknown) {
     super(where, { cause });
     this.where = where;
   }
 }
 
-/** Runs one step; if it throws, the failure carries the step's name. */
-async function step<T>(where: string, run: () => T | Promise<T>): Promise<T> {
+/** Reads the settings; a failure is `settings`. */
+function settings(env: Env): ReturnType<typeof rosterSettingsOf> {
   try {
-    return await run();
+    return rosterSettingsOf(env);
   } catch (e) {
-    throw new Internal(where, e);
+    throw new Internal("settings", e);
   }
 }
 
-/**
- * Which roster this environment serves: the setting `ROSTER_KIND`
- * (wrangler.jsonc), "test" or "production". It selects the scope string and
- * the platform table, which are written in protocol/, not in the setting.
- */
-export function rosterKindOf(env: Env): RosterKind {
-  const kind: string = env.ROSTER_KIND;
-  if (kind === "test" || kind === "production") return kind;
-  throw new Error("ROSTER_KIND is neither test nor production");
-}
-
-/**
- * The platform table of this environment's roster, in ascending order of
- * platform ID (protocol/src/platforms.ts). The one place the back end gets it: what `config` sends to
- * devices and what the back end itself reads are the same table.
- */
-export function platformTableOf(env: Env): readonly PlatformRow[] {
-  return platformsOf(rosterKindOf(env));
+/** Asks the roster's object; a failure is `roster`, or `roster_kind` when the object says it holds another roster. */
+async function askRoster<T>(run: () => T | Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (e) {
+    throw new Internal(e instanceof Error && e.message === OTHER_ROSTER ? "roster_kind" : "roster", e);
+  }
 }
 
 /**
@@ -105,7 +109,8 @@ async function readBody(request: Request): Promise<string | null> {
 
 /** `POST /api/v1/challenges`: the roster's object issues and stores it. The body is not read. */
 async function postChallenge(_request: Request, env: Env): Promise<Reply> {
-  const challenge = await step("roster", () => rosterOf(env).issueChallenge());
+  settings(env);
+  const challenge = await askRoster(() => rosterOf(env).issueChallenge());
   return ok({ challenge });
 }
 
@@ -115,8 +120,7 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  * in the order of docs/api/card-proof.md.
  */
 async function postCardState(request: Request, env: Env): Promise<Reply> {
-  const kind = await step("settings", () => rosterKindOf(env));
-  const table = platformTableOf(env);
+  const { kind, platforms: table } = settings(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
   const fields = readStrings(text, ["scope_string", "scoped_id"]);
@@ -125,18 +129,10 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
   if (!lookupScope(kind, fields.scope_string)) return MALFORMED;
   if (parseScopedId(fields.scoped_id) === null) return MALFORMED;
 
-  const { card, count } = await step("roster", () => rosterOf(env).cardState(fields.scope_string, fields.scoped_id));
-  const platforms: Record<string, unknown> = {};
-  for (const { platform } of table) {
-    // A platform the stored state has no slot for is a slot never used.
-    const slot = card?.slots.get(platform) ?? EMPTY_SLOT;
-    platforms[platform] = {
-      current: slot.current,
-      last_declared: slot.lastDeclared,
-      switch_count: slot.switchCount,
-      correction_date: slot.correctionDate === null ? null : formatDay(slot.correctionDate),
-    };
-  }
+  const { card, count } = await askRoster(() => rosterOf(env).cardState(fields.scope_string, fields.scoped_id));
+  const platforms: Record<string, SlotJson> = {};
+  // A platform the stored state has no slot for is a slot never used.
+  for (const { platform } of table) platforms[platform] = slotToJson(card?.slots.get(platform) ?? EMPTY_SLOT);
   return ok({
     last_card_proof: card === null || card.lastCardProof === null ? null : formatDay(card.lastCardProof),
     proofs_on_last_date: card?.proofsOnLastDate ?? 0,
@@ -147,13 +143,14 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 
 /**
  * `GET /api/v1/config`: the CRL age bound and the platform table of this
- * roster, in ascending order of platform ID. The Worker answers by itself.
+ * roster, in ascending order of platform ID. The Worker answers by itself,
+ * without asking the roster's object.
  */
 async function getConfig(_request: Request, env: Env): Promise<Reply> {
-  const table = await step("settings", () => platformTableOf(env));
+  const { platforms } = settings(env);
   return ok({
     crl_max_age_days: CRL_MAX_AGE_DAYS,
-    platforms: table.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.format.text })),
+    platforms: platforms.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.format.text })),
   });
 }
 
