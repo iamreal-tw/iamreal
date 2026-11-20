@@ -131,6 +131,36 @@ export function nextFingerprint(fingerprint: string, recordHashOfNext: string): 
   return sha256Hex(utf8(`${FINGERPRINT_VERSION}\n${fingerprint}\n${recordHashOfNext}`));
 }
 
+/** A full file of the roster directory has this many lines (spec/record.md, "The published roster"). */
+export const LINES_PER_FILE = 1000;
+
+/** `before`, the number of records before a roster file, as the 16 digits of its name. */
+function fileNumber(before: number): string {
+  if (!Number.isSafeInteger(before) || before < 0 || before % LINES_PER_FILE !== 0) throw new Error("not a number of records a roster file follows");
+  return String(before).padStart(16, "0");
+}
+
+/** The name, in the roster directory, of the roster file that follows the first `before` records: `before` in 16 digits, then `.jsonl`. */
+export function rosterFileName(before: number): string {
+  return `${fileNumber(before)}.jsonl`;
+}
+
+/** The path, in the roster directory, of the record hash list of the roster file `rosterFileName(before)`. */
+export function hashListName(before: number): string {
+  return `hashes/${fileNumber(before)}.txt`;
+}
+
+/**
+ * The record hash list of a roster file (spec/record.md, "Record hash
+ * lists"): `fingerprintBefore` is the roster fingerprint at the end of the
+ * file before it (EMPTY_FINGERPRINT for the first file), `recordHashes` the
+ * record hash of each of its lines, in order. Each value is followed by LF.
+ */
+export function hashList(fingerprintBefore: string, recordHashes: readonly string[]): string {
+  for (const value of [fingerprintBefore, ...recordHashes]) if (!LOWER_HEX_64.test(value)) throw new Error("not 64 lowercase hex digits");
+  return [fingerprintBefore, ...recordHashes].map((value) => `${value}\n`).join("");
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
