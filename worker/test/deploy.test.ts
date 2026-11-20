@@ -1,10 +1,14 @@
-// The parts of `pnpm run deploy:test` that can be checked without
-// deploying (scripts/deploy.ts): how it reads the token out of `.env.local`
-// and which environment it runs wrangler in. The text here is made up; the
-// real `.env.local` is never read by a test.
+// The parts of deploying that can be checked without deploying
+// (scripts/deploy.ts): how `pnpm run deploy:test` reads the token out of
+// `.env.local`, which environment it runs wrangler in, and the arguments of
+// the build and of the upload, which the workflow uses too. The text here is
+// made up; the real `.env.local` is never read by a test.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
-import { DEPLOY_ARGS, deployTokenOf, wranglerEnv } from "../scripts/deploy.ts";
+import { WORKER_DIR, buildArgs, deployTokenOf, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
 
 const TOKEN = "made-up-token_0123456789";
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
@@ -77,9 +81,67 @@ test("the builds the tests make run wrangler in the same environment, without a 
   });
 });
 
-test("the command deploys the test environment and names nothing else", () => {
-  // test/build.ts adds `--dry-run --outdir` to these, so the build test/bundle.test.ts looks at is
-  // this command's. An `--alias` or `--define` added here would change that build.
-  // Why `--experimental-provision=false`: scripts/deploy.ts, at DEPLOY_ARGS.
-  assert.deepEqual(DEPLOY_ARGS, ["deploy", "--env", "test", "--experimental-provision=false"]);
+test("deploying is two commands: a build of the test environment, then an upload of that build as it is", () => {
+  // Why each argument: scripts/deploy.ts, at WRANGLER_ARGS. The test build (test/build.ts) adds an
+  // entry point, `--alias` and `--define` to the first; nothing here may.
+  assert.deepEqual(buildArgs("/tmp/out"), [
+    "deploy",
+    "--config",
+    "wrangler.jsonc",
+    "--env",
+    "test",
+    "--experimental-provision=false",
+    "--env-file=/dev/null",
+    "--dry-run",
+    "--outdir",
+    "/tmp/out",
+  ]);
+  assert.deepEqual(uploadArgs("/tmp/out/index.js"), [
+    "deploy",
+    "/tmp/out/index.js",
+    "--no-bundle",
+    "--config",
+    "wrangler.jsonc",
+    "--env",
+    "test",
+    "--experimental-provision=false",
+    "--env-file=/dev/null",
+  ]);
+});
+
+test("wrangler reads none of the .env files it would read by default", () => {
+  // wrangler 4.160.1 loads `.env`, `.env.local`, `.env.<env>` and `.env.<env>.local` from its working
+  // directory into its environment unless `--env-file` names others; one of them could set
+  // CLOUDFLARE_API_BASE_URL and send the token elsewhere. Each file here sets
+  // WRANGLER_OUTPUT_FILE_PATH, which wrangler writes to right after loading them, so the file
+  // appears if and only if wrangler read that .env file. A dry run sends no request.
+  mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
+  const dir = mkdtempSync(join(WORKER_DIR, "test-output", "dotenv-"));
+  try {
+    copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(dir, "wrangler.jsonc"));
+    symlinkSync(join(WORKER_DIR, "node_modules"), join(dir, "node_modules"));
+    mkdirSync(join(dir, "out"));
+    writeFileSync(join(dir, "out", "index.js"), "export class Roster {}\nexport default { fetch() { return new Response(null, { status: 404 }); } };\n");
+    const read: string[] = [];
+    const files = [".env", ".env.local", ".env.test", ".env.test.local"];
+    for (const [i, file] of files.entries()) {
+      const marker = join(dir, `marker-${i}`);
+      writeFileSync(join(dir, file), `WRANGLER_OUTPUT_FILE_PATH=${marker}\n`);
+      for (const [what, args] of [
+        ["without the flag", uploadArgs("out/index.js").filter((a) => a !== "--env-file=/dev/null")],
+        ["upload", uploadArgs("out/index.js")],
+      ] as const) {
+        rmSync(marker, { force: true });
+        const r = spawnSync(join(dir, "node_modules", ".bin", "wrangler"), [...args, "--dry-run"], { cwd: dir, encoding: "utf8", env: wranglerEnv(process.env) });
+        assert.equal(r.status, 0, `${what}, ${file}:\n${r.stdout}\n${r.stderr}`);
+        if (existsSync(marker)) read.push(`${what} ${file}`);
+      }
+      rmSync(join(dir, file));
+    }
+    // Without the flag every file is read: the check can see it.
+    assert.deepEqual(read, files.map((f) => `without the flag ${f}`));
+    assert.ok(buildArgs("out").includes("--env-file=/dev/null"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -58,6 +58,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - wrangler 的設定檔，特別是 `build.command`：部署時會執行它（[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)）
 - `package.json` 的 `scripts`，特別是 `preinstall`、`install`、`postinstall`、`prepare`：安裝套件時就會執行
 - 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
+- 安裝套件和 wrangler 啟動時會讀的檔：`.npmrc`、`.pnpmfile.cjs`（或 `.mjs`、`.js`）、`pnpm-workspace.yaml`、`worker/` 底下的 `.env*`
 - 部署的工作會呼叫的任何腳本
 
 審外人的 PR 時，`/code-review` 照這份清單列出動到哪幾項、每一項改了什麼；動到任何一項，維護者自己看過才合併。
@@ -82,5 +83,5 @@ PR 的說明照 `/pr` 的格式，「Evidence」列出下面每一項的結果�
 - `go test -count=1 -tags iamrealtest ./...`（要設 `IAMREAL_BB` 指到 `bb`）
 - 動到 `protocol/` 時：在 `protocol/` 跑 `pnpm typecheck`、`pnpm test`，再跑下面 `web/` 和 `worker/` 的那幾項（兩邊都引用它）
 - 動到 `web/` 時：在 `web/` 跑 `pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
-- 動到 `worker/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`
+- 動到 `worker/` 或 `.github/workflows/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`（工作流程的檢查在 `worker/test/workflows.test.ts`）
 - 動到畫面時：桌機和手機寬度的截圖
