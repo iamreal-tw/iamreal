@@ -68,7 +68,7 @@ for all of them (ADR-0017).
 - Response `200`:
 
   ```
-  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}},"count":137,"head":"…"}
+  {"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}},"count":137}
   ```
 
   - `last_card_proof` and `proofs_on_last_date` are the card's. A card with
@@ -91,11 +91,11 @@ for all of them (ADR-0017).
     `null`. It is not sent a second time in another form.
   - The dates of the individual switches are not sent. The rules do not
     read them; they are in the roster.
-  - `count` is the number of records the answer was computed at, and
-    `head` the roster fingerprint of those records
-    ([`spec/record.md`](../../spec/record.md)): of every record stored at
-    that moment, not the last line published in `fingerprints.jsonl`. The
-    name `head` is from before ADR-0021; the new backend changes it.
+  - `count` is the number of records the answer was computed at: every
+    record stored at that moment, not the count of the last line published
+    in `fingerprints.jsonl`. The answer carries no roster fingerprint; the
+    Go backend (`server/`), kept only for comparison, still sends one as
+    `head`.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 The server sends facts, not conclusions. The device computes the rest from
