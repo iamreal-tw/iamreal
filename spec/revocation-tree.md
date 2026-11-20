@@ -222,6 +222,11 @@ for it.
 
 [`vectors/poseidon2.json`](vectors/poseidon2.json), `revocation_tree`: small
 trees with their roots and proofs of absence.
+[`vectors/revocation-tree.json`](vectors/revocation-tree.json): CRLs in
+MOICA's layout, signed by test keys (not MOICA's), with their roots, and the
+proofs of absence of serial numbers in them, in the form of the circuit's
+inputs ([`circuit-inputs.md`](circuit-inputs.md)) that `iamreal-crl prove`
+prints; a serial number in the tree has none.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
