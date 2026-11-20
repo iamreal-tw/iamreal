@@ -1,25 +1,46 @@
 # The checks of a pull request: the items of the definition of done in
 # CONTRIBUTING.md (ADR-0029, on pull requests from outside), on every pull
-# request. web/'s browser tests (`pnpm test:e2e`, `pnpm test:ui`) are in
-# checks-browser.yml, which runs only when a file they use changes. The
-# workflows are ASCII only, comments included (worker/test/workflows.ts).
+# request and on every merge group of the merge queue (#180). web/'s browser
+# tests (`pnpm test:e2e`, `pnpm test:ui`) are in checks-browser.yml, which
+# runs only on pull requests that change a file they use, not in the queue.
+# The workflows are ASCII only, comments included (worker/test/workflows.ts).
 #
-# Triggered by pull_request only, never pull_request_target: a pull request
-# from a fork gets no secret and a read-only GITHUB_TOKEN. Nothing here
-# refers to a secret, and nothing is cached, so a pull request writes nothing
-# another run reads (GitHub's "Events that trigger workflows", pull_request,
-# "Workflows in forked repositories"). worker/test/workflows.test.ts checks this file against
-# the rules in worker/test/workflows.ts.
+# Triggered by pull_request, never pull_request_target: a pull request from a
+# fork gets no secret and a read-only GITHUB_TOKEN (GitHub's "Events that
+# trigger workflows", pull_request, "Workflows in forked repositories").
+# And by merge_group, which the merge queue needs: the checks the ruleset of
+# main requires (go, typescript, device-core, the jobs' ids) are reported
+# only by a workflow that runs on it (same page, merge_group). A merge group
+# is a branch of this repository with the pull request's change in it, from a
+# fork too, and GitHub's documentation does not say that limit holds for it.
+# What keeps its runs safe is this file: nothing here refers to a secret,
+# the token can only read, and nothing is cached, so a run writes nothing
+# another run reads; and a change to this file is read line by line before
+# it is merged (CONTRIBUTING.md). worker/test/workflows.test.ts checks this
+# file against the rules in worker/test/workflows.ts.
+#
+# Concurrency: a new push to a pull request cancels the run before it, in the
+# group of the pull request's number. A merge group's run has no pull request
+# in its event; its group is github.ref, "the branch or tag ref that
+# triggered the workflow run" (GitHub's "Contexts reference", github
+# context), for merge_group "Ref of the merge group" ("Events that trigger
+# workflows", merge_group): the temporary branch the queue makes for each
+# pull request in it, gh-readonly-queue/main/... ("Managing a merge queue").
+# Without it the merge groups' runs would share one group and cancel each
+# other.
 name: checks
 
 on:
   pull_request:
+  merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
 
 concurrency:
-  group: checks-${{ github.event.pull_request.number }}
+  group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
