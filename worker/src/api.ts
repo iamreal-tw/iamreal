@@ -216,15 +216,17 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 }
 
 /**
- * `GET /api/v1/config`: the CRL age bound and the platform table of this
- * roster, in ascending order of platform ID. The Worker answers by itself,
- * without asking the roster's object.
+ * `GET /api/v1/config`: the CRL age bound, the platform table of this
+ * roster, in ascending order of platform ID, and the minimum app version
+ * (src/min-app.ts). The Worker answers by itself, without asking the
+ * roster's object.
  */
 async function getConfig(_request: Request, env: Env): Promise<Reply> {
-  const { platforms } = settings(env);
+  const { platforms, minApp } = settings(env);
   return ok({
     crl_max_age_days: CRL_MAX_AGE_DAYS,
     platforms: platforms.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.format.text })),
+    min_app: { android: { build: minApp.android.build, from: minApp.android.from }, ios: { build: minApp.ios.build, from: minApp.ios.from } },
   });
 }
 

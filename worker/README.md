@@ -63,9 +63,11 @@ pnpm typecheck   # 型別檢查
 | `POST /api/v1/challenges` | Durable Object | 日期是發出那一刻的台灣日期，加 16 個隨機位元組；先存進題目表再回。請求的內容不讀。存著的規則版本和程式的不同時不發，回 `503` `paused` |
 | `POST /api/v1/records` | Worker 和 Durable Object 各兩段 | 見[送出一筆](#送出一筆) |
 | `POST /api/v1/card-state` | Worker 檢查格式，Durable Object 讀卡片狀態表 | 場合字串不是這份名冊的、匿名編號不是它唯一的寫法，都是 `malformed`，不問 Durable Object。平台表的每個平台一項；存著的狀態沒有某個平台的名額時，那一項是沒用過的名額。回應沒有 `head` |
-| `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表 |
+| `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表；`min_app` 是這份名冊的最低版本 |
 
 **平台表**寫在 [`protocol/src/platforms.ts`](../protocol/src/platforms.ts)，照名冊分兩張，內容和 `spec/scope.md` 的表一字不差（`protocol/` 的測試拿規格的 Markdown 核對）。後台只從 [`src/settings.ts`](src/settings.ts) 的 `rosterSettingsOf` 一個地方取得它：`config` 送給裝置的、`card-state` 列的、檢查存著的卡片狀態用的是同一張。這個環境用哪一份名冊，是設定 `ROSTER_KIND`（見[設定檔](#設定檔)）；設定只說是哪一份，表的內容不在設定裡。
+
+**最低版本**（`min_app`，`spec/min-app.md`、ADR-0035）寫在 [`src/min-app.ts`](src/min-app.ts)，正式名冊和測試名冊各一組，同樣照 `ROSTER_KIND` 選，從 `rosterSettingsOf` 取得。現在兩組都是 Android、iOS 的 `build` 1、`from` 2026-11-20：`build` 最小就是 1，沒有任何一版 app 會停下來。調高時改這個檔，一次一個 PR，說明裡寫理由。後台收證明時不看 app 的版本；`test/api.test.ts` 確認兩份名冊送出的值兩個 app 都讀得懂（`protocol/src/min-app.ts`）。
 
 ### 名冊和物件的名稱要對得上
 
