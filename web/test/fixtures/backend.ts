@@ -5,16 +5,16 @@
 // test's HTTP server.
 //
 // It keeps a small roster of its own, for one card: what the default answers
-// to card-state and to a submission say, by the event rules of
-// spec/roster-rules.md (protocol/src/roster-rules.ts), so that card proofs one
-// after the other see each other. It verifies nothing: no proof, no
-// challenge, no root. A test that sets `cardState` answers card-state with it
+// to card-state and to a submission say, by the roster rules
+// (spec/roster-rules.md, applyRecord of protocol/src/roster-rules.ts), so
+// that card proofs one after the other see each other. It verifies nothing:
+// no proof, no challenge, no root. A test that sets `cardState` answers card-state with it
 // as it is, and the default submission's kinds are then computed against it
 // (and the roster of its own is left as it was).
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type SlotState, applyKind, dailyLimitReached, listOutcome } from "iamreal-protocol/roster-rules.ts";
+import { type CardState, type SlotState, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
 
 export interface LoggedRequest {
   method: string;
@@ -58,20 +58,8 @@ export interface Answer {
   bytes: Uint8Array;
 }
 
-interface Card {
-  lastCardProof: Day | null;
-  proofsOnLastDate: number;
-  slots: Map<string, SlotState>;
-}
-
-const emptyCard = (platforms: readonly string[]): Card => ({
-  lastCardProof: null,
-  proofsOnLastDate: 0,
-  slots: new Map(platforms.map((p) => [p, { current: null, lastDeclared: null, switchCount: 0, correctionDate: null }])),
-});
-
 /** A card-state answer, read back into the roster's terms (loosely: it is the test's own). */
-function cardOf(answer: Record<string, unknown>): Card {
+function cardOf(answer: Record<string, unknown>): CardState {
   const day = (x: unknown): Day | null => (typeof x === "string" ? parseDay(x) : null);
   const slots = new Map<string, SlotState>();
   const platforms = typeof answer.platforms === "object" && answer.platforms !== null ? (answer.platforms as Record<string, Record<string, unknown>>) : {};
@@ -93,11 +81,11 @@ export class FakeBackend {
   readonly submissions: Record<string, unknown>[] = [];
   readonly opts: BackendOptions;
   /** The roster of its own: one card. */
-  card: Card;
+  card: CardState;
 
   constructor(opts: BackendOptions) {
     this.opts = opts;
-    this.card = emptyCard(this.table().map((r) => r.platform));
+    this.card = newCard(this.table().map((r) => r.platform));
   }
 
   private table(): readonly PlatformTableRow[] {
@@ -129,20 +117,25 @@ export class FakeBackend {
     const accounts = Array.isArray(body.accounts) ? (body.accounts as { platform: string; username: string }[]) : [];
     const list = new Map(accounts.map((a) => [a.platform, a.username]));
     const d = parseDay(String(body.challenge).slice(0, 10)) ?? taiwanDay(this.opts.clock());
-    const o = listOutcome(card.slots, list, d);
-    if (!o.valid) return this.json(400, { error: o.reason });
-    if (dailyLimitReached(card, d)) return this.json(400, { error: "daily_limit" });
-    const kinds = o.kinds.map((k) => ({
+    // The roster rules for a roster of one card, with the answers this
+    // server does not check: the record verifies, its challenge is new, its
+    // root is recognized.
+    const o = applyRecord({
+      platforms: [...new Set([...card.slots.keys(), ...list.keys()])],
+      record: { accounts, date: d, verifies: true },
+      card,
+      latestValidDate: card.lastCardProof,
+      challengeUsed: false,
+      crlDates: [d],
+    });
+    if (!o.result.valid) return this.json(400, { error: o.result.reason });
+    const kinds = o.result.kinds.map((k) => ({
       platform: k.platform,
       kind: k.kind,
       username: k.kind === "withdraw" ? card.slots.get(k.platform)!.current! : list.get(k.platform)!,
       account_cards: k.kind === "withdraw" ? 0 : 1,
     }));
-    if (own) {
-      for (const k of o.kinds) card.slots.set(k.platform, applyKind(card.slots.get(k.platform) ?? { current: null, lastDeclared: null, switchCount: 0, correctionDate: null }, k.kind, list.get(k.platform) ?? null, d));
-      if (card.lastCardProof === null || d > card.lastCardProof) [card.lastCardProof, card.proofsOnLastDate] = [d, 1];
-      else if (d === card.lastCardProof) card.proofsOnLastDate++;
-    }
+    if (own) this.card = o.card;
     return this.json(201, { seq: this.submissions.length, record_hash: await sha256Hex(new TextEncoder().encode(raw)), kinds });
   }
 

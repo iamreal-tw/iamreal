@@ -1,0 +1,299 @@
+// The roster rules as one function that keeps nothing (src/roster-rules.ts),
+// and the state kept in memory around it (src/roster-memory.ts), against
+// spec/vectors/roster-rules.json: the same file the Go tests read.
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+import { type Day, formatDay, parseDay } from "../src/date.ts";
+import { MemoryRoster } from "../src/roster-memory.ts";
+import { type CardState, EMPTY_SLOT, RULES_VERSION, type RecordInput, type SlotState, applyList, applyRecord, dailyLimitReached, newCard, possibleCard, possibleSlot } from "../src/roster-rules.ts";
+import { repoFile, vectors } from "./vectors.ts";
+
+const TABLES = { production: ["threads"], test: ["test-example", "threads"] } as const;
+
+const day = (s: string): Day => parseDay(s)!;
+const dateText = (d: Day | null): string | null => (d === null ? null : formatDay(d));
+
+/** A card's state in the vectors' spelling: `proofs_on_last_date` and `slots`. */
+const slotsOut = (card: CardState) =>
+  Object.fromEntries([...card.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: dateText(s.correctionDate) }]));
+
+/** The state in memory in the vectors' spelling of `state`. */
+const stateOut = (roster: MemoryRoster) =>
+  roster.output().map((scope) => ({
+    scope_string: scope.scopeString,
+    cards: scope.cards.map((c) => {
+      const card = roster.card(scope.scopeString, c.scopedId);
+      return { scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof), accounts: c.accounts, proofs_on_last_date: card.proofsOnLastDate, slots: slotsOut(card) };
+    }),
+    accounts: scope.accounts.map((a) => ({ platform: a.platform, username: a.username, cards: a.cards.map((c) => ({ scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof) })) })),
+  }));
+
+describe("the version number of the rules", () => {
+  // The Go tests check roster.RulesVersion against the same two places (roster/version_test.go).
+  test("the constant is the number spec/roster-rules.md states and the vectors carry", () => {
+    const stated = /^\*\*These rules are version ([1-9][0-9]*)\.\*\*$/m.exec(new TextDecoder().decode(repoFile("spec/roster-rules.md")));
+    assert.notEqual(stated, null, "spec/roster-rules.md states the version in one sentence");
+    assert.equal(String(RULES_VERSION), stated![1]);
+    assert.equal(vectors("roster-rules.json").rules_version, RULES_VERSION);
+  });
+});
+
+describe("roster-rules.json: every case, record by record, through the state in memory", () => {
+  for (const c of vectors("roster-rules.json").cases) {
+    test(c.name, () => {
+      const roster = new MemoryRoster(TABLES[c.roster as "production" | "test"]);
+      assert.equal(c.events.length, c.results.length);
+      c.events.forEach((e: Record<string, any>, i: number) => {
+        const before = roster.card(e.scope_string, e.scoped_id);
+        const beforeText = JSON.stringify(slotsOut(before));
+        const latestBefore = roster.latestValidDate;
+        const outcome = roster.apply({
+          scopeString: e.scope_string,
+          scopedId: e.scoped_id,
+          challenge: e.challenge,
+          accounts: e.accounts,
+          verifies: e.verifies,
+          crlDates: e.crl_dates.map(day),
+        });
+        const { seq, ...want } = c.results[i];
+        assert.equal(seq, i + 1);
+        assert.deepEqual(outcome.result, want, `event ${e.seq}`);
+        assert.equal(roster.count, i + 1);
+        const after = roster.card(e.scope_string, e.scoped_id);
+        if (want.valid) {
+          // "Every valid record": the card's date is the record's.
+          assert.equal(dateText(after.lastCardProof), e.date, `event ${e.seq}`);
+        } else {
+          // "What an invalid record changes": nothing of its card, not the roster's latest valid date.
+          assert.equal(after.lastCardProof, before.lastCardProof, `event ${e.seq}`);
+          assert.equal(after.proofsOnLastDate, before.proofsOnLastDate, `event ${e.seq}`);
+          assert.equal(JSON.stringify(slotsOut(after)), beforeText, `event ${e.seq}`);
+          assert.equal(roster.latestValidDate, latestBefore, `event ${e.seq}`);
+        }
+        // Every state the rules produce is one the device reads.
+        const today = Math.max(day(e.date), after.lastCardProof ?? day(e.date));
+        assert.ok(possibleCard(after.lastCardProof, after.proofsOnLastDate, today), `event ${e.seq}: the card's items`);
+        for (const [p, slot] of after.slots) assert.ok(possibleSlot(slot, after.lastCardProof), `event ${e.seq}: the slot ${p}`);
+      });
+      assert.deepEqual(stateOut(roster), c.state);
+    });
+  }
+});
+
+describe("applyRecord: one record, the state of its card, three facts about the roster", () => {
+  const today = day("2026-11-16");
+  const alice: SlotState = { current: "alice", lastDeclared: "alice", switchCount: 1, correctionDate: day("2026-03-02") };
+  const card = (o: Partial<SlotState> = {}, lastCardProof = day("2026-11-04"), proofsOnLastDate = 1): CardState => ({ lastCardProof, proofsOnLastDate, slots: new Map([["threads", { ...alice, ...o }]]) });
+  const input = (o: Partial<RecordInput> = {}, accounts = [{ platform: "threads", username: "bob" }], verifies = true): RecordInput => ({
+    platforms: ["threads"],
+    record: { accounts, date: today, verifies },
+    card: card(),
+    latestValidDate: day("2026-11-15"),
+    challengeUsed: false,
+    crlDates: [today],
+    ...o,
+  });
+
+  test("a valid record: its kinds, the card after it, the roster's latest valid date", () => {
+    assert.deepEqual(applyRecord(input()), {
+      result: { valid: true, kinds: [{ platform: "threads", kind: "switch" }] },
+      card: { lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", { current: "bob", lastDeclared: "bob", switchCount: 2, correctionDate: today }]]) },
+      latestValidDate: today,
+      blockedPlatform: null,
+    });
+  });
+
+  test("the first record of a card and of the roster", () => {
+    assert.deepEqual(applyRecord(input({ card: newCard(["threads"]), latestValidDate: null })), {
+      result: { valid: true, kinds: [{ platform: "threads", kind: "first" }] },
+      card: { lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", { current: "bob", lastDeclared: "bob", switchCount: 0, correctionDate: today }]]) },
+      latestValidDate: today,
+      blockedPlatform: null,
+    });
+  });
+
+  test("a valid record dated before the roster's latest valid date does not move it back", () => {
+    const o = applyRecord(input({ latestValidDate: day("2026-11-18") }));
+    assert.equal(o.result.valid, true);
+    assert.equal(o.latestValidDate, day("2026-11-18"));
+  });
+
+  test("the checks in order: the first that fails gives the code", () => {
+    const blocked = card({ switchCount: 5 }, today, 3);
+    // Everything wrong at once, then one check fewer each time.
+    const all: RecordInput = input({ card: blocked, challengeUsed: true, crlDates: [], latestValidDate: day("2026-11-21") }, undefined, false);
+    assert.deepEqual(applyRecord(all).result, { valid: false, reason: "proof" });
+    const verifies = { ...all, record: { ...all.record, verifies: true } };
+    assert.deepEqual(applyRecord(verifies).result, { valid: false, reason: "challenge_reused" });
+    assert.deepEqual(applyRecord({ ...verifies, challengeUsed: false }).result, { valid: false, reason: "root" });
+    const rooted = { ...verifies, challengeUsed: false, crlDates: [today] };
+    assert.deepEqual(applyRecord(rooted).result, { valid: false, reason: "date_order" });
+    const ordered = { ...rooted, latestValidDate: day("2026-11-20") };
+    assert.deepEqual(applyRecord(ordered), { result: { valid: false, reason: "switch_limit" }, card: blocked, latestValidDate: day("2026-11-20"), blockedPlatform: "threads" });
+    // The same account: nothing blocked, and the fourth record of the date.
+    assert.deepEqual(applyRecord({ ...ordered, record: { ...ordered.record, accounts: [{ platform: "threads", username: "alice" }] } }).result, { valid: false, reason: "daily_limit" });
+  });
+
+  test("check 3: the CRL date minus 1 day to the CRL date plus 3 days; one CRL that fits is enough", () => {
+    const reason = (crlDates: Day[]) => {
+      const r = applyRecord(input({ crlDates })).result;
+      return r.valid ? "valid" : r.reason;
+    };
+    assert.equal(reason([today + 1]), "valid");
+    assert.equal(reason([today + 2]), "root");
+    assert.equal(reason([today - 3]), "valid");
+    assert.equal(reason([today - 4]), "root");
+    assert.equal(reason([today - 9, today, today + 9]), "valid");
+    assert.equal(reason([]), "root");
+  });
+
+  test("check 4: 4 days before the roster's latest valid date; not before the card's own last card proof", () => {
+    const reason = (o: Partial<RecordInput>) => {
+      const r = applyRecord(input(o)).result;
+      return r.valid ? "valid" : r.reason;
+    };
+    assert.equal(reason({ latestValidDate: today + 4 }), "valid");
+    assert.equal(reason({ latestValidDate: today + 5 }), "date_order");
+    assert.equal(reason({ card: card({}, today) }), "valid");
+    assert.equal(reason({ card: card({}, today + 1) }), "date_order");
+  });
+
+  test("an invalid record gives back the state it was given, and the latest valid date as it was", () => {
+    for (const o of [input({ challengeUsed: true }), input({ crlDates: [] }), input({ card: card({ switchCount: 5 }) }), input({}, undefined, false)]) {
+      const out = applyRecord(o);
+      assert.equal(out.result.valid, false);
+      assert.equal(out.card, o.card);
+      assert.equal(out.latestValidDate, o.latestValidDate);
+    }
+  });
+
+  test("it keeps nothing and changes nothing: the same input twice gives the same outcome", () => {
+    const frozen = input({ card: Object.freeze({ lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", Object.freeze({ ...alice })]]) }) });
+    Object.freeze(frozen);
+    Object.freeze(frozen.record);
+    const text = JSON.stringify([frozen, [...frozen.card.slots]]);
+    const first = applyRecord(frozen);
+    const second = applyRecord(frozen);
+    assert.deepEqual(first, second);
+    assert.equal(first.card.proofsOnLastDate, 2);
+    assert.equal(JSON.stringify([frozen, [...frozen.card.slots]]), text);
+    assert.notEqual(first.card.slots, frozen.card.slots);
+  });
+
+  test("a platform of the table without a slot in the state has the empty slot; the state after has every platform", () => {
+    const o = applyRecord(input({ platforms: ["threads", "test-example"], card: card() }, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "alice" }]));
+    assert.deepEqual(o.result, { valid: true, kinds: [{ platform: "test-example", kind: "first" }, { platform: "threads", kind: "refresh" }] });
+    assert.deepEqual([...o.card.slots.keys()], ["test-example", "threads"]);
+    assert.deepEqual(o.card.slots.get("test-example"), { current: "carol", lastDeclared: "carol", switchCount: 0, correctionDate: today });
+    // Left alone, the new platform has no kind and stays empty.
+    const left = applyRecord(input({ platforms: ["threads", "test-example"], card: card() }, [{ platform: "threads", username: "alice" }]));
+    assert.deepEqual(left.result, { valid: true, kinds: [{ platform: "threads", kind: "refresh" }] });
+    assert.deepEqual(left.card.slots.get("test-example"), EMPTY_SLOT);
+  });
+
+  test("not a record of the roster: an error, not a reason code", () => {
+    assert.throws(() => applyRecord(input({}, [{ platform: "example", username: "bob" }])), /outside the table/);
+    assert.throws(() => applyRecord(input({}, [{ platform: "threads", username: "bob" }, { platform: "threads", username: "carol" }])), /twice/);
+    assert.throws(() => applyRecord(input({ card: { ...card(), slots: new Map([["example", { ...alice }]]) } })), /outside the table/);
+  });
+});
+
+describe("applyList: checks 5 and 6, what the device computes before signing", () => {
+  const today = day("2026-11-16");
+  const slot = (o: Partial<SlotState>): SlotState => ({ current: "alice", lastDeclared: "alice", switchCount: 1, correctionDate: day("2026-03-02"), ...o });
+  const one = (s: SlotState, entry: string | null, lastCardProof: Day | null = day("2026-11-04"), n = 1) =>
+    applyList(["threads"], { lastCardProof, proofsOnLastDate: n, slots: new Map([["threads", s]]) }, entry === null ? [] : [{ platform: "threads", username: entry }], today);
+  const kindOf = (s: SlotState, entry: string | null) => {
+    const o = one(s, entry);
+    return o.result.valid ? o.result.kinds.map((k) => k.kind).join() : o.result.reason;
+  };
+
+  test("the event rules on one slot: first, refresh, correction, switch, blocked; withdraw", () => {
+    assert.equal(kindOf(EMPTY_SLOT, "alice"), "first");
+    assert.equal(kindOf(EMPTY_SLOT, null), "empty");
+    assert.equal(kindOf(slot({}), "alice"), "refresh");
+    assert.equal(kindOf(slot({ current: null }), "alice"), "refresh");
+    assert.equal(kindOf(slot({}), "bob"), "switch");
+    assert.equal(kindOf(slot({ correctionDate: today }), "bob"), "correction");
+    assert.equal(kindOf(slot({ switchCount: 5 }), "bob"), "switch_limit");
+    // After the fifth, a correction on its date is still a correction.
+    assert.equal(kindOf(slot({ switchCount: 5, correctionDate: today }), "bob"), "correction");
+    assert.equal(kindOf(slot({}), null), "withdraw");
+    assert.equal(kindOf(slot({ current: null }), null), "empty");
+  });
+
+  test("the slot after each kind", () => {
+    const after = (s: SlotState, entry: string | null) => one(s, entry).card.slots.get("threads");
+    assert.deepEqual(after(EMPTY_SLOT, "alice"), { current: "alice", lastDeclared: "alice", switchCount: 0, correctionDate: today });
+    assert.deepEqual(after(slot({ current: null }), "alice"), slot({}));
+    assert.deepEqual(after(slot({ correctionDate: today }), "bob"), { current: "bob", lastDeclared: "bob", switchCount: 1, correctionDate: today });
+    assert.deepEqual(after(slot({}), "bob"), { current: "bob", lastDeclared: "bob", switchCount: 2, correctionDate: today });
+    assert.deepEqual(after(slot({}), null), slot({ current: null }));
+  });
+
+  test("a blocked platform names itself and blocks the other platforms' changes", () => {
+    const card: CardState = { lastCardProof: day("2026-11-04"), proofsOnLastDate: 1, slots: new Map([["test-example", { ...EMPTY_SLOT }], ["threads", slot({ switchCount: 5 })]]) };
+    const o = applyList(["test-example", "threads"], card, [{ platform: "test-example", username: "carol" }, { platform: "threads", username: "bob" }], today);
+    assert.deepEqual(o, { result: { valid: false, reason: "switch_limit" }, card, blockedPlatform: "threads" });
+  });
+
+  test("3 records today: nothing more today; tomorrow again", () => {
+    assert.deepEqual(one(slot({}), "alice", today, 3).result, { valid: false, reason: "daily_limit" });
+    assert.equal(one(slot({}), "alice", today, 2).card.proofsOnLastDate, 3);
+    assert.equal(one(slot({}), "alice", today - 1, 3).card.proofsOnLastDate, 1);
+    // `empty` and `switch_limit` come before `daily_limit`.
+    assert.deepEqual(one(slot({ current: null }), null, today, 3).result, { valid: false, reason: "empty" });
+    assert.deepEqual(one(slot({ switchCount: 5 }), "bob", today, 3).result, { valid: false, reason: "switch_limit" });
+
+    const s = { lastCardProof: today, proofsOnLastDate: 3 };
+    assert.equal(dailyLimitReached(s, today), true);
+    assert.equal(dailyLimitReached(s, today + 1), false);
+    assert.equal(dailyLimitReached({ ...s, proofsOnLastDate: 2 }, today), false);
+    // The last card proof dated after today: a card proof dated today is date_order, not daily_limit.
+    assert.equal(dailyLimitReached(s, today - 1), false);
+    assert.equal(dailyLimitReached({ lastCardProof: null, proofsOnLastDate: 0 }, today), false);
+  });
+});
+
+describe("states the rules cannot produce", () => {
+  test("possibleSlot, possibleCard", () => {
+    const today = day("2026-11-16");
+    const lcp = day("2026-11-04");
+    const ok: SlotState = { current: "bob", lastDeclared: "bob", switchCount: 1, correctionDate: day("2026-03-02") };
+    assert.equal(possibleSlot(ok, lcp), true);
+    assert.equal(possibleSlot(EMPTY_SLOT, null), true);
+    assert.equal(possibleSlot({ ...ok, current: null }, lcp), true);
+    for (const [label, s, l] of [
+      ["current is not last_declared", { ...ok, current: "alice" }, lcp],
+      ["last_declared without correction_date", { ...ok, correctionDate: null }, lcp],
+      ["correction_date without last_declared", { ...EMPTY_SLOT, correctionDate: lcp }, lcp],
+      ["switches without an account ever", { ...EMPTY_SLOT, switchCount: 1 }, lcp],
+      ["6 switches", { ...ok, switchCount: 6 }, lcp],
+      ["-1 switches", { ...ok, switchCount: -1 }, lcp],
+      ["1.5 switches", { ...ok, switchCount: 1.5 }, lcp],
+      ["an account without a last card proof", ok, null],
+      ["correction_date after the last card proof", { ...ok, correctionDate: day("2026-11-05") }, lcp],
+    ] as const) {
+      assert.equal(possibleSlot(s as SlotState, l), false, label);
+    }
+    for (const n of [1, 2, 3]) assert.equal(possibleCard(lcp, n, today), true, String(n));
+    for (const n of [0, 4, -1, 1.5, NaN, Infinity]) assert.equal(possibleCard(lcp, n, today), false, String(n));
+    assert.equal(possibleCard(null, 0, today), true);
+    for (const n of [1, 3, -1, 0.5]) assert.equal(possibleCard(null, n, today), false, String(n));
+    assert.equal(possibleCard(day("2026-11-19"), 1, today), true);
+    assert.equal(possibleCard(day("2026-11-20"), 1, today), false);
+  });
+});
+
+describe("the state in memory", () => {
+  test("not a well-formed record: an error, and nothing changes", () => {
+    const roster = new MemoryRoster(["threads"]);
+    const r = { scopeString: "iamreal:public:0_______________", scopedId: "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880", accounts: [{ platform: "threads", username: "alice" }], verifies: true, crlDates: [day("2026-01-01")] };
+    assert.throws(() => roster.apply({ ...r, challenge: "2026-01-01" }), /challenge/);
+    assert.throws(() => roster.apply({ ...r, challenge: "2026-01-01.GQ6BW1FY2H0WBP91MMG57JWPF0", accounts: [{ platform: "example", username: "alice" }] }), /outside the table/);
+    assert.equal(roster.count, 0);
+    assert.deepEqual(roster.output(), []);
+    // The challenge of the record that threw is not used.
+    assert.equal(roster.apply({ ...r, challenge: "2026-01-01.GQ6BW1FY2H0WBP91MMG57JWPF0" }).result.valid, true);
+  });
+});
