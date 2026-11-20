@@ -1,0 +1,91 @@
+# Deploys the test site (the Worker iamreal-test, test.iamreal.tw) with each
+# push to main (ADR-0029). worker/README.md, the section on deploying from
+# GitHub Actions, has the details; worker/test/workflows.ts holds this
+# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
+# file against them.
+#
+# "build" has no token. It runs the repository's code: scripts/build-deploy.ts
+# makes the deploy build the way `pnpm run deploy:test` does (the proof
+# verifier's files checked against their SHA-256, then a wrangler dry run)
+# and checks it, then hands it on as an artifact.
+#
+# "deploy" uploads that build as it is. Only its last step has the token
+# (the repository's CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID).
+# Before that step the job runs the pinned actions, npm installing pnpm
+# before the repository is checked out, and pnpm installing the packages
+# of the lockfile with no install script and no .pnpmfile.cjs; it runs no
+# script of the repository. What it still trusts: the pinned actions;
+# pnpm 10.16.1 as npm's registry serves it (no hash is checked); the
+# packages of pnpm-lock.yaml, wrangler among them, as pnpm-workspace.yaml
+# and the lockfile describe them; and wrangler.jsonc, which wrangler reads
+# when it uploads (it has no build command: wrangler would run it).
+name: deploy-test
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One deploy at a time, the newest last; a running one is not stopped halfway.
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
+      - run: pnpm install --frozen-lockfile
+      - name: Build the Worker and check the build
+        working-directory: worker
+        run: node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker-build
+          path: ${{ runner.temp }}/worker-build
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Node and pnpm before the checkout: no file of the repository (an .npmrc) is there yet.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
+      # wrangler.jsonc has the bindings; the lockfile has wrangler.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install wrangler
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-worker
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: worker-build
+          path: ${{ runner.temp }}/worker-build
+      # The build's index.js and the modules next to it, as they are (--no-bundle), with the
+      # bindings of wrangler.jsonc. The arguments are uploadArgs of worker/scripts/deploy.ts;
+      # --env-file=/dev/null keeps wrangler from loading a .env file of the checkout.
+      - name: Upload to iamreal-test
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: WRANGLER_SEND_METRICS=false WRANGLER_HIDE_BANNER=true node_modules/.bin/wrangler deploy "$RUNNER_TEMP/worker-build/index.js" --no-bundle --config wrangler.jsonc --env test --experimental-provision=false --env-file=/dev/null

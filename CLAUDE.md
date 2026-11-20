@@ -38,11 +38,12 @@
 | `protocol/` | `spec/` 的 TypeScript 實作：名冊規則、場合字串、宣告碼、匿名編號、題目 | 後台和裝置用的是同一份規則 | 無 |
 | `worker/` | 後台（TypeScript，Cloudflare 的 Worker 專案，ADR-0023） | 規則有照做 | `protocol/` |
 | `server/` | 舊的後台（Go），只當 `worker/` 逐案比對的對照，比對通過後刪掉 | `worker/` 的每一筆判斷和它相同 | `verifier/`、`roster/`、`crl/` |
-| `web/`、`android/`、`ios/` | 持卡人裝置上執行的程式 | 憑證、公鑰、簽章、PIN 沒有離開裝置 | `protocol/`；不引用 `worker/`、`server/` |
+| `device-core/` | Android、iOS 共用的核心（Rust，ADR-0034）：`spec/` 的實作、憑證和清冊的檢查、算證明 | 兩個 app 在手機上做的檢查和算法是同一份，而且不碰 PIN、網路、NFC | Barretenberg、Noir 的 ACVM |
+| `web/`、`android/`、`ios/` | 持卡人裝置上執行的程式 | 憑證、公鑰、簽章、PIN 沒有離開裝置 | `web/`：`protocol/`；`android/`、`ios/`：`device-core/`；都不引用 `worker/`、`server/` |
 
 - 目錄在第一次需要時才建立，建立時附 `README.md`：這個目錄讓人檢查什麼、怎麼單獨執行
 - Go 的程式是同一個模組，`go.mod` 在根目錄；`verifier/` 和 `roster/` 要能不帶後台單獨編譯
-- Go 的 `verifier/`、`roster/`、`crl/`、`cmd/` 是後台以外的第二份實作，每天的重驗用它（ADR-0025、ADR-0030）。Go 不引用 TypeScript，TypeScript 不引用 Go；兩邊只共用 `spec/`
+- Go 的 `verifier/`、`roster/`、`crl/`、`cmd/` 是後台以外的第二份實作，每天的重驗用它（ADR-0025、ADR-0030）。Go、TypeScript、Rust（`device-core/`，ADR-0034）的實作互不引用，只共用 `spec/`
 - `worker/` 現在只有骨架（清冊鏡像的排程、測試專用的建置）。它做完之前，後台是 Go 的 `server/`
 - 做任何畫面、寫任何介面文字之前，先讀 `docs/design/principles.md`
 - 兩種以上語言都要實作的算法，測試一律讀 `spec/vectors/` 裡同一份標準答案
