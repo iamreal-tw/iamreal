@@ -24,7 +24,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
-import { type ConfiguredSite, checkCpuLimit, checkSiteFiles, configuredCpuMs, configuredSites } from "../scripts/deploy-build-checks.ts";
+import { type ConfiguredSite, checkClearedOn, checkCpuLimit, checkSiteFiles, configuredClearedOn, configuredCpuMs, configuredSites } from "../scripts/deploy-build-checks.ts";
 import { RUN_WORKER_FIRST, SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
 import { CRL_CATCH_UP_MS, RESERVED_FOR_LARGEST_CRL_MS, ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WORKER_DIR } from "./build.ts";
@@ -156,6 +156,21 @@ test("a configuration that runs the Worker for the card proof page's files, lets
   assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
   checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });
   assert.throws(() => checkSiteFiles({}), /has an environment/);
+});
+
+test("the date the test roster was last cleared on is a date of the calendar; a configuration with another value is turned away before it is deployed", () => {
+  const configured = configuredClearedOn();
+  assert.deepEqual(Object.keys(configured).sort(), Object.keys(ENVIRONMENTS).sort());
+  assert.deepEqual(configured.test, { kind: "test", clearedOn: read("test").vars.TEST_ROSTER_CLEARED_ON });
+  assert.match(String(configured.test!.clearedOn), /^\d{4}-\d{2}-\d{2}$/);
+  checkClearedOn(configured);
+  // Deployed, such a value makes the test site answer nothing but 500 (src/settings.ts).
+  for (const other of ["2026-11-31", "2026-02-30", "2026-13-01", "2026-11-00", "2026-1-9", "20261119", "2026/11/19", "2026-11-19 ", "soon", "", undefined, 20261119]) {
+    assert.throws(() => checkClearedOn({ test: { kind: "test", clearedOn: other } }), /TEST_ROSTER_CLEARED_ON of the test environment/, String(other));
+  }
+  // A production roster's pages have no mark: the setting is not read, and is not asked for.
+  checkClearedOn({ test: configured.test!, production: { kind: "production", clearedOn: undefined } });
+  assert.throws(() => checkClearedOn({}), /has an environment/);
 });
 
 test("a round stops starting older files 2.5 minutes in: what is left of the CPU time is several times what the largest CRL's tree was measured to take", () => {

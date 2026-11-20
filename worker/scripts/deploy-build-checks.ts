@@ -9,7 +9,8 @@
 // And the configuration it is uploaded with gives an invocation the CPU
 // time a round of the CRL mirror counts on (`checkCpuLimit`), and has
 // Cloudflare send the files of site/ itself, with the headers of the
-// environment's kind of roster (`checkSiteFiles`).
+// environment's kind of roster (`checkSiteFiles`), and a test roster's
+// site has a date to say it was last cleared on (`checkClearedOn`).
 //
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
@@ -26,6 +27,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
+import { parseDay } from "iamreal-protocol/date.ts";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
@@ -223,6 +225,36 @@ export function checkCpuLimit(cpuMs: Readonly<Record<string, number | undefined>
   for (const [env, ms] of Object.entries(cpuMs)) assert.equal(ms, ROUND_CPU_MS, `limits.cpu_ms of the ${env} environment is the CPU time a round of the CRL mirror counts on`);
 }
 
+/**
+ * `ROSTER_KIND` and `TEST_ROSTER_CLEARED_ON` of every environment of
+ * wrangler.jsonc, each read the way wrangler reads it for `--env <name>`
+ * (as `configuredCpuMs` reads).
+ */
+export function configuredClearedOn(): Record<string, { kind: unknown; clearedOn: unknown }> {
+  const { rawConfig } = experimental_readRawConfig({ config: WRANGLER_CONFIG });
+  const out: Record<string, { kind: unknown; clearedOn: unknown }> = {};
+  for (const env of Object.keys(rawConfig.env ?? {})) {
+    const { vars } = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
+    out[env] = { kind: vars.ROSTER_KIND, clearedOn: vars.TEST_ROSTER_CLEARED_ON };
+  }
+  return out;
+}
+
+/**
+ * In every environment that serves a test roster, `TEST_ROSTER_CLEARED_ON`
+ * is a date of the calendar, `YYYY-MM-DD`, read as the Worker reads it
+ * (src/settings.ts): with any other value the deployed test site answers
+ * nothing but 500, its API included, and that would only be seen after the
+ * deploy.
+ */
+export function checkClearedOn(configured: Readonly<Record<string, { kind: unknown; clearedOn: unknown }>>): void {
+  assert.ok(Object.keys(configured).length > 0, "wrangler.jsonc has an environment");
+  for (const [env, { kind, clearedOn }] of Object.entries(configured)) {
+    if (kind !== "test") continue;
+    assert.ok(typeof clearedOn === "string" && parseDay(clearedOn) !== null, `TEST_ROSTER_CLEARED_ON of the ${env} environment is a date, YYYY-MM-DD`);
+  }
+}
+
 /** How one environment of wrangler.jsonc has Static Assets send the files of its directory. */
 export interface ConfiguredSite {
   /** `ROSTER_KIND`: which roster the environment serves. */
@@ -309,4 +341,5 @@ export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   checkEngineFiles(b);
   checkCpuLimit(configuredCpuMs());
   checkSiteFiles(configuredSites());
+  checkClearedOn(configuredClearedOn());
 }
