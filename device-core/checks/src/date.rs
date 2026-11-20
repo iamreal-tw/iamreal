@@ -13,14 +13,48 @@ pub struct Date {
 const TAIWAN_OFFSET_SECONDS: i64 = 8 * 3600;
 const SECONDS_PER_DAY: i64 = 86_400;
 
-fn days_in_month(year: u16, month: u8) -> u8 {
+fn is_leap(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+/// The number of days of a month of the Gregorian calendar.
+pub fn days_in_month(year: i64, month: i64) -> i64 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        // Every fourth year from 2000 to 2049 is a leap year, 2000 included.
-        _ if year.is_multiple_of(4) => 29,
+        _ if is_leap(year) => 29,
         _ => 28,
     }
+}
+
+/// The number of days from 1970-01-01 to a date of the Gregorian calendar.
+pub fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    // Years start in March, so that the leap day is the last day of one.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let year_of_era = y.rem_euclid(400);
+    let day_of_year = (153 * ((month + 9) % 12) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// The date, as (year, month, day), of a number of days from 1970-01-01.
+pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let day_of_era = z.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (year, month, day)
 }
 
 impl Date {
@@ -30,7 +64,7 @@ impl Date {
         let exists = (2000..=2049).contains(&year)
             && (1..=12).contains(&month)
             && day >= 1
-            && day <= days_in_month(year, month);
+            && i64::from(day) <= days_in_month(i64::from(year), i64::from(month));
         exists.then_some(Date { year, month, day })
     }
 
@@ -73,7 +107,7 @@ impl Date {
         }
         let mut month = 1u8;
         loop {
-            let length = u32::from(days_in_month(year, month));
+            let length = days_in_month(i64::from(year), i64::from(month)) as u32;
             if left < length {
                 break;
             }
@@ -81,6 +115,15 @@ impl Date {
             month += 1;
         }
         Date::new(year, month, left as u8 + 1)
+    }
+
+    /// The number of days from 1970-01-01 to this date.
+    pub fn days_since_1970(&self) -> i64 {
+        days_from_civil(
+            i64::from(self.year),
+            i64::from(self.month),
+            i64::from(self.day),
+        )
     }
 
     pub fn year(&self) -> u16 {
@@ -100,5 +143,22 @@ impl Date {
 impl std::fmt::Display for Date {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn days_and_dates_agree() {
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+        assert_eq!(days_from_civil(2000, 1, 1), 10_957);
+        assert_eq!(days_from_civil(2026, 11, 16), 20_773);
+        for days in [-800_000, -1, 0, 59, 60, 10_957, 11_016, 20_773, 2_932_896] {
+            let (y, m, d) = civil_from_days(days);
+            assert_eq!(days_from_civil(y, m, d), days);
+        }
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
     }
 }
