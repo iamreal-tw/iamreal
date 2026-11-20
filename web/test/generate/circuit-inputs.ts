@@ -22,7 +22,7 @@ import { Noir } from "@noir-lang/noir_js";
 import { asciiBytes, hexOf } from "iamreal-protocol/bytes.ts";
 import { currentTime } from "iamreal-protocol/challenge.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import { declarationCode } from "iamreal-protocol/declaration-code.ts";
+import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId } from "iamreal-protocol/scoped-id.ts";
 import { checkCertificate } from "../../src/certificate.ts";
@@ -68,25 +68,19 @@ interface CrlSpec {
 // path runs past the random keys to depth 40.
 const near = (bits: number[]): bigint => bits.reduce((k, b) => k ^ (1n << BigInt(b)), cardSerial);
 const random = randomSerials(200, 7n);
+// The card's path ends at a leaf of another key.
+const leafSerials = [...random, near([40])];
+const leafWhat = "200 serials like MOICA's, and one that shares the card's lowest 40 bits: the card's path ends at that leaf";
+// The card's path ends in an empty subtree.
+const emptySerials = [...randomSerials(200, 11n), near([40]), near([40, 41])];
+const emptyWhat =
+  "200 serials like MOICA's, and two that share the card's lowest 40 bits and differ from it in bit 40: past the random keys the card's path runs on with zero siblings to depth 40, and ends in an empty subtree at depth 41";
 const crlSpecs: CrlSpec[] = [
-  {
-    name: "g3-leaf",
-    what: "200 serials like MOICA's, and one that shares the card's lowest 40 bits: the card's path ends at that leaf",
-    issuer: "G3",
-    serials: [...random, near([40])],
-  },
-  {
-    name: "g2-empty",
-    what: "200 serials like MOICA's, and two that share the card's lowest 40 bits and differ from it in bit 40: past the random keys the card's path runs on with zero siblings to depth 40, and ends in an empty subtree at depth 41",
-    issuer: "G2",
-    serials: [...randomSerials(200, 11n), near([40]), near([40, 41])],
-  },
-  {
-    name: "g3-empty-list",
-    what: "a CRL without revokedCertificates",
-    issuer: "G3",
-    serials: [],
-  },
+  { name: "g3-leaf", what: leafWhat, issuer: "G3", serials: leafSerials },
+  { name: "g3-empty", what: emptyWhat, issuer: "G3", serials: emptySerials },
+  { name: "g2-leaf", what: leafWhat, issuer: "G2", serials: leafSerials },
+  { name: "g2-empty", what: emptyWhat, issuer: "G2", serials: emptySerials },
+  { name: "g3-empty-list", what: "a CRL without revokedCertificates", issuer: "G3", serials: [] },
 ];
 
 interface Path {
@@ -127,8 +121,10 @@ async function pathOrInTree(crlName: string, serial: bigint): Promise<{ inTree: 
 }
 
 const treeCases: { label: string; crl: string; serial: bigint; expect: "old_leaf" | "empty" | "in_tree" }[] = [
-  { label: "the card's serial: the path ends at a leaf of another key", crl: "g3-leaf", serial: cardSerial, expect: "old_leaf" },
-  { label: "the card's serial: the path ends in an empty subtree", crl: "g2-empty", serial: cardSerial, expect: "empty" },
+  { label: "the card's serial, G3: the path ends at a leaf of another key", crl: "g3-leaf", serial: cardSerial, expect: "old_leaf" },
+  { label: "the card's serial, G2: the path ends in an empty subtree", crl: "g2-empty", serial: cardSerial, expect: "empty" },
+  { label: "the card's serial, G3: the path ends in an empty subtree", crl: "g3-empty", serial: cardSerial, expect: "empty" },
+  { label: "the card's serial, G2: the path ends at a leaf of another key", crl: "g2-leaf", serial: cardSerial, expect: "old_leaf" },
   { label: "a revoked serial: in the tree, no path", crl: "g3-leaf", serial: random[17]!, expect: "in_tree" },
   { label: "a serial of 20 bytes, not in the tree", crl: "g3-leaf", serial: (0x7fn << 152n) | 0x0123456789abcdef0123456789abcdefn, expect: "old_leaf" },
   { label: "an empty CRL: root 0, every sibling 0", crl: "g3-empty-list", serial: cardSerial, expect: "empty" },
@@ -168,11 +164,17 @@ const revocationTree = {
 
 // ------------------------------------------------------ the circuit inputs
 
-const scopeString = scopeOf("test");
-const scope = asciiBytes(scopeString);
-const code = await declarationCode(scopeString, [{ platform: "threads", username: "alice" }], challenge);
+interface Statement {
+  scopeString: string;
+  accounts: Account[];
+}
+const testRoster: Statement = { scopeString: scopeOf("test"), accounts: [{ platform: "threads", username: "alice" }] };
+const publicRoster: Statement = { scopeString: scopeOf("production"), accounts: [] };
 
-async function circuitCase(label: string, world: World, crlName: string) {
+async function circuitCase(label: string, world: World, crlName: string, statement: Statement) {
+  const scopeString = statement.scopeString;
+  const scope = asciiBytes(scopeString);
+  const code = await declarationCode(scopeString, statement.accounts, challenge);
   const checked = await checkCertificate(world.signingCert, day, world.issuers);
   assert.equal(checked.ok, true);
   if (!checked.ok) throw new Error(`${label}: the certificate does not pass`);
@@ -228,8 +230,10 @@ const circuitVectors = {
   issuers,
   generated_by: GENERATED_BY,
   cases: [
-    await circuitCase("G3 certificate (card_proof_rs4096); the path ends at a leaf of another key", g3, "g3-leaf"),
-    await circuitCase("G2 certificate (card_proof_rs2048); the path ends in an empty subtree", g2, "g2-empty"),
+    await circuitCase("G3 certificate (card_proof_rs4096), test roster; the path ends at a leaf of another key", g3, "g3-leaf", testRoster),
+    await circuitCase("G3 certificate (card_proof_rs4096), public roster, no accounts; the path ends in an empty subtree", g3, "g3-empty", publicRoster),
+    await circuitCase("G2 certificate (card_proof_rs2048), test roster; the path ends in an empty subtree", g2, "g2-empty", testRoster),
+    await circuitCase("G2 certificate (card_proof_rs2048), public roster, no accounts; the path ends at a leaf of another key", g2, "g2-leaf", publicRoster),
   ],
 };
 

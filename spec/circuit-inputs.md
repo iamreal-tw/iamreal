@@ -91,9 +91,11 @@ would declare something the cardholder did not confirm.
 ## Test vectors
 
 [`vectors/circuit-inputs.json`](vectors/circuit-inputs.json): certificates
-issued by test keys (not MOICA's), one for each circuit, with their paths,
-signatures and `current_time`, the whole input map and the expected public
-inputs. The circuits in [`../web/circuits/`](../web/circuits) accept each
+issued by test keys (not MOICA's), with their paths, signatures and
+`current_time`, the whole input map and the expected public inputs. Each
+circuit has two cases: one path ends at a leaf, the other in an empty
+subtree, one signs the test roster's scope string and the other the public
+roster's. The circuits in [`../web/circuits/`](../web/circuits) accept each
 input map, and compute the last three public inputs as listed. Each path is
 the path of the certificate's serial number in the CRL the case names in
 [`vectors/revocation-tree.json`](vectors/revocation-tree.json). How
