@@ -16,6 +16,7 @@
 import { parseDay } from "iamreal-protocol/date.ts";
 import { type PlatformRow, platformsOf } from "iamreal-protocol/platforms.ts";
 import type { Roster as RosterKind } from "iamreal-protocol/scope.ts";
+import { MIN_APP, type MinAppJson } from "./min-app.ts";
 
 export type { RosterKind };
 
@@ -32,6 +33,11 @@ export interface RosterSettings {
    * stored state of a card is checked against are the same table.
    */
   readonly platforms: readonly PlatformRow[];
+  /**
+   * The minimum app version `config` sends to the apps (`min_app`), the
+   * values of this roster in src/min-app.ts.
+   */
+  readonly minApp: MinAppJson;
   /**
    * The back end's policy on late switches (docs/api/card-proof.md,
    * `switch_restricted`): when true, a record the roster rules accept is
@@ -91,5 +97,5 @@ export function rosterSettingsOf(env: Env): RosterSettings {
   // A test roster's pages are not served without the date beside their mark.
   const cleared: unknown = (env as { TEST_ROSTER_CLEARED_ON?: unknown }).TEST_ROSTER_CLEARED_ON;
   if (kind === "test" && (typeof cleared !== "string" || parseDay(cleared) === null)) throw new Error("TEST_ROSTER_CLEARED_ON is not a date");
-  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true", testRosterClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
+  return { kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", testRosterClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }

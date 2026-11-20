@@ -156,7 +156,7 @@ describe("the component's window", () => {
     }
   });
 
-  // research/57: Chrome sometimes leaves open a window closed a few
+  // Chrome sometimes leaves open a window closed a few
   // milliseconds after it was opened (its first page still loading in
   // another process): `closed` turns true, then false again. The bridge looks
   // again and closes it again.
