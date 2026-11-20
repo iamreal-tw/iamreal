@@ -69,10 +69,13 @@ final class BuildTests: XCTestCase {
         XCTAssertTrue(copy.contains("\n\(ScreenCopy.testRoster)\u{3000}"))
     }
 
-    /// The name under the app's icon is what design/copy/ calls the app.
+    /// The name under the app's icon is the one of design/copy/app.md, for the test app.
     func testTheNameOfTheAppIsInDesignCopy() throws {
         let name = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-        XCTAssertTrue(try Repository.text("design/copy/card-proof.md").contains("「\(name)」app"), name)
+        let copy = try Repository.text("design/copy/app.md")
+        let section = try XCTUnwrap(copy.components(separatedBy: "\n## 主畫面上的名稱\n").last)
+        XCTAssertTrue(section.contains("測試 app"))
+        XCTAssertEqual(section.components(separatedBy: "```\n").dropFirst().first, "\(name)\n")
     }
 
     /// The hashes of the CRS are the ones the page's download checks.

@@ -1,7 +1,8 @@
 # The iOS check of a pull request: builds device-core/ for the simulator,
 # builds the app of ios/ and runs its tests in the simulator (ios/README.md).
 # It runs on macOS, whose minutes count for more than Linux's, so only when
-# the pull request changes ios/, device-core/ or this file (issue #155).
+# the pull request changes ios/, device-core/, a file the app carries or its
+# tests read, or this file (issue #155; .github/README.md).
 #
 # The same rules as checks.yml: triggered by pull_request only, never
 # pull_request_target; read-only; no secret; nothing cached; ASCII only.
@@ -21,6 +22,11 @@ on:
     paths:
       - ios/**
       - device-core/**
+      - spec/vectors/**
+      - design/copy/**
+      - web/circuits/**
+      - verifier/vk/**
+      - web/scripts/fetch-crs.mjs
       - .github/workflows/checks-ios.yml
 
 permissions:

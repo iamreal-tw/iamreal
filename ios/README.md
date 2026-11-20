@@ -23,7 +23,7 @@
 
 還沒有的（各有自己的票）：過卡的畫面和流程、讀卡（NFC，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）、上傳到 TestFlight（[#176](https://github.com/iamreal-tw/iamreal/issues/176)）。NFC 的 entitlement、`NFCReaderUsageDescription`、`Info.plist` 的 AID 清單在讀卡那張票加，這裡還沒有。`App/DeviceCore.swift` 現在只包了殼用到的三個函式，其餘的在用到的那張票加。
 
-主畫面上 app 的名稱暫時是「島民證明」（`design/copy/card-proof.md` 對 app 的稱呼）；正式的名稱、測試 app 和正式 app 怎麼分，在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。
+主畫面上 app 的名稱是「島民證明 測試」（`design/copy/app.md`，第一版，Android 的測試 app 相同）；正式的名稱、測試 app 和正式 app 怎麼分，在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。
 
 ## 環境在建置時寫死
 
@@ -81,7 +81,7 @@ xcodebuild test -project IamrealApp.xcodeproj -scheme IamrealApp \
 
 - `build-core.sh` 先下載 Barretenberg 的靜態函式庫（`device-core/fetch-barretenberg.sh`）和參數檔（`device-core/fetch-crs.sh`），兩者都核對 SHA-256 才用，再用 `cargo build --locked --release` 編出 `device-core/target/<target>/release/libiamreal_device_core.a`。Xcode 專案連結的就是那個位置的檔，所以改了 `device-core/` 要重跑它。它不放進 Xcode 的建置階段：下載不該發生在 Xcode 的建置裡，Xcode 給建置階段的環境變數（`SDKROOT` 等）也是給 iOS 的，不是給 cargo 在 Mac 上跑的建置腳本的。
 - `xcodebuild test` 建置 app、跑 `check-app.sh`、在模擬器上跑 `Tests/`。
-- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/` 或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
+- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/`、它讀的檔（`.github/README.md` 列出來）或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
 
 要在模擬器上看畫面：用 Xcode 打開 `IamrealApp.xcodeproj` 按執行，或 `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/IamrealApp.app` 再 `xcrun simctl launch booted tw.iamreal.app.test`。
 

@@ -209,10 +209,14 @@ export const BROWSER_PATHS: readonly string[] = [
 
 /**
  * The paths whose change runs the iOS check (checks-ios.yml), exactly: the
- * app, the core it links, and the workflow itself (issue #155: macOS
- * minutes count for more, so the check runs only for these).
+ * app, the core it links, what the app carries (the circuits, the
+ * verification keys) and what its tests read (the vectors, the copy, the
+ * hashes of the page's CRS), and the workflow itself. Issue #155: macOS
+ * minutes count for more, so the check runs only for these.
+ * test/workflows.test.ts checks that every path the tests of ios/Tests/ and
+ * ios/check-app.sh name is under one of them.
  */
-export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", ".github/workflows/checks-ios.yml"];
+export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
 /**
  * The runner of the iOS check, and the one Xcode it builds with, by its path
  * on that runner's image (.github/README.md gives the sources).

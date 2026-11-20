@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
-import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, CHECK_BB, INSTALL_PNPM, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
+import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, IOS_PATHS, CHECK_BB, INSTALL_PNPM, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
@@ -159,7 +159,7 @@ const CHANGES: Record<string, Change[]> = {
   "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
   "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x cargo test")],
   "104 one more step in the device-core job": [replace(C, "      - name: cargo fmt --check\n", "      - run: rm .cargo/config.toml\n        working-directory: device-core\n      - name: cargo fmt --check\n")],
-  "105 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - .github/workflows/checks-ios.yml\n", "")],
+  "105 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - spec/vectors/**\n      - design/copy/**\n      - web/circuits/**\n      - verifier/vk/**\n      - web/scripts/fetch-crs.mjs\n      - .github/workflows/checks-ios.yml\n", "")],
   "106 a path less in checks-ios.yml": [replace(I, "      - device-core/**\n", "")],
   "107 checks-ios.yml on pull_request_target": [replace(I, "  pull_request:\n", "  pull_request_target:\n")],
   "108 checks-ios.yml on another runner": [replace(I, "    runs-on: xcode-27\n", "    runs-on: macos-latest\n")],
@@ -215,7 +215,7 @@ test("the reader reads the part of YAML the workflows are written in, values as 
   assert.equal(paths.at(-1), ".github/workflows/checks-browser.yml");
   assert.deepEqual(Object.keys(browserDoc.jobs as object), ["browser"]);
   const iosDoc = readYaml(realFiles()[I]!) as Record<string, Yaml>;
-  assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, ["ios/**", "device-core/**", ".github/workflows/checks-ios.yml"]);
+  assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...IOS_PATHS]);
   assert.deepEqual(Object.keys(iosDoc.jobs as object), ["ios"]);
   const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;
   assert.deepEqual(browser.env, { CHROME: "/usr/bin/google-chrome" });
@@ -410,3 +410,24 @@ test(
     );
   },
 );
+
+test("the paths of checks-ios.yml hold every file of the repository the iOS tests and check-app.sh read", () => {
+  // Found by reading their source: `Repository.data("…")`, `.text("…")` and `.vectors("…")` in
+  // ios/Tests/, and the paths check-app.sh compares the app's files with (`<name> <path>` lines
+  // and "$repo/<path>"). A path put together some other way is not seen: this is a reminder, like
+  // the one for checks-browser.yml.
+  const read = new Set<string>();
+  const tests = join(REPO, "ios", "Tests");
+  for (const f of readdirSync(tests)) {
+    const text = readFileSync(join(tests, f), "utf8");
+    for (const m of text.matchAll(/Repository\.(?:data|text)\("([^"\\]+)"\)/g)) read.add(m[1]!);
+    for (const m of text.matchAll(/(?:Repository\.)?vectors\("([^"\\]+)"\)/g)) read.add(`spec/vectors/${m[1]!}`);
+    for (const m of text.matchAll(/: "((?:web|verifier|spec|design|device-core)\/[^"]+)"/g)) read.add(m[1]!);
+  }
+  const check = readFileSync(join(REPO, "ios", "check-app.sh"), "utf8");
+  for (const m of check.matchAll(/^\S+ ((?:web|verifier)\/\S+)$/gm)) read.add(m[1]!);
+  for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
+  assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
+  const covered = (path: string): boolean => IOS_PATHS.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
+  assert.deepEqual([...read].filter((p) => !covered(p)), []);
+});
