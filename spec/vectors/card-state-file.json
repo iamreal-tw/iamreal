@@ -1,7 +1,8 @@
 {
-  "spec": "spec/roster-rules.md, \"The card state file\"",
+  "spec": "card-state-file",
   "status": "draft",
-  "note": "`files`: card state files, valid or broken. Every `content` is the whole file as text; its bytes are the UTF-8 encoding of it (only the byte order mark case has a character outside ASCII). `roster` says whose accepted scopes and platform table the file is read with (spec/scope.md). A valid file has `cards`: the rows as states, in the order of the file, each with the items of spec/roster-rules.md, \"State\", and `last_seq`; `slots` has exactly the slots the row lists, so a platform that is not there is in the initial state, and null means none. Reading `content` gives `cards`; writing `cards`, given in any order and with or without slots in the initial state, gives `content`. A broken file has the number of the first line that fails (counting from 1) and the code. A valid file with `roster_rules_case` is the final state of the case of that name in roster-rules.json: its cards are that case's cards with `accounts` left out, the slots in the initial state left out, and `last_seq` the `seq` of the card's last valid result; `count` is the number of the case's events, the count the file would be published for. `rules_leave` false marks a file whose rows are well formed but are not states the rules leave. `comparisons`: a re-verifier's comparison (\"Comparing\"). `content` is a valid file, `count` the count of the fingerprint line of its date, `verified` the number of records the re-verifier has applied the rules to, `computed` its cards with a valid record among them, in the form of `cards`. `outcomes` has every card of the file or of `computed`, in the order of a file's rows, as `same`, `skipped` or `different`; `passes` is false if any is `different`. No implementation in this repository's TypeScript reads `comparisons`.",
+  "rules_version": 1,
+  "note": "For spec/roster-rules.md, \"The card state file\". `rules_version` is the version number of the rules the files with `roster_rules_case` were computed by; when it goes up, they are computed again. `files`: card state files, valid or broken. `content` is the whole file as text; the file is the UTF-8 encoding of it (only broken files have a character outside ASCII). A file whose bytes are not UTF-8 has `content_hex` in place of `content`: its bytes as lowercase hex digits. `roster` says whose accepted scopes and platform table the file is read with (spec/scope.md). A valid file has `cards`: the rows as states, in the order of the file, each with the items of spec/roster-rules.md, \"State\", and `last_seq`; `slots` has exactly the slots the row lists, so a platform that is not there is in the initial state, and null means none. Reading `content` gives `cards`; writing `cards`, given in any order and with or without slots in the initial state, gives `content`. A broken file has the number of the first line that fails (counting from 1) and the code. A valid file with `roster_rules_case` is the final state of the case of that name in roster-rules.json: its cards are that case's cards with `accounts` left out, the slots in the initial state left out, and `last_seq` the `seq` of the card's last valid result; `count` is the number of the case's events, the count the file would be published for. `rules_leave` false marks a file whose rows are well formed but are not states the rules leave. `comparisons`: a re-verifier's comparison (\"Comparing\"). `content` is a valid file, `count` the count of the fingerprint line of its date, `verified` the number of records the re-verifier has applied the rules to, `computed` its cards with a valid record among them, in the form of `cards`. `outcomes` has every card of the file or of `computed`, in the order of a file's rows, as `same`, `skipped` or `different`; `passes` is false if any is `different`. No implementation in this repository's TypeScript reads `comparisons`.",
   "files": [
     {
       "name": "no card: the empty file",
@@ -713,6 +714,62 @@
       "roster": "production",
       "valid": false,
       "content": "\ufeff{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n",
+      "line": 1,
+      "code": "line"
+    },
+    {
+      "name": "not UTF-8: the byte FF in a username of the second row",
+      "roster": "production",
+      "valid": false,
+      "content_hex": "7b2273636f70655f737472696e67223a2269616d7265616c3a7075626c69633a305f5f5f5f5f5f5f5f5f5f5f5f5f5f5f222c2273636f7065645f6964223a2230343030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030222c226c6173745f736571223a322c226c6173745f636172645f70726f6f66223a22323032362d31312d3034222c2270726f6f66735f6f6e5f6c6173745f64617465223a312c22736c6f7473223a7b2274687265616473223a7b2263757272656e74223a22626f62222c226c6173745f6465636c61726564223a22626f62222c227377697463685f636f756e74223a302c22636f7272656374696f6e5f64617465223a22323032362d31312d3034227d7d7d0a7b2273636f70655f737472696e67223a2269616d7265616c3a7075626c69633a305f5f5f5f5f5f5f5f5f5f5f5f5f5f5f222c2273636f7065645f6964223a22515350374e363736534e53563537595336314658564d56514444394554463553474a324e30434e47464632454e38443056383830222c226c6173745f736571223a312c226c6173745f636172645f70726f6f66223a22323032362d31312d3034222c2270726f6f66735f6f6e5f6c6173745f64617465223a312c22736c6f7473223a7b2274687265616473223a7b2263757272656e74223a22616c6963ff222c226c6173745f6465636c61726564223a22616c696365222c227377697463685f636f756e74223a302c22636f7272656374696f6e5f64617465223a22323032362d31312d3034227d7d7d0a",
+      "line": 2,
+      "code": "line"
+    },
+    {
+      "name": "not UTF-8: a byte order mark of UTF-16 and the row in UTF-16",
+      "roster": "production",
+      "valid": false,
+      "content_hex": "fffe7b002200730063006f00700065005f0073007400720069006e00670022003a002200690061006d007200650061006c003a007000750062006c00690063003a0030005f005f005f005f005f005f005f005f005f005f005f005f005f005f005f0022002c002200730063006f007000650064005f006900640022003a00220051005300500037004e0036003700360053004e00530056003500370059005300360031004600580056004d00560051004400440039004500540046003500530047004a0032004e00300043004e00470046004600320045004e00380044003000560038003800300022002c0022006c006100730074005f0073006500710022003a0031002c0022006c006100730074005f0063006100720064005f00700072006f006f00660022003a00220032003000320036002d00310031002d003000340022002c002200700072006f006f00660073005f006f006e005f006c006100730074005f00640061007400650022003a0031002c00220073006c006f007400730022003a007b002200740068007200650061006400730022003a007b002200630075007200720065006e00740022003a00220061006c0069006300650022002c0022006c006100730074005f006400650063006c00610072006500640022003a00220061006c0069006300650022002c0022007300770069007400630068005f0063006f0075006e00740022003a0030002c00220063006f007200720065006300740069006f006e005f00640061007400650022003a00220032003000320036002d00310031002d003000340022007d007d007d000a00",
+      "line": 1,
+      "code": "line"
+    },
+    {
+      "name": "not UTF-8: the two bytes C0 AF, an overlong spelling of a slash, after the last row",
+      "roster": "production",
+      "valid": false,
+      "content_hex": "7b2273636f70655f737472696e67223a2269616d7265616c3a7075626c69633a305f5f5f5f5f5f5f5f5f5f5f5f5f5f5f222c2273636f7065645f6964223a2230343030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030222c226c6173745f736571223a322c226c6173745f636172645f70726f6f66223a22323032362d31312d3034222c2270726f6f66735f6f6e5f6c6173745f64617465223a312c22736c6f7473223a7b2274687265616473223a7b2263757272656e74223a22626f62222c226c6173745f6465636c61726564223a22626f62222c227377697463685f636f756e74223a302c22636f7272656374696f6e5f64617465223a22323032362d31312d3034227d7d7d0ac0af",
+      "line": 2,
+      "code": "line"
+    },
+    {
+      "name": "not UTF-8: a lone continuation byte between two rows",
+      "roster": "production",
+      "valid": false,
+      "content_hex": "7b2273636f70655f737472696e67223a2269616d7265616c3a7075626c69633a305f5f5f5f5f5f5f5f5f5f5f5f5f5f5f222c2273636f7065645f6964223a2230343030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030222c226c6173745f736571223a322c226c6173745f636172645f70726f6f66223a22323032362d31312d3034222c2270726f6f66735f6f6e5f6c6173745f64617465223a312c22736c6f7473223a7b2274687265616473223a7b2263757272656e74223a22626f62222c226c6173745f6465636c61726564223a22626f62222c227377697463685f636f756e74223a302c22636f7272656374696f6e5f64617465223a22323032362d31312d3034227d7d7d0a807b2273636f70655f737472696e67223a2269616d7265616c3a7075626c69633a305f5f5f5f5f5f5f5f5f5f5f5f5f5f5f222c2273636f7065645f6964223a22515350374e363736534e53563537595336314658564d56514444394554463553474a324e30434e47464632454e38443056383830222c226c6173745f736571223a312c226c6173745f636172645f70726f6f66223a22323032362d31312d3034222c2270726f6f66735f6f6e5f6c6173745f64617465223a312c22736c6f7473223a7b2274687265616473223a7b2263757272656e74223a22616c696365222c226c6173745f6465636c61726564223a22616c696365222c227377697463685f636f756e74223a302c22636f7272656374696f6e5f64617465223a22323032362d31312d3034227d7d7d0a",
+      "line": 2,
+      "code": "line"
+    },
+    {
+      "name": "a character outside ASCII in a username",
+      "roster": "production",
+      "valid": false,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alic\u00e9\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n",
+      "line": 1,
+      "code": "line"
+    },
+    {
+      "name": "a line separator U+2028 in place of the LF",
+      "roster": "production",
+      "valid": false,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\u2028",
+      "line": 1,
+      "code": "line"
+    },
+    {
+      "name": "a NUL byte after the row",
+      "roster": "production",
+      "valid": false,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\u0000\n",
       "line": 1,
       "code": "line"
     },
@@ -2413,6 +2470,581 @@
       "count": 1,
       "verified": 1,
       "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":0,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "every last_seq far beyond the count: nothing is skipped, every card is different",
+      "note": "The server kept something else than a seq as last_seq. A row beyond the count is never the state after the first count records.",
+      "roster": "production",
+      "count": 3,
+      "verified": 3,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1763596800000,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":1763596800001,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1763596800002,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "last_seq": 3,
+          "last_card_proof": "2026-11-05",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "carol",
+              "last_declared": "carol",
+              "switch_count": 0,
+              "correction_date": "2026-11-05"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "every last_seq far beyond the count, the re-verifier far ahead of the count",
+      "note": "The same file with N far above the count: the outcome of a row beyond the count does not depend on N.",
+      "roster": "production",
+      "count": 3,
+      "verified": 1000000,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1763596800000,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":1763596800001,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":1763596800002,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "last_seq": 3,
+          "last_card_proof": "2026-11-05",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "carol",
+              "last_declared": "carol",
+              "switch_count": 0,
+              "correction_date": "2026-11-05"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "a last_seq one beyond the count is different, the re-verifier at the count",
+      "note": "The largest last_seq a row can have is the count.",
+      "roster": "production",
+      "count": 3,
+      "verified": 3,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":4,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "last_seq": 3,
+          "last_card_proof": "2026-11-05",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "carol",
+              "last_declared": "carol",
+              "switch_count": 0,
+              "correction_date": "2026-11-05"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "a last_seq one beyond the count is different, the re-verifier behind the file",
+      "note": "Beyond the count comes before beyond N: the row is not skipped.",
+      "roster": "production",
+      "count": 3,
+      "verified": 2,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":4,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "a last_seq beyond the count is different even when it is the card's last valid record: the file was to stop at the count",
+      "note": "Record 4 is a valid record of the card and the row is its state after it; the file of count 3 was to hold its state after record 3.",
+      "roster": "production",
+      "count": 3,
+      "verified": 4,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":4,\"last_card_proof\":\"2026-11-06\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "last_seq": 4,
+          "last_card_proof": "2026-11-06",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "carol",
+              "last_declared": "carol",
+              "switch_count": 0,
+              "correction_date": "2026-11-05"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "a row beyond the count for a card the roster gives no valid record",
+      "note": "Count and N are 2; the row says record 3.",
+      "roster": "production",
+      "count": 2,
+      "verified": 2,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":3,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "bob",
+              "last_declared": "bob",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "different"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "a last_seq at the count, the re-verifier behind the file: skipped",
+      "note": "Rows with a last_seq above N and at most the count are compared the next time.",
+      "roster": "production",
+      "count": 3,
+      "verified": 1,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"alice\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"A000000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"bob\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":3,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "same"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "A000000000000000000000000000000000000000000000000000",
+          "outcome": "skipped"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "skipped"
+        }
+      ],
+      "passes": true
+    },
+    {
+      "name": "a last_seq between N and the count for a card the re-verifier has in an older state: skipped",
+      "note": "The re-verifier has applied 1 record; the row is the card's state after record 2.",
+      "roster": "production",
+      "count": 3,
+      "verified": 1,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"dave\",\"last_declared\":\"dave\",\"switch_count\":1,\"correction_date\":\"2026-11-05\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":3,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 1,
+          "last_card_proof": "2026-11-04",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "alice",
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "skipped"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "skipped"
+        }
+      ],
+      "passes": true
+    },
+    {
+      "name": "one item differs: last_declared, of a slot that was withdrawn",
+      "note": "current is none on both sides. Whether the next account is a refresh or a switch depends on last_declared alone.",
+      "roster": "production",
+      "count": 3,
+      "verified": 3,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":2,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":null,\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880\",\"last_seq\":3,\"last_card_proof\":\"2026-11-05\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"carol\",\"last_declared\":\"carol\",\"switch_count\":0,\"correction_date\":\"2026-11-05\"}}}\n",
+      "computed": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "last_seq": 2,
+          "last_card_proof": "2026-11-05",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": null,
+              "last_declared": "alice",
+              "switch_count": 0,
+              "correction_date": "2026-11-04"
+            }
+          }
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "last_seq": 3,
+          "last_card_proof": "2026-11-05",
+          "proofs_on_last_date": 1,
+          "slots": {
+            "threads": {
+              "current": "carol",
+              "last_declared": "carol",
+              "switch_count": 0,
+              "correction_date": "2026-11-05"
+            }
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "outcome": "different"
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "outcome": "same"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "name": "one item differs: last_declared, current being set",
+      "note": "The row is not a state the rules leave (current is not last_declared); it is still compared item by item.",
+      "roster": "production",
+      "count": 1,
+      "verified": 1,
+      "content": "{\"scope_string\":\"iamreal:public:0_______________\",\"scoped_id\":\"0400000000000000000000000000000000000000000000000000\",\"last_seq\":1,\"last_card_proof\":\"2026-11-04\",\"proofs_on_last_date\":1,\"slots\":{\"threads\":{\"current\":\"alice\",\"last_declared\":\"bob\",\"switch_count\":0,\"correction_date\":\"2026-11-04\"}}}\n",
       "computed": [
         {
           "scope_string": "iamreal:public:0_______________",
