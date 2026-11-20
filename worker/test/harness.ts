@@ -321,6 +321,8 @@ export interface TestWorker {
      * of that limit).
      */
     kept(): Promise<KeptRecords>;
+    /** The names of the tables of the object's SQLite, in byte order (test build, `GET /__test/roster/tables`). */
+    tables(): Promise<string[]>;
     /**
      * From now on the object waits this many milliseconds before it hashes
      * a record it is asked to write (test build,
@@ -579,6 +581,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/kept");
         if (res.status !== 200) throw new Error(`reading what the roster keeps: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as KeptRecords;
+      },
+      async tables() {
+        const res = await server.fetch("/__test/roster/tables");
+        if (res.status !== 200) throw new Error(`reading the object's tables: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as string[];
       },
       async setHashDelay(ms) {
         const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });

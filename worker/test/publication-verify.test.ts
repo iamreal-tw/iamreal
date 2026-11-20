@@ -86,12 +86,19 @@ describe("a roster published over three days, re-verified by Go's iamreal-verify
     await mustSubmit(worker, await sub(worker, switches, root, "threads:alice"), "threads switch");
     await worker.roster.runAlarm();
     assert.equal(await noteFingerprint(), 2003);
-    await midnight("2026-11-23");
 
-    // 2026-11-23: two records that no fingerprint line covers yet.
-    await day(worker, 3);
-    await mustSubmit(worker, await sub(worker, withdraws, root, "threads:dave"), "threads switch");
-    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    // 2026-11-23: two records that no fingerprint line covers, written while the card state file of the date is being
+    // written, after the publication's moment: one changes a card that is in the file, one is of a new card.
+    await worker.setClock(tw("2026-11-23", "00:00:10"));
+    const late = [await sub(worker, withdraws, root, "threads:dave"), await sub(worker, newCard(), root, "threads:alice")] as const;
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-23.jsonl", how: "put takes a while" });
+    const publishing = worker.roster.runAlarm();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.deepEqual(await worker.files("roster/card-state/2026-11-23"), [], "the publication is writing the card state file");
+    await mustSubmit(worker, late[0], "threads switch");
+    await mustSubmit(worker, late[1], "threads first");
+    await publishing;
+    await worker.roster.setBucketFault(null);
     const records = await checkRoster(worker);
     assert.equal(records.length, 2005);
 

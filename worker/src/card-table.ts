@@ -28,8 +28,8 @@ import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/roster-rules.ts";
 import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
 
-export const CARD_TABLE = `
-CREATE TABLE IF NOT EXISTS cards (
+/** The columns of the card state table, and of its snapshot (`snapshotCards`). */
+const CARD_COLUMNS = `(
   scope_string        TEXT    NOT NULL,
   scoped_id           TEXT    NOT NULL,
   last_card_proof     TEXT    NOT NULL,
@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS cards (
   last_seq            INTEGER NOT NULL,
   PRIMARY KEY (scope_string, scoped_id)
 ) WITHOUT ROWID`;
+
+export const CARD_TABLE = `CREATE TABLE IF NOT EXISTS cards ${CARD_COLUMNS}`;
+
+/**
+ * The snapshot of the card state table: a copy the card state file of a
+ * publication is written from (roster.ts, `#publish`): made at the moment the publication
+ * reads its count, read afterwards while records go on being written to
+ * `cards`, and dropped when the publication ends, however it ends. Nothing
+ * else reads it, and nothing reads a snapshot left by an object that stopped
+ * in the middle of a publication: the next publication makes its own.
+ */
+const CARD_SNAPSHOT = "card_snapshot";
 
 /** A card's row: its state, and the `seq` of its last valid record. */
 export interface StoredCard {
@@ -66,8 +78,8 @@ const COLUMNS = "last_card_proof, proofs_on_last_date, slots, last_seq";
  * cannot be read as a state at all (a date that is not a date, slots that
  * are not JSON of the stored shape); the message names the column, never
  * the card or a value. Whether the state is one the roster rules can have
- * left is not asked here: `readCard` asks it, `everyCard` on purpose does
- * not.
+ * left is not asked here: `readCard` asks it, `snapshotRows` on purpose
+ * does not.
  */
 function stateOf(row: Columns): StoredCard & { card: { lastCardProof: Day } } {
   const { last_card_proof, proofs_on_last_date, slots: slotsText, last_seq } = row;
@@ -125,19 +137,42 @@ export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], sco
 }
 
 /**
- * Every row of the table as a row of the card state file
- * (spec/roster-rules.md, "The card state file"), in the order of the table.
+ * Copies the card state table, as it is now, to its snapshot, in place of
+ * any snapshot there is: SQLite copies the rows, and none of them passes
+ * through JavaScript.
+ */
+export function snapshotCards(sql: SqlStorage): void {
+  dropCardSnapshot(sql);
+  sql.exec(`CREATE TABLE ${CARD_SNAPSHOT} ${CARD_COLUMNS}`);
+  sql.exec(`INSERT INTO ${CARD_SNAPSHOT} SELECT scope_string, scoped_id, last_card_proof, proofs_on_last_date, slots, last_seq FROM cards`);
+}
+
+/** Drops the snapshot of the card state table, if there is one. */
+export function dropCardSnapshot(sql: SqlStorage): void {
+  sql.exec(`DROP TABLE IF EXISTS ${CARD_SNAPSHOT}`);
+}
+
+/**
+ * Rows of the snapshot of the card state table (`snapshotCards`) as rows of the
+ * card state file (spec/roster-rules.md, "The card state file"): at most
+ * `limit` of them, those that come after the card of `after` (or from the
+ * first, with null), in the order of the file. Each call is a query of its
+ * own, read to its end before it returns, so that nothing is held open
+ * while the caller waits.
  *
  * Unlike `readCard`, this does not ask whether a row is a state the roster
  * rules can have left: the card state file is published so that whoever
  * compares it finds a stored state that is wrong, and a reading that
  * refused such a row would hide it. It throws only for a row that cannot be
  * read as a state at all (`stateOf`). Whether every value is in the format
- * of a row is for protocol/'s `cardStateFile`.
+ * of a row, and the rows in the order of the file, is for protocol/'s
+ * `cardStateFileWriter`.
  */
-export function everyCard(sql: SqlStorage): CardRow[] {
+export function snapshotRows(sql: SqlStorage, after: CardRow | null, limit: number): CardRow[] {
+  const from = after === null ? "" : "WHERE (scope_string, scoped_id) > (?, ?)";
+  const keys = after === null ? [] : [after.scopeString, after.scopedId];
   const out: CardRow[] = [];
-  for (const row of sql.exec(`SELECT scope_string, scoped_id, ${COLUMNS} FROM cards ORDER BY scope_string, scoped_id`)) {
+  for (const row of sql.exec(`SELECT scope_string, scoped_id, ${COLUMNS} FROM ${CARD_SNAPSHOT} ${from} ORDER BY scope_string, scoped_id LIMIT ?`, ...keys, limit)) {
     if (typeof row.scope_string !== "string" || typeof row.scoped_id !== "string") throw corrupt("the card");
     out.push({ scopeString: row.scope_string, scopedId: row.scoped_id, ...stateOf(row) });
   }

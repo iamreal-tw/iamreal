@@ -7,7 +7,7 @@
 // The bucket is written through the binding only, and nothing here or
 // anywhere in the Worker sends one of these files to anybody: they are
 // downloaded from the data domain, which does not run the Worker.
-import { sha256Hex } from "iamreal-protocol/bytes.ts";
+import { hexOf, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { type Day, formatDay } from "iamreal-protocol/date.ts";
 import { FINGERPRINT_FILE_NAME, LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
 
@@ -101,6 +101,63 @@ export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: U
   if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
   if (!(await isBytes(stored.body, bytes))) throw new Error(`${key} read back is not the bytes that were written`);
   return sha256;
+}
+
+/** The number of bytes and the SHA-256 of what `chunks` gives, read as it comes and not kept. */
+export async function lengthAndSha256(chunks: Iterable<Uint8Array> | AsyncIterable<Uint8Array>): Promise<{ length: number; sha256: string }> {
+  const digest = new crypto.DigestStream("SHA-256");
+  const writer = digest.getWriter();
+  let length = 0;
+  for await (const chunk of chunks) {
+    await writer.write(chunk);
+    length += chunk.length;
+  }
+  await writer.close();
+  return { length, sha256: hexOf(new Uint8Array(await digest.digest)) };
+}
+
+/** What `writeStreamAndReadBack` writes: a stream of bytes, with their number and their SHA-256, both known before it is read. */
+export interface StreamToWrite {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly length: number;
+  readonly sha256: string;
+}
+
+/**
+ * Writes an object from a stream and reads it back, holding neither in
+ * memory: `writeAndReadBack` for an object too large to hold. It returns
+ * only once the bucket gives, under this key and with these headers, an
+ * object of `body.length` bytes whose SHA-256 is `body.sha256`. Otherwise
+ * it throws; the message names the key and nothing of the content.
+ *
+ * The bucket is given the SHA-256 with the stream, as `writeAndReadBack`
+ * gives it with the bytes: if what it received is not those bytes, nothing
+ * is stored. A stream that gives other than `body.length` bytes, or fails,
+ * stores nothing either (`FixedLengthStream`). The object is read back
+ * through a SHA-256 in place of a comparison of bytes, which would need
+ * the bytes that were written.
+ *
+ * Writing the same bytes again leaves the same object, so a caller that
+ * does not know how far an earlier try came simply calls this again.
+ */
+export async function writeStreamAndReadBack(bucket: FileBucket, key: string, body: StreamToWrite, headers: FileHeaders): Promise<void> {
+  // The bucket takes a stream only of a known length.
+  const sized = body.stream.pipeThrough(new FixedLengthStream(body.length));
+  try {
+    await bucket.put(key, sized, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256: body.sha256 });
+  } catch (e) {
+    // A write that failed without reading the stream to its end: the rest is not read.
+    await sized.cancel().catch(() => undefined);
+    throw e;
+  }
+  const stored = await bucket.get(key);
+  if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
+  if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) {
+    await stored.body.cancel();
+    throw new Error(`${key} does not carry the headers it was written with`);
+  }
+  const read = await lengthAndSha256(stored.body);
+  if (read.length !== body.length || read.sha256 !== body.sha256) throw new Error(`${key} read back is not the bytes that were written`);
 }
 
 /** Whether a stream gives exactly `bytes`. It is compared as it comes, so that the object is not held in memory a second time. */

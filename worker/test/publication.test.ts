@@ -187,6 +187,58 @@ describe("a roster with records", () => {
   });
 });
 
+describe("the card state file is written from a copy of the card state table", () => {
+  test("records written while it is written, one to a card in it and one of a new card, are in none of it; the copy is gone afterwards", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    const [a, b, late] = [newCard(), newCard(), newCard()];
+    await mustSubmit(worker, await sub(worker, a, root, "threads:alice"), "threads first");
+    await mustSubmit(worker, await sub(worker, b, root, "threads:bob"), "threads first");
+    const moment = await worker.roster.stored();
+    const rows = await Promise.all(byScopedId([a, b]).map((card) => rowOf(card, card === a ? 1 : 2)));
+    const tables = await worker.roster.tables();
+
+    await worker.setClock(tw("2026-11-21", "00:00:00"));
+    const [change, first] = [await sub(worker, a, root, "threads:carol"), await sub(worker, late, root, "threads:dave")];
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-21.jsonl", how: "put takes a while" });
+    const publishing = worker.roster.runAlarm();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), hashListName(0)], "the publication is writing the card state file");
+    assert.equal((await mustSubmit(worker, change, "threads switch")).seq, 3);
+    assert.equal((await mustSubmit(worker, first, "threads first")).seq, 4);
+    await publishing;
+    await worker.roster.setBucketFault(null);
+
+    const files = await directory();
+    assert.deepEqual(rowsOf(files.get("card-state/2026-11-21.jsonl")!), rows);
+    assert.equal(text(files.get(FINGERPRINTS)!), line("2026-11-21", 2, moment.roster.fingerprint));
+    assert.deepEqual(await worker.roster.tables(), tables);
+    assert.equal((await checkRoster(worker)).length, 4);
+  });
+
+  test("a row of the table not in the format of a row: nothing of the card state file is written, and no line; once the row is mended, the roster is published", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    const a = newCard();
+    await mustSubmit(worker, await sub(worker, a, root, "threads:alice"), "threads first");
+    const tables = await worker.roster.tables();
+    const card = { scope_string: TEST_SCOPE, scoped_id: newCard(), last_card_proof: "2026-11-20", proofs_on_last_date: 1, platforms: {} };
+    await worker.roster.writeCard({ ...card, seq: 0 });
+    const failures = notPublished();
+
+    await alarmAt("2026-11-21", "00:00:00");
+    assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), hashListName(0)]);
+    assert.equal(notPublished(), failures + 1);
+    assert.deepEqual(await worker.roster.tables(), tables);
+
+    await worker.roster.writeCard({ ...card, seq: 1 });
+    await alarmAt("2026-11-21", "00:01:00");
+    const files = await directory();
+    assert.equal(rowsOf(files.get("card-state/2026-11-21.jsonl")!).length, 2);
+    assert.equal(text(files.get(FINGERPRINTS)!).split("\n").length, 2);
+  });
+});
+
 describe("a publication that cannot be finished", () => {
   /** Each try is one alarm, a minute of the object's clock after the one before. */
   let time = 0;
@@ -242,6 +294,29 @@ describe("a publication that cannot be finished", () => {
     assert.equal(text(files.get(FINGERPRINTS)!), line("2026-11-21", 2, moment.roster.fingerprint));
     assert.deepEqual(await published(), { date: "2026-11-21", count: 2, fingerprint: moment.roster.fingerprint });
     assert.equal(notPublished(), failures + 3);
+  });
+
+  test("the card state file breaks off while it is written: no line, no copy of the card state table kept; the next try is of its own moment", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const tables = await worker.roster.tables();
+    time = tw("2026-11-21", "00:00:00").getTime();
+    await worker.setClock(new Date(time));
+
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-21.jsonl", how: "put breaks off" });
+    await worker.roster.runAlarm();
+    assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), hashListName(0)]);
+    assert.deepEqual(await worker.roster.tables(), tables);
+
+    await worker.roster.setBucketFault(null);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const moment = await worker.roster.stored();
+    await tryAgain();
+    const files = await directory();
+    assert.equal(rowsOf(files.get("card-state/2026-11-21.jsonl")!).length, 2);
+    assert.equal(text(files.get(FINGERPRINTS)!), line("2026-11-21", 2, moment.roster.fingerprint));
+    assert.deepEqual(await worker.roster.tables(), tables);
   });
 
   test("the line of a date is decided once: a fingerprint file that could not be written is written later with that line, whatever was recorded since", async () => {

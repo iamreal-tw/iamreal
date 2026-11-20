@@ -148,10 +148,21 @@ export class Roster extends DeployedRoster {
     const fault = this.#bucketFault;
     if (fault === null) return real;
     const faulty = {
-      put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
-        if (key !== fault.key) return real.put(key, value, options);
+      put: async (key: string, sent: Uint8Array | ReadableStream<Uint8Array>, options: R2PutOptions): Promise<R2Object | null> => {
+        if (key !== fault.key) return real.put(key, sent, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
+        if (fault.how === "put breaks off") {
+          if (sent instanceof ReadableStream) {
+            const reader = sent.getReader();
+            await reader.read();
+            await reader.cancel();
+          }
+          throw new Error("the test makes this write break off");
+        }
         if (fault.how === "put takes a while") await new Promise((resolve) => setTimeout(resolve, 600));
+        if (fault.how === "put takes a while") return real.put(key, sent, options);
+        // The faults below change the bytes or the headers: a stream is read whole first (a test's files are small).
+        const value = sent instanceof ReadableStream ? new Uint8Array(await new Response(sent).arrayBuffer()) : sent;
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
         // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
         if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
@@ -167,6 +178,15 @@ export class Roster extends DeployedRoster {
       },
     };
     return faulty as unknown as FileBucket;
+  }
+
+  /** The names of the tables of the object's SQLite, in byte order. */
+  testTables(): string[] {
+    return this.ctx.storage.sql
+      .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .toArray()
+      .map((row) => row.name)
+      .sort(byBytes);
   }
 
   /** From now on the object's use of the data bucket goes wrong as `fault` says, or, with null, not at all. Kept in memory. */
@@ -438,7 +458,8 @@ export default {
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster. `GET /__test/roster/kept`
    *   answers a KeptRecords: only how many it keeps, and from which `seq`
-   *   to which.
+   *   to which. `GET /__test/roster/tables` answers the names of the
+   *   tables of its SQLite.
    * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
    *   object waits that long before it hashes a record it is asked to
    *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
@@ -542,6 +563,7 @@ export default {
     }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
     if (route === "GET /__test/roster/kept") return json(await testRosterOf(env).testKept());
+    if (route === "GET /__test/roster/tables") return json(await testRosterOf(env).testTables());
     if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
     if (route === "DELETE /__test/roster/views") {
       await testRosterOf(env).testClearViews();
