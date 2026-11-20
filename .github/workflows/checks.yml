@@ -103,6 +103,10 @@ jobs:
   # device-core/: the Rust core of the apps. It installs no package of npm and
   # uses no bb: the Barretenberg it links is the static library that
   # fetch-barretenberg.sh downloads and checks against barretenberg.sha256.
+  # The proofs its tests make are verified by that library; IAMREAL_BB is
+  # emptied for cargo test, so that they are not also handed to a bb this job
+  # never installed. fetch-crs.sh downloads the common reference string the
+  # proofs need and checks it against crs.sha256.
   device-core:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -121,9 +125,12 @@ jobs:
       - name: cargo clippy
         working-directory: device-core
         run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo clippy --locked --release --all-targets -- -D warnings
+      - name: Fetch the common reference string
+        working-directory: device-core
+        run: ./fetch-crs.sh
       - name: cargo test
         working-directory: device-core
-        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test --locked --release
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release
 
   # android/: the Android app. The native library is device-core/ and the JNI
   # layer, linked by the Zig that android/fetch-zig.sh downloads and checks
