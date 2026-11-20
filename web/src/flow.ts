@@ -160,7 +160,10 @@ export interface FlowDeps {
    * any other is a platform the device does not know.
    */
   knownPlatforms: ReadonlySet<string>;
+  /** The server's API. */
   fetch: Fetch;
+  /** The data domain's files: the CRL archive (ADR-0027). Its origin is fixed by the page's build, not by a server. */
+  dataFetch: Fetch;
   /** Milliseconds since the epoch (Date.now in the page). */
   clock: () => number;
   store: CrlNumberStore;
@@ -665,7 +668,7 @@ export class CardProofFlow {
         const config = await this.timed("config", requestConfig(this.deps.fetch));
         progress("config");
         const maxAgeDays = crlMaxAge(config.crlMaxAgeDays);
-        const crl = await this.timed("crl", loadCrl({ fetch: this.deps.fetch, issuer, today, maxAgeDays, store: this.deps.store }));
+        const crl = await this.timed("crl", loadCrl({ fetch: this.deps.dataFetch, issuer, today, maxAgeDays, store: this.deps.store }));
         progress("crl");
         builder = await builderP;
         const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial));

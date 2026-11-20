@@ -35,6 +35,8 @@ const circuitFiles = new Map(
 interface Setup {
   w: World;
   backend: FakeBackend;
+  /** The data domain (ADR-0027): the CRL archive's files, and nothing else. */
+  data: FakeBackend;
   card: FakeCard;
   flow: CardProofFlow;
   store: ReturnType<typeof memoryStore>;
@@ -94,8 +96,10 @@ async function setup(o: {
     c[c.length - 3]! ^= 1;
     files.set("/circuits/card_proof_rs4096.json", c);
   }
-  for (const f of await mirror(w, o.crls ?? [{ serials: randomSerials(300), crlNumber: 100n, thisUpdate: CRL_TIME }])) files.set(f.path, f.bytes);
+  const crlFiles = new Map<string, Uint8Array>();
+  for (const f of await mirror(w, o.crls ?? [{ serials: randomSerials(300), crlNumber: 100n, thisUpdate: CRL_TIME }])) crlFiles.set(f.path, f.bytes);
   const backend = new FakeBackend({ files, clock: () => NOW, ...o.backend });
+  const data = new FakeBackend({ files: crlFiles, clock: () => NOW });
   const signingCertificate = o.signer === "signing" ? w.signingCert : o.signer === "encryption" ? w.encryptionCert : undefined;
   const card = new FakeCard({ certificates: [w.encryptionCert, w.signingCert], signingKey: w.card.privateKey, pin: PIN, signingCertificate });
   const p = await poseidon();
@@ -151,6 +155,7 @@ async function setup(o: {
       issuers: w.issuers,
       knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
+      dataFetch: data.fetch,
       clock: () => now,
       store,
       card,
@@ -175,7 +180,7 @@ async function setup(o: {
       }
     }
   };
-  return { w, backend, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold };
+  return { w, backend, data, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold };
 }
 
 /** A slot of the card-state answer (docs/api/card-proof.md): empty unless the test says otherwise. */
@@ -464,12 +469,23 @@ describe("the flow, with a server that gives values the device must not accept",
 
   test("a file served under its name but with other bytes", async () => {
     const s = await setup();
-    const sha = [...s.backend.opts.files.keys()].find((k) => k.endsWith(".crl"))!;
-    const bytes = s.backend.opts.files.get(sha)!.slice();
+    const sha = [...s.data.opts.files.keys()].find((k) => k.endsWith(".crl"))!;
+    const bytes = s.data.opts.files.get(sha)!.slice();
     bytes[bytes.length - 1]! ^= 1;
-    s.backend.opts.files.set(sha, bytes);
+    s.data.opts.files.set(sha, bytes);
     const bg = await readAndWait(s);
     assert.deepEqual(bg, { code: "revocation", problem: { code: "crl_hash" } });
+  });
+
+  test("the CRL comes from the data domain: its index, then one file; the server is not asked for it", async () => {
+    const s = await setup();
+    assert.equal(await readAndWait(s), null);
+    const sha = [...s.data.opts.files.keys()].find((k) => k.endsWith(".crl"))!;
+    assert.deepEqual(
+      s.data.log.map((r) => `${r.method} ${r.path}`),
+      ["GET /crl/index.jsonl", `GET ${sha}`],
+    );
+    assert.deepEqual(s.backend.log.filter((r) => r.path.startsWith("/crl/")), []);
   });
 
   test("a usable CRL: its number is remembered, nothing else is stored", async () => {
