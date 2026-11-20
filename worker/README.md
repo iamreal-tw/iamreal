@@ -19,7 +19,7 @@
 
 ## 單獨執行
 
-需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。有些測試另外要 Go：和原生 `bb` 逐案比對（`test/compare.test.ts`，另要 `IAMREAL_BB`，見「和原生的 `bb verify` 逐案比對」），和 `test/workflows.test.ts` 裡檢查 `web/` 瀏覽器測試的 `paths` 清單的那一項（`.github/README.md`）。前者沒設 `IAMREAL_BB` 時跳過；後者沒有 `go` 時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗（GitHub Actions 會設 `CI`），這樣 CI 上不會悄悄跳過。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
+需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。有些測試另外要 Go：和原生 `bb` 逐案比對（`test/compare.test.ts`，另要 `IAMREAL_BB`，見「和原生的 `bb verify` 逐案比對」），`test/workflows.test.ts` 裡檢查 `web/` 瀏覽器測試的 `paths` 清單的那一項（`.github/README.md`），和名冊規則跟 Go 的 `roster/` 逐筆比對（`test/sequence.test.ts`，見「名冊規則和 Go 的 `roster/` 逐筆比對」）。第一項沒設 `IAMREAL_BB` 時跳過；後兩項沒有 `go` 時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗（GitHub Actions 會設 `CI`），這樣 CI 上不會悄悄跳過。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
 
 ```sh
 pnpm dev         # 在本機的 workerd 啟動 Worker
@@ -183,6 +183,85 @@ pnpm typecheck   # 型別檢查
 **序號**是寫入那一刻的筆數加一。紀錄雜湊要用到序號，而算雜湊（WebCrypto）是非同步的，所以做法是：先照現在的筆數算好雜湊和名冊指紋，接著從檢查到寫入一口氣做完、中間不等任何東西，而且一開始先確認筆數沒有變；變了就重算。所以不會有兩筆拿到同一個序號，每一筆都是照前一筆留下的狀態檢查的。本機的 workerd 裡算雜湊不會讓別的請求插進來（20 個請求同時送，筆數也不會在這中間改變），所以測試專用的建置可以讓 Durable Object 在算雜湊之前先等幾毫秒（`PUT /__test/roster/hash-delay`；`src/roster.ts` 的 `hashOf` 就是為了這個拆出來的，只有測試專用的建置覆寫它）：等的時候別的請求會插進來，20 個同時送的請求就會拿著同一個筆數算雜湊。測試確認這時 20 筆仍然各拿到一個序號、存下來的名冊檔驗得過，而且有紀錄重算過。拿掉確認筆數的那一行，這個測試會看到 `500`（序號重複的那一筆因為主鍵寫不進去）。
 
 紀錄現在全部留在 Durable Object 的 `records` 表；寫滿 1,000 筆搬到 R2、每天公布，是 [#70](https://github.com/iamreal-tw/iamreal/issues/70)。在那之前，寫進去的那一行、每一筆的紀錄雜湊和名冊指紋、名冊那一列的筆數和名冊指紋，部署的後台沒有任何介面讀得到。測試從測試專用建置的 `GET /__test/roster/stored` 讀出來，[`test/records.ts`](test/records.ts) 的 `checkRoster` 只拿存著的每一行，用 `protocol/` 照 `spec/record.md` 重算：每一行讀得過（「Check a line」）、序號從 1 連續、紀錄雜湊和每一筆之後的名冊指紋都對、名冊那一列的筆數和指紋是最後一筆的。它對應 Go 舊後台測試的 `checkRoster`（`server/harness_test.go`），用在同時送出、`empty` 和 `switch_limit`、`switch_restricted`、`daily_limit` 的案例。
+
+### 名冊規則和 Go 的 `roster/` 逐筆比對
+
+刪掉舊的後台之前，要確定這裡的每一筆判斷都和 Go 的 `roster/` 相同（[#9](https://github.com/iamreal-tw/iamreal/issues/9) 結論第 8 項）。分三層，三層都過才算：
+
+| | 比什麼 | 在哪裡 |
+|---|---|---|
+| 1 | `spec/vectors/roster-rules.json` 的每一案，配 Durable Object 的儲存，每筆之間重啟 | `test/records-storage.test.ts` |
+| 2 | 一串固定種子產生的長序列，`protocol/` 的規則配記憶體（`MemoryRules`），以 Go 的 `roster/` 當答案 | `test/sequence.test.ts` |
+| 3 | 同一串，配 Durable Object 的儲存，每一筆之間重啟名冊的 Durable Object | `test/sequence.test.ts` |
+
+第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，每個 PR 都跑（不到 1 秒）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
+
+```sh
+node --experimental-strip-types --test test/sequence.test.ts                             # 第 2 層
+IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.test.ts  # 第 2、3 層
+```
+
+**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層每個 PR 擋著，存了再讀的不同由第 1 層每個 PR 擋著（標準答案的每一案，每筆之間重啟）；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
+
+要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
+
+做的事：
+
+1. **產生一串紀錄。** [`test/sequence.ts`](test/sequence.ts) 的 `generateSequence` 從種子（現在是 1）產生 10,000 筆測試名冊（兩個平台）的事件。它不知道規則，只記得每張卡片在每個平台想宣告哪個帳號，讓規則的各種情況常常發生：160 張卡片，同一時間只有 8 張在送、每 64 筆換一張，偶爾是剛離開的卡片回來送一筆、日期是 4 天前；每個平台 4 個帳號名稱；一天約 18 筆，日期大多是當天，常常是前一天（午夜前拿的題目），有時往回 2 到 8 天（沒超過和超過檢查 4 的 4 天）、有時往後 1 到 3 天；有時是空的清單、重送最近 30 筆之一的題目、證明不過、沒有一份清冊的日期對得上（含差一天就對得上的）。亂數是自己寫的 mulberry32，只用 32 位元的整數運算，不用 Node 內建的，所以同一個種子產生的序列不隨 Node 的版本改變；同一個種子長一點的序列，開頭就是短的那一串。
+2. **Go 算答案。** 測試把序列寫進 `worker/test-output/sequence-…/events.json`，跑 `go test -count=1 -run '^TestSequenceAnswers$' ./roster`，環境變數 `IAMREAL_ROSTER_SEQUENCE` 指到那個目錄。`roster/sequence_test.go` 用 `roster.Rules` 一筆一筆套用，寫同一個目錄的 `answers.json`。兩個檔的格式見下面「交換的檔」。`test-output/` 不進版控（`worker/.gitignore`）：每一項都過時刪掉這個目錄；有任何一項失敗（包括 Go 那邊失敗、最後的現況不同）時留著，失敗的訊息寫著路徑。
+3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、`proofs_on_last_date`、每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`；沒有有效紀錄的卡片是空的狀態）。
+   - 記憶體那一次另外每一筆比名冊上最晚的有效日期，每 100 筆比一次每個帳號底下的卡片數（`account_cards`），最後比整個現況（每張卡片的清單，每個帳號底下的卡片）。
+   - Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/roster/rule-event`，接著重啟名冊的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片。`rule-event` 對有效的一筆除了寫卡片的狀態，也照送出一筆的同一段程式寫衍生表（`viewOf`、`writeView`）：數卡片查的是衍生表。這個入口不存紀錄，所以寫完把衍生表記的筆數放回名冊的筆數，物件重啟時才不會當成衍生表沒跟上、拿不存在的紀錄去重建。每 100 筆（共 100 次，最後一筆也是）再從 `POST /__test/roster/rule-state` 讀名冊上最晚的有效日期（`ruleState` 讀出來給規則的那一個）和每個帳號底下的卡片數（部署的 `accountCards` 那一句查詢數的，就是 `201` 回應裡的 `account_cards`：查衍生表 `view_slots`，不讀卡片狀態表；有哪些帳號則是從卡片狀態表列出來的，所以這一步同時比了兩張表對不對得上），和 Go 的比。
+4. **遇到第一筆不同就停**，訊息寫第幾筆、哪張卡片、哪個欄位、兩邊的值，例如（把 `accountCards` 的查詢故意改成最多回 1 時）：
+
+   ```
+   record 100 of 10000 (seq 100), card 52BSJ2X5Y0JK8VWSEYGDKTAPYQ6GHCSF333XYD5WCR8C8ZYWNW00, accounts[0].account_cards: Go 3, Durable Object 1. The events and Go's answers are kept in /…/worker/test-output/sequence-…
+   ```
+
+   Durable Object 讀不出那張卡片時（存著的狀態不合規則，`card-state` 回 `500`，見[讀卡片狀態時的檢查](#讀卡片狀態時的檢查)），訊息寫第幾筆、哪張卡片。
+5. **印出統計，設下限。** 每個代碼、每個平台的每個種類都要至少 100 次。另外數下面幾種情境，下限約是種子 1 實際次數的四分之三，換了種子或改了產生器時確認序列還涵蓋它們。情境從事件和 Go 的答案數，不用 `protocol/`（`test/sequence.ts` 的 `scenarios`）。
+
+**交換的檔**是這兩個測試檔之間的約定（`roster/sequence_test.go`、`test/sequence.ts`），不在 `spec/` 裡。它們以 `spec/vectors/roster-rules.json` 一個案例的樣子為底，因為 Go 和 TypeScript 互不引用、只共用 `spec/`，這是兩邊本來都讀的格式；找到不一致時，最小的重現案例可以直接寫成標準答案的一案。多出來的欄位：
+
+| 檔 | 和標準答案的案例相同的 | 多出來的 |
+|---|---|---|
+| `events.json` | `name`、`roster`、`events`（事件的欄位相同） | `checkpoint_every`：每幾筆列一次帳號 |
+| `answers.json` | 上面三項、`results`、`state`（最後的現況，寫法相同） | `rules_version`；每一筆一項的 `cards`（這一筆之後那張卡片的狀態，寫法和標準答案的 `slots` 相同）和 `latest_valid_dates`（到這一筆為止有效紀錄最晚的日期；`roster.Rules` 沒有匯出它，由 Go 的測試照規格的定義從 `Rules` 判為有效的紀錄的日期取）；`checkpoints`（每 `checkpoint_every` 筆和最後一筆之後，每個有卡片宣告的帳號和 `AccountCards` 數的卡片數） |
+
+**這一層沒比到的。** `rule-event` 和真的送出一筆共用的只有讀狀態、寫狀態那兩段（`src/roster.ts` 的 `ruleState`、`keepRuleState`）、寫衍生表的那兩段（`src/views.ts` 的 `viewOf`、`writeView`）和 `protocol/` 的 `applyRecord`。送出一筆的第 4 段（`#acceptAt`）其餘的部分這裡都沒走到：
+
+- 題目表：`challenge_unknown`、`challenge_used`、計次。用過的題目記在測試專用建置自己的表（`test_used_challenges`），`challenge_reused` 比的是那張表配規則的檢查 2
+- 清冊的政策：`crl_stale`、只認最新兩份清冊的樹根
+- 更換政策 `switch_restricted`
+- 寫 `records`、名冊那一列的 `count`、`fingerprint` 的交易
+- 數 `account_cards` 的查詢在寫入的交易裡跑的那一次（這裡比的是同一句查詢，在交易外面另外叫）
+
+`proof` 和 `root` 兩邊都照事件的旗標回答（`verifies`、`crl_dates`），不驗證證明，也不讀清冊，所以比到的是檢查的先後和檢查 3 的日期範圍（清冊日期的前 1 天到後 3 天），不是驗證器和清冊存檔。這些由 `test/records.test.ts`（每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容）、`test/records-real.test.ts`（真的證明和鏡像抓的清冊）和 `test/records-storage.test.ts`（同時送出、寫到一半失敗、`paused`）守著。
+
+2026-11-20 跑的結果（種子 1，10,000 筆）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，100 次的名冊最晚有效日期和帳號的卡片數也相同，最後的現況也相同。有效 4,766 筆、無效 5,234 筆：
+
+| 代碼 | 筆數 | | 種類 | 次數（`test-example`／`threads`） |
+|---|---|---|---|---|
+| `proof` | 313 | | `first` | 320（160／160） |
+| `challenge_reused` | 279 | | `refresh` | 5,014（2,534／2,480） |
+| `root` | 292 | | `correction` | 255（127／128） |
+| `date_order` | 1,611 | | `switch` | 1,420（699／721） |
+| `empty` | 233 | | `withdraw` | 929（457／472） |
+| `switch_limit` | 1,311 | | | |
+| `daily_limit` | 1,195 | | | |
+
+| 情境 | 怎麼數 | 次數 | 下限 |
+|---|---|---|---|
+| 跨午夜 | 有效，日期是名冊上最晚有效日期的前一天 | 842 | 630 |
+| 日期往回超過 4 天 | `date_order`，日期早於名冊上最晚有效日期超過 4 天 | 408 | 300 |
+| 剛好往回 4 天而有效 | 有效，日期剛好是名冊上最晚有效日期的 4 天前 | 79 | 60 |
+| 第 5 次更換 | 一個 `switch` 讓那個名額的 `switch_count` 變成 5 | 223 | 165 |
+| 第 6 次被擋 | `switch_limit` | 1,311 | 980 |
+| 當天更正 | `correction`，任何平台 | 255 | 190 |
+| 全部收回後再宣告 | 有效、清單不是空的，那張卡片之前有有效紀錄、一個帳號都沒宣告 | 307 | 230 |
+| 帳號被兩張以上的卡宣告 | 有效，之後清單裡有一個帳號被兩張以上的卡宣告 | 4,414 | 3,300 |
+
+量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：單獨跑這個檔約 107 秒。Go 算答案（含編譯測試）約 0.7 秒，記憶體 0.07 秒，Durable Object 約 106 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返，加上 100 次讀 `rule-state`。
 
 ## 頁面和檔案
 
@@ -352,7 +431,7 @@ pnpm typecheck   # 型別檢查
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件，對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_ROSTER_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -517,7 +596,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **索引裡已經有的檔不再讀、不再建樹。** 內政部沒有換清冊的那幾個小時，這一步只列一次儲存桶、讀一次索引，索引不重寫。
 - **寫到一半失敗，下一輪補得回來。** 補的依據是儲存桶裡有什麼，不是這一輪抓到什麼：上一輪存了檔、還沒寫行就結束，這一輪補上那一行，內政部那時已經換了清冊也一樣。索引是一個物件，每次整份換掉，不會有人讀到半份。讀到的索引有寫法不合規格的行、重複的行、對不到檔案的行時，那些行不算數，從檔案重來。
 - **一個檔拿不到行，只是那個檔的事。** 內容和檔名不符、讀不出來、建樹時 Barretenberg 出錯：那個檔記一行 `failed`，其他檔照做，Durable Object 照樣被告知，下一輪再試那個檔。這一次排程最後以例外結束。
-- **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一輪假設自己拿得到 300,000 毫秒的 CPU 時間（`wrangler.jsonc` 的 `limits.cpu_ms` 設的數字；排程實際拿到多少還沒量，見 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，Cloudflare 上要多久還沒量到，留的是本機的 5 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。**這個算法靠時鐘是新的，而 Cloudflare 上的時鐘只在 I/O 之後才前進**：程式在算的時候 `Date.now()` 停在上一次 I/O 的時間（[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)：「only advance or increment after I/O occurs」；[Security model](https://developers.cloudflare.com/workers/reference/security-model/)：「`Date.now()` returns the time of the last I/O. It does not advance during code execution」；2026-11-20 讀的）。一棵樹是幾十秒沒有 I/O 的計算，所以每次要不要再起一份之前，先對儲存桶問一次索引在不在（`head`），問完才讀時鐘（`src/mirror.ts` 的 `elapsedMs`）；前一份失敗、後面沒有任何 I/O 的時候也一樣。把讀時鐘挪到別的地方，這條界線在線上會無聲地失效，而本機的 workerd 時鐘照常前進（同一頁：「In local development, however, timers will increment regardless of whether I/O happens or not」），測試看不出來。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
+- **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一輪假設自己拿得到 300,000 毫秒的 CPU 時間（`wrangler.jsonc` 的 `limits.cpu_ms` 設的數字；排程實際拿到的是不是這個數字還沒量到，見 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，留的是本機的 5 倍；Cloudflare 上量到的是四棵樹約 157 秒，不到本機的 2 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。**這個算法靠時鐘是新的，而 Cloudflare 上的時鐘只在 I/O 之後才前進**：程式在算的時候 `Date.now()` 停在上一次 I/O 的時間（[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)：「only advance or increment after I/O occurs」；[Security model](https://developers.cloudflare.com/workers/reference/security-model/)：「`Date.now()` returns the time of the last I/O. It does not advance during code execution」；2026-11-20 讀的）。一棵樹是幾十秒沒有 I/O 的計算，所以每次要不要再起一份之前，先對儲存桶問一次索引在不在（`head`），問完才讀時鐘（`src/mirror.ts` 的 `elapsedMs`）；前一份失敗、後面沒有任何 I/O 的時候也一樣。把讀時鐘挪到別的地方，這條界線在線上會無聲地失效，而本機的 workerd 時鐘照常前進（同一頁：「In local development, however, timers will increment regardless of whether I/O happens or not」），測試看不出來。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
 - **一輪做到一半被停掉，寫好的行留著。** 用完 CPU 時間的那一次呼叫會被 Cloudflare 停掉。索引每做完一個檔就寫一次、寫完就告訴 Durable Object，所以停在第二份的建樹時，第一份的行已經在索引裡、Durable Object 也知道；第二份的檔已經存著，之後的某一輪補它的行。這一輪抓到的兩份不看時間、一定做：兩份加起來超過一次呼叫的上限時，沒有哪一輪做得完，那是把鏡像搬出 Worker 的時候（ADR-0023）。
 - **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
 - **讀一個檔花的時間不超過它大小的線性倍數，除了一處。** 延伸欄位有沒有重複用集合找，不是兩兩比。清冊編號沒有長度上限（和 Go 相同），位元組一次轉成整數；但把整數印成十進位是 JavaScript 引擎做的，比線性慢：見[量到的](#清冊鏡像量到的)。
@@ -576,7 +655,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 ### 清冊鏡像量到的
 
-2026-11-20，Apple Silicon。清冊是測試網站 2026-11-19 鏡像下來的兩份（[第一次部署量到的](#第一次部署量到的)那兩個 SHA-256），從 `test-data.iamreal.tw` 下載，沒有對內政部送請求。**本機的 workerd 不限 CPU 和記憶體，這些數字只說明量級；Cloudflare 上只知道 30 秒的 CPU 時間不夠建完 G2 的樹（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），確切的還沒量。**
+2026-11-20，Apple Silicon。清冊是測試網站 2026-11-19 鏡像下來的兩份（[第一次部署量到的](#第一次部署量到的)那兩個 SHA-256），從 `test-data.iamreal.tw` 下載，沒有對內政部送請求。**本機的 workerd 不限 CPU 和記憶體，這些數字只說明量級；Cloudflare 上量到的在 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)：30 秒的 CPU 時間不夠建完 G2 的樹，設成 300,000 毫秒之後一輪建四棵樹約 157 秒。**
 
 本機的 workerd（1.20261110.1），整個 Worker，發證金鑰換成內政部的兩把，假的內政部送出那兩份檔，跑一次排程：
 
@@ -625,9 +704,9 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 - 讀得完的時候，索引的那一行帶著整個十進位的編號：4 MB 的整數是 960 萬個數字的一行。清冊檔和它的行都不刪（ADR-0027），所以這一行會一直留在每台裝置過卡時都要下載的索引裡。
 - 清冊編號和清冊層級延伸欄位的上限由 [#120](https://github.com/iamreal-tw/iamreal/issues/120) 在規格裡定，這一版沒有做。
 
-**部署之後要看的**，還沒有答案：
+**部署之後要看的**（第一項有答案了，其餘還沒有）：
 
-- Cloudflare 上一次排程真的 CPU 時間：看儀表板的 Metrics。`wrangler tail` 的 `crl_index` 那幾行的 `tree_ms` 在線上不可靠（時鐘在計算時不前進，見「排程做什麼」），不能拿來當建樹的時間。第一次只知道超過 30 秒（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）；`limits.cpu_ms` 設成 300,000 之後的還沒量
+- Cloudflare 上一次排程真的 CPU 時間：看儀表板的 Metrics。`wrangler tail` 的 `crl_index` 那幾行的 `tree_ms` 在線上不可靠（時鐘在計算時不前進，見「排程做什麼」），不能拿來當建樹的時間。第一次只知道超過 30 秒；`limits.cpu_ms` 設成 300,000 之後的第一輪約 157 秒，建了四棵樹（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）
 - 18 MB（gzip 後 4 MB）的一包上傳得上去、啟動得了
 - 編好的 WASM 機器碼算不算進每個實例 128 MB 的記憶體上限。Cloudflare 的文件寫的是「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)，2026-11-20 讀的），沒有講機器碼
 - 第一次排程要補的檔：儲存桶裡從 2026-11-19 起每小時鏡像下來的清冊都還沒有行，有幾份沒有查過。一輪補不完時分幾輪補，補齊之前索引只列一部分
@@ -647,7 +726,14 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 之後的做法：`limits.cpu_ms` 設成 300,000（[設定檔](#設定檔)）；一輪補之前留下的檔時，留 2.5 分鐘給最大的一份（[排程做什麼](#排程做什麼)）。
 
-**還沒量的**：設了 `limits.cpu_ms` 之後，一次排程在 Cloudflare 上實際用多少 CPU 時間、G2 的樹要多久；每小時的排程拿到的上限是設的 300,000 毫秒，還是那張表寫的 15 分鐘。部署後第一個整點要看的：`https://test-data.iamreal.tw/crl/index.jsonl` 有 G2、G3 各一行，樹根和 Go 的 `iamreal-crl check` 對同一份檔算的相同；儀表板上那一次沒有 Exceeded CPU Time Limits；那一次的 CPU 時間記在這裡，數字取儀表板 Metrics 的，不取紀錄裡的 `tree_ms`（線上的時鐘在計算時不前進，那個數字會偏小）。量到的 CPU 時間離 5 分鐘不夠遠時，另外開票（建樹跨輪接續，或把鏡像搬出 Worker）。
+**設了 `limits.cpu_ms` 之後的第一輪**（06:06 部署，07:00 的排程）：
+
+- 索引在 07:01:43 有兩行（這一輪抓到的 G2、G3，清冊編號都是 `2026112010`），07:03:08 有四行（補了之前留下的兩份，編號 `2026112005`）。之後照 2.5 分鐘的界線停下來，剩下的留給後面幾輪。
+- 儀表板 Metrics 上那一次：CPU 時間約 157 秒，牆上時間約 176 秒（圖上的數字只到千毫秒），沒有 Exceeded CPU Time Limits。「Errors by invocation status」過去 24 小時的 Exceeded CPU Time Limits 共 2 次，是 05:00 和 06:00 那兩輪，都在這次部署之前。
+- 四棵樹（G2、G3 各兩份）約 157 秒，一對約 78 秒，是本機（42 到 45 秒）的不到 2 倍。單獨一棵樹在線上要多久沒有量到。
+- 四行的樹根和 Go 的 `iamreal-crl check` 對同一份檔（從 `test-data.iamreal.tw/crl/<sha256>.crl` 下載，SHA-256 和索引的相同）算的相同。
+
+**還沒量的**：每小時的排程拿到的上限是設的 300,000 毫秒，還是那張表寫的 15 分鐘（這一輪用了約 157 秒，兩個都沒碰到）。一輪用掉的 CPU 時間接近 5 分鐘時，另外開票（建樹跨輪接續，或把鏡像搬出 Worker）。
 
 ### 內政部看得到什麼
 
@@ -685,6 +771,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 讓某一張表的寫入失敗 | `worker.roster.failWritesTo("cards")`，`(null)` 恢復 |
 | 把存著的規則版本改成另一個數字、改回來 | `worker.roster.setStoredRulesVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
 | 對存著的狀態跑一筆標準答案的事件 | `worker.roster.applyRuleEvent(事件)` |
+| 讀名冊上最晚的有效日期、每個帳號底下的卡片數 | `worker.roster.ruleState(場合字串, 匿名編號)` |
 | 讓後台自己出錯 | `worker.roster.breakTables()` |
 | 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
 | 讀存著的紀錄和名冊那一列、照規格重算 | `worker.roster.stored()` 讀出來；`test/records.ts` 的 `checkRoster(worker)` 重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |
@@ -870,6 +957,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`、跳脫、方法、測試名冊的標示；讀 `design/copy/` 的工具 |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
+| `test/sequence.test.ts`、`test/sequence.ts` | 固定種子的長序列：產生器，Go 的 `roster/` 算的答案，配記憶體和配 Durable Object 的儲存逐筆比對（要有 `go`） |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；每個環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |

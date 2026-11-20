@@ -461,7 +461,7 @@ export class Roster extends DurableObject<Env> {
       sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       writeView(sql, view);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
-      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: accountCards(sql, record.scopeString, a.platform, a.username) })) };
+      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })) };
     });
     return { outcome: "written", record: written };
   }
@@ -503,6 +503,19 @@ export class Roster extends DurableObject<Env> {
   pageCards(shortId: string): CardsOfShortId {
     this.#checkViews();
     return { today: taiwanDay(now().getTime()), cards: cardsOfShortId(this.ctx.storage.sql, scopeOf(this.settings.kind), shortId) };
+  }
+
+  /**
+   * The number of cards of a scope that give their place on a platform to
+   * this username now, counted in the views (views.ts, `accountCards`): one
+   * index, and no card's stored state is read.
+   *
+   * `protected`, like `ruleState`, so that the test build counts the cards
+   * of each account with this same query when it compares the stored state
+   * with Go's roster/ (its `testRuleState`). It is not overridden.
+   */
+  protected accountCards(scopeString: string, platform: string, username: string): number {
+    return accountCards(this.ctx.storage.sql, scopeString, platform, username);
   }
 
   /** The state of one card and the number of records it was computed at. */

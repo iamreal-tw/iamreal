@@ -278,15 +278,7 @@ func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 			if x != nil {
 				cs := x.Card(s.ScopeString, c.ScopedID)
 				co.ProofsOnLastDate = cs.ProofsOnLastDate
-				co.Slots = map[string]slotOut{}
-				for p, slot := range cs.Slots {
-					so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
-					if slot.CorrectionDate != nil {
-						d := slot.CorrectionDate.String()
-						so.CorrectionDate = &d
-					}
-					co.Slots[p] = so
-				}
+				co.Slots = slotsOut(cs)
 			}
 			so.Cards = append(so.Cards, co)
 		}
@@ -298,6 +290,20 @@ func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 			so.Accounts = append(so.Accounts, ao)
 		}
 		out = append(out, so)
+	}
+	return out
+}
+
+// slotsOut writes a card's slots in the shape of the vectors' `slots`.
+func slotsOut(cs roster.CardState) map[string]slotOut {
+	out := map[string]slotOut{}
+	for p, slot := range cs.Slots {
+		so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}
+		if slot.CorrectionDate != nil {
+			d := slot.CorrectionDate.String()
+			so.CorrectionDate = &d
+		}
+		out[p] = so
 	}
 	return out
 }

@@ -30,14 +30,16 @@
 //   break its tables, or one card's row, or make every write to one of them fail, to see what
 //   the API answers when the back end itself fails; drop the table of the
 //   newest CRLs; and run the roster rules on the object's stored state for
-//   an event the API would never write (an invalid record of a roster);
+//   an event the API would never write (an invalid record of a roster),
+//   and read the latest valid date and the cards of each account as the
+//   object reads and counts them;
 //   read the rows it keeps of its records and of the roster as a whole,
 //   which no endpoint shows yet; and wait before it hashes a record, so
 //   that requests sent at once do cross where the deployed object lets
 //   them (in the local workerd the hash alone does not let another in).
-import { bytesOfHex } from "iamreal-protocol/bytes.ts";
+import { byBytes, bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
-import { parseDay } from "iamreal-protocol/date.ts";
+import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
@@ -47,8 +49,8 @@ import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import { VIEW_TABLE_KEYS } from "../src/views.ts";
-import type { CardToWrite, RuleEvent, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
+import { VIEW_TABLE_KEYS, viewOf, writeView } from "../src/views.ts";
+import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -255,10 +257,37 @@ export class Roster extends DeployedRoster {
   }
 
   /**
+   * What the stored state says besides the cards' rows (RuleStateAnswer):
+   * the latest valid date as `ruleState` reads it, and the cards of each
+   * account as `accountCards` counts them. Which accounts there are is read
+   * here from the rows of the card states; the count is the deployed
+   * query's, which asks the views.
+   */
+  testRuleState(scopeString: string, scopedId: string): RuleStateAnswer {
+    const { latestValidDate } = this.ruleState(scopeString, scopedId);
+    const accounts: { platform: string; username: string; account_cards: number }[] = [];
+    for (const platform of this.settings.platforms.map((p) => p.platform).sort(byBytes)) {
+      const declared = this.ctx.storage.sql
+        .exec<{ username: string }>("SELECT DISTINCT json_extract(slots, ?) AS username FROM cards WHERE scope_string = ? AND json_extract(slots, ?) IS NOT NULL", `$."${platform}".current`, scopeString, `$."${platform}".current`)
+        .toArray()
+        .map((r) => r.username)
+        .sort(byBytes);
+      for (const username of declared) accounts.push({ platform, username, account_cards: this.accountCards(scopeString, platform, username) });
+    }
+    return { latest_valid_date: latestValidDate === null ? null : formatDay(latestValidDate), accounts };
+  }
+
+  /**
    * Runs the roster rules for one event of spec/vectors/roster-rules.json on
    * the state the object stores, and keeps what a valid one leaves: the
    * same reading and the same writing of the state as for a submitted
-   * record (src/roster.ts, `ruleState`, `keepRuleState`). The answers the
+   * record (src/roster.ts, `ruleState`, `keepRuleState`), and the same
+   * change to the views (src/views.ts, `viewOf`, `writeView`), which is
+   * where the deployed object counts the cards of an account. No record is
+   * stored for an event, so the views' own count of records is put back to
+   * the roster's afterwards: the object would otherwise take the views for
+   * stale when it next starts, and fill them from records that are not
+   * there. The answers the
    * rules take from outside the roster come with the event. Which
    * challenges were used is kept in a table of the test's own, since the
    * back end never writes an invalid record and so keeps no challenge of
@@ -280,7 +309,13 @@ export class Roster extends DeployedRoster {
       crlDates: e.crl_dates.map((d) => parseDay(d)!),
     });
     this.ctx.storage.transactionSync(() => {
-      if (outcome.result.valid) this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+      if (outcome.result.valid) {
+        this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+        const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
+        sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", e.seq - 1);
+        writeView(sql, viewOf({ seq: e.seq, scopeString: e.scope_string, scopedId: e.scoped_id }, date, outcome.result.kinds, card, outcome.card));
+        sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", count);
+      }
       sql.exec("INSERT OR IGNORE INTO test_used_challenges (challenge) VALUES (?)", e.challenge);
     });
     return outcome.result;
@@ -325,6 +360,9 @@ export default {
    *   CRLs, as on an object made before the build had it.
    * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
    *   rules for it on the object's stored state and answers the result.
+   * - `POST /__test/roster/rule-state` with `{scope_string, scoped_id}`
+   *   answers a RuleStateAnswer: the latest valid date the rules read for
+   *   that card, and the cards of every declared account of the scope.
    * - `GET /__test/roster/views` answers a StoredViews: every row of the
    *   views; `DELETE` clears them, and the object fills them from its
    *   records when it starts again.
@@ -425,6 +463,10 @@ export default {
       return done();
     }
     if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
+    if (route === "POST /__test/roster/rule-state") {
+      const { scope_string, scoped_id } = (await request.json()) as { scope_string: string; scoped_id: string };
+      return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
+    }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
     if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
     if (route === "DELETE /__test/roster/views") {

@@ -29,6 +29,19 @@ export interface RuleEvent {
   readonly crl_dates: readonly string[];
 }
 
+/**
+ * What `POST /__test/roster/rule-state` answers for `{scope_string,
+ * scoped_id}`: the latest valid date the roster rules read for that card
+ * (src/roster.ts, `ruleState`), and every account of the scope that a
+ * stored card declares now, with the number of cards that declare it as
+ * the deployed query counts them (`accountCards`, the `account_cards` of a
+ * `201`). Sorted by platform, then username, by byte value.
+ */
+export interface RuleStateAnswer {
+  readonly latest_valid_date: string | null;
+  readonly accounts: readonly { readonly platform: string; readonly username: string; readonly account_cards: number }[];
+}
+
 /** The settings of the environment a test may replace (`PUT /__test/settings`); wrangler.jsonc has the deployed ones. */
 export interface TestSettings {
   readonly ROSTER_KIND?: string;

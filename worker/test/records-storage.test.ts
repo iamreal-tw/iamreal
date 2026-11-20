@@ -9,13 +9,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { type Day, formatDay, parseDay } from "iamreal-protocol/date.ts";
+import { parseDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
 import type { CardState } from "iamreal-protocol/roster-rules.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
 import { type Answer, type Submission, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
+import { cardJsonOf } from "./sequence.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -223,13 +224,11 @@ describe("spec/vectors/roster-rules.json on the object's stored state", () => {
     readonly state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; proofs_on_last_date: number; slots: Record<string, unknown> }[] }[];
   }
   const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "roster-rules.json"), "utf8")) as { cases: Case[] };
-  const dateText = (d: Day | null): string | null => (d === null ? null : formatDay(d));
   /** A card's state from memory, in the spelling of `card-state`'s answer without `count`. */
-  const answerOf = (card: CardState): Record<string, unknown> => ({
-    last_card_proof: dateText(card.lastCardProof),
-    proofs_on_last_date: card.proofsOnLastDate,
-    platforms: Object.fromEntries([...card.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: dateText(s.correctionDate) }])),
-  });
+  const answerOf = (card: CardState): Record<string, unknown> => {
+    const { slots, ...items } = cardJsonOf(card);
+    return { ...items, platforms: slots };
+  };
   const stored = async (scope: string, card: string): Promise<Record<string, unknown>> => {
     const { count: _, ...state } = await cardState(worker, card, scope);
     return state;
