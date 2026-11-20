@@ -204,6 +204,12 @@ const hasGo = spawnSync("go", ["version"]).status === 0;
 const goRequired = Boolean(process.env.CI) || Boolean(process.env.IAMREAL_BB);
 const skip = !hasGo && !goRequired ? "go is not installed: no answers from Go's roster/" : false;
 
+// The run on the Durable Object's storage takes about 107 s, nearly all the
+// time of this file, so it runs only when asked for: IAMREAL_SEQUENCE_STORAGE=1.
+// The run in memory (under a second) runs with every `pnpm test`. When to ask
+// for it is in README.md, "名冊規則和 Go 的 roster/ 逐筆比對".
+const storageSkip = process.env.IAMREAL_SEQUENCE_STORAGE === "1" ? false : "IAMREAL_SEQUENCE_STORAGE is not 1: the run on the Durable Object's storage (about 107 s) is not asked for";
+
 /** protocol/'s result without the explanation for people (`blockedPlatform`): the reason code is the whole result of an invalid record. */
 const resultOf = (r: RecordResult): ResultJson => (r.valid ? { valid: true, kinds: r.kinds } : { valid: false, reason: r.reason });
 
@@ -221,8 +227,8 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's roster/ gives th
   let failed = false;
 
   /** A test of this suite: a failure keeps the files. */
-  const check = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-    test(name, async (t) => {
+  const check = (name: string, fn: (t: TestContext) => void | Promise<void>, options: { skip?: string | false } = {}): void => {
+    test(name, options, async (t) => {
       try {
         await fn(t);
       } catch (err) {
@@ -352,5 +358,5 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's roster/ gives th
     }
     assert.equal(checkpoints, LENGTH / CHECKPOINT_EVERY);
     t.diagnostic(`${LENGTH} records and ${checkpoints} checkpoints on the Durable Object, the Worker's start included: ${Math.round((performance.now() - started) / 1000)} s`);
-  });
+  }, { skip: storageSkip });
 });

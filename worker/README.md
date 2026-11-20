@@ -188,11 +188,14 @@ pnpm typecheck   # 型別檢查
 | 2 | 一串固定種子產生的長序列，`protocol/` 的規則配記憶體（`MemoryRules`），以 Go 的 `roster/` 當答案 | `test/sequence.test.ts` |
 | 3 | 同一串，配 Durable Object 的儲存，每一筆之間重啟名冊的 Durable Object | `test/sequence.test.ts` |
 
-第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在 `pnpm test` 裡。只跑它，在這個目錄：
+第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，每個 PR 都跑（不到 1 秒）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
 
 ```sh
-node --experimental-strip-types --test test/sequence.test.ts
+node --experimental-strip-types --test test/sequence.test.ts                             # 第 2 層
+IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.test.ts  # 第 2、3 層
 ```
+
+**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層每個 PR 擋著，存了再讀的不同由第 1 層每個 PR 擋著（標準答案的每一案，每筆之間重啟）；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
 
 要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
 
