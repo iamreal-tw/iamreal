@@ -15,8 +15,8 @@ describe("device-checks.json: certificate", () => {
 });
 
 describe("device-checks.json: crl", () => {
-  test("max_age", () => {
-    for (const c of v.crl.max_age as MaxAgeCase[]) assert.equal(maxAgeResult(c), c.max_age_days, `server ${c.server_days}`);
+  test("max_age", async () => {
+    for (const c of v.crl.max_age as MaxAgeCase[]) assert.equal(await maxAgeResult(c), c.max_age_days, `server ${JSON.stringify(c.server_max_age_days)}`);
   });
   for (const c of v.crl.index as IndexCase[]) {
     test(`index: ${c.what}`, () => assert.deepEqual(indexResult(c), c.result));

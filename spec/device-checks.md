@@ -7,8 +7,8 @@ certificate a card proof uses, checks it, and checks the CRL it builds the
 revocation tree from. These checks protect the cardholder: a card that
 cannot pass is told so before any PIN is used, and a server cannot loosen
 them (ADR-0015, ADR-0016). This document defines them, so that every
-implementation on a device (the web page, the apps) gives the same answer
-for the same certificates, CRLs and date.
+client (the web page, the Android and iOS apps) gives the same answer for
+the same certificates, CRLs and date.
 
 Each check either passes or stops the card proof with a reason code. The
 codes are the names used in the test vectors; what the screen says for each
@@ -60,9 +60,17 @@ or a reason code, and is marked **signing** or not.
 4. **The walk's result.** Stopped at `holder`: `not_citizen_primary`.
    Stopped at `key_usage` or `structure`: `unsupported_format`.
 5. **Issuer.** The signature is checked under each issuer key in the order of
-   the table, as RSASSA-PKCS1-v1_5 with SHA-256 and exponent 65537 over the
-   bytes of the tbs (its tag and length included). A signature whose length
-   is not the key's size in bytes (256 for G2, 512 for G3) does not verify.
+   the table, as RSASSA-PKCS1-v1_5 (RFC 8017 section 8.2.2) with SHA-256 and
+   exponent 65537 over the bytes of the tbs (its tag and length included).
+   It verifies only if:
+   - its length is the key's size in bytes (256 for G2, 512 for G3), with no
+     byte added or removed;
+   - read as a big-endian integer, it is below the key's modulus;
+   - the decoded block is exactly `00 01`, `FF` bytes, `00` and the
+     DigestInfo `30 31 30 0d 06 09 60 86 48 01 65 03 04 02 01 05 00 04 20`
+     followed by the SHA-256 of the tbs. A DigestInfo without the `05 00`
+     (NULL) parameters does not verify.
+
    The first key under which it verifies is the certificate's issuer. None:
    `unknown_issuer`.
 6. Otherwise the certificate **passes**.
@@ -113,7 +121,7 @@ at the bytes after the tbs.
 
 ### What the device reads from the chosen certificate
 
-- the issuer (`G2` or `G3`), which decides the CRL and the circuit
+- the issuer key (`G2` or `G3`), which decides the CRL and the circuit
   ([`issuers.md`](issuers.md));
 - the serial number (row 4), the key of the revocation tree
   ([`revocation-tree.md`](revocation-tree.md));
@@ -123,11 +131,12 @@ at the bytes after the tbs.
 - the **name**, shown to the cardholder before the PIN and never sent
   anywhere: the value of the first attribute of type `2.5.4.3`
   (commonName) in the subject, reading its relative distinguished names and
-  their attributes in order, as DER. A `BMPString` (tag `1e`) is UTF-16
-  big-endian; a value of any other tag is UTF-8. No commonName, or a subject
-  the device cannot read: the name is empty. The name is not checked and
-  never compared, so how an implementation shows text that is not valid
-  UTF-8 or UTF-16 is its own choice; the vectors contain none.
+  their attributes in order. A `BMPString` (tag `1e`) is UTF-16 big-endian;
+  a value of any other tag is UTF-8. No commonName: the name is empty. The
+  name is not checked and never compared, so how an implementation reads a
+  subject that is not a well-formed `Name`, or shows text that is not valid
+  UTF-8 or UTF-16, is its own choice (the web page shows an empty name); the
+  vectors contain none.
 
 ### Reason codes
 
@@ -160,6 +169,14 @@ index").
 L = min(crl_max_age_days, 7)
 ```
 
+`crl_max_age_days` is a JSON number that is a non-negative integer no larger
+than 2^53 − 1. A config with any other value (negative, a fraction, a
+string, `null`, larger) is not read at all: it is a malformed response
+(`malformed_response`, [`docs/api/card-proof.md`](../docs/api/card-proof.md)),
+and the card proof stops before any CRL is used. The server writes the number as plain digits; how a number written
+with a fraction or an exponent part that is an integer (`3.0`, `3e0`) is
+read is not specified, and the vectors contain none.
+
 7 is the bound built into the device. The server can make it stricter, never
 looser: a mirror that serves old CRLs could otherwise learn whether a card
 was suspended then ([`revocation-tree.md`](revocation-tree.md), "Why the
@@ -169,8 +186,9 @@ device has its own bound").
 
 The index is used only to find the file; nothing else in it is trusted.
 
-- The index is read as UTF-8 text and split at each `0A`. Empty lines, and
-  lines that are not a JSON object, are skipped. A text that is not UTF-8 is
+- The index is read as UTF-8 text, without a byte order mark at its start if
+  there is one, and split at each `0A`. Empty lines, and lines that are not
+  a JSON object, are skipped. A text that is not UTF-8 is
   `crl_unavailable`.
 - A line is a **candidate** if its `issuer` is the certificate's issuer, its
   `crl_number` is a string of decimal digits without a leading zero (or
@@ -218,7 +236,7 @@ number is in the tree, the card proof stops with `revoked`.
 
 | Code | Details reported | The CRL |
 |---|---|---|
-| `crl_unavailable` | | No file chosen from the index, or the index or the file could not be downloaded |
+| `crl_unavailable` | | No file chosen from the index, the index is not UTF-8, or the index or the file could not be downloaded |
 | `crl_hash` | | The file's SHA-256 is not the one the index gave |
 | `crl_unusable` | the reason code | Not usable under the issuer key |
 | `crl_rollback` | its CRL number, the highest remembered | A lower CRL number than this device has used for the issuer |
@@ -236,12 +254,16 @@ number is in the tree, the card proof stops with `revoked`.
   input, issuer, serial number, card's modulus, notBefore, notAfter, name)
   or the reason code, with notAfter for `expired` and notBefore for
   `not_yet_valid`.
-- `crl.max_age`: `crl_max_age_days` and `L`.
+- `crl.max_age`: the server's `crl_max_age_days` as it is in the JSON
+  (`server_max_age_days`), and `L` (`max_age_days`), or `null` where the
+  config is not read.
 - `crl.index`: an index and an issuer; the chosen `crl_number` and `sha256`,
   or `crl_unavailable`.
-- `crl.cases`: the certificate's issuer, today, `crl_max_age_days`, the
-  remembered CRL number, and the mirror (its index and the files it serves,
-  by name; a name not listed is not served). The result is the CRL used (its
+- `crl.cases`: the certificate's issuer key, today, the server's
+  `crl_max_age_days` (`server_max_age_days`), the remembered CRL number, and
+  the mirror's answers by file name (`index.jsonl` and `<sha256>.crl`): the
+  HTTP status and the body in hex; a name not listed is answered with `404`.
+  A request that gets no answer at all is not in the vectors. The result is the CRL used (its
   number, CRL date and SHA-256) or the reason code with its details, and in
   both cases the number remembered afterwards.
 

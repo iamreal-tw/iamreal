@@ -4,8 +4,8 @@
 // results written by hand before it writes the file.
 import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
-import type { Fetch } from "../src/api.ts";
-import { selectCertificate } from "../src/certificate.ts";
+import { type Fetch, ServerError, requestConfig } from "../src/api.ts";
+import { type CertificateProblem, selectCertificate } from "../src/certificate.ts";
 import { RevocationError, chooseFromIndex, crlMaxAge, loadCrl } from "../src/crl/revocation.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { memoryStore } from "../src/storage.ts";
@@ -51,7 +51,7 @@ export type CertificateResult =
       not_after: string;
       name: string;
     }
-  | { ok: false; problem: string; not_before?: string; not_after?: string };
+  | { ok: false; problem: CertificateProblem; not_before?: string; not_after?: string };
 
 export async function certificateResult(c: Omit<CertificateCase, "result">, issuers: readonly VectorIssuer[]): Promise<CertificateResult> {
   const ders = c.certificates.map((h) => bytesOfHex(h));
@@ -79,11 +79,23 @@ export async function certificateResult(c: Omit<CertificateCase, "result">, issu
 }
 
 export interface MaxAgeCase {
-  server_days: number;
-  max_age_days: number;
+  /** `crl_max_age_days` of the server's config, as it is in the JSON (any value). */
+  server_max_age_days: unknown;
+  /** L, or null if the device does not read a config with this value. */
+  max_age_days: number | null;
 }
 
-export const maxAgeResult = (c: Omit<MaxAgeCase, "max_age_days">): number => crlMaxAge(c.server_days);
+/** A config with one row the device reads, so only `crl_max_age_days` decides. */
+export async function maxAgeResult(c: Omit<MaxAgeCase, "max_age_days">): Promise<number | null> {
+  const body = { crl_max_age_days: c.server_max_age_days, platforms: [{ platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" }] };
+  const fetchFn: Fetch = async () => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    return crlMaxAge((await requestConfig(fetchFn)).crlMaxAgeDays);
+  } catch (e) {
+    if (e instanceof ServerError && e.code === "malformed_response") return null;
+    throw e;
+  }
+}
 
 export interface IndexCase {
   what: string;
@@ -113,9 +125,11 @@ export interface CrlCase {
   server_max_age_days: number;
   /** The highest CRL number this device has used for the issuer, or null. */
   highest: string | null;
-  /** The mirror: its index.jsonl, and its CRL files by name (hex). A name not here is not served. */
-  index: string;
-  files: Record<string, string>;
+  /**
+   * The mirror's answers, by file name (`index.jsonl`, `<sha256>.crl`): the
+   * HTTP status and the body (hex). A name not here is answered with 404.
+   */
+  mirror: Record<string, { status: number; body: string }>;
   result: CrlResult;
 }
 
@@ -134,10 +148,9 @@ export async function crlResult(c: Omit<CrlCase, "result">, issuers: readonly Ve
   const issuer = issuerKeys(issuers).find((k) => k.name === c.issuer);
   if (!issuer) throw new Error(`no issuer ${c.issuer}`);
   const fetchFn: Fetch = async (path) => {
-    if (path === "/crl/index.jsonl") return new Response(new TextEncoder().encode(c.index), { status: 200 });
     const m = /^\/crl\/(.+)$/.exec(path);
-    const hex = m ? c.files[m[1]!] : undefined;
-    return hex === undefined ? new Response(null, { status: 404 }) : new Response(bytesOfHex(hex) as BodyInit, { status: 200 });
+    const file = m ? c.mirror[m[1]!] : undefined;
+    return file === undefined ? new Response(null, { status: 404 }) : new Response(bytesOfHex(file.body) as BodyInit, { status: file.status });
   };
   const store = memoryStore(c.highest === null ? {} : { [c.issuer]: BigInt(c.highest) });
   const highestAfter = () => store.get(c.issuer)?.toString() ?? null;

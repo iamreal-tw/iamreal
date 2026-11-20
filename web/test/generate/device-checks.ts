@@ -8,7 +8,8 @@
 // gives a different one, this stops and writes nothing.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { concatBytes, hexOf, sha256Hex } from "iamreal-protocol/bytes.ts";
+import { bigintOfBytes, bytesOfBigint, concatBytes, hexOf, sha256, sha256Hex } from "iamreal-protocol/bytes.ts";
+import type { CertificateProblem } from "../../src/certificate.ts";
 import type { IssuerName } from "../../src/issuers.ts";
 import {
   type CertificateCase,
@@ -35,11 +36,18 @@ import {
   subjectDirectoryAttributes,
 } from "../fixtures/certs.ts";
 import { IDP, indexLine, makeCrl } from "../fixtures/crls.ts";
-import { type TestKey, hex, makeKey, seq, tlv } from "../fixtures/der-build.ts";
+import { SHA256_WITH_RSA, type TestKey, hex, makeKey, seq, signWith, tlv } from "../fixtures/der-build.ts";
 
 const out = new URL("../../../spec/vectors/device-checks.json", import.meta.url);
 
-const [g2, g3, other, card, bigCard] = await Promise.all([makeKey(2048), makeKey(4096), makeKey(2048), makeKey(2048), makeKey(4096)]);
+/** A G2 key below 1.5 × 2^2047, so that a signature plus the modulus often still fits in 256 bytes. */
+async function g2Key(): Promise<TestKey> {
+  for (;;) {
+    const k = await makeKey(2048);
+    if (k.modulus >> 2045n < 6n) return k;
+  }
+}
+const [g2, g3, other, card, bigCard] = await Promise.all([g2Key(), makeKey(4096), makeKey(2048), makeKey(2048), makeKey(4096)]);
 const issuerKeys: Record<IssuerName, TestKey> = { G2: g2, G3: g3 };
 const issuers: VectorIssuer[] = [
   { issuer: "G2", bits: 2048, modulus: "0x" + g2.modulus.toString(16) },
@@ -71,6 +79,7 @@ const bmpString = (s: string): Uint8Array => {
   }
   return b;
 };
+// fixtures/certs.ts writes names in UTF-8 only; this one takes the value's tag and bytes.
 const rdn = (oid: string, tag: number, value: Uint8Array): Uint8Array => tlv(0x31, seq(tlv(0x06, hex(oid)), tlv(tag, value)));
 const COUNTRY = rdn("550406", 0x13, Uint8Array.from("TW", (c) => c.charCodeAt(0)));
 
@@ -84,7 +93,56 @@ const passes = (o: { chosen?: number; issuer?: IssuerName; serial?: string; modu
   not_after: o.notAfter ?? "310101155959",
   name: o.name ?? "測試用戶",
 });
-const fails = (problem: string, dates: { not_before?: string; not_after?: string } = {}) => ({ ok: false as const, problem, ...dates });
+const fails = (problem: CertificateProblem, dates: { not_before?: string; not_after?: string } = {}) => ({ ok: false as const, problem, ...dates });
+
+// Certificates written byte by byte: the walk's rows, the outer DER, the signature.
+const TBS = buildTbs({ spki: card.spki });
+function offsetOf(b: Uint8Array, pattern: Uint8Array): number {
+  for (let i = 0; i + pattern.length <= b.length; i++) if (pattern.every((x, j) => b[i + j] === x)) return i;
+  throw new Error("pattern not found");
+}
+const K = offsetOf(TBS, hex("30820122300d06092a864886f70d01010105000382010f003082010a0282010100")); // row 9
+const E = K + 289; // row 10
+/** The usual tbs with `bytes` written at `offset`, signed by G3. */
+const patched = (offset: number, bytes: number[]): Promise<Uint8Array> => {
+  const t = TBS.slice();
+  t.set(bytes, offset);
+  return certificate(t, g3);
+};
+/** The usual tbs cut to `n` bytes (its outer length follows), signed by G3. */
+const cutTo = (n: number): Promise<Uint8Array> => {
+  const t = TBS.slice(0, n);
+  t[2] = (n - 4) >> 8;
+  t[3] = (n - 4) & 0xff;
+  return certificate(t, g3);
+};
+const bitString = (unused: number, sig: Uint8Array): Uint8Array => tlv(0x03, concatBytes(Uint8Array.of(unused), sig));
+const tbsSig = await signWith(g3, TBS);
+/** RSASSA-PKCS1-v1_5 written out: 00 01 FF… 00 and the DigestInfo, raised to d. */
+async function rawSign(key: TestKey, digestInfo: Uint8Array): Promise<Uint8Array> {
+  const jwk = await crypto.subtle.exportKey("jwk", key.privateKey);
+  const d = bigintOfBytes(Uint8Array.from(atob(jwk.d!.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
+  const k = key.bits / 8;
+  const em = concatBytes(Uint8Array.of(0, 1), new Uint8Array(k - 3 - digestInfo.length).fill(0xff), Uint8Array.of(0), digestInfo);
+  let base = bigintOfBytes(em) % key.modulus;
+  let r = 1n;
+  for (let e = d; e > 0n; e >>= 1n, base = (base * base) % key.modulus) if (e & 1n) r = (r * base) % key.modulus;
+  return bytesOfBigint(r, k);
+}
+const G2_TBS = buildTbs({ spki: card.spki });
+const g2Digest = await sha256(G2_TBS);
+const withNull = concatBytes(hex("3031300d060960864801650304020105000420"), g2Digest);
+assert.deepEqual(await rawSign(g2, withNull), await signWith(g2, G2_TBS), "the written-out signature is the one WebCrypto makes");
+const noNull = await rawSign(g2, concatBytes(hex("302f300b0609608648016503040201") , hex("0420"), g2Digest));
+/** A G2 certificate whose signature is written as itself plus the modulus, still 256 bytes. */
+async function signaturePlusModulus(): Promise<Uint8Array> {
+  for (let i = 0; i < 200; i++) {
+    const t = buildTbs({ spki: card.spki, serial: Uint8Array.of(0x10, i) });
+    const big = bigintOfBytes(await signWith(g2, t)) + g2.modulus;
+    if (big >> 2048n === 0n) return seq(t, SHA256_WITH_RSA, bitString(0, bytesOfBigint(big, 256)));
+  }
+  throw new Error("no signature with room above the modulus");
+}
 
 const signing = await cert();
 const encryption = await cert(ENCRYPTION);
@@ -139,6 +197,31 @@ certCase("notAfter in 2050 or later (UTCTime 50)", [await cert({ notAfter: "5001
 certCase("notAfter as GeneralizedTime", [await cert({ notAfter: "20491231155959Z" })], fails("unsupported_format"));
 certCase("a tbsCertificate of 1527 bytes", [await certWithTbsOf(1527)], passes());
 certCase("a tbsCertificate of 1528 bytes", [await certWithTbsOf(1528)], fails("unsupported_format"));
+certCase("version 2 (row 3)", [await patched(8, [0x01])], fails("unsupported_format"));
+certCase("signature algorithm sha1WithRSAEncryption in the tbs (row 5)", [await patched(11 + 16 + 12, [0x05])], fails("unsupported_format"));
+certCase("a date with a byte that is not a digit (row 7)", [await cert({ notBefore: "26010100000AZ" })], fails("unsupported_format"));
+certCase(
+  "a subject of fewer than 128 bytes with a long-form length, 81 xx (row 8)",
+  [await cert({ subject: (() => { const n = name("測試用戶"); return concatBytes(Uint8Array.of(0x30, 0x81, n[1]!), n.subarray(2)); })() })],
+  fails("unsupported_format"),
+);
+certCase("a card modulus whose first byte is 7f: fewer than 2048 bits (row 9)", [await patched(K + 33, [0x7f])], fails("unsupported_format"));
+certCase("exponent 65539 (row 10)", [await patched(E + 4, [0x03])], fails("unsupported_format"));
+certCase("the tbs ends 168 bytes after the exponent (row 16)", [await cutTo(E + 168)], passes());
+certCase("the tbs ends 167 bytes after the exponent (row 16)", [await cutTo(E + 167)], fails("unsupported_format"));
+certCase("the signatureAlgorithm outside the tbs is not read", [seq(TBS, hex("300d06092a864886f70d0101050500"), bitString(0, tbsSig))], passes());
+certCase("the signature's BIT STRING has 1 unused bit", [seq(TBS, SHA256_WITH_RSA, bitString(1, tbsSig))], fails("unsupported_format"));
+certCase("a G2 signature of 257 bytes, the first 00", [seq(G2_TBS, SHA256_WITH_RSA, bitString(0, concatBytes(Uint8Array.of(0), await signWith(g2, G2_TBS))))], fails("unknown_issuer"));
+certCase("a G2 signature written as itself plus the modulus", [await signaturePlusModulus()], fails("unknown_issuer"));
+certCase("a G2 signature whose DigestInfo has no NULL parameters", [seq(G2_TBS, SHA256_WITH_RSA, bitString(0, noNull))], fails("unknown_issuer"));
+certCase("DER: a multi-byte tag", [seq(TBS, hex("3f010d300b06092a864886f70d01010b"), bitString(0, tbsSig))], fails("unsupported_format"));
+certCase("DER: an indefinite length", [concatBytes(hex("3080"), TBS, SHA256_WITH_RSA, bitString(0, tbsSig), hex("0000"))], fails("unsupported_format"));
+certCase("DER: a long-form length below 128, 81 0d", [seq(TBS, hex("30810d06092a864886f70d01010b0500"), bitString(0, tbsSig))], fails("unsupported_format"));
+certCase(
+  "DER: a length with a leading zero byte",
+  [(() => { const body = concatBytes(TBS, SHA256_WITH_RSA, bitString(0, tbsSig)); return concatBytes(Uint8Array.of(0x30, 0x83, 0, body.length >> 8, body.length & 0xff), body); })()],
+  fails("unsupported_format"),
+);
 
 // --- CRLs -------------------------------------------------------------------
 
@@ -156,35 +239,55 @@ interface MirrorCrl {
   extraExtensions?: Uint8Array[];
   /** The index line says this root (for example "-not_usable_signature"). */
   root?: string;
-  /** Serve these bytes under the file's name instead. */
+  /** Serve these bytes under the file's name instead; null: not served (404). */
   serve?: Uint8Array | null;
+  /** Answer the file's name with this status (and no body). */
+  status?: number;
 }
 
-async function mirror(crls: MirrorCrl[]): Promise<{ index: string; files: Record<string, string> }> {
+interface MirrorOptions {
+  /** The index's bytes from its text (default: UTF-8). */
+  indexBytes?: (text: string) => Uint8Array;
+  /** Answer index.jsonl with this status (and no body); 404 is "not served". */
+  indexStatus?: number;
+}
+
+type Mirror = CrlCase["mirror"];
+
+/** The mirror's answers, and the SHA-256 of each CRL in the order given. */
+async function mirror(crls: MirrorCrl[], o: MirrorOptions): Promise<{ mirror: Mirror; shas: string[] }> {
   const lines: string[] = [];
-  const files: Record<string, string> = {};
+  const files: Mirror = {};
+  const shas: string[] = [];
   for (const c of crls) {
     const der = await makeCrl({ issuer: c.signWith ?? issuerKeys[c.issuer], serials: [3n, 0x1234n, 0xfedcba9876543210n], crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, extraExtensions: c.extraExtensions });
     lines.push(await indexLine({ issuer: c.issuer, crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, der, root: c.root ?? ROOT }));
+    const sha = await sha256Hex(der);
+    shas.push(sha);
     const served = c.serve === undefined ? der : c.serve;
-    if (served !== null) files[`${await sha256Hex(der)}.crl`] = hexOf(served);
+    if (c.status !== undefined) files[`${sha}.crl`] = { status: c.status, body: "" };
+    else if (served !== null) files[`${sha}.crl`] = { status: 200, body: hexOf(served) };
   }
-  return { index: lines.map((l) => l + "\n").join(""), files };
+  const text = lines.map((l) => l + "\n").join("");
+  const index = o.indexStatus !== undefined ? { status: o.indexStatus, body: "" } : { status: 200, body: hexOf((o.indexBytes ?? ((t) => new TextEncoder().encode(t)))(text)) };
+  const answers: Mirror = o.indexStatus === 404 ? {} : { "index.jsonl": index };
+  return { mirror: { ...answers, ...files }, shas };
 }
-const firstSha = (files: Record<string, string>) => Object.keys(files)[0]!.slice(0, 64);
 
 const crlCases: CrlCase[] = [];
 async function crlCase(
   what: string,
-  o: { issuer?: IssuerName; serverDays?: number; highest?: string | null; crls: MirrorCrl[] },
-  result: (m: { files: Record<string, string> }) => CrlCase["result"],
+  o: { issuer?: IssuerName; serverDays?: number; highest?: string | null; crls: MirrorCrl[] } & MirrorOptions,
+  result: (m: { shas: string[] }) => CrlCase["result"],
 ) {
-  const m = await mirror(o.crls);
-  crlCases.push({ what, issuer: o.issuer ?? "G3", today: TODAY, server_max_age_days: o.serverDays ?? 3, highest: o.highest ?? null, index: m.index, files: m.files, result: result(m) });
+  const m = await mirror(o.crls, o);
+  crlCases.push({ what, issuer: o.issuer ?? "G3", today: TODAY, server_max_age_days: o.serverDays ?? 3, highest: o.highest ?? null, mirror: m.mirror, result: result(m) });
 }
 const G3_100 = (daysBefore = 0, more: Partial<MirrorCrl> = {}): MirrorCrl => ({ issuer: "G3", crlNumber: 100n, thisUpdate: crlTime(daysBefore), ...more });
-const used = (crlDate: string, crlNumber = "100", highestAfter = crlNumber) => (m: { files: Record<string, string> }) =>
-  ({ ok: true as const, crl_number: crlNumber, crl_date: crlDate, sha256: firstSha(m.files), highest_after: highestAfter });
+/** The first CRL of the case is used. */
+const used = (crlDate: string, crlNumber = "100", highestAfter = crlNumber) => (m: { shas: string[] }) =>
+  ({ ok: true as const, crl_number: crlNumber, crl_date: crlDate, sha256: m.shas[0]!, highest_after: highestAfter });
+const unavailableCrl = () => ({ ok: false as const, problem: "crl_unavailable" as const, highest_after: null });
 
 await crlCase("today's CRL, no CRL number remembered", { crls: [G3_100()] }, used("2026-11-16"));
 await crlCase("a lower CRL number remembered", { highest: "99", crls: [G3_100()] }, used("2026-11-16"));
@@ -238,15 +341,26 @@ await crlCase(
   { highest: "101", crls: [G3_100(0, { signWith: other })] },
   () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_signature", highest_after: "101" }),
 );
+await crlCase("the index is not served (404)", { indexStatus: 404, crls: [G3_100()] }, unavailableCrl);
+await crlCase("the index is answered with 500", { indexStatus: 500, crls: [G3_100()] }, unavailableCrl);
+await crlCase("the file is answered with 500", { crls: [G3_100(0, { status: 500 })] }, unavailableCrl);
+await crlCase("the index is not UTF-8", { indexBytes: (t) => concatBytes(new TextEncoder().encode(t), Uint8Array.of(0xff, 0x0a)), crls: [G3_100()] }, unavailableCrl);
+await crlCase("the index starts with a byte order mark", { indexBytes: (t) => concatBytes(hex("efbbbf"), new TextEncoder().encode(t)), crls: [G3_100()] }, used("2026-11-16"));
 await crlCase("order: rollback before stale", { highest: "101", crls: [G3_100(4)] }, () => ({ ok: false, problem: "crl_rollback", crl_number: "100", highest: "101", highest_after: "101" }));
 
 const maxAge: MaxAgeCase[] = [
-  { server_days: 0, max_age_days: 0 },
-  { server_days: 3, max_age_days: 3 },
-  { server_days: 6, max_age_days: 6 },
-  { server_days: 7, max_age_days: 7 },
-  { server_days: 8, max_age_days: 7 },
-  { server_days: 365, max_age_days: 7 },
+  { server_max_age_days: -1, max_age_days: null },
+  { server_max_age_days: 1.5, max_age_days: null },
+  { server_max_age_days: "3", max_age_days: null },
+  { server_max_age_days: null, max_age_days: null },
+  { server_max_age_days: 9007199254740992, max_age_days: null },
+  { server_max_age_days: 9007199254740991, max_age_days: 7 },
+  { server_max_age_days: 0, max_age_days: 0 },
+  { server_max_age_days: 3, max_age_days: 3 },
+  { server_max_age_days: 6, max_age_days: 6 },
+  { server_max_age_days: 7, max_age_days: 7 },
+  { server_max_age_days: 8, max_age_days: 7 },
+  { server_max_age_days: 365, max_age_days: 7 },
 ];
 
 const A = "aa".repeat(32);
@@ -280,7 +394,7 @@ indexCase("a CRL number above 2^64", "G3", [line("G3", "18446744073709551616", A
 const whats = [...certificateCases, ...crlCases, ...indexCases].map((c) => c.what);
 assert.equal(new Set(whats).size, whats.length, "every case has its own description");
 for (const c of certificateCases) assert.deepEqual(await certificateResult(c, issuers), c.result, c.what);
-for (const c of maxAge) assert.equal(maxAgeResult(c), c.max_age_days, `max_age ${c.server_days}`);
+for (const c of maxAge) assert.equal(await maxAgeResult(c), c.max_age_days, `max_age ${JSON.stringify(c.server_max_age_days)}`);
 for (const c of indexCases) assert.deepEqual(indexResult(c), c.result, c.what);
 for (const c of crlCases) assert.deepEqual(await crlResult(c, issuers), c.result, c.what);
 
@@ -288,7 +402,7 @@ const file = {
   spec: "device-checks",
   status: "draft",
   note:
-    "Made by web/test/generate/device-checks.ts with test keys made on the spot. The issuer keys below stand in for MOICA's G2 and G3: use them in place of spec/issuers.md for these cases only. Certificates and CRLs are DER in hex; moduli and serial numbers are 0x-prefixed hex; certificate times are the 12 digits YYMMDDHHMMSS (UTC) as the certificate writes them; dates are in Taiwan.",
+    "Made by web/test/generate/device-checks.ts with test keys made on the spot. The issuer keys below stand in for MOICA's G2 and G3: use them in place of spec/issuers.md for these cases only. Bytes (certificates, CRLs, the mirror's answers) are lowercase hex; moduli and serial numbers are 0x-prefixed lowercase hex without leading zeros (00 ff 01 is 0xff01); certificate times are the 12 digits YYMMDDHHMMSS (UTC) as the certificate writes them; dates are in Taiwan.",
   generated_by: "web/test/generate/device-checks.ts",
   issuers,
   certificate: { cases: certificateCases },
