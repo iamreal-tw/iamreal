@@ -152,11 +152,12 @@ pnpm typecheck   # 型別檢查
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
   - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
+  - `wrangler.jsonc` 測試環境的 `limits.cpu_ms` 是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔照 wrangler 讀 `--env test` 的方式讀；沒有設、或是別的數字都不過
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
 **驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，雖然還沒有程式呼叫驗證。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
 
-`target.ts` 還有兩樣時間，也是測試專用的建置會換的：等內政部一份清冊最久等多久（部署的是 5 分鐘，測試換成一兩秒，測逾時才不用等幾分鐘），和一輪鏡像補之前留下的檔最久補多久（部署的是 5 分鐘，測試可以設成 0 來測這條界線）。
+`target.ts` 還有兩樣時間，也是測試專用的建置會換的：等內政部一份清冊最久等多久（部署的是 5 分鐘，測試換成一兩秒，測逾時才不用等幾分鐘），和一輪鏡像補之前留下的檔最久補多久（部署的是 2.5 分鐘，寫在 [`src/round-budget.ts`](src/round-budget.ts)，`target.ts` 引用它；測試可以設成別的數字來測這條界線）。
 
 Worker 載入時檢查發證金鑰是一把 2048 位元的 G2 和一把 4096 位元的 G3，不是就不啟動。
 
@@ -260,10 +261,13 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `name` | `iamreal-test` | Worker 的名稱。部署的權杖只能部署這一個 |
 | `workers_dev`、`preview_urls` | `false` | 不開 `workers.dev` 的網址，只走自訂網域 `test.iamreal.tw`。自訂網域在儀表板上設，不在這裡（ADR-0029） |
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
+| `limits.cpu_ms` | `300000` | 一次呼叫（一個請求、一次排程）最多用多少 CPU 時間：5 分鐘，付費方案能設的最大值；沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。鏡像的一輪照這個數字留餘裕，部署前的檢查和 [`test/environments.test.ts`](test/environments.test.ts) 核對兩邊相同 |
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
 | `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
 | `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，三個介面都回 `500` |
+
+`limits` 寫在 `env.test` 裡，和這個環境的其他設定放在一起。wrangler 4.160.1 讀設定時，`limits` 是環境沒寫就沿用最上層的那一種欄位（`wrangler-dist/cli.js` 的 `normalizeAndValidateLimits` 呼叫 `inheritable`：先拿環境自己的，沒有才拿最上層的），所以寫在哪一層 `--env test` 都讀得到；`test/environments.test.ts` 用 wrangler 自己的 `unstable_readConfig` 讀 `env: "test"`，釘住讀到的是 300,000。
 
 之後加正式環境，是在 `env` 底下多一段，程式不用改。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
@@ -273,7 +277,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 **一、抓和存。**
 
-1. 同時抓 G2、G3 的清冊，兩份互不等待。每一份從送出請求到收完最多等 5 分鐘：G2 的清冊約 17 MB，每秒 0.5 Mbit 也收得完；排程一次最多能跑 15 分鐘（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)）。
+1. 同時抓 G2、G3 的清冊，兩份互不等待。每一份從送出請求到收完最多等 5 分鐘：G2 的清冊約 17 MB，每秒 0.5 Mbit 也收得完；排程一次的牆上時間最多 15 分鐘（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「Wall time limits by invocation type」），等回應的時間不算 CPU 時間（同一頁「CPU time」）。
 2. 收到完整的 `200` 時，算內容的 SHA-256。R2 裡已經有 `crl/<SHA-256>.crl` 就不重存；沒有才寫入。
 3. 下面的情況算失敗，那一份不存任何檔，另一份照常：
    - 狀態不是 `200`、連不上、超過 5 分鐘
@@ -296,7 +300,8 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **索引裡已經有的檔不再讀、不再建樹。** 內政部沒有換清冊的那幾個小時，這一步只列一次儲存桶、讀一次索引，索引不重寫。
 - **寫到一半失敗，下一輪補得回來。** 補的依據是儲存桶裡有什麼，不是這一輪抓到什麼：上一輪存了檔、還沒寫行就結束，這一輪補上那一行，內政部那時已經換了清冊也一樣。索引是一個物件，每次整份換掉，不會有人讀到半份。讀到的索引有寫法不合規格的行、重複的行、對不到檔案的行時，那些行不算數，從檔案重來。
 - **一個檔拿不到行，只是那個檔的事。** 內容和檔名不符、讀不出來、建樹時 Barretenberg 出錯：那個檔記一行 `failed`，其他檔照做，Durable Object 照樣被告知，下一輪再試那個檔。這一次排程最後以例外結束。
-- **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 5 分鐘之後就不再開始新的一份，留給下一輪。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
+- **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一次呼叫的 CPU 時間上限是 5 分鐘（`wrangler.jsonc` 的 `limits.cpu_ms`），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，Cloudflare 上要多久還沒量到，留的是本機的 5 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
+- **一輪做到一半被停掉，寫好的行留著。** 用完 CPU 時間的那一次呼叫會被 Cloudflare 停掉。索引每做完一個檔就寫一次、寫完就告訴 Durable Object，所以停在第二份的建樹時，第一份的行已經在索引裡、Durable Object 也知道；第二份的檔已經存著，之後的某一輪補它的行。這一輪抓到的兩份不看時間、一定做：兩份加起來超過一次呼叫的上限時，沒有哪一輪做得完，那是把鏡像搬出 Worker 的時候（ADR-0023）。
 - **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
 - **讀一個檔花的時間不超過它大小的線性倍數，除了一處。** 延伸欄位有沒有重複用集合找，不是兩兩比。清冊編號沒有長度上限（和 Go 相同），位元組一次轉成整數；但把整數印成十進位是 JavaScript 引擎做的，比線性慢：見[量到的](#清冊鏡像量到的)。
 - **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
@@ -354,7 +359,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 ### 清冊鏡像量到的
 
-2026-11-20，Apple Silicon。清冊是測試網站 2026-11-19 鏡像下來的兩份（[第一次部署量到的](#第一次部署量到的)那兩個 SHA-256），從 `test-data.iamreal.tw` 下載，沒有對內政部送請求。**本機的 workerd 不限 CPU 和記憶體，這些數字只說明量級；Cloudflare 上的還沒量。**
+2026-11-20，Apple Silicon。清冊是測試網站 2026-11-19 鏡像下來的兩份（[第一次部署量到的](#第一次部署量到的)那兩個 SHA-256），從 `test-data.iamreal.tw` 下載，沒有對內政部送請求。**本機的 workerd 不限 CPU 和記憶體，這些數字只說明量級；Cloudflare 上只知道 30 秒的 CPU 時間不夠建完 G2 的樹（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），確切的還沒量。**
 
 本機的 workerd（1.20261110.1），整個 Worker，發證金鑰換成內政部的兩把，假的內政部送出那兩份檔，跑一次排程：
 
@@ -367,7 +372,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | Poseidon2 算了幾次 | 833,443 | 434,659 |
 | 樹根 | `08aca62b…e1f9` | `04c63283…ffdd` |
 
-- 整次排程 45.4 秒，幾乎都是 Poseidon2：每次約 35 µs，包含 msgpack 的編碼和解碼。離每小時一次的排程 15 分鐘的 CPU 時間上限約 20 倍。
+- 整次排程 45.4 秒，幾乎都是 Poseidon2：每次約 35 µs，包含 msgpack 的編碼和解碼。一次呼叫的 CPU 時間上限設成 5 分鐘（`limits.cpu_ms`），是這個數字的 6 倍多；沒有設的時候是 30 秒，比這個數字少。
 - 兩個樹根和 Go 的 `iamreal-crl check` 對同一份檔案算的相同。
 - 接著再跑一次排程（兩份都已經在索引裡）：48 ms。
 - 建樹的時候每 100 ms 對同一個 Worker 送一個請求，共 314 個：往返的中位數 41 ms，第 95 百分位 64 ms，最久 339 ms。沒有鏡像在跑時是 2.6 ms。
@@ -405,10 +410,27 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 **部署之後要看的**，還沒有答案：
 
-- Cloudflare 上一次排程真的 CPU 時間（`wrangler tail` 的 `crl_index` 那幾行有每一份的 `tree_ms`）
+- Cloudflare 上一次排程真的 CPU 時間（`wrangler tail` 的 `crl_index` 那幾行有每一份的 `tree_ms`）。第一次只知道超過 30 秒（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）；`limits.cpu_ms` 設成 300,000 之後的還沒量
 - 18 MB（gzip 後 4 MB）的一包上傳得上去、啟動得了
 - 編好的 WASM 機器碼算不算進每個實例 128 MB 的記憶體上限。Cloudflare 的文件寫的是「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)，2026-11-20 讀的），沒有講機器碼
 - 第一次排程要補的檔：儲存桶裡從 2026-11-19 起每小時鏡像下來的清冊都還沒有行，有幾份沒有查過。一輪補不完時分幾輪補，補齊之前索引只列一部分
+
+### Cloudflare 上第一次建樹
+
+2026-11-20，時間都是 UTC（[#128](https://github.com/iamreal-tw/iamreal/issues/128)）。
+
+- 04:12 部署了會驗章、建樹的鏡像。05:00 的排程在 05:00:25 把 `crl/index.jsonl` 寫成空檔（`200`、0 個位元組），之後索引沒有再變：一行都沒有寫出來。
+- Cloudflare 儀表板上 `iamreal-test` 的 Metrics，「Errors by invocation status」：Exceeded CPU Time Limits 1 次，Exceeded Memory、Uncaught Exception、Internal 都是 0。那一次的 CPU 時間約 32 秒，牆上時間約 47 秒，記憶體高點約 50 MB。
+- 那時 `wrangler.jsonc` 沒有 `limits`，儀表板上這個 Worker 的 CPU Time Limit 是空的。
+- Workers Logs 沒有開，所以看不到 `crl_mirror`、`crl_index` 那幾行。
+
+原因和 Cloudflare 文件寫的對得上的部分：付費方案每次呼叫的 CPU 時間預設 30 秒，用 `limits.cpu_ms` 最多調到 300,000 毫秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的）。G2 那一棵樹在本機要 27 到 29 秒，一份檔要建完樹才有索引的那一行，所以 30 秒內連這一輪抓到的第一份都做不完。
+
+對不上的部分：同一頁的 CPU 表寫間隔一小時以上的排程有 15 分鐘的 CPU 時間；這裡每小時一次的排程是約 32 秒就被停。同一頁另外兩處的 15 分鐘（「Duration」、「Wall time limits by invocation type」）講的是排程一次的牆上時間。
+
+之後的做法：`limits.cpu_ms` 設成 300,000（[設定檔](#設定檔)）；一輪補之前留下的檔時，留 2.5 分鐘給最大的一份（[排程做什麼](#排程做什麼)）。
+
+**還沒量的**：設了 `limits.cpu_ms` 之後，一次排程在 Cloudflare 上實際用多少 CPU 時間、G2 的樹要多久；每小時的排程拿到的上限是設的 5 分鐘，還是那張表寫的 15 分鐘。部署後第一個整點要看的：`https://test-data.iamreal.tw/crl/index.jsonl` 有 G2、G3 各一行，樹根和 Go 的 `iamreal-crl check` 對同一份檔算的相同；儀表板上那一次沒有 Exceeded CPU Time Limits；那一次的 CPU 時間記在這裡。量到的 CPU 時間離 5 分鐘不夠遠時，另外開票（建樹跨輪接續，或把鏡像搬出 Worker）。
 
 ### 內政部看得到什麼
 
@@ -433,7 +455,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 名冊的 Durable Object 知道的最新清冊 | `worker.newestCrls()` |
 | 把儲存桶弄成上一輪做到一半的樣子 | `worker.putFile(檔名, 內容)`、`worker.deleteFile(檔名)` |
 | 假的內政部不帶 `Content-Length` | `worker.moica.serve("G2", 位元組, "chunked")` |
-| 改一輪補舊檔的界線 | `startWorker({ crlCatchUpMs: 0 })`，預設是部署的 5 分鐘 |
+| 改一輪補舊檔的界線 | `startWorker({ crlCatchUpMs: 0 })`，預設是部署的 2.5 分鐘 |
 | 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
 | 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
 | 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
@@ -592,6 +614,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/slot-json.ts` | 一個名額寫成 JSON 的那一種寫法：`card-state` 的回應和卡片狀態表共用 |
 | `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表 |
 | `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限、補舊檔的界線 |
+| `src/round-budget.ts` | 鏡像一輪假設自己拿得到的 CPU 時間（和 `wrangler.jsonc` 的 `limits.cpu_ms` 相同）、留給最大一份清冊的時間、補舊檔的界線 |
 | `src/in-worker.ts` | 在 Worker 裡用的 `proofVerifier` 和 `poseidon2Hash`：把下面幾個檔和 WASM 檔、驗證金鑰接起來，只有它引用 `generated/` |
 | `src/verify.ts` | 驗證證明的介面 `ProofVerifier`、呼叫 Barretenberg 之前的檢查 |
 | `src/poseidon2.ts` | Poseidon2 的雜湊 |
@@ -603,9 +626,9 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/crls.ts` | 測試的發證金鑰、用它們簽的清冊 |
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
-| `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔、兩輪同時寫索引 |
+| `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔和補它們的界線、建樹到一半被停掉的一輪、兩輪同時寫索引 |
 | `test/api.test.ts` | 三個介面和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
-| `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上 |
+| `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；測試環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
 | `test/*.test.ts` | 測試 |
