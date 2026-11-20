@@ -25,12 +25,15 @@
 # have built or downloaded. device-core's tests are built, not run
 # (--no-run): running them adds nothing to target/ that a later run reuses.
 # android's job runs the whole `gradlew build`, with --no-daemon, so that no
-# Gradle is left running when the caches are saved. The keys hold the hash of every file that decides what
-# the dependencies are built from and with, and of this file, which holds
-# the commands; with no restore-keys a cache is restored for exactly those
-# files or not at all. A key that already has a cache is not saved again: the
-# job then restores it, builds the little that changed and leaves the cache
-# as it is. So a change to this file, a comment too, is a new key.
+# Gradle is left running when the caches are saved, then takes Gradle's lock
+# files and gc.properties out of ~/.gradle/caches ("Do not copy the *.lock or
+# gc.properties files if they exist", Gradle's "Dependency caching").
+# The keys hold the hash of every file that decides what the dependencies
+# are built from and with, and of this file, which holds the commands; with
+# no restore-keys a cache is restored for exactly those files or not at all.
+# A key that already has a cache is not saved again: the job then restores
+# it, builds the little that changed and leaves the cache as it is. So a
+# change to this file, a comment too, is a new key.
 # ASCII only, comments included (worker/test/workflows.ts).
 name: cache
 
@@ -129,3 +132,5 @@ jobs:
       - name: gradlew build
         working-directory: android
         run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build
+      - name: Leave Gradle's lock files and gc.properties out of the cache
+        run: find "$HOME/.gradle/caches" -type f \( -name "*.lock" -o -name gc.properties \) -delete

@@ -184,8 +184,10 @@ jobs:
   # into, and Gradle's caches and wrapper are restored from the caches
   # cache.yml saved on main, for exactly the files hashed in the keys (no
   # restore-keys); with no cache the job builds everything, as before. Gradle
-  # checks a library from its cache against verification-metadata.xml too;
-  # the wrapper's distribution and target/ are not checked again
+  # hashes again each library it takes from the restored cache and checks it
+  # against verification-metadata.xml: the hashes it has computed are kept in
+  # android/.gradle/, which is not cached. What Gradle made from the
+  # libraries, the wrapper's distribution and target/ are not checked again
   # (.github/README.md, on caches).
   android:
     runs-on: ubuntu-24.04

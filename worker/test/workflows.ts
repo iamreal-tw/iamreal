@@ -378,9 +378,16 @@ const ANDROID_KEY_FILES: readonly string[] = [
   "android/gradle/verification-metadata.xml",
   "android/gradle/wrapper/gradle-wrapper.properties",
 ];
-const hashOf = (files: readonly string[]): string => `\${{ hashFiles(${[`.github/workflows/${CACHE_WORKFLOW}`, ...files].map((f) => `'${f}'`).join(", ")}) }}`;
-/** Every file a key hashes. test/workflows.test.ts checks that each one is there: hashFiles skips a path that matches nothing, so a misspelt one would quietly leave its file out of the key. */
-export const CACHE_KEY_FILES: readonly string[] = [`.github/workflows/${CACHE_WORKFLOW}`, ...new Set([...DEVICE_CORE_KEY_FILES, ...ANDROID_KEY_FILES])];
+/** cache.yml, the first file of every key: it holds the commands that fill the caches. */
+const CACHE_WORKFLOW_PATH = `.github/workflows/${CACHE_WORKFLOW}`;
+const hashOf = (files: readonly string[]): string => `\${{ hashFiles(${[CACHE_WORKFLOW_PATH, ...files].map((f) => `'${f}'`).join(", ")}) }}`;
+/**
+ * Every file a key hashes (android's list holds device-core's).
+ * test/workflows.test.ts checks that each one is there: hashFiles skips a
+ * path that matches nothing, so a misspelt one would quietly leave its file
+ * out of the key.
+ */
+export const CACHE_KEY_FILES: readonly string[] = [CACHE_WORKFLOW_PATH, ...ANDROID_KEY_FILES];
 const DEVICE_CORE_HASH = hashOf(DEVICE_CORE_KEY_FILES);
 const ANDROID_HASH = hashOf(ANDROID_KEY_FILES);
 const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
@@ -406,19 +413,21 @@ export const DEVICE_CORE_CACHES = {
  * Android target; and Gradle's caches and wrapper. One cache per directory,
  * so that `gh cache list` shows each one's size. Only `caches` and `wrapper`
  * of ~/.gradle: not its init scripts, its properties or the daemon's
- * directories. Gradle checks the libraries in its cache against
- * verification-metadata.xml on every build; the wrapper checks the
- * distribution only when it downloads it; what Gradle made from the libraries
- * (transforms, compiled build scripts) and cargo's target/ are not checked
- * again (.github/README.md, "快取").
+ * directories. Gradle hashes again each library it takes from the restored
+ * cache and checks it against verification-metadata.xml (the hashes it has
+ * computed are kept in android/.gradle/, which is not cached); the wrapper
+ * checks the distribution only when it downloads it; what Gradle made from
+ * the libraries (transforms, compiled build scripts) and cargo's target/ are
+ * not checked again (.github/README.md, "快取"). Lock files and gc.properties
+ * are taken out before the save (GRADLE_CACHE_CLEANUP).
  */
 export const ANDROID_CACHES = {
   registry: { path: "~/.cargo/registry", key: cacheKey("android-cargo-registry", ANDROID_HASH) },
   host: { path: "device-core/target/release", key: cacheKey("android-target-host", ANDROID_HASH) },
-  arm64: { path: "device-core/target/aarch64-linux-android", key: cacheKey("android-target-aarch64-linux-android", ANDROID_HASH) },
+  aarch64: { path: "device-core/target/aarch64-linux-android", key: cacheKey("android-target-aarch64-linux-android", ANDROID_HASH) },
   x86_64: { path: "device-core/target/x86_64-linux-android", key: cacheKey("android-target-x86_64-linux-android", ANDROID_HASH) },
-  gradle: { path: "~/.gradle/caches", key: cacheKey("android-gradle-caches", ANDROID_HASH) },
-  wrapper: { path: "~/.gradle/wrapper", key: cacheKey("android-gradle-wrapper", ANDROID_HASH) },
+  gradleCaches: { path: "~/.gradle/caches", key: cacheKey("android-gradle-caches", ANDROID_HASH) },
+  gradleWrapper: { path: "~/.gradle/wrapper", key: cacheKey("android-gradle-wrapper", ANDROID_HASH) },
 } as const satisfies Record<string, Cache>;
 const cacheSteps = (use: "read" | "write", caches: Readonly<Record<string, Cache>>): YamlMap[] => Object.values(caches).map((c) => ({ uses: uses(CACHE_ACTION[use]), with: { ...c } }));
 /** The caches each job of checks.yml may restore: its own. */
@@ -470,6 +479,17 @@ const ANDROID_BUILD: readonly YamlMap[] = [
   { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
   { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
 ];
+/**
+ * The last step of cache.yml's android job, before actions/cache saves after
+ * the job: Gradle's lock files and gc.properties out of ~/.gradle/caches.
+ * Gradle's documentation, on copying its dependency cache: "Do not copy the
+ * `*.lock` or `gc.properties` files if they exist"
+ * (https://docs.gradle.org/current/userguide/dependency_caching.html).
+ */
+const GRADLE_CACHE_CLEANUP: YamlMap = {
+  name: "Leave Gradle's lock files and gc.properties out of the cache",
+  run: `find "$HOME/.gradle/caches" -type f \\( -name "*.lock" -o -name gc.properties \\) -delete`,
+};
 
 /**
  * The android job of checks.yml, exactly, written out for the same reason
@@ -580,7 +600,7 @@ export const CACHE_JOBS: YamlMap = {
   "cache-android": {
     "runs-on": "ubuntu-24.04",
     "timeout-minutes": "30",
-    steps: [step("actions/checkout"), ...cacheSteps("write", ANDROID_CACHES), ...ANDROID_BUILD],
+    steps: [step("actions/checkout"), ...cacheSteps("write", ANDROID_CACHES), ...ANDROID_BUILD, GRADLE_CACHE_CLEANUP],
   },
 };
 

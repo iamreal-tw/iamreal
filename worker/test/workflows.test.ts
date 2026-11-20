@@ -250,14 +250,16 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 // only because a job is no longer the one written in test/workflows.ts.
 const K = "cache.yml";
 const { registry: REGISTRY, target: TARGET } = DEVICE_CORE_CACHES;
-const { gradle: GRADLE } = ANDROID_CACHES;
-const ANDROID_STEPS_START = "  android:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n";
+const { gradleCaches: GRADLE } = ANDROID_CACHES;
 const cacheStep = (action: string, cache: { readonly path: string; readonly key: string }): string => {
   const { sha, version } = ACTIONS["actions/cache"]!;
   return `      - uses: ${action}@${sha} # ${version}\n        with:\n          path: ${cache.path}\n          key: ${cache.key}\n`;
 };
 const GO_BUILD = "      - run: go build ./...\n";
 const AFTER_CHECKOUT = "          persist-credentials: false\n";
+const CHECKOUT = `      - uses: actions/checkout@${ACTIONS["actions/checkout"]!.sha} # ${ACTIONS["actions/checkout"]!.version}\n        with:\n${AFTER_CHECKOUT}`;
+const ANDROID_STEPS_START = `  android:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHECKOUT}`;
+const GRADLE_CLEANUP = `      - name: Leave Gradle's lock files and gc.properties out of the cache\n        run: find "$HOME/.gradle/caches" -type f \\( -name "*.lock" -o -name gc.properties \\) -delete\n`;
 const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
 const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
   "150 a job of checks.yml with the action that also saves": {
@@ -369,6 +371,18 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     changes: [replace(C, GO_JOB, `${GO_JOB}    cache-mode: write\n`)],
     problem: /^checks\.yml: line \d+: cache-mode below the top level/,
   },
+  "178 a job of deploy-test.yml with its own cache-mode": {
+    changes: [replace(D, BUILD_JOB, `${BUILD_JOB}    cache-mode: read\n`)],
+    problem: /^deploy-test\.yml: line \d+: cache-mode below the top level/,
+  },
+  "179 a new workflow with no cache-mode": {
+    changes: [addFile("other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
+    problem: /^other\.yml: cache-mode is not none/,
+  },
+  "168 a new workflow that saves a cache": {
+    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", TARGET)}`)],
+    problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  },
   // android's caches (#207): its own, with keys that hash every file deciding what is in them.
   "190 the android job restoring device-core's target/, built by other commands": {
     changes: [replace(C, ANDROID_STEPS_START, `${ANDROID_STEPS_START}${cacheStep("actions/cache/restore", TARGET)}`)],
@@ -398,17 +412,13 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     changes: [replace(K, "$JAVA_HOME_17_X64", "$JAVA_HOME_21_X64")],
     problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
   },
-  "178 a job of deploy-test.yml with its own cache-mode": {
-    changes: [replace(D, BUILD_JOB, `${BUILD_JOB}    cache-mode: read\n`)],
-    problem: /^deploy-test\.yml: line \d+: cache-mode below the top level/,
+  "197 cache.yml's android job saving Gradle's lock files and gc.properties": {
+    changes: [replace(K, GRADLE_CLEANUP, "")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
   },
-  "179 a new workflow with no cache-mode": {
-    changes: [addFile("other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
-    problem: /^other\.yml: cache-mode is not none/,
-  },
-  "168 a new workflow that saves a cache": {
-    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", TARGET)}`)],
-    problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  "198 cache.yml's android job deleting more than Gradle's lock files before the save": {
+    changes: [replace(K, 'find "$HOME/.gradle/caches"', 'find "$HOME/.gradle"')],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
   },
 };
 
