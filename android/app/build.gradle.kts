@@ -199,26 +199,38 @@ abstract class CheckLibraries : DefaultTask() {
 }
 
 /**
- * Fails when an installer is not what goes out (README.md, "建置時的檢查"):
+ * Fails when an installer (an APK, or the bundle Google Play takes) is not
+ * what goes out (README.md, "建置時的檢查"):
  * a native library for anything but the ABIs given, or any but ours; a
  * bundled file missing, extra or changed; the production site or the
  * production roster's scope string in the Kotlin code; a way to Android's
  * log.
  */
 abstract class CheckApk : DefaultTask() {
-    @get:InputDirectory abstract val apks: DirectoryProperty
+    @get:InputDirectory @get:Optional abstract val apks: DirectoryProperty
+    @get:InputFile @get:Optional abstract val aab: RegularFileProperty
     @get:InputFiles abstract val lists: ConfigurableFileCollection
     @get:Input abstract val abis: ListProperty<String>
     @get:Input abstract val silent: Property<Boolean>
 
     @TaskAction
     fun check() {
-        val files = apks.get().asFile.listFiles { f -> f.extension == "apk" }.orEmpty()
-        if (files.size != 1) throw GradleException("not exactly one installer in ${apks.get().asFile}")
+        val file = if (aab.isPresent) {
+            aab.get().asFile
+        } else {
+            val files = apks.get().asFile.listFiles { f -> f.extension == "apk" }.orEmpty()
+            if (files.size != 1) throw GradleException("not exactly one installer in ${apks.get().asFile}")
+            files[0]
+        }
+        // A bundle holds the app's one module under base/, with what an APK has at its top.
+        val top = if (aab.isPresent) "base/" else ""
         val problems = mutableListOf<String>()
-        ZipFile(files[0]).use { zip ->
-            val names = zip.entries().asSequence().map { it.name }.toList()
-            val read = { name: String -> zip.getInputStream(zip.getEntry(name)).use { it.readBytes() } }
+        ZipFile(file).use { zip ->
+            val all = zip.entries().asSequence().map { it.name }.toList()
+            val modules = all.filter { "/" in it && !it.startsWith("BUNDLE-METADATA/") }.map { it.substringBefore("/") }.toSet()
+            if (aab.isPresent && modules != setOf("base")) problems += "the modules are $modules, not base alone"
+            val names = all.filter { it.startsWith(top) }.map { it.removePrefix(top) }
+            val read = { name: String -> zip.getInputStream(zip.getEntry(top + name)).use { it.readBytes() } }
 
             val libs = names.filter { it.startsWith("lib/") }.sorted()
             val wantLibs = abis.get().map { "lib/$it/libiamreal_device_core_jni.so" }.sorted()
@@ -249,7 +261,7 @@ abstract class CheckApk : DefaultTask() {
                 }
             }
         }
-        if (problems.isNotEmpty()) throw GradleException("${files[0]}:\n" + problems.joinToString("\n"))
+        if (problems.isNotEmpty()) throw GradleException("$file:\n" + problems.joinToString("\n"))
     }
 }
 
@@ -320,9 +332,16 @@ androidComponents {
             allowed = allowedLibraries
         }
         tasks.named("check") { dependsOn(checkManifest, checkApk, checkLibraries) }
-        // Whoever assembles an APK gets it checked. A bundle (bundleRelease, what Google Play takes)
-        // is not looked at here: the job that uploads one has to check it.
-        tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(checkManifest, checkApk, checkLibraries) }
+        val checkBundle = tasks.register<CheckApk>("checkBundle$name") {
+            aab = variant.artifacts.get(SingleArtifact.BUNDLE)
+            lists.from(bundledLists)
+            abis = variantAbis
+            silent = release
+        }
+        // Whoever makes an installer gets it checked, whichever task makes it: an APK
+        // (assemble, package) or the bundle Google Play takes (bundle).
+        tasks.matching { it.name == "assemble$name" || it.name == "package$name" }.configureEach { finalizedBy(checkManifest, checkApk, checkLibraries) }
+        tasks.matching { it.name == "bundle$name" }.configureEach { finalizedBy(checkManifest, checkBundle, checkLibraries) }
     }
 }
 
@@ -336,5 +355,5 @@ tasks.withType<Test>().configureEach {
     systemProperty("iamreal.strings", file("src/main/res/values/strings.xml").path)
     inputs.file(file("src/main/res/values/strings.xml"))
     inputs.dir(rootProject.file("../spec/vectors"))
-    inputs.file(rootProject.file("../design/copy/card-proof.md"))
+    inputs.file(rootProject.file("../design/copy/app.md"))
 }

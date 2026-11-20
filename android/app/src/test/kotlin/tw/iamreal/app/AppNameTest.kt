@@ -5,15 +5,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Test
 import java.io.File
 
-/** The name under the icon against design/copy/: the service's name as the copy writes it, then that this is the test app. */
+/** The name under the icon against design/copy/app.md: the two are the same text. */
 class AppNameTest {
     @Test
-    fun `the app is named after the service, marked as the test app`() {
-        val copy = File(System.getProperty("iamreal.copy"), "card-proof.md").readText()
-        val service = Regex("下載「(.+?)」app").find(copy)
-        assertNotNull("the line of card-proof.md that names the app", service)
+    fun `the name under the icon is the one design copy gives the test app`() {
+        val copy = File(System.getProperty("iamreal.copy"), "app.md").readText()
+        val section = copy.substringAfter("## 主畫面上的名稱", "")
+        val written = Regex("```\n(.+)\n```").find(section)
+        assertNotNull("the name in design/copy/app.md", written)
         val strings = File(System.getProperty("iamreal.strings")).readText()
         val name = Regex("<string name=\"app_name\">(.*?)</string>").find(strings)!!.groupValues[1]
-        assertEquals("${service!!.groupValues[1]} 測試", name)
+        assertEquals(written!!.groupValues[1], name)
     }
 }

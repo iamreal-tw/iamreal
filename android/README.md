@@ -11,7 +11,7 @@
 | | |
 |---|---|
 | 識別碼 | `tw.iamreal.app.test` |
-| 圖示下面的名稱 | 島民證明 測試 |
+| 圖示下面的名稱 | 島民證明 測試（`design/copy/app.md`） |
 | 連哪裡 | `https://test.iamreal.tw`、`https://test-data.iamreal.tw` |
 | 簽的場合字串 | `iamreal-test:public:0` |
 
@@ -78,7 +78,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 ## 建置時的檢查
 
-`./gradlew build` 會跑，只做 APK（`assembleDebug`、`assembleRelease`）時也會跑；任何一項不過就失敗（`app/build.gradle.kts`）。它們看的是 APK；上傳到 Google Play 用的 bundle（`bundleRelease`）這裡不看，上傳的工作要自己檢查：
+`./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看同樣的幾項）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
 - **合併後的 manifest**（`checkManifest`）：識別碼不是 `tw.iamreal.app.test` 就失敗；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的（現在是空的）。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`
@@ -133,7 +133,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案（`scope.json`、`declaration-code.json`），不複製。`AppNameTest` 讀 `design/copy/card-proof.md`，核對圖示下面的名稱是服務的名稱加「 測試」。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案（`scope.json`、`declaration-code.json`），不複製。`AppNameTest` 讀 `design/copy/app.md`，核對圖示下面的名稱和它寫的相同。
 
 測到的：Kotlin 到 JNI 到核心這條路、代碼變成例外、傳進去的位元組呼叫後沒有被改。測不到的：Android 上的 `.so`（Zig 連結的那一個）。那一個要在模擬器或手機上打開 app 看。
 
