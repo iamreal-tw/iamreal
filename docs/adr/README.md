@@ -85,7 +85,7 @@
 | 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
-| 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
+| 0027 | 指紋檔沒有另一份；卡片狀態檔只留 7 天的生命週期規則還沒設（營運者在儲存桶上設） | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 測試網站有測試名冊、它的標示、首頁和島民證明，但還不能過卡：部署沒有放過卡的頁面（`/proof`），過卡的頁面上也沒有標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |

@@ -382,7 +382,8 @@ What the device does with what it cannot read:
   ([`spec/record.md`](../../spec/record.md), "The published roster"), with
   the fields of that line: the date in Taiwan on which it was written, the
   number of records at that moment, and their roster fingerprint
-  (ADR-0021). It is the line as the published file has it: a line the
+  (ADR-0021). It is the last line the server wrote to that file and read
+  back, as the server keeps it; the file is not read to answer. A line the
   server has decided on and not yet written to the file is not answered.
 - A roster that was never published:
   `{"date":null,"count":0,"fingerprint":"0000…0000"}`, no date, no record,
@@ -406,7 +407,7 @@ without going through the server's code (ADR-0027). The test site's are on
 |---|---|
 | `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
-| `https://data.iamreal.tw/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster") |
+| `https://data.iamreal.tw/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster"), and the card state files of the last days (`card-state/`, [`spec/roster-rules.md`](../../spec/roster-rules.md), "The card state file") |
 
 Only `GET` from the card proof page's origin is allowed across origins
 (CORS), and the page's `Content-Security-Policy` lets it connect to this
