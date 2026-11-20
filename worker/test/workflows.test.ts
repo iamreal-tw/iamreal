@@ -133,6 +133,25 @@ const CHANGES: Record<string, Change[]> = {
   "67 another directory in a step of checks.yml": [replace(C, "        working-directory: web\n        run: pnpm fetch-crs", "        working-directory: ..\n        run: pnpm fetch-crs")],
 };
 
+// Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
+// then `#` is not a comment there but the next line of the value above it: `run` of the upload
+// would end with the command after the `#` (review of #39, round 2).
+for (const [label, cp] of [
+  ["U+00A0", 0xa0],
+  ["U+3000", 0x3000],
+  ["U+2003", 0x2003],
+] as const) {
+  const ch = String.fromCodePoint(cp);
+  CHANGES[`68 ${label} at the start of a line, then #, after the upload's run`] = [
+    (f) => {
+      f[D] += `${ch}${ch}#; echo "$CLOUDFLARE_API_TOKEN" > /tmp/x\n`;
+    },
+  ];
+  CHANGES[`69 ${label} before # in an indented line`] = [replace(D, "      - name: Upload to iamreal-test\n", `          ${ch}#; node x.js\n      - name: Upload to iamreal-test\n`)];
+  CHANGES[`70 ${label} between a key and its colon`] = [replace(C, "    timeout-minutes: 30\n", `    timeout-minutes${ch}: 30\n`)];
+  CHANGES[`71 ${label} in a comment`] = [replace(C, "jobs:\n", `# a comment${ch}with it\njobs:\n`)];
+}
+
 for (const [name, changes] of Object.entries(CHANGES)) {
   test(`turned away: ${name}`, () => {
     const files = realFiles();

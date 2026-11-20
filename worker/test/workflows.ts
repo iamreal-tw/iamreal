@@ -27,8 +27,15 @@
 // - a difference between this reader and the YAML parser GitHub uses, for
 //   a file inside the part of YAML read here. The part is kept small (no
 //   flow style, quoted keys, anchors, tags, block or multi-line scalars,
-//   escapes in double quotes, tabs or characters outside ASCII) to make
-//   such a difference unlikely; it is not proven absent.
+//   escapes in double quotes, tabs or any byte outside printable ASCII,
+//   comments included) to make such a difference unlikely; it is not proven
+//   absent. One was found and closed: this reader once took spaces outside
+//   ASCII (U+00A0, U+3000, U+2003, ...) for spaces, so a line of them
+//   followed by `#` read here as a comment, while libyaml, which takes only
+//   ASCII space for a space, read it as the next line of the value above
+//   and folded the command after the `#` into a `run`. Every byte outside
+//   printable ASCII is now a problem, and only the ASCII space (0x20) counts
+//   as a space here.
 import { uploadArgs, WRANGLER_QUIET } from "../scripts/deploy.ts";
 
 /** A value of the part of YAML read here: a plain or quoted string, nothing (`key:` with nothing under it), a list or a map. */
@@ -43,11 +50,19 @@ interface Line {
 
 const KEY = /^([A-Za-z_][A-Za-z0-9_-]*):(?: (.*))?$/;
 
+// Only the ASCII space (0x20) is a space here: not trim*(), not \s, which take Unicode spaces too.
+/** How many spaces `s` starts with. */
+const leadingSpaces = (s: string): number => /^ */.exec(s)![0].length;
+/** `s` without the spaces it ends with. */
+const withoutTrailingSpaces = (s: string): string => s.replace(/ +$/, "");
+/** Whether `s` is only spaces, or spaces then `#`: a blank line or a comment. */
+const isBlankOrComment = (s: string): boolean => /^ *(#.*)?$/.test(s);
+
 /** A scalar after `key: ` or `- `, with its comment taken off. Throws for anything outside the part of YAML read here. */
 function scalar(raw: string, n: number): string {
-  const s = raw.trimEnd();
+  const s = withoutTrailingSpaces(raw);
   const rest = (after: string): void => {
-    if (!/^(\s+#.*)?$/.test(after)) throw new Error(`line ${n}: something after the quoted value: ${after}`);
+    if (!/^( +#.*)?$/.test(after)) throw new Error(`line ${n}: something after the quoted value: ${after}`);
   };
   if (s.startsWith("'")) {
     let j = 1;
@@ -72,7 +87,7 @@ function scalar(raw: string, n: number): string {
     return value;
   }
   if (/^[[\]{}&*!|>%@`,?#-]/.test(s) || s === "") throw new Error(`line ${n}: a value written in a way not read here: ${s}`);
-  const value = s.replace(/\s+#.*$/, "");
+  const value = s.replace(/ +#.*$/, "");
   if (/: |:$/.test(value)) throw new Error(`line ${n}: a plain value with ": " in it`);
   return value;
 }
@@ -82,15 +97,15 @@ function scalar(raw: string, n: number): string {
  * value. Throws, naming the line, for anything outside that part.
  */
 export function readYaml(text: string): Yaml {
-  // Characters some YAML parsers take for a line break (or a mark) are nowhere; other characters
-  // outside printable ASCII only in a line that is a comment.
-  if (/[\t\r\x85\u2028\u2029\ufeff]/.test(text)) throw new Error("a tab, a carriage return, a byte-order mark or a character some parsers take for a line break");
+  // Printable ASCII and newlines only, comments included: no tab, carriage return, byte-order
+  // mark, character some parsers take for a line break, or space other than 0x20.
+  const bad = /[^\x20-\x7e\n]/.exec(text);
+  if (bad) throw new Error(`line ${text.slice(0, bad.index).split("\n").length}: a character outside printable ASCII (U+${bad[0].codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")})`);
   const lines: Line[] = [];
   for (const [i, raw] of text.split("\n").entries()) {
-    if (!/^[\x20-\x7e]*$/.test(raw) && !raw.trimStart().startsWith("#")) throw new Error(`line ${i + 1}: a character outside printable ASCII, not in a comment`);
-    if (raw.trim() === "" || raw.trimStart().startsWith("#")) continue;
-    const indent = raw.length - raw.trimStart().length;
-    lines.push({ n: i + 1, indent, text: raw.slice(indent).trimEnd() });
+    if (isBlankOrComment(raw)) continue;
+    const indent = leadingSpaces(raw);
+    lines.push({ n: i + 1, indent, text: withoutTrailingSpaces(raw.slice(indent)) });
   }
   if (lines.length === 0) throw new Error("an empty file");
 
@@ -263,10 +278,10 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
   // Every line that mentions `uses`: an action of the list, at its commit, with its version.
   for (const f of names) {
     for (const l of files[f]!.split("\n")) {
-      if (!/uses/.test(l) || l.trimStart().startsWith("#")) continue;
+      if (!/uses/.test(l) || /^ *#/.test(l)) continue;
       const m = /^ {6}- uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/.exec(l);
       const known = m && ACTIONS[m[1]!];
-      if (!m || !known || known.sha !== m[2] || known.version !== m[3]) problems.push(`${f}: not an action of the list at its commit: ${l.trim()}`);
+      if (!m || !known || known.sha !== m[2] || known.version !== m[3]) problems.push(`${f}: not an action of the list at its commit: ${l.replace(/^ +| +$/g, "")}`);
     }
   }
 

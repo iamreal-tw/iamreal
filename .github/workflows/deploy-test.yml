@@ -1,7 +1,8 @@
 # Deploys the test site (the Worker iamreal-test, test.iamreal.tw) with each
-# push to main (ADR-0029). worker/README.md, "從 GitHub Actions 部署", has the
-# details; worker/test/workflows.ts holds this file's two jobs, exactly, and
-# worker/test/workflows.test.ts checks this file against them.
+# push to main (ADR-0029). worker/README.md, the section on deploying from
+# GitHub Actions, has the details; worker/test/workflows.ts holds this
+# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
+# file against them.
 #
 # "build" has no token. It runs the repository's code: scripts/build-deploy.ts
 # makes the deploy build the way `pnpm run deploy:test` does (the proof

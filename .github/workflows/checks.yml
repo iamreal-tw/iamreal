@@ -1,5 +1,7 @@
-# The checks of a pull request: every item of CONTRIBUTING.md, "完成的定義",
-# with the fake card in the end-to-end tests (ADR-0029, "外人的 PR").
+# The checks of a pull request: every item of the definition of done in
+# CONTRIBUTING.md, with the fake card in the end-to-end tests (ADR-0029, on
+# pull requests from outside). The workflows are ASCII only, comments
+# included (worker/test/workflows.ts).
 #
 # Triggered by pull_request only, never pull_request_target: a pull request
 # from a fork gets no secret and a read-only GITHUB_TOKEN. Nothing here
@@ -24,7 +26,7 @@ env:
   # @aztec-foundation/bb.js 6.0.0 (pnpm-lock.yaml), for Linux on x86-64. Each
   # job checks its SHA-256 before using it (the value: worker/test/workflows.ts).
   IAMREAL_BB: ${{ github.workspace }}/web/node_modules/@aztec-foundation/bb.js/build/amd64-linux/bb
-  # wrangler sends Cloudflare no usage report and asks npm for no newer version (worker/README.md, "套件").
+  # wrangler sends Cloudflare no usage report and asks npm for no newer version (worker/README.md, on packages).
   WRANGLER_SEND_METRICS: "false"
   WRANGLER_HIDE_BANNER: "true"
 
