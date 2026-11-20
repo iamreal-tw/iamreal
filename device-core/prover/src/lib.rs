@@ -11,15 +11,24 @@
 //! "核心擋住的順序").
 
 pub mod hashes;
+mod json;
+mod server_state;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use iamreal_device_checks::challenge::parse_challenge;
+use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
 use iamreal_device_checks::hash::Poseidon2;
+use iamreal_device_checks::list_consequence::{Consequence, list_consequence};
+use iamreal_device_checks::roster_rules::{self, Reason};
 use iamreal_device_checks::scope::{Roster, scope_string};
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
+use serde_json::json;
+
+use crate::json::Json;
+use crate::server_state::{read_card_state, read_platforms};
 
 /// The version of the C functions: the number the header gives as
 /// `IDC_ABI_VERSION`. It goes up when a function changes or goes away.
@@ -268,5 +277,112 @@ pub unsafe extern "C" fn idc_declaration_code(
         )
         .map_err(|_| IDC_ERR_INPUT)?;
         Ok(code.to_vec())
+    })
+}
+
+/// What a list does on every platform, before the card signs it
+/// (spec/roster-rules.md, checks 5 and 6): JSON in `*out`, for the
+/// confirmation screen.
+///
+/// - `platforms_json`: the `platforms` of `GET /api/v1/config`, as the
+///   server sent it.
+/// - `card_state_json`: the answer of `POST /api/v1/card-state`, as the
+///   server sent it.
+/// - `accounts_json`: the cardholder's list for the platforms offered (a
+///   row of the table with an entry in the state), in the shape of a
+///   record's `accounts`: ascending order of platform, each platform at
+///   most once, each `username` in its platform's format. The accounts on
+///   platforms the device does not know are not in it: the core keeps them.
+/// - `now`: seconds since 1970-01-01T00:00:00Z by the device's clock; the
+///   date is the one in Taiwan.
+///
+/// The output is one of:
+///
+/// ```text
+/// {"valid":true,"accounts":[…],"rows":[{"platform":"threads","kind":"switch","username":"carol","previous":"bob","switches_left":3}]}
+/// {"valid":false,"reason":"switch_limit","platform":"threads"}
+/// {"valid":false,"reason":"empty"}
+/// ```
+///
+/// `accounts` is the list the card signs (pass it to
+/// [`idc_declaration_code`]); `rows` has one row for every platform the
+/// list does something on, in ascending order of platform. `kind` is
+/// `first`, `refresh`, `correction`, `switch` or `withdraw`; `username` is
+/// the account declared, or the one withdrawn; `previous` is the account a
+/// `switch` or `correction` replaces, otherwise null; `switches_left` is
+/// what is left after the record, null on a platform the device does not
+/// know. `valid` false is a list the rules refuse (`empty`,
+/// `switch_limit` with the platform blocked, `daily_limit`): it is not
+/// offered for signing.
+///
+/// `IDC_ERR_INPUT` when the table or the state cannot be read
+/// (docs/api/card-proof.md), when the list is not one of the platforms
+/// offered, or when `now` is outside the years 2000 to 2049 in Taiwan.
+///
+/// # Safety
+/// The three inputs point to as many bytes as their lengths say; `out` is
+/// null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn idc_list_consequence(
+    platforms_json: *const u8,
+    platforms_json_len: usize,
+    card_state_json: *const u8,
+    card_state_json_len: usize,
+    accounts_json: *const u8,
+    accounts_json_len: usize,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (platforms_json, card_state_json, accounts_json) = unsafe {
+            (
+                input(platforms_json, platforms_json_len)?,
+                input(card_state_json, card_state_json_len)?,
+                input(accounts_json, accounts_json_len)?,
+            )
+        };
+        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+        let table = Json::parse(platforms_json)
+            .as_ref()
+            .and_then(read_platforms)
+            .ok_or(IDC_ERR_INPUT)?;
+        let (state, offered) = Json::parse(card_state_json)
+            .and_then(|state| read_card_state(&state, &table, today))
+            .ok_or(IDC_ERR_INPUT)?;
+        let list: Vec<roster_rules::Account> = accounts_of(accounts_json)?
+            .into_iter()
+            .map(|a| roster_rules::Account {
+                platform: a.platform,
+                username: a.username,
+            })
+            .collect();
+        let consequence =
+            list_consequence(&offered, &state, &list, today).map_err(|_| IDC_ERR_INPUT)?;
+        let value = match consequence {
+            Consequence::Valid { accounts, rows } => json!({
+                "valid": true,
+                "accounts": accounts
+                    .iter()
+                    .map(|a| json!({"platform": a.platform, "username": a.username}))
+                    .collect::<Vec<_>>(),
+                "rows": rows
+                    .iter()
+                    .map(|r| json!({
+                        "platform": r.platform,
+                        "kind": r.kind.name(),
+                        "username": r.username,
+                        "previous": r.previous,
+                        "switches_left": r.switches_left,
+                    }))
+                    .collect::<Vec<_>>(),
+            }),
+            Consequence::Invalid(Reason::SwitchLimit { platform }) => {
+                json!({"valid": false, "reason": "switch_limit", "platform": platform})
+            }
+            Consequence::Invalid(reason) => json!({"valid": false, "reason": reason.name()}),
+        };
+        serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
     })
 }

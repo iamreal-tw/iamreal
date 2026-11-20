@@ -30,8 +30,10 @@
 | `base32.rs` | `spec/README.md` | base32，只認一種寫法 |
 | `field.rs` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
 | `hash.rs` | | 呼叫的人要提供的兩個雜湊 |
+| `roster_rules.rs` | `spec/roster-rules.md` | 名冊規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
+| `list_consequence.rs` | `docs/api/card-proof.md`（card-state） | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更正、更換還是收回，更換之後還剩幾次；不認得的平台上的帳號照原樣留在清單裡。和 `web/src/flow.ts` 的 `consequenceOf` 算的是同一件事 |
 
-還沒有的（各有自己的票）：選憑證和檢查憑證、廢止清冊、建樹、電路輸入、名冊規則、檢查後台的回應、「檢查都通過了」的結果、算見證和證明、Android 和 iOS 的建置。
+還沒有的（各有自己的票）：選憑證和檢查憑證、廢止清冊、建樹、電路輸入、檢查後台其他的回應（`config` 的其他欄位、題目、送出之後的回應）、「檢查都通過了」的結果、算見證和證明、Android 和 iOS 的建置。
 
 ## C 函式的慣例
 
@@ -79,6 +81,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_self_check` | 確認連結進來的 Barretenberg 有回應，算出的 Poseidon2 和 `spec/vectors/poseidon2.json` 的一個案例相同。不收輸入。給 app 啟動時和建置的檢查用 |
 | `idc_scope_string` | 這份名冊的場合字串（31 個位元組），卡片第一次簽的就是它 |
 | `idc_declaration_code` | 帳號清單和題目的宣告碼（31 個位元組），卡片第二次簽的就是它。清單沒照平台排序、同一個平台兩次、題目不是唯一的寫法，都是 `IDC_ERR_INPUT` |
+| `idc_list_consequence` | 持卡人改過的清單在每個平台上的後果（JSON），給確認的畫面。收 `config` 的 `platforms` 和 `card-state` 的回應（照後台送來的原樣）、持卡人的清單、裝置時鐘的現在；照 `docs/api/card-proof.md` 讀後台的回應，讀不懂就是 `IDC_ERR_INPUT`。回傳卡片要簽的整份清單（交給 `idc_declaration_code`）和每一列，或名冊規則不收的理由（`empty`、`switch_limit`、`daily_limit`）。形狀寫在標頭檔 |
 
 ## 套件和工具鏈
 
@@ -87,7 +90,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 - **Rust 1.99.1**（`rust-toolchain.toml`；2026-10-15 發布）。有 rustup 的機器在這個目錄下跑 `cargo` 就會用它
 - **`barretenberg-rs` 6.0.0**（只開 `ffi`）：呼叫 Barretenberg。版本和 `web/` 釘的 `@aztec-foundation/bb.js` 相同（ADR-0034）
 - **`sha2` 0.11.1**：SHA-256（宣告碼）。Noir `v1.0.0` 的 ACVM 用的也是這一版
-- **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次、多出來的鍵都不收；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
+- **`serde_json` 1.0.154**、**`serde` 1.0.229**（不開 `derive`）：讀 C 函式收到的 JSON，同一個鍵寫兩次的不收；多出來的鍵，帳號清單不收，後台的回應照 `docs/api/` 略過（`prover/src/json.rs`、`prover/src/server_state.rs`）；測試讀 `spec/vectors/`。Noir `v1.0.0` 的 `Cargo.lock` 裡也是這兩版，`serde` 本來就由 `barretenberg-rs` 帶進來
 - `checks/` 的測試另外用 `sha2`、`serde_json`（只在測試）
 - 上面幾個帶進來的套件和版本在 `Cargo.lock`（進版控）。建置一律加 `--locked`
 
@@ -133,6 +136,8 @@ cargo test --locked -p iamreal-device-checks
 - `checks/tests/vectors.rs`（不需要 Barretenberg）：`challenge.json`（唯一的寫法、日期、`current_time` 和它的公開輸入、亂數的位元組）、`scope.json`（兩個場合字串和打包值、平台代號、帳號名稱照它的平台的格式）、`declaration-code.json`（原文、SHA-256、宣告碼、打包值）、`scoped-id.json`（文字寫法、短編號、讀不懂的寫法、網址裡的短編號）
 - `prover/tests/vectors.rs`：`poseidon2.json` 的 `hash_2`、`hash_3`（Barretenberg 的 Poseidon2），和 `scoped_id`（簽章切出的 18 段、串起來的匿名編號）
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
+- `checks/tests/roster_rules.rs`（不需要 Barretenberg）：`roster-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/roster-rules.md` 寫的、標準答案帶的版本號相同
+- `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；每一列的內容、不認得的平台、讀不懂的平台表和現況、裝置的時區
 - `prover/tests/c_link.rs`：用 `cargo build` 編出靜態函式庫，拿 `include/iamreal_device_core.h` 編 `prover/tests/smoke.c`、連結、執行。標頭檔和函式庫對不上、函式庫裡沒有對外的函式時，這一個會失敗
 
 ## 連結 Barretenberg 時要注意的

@@ -83,6 +83,18 @@ impl Date {
         Date::new(year, month, left as u8 + 1)
     }
 
+    /// The number of days from 2000-01-01 to this date: dates are
+    /// compared and counted apart by it (spec/roster-rules.md counts days).
+    pub fn day_number(&self) -> i32 {
+        let years = (2000..self.year)
+            .map(|y| if y.is_multiple_of(4) { 366 } else { 365 })
+            .sum::<i32>();
+        let months = (1..self.month)
+            .map(|m| i32::from(days_in_month(self.year, m)))
+            .sum::<i32>();
+        years + months + i32::from(self.day) - 1
+    }
+
     pub fn year(&self) -> u16 {
         self.year
     }

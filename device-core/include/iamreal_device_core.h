@@ -82,6 +82,43 @@ int32_t idc_declaration_code(uint32_t roster,
                              const uint8_t *challenge, size_t challenge_len,
                              idc_buf *out);
 
+/* What a list does on every platform, before the card signs it
+ * (spec/roster-rules.md, checks 5 and 6): JSON in *out, for the
+ * confirmation screen.
+ *
+ * platforms_json: the `platforms` of GET /api/v1/config, as the server
+ * sent it.
+ * card_state_json: the answer of POST /api/v1/card-state, as the server
+ * sent it.
+ * accounts_json: the cardholder's list for the platforms offered (a row of
+ * the table with an entry in the state), in the shape of a record's
+ * accounts: ascending order of platform, each platform at most once, each
+ * username in its platform's format. Accounts on platforms the device does
+ * not know are not in it: the core keeps them.
+ * now: seconds since 1970-01-01T00:00:00Z by the device's clock; the date
+ * is the one in Taiwan.
+ *
+ * *out is one of:
+ *   {"valid":true,"accounts":[...],"rows":[{"platform":"threads","kind":"switch","username":"carol","previous":"bob","switches_left":3}]}
+ *   {"valid":false,"reason":"switch_limit","platform":"threads"}
+ *   {"valid":false,"reason":"empty"}   (or "daily_limit")
+ * accounts is the list the card signs (pass it to idc_declaration_code).
+ * rows: one per platform the list does something on, in ascending order of
+ * platform. kind is first, refresh, correction, switch or withdraw;
+ * username the account declared, or the one withdrawn; previous the
+ * account a switch or correction replaces, otherwise null; switches_left
+ * what is left after the record, null on a platform the device does not
+ * know. valid false is a list the rules refuse: it is not offered for
+ * signing.
+ *
+ * IDC_ERR_INPUT when the table or the state cannot be read
+ * (docs/api/card-proof.md), when the list is not one of the platforms
+ * offered, or when now is outside the years 2000 to 2049 in Taiwan. */
+int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_json_len,
+                             const uint8_t *card_state_json, size_t card_state_json_len,
+                             const uint8_t *accounts_json, size_t accounts_json_len,
+                             int64_t now, idc_buf *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -14,6 +14,8 @@ pub mod date;
 pub mod declaration_code;
 pub mod field;
 pub mod hash;
+pub mod list_consequence;
+pub mod roster_rules;
 pub mod scope;
 pub mod scoped_id;
 pub mod username_format;

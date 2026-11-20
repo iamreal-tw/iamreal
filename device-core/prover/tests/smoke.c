@@ -36,5 +36,20 @@ int main(void) {
                            (const uint8_t *)challenge, strlen(challenge), &out) != IDC_ERR_INPUT) return 8;
   if (out.ptr != NULL || out.len != 0) return 9;
   if (idc_scope_string(2, &out) != IDC_ERR_ARGUMENT) return 10;
+
+  /* A first declaration on a card without a record, on 2026-11-16 in Taiwan. */
+  {
+    static const char platforms[] =
+        "[{\"platform\":\"threads\",\"display_name\":\"Threads\",\"username_format\":\"[a-z0-9._]{1,30}\"}]";
+    static const char state[] =
+        "{\"last_card_proof\":null,\"proofs_on_last_date\":0,\"platforms\":{\"threads\":"
+        "{\"current\":null,\"last_declared\":null,\"switch_count\":0,\"correction_date\":null}},\"count\":0}";
+    if (idc_list_consequence((const uint8_t *)platforms, strlen(platforms), (const uint8_t *)state,
+                             strlen(state), (const uint8_t *)accounts, strlen(accounts),
+                             INT64_C(1794801600), &out) != IDC_OK) return 11;
+    /* What it holds is checked in tests/c_list_consequence.rs; here, that the call links. */
+    if (out.ptr == NULL || out.len == 0) return 12;
+    idc_buf_free(&out);
+  }
   return 0;
 }
