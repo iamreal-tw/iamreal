@@ -94,7 +94,7 @@ ${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
 <section class="last">
 ${when}
 <p class="small">那一天檢查過：這張自然人憑證在效期內，不在廢止清冊上。之後有沒有被廢止，要等下一次過卡才知道。</p>
-<p class="small">島民建議持卡人每季過卡一次。隔得越久，這張證明的說服力越低。 <a href="/proof">我要更新這張證明</a></p>
+<p class="small">建議持卡人每季過卡一次。隔得越久，這張證明的說服力越低。 <a href="/proof">我要更新這張證明</a></p>
 </section>
 <section class="owner">
 <h2 class="ask">帳號主人承認嗎？你需要自己看。</h2>
