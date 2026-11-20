@@ -27,7 +27,7 @@ function filesUnder(dir: string): string[] {
 }
 
 interface Build {
-  /** The modules as wrangler would upload them (not the source map, which is not uploaded). */
+  /** The JavaScript modules as wrangler would upload them (not the source map, which is not uploaded). */
   readonly code: string;
   /** What wrangler printed. */
   readonly output: string;
@@ -44,7 +44,8 @@ function build(kind: "deploy" | "test", values: TestBuildValues): Build {
     assert.ok(files.length > 0, `${kind}: the build has files`);
     const others = files.filter((f) => !f.endsWith(".js"));
     return {
-      code: files.map((f) => readFileSync(f, "utf8")).join("\n"),
+      // The modules that are not JavaScript are known by their SHA-256 (`files`), not read as text.
+      code: files.filter((f) => f.endsWith(".js")).map((f) => readFileSync(f, "utf8")).join("\n"),
       output,
       // wrangler names such a module `<hash>-<the file's name>`.
       files: Object.fromEntries(others.map((f) => [basename(f).replace(/^[0-9a-f]{40}-/, ""), sha256Hex(readFileSync(f))])),
@@ -101,8 +102,18 @@ test("the only addresses in the deploy build are MOICA's two, the ones crl/READM
   assert.deepEqual(urlsIn(deploy.code), addressesInCrlReadme().sort());
 });
 
+/**
+ * The one other run of that length: the G2 point of Barretenberg's CRS,
+ * 128 bytes written as hex in src/barretenberg.ts. It is known here by the
+ * SHA-256 of the file bb.js downloads it as (README.md, "WASM 檔和驗證金鑰從哪裡來").
+ */
+const CRS_G2_SHA256 = "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f";
+const isCrsPoint = (run: string): boolean => /^[0-9a-f]{256}$/.test(run) && sha256Hex(Buffer.from(run, "hex")) === CRS_G2_SHA256;
+
 test("the issuer keys in the deploy build are exactly the two of spec/vectors/issuers.json", () => {
-  assert.deepEqual(keySizedRuns(deploy.code), moduliInSpec().sort());
+  const runs = keySizedRuns(deploy.code);
+  assert.deepEqual(runs.filter((run) => !isCrsPoint(run)), moduliInSpec().sort());
+  assert.equal(runs.filter(isCrsPoint).length, 1, "the build verifies proofs: it holds the CRS point");
   for (const s of ["PRIVATE KEY", "PUBLIC KEY", "BEGIN CERTIFICATE", "pkcs8", "spki"]) assert.ok(!deploy.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
 });
 
@@ -123,18 +134,14 @@ test("the test build holds another key, the fake MOICA and the clock's switch: t
   // The test's keys are found by the same search that finds only MOICA's in the deploy build.
   const runs = keySizedRuns(testBuild.code);
   for (const k of values.issuers) assert.ok(runs.includes(k.modulus), `the search does not find the test's ${k.name} key`);
-  assert.notDeepEqual(runs, moduliInSpec().sort());
+  assert.notDeepEqual(runs.filter((run) => !isCrsPoint(run)), moduliInSpec().sort());
   assert.notDeepEqual(urlsIn(testBuild.code), addressesInCrlReadme().sort());
   assert.deepEqual(bindingsIn(testBuild.output), bindingsIn(deploy.output));
 });
 
 test("the proof verifier's files in a build are Barretenberg's module and the two verification keys, each with its SHA-256", () => {
   const checked = { [WASM_FILE]: WASM_SHA256, ...Object.fromEntries(CIRCUIT_NAMES.map((circuit) => [vkFile(circuit), CIRCUITS[circuit].verificationKeySha256])) };
-  // The test build calls the verifier (test-build/index.ts), so it holds the files.
+  // Both builds hold them: the CRL mirror builds its trees with the module's Poseidon2 (src/index.ts).
   assert.deepEqual(build("test", values).files, checked);
-  // The deployed Worker has nothing that calls the verifier yet, so the
-  // bundler leaves it out and this `if` is never true. #67, which makes
-  // the deployed Worker verify submissions, removes the `if`: from then on
-  // the deploy build's files must be these same ones.
-  if (Object.keys(deploy.files).length > 0) assert.deepEqual(deploy.files, checked);
+  assert.deepEqual(deploy.files, checked);
 });

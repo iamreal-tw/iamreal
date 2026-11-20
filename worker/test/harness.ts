@@ -3,15 +3,18 @@
 // A test sends it HTTP requests, runs its schedule, reads the files it wrote
 // to the simulated R2 bucket, and sets its clock. Nothing here needs a
 // Cloudflare account, and nothing sends a request to MOICA.
-import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
+import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
+import { testIssuers } from "./crls.ts";
+
+export { testIssuers } from "./crls.ts";
 
 /** The cron expression of the test environment (wrangler.jsonc). */
 export const HOURLY = "0 * * * *";
@@ -115,6 +118,8 @@ export interface StoredFile {
 
 /** What the tests use of an R2 bucket binding. */
 interface Bucket {
+  put(key: string, value: Uint8Array | string, options?: { httpMetadata?: { cacheControl?: string } }): Promise<unknown>;
+  delete(key: string): Promise<void>;
   list(options?: { prefix?: string; cursor?: string }): Promise<{ objects: { key: string }[]; truncated: boolean; cursor?: string }>;
   get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer>; httpMetadata?: { cacheControl?: string }; uploaded: Date } | null>;
 }
@@ -129,6 +134,24 @@ export interface TestWorker {
   runSchedule(): Promise<{ outcome: string }>;
   /** The files in the simulated R2 bucket, in the order of their keys. */
   files(prefix?: string): Promise<StoredFile[]>;
+  /**
+   * Puts a file into the simulated R2 bucket, or takes one out, behind the
+   * Worker's back: how a test leaves the bucket as a round that broke off
+   * would have left it.
+   */
+  putFile(key: string, bytes: Uint8Array | string): Promise<void>;
+  deleteFile(key: string): Promise<void>;
+  /**
+   * What the roster's Durable Object knows of the CRL archive, through the
+   * test build's `GET /__test/newest-crls`.
+   */
+  newestCrls(): Promise<NewestCrls>;
+  /**
+   * Stops the Worker and its Durable Objects and starts them again. What
+   * they keep in storage and the bucket's files stay; what they held in
+   * memory, the test clock included, is gone.
+   */
+  restart(): Promise<void>;
   /** From now on the Worker's clock shows `time`. */
   setClock(time: Date): Promise<void>;
   /** What the Worker has written to its log since it started. */
@@ -138,33 +161,14 @@ export interface TestWorker {
    * build's `POST /__test/verify`: true if the proof is accepted.
    */
   verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
-  /**
-   * The Worker's Poseidon2 hash (src/in-worker.ts) of these field elements,
-   * through the test build's `POST /__test/poseidon2`. Elements and hash
-   * are 64 hex digits, big-endian. Rejects if the Worker refuses the inputs.
-   */
-  poseidon2(inputs: readonly string[]): Promise<string>;
   close(): Promise<void>;
-}
-
-let issuers: IssuerKey[] | undefined;
-
-/**
- * The test's issuer keys: made on the spot, once per process, and the
- * private halves are dropped here (ADR-0028).
- */
-export function testIssuers(): IssuerKey[] {
-  issuers ??= ([["G2", 2048], ["G3", 4096]] as const).map(([name, bits]) => {
-    const { publicKey } = generateKeyPairSync("rsa", { modulusLength: bits, publicExponent: 65537 });
-    const n = publicKey.export({ format: "jwk" }).n!;
-    return { name, modulus: Buffer.from(n, "base64url").toString("hex"), bits };
-  });
-  return issuers;
 }
 
 export interface StartOptions {
   /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
   readonly crlTimeoutMs?: number;
+  /** The issuer keys of the build, one G2 and one G3. By default the test's own, which sign the CRLs of test/crls.ts. */
+  readonly issuers?: readonly IssuerKey[];
 }
 
 /** Builds the test build and starts it in the local workerd, with a fake MOICA that has no CRL yet. */
@@ -175,7 +179,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   const server = createTestHarness({ root: WORKER_DIR, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
-    buildWorker("test", dir, { moica: moica.origin, issuers: testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000 });
+    buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000 });
     ({ url } = await server.listen());
   } catch (e) {
     await moica.close();
@@ -217,10 +221,19 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 200) throw new Error(`verifying: HTTP ${res.status} ${await res.text()}`);
       return ((await res.json()) as { verified: boolean }).verified;
     },
-    async poseidon2(inputs) {
-      const res = await server.fetch("/__test/poseidon2", { method: "POST", body: JSON.stringify({ inputs }) });
-      if (res.status !== 200) throw new Error(`hashing: HTTP ${res.status} ${await res.text()}`);
-      return ((await res.json()) as { hash: string }).hash;
+    async putFile(key, bytes) {
+      await (await worker.getEnv()).DATA.put(key, bytes);
+    },
+    async deleteFile(key) {
+      await (await worker.getEnv()).DATA.delete(key);
+    },
+    async newestCrls() {
+      const res = await server.fetch("/__test/newest-crls");
+      if (res.status !== 200) throw new Error(`asking the roster's object: HTTP ${res.status} ${await res.text()}`);
+      return (await res.json()) as NewestCrls;
+    },
+    async restart() {
+      await server.update((current) => ({ ...current }));
     },
     async close() {
       await server.close();
