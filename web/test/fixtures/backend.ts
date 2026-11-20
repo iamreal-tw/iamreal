@@ -14,7 +14,9 @@
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
+import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type CardState, type SlotState, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
+import { isAnyUsername, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 export interface LoggedRequest {
   method: string;
@@ -85,19 +87,32 @@ export class FakeBackend {
 
   constructor(opts: BackendOptions) {
     this.opts = opts;
-    this.card = newCard(this.table().map((r) => r.platform));
+    this.card = newCard(this.rows());
   }
 
   /**
-   * The platform table of this server's roster: the one its `config` sends
-   * (`config` whole, else `platforms`), or TEST_PLATFORMS when the test made
-   * that answer something that is not a table.
+   * The platform table of this server's roster, as it sends it: the one of
+   * its `config` (`config` whole, else `platforms`), or TEST_PLATFORMS when
+   * the test made that answer something that is not a table.
    */
   private table(): readonly PlatformTableRow[] {
     const o = this.opts;
     const sent = "config" in o ? (o.config as { platforms?: unknown } | null)?.platforms : o.platforms;
     const rows = Array.isArray(sent) ? sent.filter((r): r is PlatformTableRow => typeof r === "object" && r !== null && typeof r.platform === "string") : [];
     return rows.length > 0 ? rows : TEST_PLATFORMS;
+  }
+
+  /**
+   * The same table as the rows the roster rules take. A test gives a row a
+   * format no device reads to see what the device does; this server then
+   * checks the usernames of that platform as any username.
+   */
+  private rows(): PlatformRow[] {
+    return this.table().map((r) => ({
+      platform: r.platform,
+      displayName: String(r.display_name),
+      format: parseUsernameFormat(r.username_format) ?? { text: String(r.username_format), min: 1, max: Number.MAX_SAFE_INTEGER, accepts: isAnyUsername },
+    }));
   }
 
   /** The card-state answer of the roster of its own. */
@@ -128,9 +143,10 @@ export class FakeBackend {
     // The roster rules for a roster of one card, on this server's platform
     // table, with the answers this server does not check: the record
     // verifies, its challenge is new, its root is recognized. A list that is
-    // not a record's (a platform outside the table) makes applyRecord throw.
+    // not a record's (a platform outside the table, a username outside its
+    // platform's format) makes applyRecord throw.
     const o = applyRecord({
-      platforms: this.table().map((r) => r.platform),
+      platforms: this.rows(),
       record: { accounts, date: d, verifies: true },
       card,
       latestValidDate: card.lastCardProof,

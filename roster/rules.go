@@ -13,7 +13,10 @@ import (
 // implementation has the same constant (protocol/'s RULES_VERSION). When it
 // goes up is written there: with every change to the rules, and when an
 // implementation is corrected for a result or a state the rules do not give
-// and states computed by it may be stored.
+// and states computed by it may be stored. Nothing stored is computed by
+// this package, so correcting an error here alone does not change the
+// number; a new version of the re-verification command starts the
+// re-verification from the first record (ADR-0025).
 const RulesVersion = 1
 
 // Reason codes of an invalid record (spec/roster-rules.md, "Per record").

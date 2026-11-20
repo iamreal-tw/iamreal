@@ -10,7 +10,7 @@
 // own text, which could quote it.
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
-import { type Platform, platformsOf } from "iamreal-protocol/platforms.ts";
+import { type PlatformRow, platformsOf } from "iamreal-protocol/platforms.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
 import { type Roster as RosterKind, lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
@@ -69,10 +69,10 @@ export function rosterKindOf(env: Env): RosterKind {
 
 /**
  * The platform table of this environment's roster, in ascending order of
- * platform ID. The one place the back end gets it: what `config` sends to
+ * platform ID (protocol/src/platforms.ts). The one place the back end gets it: what `config` sends to
  * devices and what the back end itself reads are the same table.
  */
-export function platformTableOf(env: Env): readonly Platform[] {
+export function platformTableOf(env: Env): readonly PlatformRow[] {
   return platformsOf(rosterKindOf(env));
 }
 
@@ -153,7 +153,7 @@ async function getConfig(_request: Request, env: Env): Promise<Reply> {
   const table = await step("settings", () => platformTableOf(env));
   return ok({
     crl_max_age_days: CRL_MAX_AGE_DAYS,
-    platforms: table.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.usernameFormat })),
+    platforms: table.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.format.text })),
   });
 }
 

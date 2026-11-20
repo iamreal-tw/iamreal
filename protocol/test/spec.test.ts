@@ -8,7 +8,7 @@ import { currentTime, parseChallenge } from "../src/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "../src/date.ts";
 import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/field.ts";
-import { platformIdsOf, platformsOf } from "../src/platforms.ts";
+import { platformsOf } from "../src/platforms.ts";
 import { lookupScope, scopeOf } from "../src/scope.ts";
 import { parseScopedId, scopedIdText, shortId } from "../src/scoped-id.ts";
 import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/username-format.ts";
@@ -93,12 +93,15 @@ describe("scope.json", () => {
       if (p.accepted) assert.equal(row!.displayName, p.display_name);
     }
   });
-  test("the server's tables (platforms.ts) are the ones spec/scope.md writes, word for word and in ascending order", () => {
+  test("the platform table of each roster in protocol/ is the one of the vectors and of spec/scope.md", () => {
     for (const roster of ["production", "test"] as const) {
-      assert.deepEqual(platformsOf(roster), tables[roster].map((r) => ({ platform: r.platform, displayName: r.displayName, usernameFormat: r.format })));
-      assert.deepEqual(platformIdsOf(roster), tables[roster].map((r) => r.platform));
+      const rows = platformsOf(roster).map((r) => ({ platform: r.platform, displayName: r.displayName, format: r.format.text }));
+      assert.deepEqual(rows, tables[roster], roster);
+      const accepted = v.platforms
+        .filter((p: Record<string, unknown>) => p.roster === roster && p.accepted)
+        .map((p: Record<string, string>) => ({ platform: p.platform, displayName: p.display_name, format: p.username_format }));
+      assert.deepEqual(rows, accepted, roster);
     }
-    for (const p of v.platforms) assert.equal(platformIdsOf(p.roster).includes(p.platform), p.accepted, `${p.roster} ${p.platform}`);
   });
   for (const p of v.platforms) {
     // The device cannot know a roster's table but from the server; what it checks of any ID is the syntax.

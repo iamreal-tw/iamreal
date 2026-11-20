@@ -6,6 +6,7 @@
 import { byBytes } from "./bytes.ts";
 import { parseChallenge } from "./challenge.ts";
 import type { Day } from "./date.ts";
+import type { PlatformRow } from "./platforms.ts";
 import { type Account, type CardState, type RecordOutcome, applyRecord, newCard } from "./roster-rules.ts";
 
 /** A well-formed record, with the two answers the rules take from outside the roster. */
@@ -41,16 +42,16 @@ export interface OutputScope {
 }
 
 export class MemoryRules {
-  private readonly platforms: readonly string[];
+  private readonly platforms: readonly PlatformRow[];
   /** Scope string, then scoped ID. */
   private readonly cards = new Map<string, Map<string, CardState>>();
   private readonly used = new Set<string>();
   private latest: Day | null = null;
   private applied = 0;
 
-  /** `platforms`: the platform IDs of the roster's table (spec/scope.md). */
-  constructor(platforms: readonly string[]) {
-    this.platforms = [...platforms].sort(byBytes);
+  /** `platforms`: the roster's platform table (spec/scope.md; platformsOf of platforms.ts). */
+  constructor(platforms: readonly PlatformRow[]) {
+    this.platforms = [...platforms].sort((a, b) => byBytes(a.platform, b.platform));
   }
 
   /**
@@ -59,7 +60,8 @@ export class MemoryRules {
    * Throws, and changes nothing (not the count, not the challenges used),
    * for what is not a well-formed record of the roster: a challenge not in
    * its one spelling, a list naming a platform outside the table or one
-   * platform twice, or not in ascending order of platform.
+   * platform twice, not in ascending order of platform, or with a username
+   * outside the format of its platform.
    */
   apply(r: MemoryRulesRecord): RecordOutcome {
     const date = parseChallenge(r.challenge);
@@ -114,7 +116,7 @@ export class MemoryRules {
         const state = scope.get(scopedId)!;
         const lastCardProof = state.lastCardProof!;
         const list: Account[] = [];
-        for (const platform of this.platforms) {
+        for (const { platform } of this.platforms) {
           const username = state.slots.get(platform)?.current ?? null;
           if (username === null) continue;
           list.push({ platform, username });

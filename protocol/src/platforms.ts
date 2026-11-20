@@ -1,40 +1,48 @@
-// The platform tables (spec/scope.md, "Platforms"): which platforms a roster
-// accepts, each with its display name and its `username` format exactly as
-// the specification writes it. The server answers `config` with its roster's
-// table (docs/api/card-proof.md) and checks a submitted list against it. The
-// device does not import this file: it takes the table from the server and
-// has its own definitions of the platforms it offers.
+// The platform table of each roster (spec/scope.md, "Platforms"): which
+// platforms the roster accepts and the `username` format of each. The roster
+// rules take a table (roster-rules.ts); the server and a recomputation from
+// the first record give them the table of their roster, from here. The
+// device does not: it uses the table the server sends (`config`,
+// docs/api/card-proof.md), read into the same rows.
+//
+// The Go implementation has the same tables (verifier/scope.go, Platforms);
+// the tests of both read them against spec/vectors/scope.json.
 import { byBytes } from "./bytes.ts";
 import type { Roster } from "./scope.ts";
+import { type UsernameFormat, parseUsernameFormat } from "./username-format.ts";
 
-/** One row of a platform table. */
-export interface Platform {
-  /** The platform ID, as records and the declaration code write it. */
+/** A row of a platform table. */
+export interface PlatformRow {
+  /** The platform ID written in records and in the declaration code. */
   readonly platform: string;
   /** For screens; the rules do not read it. */
   readonly displayName: string;
-  /** One character class and one length range, `[…]{m,n}` (username-format.ts reads it). */
-  readonly usernameFormat: string;
+  /** The `username` format of the platform, `[…]{m,n}`, as the table writes it and as read from it. */
+  readonly format: UsernameFormat;
 }
 
-const PRODUCTION: readonly Platform[] = [{ platform: "threads", displayName: "Threads", usernameFormat: "[a-z0-9._]{1,30}" }];
+function row(platform: string, displayName: string, format: string): PlatformRow {
+  const read = parseUsernameFormat(format);
+  if (read === null) throw new Error(`platform table: the format of ${platform} is not in the one form`);
+  return Object.freeze({ platform, displayName, format: read });
+}
 
-/** A test roster accepts these besides the production rows. IDs starting with `test-` are never production rows. */
-const TEST_ONLY: readonly Platform[] = [{ platform: "test-example", displayName: "Example (no real service)", usernameFormat: "[a-z0-9-]{1,20}" }];
+const byId = (a: PlatformRow, b: PlatformRow): number => byBytes(a.platform, b.platform);
 
-const byId = (a: Platform, b: Platform): number => byBytes(a.platform, b.platform);
+/** The rows under "Production roster". IDs starting with `test-` are never added here. */
+const PRODUCTION: readonly PlatformRow[] = Object.freeze([row("threads", "Threads", "[a-z0-9._]{1,30}")]);
+/** The rows under "Test rosters only": a test roster accepts the production rows and these. */
+const TEST_ONLY: readonly PlatformRow[] = Object.freeze([row("test-example", "Example (no real service)", "[a-z0-9-]{1,20}")]);
 
-const TABLES: Readonly<Record<Roster, readonly Platform[]>> = Object.freeze({
-  production: Object.freeze([...PRODUCTION].sort(byId).map((p) => Object.freeze(p))),
-  test: Object.freeze([...PRODUCTION, ...TEST_ONLY].sort(byId).map((p) => Object.freeze(p))),
+const TABLES: Readonly<Record<Roster, readonly PlatformRow[]>> = Object.freeze({
+  production: Object.freeze([...PRODUCTION].sort(byId)),
+  test: Object.freeze([...PRODUCTION, ...TEST_ONLY].sort(byId)),
 });
 
-/** The platforms `roster` accepts, in ascending order of platform ID by byte value: the order of a record's list. */
-export function platformsOf(roster: Roster): readonly Platform[] {
+/**
+ * The platforms `roster` accepts, in ascending order of ID by byte value:
+ * the order of a record's account list.
+ */
+export function platformsOf(roster: Roster): readonly PlatformRow[] {
   return TABLES[roster];
-}
-
-/** The platform IDs of `roster`, in the same order: the table the roster rules take. */
-export function platformIdsOf(roster: Roster): readonly string[] {
-  return TABLES[roster].map((p) => p.platform);
 }

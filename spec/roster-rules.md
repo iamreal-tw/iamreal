@@ -275,11 +275,13 @@ record that is `empty` or `switch_limit` is never counted towards the 3 of
 its card, and never reported as `daily_limit`.
 
 A list that cannot be read in one way is not an invalid record: a platform
-outside the table, a platform twice, accounts out of order make the line
-malformed and the whole file broken ([`record.md`](record.md)). The rules
-only ever see lists with at most one entry per platform. An implementation
-of the rules that is handed a list naming a platform outside the table
-stops with an error; it does not give the record a reason code.
+outside the table, a platform twice, accounts out of order, a `username`
+outside the format of its platform make the line malformed and the whole
+file broken ([`record.md`](record.md), "The account list"). The rules only
+ever see lists with at most one entry per platform, each `username` in the
+format of its platform. An implementation of the rules that is handed a
+list with any of these four stops with an error before check 1; it does not
+give the record a reason code.
 
 ## How far dates are trusted
 
@@ -468,11 +470,23 @@ every record or from an effective date makes no difference to the number.
 The specification, the vectors and both implementations change in the same
 pull request (ADR-0030).
 
+This is on purpose also for a change that leaves every stored state as it
+was, such as another number for a limit: the number goes up, and the server
+stops accepting card proofs until its states are rebuilt. Nobody then has
+to judge whether a change makes the stored states wrong, where a wrong
+judgement means records accepted on a wrong state that cannot be taken out
+of the roster; and only a new number starts the re-verification from the
+first record (ADR-0025, ADR-0031).
+
 **It also goes up when an implementation is corrected**: when one of them
 gave a record a result, or a card a state, that these rules do not give,
 and states computed by it may be stored. The text of these rules does not
 change then; the number does, because the stored states cannot be trusted
-(ADR-0025).
+(ADR-0025). For now only the server stores states, so this is the case of
+an error in the server. Correcting an error in Go's `roster/` does not
+change the number: nothing stored was computed by it, and the new version
+of the re-verification command starts the re-verification from the first
+record (ADR-0025).
 
 The number stays when nothing a record or a stored state could show has
 changed:
