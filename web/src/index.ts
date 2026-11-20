@@ -1,10 +1,11 @@
 // The page's entry point to the card proof engine. Everything a server could
 // otherwise influence is fixed here: the roster whose scope string the card
-// signs, the issuer keys and the component's address (target.ts), the fetch
-// (same origin only), the clock, the one storage key.
+// signs, the issuer keys, the component's address and the data domain
+// (target.ts), the fetch (same origin only; the CRL archive from the data
+// domain), the clock, the one storage key.
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
-import { sameOriginFetch } from "./api.ts";
+import { dataOriginFetch, sameOriginFetch } from "./api.ts";
 import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
@@ -13,7 +14,7 @@ import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
 import { KNOWN_PLATFORMS } from "./platforms.ts";
 import { localStorageStore } from "./storage.ts";
-import { IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
+import { DATA_ORIGIN, IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
 
 export { ROSTER };
 
@@ -41,6 +42,7 @@ export function createCardProof(opts: {
     issuers: ISSUERS,
     knownPlatforms: KNOWN_PLATFORMS,
     fetch: sameOriginFetch,
+    dataFetch: dataOriginFetch(DATA_ORIGIN),
     clock: () => Date.now(),
     store: localStorageStore(),
     card: opts.card,

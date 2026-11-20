@@ -1,5 +1,6 @@
 // Build of web/. Besides bundling, it makes the page load everything from its
-// own origin (README.md, "Content-Security-Policy"):
+// own origin, but the CRL archive, which is on the data domain of the build's
+// target (README.md, "Content-Security-Policy" and "資料網域"):
 //
 // - bb.js ships its WebAssembly as data: URLs inside two JavaScript modules.
 //   The build writes them out as files (bb/barretenberg.wasm.gz and

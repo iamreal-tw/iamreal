@@ -4,7 +4,7 @@
 // connection. The clock is node:test's mock of setTimeout.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-import { API_TIMEOUT_MS, FILE_TIMEOUT_MS, type Fetch, ServerError, getBytes, requestCardState, requestChallenge, requestConfig } from "../src/api.ts";
+import { API_TIMEOUT_MS, FILE_TIMEOUT_MS, type Fetch, ServerError, dataOriginFetch, getBytes, requestCardState, requestChallenge, requestConfig } from "../src/api.ts";
 import { dayOf } from "iamreal-protocol/date.ts";
 
 const TODAY = dayOf(2026, 11, 16);
@@ -158,4 +158,46 @@ describe("the platform table of config (src/api.ts)", () => {
       await assert.rejects(requestConfig(answer(body)), (e) => e instanceof ServerError && e.code === "malformed_response");
     });
   }
+});
+
+describe("the data domain's fetch (src/api.ts)", () => {
+  /** The calls a fetch got: the URL and the options. */
+  function recording(): { fetchFn: typeof fetch; calls: [string, RequestInit][] } {
+    const calls: [string, RequestInit][] = [];
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      calls.push([url, init]);
+      return new Response("x");
+    }) as unknown as typeof fetch;
+    return { fetchFn, calls };
+  }
+
+  test("asks the data domain for the path, with no credentials, no cache, no redirect, no referrer", async () => {
+    const r = recording();
+    await dataOriginFetch("https://data.iamreal.tw", r.fetchFn)("/crl/index.jsonl");
+    assert.equal(r.calls.length, 1);
+    const [url, init] = r.calls[0]!;
+    assert.equal(url, "https://data.iamreal.tw/crl/index.jsonl");
+    assert.equal(init.method, "GET");
+    assert.equal(init.mode, "cors");
+    assert.equal(init.credentials, "omit");
+    assert.equal(init.cache, "no-store");
+    assert.equal(init.redirect, "error");
+    assert.equal(init.referrerPolicy, "no-referrer");
+    assert.equal(init.body, undefined);
+    assert.equal(init.headers, undefined);
+  });
+
+  test("an empty origin is the page's own", async () => {
+    const r = recording();
+    await dataOriginFetch("", r.fetchFn)("/crl/index.jsonl");
+    assert.equal(r.calls[0]![0], "/crl/index.jsonl");
+  });
+
+  test("only a path, and only GET", () => {
+    const f = dataOriginFetch("https://data.iamreal.tw", recording().fetchFn);
+    for (const p of ["crl/index.jsonl", "//elsewhere.example/crl/index.jsonl", "https://elsewhere.example/"]) {
+      assert.throws(() => f(p), `path ${p}`);
+    }
+    assert.throws(() => f("/crl/index.jsonl", { method: "POST", body: "{}" }));
+  });
 });

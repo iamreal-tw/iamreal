@@ -23,7 +23,10 @@ var responseHeaders = map[string]string{
 // quotes this one.
 //
 //   - Content-Security-Policy: fetch, images, WebSockets, forms, frames and
-//     other origins' scripts and workers reach the page's own origin only.
+//     other origins' scripts and workers reach the page's own origin only;
+//     fetch also reaches the data domain https://data.iamreal.tw, where the
+//     production build downloads the CRL archive (ADR-0027). The builds this
+//     server is run with locally fetch it from this server, under /crl/.
 //     It does not govern top-level navigation, window.open or WebRTC, so it
 //     does not stop a script in the page from sending data elsewhere
 //     (web/README.md says what it does and does not stop). The window of
@@ -39,7 +42,7 @@ var responseHeaders = map[string]string{
 //     window by name). The windows the page opens itself keep their opener,
 //     so the component's reply still comes back.
 var pageHeaders = map[string]string{
-	"Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; " +
+	"Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; " +
 		"img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
 	"Document-Isolation-Policy":  "isolate-and-credentialless",
 	"Cross-Origin-Opener-Policy": "same-origin-allow-popups",

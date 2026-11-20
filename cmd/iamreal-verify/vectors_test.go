@@ -44,7 +44,11 @@ type recordVectors struct {
 				Name   string `json:"name"`
 				SHA256 string `json:"sha256"`
 			} `json:"hash_lists"`
-			Fingerprint string `json:"fingerprint"`
+			Fingerprint     string `json:"fingerprint"`
+			FingerprintFile struct {
+				Name    string `json:"name"`
+				Content string `json:"content"`
+			} `json:"fingerprint_file"`
 		} `json:"directories"`
 	} `json:"generated_roster"`
 	FingerprintFiles []struct {
@@ -116,7 +120,15 @@ func TestVectorsDirectory(t *testing.T) {
 				}
 				files[l.Name] = l.Data
 			}
-			fps := fmt.Sprintf(`{"date":"2026-11-16","count":%d,"fingerprint":"%s"}`+"\n", d.Count, d.Fingerprint)
+			// The fingerprint file of the directory, published once with every record.
+			fp := d.FingerprintFile
+			if fp.Name != fingerprintsFileName {
+				t.Fatalf("fingerprint file %q, want %q", fp.Name, fingerprintsFileName)
+			}
+			if want := fmt.Sprintf(`{"date":"2026-11-16","count":%d,"fingerprint":"%s"}`+"\n", d.Count, d.Fingerprint); fp.Content != want {
+				t.Fatalf("fingerprint file %q, want %q", fp.Content, want)
+			}
+			fps := fp.Content
 			code, out, errOut := runDir(t, writeDir(t, files, fps), "-json")
 			var got jsonReport
 			if err := json.Unmarshal([]byte(out), &got); err != nil {

@@ -1,5 +1,6 @@
 // The requests to the server (docs/api/card-proof.md). Every path is on the
-// page's own origin. Each response is read strictly, and what the device then
+// page's own origin, except the CRL archive's, which is on the data domain
+// (dataOriginFetch). Each response is read strictly, and what the device then
 // does with each value is in the README's table. Nothing here reports a
 // failure of the device's own checks to the server (ADR-0016): there is no
 // request for that.
@@ -47,6 +48,29 @@ export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; b
     referrerPolicy: "no-referrer",
     signal: init?.signal,
   });
+}
+
+/**
+ * The fetch of the data domain's files (the CRL archive, ADR-0027): `GET`
+ * of a path on `origin`, which the page's build fixes (src/target.ts); the
+ * empty origin is the page's own. No credentials, no cache, no redirects,
+ * like sameOriginFetch. The page's Content-Security-Policy allows this one
+ * origin besides its own (README.md).
+ */
+export function dataOriginFetch(origin: string, fetchFn: typeof fetch = fetch): Fetch {
+  return (path, init) => {
+    if (!path.startsWith("/") || path.startsWith("//")) throw new Error("not a path");
+    if ((init?.method ?? "GET") !== "GET" || init?.body !== undefined) throw new Error("the data domain is only read");
+    return fetchFn(origin + path, {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: init?.signal,
+    });
+  };
 }
 
 /**

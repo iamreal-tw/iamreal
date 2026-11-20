@@ -23,4 +23,7 @@ export const ISSUERS: readonly IssuerKey[] = __IAMREAL_TEST_ISSUERS__.map((i) =>
 
 export const COMPONENT_ORIGIN: string = __IAMREAL_TEST_COMPONENT__;
 
+/** The test's server serves the CRL archive itself: the page's own origin. */
+export const DATA_ORIGIN = "";
+
 export const IDLE_LIMIT_MS: number = __IAMREAL_TEST_IDLE_MS__;
