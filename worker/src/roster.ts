@@ -1059,8 +1059,8 @@ export class Roster extends DurableObject<Env> {
     const { length, sha256 } = await lengthAndSha256(this.#cardStateChunks());
     const chunks = this.#cardStateChunks();
     const stream = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        const next = chunks.next();
+      async pull(controller) {
+        const next = await chunks.next();
         if (next.done) controller.close();
         else controller.enqueue(next.value);
       },
@@ -1071,9 +1071,13 @@ export class Roster extends DurableObject<Env> {
   /**
    * The card state file of the copy of the card state table, as one
    * chunk of bytes for each batch of `CARD_STATE_BATCH` rows. Each batch is
-   * read when the chunk before it has been taken.
+   * read when the chunk before it has been taken, and only after a timer
+   * has run out: the object takes the requests that came meanwhile, so a
+   * submission waits for one batch, not for the whole file. Without the
+   * timer the first reading, which waits only for the hash of each chunk,
+   * would not let any request in until it had read every card.
    */
-  *#cardStateChunks(): Generator<Uint8Array> {
+  async *#cardStateChunks(): AsyncGenerator<Uint8Array> {
     const sql = this.ctx.storage.sql;
     const write = cardStateFileWriter(this.settings.kind);
     const encoder = new TextEncoder();
@@ -1084,6 +1088,7 @@ export class Roster extends DurableObject<Env> {
       for (const row of rows) text += write(row);
       yield encoder.encode(text);
       after = rows.at(-1)!;
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
