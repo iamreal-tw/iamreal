@@ -58,7 +58,7 @@
 
 讀後台回應的規則（`spec/list-consequence.md` 的「Reading the platform table」「Reading the card's state」）在 `prover/src/server_state.rs`，不在 `checks/`：它要讀 JSON，而 `checks/` 沒有執行期的套件。所以 `list-consequence.json` 的測試在 `prover/tests/`，要連結 Barretenberg 才跑得到。
 
-還沒有的（各有自己的票）：檢查後台其他的回應（題目、送出的回應）、Android 的建置。iOS 的建置在 `ios/`（`ios/README.md`）。
+還沒有的（各有自己的票）：檢查後台其他的回應（題目、送出的回應）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
 
 ## 「檢查都通過了」
 
@@ -267,6 +267,6 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 
 - **`strip = "symbols"` 會把靜態函式庫對外的函式也拿掉。** `Cargo.toml` 的 release 設定用 `strip = "debuginfo"`；符號由 app 自己的連結去掉。`panic = "unwind"` 也不能改：C 函式靠它接住 panic
 - **Barretenberg 的執行緒數由核心設定**，不留給它自己決定：量測時（[#88](https://github.com/iamreal-tw/iamreal/issues/88)）它自己決定的數字在 Mac 上偏低，證明慢 2 到 3 倍；寫這一段時在另一台 Mac 上沒有重現（沒設定時就是核心數），核心照樣自己設，不靠它的預設。核心在每次算證明之前，在算證明的那個執行緒上把它設成 `std::thread::available_parallelism()`（`prover/src/proof.rs`）。Barretenberg 的這個數字是每個執行緒各自的：它第一次用到時讀環境變數 `HARDWARE_CONCURRENCY`，沒有就用 `min(32, 核心數)`（`common/thread.cpp`）。核心不改環境變數（行程裡別的執行緒可能正在讀），直接呼叫 `bb::set_parallel_for_concurrency`；`bbapi` 的介面沒有這一項，所以是用 C++ 的符號名稱連結的，換 Barretenberg 的版本時這個名稱不在了，連結會失敗，不會悄悄失效
-- **Android 的 libc++。** Aztec 給 Android 的靜態函式庫用的是 LLVM 的 libc++（`std::__1`），NDK 的是 `std::__ndk1`，兩者連結不起來；量測時用 Aztec 編 Barretenberg 的同一版 Zig 連結，把 libc++ 靜態連進 `.so`。留給 Android 建置的那張票
+- **Android 的 libc++。** Aztec 給 Android 的靜態函式庫用的是 LLVM 的 libc++（`std::__1`），NDK 的是 `std::__ndk1`，兩者連結不起來；量測時用 Aztec 編 Barretenberg 的同一版 Zig 連結，把 libc++ 靜態連進 `.so`。Android 的建置照這個做（`android/build-native.sh`、`android/README.md`「原生的函式庫」）
 
 Linux 的靜態函式庫同樣要 LLVM 的 libc++（不是 GCC 的 libstdc++），所以上面要裝 `libc++-dev`。檢查裡裝的是 Ubuntu 24.04 套件庫當時的版本，沒有釘：它只在 Linux 上跑測試時用到，不進 app。

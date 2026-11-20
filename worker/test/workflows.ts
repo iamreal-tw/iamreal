@@ -9,7 +9,8 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs must be exactly the ones written here.
+// workflow's two jobs, and the device-core and android jobs of checks.yml,
+// must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -249,6 +250,28 @@ export const DEVICE_CORE_JOB = "device-core";
 /** How a step of that job gets Barretenberg: the directory the script prints, and nothing if the script fails. */
 export const FETCH_BARRETENBERG = 'BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && ';
 
+/**
+ * The other job that does not check bb's SHA-256: android/ runs no bb
+ * either. Its Barretenberg comes from the same script, which
+ * android/build-native.sh calls.
+ */
+export const ANDROID_JOB = "android";
+/** The one line of that job that runs Gradle: the wrapper of the repository, with the runner's JDK 17. */
+export const GRADLE_BUILD = 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build';
+/** How that job gets the NDK, the platform and the build tools android/app/build.gradle.kts names, with the SDK manager the runner has. */
+export const ANDROID_SDK_PARTS = '$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null';
+/**
+ * The Gradle the wrapper downloads and the SHA-256 it checks the download
+ * against, and the SHA-256 of the wrapper's own jar in the repository, which
+ * android/gradlew (a shell script, read like any other of the repository)
+ * starts. Both are the ones Gradle publishes
+ * for this version (https://gradle.org/release-checksums/);
+ * test/workflows.test.ts checks the files of android/gradle/wrapper/ against them.
+ */
+export const GRADLE_VERSION = "9.9.1";
+export const GRADLE_DISTRIBUTION_SHA256 = "d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228";
+export const GRADLE_WRAPPER_JAR_SHA256 = "621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8";
+
 /** What each action may be given, exactly. */
 const WITH: Readonly<Record<string, YamlMap>> = {
   "actions/checkout": { "persist-credentials": "false" },
@@ -277,6 +300,27 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
     { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
     { name: "Fetch the common reference string", "working-directory": "device-core", run: "./fetch-crs.sh" },
     { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release` },
+  ],
+};
+
+/**
+ * The android job of checks.yml, exactly, written out for the same reason
+ * as the device-core job: what it runs is the Gradle wrapper of android/
+ * (`build`: both installers, the unit tests, lint, the checks of what was
+ * built), and everything it links or bundles comes from a script that
+ * checks a SHA-256 (android/build-native.sh calls fetch-barretenberg.sh
+ * and fetch-zig.sh).
+ */
+export const ANDROID_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+    { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
+    { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
+    { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
+    { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
   ],
 };
 
@@ -478,7 +522,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, ios");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android, ios");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -496,6 +540,10 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
         // (where .cargo/config.toml is read) with the library the script checked.
         if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+      } else if (f === "checks.yml" && name === ANDROID_JOB) {
+        // Exactly the steps written above: Gradle is the wrapper of android/, and Barretenberg, Zig
+        // and the parameter files come from the scripts that check their SHA-256.
+        if (!same(job, ANDROID_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (f === "checks-ios.yml" && name === IOS_JOB) {
         // Exactly the steps written above, for the same reason: the one step that gets Barretenberg
         // and the CRS is ios/build-core.sh, which has each checked before cargo or Xcode uses it.
