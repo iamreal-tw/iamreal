@@ -12,6 +12,9 @@
 //   cards        the roster rules' state of each card (card-table.ts)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
+//   published    the lines of the fingerprint file: the days the roster was
+//                published on
+//   publication  one row: the date the roster is published after
 //   view_*       the views: what the visitors' pages read (views.ts)
 //
 // The views are derived from the records: they are written with each record,
@@ -27,15 +30,16 @@ import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
+import { cardStateFile } from "iamreal-protocol/card-state-file.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RecordFields, type RosterRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
+import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
-import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
+import { CARD_TABLE, everyCard, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfShortId, Counts } from "./page-data.ts";
-import { CACHE_FULL_FILE, FULL_FILE_RETRY_MS, type FileBucket, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, readFullFile, writeAndReadBack } from "./roster-files.ts";
+import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, FULL_FILE_RETRY_MS, type FileBucket, type FileHeaders, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, readFullFile, writeAndReadBack } from "./roster-files.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfShortId, clearViews, counts, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
@@ -100,6 +104,22 @@ export const RESTRICTED_FROM = 4;
  * "The version number"); `schema_version` the SCHEMA_VERSION of the build
  * that made the tables.
  *
+ * published: one row per line of the fingerprint file (spec/record.md,
+ * "The published roster"): a date in Taiwan on which the roster was
+ * published, `YYYY-MM-DD`, with the number of records and the roster
+ * fingerprint read at that moment. A row is written once and never changed
+ * or deleted: the line of a date does not change. The table is the
+ * fingerprint file's source; the file in the data bucket is written from
+ * it, whole, and never read. `in_bucket` is 0 from the moment the row is
+ * written until the fingerprint file was written with its line and read
+ * back, then 1. The table came after the others, with SCHEMA_VERSION
+ * unchanged.
+ *
+ * publication: exactly one row (`id` 1), written when an object first
+ * starts with a build that publishes: `since` is the date in Taiwan of that
+ * start. The roster is first published when the date after it begins, not
+ * on the day the object, or the build, is new. SCHEMA_VERSION is unchanged.
+ *
  * newest_crls: for each issuer key, its newest usable CRLs as the CRL mirror
  * last told them (src/mirror.ts): `place` 0 is the newest. `root` is the
  * root of the CRL's tree, 64 lowercase hex digits; `crl_number` its
@@ -143,6 +163,16 @@ const TABLES: readonly string[] = [
      crl_date   TEXT    NOT NULL,
      PRIMARY KEY (issuer, place)
    ) WITHOUT ROWID`,
+  `CREATE TABLE IF NOT EXISTS published (
+     date        TEXT    PRIMARY KEY,
+     count       INTEGER NOT NULL,
+     fingerprint TEXT    NOT NULL,
+     in_bucket   INTEGER NOT NULL
+   ) WITHOUT ROWID`,
+  `CREATE TABLE IF NOT EXISTS publication (
+     id    INTEGER PRIMARY KEY CHECK (id = 1),
+     since TEXT    NOT NULL
+   )`,
   // The views (views.ts). They came after the others, with SCHEMA_VERSION unchanged: an object made without them
   // gets them when it next starts, and fills them from its records (the constructor).
   ...VIEW_TABLES,
@@ -236,6 +266,12 @@ export interface TimedWork {
 /** The least the alarm waits, so that work that stays due cannot make the alarm spin. */
 const MIN_ALARM_WAIT_MS = 1000;
 
+/** How long after the roster could not be published the object tries again: one minute, as for a full file that could not be moved. */
+const PUBLICATION_RETRY_MS = 60 * 1000;
+
+/** The first moment of a date in Taiwan (UTC+8, no daylight saving), in milliseconds since the epoch. */
+const startOfTaiwanDay = (day: Day): number => day * 24 * 3600 * 1000 - 8 * 3600 * 1000;
+
 /** How long after views could not be filled the object tries again: one minute, as for a full file that could not be moved. */
 const VIEWS_RETRY_MS = 60 * 1000;
 
@@ -319,6 +355,13 @@ export class Roster extends DurableObject<Env> {
     this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#rosterRow().count;
     this.viewsFilling = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused ? this.#fillViews() : Promise.resolve();
     ctx.waitUntil(this.viewsFilling);
+    if (this.#tablesAreThisVersion) {
+      // The roster is published from the date after this one on (`#publication`); on an object that has the row this changes nothing.
+      sql.exec("INSERT OR IGNORE INTO publication (id, since) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
+      // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
+      // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
+      ctx.waitUntil(Promise.resolve().then(() => this.#setAlarmWithoutFailing()));
+    }
   }
 
   /**
@@ -811,9 +854,162 @@ export class Roster extends DurableObject<Env> {
     });
   }
 
+  /** The last line of the fingerprint file as the data bucket has it, or null if the roster was never published: what `GET /api/v1/fingerprint` answers from. */
+  lastPublished(): { date: string; count: number; fingerprint: string } | null {
+    this.#checkTables();
+    return this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string }>("SELECT date, count, fingerprint FROM published WHERE in_bucket = 1 ORDER BY date DESC LIMIT 1").toArray()[0] ?? null;
+  }
+
+  /** When a publication that failed is tried again, on the object's clock. Kept in memory: an object that starts again tries at once. */
+  #publishAgainAt = 0;
+  /** The publication that is going on, if one is. */
+  #publishing: Promise<void> | null = null;
+
+  /**
+   * Publishing the roster, once for each date in Taiwan (ADR-0027): due
+   * when the date after the last published one begins (after the date the
+   * object first ran, for a roster never published), and at once while a
+   * line it wrote is not in the bucket's fingerprint file yet; after a
+   * failure, a minute later. A date on which the alarm never rang gets no
+   * line afterwards: a line is dated the day it is written
+   * (spec/record.md).
+   *
+   * Not while the roster is paused: the states of the cards were then
+   * computed by other rules than this build's, and the card state file
+   * would be published as this build's. Full files are moved all the same
+   * (`#fullFiles`).
+   *
+   * A failure is this piece's own: one line says so, and the alarm goes on
+   * to the other pieces.
+   */
+  #publication: TimedWork = {
+    due: () => {
+      if (this.#paused) return null;
+      const sql = this.ctx.storage.sql;
+      const { last, behind } = sql.exec<{ last: string | null; behind: number }>("SELECT MAX(date) AS last, COALESCE(SUM(in_bucket = 0), 0) AS behind FROM published").one();
+      if (behind > 0) return this.#publishAgainAt;
+      const after = parseDay(last ?? sql.exec<{ since: string }>("SELECT since FROM publication WHERE id = 1").one().since);
+      if (after === null) throw new Error("published: a date is not a date");
+      return Math.max(startOfTaiwanDay(after + 1), this.#publishAgainAt);
+    },
+    run: async (time) => {
+      try {
+        // The alarm's handler does not run twice at once; the test build's door to it can, while the alarm itself rings.
+        this.#publishing ??= this.#publish().finally(() => {
+          this.#publishing = null;
+        });
+        await this.#publishing;
+      } catch (e) {
+        this.#publishAgainAt = time + PUBLICATION_RETRY_MS;
+        logFailure("roster_not_published", e);
+      }
+    },
+  };
+
+  /**
+   * Publishes the roster as it is at one moment of today's date in Taiwan
+   * (ADR-0027; spec/record.md, "What is published when"), in this order:
+   *
+   *   0. every full roster file is moved to the bucket (`#moveFullFiles`);
+   *   1. the last roster file, which is not full, and its record hash
+   *      list, over those of the day before;
+   *   2. the card state file of the date;
+   *   3. the line of the date: the row of `published`, then the
+   *      fingerprint file with it.
+   *
+   * - **One moment.** The count, the roster fingerprint, the lines of the
+   *   last file and the state of every card are read without waiting for
+   *   anything in between (`#readForPublication`), and only then is the
+   *   bucket written: the card state file is the states after exactly the
+   *   line's `count` records (spec/roster-rules.md, "The card state
+   *   file"). Records written while the bucket is written wait for the
+   *   next date.
+   * - **The line comes last**, and not at all if anything before it
+   *   failed: every record a line covers can be downloaded when the line
+   *   is there. A publication that broke off before the row was written is
+   *   made again from a new moment, all of it; the count may have grown.
+   * - **The row decides.** Once the row of a date is written, nothing of
+   *   that date is published again, and its line never changes
+   *   (spec/record.md: "publishing again on the same date … with more
+   *   records it is refused"). If the fingerprint file could not be
+   *   written after it, only the file is written again, from the table.
+   * - **The fingerprint file is written from the table**, whole, and never
+   *   read from the bucket: whatever the bucket's file was, it is the
+   *   table's lines after this.
+   * - The last roster file has the name a full one gets once it is full,
+   *   so it is written here only, in the alarm's work, where no move of a
+   *   full file runs meanwhile (`#moveFile`).
+   */
+  async #publish(): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    await this.#moveFullFiles();
+    const moment = this.#readForPublication();
+    if (moment !== null) {
+      const bucket = this.bucket();
+      const lines: FileHeaders = { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES };
+      if (moment.lastFile !== null) {
+        await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(moment.lastFile.before), moment.lastFile.file, lines);
+        await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(moment.lastFile.before), moment.lastFile.list, { cacheControl: CACHE_DAILY, contentType: TYPE_TEXT });
+      }
+      await writeAndReadBack(bucket, cardStateFileKey(moment.date), moment.cardStates, lines);
+      // A line is dated the day it is written: not this one, if the date changed while the bucket was written.
+      if (taiwanDay(now().getTime()) !== moment.date) throw new Error("the date changed while the roster was being published");
+      sql.exec("INSERT INTO published (date, count, fingerprint, in_bucket) VALUES (?, ?, ?, 0)", formatDay(moment.date), moment.count, moment.fingerprint);
+    }
+    await this.#writeFingerprintFile();
+  }
+
+  /**
+   * What is published of the roster at this moment, for today's date in
+   * Taiwan, or null if today's line is written already. Nothing here
+   * waits: everything is of the same count of records.
+   */
+  #readForPublication(): { date: Day; count: number; fingerprint: string; lastFile: { before: number; file: Uint8Array; list: Uint8Array } | null; cardStates: Uint8Array } | null {
+    const sql = this.ctx.storage.sql;
+    const encoder = new TextEncoder();
+    const date = taiwanDay(now().getTime());
+    const { last } = sql.exec<{ last: string | null }>("SELECT MAX(date) AS last FROM published").one();
+    if (last !== null && last >= formatDay(date)) {
+      if (last === formatDay(date)) return null;
+      throw new Error("the roster is already published for a later date than today");
+    }
+    const { count, fingerprint } = this.#rosterRow();
+    const before = count - (count % LINES_PER_FILE);
+    const kept = sql.exec<{ seq: number; line: string; record_hash: string }>("SELECT seq, line, record_hash FROM records ORDER BY seq").toArray();
+    if (kept.length !== count - before || kept.some((row, i) => row.seq !== before + i + 1)) throw new Error("the stored records are not those of the last roster file");
+    let lastFile: { before: number; file: Uint8Array; list: Uint8Array } | null = null;
+    if (kept.length > 0) {
+      // The first line of the list: the roster fingerprint at the end of the file before.
+      const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
+      if (fingerprintBefore === undefined) throw new Error("the file before the last roster file is not among the full files");
+      lastFile = { before, file: encoder.encode(kept.map((row) => row.line).join("")), list: encoder.encode(hashList(fingerprintBefore, kept.map((row) => row.record_hash))) };
+    }
+    return { date, count, fingerprint, lastFile, cardStates: encoder.encode(cardStateFile(this.settings.kind, everyCard(sql))) };
+  }
+
+  /**
+   * Writes the fingerprint file from the rows of `published`, if a row is
+   * not in the bucket's file yet: every line, in order of date, in one
+   * object that replaces the one there, read back before the rows are
+   * marked as in the bucket.
+   */
+  async #writeFingerprintFile(): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    const rows = sql.exec<{ date: string; count: number; fingerprint: string; in_bucket: number }>("SELECT date, count, fingerprint, in_bucket FROM published ORDER BY date").toArray();
+    if (rows.every((row) => row.in_bucket === 1)) return;
+    const file = rows.map((row) => {
+      const date = parseDay(row.date);
+      if (date === null) throw new Error("published: a date is not a date");
+      return fingerprintLine({ date, count: row.count, fingerprint: row.fingerprint });
+    });
+    await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, new TextEncoder().encode(file.join("")), { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
+    // The rows that were written: one written meanwhile is not among them.
+    sql.exec("UPDATE published SET in_bucket = 1 WHERE date <= ?", rows.at(-1)!.date);
+  }
+
   /** Every piece of timed work of the object (TimedWork). Whatever comes to need the alarm is added here. */
   protected timedWork(): readonly TimedWork[] {
-    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles];
+    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles, this.#publication];
   }
 
   /**

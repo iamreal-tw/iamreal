@@ -8,7 +8,8 @@
 // anywhere in the Worker sends one of these files to anybody: they are
 // downloaded from the data domain, which does not run the Worker.
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
-import { LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
+import { type Day, formatDay } from "iamreal-protocol/date.ts";
+import { FINGERPRINT_FILE_NAME, LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
 
 /** The roster directory's place in the data bucket (ADR-0027). */
 export const ROSTER_DIRECTORY = "roster/";
@@ -20,6 +21,22 @@ export const ROSTER_DIRECTORY = "roster/";
  * (README.md, "寫滿的名冊檔搬到 R2").
  */
 export const CACHE_FULL_FILE = "public, max-age=31536000, immutable";
+
+/**
+ * The `Cache-Control` of what the roster's object writes once a day and
+ * writes again the next: the last roster file, which is not full, and its
+ * record hash list; the card state file of a date; the fingerprint file
+ * (ADR-0027).
+ */
+export const CACHE_DAILY = "public, max-age=60";
+
+/** The fingerprint file's place in the data bucket. */
+export const FINGERPRINT_FILE = ROSTER_DIRECTORY + FINGERPRINT_FILE_NAME;
+
+/** The place in the data bucket of the card state file of a date in Taiwan (ADR-0027). */
+export function cardStateFileKey(date: Day): string {
+  return `${ROSTER_DIRECTORY}card-state/${formatDay(date)}.jsonl`;
+}
 
 /**
  * The `Content-Type` of the roster directory's files of lines of JSON

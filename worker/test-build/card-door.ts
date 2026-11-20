@@ -83,9 +83,11 @@ export interface StoredRoster {
  *     Content-Type": the write stores the bytes with another value of that
  *     header, and says it went well;
  *   - "put loses its answer": the write stores the bytes, and throws;
+ *   - "put takes a while": the write stores the bytes after 600 ms, in
+ *     which the object takes other requests;
  *   - "get fails": the read throws.
  */
-export type BucketFault = { readonly key: string; readonly how: "put fails" | "put sends other bytes" | "put writes other bytes" | "put writes another Cache-Control" | "put writes another Content-Type" | "put loses its answer" | "get fails" } | null;
+export type BucketFault = { readonly key: string; readonly how: "put fails" | "put sends other bytes" | "put writes other bytes" | "put writes another Cache-Control" | "put writes another Content-Type" | "put loses its answer" | "put takes a while" | "get fails" } | null;
 
 /**
  * What `GET /__test/roster/kept` answers: how many records the roster's

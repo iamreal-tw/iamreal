@@ -151,6 +151,7 @@ export class Roster extends DeployedRoster {
       put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
         if (key !== fault.key) return real.put(key, value, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
+        if (fault.how === "put takes a while") await new Promise((resolve) => setTimeout(resolve, 600));
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
         // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
         if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
