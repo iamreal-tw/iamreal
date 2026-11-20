@@ -75,6 +75,9 @@ const STAND_IN: ApiParts = {
 
 let standIn = false;
 
+/** The requests that reached the Worker's code, the doors aside (`GET /__test/seen`). */
+const seen: string[] = [];
+
 /**
  * What a test can make every write to fail on: a table the object writes,
  * or only the mark that a record was written for a challenge (the column
@@ -337,11 +340,17 @@ export default {
    * - `GET /__test/newest-crls` answers what the roster's object knows of
    *   the CRL archive (src/roster.ts, `newestCrls`).
    *
+   * - `GET /__test/seen` answers the method and path of every request that
+   *   reached this code since it was last asked, the doors aside: what
+   *   Static Assets answers by itself is not among them.
+   *
    * Anything else is the Worker's.
    */
   async fetch(request, deployedEnv, ctx): Promise<Response> {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname}`;
+    if (route === "GET /__test/seen") return json(seen.splice(0));
+    if (!pathname.startsWith("/__test/")) seen.push(route);
     if (route === "PUT /__test/clock") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms)) return new Response(null, { status: 400 });

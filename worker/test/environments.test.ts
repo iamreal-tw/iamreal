@@ -8,6 +8,10 @@
 // (`limits.cpu_ms`) to what a round of the CRL mirror counts on
 // (src/round-budget.ts).
 //
+// And the files of Static Assets are routed and headed as the roster of the
+// environment needs (`checkSiteFiles`): the card proof page's files never
+// run the Worker, and only a test roster's site says noindex.
+//
 // This is the first of two guards. The second is in the Worker
 // (src/settings.ts): at every request it checks that `ROSTER_KIND` and
 // `ROSTER_OBJECT_NAME` fit each other, which also holds for a deploy from a
@@ -20,7 +24,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
-import { checkCpuLimit, configuredCpuMs } from "../scripts/deploy-build-checks.ts";
+import { type ConfiguredSite, checkCpuLimit, checkSiteFiles, configuredCpuMs, configuredSites } from "../scripts/deploy-build-checks.ts";
+import { RUN_WORKER_FIRST, SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
 import { CRL_CATCH_UP_MS, RESERVED_FOR_LARGEST_CRL_MS, ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WORKER_DIR } from "./build.ts";
 
@@ -107,6 +112,50 @@ test("a configuration in which an environment has another CPU time than the mirr
   }
   // And a configuration with no environment has nothing that was checked.
   assert.throws(() => checkCpuLimit({}), /has an environment/);
+});
+
+test("every environment sends the files of site/ past the Worker, with the headers of its kind of roster", () => {
+  const sites = configuredSites();
+  assert.deepEqual(Object.keys(sites).sort(), Object.keys(ENVIRONMENTS).sort());
+  for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
+    assert.deepEqual(sites[env], {
+      kind: expected.kind,
+      runWorkerFirst: ["/*", "!/pages.css", "!/proof", "!/proof/*"],
+      binding: undefined,
+      htmlHandling: "none",
+      notFoundHandling: "none",
+      headers: siteHeaders(expected.kind),
+      redirects: SITE_REDIRECTS,
+    });
+  }
+  assert.deepEqual(RUN_WORKER_FIRST, ["/*", "!/pages.css", "!/proof", "!/proof/*"]);
+  checkSiteFiles(sites);
+  // Set once, at the top level, which every environment shares.
+  const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
+  for (const [env, settings] of Object.entries(rawConfig.env ?? {})) assert.equal((settings as { assets?: unknown }).assets, undefined, `env.${env} has no assets of its own`);
+});
+
+test("a configuration that runs the Worker for the card proof page's files, lets it read them, or sends them with another roster's headers is turned away", () => {
+  const real = configuredSites().test!;
+  const cases: [string, Partial<ConfiguredSite>, RegExp][] = [
+    ["the Worker first for everything", { runWorkerFirst: true }, /run_worker_first of the test environment/],
+    ["no rule at all: a file that is not there would run the Worker", { runWorkerFirst: undefined }, /run_worker_first of the test environment/],
+    ["/proof itself not among the rules", { runWorkerFirst: ["/*", "!/pages.css", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["a binding to read the files by", { binding: "ASSETS" }, /no binding/],
+    ["index.html found for directories", { htmlHandling: "auto-trailing-slash" }, /html_handling/],
+    ["a page for what is not there", { notFoundHandling: "single-page-application" }, /not_found_handling/],
+    ["a production roster's headers on the test site: no noindex", { headers: siteHeaders("production") }, /_headers of the test environment/],
+    ["a header changed by hand", { headers: real.headers!.replace("same-origin-allow-popups", "unsafe-none") }, /_headers of the test environment/],
+    ["no _headers", { headers: null }, /_headers of the test environment/],
+    ["no _redirects", { redirects: null }, /_redirects of the test environment/],
+    ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
+    ["a kind that is none", { kind: "staging" }, /ROSTER_KIND of the test environment/],
+  ];
+  for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
+  // A production roster's site with the test site's files says noindex: turned away too.
+  assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
+  checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });
+  assert.throws(() => checkSiteFiles({}), /has an environment/);
 });
 
 test("a round stops starting older files 2.5 minutes in: what is left of the CPU time is several times what the largest CRL's tree was measured to take", () => {

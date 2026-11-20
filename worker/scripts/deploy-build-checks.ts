@@ -7,7 +7,9 @@
 // with their SHA-256 (engine-files.ts).
 //
 // And the configuration it is uploaded with gives an invocation the CPU
-// time a round of the CRL mirror counts on (`checkCpuLimit`).
+// time a round of the CRL mirror counts on (`checkCpuLimit`), and has
+// Cloudflare send the files of site/ itself, with the headers of the
+// environment's kind of roster (`checkSiteFiles`).
 //
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
@@ -20,13 +22,14 @@
 // not.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
+import { RUN_WORKER_FIRST, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -118,12 +121,13 @@ export function engineFiles(): Record<string, string> {
  *   - the repository, linked from every page (design/copy/home.md, 導覽列);
  *   - Threads: the profile a page of a card embeds and links to
  *     (design/copy/proof-page.md, section 3), and the one origin the pages'
- *     policy allows a frame from (src/headers.ts);
- *   - the data domain, which the card proof page's policy lets it fetch
- *     from (src/headers.ts; web/README.md).
+ *     policy allows a frame from (src/headers.ts).
+ *
+ * The data domain, which the card proof page's policy lets it fetch from,
+ * is not among them: that policy is sent by Static Assets (site/_headers),
+ * and the Worker's code does not hold it.
  */
 export const PAGE_ADDRESSES: readonly string[] = [
-  "https://data.iamreal.tw;",
   "https://github.com/iamreal-tw/iamreal",
   "https://www.threads.com/@${account}",
   "https://www.threads.com/@${account}/embed/",
@@ -162,16 +166,16 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 
 /**
  * The test environment's only settings are the roster's object, the data
- * bucket, the files of Static Assets, the object's name, which roster it is
- * and the date it was last cleared on: so the issuer keys, MOICA's
- * addresses and the clock cannot be read from a setting. (A secret
- * set on the Worker with `wrangler secret` is not in the configuration and
- * is not seen here.)
+ * bucket, the object's name, which roster it is and the date it was last
+ * cleared on: so the issuer keys, MOICA's addresses and the clock cannot be
+ * read from a setting, and the Worker has no binding to read the files of
+ * Static Assets by (`checkSiteFiles`). (A secret set on the Worker with
+ * `wrangler secret` is not in the configuration and is not seen here.)
  */
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { ROSTER: "Durable Object", DATA: "R2 Bucket", ASSETS: "Assets", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable", TEST_ROSTER_CLEARED_ON: "Environment Variable" },
+    { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable", TEST_ROSTER_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }
@@ -219,6 +223,82 @@ export function checkCpuLimit(cpuMs: Readonly<Record<string, number | undefined>
   for (const [env, ms] of Object.entries(cpuMs)) assert.equal(ms, ROUND_CPU_MS, `limits.cpu_ms of the ${env} environment is the CPU time a round of the CRL mirror counts on`);
 }
 
+/** How one environment of wrangler.jsonc has Static Assets send the files of its directory. */
+export interface ConfiguredSite {
+  /** `ROSTER_KIND`: which roster the environment serves. */
+  readonly kind: unknown;
+  /** `assets.run_worker_first`, `assets.binding`, `assets.html_handling`, `assets.not_found_handling`. */
+  readonly runWorkerFirst: unknown;
+  readonly binding: unknown;
+  readonly htmlHandling: unknown;
+  readonly notFoundHandling: unknown;
+  /** The text of `_headers` and of `_redirects` in `assets.directory`; null if the file is not there. */
+  readonly headers: string | null;
+  readonly redirects: string | null;
+}
+
+/**
+ * Static Assets of every environment of wrangler.jsonc, each read the way
+ * wrangler reads it for `--env <name>`, with the two files of its directory
+ * as they are in this checkout: what an upload of that environment sends
+ * (deploy.ts, `uploadArgs`). Read as `configuredCpuMs` reads: in this
+ * process, sending nothing.
+ */
+export function configuredSites(): Record<string, ConfiguredSite> {
+  const { rawConfig } = experimental_readRawConfig({ config: WRANGLER_CONFIG });
+  const out: Record<string, ConfiguredSite> = {};
+  for (const env of Object.keys(rawConfig.env ?? {})) {
+    const config = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
+    const directory = config.assets?.directory;
+    const textOf = (name: string): string | null => {
+      if (directory === undefined) return null;
+      // wrangler resolves the directory against the configuration file's.
+      const path = join(dirname(WRANGLER_CONFIG), directory, name);
+      return existsSync(path) ? readFileSync(path, "utf8") : null;
+    };
+    out[env] = {
+      kind: config.vars.ROSTER_KIND,
+      runWorkerFirst: config.assets?.run_worker_first,
+      binding: config.assets?.binding,
+      htmlHandling: config.assets?.html_handling,
+      notFoundHandling: config.assets?.not_found_handling,
+      headers: textOf("_headers"),
+      redirects: textOf("_redirects"),
+    };
+  }
+  return out;
+}
+
+/**
+ * In every environment, Cloudflare sends the card proof page's files and
+ * the style sheet itself, and the Worker's code has no part in it
+ * (README.md, "Static Assets"):
+ *
+ *   - a request for one of them never runs the Worker (`RUN_WORKER_FIRST`),
+ *     and the Worker has no binding to read them by;
+ *   - a path is a file's own or nothing, but for the redirects of
+ *     site-files.ts (`SITE_REDIRECTS`);
+ *   - their headers are the ones written from src/headers.ts for the
+ *     environment's kind of roster (`siteHeaders`): a test roster's site
+ *     says noindex and a production roster's does not.
+ *
+ * `_headers` is one file of one directory. Two environments that serve
+ * different kinds of roster from the same directory do not pass: each then
+ * needs a directory of its own, or its files written before the upload.
+ */
+export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>): void {
+  assert.ok(Object.keys(sites).length > 0, "wrangler.jsonc has an environment");
+  for (const [env, site] of Object.entries(sites)) {
+    assert.deepEqual(site.runWorkerFirst, RUN_WORKER_FIRST, `assets.run_worker_first of the ${env} environment keeps the Worker from the files of Static Assets`);
+    assert.equal(site.binding, undefined, `the ${env} environment gives the Worker no binding to the files of Static Assets`);
+    assert.equal(site.htmlHandling, "none", `assets.html_handling of the ${env} environment`);
+    assert.equal(site.notFoundHandling, "none", `assets.not_found_handling of the ${env} environment`);
+    assert.ok(site.kind === "test" || site.kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
+    assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} roster's site`);
+    assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
+  }
+}
+
 /** Every check above on the build in `dir`; throws on the first that fails. */
 export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   const b = readBuild(dir);
@@ -228,4 +308,5 @@ export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   checkBindings(wranglerOutput);
   checkEngineFiles(b);
   checkCpuLimit(configuredCpuMs());
+  checkSiteFiles(configuredSites());
 }

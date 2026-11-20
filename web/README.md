@@ -260,7 +260,7 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ## 頁面需要的標頭
 
-伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（舊後台是 `server/headers.go` 的 `pageHeaders`，Worker 是 `worker/src/headers.ts` 的 `PROOF_PAGE_HEADERS`；`server/` 和 `worker/` 的測試各自檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
+伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（舊後台是 `server/headers.go` 的 `pageHeaders`；`worker/` 定義在 `worker/src/headers.ts` 的 `PROOF_PAGE_HEADERS`，寫進 `worker/site/_headers`，由 Cloudflare 的 Static Assets 直接加在檔案上，不經過 Worker 的程式，見 `worker/README.md`「Static Assets」；`server/` 和 `worker/` 的測試各自檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
 
 ### `Content-Security-Policy`
 
@@ -303,6 +303,7 @@ pnpm typecheck
 pnpm test             # Node 裡的測試，約 20 秒（含一次正式的建置）
 IAMREAL_BB=/path/to/bb pnpm test:e2e     # 引擎，無頭的 Chrome，約 2 分鐘
 IAMREAL_BB=/path/to/bb pnpm test:ui      # 畫面、橋接、真的後台，無頭的 Chrome，約 3 分鐘（要 Go）
+pnpm test:worker      # 對本機的 Worker 用假卡片走完六步，無頭的 Chrome；不在 CI 裡
 pnpm build            # 正式的建置，到 dist/
 ```
 

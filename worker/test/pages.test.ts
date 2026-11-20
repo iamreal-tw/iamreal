@@ -343,8 +343,7 @@ describe("every page", () => {
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
     wantLines((await getPage(worker, `/p/${CARD_A}`, { test: false })).page, copyLines(block("proof-page.md", "1. ")));
-    const css = await worker.fetch("/pages.css");
-    checkVisitorHeaders("/pages.css", css, { cache: "no-cache", noindex: false });
+    // The style sheet's headers are fixed when the Worker is uploaded: a production roster's site is in test/proof-files.test.ts.
   });
 
   test("the test roster: the mark says the date of the setting, as design/copy/test-site.md writes it", async () => {
@@ -378,14 +377,16 @@ describe("every page", () => {
       checkVisitorHeaders(`HEAD ${path}`, head, { cache });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
-        assert.deepEqual([res.status, res.headers.get("allow")], [405, "GET, HEAD"], `${method} ${path}`);
-        checkVisitorHeaders(`${method} ${path}`, res, { cache: "no-store", more: ["allow"] });
+        // The pages are the Worker's; the style sheet is sent by Static Assets, whose 405 has no Allow.
+        assert.deepEqual([res.status, res.headers.get("allow")], [405, path === "/pages.css" ? null : "GET, HEAD"], `${method} ${path}`);
+        checkVisitorHeaders(`${method} ${path}`, res, { cache: path === "/pages.css" ? "no-cache" : "no-store", more: ["allow"] });
       }
     }
   });
 
-  test("the style sheet: the old back end's, with the pages' headers and an ETag to ask again by", async () => {
+  test("the style sheet: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
     await freshRoster(worker, { clearedOn: CLEARED_ON });
+    await worker.seen();
     const res = await worker.fetch("/pages.css");
     assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/css; charset=utf-8"]);
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
@@ -401,6 +402,7 @@ describe("every page", () => {
     const again = await worker.fetch("/pages.css", { headers: { "If-None-Match": etag! } });
     assert.equal(again.status, 304);
     checkVisitorHeaders("/pages.css again", again, { cache: "no-cache" });
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for neither request");
   });
 
   test("what is not a page is 404, and nothing but the pages is cached: the API's answers are no-store", async () => {

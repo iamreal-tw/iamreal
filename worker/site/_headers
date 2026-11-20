@@ -1,0 +1,25 @@
+# The headers Static Assets sends with the files of this directory, for a test roster's site.
+# Written by scripts/site-files.ts from src/headers.ts: change them there, not here.
+
+/proof
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Document-Isolation-Policy: isolate-and-credentialless
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
+
+/proof/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Document-Isolation-Policy: isolate-and-credentialless
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
+
+/pages.css
+  Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  X-Content-Type-Options: nosniff
+  X-Robots-Tag: noindex
+  ! Cache-Control
+  Cache-Control: no-cache

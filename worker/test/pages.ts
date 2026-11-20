@@ -71,7 +71,7 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
   };
   const got: Record<string, string> = {};
   // What the local workerd adds on its way out, or what says how the body is sent, is not the Worker's.
-  const transport = new Set(["content-type", "content-length", "transfer-encoding", "mf-content-encoding", "content-encoding", "connection", "date", "vary", "etag", ...(expect.more ?? [])]);
+  const transport = new Set(["content-type", "content-length", "transfer-encoding", "mf-content-encoding", "content-encoding", "connection", "date", "vary", "etag", "cf-cache-status", ...(expect.more ?? [])]);
   res.headers.forEach((value, name) => {
     if (!transport.has(name)) got[name] = value;
   });

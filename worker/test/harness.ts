@@ -3,11 +3,12 @@
 // A test sends it HTTP requests, runs its schedule, reads the files it wrote
 // to the simulated R2 bucket, and sets its clock. Nothing here needs a
 // Cloudflare account, and nothing sends a request to MOICA.
-import { copyFileSync, cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createTestHarness } from "wrangler";
+import { siteHeaders } from "../scripts/site-files.ts";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
@@ -168,6 +169,12 @@ export interface TestWorker {
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
   /**
+   * The method and path of every request that reached the Worker's code
+   * since this was last asked (test build, `GET /__test/seen`), in order:
+   * a request Static Assets answered by itself is not among them.
+   */
+  seen(): Promise<string[]>;
+  /**
    * Asks `POST /api/v1/challenges` for a challenge and returns it. With
    * `randomHex`, 16 bytes in hex, the challenge has those bytes in place of
    * random ones (test build, `PUT /__test/roster/next-random`): how a test
@@ -315,7 +322,10 @@ export interface StartOptions {
   /**
    * Settings of the environment to start with in place of wrangler.jsonc's:
    * which roster (`ROSTER_KIND`) and the name of its object
-   * (`ROSTER_OBJECT_NAME`). The configuration file is not changed.
+   * (`ROSTER_OBJECT_NAME`). The configuration file is not changed. With a
+   * production roster the files of Static Assets get the headers of a
+   * production roster's site (scripts/site-files.ts): those are fixed when
+   * the Worker starts, and `setSettings` does not change them.
    */
   readonly settings?: TestSettings;
   /** For how long a round goes on starting files an earlier round left without a line, in milliseconds. By default the deployed build's (src/round-budget.ts). */
@@ -323,7 +333,7 @@ export interface StartOptions {
   /** The issuer keys of the build, one G2 and one G3. By default the test's own, which sign the CRLs of test/crls.ts. */
   readonly issuers?: readonly IssuerKey[];
   /**
-   * A directory whose files the Worker serves as the card proof page
+   * A directory whose files Static Assets serves as the card proof page
    * (/proof is its index.html, /proof/… the rest): a build of web/, or
    * files a test made up. By default there is none, as in a deploy made
    * before web/ is built for it.
@@ -344,6 +354,8 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(run, "wrangler.jsonc"));
   cpSync(join(WORKER_DIR, "site"), join(run, "site"), { recursive: true, filter: (source) => source !== join(WORKER_DIR, "site", "proof") });
   if (options.proofFiles !== undefined) cpSync(options.proofFiles, join(run, "site", "proof"), { recursive: true });
+  // site/_headers in the repository is a test roster's site's; a production roster's has its own.
+  if (options.settings?.ROSTER_KIND === "production") writeFileSync(join(run, "site", "_headers"), siteHeaders("production"));
   const server = createTestHarness({ root: run, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
@@ -403,6 +415,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 204) throw new Error(`setting the clock: HTTP ${res.status}`);
     },
     logLines: () => server.getLogs().map((l) => l.message),
+    async seen() {
+      const res = await server.fetch("/__test/seen");
+      if (res.status !== 200) throw new Error(`asking what reached the Worker: HTTP ${res.status}`);
+      return (await res.json()) as string[];
+    },
     async issueChallenge(randomHex) {
       if (randomHex !== undefined) {
         const set = await server.fetch("/__test/roster/next-random", { method: "PUT", body: randomHex });

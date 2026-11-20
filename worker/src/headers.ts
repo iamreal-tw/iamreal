@@ -1,7 +1,12 @@
-// The headers of everything the Worker sends that is not the API's: the one
+// The headers of everything the site sends that is not the API's: the one
 // place they are defined. README.md, "頁面送的標頭", gives the reason for
 // each; the API's are in api.ts. They are the Go backend's
 // (server/headers.go, server/visitor.go), word for word.
+//
+// The Worker sends the ones of the pages it makes (visitor.ts). The files
+// (the card proof page's, the style sheet) are sent by Static Assets, past
+// the Worker's code, with the headers of site/_headers, which
+// scripts/site-files.ts writes from the values here.
 
 /** Sent with every response. */
 export const EVERY_RESPONSE: Readonly<Record<string, string>> = {
@@ -10,7 +15,7 @@ export const EVERY_RESPONSE: Readonly<Record<string, string>> = {
 
 /**
  * Sent with the visitors' pages and their style sheet, besides
- * EVERY_RESPONSE.
+ * EVERY_RESPONSE (the style sheet's by site/_headers).
  *
  *   - Content-Security-Policy: no script at all; the style sheet and images
  *     of this origin; frames from https://www.threads.com only (the profile
@@ -32,8 +37,10 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 /**
  * Sent with every file of the card proof page (/proof and under /proof/),
  * besides EVERY_RESPONSE: the pages, their scripts and workers, the
- * circuits and the CRS. web/README.md, "頁面需要的標頭", explains each and
- * quotes the policy; a test checks that what is sent is what it quotes.
+ * circuits and the CRS. Static Assets sends them, by site/_headers; nothing
+ * of the Worker's code does. web/README.md, "頁面需要的標頭", explains each
+ * and quotes the policy; a test checks that what is sent is what it quotes
+ * (test/proof-files.test.ts).
  */
 export const PROOF_PAGE_HEADERS: Readonly<Record<string, string>> = {
   "Content-Security-Policy":
@@ -50,6 +57,12 @@ export const PROOF_PAGE_HEADERS: Readonly<Record<string, string>> = {
 export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
   "X-Robots-Tag": "noindex",
 };
+
+/**
+ * The style sheet's Cache-Control: asked for again every time it is used,
+ * by its ETag (site/_headers).
+ */
+export const STYLE_SHEET_CACHE = "no-cache";
 
 /**
  * How long a page that shows the roster may be kept by a cache: 60 seconds,

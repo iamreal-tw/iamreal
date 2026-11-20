@@ -53,8 +53,10 @@ const testBuild = build("test", values);
 
 test("the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives, and the ones the pages write", () => {
   checkAddresses(deploy);
-  // The pages' are the repository, Threads and the data domain, each over HTTPS.
-  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/(github\.com|www\.threads\.com|data\.iamreal\.tw)[/;]/);
+  // The pages' are the repository and Threads, each over HTTPS. (The data domain is in the card proof page's
+  // policy, which is in site/_headers and no longer in the Worker.)
+  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/(github\.com|www\.threads\.com)[/;]/);
+  assert.ok(!deploy.code.includes("data.iamreal.tw") && !deploy.code.includes("Document-Isolation-Policy"), "the deploy build has nothing of the card proof page's headers");
   assert.throws(() => checkAddresses({ ...deploy, code: `${deploy.code}\nfetch("https://example.org/");` }));
 });
 
@@ -73,8 +75,11 @@ test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the roster's object, the data bucket, the files of Static Assets, the object's name, which roster it is and the date it was last cleared on", () => {
+test("the test environment's only settings are the roster's object, the data bucket, the object's name, which roster it is and the date it was last cleared on", () => {
   checkBindings(deploy.output);
+  // Not the files of Static Assets: with a binding to them the Worker could read and send them itself.
+  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["DATA", "ROSTER", "ROSTER_KIND", "ROSTER_OBJECT_NAME", "TEST_ROSTER_CLEARED_ON"]);
+  assert.throws(() => checkBindings(`${deploy.output}\nenv.ASSETS      Assets\n`));
 });
 
 test("the deploy build's other modules are the proof verifier's files: Barretenberg's module and the two verification keys", () => {

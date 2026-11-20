@@ -1,14 +1,19 @@
-// The card proof page (/proof) and its files, through the Worker's HTTP
-// (test/harness.ts): the files of Static Assets, sent by the Worker with the
-// headers web/README.md says the page needs, word for word. The files here
-// are made up; what the page does with those headers in a browser is for the
+// The card proof page (/proof) and its files, over the HTTP of the local
+// workerd (test/harness.ts): Static Assets sends them itself, with the
+// headers of site/_headers, and no code of the Worker runs for them
+// (wrangler.jsonc, "assets"; README.md, "Static Assets"). The headers are the
+// ones web/README.md says the page needs, word for word. The files here are
+// made up; what the page does with those headers in a browser is for the
 // tests of web/.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
+import { PROOF_PAGE_HEADERS } from "../src/headers.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
+import { checkVisitorHeaders } from "./pages.ts";
 import { freshRoster } from "./records.ts";
 
 const FILES: Readonly<Record<string, string>> = {
@@ -22,6 +27,7 @@ const FILES: Readonly<Record<string, string>> = {
 
 let worker: TestWorker;
 let bare: TestWorker;
+let production: TestWorker;
 let dir: string;
 before(async () => {
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
@@ -30,10 +36,10 @@ before(async () => {
     mkdirSync(join(dir, name, ".."), { recursive: true });
     writeFileSync(join(dir, name), text, "latin1");
   }
-  [worker, bare] = await Promise.all([startWorker({ proofFiles: dir }), startWorker()]);
+  [worker, bare, production] = await Promise.all([startWorker({ proofFiles: dir }), startWorker(), startWorker({ proofFiles: dir, settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "roster-1" } })]);
 });
 after(async () => {
-  await Promise.all([worker.close(), bare.close()]);
+  await Promise.all([worker.close(), bare.close(), production.close()]);
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -52,7 +58,7 @@ function headersInWebReadme(): Record<string, string> {
 function checkProofHeaders(what: string, res: Response, expect: { test?: boolean; more?: readonly string[] } = {}): void {
   const want = { ...headersInWebReadme(), "x-content-type-options": "nosniff", ...(expect.test !== false && { "x-robots-tag": "noindex" }) };
   const got: Record<string, string> = {};
-  const aside = new Set(["content-type", "content-length", "transfer-encoding", "mf-content-encoding", "content-encoding", "connection", "date", "vary", "etag", "cache-control", ...(expect.more ?? [])]);
+  const aside = new Set(["content-type", "content-length", "transfer-encoding", "mf-content-encoding", "content-encoding", "connection", "date", "vary", "etag", "cache-control", "cf-cache-status", ...(expect.more ?? [])]);
   res.headers.forEach((value, name) => {
     if (!aside.has(name)) got[name] = value;
   });
@@ -60,16 +66,30 @@ function checkProofHeaders(what: string, res: Response, expect: { test?: boolean
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-test("web/README.md quotes the three headers the page needs", () => {
-  assert.deepEqual(Object.keys(headersInWebReadme()).sort(), ["content-security-policy", "cross-origin-opener-policy", "document-isolation-policy"]);
+test("web/README.md quotes the three headers the page needs, and they are the ones of src/headers.ts", () => {
+  const quoted = headersInWebReadme();
+  assert.deepEqual(Object.keys(quoted).sort(), ["content-security-policy", "cross-origin-opener-policy", "document-isolation-policy"]);
+  assert.deepEqual(quoted, Object.fromEntries(Object.entries(PROOF_PAGE_HEADERS).map(([name, value]) => [name.toLowerCase(), value])));
 });
 
-test("/proof is the build's index.html, and every file of the build is under /proof/, each with the headers of web/README.md", async () => {
+test("site/_headers and site/_redirects in the repository are the ones written from src/headers.ts for a test roster", () => {
+  assert.equal(readFileSync(join(WORKER_DIR, "site", "_headers"), "utf8"), siteHeaders("test"));
+  assert.equal(readFileSync(join(WORKER_DIR, "site", "_redirects"), "utf8"), SITE_REDIRECTS);
+  // A production roster's differ in one thing: no noindex.
+  assert.equal(siteHeaders("production"), siteHeaders("test").replace(/^  X-Robots-Tag: noindex\n/gm, "").replace("a test roster", "a production roster"));
+  assert.ok(!siteHeaders("production").includes("X-Robots-Tag") && siteHeaders("test").includes("X-Robots-Tag: noindex"));
+  // Cloudflare's limits (README.md, "Static Assets"): 100 rules, 2,000 characters a line.
+  for (const line of siteHeaders("test").split("\n")) assert.ok(line.length <= 2000);
+});
+
+test("/proof is the build's index.html, and every file of the build is under /proof/, each with the headers of web/README.md; none of them reaches the Worker's code", async () => {
   await freshRoster(worker);
+  await worker.seen();
   const page = await worker.fetch("/proof");
   assert.deepEqual([page.status, page.headers.get("content-type"), await page.text()], [200, "text/html; charset=utf-8", FILES["index.html"]]);
   checkProofHeaders("/proof", page);
   for (const [name, text] of Object.entries(FILES)) {
+    if (name === "index.html") continue;
     const res = await worker.fetch(`/proof/${name}`);
     assert.deepEqual([res.status, Buffer.from(await res.arrayBuffer()).toString("latin1")], [200, text], name);
     checkProofHeaders(`/proof/${name}`, res);
@@ -78,58 +98,102 @@ test("/proof is the build's index.html, and every file of the build is under /pr
   // The help page is linked with a query (design/copy/home.md, section 9).
   const help = await worker.fetch("/proof/help.html?topic=prepare");
   assert.deepEqual([help.status, await help.text()], [200, FILES["help.html"]]);
+  assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
+  // The same door does see what the Worker answers.
+  await worker.fetch("/");
+  await worker.fetch("/api/v1/config");
+  assert.deepEqual(await worker.seen(), ["GET /", "GET /api/v1/config"]);
 });
 
-test("/proof/ is redirected (301) to /proof, the one address of the page", async () => {
-  const res = await worker.fetch("/proof/", { redirect: "manual" });
-  assert.deepEqual([res.status, res.headers.get("location")], [301, "/proof"]);
-  checkProofHeaders("/proof/", res, { more: ["location"] });
-});
-
-test("what is not a file of the build is 404, a directory too; nothing outside it is served under /proof", async () => {
-  for (const path of ["/proof/nothing.js", "/proof/assets", "/proof/assets/", "/proof/pages.css", "/proof/index", "/proof/help", "/proofs", "/proof.html"]) {
+test("/proof/ and /proof/index.html are redirected (301) to /proof, the one address of the page", async () => {
+  await worker.seen();
+  for (const [path, to] of [["/proof/", "/proof"], ["/proof/index.html", "/proof"], ["/proof/?topic=prepare", "/proof?topic=prepare"]] as const) {
     const res = await worker.fetch(path, { redirect: "manual" });
-    assert.equal(res.status, 404, path);
-    if (path.startsWith("/proof/")) checkProofHeaders(path, res);
+    assert.deepEqual([res.status, res.headers.get("location")], [301, to], path);
+    checkProofHeaders(path, res, { more: ["location"] });
   }
-  // The style sheet is the visitors' pages', with their headers, not the card proof page's.
-  const css = await worker.fetch("/pages.css");
-  assert.equal(css.headers.get("document-isolation-policy"), null);
-  assert.match(css.headers.get("content-security-policy") ?? "", /^default-src 'none'; style-src 'self';/);
+  assert.deepEqual(await worker.seen(), []);
+});
+
+test("what is not a file of the build is 404, a directory too, without the Worker; nothing outside the build is served under /proof", async () => {
+  await worker.seen();
+  for (const path of ["/proof/nothing.js", "/proof/assets", "/proof/assets/", "/proof/pages.css", "/proof/index", "/proof/help", "/proof/_headers", "/proof/Index.html", "/proof/..%2fpages.css"]) {
+    const res = await worker.fetch(path, { redirect: "manual" });
+    assert.deepEqual([res.status, await res.text()], [404, ""], path);
+    checkProofHeaders(path, res);
+  }
+  assert.deepEqual(await worker.seen(), []);
+  // Beside /proof, not under it: the Worker's 404. The two files that hold the rules are not served.
+  for (const path of ["/proofs", "/proof.html", "/Proof", "/_headers", "/_redirects"]) {
+    const res = await worker.fetch(path, { redirect: "manual" });
+    assert.deepEqual([res.status, await res.text()], [404, "not found\n"], path);
+  }
+  assert.deepEqual(await worker.seen(), ["GET /proofs", "GET /proof.html", "GET /Proof", "GET /_headers", "GET /_redirects"]);
+});
+
+test("another spelling of a file's path is redirected (307) to the file's own, or is 404; a path that leaves /proof is the path it normalizes to", async () => {
+  for (const [path, to] of [["/proof//index.html", "/proof/index.html"], ["/proof/%69ndex.html", "/proof/index.html"], ["/proof/assets%2findex.js", "/proof/assets/index.js"]] as const) {
+    const res = await worker.fetch(path, { redirect: "manual" });
+    assert.deepEqual([res.status, res.headers.get("location")], [307, to], path);
+  }
+  // The URL is normalized before anything looks at it: this is /pages.css, with the style sheet's headers.
+  for (const path of ["/proof/../pages.css", "/proof/%2e%2e/pages.css"]) {
+    const res = await worker.fetch(path);
+    assert.deepEqual([res.status, res.headers.get("content-type"), res.headers.get("document-isolation-policy")], [200, "text/css; charset=utf-8", null], path);
+  }
 });
 
 test("the page and its files take GET and HEAD only, and are asked again by their ETag", async () => {
-  for (const path of ["/proof", "/proof/assets/index.js", "/proof/"]) {
-    for (const method of ["POST", "PUT", "DELETE"]) {
+  await worker.seen();
+  for (const method of ["POST", "PUT", "DELETE"]) {
+    // Static Assets answers 405 by itself, without an Allow header.
+    for (const path of ["/proof", "/proof/assets/index.js", "/proof/nothing.js"]) {
       const res = await worker.fetch(path, { method, redirect: "manual" });
-      assert.deepEqual([res.status, res.headers.get("allow")], [405, "GET, HEAD"], `${method} ${path}`);
-      checkProofHeaders(`${method} ${path}`, res, { more: ["allow"] });
+      assert.deepEqual([res.status, await res.text()], [path === "/proof/nothing.js" ? 404 : 405, ""], `${method} ${path}`);
+      checkProofHeaders(`${method} ${path}`, res);
     }
+    // A redirect is the same for every method; what it leads to is the 405 above.
+    const res = await worker.fetch("/proof/", { method, redirect: "manual" });
+    assert.deepEqual([res.status, res.headers.get("location")], [301, "/proof"], `${method} /proof/`);
   }
   const head = await worker.fetch("/proof", { method: "HEAD" });
   assert.deepEqual([head.status, await head.text()], [200, ""]);
   checkProofHeaders("HEAD /proof", head);
-  const etag = (await worker.fetch("/proof")).headers.get("etag");
+  const first = await worker.fetch("/proof");
+  assert.equal(first.headers.get("cache-control"), "public, max-age=0, must-revalidate");
+  const etag = first.headers.get("etag");
   assert.ok(etag);
   const again = await worker.fetch("/proof", { headers: { "If-None-Match": etag } });
   assert.equal(again.status, 304);
   checkProofHeaders("/proof again", again);
+  assert.deepEqual(await worker.seen(), []);
 });
 
-test("on the production roster the same, without noindex", async () => {
-  await freshRoster(worker, { kind: "production" });
-  const res = await worker.fetch("/proof");
-  assert.equal(res.status, 200);
-  checkProofHeaders("/proof", res, { test: false });
+test("the settings do not reach the files: with settings the Worker answers 500 for, the page and the style sheet are sent as before", async () => {
+  await worker.setSettings({ ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "test-1" });
+  assert.equal((await worker.fetch("/")).status, 500);
+  checkProofHeaders("/proof", await worker.fetch("/proof"));
+  checkVisitorHeaders("/pages.css", await worker.fetch("/pages.css"), { cache: "no-cache" });
   await freshRoster(worker);
 });
 
-test("a Worker without a build of web/ among its files: /proof and everything under it is 404, with the same headers", async () => {
-  for (const path of ["/proof", "/proof/index.html", "/proof/help.html"]) {
+test("a production roster's site: the same files, the same headers without noindex", async () => {
+  await freshRoster(production, { kind: "production" });
+  const res = await production.fetch("/proof");
+  assert.deepEqual([res.status, await res.text()], [200, FILES["index.html"]]);
+  checkProofHeaders("/proof", res, { test: false });
+  checkProofHeaders("/proof/assets/index.js", await production.fetch("/proof/assets/index.js"), { test: false });
+  checkProofHeaders("/proof/nothing", await production.fetch("/proof/nothing"), { test: false });
+  checkVisitorHeaders("/pages.css", await production.fetch("/pages.css"), { cache: "no-cache", noindex: false });
+});
+
+test("a Worker without a build of web/ among its files: /proof and everything under it is 404, with the same headers and without the Worker", async () => {
+  await bare.seen();
+  for (const path of ["/proof", "/proof/index.html", "/proof/help.html", "/proof/"]) {
     const res = await bare.fetch(path);
     assert.equal(res.status, 404, path);
     checkProofHeaders(path, res);
   }
-  assert.equal((await bare.fetch("/proof/", { redirect: "manual" })).status, 301);
   assert.equal((await bare.fetch("/pages.css")).status, 200);
+  assert.deepEqual(await bare.seen(), []);
 });

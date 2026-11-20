@@ -186,29 +186,29 @@ pnpm typecheck   # 型別檢查
 
 ## 頁面和檔案
 
-`/api/` 以外的請求都交給 [`src/visitor.ts`](src/visitor.ts)：
+`/api/` 以外的網址分兩種：頁面由 Worker 產生（[`src/visitor.ts`](src/visitor.ts)），檔案由 Cloudflare 的 Static Assets 直接送，不跑 Worker（[Static Assets](#static-assets)）。
 
 | 網址 | 內容 | 從哪裡來 |
 |---|---|---|
 | `/` | 首頁（`design/copy/home.md`） | Worker 產生，兩個數字問名冊 |
 | `/p/<短編號>` | 島民證明（`design/copy/proof-page.md`） | Worker 產生，問名冊 |
-| `/pages.css` | 訪客頁面的樣式表 | Static Assets 的檔 `site/pages.css` |
-| `/proof` | 過卡的頁面：`web/` 建置的 `index.html`；`/proof/` 轉（`301`）到 `/proof` | Static Assets 的 `site/proof/` |
+| `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
+| `/proof` | 過卡的頁面：`web/` 建置的 `index.html`；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof` | Static Assets 直接送 `site/proof/` 的檔，不跑 Worker |
 | `/proof/…` | 那份建置的其他檔案 | 同上 |
 
-其他網址回 `404`。首頁上連到查詢頁、名冊頁、常見問題、怎麼驗證、掛上去的連結照樣留著，那些頁面在 [#72](https://github.com/iamreal-tw/iamreal/issues/72)。
+其他網址由 Worker 回 `404`。首頁上連到查詢頁、名冊頁、常見問題、怎麼驗證、掛上去的連結照樣留著，那些頁面在 [#72](https://github.com/iamreal-tw/iamreal/issues/72)。
 
 - **樣板、樣式表是舊後台的。** `src/pages/` 的 HTML 照 `server/pages/templates/` 逐段搬過來，`site/pages.css` 就是 `server/pages/style.css`。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、名冊上的帳號都走這一條。
 - **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑。
-- **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`css`、`proof`），不含短編號和網址的任何部分。
+- **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`），不含短編號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
 
 ### 讀名冊經過一個介面
 
 頁面要的資料只從 [`src/page-data.ts`](src/page-data.ts) 的 `PageData` 拿（ADR-0026）：首頁的兩個數字、一個短編號對到的卡片。現在的實作 `pageDataOfRoster` 問名冊的 Durable Object；用哪一個實作只寫在 `src/index.ts` 一處。之後讀取要搬出 Durable Object（ADR-0026 的 Consequences），換的是這一塊，頁面的程式不動。
 
 - **格式不對的短編號不問 Durable Object**：照 `spec/scoped-id.md` 的寬鬆讀法（`protocol/` 的 `readShortIdInUrl`，讀 `spec/vectors/scoped-id.json`）讀不成 10 個字元的，直接回「找不到這張島民證明」那一頁，`404`。讀得成、但寫法不是標準的那一種（小寫、`O`、`I`、`L`），`301` 轉到標準寫法，也不問。測試把 Durable Object 弄成什麼都不答來確認這兩種照樣回答。
-- **快取**：首頁和島民證明的回應帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址也一樣（ADR-0026：沒帶的話，Workers 前面的快取會把 `404` 放更久）。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的名冊。樣式表帶 `no-cache`，靠 `ETag` 重新確認。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
+- **快取**：首頁和島民證明的回應帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址也一樣（ADR-0026：沒帶的話，Workers 前面的快取會把 `404` 放更久）。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的名冊。樣式表帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
 - **首頁的兩個數字**：現在把 Threads 的名額給了某個帳號的卡片有幾張；其中上次過卡日在今天往回 90 天以內（含第 90 天）的有幾張，今天照台灣的日期。一個查詢、一個索引（`src/views.ts` 的 `counts`）。
 - **頁面只列 Threads**（`src/pages/proof.ts` 的 `PLATFORM`）：測試名冊另一個平台 `test-example` 的帳號不出現在頁面上。
 
@@ -231,15 +231,21 @@ pnpm typecheck   # 型別檢查
 
 ### 測試名冊的標示
 
-`ROSTER_KIND` 是 `test` 時，每一頁最上面有一行 `測試名冊　不定期清空，上次清空：<日期>`（`design/copy/test-site.md`，[#59](https://github.com/iamreal-tw/iamreal/issues/59) 定的字），`404` 的頁面也有；日期是設定值 `TEST_ROSTER_CLEARED_ON`。每一頁的 `<head>` 有 `<meta name="robots" content="noindex">`，而且 `/api/` 以外的每個回應（頁面、樣式表、`/proof` 的每個檔案）帶 `X-Robots-Tag: noindex`（ADR-0028）。正式名冊都沒有。
+`ROSTER_KIND` 是 `test` 時，每一頁最上面有一行 `測試名冊　不定期清空，上次清空：<日期>`（`design/copy/test-site.md`，[#59](https://github.com/iamreal-tw/iamreal/issues/59) 定的字），`404` 的頁面也有；日期是設定值 `TEST_ROSTER_CLEARED_ON`。每一頁的 `<head>` 有 `<meta name="robots" content="noindex">`，而且 Worker 產生的每一頁、樣式表、`/proof` 的每個檔案都帶 `X-Robots-Tag: noindex`（ADR-0028）。正式名冊都沒有。
 
-- `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境什麼都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。
-- **過卡的頁面自己沒有這一行。** `/proof` 是 `web/` 建置出來的檔案，Worker 不改它的內容，只加標頭；頁面上的標示要由 `web/` 測試網站的建置寫進去（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），現在沒有。
+- **檔案的 `X-Robots-Tag` 不是 Worker 加的**，是 `site/_headers` 寫的，上傳時就定了，不跟著 `ROSTER_KIND` 變。所以 `_headers` 照名冊的種類各有一份（[`scripts/site-files.ts`](scripts/site-files.ts) 的 `siteHeaders`），版控裡的是測試名冊的；部署前的檢查核對每個環境的 `_headers` 是它那一種名冊的那一份（[Static Assets](#static-assets)）。
+- `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表和 `/proof` 的檔案不跑 Worker，照常送。
+- **過卡的頁面自己沒有這一行。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；頁面上的標示要由 `web/` 測試網站的建置寫進去（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），現在沒有。
 - **清空測試名冊時**一起改三樣：`ROSTER_OBJECT_NAME`、清空測試的儲存桶、`TEST_ROSTER_CLEARED_ON`。
 
 ### 頁面送的標頭
 
 定義在 [`src/headers.ts`](src/headers.ts) 一處，和舊後台送的那一組相同（`server/headers.go`、`server/visitor.go`）。測試對每一種回應核對整組標頭：多一個、少一個、值不同都不過。
+
+送出去的地方有兩個，值都從那一處來：
+
+- Worker 產生的頁面，由 `src/visitor.ts` 加上。
+- 樣式表和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
 
 每個回應：
 
@@ -256,18 +262,69 @@ pnpm typecheck   # 型別檢查
 | `Cross-Origin-Opener-Policy` | `same-origin` | 開啟這一頁的別的網站，和這一頁開出去的視窗，彼此拿不到對方 |
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
 
-過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認 Worker 送的一字不差。`connect-src` 裡的資料網域寫的是 `https://data.iamreal.tw`，和舊後台相同；測試網站要的 `test-data.iamreal.tw` 在 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
+過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域寫的是 `https://data.iamreal.tw`，和舊後台相同；測試網站要的 `test-data.iamreal.tw` 在 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
 
 測試名冊另外加 `X-Robots-Tag: noindex`（上一節）。
 
 ### Static Assets
 
-`wrangler.jsonc` 的 `assets` 指到 [`site/`](site)：
+`wrangler.jsonc` 最上層的 `assets` 指到 [`site/`](site)。這些檔案由 Cloudflare 直接送，**請求不跑 Worker**（ADR-0023「靜態檔」：這些下載不經過後台的程式）。要保住的是：持卡人拿到的過卡頁面就是建置出來的那些檔，後台沒有一段程式能對不同的人送不同的內容。
 
-- `site/pages.css` 在版控裡。
-- `site/proof/` 是放 `web/` 建置的地方，不進版控。**現在沒有任何部署會放東西進去**：測試網站的建置模式還沒有（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），正式的建置簽的是正式名冊的場合字串，不能放上測試網站。所以部署出去的 `/proof` 和它底下的網址是 `404`（帶同一組標頭），首頁的「我要換島民證明」點過去也是。
-- `run_worker_first` 是 `true`：每個請求先跑 Worker，檔案由 Worker 向 `ASSETS` 要來、加上標頭才送出，沒有一個檔案繞過這段程式。`html_handling` 和 `not_found_handling` 都是 `none`：一個路徑要嘛就是那個檔案，要嘛沒有；不替目錄找 `index.html`、不自己轉址、沒有替代的頁面。`/proof` 對到 `index.html` 和 `/proof/` 的轉址寫在 `src/visitor.ts`。
-- 測試的工具把 `wrangler.jsonc` 原樣複製到每個測試自己的目錄再啟動 Worker，`./site` 就是那個測試自己的：設定和部署的是同一份，同時跑的測試不共用過卡頁面的檔案。`startWorker({ proofFiles })` 給一個目錄當 `site/proof/`。
+| `site/` 裡的 | 是什麼 |
+|---|---|
+| `pages.css` | 訪客頁面的樣式表，在版控裡 |
+| `proof/` | 放 `web/` 建置的地方，不進版控 |
+| `_headers` | 這些檔案的標頭，在版控裡，由 `scripts/site-files.ts` 寫出來（[頁面送的標頭](#頁面送的標頭)） |
+| `_redirects` | `/proof` 的三條規則，在版控裡，內容是 `scripts/site-files.ts` 的 `SITE_REDIRECTS` |
+
+`_headers` 和 `_redirects` 是給 Static Assets 讀的規則，本身不會被送出去。
+
+**現在沒有任何部署會放東西進 `site/proof/`**：測試網站的建置模式還沒有（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），正式的建置簽的是正式名冊的場合字串，不能放上測試網站。所以部署出去的 `/proof` 和它底下的網址是 `404`（帶同一組標頭），首頁的「我要換島民證明」點過去也是。
+
+設定的每一項：
+
+- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：Worker 只對這幾個路徑以外的請求執行。`!` 開頭的是排除，排除優先。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：檔案在就送，不在就由 Static Assets 自己回 `404`（空的內容）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
+- **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
+- **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
+- **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。說明頁留在 `/proof/help.html`。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
+
+沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走，`/proof/help.html` 變成 `307` 到 `/proof/help`，首頁和過卡頁面連到說明頁的每個連結都多轉一次。
+
+和 Worker 自己送的時候不同的地方（本機的 workerd 上量的，[`test/proof-files.test.ts`](test/proof-files.test.ts)）：
+
+| 請求 | 現在 | 之前 |
+|---|---|---|
+| `/proof/index.html` | `301` 到 `/proof` | `200`，同一個檔兩個網址 |
+| `/proof//index.html`、`/proof/%69ndex.html`、`/proof/assets%2findex.js` | `307` 到那個檔自己的路徑 | `200` |
+| `/proof` 底下不存在的檔 | `404`，內容是空的 | `404`，`not found` |
+| `/proof` 和它的檔用 `POST` 等其他方法 | `405`，沒有 `Allow` | `405`，`Allow: GET, HEAD` |
+| `/proof/` 用 `POST` 等其他方法 | `301` 到 `/proof`（轉址不分方法） | `405` |
+| 設定讀不出來時（`ROSTER_KIND` 不對等） | 檔案照常送 | `500` |
+| `/proof/` 的 `301` | 沒有 `Cache-Control` | 沒有 `Cache-Control` |
+
+`/proof/../pages.css` 這種路徑在送到 Static Assets 之前就被正規化成 `/pages.css`，拿到的是樣式表和樣式表的標頭；`/proof/..%2fpages.css` 是 `404`。兩種寫法都拿不到 `site/` 以外的檔。
+
+檔案預設帶 `Cache-Control: public, max-age=0, must-revalidate` 和 `ETag`：瀏覽器每次用之前重新確認，沒變就回 `304`。`/proof` 的檔案用這個預設值，通用參數那個 8 MB 的檔也是。
+
+**這個做法依據的 Cloudflare 文件**（2026-11-20 讀的）：
+
+- [Headers](https://developers.cloudflare.com/workers/static-assets/headers/)：`_headers` 的格式；不套用在 Worker 產生的回應上；最多 100 條規則、每行 2,000 個字元；`! 名稱` 拿掉先前的標頭；同一個標頭設兩次會用逗號接起來；預設的 `Cache-Control` 和 `ETag`。文件的例子裡有 `Content-Security-Policy` 和 `X-Robots-Tag`，沒有提到 `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy`。
+- [Redirects](https://developers.cloudflare.com/workers/static-assets/redirects/)：`_redirects` 的格式；`200` 是送另一個路徑的內容而網址不變（文件叫 proxying），只能指到自己網站的路徑；轉址在標頭之前處理。
+- [Configuration and Bindings](https://developers.cloudflare.com/workers/static-assets/binding/)：`run_worker_first` 可以是路徑樣式的清單，`!` 開頭的是排除、排除優先，最多 100 條；`binding` 可以不設。
+- [HTML handling](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/)：`none` 時只有檔案自己的路徑送得出檔案；其他三種會用 `307` 轉走 `.html` 和 `index.html`。
+- [Billing and Limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)：對靜態檔的請求免費、不限次數；排除的樣式把請求導向檔案，不執行 Worker。
+
+**只在本機的 workerd 上看過，Cloudflare 上還沒確認的**：
+
+- `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 寫在 `_headers` 裡，線上會不會照樣送出。本機有送；文件沒有列出不能設的標頭，也沒有提到這兩個。部署後第一件要看的是 `/pages.css` 的回應有沒有 `Cross-Origin-Opener-Policy`（現在線上只有這個檔）。
+- 排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，還是會轉給 Worker。本機是前者。轉給 Worker 的話，Worker 回的是它對不認得的路徑回的 `404`，沒有 `/proof` 的那一組標頭；兩種情況 Worker 都送不出檔案。
+- `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
+- 第一次帶 Static Assets 的部署：只能部署 `iamreal-test` 的那把權杖能不能上傳檔案，還沒試過。
+
+**加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式名冊的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
+
+測試的工具把 `wrangler.jsonc` 原樣複製到每個測試自己的目錄再啟動 Worker，`./site` 就是那個測試自己的：設定和部署的是同一份，同時跑的測試不共用過卡頁面的檔案。`startWorker({ proofFiles })` 給一個目錄當 `site/proof/`；用正式名冊啟動時，工具把 `_headers` 換成正式名冊的那一份。
 
 ### 用假卡片走完一次
 
@@ -292,12 +349,13 @@ pnpm typecheck   # 型別檢查
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
-  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫、Threads、資料網域）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊
+  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫、Threads）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊。過卡頁面的 CSP 裡的資料網域不在這一包裡：那一組標頭寫在 `site/_headers`
   - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數，加上 Barretenberg 通用參數的那一個點（128 個位元組寫成十六進位，用它的 SHA-256 認，要恰好出現一次）。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
-  - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ASSETS`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`、`TEST_ROSTER_CLEARED_ON`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
+  - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`、`TEST_ROSTER_CLEARED_ON`，所以金鑰、網址、時鐘沒有設定值可以讀，Worker 也沒有 `ASSETS` 可以讀 Static Assets 的檔。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `ROSTER_KIND` 寫出來的逐字相同，`site/_redirects` 也是。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、或測試網站的 `_headers` 少了 `noindex`，都過不了
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
 **驗證證明的程式兩種建置相同，測試專用的建置預設用的也是真的那一個；它另外能在測試明確要求時（`PUT /__test/verifier`）把 `records` 用的驗證器換成替身，替身進不了部署的那一包。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，送出一筆時呼叫驗證的也是它的 `proofVerifier`。測試專用的建置可以把 `records` 用的驗證器換成只看第一個位元組的那一個（上面的 `PUT /__test/verifier`），預設不換，重啟整個 Worker 之後也變回真的（[`test/records.test.ts`](test/records.test.ts) 有這兩個案例）；換上的那一個在 `test-build/index.ts`，不在這六個檔裡。部署的那一包沒有它：進入點是 `src/index.ts`，`scripts/deploy-build-checks.ts` 的 `checkNothingOfTheTestBuild` 不准那一包裡有 `/__test/`、`test-build` 這些字。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
@@ -409,9 +467,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
 | `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
-| `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，四個介面和每個頁面都回 `500` |
+| `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，四個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
 | `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-19` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。還沒清空過，所以是測試網站第一次部署的日期（[第一次部署量到的](#第一次部署量到的)）。清空時和 `ROSTER_OBJECT_NAME` 一起改 |
-| `assets` | `ASSETS` → `./site` | 樣式表和過卡頁面的檔案，每個請求先跑 Worker（[Static Assets](#static-assets)） |
+| `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
 
@@ -647,7 +705,8 @@ pnpm run deploy:test
 部署分兩段，本機和 GitHub Actions 走同一段程式（[`scripts/deploy.ts`](scripts/deploy.ts)）：
 
 1. **打包**（`buildDeploy`）：先核對 WASM 檔和驗證金鑰的 SHA-256（[WASM 檔和驗證金鑰從哪裡來](#wasm-檔和驗證金鑰從哪裡來)），不對就停；再用 `wrangler deploy --dry-run --outdir <目錄>` 打包，不帶權杖；最後跑部署那一包的檢查（[三樣不是設定值的東西](#三樣不是設定值的東西)）；其中核對 `limits.cpu_ms` 的那一項不是起 wrangler 的指令，是在跑檢查的這個程序裡用 wrangler 的函式庫讀 `wrangler.jsonc`。打包唯一的入口是 `bundleWorker`，測試專用的建置也經過它：打包之前要做的事只寫在那裡。
-2. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
+2. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
+   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`_headers`、`_redirects`），不是 `build` 工作交出來的 artifact。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`），`pages.css` 有測試和舊後台的逐位元組比對。
 
 兩段共用的參數：
 
@@ -768,7 +827,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/page-data.ts` | 頁面讀名冊的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、從紀錄重建、頁面的查詢、數有幾張卡片宣告同一個帳號 |
 | `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試名冊的標示）、`home.ts`、`proof.ts` |
-| `site/` | Static Assets 的檔案：`pages.css` 在版控裡，`proof/` 放 `web/` 的建置 |
+| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、四個介面、後台自己出錯時的那一行 |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
 | `src/record-proof.ts` | 從一筆紀錄的欄位重建公開輸入、交給驗證器 |
@@ -809,6 +868,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `scripts/dev.ts` | `pnpm dev` |
 | `scripts/deploy.ts` | 部署的兩段：打包唯一的入口 `bundleWorker`、`buildDeploy`、上傳的參數 `uploadArgs`；怎麼讀權杖、給 wrangler 的環境 |
 | `scripts/deploy-build-checks.ts` | 部署那一包上傳之前的檢查 |
+| `scripts/site-files.ts` | 寫出 `site/_headers`（從 `src/headers.ts`，照名冊的種類）和 `site/_redirects`；部署前的檢查和測試拿它核對版控裡的那兩個檔 |
 | `scripts/build-deploy.ts` | GitHub Actions 的 `build` 工作跑的：打包、檢查 |
 | `scripts/deploy-test.ts` | `pnpm run deploy:test` |
 | `test/workflows.ts` | 工作流程的白名單和讀它們的程式 |
