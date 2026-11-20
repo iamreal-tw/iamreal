@@ -135,7 +135,13 @@ fn certificates_with_a_marker_in_them() {
                 // Nor does a session that did not pass say anything of it.
                 let mut out = empty();
                 let code = unsafe {
-                    idc_session_card_state_request(handle, MARKER.as_ptr(), MARKER.len(), &mut out)
+                    idc_session_card_state_request(
+                        handle,
+                        NOW,
+                        MARKER.as_ptr(),
+                        MARKER.len(),
+                        &mut out,
+                    )
                 };
                 assert_unmarked(what, &self::answer(code, out));
                 idc_session_close(handle);

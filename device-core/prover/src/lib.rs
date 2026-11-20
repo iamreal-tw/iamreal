@@ -436,6 +436,15 @@ pub unsafe extern "C" fn idc_session_check_artifacts(
     })
 }
 
+/// See [`session::check_date`].
+///
+/// # Safety
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_date(session: u64, now: i64, out: *mut IdcBuf) -> i32 {
+    output(out, || session::check_date(session, now))
+}
+
 /// See [`session::card_state_request`].
 ///
 /// # Safety
@@ -444,6 +453,7 @@ pub unsafe extern "C" fn idc_session_check_artifacts(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn idc_session_card_state_request(
     session: u64,
+    now: i64,
     scope_signature: *const u8,
     scope_signature_len: usize,
     out: *mut IdcBuf,
@@ -451,7 +461,7 @@ pub unsafe extern "C" fn idc_session_card_state_request(
     output(out, || {
         // SAFETY: the caller's promise.
         let scope_signature = unsafe { input(scope_signature, scope_signature_len)? };
-        session::card_state_request(session, scope_signature)
+        session::card_state_request(session, now, scope_signature)
     })
 }
 

@@ -27,6 +27,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use iamreal_device_checks::certificate::{
     CardCertificate, Selection, is_card_signature, select_certificate,
 };
+use iamreal_device_checks::challenge::current_time;
 use iamreal_device_checks::crl::CrlNumber;
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::issuers::{IssuerKey, IssuerName, MOICA_ISSUERS};
@@ -80,14 +81,17 @@ struct Session {
     trust: Trust,
     /// The certificates the card returned, until they are checked.
     offered: Vec<Vec<u8>>,
-    /// Step 1, and the date in Taiwan it was checked on: every later
-    /// check of the session uses that date.
+    /// Step 1, and the date in Taiwan the session's checks hold for: the
+    /// date of step 1, until [`check_date`] moves it.
     certificate: Option<CardCertificate>,
     today: Option<Date>,
     /// Step 2: the file chosen from the index, then the keys of the CRL
     /// that passed.
     crl_choice: Option<IndexChoice>,
     crl_keys: Option<Vec<Key>>,
+    /// Of the CRL that passed: its CRL date, as days from 1970-01-01, and
+    /// the `L` it was checked against.
+    crl_age: Option<(i64, u64)>,
     /// Step 3.
     path: Option<AbsenceProof>,
     /// Step 4.
@@ -102,12 +106,24 @@ struct Passed<'a> {
 }
 
 impl Session {
-    /// "Every check passed", or `None`.
-    fn passed(&self) -> Option<Passed<'_>> {
+    /// "Every check passed" on the date `today`, or `None`. A pass holds
+    /// for the date it was made on; on another date the date conditions
+    /// are to be checked again first ([`check_date`]).
+    fn passed(&self, today: Date) -> Option<Passed<'_>> {
         match (&self.certificate, &self.path, self.artifacts_checked) {
-            (Some(certificate), Some(path), true) => Some(Passed { certificate, path }),
+            (Some(certificate), Some(path), true) if self.today == Some(today) => {
+                Some(Passed { certificate, path })
+            }
             _ => None,
         }
+    }
+
+    /// Nothing the session checked holds any more.
+    fn start_over(&mut self) {
+        self.certificate = None;
+        self.today = None;
+        self.artifacts_checked = false;
+        self.forget_crl();
     }
 
     fn forget_offered(&mut self) {
@@ -121,6 +137,7 @@ impl Session {
     fn forget_crl(&mut self) {
         self.crl_choice = None;
         self.crl_keys = None;
+        self.crl_age = None;
         self.path = None;
     }
 }
@@ -148,6 +165,7 @@ pub fn open(roster: Roster, trust: Trust) -> u64 {
         today: None,
         crl_choice: None,
         crl_keys: None,
+        crl_age: None,
         path: None,
         artifacts_checked: false,
     };
@@ -222,22 +240,22 @@ pub fn add_certificate(handle: u64, certificate: &[u8]) -> Result<(), i32> {
 /// - `{"ok":false,"problem":"expired","not_after":"…"}`
 ///
 /// The session keeps the chosen certificate and wipes the others. A second
-/// call starts the session over with the certificates added since; one
-/// that is refused for its clock only wipes those certificates.
+/// call starts the session over with the certificates added since. So
+/// does a call refused for its clock, which keeps no certificate.
 pub fn check_certificates(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
         let today = match today(now) {
             Ok(today) => today,
             Err(code) => {
-                // The copies do not stay, whatever the answer.
+                // The copies do not stay, whatever the answer, and nothing
+                // checked earlier holds under a clock the core refuses.
                 session.forget_offered();
+                session.start_over();
                 return Err(code);
             }
         };
-        session.certificate = None;
+        session.start_over();
         session.today = Some(today);
-        session.artifacts_checked = false;
-        session.forget_crl();
         let selection = {
             let offered: Vec<&[u8]> = session.offered.iter().map(Vec::as_slice).collect();
             select_certificate(&offered, today, &session.trust.issuer_keys(), &mut Sha2)
@@ -405,6 +423,7 @@ pub fn check_crl(
         // The file chosen from the index stays; what an earlier file gave
         // does not.
         session.crl_keys = None;
+        session.crl_age = None;
         session.path = None;
         let remembered = |number: Option<&CrlNumber>| match number {
             Some(number) => Value::from(number.as_str()),
@@ -424,12 +443,13 @@ pub fn check_crl(
             .iter()
             .find(|key| key.name == certificate.issuer())
             .ok_or(IDC_ERR_INTERNAL)?;
+        let max_age_days = crl_max_age(server_days);
         let checked = check_crl_file(
             file,
             &choice.sha256,
             issuer,
             today,
-            crl_max_age(server_days),
+            max_age_days,
             highest.as_ref(),
             &mut Sha2,
         );
@@ -475,6 +495,7 @@ pub fn check_crl(
             "sha256": hex(&choice.sha256),
             "highest_after": highest_after.as_str(),
         });
+        session.crl_age = Some((crl.crl_day(), max_age_days));
         session.crl_keys = Some(crl.keys);
         bytes_of(result)
     })
@@ -544,17 +565,75 @@ pub fn check_artifacts(
     })
 }
 
+/// The date conditions again, on the date in Taiwan of `now`: the
+/// certificate is still valid, and the CRL that passed is no older than
+/// the `L` it was checked against. A card proof can cross midnight; the
+/// app calls this when the date has changed since step 1, and before it
+/// asks for a challenge and before the second signature, as the web page
+/// does. The result is JSON:
+///
+/// - `{"ok":true}`: what the session checked holds for this date now;
+/// - `{"ok":false,"problem":"expired","not_after":"…"}`, `not_yet_valid`
+///   (with `not_before`), `{"ok":false,"problem":"crl_stale","days":8,"max_age_days":7}`:
+///   the card proof stops, and the session starts over.
+///
+/// `IDC_ERR_REFUSED` before a certificate was chosen. `IDC_ERR_ARGUMENT`
+/// for a clock outside 2000 to 2049; the session starts over then too.
+pub fn check_date(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
+    with(handle, |session| {
+        let today = match today(now) {
+            Ok(today) => today,
+            Err(code) => {
+                session.start_over();
+                return Err(code);
+            }
+        };
+        let certificate = session.certificate.as_ref().ok_or(IDC_ERR_REFUSED)?;
+        let time = current_time(today);
+        let stop = if time > certificate.not_after() {
+            Some(json!({
+                "problem": "expired",
+                "not_after": certificate_time(certificate.not_after()),
+            }))
+        } else if time < certificate.not_before() {
+            Some(json!({
+                "problem": "not_yet_valid",
+                "not_before": certificate_time(certificate.not_before()),
+            }))
+        } else {
+            session.crl_age.and_then(|(crl_day, max_age_days)| {
+                let days = today.days_since_1970() - crl_day;
+                (days > 0 && days.unsigned_abs() > max_age_days)
+                    .then(|| json!({ "problem": "crl_stale", "days": days, "max_age_days": max_age_days }))
+            })
+        };
+        match stop {
+            Some(mut result) => {
+                result["ok"] = false.into();
+                session.start_over();
+                bytes_of(result)
+            }
+            None => {
+                session.today = Some(today);
+                bytes_of(json!({ "ok": true }))
+            }
+        }
+    })
+}
+
 /// The body of `POST /api/v1/card-state` (docs/api/card-proof.md):
 /// `{"scope_string":"…","scoped_id":"…"}`, with the scoped ID computed
 /// from the card's signature over the scope string of the session's
 /// roster. The first thing a card proof sends that names the card.
 ///
-/// `IDC_ERR_REFUSED` unless the session passed every check;
-/// `IDC_ERR_INPUT` when `scope_signature` is not the signature of the
-/// session's certificate over that scope string.
-pub fn card_state_request(handle: u64, scope_signature: &[u8]) -> Result<Vec<u8>, i32> {
+/// `IDC_ERR_REFUSED` unless the session passed every check and the date
+/// in Taiwan of `now` is the date its checks hold for ([`check_date`]
+/// moves it); `IDC_ERR_INPUT` when `scope_signature` is not the signature
+/// of the session's certificate over that scope string.
+pub fn card_state_request(handle: u64, now: i64, scope_signature: &[u8]) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
-        let passed = session.passed().ok_or(IDC_ERR_REFUSED)?;
+        let today = today(now)?;
+        let passed = session.passed(today).ok_or(IDC_ERR_REFUSED)?;
         let scope = scope_string(session.roster);
         if !is_card_signature(passed.certificate, scope, scope_signature, &mut Sha2) {
             return Err(IDC_ERR_INPUT);

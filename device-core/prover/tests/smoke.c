@@ -44,7 +44,7 @@ int main(void) {
     static const uint8_t signature[256] = {1};
     idc_session session = 0;
     if (idc_session_open(IDC_ROSTER_TEST, &session) != IDC_OK || session == 0) return 11;
-    if (idc_session_card_state_request(session, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 12;
+    if (idc_session_card_state_request(session, 1794800000, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 12;
     if (out.ptr != NULL || out.len != 0) return 13;
     if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 14;
     if (idc_session_check_artifacts(session, NULL, 0, NULL, 0, NULL, 0, NULL, 0) != IDC_ERR_REFUSED) return 15;

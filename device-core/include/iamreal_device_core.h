@@ -98,7 +98,10 @@ int32_t idc_declaration_code(uint32_t roster,
  *   idc_session_build_tree               3. the tree
  *   idc_session_check_artifacts          4. the circuit and its parameters
  *                                           (any time after step 1)
- *   idc_session_card_state_request       only after 1 to 4 all passed
+ *   idc_session_check_date               the date conditions again, when
+ *                                        the date has changed
+ *   idc_session_card_state_request       only after 1 to 4 all passed,
+ *                                        on the date they hold for
  *
  * Step 1 again starts the session over; step 2 again forgets the tree.
  *
@@ -109,11 +112,12 @@ int32_t idc_declaration_code(uint32_t roster,
  * prover/src/session.rs.
  *
  * `now` is the device's clock, in seconds since 1970-01-01T00:00:00Z; the
- * core takes the date in Taiwan from it, once: the CRL is checked on the
- * date the certificate was checked on. IDC_ERR_ARGUMENT for a number
- * that names no session, and for a clock outside the years 2000 to 2049:
- * no certificate is valid then, and the app says to check the phone's
- * clock. The certificates added are overwritten in that case too.
+ * core takes the date in Taiwan from it. What a session checked holds for
+ * one date: the date of step 1, which the CRL is checked on too, until
+ * idc_session_check_date moves it. IDC_ERR_ARGUMENT for a number that
+ * names no session, and for a clock outside the years 2000 to 2049: no
+ * certificate is valid then, the app says to check the phone's clock, and
+ * the session starts over (the certificates added are overwritten).
  *
  * One call at a time runs on a session; a second call waits. Every idc_buf
  * a session function fills is the caller's to give back with idc_buf_free.
@@ -194,14 +198,28 @@ int32_t idc_session_check_artifacts(idc_session session,
                                     const uint8_t *crs_g1, size_t crs_g1_len,
                                     const uint8_t *crs_g2, size_t crs_g2_len);
 
+/* The date conditions again, on the date of `now`: the certificate is
+ * still valid and the CRL that passed is no older than the bound it was
+ * checked against. Call it when the date in Taiwan has changed since step
+ * 1, and before asking for a challenge and before the second signature (a
+ * card proof can cross midnight). JSON in *out:
+ *   {"ok":true}                                   the session holds for this date
+ *   {"ok":false,"problem":"expired","not_after":"..."}
+ *   {"ok":false,"problem":"not_yet_valid","not_before":"..."}
+ *   {"ok":false,"problem":"crl_stale","days":8,"max_age_days":7}
+ * With "ok": false the card proof stops and the session starts over.
+ * IDC_ERR_REFUSED before step 1 passed. */
+int32_t idc_session_check_date(idc_session session, int64_t now, idc_buf *out);
+
 /* The body of POST /api/v1/card-state, {"scope_string":"...","scoped_id":"..."},
  * in *out: the scoped ID computed from the card's signature over the scope
  * string of the session's roster (256 bytes).
- * IDC_ERR_REFUSED unless steps 1 to 4 all passed. IDC_ERR_INPUT when the
+ * IDC_ERR_REFUSED unless steps 1 to 4 all passed and the date of `now` is
+ * the date they hold for (idc_session_check_date). IDC_ERR_INPUT when the
  * signature is not the one of the session's certificate over that scope
  * string. The core keeps no copy of the signature; the caller overwrites
  * its own when the card proof ends. */
-int32_t idc_session_card_state_request(idc_session session,
+int32_t idc_session_card_state_request(idc_session session, int64_t now,
                                        const uint8_t *scope_signature, size_t scope_signature_len,
                                        idc_buf *out);
 

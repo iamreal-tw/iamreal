@@ -65,7 +65,8 @@
 | 2 | `idc_session_choose_crl`、`idc_session_check_crl` | 從鏡像的索引選出檔案；下載回來的檔案雜湊對、可用、編號沒有倒退、不過期，而且憑證的序號不在上面 |
 | 3 | `idc_session_build_tree` | 樹建好了，憑證的序號有「不在樹裡」的路徑 |
 | 4 | `idc_session_check_artifacts` | app 帶的電路檔、驗證金鑰、參數檔（兩個）就是寫死雜湊的那幾個。第 1 步之後任何時候都可以做 |
-| | `idc_session_card_state_request` | **四步都通過才做**：驗卡片對場合字串的簽章、算匿名編號、組出查現況的請求 |
+| | `idc_session_check_date` | 日期換了之後：憑證還在效期內、清冊還沒過期。通過的 session 才能在新的那一天繼續用 |
+| | `idc_session_card_state_request` | **四步都通過、而且是在通過的那一天才做**：驗卡片對場合字串的簽章、算匿名編號、組出查現況的請求 |
 | | `idc_session_close` | 關掉，清掉 |
 
 - **只有通過四步的 session 算得出匿名編號。** 算匿名編號、組送後台的內容的函式都收 session；之後算證明、組送出的請求的函式也一樣，從同一個 `passed()` 拿憑證和路徑。
@@ -74,7 +75,7 @@
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給，一個 session 只取一次。** `idc_session_check_certificates` 收 `now`（裝置的時鐘，1970 年起的秒數），核心換成台灣的日期，不看裝置的時區；清冊多舊算過期用的是同一天（網頁版在這兩步也只取一次）。通過的 session 沒有期限：網頁版在拿題目之前和第二次簽章之前，會用當時的日期再看一次憑證的效期和清冊的日期，這裡還沒有，要在算證明的那張票用題目的日期補上。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說。
+- **時間由 app 給；通過只算在那一天。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。`idc_session_check_certificates` 的那一天就是這個 session 的日期，清冊多舊算過期用同一天。算匿名編號的函式也收 `now`：日期和 session 的不同就回 `IDC_ERR_REFUSED`，要先用 `idc_session_check_date` 拿新的日期再核一次憑證的效期和清冊的日期（過卡可能跨過午夜；網頁版在拿題目之前和第二次簽章之前各核一次，app 照做）。核不過就停，session 從頭來。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；先前通過的也一起作廢。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
@@ -202,12 +203,12 @@ cargo test --locked -p iamreal-device-checks
 測試讀 `spec/vectors/` 的標準答案，不複製，也不從另一種語言產生。
 
 - `checks/tests/vectors.rs`（不需要 Barretenberg）：`challenge.json`（唯一的寫法、日期、`current_time` 和它的公開輸入、亂數的位元組）、`scope.json`（兩個場合字串和打包值、每份名冊收和不收的平台、帳號名稱照它的平台的格式）、`declaration-code.json`（原文、SHA-256、宣告碼、打包值）、`scoped-id.json`（文字寫法、短編號、讀不懂的寫法、網址裡的短編號）
-- 沒有讀的：`poseidon2-constants.json`（Poseidon2 的置換是 Barretenberg 的，這裡沒有自己實作）；`device-checks.json` 沒有「憑證在清冊上」的案例（標準答案裡沒有一張憑證在同一把金鑰簽的清冊上），`revoked` 這個答案只測到它依據的那件事：`revocation-tree.json` 說在樹裡的序號，在那份清冊的鍵裡找得到
+- 沒有讀的：`poseidon2-constants.json`（Poseidon2 的置換是 Barretenberg 的，這裡沒有自己實作）
 - `prover/tests/vectors.rs`：`poseidon2.json` 的 `hash_2`、`hash_3`（Barretenberg 的 Poseidon2），和 `scoped_id`（簽章切出的 18 段、串起來的匿名編號）
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
 - `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）
-- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的，都拿不到匿名編號；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替
+- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替
 - `prover/tests/no_values_in_errors.rs`：把一段記號寫進憑證、清冊、索引、`config`、記住的編號（各幾種寫法），走 C 函式，所有停下來的答案和錯誤裡都找不到那段記號
 - `prover/tests/quiet.rs`：核心裡的 panic 什麼都不印（另開一個行程，讀它印出來的東西）
 - `prover/tests/c_link.rs`：用 `cargo build` 編出靜態函式庫，拿 `include/iamreal_device_core.h` 編 `prover/tests/smoke.c`、連結、執行。標頭檔和函式庫對不上、函式庫裡沒有對外的函式時，這一個會失敗

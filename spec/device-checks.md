@@ -242,6 +242,7 @@ number is in the tree, the card proof stops with `revoked`.
 | `crl_unusable` | the reason code | Not usable under the issuer key |
 | `crl_rollback` | its CRL number, the highest remembered | A lower CRL number than this device has used for the issuer |
 | `crl_stale` | the days since its CRL date, `L` | Older than `L` days |
+| `revoked` | | It passed, and the certificate's serial number is on it |
 
 ## Test vectors
 
@@ -266,7 +267,11 @@ number is in the tree, the card proof stops with `revoked`.
   HTTP status and the body in hex; a name not listed is answered with `404`.
   A request that gets no answer at all is not in the vectors. The result is
   the CRL used (its number, CRL date and SHA-256) or the reason code with its
-  details, and in both cases the number remembered afterwards.
+  details, and in both cases the number remembered afterwards. A case with
+  `serial` gives the serial number of the cardholder's certificate (one of
+  the certificates of `certificate.cases`); its result is `revoked` if the
+  CRL passes and that serial number is on it. In a case without `serial`
+  the certificate is not on the CRL.
 
 Which CRLs are usable, case by case with their reason codes, is in
 [`../crl/testdata/`](../crl/testdata) (`expected.json`).

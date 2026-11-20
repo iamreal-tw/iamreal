@@ -18,7 +18,8 @@ use iamreal_device_core::{
     IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_ROSTER_TEST, IdcBuf,
     idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
     idc_session_card_state_request, idc_session_check_artifacts, idc_session_check_certificates,
-    idc_session_check_crl, idc_session_choose_crl, idc_session_close, idc_session_open,
+    idc_session_check_crl, idc_session_check_date, idc_session_choose_crl, idc_session_close,
+    idc_session_open,
 };
 use serde_json::{Value, json};
 use sha2::Digest;
@@ -121,6 +122,12 @@ impl Session {
         json_of(finish(code, out))
     }
 
+    fn check_date(&self, now: i64) -> Result<Value, i32> {
+        let mut out = empty();
+        let code = unsafe { idc_session_check_date(self.0, now, &mut out) };
+        json_of(finish(code, out))
+    }
+
     fn build_tree(&self) -> Result<(), i32> {
         status(idc_session_build_tree(self.0))
     }
@@ -141,11 +148,12 @@ impl Session {
         })
     }
 
-    fn card_state_request(&self, scope_signature: &[u8]) -> Result<Value, i32> {
+    fn card_state_request(&self, now: i64, scope_signature: &[u8]) -> Result<Value, i32> {
         let mut out = empty();
         let code = unsafe {
             idc_session_card_state_request(
                 self.0,
+                now,
                 scope_signature.as_ptr(),
                 scope_signature.len(),
                 &mut out,
@@ -201,10 +209,18 @@ fn choosing_and_checking_the_certificate() {
 /// `today`: the first two cases of the vectors are a G3 and a G2
 /// certificate.
 fn session_with_certificate(v: &Value, issuer: &str, today: &str) -> Session {
+    session_with_serial(v, issuer, today, None)
+}
+
+/// As above, with the certificate whose serial number is `serial` if one
+/// is given.
+fn session_with_serial(v: &Value, issuer: &str, today: &str, serial: Option<&str>) -> Session {
     let case = cases(&v["certificate"], "cases")
         .iter()
         .find(|c| {
-            c["result"]["issuer"] == issuer && c["certificates"].as_array().unwrap().len() == 1
+            c["result"]["issuer"] == issuer
+                && c["certificates"].as_array().unwrap().len() == 1
+                && serial.is_none_or(|serial| c["result"]["serial"] == serial)
         })
         .expect("a certificate of the issuer");
     let session = device_checks_session(v);
@@ -247,7 +263,12 @@ fn which_crl_the_device_uses_and_when_it_refuses_one() {
             assert_eq!(expected["highest_after"], case["highest"], "{what}");
         };
         // The CRL is checked on the date the certificate was checked on.
-        let session = session_with_certificate(&v, text(case, "issuer"), text(case, "today"));
+        let session = session_with_serial(
+            &v,
+            text(case, "issuer"),
+            text(case, "today"),
+            case["serial"].as_str(),
+        );
         let Some(index) = served(&case["mirror"], "index.jsonl") else {
             unavailable();
             continue;
@@ -484,7 +505,9 @@ fn a_session_that_passed_every_check_gives_the_card_state_request() {
     assert!(cards.len() >= 4);
     for card in &cards {
         let session = card.passed();
-        let request = session.card_state_request(&card.scope_signature).unwrap();
+        let request = session
+            .card_state_request(card.now, &card.scope_signature)
+            .unwrap();
         let scoped_id = iamreal_device_checks::scoped_id::scoped_id_text(&card.scoped_id).unwrap();
         assert_eq!(
             request,
@@ -500,7 +523,7 @@ fn without_every_check_passed_no_scoped_id_is_computed() {
     for card in &cards() {
         let refused = |session: &Session, what: &str| {
             assert_eq!(
-                session.card_state_request(&card.scope_signature),
+                session.card_state_request(card.now, &card.scope_signature),
                 Err(IDC_ERR_REFUSED),
                 "{}: {what}",
                 card.label
@@ -516,7 +539,11 @@ fn without_every_check_passed_no_scoped_id_is_computed() {
         session.build_tree().unwrap();
         refused(&session, "the files not checked");
         session.check_artifacts(&card.files).unwrap();
-        assert!(session.card_state_request(&card.scope_signature).is_ok());
+        assert!(
+            session
+                .card_state_request(card.now, &card.scope_signature)
+                .is_ok()
+        );
 
         // The files checked, the CRL not.
         let session = card.session();
@@ -535,7 +562,11 @@ fn without_every_check_passed_no_scoped_id_is_computed() {
         session.build_tree().unwrap();
         refused(&session, "the certificate checked again, the files not");
         session.check_artifacts(&card.files).unwrap();
-        assert!(session.card_state_request(&card.scope_signature).is_ok());
+        assert!(
+            session
+                .card_state_request(card.now, &card.scope_signature)
+                .is_ok()
+        );
 
         // Choosing a CRL again forgets the tree, whatever the choice.
         let session = card.passed();
@@ -588,7 +619,7 @@ fn files_that_are_not_the_ones_written_into_the_core_are_refused() {
                 "{what}"
             );
             assert_eq!(
-                session.card_state_request(&card.scope_signature),
+                session.card_state_request(card.now, &card.scope_signature),
                 Err(IDC_ERR_REFUSED),
                 "{what}"
             );
@@ -600,7 +631,7 @@ fn files_that_are_not_the_ones_written_into_the_core_are_refused() {
                 "{what}"
             );
             assert_eq!(
-                session.card_state_request(&card.scope_signature),
+                session.card_state_request(card.now, &card.scope_signature),
                 Err(IDC_ERR_REFUSED),
                 "{what}"
             );
@@ -636,14 +667,18 @@ fn a_signature_that_is_not_the_cards_over_the_scope_string_is_refused() {
             ("no bytes", &Vec::new()),
         ] {
             assert_eq!(
-                session.card_state_request(signature),
+                session.card_state_request(card.now, signature),
                 Err(IDC_ERR_INPUT),
                 "{}: {what}",
                 card.label
             );
         }
         // The session still answers for the right one.
-        assert!(session.card_state_request(&card.scope_signature).is_ok());
+        assert!(
+            session
+                .card_state_request(card.now, &card.scope_signature)
+                .is_ok()
+        );
     }
     // The same signature under the other roster's scope string.
     let card = &cards()[0];
@@ -656,7 +691,7 @@ fn a_signature_that_is_not_the_cards_over_the_scope_string_is_refused() {
     };
     let session = other.passed();
     assert_eq!(
-        session.card_state_request(&card.scope_signature),
+        session.card_state_request(card.now, &card.scope_signature),
         Err(IDC_ERR_INPUT)
     );
 }
@@ -720,6 +755,116 @@ fn the_crl_is_checked_on_the_date_the_certificate_was_checked_on() {
 }
 
 #[test]
+fn a_pass_holds_for_the_date_it_was_made_on() {
+    const DAY: i64 = 86_400;
+    for card in &cards() {
+        let session = card.passed();
+        // The next day in Taiwan: the date conditions first.
+        let tomorrow = card.now + DAY;
+        assert_eq!(
+            session.card_state_request(tomorrow, &card.scope_signature),
+            Err(IDC_ERR_REFUSED),
+            "{}",
+            card.label
+        );
+        assert_eq!(session.check_date(tomorrow).unwrap(), json!({ "ok": true }));
+        assert!(
+            session
+                .card_state_request(tomorrow, &card.scope_signature)
+                .is_ok()
+        );
+        // And no longer for the date before.
+        assert_eq!(
+            session.card_state_request(card.now, &card.scope_signature),
+            Err(IDC_ERR_REFUSED)
+        );
+        // Later the same day is the same date.
+        assert!(
+            session
+                .card_state_request(tomorrow + 3_600, &card.scope_signature)
+                .is_ok()
+        );
+    }
+}
+
+#[test]
+fn on_a_later_date_the_certificate_and_the_crl_are_checked_again() {
+    const DAY: i64 = 86_400;
+    let card = &cards()[0];
+    // The CRL of the vectors is of the card's date; the config says 7 days.
+    let session = card.passed();
+    assert_eq!(
+        session.check_date(card.now + 7 * DAY).unwrap(),
+        json!({ "ok": true })
+    );
+    assert_eq!(
+        session.check_date(card.now + 8 * DAY).unwrap(),
+        json!({ "ok": false, "problem": "crl_stale", "days": 8, "max_age_days": 7 })
+    );
+    // The card proof stopped: the session starts over.
+    for now in [card.now, card.now + 7 * DAY, card.now + 8 * DAY] {
+        assert_eq!(
+            session.card_state_request(now, &card.scope_signature),
+            Err(IDC_ERR_REFUSED)
+        );
+    }
+    assert_eq!(session.check_date(card.now), Err(IDC_ERR_REFUSED));
+    assert_eq!(session.build_tree(), Err(IDC_ERR_REFUSED));
+
+    // The certificate's own dates, read from what step 1 answered.
+    let session = card.session();
+    session.add_certificate(&card.certificate).unwrap();
+    let checked = session.check_certificates(card.now).unwrap();
+    let (not_before, not_after) = (text(&checked, "not_before"), text(&checked, "not_after"));
+    let date = |time: &str| format!("20{}-{}-{}", &time[0..2], &time[2..4], &time[4..6]);
+    // Two days after notAfter and two days before notBefore, whatever the
+    // hour they are written with.
+    let after = noon(&date(not_after)) + 2 * DAY;
+    assert_eq!(
+        session.check_date(after).unwrap(),
+        json!({ "ok": false, "problem": "expired", "not_after": not_after })
+    );
+    assert_eq!(session.check_date(card.now), Err(IDC_ERR_REFUSED));
+    card.check_certificate(&session);
+    let before = noon(&date(not_before)) - 2 * DAY;
+    assert_eq!(
+        session.check_date(before).unwrap(),
+        json!({ "ok": false, "problem": "not_yet_valid", "not_before": not_before })
+    );
+    assert_eq!(session.check_date(card.now), Err(IDC_ERR_REFUSED));
+}
+
+#[test]
+fn a_clock_the_core_refuses_ends_what_the_session_checked() {
+    let card = &cards()[0];
+    for refuse in [
+        (|session: &Session| session.check_date(0)) as fn(&Session) -> Result<Value, i32>,
+        |session: &Session| session.check_certificates(i64::MAX),
+    ] {
+        let session = card.passed();
+        assert_eq!(refuse(&session), Err(IDC_ERR_ARGUMENT));
+        assert_eq!(
+            session.card_state_request(card.now, &card.scope_signature),
+            Err(IDC_ERR_REFUSED)
+        );
+        assert_eq!(session.check_date(card.now), Err(IDC_ERR_REFUSED));
+        assert_eq!(session.choose_crl(b""), Err(IDC_ERR_REFUSED));
+    }
+    // A request with such a clock is refused as an argument, and the
+    // session is as it was.
+    let session = card.passed();
+    assert_eq!(
+        session.card_state_request(0, &card.scope_signature),
+        Err(IDC_ERR_ARGUMENT)
+    );
+    assert!(
+        session
+            .card_state_request(card.now, &card.scope_signature)
+            .is_ok()
+    );
+}
+
+#[test]
 fn what_is_not_a_session_and_what_is_not_an_argument() {
     let card = &cards()[0];
     let closed = {
@@ -741,7 +886,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
         assert_eq!(session.build_tree(), Err(IDC_ERR_ARGUMENT));
         assert_eq!(session.check_artifacts(&card.files), Err(IDC_ERR_ARGUMENT));
         assert_eq!(
-            session.card_state_request(&card.scope_signature),
+            session.card_state_request(card.now, &card.scope_signature),
             Err(IDC_ERR_ARGUMENT)
         );
         // Closing what is not a session does nothing.
@@ -805,7 +950,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
             IDC_ERR_ARGUMENT
         );
         assert_eq!(
-            idc_session_card_state_request(session.0, std::ptr::null(), 256, &mut out),
+            idc_session_card_state_request(session.0, card.now, std::ptr::null(), 256, &mut out),
             IDC_ERR_ARGUMENT
         );
     }
@@ -828,39 +973,7 @@ fn a_session_an_app_opens_trusts_only_the_keys_of_moica() {
         json!({ "ok": false, "problem": "unknown_issuer" })
     );
     assert_eq!(
-        session.card_state_request(&card.scope_signature),
+        session.card_state_request(card.now, &card.scope_signature),
         Err(IDC_ERR_REFUSED)
     );
-}
-
-#[test]
-fn a_serial_number_on_the_crl_is_one_of_its_keys() {
-    // No certificate of the vectors is on a CRL of its own issuer, so the
-    // `revoked` answer cannot be asked for through a session here. What it
-    // rests on: the serial number the vectors call revoked is among the
-    // keys of that CRL, and the card's own is not.
-    use iamreal_device_checks::crl::usable_crl;
-    use iamreal_device_checks::key::Key;
-    let v = vectors("revocation-tree.json");
-    let issuers = issuers_of(&v);
-    for case in cases(&v, "cases") {
-        let crl = cases(&v, "crls")
-            .iter()
-            .find(|c| c["name"] == case["crl"])
-            .unwrap();
-        let modulus = &issuers
-            .iter()
-            .find(|(name, _)| name.as_str() == text(crl, "issuer"))
-            .unwrap()
-            .1;
-        let usable = usable_crl(&unhex(text(crl, "crl")), modulus, &mut common::TestSha256)
-            .unwrap_or_else(|reason| panic!("{}", reason.code()));
-        let serial = Key::from_unsigned(&unhex(text(case, "serial"))).unwrap();
-        assert_eq!(
-            usable.keys.contains(&serial),
-            case["in_tree"].as_bool().unwrap(),
-            "{}",
-            text(case, "label")
-        );
-    }
 }

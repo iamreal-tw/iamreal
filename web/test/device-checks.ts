@@ -6,6 +6,7 @@ import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import { type Fetch, ServerError, requestConfig } from "../src/api.ts";
 import { type CertificateProblem, selectCertificate } from "../src/certificate.ts";
+import { keyAt } from "../src/crl/crl.ts";
 import { RevocationError, chooseFromIndex, crlMaxAge, loadCrl } from "../src/crl/revocation.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { memoryStore } from "../src/storage.ts";
@@ -130,6 +131,12 @@ export interface CrlCase {
    * HTTP status and the body (hex). A name not here is answered with 404.
    */
   mirror: Record<string, { status: number; body: string }>;
+  /**
+   * The serial number of the cardholder's certificate (0x-prefixed hex), in
+   * the cases that say whether it is on the CRL. Without it, the certificate
+   * is not on the CRL.
+   */
+  serial?: string;
   result: CrlResult;
 }
 
@@ -139,6 +146,8 @@ export type CrlResult = (
   | { ok: false; problem: "crl_unusable"; reason: string }
   | { ok: false; problem: "crl_rollback"; crl_number: string; highest: string }
   | { ok: false; problem: "crl_stale"; days: number; max_age_days: number }
+  /** The CRL passed, and the certificate's serial number is on it. */
+  | { ok: false; problem: "revoked" }
 ) & {
   /** The highest CRL number the device remembers for the issuer afterwards. */
   highest_after: string | null;
@@ -156,6 +165,13 @@ export async function crlResult(c: Omit<CrlCase, "result">, issuers: readonly Ve
   const highestAfter = () => store.get(c.issuer)?.toString() ?? null;
   try {
     const crl = await loadCrl({ fetch: fetchFn, issuer, today: day(c.today), maxAgeDays: crlMaxAge(c.server_max_age_days), store });
+    // The page learns it from the tree it builds (test/crl.test.ts,
+    // revocation-tree.json): a serial number is in the tree exactly when it
+    // is one of the CRL's keys.
+    if (c.serial !== undefined) {
+      const serial = BigInt(c.serial);
+      for (let n = 0; n < crl.count; n++) if (keyAt(crl.keys, n) === serial) return { ok: false, problem: "revoked", highest_after: highestAfter() };
+    }
     return { ok: true, crl_number: crl.crlNumber.toString(), crl_date: formatDay(crl.crlDay), sha256: crl.sha256, highest_after: highestAfter() };
   } catch (e) {
     if (!(e instanceof RevocationError)) throw e;
