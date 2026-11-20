@@ -516,6 +516,21 @@ fn without_every_check_passed_no_proof_is_made() {
             Err(IDC_ERR_REFUSED)
         );
     }
+    // Refused before anything else it was given is read.
+    let session = card.session_without(Some(Step::Tree));
+    for accounts in ["", "not a list"] {
+        assert_eq!(
+            session.records_request(
+                &card.files,
+                &Declaration {
+                    accounts,
+                    challenge: "",
+                    ..card.declaration()
+                }
+            ),
+            Err(IDC_ERR_REFUSED)
+        );
+    }
     // A session an app opens knows MOICA's keys only.
     let mut handle = 0;
     assert_eq!(

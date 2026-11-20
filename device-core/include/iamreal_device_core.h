@@ -241,9 +241,10 @@ int32_t idc_session_card_state_request(idc_session session, int64_t now,
  *                 idc_declaration_code of this list and challenge (256
  *                 bytes each)
  * The proof takes seconds, on as many threads as the device has cores, and
- * several hundred MiB (issue #88): call it from a background thread. One proof is made at a
- * time; a second call waits. The core compares the proof's public inputs
- * with the ones it expects and returns nothing if any differs.
+ * several hundred MiB (issue #88): call it from a background thread. One
+ * proof is made at a time; a second call waits. The core compares the
+ * proof's public inputs with the ones it expects and returns nothing if
+ * any differs.
  *
  * IDC_ERR_REFUSED unless steps 1 to 4 all passed and the challenge's date
  * is the date they hold for (idc_session_check_date): the record is dated
@@ -252,9 +253,10 @@ int32_t idc_session_card_state_request(idc_session session, int64_t now,
  * must then pass again), the list or the challenge is not what
  * idc_declaration_code takes, a signature is not the card's over its
  * message, or the circuit has no proof for these inputs.
- * The core keeps no copy of either signature: its copies, the circuit's
- * inputs and the witness are overwritten before the call returns. The
- * caller overwrites its own. */
+ * The core keeps no copy of either signature: its own copies, the
+ * circuit's inputs and the witness are overwritten before the call
+ * returns. What Barretenberg (C++) copied of the witness is not reached
+ * (device-core/README.md, "清掉"). The caller overwrites its own. */
 int32_t idc_session_records_request(idc_session session,
                                     const uint8_t *circuit, size_t circuit_len,
                                     const uint8_t *verification_key, size_t verification_key_len,

@@ -17,8 +17,9 @@ const MAX_TBS_CONTENT: usize = MAX_TBS_LENGTH - 9;
 
 /// A limb is 120 bits: 15 bytes.
 const LIMB_BYTES: usize = 15;
-/// The limbs of a 2048-bit number.
+/// The limbs of a 2048-bit number, and of a 4096-bit one.
 const LIMBS_2048: usize = 18;
+const LIMBS_4096: usize = 35;
 /// The bits of the card's modulus.
 const CARD_BITS: usize = 2048;
 
@@ -85,7 +86,7 @@ pub fn circuit_inputs(
     let issuer_bits = issuer_modulus.len() * 8;
     let count = match issuer_bits {
         2048 => LIMBS_2048,
-        4096 => 35,
+        4096 => LIMBS_4096,
         _ => return None,
     };
     let content = certificate.tbs();
@@ -96,13 +97,18 @@ pub fn circuit_inputs(
     if issuer_signature.len() != issuer_modulus.len() {
         return None;
     }
+    // What can fail comes first: nothing of the certificate or of a
+    // signature is copied before it.
+    let tbs_len = u32::try_from(content.len()).ok()?;
+    let issuer_redc = redc(issuer_modulus, issuer_bits)?;
+    let card_redc = redc(certificate.card_modulus(), CARD_BITS)?;
     let mut tbs = vec![0u8; MAX_TBS_LENGTH];
     tbs[..content.len()].copy_from_slice(content);
     Some(CircuitInputs {
         tbs,
-        tbs_len: u32::try_from(content.len()).ok()?,
+        tbs_len,
         issuer_modulus: limbs(issuer_modulus, count),
-        issuer_redc: limbs(&redc(issuer_modulus, issuer_bits)?, count),
+        issuer_redc: limbs(&issuer_redc, count),
         issuer_signature: limbs(issuer_signature, count),
         smt_root: path.root,
         smt_siblings: path.siblings.clone(),
@@ -110,7 +116,7 @@ pub fn circuit_inputs(
         smt_old_value: path.old_value,
         smt_is_old0: path.is_old0,
         current_time: fe_of_u64(current_time),
-        card_redc: limbs(&redc(certificate.card_modulus(), CARD_BITS)?, LIMBS_2048),
+        card_redc: limbs(&card_redc, LIMBS_2048),
         scope: *scope,
         scope_signature: limbs(scope_signature, LIMBS_2048),
         declaration_code: *declaration_code,

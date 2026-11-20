@@ -510,6 +510,8 @@ pub unsafe extern "C" fn idc_session_records_request(
                 input(declaration_code_signature, declaration_code_signature_len)?,
             )
         };
+        // A session that passed nothing refuses, whatever the list is.
+        session::require_passed(session)?;
         let list = accounts_of(accounts_json)?;
         session::records_request(
             session,

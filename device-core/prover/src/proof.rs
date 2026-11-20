@@ -69,15 +69,17 @@ pub fn barretenberg_threads() -> usize {
 ///   #88). The setting is the calling thread's, so it is set every time,
 ///   and no environment variable is written.
 /// - Barretenberg logs nothing. It would write a line for each step to
-///   stderr, which on a phone is the system log.
+///   stderr, which on a phone is the system log. The level is the
+///   process's, and is written once.
 fn configure() {
-    // SAFETY: the first sets a thread-local of Barretenberg. The second
-    // writes an `int` that Barretenberg reads before it logs; the caller
-    // holds `PROVER`, and no code of the core writes it elsewhere.
-    unsafe {
-        bb_set_parallel_for_concurrency(threads());
-        bb_log_level = 0;
-    }
+    static QUIET: std::sync::Once = std::sync::Once::new();
+    // SAFETY: writes an `int`, once, and nothing else in the core writes
+    // it. Barretenberg reads it without a lock before it logs, also on
+    // other threads (a tree being built): such a read sees the level
+    // before or after this write, and either is a level it accepts.
+    QUIET.call_once(|| unsafe { bb_log_level = 0 });
+    // SAFETY: sets a thread-local of Barretenberg.
+    unsafe { bb_set_parallel_for_concurrency(threads()) };
 }
 
 /// Barretenberg keeps the common reference string for the whole process.

@@ -650,6 +650,18 @@ pub fn card_state_request(handle: u64, now: i64, scope_signature: &[u8]) -> Resu
     })
 }
 
+/// `IDC_ERR_REFUSED` unless the session passed every check on its date.
+/// The C function asks this before it reads anything else it was given.
+pub fn require_passed(handle: u64) -> Result<(), i32> {
+    with(handle, |session| {
+        session
+            .today
+            .and_then(|today| session.passed(today))
+            .map(|_| ())
+            .ok_or(IDC_ERR_REFUSED)
+    })
+}
+
 /// The four files the app carries (ADR-0035), as it passes them to a call.
 pub struct Files<'a> {
     /// The compiled circuit of the certificate's issuer.
