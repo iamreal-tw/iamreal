@@ -2,7 +2,7 @@
 // (worker/) in the local workerd, then the page of the card it made. Nothing
 // real: test keys, a fake card behind a fake component, a fake MOICA.
 //
-//   node --experimental-strip-types test/e2e/worker.ts
+//   node --experimental-strip-types test/worker-card-proof.ts   (pnpm test:worker)
 //
 // 1. Makes throwaway issuer keys (G2, G3), a card and a CRL of each
 //    (test/fixtures/).
@@ -25,6 +25,8 @@
 //
 // The screens' own sentences, every way a card proof stops and every kind
 // of record are test/e2e/ui.ts's, which still runs against the Go backend.
+// This file is not under test/e2e/: the checks of a pull request do not run
+// it, and what they run is what worker/test/workflows.test.ts reads there.
 //
 // The browser resolves no host name but localhost and 127.0.0.1
 // (--host-resolver-rules): the profile a page of a card embeds gets no
@@ -35,17 +37,17 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { startWorker } from "../../../worker/test/harness.ts";
-import { COPY } from "../../src/ui/copy.ts";
-import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "../fixtures/certs.ts";
-import { makeCrl } from "../fixtures/crls.ts";
-import { hex, makeKey } from "../fixtures/der-build.ts";
-import { randomSerials, testIssuerKeys } from "../fixtures/world.ts";
-import { Browser, type Page } from "./cdp.ts";
-import { FakeComponent } from "./fake-component.ts";
+import { startWorker } from "../../worker/test/harness.ts";
+import { COPY } from "../src/ui/copy.ts";
+import { Browser, type Page } from "./e2e/cdp.ts";
+import { FakeComponent } from "./e2e/fake-component.ts";
+import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./fixtures/certs.ts";
+import { makeCrl } from "./fixtures/crls.ts";
+import { hex, makeKey } from "./fixtures/der-build.ts";
+import { randomSerials, testIssuerKeys } from "./fixtures/world.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const web = join(here, "..", "..");
+const web = join(here, "..");
 const repo = join(web, "..");
 const out = join(web, "test-output", "worker");
 /** The test build's component address (a port other than the real component's 61161). */

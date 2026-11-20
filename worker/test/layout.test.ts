@@ -31,18 +31,20 @@ const GENERATED = [WASM_FILE, ...CIRCUIT_NAMES.map(vkFile)].map((file) => `../ge
 
 test("the code that runs in the Worker imports its own files, protocol/ and the runtime, nothing else; the proof verifier also msgpackr and its generated files", () => {
   const seen: string[] = [];
-  for (const dir of ["src", "test-build"]) {
-    for (const file of readdirSync(join(WORKER_DIR, dir))) {
+  // src/pages/ is the one directory under src/: its files import each other and the files of src/ above them.
+  for (const dir of ["src", "src/pages", "test-build"]) {
+    for (const file of readdirSync(join(WORKER_DIR, dir)).filter((f) => f.endsWith(".ts"))) {
       const source = readFileSync(join(WORKER_DIR, dir, file), "utf8");
       for (const m of source.matchAll(/\bfrom\s+"([^"]+)"|\bimport\s*\(?\s*"([^"]+)"/g)) {
         const specifier = (m[1] ?? m[2])!;
         seen.push(specifier);
-        const own = dir === "src" ? /^\.\/[a-z0-9-]+\.ts$/ : /^\.\/[a-z0-9-]+\.ts$|^\.\.\/src\/[a-z0-9-]+\.ts$/;
+        const own = dir === "src" ? /^\.\/(pages\/)?[a-z0-9-]+\.ts$/ : dir === "src/pages" ? /^\.\.?\/[a-z0-9-]+\.ts$/ : /^\.\/[a-z0-9-]+\.ts$|^\.\.\/src\/[a-z0-9-]+\.ts$/;
         const engines = dir === "src" && ((file === "barretenberg.ts" && specifier === "msgpackr") || (file === "in-worker.ts" && GENERATED.includes(specifier)));
         assert.ok(engines || own.test(specifier) || specifier === "#target" || specifier === "cloudflare:workers" || /^iamreal-protocol\/[a-z0-9-]+\.ts$/.test(specifier), `${dir}/${file} imports ${specifier}`);
       }
     }
   }
+  assert.deepEqual(readdirSync(join(WORKER_DIR, "src"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name), ["pages"], "the directories under src/ that the check reads");
   assert.ok(seen.includes("#target") && seen.some((s) => s.startsWith("iamreal-protocol/")) && seen.includes("msgpackr"), "the check read the imports");
   assert.deepEqual(pkg.imports, { "#target": "./src/target.ts" });
 });

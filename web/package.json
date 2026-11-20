@@ -8,7 +8,7 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "test:e2e": "node --experimental-strip-types test/e2e/run.ts",
     "test:ui": "node --experimental-strip-types test/e2e/ui.ts",
-    "test:worker": "node --experimental-strip-types test/e2e/worker.ts",
+    "test:worker": "node --experimental-strip-types test/worker-card-proof.ts",
     "local": "node --experimental-strip-types scripts/local.ts",
     "fetch-crs": "node scripts/fetch-crs.mjs"
   },
