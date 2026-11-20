@@ -31,6 +31,14 @@ export interface RosterSettings {
    * stored state of a card is checked against are the same table.
    */
   readonly platforms: readonly PlatformRow[];
+  /**
+   * The back end's policy on late switches (docs/api/card-proof.md,
+   * `switch_restricted`): when true, a record the roster rules accept is
+   * refused if a switch in it would be the fourth or fifth of its slot.
+   * False unless the environment sets `RESTRICT_LATE_SWITCHES` to "true";
+   * wrangler.jsonc does not set it, so by default there is no such policy.
+   */
+  readonly restrictLateSwitches: boolean;
 }
 
 /**
@@ -56,5 +64,8 @@ export function rosterSettingsOf(env: Env): RosterSettings {
   const kind: string = env.ROSTER_KIND;
   const problem = rosterSettingsProblem(kind, env.ROSTER_OBJECT_NAME);
   if (problem !== null || (kind !== "test" && kind !== "production")) throw new Error(problem ?? "ROSTER_KIND");
-  return { kind, platforms: platformsOf(kind) };
+  // Not one of the environment's declared settings (wrangler.jsonc): absent, or exactly "true" or "false".
+  const restrict: unknown = (env as { RESTRICT_LATE_SWITCHES?: unknown }).RESTRICT_LATE_SWITCHES;
+  if (restrict !== undefined && restrict !== "true" && restrict !== "false") throw new Error("RESTRICT_LATE_SWITCHES is neither true nor false");
+  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true" };
 }

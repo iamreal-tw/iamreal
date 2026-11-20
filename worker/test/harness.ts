@@ -166,6 +166,22 @@ export interface TestWorker {
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
   /**
+   * Asks `POST /api/v1/challenges` for a challenge and returns it. With
+   * `randomHex`, 16 bytes in hex, the challenge has those bytes in place of
+   * random ones (test build, `PUT /__test/roster/next-random`): how a test
+   * gets the challenge a proof was made for, or the same challenges in two
+   * runs.
+   */
+  issueChallenge(randomHex?: string): Promise<string>;
+  /**
+   * Which proof verifier `records` asks from now on (test build,
+   * `PUT /__test/verifier`): "real" is the deployed Worker's, and what a
+   * test worker starts with; "stand-in" judges a proof by its first byte
+   * alone (0 accepted, 1 rejected, 2 the verifier cannot run), for the
+   * tests that are about everything but the proof.
+   */
+  setVerifier(which: "real" | "stand-in"): Promise<void>;
+  /**
    * Asks the Worker's proof verifier (src/in-worker.ts) through the test
    * build's `POST /__test/verify`: true if the proof is accepted.
    */
@@ -296,6 +312,19 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 204) throw new Error(`setting the clock: HTTP ${res.status}`);
     },
     logLines: () => server.getLogs().map((l) => l.message),
+    async issueChallenge(randomHex) {
+      if (randomHex !== undefined) {
+        const set = await server.fetch("/__test/roster/next-random", { method: "PUT", body: randomHex });
+        if (set.status !== 204) throw new Error(`setting the next challenge's bytes: HTTP ${set.status}`);
+      }
+      const res = await server.fetch("/api/v1/challenges", { method: "POST" });
+      if (res.status !== 200) throw new Error(`asking for a challenge: HTTP ${res.status} ${await res.text()}`);
+      return ((await res.json()) as { challenge: string }).challenge;
+    },
+    async setVerifier(which) {
+      const res = await server.fetch("/__test/verifier", { method: "PUT", body: which });
+      if (res.status !== 204) throw new Error(`choosing the verifier: HTTP ${res.status}`);
+    },
     async verify(circuit, proof, publicInputs) {
       const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
       const res = await server.fetch("/__test/verify", { method: "POST", body: JSON.stringify({ circuit, proof: hex(proof), publicInputs: publicInputs.map(hex) }) });

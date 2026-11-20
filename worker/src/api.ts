@@ -1,5 +1,5 @@
-// The API under /api/ (docs/api/card-proof.md). So far: challenges,
-// card-state and config.
+// The API under /api/ (docs/api/card-proof.md): challenges, card-state,
+// records and config.
 //
 // Every answer is JSON with `Cache-Control: no-store` and an `X-Request-Id`
 // of its own; none sets a cookie or a CORS header. This back end keeps no
@@ -12,25 +12,22 @@
 // Every endpoint reads the environment's settings first (settings.ts): with
 // a `ROSTER_KIND` that names no roster, none of them answers anything but
 // `500`.
+import { ISSUERS } from "#target";
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { readStrings } from "./json.ts";
-import { OTHER_SCHEMA, rosterOf } from "./roster.ts";
+import { recordVerifies } from "./record-proof.ts";
+import { CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, rosterOf } from "./roster.ts";
 import { rosterSettingsOf } from "./settings.ts";
 import { type SlotJson, slotToJson } from "./slot-json.ts";
+import { readSubmission } from "./submission.ts";
+import type { ProofVerifier } from "./verify.ts";
 
 /** The largest request body read, in bytes: a longer one is `malformed`. */
 export const MAX_BODY_BYTES = 64 * 1024;
-
-/**
- * No card proof is accepted when the newest CRL of the issuer is more than
- * this many days old (spec/revocation-tree.md, "Who checks what"); `config`
- * announces it to devices.
- */
-export const CRL_MAX_AGE_DAYS = 3;
 
 /** What an endpoint answers: a status and a JSON body. */
 interface Reply {
@@ -44,6 +41,27 @@ const fail = (status: number, code: string): Reply => ({ status, body: { error: 
 const MALFORMED = fail(400, "malformed");
 
 /**
+ * The status of each code the roster's object refuses a challenge or a
+ * record with (docs/api/card-proof.md): `503` when the back end takes no
+ * card proof at all for now, `403` for its own policy, `400` otherwise.
+ */
+const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>> = {
+  paused: 503,
+  challenge_unknown: 400,
+  challenge_used: 400,
+  challenge_attempts: 400,
+  crl_stale: 503,
+  root: 400,
+  date_order: 400,
+  empty: 400,
+  switch_limit: 400,
+  daily_limit: 400,
+  switch_restricted: 403,
+};
+
+const refuse = (code: SubmissionRefusal | RecordRefusal): Reply => fail(REFUSAL_STATUS[code], code);
+
+/**
  * Where the back end failed, as the one line about it says (`where`):
  *
  *   settings   the settings are not right: `ROSTER_KIND` names no roster, or
@@ -52,9 +70,11 @@ const MALFORMED = fail(400, "malformed");
  *              SCHEMA_VERSION than this build's (roster.ts)
  *   roster     anything else in the roster's object, a stored state that is
  *              broken among it
+ *   verifier   the proof verifier could not run (verify.ts): no verdict on
+ *              the proof, and nothing is written
  *   handler    anywhere else
  */
-type Where = "settings" | "schema" | "roster" | "handler";
+type Where = "settings" | "schema" | "roster" | "verifier" | "handler";
 
 /** A failure of the back end itself. */
 class Internal extends Error {
@@ -113,8 +133,58 @@ async function readBody(request: Request): Promise<string | null> {
 /** `POST /api/v1/challenges`: the roster's object issues and stores it. The body is not read. */
 async function postChallenge(_request: Request, env: Env): Promise<Reply> {
   settings(env);
-  const challenge = await askRoster(() => rosterOf(env).issueChallenge());
-  return ok({ challenge });
+  const issued = await askRoster(() => rosterOf(env).issueChallenge());
+  return issued.challenge === null ? refuse("paused") : ok({ challenge: issued.challenge });
+}
+
+/**
+ * `POST /api/v1/records`: one card proof, the card's whole list of accounts.
+ * The checks run in the order of docs/api/card-proof.md, and the first that
+ * fails gives the error. Between the Worker and the roster's object:
+ *
+ *   1. here: the request is read and every field's format checked
+ *      (`malformed`, `scope`, `platform`). A submission that ends here does
+ *      not count, and the object is not asked;
+ *   2. the object: the challenge (`challenge_unknown`, `challenge_used`,
+ *      `challenge_attempts`); this submission is counted;
+ *   3. here: the record verifies (`proof`), outside the object, so that a
+ *      proof being verified does not hold up the roster;
+ *   4. the object: the challenge again, the back end's rule on `smt_root`
+ *      (`crl_stale`, `root`), the roster rules, the back end's policy on
+ *      switches (`switch_restricted`); then the record is written.
+ *
+ * A verifier that could not run gives no verdict: the answer is `500`, and
+ * the object is not asked to write anything.
+ */
+async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<Reply> {
+  const { kind } = settings(env);
+  const text = await readBody(request);
+  if (text === null) return MALFORMED;
+  const fields = readSubmission(kind, text);
+  if (typeof fields === "string") return fail(400, fields);
+
+  const roster = rosterOf(env);
+  const begun = await askRoster(() => roster.beginSubmission(fields.challenge));
+  if (begun !== "ok") return refuse(begun);
+
+  let verifies: boolean;
+  try {
+    verifies = await recordVerifies(fields, ISSUERS, parts.verifier);
+  } catch (e) {
+    throw new Internal("verifier", e);
+  }
+  if (!verifies) return fail(400, "proof");
+
+  const answer = await askRoster(() => roster.accept(fields));
+  if (answer.accepted === null) {
+    if (answer.refused === null) throw new Internal("roster", new Error("neither a record nor a refusal"));
+    return refuse(answer.refused);
+  }
+  const { seq, recordHash, kinds } = answer.accepted;
+  return {
+    status: 201,
+    body: { seq, record_hash: recordHash, kinds: kinds.map((k) => ({ platform: k.platform, kind: k.kind, username: k.username, account_cards: k.accountCards })) },
+  };
 }
 
 /**
@@ -157,14 +227,21 @@ async function getConfig(_request: Request, env: Env): Promise<Reply> {
   });
 }
 
+/** What the API is given besides the environment: the pieces that are behind an interface, so that each can be replaced by itself. */
+export interface ApiParts {
+  /** Verifies the proof of a submitted record (verify.ts). */
+  readonly verifier: ProofVerifier;
+}
+
 interface Endpoint {
   readonly method: string;
-  readonly handle: (request: Request, env: Env) => Promise<Reply>;
+  readonly handle: (request: Request, env: Env, parts: ApiParts) => Promise<Reply>;
 }
 
 const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
   ["/api/v1/challenges", { method: "POST", handle: postChallenge }],
   ["/api/v1/card-state", { method: "POST", handle: postCardState }],
+  ["/api/v1/records", { method: "POST", handle: postRecord }],
   ["/api/v1/config", { method: "GET", handle: getConfig }],
 ]);
 
@@ -179,7 +256,7 @@ function requestId(): string {
 }
 
 /** Answers a request under /api/. */
-export async function api(request: Request, env: Env): Promise<Response> {
+export async function api(request: Request, env: Env, parts: ApiParts): Promise<Response> {
   const id = requestId();
   const { pathname } = new URL(request.url);
   const endpoint = ENDPOINTS.get(pathname);
@@ -188,7 +265,7 @@ export async function api(request: Request, env: Env): Promise<Response> {
   else if (request.method !== endpoint.method) reply = { ...fail(405, "method_not_allowed"), allow: endpoint.method };
   else {
     try {
-      reply = await endpoint.handle(request, env);
+      reply = await endpoint.handle(request, env, parts);
     } catch (e) {
       // The path is one of the endpoints' own, not what the client wrote; the
       // error is named by its class and the step, never by its message.

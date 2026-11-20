@@ -1,10 +1,10 @@
-// The Worker (ADR-0023). So far: the first endpoints of the API (api.ts),
-// the hourly CRL mirror (mirror.ts), and the roster's Durable Object
-// (roster.ts), which also keeps what the mirror tells it. It has no page
-// yet.
+// The Worker (ADR-0023). So far: the API of a card proof (api.ts), the
+// hourly CRL mirror (mirror.ts), and the roster's Durable Object
+// (roster.ts), which writes the records and keeps what the mirror tells it.
+// It has no page yet.
 import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#target";
-import { api, isApiPath } from "./api.ts";
-import { poseidon2Hash } from "./in-worker.ts";
+import { type ApiParts, api, isApiPath } from "./api.ts";
+import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
 import { rosterOf } from "./roster.ts";
@@ -15,9 +15,12 @@ export { Roster } from "./roster.ts";
 // A build whose issuer keys are not one G2 and one G3 key does not start.
 checkIssuerTable(ISSUERS);
 
+/** The only place that says which proof verifier it is (src/verify.ts, `ProofVerifier`): the one that runs in the Worker. */
+const API_PARTS: ApiParts = { verifier: proofVerifier };
+
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
-    if (isApiPath(new URL(request.url).pathname)) return api(request, env);
+    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS);
     return new Response(null, { status: 404 });
   },
 
