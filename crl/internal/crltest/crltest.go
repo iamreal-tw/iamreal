@@ -52,6 +52,10 @@ type CRL struct {
 	// NoNullTBS and NoNullOuter leave out the NULL parameters of
 	// sha256WithRSAEncryption in tbsCertList and next to the signature.
 	NoNullTBS, NoNullOuter bool
+	// ThisUpdateDER and NextUpdateDER, when not nil, are written as they
+	// are in place of ThisUpdate and NextUpdate: a whole DER element each,
+	// for times spelled in ways AddASN1UTCTime does not spell them.
+	ThisUpdateDER, NextUpdateDER []byte
 }
 
 var (
@@ -128,8 +132,14 @@ func TBS(c *CRL, keyID []byte) []byte {
 				})
 			}
 		})
-		addTime(b, c.ThisUpdate)
-		if !c.NextUpdate.IsZero() {
+		if c.ThisUpdateDER != nil {
+			b.AddBytes(c.ThisUpdateDER)
+		} else {
+			addTime(b, c.ThisUpdate)
+		}
+		if c.NextUpdateDER != nil {
+			b.AddBytes(c.NextUpdateDER)
+		} else if !c.NextUpdate.IsZero() {
 			addTime(b, c.NextUpdate)
 		}
 		if len(c.Entries) > 0 || c.EmptyList {

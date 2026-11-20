@@ -1,35 +1,36 @@
 // The entry point of the test build (test/build.ts): the Worker of
 // src/index.ts, and in front of it the switches the tests need that the
 // deployed Worker must not have: the clock, the environment's settings,
-// doors to the roster's Durable Object, and two doors to code that has no
-// API of its own yet, the proof verifier and the Poseidon2 hash. Never in
-// the deployed build (test/bundle.test.ts).
+// doors to the roster's Durable Object, and two doors to what has no API of
+// its own yet, the proof verifier and what the roster's object knows of
+// the CRL archive. Never in the deployed build (test/bundle.test.ts).
 //
-// The doors to the verifier and the hash call the same ones the deployed
-// Worker has (src/in-worker.ts); nothing of them is replaced here. They are
-// temporary: once the real API verifies a submitted record's proof and the
-// CRL mirror builds its tree (#67, #65), the tests go through those and
-// the doors go.
+// Those two doors call the same verifier and the same method the deployed
+// Worker has (src/in-worker.ts, src/roster.ts); nothing of them is replaced
+// here. They are temporary: once the real API verifies a submitted record's
+// proof and checks its root against the newest CRLs (#67), the tests go
+// through that and the doors go.
 //
 // The doors to the roster's object do what no request can do yet or ever.
 // The object of the test build is the deployed one (src/roster.ts) with
-// seven methods added: run its alarm now; read when the alarm is set for;
+// eight methods added: run its alarm now; read when the alarm is set for;
 // write the state of a card (until submitting a record does, #67); break
 // its tables, to see what the API answers when the back end itself fails;
 // give it a second piece of timed work, and read when that one ran, to see
 // that two pieces share the one alarm without disturbing each other; and
-// change the version its tables say they were made by.
+// change the version its tables say they were made by; and drop the table
+// of the newest CRLs, to see an object made before that table get it.
 //
 // The settings a test replaces (`ROSTER_KIND`, `ROSTER_OBJECT_NAME`) are
 // kept here, in memory, and laid over the environment the Worker and the
 // object are given. wrangler.jsonc is not touched: the deployed settings
 // are the ones the deploy build reads.
-import { bytesOfHex, hexOf } from "iamreal-protocol/bytes.ts";
+import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
 import type { CardState, SlotState } from "iamreal-protocol/roster-rules.ts";
 import { writeCard } from "../src/card-table.ts";
 import worker from "../src/index.ts";
-import { poseidon2Hash, proofVerifier } from "../src/in-worker.ts";
+import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import type { CardToWrite, TestSettings } from "./card-door.ts";
@@ -93,6 +94,11 @@ export class Roster extends DeployedRoster {
     this.ctx.storage.sql.exec("UPDATE roster SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
   }
 
+  /** Drops the table of the newest CRLs: the object is then as one made by a build that did not have it yet. */
+  testDropNewestCrls(): void {
+    this.ctx.storage.sql.exec("DROP TABLE newest_crls");
+  }
+
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
   testBreak(): void {
     this.ctx.storage.sql.exec("DROP TABLE challenges");
@@ -121,10 +127,12 @@ export default {
    * - `PUT /__test/roster/schema-version` with `{to}`, "another" or "the
    *   build's", changes the version the object's tables say they were made by.
    * - `POST /__test/roster/break` drops the tables the API reads.
+   * - `POST /__test/roster/drop-newest-crls` drops the table of the newest
+   *   CRLs, as on an object made before the build had it.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
-   * - `POST /__test/poseidon2` with `{inputs}` (a list of hex) answers
-   *   `{hash}`, or 400 with `{error}` if the hash refuses the inputs.
+   * - `GET /__test/newest-crls` answers what the roster's object knows of
+   *   the CRL archive (src/roster.ts, `newestCrls`).
    *
    * Anything else is the Worker's.
    */
@@ -173,18 +181,15 @@ export default {
       await testRosterOf(env).testBreak();
       return done();
     }
+    if (route === "POST /__test/roster/drop-newest-crls") {
+      await testRosterOf(env).testDropNewestCrls();
+      return done();
+    }
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });
     }
-    if (route === "POST /__test/poseidon2") {
-      const { inputs } = (await request.json()) as { inputs: string[] };
-      try {
-        return json({ hash: hexOf(poseidon2Hash(inputs.map(bytesOfHex))) });
-      } catch (e) {
-        return json({ error: e instanceof Error ? e.name : "Error" }, 400);
-      }
-    }
+    if (route === "GET /__test/newest-crls") return json(await rosterOf(env).newestCrls());
     return worker.fetch(request, env, ctx);
   },
   /** The schedule, with the settings the test replaced. */

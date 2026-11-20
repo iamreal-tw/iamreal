@@ -36,9 +36,13 @@ type CRL struct {
 	Version    int    // 1 or 2
 	Issuer     []byte // the issuer Name, as encoded
 	ThisUpdate time.Time
-	NextUpdate time.Time // zero if absent
-	Entries    []Entry
-	Extensions []Extension
+	NextUpdate time.Time // meaningful only if HasNextUpdate
+	// HasNextUpdate is whether the CRL has a nextUpdate field. NextUpdate
+	// being the zero time does not say: 0001-01-01T00:00:00Z is a time a
+	// CRL can carry.
+	HasNextUpdate bool
+	Entries       []Entry
+	Extensions    []Extension
 }
 
 // Entry is one element of revokedCertificates.
@@ -122,6 +126,7 @@ func Parse(der []byte) (*CRL, error) {
 		if c.NextUpdate, err = readTime(&tbs); err != nil {
 			return nil, fmt.Errorf("crl: nextUpdate: %w", err)
 		}
+		c.HasNextUpdate = true
 	}
 	if tbs.PeekASN1Tag(cbasn1.SEQUENCE) {
 		var revoked cryptobyte.String

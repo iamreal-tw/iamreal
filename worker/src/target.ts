@@ -1,7 +1,7 @@
 // What the Worker trusts that the test build replaces: the issuer keys,
 // where MOICA publishes its CRLs, and the clock; and how long the mirror
-// waits, which the test build shortens. None of the three is a
-// setting (ADR-0028). This file is the deployed build's: the rest of src/
+// waits and how long it catches up, which the test build shortens. None of
+// the three is a setting (ADR-0028). This file is the deployed build's: the rest of src/
 // imports it as `#target` (package.json, "imports"). The test build puts
 // test-build/target.ts in its place (test/build.ts); test/bundle.test.ts
 // checks that the deployed build holds nothing of that one.
@@ -31,6 +31,18 @@ export const CRL_SOURCES: readonly CrlSource[] = Object.freeze([
  * not take minutes.
  */
 export const CRL_TIMEOUT_MS: number = 5 * 60 * 1000;
+
+/**
+ * For how long a round of the mirror goes on starting files that an
+ * earlier round left without a line of the index: 5 minutes. The files
+ * fetched in this round always get theirs. A round may use 15 minutes of
+ * CPU time (https://developers.cloudflare.com/workers/platform/limits/),
+ * and the tree of MOICA's G2 CRL takes about half a minute in the local
+ * workerd; so an archive that lost its whole index gets it back over
+ * several rounds, each of which ends in time, and every line a round wrote
+ * stays. The test build sets its own, so that a test can reach the limit.
+ */
+export const CRL_CATCH_UP_MS: number = 5 * 60 * 1000;
 
 /** The time. */
 export function now(): Date {

@@ -6,6 +6,9 @@
 
 export type IssuerName = "G2" | "G3";
 
+/** Every issuer key's name, in the order of spec/issuers.md. */
+export const ISSUER_NAMES: readonly IssuerName[] = ["G2", "G3"];
+
 export interface IssuerKey {
   readonly name: IssuerName;
   /** The RSA modulus, lowercase hex without a prefix; the exponent is 65537. */

@@ -1,12 +1,14 @@
 // One roster is one Durable Object, the roster's only writer (ADR-0023).
-// So far it issues challenges and answers for the state of a card; nothing
-// writes a record yet, so every card is one without a record.
+// So far it issues challenges, answers for the state of a card, and keeps
+// the newest CRLs the CRL mirror tells it of; nothing writes a record yet,
+// so every card is one without a record.
 //
 // What it keeps, in its SQLite:
 //
 //   challenges   the challenges it issued that have not expired
 //   cards        the roster rules' state of each card (card-table.ts)
 //   roster       one row: what is true of the roster as a whole
+//   newest_crls  the newest CRLs, as the CRL mirror last told them
 //
 // Nothing here is derived for a page: those tables are separate, and can be
 // rebuilt from the records, which the rules' state cannot be thrown away for.
@@ -17,6 +19,8 @@ import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { formatDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type CardState, RULES_VERSION } from "iamreal-protocol/roster-rules.ts";
 import { CARD_TABLE, readCard } from "./card-table.ts";
+import { type NewestCrls, newestOfEach } from "./crl-index.ts";
+import { ISSUER_NAMES } from "./issuers.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
 
 /**
@@ -47,6 +51,13 @@ const EMPTY_FINGERPRINT = "0".repeat(64);
  * roster rules the rows of `cards` were computed by (spec/roster-rules.md,
  * "The version number"); `schema_version` the SCHEMA_VERSION of the build
  * that made the tables.
+ *
+ * newest_crls: for each issuer key, its newest usable CRLs as the CRL mirror
+ * last told them (src/mirror.ts): `place` 0 is the newest. `root` is the
+ * root of the CRL's tree, 64 lowercase hex digits; `crl_number` its
+ * cRLNumber in decimal; `crl_date` its CRL date, `YYYY-MM-DD`. The table
+ * came after the others, with SCHEMA_VERSION unchanged: an object that was
+ * made without it gets it, empty, when it next starts.
  */
 const TABLES: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS challenges (
@@ -65,6 +76,14 @@ const TABLES: readonly string[] = [
      rules_version     INTEGER NOT NULL,
      schema_version    INTEGER NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS newest_crls (
+     issuer     TEXT    NOT NULL,
+     place      INTEGER NOT NULL,
+     root       TEXT    NOT NULL,
+     crl_number TEXT    NOT NULL,
+     crl_date   TEXT    NOT NULL,
+     PRIMARY KEY (issuer, place)
+   ) WITHOUT ROWID`,
 ];
 
 /**
@@ -179,6 +198,42 @@ export class Roster extends DurableObject<Env> {
     const sql = this.ctx.storage.sql;
     const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
     return { card: readCard(sql, platforms, scopeString, scopedId)?.card ?? null, count };
+  }
+
+  /**
+   * Replaces what the object knows of the CRL archive: for each issuer key,
+   * its newest usable CRLs, the newest first. Called by the CRL mirror, each
+   * time with all of what the index in the data bucket lists at that moment
+   * (src/crl-index.ts, `newestCrls`, which is where "newest" and how many
+   * are decided).
+   */
+  setNewestCrls(newest: NewestCrls): void {
+    this.#checkTables();
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM newest_crls");
+      for (const issuer of ISSUER_NAMES) {
+        for (const [place, crl] of newest[issuer].entries()) {
+          this.ctx.storage.sql.exec("INSERT INTO newest_crls (issuer, place, root, crl_number, crl_date) VALUES (?, ?, ?, ?, ?)", issuer, place, crl.root, crl.crlNumber, crl.crlDate);
+        }
+      }
+    });
+  }
+
+  /**
+   * For each issuer key, its two newest usable CRLs as the mirror last told
+   * them, the newest first: fewer than two, or none, if the archive has no
+   * more. A record's `smt_root` is accepted only if it is the root of one
+   * of them, and none is if the first one's date is too old
+   * (spec/revocation-tree.md, "Who checks what").
+   */
+  newestCrls(): NewestCrls {
+    this.#checkTables();
+    return newestOfEach((issuer) =>
+      this.ctx.storage.sql
+        .exec<{ root: string; crl_number: string; crl_date: string }>("SELECT root, crl_number, crl_date FROM newest_crls WHERE issuer = ? ORDER BY place", issuer)
+        .toArray()
+        .map((row) => ({ root: row.root, crlNumber: row.crl_number, crlDate: row.crl_date })),
+    );
   }
 
   /**

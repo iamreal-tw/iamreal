@@ -4,14 +4,14 @@
 
 ## 現在有什麼
 
-還沒做完：過卡前半段的三個介面有了，送出一筆和頁面還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
+還沒做完：清冊鏡像和過卡前半段的三個介面有了，送出一筆和頁面還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
 
 | 有 | 還沒有 |
 |---|---|
-| 每小時的排程：抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl` | 驗清冊的簽章、建樹、清冊存檔的索引 `crl/index.jsonl` |
-| 名冊的 Durable Object：題目表、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)） | 寫入紀錄：還沒有任何東西會寫卡片狀態表，所以每張卡片都是沒過過卡的樣子 |
+| 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | 在 Cloudflare 上跑過的紀錄：這一版還沒部署 |
+| 名冊的 Durable Object：題目表、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | 寫入紀錄：還沒有任何東西會寫卡片狀態表，所以每張卡片都是沒過過卡的樣子 |
 | API 的三個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`GET /api/v1/config` | `POST /api/v1/records`、`GET /api/v1/fingerprint`；限流；存著的規則版本和程式不同時的 `paused` |
-| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過 | 呼叫它們的程式：送出一筆時驗證、清冊鏡像建樹。部署的那一包現在不含它們 |
+| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過 | 呼叫驗證的程式：送出一筆時驗證 |
 | 測試專用的建置和測試的工具 | 任何頁面：`/api/` 以外的每個網址都回 `404` |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
@@ -141,21 +141,22 @@ pnpm typecheck   # 型別檢查
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
 
 - [`src/target.ts`](src/target.ts) 是部署用的那一份：內政部的兩把發證金鑰（[`src/issuers.ts`](src/issuers.ts)，測試拿 `spec/vectors/issuers.json` 核對）、內政部的兩個清冊網址（和 [`crl/README.md`](../crl/README.md) 寫的相同）、真的時鐘。其他程式用 `#target` 這個名字引用它（`package.json` 的 `imports`）。
-- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰（私鑰不留下）、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個讓測試呼叫得到驗證證明、Poseidon2 的入口 `POST /__test/verify`、`POST /__test/poseidon2`（這兩樣還沒有自己的 API）。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `poseidon2Hash`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證之後，測試改走真的介面，`/__test/verify` 拿掉；`/__test/poseidon2` 在清冊鏡像用 Poseidon2 建樹（[#65](https://github.com/iamreal-tw/iamreal/issues/65)）、測試看得到樹根之後拿掉。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上七個只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候、用 `src/card-table.ts` 的 `writeCard` 寫一張卡片的狀態、把題目表和卡片狀態表丟掉（看後台自己出錯時回什麼）、多塞一件假的定時工作、讀那件工作什麼時候跑過、把存著的表的版本改成另一個數字。**寫卡片狀態的入口是暫時的**：#67 之後卡片的狀態由送出一筆寫入，測試改走真的介面。部署的那一包沒有這七個方法，也沒有 `writeCard`（還沒有程式呼叫它）。
+- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個還沒有自己的 API 的入口：`POST /__test/verify` 讓測試呼叫得到驗證證明，`GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `src/roster.ts` 的 `newestCrls`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證和清冊的檢查之後，測試改走真的介面，兩個都拿掉。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上八個只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候、用 `src/card-table.ts` 的 `writeCard` 寫一張卡片的狀態、把題目表和卡片狀態表丟掉（看後台自己出錯時回什麼）、多塞一件假的定時工作、讀那件工作什麼時候跑過、把存著的表的版本改成另一個數字、把最新清冊的那張表丟掉（看沒有這張表的舊物件啟動時補上它）。**寫卡片狀態的入口是暫時的**：#67 之後卡片的狀態由送出一筆寫入，測試改走真的介面。部署的那一包沒有這八個方法，也沒有 `writeCard`（還沒有程式呼叫它）。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例用它測。
+- 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
   - JavaScript 裡的網址只有內政部的兩個
-  - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
+  - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數，加上 Barretenberg 通用參數的那一個點（128 個位元組寫成十六進位，用它的 SHA-256 認，要恰好出現一次）。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
   - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
-  - 不是 JavaScript 的模組，要嘛沒有，要嘛恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
+  - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
-**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。測試專用的那一包裡不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個（`test/bundle.test.ts`）。部署的那一包現在不含驗證的程式，所以那一項檢查允許「沒有」。**#67 把驗證接進部署的那一包時，要把 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 改成「必須恰好是這三個」**。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
+**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，雖然還沒有程式呼叫驗證。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
 
-`target.ts` 還有第四樣：等內政部一份清冊最久等多久。部署的是 5 分鐘，測試專用的建置換成一兩秒，測逾時才不用等幾分鐘。
+`target.ts` 還有兩樣時間，也是測試專用的建置會換的：等內政部一份清冊最久等多久（部署的是 5 分鐘，測試換成一兩秒，測逾時才不用等幾分鐘），和一輪鏡像補之前留下的檔最久補多久（部署的是 5 分鐘，測試可以設成 0 來測這條界線）。
 
 Worker 載入時檢查發證金鑰是一把 2048 位元的 G2 和一把 4096 位元的 G3，不是就不啟動。
 
@@ -213,7 +214,7 @@ WASM 丟出任何例外都算拒絕，並丟掉那個實例，下一筆重新實
 
 ### Poseidon2
 
-[`src/in-worker.ts`](src/in-worker.ts) 的 `poseidon2Hash(inputs: readonly Uint8Array[]): Uint8Array`（型別 `Poseidon2Hash` 在 [`src/poseidon2.ts`](src/poseidon2.ts)）：輸入和輸出都是 32 個位元組、大端序的體元素，同步，用驗證證明的同一個 WASM 實例。清冊鏡像建樹用它，Worker 裡沒有另一份 Poseidon2。不是 32 個位元組或不小於 `p` 的輸入丟 `RangeError`，不問 WASM。Barretenberg 跑不起來、丟例外、或回的不是雜湊時丟 `EngineError`，並丟掉那個實例（跑不起來時沒有實例可丟）；下一次呼叫用新的實例。[`test/poseidon2.test.ts`](test/poseidon2.test.ts) 拿 `spec/vectors/poseidon2.json`（Go 的 `crl/poseidon2` 讀的同一份）的 `hash_2`、`hash_3`、`scoped_id` 每一案核對。
+[`src/in-worker.ts`](src/in-worker.ts) 的 `poseidon2Hash(inputs: readonly Uint8Array[]): Uint8Array`（型別 `Poseidon2Hash` 在 [`src/poseidon2.ts`](src/poseidon2.ts)）：輸入和輸出都是 32 個位元組、大端序的體元素，同步，用驗證證明的同一個 WASM 實例。清冊鏡像建樹用它（[`src/crl-tree.ts`](src/crl-tree.ts)），Worker 裡沒有另一份 Poseidon2。不是 32 個位元組或不小於 `p` 的輸入丟 `RangeError`，不問 WASM。Barretenberg 跑不起來、丟例外、或回的不是雜湊時丟 `EngineError`，並丟掉那個實例（跑不起來時沒有實例可丟）；下一次呼叫用新的實例。[`test/poseidon2.test.ts`](test/poseidon2.test.ts) 拿 `spec/vectors/poseidon2.json`（Go 的 `crl/poseidon2` 讀的同一份）核對：`hash_2`、`hash_3`、`scoped_id` 每一案在 Node 裡直接呼叫這個函式（Worker 沒有只算雜湊的入口）；`revocation_tree` 每一案的樹根在本機的 workerd 裡經過清冊鏡像核對。
 
 ### 和原生的 `bb verify` 逐案比對
 
@@ -246,7 +247,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 - 扣掉往返，驗一筆約 15 ms，實例化約 2 ms。Worker 啟動後的第一筆（第一次實例化加驗證）往返 84 ms。
 - 在 Node 22 裡直接跑載入程式一次：實例化加載入通用參數 10 ms，第一筆驗證 26 ms，第二筆 13 ms；WASM 的記憶體實例化後是 2.5 MiB，驗完兩筆是 2.6 MiB。
-- 打包後的大小（測試專用的建置，`wrangler deploy --dry-run` 印的）：17,949 KiB，gzip 後 4,019 KiB，幾乎都是 WASM。部署的那一包現在是 23 KiB（gzip 後 8.4 KiB，有了題目、卡片現況、設定三個介面之後）：還沒有程式呼叫驗證，打包時整個被略過；送出一筆的介面做好之後會和測試專用的那一包差不多大。
+- 打包後的大小（部署的那一包，`wrangler deploy --dry-run` 印的）：17,999 KiB，gzip 後 4,034 KiB，幾乎都是 WASM。清冊鏡像做好之前，部署的那一包是 23 KiB（gzip 後 8.4 KiB）；**這個大小的一包還沒有上傳到 Cloudflare 過**。
 
 ## 設定檔
 
@@ -268,30 +269,146 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 ## 排程做什麼
 
-每小時一次（[`src/mirror.ts`](src/mirror.ts)）：
+每小時一次，一輪清冊鏡像（[`src/mirror.ts`](src/mirror.ts)），照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。三步：
+
+**一、抓和存。**
 
 1. 同時抓 G2、G3 的清冊，兩份互不等待。每一份從送出請求到收完最多等 5 分鐘：G2 的清冊約 17 MB，每秒 0.5 Mbit 也收得完；排程一次最多能跑 15 分鐘（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)）。
-2. 收到完整的 `200` 時，算內容的 SHA-256。R2 裡已經有 `crl/<SHA-256>.crl` 就不重存；沒有才寫入，`Cache-Control` 是 `public, max-age=31536000, immutable`（檔名就是內容的雜湊，內容不會變）。
+2. 收到完整的 `200` 時，算內容的 SHA-256。R2 裡已經有 `crl/<SHA-256>.crl` 就不重存；沒有才寫入。
 3. 下面的情況算失敗，那一份不存任何檔，另一份照常：
    - 狀態不是 `200`、連不上、超過 5 分鐘
    - 執行環境回報連線中斷
    - 收到的長度和回應的 `Content-Length` 不同
    - 內容是 0 個位元組
-4. 只要有一份失敗，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次。
+   - 內容超過 32 MiB（33,554,432 個位元組）。回應有 `Content-Length` 時看它，不讀內容；沒有時邊讀邊數，超過就停
 
-**存進去的不一定是清冊。** 完整的 `200` 不論內容都存，例如內政部的伺服器回一頁 HTML 的錯誤訊息也會存：規格是可用不可用都存，哪些可用，由之後寫索引的程式驗章決定。
+**二、補索引。** 列出儲存桶裡 `crl/` 底下的清冊檔，讀 `crl/index.jsonl`；有檔案、索引裡沒有行的，一個一個讀出來：
 
-**有一種截斷現在擋不住。** 回應沒有 `Content-Length`（chunked）、連線在最後一塊之前斷掉時，本機的 workerd（1.20261110.1）不回報錯誤，收到的那一段看起來就是完整的回應，會被存起來。這在 HTTP 這一層分不出來，要到驗清冊簽章的那一步才擋得住。回應有 `Content-Length`、連線提早斷掉時，本機的 workerd 既不報錯也不結束，所以是等到逾時才算失敗。這兩件事在 Cloudflare 上是不是一樣，還沒有在部署的環境看過。
+1. 核對內容的 SHA-256 和檔名相同。
+2. 讀清冊、驗章（[`src/crl.ts`](src/crl.ts)）：可不可用、原因代碼和它們的順序，和 Go 的 [`crl/`](../crl) 相同。簽章用兩把發證金鑰各試一次，哪一把驗得過，`issuer` 就是哪一把。
+3. 可用的建樹（[`src/crl-tree.ts`](src/crl-tree.ts)），得到樹根。
+4. 這個檔的行加進索引，整份索引重寫一次。
+5. 把索引現在列著的最新清冊告訴名冊的 Durable Object（第三步）。
 
-寫進資料儲存桶的每個物件都要設 `Cache-Control`：資料網域的快取規則是「有就照它，沒有就不快取」。
+所以：
 
-每一份清冊寫一行紀錄，只在即時的輸出看得到（`wrangler tail` 或儀表板的即時紀錄），沒有開保存：
+- **可用不可用都存、都有一行。** 內政部的伺服器回一頁 HTML 的錯誤訊息，也會存起來，索引裡是 `-not_usable_der`。
+- **索引裡已經有的檔不再讀、不再建樹。** 內政部沒有換清冊的那幾個小時，這一步只列一次儲存桶、讀一次索引，索引不重寫。
+- **寫到一半失敗，下一輪補得回來。** 補的依據是儲存桶裡有什麼，不是這一輪抓到什麼：上一輪存了檔、還沒寫行就結束，這一輪補上那一行，內政部那時已經換了清冊也一樣。索引是一個物件，每次整份換掉，不會有人讀到半份。讀到的索引有寫法不合規格的行、重複的行、對不到檔案的行時，那些行不算數，從檔案重來。
+- **一個檔拿不到行，只是那個檔的事。** 內容和檔名不符、讀不出來、建樹時 Barretenberg 出錯：那個檔記一行 `failed`，其他檔照做，Durable Object 照樣被告知，下一輪再試那個檔。這一次排程最後以例外結束。
+- **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 5 分鐘之後就不再開始新的一份，留給下一輪。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
+- **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
+- **讀一個檔花的時間不超過它大小的線性倍數，除了一處。** 延伸欄位有沒有重複用集合找，不是兩兩比。清冊編號沒有長度上限（和 Go 相同），位元組一次轉成整數；但把整數印成十進位是 JavaScript 引擎做的，比線性慢：見[量到的](#清冊鏡像量到的)。
+- **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
+- **建樹時讓出執行緒。** 樹切成最多 4,096 塊（樹根往下 12 層的子樹），每做完約 256 個鍵就等一次 `setTimeout(0)`，同一個實例裡等著的請求在這時候被處理。
+
+**三、告訴名冊的 Durable Object。** 從索引取每把發證金鑰最新兩份可用的清冊（照清冊編號，和裝置選清冊的方法相同；不可用的不算），把樹根、編號、清冊日期交給名冊的 Durable Object，它整份換掉自己存的（[`src/roster.ts`](src/roster.ts) 的 `setNewestCrls`）。每一輪一開始讀完索引就交一次，不管有沒有新的清冊；之後每寫完一次索引再交一次，所以 G2 的新清冊不用等 G3 的樹建完。
+
+要守住的只有一條：**鏡像交給 Durable Object 的樹根，交的那一刻已經列在儲存桶的索引裡。** 交出去的是從剛寫成功、或剛讀到的那一份索引算的。寫索引時丟例外的話，那次寫入可能其實做了，所以先重讀索引才決定交什麼；重讀也失敗，就在讀到之前都不交（[`test/mirror-invariant.test.ts`](test/mirror-invariant.test.ts) 用一個寫入會出錯的假儲存桶，在每一次交的當下核對）。
+
+這一條講的是每一次交的當下，不是 Durable Object 任何時刻存著的東西：見下面「兩輪同時跑」。
+
+```ts
+interface KnownCrl {
+  root: string;      // 樹根，64 個小寫十六進位數字，和紀錄的 smt_root 同一種寫法
+  crlNumber: string; // 清冊編號，十進位
+  crlDate: string;   // 清冊日期：thisUpdate 的台灣日期，YYYY-MM-DD
+}
+type NewestCrls = { G2: KnownCrl[]; G3: KnownCrl[] }; // 每把最多兩份，最新的在前
+```
+
+Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（樹根是不是這兩份之一、最新那一份是不是太舊）還沒做，在 [#67](https://github.com/iamreal-tw/iamreal/issues/67)。
+
+只要有一份清冊沒抓到、有一個檔沒補上行、索引沒寫成、或沒交給 Durable Object，這一次排程就以例外結束，在 Cloudflare 的紀錄上是失敗的一次；做得到的部分照樣做完。
+
+寫進資料儲存桶的每個物件都設 `Cache-Control`：資料網域的快取規則是「有就照它，沒有就不快取」。
+
+| 物件 | `Cache-Control` | 理由 |
+|---|---|---|
+| `crl/<SHA-256>.crl` | `public, max-age=31536000, immutable` | 檔名就是內容的雜湊，內容不會變 |
+| `crl/index.jsonl` | `public, max-age=60` | 內政部簽發新的清冊就會變 |
+
+**鏡像在一個換得掉的介面後面**（ADR-0023）：`src/mirror.ts` 的 `CrlMirror`，只有一個方法 `round()`，回傳這一輪做了什麼、哪裡出錯，不丟例外。現在的實作 `crlMirrorInWorker` 全部在 Worker 裡做，要的東西（來源、儲存桶、發證金鑰、雜湊、兩個時間、告訴 Durable Object 的函式 `tell`）由 `src/index.ts` 交給它；超過 Workers 的限制時換掉它（例如在 Containers 跑 Go 的 `crl/`），`src/index.ts` 只改建立它的那幾行。
+
+**有一種截斷在抓的時候擋不住。** 回應沒有 `Content-Length`（chunked）、連線在最後一塊之前斷掉時，本機的 workerd（1.20261110.1）不回報錯誤，收到的那一段看起來就是完整的回應，會被存起來。它不是內政部簽的清冊，索引裡是不可用的一行。回應有 `Content-Length`、連線提早斷掉時，本機的 workerd 既不報錯也不結束，所以是等到逾時才算失敗。這兩件事在 Cloudflare 上是不是一樣，還沒有在部署的環境看過。
+
+排程寫的紀錄只在即時的輸出看得到（`wrangler tail` 或儀表板的即時紀錄），沒有開保存。每一份來源一行，每一個補上行的檔一行：
 
 ```
 {"event":"crl_mirror","at":"2026-11-20T08:00:00.123Z","issuer":"G3","result":"stored","sha256":"…"}
+{"event":"crl_index","at":"2026-11-20T08:00:00.123Z","result":"indexed","sha256":"…","issuer":"G3","crl_number":"2026112016","crl_date":"2026-11-20","root":"…","entries":178020,"keys":178020,"hashes":434659,"read_ms":113,"tree_ms":15657}
 ```
 
-`result` 是 `stored`（新的一份）、`already_stored`（已經有）、`failed`（附 `error`）。
+- `crl_mirror` 的 `result` 是 `stored`（新的一份）、`already_stored`（已經有）、`failed`（附 `error`）。
+- `crl_index` 的 `result` 是 `indexed` 或 `failed`（附 `error`）。`entries` 是廢止的筆數，`keys` 是樹裡的鍵數，`hashes` 是建樹算了幾次 Poseidon2；`read_ms` 是從儲存桶讀出來到驗完章，`tree_ms` 是建樹，都是毫秒。
+
+### 和 Go 的 `crl/` 逐案比對
+
+[`test/crl-testdata.test.ts`](test/crl-testdata.test.ts)，在 `pnpm test` 裡。每一份清冊當成假的內政部的回應，經過本機 workerd 裡的整個 Worker，看儲存桶裡的索引。
+
+1. `crl/testdata/` 的 37 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go 的測試讀的同一份）相同。
+2. `crl/testdata/times/` 的 48 份：`thisUpdate`、`nextUpdate` 用各種寫法（沒有秒的 UTCTime、帶時差、西元 0 年以前和 9999 年以後、不存在的日期……；線上那兩份清冊的時間都是 12 位數字加 `Z` 的 UTCTime）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同，Go 的測試讀同一份。這些案例記的是 Go 的 `crl/` 和這裡現在得到相同的結果，不是規格的標準答案。時間接受哪些寫法，規格還沒有定：[#120](https://github.com/iamreal-tw/iamreal/issues/120) 會收窄成 RFC 5280 的寫法，那時這些案例的答案會跟著改。`web/` 現在的讀法比這裡嚴（只收 `Z` 結尾、有秒的寫法），沒有讀這些案例。
+3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 85 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+
+2026-11-20 跑的結果：三項都過，共 89 個檔，索引 89 行，沒有一行不同。
+
+### 清冊鏡像量到的
+
+2026-11-20，Apple Silicon。清冊是測試網站 2026-11-19 鏡像下來的兩份（[第一次部署量到的](#第一次部署量到的)那兩個 SHA-256），從 `test-data.iamreal.tw` 下載，沒有對內政部送請求。**本機的 workerd 不限 CPU 和記憶體，這些數字只說明量級；Cloudflare 上的還沒量。**
+
+本機的 workerd（1.20261110.1），整個 Worker，發證金鑰換成內政部的兩把，假的內政部送出那兩份檔，跑一次排程：
+
+| | G2 | G3 |
+|---|---|---|
+| 大小 | 16,893,934 位元組 | 8,818,913 位元組 |
+| 廢止的筆數、樹裡的鍵數 | 341,055 | 178,020 |
+| 從儲存桶讀出來、算 SHA-256、讀清冊、驗章、排序 | 200 ms | 113 ms |
+| 建樹 | 29.2 秒 | 15.7 秒 |
+| Poseidon2 算了幾次 | 833,443 | 434,659 |
+| 樹根 | `08aca62b…e1f9` | `04c63283…ffdd` |
+
+- 整次排程 45.4 秒，幾乎都是 Poseidon2：每次約 35 µs，包含 msgpack 的編碼和解碼。離每小時一次的排程 15 分鐘的 CPU 時間上限約 20 倍。
+- 兩個樹根和 Go 的 `iamreal-crl check` 對同一份檔案算的相同。
+- 接著再跑一次排程（兩份都已經在索引裡）：48 ms。
+- 建樹的時候每 100 ms 對同一個 Worker 送一個請求，共 314 個：往返的中位數 41 ms，第 95 百分位 64 ms，最久 339 ms。沒有鏡像在跑時是 2.6 ms。
+- 在 Node 22 裡直接跑同一段程式，Poseidon2 每次約 30 µs，G2 建樹 25.7 秒、G3 13.5 秒。
+- 審查後的修正（條件式寫入、每寫一次索引就告訴 Durable Object 一次）之後再跑一次：整次排程 42.5 秒，G2 建樹 27.5 秒、G3 14.4 秒，樹根相同；建樹時的請求往返中位數 38 ms。
+
+記憶體，在 Node 22 裡量（workerd 裡量不到）。G2 那一份，和一份 Go 的 `crl/internal/crltest/makecrl` 做的同樣大小的自製清冊（16,937,158 位元組，342,152 筆），結果相同：
+
+| | JavaScript 的記憶體（`heapUsed`） | `ArrayBuffer` |
+|---|---|---|
+| 讀完清冊（放掉檔案之前），沒有強制回收時看到的高點 | 25 MB | 30.5 MB：檔案 16.9 MB，加鍵的兩份陣列（排序前、排序後）各 6.5 MB |
+| 讀完、檔案放掉、回收之後 | 8.6 MB | 6.5 MB：排序後的鍵 |
+| 建完樹、回收之後 | 6 到 10 MB | 6.6 MB |
+
+- 排序當下多一個 1.4 MB 的陣列，沒有取樣到，所以 `ArrayBuffer` 的高點約 32 MB。
+- 自製的那一份在 JavaScript 的記憶體限制 24 MB（`--max-old-space-size=24`）下跑得完，樹根和 Go 算的相同。
+- WASM 的線性記憶體另計，上限 16 MiB，建樹用到 2.5 MiB 上下（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）。
+- 抓和存的那一步，兩份清冊同時在記憶體裡，約 26 MB；補索引時一次只讀一份。兩份都剛好是上限 32 MiB 時，這一步是 64 MiB；沒有 `Content-Length` 的回應在接起來的那一刻多佔一倍。
+
+**故意做來拖時間的檔**，在 Node 22 裡量讀一個檔（`readCrl`）的時間。這種檔不需要簽章就會被存下來：內政部的網址是 `http://`，路上的人可以換掉回應。
+
+| 檔案 | 讀一次 | Go 的 `iamreal-crl check` |
+|---|---|---|
+| 清冊編號是 400,000 個位元組的整數 | 0.2 秒（修正前 26.3 秒） | 0.14 秒 |
+| 清冊編號是 4,000,000 個位元組的整數 | 2.9 秒 | 5.0 秒 |
+| 清冊編號是 16,000,000 個位元組的整數 | 14.9 秒 | 44.4 秒 |
+| 30,000 個不同的延伸欄位（390 KB） | 12 ms（修正前 27.2 秒） | 沒量 |
+
+- 清冊編號的時間幾乎都花在把整數印成十進位，這一步是一次同步的呼叫，中間不讓出執行緒；Go 也是這裡慢。
+- **記憶體才是問題。** 第二輪審查 2026-11-20 在 Node 裡量讀這種檔時記憶體的高點多出多少：清冊編號 1 MB 時多 97 MiB，4 MB 時多 339 MiB，32 MiB（下載上限之內最大的）時多 2.7 GiB；280 萬個延伸欄位的檔多 623 MiB。把 JavaScript 的記憶體限在 100 MB，這兩種檔都讓程序當掉。這些數字不是這裡量的，也不是在 workerd 裡量的。
+- **在 Cloudflare 上會怎樣沒有量過。** 每個實例的記憶體上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)），照上面的數字，讀這種檔比較可能的結果是實例被終止，不是多等幾十秒。
+- **這種檔會讓每一輪都停在它。** 它存進了儲存桶、沒有行，之後每一輪都會再讀它；讀它的那一輪如果被終止，排在它後面的檔和那一輪之後的事都做不到。下載上限 32 MiB 擋不住：上面最小的例子是 1 MB。
+- 讀得完的時候，索引的那一行帶著整個十進位的編號：4 MB 的整數是 960 萬個數字的一行。清冊檔和它的行都不刪（ADR-0027），所以這一行會一直留在每台裝置過卡時都要下載的索引裡。
+- 清冊編號和清冊層級延伸欄位的上限由 [#120](https://github.com/iamreal-tw/iamreal/issues/120) 在規格裡定，這一版沒有做。
+
+**部署之後要看的**，還沒有答案：
+
+- Cloudflare 上一次排程真的 CPU 時間（`wrangler tail` 的 `crl_index` 那幾行有每一份的 `tree_ms`）
+- 18 MB（gzip 後 4 MB）的一包上傳得上去、啟動得了
+- 編好的 WASM 機器碼算不算進每個實例 128 MB 的記憶體上限。Cloudflare 的文件寫的是「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)，2026-11-20 讀的），沒有講機器碼
+- 第一次排程要補的檔：儲存桶裡從 2026-11-19 起每小時鏡像下來的清冊都還沒有行，有幾份沒有查過。一輪補不完時分幾輪補，補齊之前索引只列一部分
 
 ### 內政部看得到什麼
 
@@ -312,7 +429,13 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | 縮短等內政部的上限 | `startWorker({ crlTimeoutMs: 1500 })`，預設 2 秒 |
 | Worker 寫的紀錄 | `worker.logLines()` |
 | 驗一份證明 | `worker.verify(電路名稱, 證明, 公開輸入)`，回 `true` 或 `false` |
-| 算 Poseidon2 | `worker.poseidon2([十六進位的體元素, …])`，回十六進位的雜湊 |
+| 做一份測試金鑰簽的清冊 | [`test/crls.ts`](test/crls.ts) 的 `makeCrl({ issuer, number, thisUpdate, serials })`，交給 `worker.moica.serve` |
+| 名冊的 Durable Object 知道的最新清冊 | `worker.newestCrls()` |
+| 把儲存桶弄成上一輪做到一半的樣子 | `worker.putFile(檔名, 內容)`、`worker.deleteFile(檔名)` |
+| 假的內政部不帶 `Content-Length` | `worker.moica.serve("G2", 位元組, "chunked")` |
+| 改一輪補舊檔的界線 | `startWorker({ crlCatchUpMs: 0 })`，預設是部署的 5 分鐘 |
+| 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
+| 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
 | 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
 | 跑 Durable Object 的 alarm、看它設在多久之後 | `worker.roster.runAlarm()`、`worker.roster.alarmInMs()` |
 | 寫一張卡片的狀態 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。暫時的，到 #67 為止 |
@@ -331,7 +454,7 @@ Workers 執行環境的型別（`R2Bucket`、`DurableObject`……）和 `Env` �
 型別檢查分兩份設定，因為兩邊的全域型別不同：
 
 - `tsconfig.json`：在 Worker 裡執行的程式（`src/`、`test-build/`），用上面產生的型別，沒有 Node 也沒有 DOM 的型別
-- `test/tsconfig.json`：在 Node 裡執行的測試和指令（`test/`、`scripts/`）
+- `test/tsconfig.json`：在 Node 裡執行的測試和指令（`test/`、`scripts/`）。它另外帶 DOM 的型別：測試在 Node 裡直接載入 WASM 檔（`test/poseidon2.test.ts`），`WebAssembly` 的型別在那裡
 
 ## 部署測試環境
 
@@ -446,7 +569,7 @@ pnpm run deploy:test
 - `typescript`、`@types/node`：型別檢查，版本和 `protocol/`、`web/` 相同
 - `@aztec-foundation/bb.js` 6.0.0：只在建置時讀它裡面的 WASM 檔（[驗證證明](#wasm-檔和驗證金鑰從哪裡來)），它的程式不進 Worker。`web/` 用的是同一版，lockfile 裡本來就有
 
-部署出去的程式現在還沒有任何外部套件：驗證證明的程式要到有程式呼叫它才會被打包進去，那時多的是 `msgpackr` 和 WASM 檔。
+部署出去的程式裡的外部套件就是 `msgpackr`，另外帶 WASM 檔和兩把驗證金鑰：清冊鏡像用 Poseidon2 建樹，它們跟著進了部署的那一包。
 
 沒有任何套件的安裝腳本會執行。有安裝腳本的三個套件列在根目錄 `pnpm-workspace.yaml` 的 `ignoredBuiltDependencies`：`workerd` 和 `esbuild` 的執行檔是各自平台的套件直接帶的，安裝腳本沒跑也能用；`msgpackr-extract` 是 `web/` 那邊的。
 
@@ -460,12 +583,15 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/index.ts` | 進入點：HTTP（`/api/` 交給 `src/api.ts`，其他回 `404`）和排程 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、三個介面、後台自己出錯時的那一行 |
 | `src/json.ts` | 讀請求的 JSON，鍵重複就拒絕 |
-| `src/mirror.ts` | 清冊鏡像 |
-| `src/roster.ts` | 名冊的 Durable Object：建表、發題目、讀卡片現況、刪過期的題目 |
+| `src/mirror.ts` | 清冊鏡像：介面 `CrlMirror` 和在 Worker 裡做的那一個 |
+| `src/crl.ts`、`src/crl-time.ts` | 讀一份清冊：可不可用、原因代碼、索引那一行的欄位、樹的鍵 |
+| `src/crl-tree.ts` | 從鍵算樹根 |
+| `src/crl-index.ts` | 索引的寫法和順序、最新兩份可用的清冊 |
+| `src/roster.ts` | 名冊的 Durable Object：建表、發題目、讀卡片現況、刪過期的題目、存鏡像交給它的最新清冊 |
 | `src/card-table.ts` | 卡片狀態表：建表的程式，讀（連同檢查）和寫一張卡片的狀態 |
 | `src/slot-json.ts` | 一個名額寫成 JSON 的那一種寫法：`card-state` 的回應和卡片狀態表共用 |
 | `src/settings.ts` | 環境的設定：這個環境用哪一份名冊、它的平台表 |
-| `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限 |
+| `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限、補舊檔的界線 |
 | `src/in-worker.ts` | 在 Worker 裡用的 `proofVerifier` 和 `poseidon2Hash`：把下面幾個檔和 WASM 檔、驗證金鑰接起來，只有它引用 `generated/` |
 | `src/verify.ts` | 驗證證明的介面 `ProofVerifier`、呼叫 Barretenberg 之前的檢查 |
 | `src/poseidon2.ts` | Poseidon2 的雜湊 |
@@ -474,6 +600,10 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
 | `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
+| `test/crls.ts` | 測試的發證金鑰、用它們簽的清冊 |
+| `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
+| `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
+| `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔、兩輪同時寫索引 |
 | `test/api.test.ts` | 三個介面和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
