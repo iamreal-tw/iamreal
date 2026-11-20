@@ -15,7 +15,7 @@ import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
 import type { CardState } from "iamreal-protocol/roster-rules.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
-import { type Answer, type Submission, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
+import { type Answer, type Submission, TEST_SCOPE, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -178,6 +178,33 @@ describe("a write that fails in the middle", () => {
       await wantError(worker, s, 400, "challenge_used");
     });
   }
+});
+
+describe("a failure after the roster rules accepted the record", () => {
+  test("counting the cards of the account fails on another card's broken row: 500, and the record is not written without its answer", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    const broken = newCard();
+    await mustSubmit(worker, await sub(worker, broken, root, "threads:alice"), "threads first");
+    const card = newCard();
+    const s = await sub(worker, card, root, "threads:alice");
+    // The answer of a `201` counts the cards that declare the account, which reads the row of every card of the scope.
+    await worker.roster.breakCard(broken);
+    const logged = worker.logLines().length;
+    const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(s) });
+    assert.equal(res.status, 500);
+    assert.deepEqual(JSON.parse(await res.text()), { error: "internal" });
+    assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "roster", error: "Error" }]);
+    assert.equal((await checkRoster(worker)).length, 1);
+    assert.equal((await cardState(worker, card)).last_card_proof, null);
+
+    // With the row as the rules left it, the same submission is written: its challenge was not marked.
+    await worker.roster.writeCard({ scope_string: TEST_SCOPE, scoped_id: broken, seq: 1, last_card_proof: "2026-11-20", proofs_on_last_date: 1, platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } } });
+    const answer = await submit(worker, s);
+    assert.equal(answer.status, 201, JSON.stringify(answer.body));
+    assert.deepEqual([answer.body.seq, answer.body.kinds], [2, [{ platform: "threads", kind: "first", username: "alice", account_cards: 2 }]]);
+    assert.equal((await checkRoster(worker)).length, 2);
+  });
 });
 
 describe("a stored state computed by another version of the roster rules", () => {

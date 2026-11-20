@@ -20,7 +20,7 @@ import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { readStrings } from "./json.ts";
 import { recordVerifies } from "./record-proof.ts";
-import { CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, rosterOf } from "./roster.ts";
+import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, rosterOf } from "./roster.ts";
 import { rosterSettingsOf } from "./settings.ts";
 import { type SlotJson, slotToJson } from "./slot-json.ts";
 import { readSubmission } from "./submission.ts";
@@ -42,8 +42,11 @@ const MALFORMED = fail(400, "malformed");
 
 /**
  * The status of each code the roster's object refuses a challenge or a
- * record with (docs/api/card-proof.md): `503` when the back end takes no
- * card proof at all for now, `403` for its own policy, `400` otherwise.
+ * record with (docs/api/card-proof.md). `503` when nothing is wrong with
+ * the request and the back end cannot take it for now: `paused`, no card
+ * proof at all; `crl_stale`, none of the record's issuer key, whose newest
+ * CRL is too old, while the other issuer key's are taken as ever. `403`
+ * for the back end's own policy, `400` otherwise.
  */
 const REFUSAL_STATUS: Readonly<Record<SubmissionRefusal | RecordRefusal, number>> = {
   paused: 503,
@@ -175,12 +178,10 @@ async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<
   }
   if (!verifies) return fail(400, "proof");
 
-  const answer = await askRoster(() => roster.accept(fields));
-  if (answer.accepted === null) {
-    if (answer.refused === null) throw new Internal("roster", new Error("neither a record nor a refusal"));
-    return refuse(answer.refused);
-  }
-  const { seq, recordHash, kinds } = answer.accepted;
+  // The type is named: left to itself it is inferred from the first member of the union alone.
+  const answer = await askRoster<AcceptAnswer>(() => roster.accept(fields));
+  if (answer.outcome === "refused") return refuse(answer.code);
+  const { seq, recordHash, kinds } = answer.record;
   return {
     status: 201,
     body: { seq, record_hash: recordHash, kinds: kinds.map((k) => ({ platform: k.platform, kind: k.kind, username: k.username, account_cards: k.accountCards })) },

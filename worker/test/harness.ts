@@ -250,6 +250,13 @@ export interface TestWorker {
      * build can leave, a broken one or one from before a platform was added.
      */
     writeCard(card: CardToWrite): Promise<void>;
+    /**
+     * Makes the stored slots of one card of the test roster text that is
+     * not JSON (test build, `POST /__test/roster/break-card`): what reads
+     * that row then fails, `card-state` for the card and whatever looks at
+     * every card of its scope.
+     */
+    breakCard(scopedId: string): Promise<void>;
     /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/roster/break`). */
     breakTables(): Promise<void>;
     /**
@@ -477,6 +484,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/hash-delay");
         if (res.status !== 200) throw new Error(`reading the number of hashes: HTTP ${res.status}`);
         return ((await res.json()) as { hashes: number }).hashes;
+      },
+      async breakCard(scopedId) {
+        const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId }) });
+        if (res.status !== 204) throw new Error(`breaking a card's row: HTTP ${res.status}`);
       },
       async breakTables() {
         const res = await server.fetch("/__test/roster/break", { method: "POST" });

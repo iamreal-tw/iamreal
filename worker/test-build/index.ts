@@ -26,7 +26,7 @@
 //   test gets the challenge a proof was made for; change the versions its
 //   tables say they were made by and computed by; write a row of the card
 //   state table as it is given, for the states the rules cannot leave;
-//   break its tables, or make every write to one of them fail, to see what
+//   break its tables, or one card's row, or make every write to one of them fail, to see what
 //   the API answers when the back end itself fails; drop the table of the
 //   newest CRLs; and run the roster rules on the object's stored state for
 //   an event the API would never write (an invalid record of a roster);
@@ -180,6 +180,12 @@ export class Roster extends DeployedRoster {
     this.ctx.storage.sql.exec("DROP TABLE newest_crls");
   }
 
+  /** Makes the stored slots of one card text that is not JSON: reading that row fails from now on. Throws if the card has no row. */
+  testBreakCard(scopeString: string, scopedId: string): void {
+    const { rowsWritten } = this.ctx.storage.sql.exec("UPDATE cards SET slots = 'not JSON' WHERE scope_string = ? AND scoped_id = ?", scopeString, scopedId);
+    if (rowsWritten !== 1) throw new Error("the card has no row");
+  }
+
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
   testBreak(): void {
     this.ctx.storage.sql.exec("DROP TABLE challenges");
@@ -272,6 +278,8 @@ export default {
    *   build's", change the version the object's tables say they were made
    *   by, and the version of the rules its state says it was computed by.
    * - `POST /__test/roster/break` drops the tables the API reads.
+   * - `POST /__test/roster/break-card` with `{scope_string, scoped_id}`
+   *   makes the stored slots of that card text that is not JSON.
    * - `PUT /__test/roster/fail-writes` with `{what}`, a table, or
    *   `challenges.accepted`, or null: every write to it fails from now on,
    *   or none does.
@@ -353,6 +361,11 @@ export default {
     }
     if (route === "POST /__test/roster/break") {
       await testRosterOf(env).testBreak();
+      return done();
+    }
+    if (route === "POST /__test/roster/break-card") {
+      const { scope_string, scoped_id } = (await request.json()) as { scope_string: string; scoped_id: string };
+      await testRosterOf(env).testBreakCard(scope_string, scoped_id);
       return done();
     }
     if (route === "PUT /__test/roster/fail-writes") {

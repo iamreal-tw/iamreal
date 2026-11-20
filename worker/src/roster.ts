@@ -169,13 +169,13 @@ export interface Accepted {
   readonly kinds: readonly AcceptedKind[];
 }
 
-/** What `accept` answers: the record that was written, or why none was. Exactly one of the two is not null. */
-export interface AcceptAnswer {
-  readonly accepted: Accepted | null;
-  readonly refused: RecordRefusal | null;
-}
+/** What `accept` answers: the record that was written, or why none was. */
+export type AcceptAnswer = { readonly outcome: "written"; readonly record: Accepted } | { readonly outcome: "refused"; readonly code: RecordRefusal };
 
-const refused = (code: RecordRefusal): AcceptAnswer => ({ accepted: null, refused: code });
+const refused = (code: RecordRefusal): AcceptAnswer => ({ outcome: "refused", code });
+
+/** What one try of `accept` at a count gives: an answer, or that the count is no longer the one the record's `seq` was taken from. */
+type AcceptTry = AcceptAnswer | { readonly outcome: "the count moved" };
 
 /** What `card-state` is answered from. */
 export interface CardStateAnswer {
@@ -208,6 +208,14 @@ const MIN_ALARM_WAIT_MS = 1000;
  * here: settings.ts.)
  */
 export class Roster extends DurableObject<Env> {
+  /**
+   * The settings the object started with. This and the other `protected`
+   * members below (`challengeRandom`, `hashOf`, `ruleState`,
+   * `keepRuleState`, `timedWork`, `setAlarmForTimedWork`) are `protected`
+   * and not private for one reader: the object of the test build
+   * (test-build/index.ts), the only class that extends this one. Nothing
+   * else overrides or calls them from outside this file.
+   */
   protected readonly settings: RosterSettings;
   /** Whether the object's tables were made by this build's SCHEMA_VERSION. */
   readonly #tablesAreThisVersion: boolean;
@@ -265,7 +273,7 @@ export class Roster extends DurableObject<Env> {
     return { challenge };
   }
 
-  /** The 16 random bytes of a new challenge. */
+  /** The 16 random bytes of a new challenge. `protected` so that the test build can choose them (test-build/index.ts overrides it); nothing else does. */
   protected challengeRandom(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(16));
   }
@@ -318,7 +326,7 @@ export class Roster extends DurableObject<Env> {
       const record: RosterRecord = { ...fields, seq: count + 1 };
       const hash = await this.hashOf(record);
       const answer = this.#acceptAt(record, hash, await nextFingerprint(fingerprint, hash));
-      if (answer !== "the count moved") return answer;
+      if (answer.outcome !== "the count moved") return answer;
     }
   }
 
@@ -341,10 +349,14 @@ export class Roster extends DurableObject<Env> {
    * The checks and the write of `accept`, for a record whose `seq`, hash and
    * roster fingerprint were computed at a count of `record.seq − 1`. Nothing
    * here waits, so no other request runs in between.
+   *
+   * Everything that can fail once the rules accepted the record is inside
+   * the transaction, the answer included: a record is never written
+   * without its answer, and nothing after the transaction can fail.
    */
-  #acceptAt(record: RosterRecord, hash: string, fingerprint: string): AcceptAnswer | "the count moved" {
+  #acceptAt(record: RosterRecord, hash: string, fingerprint: string): AcceptTry {
     const sql = this.ctx.storage.sql;
-    if (this.#rosterRow().count !== record.seq - 1) return "the count moved";
+    if (this.#rosterRow().count !== record.seq - 1) return { outcome: "the count moved" };
     const { kind, platforms } = this.settings;
     const date = parseChallenge(record.challenge);
     if (date === null || (record.issuer !== "G2" && record.issuer !== "G3")) throw new Error("the record's fields are not in their formats");
@@ -378,26 +390,24 @@ export class Roster extends DurableObject<Env> {
     const line = recordLine(record);
     if (readRecordLine(kind, line) === null) throw new Error("the record's line is not a well-formed line of the roster");
 
-    // One transaction: the record with its `seq`, the card's state, the roster's row, the challenge.
-    this.ctx.storage.transactionSync(() => {
+    // The account of each kind: the one the list has for the platform, or for `withdraw` the one the slot had.
+    const accounts = kinds.map(({ platform, kind: what }) => {
+      const username = (what === "withdraw" ? before.slots.get(platform)?.current : record.accounts.find((a) => a.platform === platform)?.username) ?? null;
+      if (username === null) throw new Error("a kind without an account");
+      return { platform, kind: what, username };
+    });
+
+    // One transaction: the record with its `seq`, the card's state, the roster's row, the challenge. The answer counts
+    // the cards of each account in the state the record leaves, so it is made in the transaction too: if the count
+    // fails, the record is not written.
+    const written = this.ctx.storage.transactionSync((): Accepted => {
       sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
       this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
       sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
+      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.#accountCards(record.scopeString, a.platform, a.username) })) };
     });
-
-    return {
-      refused: null,
-      accepted: {
-        seq: record.seq,
-        recordHash: hash,
-        kinds: kinds.map(({ platform, kind: what }) => {
-          const username = (what === "withdraw" ? before.slots.get(platform)?.current : record.accounts.find((a) => a.platform === platform)?.username) ?? null;
-          if (username === null) throw new Error("a kind without an account");
-          return { platform, kind: what, username, accountCards: this.#accountCards(record.scopeString, platform, username) };
-        }),
-      },
-    };
+    return { outcome: "written", record: written };
   }
 
   /**
@@ -405,6 +415,11 @@ export class Roster extends DurableObject<Env> {
    * (protocol/, applyRecord): the state of the record's card, the empty
    * state for a card without a valid record, and the latest date among the
    * valid records.
+   *
+   * `protected`, like `keepRuleState`, so that the test build runs the
+   * roster rules on the stored state through the same reading and writing
+   * (test-build/index.ts, `testApplyRuleEvent`, which calls both). Neither
+   * is overridden.
    */
   protected ruleState(scopeString: string, scopedId: string): { card: CardState; latestValidDate: Day | null } {
     const { platforms } = this.settings;
