@@ -44,6 +44,8 @@ on:
 permissions:
   contents: read
 
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
 cache-mode: none
 
 # Not the group of checks.yml: "concurrency group names must be unique across workflows to avoid

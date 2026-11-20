@@ -16,6 +16,9 @@
 // these files, which CONTRIBUTING.md requires. It does not see:
 // - what the commands of checks.yml run: they run the repository's code,
 //   by design, with no secret and a token that can only read;
+// - what the commands of cache.yml leave in the caches it saves: they run
+//   the code of main (device-core/'s build), and every later check that
+//   restores a cache builds on what that run left in it;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
@@ -334,26 +337,48 @@ const CACHE_ACTION = { read: "actions/cache/restore", write: "actions/cache" } a
 /**
  * The files whose hash is in the keys of device-core's caches: what decides
  * which packages cargo builds, with which features and settings, with which
- * Rust, and which Barretenberg they link. A key is one cache, restored for
- * exactly these files or not at all: no `restore-keys`, so a run never gets
- * a target/ built for another Cargo.lock or another Rust.
+ * Rust, and which Barretenberg they link; and cache.yml itself, which holds
+ * the commands that fill the caches, so that a change to them (a flag, a
+ * feature) is a new key. A cache is never saved twice under one key ("You
+ * cannot change the contents of an existing cache",
+ * https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching),
+ * so whatever changes what should be in it must change the key. A key is one
+ * cache, restored for exactly these files or not at all: no `restore-keys`,
+ * so a run never gets a target/ built for another Cargo.lock or another Rust.
  */
 const DEVICE_CORE_HASH =
-  "${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}";
+  "${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}";
 const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
 /**
  * The caches, exactly: what a step that restores or saves one is given. One
  * path each, because the reader of YAML here reads no value of several lines.
- * cargo's registry holds the packages of Cargo.lock as downloaded (cargo
- * checks each against the checksum in Cargo.lock when it unpacks it);
- * device-core/target holds what was compiled.
+ * cargo's registry holds the packages of Cargo.lock, as downloaded and
+ * unpacked; device-core/target holds what was compiled. Neither is checked
+ * again after it is restored: cargo checks a package against the checksum
+ * in Cargo.lock when it downloads it, not one already in the registry. What
+ * a restored cache holds is what the run of cache.yml on main left there.
  */
-export const DEVICE_CORE_CACHES: readonly YamlMap[] = [
-  { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
-  { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
+type Cache = { readonly path: string; readonly key: string };
+export const DEVICE_CORE_CACHES = {
+  registry: { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
+  target: { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
+} as const satisfies Record<string, Cache>;
+const cacheSteps = (use: "read" | "write", caches: Readonly<Record<string, Cache>>): YamlMap[] => Object.values(caches).map((c) => ({ uses: uses(CACHE_ACTION[use]), with: { ...c } }));
+/** The caches each job of checks.yml may restore: its own. */
+const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES };
+
+/**
+ * The steps the device-core job of checks.yml and the job of cache.yml that
+ * fills its caches share, written once: cargo reuses what is in target/ only
+ * for the same commands with the same flags, so a change to one job that
+ * leaves the other alone would leave a cache nobody uses.
+ */
+const DEVICE_CORE_SETUP: readonly YamlMap[] = [
+  { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+  { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
 ];
-export const CACHES: readonly YamlMap[] = [...DEVICE_CORE_CACHES];
-const cacheSteps = (use: "read" | "write", caches: readonly YamlMap[]): YamlMap[] => caches.map((c) => ({ uses: uses(CACHE_ACTION[use]), with: c }));
+const DEVICE_CORE_CLIPPY: YamlMap = { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` };
+const DEVICE_CORE_TEST = `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release`;
 
 /**
  * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
@@ -366,12 +391,11 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
   steps: [
     step("actions/checkout"),
     ...cacheSteps("read", DEVICE_CORE_CACHES),
-    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
-    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    ...DEVICE_CORE_SETUP,
     { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
-    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    DEVICE_CORE_CLIPPY,
     { name: "Fetch the common reference string", "working-directory": "device-core", run: "./fetch-crs.sh" },
-    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release` },
+    { name: "cargo test", "working-directory": "device-core", run: DEVICE_CORE_TEST },
   ],
 };
 
@@ -467,7 +491,8 @@ export const CACHE_ON: Yaml = { push: { branches: ["main"] } };
 export const CACHE_GROUP = "cache";
 /**
  * The jobs of cache.yml, exactly. Each compiles what its job of checks.yml
- * compiles, with the same commands in the same directory, so that the
+ * compiles, with the same commands in the same directory (the same
+ * constants, above), so that the
  * target/ it saves is the one that job's cargo looks in: clippy's check of
  * every target and the tests, with --release. The tests are built and not
  * run (`--no-run`): running them leaves nothing in target/ that a later
@@ -481,10 +506,9 @@ export const CACHE_JOBS: YamlMap = {
     steps: [
       step("actions/checkout"),
       ...cacheSteps("write", DEVICE_CORE_CACHES),
-      { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
-      { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
-      { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
-      { name: "cargo test, built and not run", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release --no-run` },
+      ...DEVICE_CORE_SETUP,
+      DEVICE_CORE_CLIPPY,
+      { name: "cargo test, built and not run", "working-directory": "device-core", run: `${DEVICE_CORE_TEST} --no-run` },
     ],
   },
 };
@@ -726,7 +750,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
-          else if (action in WITH ? !same(s.with, WITH[action]) : !CACHES.some((c) => same(s.with, c))) sp(`${action} is not given exactly ${JSON.stringify(WITH[action] ?? CACHES)}`);
+          else if (action in WITH) {
+            if (!same(s.with, WITH[action])) sp(`${action} is not given exactly ${JSON.stringify(WITH[action])}`);
+          } else {
+            // A cache action: only in a job that has caches, and given exactly one of them.
+            const caches = Object.values(CACHES_OF_JOB[name] ?? {});
+            if (caches.length === 0) sp("restores a cache that is not this job's");
+            else if (!caches.some((c) => same(s.with, c))) sp(`${action} is not given exactly one of ${JSON.stringify(caches)}`);
+          }
         } else if (s.with !== undefined) sp("with but no uses");
         if (s.run !== undefined) {
           if (typeof s.run !== "string") sp("run is not one line");

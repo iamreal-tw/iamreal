@@ -18,8 +18,9 @@ import {
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
-  CACHES,
+  ACTIONS,
   CHECK_BB,
+  DEVICE_CORE_CACHES,
   CHECKS_GROUP,
   CHECKS_ON,
   GRADLE_BUILD,
@@ -246,33 +247,33 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 // the other workflows use none. Each change here must be turned away for the reason given, not
 // only because a job is no longer the one written in test/workflows.ts.
 const K = "cache.yml";
-const CACHE_ACTION_SHA = "55cc8345863c7cc4c66a329aec7e433d2d1c52a9";
-const cacheStep = (action: string, n: number): string => {
-  const c = CACHES[n] as Record<string, string>;
-  return `      - uses: ${action}@${CACHE_ACTION_SHA} # v6.1.0\n        with:\n          path: ${c.path}\n          key: ${c.key}\n`;
+const { registry: REGISTRY, target: TARGET } = DEVICE_CORE_CACHES;
+const cacheStep = (action: string, cache: { readonly path: string; readonly key: string }): string => {
+  const { sha, version } = ACTIONS["actions/cache"]!;
+  return `      - uses: ${action}@${sha} # ${version}\n        with:\n          path: ${cache.path}\n          key: ${cache.key}\n`;
 };
 const GO_BUILD = "      - run: go build ./...\n";
 const AFTER_CHECKOUT = "          persist-credentials: false\n";
 const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
 const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
   "150 a job of checks.yml with the action that also saves": {
-    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache", 0)}${GO_BUILD}`)],
+    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache", REGISTRY)}${GO_BUILD}`)],
     problem: /^checks\.yml: line \d+: uses actions\/cache, which saves a cache: this workflow may only restore one/,
   },
   "151 a job of checks.yml with the action that only saves": {
-    changes: [replace(C, GO_BUILD, `${GO_BUILD}${cacheStep("actions/cache/save", 0)}`)],
+    changes: [replace(C, GO_BUILD, `${GO_BUILD}${cacheStep("actions/cache/save", REGISTRY)}`)],
     problem: /^checks\.yml: line \d+: uses actions\/cache\/save, which saves a cache: this workflow may only restore one/,
   },
   "152 deploy-test.yml restoring a cache, so that what is deployed depends on it": {
-    changes: [replace(D, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", 0)}`)],
+    changes: [replace(D, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", REGISTRY)}`)],
     problem: /^deploy-test\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
   },
   "153 checks-browser.yml restoring a cache": {
-    changes: [replace(B, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", 0)}`)],
+    changes: [replace(B, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", REGISTRY)}`)],
     problem: /^checks-browser\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
   },
   "154 checks-ios.yml with the action that also saves": {
-    changes: [replace(I, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache", 1)}`)],
+    changes: [replace(I, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache", TARGET)}`)],
     problem: /^checks-ios\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
   },
   "155 cache.yml also on pull_request, where a pull request's code would run before the save": {
@@ -320,12 +321,16 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
   },
   "166 a cache of checks.yml with a key that leaves out the files": {
-    changes: [replace(C, `          key: ${(CACHES[1] as Record<string, string>).key}\n`, "          key: device-core-target\n")],
+    changes: [replace(C, `          key: ${TARGET.key}\n`, "          key: device-core-target\n")],
     problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
   },
   "167 a restored cache that fails the check when there is none": {
     changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          fail-on-cache-miss: true\n")],
     problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "169 a job of checks.yml other than device-core restoring device-core's cache": {
+    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache/restore", TARGET)}${GO_BUILD}`)],
+    problem: /^checks\.yml: job go: step \d+: restores a cache that is not this job's/,
   },
   // cache-mode: what the cache service lets a job do, whatever its steps are.
   "170 checks.yml with no cache-mode, so with whatever the trigger's default is": {
@@ -369,7 +374,7 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     problem: /^other\.yml: cache-mode is not none/,
   },
   "168 a new workflow that saves a cache": {
-    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", 1)}`)],
+    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", TARGET)}`)],
     problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
   },
 };

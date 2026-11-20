@@ -1,13 +1,17 @@
 # Writes the caches the checks of a pull request restore (checks.yml), with
 # each push to main (ADR-0029). This is the only workflow that may write a
-# cache: checks.yml uses actions/cache/restore, which has no step that saves,
-# and deploy-test.yml, checks-browser.yml and checks-ios.yml use no cache at
-# all (worker/test/workflows.ts turns away a change to any of this).
+# cache: it alone has cache-mode: write. checks.yml has cache-mode: read, and
+# deploy-test.yml, checks-browser.yml and checks-ios.yml have cache-mode:
+# none (worker/test/workflows.ts turns away a change to any of this). "Access
+# is enforced with scoped cache tokens, so a job cannot restore or save
+# caches beyond the mode it is granted" (GitHub's "Workflow syntax",
+# cache-mode): that holds for whatever a step runs, not only for the cache
+# actions.
 #
-# Why only here: "Workflow runs can restore caches created in either the
-# current branch or the default branch (usually main)", and a cache a pull
-# request's run creates is scoped to its merge ref and "can only be restored
-# by re-runs of the pull request" (GitHub's "Dependency caching",
+# Under that, GitHub's scopes: "Workflow runs can restore caches created in
+# either the current branch or the default branch (usually main)", and a
+# cache a pull request's run creates is scoped to its merge ref and "can only
+# be restored by re-runs of the pull request" (GitHub's "Dependency caching",
 # "Restrictions for accessing a cache"). So what a run of checks.yml restores
 # was written by a run of this file on main, or by nothing. This file refers
 # to no secret and its token can only read: the step that saves holds no key.
@@ -19,10 +23,11 @@
 # so that cargo finds in target/ what it would have built. The tests are
 # built, not run (--no-run): running them adds nothing to target/ that a
 # later run reuses. The keys hold the hash of every file that decides what
-# the dependencies are built from and with; with no restore-keys a cache is
-# restored for exactly those files or not at all. A key that already has a
-# cache is not saved again: the job then restores it, builds the little that
-# changed and leaves the cache as it is.
+# the dependencies are built from and with, and of this file, which holds
+# the commands; with no restore-keys a cache is restored for exactly those
+# files or not at all. A key that already has a cache is not saved again: the
+# job then restores it, builds the little that changed and leaves the cache
+# as it is. So a change to this file, a comment too, is a new key.
 # ASCII only, comments included (worker/test/workflows.ts).
 name: cache
 
@@ -56,11 +61,11 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/registry
-          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: device-core/target
-          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml

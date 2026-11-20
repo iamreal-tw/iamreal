@@ -15,10 +15,11 @@
 # with the pull request's change in it, from a fork too, and GitHub's
 # documentation does not say that limit holds for it.
 # What keeps its runs safe is this file: nothing here refers to a secret,
-# the token can only read, and a cache is only restored, never saved
-# (actions/cache/restore; cache.yml, on pushes to main, is what saves), so a
-# run writes nothing another run reads; and a change to this file is read line
-# by line before it is merged (CONTRIBUTING.md). worker/test/workflows.test.ts checks this
+# the token can only read, and caches can only be restored, never saved
+# (cache-mode: read, which the cache service enforces whatever a step runs;
+# cache.yml, on pushes to main, is what saves), so a run writes nothing
+# another run reads; and a change to this file is read line by line before
+# it is merged (CONTRIBUTING.md). worker/test/workflows.test.ts checks this
 # file against the rules in worker/test/workflows.ts.
 #
 # Concurrency: a new push to a pull request cancels the run before it, in the
@@ -42,6 +43,9 @@ on:
 permissions:
   contents: read
 
+# Caches can be restored and not saved, by any step: "Access is enforced with
+# scoped cache tokens, so a job cannot restore or save caches beyond the mode
+# it is granted" (GitHub's "Workflow syntax", cache-mode).
 cache-mode: read
 
 concurrency:
@@ -146,11 +150,11 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/registry
-          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: device-core/target
-          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
+          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256') }}
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml
