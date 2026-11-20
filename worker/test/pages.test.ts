@@ -3,7 +3,10 @@
 // case, in order, read from the copy files; the headers; the redirects and
 // the 404s; and that what the roster's object writes shows on the next page.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
@@ -388,6 +391,9 @@ describe("every page", () => {
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
     const css = await res.text();
     assert.ok(css.includes(".test-roster {") && css.includes(".threads-profile"));
+    // Byte for byte the Go backend's, for as long as that one is in the repository.
+    const old = join(WORKER_DIR, "..", "server", "pages", "style.css");
+    if (existsSync(old)) assert.equal(css, readFileSync(old, "utf8"));
     // Nothing of another origin, and no script.
     assert.doesNotMatch(css, /url\(|@import|https?:|expression\(/i);
     const etag = res.headers.get("etag");
