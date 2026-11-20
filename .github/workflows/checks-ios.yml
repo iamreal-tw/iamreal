@@ -33,6 +33,10 @@ on:
 permissions:
   contents: read
 
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
 # Its own group: see checks-browser.yml.
 concurrency:
   group: checks-ios-${{ github.event.pull_request.number }}

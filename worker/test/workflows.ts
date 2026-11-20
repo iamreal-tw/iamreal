@@ -9,13 +9,16 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, and the device-core and android jobs of checks.yml,
-// must be exactly the ones written here.
+// workflow's two jobs, the device-core and android jobs of checks.yml, and
+// the jobs of cache.yml, must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
 // - what the commands of checks.yml run: they run the repository's code,
 //   by design, with no secret and a token that can only read;
+// - what the commands of cache.yml leave in the caches it saves: they run
+//   the code of main (device-core/'s build), and every later check that
+//   restores a cache builds on what that run left in it;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
@@ -179,6 +182,10 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
   "actions/setup-go": { sha: "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e", version: "v7.0.0" },
   "actions/upload-artifact": { sha: "cf430e030ddbb5b0abf93d22962f4752f3646cd9", version: "v7.0.2" },
   "actions/download-artifact": { sha: "9000827ccba6bdab643e8b6fd33ac0654aef8333", version: "v8.0.2" },
+  // One repository, one commit: `actions/cache` restores and has a step after the job that saves;
+  // `actions/cache/restore` only restores. Which workflow may use which: CACHE_MODE, below.
+  "actions/cache": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
+  "actions/cache/restore": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
 };
 
 /**
@@ -285,6 +292,95 @@ const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
 
 /**
+ * The caches (#203, ADR-0029).
+ *
+ * Who may write one: only cache.yml, which runs on pushes to main and on
+ * nothing else. What holds the others to that is `cache-mode`, at the top of
+ * every workflow: `read` "allows cache restores but prevents cache saves",
+ * `none` "prevents all cache access"
+ * (https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode),
+ * and "Access is enforced with scoped cache tokens, so a job cannot restore
+ * or save caches beyond the mode it is granted"
+ * (https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax#cache-mode).
+ * That is the boundary, and not which action a step uses: the commands of
+ * checks.yml run a pull request's code, and code in a job can talk to the
+ * cache service with the job's own token, without any action
+ * (https://adnanthekhan.com/2024/12/21/cacheract-the-monster-in-your-build-cache/).
+ * "Job-level settings override workflow-level settings" (the changelog), so
+ * `cache-mode` anywhere below the top level is a problem. A mode left out is
+ * a problem too: "If you omit `cache-mode`, a `read` or `write` default is
+ * used based on the trigger type" (the syntax page).
+ *
+ * Under that, GitHub scopes a cache to the branch of the run that made it:
+ * "Workflow runs can restore caches created in either the current branch or
+ * the default branch (usually `main`)", and a cache a pull request's run
+ * makes "can only be restored by re-runs of the pull request"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
+ *
+ * The actions follow the mode, so that the file says what it does:
+ * checks.yml (`read`) uses only `actions/cache/restore`, which "works
+ * similarly to the `cache` action except that it doesn't have a post step to
+ * save the cache" (https://github.com/actions/cache/blob/v6.1.0/restore/README.md);
+ * a workflow with `none` uses no cache action. A step that is not permitted
+ * would not fail ("the cache step logs an informational message and
+ * continues", the syntax page), so the wrong action would go unseen.
+ *
+ * CACHE_MODE: each workflow's `cache-mode`, exactly. A file not named here,
+ * a new one too, must say `none`.
+ */
+export const CACHE_WORKFLOW = "cache.yml";
+export const CACHE_MODE: Readonly<Record<string, "read" | "write">> = { "checks.yml": "read", [CACHE_WORKFLOW]: "write" };
+const cacheMode = (file: string): "read" | "write" | "none" => CACHE_MODE[file] ?? "none";
+/** The action each mode is written with. `actions/cache/save` is in no list: nothing here needs it. */
+const CACHE_ACTION = { read: "actions/cache/restore", write: "actions/cache" } as const;
+
+/**
+ * The files whose hash is in the keys of device-core's caches: what decides
+ * which packages cargo builds, with which features and settings, with which
+ * Rust, and which Barretenberg they link; and cache.yml itself, which holds
+ * the commands that fill the caches, so that a change to them (a flag, a
+ * feature) is a new key. A cache is never saved twice under one key ("You
+ * cannot change the contents of an existing cache",
+ * https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching),
+ * so whatever changes what should be in it must change the key. A key is one
+ * cache, restored for exactly these files or not at all: no `restore-keys`,
+ * so a run never gets a target/ built for another Cargo.lock or another Rust.
+ */
+const DEVICE_CORE_HASH =
+  "${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}";
+const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
+/**
+ * The caches, exactly: what a step that restores or saves one is given. One
+ * path each, because the reader of YAML here reads no value of several lines.
+ * cargo's registry holds the packages of Cargo.lock, as downloaded and
+ * unpacked; device-core/target holds what was compiled. Neither is checked
+ * again after it is restored: cargo checks a package against the checksum
+ * in Cargo.lock when it downloads it, not one already in the registry. What
+ * a restored cache holds is what the run of cache.yml on main left there.
+ */
+type Cache = { readonly path: string; readonly key: string };
+export const DEVICE_CORE_CACHES = {
+  registry: { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
+  target: { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
+} as const satisfies Record<string, Cache>;
+const cacheSteps = (use: "read" | "write", caches: Readonly<Record<string, Cache>>): YamlMap[] => Object.values(caches).map((c) => ({ uses: uses(CACHE_ACTION[use]), with: { ...c } }));
+/** The caches each job of checks.yml may restore: its own. */
+const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES };
+
+/**
+ * The steps the device-core job of checks.yml and the job of cache.yml that
+ * fills its caches share, written once: cargo reuses what is in target/ only
+ * for the same commands with the same flags, so a change to one job that
+ * leaves the other alone would leave a cache nobody uses.
+ */
+const DEVICE_CORE_SETUP: readonly YamlMap[] = [
+  { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+  { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+];
+const DEVICE_CORE_CLIPPY: YamlMap = { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` };
+const DEVICE_CORE_TEST = `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release`;
+
+/**
  * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
  * that directory, and that file is what stops barretenberg-rs from downloading a library nobody
  * checked; so the job is written out here instead of being described by rules.
@@ -294,12 +390,12 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
   "timeout-minutes": "30",
   steps: [
     step("actions/checkout"),
-    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
-    { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
+    ...cacheSteps("read", DEVICE_CORE_CACHES),
+    ...DEVICE_CORE_SETUP,
     { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
-    { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
+    DEVICE_CORE_CLIPPY,
     { name: "Fetch the common reference string", "working-directory": "device-core", run: "./fetch-crs.sh" },
-    { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release` },
+    { name: "cargo test", "working-directory": "device-core", run: DEVICE_CORE_TEST },
   ],
 };
 
@@ -383,6 +479,36 @@ export const DEPLOY_JOBS: YamlMap = {
         env: { CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}", CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" },
         run: UPLOAD,
       },
+    ],
+  },
+};
+
+/**
+ * How cache.yml is triggered and its concurrency group: pushes to main, one
+ * run at a time, none cancelled. The group's name is no other workflow's.
+ */
+export const CACHE_ON: Yaml = { push: { branches: ["main"] } };
+export const CACHE_GROUP = "cache";
+/**
+ * The jobs of cache.yml, exactly. Each compiles what its job of checks.yml
+ * compiles, with the same commands in the same directory (the same
+ * constants, above), so that the
+ * target/ it saves is the one that job's cargo looks in: clippy's check of
+ * every target and the tests, with --release. The tests are built and not
+ * run (`--no-run`): running them leaves nothing in target/ that a later
+ * run reuses. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
+ * below, on why names are unique across workflows).
+ */
+export const CACHE_JOBS: YamlMap = {
+  "cache-device-core": {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "30",
+    steps: [
+      step("actions/checkout"),
+      ...cacheSteps("write", DEVICE_CORE_CACHES),
+      ...DEVICE_CORE_SETUP,
+      DEVICE_CORE_CLIPPY,
+      { name: "cargo test, built and not run", "working-directory": "device-core", run: `${DEVICE_CORE_TEST} --no-run` },
     ],
   },
 };
@@ -482,13 +608,38 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(v).filter((k) => !allowed.includes(k));
 
 /**
+ * The problems with caches (CACHE_MODE) that are read line by line as
+ * written, so that they hold whatever job or step the line is in: a
+ * `cache-mode` below the top level, which would override the workflow's, and
+ * a cache action the workflow's mode does not go with. A line with
+ * `actions/cache` in it that is not a comment is a use of a cache action. The
+ * caches the other actions keep are off where they are used: WITH gives
+ * setup-node `package-manager-cache: false` and setup-go `cache: false`,
+ * exactly.
+ */
+function cacheProblems(file: string, text: string): string[] {
+  const problems: string[] = [];
+  const mode = cacheMode(file);
+  for (const [i, l] of text.split("\n").entries()) {
+    if (/^ *#/.test(l)) continue;
+    if (/cache-mode/.test(l) && !/^cache-mode: /.test(l)) problems.push(`${file}: line ${i + 1}: cache-mode below the top level, or not written as the key of a line`);
+    if (!/actions\/cache/.test(l)) continue;
+    const action = /uses: (actions\/cache(?:\/[\w.-]+)*)@/.exec(l)?.[1] ?? "actions/cache";
+    const p = (s: string): number => problems.push(`${file}: line ${i + 1}: uses ${action}${s}`);
+    if (mode === "none") p(": this workflow may use no cache");
+    else if (mode === "read" && action !== CACHE_ACTION.read) p(", which saves a cache: this workflow may only restore one");
+  }
+  return problems;
+}
+
+/**
  * The problems in a set of workflow files, by file name. None, for files
  * that keep to everything described at the top of this file.
  */
 export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -502,11 +653,13 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
   for (const f of names) {
     for (const l of files[f]!.split("\n")) {
       if (!/uses/.test(l) || /^ *#/.test(l)) continue;
-      const m = /^ {6}- uses: ([\w.-]+\/[\w.-]+)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/.exec(l);
+      const m = /^ {6}- uses: ([\w.-]+\/[\w.-]+(?:\/[\w.-]+)?)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/.exec(l);
       const known = m && ACTIONS[m[1]!];
       if (!m || !known || known.sha !== m[2] || known.version !== m[3]) problems.push(`${f}: not an action of the list at its commit: ${l.replace(/^ +| +$/g, "")}`);
     }
   }
+
+  for (const f of names) problems.push(...cacheProblems(f, files[f]!));
 
   for (const f of names) {
     let doc: Yaml;
@@ -521,9 +674,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       p("not a map");
       continue;
     }
-    const wrong = extra(doc, ["name", "on", "permissions", "concurrency", "env", "jobs"]);
+    const wrong = extra(doc, ["name", "on", "permissions", "cache-mode", "concurrency", "env", "jobs"]);
     if (wrong.length) p(`keys not allowed at the top: ${wrong.join(", ")}`);
     if (!same(doc.permissions, { contents: "read" })) p("permissions is not exactly contents: read");
+    // What the cache service lets the workflow's jobs do (CACHE_MODE): said in every file, never left to the trigger's default.
+    if (doc["cache-mode"] !== cacheMode(f)) p(`cache-mode is not ${cacheMode(f)}`);
     const c = doc.concurrency;
     if (c !== undefined && !(isMap(c) && extra(c, ["group", "cancel-in-progress"]).length === 0 && Object.values(c).every((v) => typeof v === "string"))) p("concurrency is not group and cancel-in-progress");
     if (doc.name !== undefined && typeof doc.name !== "string") p("name is not a string");
@@ -532,6 +687,17 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    // Whatever saves a cache runs on pushes to main and nothing else: on any other event (a pull
+    // request, a merge group, a run started by hand on a branch) the code that runs before the
+    // save is not main's. With the rule for every file above (permissions exactly contents: read)
+    // and SECRET_LINES, the step that saves holds no secret and a token that can only read.
+    if (cacheMode(f) === "write" && !same(doc.on, CACHE_ON)) p(`saves a cache and is not triggered by a push to main only: ${JSON.stringify(doc.on)}`);
+    if (f === CACHE_WORKFLOW) {
+      if (!same(doc.concurrency, { group: CACHE_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${CACHE_GROUP}, one run at a time and none cancelled`);
+      if (doc.env !== undefined) p("an env at the top");
+      if (!same(doc.jobs, CACHE_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     const rules = PULL_REQUEST_RULES[f];
@@ -584,7 +750,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
-          else if (!same(s.with, WITH[action])) sp(`${action} is not given exactly ${JSON.stringify(WITH[action])}`);
+          else if (action in WITH) {
+            if (!same(s.with, WITH[action])) sp(`${action} is not given exactly ${JSON.stringify(WITH[action])}`);
+          } else {
+            // A cache action: only in a job that has caches, and given exactly one of them.
+            const caches = Object.values(CACHES_OF_JOB[name] ?? {});
+            if (caches.length === 0) sp("restores a cache that is not this job's");
+            else if (!caches.some((c) => same(s.with, c))) sp(`${action} is not given exactly one of ${JSON.stringify(caches)}`);
+          }
         } else if (s.with !== undefined) sp("with but no uses");
         if (s.run !== undefined) {
           if (typeof s.run !== "string") sp("run is not one line");
