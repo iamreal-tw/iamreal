@@ -45,7 +45,9 @@ pub fn declaration_preimage(
         if a.platform.contains(':') {
             return Err(PreimageError::ColonInPlatform);
         }
-        // Strings compare by their bytes, as every list of the specification is ordered.
+        // Strings compare by their bytes, as every list of the specification is
+        // ordered. A platform ID is ASCII (spec/scope.md), where bytes and
+        // UTF-16 code units, which protocol/ compares, give the same order.
         if i > 0 && accounts[i - 1].platform >= a.platform {
             return Err(PreimageError::NotAscending);
         }

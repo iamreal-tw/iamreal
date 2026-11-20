@@ -163,23 +163,70 @@ fn scope_json_scopes() {
     }
 }
 
-#[test]
-fn scope_json_platforms_and_usernames() {
-    let v = vectors("scope.json");
-    // The device gets a roster's table from the server; here the rows the
-    // vectors accept stand in for it.
-    let mut formats = std::collections::BTreeMap::new();
-    for p in cases(&v, "platforms") {
+/// The platform table of one roster as the vectors give it: the rows that
+/// roster accepts, each with its `username` format as read here. The
+/// device gets its table from the server (`config`); the vectors' rows
+/// stand in for it.
+fn platform_table(v: &Value, of: Roster) -> std::collections::BTreeMap<String, UsernameFormat> {
+    let mut table = std::collections::BTreeMap::new();
+    for p in cases(v, "platforms") {
+        if roster(p) != of {
+            continue;
+        }
+        let platform = text(p, "platform");
         if p["accepted"].as_bool().unwrap() {
-            let platform = text(p, "platform");
             assert!(is_platform_id(platform.as_bytes()), "{platform}");
+            assert!(!text(p, "display_name").is_empty(), "{platform}");
             let format = UsernameFormat::parse(text(p, "username_format").as_bytes())
                 .unwrap_or_else(|| panic!("the format of {platform}"));
-            formats.insert(platform, format);
+            assert!(
+                table.insert(platform.to_string(), format).is_none(),
+                "{platform} once"
+            );
+        } else {
+            assert!(!text(p, "reason").is_empty(), "{platform}");
         }
     }
+    table
+}
+
+#[test]
+fn scope_json_platforms_of_each_roster() {
+    let v = vectors("scope.json");
+    let production = platform_table(&v, Roster::Production);
+    let test = platform_table(&v, Roster::Test);
+    assert_eq!(production.keys().collect::<Vec<_>>(), ["threads"]);
+    assert_eq!(test.keys().collect::<Vec<_>>(), ["test-example", "threads"]);
+    // A test roster accepts the production rows, with the same format.
+    assert_eq!(test["threads"], production["threads"]);
+    // What a roster does not accept is not in its table, whatever the reason:
+    // another spelling of a listed ID, or an ID of the other roster.
+    let mut refused = 0;
+    for p in cases(&v, "platforms") {
+        if !p["accepted"].as_bool().unwrap() {
+            let table = if roster(p) == Roster::Production {
+                &production
+            } else {
+                &test
+            };
+            assert!(
+                !table.contains_key(text(p, "platform")),
+                "{}",
+                text(p, "platform")
+            );
+            refused += 1;
+        }
+    }
+    assert!(refused > 0);
+}
+
+#[test]
+fn scope_json_usernames() {
+    let v = vectors("scope.json");
+    // Every platform of the vectors is in a test roster's table.
+    let table = platform_table(&v, Roster::Test);
     for u in cases(&v, "usernames") {
-        let format = &formats[text(u, "platform")];
+        let format = &table[text(u, "platform")];
         let username = text(u, "username");
         assert_eq!(
             format.accepts(username.as_bytes()),
