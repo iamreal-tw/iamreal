@@ -1,0 +1,26 @@
+// Settings that hold for every build of the app, whatever the environment.
+
+// The lowest iOS the app runs on: the higher of what Barretenberg's
+// prebuilt iOS library needs (15.0, its LC_BUILD_VERSION) and what reading
+// an ISO 7816 card over NFC needs (13.0). README.md says how to check the
+// number. build-core.sh reads this line for the Rust build.
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+
+// iPhone only: no iPad interface, and not offered to a Mac or a Vision Pro
+// as an iPhone app. An iPad can still install an iPhone app and run it in
+// compatibility mode; what keeps it off an iPad is requiring NFC in
+// UIRequiredDeviceCapabilities, which comes with reading the card (#174).
+TARGETED_DEVICE_FAMILY = 1
+SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
+SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO
+
+// Where build-core.sh leaves the static library of device-core/. There is
+// no prebuilt Barretenberg for the simulator of an Intel Mac.
+IAMREAL_RUST_TARGET[sdk=iphoneos*] = aarch64-apple-ios
+IAMREAL_RUST_TARGET[sdk=iphonesimulator*] = aarch64-apple-ios-sim
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64
+IAMREAL_CORE_LIBRARY = $(SRCROOT)/../device-core/target/$(IAMREAL_RUST_TARGET)/release/libiamreal_device_core.a
+
+// The header of the core's C functions, for App/Bridge.h. The tests need
+// it too: they import the app's module, which carries the bridging header.
+HEADER_SEARCH_PATHS = $(SRCROOT)/../device-core/include
