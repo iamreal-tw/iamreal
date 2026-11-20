@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
-import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, CHECK_BB, INSTALL_PNPM, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
+import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, CHECK_BB, CHECKS_GROUP, CHECKS_ON, INSTALL_PNPM, REQUIRED_CHECKS, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
@@ -42,7 +42,6 @@ const DEPLOY_JOB = "  deploy:\n    needs: build\n";
 const GO_JOB = "  go:\n    runs-on: ubuntu-24.04\n";
 /** How checks.yml is triggered by the merge queue (#180), as written there. */
 const MERGE_GROUP = "  merge_group:\n    types:\n      - checks_requested\n";
-const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || github.ref }}";
 
 type Change = (files: Record<string, string>) => void;
 /** Replaces the first `from` in `file`; fails if it is not there, so a change never quietly does nothing. */
@@ -201,20 +200,10 @@ for (const [name, changes] of Object.entries(CHANGES)) {
   });
 }
 
-test("checks.yml runs in the merge queue: on merge_group, as the three checks the ruleset of main requires, each merge group in a group of its own", () => {
-  // The decision on #180: the queue runs checks.yml's go, typescript and device-core, the checks
-  // the ruleset of main requires; a check reports under its job's id when the job has no name.
-  const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
-  assert.deepEqual(doc.on, { pull_request: null, merge_group: { types: ["checks_requested"] } });
-  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript", "device-core"]);
-  assert.ok(Object.values(doc.jobs as Record<string, Record<string, Yaml>>).every((j) => j.name === undefined));
-  assert.deepEqual(doc.concurrency, { group: CHECKS_GROUP, "cancel-in-progress": "true" });
-});
-
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
-  assert.deepEqual(doc.on, { pull_request: null, merge_group: { types: ["checks_requested"] } });
-  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript", "device-core"]);
+  assert.deepEqual(doc.on, CHECKS_ON);
+  assert.deepEqual(Object.keys(doc.jobs as object), REQUIRED_CHECKS);
   const browserDoc = readYaml(realFiles()[B]!) as Record<string, Yaml>;
   // `paths`: a list of strings under pull_request, each as written (`**` is no special character in YAML here).
   const paths = (browserDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths as string[];

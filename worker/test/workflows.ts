@@ -311,12 +311,37 @@ export const SECRET_LINES: readonly string[] = [
 
 /**
  * The checks the ruleset of main requires before a pull request is merged,
- * and that the merge queue waits for: checks.yml's jobs, exactly, each
- * reporting under its id (a job with no `name`). A job renamed or given a
- * name reports a check the ruleset does not wait for, and the one it waits
- * for never comes (#180).
+ * and that the merge queue waits for (#180): checks.yml's jobs, exactly,
+ * none with a `name`. Required checks are matched by job name ("make sure
+ * that job names are unique across all workflows. Using the same job name in
+ * multiple workflows can cause ambiguous status check results",
+ * https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches),
+ * and `name` sets "a name for the job, which is displayed in the GitHub UI"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idname).
+ * That a job with no `name` reports under its id is not written there; it is
+ * what is seen: the ruleset of main requires go, typescript and device-core,
+ * the ids of these jobs, none with a name (read 2026-11-21). A job renamed or
+ * given a name reports a check the ruleset does not wait for, and the one it
+ * waits for never comes.
  */
-export const REQUIRED_CHECKS: readonly string[] = ["go", "typescript", DEVICE_CORE_JOB];
+export const REQUIRED_CHECKS: readonly string[] = ["go", "typescript", "device-core"];
+
+/**
+ * How checks.yml is triggered: on every pull request, and on every merge
+ * group of the merge queue (#180), with merge_group's one activity type
+ * named ("specifying the activity type will keep your workflow specific if
+ * more activity types are added in the future",
+ * https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
+ */
+export const CHECKS_ON: Yaml = { pull_request: null, merge_group: { types: ["checks_requested"] } };
+
+/**
+ * checks.yml's concurrency group: a pull request's number, or where the event
+ * has none (merge_group) github.ref, the merge group's own branch, so that
+ * the merge groups' runs do not cancel each other
+ * (.github/workflows/checks.yml, the comment at the top).
+ */
+export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || github.ref }}";
 
 /**
  * The two workflows of a pull request's checks: each one's trigger, its
@@ -326,20 +351,18 @@ export const REQUIRED_CHECKS: readonly string[] = ["go", "typescript", DEVICE_CO
  * or runs from other workflows"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  *
- * checks.yml also runs on merge_group, with its one activity type named
- * ("specifying the activity type will keep your workflow specific if more
- * activity types are added in the future"), so that the merge queue gets the
- * checks it waits for; its group falls back to github.ref, the merge group's
- * own branch, where the event has no pull request (.github/workflows/checks.yml,
- * the comment at the top;
- * https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
- * checks-browser.yml does not run in the queue (#180).
+ * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
+ * they are the checks main requires. checks-browser.yml does not run in the
+ * merge queue (#180).
  */
-const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string }>> = {
+const PULL_REQUEST_RULES: Readonly<
+  Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly requiredChecks?: readonly string[] }>
+> = {
   "checks.yml": {
-    on: { pull_request: null, merge_group: { types: ["checks_requested"] } },
+    on: CHECKS_ON,
     env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
-    group: "checks-${{ github.event.pull_request.number || github.ref }}",
+    group: CHECKS_GROUP,
+    requiredChecks: REQUIRED_CHECKS,
   },
   "checks-browser.yml": {
     on: { pull_request: { paths: [...BROWSER_PATHS] } },
@@ -424,15 +447,16 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       p("no jobs");
       continue;
     }
-    if (f === "checks.yml" && !same(Object.keys(doc.jobs).sort(), [...REQUIRED_CHECKS].sort())) p(`the jobs are not exactly the checks main requires, ${REQUIRED_CHECKS.join(", ")}: ${Object.keys(doc.jobs).join(", ")}`);
+    const required = rules.requiredChecks;
+    if (required !== undefined && !same(Object.keys(doc.jobs).sort(), [...required].sort())) p(`the jobs are not exactly the checks main requires, ${required.join(", ")}: ${Object.keys(doc.jobs).join(", ")}`);
     for (const [name, job] of Object.entries(doc.jobs)) {
       const j = (s: string): number => p(`job ${name}: ${s}`);
       if (!isMap(job)) {
         j("not a map");
         continue;
       }
-      // A job's name is the name its check reports: none in checks.yml, whose checks main requires by id.
-      const wrongJob = extra(job, f === "checks.yml" ? ["runs-on", "timeout-minutes", "env", "steps"] : ["name", "runs-on", "timeout-minutes", "env", "steps"]);
+      // A job's name is the name its check reports: none where main requires the checks by id.
+      const wrongJob = extra(job, [...(required === undefined ? ["name"] : []), "runs-on", "timeout-minutes", "env", "steps"]);
       if (wrongJob.length) j(`keys not allowed: ${wrongJob.join(", ")}`);
       if (job["runs-on"] !== "ubuntu-24.04") j("runs-on is not ubuntu-24.04");
       if (job.env !== undefined && !same(job.env, rules.jobEnv)) j("an env other than the one in test/workflows.ts");
