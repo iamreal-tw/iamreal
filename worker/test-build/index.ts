@@ -151,6 +151,7 @@ export class Roster extends DeployedRoster {
       put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
         if (key !== fault.key) return real.put(key, value, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
+        if (fault.how === "put takes a while") await new Promise((resolve) => setTimeout(resolve, 600));
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
         // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
         if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
@@ -198,6 +199,23 @@ export class Roster extends DeployedRoster {
   /** The times, on the object's clock, at which the second piece of timed work ran. */
   testExtraWorkRuns(): number[] {
     return [...this.#extraRuns];
+  }
+
+  /** The handler of the alarm that is running or was last to run, however it was started. */
+  #alarms: Promise<void> = Promise.resolve();
+
+  /**
+   * The alarm's handler, one run at a time. The deployed object's handler
+   * never runs twice at once, and its timed work counts on that
+   * (src/roster.ts, `#dailyPublication`); only this build has a second way
+   * to start it (`testRunAlarm`), which could run it while the alarm
+   * itself rings. So here every run, the alarm's own too, waits for the
+   * one before it.
+   */
+  override alarm(): Promise<void> {
+    const run = this.#alarms.then(() => super.alarm());
+    this.#alarms = run.catch(() => undefined);
+    return run;
   }
 
   /**

@@ -22,7 +22,8 @@
 // A row is checked when it is read (readCard): a state the rules cannot
 // have left is not handed on.
 import { byBytes } from "iamreal-protocol/bytes.ts";
-import { formatDay, parseDay } from "iamreal-protocol/date.ts";
+import type { CardRow } from "iamreal-protocol/card-state-file.ts";
+import { type Day, formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/roster-rules.ts";
 import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
@@ -54,6 +55,45 @@ function corrupt(column: string): Error {
 
 const stringOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
 
+/** The columns of a row of the table, as SQLite gives them. */
+type Columns = Record<string, SqlStorageValue>;
+
+const COLUMNS = "last_card_proof, proofs_on_last_date, slots, last_seq";
+
+/**
+ * A row of the table read as a state: the columns as they are stored, each
+ * of its own type, the slots parsed from their JSON. Throws for a row that
+ * cannot be read as a state at all (a date that is not a date, slots that
+ * are not JSON of the stored shape); the message names the column, never
+ * the card or a value. Whether the state is one the roster rules can have
+ * left is not asked here: `readCard` asks it, `everyCard` on purpose does
+ * not.
+ */
+function stateOf(row: Columns): StoredCard & { card: { lastCardProof: Day } } {
+  const { last_card_proof, proofs_on_last_date, slots: slotsText, last_seq } = row;
+  const lastCardProof = typeof last_card_proof === "string" ? parseDay(last_card_proof) : null;
+  if (lastCardProof === null) throw corrupt("last_card_proof");
+  if (typeof proofs_on_last_date !== "number") throw corrupt("proofs_on_last_date");
+  if (typeof last_seq !== "number") throw corrupt("last_seq");
+  let parsed: unknown;
+  try {
+    parsed = typeof slotsText === "string" ? JSON.parse(slotsText) : null;
+  } catch {
+    parsed = null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw corrupt("slots");
+  const slots = new Map<string, SlotState>();
+  for (const [platform, s] of Object.entries(parsed as Record<string, Partial<SlotJson> | null>)) {
+    if (typeof s !== "object" || s === null) throw corrupt("slots");
+    const { current, last_declared, switch_count, correction_date } = s;
+    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") throw corrupt("slots");
+    const slot = slotOfJson({ current, last_declared, switch_count, correction_date });
+    if (slot === null) throw corrupt("slots");
+    slots.set(platform, slot);
+  }
+  return { card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
+}
+
 /**
  * The state of the card, or null if it has no valid record.
  *
@@ -70,35 +110,38 @@ const stringOrNull = (v: unknown): v is string | null => v === null || typeof v 
  * The limits are the constants of protocol/, not numbers of this file.
  */
 export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], scopeString: string, scopedId: string): StoredCard | null {
-  const rows = sql.exec("SELECT last_card_proof, proofs_on_last_date, slots, last_seq FROM cards WHERE scope_string = ? AND scoped_id = ?", scopeString, scopedId).toArray();
-  const row = rows[0];
+  const row = sql.exec(`SELECT ${COLUMNS} FROM cards WHERE scope_string = ? AND scoped_id = ?`, scopeString, scopedId).toArray()[0];
   if (row === undefined) return null;
-  const { last_card_proof, proofs_on_last_date, slots: slotsText, last_seq } = row;
-  const lastCardProof = typeof last_card_proof === "string" ? parseDay(last_card_proof) : null;
-  if (lastCardProof === null) throw corrupt("last_card_proof");
-  if (typeof proofs_on_last_date !== "number" || !Number.isSafeInteger(proofs_on_last_date) || proofs_on_last_date < 1 || proofs_on_last_date > MAX_PER_DATE) throw corrupt("proofs_on_last_date");
-  if (typeof last_seq !== "number" || !Number.isSafeInteger(last_seq) || last_seq < 1) throw corrupt("last_seq");
-  if (typeof slotsText !== "string") throw corrupt("slots");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(slotsText);
-  } catch {
-    throw corrupt("slots");
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw corrupt("slots");
-  const slots = new Map<string, SlotState>();
-  for (const [platform, s] of Object.entries(parsed as Record<string, Partial<SlotJson> | null>)) {
+  const stored = stateOf(row);
+  const { card, lastSeq } = stored;
+  if (!Number.isSafeInteger(card.proofsOnLastDate) || card.proofsOnLastDate < 1 || card.proofsOnLastDate > MAX_PER_DATE) throw corrupt("proofs_on_last_date");
+  if (!Number.isSafeInteger(lastSeq) || lastSeq < 1) throw corrupt("last_seq");
+  for (const [platform, slot] of card.slots) {
     const tableRow = platforms.find((p) => p.platform === platform);
-    if (tableRow === undefined) throw corrupt("slots");
-    if (typeof s !== "object" || s === null) throw corrupt("slots");
-    const { current, last_declared, switch_count, correction_date } = s;
-    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") throw corrupt("slots");
-    const slot = slotOfJson({ current, last_declared, switch_count, correction_date });
-    if (slot === null || !possibleSlot(slot, lastCardProof)) throw corrupt("slots");
+    if (tableRow === undefined || !possibleSlot(slot, card.lastCardProof)) throw corrupt("slots");
     for (const username of [slot.current, slot.lastDeclared]) if (username !== null && !tableRow.format.accepts(username)) throw corrupt("slots");
-    slots.set(platform, slot);
   }
-  return { card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
+  return stored;
+}
+
+/**
+ * Every row of the table as a row of the card state file
+ * (spec/roster-rules.md, "The card state file"), in the order of the table.
+ *
+ * Unlike `readCard`, this does not ask whether a row is a state the roster
+ * rules can have left: the card state file is published so that whoever
+ * compares it finds a stored state that is wrong, and a reading that
+ * refused such a row would hide it. It throws only for a row that cannot be
+ * read as a state at all (`stateOf`). Whether every value is in the format
+ * of a row is for protocol/'s `cardStateFile`.
+ */
+export function everyCard(sql: SqlStorage): CardRow[] {
+  const out: CardRow[] = [];
+  for (const row of sql.exec(`SELECT scope_string, scoped_id, ${COLUMNS} FROM cards ORDER BY scope_string, scoped_id`)) {
+    if (typeof row.scope_string !== "string" || typeof row.scoped_id !== "string") throw corrupt("the card");
+    out.push({ scopeString: row.scope_string, scopedId: row.scoped_id, ...stateOf(row) });
+  }
+  return out;
 }
 
 /**
