@@ -35,7 +35,16 @@ export interface TestSettings {
   readonly ROSTER_OBJECT_NAME?: string;
   /** The back end's policy on late switches (src/settings.ts): "true" turns it on. wrangler.jsonc does not set it. */
   readonly RESTRICT_LATE_SWITCHES?: string;
+  /** The date the test roster was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
+  readonly TEST_ROSTER_CLEARED_ON?: string;
 }
+
+/**
+ * What `GET /__test/roster/views` answers: every row of the views
+ * (src/views.ts), table by table, each table in the order of its primary
+ * key.
+ */
+export type StoredViews = Readonly<Record<string, readonly Readonly<Record<string, string | number | null>>[]>>;
 
 /**
  * What `GET /__test/roster/stored` answers: the rows the roster's object

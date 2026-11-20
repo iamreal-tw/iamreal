@@ -3,7 +3,7 @@
 // A test sends it HTTP requests, runs its schedule, reads the files it wrote
 // to the simulated R2 bucket, and sets its clock. Nothing here needs a
 // Cloudflare account, and nothing sends a request to MOICA.
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "../test-build/card-door.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -228,7 +228,20 @@ export interface TestWorker {
      * `challenges.accepted`, only marking a challenge as accepted), or, with
      * null, none does (test build, `PUT /__test/roster/fail-writes`).
      */
-    failWritesTo(what: "records" | "cards" | "roster" | "challenges" | "challenges.accepted" | null): Promise<void>;
+    failWritesTo(what: "records" | "cards" | "roster" | "challenges" | "challenges.accepted" | "view_cards" | "view_slots" | "view_history" | "view_state" | null): Promise<void>;
+    /**
+     * Every row of the views the object keeps for the pages (src/views.ts),
+     * table by table (test build, `GET /__test/roster/views`): for the one
+     * thing no page can show, that the views written again from the records
+     * are row for row the views written record by record.
+     */
+    views(): Promise<StoredViews>;
+    /**
+     * Clears the views (test build, `DELETE /__test/roster/views`): the
+     * object is then as one that has records from before it had the views.
+     * It fills them from its records when it starts: `restart()` after this.
+     */
+    clearViews(): Promise<void>;
     /**
      * Runs the roster rules for one event of spec/vectors/roster-rules.json
      * on the state the object stores, keeps what a valid one leaves, and
@@ -291,7 +304,7 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-export type { CardToWrite, RuleEvent, StoredRoster, TestSettings };
+export type { CardToWrite, RuleEvent, StoredRoster, StoredViews, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -309,6 +322,13 @@ export interface StartOptions {
   readonly crlCatchUpMs?: number;
   /** The issuer keys of the build, one G2 and one G3. By default the test's own, which sign the CRLs of test/crls.ts. */
   readonly issuers?: readonly IssuerKey[];
+  /**
+   * A directory whose files the Worker serves as the card proof page
+   * (/proof is its index.html, /proof/… the rest): a build of web/, or
+   * files a test made up. By default there is none, as in a deploy made
+   * before web/ is built for it.
+   */
+  readonly proofFiles?: string;
 }
 
 /** Builds the test build and starts it in the local workerd, with a fake MOICA that has no CRL yet. */
@@ -316,7 +336,15 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   const moica = await FakeMoica.start();
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "worker-"));
-  const server = createTestHarness({ root: WORKER_DIR, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
+  // The Worker runs from a copy of wrangler.jsonc, byte for byte, in a directory of this test's own: the
+  // configuration is the deployed one, and "assets.directory" (./site) is then this test's, so that tests
+  // running at once do not share the card proof page's files. The files of site/ in the repository (the style
+  // sheet) are copied as they are.
+  const run = mkdtempSync(join(WORKER_DIR, "test-output", "run-"));
+  copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(run, "wrangler.jsonc"));
+  cpSync(join(WORKER_DIR, "site"), join(run, "site"), { recursive: true, filter: (source) => source !== join(WORKER_DIR, "site", "proof") });
+  if (options.proofFiles !== undefined) cpSync(options.proofFiles, join(run, "site", "proof"), { recursive: true });
+  const server = createTestHarness({ root: run, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
     buildWorker("test", dir, { moica: moica.origin, issuers: options.issuers ?? testIssuers(), crlTimeoutMs: options.crlTimeoutMs ?? 2000, crlCatchUpMs: options.crlCatchUpMs ?? CRL_CATCH_UP_MS });
@@ -324,6 +352,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   } catch (e) {
     await moica.close();
     rmSync(dir, { recursive: true, force: true });
+    rmSync(run, { recursive: true, force: true });
     throw e;
   }
   const worker = server.getWorker<{ DATA: Bucket }>();
@@ -475,6 +504,15 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
       },
+      async views() {
+        const res = await server.fetch("/__test/roster/views");
+        if (res.status !== 200) throw new Error(`reading the views: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as StoredViews;
+      },
+      async clearViews() {
+        const res = await server.fetch("/__test/roster/views", { method: "DELETE" });
+        if (res.status !== 204) throw new Error(`clearing the views: HTTP ${res.status}`);
+      },
       async stored() {
         const res = await server.fetch("/__test/roster/stored");
         if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
@@ -506,6 +544,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       await server.close();
       await moica.close();
       rmSync(dir, { recursive: true, force: true });
+      rmSync(run, { recursive: true, force: true });
     },
   };
 }

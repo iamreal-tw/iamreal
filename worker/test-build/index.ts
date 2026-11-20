@@ -47,7 +47,8 @@ import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import type { CardToWrite, RuleEvent, StoredRoster, TestSettings } from "./card-door.ts";
+import { VIEW_TABLE_KEYS } from "../src/views.ts";
+import type { CardToWrite, RuleEvent, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -85,6 +86,10 @@ const FAILING_WRITES = {
   roster: "ON roster",
   challenges: "ON challenges",
   "challenges.accepted": "OF accepted ON challenges",
+  view_cards: "ON view_cards",
+  view_slots: "ON view_slots",
+  view_history: "ON view_history",
+  view_state: "ON view_state",
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
 
@@ -220,6 +225,23 @@ export class Roster extends DeployedRoster {
     if (what !== "challenges.accepted") sql.exec(`CREATE TRIGGER test_fail_insert BEFORE INSERT ${FAILING_WRITES[what]} ${fail}`);
   }
 
+  /** Every row of the views (src/views.ts), table by table, each in the order of its primary key. */
+  testViews(): StoredViews {
+    const out: Record<string, Record<string, string | number | null>[]> = {};
+    for (const [table, key] of Object.entries(VIEW_TABLE_KEYS)) out[table] = this.ctx.storage.sql.exec<Record<string, string | number | null>>(`SELECT * FROM ${table} ORDER BY ${key}`).toArray();
+    return out;
+  }
+
+  /**
+   * Clears the views, as on an object that has records from before it had
+   * them. The object fills them from its records when it starts again.
+   */
+  testClearViews(): void {
+    const sql = this.ctx.storage.sql;
+    for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
+    sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
+  }
+
   /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
   testStored(): StoredRoster {
     const sql = this.ctx.storage.sql;
@@ -300,6 +322,9 @@ export default {
    *   CRLs, as on an object made before the build had it.
    * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
    *   rules for it on the object's stored state and answers the result.
+   * - `GET /__test/roster/views` answers a StoredViews: every row of the
+   *   views; `DELETE` clears them, and the object fills them from its
+   *   records when it starts again.
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster.
@@ -392,6 +417,11 @@ export default {
     }
     if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
+    if (route === "DELETE /__test/roster/views") {
+      await testRosterOf(env).testClearViews();
+      return done();
+    }
     if (route === "PUT /__test/roster/hash-delay") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms) || ms < 0) return new Response(null, { status: 400 });

@@ -30,6 +30,13 @@
       "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],
+      // Static Assets: the files of site/, which the Worker sends with its own headers
+      // (src/visitor.ts; README.md, "頁面和檔案"). site/pages.css, the visitors' style sheet, is in
+      // the repository; site/proof/ is where a build of web/ goes, and no deploy puts one there yet.
+      // Every request runs the Worker first ("run_worker_first"), so no file is served past its
+      // code; a path is a file's own or nothing ("html_handling", "not_found_handling": no
+      // index.html found for a directory, no redirect, no page for what is not there).
+      "assets": { "directory": "./site", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none", "not_found_handling": "none" },
       "vars": {
         // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
         // The name of a test roster's object always starts with "test-"; keep that when changing it.
@@ -40,7 +47,12 @@
         // It must fit the name above: "test" with a name that starts with "test-", "production"
         // with one that does not. Otherwise the API answers nothing but 500 (src/settings.ts),
         // and test/environments.test.ts fails before that.
-        "ROSTER_KIND": "test"
+        "ROSTER_KIND": "test",
+        // The date the test roster was last cleared on, YYYY-MM-DD: every page says it beside the mark
+        // of a test roster (design/copy/test-site.md). It has not been cleared yet, so this is the date
+        // the test site was first deployed (README.md, "第一次部署量到的"). Change it together with
+        // ROSTER_OBJECT_NAME when the roster is cleared.
+        "TEST_ROSTER_CLEARED_ON": "2026-11-19"
       }
     }
   }

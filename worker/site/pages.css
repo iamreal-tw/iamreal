@@ -1,0 +1,925 @@
+/*
+ * The pages visitors read: the home page, the FAQ, how to verify, hanging
+ * a proof on a profile, the page of a card, the page of an account and the
+ * roster page (server/pages). One column, at most 560 wide, 20 on each
+ * side on a phone.
+ *
+ * Nothing here means a conclusion (docs/design/principles.md, principle 4):
+ * no green, no check mark, no lock or shield, nothing that looks like a
+ * platform's verified badge. The raspberry red is for links and the one
+ * button. The last card proof looks the same whatever the number of days.
+ *
+ * The colours and type stacks are those of web/src/ui/style.css. The pages
+ * load no font file: the stacks name the visual identity's typefaces first
+ * and fall back to the system's. The Content-Security-Policy of these pages
+ * allows this file and nothing inline (server/README.md).
+ */
+:root {
+  --ink: #1b1b1f;
+  --paper: #f4f1ea;
+  --line: #d8d3c7;
+  --mute: #6b6860;
+  --white: #fffdf9;
+  --red: #bf2150;
+  --teal: #226977;
+  --teal-bg: #d9eef2;
+  --round: "GenSenRounded2 TW", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 20px 48px;
+}
+
+a {
+  color: var(--red);
+  text-underline-offset: 3px;
+}
+
+p {
+  margin: 0 0 10px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+.small {
+  font-size: 14px;
+  color: var(--mute);
+}
+
+.id {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+/* A test roster says so above everything else. */
+.test-roster {
+  margin: 0;
+  padding: 6px 20px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-weight: 700;
+  font-size: 15px;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* The navigation bar at the top (home.md, 導覽列) ------------------------------
+   One row: the mark, the four links, the button. On a narrow screen the
+   links move to a second row under the mark and the button; nothing is
+   hidden and no script is needed. */
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.top .home {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.top .logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+.top .home b {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+}
+
+.top .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.top .links a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.top .links a:hover {
+  text-decoration: underline;
+}
+
+.top .nav-button {
+  margin: 0;
+  padding: 5px 16px;
+  font-size: 14px;
+}
+
+@media (max-width: 600px) {
+  .top .links {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: space-between;
+    padding-top: 4px;
+  }
+}
+
+.logo-card-body {
+  fill: var(--red);
+}
+
+.logo-chip {
+  fill: var(--paper);
+}
+
+.logo-island-body {
+  fill: var(--ink);
+  stroke: var(--paper);
+}
+
+/* Titles ------------------------------------------------------------------------ */
+
+.title {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.55;
+  margin: 28px 0 8px;
+}
+
+.title .line {
+  display: block;
+}
+
+/* The account: the largest words of the first screen. */
+.title .account {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* An account longer than 18 characters: one size smaller, and broken
+   anywhere only when even that does not fit. */
+.title .account.long {
+  font-size: 28px;
+}
+
+.lookup .title .account {
+  display: inline;
+  font-size: inherit;
+}
+
+.scope {
+  margin-bottom: 0;
+}
+
+/* The last card proof: as prominent as the title, the same for any number
+   of days. */
+.last {
+  margin: 20px 0 0;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.last .when {
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.55;
+  margin-bottom: 6px;
+}
+
+.last .small a {
+  white-space: nowrap;
+}
+
+/* Does the account owner acknowledge it ---------------------------------------- */
+
+h2 {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  margin: 36px 0 10px;
+}
+
+.backlink {
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  margin: 0 0 14px;
+  padding: 6px 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+/* The profile on Threads. A fixed height that holds three lines of bio and
+   two links; more than that scrolls inside the frame, rather than cut a
+   link off. The embed's page is white below its own card, so the frame
+   is drawn as one white box around all of it. */
+iframe.threads-profile {
+  display: block;
+  width: 100%;
+  max-width: 558px;
+  height: 360px;
+  margin: 0 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* The record ------------------------------------------------------------------------ */
+
+.facts {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.history summary {
+  cursor: pointer;
+  color: var(--teal);
+  font-weight: 500;
+  padding: 6px 0;
+}
+
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.log li {
+  display: flex;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.log time,
+.rows time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Several cards behind one short ID */
+
+.many {
+  margin-bottom: 8px;
+}
+
+.one-of-many {
+  margin-top: 36px;
+  padding-top: 4px;
+  border-top: 2px solid var(--ink);
+}
+
+.one-of-many .prefix {
+  margin: 10px 0 0;
+  font-size: 15px;
+}
+
+.one-of-many .title {
+  margin-top: 12px;
+}
+
+/* How to verify, and getting one's own -------------------------------------------- */
+
+section.verify {
+  margin-top: 40px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.mine {
+  margin-top: 40px;
+  padding: 18px 18px 8px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.button {
+  display: inline-block;
+  margin: 4px 0 2px;
+  padding: 10px 24px;
+  border-radius: 99px;
+  background: var(--red);
+  color: var(--white);
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 17px;
+  text-decoration: none;
+}
+
+/* The page of an account ----------------------------------------------------------- */
+
+.cards {
+  list-style: none;
+  margin: 14px 0 18px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.cards li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.cards a {
+  margin-left: auto;
+}
+
+/* The roster page ------------------------------------------------------------------- */
+
+.query {
+  margin-top: 28px;
+}
+
+.query label {
+  font-weight: 500;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field .at {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.field input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: 16px var(--sans);
+}
+
+.field button {
+  padding: 8px 20px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--red);
+  color: var(--white);
+  font: 700 16px var(--round);
+  cursor: pointer;
+}
+
+.bad {
+  margin-top: 6px;
+}
+
+.rows {
+  list-style: none;
+  margin: 10px 0 10px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.rows a {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.rows .who {
+  color: var(--red);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.rows .id-line {
+  color: var(--mute);
+}
+
+.download {
+  margin-top: 28px;
+}
+
+.download a + a {
+  margin-left: 24px;
+}
+
+/* The page of a short ID that resolves to nothing */
+
+.typed {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* The home page (home.md) ------------------------------------------------------------ */
+
+body.home section + section {
+  margin-top: 52px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.hero {
+  padding: 32px 0 8px;
+}
+
+.hero .brand {
+  margin: 0 0 6px;
+}
+
+.hero .brand b {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+}
+
+.hero .brand span {
+  margin-left: 6px;
+  font: 14px var(--mono);
+  color: var(--mute);
+}
+
+/* The first screen's two lines: the largest words of the home page. */
+.headline {
+  margin: 0 0 22px;
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.45;
+}
+
+.headline .line,
+.big-heading .line {
+  display: block;
+}
+
+.headline .line + .line {
+  margin-top: 10px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  margin: 0 0 8px;
+}
+
+.button.big {
+  padding: 12px 30px;
+  font-size: 18px;
+}
+
+/* The small proof: an example. */
+.mini-proof {
+  max-width: 340px;
+  margin: 30px 0 18px;
+  padding: 14px 20px 12px;
+  background: var(--white);
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 6px 6px 0 var(--teal-bg);
+}
+
+.mini-proof p {
+  margin: 0;
+}
+
+.mini-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.mini-top .platform {
+  padding: 1px 10px;
+  border-radius: 99px;
+  background: var(--teal-bg);
+  color: var(--teal);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.mini-account {
+  margin: 4px 0 8px !important;
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.3;
+}
+
+.mini-proof dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 18px;
+  margin: 0 0 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.mini-proof dt {
+  color: var(--mute);
+}
+
+.mini-proof dd {
+  margin: 0;
+}
+
+.big-heading {
+  margin: 34px 0 14px;
+  font-size: 24px;
+  line-height: 1.45;
+}
+
+.numbers {
+  padding-top: 18px !important;
+}
+
+.numbers .count {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.numbers .count b {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.numbers .count + p:not(.count) {
+  margin-top: 12px;
+}
+
+.why p {
+  font-size: 17px;
+  line-height: 1.85;
+}
+
+.steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 14px 18px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.steps .n {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--teal);
+}
+
+.steps b {
+  display: block;
+  font-family: var(--round);
+  font-size: 18px;
+}
+
+.steps .small {
+  display: block;
+}
+
+.halves {
+  margin: 14px 0 18px;
+  background: var(--white);
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.half {
+  padding: 16px 20px 8px;
+}
+
+.half + .half {
+  border-top: 1.5px dashed var(--ink);
+}
+
+.half .tag {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--teal);
+}
+
+.both {
+  font-family: var(--round);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.questions {
+  border-top: 1px solid var(--line);
+}
+
+.questions details {
+  border-bottom: 1px solid var(--line);
+}
+
+.questions summary {
+  padding: 12px 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.questions details[open] summary {
+  padding-bottom: 6px;
+}
+
+.questions details > :last-child {
+  margin-bottom: 14px;
+}
+
+.more-qa {
+  margin-top: 16px;
+}
+
+.uses {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.uses > li {
+  display: grid;
+  grid-template-columns: 3.6em 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.uses .when {
+  justify-self: start;
+  padding: 1px 10px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+.uses b {
+  display: block;
+  font-family: var(--round);
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.uses .sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--mute);
+}
+
+body.home section.end {
+  margin-top: 56px;
+  padding: 30px 22px 20px;
+  background: var(--white);
+  border: 1.5px solid var(--ink);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.end .big-heading {
+  margin-top: 0;
+  font-size: 24px;
+}
+
+.end .lead {
+  font-size: 17px;
+  margin-bottom: 18px;
+}
+
+/* The FAQ (faq.md): every answer shown under its question ----------------------------- */
+
+.category h2 {
+  margin: 40px 0 4px;
+  font-size: 20px;
+}
+
+.question h3 {
+  margin: 22px 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.question {
+  scroll-margin-top: 16px;
+}
+
+ul.dots {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+  list-style-type: "·  ";
+}
+
+ul.dots li {
+  margin-bottom: 6px;
+}
+
+/* How to verify (verify.md) ------------------------------------------------------------- */
+
+.prompt {
+  margin: 0 0 10px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 14px/1.7 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A copy button (/copy.js shows it): outlined, the raspberry red. */
+button.copy {
+  padding: 6px 20px;
+  border: 1.5px solid var(--red);
+  border-radius: 99px;
+  background: var(--white);
+  color: var(--red);
+  font: 700 15px var(--round);
+  cursor: pointer;
+}
+
+/* Hanging a proof on a profile (hang.md) ------------------------------------------------- */
+
+.hang .title .account {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-family: var(--round);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.hang .actions {
+  margin: 4px 0 22px;
+}
+
+.hang button.copy.button {
+  margin: 0;
+  border: 0;
+  background: var(--red);
+  color: var(--white);
+  font-size: 17px;
+  padding: 10px 24px;
+}
+
+.button.quiet {
+  margin: 0;
+  background: transparent;
+  color: var(--red);
+  box-shadow: inset 0 0 0 1.5px var(--red);
+}
+
+.hang .steps li {
+  grid-template-columns: 30px 1fr;
+}
+
+.hang .done {
+  margin-top: 24px;
+}
+
+.none-yet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 28px;
+}
+
+/* The foot of every page (home.md, section 9) -------------------------------------------- */
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 20px;
+  margin-top: 48px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.foot .site b {
+  font-family: var(--round);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.foot .site span {
+  font: 12px var(--mono);
+  color: var(--mute);
+}
+
+@media (max-width: 480px) {
+  .title .account {
+    font-size: 32px;
+  }
+
+  .title .account.long {
+    font-size: 22px;
+  }
+
+  iframe.threads-profile {
+    height: 380px;
+  }
+
+  .cards a {
+    margin-left: 0;
+  }
+
+  .headline {
+    font-size: 26px;
+  }
+
+  .big-heading {
+    font-size: 22px;
+  }
+
+  .numbers .count b,
+  .mini-account {
+    font-size: 24px;
+  }
+}

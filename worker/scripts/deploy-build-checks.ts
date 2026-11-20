@@ -1,6 +1,7 @@
 // The checks of a deploy build, a directory made by `buildDeploy`
 // (deploy.ts): what gets deployed holds MOICA's two issuer keys and MOICA's
-// two CRL addresses, written into the code, and nothing of the test build:
+// two CRL addresses, written into the code, no other address but the ones
+// the pages write (`PAGE_ADDRESSES`), and nothing of the test build:
 // no other key, no fake MOICA, no switch for the clock; none of these is a
 // setting (ADR-0028); and its other modules are the proof verifier's files
 // with their SHA-256 (engine-files.ts).
@@ -108,8 +109,33 @@ export function engineFiles(): Record<string, string> {
   return { [WASM_FILE]: WASM_SHA256, ...Object.fromEntries(CIRCUIT_NAMES.map((circuit) => [vkFile(circuit), CIRCUITS[circuit].verificationKeySha256])) };
 }
 
+/**
+ * The addresses the pages and their headers write, each as the code has it
+ * (`urlsIn` reads up to the next quote or space, so what follows an address
+ * in the same string is part of it here). None of them is fetched: the
+ * Worker requests nothing but MOICA's two CRLs.
+ *
+ *   - the repository, linked from every page (design/copy/home.md, 導覽列);
+ *   - Threads: the profile a page of a card embeds and links to
+ *     (design/copy/proof-page.md, section 3), and the one origin the pages'
+ *     policy allows a frame from (src/headers.ts);
+ *   - the data domain, which the card proof page's policy lets it fetch
+ *     from (src/headers.ts; web/README.md).
+ */
+export const PAGE_ADDRESSES: readonly string[] = [
+  "https://data.iamreal.tw;",
+  "https://github.com/iamreal-tw/iamreal",
+  "https://www.threads.com/@${account}",
+  "https://www.threads.com/@${account}/embed/",
+  "https://www.threads.com;",
+];
+
 export function checkAddresses(b: BuildContents): void {
-  assert.deepEqual(urlsIn(b.code), addressesInCrlReadme().sort(), "the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives");
+  assert.deepEqual(
+    urlsIn(b.code),
+    [...addressesInCrlReadme(), ...PAGE_ADDRESSES].sort(),
+    "the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives, and the ones the pages write",
+  );
 }
 
 /**
@@ -136,15 +162,16 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 
 /**
  * The test environment's only settings are the roster's object, the data
- * bucket, the object's name and which roster it is: so the issuer keys,
- * MOICA's addresses and the clock cannot be read from a setting. (A secret
+ * bucket, the files of Static Assets, the object's name, which roster it is
+ * and the date it was last cleared on: so the issuer keys, MOICA's
+ * addresses and the clock cannot be read from a setting. (A secret
  * set on the Worker with `wrangler secret` is not in the configuration and
  * is not seen here.)
  */
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable" },
+    { ROSTER: "Durable Object", DATA: "R2 Bucket", ASSETS: "Assets", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable", TEST_ROSTER_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }

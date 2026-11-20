@@ -1,7 +1,7 @@
 // The scoped ID (spec/scoped-id.md): computed from the card's signature over
 // the scope string, written as text, and its short ID.
 import { bigintOfBytes, bytesOfBigint, limbs } from "./bytes.ts";
-import { decodeBase32Strict, encodeBase32 } from "./base32.ts";
+import { ALPHABET, decodeBase32Strict, encodeBase32 } from "./base32.ts";
 import { P } from "./field.ts";
 
 /** Poseidon2 of two field elements, as Barretenberg computes it. */
@@ -44,4 +44,22 @@ export const SHORT_ID_LENGTH = 10;
 /** The first 10 characters of the scoped ID's text form: the card's page names the card by them. */
 export function shortId(text: string): string {
   return text.slice(0, SHORT_ID_LENGTH);
+}
+
+/**
+ * A short ID as typed in a URL (spec/scoped-id.md): read without regard to
+ * case, with `O` read as `0` and `I` and `L` as `1`. After that it must be
+ * exactly 10 characters of the alphabet; null otherwise. This leniency is
+ * for URLs only, never for records.
+ */
+export function readShortIdInUrl(typed: string): string | null {
+  if (typed.length !== SHORT_ID_LENGTH) return null;
+  let out = "";
+  for (const c of typed) {
+    const upper = c >= "a" && c <= "z" ? c.toUpperCase() : c;
+    const read = upper === "O" ? "0" : upper === "I" || upper === "L" ? "1" : upper;
+    if (!ALPHABET.includes(read)) return null;
+    out += read;
+  }
+  return out;
 }
