@@ -52,7 +52,8 @@ const (
 // verified again with bb, and the CRL archive's index is rebuilt from the
 // CRL files. Then it writes the roster directory, one file per 1,000
 // records, and its record hash lists, and adds today's line to
-// fingerprints.jsonl.
+// fingerprints.jsonl, after the card state file of today (the states this
+// re-verification computed), which iamreal-verify asks for with the line.
 //
 // A full file or list already published is never written again; it must
 // have the same bytes. Nothing is written if anything is wrong, and the exit code
@@ -162,6 +163,16 @@ func snapshot(c snapshotConfig) int {
 		if err := writeFileAtomic(filepath.Join(c.OutDir, filepath.FromSlash(f.Name)), f.Data); err != nil {
 			return fail(err)
 		}
+	}
+	// The card state file of today, before today's line (ADR-0027): the
+	// states of the re-verification just made, which are the ones this
+	// snapshot publishes the roster by. iamreal-verify reports a line
+	// whose date has no card state file.
+	if err := os.MkdirAll(filepath.Join(c.OutDir, roster.CardStateDir), 0o755); err != nil {
+		return fail(err)
+	}
+	if err := writeFileAtomic(filepath.Join(c.OutDir, filepath.FromSlash(roster.CardStateName(c.Today))), roster.CardStateFile(rep.Cards)); err != nil {
+		return fail(err)
 	}
 	var fingerprintFile []byte
 	for _, fl := range lines {
