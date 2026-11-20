@@ -111,7 +111,7 @@ IAMREAL_BB=/path/to/bb pnpm test                                                
 IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.ts        # 只跑比對
 ```
 
-`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
+`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。GitHub Actions 上，每個 PR 的 `typescript` 工作（`.github/workflows/checks.yml`）設了兩樣，會跑到它；`web/` 的兩套瀏覽器測試在另一個工作流程，只在它們用到的檔改了才跑（`.github/README.md`）。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
 
 1. 用一個頂替 `bb` 的腳本跑 `go test ./verifier`，留下每次交給 `bb verify` 的驗證金鑰、證明、公開輸入，再把同樣的參數交給真的 `bb`。內容相同的算一案。Go 的測試裡有亂數的證明，所以每次跑的案例不完全相同。
 2. 加上 Go 在呼叫 `bb` 之前就擋掉、所以腳本看不到的那幾種，每個電路 16 案：公開輸入加上 `p`、等於 `p`、`2^256 − 1`、個數多一個少一個、沒有、少一個位元組；證明是空的、多或少一個位元組、多或少一個值、非零知識的證明；別的電路的驗證金鑰（配原本的公開輸入、配那個電路的公開輸入）。
@@ -250,7 +250,7 @@ pnpm run deploy:test
 - `pnpm-workspace.yaml`：安裝時一定會讀，設定能改裝進來的套件（例如 `patchedDependencies` 加一個 `patches/` 的修補，在 `--ignore-scripts --ignore-pnpmfile` 之下照樣套到 wrangler 上，試過）。`test/workflows.test.ts` 確認它只有現在的三個鍵、lockfile 沒有 `patchedDependencies` 這類段落、程式庫沒有追蹤 `.npmrc`、`.pnpmfile.cjs`、`patches/`、`worker/` 底下的 `.env*`
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
-[`test/workflows.ts`](test/workflows.ts) 是工作流程的白名單：`deploy-test.yml` 的兩個工作必須逐字是那裡寫的（上傳那一行由 `uploadArgs` 組出來），`checks.yml` 的每個鍵、action、`with`、`env`、`working-directory` 都要在清單裡，整個 `.github/workflows/` 有 `secrets` 這個字的行（註解也算）恰好是上傳那一步的兩行。檔案用一個只讀 YAML 一小部分的讀法讀，那部分以外的寫法都算問題；檔裡只准可列印的 ASCII 和換行，註解也一樣，空白只認 ASCII 的空格（不然 U+00A0 這類空白開頭、接著 `#` 的一行，這裡當成註解，libyaml 這類照 YAML 規格只認 ASCII 空白的解析器卻會把它接到上一行的值後面，折進 `run`（#39 第二輪審查用 libyaml 實測））。它防手誤和明顯的改動，不能代替逐行看；它看不到什麼，寫在那個檔的開頭。
+[`test/workflows.ts`](test/workflows.ts) 是工作流程的白名單：`deploy-test.yml` 的兩個工作必須逐字是那裡寫的（上傳那一行由 `uploadArgs` 組出來），PR 的兩個檢查工作流程 `checks.yml`、`checks-browser.yml` 的每個鍵、action、`with`、`env`、`working-directory` 都要在清單裡，觸發條件逐字照寫（`paths` 只准在 `checks-browser.yml`，內容逐字等於 `BROWSER_PATHS`），`concurrency` 的群組各自不同，整個 `.github/workflows/` 有 `secrets` 這個字的行（註解也算）恰好是上傳那一步的兩行。檔案用一個只讀 YAML 一小部分的讀法讀，那部分以外的寫法都算問題；檔裡只准可列印的 ASCII 和換行，註解也一樣，空白只認 ASCII 的空格（不然 U+00A0 這類空白開頭、接著 `#` 的一行，這裡當成註解，libyaml 這類照 YAML 規格只認 ASCII 空白的解析器卻會把它接到上一行的值後面，折進 `run`（#39 第二輪審查用 libyaml 實測））。它防手誤和明顯的改動，不能代替逐行看；它看不到什麼，寫在那個檔的開頭。
 
 ## 第一次部署量到的
 
