@@ -1,7 +1,7 @@
-//! `idc_list_consequence`, called the way an app calls it: what a list
-//! does on every platform, from the platform table and the card's state the
-//! server sent, before the card signs the list (spec/roster-rules.md,
-//! checks 5 and 6; docs/api/card-proof.md, card-state).
+//! `idc_list_consequence`, called the way an app calls it: every case of
+//! spec/vectors/list-consequence.json, and every record of
+//! spec/vectors/roster-rules.json that reaches checks 5 and 6; then what
+//! only the C function has (the shape of its input, the clock, pointers).
 
 mod common;
 
@@ -192,6 +192,29 @@ fn every_case_of_the_vectors_that_reaches_the_event_rules() {
     );
 }
 
+#[test]
+fn every_case_of_list_consequence_json() {
+    let v = vectors("list-consequence.json");
+    let cases = v["cases"].as_array().unwrap();
+    assert!(!cases.is_empty());
+    for c in cases {
+        let name = text(c, "name");
+        let got = consequence(
+            &c["platforms"],
+            &c["card_state"],
+            &c["accounts"],
+            text(c, "today"),
+        );
+        let want = &c["result"];
+        if want.get("unread").is_some() || want.get("not_offered").is_some() {
+            // The device does not go on; nothing is computed.
+            assert_eq!(got, Err(IDC_ERR_INPUT), "{name}");
+        } else {
+            assert_eq!(got.as_ref(), Ok(want), "{name}");
+        }
+    }
+}
+
 const THREADS: &str =
     r#"[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
 
@@ -208,308 +231,56 @@ fn threads(card_state: &str, accounts: &str, today: &str) -> Result<Value, i32> 
 }
 
 #[test]
-fn each_row_says_what_the_list_does_and_how_many_switches_stay() {
-    // Another account on a later date: a switch, the second of five.
-    assert_eq!(
-        threads(
-            BOB,
-            r#"[{"platform":"threads","username":"carol"}]"#,
-            "2026-11-16"
-        ),
-        Ok(json!({
-            "valid": true,
-            "accounts": [{"platform": "threads", "username": "carol"}],
-            "rows": [{"platform": "threads", "kind": "switch", "username": "carol", "previous": "bob", "switches_left": 3}],
-        }))
-    );
-    // The same account: nothing changes.
-    assert_eq!(
-        threads(
-            BOB,
-            r#"[{"platform":"threads","username":"bob"}]"#,
-            "2026-11-16"
-        ),
-        Ok(json!({
-            "valid": true,
-            "accounts": [{"platform": "threads", "username": "bob"}],
-            "rows": [{"platform": "threads", "kind": "refresh", "username": "bob", "previous": null, "switches_left": 4}],
-        }))
-    );
-    // Left out: withdrawn; the row names the account withdrawn.
-    assert_eq!(
-        threads(BOB, "[]", "2026-11-16"),
-        Ok(json!({
-            "valid": true,
-            "accounts": [],
-            "rows": [{"platform": "threads", "kind": "withdraw", "username": "bob", "previous": null, "switches_left": 4}],
-        }))
-    );
-    // Another account on the date of the last switch: a correction, not counted.
-    let today = BOB.replace("2026-11-04", "2026-03-02");
-    assert_eq!(
-        threads(
-            &today,
-            r#"[{"platform":"threads","username":"carol"}]"#,
-            "2026-03-02"
-        ),
-        Ok(json!({
-            "valid": true,
-            "accounts": [{"platform": "threads", "username": "carol"}],
-            "rows": [{"platform": "threads", "kind": "correction", "username": "carol", "previous": "bob", "switches_left": 4}],
-        }))
-    );
-    // A card without a record.
-    let new = r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}"#;
-    assert_eq!(
-        threads(
-            new,
-            r#"[{"platform":"threads","username":"alice"}]"#,
-            "2026-11-16"
-        ),
-        Ok(json!({
-            "valid": true,
-            "accounts": [{"platform": "threads", "username": "alice"}],
-            "rows": [{"platform": "threads", "kind": "first", "username": "alice", "previous": null, "switches_left": 5}],
-        }))
-    );
-    // After a withdrawal, another account is a switch from the last one declared.
-    let withdrawn = BOB.replace(r#""current":"bob""#, r#""current":null"#);
-    assert_eq!(
-        threads(
-            &withdrawn,
-            r#"[{"platform":"threads","username":"carol"}]"#,
-            "2026-11-16"
-        )
-        .unwrap()["rows"],
-        json!([{"platform": "threads", "kind": "switch", "username": "carol", "previous": "bob", "switches_left": 3}])
-    );
-}
-
-#[test]
-fn a_list_the_rules_refuse_is_a_result_not_an_error() {
-    let used_up = BOB.replace(r#""switch_count":1"#, r#""switch_count":5"#);
-    assert_eq!(
-        threads(
-            &used_up,
-            r#"[{"platform":"threads","username":"carol"}]"#,
-            "2026-11-16"
-        ),
-        Ok(json!({"valid": false, "reason": "switch_limit", "platform": "threads"}))
-    );
-    let new = r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}"#;
-    assert_eq!(
-        threads(new, "[]", "2026-11-16"),
-        Ok(json!({"valid": false, "reason": "empty"}))
-    );
-    let three_today = BOB.replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":3"#);
-    assert_eq!(
-        threads(
-            &three_today,
-            r#"[{"platform":"threads","username":"bob"}]"#,
-            "2026-11-04"
-        ),
-        Ok(json!({"valid": false, "reason": "daily_limit"}))
-    );
-    // The next date allows three more.
-    assert_eq!(
-        threads(
-            &three_today,
-            r#"[{"platform":"threads","username":"bob"}]"#,
-            "2026-11-05"
-        )
-        .unwrap()["valid"],
-        json!(true)
-    );
-}
-
-#[test]
-fn an_account_on_a_platform_the_device_does_not_know_stays_in_the_list_as_it_is() {
-    // `example` is not in the table the server sent; its account stays, in its place by platform.
-    let state = r#"{"last_card_proof":"2026-11-04","proofs_on_last_date":1,"platforms":{"threads":{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"},"example":{"current":"Bob Example","whatever":1},"zzz":{"current":null}},"count":1}"#;
-    assert_eq!(
-        threads(
-            state,
-            r#"[{"platform":"threads","username":"carol"}]"#,
-            "2026-11-16"
-        ),
-        Ok(json!({
-            "valid": true,
-            "accounts": [{"platform": "example", "username": "Bob Example"}, {"platform": "threads", "username": "carol"}],
-            "rows": [
-                {"platform": "example", "kind": "refresh", "username": "Bob Example", "previous": null, "switches_left": null},
-                {"platform": "threads", "kind": "switch", "username": "carol", "previous": "bob", "switches_left": 3},
-            ],
-        }))
-    );
-    // The empty list does not withdraw it: the card still declares an account.
-    assert_eq!(
-        threads(state, "[]", "2026-11-16").unwrap()["accounts"],
-        json!([{"platform": "example", "username": "Bob Example"}])
-    );
-    // The cardholder cannot name it: it is not offered.
-    assert_eq!(
-        threads(
-            state,
-            r#"[{"platform":"example","username":"Bob Example"},{"platform":"threads","username":"carol"}]"#,
-            "2026-11-16"
-        ),
-        Err(IDC_ERR_INPUT)
-    );
-    // A row of the table the device cannot read is a platform it does not know.
-    let unreadable_row = r#"[{"platform":"example","display_name":"Example","username_format":"[a-z"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
-    assert_eq!(
-        call(
-            unreadable_row.as_bytes(),
-            state.as_bytes(),
-            b"[]",
-            noon("2026-11-16")
-        )
-        .unwrap()["accounts"],
-        json!([{"platform": "example", "username": "Bob Example"}])
-    );
-}
-
-#[test]
-fn a_platform_of_the_table_without_an_entry_is_not_offered() {
+fn the_list_is_in_the_shape_of_a_record_s_accounts() {
     let two = r#"[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
-    let only_threads = BOB;
-    assert_eq!(
-        call(
-            two.as_bytes(),
-            only_threads.as_bytes(),
-            br#"[{"platform":"threads","username":"bob"}]"#,
-            noon("2026-11-16")
-        )
-        .unwrap()["rows"],
-        json!([{"platform": "threads", "kind": "refresh", "username": "bob", "previous": null, "switches_left": 4}])
-    );
-    assert_eq!(
-        call(
-            two.as_bytes(),
-            only_threads.as_bytes(),
-            br#"[{"platform":"test-example","username":"bob"}]"#,
-            noon("2026-11-16")
-        ),
-        Err(IDC_ERR_INPUT)
-    );
-}
-
-#[test]
-fn a_list_that_is_not_one_of_the_platforms_offered_is_refused() {
+    let both = r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null},"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}"#;
+    let now = noon("2026-11-16");
+    let ordered = br#"[{"platform":"test-example","username":"bob"},{"platform":"threads","username":"bob"}]"#;
+    assert!(call(two.as_bytes(), both.as_bytes(), ordered, now).is_ok());
     for list in [
-        r#"[{"platform":"threads","username":"Bob"}]"#,
+        r#"[{"platform":"threads","username":"bob"},{"platform":"test-example","username":"bob"}]"#,
         r#"[{"platform":"threads","username":"bob"},{"platform":"threads","username":"carol"}]"#,
-        r#"[{"platform":"instagram","username":"bob"}]"#,
         r#"[{"platform":"threads","username":"bob","platform":"threads"}]"#,
+        r#"[{"platform":"threads","username":"bob","more":1}]"#,
         r#"{"threads":"bob"}"#,
         "",
     ] {
         assert_eq!(
-            threads(BOB, list, "2026-11-16"),
+            call(two.as_bytes(), both.as_bytes(), list.as_bytes(), now),
             Err(IDC_ERR_INPUT),
             "{list}"
         );
     }
-    let two = r#"[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"#;
-    let both = r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null},"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}"#;
-    let ordered = br#"[{"platform":"test-example","username":"bob"},{"platform":"threads","username":"bob"}]"#;
-    let unordered = br#"[{"platform":"threads","username":"bob"},{"platform":"test-example","username":"bob"}]"#;
-    assert!(call(two.as_bytes(), both.as_bytes(), ordered, noon("2026-11-16")).is_ok());
-    assert_eq!(
-        call(
-            two.as_bytes(),
-            both.as_bytes(),
-            unordered,
-            noon("2026-11-16")
-        ),
-        Err(IDC_ERR_INPUT)
-    );
 }
 
 #[test]
-fn a_card_state_the_device_cannot_read_is_refused() {
-    let replace = |from: &str, to: &str| {
-        assert!(BOB.contains(from), "{from}");
-        BOB.replace(from, to)
-    };
+fn an_answer_is_read_in_one_way() {
+    // A key twice in one object: the core does not pick one.
     for state in [
-        replace(r#""last_card_proof":"2026-11-04","#, ""),
-        replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":1.5"#),
-        replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":"1""#),
-        replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":0"#),
-        replace(r#""proofs_on_last_date":1"#, r#""proofs_on_last_date":4"#),
-        replace(r#""last_card_proof":"2026-11-04""#, r#""last_card_proof":"2026-11-20""#),
-        replace(r#""last_card_proof":"2026-11-04""#, r#""last_card_proof":"2026-11-4""#),
-        replace(r#""last_card_proof":"2026-11-04""#, r#""last_card_proof":null"#),
-        replace(r#""switch_count":1"#, r#""switch_count":6"#),
-        replace(r#""switch_count":1"#, r#""switch_count":-1"#),
-        replace(r#""switch_count":1,"#, ""),
-        replace(r#""current":"bob""#, r#""current":"Bob""#),
-        replace(r#""current":"bob""#, r#""current":"carol""#),
-        replace(r#""correction_date":"2026-03-02""#, r#""correction_date":null"#),
-        replace(r#""correction_date":"2026-03-02""#, r#""correction_date":"2026-11-05""#),
-        replace(r#","correction_date":"2026-03-02""#, ""),
-        replace(r#""current":"bob","#, r#""current":"bob","current":"bob","#),
-        replace(r#""last_card_proof":"2026-11-04""#, r#""last_card_proof":"2026-11-04","last_card_proof":"2026-11-04""#),
-        replace(r#"{"current":"bob","last_declared":"bob","switch_count":1,"correction_date":"2026-03-02"}"#, "[]"),
-        replace(r#""platforms":{"#, r#""platforms":{"Example":{"current":"bob"},"#),
-        replace(r#""platforms":{"#, r#""platforms":{"example":{"current":"a\"b"},"#),
-        replace(r#""platforms":{"#, r#""platforms":{"example":{"last_declared":null},"#),
-        replace(r#""platforms":{"#, r#""platforms":{"example":"bob","#),
-        r#"{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"example":{"current":"bob"}},"count":0}"#.to_owned(),
-        r#"{"last_card_proof":null,"proofs_on_last_date":0,"count":0}"#.to_owned(),
-        "[]".to_owned(),
-        "".to_owned(),
-    ] {
-        assert_eq!(threads(&state, "[]", "2026-11-16"), Err(IDC_ERR_INPUT), "{state}");
-    }
-    // What is read is read: fields it does not know are ignored, and a count is a number with no fraction.
-    for state in [
-        replace(r#""count":137"#, r#""count":137,"head":"x""#),
-        replace(r#""switch_count":1"#, r#""switch_count":1,"next":2"#),
-        replace(r#""switch_count":1"#, r#""switch_count":1.0"#),
-        // The last card proof may be up to 3 days ahead of the device's date.
-        replace(
-            r#""last_card_proof":"2026-11-04""#,
-            r#""last_card_proof":"2026-11-19""#,
-        ),
-    ] {
-        assert!(threads(&state, "[]", "2026-11-16").is_ok(), "{state}");
-    }
-}
-
-#[test]
-fn a_platform_table_the_device_cannot_read_is_refused() {
-    for platforms in [
-        // Not in ascending order of platform.
-        r#"[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"},{"platform":"example","display_name":"Example","username_format":"[a-z]{1,9}"}]"#,
-        // No row it can read.
-        r#"[{"platform":"threads","display_name":"Threads","username_format":"a+"}]"#,
-        r#"[{"platform":"threads","display_name":"","username_format":"[a-z0-9._]{1,30}"}]"#,
-        "[]",
-        r#"{"platforms":[]}"#,
+        BOB.replace(r#""current":"bob","#, r#""current":"bob","current":"bob","#),
+        BOB.replace(r#""count":137"#, r#""count":137,"count":137"#),
     ] {
         assert_eq!(
-            call(
-                platforms.as_bytes(),
-                BOB.as_bytes(),
-                b"[]",
-                noon("2026-11-16")
-            ),
+            threads(&state, "[]", "2026-11-16"),
             Err(IDC_ERR_INPUT),
-            "{platforms}"
+            "{state}"
         );
     }
-    // An element that names no platform is passed over.
-    let with_junk = r#"[1,{"platform":"Threads"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}","more":true}]"#;
-    assert!(
-        call(
-            with_junk.as_bytes(),
-            BOB.as_bytes(),
-            b"[]",
-            noon("2026-11-16")
-        )
-        .is_ok()
+    let table = THREADS.replace(
+        r#""platform":"threads","#,
+        r#""platform":"threads","platform":"threads","#,
+    );
+    assert_eq!(
+        call(table.as_bytes(), BOB.as_bytes(), b"[]", noon("2026-11-16")),
+        Err(IDC_ERR_INPUT)
+    );
+    // A number is read by its value (spec/list-consequence.md, "Input").
+    let state = BOB
+        .replace(r#""switch_count":1"#, r#""switch_count":1.0"#)
+        .replace(r#""count":137"#, r#""count":1.37e2"#);
+    assert_eq!(
+        threads(&state, "[]", "2026-11-16"),
+        threads(BOB, "[]", "2026-11-16")
     );
 }
 

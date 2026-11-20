@@ -15,6 +15,7 @@ there are the names used here.
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
 | [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the roster fingerprint, the published roster, how to verify it | Draft |
 | [`roster-rules.md`](roster-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot and 5 switches per card and platform | Draft |
+| [`list-consequence.md`](list-consequence.md) | What a cardholder's list does, as the device shows it before the card signs: reading the platform table of `config` and the card's state, the list the card signs, one row per platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |

@@ -1,10 +1,8 @@
-//! What a list does on every platform, before the card signs it: the
-//! confirmation screen shows it row by row (docs/api/card-proof.md,
-//! card-state, "What the device does with it"). The roster rules decide it
-//! ([`apply_list`], checks 5 and 6), against the state of the card the
-//! server reported, on today's date in Taiwan by the device's clock.
-//!
-//! `web/` computes the same in `web/src/flow.ts` (`consequenceOf`).
+//! What a list does on every platform, before the card signs it
+//! (spec/list-consequence.md, "What the list does"): the list the card
+//! signs and one row per platform, for the confirmation screen. The roster
+//! rules decide it ([`apply_list`], checks 5 and 6), against the state of
+//! the card the server reported, on today's date in Taiwan.
 
 use crate::date::Date;
 use crate::roster_rules::{
@@ -12,77 +10,85 @@ use crate::roster_rules::{
     Slot, apply_list,
 };
 
-/// The state of a card as the device read it from the server.
+/// The state of a card as the device read it (spec/list-consequence.md,
+/// "Reading the card's state").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadState {
     /// `last_card_proof`, `proofs_on_last_date`, and a slot for every
-    /// platform offered: a row of the table the device read, with an entry
-    /// in the state.
+    /// platform offered.
     pub card: Card,
-    /// The accounts of the card on platforms the device does not know, in
-    /// ascending order of platform: kept in the list as they are, since a
-    /// list without one would withdraw it.
+    /// The kept accounts, on platforms the device does not know, in
+    /// ascending order of platform.
     pub kept: Vec<Account>,
 }
 
-/// One row of the confirmation: what the list does on one platform.
+/// One row: what the list does on one platform (spec/list-consequence.md,
+/// the table of a row).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
     pub platform: String,
+    /// False for a platform whose account is kept.
+    pub known: bool,
     pub kind: Kind,
-    /// The account the row is about: the one declared, or for a
-    /// `withdraw` the one withdrawn.
+    /// The account the list has there; for a `withdraw`, the one withdrawn.
     pub username: String,
-    /// For a `switch` or a `correction`, the account it replaces: the
-    /// current one, or after a withdrawal the last one declared.
+    /// The slot's `current` before the record.
+    pub current: Option<String>,
+    /// For a `switch` or a `correction`, the account replaced.
     pub previous: Option<String>,
-    /// The switches left on the platform after the record; `None` on a
-    /// platform the device does not know.
+    /// For a `switch`, the switches left after it.
     pub switches_left: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Consequence {
-    /// The list the card signs (the cardholder's, with the kept accounts),
-    /// in ascending order of platform, and a row for every platform that
-    /// has a kind, in the same order.
+    /// The list the card signs, in ascending order of platform, a row for
+    /// every platform that has a kind, in the same order, and whether this
+    /// would be the card's first record.
     Valid {
         accounts: Vec<Account>,
         rows: Vec<Row>,
+        first_record: bool,
     },
-    /// The rules refuse the list (`empty`, `switch_limit`, `daily_limit`):
-    /// it is not offered for signing.
+    /// The rules refuse the list: it is not offered for signing.
     Invalid(Reason),
+    /// A `username` of the list is not in the format of this platform, the
+    /// first in ascending order.
+    Username { platform: String },
 }
 
-/// What `list` does, the cardholder's list for the platforms offered: in
-/// ascending order of platform, each at most once, each a platform of
-/// `offered` in its format. `offered` are the rows of the table that have
-/// a slot in `state.card`. Anything else is an error, not a result.
+/// The list names a platform that is not offered: a mistake of the
+/// program, not of the cardholder (step 1). Or the list is not in ascending
+/// order of platform, or names one twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotAList;
+
+/// What `list` does. `offered` are the rows of the table with a slot in
+/// `state.card`, in ascending order of platform.
 pub fn list_consequence(
     offered: &[Platform],
     state: &ReadState,
     list: &[Account],
     today: Date,
-) -> Result<Consequence, NotARecord> {
-    for pair in list.windows(2) {
-        if pair[0].platform == pair[1].platform {
-            return Err(NotARecord::PlatformTwice);
-        }
-        if pair[0].platform > pair[1].platform {
-            return Err(NotARecord::NotInOrder);
-        }
+) -> Result<Consequence, NotAList> {
+    let ascending = list.windows(2).all(|w| w[0].platform < w[1].platform);
+    let row_of = |a: &Account| offered.iter().find(|p| p.id() == a.platform);
+    // 1. Every platform of the list is offered.
+    if !ascending || list.iter().any(|a| row_of(a).is_none()) {
+        return Err(NotAList);
     }
-    if list
+    // 2. Every username is in its platform's format.
+    if let Some(a) = list
         .iter()
-        .any(|a| !offered.iter().any(|p| p.id() == a.platform))
+        .find(|a| row_of(a).is_some_and(|p| !p.accepts(&a.username)))
     {
-        return Err(NotARecord::PlatformOutsideTable);
+        return Ok(Consequence::Username {
+            platform: a.platform.clone(),
+        });
     }
 
-    // The table the rules go through: the platforms offered, and for each
-    // one the device does not know a row that takes its account as kept.
-    // There the account is the one declared, whatever else its slot holds.
+    // 3. The list the card signs, and the slots the rules go through: one
+    // for each kept account, which is the account declared there.
     let mut table = offered.to_vec();
     let mut card = state.card.clone();
     let mut accounts = list.to_vec();
@@ -100,11 +106,13 @@ pub fn list_consequence(
     }
     accounts.sort_by(|a, b| a.platform.cmp(&b.platform));
 
-    let outcome = apply_list(&table, &card, &accounts, today)?;
+    // 4 and 5. Checks 5 and 6.
+    let outcome = apply_list(&table, &card, &accounts, today).map_err(|_: NotARecord| NotAList)?;
     let kinds = match outcome.result {
         RecordResult::Valid(kinds) => kinds,
         RecordResult::Invalid(reason) => return Ok(Consequence::Invalid(reason)),
     };
+    // 6. The rows.
     let rows = kinds
         .into_iter()
         .map(|PlatformKind { platform, kind }| {
@@ -120,15 +128,20 @@ pub fn list_consequence(
                 }
                 _ => None,
             };
-            let known = !state.kept.iter().any(|k| k.platform == platform);
             Row {
+                known: !state.kept.iter().any(|k| k.platform == platform),
                 username: username.expect("a row has an account"),
+                current: before.current.clone(),
                 previous,
-                switches_left: known.then(|| MAX_SWITCHES - after.switch_count),
+                switches_left: (kind == Kind::Switch).then(|| MAX_SWITCHES - after.switch_count),
                 platform,
                 kind,
             }
         })
         .collect();
-    Ok(Consequence::Valid { accounts, rows })
+    Ok(Consequence::Valid {
+        accounts,
+        rows,
+        first_record: state.card.last_card_proof.is_none(),
+    })
 }

@@ -1,9 +1,7 @@
 //! Reading the platform table of `GET /api/v1/config` and the answer of
-//! `POST /api/v1/card-state` the way docs/api/card-proof.md says the device
-//! reads them ("What the device does with what it cannot read"), with the
-//! same rules as `web/src/api.ts` (`requestConfig`, `requestCardState`).
-//! What cannot be read is `None`: the device does not go on to the
-//! declaration.
+//! `POST /api/v1/card-state` (spec/list-consequence.md, "Reading the
+//! platform table" and "Reading the card's state"). What cannot be read is
+//! `None`: the device does not go on to the declaration.
 
 use std::collections::BTreeMap;
 
@@ -16,8 +14,8 @@ use iamreal_device_checks::username_format::{UsernameFormat, is_any_username, is
 
 use crate::json::Json;
 
-/// A display name: 1 to 100 UTF-16 code units (as `web/` counts them),
-/// without a control character or a line or paragraph separator.
+/// A display name: 1 to 100 UTF-16 code units, none below U+0020, none
+/// from U+007F to U+009F, neither U+2028 nor U+2029.
 fn is_display_name(s: &str) -> bool {
     (1..=100).contains(&s.encode_utf16().count())
         && s.chars().all(|c| {
@@ -28,11 +26,8 @@ fn is_display_name(s: &str) -> bool {
         })
 }
 
-/// The `platforms` of `config`: the rows the device can read, in ascending
-/// order of platform. An element that names no platform ID is passed over;
-/// one that names a platform but whose format or display name cannot be
-/// read is a platform the device does not know. The platform IDs named
-/// must be in strictly ascending order, and at least one row read.
+/// The rows of the table the device can read, in ascending order of
+/// platform; `None` when the table cannot be read.
 pub fn read_platforms(json: &Json) -> Option<Vec<Platform>> {
     let mut named: Vec<&str> = Vec::new();
     let mut rows = Vec::new();
@@ -66,25 +61,9 @@ fn date(v: &Json) -> Option<Option<Date>> {
     }
 }
 
-/// The answer of `card-state` against `table` (the rows of `config` read
-/// by [`read_platforms`]), on `today` in Taiwan:
-///
-/// - `last_card_proof` (a date or null), `proofs_on_last_date` (a count)
-///   and `platforms` (an object) must be read;
-/// - the entry of every platform of the table that has one must be read:
-///   `current` and `last_declared` null or in the platform's format,
-///   `switch_count` from 0 to 5, `correction_date` a date or null. A
-///   platform of the table without an entry is not offered;
-/// - an entry of a platform the device does not know must be an object
-///   with `current`: null, it is passed over; set, the account is kept as
-///   it is if the platform ID and the `username` pass the checks every
-///   platform does, and the card has a last card proof;
-/// - a state the rules cannot produce is not read either.
-///
-/// Fields it does not know are passed over, `count` among them: the
-/// device does not use it here.
-///
-/// Gives the state and the rows offered, in ascending order of platform.
+/// The answer of `card-state` against `table` (the rows [`read_platforms`]
+/// read), on `today`: the state and the rows offered, in ascending order
+/// of platform; `None` when the answer cannot be read.
 pub fn read_card_state(
     json: &Json,
     table: &[Platform],
@@ -92,7 +71,8 @@ pub fn read_card_state(
 ) -> Option<(ReadState, Vec<Platform>)> {
     let body = json.as_object()?;
     let last_card_proof = date(body.get("last_card_proof")?)?;
-    let proofs_on_last_date = body.get("proofs_on_last_date")?.as_count(u32::MAX)?;
+    let proofs_on_last_date = u32::try_from(body.get("proofs_on_last_date")?.as_count()?).ok()?;
+    body.get("count")?.as_count()?;
     if !possible_card(last_card_proof, proofs_on_last_date, today) {
         return None;
     }
@@ -115,7 +95,9 @@ pub fn read_card_state(
         let slot = Slot {
             current: user("current")?,
             last_declared: user("last_declared")?,
-            switch_count: entry.get("switch_count")?.as_count(MAX_SWITCHES)?,
+            switch_count: u32::try_from(entry.get("switch_count")?.as_count()?)
+                .ok()
+                .filter(|n| *n <= MAX_SWITCHES)?,
             correction_date: date(entry.get("correction_date")?)?,
         };
         if !possible_slot(&slot, last_card_proof) {

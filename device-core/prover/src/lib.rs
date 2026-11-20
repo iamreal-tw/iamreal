@@ -180,61 +180,28 @@ pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 
     output(out, || Ok(scope_string(roster_of(roster)?).to_vec()))
 }
 
-/// One account of the list a C function takes: `{"platform":"…","username":"…"}`,
-/// the shape of a record's `accounts` (spec/record.md). Exactly these two
-/// keys, each once, both strings: a list has one reading.
-struct AccountJson {
-    platform: String,
-    username: String,
-}
-
-impl<'de> serde::Deserialize<'de> for AccountJson {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Keys;
-        impl<'de> serde::de::Visitor<'de> for Keys {
-            type Value = AccountJson;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("an account")
+/// Reads the list a C function takes: a JSON array of
+/// `{"platform":"…","username":"…"}`, the shape of a record's `accounts`
+/// (spec/record.md). Each account has exactly these two keys, each once,
+/// both strings, the platform a platform ID and the username one any
+/// platform could have: a list has one reading.
+fn accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
+    let account = |a: &Json| {
+        let a = a.as_object().filter(|a| a.len() == 2)?;
+        let platform = a.get("platform")?.as_str()?;
+        let username = a.get("username")?.as_str()?;
+        (is_platform_id(platform.as_bytes()) && is_any_username(username.as_bytes())).then(|| {
+            roster_rules::Account {
+                platform: platform.to_owned(),
+                username: username.to_owned(),
             }
-
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<AccountJson, A::Error> {
-                use serde::de::Error;
-                let (mut platform, mut username) = (None, None);
-                while let Some(key) = map.next_key::<String>()? {
-                    let slot = match key.as_str() {
-                        "platform" => &mut platform,
-                        "username" => &mut username,
-                        _ => return Err(A::Error::custom("a key that is not of an account")),
-                    };
-                    if slot.replace(map.next_value::<String>()?).is_some() {
-                        return Err(A::Error::custom("a key twice"));
-                    }
-                }
-                match (platform, username) {
-                    (Some(platform), Some(username)) => Ok(AccountJson { platform, username }),
-                    _ => Err(A::Error::custom("a key is missing")),
-                }
-            }
-        }
-        deserializer.deserialize_map(Keys)
-    }
-}
-
-/// Reads the JSON array of accounts and checks each value's form.
-fn accounts_of(json: &[u8]) -> Result<Vec<AccountJson>, i32> {
-    let list: Vec<AccountJson> = serde_json::from_slice(json).map_err(|_| IDC_ERR_INPUT)?;
-    let well_formed = |a: &AccountJson| {
-        is_platform_id(a.platform.as_bytes()) && is_any_username(a.username.as_bytes())
+        })
     };
-    if list.iter().all(well_formed) {
-        Ok(list)
-    } else {
-        Err(IDC_ERR_INPUT)
-    }
+    Json::parse(json)
+        .as_ref()
+        .and_then(Json::as_array)
+        .and_then(|list| list.iter().map(account).collect())
+        .ok_or(IDC_ERR_INPUT)
 }
 
 /// The declaration code (spec/declaration-code.md) of a list of accounts
@@ -288,43 +255,36 @@ pub unsafe extern "C" fn idc_declaration_code(
 }
 
 /// What a list does on every platform, before the card signs it
-/// (spec/roster-rules.md, checks 5 and 6): JSON in `*out`, for the
-/// confirmation screen.
+/// (spec/list-consequence.md): JSON in `*out`, for the confirmation screen.
 ///
 /// - `platforms_json`: the `platforms` of `GET /api/v1/config`, as the
 ///   server sent it.
 /// - `card_state_json`: the answer of `POST /api/v1/card-state`, as the
 ///   server sent it.
-/// - `accounts_json`: the cardholder's list for the platforms offered (a
-///   row of the table with an entry in the state), in the shape of a
-///   record's `accounts`: ascending order of platform, each platform at
-///   most once, each `username` in its platform's format. The accounts on
-///   platforms the device does not know are not in it: the core keeps them.
+/// - `accounts_json`: the cardholder's list for the platforms offered, in
+///   the shape of a record's `accounts` (ascending order of platform, each
+///   platform at most once). The kept accounts are not in it: the core adds
+///   them.
 /// - `now`: seconds since 1970-01-01T00:00:00Z by the device's clock; the
 ///   date is the one in Taiwan.
 ///
 /// The output is one of:
 ///
 /// ```text
-/// {"valid":true,"accounts":[…],"rows":[{"platform":"threads","kind":"switch","username":"carol","previous":"bob","switches_left":3}]}
+/// {"valid":true,"accounts":[…],"rows":[{"platform":"threads","known":true,"kind":"switch","username":"carol","current":"bob","previous":"bob","switches_left":3}],"first_record":false}
 /// {"valid":false,"reason":"switch_limit","platform":"threads"}
+/// {"valid":false,"reason":"username","platform":"threads"}
 /// {"valid":false,"reason":"empty"}
 /// ```
 ///
 /// `accounts` is the list the card signs (pass it to
-/// [`idc_declaration_code`]); `rows` has one row for every platform the
-/// list does something on, in ascending order of platform. `kind` is
-/// `first`, `refresh`, `correction`, `switch` or `withdraw`; `username` is
-/// the account declared, or the one withdrawn; `previous` is the account a
-/// `switch` or `correction` replaces, otherwise null; `switches_left` is
-/// what is left after the record, null on a platform the device does not
-/// know. `valid` false is a list the rules refuse (`empty`,
-/// `switch_limit` with the platform blocked, `daily_limit`): it is not
+/// [`idc_declaration_code`]); a row and the reasons are those of
+/// spec/list-consequence.md, "What the list does". `valid` false is not
 /// offered for signing.
 ///
-/// `IDC_ERR_INPUT` when the table or the state cannot be read
-/// (docs/api/card-proof.md), when the list is not one of the platforms
-/// offered, or when `now` is outside the years 2000 to 2049 in Taiwan.
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, when the
+/// list names a platform that is not offered or is not in the shape above,
+/// or when `now` is outside the years 2000 to 2049 in Taiwan.
 ///
 /// # Safety
 /// The three inputs point to as many bytes as their lengths say; `out` is
@@ -358,17 +318,15 @@ pub unsafe extern "C" fn idc_list_consequence(
         let (state, offered) = Json::parse(card_state_json)
             .and_then(|state| read_card_state(&state, &table, today))
             .ok_or(IDC_ERR_INPUT)?;
-        let list: Vec<roster_rules::Account> = accounts_of(accounts_json)?
-            .into_iter()
-            .map(|a| roster_rules::Account {
-                platform: a.platform,
-                username: a.username,
-            })
-            .collect();
+        let list = accounts_of(accounts_json)?;
         let consequence =
             list_consequence(&offered, &state, &list, today).map_err(|_| IDC_ERR_INPUT)?;
         let value = match consequence {
-            Consequence::Valid { accounts, rows } => json!({
+            Consequence::Valid {
+                accounts,
+                rows,
+                first_record,
+            } => json!({
                 "valid": true,
                 "accounts": accounts
                     .iter()
@@ -378,13 +336,19 @@ pub unsafe extern "C" fn idc_list_consequence(
                     .iter()
                     .map(|r| json!({
                         "platform": r.platform,
+                        "known": r.known,
                         "kind": r.kind.name(),
                         "username": r.username,
+                        "current": r.current,
                         "previous": r.previous,
                         "switches_left": r.switches_left,
                     }))
                     .collect::<Vec<_>>(),
+                "first_record": first_record,
             }),
+            Consequence::Username { platform } => {
+                json!({"valid": false, "reason": "username", "platform": platform})
+            }
             Consequence::Invalid(Reason::SwitchLimit { platform }) => {
                 json!({"valid": false, "reason": "switch_limit", "platform": platform})
             }

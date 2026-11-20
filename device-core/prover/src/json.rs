@@ -1,7 +1,6 @@
 //! JSON read with one reading: an object with a key twice is not read
-//! (`serde_json::Value` would keep the last one). Numbers are kept as
-//! `f64`, as a JavaScript client reads them, so that `1.0` is the integer 1
-//! here as it is in `web/`.
+//! (`serde_json::Value` would keep the last one). Numbers are read by their
+//! value (spec/list-consequence.md, "Input"): `1.0` is the count 1.
 
 use std::collections::BTreeMap;
 
@@ -44,12 +43,12 @@ impl Json {
         }
     }
 
-    /// A number with no fraction from 0 to `max`.
-    pub fn as_count(&self, max: u32) -> Option<u32> {
+    /// A count: a number with no fraction, from 0 to 2^53 - 1 (the
+    /// integers a JavaScript client reads exactly).
+    pub fn as_count(&self) -> Option<u64> {
+        const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
         match self {
-            Json::Number(n) if n.fract() == 0.0 && (0.0..=f64::from(max)).contains(n) => {
-                Some(*n as u32)
-            }
+            Json::Number(n) if n.fract() == 0.0 && (0.0..=MAX_SAFE).contains(n) => Some(*n as u64),
             _ => None,
         }
     }

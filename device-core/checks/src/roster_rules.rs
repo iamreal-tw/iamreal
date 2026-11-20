@@ -244,7 +244,7 @@ pub struct RecordOutcome {
 }
 
 /// What the event rules give one slot.
-enum Entry {
+enum SlotOutcome {
     /// No kind: no entry, and no account to withdraw.
     Nothing,
     /// Another account, with no switch left and no correction open.
@@ -255,11 +255,11 @@ enum Entry {
 /// The event rules for one slot ("Event rules"): `entry` is the account the
 /// list has for the slot's platform. The first row that applies gives the
 /// kind and the slot after it.
-fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> Entry {
+fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> SlotOutcome {
     let Some(entry) = entry else {
         return match slot.current {
-            None => Entry::Nothing,
-            Some(_) => Entry::Kind(
+            None => SlotOutcome::Nothing,
+            Some(_) => SlotOutcome::Kind(
                 Kind::Withdraw,
                 Slot {
                     current: None,
@@ -290,9 +290,9 @@ fn apply_entry(slot: &Slot, entry: Option<&str>, date: Date) -> Entry {
         Some(_) if slot.switch_count < MAX_SWITCHES => {
             (Kind::Switch, declared(slot.switch_count + 1, Some(date)))
         }
-        Some(_) => return Entry::Blocked,
+        Some(_) => return SlotOutcome::Blocked,
     };
-    Entry::Kind(applied.0, applied.1)
+    SlotOutcome::Kind(applied.0, applied.1)
 }
 
 /// Reads the list against the table, account by account: its platform, its
@@ -347,19 +347,19 @@ fn check_list(
     for platform in table {
         let before = card.slots.get(platform).unwrap_or(&empty);
         match apply_entry(before, list.get(platform).copied(), date) {
-            Entry::Blocked => {
+            SlotOutcome::Blocked => {
                 return invalid(Reason::SwitchLimit {
                     platform: platform.clone(),
                 });
             }
-            Entry::Kind(kind, after) => {
+            SlotOutcome::Kind(kind, after) => {
                 kinds.push(PlatformKind {
                     platform: platform.clone(),
                     kind,
                 });
                 slots.insert(platform.clone(), after);
             }
-            Entry::Nothing => {
+            SlotOutcome::Nothing => {
                 slots.insert(platform.clone(), before.clone());
             }
         }
@@ -393,7 +393,7 @@ fn check_list(
 ///
 /// The device calls it by itself for what a list would do today. Of checks
 /// 1 to 4 it could compute only the card's own half of check 4, and it
-/// leaves that one to the server, as `web/` does.
+/// leaves that one to the server (spec/list-consequence.md).
 pub fn apply_list(
     platforms: &[Platform],
     card: &Card,
