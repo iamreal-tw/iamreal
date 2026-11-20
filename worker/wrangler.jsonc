@@ -25,9 +25,9 @@
   // - "run_worker_first": the Worker runs first for every path but the files' own: /pages.css, /proof
   //   and everything under /proof/ (a "!" pattern wins over "/*"). There Static Assets looks for a file
   //   first, and a file that is there is sent without running the Worker. In the local workerd a request
-  //   for one of those paths never runs the Worker, whether the file is there or not; on Cloudflare
-  //   that is not confirmed for a file that is not there, which by the documentation may be handed to
-  //   the Worker (README.md, "Static Assets", has the sentences and what to look at after a deploy).
+  //   for one of those paths never runs the Worker, whether the file is there or not. On Cloudflare
+  //   that was seen for a file that is not there (2026-11-20: Static Assets answers 404 itself); for a
+  //   file that is there it waits for the first deploy with one (README.md, "Static Assets").
   // - No "binding": the Worker cannot read the files, so whichever it is, none of its code can choose
   //   what a card holder is sent as a file of the card proof page.
   // - Their headers are site/_headers and the one address of /proof is site/_redirects, both written
