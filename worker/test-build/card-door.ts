@@ -68,3 +68,16 @@ export interface StoredRoster {
   readonly records: readonly { readonly seq: number; readonly line: string; readonly record_hash: string; readonly fingerprint: string }[];
   readonly roster: { readonly count: number; readonly fingerprint: string };
 }
+
+/**
+ * What `PUT /__test/roster/bucket-fault` takes: from now on the roster's
+ * object's writes or reads of one object of the data bucket go wrong in one
+ * way, or, with null, none does.
+ *
+ *   - "put fails": the write throws, and nothing is written;
+ *   - "put writes other bytes": the write stores the bytes without their
+ *     last one, and says it went well;
+ *   - "put loses its answer": the write stores the bytes, and throws;
+ *   - "get fails": the read throws.
+ */
+export type BucketFault = { readonly key: string; readonly how: "put fails" | "put writes other bytes" | "put loses its answer" | "get fails" } | null;

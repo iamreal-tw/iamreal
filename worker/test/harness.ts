@@ -13,7 +13,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
+import type { BucketFault, CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -142,9 +142,10 @@ export interface TestWorker {
   /**
    * Puts a file into the simulated R2 bucket, or takes one out, behind the
    * Worker's back: how a test leaves the bucket as a round that broke off
-   * would have left it.
+   * would have left it. `cacheControl` is the `Cache-Control` the file
+   * carries; without it, none.
    */
-  putFile(key: string, bytes: Uint8Array | string): Promise<void>;
+  putFile(key: string, bytes: Uint8Array | string, cacheControl?: string): Promise<void>;
   deleteFile(key: string): Promise<void>;
   /**
    * What the roster's Durable Object knows of the CRL archive, through the
@@ -250,6 +251,13 @@ export interface TestWorker {
      */
     clearViews(): Promise<void>;
     /**
+     * Waits until the object that is running has filled its views, or has
+     * given up filling them (test build, `POST /__test/roster/views-filled`):
+     * an object that has roster files in the data bucket fills them after
+     * it has started, while it already answers.
+     */
+    viewsFilled(): Promise<void>;
+    /**
      * Runs the roster rules for one event of spec/vectors/roster-rules.json
      * on the state the object stores, keeps what a valid one leaves, and
      * returns the result (test build, `POST /__test/roster/rule-event`).
@@ -313,11 +321,18 @@ export interface TestWorker {
     setHashDelay(ms: number): Promise<void>;
     /** How many times the object has hashed a record since it started: more than the submissions it was asked to write, if any was hashed again for another `seq`. */
     hashes(): Promise<number>;
+    /**
+     * From now on the object's writes or reads of one object of the data
+     * bucket go wrong in one way, or, with null, none does (test build,
+     * `PUT /__test/roster/bucket-fault`). Kept in memory: gone when the
+     * object starts again.
+     */
+    setBucketFault(fault: BucketFault): Promise<void>;
   };
   close(): Promise<void>;
 }
 
-export type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
+export type { BucketFault, CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
 
 /** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
 const DEPLOYED_ROSTER_OBJECT = "test-1";
@@ -445,8 +460,8 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 200) throw new Error(`verifying: HTTP ${res.status} ${await res.text()}`);
       return ((await res.json()) as { verified: boolean }).verified;
     },
-    async putFile(key, bytes) {
-      await (await worker.getEnv()).DATA.put(key, bytes);
+    async putFile(key, bytes, cacheControl) {
+      await (await worker.getEnv()).DATA.put(key, bytes, cacheControl === undefined ? {} : { httpMetadata: { cacheControl } });
     },
     async deleteFile(key) {
       await (await worker.getEnv()).DATA.delete(key);
@@ -537,6 +552,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         if (res.status !== 200) throw new Error(`reading the views: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredViews;
       },
+      async viewsFilled() {
+        const res = await server.fetch("/__test/roster/views-filled", { method: "POST" });
+        if (res.status !== 204) throw new Error(`waiting for the views: HTTP ${res.status}`);
+      },
       async clearViews() {
         const res = await server.fetch("/__test/roster/views", { method: "DELETE" });
         if (res.status !== 204) throw new Error(`clearing the views: HTTP ${res.status}`);
@@ -554,6 +573,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/hash-delay");
         if (res.status !== 200) throw new Error(`reading the number of hashes: HTTP ${res.status}`);
         return ((await res.json()) as { hashes: number }).hashes;
+      },
+      async setBucketFault(fault) {
+        const res = await server.fetch("/__test/roster/bucket-fault", { method: "PUT", body: JSON.stringify(fault) });
+        if (res.status !== 204) throw new Error(`setting the bucket's fault: HTTP ${res.status}`);
       },
       async breakCard(scopedId) {
         const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: false }) });

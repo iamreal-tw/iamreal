@@ -3,8 +3,9 @@
 // valid record changed, as the roster rules computed it (protocol/,
 // applyRecord): nothing here decides a kind. The records are what counts.
 // The views are written in the transaction that writes a record, and can be
-// cleared and written again from the records at any time (`rebuildViews`);
-// they reflect exactly the records 1 to `viewSeq`.
+// cleared and written again from the records at any time (`clearViews`,
+// `writeViewsOf`; roster.ts, `#fillViews`, which reads the records where
+// they are); they reflect exactly the records 1 to `viewSeq`.
 //
 // The four tables are the ones of the Go backend (server/store/sqlite_view.go).
 // A date is a day number (protocol/, `Day`: days since 1970-01-01), so that
@@ -217,21 +218,32 @@ export function writeView(sql: SqlStorage, v: View): void {
   sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", v.seq);
 }
 
-/**
- * Clears the views and writes them again from the stored records, in the
- * order of `seq`. The caller runs it in a transaction.
- *
- * Every stored record is one the back end wrote, so it passed the roster
- * rules' checks 1 to 4 when it was written; what it did on each platform is
- * computed again by the same rules (protocol/, `applyList`: checks 5 and 6
- * and the effects), from the states the records before it leave. A record
- * the rules do not take throws: the views are then left as they were.
- */
-export function rebuildViews(sql: SqlStorage, kind: RosterKind, platforms: readonly PlatformRow[]): void {
+/** Clears the views: they then reflect no record. The caller runs it in a transaction. */
+export function clearViews(sql: SqlStorage): void {
   for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
   sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
-  const cards = new Map<string, CardState>();
-  for (const row of sql.exec<{ seq: number; line: string }>("SELECT seq, line FROM records ORDER BY seq")) {
+}
+
+/** The roster rules' state of every card met so far while the views are written again, by scope string and scoped ID. */
+export type CardsSoFar = Map<string, CardState>;
+
+/**
+ * Writes what a run of the roster's lines changes in the views: `lines` are
+ * lines of the roster file with the `seq` each must have, in order, the
+ * first being the record after the last one the views reflect. `cards` is
+ * the state the records before them left, and is brought up to the last of
+ * them: empty for the roster's first line, then the same map for each run
+ * that follows. The caller runs it in a transaction.
+ *
+ * Every line is one the back end wrote, so it passed the roster rules'
+ * checks 1 to 4 when it was written; what it did on each platform is
+ * computed again by the same rules (protocol/, `applyList`: checks 5 and 6
+ * and the effects), from the states the records before it leave. A line
+ * that is not well formed, or a record the rules do not take, throws: the
+ * transaction then leaves the views as they were before this run.
+ */
+export function writeViewsOf(sql: SqlStorage, kind: RosterKind, platforms: readonly PlatformRow[], cards: CardsSoFar, lines: Iterable<{ readonly seq: number; readonly line: string }>): void {
+  for (const row of lines) {
     const record: RosterRecord | null = readRecordLine(kind, row.line);
     const date = record === null ? null : parseChallenge(record.challenge);
     if (record === null || date === null || record.seq !== row.seq) throw new Error("views: a stored record is not a well-formed line");
@@ -242,6 +254,11 @@ export function rebuildViews(sql: SqlStorage, kind: RosterKind, platforms: reado
     cards.set(key, outcome.card);
     writeView(sql, viewOf(record, date, outcome.result.kinds, before, outcome.card));
   }
+}
+
+/** The rows of the records table (roster.ts), in the order of `seq`, as `writeViewsOf` takes them. */
+export function storedLines(sql: SqlStorage): Iterable<{ seq: number; line: string }> {
+  return sql.exec<{ seq: number; line: string }>("SELECT seq, line FROM records ORDER BY seq");
 }
 
 /**

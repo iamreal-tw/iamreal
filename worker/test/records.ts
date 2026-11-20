@@ -3,7 +3,7 @@
 // through the Worker's HTTP (test/harness.ts).
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { EMPTY_FINGERPRINT, type RosterRecord, nextFingerprint, readRecordLine, recordHash } from "iamreal-protocol/record.ts";
+import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RosterRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopedIdText } from "iamreal-protocol/scoped-id.ts";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { IssuerName } from "../src/issuers.ts";
@@ -164,17 +164,26 @@ export async function wantError(worker: TestWorker, s: Submission, status: numbe
   assert.deepEqual(await submit(worker, s), { status, body: { error: code } }, what);
 }
 
+/** The `Cache-Control` of a full roster file and of its record hash list in the data bucket (ADR-0027). */
+export const IMMUTABLE = "public, max-age=31536000, immutable";
+
 /**
- * Checks what the roster's object stores of its records against
- * spec/record.md, computing everything again from the stored lines alone,
- * and returns the records:
+ * Checks the whole roster, the full roster files in the data bucket and
+ * then what the roster's object stores of its records, against
+ * spec/record.md, computing everything again from the lines alone, and
+ * returns the records:
  *
- *   - every `line` is a well-formed line of a roster file of `kind` ("Check
- *     a line"), and the `seq`s are 1, 2, 3 and so on, in the row and in the
- *     line;
- *   - every `record_hash` is the hash of its line's record;
- *   - every `fingerprint` is the roster fingerprint up to its record, each
- *     computed from the one before, the first from 64 zeros;
+ *   - the object's stored records begin right after a number of full files
+ *     (none, for a roster that has not filled one), and each of those files
+ *     is in the bucket with 1,000 lines, next to its record hash list;
+ *   - every line, of a file or stored, is a well-formed line of a roster
+ *     file of `kind` ("Check a line"), and the `seq`s are 1, 2, 3 and so
+ *     on, in the line and in the stored row;
+ *   - every record hash, in a list or stored, is the hash of its line's
+ *     record, and the first line of a list is the roster fingerprint at the
+ *     end of the file before;
+ *   - every stored `fingerprint` is the roster fingerprint up to its
+ *     record, each computed from the one before, the first from 64 zeros;
  *   - the row of the roster has the number of records and the last
  *     fingerprint, and `card-state` reports the same number.
  *
@@ -185,15 +194,41 @@ export async function checkRoster(worker: TestWorker, kind: "test" | "production
   const { records: rows, roster } = await worker.roster.stored();
   const records: RosterRecord[] = [];
   let fingerprint = EMPTY_FINGERPRINT;
-  for (const [i, row] of rows.entries()) {
-    const record = readRecordLine(kind, row.line);
-    if (record === null) throw new assert.AssertionError({ message: `the stored line of record ${i + 1} is not a well-formed line: ${row.line.slice(0, 200)}` });
-    assert.deepEqual([row.seq, record.seq], [i + 1, i + 1], "the stored `seq`s");
-    const hash = await recordHash(record);
-    assert.equal(row.record_hash, hash, `the stored record hash of record ${i + 1}`);
-    fingerprint = await nextFingerprint(fingerprint, hash);
-    assert.equal(row.fingerprint, fingerprint, `the stored roster fingerprint at record ${i + 1}`);
+  const read = async (line: string): Promise<string> => {
+    const record = readRecordLine(kind, line);
+    if (record === null) throw new assert.AssertionError({ message: `the line of record ${records.length + 1} is not a well-formed line: ${line.slice(0, 200)}` });
     records.push(record);
+    assert.equal(record.seq, records.length, "the `seq` of a line");
+    return recordHash(record);
+  };
+
+  // The full files the object no longer keeps the records of.
+  const moved = (rows[0]?.seq ?? roster.count + 1) - 1;
+  assert.equal(moved % LINES_PER_FILE, 0, "the stored records begin at a roster file");
+  const bucket = new Map((await worker.files("roster/")).map((f) => [f.key, f]));
+  for (let before = 0; before < moved; before += LINES_PER_FILE) {
+    const file = bucket.get(`roster/${rosterFileName(before)}`);
+    const list = bucket.get(`roster/${hashListName(before)}`);
+    assert.ok(file && list, `the roster file after ${before} records and its record hash list are in the bucket`);
+    assert.deepEqual([file.cacheControl, list.cacheControl], [IMMUTABLE, IMMUTABLE]);
+    const lines = new TextDecoder().decode(file.bytes).split("\n");
+    assert.equal(lines.pop(), "", "a roster file ends with LF");
+    assert.equal(lines.length, LINES_PER_FILE, "the lines of a full file");
+    const hashes: string[] = [];
+    const fingerprintBefore = fingerprint;
+    for (const line of lines) {
+      hashes.push(await read(`${line}\n`));
+      fingerprint = await nextFingerprint(fingerprint, hashes.at(-1)!);
+    }
+    assert.equal(new TextDecoder().decode(list.bytes), hashList(fingerprintBefore, hashes), `the record hash list of the file after ${before} records`);
+  }
+
+  for (const row of rows) {
+    const hash = await read(row.line);
+    assert.equal(row.seq, records.length, "the stored `seq`s");
+    assert.equal(row.record_hash, hash, `the stored record hash of record ${row.seq}`);
+    fingerprint = await nextFingerprint(fingerprint, hash);
+    assert.equal(row.fingerprint, fingerprint, `the stored roster fingerprint at record ${row.seq}`);
   }
   assert.deepEqual(roster, { count: records.length, fingerprint }, "the row of the roster");
   const scope = kind === "production" ? "iamreal:public:0_______________" : TEST_SCOPE;
