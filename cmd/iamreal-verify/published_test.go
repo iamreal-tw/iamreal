@@ -302,25 +302,28 @@ func TestDataErrors(t *testing.T) {
 	}
 }
 
-// README.md quotes the prompt of the page "how to verify" exactly
-// (design/copy/verify.md, section 3: the third code block).
+// README.md quotes the prompt of the page "how to verify" exactly: the
+// code block that follows "提示詞要逐字照這一段" in design/copy/verify.md.
 func TestReadmeQuotesThePrompt(t *testing.T) {
 	copyText, err := os.ReadFile("../../design/copy/verify.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	blocks := strings.Split(string(copyText), "```\n")
-	// Blocks are at the odd indexes: 1 the heading, 3 the two lists, 5 the
-	// heading of section 3, 7 the prompt.
-	if len(blocks) < 8 || !strings.HasPrefix(blocks[7], "請幫我驗證") {
-		t.Fatalf("no prompt in verify.md: %q", blocks)
+	_, after, ok := strings.Cut(string(copyText), "提示詞要逐字照這一段")
+	if !ok {
+		t.Fatal("verify.md does not say where the prompt is")
+	}
+	_, after, ok = strings.Cut(after, "```\n")
+	prompt, _, closed := strings.Cut(after, "```\n")
+	if !ok || !closed || !strings.HasPrefix(prompt, "請幫我驗證") {
+		t.Fatalf("no prompt in verify.md: %q", prompt)
 	}
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(readme), "```\n"+blocks[7]+"```\n") {
-		t.Errorf("README.md does not quote the prompt of verify.md:\n%s", blocks[7])
+	if !strings.Contains(string(readme), "```\n"+prompt+"```\n") {
+		t.Errorf("README.md does not quote the prompt of verify.md:\n%s", prompt)
 	}
 }
 

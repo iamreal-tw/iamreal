@@ -265,6 +265,11 @@ func TestHashLists(t *testing.T) {
 		}, []string{"hashes/0000000000001000.txt is missing"}},
 		{"none", func() map[string][]byte { return cut(1001) },
 			[]string{"hashes/0000000000000000.txt is missing", "hashes/0000000000001000.txt is missing"}},
+		{"a list without a roster file", func() map[string][]byte {
+			f := published(1001)
+			f["hashes/0000000000002000.txt"] = []byte(roster.EmptyFingerprint + "\n")
+			return f
+		}, []string{"hashes/0000000000002000.txt has no roster file"}},
 		{"a hash changed", func() map[string][]byte {
 			f := published(1001)
 			b := append([]byte(nil), f["hashes/0000000000000000.txt"]...)
