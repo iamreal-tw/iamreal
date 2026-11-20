@@ -123,10 +123,10 @@ test("what is not a file of the build is 404, a directory too, without the Worke
     checkProofHeaders(path, res);
   }
   assert.deepEqual(await worker.seen(), []);
-  // Beside /proof, not under it: the Worker's 404. The two files that hold the rules are not served.
+  // Beside /proof, not under it: the Worker's page for what is not there. The two files that hold the rules are not served.
   for (const path of ["/proofs", "/proof.html", "/Proof", "/_headers", "/_redirects"]) {
     const res = await worker.fetch(path, { redirect: "manual" });
-    assert.deepEqual([res.status, await res.text()], [404, "not found\n"], path);
+    assert.deepEqual([res.status, res.headers.get("content-type"), (await res.text()).includes("找不到這一頁")], [404, "text/html; charset=utf-8", true], path);
   }
   assert.deepEqual(await worker.seen(), ["GET /proofs", "GET /proof.html", "GET /Proof", "GET /_headers", "GET /_redirects"]);
 });

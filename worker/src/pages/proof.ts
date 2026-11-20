@@ -7,7 +7,7 @@ import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { SHORT_ID_LENGTH } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfShortId, HistoryRow, PageCard } from "../page-data.ts";
 import { Html, html } from "./html.ts";
-import { type Document, NEEDS } from "./layout.ts";
+import { type Document, NEEDS, type Site } from "./layout.ts";
 
 /** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test roster are not shown. */
 export const PLATFORM = "threads";
@@ -77,7 +77,7 @@ function eventOf(row: HistoryRow): string {
 }
 
 /** Sections 1 to 4, or 6 and 4, of one card. `nested` is one of several cards: its title is not the page's. */
-function cardSections(card: PageCard, shortId: string, today: number, nested: boolean): Html {
+function cardSections(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
   const rows = card.history.filter((row) => row.platform === PLATFORM);
@@ -99,7 +99,7 @@ ${when}
 <section class="owner">
 <h2 class="ask">帳號主人承認嗎？你需要自己看。</h2>
 <p>@${account} 的個人檔案上有這個連結，才代表帳號主人承認：</p>
-<p class="backlink">iamreal.tw/p/${shortId}</p>
+<p class="backlink">${site.host}/p/${shortId}</p>
 <iframe class="threads-profile" src="https://www.threads.com/@${account}/embed/" title="Threads 個人檔案：@${account}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>
 <p class="small">@${account} 的個人檔案上沒有 ${shortId}，代表帳號主人可能沒有承認這張證明。</p>
 <p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@${account}">Threads 的 @${account}</a></p>
@@ -149,12 +149,13 @@ const MINE = html`<section class="mine">
 /**
  * The page of the short ID `shortId` (in its one spelling) for the cards it
  * resolves to: one or more, in ascending order of scoped ID. A short ID
- * that resolves to no card has the page of `proofMissing`.
+ * that resolves to no card has the page of `proofMissing`. The page's own
+ * address is written with the site's domain (`site.host`).
  */
-export function proofPage(shortId: string, { today, cards }: CardsOfShortId): Document {
+export function proofPage(site: Site, shortId: string, { today, cards }: CardsOfShortId): Document {
   if (cards.length === 0) throw new Error("pages: no card for the short ID");
   let content: Html;
-  if (cards.length === 1) content = cardSections(cards[0]!, shortId, today, false);
+  if (cards.length === 1) content = cardSections(site, cards[0]!, shortId, today, false);
   else {
     const starts = prefixes(cards.map((c) => c.scopedId));
     content = html`<section class="many">
@@ -164,7 +165,7 @@ export function proofPage(shortId: string, { today, cards }: CardsOfShortId): Do
 ${cards.map(
   (card, i) => html`<article class="one-of-many">
 <p class="prefix">島民編號 <span class="id">${starts[i]!}</span> 開頭</p>
-${cardSections(card, shortId, today, true)}
+${cardSections(site, card, shortId, today, true)}
 </article>`,
 )}`;
   }
@@ -176,10 +177,10 @@ ${cardSections(card, shortId, today, true)}
  * 9). `typed` is what the visitor typed after /p/, written back on the page
  * as it is, escaped.
  */
-export function proofMissing(typed: string): Document {
+export function proofMissing(site: Site, typed: string): Document {
   const content = html`<section class="missing">
 <h1 class="title">找不到這張島民證明</h1>
-<p><span class="typed">iamreal.tw/p/${typed}</span> 沒有對到任何一張自然人憑證。請確認網址有沒有抄錯。</p>
+<p><span class="typed">${site.host}/p/${typed}</span> 沒有對到任何一張自然人憑證。請確認網址有沒有抄錯。</p>
 <p>如果你是從某個帳號的個人檔案點進來的，請留意這張島民證明並不存在。</p>
 <p><a href="/roster#q">查一個 Threads 帳號</a></p>
 </section>`;

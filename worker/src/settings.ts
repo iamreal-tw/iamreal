@@ -48,7 +48,19 @@ export interface RosterSettings {
    * whose pages have no such mark; the setting is then not read.
    */
   readonly testRosterClearedOn: string | null;
+  /**
+   * The domain this roster's site is at (`SITE_HOSTS`): what a page writes
+   * where it writes its own address.
+   */
+  readonly siteHost: string;
 }
+
+/**
+ * The domain of each roster's site (ADR-0028). It follows from which roster
+ * it is and is not a setting of its own: a page never takes it from the
+ * request's `Host`, which is whatever the visitor's client sent.
+ */
+export const SITE_HOSTS: Readonly<Record<RosterKind, string>> = { production: "iamreal.tw", test: "test.iamreal.tw" };
 
 /**
  * What is wrong with the two settings, or null: `ROSTER_KIND` is "test" or
@@ -79,5 +91,5 @@ export function rosterSettingsOf(env: Env): RosterSettings {
   // A test roster's pages are not served without the date beside their mark.
   const cleared: unknown = (env as { TEST_ROSTER_CLEARED_ON?: unknown }).TEST_ROSTER_CLEARED_ON;
   if (kind === "test" && (typeof cleared !== "string" || parseDay(cleared) === null)) throw new Error("TEST_ROSTER_CLEARED_ON is not a date");
-  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true", testRosterClearedOn: kind === "test" ? (cleared as string) : null };
+  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true", testRosterClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }

@@ -84,6 +84,9 @@ const NAV_LINKS = `<a href="/verify">怎麼驗證</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
 
+/** The mark of a test roster as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
+export const testRosterMark = (date: string): string => `<p class="test-roster">${testRosterLine(date).replace(date, `<time>${date}</time>`)}</p>`;
+
 /**
  * Requests a page and checks what every page of the visitors must be: the
  * headers; HTML with no script, no inline style, no event attribute and no
@@ -104,7 +107,7 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   for (const part of ['<link rel="stylesheet" href="/pages.css">', NAV_LINKS, '<a class="button nav-button" href="/proof">我要換島民證明</a>', '<a href="/proof/help.html?topic=prepare">怎麼準備</a>']) {
     assert.ok(page.includes(part), `${path}: the page has ${part}`);
   }
-  const mark = `<p class="test-roster">${testRosterLine(CLEARED_ON)}</p>`;
+  const mark = testRosterMark(CLEARED_ON);
   assert.equal(page.includes("測試名冊"), test, `${path}: says 測試名冊`);
   assert.equal(page.includes('<meta name="robots" content="noindex">'), test, `${path}: noindex in the page`);
   if (test) {

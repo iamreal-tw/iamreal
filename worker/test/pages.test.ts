@@ -7,9 +7,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
-import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testRosterMark } from "./pages.ts";
 import { DAY_MS, START, freshRoster, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -48,8 +48,10 @@ describe("the page of a card", () => {
     for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', '<a href="/verify">怎麼驗證</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
-    // iamreal.tw/p/… is written, not a link.
-    assert.ok(page.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>'));
+    // The address to look for on the profile is written, not a link. A test roster's site writes its own domain
+    // (design/copy/test-site.md): that is where this card's page is.
+    assert.equal(testSiteCardAddress(CARD_A), "test.iamreal.tw/p/7K2Q9FM4XD");
+    assert.ok(page.includes(`<p class="backlink">${testSiteCardAddress(CARD_A)}</p>`));
     // The profile, embedded with no script of Threads and nothing sent with the request.
     assert.ok(
       page.includes('<iframe class="threads-profile" src="https://www.threads.com/@alice/embed/" title="Threads 個人檔案：@alice" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>'),
@@ -176,6 +178,7 @@ describe("the page of a card", () => {
       const { status, page } = await getPage(worker, `/p/${typed}`);
       assert.equal(status, 404, `/p/${typed}`);
       wantLines(page, copyLines(block("proof-page.md", "9. "), "7K2Q9FM4XD", typed));
+      assert.ok(page.includes(`<span class="typed">${testSiteCardAddress(typed)}</span> 沒有對到任何一張自然人憑證。`), `/p/${typed}: the test site's own domain`);
       assert.ok(page.includes('<a href="/roster#q">查一個 Threads 帳號</a>'));
       wantPreview(page, specialTitles()[2]!, "島民 iamreal.tw");
     }
@@ -342,19 +345,29 @@ describe("every page", () => {
       const { page } = await getPage(worker, path, { test: false });
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
-    wantLines((await getPage(worker, `/p/${CARD_A}`, { test: false })).page, copyLines(block("proof-page.md", "1. ")));
+    const card = (await getPage(worker, `/p/${CARD_A}`, { test: false })).page;
+    wantLines(card, copyLines(block("proof-page.md", "1. ")));
+    // The production site's domain, as proof-page.md writes it, in both places that write the page's address.
+    assert.ok(card.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>') && !card.includes("test.iamreal.tw"));
+    const missing = (await getPage(worker, "/p/7K2Q9FM4XE", { test: false })).page;
+    assert.ok(missing.includes('<span class="typed">iamreal.tw/p/7K2Q9FM4XE</span>') && !missing.includes("test.iamreal.tw"));
+    const none = await getPage(worker, "/nothing", { test: false });
+    assert.equal(none.status, 404);
+    wantLines(none.page, copyLines(block("not-found.md", "頁面")));
     // The style sheet's headers are fixed when the Worker is uploaded: a production roster's site is in test/proof-files.test.ts.
   });
 
   test("the test roster: the mark says the date of the setting, as design/copy/test-site.md writes it", async () => {
     await freshRoster(worker, { clearedOn: "2026-12-31" });
     const page = await (await worker.fetch("/")).text();
-    assert.ok(page.includes(`<p class="test-roster">${testRosterLine("2026-12-31")}</p>`));
+    assert.ok(page.includes(testRosterMark("2026-12-31")));
+    assert.equal(testRosterMark("2026-12-31"), '<p class="test-roster">測試名冊　不定期清空，上次清空：<time>2026-12-31</time></p>');
     assert.equal(testRosterLine("2026-12-31"), "測試名冊　不定期清空，上次清空：2026-12-31");
     // A date that is not one: the test site serves no page rather than a mark without its date.
     await freshRoster(worker, { clearedOn: "soon" });
     assert.equal((await worker.fetch("/")).status, 500);
     assert.equal((await worker.fetch("/p/7K2Q9FM4X")).status, 500);
+    assert.equal((await worker.fetch("/nothing")).status, 500);
   });
 
   test("what the address has is escaped", async () => {
@@ -364,15 +377,18 @@ describe("every page", () => {
       assert.equal(status, 404, path);
       assert.ok(!page.includes("<b>x") && !page.includes(`x"'`) && !page.includes('href="javascript') && !page.includes('src="javascript'), `${path}: escaped`);
     }
-    assert.ok((await getPage(worker, "/p/%3Cb%3Ex%22%27&amp;")).page.includes("iamreal.tw/p/&lt;b&gt;x&#34;&#39;&amp;amp;"));
+    assert.ok((await getPage(worker, "/p/%3Cb%3Ex%22%27&amp;")).page.includes("test.iamreal.tw/p/&lt;b&gt;x&#34;&#39;&amp;amp;"));
+    // The page for what is no page writes nothing of the address back.
+    const none = (await getPage(worker, "/%3Cb%3Ex%22%27?q=%3Ci%3E")).page;
+    assert.ok(!none.includes("<b>x") && !none.includes("&lt;b&gt;") && !none.includes("<i>") && !none.includes("&lt;i&gt;"));
   });
 
   test("the pages and the style sheet take GET and HEAD only", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/pages.css"]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css"]) {
       const cache = path === "/pages.css" ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
-      assert.equal(head.status, path === "/p/7K2Q9FM4XE" ? 404 : 200, `HEAD ${path}`);
+      assert.equal(head.status, path === "/p/7K2Q9FM4XE" || path === "/nothing" ? 404 : 200, `HEAD ${path}`);
       assert.equal(await head.text(), "");
       checkVisitorHeaders(`HEAD ${path}`, head, { cache });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
@@ -392,9 +408,18 @@ describe("every page", () => {
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
     const css = await res.text();
     assert.ok(css.includes(".test-roster {") && css.includes(".threads-profile"));
-    // Byte for byte the Go backend's, for as long as that one is in the repository.
+    // The Go backend's, for as long as that one is in the repository, byte for byte but for one rule added after
+    // the mark of a test roster: the date in it is not broken at a hyphen on a narrow screen.
+    const added = `
+/* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
+.test-roster time {
+  white-space: nowrap;
+}
+`;
+    assert.equal(css.split(added).length, 2, "the style sheet has the added rule once");
+    assert.ok(css.includes(`  letter-spacing: 0.1em;\n}\n${added}\n[hidden] {`), "right after the rule of the mark");
     const old = join(WORKER_DIR, "..", "server", "pages", "style.css");
-    if (existsSync(old)) assert.equal(css, readFileSync(old, "utf8"));
+    if (existsSync(old)) assert.equal(css.replace(added, ""), readFileSync(old, "utf8"));
     // Nothing of another origin, and no script.
     assert.doesNotMatch(css, /url\(|@import|https?:|expression\(/i);
     const etag = res.headers.get("etag");
@@ -405,16 +430,34 @@ describe("every page", () => {
     assert.deepEqual(await worker.seen(), [], "the Worker's code ran for neither request");
   });
 
-  test("what is not a page is 404, and nothing but the pages is cached: the API's answers are no-store", async () => {
+  test("what is not a page is the 404 page of design/copy/not-found.md, with what every page has; under /api/ it stays the API's answer", async () => {
     await freshRoster(worker, { clearedOn: CLEARED_ON });
-    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p"]) {
-      const res = await worker.fetch(path, { redirect: "manual" });
-      assert.equal(res.status, 404, path);
-      assert.equal(res.headers.get("x-content-type-options"), "nosniff", path);
-      assert.equal(res.headers.get("set-cookie"), null);
+    const lines = copyLines(block("not-found.md", "頁面"));
+    assert.deepEqual(lines, ["找不到這一頁", "這個網址沒有對到任何頁面。請確認網址有沒有抄錯。", "回到首頁"]);
+    // Among them the pages the home page links to and that are not made yet.
+    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/faq", "/roster", "/verify", "/hang", "/threads/@alice", "/nothing?q=1"]) {
+      // getPage checks the headers (noindex among them), the mark of the test roster with its date, the navigation bar and the foot.
+      const { status, page } = await getPage(worker, path);
+      assert.equal(status, 404, path);
+      wantLines(page, lines);
+      assert.ok(page.includes('<h1 class="title">找不到這一頁</h1>') && page.includes('<a href="/">回到首頁</a>'), path);
+      assert.equal(firstMatch(TITLE_TAG, page), "找不到這一頁｜島民");
+      wantPreview(page, "找不到這一頁", "島民 iamreal.tw");
     }
+    // The roster is not asked: with an object that answers nothing, the page is the same.
+    await worker.roster.setStoredSchemaVersion("another");
+    await worker.roster.restart();
+    try {
+      assert.equal((await getPage(worker, "/nothing")).status, 404);
+    } finally {
+      await worker.roster.setStoredSchemaVersion("the build's");
+      await worker.roster.restart();
+    }
+    // Nothing but the pages is cached, and what is not there under /api/ is the API's own 404.
     for (const [path, method] of [["/api/v1/config", "GET"], ["/api/v1/challenges", "POST"], ["/api/v1/nothing", "GET"]] as const) {
       assert.equal((await worker.fetch(path, { method })).headers.get("cache-control"), "no-store", path);
     }
+    const api = await worker.fetch("/api/v1/nothing");
+    assert.deepEqual([api.status, api.headers.get("content-type"), api.headers.get("x-robots-tag")], [404, "application/json", null]);
   });
 });

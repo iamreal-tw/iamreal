@@ -2,6 +2,8 @@
 //
 //   /            the home page (design/copy/home.md)
 //   /p/…         the page of a card (design/copy/proof-page.md)
+//   anything else the page for what is not there (design/copy/not-found.md),
+//                with 404
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
 // Their style sheet (/pages.css) and the card proof page (/proof and
@@ -20,6 +22,7 @@ import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS }
 import type { PageData } from "./page-data.ts";
 import { homePage } from "./pages/home.ts";
 import { type Document, type Site, layout } from "./pages/layout.ts";
+import { notFoundPage } from "./pages/not-found.ts";
 import { PLATFORM, proofMissing, proofPage } from "./pages/proof.ts";
 import { OTHER_SCHEMA } from "./roster.ts";
 import { rosterSettingsOf } from "./settings.ts";
@@ -50,11 +53,11 @@ async function ask<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Which kind of page a path is, for the log and to choose its headers; null if it is none. */
-function kindOf(pathname: string): "home" | "card" | null {
+/** Which kind of page a path is, for the log: the home page, the page of a card, or the page for what is none. */
+function kindOf(pathname: string): "home" | "card" | "none" {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/p/")) return "card";
-  return null;
+  return "none";
 }
 
 /** What a page handler answers, before the headers every answer of its kind has. */
@@ -102,38 +105,38 @@ async function card(site: Site, parts: VisitorParts, pathname: string): Promise<
   }
   const short = readShortIdInUrl(typed);
   if (short !== null && short !== typed) return { status: 301, headers: { Location: `/p/${short}`, "Cache-Control": ROSTER_PAGE_CACHE }, body: null };
-  if (short === null) return page(site, 404, proofMissing(typed));
+  if (short === null) return page(site, 404, proofMissing(site, typed));
   const found = await ask(() => parts.pageData.cards(short));
-  if (found.cards.length === 0) return page(site, 404, proofMissing(typed));
+  if (found.cards.length === 0) return page(site, 404, proofMissing(site, typed));
   try {
-    return page(site, 200, proofPage(short, found));
+    return page(site, 200, proofPage(site, short, found));
   } catch (e) {
     throw e instanceof Internal ? e : new Internal("render", e);
   }
 }
 
-/** Whether this code answers for the path: the visitors' pages. */
-export function isVisitorPath(pathname: string): boolean {
-  return kindOf(pathname) !== null;
-}
-
-/** Answers a request for a page. */
+/**
+ * Answers a request for anything that is not the API's: a page, or, for a
+ * path that is none, the page that says so, with 404. That one has what
+ * every page has (on a test roster the mark, the date and noindex), and is
+ * kept by a cache as long as the others.
+ */
 export async function visitor(request: Request, env: Env, parts: VisitorParts): Promise<Response> {
   const { pathname } = new URL(request.url);
   const kind = kindOf(pathname);
-  if (kind === null) return notFound();
   let answer: Answer;
   let site: Site | null = null;
   try {
     try {
       const settings = rosterSettingsOf(env);
-      site = { testRosterClearedOn: settings.testRosterClearedOn };
+      site = { testRosterClearedOn: settings.testRosterClearedOn, host: settings.siteHost };
     } catch (e) {
       throw new Internal("settings", e);
     }
     if (request.method !== "GET" && request.method !== "HEAD") answer = { ...text(405, "method not allowed\n"), headers: { ...text(405, "").headers, Allow: "GET, HEAD" } };
     else if (kind === "home") answer = await home(site, parts);
-    else answer = await card(site, parts, pathname);
+    else if (kind === "card") answer = await card(site, parts, pathname);
+    else answer = page(site, 404, notFoundPage());
   } catch (e) {
     const cause = e instanceof Internal ? e.cause : e;
     console.error(JSON.stringify({ event: "internal_error", page: kind, where: e instanceof Internal ? e.where : "render", error: cause instanceof Error ? cause.name : "unknown" }));
@@ -147,9 +150,4 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     ...(site === null || site.testRosterClearedOn !== null ? TEST_SITE_HEADERS : {}),
   });
   return new Response(request.method === "HEAD" ? null : answer.body, { status: answer.status, headers });
-}
-
-/** The answer for a path that is nothing of the site. */
-export function notFound(): Response {
-  return new Response("not found\n", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...EVERY_RESPONSE } });
 }

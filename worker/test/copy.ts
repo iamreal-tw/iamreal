@@ -165,6 +165,14 @@ export function faqQuestions(): FaqQuestion[] {
   return out;
 }
 
+/** The address of a page of a card as a test roster's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
+export function testSiteCardAddress(shortId: string): string {
+  const lines = block("test-site.md", "島民證明上寫的網址");
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0]!.endsWith("/p/7K2Q9FM4XD"));
+  return lines[0]!.replace("7K2Q9FM4XD", shortId);
+}
+
 /** The sentence beside the mark of a test roster (design/copy/test-site.md), with this date in it. */
 export function testRosterLine(date: string): string {
   const lines = block("test-site.md", "測試名冊的標示");

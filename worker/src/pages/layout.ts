@@ -17,6 +17,12 @@ export interface Site {
    * production roster.
    */
   readonly testRosterClearedOn: string | null;
+  /**
+   * The site's domain, as a page writes it where it writes its own address
+   * (`iamreal.tw/p/…`; on a test roster's site its own,
+   * design/copy/test-site.md).
+   */
+  readonly host: string;
 }
 
 /** What the layout reads of a page. */
@@ -75,7 +81,7 @@ ${d.description === undefined ? new Html("") : html`<meta property="og:descripti
 `}<link rel="stylesheet" href="${CSS_PATH}">
 </head>
 <body class="${d.kind}">
-${test === null ? new Html("") : html`<p class="test-roster">測試名冊　不定期清空，上次清空：${test}</p>
+${test === null ? new Html("") : html`<p class="test-roster">測試名冊　不定期清空，上次清空：<time>${test}</time></p>
 `}<main>
 ${NAV}
 ${d.content}
