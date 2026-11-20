@@ -72,6 +72,45 @@ func writeDir(t *testing.T, files map[string][]byte, fingerprintFile string) str
 	return dir
 }
 
+// longCardStates returns the card state file of the first n records of
+// longRoster, as the server writes it: every record is a valid first
+// declaration of its own card.
+func longCardStates(n int) []byte {
+	x := roster.NewRules(verifier.Production, allVerify{}, everyRoot{})
+	for _, r := range longRoster()[:min(n, len(longRoster()))] {
+		if res, err := x.Apply(r); err != nil || !res.Valid {
+			panic(fmt.Sprintf("seq %d: %v %v", r.Seq, res, err))
+		}
+	}
+	return roster.CardStateFile(x.CardRows())
+}
+
+// withCardState adds, to the files of a roster directory of longRoster, the
+// card state file the server writes with the last line of the fingerprint
+// file fps: that of the line's date, with the states after its count. A
+// published directory has it (ADR-0027), and the command reports one that
+// does not. Nothing is added when fps has no line that reads.
+func withCardState(files map[string][]byte, fps string) map[string][]byte {
+	lines := readableFingerprintLines([]byte(fps))
+	if len(lines) == 0 {
+		return files
+	}
+	last := lines[len(lines)-1]
+	out := map[string][]byte{roster.CardStateName(last.Date): longCardStates(int(min(last.Count, uint64(len(longRoster())))))}
+	for name, b := range files {
+		out[name] = b
+	}
+	return out
+}
+
+// writePublished writes a roster directory of longRoster as the server
+// publishes it: writeDir, with the card state file of the last line of
+// fingerprintFile.
+func writePublished(t *testing.T, files map[string][]byte, fingerprintFile string) string {
+	t.Helper()
+	return writeDir(t, withCardState(files, fingerprintFile), fingerprintFile)
+}
+
 // cut returns the roster files of the roster directory of the first n
 // records, without their record hash lists.
 func cut(n int) map[string][]byte {
@@ -104,7 +143,7 @@ func runDir(t *testing.T, dir string, extra ...string) (int, string, string) {
 func TestDirectory(t *testing.T) {
 	files := published(2001)
 	files["README.md"] = []byte("not part of the roster")
-	dir := writeDir(t, files, fingerprints(fingerprintEntry("2026-11-16", 0), fingerprintEntry("2026-11-17", 1000), fingerprintEntry("2026-11-19", 1000), fingerprintEntry("2026-11-20", 2001)))
+	dir := writePublished(t, files, fingerprints(fingerprintEntry("2026-11-16", 0), fingerprintEntry("2026-11-17", 1000), fingerprintEntry("2026-11-19", 1000), fingerprintEntry("2026-11-20", 2001)))
 	code, out, errOut := runDir(t, dir)
 	fp := roster.Fingerprint(longRoster())
 	if code != exitAllValid || !strings.Contains(out, "records: 2001\nfingerprint: "+fp) ||
@@ -120,13 +159,13 @@ func TestDirectory(t *testing.T) {
 
 	// One file of 1 to 1,000 lines.
 	for _, n := range []int{1, 1000} {
-		code, _, errOut := runDir(t, writeDir(t, published(n), fingerprintEntry("2026-11-16", n)))
+		code, _, errOut := runDir(t, writePublished(t, published(n), fingerprintEntry("2026-11-16", n)))
 		if code != exitAllValid {
 			t.Errorf("%d records: exit %d %s", n, code, errOut)
 		}
 	}
 	// No record: no roster file, no record hash list.
-	if code, out, errOut := runDir(t, writeDir(t, nil, fingerprintEntry("2026-11-16", 0))); code != exitAllValid || !strings.Contains(out, "records: 0") ||
+	if code, out, errOut := runDir(t, writePublished(t, nil, fingerprintEntry("2026-11-16", 0))); code != exitAllValid || !strings.Contains(out, "records: 0") ||
 		!strings.Contains(errOut, "hashes/: 0 list(s)") {
 		t.Errorf("empty: exit %d %s %s", code, out, errOut)
 	}
@@ -186,7 +225,7 @@ func TestDirectoryBroken(t *testing.T) {
 		}, 1000, "seq", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := writeDir(t, c.files(), fingerprintEntry("2026-11-16", c.count))
+			dir := writePublished(t, c.files(), fingerprintEntry("2026-11-16", c.count))
 			code, out, _ := runDir(t, dir)
 			want := fmt.Sprintf("roster file: broken at line %d: %s", c.line, c.code)
 			if code != exitInvalid || !strings.HasPrefix(out, want) || !strings.Contains(out, c.want) {
@@ -235,7 +274,7 @@ func TestFingerprints(t *testing.T) {
 			[]string{"line 2: not the template", "line 3: date 2026-11-16 is not after 2026-11-16"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			code, out, errOut := runDir(t, writeDir(t, files, c.fingerprints))
+			code, out, errOut := runDir(t, writePublished(t, files, c.fingerprints))
 			if code != exitInvalid || !strings.Contains(out, "roster file: valid") {
 				t.Errorf("exit %d\n%s", code, errOut)
 			}
@@ -295,7 +334,7 @@ func TestHashLists(t *testing.T) {
 		}, []string{"hashes/0000000000001000.txt is not the record hash list of the roster"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			code, out, errOut := runDir(t, writeDir(t, c.files(), fps))
+			code, out, errOut := runDir(t, writePublished(t, c.files(), fps))
 			if code != exitInvalid || !strings.Contains(out, "roster file: valid") {
 				t.Errorf("exit %d\n%s", code, errOut)
 			}

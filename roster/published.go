@@ -52,6 +52,14 @@ const HashListDir = "hashes"
 // list of the roster file RosterFileName(before).
 func HashListName(before uint64) string { return fmt.Sprintf("%s/%016d.txt", HashListDir, before) }
 
+// CardStateDir is the subdirectory of the roster directory that holds the
+// card state files, one per date (ADR-0027).
+const CardStateDir = "card-state"
+
+// CardStateName is the path, in the roster directory, of the card state
+// file of date d (spec/roster-rules.md, "The card state file").
+func CardStateName(d verifier.Date) string { return CardStateDir + "/" + d.String() + ".jsonl" }
+
 // File is one file of the published roster: its path in the roster
 // directory, with "/" between directories, and its bytes.
 type File struct {
