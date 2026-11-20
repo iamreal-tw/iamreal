@@ -31,7 +31,7 @@ IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄
 
 畫面的文字在 `design/copy/card-proof.json`，是 `design/copy/card-proof.md` 的句子照畫面分組、例子換成 `{名稱}`（`{account}` 是帶前綴的帳號，例如 `@alice`）。`test/copy.test.ts` 兩個方向都比：JSON 的每一句代入 Markdown 的例子後，在 Markdown 裡一字不差；Markdown 的每個畫面（程式碼區塊）和表格裡「畫面寫」「標題」「名冊會公開記下」「按鈕」那幾欄的每一格，都由 JSON 的句子組成，剩下的只能是照原樣顯示的值（例子的帳號、日期、姓名、完成畫面的連結、平台的顯示名稱和代號，`src/platforms.ts` 的前綴）和 Markdown 畫按鈕、清單、可展開問題的符號（`[ ]`、`›`、`▸`、`○`、`·`）。「（QR code）」和「第 2 步那張表裡同一種情況的句子」是文件的註，不比。文件裡沒有的句子，畫面只顯示代碼（見「停止的原因」和「文件沒有句子、畫面顯示代碼的地方」）。唯一不在那份 Markdown 裡的是說明頁的「待補」。
 
-`card-proof.json` 的 `app` 那一組（選裝置、用手機過卡）是 app 推出之後用的：畫面現在不顯示它們（`card-proof.md`「app 推出之前」），文字測試照樣比對它們在 Markdown 裡。
+`card-proof.json` 的 `app` 那一組（選裝置、用手機過卡）是 app 推出之後用的：畫面現在不顯示它們（`card-proof.md`「app 推出之前」），文字測試照樣比對它們在 Markdown 裡。`app_` 開頭的那幾組是 Android、iOS 的 app 自己的句子（`card-proof.md` 標「app」的段落），網頁不顯示；文字測試照樣兩個方向比對，並檢查它們沒有「這台裝置」「這台電腦」。
 
 說明頁（「怎麼準備」「了解更多」「怎麼驗證」，和完成畫面的「打開這張島民證明」）是 `/proof/help.html?topic=…`，只有標題和「待補」，在新分頁開：離開這一頁，過卡就中斷了。島民證明的頁面還沒做，「打開這張島民證明」先指到說明頁。
 
@@ -320,7 +320,7 @@ pnpm build            # 正式的建置，到 dist/
 | `test/device-checks.test.ts` | `spec/vectors/device-checks.json`（`spec/device-checks.md`）：選憑證和檢查憑證（`src/certificate.ts` 的 `selectCertificate`），每一案的結果是選出的憑證和讀到的值，或原因；`crl_max_age_days` 哪些值讀得懂、清冊多舊算過期的 `L`、從索引選哪個檔、鏡像給的清冊用不用（`src/api.ts` 的 `requestConfig`，`src/crl/revocation.ts` 的 `crlMaxAge`、`chooseFromIndex`、`loadCrl`），每一案的結果是用的清冊或原因，和之後記住的編號。標準答案由 `test/generate/device-checks.ts` 用 `test/fixtures/` 產生，每一案的結果手寫在產生器裡（見 `spec/device-checks.md`「Test vectors」） |
 | `test/circuit-inputs.test.ts` | `spec/vectors/circuit-inputs.json`：每一案的憑證通過檢查、選到的電路，電路的輸入（`src/prover/inputs.ts`）和預期的公開輸入都和標準答案相同。標準答案由 `test/generate/circuit-inputs.ts` 從 `test/fixtures/` 產生，產生時讓電路執行過每一案 |
 | `test/certificate.test.ts` | 照電路的走法預先檢查憑證時，每一次讀取都在 TBS 裡面（標準答案表達不了的部分） |
-| `test/copy.test.ts` | `design/copy/card-proof.json` 和 `card-proof.md` 的句子兩個方向都相同（Markdown 的每個程式碼區塊和表格裡畫面的那幾欄；剩下的只能是照原樣顯示的值和畫按鈕、清單的符號，見「畫面和引擎怎麼分層」）；`src/ui/` 和 HTML 裡沒有中日韓文字 |
+| `test/copy.test.ts` | `design/copy/card-proof.json` 和 `card-proof.md` 的句子兩個方向都相同（Markdown 的每個程式碼區塊和表格裡畫面的那幾欄；剩下的只能是照原樣顯示的值和畫按鈕、清單的符號，見「畫面和引擎怎麼分層」）；app 的句子（`app_` 開頭的組）不寫「這台裝置」「這台電腦」；`src/ui/` 和 HTML 裡沒有中日韓文字 |
 | `test/ui.test.ts` | 每個平台的寫法（Threads 的前綴、格式的提示、帳號的網址；沒有寫法的平台沒有前綴、提示、預覽）、場合字串；每一種停止原因的句子和它寫在讀取卡片清單的哪一項下面（包括 `no_reader`、兩張憑證都通過、後台的 `daily_limit`、`switch_limit`、`empty`、`switch_restricted`、`platform`，沒有提示的平台的格式）；清單每一項的狀態（由上到下、同時做完的照順序顯示、停住的那項、上面沒完成的不顯示）；進行中停住後的按鈕（PIN 還在是「回到上一步」，丟掉了是「再讀一次卡片」，送不出去多「再試一次」）；第 4 步（還沒宣告過、宣告過、全部收回過的上方幾行和下方的說明；上次過卡是今天；每一列下面的那一行的每一種：沒宣告過、更換 0 到 5 次、今天才宣告的、收回過、不能再更換時可以清空或只能填回、次數用完但今天才宣告的；裝置不認得的平台那一列；今天已經 3 筆）；第 5 步（每一列的名稱、代號、帳號、會發生什麼和更換後的那一句的每一種；三種按鈕；有收回時；全部收回時；只有一個平台時那一句）；只有一個平台的條件（後台的表上裝置認得的平台數、不認得的平台上有帳號時當成超過一個）和第 1 步看建置認得幾個平台；第 6 步（五種標題、只有一個平台時放連結的那一句、島民證明的清單、卡片頁的連結、第一筆紀錄的換卡提醒、收回後連結可以拿掉、別的卡片也宣告了、`kinds` 讀不懂、後台記下的和第 5 步說的不同時那一列加代碼）（`src/ui/messages.ts`）；後台的錯誤帶請求編號；畫面用頁面自己的平台名稱，不用後台的；後台記下的和第 5 步說的不同時最上面那一句、那一列下面的「確認時畫面說的是：……」和「這次用掉了一次更換。」；`201` 讀不懂的標題；不認得的平台上的帳號照原樣（含空白）；日期換了一天時只有「回到開頭」 |
 | `test/hipki.test.ts` | 元件的回應怎麼讀：沒有讀卡機（`no_reader`）、讀卡機沒有卡片（`no_card`）、憑證、簽章和附的憑證；PIN 錯、鎖卡、其他代碼（照讀程式得知的格式，見「元件的橋接信任什麼」）。元件的視窗每次一個新的亂數名稱，上一個關了才開下一個；第一次關不掉的視窗，再看一次時關掉，關掉了就不再關 |
 | `test/api.test.ts` | 請求的時間上限（換掉 `setTimeout`）：現況不回答，30 秒到時當成沒有回應、請求被中斷；`fetch` 不理會中斷也一樣；回應的標頭來了、內容不來，當成沒有回應而不是讀不懂；靜態檔 30 秒時還在等、5 分鐘到時停；`requestConfig` 讀得懂哪幾列、整張表讀不懂的 9 種 |
