@@ -86,14 +86,14 @@
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 名冊目錄、指紋檔、卡片狀態檔還在舊後台的 `/roster/` 底下；資料網域上只有 Worker 鏡像的清冊檔，沒有清冊存檔的索引；指紋檔沒有另一份 | [#65](https://github.com/iamreal-tw/iamreal/issues/65)、[#70](https://github.com/iamreal-tw/iamreal/issues/70)、[#35](https://github.com/iamreal-tw/iamreal/issues/35) |
-| 0028 | 測試網站只部署了 `worker/` 的骨架：每個網址回 `404`，不能過卡，沒有測試名冊和它的標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
+| 0028 | 測試網站有測試名冊、它的標示、首頁和島民證明，但還不能過卡：部署沒有放過卡的頁面（`/proof`），過卡的頁面上也沒有標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
-`worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。後台現在還是 Go 的 `server/`。
+`worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明有了，其餘的訪客頁面、公布名冊、限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的 `server/` 只當逐案比對的對照。
 
 ## 還沒定
 
