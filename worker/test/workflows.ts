@@ -207,6 +207,25 @@ export const BROWSER_PATHS: readonly string[] = [
   ".github/workflows/checks-browser.yml",
 ];
 
+/**
+ * The paths whose change runs the iOS check (checks-ios.yml), exactly: the
+ * app, the core it links, what the app carries (the circuits, the
+ * verification keys) and what its tests read (the vectors, the copy, the
+ * hashes of the page's CRS), and the workflow itself. Issue #155: macOS
+ * minutes count for more, so the check runs only for these.
+ * test/workflows.test.ts checks that every path the tests of ios/Tests/ and
+ * ios/check-app.sh name is under one of them.
+ */
+export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
+/**
+ * The runner of the iOS check, and the one Xcode it builds with, by its path
+ * on that runner's image (.github/README.md gives the sources).
+ */
+export const IOS_RUNNER = "xcode-27";
+export const IOS_DEVELOPER_DIR = "/Applications/Xcode_27.2.app/Contents/Developer";
+/** The one job of checks-ios.yml. Like the device-core job, it runs no bb. */
+export const IOS_JOB = "ios";
+
 export const NODE_VERSION = "22.23.4";
 export const PNPM_VERSION = "10.16.1";
 /** How every job installs pnpm: from npm's registry, named here so no `.npmrc` can point elsewhere, running no install script. */
@@ -258,6 +277,27 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
     { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
     { name: "Fetch the common reference string", "working-directory": "device-core", run: "./fetch-crs.sh" },
     { name: "cargo test", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}IAMREAL_BB= cargo test --locked --release` },
+  ],
+};
+
+/**
+ * The iOS job, exactly. ios/build-core.sh is the one step that gets
+ * Barretenberg and the CRS: it calls device-core/fetch-barretenberg.sh and
+ * device-core/fetch-crs.sh, which check each SHA-256 before use, then runs
+ * cargo in device-core/. Xcode links what that step left. The destination is
+ * a simulator the runner's image has (.github/README.md gives the source).
+ */
+const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
+export const IOS_JOB_STEPS: YamlMap = {
+  "runs-on": IOS_RUNNER,
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    { name: "Install the Rust of rust-toolchain.toml, with the simulator's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios-sim" },
+    { name: "Build device-core/ for the simulator", "working-directory": "ios", run: "./build-core.sh simulator" },
+    { name: "Build the app and run its tests in the simulator", "working-directory": "ios", run: `${XCODEBUILD} test` },
+    { name: "check-app.sh turns away what it should", "working-directory": "ios", run: "./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app" },
+    { name: "Build the release configuration, with its checks", "working-directory": "ios", run: `${XCODEBUILD} -configuration Release build` },
   ],
 };
 
@@ -344,19 +384,31 @@ export const CHECKS_ON: Yaml = { pull_request: null, merge_group: { types: ["che
 export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || github.ref }}";
 
 /**
- * The two workflows of a pull request's checks: each one's trigger, its
+ * The three workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
- * exactly, and its concurrency group. The groups differ: "concurrency group
+ * exactly, its concurrency group, and its runner when that is not
+ * ubuntu-24.04. The groups differ: "concurrency group
  * names must be unique across workflows to avoid canceling in-progress jobs
  * or runs from other workflows"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  *
  * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
- * they are the checks main requires. checks-browser.yml does not run in the
- * merge queue (#180).
+ * they are the checks main requires. checks-browser.yml and checks-ios.yml
+ * do not run in the merge queue (#180).
  */
 const PULL_REQUEST_RULES: Readonly<
-  Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly requiredChecks?: readonly string[] }>
+  Record<
+    string,
+    {
+      readonly on: Yaml;
+      readonly env: YamlMap;
+      readonly jobEnv?: YamlMap;
+      readonly group: string;
+      readonly runsOn?: string;
+      readonly envRequired?: true;
+      readonly requiredChecks?: readonly string[];
+    }
+  >
 > = {
   "checks.yml": {
     on: CHECKS_ON,
@@ -369,6 +421,14 @@ const PULL_REQUEST_RULES: Readonly<
     env: { IAMREAL_BB: BB_PATH },
     jobEnv: { CHROME: "/usr/bin/google-chrome" },
     group: "checks-browser-${{ github.event.pull_request.number }}",
+  },
+  "checks-ios.yml": {
+    on: { pull_request: { paths: [...IOS_PATHS] } },
+    env: { DEVELOPER_DIR: IOS_DEVELOPER_DIR },
+    group: "checks-ios-${{ github.event.pull_request.number }}",
+    runsOn: IOS_RUNNER,
+    // Without DEVELOPER_DIR the runner's default Xcode builds the app.
+    envRequired: true,
   },
 };
 
@@ -383,7 +443,7 @@ const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(
 export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["checks-browser.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, ["checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -441,7 +501,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     // group's run, so what keeps it safe is the rest of these rules (no secret, read only).
     // `paths` only where the rules say, as they say: a path left out is a check that does not run.
     if (!same(doc.on, rules.on)) p(`not triggered as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
-    if (doc.env !== undefined && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
+    if ((doc.env !== undefined || rules.envRequired) && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
     if (!same(doc.concurrency, { group: rules.group, "cancel-in-progress": "true" })) p(`concurrency is not group ${rules.group}, cancelling the run before`);
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
       p("no jobs");
@@ -458,7 +518,8 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       // A job's name is the name its check reports: none where main requires the checks by id.
       const wrongJob = extra(job, [...(required === undefined ? ["name"] : []), "runs-on", "timeout-minutes", "env", "steps"]);
       if (wrongJob.length) j(`keys not allowed: ${wrongJob.join(", ")}`);
-      if (job["runs-on"] !== "ubuntu-24.04") j("runs-on is not ubuntu-24.04");
+      const runsOn = rules.runsOn ?? "ubuntu-24.04";
+      if (job["runs-on"] !== runsOn) j(`runs-on is not ${runsOn}`);
       if (job.env !== undefined && !same(job.env, rules.jobEnv)) j("an env other than the one in test/workflows.ts");
       if (!Array.isArray(job.steps) || job.steps.length === 0) {
         j("no steps");
@@ -474,7 +535,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, ios");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -492,6 +553,10 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         // Exactly the steps written above: every cargo that links Barretenberg runs in device-core/
         // (where .cargo/config.toml is read) with the library the script checked.
         if (!same(job, DEVICE_CORE_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+      } else if (f === "checks-ios.yml" && name === IOS_JOB) {
+        // Exactly the steps written above, for the same reason: the one step that gets Barretenberg
+        // and the CRS is ios/build-core.sh, which has each checked before cargo or Xcode uses it.
+        if (!same(job, IOS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

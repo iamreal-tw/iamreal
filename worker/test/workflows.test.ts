@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
-import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, CHECK_BB, CHECKS_GROUP, CHECKS_ON, INSTALL_PNPM, REQUIRED_CHECKS, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
+import { BB_AMD64_LINUX_SHA256, BROWSER_PATHS, IOS_PATHS, CHECK_BB, CHECKS_GROUP, CHECKS_ON, INSTALL_PNPM, REQUIRED_CHECKS, type Yaml, readYaml, workflowProblems } from "./workflows.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
@@ -30,6 +30,7 @@ test("the workflows keep to the rules", () => {
 const D = "deploy-test.yml";
 const C = "checks.yml";
 const B = "checks-browser.yml";
+const I = "checks-ios.yml";
 const BROWSER_JOB = "  browser:\n    runs-on: ubuntu-24.04\n";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SECRET = "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}";
@@ -160,17 +161,34 @@ const CHANGES: Record<string, Change[]> = {
   "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
   "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && IAMREAL_BB= cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x IAMREAL_BB= cargo test")],
   "104 one more step in the device-core job": [replace(C, "      - name: cargo fmt --check\n", "      - run: rm .cargo/config.toml\n        working-directory: device-core\n      - name: cargo fmt --check\n")],
+  "105 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - spec/vectors/**\n      - design/copy/**\n      - web/circuits/**\n      - verifier/vk/**\n      - web/scripts/fetch-crs.mjs\n      - .github/workflows/checks-ios.yml\n", "")],
+  "106 a path less in checks-ios.yml": [replace(I, "      - device-core/**\n", "")],
+  "107 checks-ios.yml on pull_request_target": [replace(I, "  pull_request:\n", "  pull_request_target:\n")],
+  "108 checks-ios.yml on another runner": [replace(I, "    runs-on: xcode-27\n", "    runs-on: macos-latest\n")],
+  "109 a job of checks.yml on the macOS runner": [replace(C, GO_JOB, "  go:\n    runs-on: xcode-27\n")],
+  "110 another Xcode in checks-ios.yml": [replace(I, "Xcode_27.2.app", "Xcode.app")],
+  "111 a secret in the env of checks-ios.yml": [replace(I, "env:\n", "env:\n  T: ${{ secrets.X }}\n")],
+  "112 checks-ios.yml with write permissions": [replace(I, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "113 checks-ios.yml in the concurrency group of checks.yml": [replace(I, "  group: checks-ios-", "  group: checks-")],
+  "114 the iOS job without the script that gets Barretenberg checked": [replace(I, "        run: ./build-core.sh simulator\n", "        run: cargo build --manifest-path ../device-core/Cargo.toml\n")],
+  "115 the iOS job taking Barretenberg from somewhere else": [replace(I, "        run: ./build-core.sh simulator\n", "        run: ./build-core.sh simulator && BB_LIB_DIR=/tmp/x cargo build\n")],
+  "116 a step of the iOS job in another directory": [replace(I, "        working-directory: ios\n        run: ./build-core.sh", "        working-directory: ios/build\n        run: ./build-core.sh")],
+  "117 an action not in the list in checks-ios.yml": [replace(I, "      - name: Build device-core/ for the simulator\n", `      - uses: maxim-lobanov/setup-xcode@${SHA} # v1.6.0\n      - name: Build device-core/ for the simulator\n`)],
+  "118 the Xcode of checks-ios.yml in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n`)],
+  "119 checks-ios.yml without its Xcode": [replace(I, "  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer\n", "  OTHER: x\n")],
+  "120 one more step in the iOS job": [replace(I, "      - name: Build device-core/ for the simulator\n", "      - run: curl -o ../device-core/vendor/x https://example.invalid/x\n        working-directory: ios\n      - name: Build device-core/ for the simulator\n")],
   // The merge queue (#180): checks.yml also runs on merge_group, and nothing else does.
-  "110 deploy-test.yml also on merge_group": [replace(D, "on:\n  push:\n", `on:\n${MERGE_GROUP}  push:\n`)],
-  "111 checks-browser.yml also on merge_group": [replace(B, "on:\n", `on:\n${MERGE_GROUP}`)],
-  "112 checks.yml on merge_group only, so a pull request gets no checks": [replace(C, "  pull_request:\n", "")],
-  "113 merge_group in checks.yml with another activity type": [replace(C, MERGE_GROUP, `${MERGE_GROUP}      - destroyed\n`)],
-  "114 checks.yml's group by pull request number, so the merge groups' runs share one and cancel each other": [replace(C, `  group: ${CHECKS_GROUP}\n`, "  group: checks-${{ github.event.pull_request.number }}\n")],
-  "115 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    runs-on: ubuntu-24.04\n")],
-  "116 a job of checks.yml given a name, which is the name its check reports": [replace(C, GO_JOB, `${GO_JOB}    name: Go\n`)],
-  "117 a fourth job in checks.yml": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
-  "118 a secret in the env at the top of checks.yml, which a merge group's run would be given": [replace(C, '  WRANGLER_HIDE_BANNER: "true"\n', `  WRANGLER_HIDE_BANNER: "true"\n  T: ${SECRET}\n`)],
-  "119 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
+  "130 deploy-test.yml also on merge_group": [replace(D, "on:\n  push:\n", `on:\n${MERGE_GROUP}  push:\n`)],
+  "131 checks-browser.yml also on merge_group": [replace(B, "on:\n", `on:\n${MERGE_GROUP}`)],
+  "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
+  "132 checks.yml on merge_group only, so a pull request gets no checks": [replace(C, "  pull_request:\n", "")],
+  "133 merge_group in checks.yml with another activity type": [replace(C, MERGE_GROUP, `${MERGE_GROUP}      - destroyed\n`)],
+  "134 checks.yml's group by pull request number, so the merge groups' runs share one and cancel each other": [replace(C, `  group: ${CHECKS_GROUP}\n`, "  group: checks-${{ github.event.pull_request.number }}\n")],
+  "135 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    runs-on: ubuntu-24.04\n")],
+  "136 a job of checks.yml given a name, which is the name its check reports": [replace(C, GO_JOB, `${GO_JOB}    name: Go\n`)],
+  "137 a fourth job in checks.yml": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
+  "138 a secret in the env at the top of checks.yml, which a merge group's run would be given": [replace(C, '  WRANGLER_HIDE_BANNER: "true"\n', `  WRANGLER_HIDE_BANNER: "true"\n  T: ${SECRET}\n`)],
+  "139 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -210,6 +228,9 @@ test("the reader reads the part of YAML the workflows are written in, values as 
   assert.equal(paths[0], "web/**");
   assert.equal(paths.at(-1), ".github/workflows/checks-browser.yml");
   assert.deepEqual(Object.keys(browserDoc.jobs as object), ["browser"]);
+  const iosDoc = readYaml(realFiles()[I]!) as Record<string, Yaml>;
+  assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...IOS_PATHS]);
+  assert.deepEqual(Object.keys(iosDoc.jobs as object), ["ios"]);
   const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;
   assert.deepEqual(browser.env, { CHROME: "/usr/bin/google-chrome" });
   assert.ok((browser.steps as Record<string, Yaml>[]).some((s) => s.run === '"$CHROME" --version'));
@@ -403,3 +424,24 @@ test(
     );
   },
 );
+
+test("the paths of checks-ios.yml hold every file of the repository the iOS tests and check-app.sh read", () => {
+  // Found by reading their source: `Repository.data("…")`, `.text("…")` and `.vectors("…")` in
+  // ios/Tests/, and the paths check-app.sh compares the app's files with (`<name> <path>` lines
+  // and "$repo/<path>"). A path put together some other way is not seen: this is a reminder, like
+  // the one for checks-browser.yml.
+  const read = new Set<string>();
+  const tests = join(REPO, "ios", "Tests");
+  for (const f of readdirSync(tests)) {
+    const text = readFileSync(join(tests, f), "utf8");
+    for (const m of text.matchAll(/Repository\.(?:data|text)\("([^"\\]+)"\)/g)) read.add(m[1]!);
+    for (const m of text.matchAll(/(?:Repository\.)?vectors\("([^"\\]+)"\)/g)) read.add(`spec/vectors/${m[1]!}`);
+    for (const m of text.matchAll(/: "((?:web|verifier|spec|design|device-core)\/[^"]+)"/g)) read.add(m[1]!);
+  }
+  const check = readFileSync(join(REPO, "ios", "check-app.sh"), "utf8");
+  for (const m of check.matchAll(/^\S+ ((?:web|verifier)\/\S+)$/gm)) read.add(m[1]!);
+  for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
+  assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
+  const covered = (path: string): boolean => IOS_PATHS.some((p) => (p.endsWith("/**") ? path.startsWith(p.slice(0, -2)) : path === p));
+  assert.deepEqual([...read].filter((p) => !covered(p)), []);
+});
