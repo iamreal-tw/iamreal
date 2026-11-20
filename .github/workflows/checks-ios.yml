@@ -4,7 +4,8 @@
 # the pull request changes ios/, device-core/, a file the app carries or its
 # tests read, or this file (issue #155; .github/README.md).
 #
-# The same rules as checks.yml: triggered by pull_request only, never
+# The same rules as checks.yml, but not on merge_group: this does not run in
+# the merge queue (#180). Triggered by pull_request only, never
 # pull_request_target; read-only; no secret; nothing cached; ASCII only.
 # worker/test/workflows.test.ts checks this file against the rules in
 # worker/test/workflows.ts.
