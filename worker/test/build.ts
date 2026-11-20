@@ -9,12 +9,16 @@
 //   src/target.ts; the fake MOICA's address, the wait for it and the test's
 //   issuer keys come in as `--define`.
 //
+// Both start, as deploying does, by putting the proof verifier's files into
+// `generated/` after checking their SHA-256 (scripts/engine-files.ts).
+//
 // test/bundle.test.ts checks that the deploy build holds nothing of the
 // test build.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEPLOY_ARGS, wranglerEnv } from "../scripts/deploy.ts";
+import { prepareEngineFiles } from "../scripts/engine-files.ts";
 import type { IssuerKey } from "../src/issuers.ts";
 
 export const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -31,6 +35,7 @@ export interface TestBuildValues {
 export function buildWorker(kind: "deploy", outDir: string): string;
 export function buildWorker(kind: "test", outDir: string, values: TestBuildValues): string;
 export function buildWorker(kind: "deploy" | "test", outDir: string, values?: TestBuildValues): string {
+  prepareEngineFiles();
   const args = [...DEPLOY_ARGS, "--dry-run", "--outdir", outDir];
   if (kind === "test") {
     args.splice(1, 0, "test-build/index.ts");
