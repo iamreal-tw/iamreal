@@ -3,7 +3,7 @@
 // two CRL addresses, written into the code, and nothing of the test build:
 // no other key, no fake MOICA, no switch for the clock; none of these is a
 // setting (ADR-0028); and its other modules are the proof verifier's files
-// with their SHA-256 (engine-files.ts) or nothing.
+// with their SHA-256 (engine-files.ts).
 //
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
@@ -74,12 +74,18 @@ const KEY_SIZED = 170;
 
 /**
  * Every run of digits and letters in the code long enough to be an RSA
- * key, with string literals that the code joins by `+` put together first.
- * A run of hex or decimal digits is one of these too.
+ * key, as often as it is there, with string literals that the code joins
+ * by `+` put together first. A run of hex or decimal digits is one of
+ * these too.
  */
-export function keySizedRuns(code: string): string[] {
+function everyKeySizedRun(code: string): string[] {
   const joined = code.replace(/(["'`])\s*\+\s*\1/g, "");
-  return [...new Set([...joined.matchAll(new RegExp(`[A-Za-z0-9+/_=-]{${KEY_SIZED},}`, "g"))].map((m) => m[0].toLowerCase()))].sort();
+  return [...joined.matchAll(new RegExp(`[A-Za-z0-9+/_=-]{${KEY_SIZED},}`, "g"))].map((m) => m[0].toLowerCase());
+}
+
+/** The different runs of `everyKeySizedRun`, sorted. */
+export function keySizedRuns(code: string): string[] {
+  return [...new Set(everyKeySizedRun(code))].sort();
 }
 
 /** The bindings wrangler lists for a build: name and kind, from the table it prints. */
@@ -101,8 +107,21 @@ export function checkAddresses(b: BuildContents): void {
   assert.deepEqual(urlsIn(b.code), addressesInCrlReadme().sort(), "the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives");
 }
 
+/**
+ * The one run as long as a key that is not a key: the G2 point of
+ * Barretenberg's CRS, 128 bytes written as hex in src/barretenberg.ts. It
+ * is known here by the SHA-256 of the file bb.js downloads it as
+ * (README.md, "WASM 檔和驗證金鑰從哪裡來").
+ */
+const CRS_G2_SHA256 = "01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f";
+export const isCrsPoint = (run: string): boolean => /^[0-9a-f]{256}$/.test(run) && createHash("sha256").update(Buffer.from(run, "hex")).digest("hex") === CRS_G2_SHA256;
+
 export function checkKeys(b: BuildContents): void {
-  assert.deepEqual(keySizedRuns(b.code), moduliInSpec().sort(), "the issuer keys in the deploy build are exactly the two of spec/vectors/issuers.json");
+  const runs = keySizedRuns(b.code);
+  assert.deepEqual(runs.filter((run) => !isCrsPoint(run)), moduliInSpec().sort(), "the issuer keys in the deploy build are exactly the two of spec/vectors/issuers.json");
+  // Counted without leaving out repeats: the loader holds the point in one
+  // place, and a second copy would be code nobody has looked at.
+  assert.equal(everyKeySizedRun(b.code).filter(isCrsPoint).length, 1, "the deploy build holds the CRS point exactly once");
   for (const s of ["PRIVATE KEY", "PUBLIC KEY", "BEGIN CERTIFICATE", "pkcs8", "spki"]) assert.ok(!b.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
 }
 
@@ -112,22 +131,27 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 
 /**
  * The test environment's only settings are the roster's object, the data
- * bucket and the object's name: so the issuer keys, MOICA's addresses and
- * the clock cannot be read from a setting. (A secret set on the Worker with
- * `wrangler secret` is not in the configuration and is not seen here.)
+ * bucket, the object's name and which roster it is: so the issuer keys,
+ * MOICA's addresses and the clock cannot be read from a setting. (A secret
+ * set on the Worker with `wrangler secret` is not in the configuration and
+ * is not seen here.)
  */
 export function checkBindings(wranglerOutput: string): void {
-  assert.deepEqual(bindingsIn(wranglerOutput), { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable" }, "the deploy build's bindings");
+  assert.deepEqual(
+    bindingsIn(wranglerOutput),
+    { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable" },
+    "the deploy build's bindings",
+  );
 }
 
 /**
  * The modules other than JavaScript are the proof verifier's files, each
- * with its SHA-256, or none: the deployed Worker has nothing that calls the
- * verifier yet, so the bundler leaves them out. #67, which makes it verify
- * submissions, makes "none" fail here.
+ * with its SHA-256, no more and no fewer: the CRL mirror builds its trees
+ * with the Poseidon2 of Barretenberg's module (src/index.ts), and the
+ * verification keys come in with the same import (src/in-worker.ts).
  */
 export function checkEngineFiles(b: BuildContents): void {
-  if (Object.keys(b.files).length > 0) assert.deepEqual(b.files, engineFiles(), "the deploy build's other modules are the proof verifier's files");
+  assert.deepEqual(b.files, engineFiles(), "the deploy build's other modules are the proof verifier's files");
 }
 
 /** Every check above on the build in `dir`; throws on the first that fails. */

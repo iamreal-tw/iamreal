@@ -224,3 +224,7 @@ for it.
 trees with their roots and proofs of absence.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
+[`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
+usable, its reason code and its root (`expected.json`). Its `times/` is not
+a vector of this document: which spellings of a time are accepted is not
+specified yet.

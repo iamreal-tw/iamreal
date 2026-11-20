@@ -69,7 +69,7 @@ func TestSyntheticCRLs(t *testing.T) {
 			if got := parsed.ThisUpdate.Format(time.RFC3339); got != c.ThisUpdate {
 				t.Errorf("thisUpdate %s, want %s", got, c.ThisUpdate)
 			}
-			if c.NextUpdate == "" != parsed.NextUpdate.IsZero() ||
+			if c.NextUpdate == "" != !parsed.HasNextUpdate ||
 				(c.NextUpdate != "" && parsed.NextUpdate.Format(time.RFC3339) != c.NextUpdate) {
 				t.Errorf("nextUpdate %v, want %q", parsed.NextUpdate, c.NextUpdate)
 			}

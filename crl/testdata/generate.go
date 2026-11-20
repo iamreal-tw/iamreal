@@ -73,7 +73,7 @@ func main() {
 			CRLDate:    parsed.Date(),
 			SHA256:     hex.EncodeToString(sum[:]),
 		}
-		if !parsed.NextUpdate.IsZero() {
+		if parsed.HasNextUpdate {
 			e.NextUpdate = parsed.NextUpdate.Format("2006-01-02T15:04:05Z")
 		}
 		if n, err := parsed.Number(); err == nil && n != nil {

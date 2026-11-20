@@ -51,6 +51,7 @@
 - 廢止清冊的樹由裝置自己建，每把發證金鑰一棵；裝置用的清冊最多舊 7 天。[ADR-0015](0015-device-builds-revocation-tree.md)
 - 平台表由後台給；顯示名稱和帳號的寫法寫死在裝置上；裝置不認得的平台原樣保留。[ADR-0019](0019-platform-table-from-server-names-on-device.md)
 - Android 和 iOS 共用一份 Rust 核心（`device-core/`）：`spec/` 的算法、裝置上的檢查、算證明，不做 I/O、不碰 PIN；畫面、NFC、流程、讀卡的指令在 Kotlin、Swift；網頁版上線時維持 TypeScript。[ADR-0034](0034-apps-share-a-rust-device-core.md)
+- 電路檔、驗證金鑰、參數檔和它們的雜湊、名冊規則都內建在 app 裡；後台用 `config` 公布每個平台的最低版本和起算日，太舊的 app 在要 PIN 之前自己停；用生效日的修改要等新版在兩個商店上架。[ADR-0035](0035-app-updates-and-minimum-version.md)
 
 ## 頁面和網址
 
@@ -89,6 +90,7 @@
 | 0029 | 沒有部署的工作流程 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
+| 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
 `worker/` 現在只有骨架（每小時把內政部的清冊原始檔存進 R2、測試專用的建置），2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。後台現在還是 Go 的 `server/`。

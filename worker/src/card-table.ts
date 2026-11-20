@@ -1,0 +1,122 @@
+// The card state table of the roster's Durable Object (roster.ts): the
+// roster rules' state of every card that has a valid record, one row a card.
+// Only the rules' state is here, nothing a page shows: it is read before and
+// written after each call of the rules (protocol/src/roster-rules.ts), and a
+// wrong row would accept records that cannot be taken back.
+//
+// The columns are the items of spec/roster-rules.md, "State", and one more:
+//
+//   last_card_proof, proofs_on_last_date   the card's own items
+//   slots                                  the items of each slot, by platform
+//   last_seq                               the `seq` of the card's last valid record
+//
+// `slots` is JSON, an object keyed by platform ID in ascending order, each
+// value a slot in the back end's one spelling of it (slot-json.ts). A date
+// is `YYYY-MM-DD`. Facts only: how many switches a slot has used, never
+// whether another is allowed.
+//
+// A card without a valid record has no row. A row holds the slots the rules
+// gave it; a platform added to the table later has no entry in the rows
+// written before, and the rules read a missing slot as the empty one.
+//
+// A row is checked when it is read (readCard): a state the rules cannot
+// have left is not handed on.
+import { byBytes } from "iamreal-protocol/bytes.ts";
+import { formatDay, parseDay } from "iamreal-protocol/date.ts";
+import type { PlatformRow } from "iamreal-protocol/platforms.ts";
+import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/roster-rules.ts";
+import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
+
+export const CARD_TABLE = `
+CREATE TABLE IF NOT EXISTS cards (
+  scope_string        TEXT    NOT NULL,
+  scoped_id           TEXT    NOT NULL,
+  last_card_proof     TEXT    NOT NULL,
+  proofs_on_last_date INTEGER NOT NULL,
+  slots               TEXT    NOT NULL,
+  last_seq            INTEGER NOT NULL,
+  PRIMARY KEY (scope_string, scoped_id)
+) WITHOUT ROWID`;
+
+/** A card's row: its state, and the `seq` of its last valid record. */
+export interface StoredCard {
+  readonly card: CardState;
+  readonly lastSeq: number;
+}
+
+/**
+ * A stored row that is not one the rules can have left: the stored state is
+ * broken. The message names the column, never the card or a value.
+ */
+function corrupt(column: string): Error {
+  return new Error(`card state table: ${column} is not a state the rules leave`);
+}
+
+const stringOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
+
+/**
+ * The state of the card, or null if it has no valid record.
+ *
+ * Throws if the row is not a state the roster rules can have left for a
+ * card of this roster (spec/roster-rules.md, "State"; `platforms` is the
+ * roster's table):
+ *
+ *   - `last_card_proof` is a date; `proofs_on_last_date` is 1 to 3; `last_seq` is 1 or more;
+ *   - every slot is on a platform of the table;
+ *   - its `switch_count` is 0 to 5, its dates are dates, and its items fit
+ *     each other and the card's last card proof (protocol/, possibleSlot);
+ *   - `current` and `last_declared` are in the `username` format of the platform.
+ *
+ * The limits are the constants of protocol/, not numbers of this file.
+ */
+export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], scopeString: string, scopedId: string): StoredCard | null {
+  const rows = sql.exec("SELECT last_card_proof, proofs_on_last_date, slots, last_seq FROM cards WHERE scope_string = ? AND scoped_id = ?", scopeString, scopedId).toArray();
+  const row = rows[0];
+  if (row === undefined) return null;
+  const { last_card_proof, proofs_on_last_date, slots: slotsText, last_seq } = row;
+  const lastCardProof = typeof last_card_proof === "string" ? parseDay(last_card_proof) : null;
+  if (lastCardProof === null) throw corrupt("last_card_proof");
+  if (typeof proofs_on_last_date !== "number" || !Number.isSafeInteger(proofs_on_last_date) || proofs_on_last_date < 1 || proofs_on_last_date > MAX_PER_DATE) throw corrupt("proofs_on_last_date");
+  if (typeof last_seq !== "number" || !Number.isSafeInteger(last_seq) || last_seq < 1) throw corrupt("last_seq");
+  if (typeof slotsText !== "string") throw corrupt("slots");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(slotsText);
+  } catch {
+    throw corrupt("slots");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw corrupt("slots");
+  const slots = new Map<string, SlotState>();
+  for (const [platform, s] of Object.entries(parsed as Record<string, Partial<SlotJson> | null>)) {
+    const tableRow = platforms.find((p) => p.platform === platform);
+    if (tableRow === undefined) throw corrupt("slots");
+    if (typeof s !== "object" || s === null) throw corrupt("slots");
+    const { current, last_declared, switch_count, correction_date } = s;
+    if (!stringOrNull(current) || !stringOrNull(last_declared) || !stringOrNull(correction_date) || typeof switch_count !== "number") throw corrupt("slots");
+    const slot = slotOfJson({ current, last_declared, switch_count, correction_date });
+    if (slot === null || !possibleSlot(slot, lastCardProof)) throw corrupt("slots");
+    for (const username of [slot.current, slot.lastDeclared]) if (username !== null && !tableRow.format.accepts(username)) throw corrupt("slots");
+    slots.set(platform, slot);
+  }
+  return { card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots }, lastSeq: last_seq };
+}
+
+/**
+ * Writes the state of a card after a valid record, `seq` being that record's:
+ * the card's row is replaced as a whole. A card has a row only once it has a
+ * valid record, so `card.lastCardProof` is a date.
+ */
+export function writeCard(sql: SqlStorage, scopeString: string, scopedId: string, card: CardState, seq: number): void {
+  if (card.lastCardProof === null) throw new Error("card state table: a card without a valid record has no row");
+  const slots: Record<string, SlotJson> = {};
+  for (const platform of [...card.slots.keys()].sort(byBytes)) slots[platform] = slotToJson(card.slots.get(platform)!);
+  sql.exec(
+    "INSERT OR REPLACE INTO cards (scope_string, scoped_id, last_card_proof, proofs_on_last_date, slots, last_seq) VALUES (?, ?, ?, ?, ?, ?)",
+    scopeString,
+    scopedId,
+    formatDay(card.lastCardProof),
+    card.proofsOnLastDate,
+    JSON.stringify(slots),
+    seq,
+  );
+}

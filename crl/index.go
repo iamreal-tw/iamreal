@@ -94,7 +94,7 @@ func IndexFile(der []byte, keys []NamedKey) IndexLine {
 	}
 	l.ThisUpdate = c.ThisUpdate.Format(timeFormat)
 	l.CRLDate = c.Date()
-	if !c.NextUpdate.IsZero() {
+	if c.HasNextUpdate {
 		l.NextUpdate = c.NextUpdate.Format(timeFormat)
 	}
 	if n, err := c.Number(); err == nil && n != nil {

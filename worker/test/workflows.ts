@@ -180,6 +180,33 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
   "actions/download-artifact": { sha: "9000827ccba6bdab643e8b6fd33ac0654aef8333", version: "v8.0.2" },
 };
 
+/**
+ * The paths whose change runs the browser tests (checks-browser.yml,
+ * `on.pull_request.paths`), exactly. Each is a pattern of GitHub's (`**`
+ * matches any characters, `/` included; a pattern matches the whole path
+ * from the repository's root:
+ * https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore).
+ * test/workflows.test.ts checks that every top-level directory and file the
+ * browser tests use is here. spec/ is here though the check does not find
+ * it used: the page's rules and their answers change together.
+ */
+export const BROWSER_PATHS: readonly string[] = [
+  "web/**",
+  "protocol/**",
+  "design/**",
+  "spec/**",
+  "server/**",
+  "verifier/**",
+  "roster/**",
+  "crl/**",
+  "cmd/**",
+  "go.mod",
+  "go.sum",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".github/workflows/checks-browser.yml",
+];
+
 export const NODE_VERSION = "22.23.4";
 export const PNPM_VERSION = "10.16.1";
 /** How every job installs pnpm: from npm's registry, named here so no `.npmrc` can point elsewhere, running no install script. */
@@ -250,9 +277,27 @@ export const SECRET_LINES: readonly string[] = [
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
 ];
 
-/** checks.yml's environment: values that are not secret, exactly. */
-const CHECKS_ENV: YamlMap = { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" };
-const CHECKS_JOB_ENV: YamlMap = { CHROME: "/usr/bin/google-chrome" };
+/**
+ * The two workflows of a pull request's checks: each one's trigger, its
+ * environment (values that are not secret) and its jobs' environment,
+ * exactly, and its concurrency group. The groups differ: "concurrency group
+ * names must be unique across workflows to avoid canceling in-progress jobs
+ * or runs from other workflows"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
+ */
+const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string }>> = {
+  "checks.yml": {
+    on: { pull_request: null },
+    env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
+    group: "checks-${{ github.event.pull_request.number }}",
+  },
+  "checks-browser.yml": {
+    on: { pull_request: { paths: [...BROWSER_PATHS] } },
+    env: { IAMREAL_BB: BB_PATH },
+    jobEnv: { CHROME: "/usr/bin/google-chrome" },
+    group: "checks-browser-${{ github.event.pull_request.number }}",
+  },
+};
 
 const isMap = (v: Yaml | undefined): v is YamlMap => typeof v === "object" && v !== null && !Array.isArray(v);
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -265,7 +310,7 @@ const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(
 export function workflowProblems(files: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks.yml and deploy-test.yml`);
+  if (!same(names, ["checks-browser.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not checks-browser.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -311,15 +356,18 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    if (f !== "checks.yml") continue;
+    const rules = PULL_REQUEST_RULES[f];
+    if (rules === undefined) continue;
 
     // Not pull_request_target, workflow_run or any other: "secrets are not passed to the runner
     // when a workflow is triggered from a forked repository" and "The GITHUB_TOKEN has read-only
     // permissions in pull requests from forked repositories" hold for pull_request, while "The
     // workflow started by the workflow_run event is able to access secrets and write tokens"
     // (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
-    if (!same(doc.on, { pull_request: null })) p("not triggered by pull_request only");
-    if (doc.env !== undefined && !same(doc.env, CHECKS_ENV)) p("the env at the top is not the one in test/workflows.ts");
+    // `paths` only where the rules say, as they say: a path left out is a check that does not run.
+    if (!same(doc.on, rules.on)) p(`not triggered by pull_request only, as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
+    if (doc.env !== undefined && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
+    if (!same(doc.concurrency, { group: rules.group, "cancel-in-progress": "true" })) p(`concurrency is not group ${rules.group}, cancelling the run before`);
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
       p("no jobs");
       continue;
@@ -333,7 +381,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       const wrongJob = extra(job, ["name", "runs-on", "timeout-minutes", "env", "steps"]);
       if (wrongJob.length) j(`keys not allowed: ${wrongJob.join(", ")}`);
       if (job["runs-on"] !== "ubuntu-24.04") j("runs-on is not ubuntu-24.04");
-      if (job.env !== undefined && !same(job.env, CHECKS_JOB_ENV)) j("an env other than the one in test/workflows.ts");
+      if (job.env !== undefined && !same(job.env, rules.jobEnv)) j("an env other than the one in test/workflows.ts");
       if (!Array.isArray(job.steps) || job.steps.length === 0) {
         j("no steps");
         continue;

@@ -19,6 +19,7 @@ import {
   checkKeys,
   checkNothingOfTheTestBuild,
   engineFiles,
+  isCrsPoint,
   keySizedRuns,
   moduliInSpec,
   readBuild,
@@ -44,7 +45,7 @@ function build(kind: "deploy" | "test", values: TestBuildValues): Build {
   }
 }
 
-const values: TestBuildValues = { moica: "http://127.0.0.1:59999", issuers: testIssuers(), crlTimeoutMs: 1234 };
+const values: TestBuildValues = { moica: "http://127.0.0.1:59999", issuers: testIssuers(), crlTimeoutMs: 1234, crlCatchUpMs: 5678 };
 
 const deploy = build("deploy", values);
 const testBuild = build("test", values);
@@ -57,16 +58,26 @@ test("the issuer keys in the deploy build are exactly the two of spec/vectors/is
   checkKeys(deploy);
 });
 
+test("the one other run as long as a key is the CRS point, and the deploy build holds it exactly once", () => {
+  const point = keySizedRuns(deploy.code).find(isCrsPoint);
+  assert.ok(point);
+  assert.throws(() => checkKeys({ ...deploy, code: `${deploy.code}\nconst again = "${point}";` }), /exactly once/);
+  assert.throws(() => checkKeys({ ...deploy, code: deploy.code.replace(point, "") }), /exactly once/);
+});
+
 test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the roster's object, the data bucket and the object's name", () => {
+test("the test environment's only settings are the roster's object, the data bucket, the object's name and which roster it is", () => {
   checkBindings(deploy.output);
 });
 
-test("the deploy build's other modules are the proof verifier's files, or none yet", () => {
+test("the deploy build's other modules are the proof verifier's files: Barretenberg's module and the two verification keys", () => {
+  assert.deepEqual(deploy.files, engineFiles());
   checkEngineFiles(deploy);
+  // A build without them does not pass: the mirror could not build a tree.
+  assert.throws(() => checkEngineFiles({ ...deploy, files: {} }));
 });
 
 test("the test build holds another key, the fake MOICA and the clock's switch: the checks above can fail", () => {
@@ -74,7 +85,7 @@ test("the test build holds another key, the fake MOICA and the clock's switch: t
   // The test's keys are found by the same search that finds only MOICA's in the deploy build.
   const runs = keySizedRuns(testBuild.code);
   for (const k of values.issuers) assert.ok(runs.includes(k.modulus), `the search does not find the test's ${k.name} key`);
-  assert.notDeepEqual(runs, moduliInSpec().sort());
+  assert.notDeepEqual(runs.filter((run) => !isCrsPoint(run)), moduliInSpec().sort());
   assert.notDeepEqual(urlsIn(testBuild.code), addressesInCrlReadme().sort());
   assert.deepEqual(bindingsIn(testBuild.output), bindingsIn(deploy.output));
   for (const check of [checkAddresses, checkKeys, checkNothingOfTheTestBuild]) assert.throws(() => check(testBuild), check.name);
@@ -88,8 +99,8 @@ test("the proof verifier's files in a build are Barretenberg's module and the tw
 });
 
 test("the upload takes the build's other modules with it: Barretenberg's module and the verification keys", () => {
-  // The deploy build has none of them yet (checkEngineFiles); the test build has all three. Its
-  // upload, as a dry run of the upload's own arguments, sends the same files.
+  // The upload of the test build, as a dry run of the upload's own arguments, sends the same three
+  // files the build holds. (The deploy build's upload is the next test.)
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "upload-"));
   try {
