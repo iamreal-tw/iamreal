@@ -18,7 +18,7 @@
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
 | `scoped-id.ts` | `spec/scoped-id.md` | 匿名編號、它的文字寫法和 10 個字元的短編號 |
 | `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
-| `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）。後台寫入一筆時用它 |
+| `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）；名冊目錄的切法（`LINES_PER_FILE`）、名冊檔和雜湊清單的檔名（`rosterFileName`、`hashListName`）、雜湊清單的寫法（`hashList`）。後台寫入一筆、把寫滿的名冊檔搬到 R2 時用它 |
 | `date.ts` | | 日期換成天數、台灣的日期（UTC+8，不看裝置的時區） |
 | `base32.ts` | | 題目和匿名編號用的 base32，只認一種寫法 |
 | `field.ts` | `spec/scoped-id.md`、`spec/proof-verification.md` | BN254 的模數、公開輸入的 32 個位元組、31 個位元組打包成一個值 |
@@ -61,6 +61,6 @@ pnpm test
 
 `test/record.test.ts`：
 
-- `record.json`：兩份名冊的每一筆紀錄，清單的寫法、名冊檔的那一行、紀錄雜湊、加上它之後的名冊指紋都和標準答案相同；每一行格式正確的都讀得出來，重寫一次位元組相同；71 種格式不對的行都讀不出來。名冊檔和名冊目錄的案例（`files`、`generated_roster`、`fingerprint_files`）這裡還沒有讀：切檔和公布在後台還沒做
+- `record.json`：兩份名冊的每一筆紀錄，清單的寫法、名冊檔的那一行、紀錄雜湊、加上它之後的名冊指紋都和標準答案相同；每一行格式正確的都讀得出來，重寫一次位元組相同；71 種格式不對的行都讀不出來。`generated_roster` 的五個名冊目錄（0、1、1,000、1,001、2,001 筆）：每個名冊檔和每份雜湊清單的檔名、行數、第一行和最後一行、SHA-256 都和標準答案相同；兩份三筆的名冊的雜湊清單（`hash_list`）也是。名冊檔成立或不成立的案例和指紋檔的案例（`files`、`fingerprint_files`、名冊目錄裡的 `fingerprint_file`）這裡還沒有讀：後台不讀整份名冊檔，每天公布還沒做
 
 另外測台灣的日期（`test/spec.test.ts`）和規則產生不出來的狀態（`test/roster-rules.test.ts`）。
