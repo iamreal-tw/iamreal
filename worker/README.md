@@ -154,7 +154,7 @@ pnpm typecheck   # 型別檢查
 - **題目**：發出滿 10 分鐘就是不認得（剛好 10 分鐘也是）。已經寫入過一筆的題目是 `challenge_used`，不計次。第 6 次送出起是 `challenge_attempts`：第 2 段每通過一次就加一，不管後來停在哪一段，第 4 段再看題目時擋下的（`challenge_used`、`challenge_unknown`）和回 `500` 的（驗證器跑不起來、第 4 段出錯）也算。第 1 段擋下的、`paused` 的、第 2 段就是 `challenge_unknown` 或 `challenge_used` 的不計次；計次的那一次寫入自己失敗（`500`）也沒有計到。
 - **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：`server/submit.go` 只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
 - **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新兩份其中一份的樹根，是 `root`。名冊規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
-- **更換政策**（`switch_restricted`）：預設沒有。環境變數 `RESTRICT_LATE_SWITCHES` 是 `"true"` 時，名冊規則接受、但其中有一個更換是那個名額的第 4 次或第 5 次的紀錄，回 `403`。`wrangler.jsonc` 沒有設這個值；要開的話在設定檔加一行，並把它加進 `scripts/deploy-build-checks.ts` 允許的清單。值不是 `"true"` 也不是 `"false"` 時每個介面都回 `500`。
+- **更換政策**（`switch_restricted`）：預設沒有。環境變數 `RESTRICT_LATE_SWITCHES` 是 `"true"` 時，名冊規則接受、但其中有一個更換是那個名額的第 4 次或第 5 次的紀錄，回 `403`。`wrangler.jsonc` 沒有設這個值；要開的話在設定檔加一行，並把它加進 `scripts/deploy-build-checks.ts` 允許的清單。這個值只寫在 `wrangler.jsonc`，不用 `wrangler secret` 設：部署前的檢查讀的是設定檔和 wrangler 列出的 binding，看不到另外設在 Worker 上的 secret，用 secret 開的政策就沒有人在 PR 裡看過。值不是 `"true"` 也不是 `"false"` 時每個介面都回 `500`。
 - **驗證器跑不起來**（`EngineError`，見[驗證證明](#驗證證明)）不是拒絕也不是通過：回 `500`，那一行紀錄的 `where` 是 `verifier`，不問 Durable Object 寫任何東西。這一次送出已經在第 2 段算了一次。
 
 ### 寫入是一個交易
