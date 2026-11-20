@@ -75,14 +75,14 @@ function rowProblem(roster: Roster, row: CardRow): string | null {
   return null;
 }
 
-const text = (value: string | null): string => (value === null ? "null" : `"${value}"`);
+const quoted = (value: string | null): string => (value === null ? "null" : `"${value}"`);
 
 /** The row written from the template and followed by LF. It does not check the values. */
 function rowLine(row: CardRow): string {
   const { card } = row;
   const slots = listedSlots(card).map(
     ([platform, s]) =>
-      `"${platform}":{"current":${text(s.current)},"last_declared":${text(s.lastDeclared)},"switch_count":${s.switchCount},"correction_date":${text(s.correctionDate === null ? null : formatDay(s.correctionDate))}}`,
+      `"${platform}":{"current":${quoted(s.current)},"last_declared":${quoted(s.lastDeclared)},"switch_count":${s.switchCount},"correction_date":${quoted(s.correctionDate === null ? null : formatDay(s.correctionDate))}}`,
   );
   return `{"scope_string":"${row.scopeString}","scoped_id":"${row.scopedId}","last_seq":${row.lastSeq},"last_card_proof":"${formatDay(card.lastCardProof!)}","proofs_on_last_date":${card.proofsOnLastDate},"slots":{${slots.join(",")}}}\n`;
 }
@@ -92,8 +92,9 @@ const byCard = (a: CardRow, b: CardRow): number => byBytes(a.scopeString, b.scop
 
 /**
  * The card state file of `cards` for a roster of `roster`: one row a card,
- * in the order of the file whatever order they are given in. The text is
- * ASCII, so its bytes are its UTF-8 encoding. No card gives the empty file.
+ * in the order of the file whatever order they are given in. The file is
+ * returned as text; every character is ASCII, and the file's bytes are its
+ * UTF-8 encoding. No card gives the empty file.
  *
  * `cards` are the cards that have a valid record, each with the `seq` of
  * its last one. Throws if a card cannot be written as a row (it has no
@@ -152,22 +153,40 @@ function readRow(roster: Roster, line: string): CardRow | null {
   return rowLine(row) === line ? row : null;
 }
 
+const LF = 0x0a;
+
+/**
+ * The text of bytes that are all ASCII, or null. Every byte of a row is
+ * ASCII, so nothing is decoded as UTF-8: a decoder would drop a byte order
+ * mark or replace bytes that are not UTF-8 before the row is looked at.
+ */
+function asciiText(bytes: Uint8Array): string | null {
+  let out = "";
+  for (const b of bytes) {
+    if (b > 0x7f) return null;
+    out += String.fromCharCode(b);
+  }
+  return out;
+}
+
 /**
  * Reads a card state file of a roster of `roster` (spec/roster-rules.md,
- * "The card state file"): `file` is the whole file as text. Lines are
- * checked one at a time, in order; for each, that it is a row in its one
- * spelling (`line`), then that its card is after the card of the row before
- * (`order`: also the same card twice). The first failure ends the check.
- * Text after the last LF, an empty line and a byte order mark fail the
+ * "The card state file"): `file` is the bytes of the whole file, as
+ * downloaded and not decoded. Lines are checked one at a time, in order;
+ * for each, that it is a row in its one spelling (`line`), then that its
+ * card is after the card of the row before (`order`: also the same card
+ * twice). The first failure ends the check. Bytes after the last LF, an
+ * empty line, a byte order mark and any other byte outside ASCII fail the
  * first check on the line where they occur. The empty file has no row.
  */
-export function readCardStateFile(roster: Roster, file: string): CardStateFileRead {
+export function readCardStateFile(roster: Roster, file: Uint8Array): CardStateFileRead {
   const rows: CardRow[] = [];
   let start = 0;
   while (start < file.length) {
     const line = rows.length + 1;
-    const end = file.indexOf("\n", start);
-    const row = end < 0 ? null : readRow(roster, file.slice(start, end + 1));
+    const end = file.indexOf(LF, start);
+    const text = end < 0 ? null : asciiText(file.subarray(start, end + 1));
+    const row = text === null ? null : readRow(roster, text);
     if (row === null) return { valid: false, line, code: "line" };
     if (rows.length > 0 && byCard(rows[rows.length - 1]!, row) >= 0) return { valid: false, line, code: "order" };
     rows.push(row);

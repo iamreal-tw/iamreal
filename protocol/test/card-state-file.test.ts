@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import { type CardRow, cardStateFile, readCardStateFile } from "../src/card-state-file.ts";
 import { parseDay } from "../src/date.ts";
 import { platformsOf } from "../src/platforms.ts";
-import { EMPTY_SLOT, type SlotState } from "../src/roster-rules.ts";
+import { EMPTY_SLOT, RULES_VERSION, type SlotState } from "../src/roster-rules.ts";
 import { vectors } from "./vectors.ts";
 
 const v = vectors("card-state-file.json");
@@ -29,7 +29,18 @@ const rowOf = (c: Json): CardRow => ({
   },
 });
 
+/** The bytes of a file of the vectors: the UTF-8 encoding of `content`, or the bytes `content_hex` spells. */
+const bytesOf = (f: Json): Uint8Array => (f.content_hex === undefined ? new TextEncoder().encode(f.content) : Uint8Array.from(f.content_hex.match(/../g) ?? [], (h: string) => Number.parseInt(h, 16)));
+
 const validFiles: Json[] = v.files.filter((f: Json) => f.valid);
+
+describe("card-state-file.json: the version of the rules its files were computed by", () => {
+  test("it is the version of roster-rules.json and of this implementation", () => {
+    assert.equal(v.spec, "card-state-file");
+    assert.equal(v.rules_version, vectors("roster-rules.json").rules_version);
+    assert.equal(v.rules_version, RULES_VERSION);
+  });
+});
 
 describe("card-state-file.json: writing", () => {
   for (const f of validFiles) {
@@ -54,7 +65,7 @@ describe("card-state-file.json: writing", () => {
 describe("card-state-file.json: reading", () => {
   for (const f of validFiles) {
     test(`${f.name} (${f.roster} roster)`, () => {
-      const read = readCardStateFile(f.roster, f.content);
+      const read = readCardStateFile(f.roster, bytesOf(f));
       assert.deepEqual(read, { valid: true, rows: f.cards.map(rowOf) });
       // The slots come in ascending order of platform, as the row lists them.
       if (read.valid) for (const [i, r] of read.rows.entries()) assert.deepEqual([...r.card.slots.keys()], Object.keys(f.cards[i].slots));
@@ -62,19 +73,28 @@ describe("card-state-file.json: reading", () => {
   }
 
   const broken: Json[] = v.files.filter((f: Json) => !f.valid);
-  test("the vectors have broken files of both codes", () => {
+  test("the vectors have broken files of both codes, and files that are not UTF-8", () => {
     assert.ok(broken.some((f) => f.code === "line") && broken.some((f) => f.code === "order"));
+    assert.ok(broken.some((f) => f.content_hex !== undefined));
+    for (const f of v.files) assert.equal(f.content === undefined, f.content_hex !== undefined, f.name);
+  });
+  test("a byte order mark is not dropped: the file as bytes, not as decoded text", () => {
+    const f = validFiles.find((k) => k.name === "one card, one slot")!;
+    const withMark = new Uint8Array([0xef, 0xbb, 0xbf, ...bytesOf(f)]);
+    // What a decoder gives for these bytes reads as the file without the mark.
+    assert.equal(new TextDecoder().decode(withMark), f.content);
+    assert.deepEqual(readCardStateFile(f.roster, withMark), { valid: false, line: 1, code: "line" });
   });
   for (const f of broken) {
     test(`broken: ${f.name} (${f.roster} roster)`, () => {
-      assert.deepEqual(readCardStateFile(f.roster, f.content), { valid: false, line: f.line, code: f.code });
+      assert.deepEqual(readCardStateFile(f.roster, bytesOf(f)), { valid: false, line: f.line, code: f.code });
     });
   }
 
   test("a file of one roster is not a file of the other: the scope string is not accepted", () => {
     for (const f of validFiles.filter((f) => f.cards.length > 0)) {
       const other = f.roster === "production" ? "test" : "production";
-      assert.deepEqual(readCardStateFile(other, f.content), { valid: false, line: 1, code: "line" }, f.name);
+      assert.deepEqual(readCardStateFile(other, bytesOf(f)), { valid: false, line: 1, code: "line" }, f.name);
     }
   });
 });
