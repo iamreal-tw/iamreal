@@ -144,8 +144,48 @@ export interface TestWorker {
    * are 64 hex digits, big-endian. Rejects if the Worker refuses the inputs.
    */
   poseidon2(inputs: readonly string[]): Promise<string>;
+  /** The roster's Durable Object, beyond what the API shows of it. */
+  readonly roster: {
+    /**
+     * Stops the running object; the next request starts it again from what
+     * it stored. Whatever it held only in memory is gone.
+     */
+    restart(): Promise<void>;
+    /** Runs the object's alarm now, whatever time it is set for (test build, `POST /__test/roster/alarm`). */
+    runAlarm(): Promise<void>;
+    /** How many milliseconds from now the object's alarm is set for, or null if it has none (test build, `GET /__test/roster/alarm`). */
+    alarmInMs(): Promise<number | null>;
+    /**
+     * The challenges the object still holds, read from its storage. A
+     * stopgap: no endpoint shows yet whether a challenge is known. When
+     * submitting a record does (`challenge_unknown`, #67), the tests ask
+     * that and this goes.
+     */
+    storedChallenges(): Promise<string[]>;
+    /**
+     * Writes the state of a card as a valid record would leave it, with the
+     * object's own code (test build, `PUT /__test/roster/card`). Until
+     * submitting a record writes it (#67).
+     */
+    writeCard(card: CardToWrite): Promise<void>;
+    /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/roster/break`). */
+    breakTables(): Promise<void>;
+  };
   close(): Promise<void>;
 }
+
+/** A card's state in the spelling of `card-state`'s answer, the card it is of, and the `seq` of its last valid record. */
+export interface CardToWrite {
+  readonly scope_string: string;
+  readonly scoped_id: string;
+  readonly seq: number;
+  readonly last_card_proof: string;
+  readonly proofs_on_last_date: number;
+  readonly platforms: Readonly<Record<string, { current: string | null; last_declared: string | null; switch_count: number; correction_date: string | null }>>;
+}
+
+/** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
+const ROSTER_OBJECT = { name: "test-1" };
 
 let issuers: IssuerKey[] | undefined;
 
@@ -221,6 +261,31 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       const res = await server.fetch("/__test/poseidon2", { method: "POST", body: JSON.stringify({ inputs }) });
       if (res.status !== 200) throw new Error(`hashing: HTTP ${res.status} ${await res.text()}`);
       return ((await res.json()) as { hash: string }).hash;
+    },
+    roster: {
+      restart: () => worker.evictDurableObject("ROSTER" as never, ROSTER_OBJECT),
+      async runAlarm() {
+        const res = await server.fetch("/__test/roster/alarm", { method: "POST" });
+        if (res.status !== 204) throw new Error(`running the alarm: HTTP ${res.status}`);
+      },
+      async alarmInMs() {
+        const res = await server.fetch("/__test/roster/alarm");
+        if (res.status !== 200) throw new Error(`reading the alarm: HTTP ${res.status}`);
+        const { alarm } = (await res.json()) as { alarm: number | null };
+        return alarm === null ? null : alarm - Date.now();
+      },
+      async storedChallenges() {
+        const storage = await worker.getDurableObjectStorage("ROSTER" as never, ROSTER_OBJECT);
+        return (await storage.exec<{ challenge: string }>("SELECT challenge FROM challenges ORDER BY challenge")).map((row) => row.challenge);
+      },
+      async writeCard(card) {
+        const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
+        if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
+      },
+      async breakTables() {
+        const res = await server.fetch("/__test/roster/break", { method: "POST" });
+        if (res.status !== 204) throw new Error(`breaking the tables: HTTP ${res.status}`);
+      },
     },
     async close() {
       await server.close();

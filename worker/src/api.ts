@@ -10,7 +10,7 @@
 // own text, which could quote it.
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
-import { platformIdsOf, platformsOf } from "iamreal-protocol/platforms.ts";
+import { type Platform, platformsOf } from "iamreal-protocol/platforms.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
 import { type Roster as RosterKind, lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
@@ -68,6 +68,15 @@ export function rosterKindOf(env: Env): RosterKind {
 }
 
 /**
+ * The platform table of this environment's roster, in ascending order of
+ * platform ID. The one place the back end gets it: what `config` sends to
+ * devices and what the back end itself reads are the same table.
+ */
+export function platformTableOf(env: Env): readonly Platform[] {
+  return platformsOf(rosterKindOf(env));
+}
+
+/**
  * The request's body as text, or null if it is longer than MAX_BODY_BYTES or
  * not UTF-8. No more than the limit and one byte is kept.
  */
@@ -107,6 +116,7 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  */
 async function postCardState(request: Request, env: Env): Promise<Reply> {
   const kind = await step("settings", () => rosterKindOf(env));
+  const table = platformTableOf(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
   const fields = readStrings(text, ["scope_string", "scoped_id"]);
@@ -117,7 +127,7 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 
   const { card, count } = await step("roster", () => rosterOf(env).cardState(fields.scope_string, fields.scoped_id));
   const platforms: Record<string, unknown> = {};
-  for (const platform of platformIdsOf(kind)) {
+  for (const { platform } of table) {
     // A platform the stored state has no slot for is a slot never used.
     const slot = card?.slots.get(platform) ?? EMPTY_SLOT;
     platforms[platform] = {
@@ -140,10 +150,10 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
  * roster, in ascending order of platform ID. The Worker answers by itself.
  */
 async function getConfig(_request: Request, env: Env): Promise<Reply> {
-  const kind = await step("settings", () => rosterKindOf(env));
+  const table = await step("settings", () => platformTableOf(env));
   return ok({
     crl_max_age_days: CRL_MAX_AGE_DAYS,
-    platforms: platformsOf(kind).map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.usernameFormat })),
+    platforms: table.map((p) => ({ platform: p.platform, display_name: p.displayName, username_format: p.usernameFormat })),
   });
 }
 

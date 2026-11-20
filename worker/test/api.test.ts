@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 
@@ -15,8 +16,10 @@ const repoText = (path: string): string => readFileSync(join(WORKER_DIR, "..", p
 const NOON = new Date("2026-11-20T04:00:00.000Z");
 
 const TEST_SCOPE = "iamreal-test:public:0__________";
-/** A scoped ID in its one spelling (spec/vectors/scoped-id.json). */
-const CARD: string = (JSON.parse(repoText("spec/vectors/scoped-id.json")) as { encoding: { scoped_id: string }[] }).encoding[0]!.scoped_id;
+/** Scoped IDs in their one spelling (spec/vectors/scoped-id.json, "encoding"). */
+const CARD = "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880";
+const OTHER_CARD = "00001W4KYQGM74BGQ5WMHT1K51ENH0C1PS2N1E19M0RY2WJECGR0";
+const THIRD_CARD = "0400000000000000000000000000000000000000000000000000";
 
 async function jsonOf(res: Response): Promise<unknown> {
   return JSON.parse(await res.text());
@@ -108,5 +111,402 @@ describe("every answer under /api/", () => {
 
   test("outside /api/ there is still no page", async () => {
     for (const path of ["/", "/api", "/apix/v1/config"]) assert.equal((await worker.fetch(path)).status, 404, path);
+  });
+});
+
+const NEVER_USED = { current: null, last_declared: null, switch_count: 0, correction_date: null };
+const PRODUCTION_SCOPE = "iamreal:public:0_______________";
+
+describe("POST /api/v1/card-state", () => {
+  let worker: TestWorker;
+  before(async () => {
+    worker = await startWorker();
+    await worker.setClock(NOON);
+  });
+  after(() => worker.close());
+
+  const ask = (body: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body });
+  const askFor = (card: string): Promise<Response> => ask(JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: card }));
+
+  test("a card with no record is not an error: null, 0, and an entry for every platform of the test roster", async () => {
+    const res = await askFor(CARD);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await jsonOf(res), {
+      last_card_proof: null,
+      proofs_on_last_date: 0,
+      platforms: { "test-example": NEVER_USED, threads: NEVER_USED },
+      count: 0,
+    });
+  });
+
+  test("the keys are in the order of the API document, and there is no `head`", async () => {
+    assert.equal(
+      await (await askFor(CARD)).text(),
+      '{"last_card_proof":null,"proofs_on_last_date":0,"platforms":{"test-example":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null},"threads":{"current":null,"last_declared":null,"switch_count":0,"correction_date":null}},"count":0}',
+    );
+  });
+
+  test("whitespace and another order of the keys are JSON like any other", async () => {
+    assert.equal((await ask(` { "scoped_id" : "${CARD}",\n\t"scope_string":"${TEST_SCOPE}" } `)).status, 200);
+  });
+
+  const good = `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}"}`;
+  const CASES: Record<string, string> = {
+    empty: "",
+    "not JSON": "card state, please",
+    "not an object": `["${TEST_SCOPE}"]`,
+    "a string": `"${CARD}"`,
+    null: "null",
+    "missing key": `{"scope_string":"${TEST_SCOPE}"}`,
+    "the other key missing": `{"scoped_id":"${CARD}"}`,
+    "no key": "{}",
+    "extra key": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}","username":"alice"}`,
+    "a platform": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}","platform":"threads"}`,
+    "key twice": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}","scoped_id":"${CARD}"}`,
+    "the first key twice": `{"scope_string":"${TEST_SCOPE}","scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}"}`,
+    "key twice, one spelled with an escape": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}","scoped\\u005fid":"${CARD}"}`,
+    "key in another case": `{"Scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}"}`,
+    number: `{"scope_string":"${TEST_SCOPE}","scoped_id":7}`,
+    "null value": `{"scope_string":"${TEST_SCOPE}","scoped_id":null}`,
+    "a list": `{"scope_string":"${TEST_SCOPE}","scoped_id":["${CARD}"]}`,
+    "an object": `{"scope_string":{"value":"${TEST_SCOPE}"},"scoped_id":"${CARD}"}`,
+    true: `{"scope_string":"${TEST_SCOPE}","scoped_id":true}`,
+    "after the object": `${good}{}`,
+    "a comma after the last member": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}",}`,
+    "single quotes": good.replaceAll('"', "'"),
+    "a byte order mark": `﻿${good}`,
+    "production scope": `{"scope_string":"${PRODUCTION_SCOPE}","scoped_id":"${CARD}"}`,
+    "unknown scope": `{"scope_string":"iamreal-test:public:1__________","scoped_id":"${CARD}"}`,
+    "scope of one platform": `{"scope_string":"iamreal-test:threads:0_________","scoped_id":"${CARD}"}`,
+    "scope with a line feed after it": `{"scope_string":"${TEST_SCOPE}\\n","scoped_id":"${CARD}"}`,
+    "empty scope": `{"scope_string":"","scoped_id":"${CARD}"}`,
+    "lowercase scoped ID": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD.toLowerCase()}"}`,
+    "short scoped ID": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD.slice(0, 51)}"}`,
+    "short ID in place of the scoped ID": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD.slice(0, 10)}"}`,
+    "scoped ID not below p": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${"Z".repeat(51)}0"}`,
+    "scoped ID with a space after it": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD} "}`,
+    "too long": `{"scope_string":"${TEST_SCOPE}","scoped_id":"${CARD}"${" ".repeat(64 * 1024)}}`,
+    "nested too deep to be a request": "[".repeat(40_000) + "]".repeat(40_000),
+  };
+  for (const [name, body] of Object.entries(CASES)) {
+    test(`malformed: ${name}`, async () => {
+      const res = await ask(body);
+      assert.equal(res.status, 400);
+      assert.deepEqual(await jsonOf(res), { error: "malformed" });
+    });
+  }
+  for (const c of (JSON.parse(repoText("spec/vectors/scoped-id.json")) as { invalid: { scoped_id: string; reason: string }[] }).invalid) {
+    test(`malformed: a scoped ID the specification rejects (${c.reason})`, async () => {
+      const res = await askFor(c.scoped_id);
+      assert.equal(res.status, 400);
+      assert.deepEqual(await jsonOf(res), { error: "malformed" });
+    });
+  }
+
+  test("malformed: a body that is not UTF-8", async () => {
+    const bytes = new TextEncoder().encode(good);
+    bytes[20] = 0xff;
+    const res = await worker.fetch("/api/v1/card-state", { method: "POST", body: bytes });
+    assert.equal(res.status, 400);
+    assert.deepEqual(await jsonOf(res), { error: "malformed" });
+  });
+
+  test("the limit is 64 KB: a body of exactly that is read, one byte more is malformed", async () => {
+    const padded = (length: number): string => good.slice(0, -1) + " ".repeat(length - good.length) + "}";
+    assert.equal(padded(64 * 1024).length, 64 * 1024);
+    assert.equal((await ask(padded(64 * 1024))).status, 200);
+    const res = await ask(padded(64 * 1024 + 1));
+    assert.equal(res.status, 400);
+    assert.deepEqual(await jsonOf(res), { error: "malformed" });
+  });
+
+  test("a card with records: its own items, each slot's, and the empty slot for a platform its state does not have", async () => {
+    // As the rules leave a card after: threads first (alice) on 11-04; on 11-19 test-example first
+    // (a-b) and threads switch (bob); then, the same day, a list without threads (a withdrawal).
+    await worker.roster.writeCard({
+      scope_string: TEST_SCOPE,
+      scoped_id: CARD,
+      seq: 3,
+      last_card_proof: "2026-11-19",
+      proofs_on_last_date: 2,
+      platforms: {
+        "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" },
+        threads: { current: null, last_declared: "bob", switch_count: 1, correction_date: "2026-11-19" },
+      },
+    });
+    // A state written before test-example was a platform of the table.
+    await worker.roster.writeCard({
+      scope_string: TEST_SCOPE,
+      scoped_id: OTHER_CARD,
+      seq: 4,
+      last_card_proof: "2026-03-02",
+      proofs_on_last_date: 3,
+      platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
+    });
+
+    assert.equal(
+      await (await askFor(CARD)).text(),
+      '{"last_card_proof":"2026-11-19","proofs_on_last_date":2,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":null,"last_declared":"bob","switch_count":1,"correction_date":"2026-11-19"}},"count":0}',
+    );
+    assert.deepEqual(await jsonOf(await askFor(OTHER_CARD)), {
+      last_card_proof: "2026-03-02",
+      proofs_on_last_date: 3,
+      platforms: { "test-example": NEVER_USED, threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
+      count: 0,
+    });
+    // Another card is still one without a record.
+    assert.deepEqual(((await jsonOf(await askFor(THIRD_CARD))) as { last_card_proof: unknown }).last_card_proof, null);
+  });
+
+  test("a later state of a card replaces the earlier one, and is still there after the object starts again", async () => {
+    await worker.roster.writeCard({
+      scope_string: TEST_SCOPE,
+      scoped_id: CARD,
+      seq: 5,
+      last_card_proof: "2026-11-20",
+      proofs_on_last_date: 1,
+      platforms: {
+        "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" },
+        threads: { current: "carol", last_declared: "carol", switch_count: 2, correction_date: "2026-11-20" },
+      },
+    });
+    const before = await (await askFor(CARD)).text();
+    assert.ok(before.startsWith('{"last_card_proof":"2026-11-20","proofs_on_last_date":1,'), before);
+    assert.ok(before.includes('"threads":{"current":"carol","last_declared":"carol","switch_count":2,"correction_date":"2026-11-20"}'), before);
+
+    await worker.roster.restart();
+
+    assert.equal(await (await askFor(CARD)).text(), before);
+  });
+});
+
+describe("what the back end writes down about a request", () => {
+  test("nothing: after every kind of request, the live log has no line, and no answer repeats what came in", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(NOON);
+      await worker.roster.writeCard({
+        scope_string: TEST_SCOPE,
+        scoped_id: CARD,
+        seq: 1,
+        last_card_proof: "2026-11-19",
+        proofs_on_last_date: 1,
+        platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 0, correction_date: "2026-11-19" } },
+      });
+      const sent = { headers: { "X-Forwarded-For": "203.0.113.7", "CF-Connecting-IP": "203.0.113.7", "User-Agent": "a-browser-of-the-test/1.0", Cookie: "session=of-the-test" } };
+      const challenge = ((await jsonOf(await worker.fetch("/api/v1/challenges", { method: "POST", ...sent }))) as { challenge: string }).challenge;
+      const answers: Response[] = [
+        await worker.fetch("/api/v1/config", sent),
+        await worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: CARD }), ...sent }),
+        await worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: OTHER_CARD, username: "alice", challenge }), ...sent }),
+        await worker.fetch(`/api/v1/card-state/${CARD}?challenge=${challenge}`, sent),
+        await worker.fetch("/api/v1/challenges", sent),
+      ];
+      // The state of the card names its account, as it must; nothing else that came in is in any answer.
+      for (const res of answers) {
+        const text = [await res.text(), ...[...res.headers].map(([name, value]) => `${name}: ${value}`)].join("\n");
+        for (const secret of [challenge, CARD, OTHER_CARD, "203.0.113.7", "a-browser-of-the-test", "of-the-test"]) assert.ok(!text.includes(secret), `an answer holds ${secret}`);
+      }
+      assert.deepEqual(worker.logLines(), []);
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("when the back end itself fails: 500 internal, and one line with the request ID, the endpoint and where, nothing of the request", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(NOON);
+      const challenge = await issue(worker);
+      await worker.roster.breakTables();
+
+      const failed = [
+        await worker.fetch("/api/v1/challenges", { method: "POST", headers: { "X-Forwarded-For": "203.0.113.7" } }),
+        await worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: CARD }), headers: { "X-Forwarded-For": "203.0.113.7" } }),
+      ];
+      const ids: string[] = [];
+      for (const res of failed) {
+        assert.equal(res.status, 500);
+        assert.equal(res.headers.get("Content-Type"), "application/json");
+        assert.equal(res.headers.get("Cache-Control"), "no-store");
+        ids.push(res.headers.get("X-Request-Id")!);
+        assert.deepEqual(await jsonOf(res), { error: "internal" });
+      }
+      // config does not ask the roster's object, so it still answers.
+      assert.equal((await worker.fetch("/api/v1/config")).status, 200);
+
+      const lines = worker.logLines().filter((l) => l.includes("internal_error"));
+      assert.deepEqual(lines.map((l) => JSON.parse(l) as unknown), [
+        { event: "internal_error", id: ids[0], endpoint: "/api/v1/challenges", where: "roster", error: "Error" },
+        { event: "internal_error", id: ids[1], endpoint: "/api/v1/card-state", where: "roster", error: "Error" },
+      ]);
+      const log = worker.logLines().join("\n");
+      for (const secret of [challenge, CARD, "203.0.113.7", TEST_SCOPE]) assert.ok(!log.includes(secret), `the log holds ${secret}`);
+    } finally {
+      await worker.close();
+    }
+  });
+});
+
+/** A moment given in Taiwan time. */
+const tw = (text: string): Date => new Date(`${text}+08:00`);
+
+/** The challenge format of spec/challenge.md, the regular expression it gives for the whole string. */
+function challengePattern(): RegExp {
+  const m = /^(\[0-9\]\{4\}-.*)$/m.exec(repoText("spec/challenge.md"));
+  assert.ok(m, "spec/challenge.md gives the format as a regular expression");
+  return new RegExp(`^(?:${m[1]})$`);
+}
+
+async function issue(worker: TestWorker): Promise<string> {
+  const res = await worker.fetch("/api/v1/challenges", { method: "POST" });
+  assert.equal(res.status, 200);
+  const body = (await jsonOf(res)) as { challenge: string };
+  assert.deepEqual(Object.keys(body), ["challenge"]);
+  return body.challenge;
+}
+
+describe("POST /api/v1/challenges", () => {
+  let worker: TestWorker;
+  before(async () => {
+    worker = await startWorker();
+    await worker.setClock(NOON);
+  });
+  after(() => worker.close());
+
+  test("a challenge is in the one spelling of spec/challenge.md and dated today in Taiwan", async () => {
+    const challenge = await issue(worker);
+    assert.match(challenge, challengePattern());
+    assert.equal(challenge.length, 37);
+    assert.equal(challenge.slice(0, 11), "2026-11-20.");
+    // What the device and every re-verifier check (protocol/, tested against spec/vectors/challenge.json).
+    assert.notEqual(parseChallenge(challenge), null);
+  });
+
+  test("the date is the date in Taiwan at the moment of issuing: it changes at 16:00 UTC", async () => {
+    for (const [at, date] of [
+      [new Date(tw("2026-11-20T23:59:59").getTime() + 999), "2026-11-20"],
+      [tw("2026-11-21T00:00:00"), "2026-11-21"],
+      [new Date("2026-12-31T15:59:59Z"), "2026-12-31"],
+      [new Date("2026-12-31T16:00:00Z"), "2027-01-01"],
+      [new Date("2028-02-28T16:00:00Z"), "2028-02-29"],
+    ] as const) {
+      await worker.setClock(at);
+      const challenge = await issue(worker);
+      assert.equal(challenge.slice(0, 10), date, at.toISOString());
+      assert.notEqual(parseChallenge(challenge), null);
+    }
+  });
+
+  test("no two challenges are the same", async () => {
+    await worker.setClock(NOON);
+    const issued = await Promise.all(Array.from({ length: 50 }, () => issue(worker)));
+    assert.equal(new Set(issued).size, 50);
+  });
+
+  test("the request carries nothing: a body, whatever it is, is not read", async () => {
+    for (const body of ['{"platform":"threads"}', "not JSON", "x".repeat(70_000)]) {
+      const res = await worker.fetch("/api/v1/challenges", { method: "POST", body });
+      assert.equal(res.status, 200);
+      assert.deepEqual(Object.keys((await jsonOf(res)) as object), ["challenge"]);
+    }
+  });
+
+  test("a date no challenge can have (after 2049) is the back end's failure, and no challenge is issued", async () => {
+    await worker.setClock(new Date("2050-01-01T00:00:00Z"));
+    const before = await worker.roster.storedChallenges();
+    const res = await worker.fetch("/api/v1/challenges", { method: "POST" });
+    assert.equal(res.status, 500);
+    assert.deepEqual(await jsonOf(res), { error: "internal" });
+    assert.deepEqual(await worker.roster.storedChallenges(), before);
+  });
+});
+
+describe("the challenges the roster's object keeps", () => {
+  const ISSUED = tw("2026-11-20T23:55:00");
+  const LIFETIME_MS = 10 * 60 * 1000;
+
+  test("a challenge issued is still known after the object starts again", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(ISSUED);
+      const first = await issue(worker);
+      const second = await issue(worker);
+      assert.deepEqual(await worker.roster.storedChallenges(), [first, second].sort());
+
+      await worker.roster.restart();
+
+      assert.deepEqual(await worker.roster.storedChallenges(), [first, second].sort());
+      // And it goes on issuing, next to the ones it had.
+      const third = await issue(worker);
+      assert.deepEqual(await worker.roster.storedChallenges(), [first, second, third].sort());
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("an expired challenge is deleted: one issued 10 minutes ago is, one a millisecond younger is not", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(ISSUED);
+      const old = await issue(worker);
+      await worker.setClock(new Date(ISSUED.getTime() + 1));
+      const younger = await issue(worker);
+
+      // A millisecond before the first expires, nothing is deleted.
+      await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS - 1));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), [old, younger].sort());
+
+      // Exactly 10 minutes after it was issued, after midnight in Taiwan, the first is gone.
+      await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), [younger]);
+
+      await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS + 1));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), []);
+      // With nothing left, running it again does nothing.
+      await worker.roster.runAlarm();
+      assert.deepEqual(await worker.roster.storedChallenges(), []);
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("the table does not keep growing: after hours of issuing, only the challenges of the last 10 minutes are left", async () => {
+    const worker = await startWorker();
+    try {
+      let last: string[] = [];
+      // 5 challenges every 4 minutes for 2 hours; the alarm runs after each round.
+      for (let minute = 0; minute <= 120; minute += 4) {
+        await worker.setClock(new Date(ISSUED.getTime() + minute * 60_000));
+        last = await Promise.all(Array.from({ length: 5 }, () => issue(worker)));
+        await worker.roster.runAlarm();
+        assert.ok((await worker.roster.storedChallenges()).length <= 15, `at minute ${minute}`);
+      }
+      // The rounds at minutes 112, 116 and 120 are less than 10 minutes old.
+      const stored = await worker.roster.storedChallenges();
+      assert.equal(stored.length, 15);
+      for (const c of last) assert.ok(stored.includes(c));
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("the object wakes itself to delete: it has no alarm until a challenge is issued, then one 10 minutes ahead, and none once nothing is left", async () => {
+    const worker = await startWorker();
+    try {
+      assert.equal(await worker.roster.alarmInMs(), null);
+      await issue(worker);
+      const wait = await worker.roster.alarmInMs();
+      assert.ok(wait !== null && wait > 9 * 60_000 && wait <= 10 * 60_000, `the alarm is ${wait} ms ahead`);
+      // A second challenge does not move it.
+      await issue(worker);
+      const later = await worker.roster.alarmInMs();
+      assert.ok(later !== null && later <= wait, `the alarm moved from ${wait} to ${later} ms ahead`);
+    } finally {
+      await worker.close();
+    }
   });
 });

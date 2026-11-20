@@ -39,7 +39,7 @@ test("the code that runs in the Worker imports its own files, protocol/ and the 
         seen.push(specifier);
         const own = dir === "src" ? /^\.\/[a-z0-9-]+\.ts$/ : /^\.\/[a-z0-9-]+\.ts$|^\.\.\/src\/[a-z0-9-]+\.ts$/;
         const engines = dir === "src" && ((file === "barretenberg.ts" && specifier === "msgpackr") || (file === "in-worker.ts" && GENERATED.includes(specifier)));
-        assert.ok(engines || own.test(specifier) || specifier === "#target" || specifier === "cloudflare:workers" || /^iamreal-protocol\/[a-z-]+\.ts$/.test(specifier), `${dir}/${file} imports ${specifier}`);
+        assert.ok(engines || own.test(specifier) || specifier === "#target" || specifier === "cloudflare:workers" || /^iamreal-protocol\/[a-z0-9-]+\.ts$/.test(specifier), `${dir}/${file} imports ${specifier}`);
       }
     }
   }
