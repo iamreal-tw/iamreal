@@ -18,7 +18,7 @@
 
 ## 單獨執行
 
-需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。有些測試另外要 Go：和原生 `bb` 逐案比對（`test/compare.test.ts`，另要 `IAMREAL_BB`，見「和原生的 `bb verify` 逐案比對」），和 `test/workflows.test.ts` 裡檢查 `web/` 瀏覽器測試的 `paths` 清單的那一項（`.github/README.md`）。前者沒設 `IAMREAL_BB` 時跳過；後者沒有 `go` 時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗（GitHub Actions 會設 `CI`），這樣 CI 上不會悄悄跳過。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
+需要 Node 22 和 pnpm。不需要 Cloudflare 的帳號。有些測試另外要 Go：和原生 `bb` 逐案比對（`test/compare.test.ts`，另要 `IAMREAL_BB`，見「和原生的 `bb verify` 逐案比對」），`test/workflows.test.ts` 裡檢查 `web/` 瀏覽器測試的 `paths` 清單的那一項（`.github/README.md`），和名冊規則跟 Go 的 `roster/` 逐筆比對（`test/sequence.test.ts`，見「名冊規則和 Go 的 `roster/` 逐筆比對」）。第一項沒設 `IAMREAL_BB` 時跳過；後兩項沒有 `go` 時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗（GitHub Actions 會設 `CI`），這樣 CI 上不會悄悄跳過。在程式庫的根目錄 `pnpm install`，然後在這個目錄：
 
 ```sh
 pnpm dev         # 在本機的 workerd 啟動 Worker
@@ -178,6 +178,52 @@ pnpm typecheck   # 型別檢查
 
 紀錄現在全部留在 Durable Object 的 `records` 表；寫滿 1,000 筆搬到 R2、每天公布，是 [#70](https://github.com/iamreal-tw/iamreal/issues/70)。在那之前，寫進去的那一行、每一筆的紀錄雜湊和名冊指紋、名冊那一列的筆數和名冊指紋，部署的後台沒有任何介面讀得到。測試從測試專用建置的 `GET /__test/roster/stored` 讀出來，[`test/records.ts`](test/records.ts) 的 `checkRoster` 只拿存著的每一行，用 `protocol/` 照 `spec/record.md` 重算：每一行讀得過（「Check a line」）、序號從 1 連續、紀錄雜湊和每一筆之後的名冊指紋都對、名冊那一列的筆數和指紋是最後一筆的。它對應 Go 舊後台測試的 `checkRoster`（`server/harness_test.go`），用在同時送出、`empty` 和 `switch_limit`、`switch_restricted`、`daily_limit` 的案例。
 
+### 名冊規則和 Go 的 `roster/` 逐筆比對
+
+刪掉舊的後台之前，要確定這裡的每一筆判斷都和 Go 的 `roster/` 相同（[#9](https://github.com/iamreal-tw/iamreal/issues/9) 結論第 8 項）。分三層，三層都過才算：
+
+| | 比什麼 | 在哪裡 |
+|---|---|---|
+| 1 | `spec/vectors/roster-rules.json` 的每一案，配 Durable Object 的儲存，每筆之間重啟 | `test/records-storage.test.ts` |
+| 2 | 一串固定種子產生的長序列，`protocol/` 的規則配記憶體（`MemoryRules`），以 Go 的 `roster/` 當答案 | `test/sequence.test.ts` |
+| 3 | 同一串，配 Durable Object 的儲存，每一筆之間重啟名冊的 Durable Object | `test/sequence.test.ts` |
+
+第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在 `pnpm test` 裡。只跑它，在這個目錄：
+
+```sh
+node --experimental-strip-types --test test/sequence.test.ts
+```
+
+要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。比的是名冊規則和狀態的儲存，不驗證證明：檢查 1 和檢查 3 的答案（`verifies`、`crl_dates`）是事件自己帶的，和標準答案的事件一樣。
+
+做的事：
+
+1. **產生一串紀錄。** [`test/sequence.ts`](test/sequence.ts) 的 `generateSequence` 從種子（現在是 1）產生 10,000 筆測試名冊（兩個平台）的事件。它不知道規則，只記得每張卡片在每個平台想宣告哪個帳號，讓規則的各種情況常常發生：160 張卡片，同一時間只有 8 張在送、每 64 筆換一張；每個平台 4 個帳號名稱；一天約 18 筆，日期大多是當天，常常是前一天（午夜前拿的題目），有時往回 2 到 8 天（沒超過和超過檢查 4 的 4 天）、有時往後 1 到 3 天；有時是空的清單、重送最近 30 筆之一的題目、證明不過、沒有一份清冊的日期對得上（含差一天就對得上的）。亂數是自己寫的 mulberry32，不用語言內建的，所以同一個種子在任何機器、任何版本的 Node 都產生同一串；同一個種子長一點的序列，開頭就是短的那一串。
+2. **Go 算答案。** 序列寫成 `spec/vectors/roster-rules.json` 一個案例的樣子（`events.json`：`name`、`roster`、`events`，事件的欄位和標準答案的事件相同），放在暫存目錄。測試跑 `go test -count=1 -run '^TestSequenceAnswers$' ./roster`，環境變數 `IAMREAL_ROSTER_SEQUENCE` 指到那個目錄。`roster/sequence_test.go` 用 `roster.Rules` 一筆一筆套用，寫 `answers.json`：同一個案例，加上每一筆的結果（`results`）、每一筆之後那張卡片的狀態（`cards`）、最後的現況（`state`，寫法和標準答案的相同）和規則的版本號。Go 和 TypeScript 互不引用，只共用 `spec/`，所以交換的格式就是兩邊本來都讀的標準答案的格式；找到不一致時，最小的重現案例可以直接寫成標準答案的一案。兩個檔都不進版控：比對全部相同時刪掉，有不同時留著，失敗的訊息寫著路徑。
+3. **比每一筆。** 每一筆的結果（有效或無效、代碼、每個平台的種類）和那張卡片在這一筆之後的狀態（`last_card_proof`、`proofs_on_last_date`、每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`；沒有有效紀錄的卡片是空的狀態）。記憶體那一次另外比最後的現況（每張卡片的清單，每個帳號底下的卡片）。Durable Object 那一次，每一筆走測試專用建置的 `POST /__test/roster/rule-event`（讀狀態、寫狀態用的是送出一筆的同一段程式），接著重啟名冊的 Durable Object，再從 `POST /api/v1/card-state` 讀那張卡片。
+4. **遇到第一筆不同就停**，訊息寫第幾筆、哪張卡片、哪個欄位、兩邊的值，例如（把 `src/card-table.ts` 寫入的 `proofs_on_last_date` 故意改成最多 2 時）：
+
+   ```
+   record 20 of 10000 (seq 20), card NH6H290YAE6AE92AWH6JMHETSR9RH0N8ADK1WRS9Z8GZ5B9APG00, card.proofs_on_last_date: Go 3, Durable Object 2. The events and Go's answers are kept in /…/iamreal-sequence-…
+   ```
+
+   Durable Object 讀不出那張卡片時（存著的狀態不合規則，`card-state` 回 `500`，見[讀卡片狀態時的檢查](#讀卡片狀態時的檢查)），訊息寫第幾筆、哪張卡片。
+5. **印出統計。** 每個代碼、每個種類（和每個平台的每個種類）出現幾次；每個代碼、每個種類都要至少 100 次，否則失敗。換了種子或改了產生器時，這一項確認序列還涵蓋每一種情況。
+
+2026-11-20 跑的結果（種子 1，10,000 筆）：Go、記憶體、Durable Object 三邊**沒有一筆不同**，最後的現況也相同。有效 4,742 筆、無效 5,258 筆：
+
+| 代碼 | 筆數 | | 種類 | 次數（`test-example`／`threads`） |
+|---|---|---|---|---|
+| `proof` | 287 | | `first` | 320（160／160） |
+| `challenge_reused` | 294 | | `refresh` | 4,923（2,430／2,493） |
+| `root` | 286 | | `correction` | 249（121／128） |
+| `date_order` | 1,502 | | `switch` | 1,431（728／703） |
+| `empty` | 320 | | `withdraw` | 1,028（512／516） |
+| `switch_limit` | 1,392 | | | |
+| `daily_limit` | 1,177 | | | |
+
+量到的時間（Apple Silicon，本機的 workerd 1.20261110.1）：整個檔約 100 秒。Go 算答案（含編譯測試）約 1 秒，記憶體 0.06 秒，Durable Object 約 97 秒（含啟動 Worker）：每一筆約 10 ms，是套用、重啟、讀 `card-state` 三次往返。
+
 ## 三樣不是設定值的東西
 
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
@@ -188,7 +234,7 @@ pnpm typecheck   # 型別檢查
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件，對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -692,6 +738,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的 `server/api_test.go` 的案例），用只看第一個位元組的驗證器 |
 | `test/records-real.test.ts` | `server/testdata/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器 |
 | `test/records-storage.test.ts` | 同時送出時序號連續、每筆之間重啟、寫到一半失敗、`paused`、`spec/vectors/roster-rules.json` 配 Durable Object 的儲存 |
+| `test/sequence.test.ts`、`test/sequence.ts` | 固定種子的長序列：產生器，Go 的 `roster/` 算的答案，配記憶體和配 Durable Object 的儲存逐筆比對（要有 `go`） |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；每個環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
