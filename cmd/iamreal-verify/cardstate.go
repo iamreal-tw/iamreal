@@ -15,10 +15,6 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// cardStateDir is the subdirectory of the roster directory that holds the
-// card state files, one per date (ADR-0027).
-const cardStateDir = "card-state"
-
 // maxCardStateFile is the largest card state file the command reads. In the
 // production roster, a row is at most 212 bytes plus 151 for each slot it
 // lists when its numbers are ones the rules leave, 227 plus 166 at the
@@ -26,19 +22,17 @@ const cardStateDir = "card-state"
 // than 10.9 million such rows.
 const maxCardStateFile = 4 << 30
 
-// cardStateName is the path, in the roster directory, of the card state
-// file of date d.
-func cardStateName(d verifier.Date) string { return cardStateDir + "/" + d.String() + ".jsonl" }
-
 // checkCardState compares the card state file of a date with rep, the
 // roster's own computation, for a valid roster directory p of roster r read
 // from src. The date is asked, or else that of the fingerprint file's last
 // line. It returns the problems, one line each for people: a broken file,
 // and every card that is different; and one line that says what was
 // compared, or why nothing was. Nothing to compare (no date, not exactly
-// one line of that date, no file of the date the last line gives) is not a
-// problem. An error means the check could not be made, including a file of
-// an asked date that is not there.
+// one line of that date) is not a problem. No file of the date the last
+// line gives is one: the file is written before its line, on every date a
+// line is written. An error means the check could not be made, including a
+// file of an asked date that is not there, which may be a date whose file
+// is no longer kept.
 func checkCardState(src source, p *publishedRoster, r verifier.Roster, rep *roster.Report, asked *verifier.Date) (problems []string, summary string, err error) {
 	var lines []fingerprintLine
 	if p.fingerprints != nil {
@@ -53,7 +47,7 @@ func checkCardState(src source, p *publishedRoster, r verifier.Roster, rep *rost
 	default:
 		date = lines[len(lines)-1].Date
 	}
-	name := cardStateName(date)
+	name := roster.CardStateName(date)
 	var dated []fingerprintLine
 	for _, fl := range lines {
 		if fl.Date == date {
@@ -75,7 +69,10 @@ func checkCardState(src source, p *publishedRoster, r verifier.Roster, rep *rost
 	data, err := src.get(name, maxCardStateFile)
 	switch {
 	case errors.Is(err, errNotFound) && asked == nil:
-		return nil, name + " is not there: no card state compared", nil
+		// The server writes the file of a date before the line of that
+		// date (ADR-0027), so a line without its file is a problem: the
+		// states the server kept at that count cannot be compared.
+		return []string{name + " is missing"}, "", nil
 	case errors.Is(err, errNotFound):
 		return nil, "", fmt.Errorf("%s is not there", name)
 	case err != nil:

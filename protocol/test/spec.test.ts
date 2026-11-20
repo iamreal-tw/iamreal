@@ -5,7 +5,7 @@ import { describe, test } from "node:test";
 import { bytesOfHex, hexOf, sha256Hex } from "../src/bytes.ts";
 import { decodeBase32Strict, encodeBase32 } from "../src/base32.ts";
 import { currentTime, parseChallenge } from "../src/challenge.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "../src/date.ts";
+import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "../src/date.ts";
 import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/field.ts";
 import { platformsOf } from "../src/platforms.ts";
@@ -199,3 +199,10 @@ describe("scoped-id.json", () => {
   }
 });
 
+
+test("the first moment of a date in Taiwan is 16:00 UTC of the day before", () => {
+  const day = parseDay("2026-11-21")!;
+  assert.equal(startOfTaiwanDay(day), Date.parse("2026-11-20T16:00:00Z"));
+  assert.equal(taiwanDay(startOfTaiwanDay(day)), day);
+  assert.equal(taiwanDay(startOfTaiwanDay(day) - 1), day - 1);
+});
