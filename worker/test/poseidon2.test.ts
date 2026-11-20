@@ -1,4 +1,4 @@
-// The Worker's Poseidon2 hash (src/poseidon2.ts) in the local workerd
+// The Worker's Poseidon2 hash (src/in-worker.ts) in the local workerd
 // against spec/vectors/poseidon2.json, the answers the Go crl/poseidon2
 // and the device's code are tested with.
 import assert from "node:assert/strict";
@@ -7,7 +7,9 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { P_HEX, testProof } from "./proofs.ts";
+import { hexOf } from "iamreal-protocol/bytes.ts";
+import { P } from "iamreal-protocol/field.ts";
+import { bytes32, testProof } from "./proofs.ts";
 
 interface HashCase {
   readonly inputs: string[];
@@ -31,7 +33,7 @@ before(async () => {
 after(() => worker.close());
 
 test("the field is the vectors' field", () => {
-  assert.equal(field(vectors.field_modulus), P_HEX);
+  assert.equal(BigInt(vectors.field_modulus), P);
 });
 
 test("hash_2 and hash_3: every case of the vectors", async () => {
@@ -58,8 +60,7 @@ test("revocation_tree: the root of a tree of one serial is its leaf, hash_3(seri
 
 test("an input that is not a field element of 32 bytes is refused, and the hash works after it", async () => {
   const one = field("0x1");
-  const pPlusOne = (BigInt(`0x${P_HEX}`) + 1n).toString(16).padStart(64, "0");
-  for (const bad of [P_HEX, pPlusOne, "f".repeat(64), one.slice(2), `00${one}`]) {
+  for (const bad of [hexOf(bytes32(P)), hexOf(bytes32(P + 1n)), "f".repeat(64), one.slice(2), `00${one}`]) {
     await assert.rejects(worker.poseidon2([one, bad]), /HTTP 400.*RangeError/, bad);
   }
   // p + 1 is refused, not hashed as 1.

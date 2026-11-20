@@ -31,7 +31,7 @@ pnpm typecheck   # 型別檢查
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
 
 - [`src/target.ts`](src/target.ts) 是部署用的那一份：內政部的兩把發證金鑰（[`src/issuers.ts`](src/issuers.ts)，測試拿 `spec/vectors/issuers.json` 核對）、內政部的兩個清冊網址（和 [`crl/README.md`](../crl/README.md) 寫的相同）、真的時鐘。其他程式用 `#target` 這個名字引用它（`package.json` 的 `imports`）。
-- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰（私鑰不留下）、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個讓測試呼叫得到驗證證明、Poseidon2 的入口 `POST /__test/verify`、`POST /__test/poseidon2`（這兩樣還沒有自己的 API）。入口呼叫的就是 `src/verify.ts` 和 `src/poseidon2.ts`，沒有換掉任何一部分。
+- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰（私鑰不留下）、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個讓測試呼叫得到驗證證明、Poseidon2 的入口 `POST /__test/verify`、`POST /__test/poseidon2`（這兩樣還沒有自己的 API）。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `poseidon2Hash`，沒有換掉任何一部分。**這兩個入口是暫時的**：送出一筆的介面（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）接上驗證之後，測試改走真的介面，`/__test/verify` 拿掉；`/__test/poseidon2` 在清冊鏡像用 Poseidon2 建樹（[#65](https://github.com/iamreal-tw/iamreal/issues/65)）、測試看得到樹根之後拿掉。
 - 怎麼換：[`test/build.ts`](test/build.ts) 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - [`test/bundle.test.ts`](test/bundle.test.ts) 用部署的指令自己的參數和環境（[`scripts/deploy.ts`](scripts/deploy.ts)，加 `--dry-run`）把要上傳的那一包打出來，檢查：
   - 裡面的網址只有內政部的兩個
@@ -40,7 +40,7 @@ pnpm typecheck   # 型別檢查
   - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`，所以金鑰、網址、時鐘沒有設定值可以讀。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
   - 把測試專用的建置也打出來，確認同樣的找法在那一包找得到測試的金鑰、假的內政部和時鐘的開關
 
-**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的四個檔（`src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`）不引用 `#target`，也不引用 `src/` 裡這四個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。測試專用的那一包裡不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個（`test/bundle.test.ts`）。部署的那一包現在不含驗證的程式，所以「兩包裡的檔相同」這一項現在只檢查得到測試專用的那一包；部署的那一包開始包含之後，同一個測試會要求它的檔也是這三個。
+**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。測試專用的那一包裡不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個（`test/bundle.test.ts`）。部署的那一包現在不含驗證的程式，所以「兩包裡的檔相同」這一項現在只檢查得到測試專用的那一包；`test/bundle.test.ts` 裡對部署那一包的檢查因此包在一個 `if` 裡，現在是空過的。**#67 把驗證接進部署的那一包時要拿掉那個 `if`**，之後部署的那一包的檔必須也是這三個。那時這個測試的其他檢查（找網址、找金鑰長度的字串）會把 WASM 檔當文字一起掃，可能要把不是 JavaScript 的模組分開處理。
 
 `target.ts` 還有第四樣：等內政部一份清冊最久等多久。部署的是 5 分鐘，測試專用的建置換成一兩秒，測逾時才不用等幾分鐘。
 
@@ -62,8 +62,9 @@ interface ProofVerifier {
 
 - `circuit` 是電路的名稱，`card_proof_rs2048` 或 `card_proof_rs4096`；`publicInputs` 每個值是 32 個位元組、大端序，照電路的順序。
 - 回 `true` 是通過，`false` 是拒絕。請求本身有任何不對都是拒絕，不丟例外：不認得的名稱、長度不對的證明、個數或大小不對的公開輸入、不小於模數的值、驗不過的證明、讓 Barretenberg 丟例外的證明。
-- 只有驗證器自己跑不起來（WASM 實例化失敗）時才丟例外，那和證明無關。
-- 之後改走 Containers 跑原生的 `bb`，換掉的是這個介面的實作 `proofVerifier`，其他程式不動。
+- **跑不起來不是拒絕，也不是通過。** 驗證器自己跑不起來（WASM 實例化失敗、載入通用參數失敗）時 `verify` 丟例外（`EngineError`，`notStarted` 是 `true`），不回任何結果；那和證明無關，沒有任何輸入會造成它。呼叫的人不可以把它當成通過：#67 要把它處理成「這一筆不接受、不寫入」，是後台自己的錯誤，不是 `proof` 這個拒絕代碼。下一次呼叫會重新試著實例化。[`test/engine.test.ts`](test/engine.test.ts) 確認這條路不會回 `true`，也不會回 `false`。
+- Barretenberg 回的不是預期的那一種答覆、或答覆裡沒有結果時，算拒絕，並丟掉那個實例。
+- 在 Worker 裡驗的那一個是 [`src/in-worker.ts`](src/in-worker.ts) 的 `proofVerifier`。之後改走 Containers 跑原生的 `bb`，換掉的是它，其他程式不動。
 
 ### 呼叫 WASM 之前的檢查
 
@@ -77,7 +78,7 @@ interface ProofVerifier {
 
 ### 丟例外就換實例
 
-WASM 丟出任何例外都算拒絕，並丟掉那個實例，下一筆重新實例化（[`src/engine.ts`](src/engine.ts)）。同一個實例一直吃例外會漏記憶體，到大約第 335 次之後連正確的證明都驗不過（#16）；[`test/verify.test.ts`](test/verify.test.ts) 有連續 500 個丟例外的證明之後再驗正確證明的案例，拿掉「丟掉實例」那一行它會失敗。
+WASM 丟出任何例外都算拒絕，並丟掉那個實例，下一筆重新實例化（[`src/engine.ts`](src/engine.ts)）。同一個實例一直吃例外會漏記憶體，到大約第 335 次之後連正確的證明都驗不過（#16）；[`test/verify.test.ts`](test/verify.test.ts) 有連續 500 個丟例外的證明之後再驗正確證明的案例，拿掉「丟掉實例」那一行它會失敗。測試沒辦法讓真的 WASM 回形狀不對的答覆或不啟動，這幾種情況在 [`test/engine.test.ts`](test/engine.test.ts) 用一個頂替 Barretenberg 實例的假物件測，在 Node 裡跑。
 
 一個實例的記憶體上限設在 16 MiB（驗一筆用到 2.6 MiB）。Barretenberg 自己印的訊息不留：裡面可能帶著正在驗的內容。
 
@@ -93,13 +94,13 @@ WASM 丟出任何例外都算拒絕，並丟掉那個實例，下一筆重新實
 
 - 驗證金鑰在程式庫裡只有 `verifier/vk/` 那一份；`generated/` 裡的是每次建置時抄的，檔名加 `.bin` 是為了讓 wrangler 照預設的規則把它當成位元組載入，設定檔不用改。兩個 SHA-256 和 `spec/proof-verification.md` 的表相同（[`test/engine-files.test.ts`](test/engine-files.test.ts) 核對）。
 - 自己核對 WASM 的 SHA-256：在這個目錄 `node --experimental-strip-types -e 'import("./scripts/engine-files.ts").then((m) => m.prepareEngineFiles())' && shasum -a 256 generated/barretenberg.wasm`。
-- bb.js 只用到這一個檔，它的程式沒有進 Worker。載入程式是自己寫的（[`src/barretenberg.ts`](src/barretenberg.ts)）：bb.js 是抓位元組來編譯，Worker 不允許；這裡是把 WASM 當模組引用，執行環境給的是編好的模組。提供給 WASM 的是 1 塊記憶體和 5 個函式，用和 bb.js 相同的 msgpack 格式（`msgpackr`）呼叫 `bbapi` 的 `SrsInitSrs`、`CircuitVerify`、`Poseidon2Hash`；`CircuitVerify` 的設定是 `noir-recursive`，沒有別的。
-- 通用參數不下載：G1 的第一個點 `(1, 2)` 和 G2 的那一個點寫在載入程式裡。WASM 自己核對這兩個點，不對就中止（#16），所以寫錯的後果是什麼都驗不過，不是驗錯。
+- bb.js 只用到這一個檔，它的程式沒有進 Worker。載入程式是自己寫的（[`src/barretenberg.ts`](src/barretenberg.ts)）：bb.js 是抓位元組來編譯（`WebAssembly.compile`），Workers 不允許：Cloudflare 的文件把 `WebAssembly.compile`、`WebAssembly.compileStreaming`、收位元組的 `WebAssembly.instantiate`、`WebAssembly.instantiateStreaming` 和 `eval()`、`new Function` 列在一起，寫「For security reasons, the following are not allowed」（[JavaScript and web standards](https://developers.cloudflare.com/workers/runtime-apis/web-standards/)，2026-11-20 讀的）。這裡是把 WASM 當模組引用，執行環境給的是編好的模組（[WebAssembly in JavaScript](https://developers.cloudflare.com/workers/runtime-apis/webassembly/javascript/)）。提供給 WASM 的是 1 塊記憶體和 5 個函式，用和 bb.js 相同的 msgpack 格式（`msgpackr`）呼叫 `bbapi` 的 `SrsInitSrs`、`CircuitVerify`、`Poseidon2Hash`；`CircuitVerify` 的設定是 `noir-recursive`，沒有別的。
+- 通用參數不下載：G1 的第一個點 `(1, 2)` 和 G2 的那一個點寫在載入程式裡。G2 那 128 個位元組和 `https://crs.aztec-cdn.foundation/g2.dat` 相同（bb.js 6.0.0 的 `src/crs/net_crs.ts` 下載的網址；2026-11-20 抓下來逐位元組對過，SHA-256 `01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f`）。WASM 自己核對這兩個點，不對就中止（#16），所以寫錯的後果是什麼都驗不過，不是驗錯。
 - 直接跑 `wrangler deploy` 不會經過這個核對，用的是 `generated/` 裡現有的檔；部署一律用 `pnpm run deploy:test`。
 
 ### Poseidon2
 
-[`src/poseidon2.ts`](src/poseidon2.ts) 的 `poseidon2Hash(inputs: readonly Uint8Array[]): Uint8Array`：輸入和輸出都是 32 個位元組、大端序的體元素，同步，用驗證證明的同一個 WASM 實例。清冊鏡像建樹用它，Worker 裡沒有另一份 Poseidon2。不是 32 個位元組或不小於 `p` 的輸入丟 `RangeError`，不問 WASM。[`test/poseidon2.test.ts`](test/poseidon2.test.ts) 拿 `spec/vectors/poseidon2.json`（Go 的 `crl/poseidon2` 讀的同一份）的 `hash_2`、`hash_3`、`scoped_id` 每一案核對。
+[`src/in-worker.ts`](src/in-worker.ts) 的 `poseidon2Hash(inputs: readonly Uint8Array[]): Uint8Array`（型別 `Poseidon2Hash` 在 [`src/poseidon2.ts`](src/poseidon2.ts)）：輸入和輸出都是 32 個位元組、大端序的體元素，同步，用驗證證明的同一個 WASM 實例。清冊鏡像建樹用它，Worker 裡沒有另一份 Poseidon2。不是 32 個位元組或不小於 `p` 的輸入丟 `RangeError`，不問 WASM。Barretenberg 跑不起來、丟例外、或回的不是雜湊時丟 `EngineError`，並丟掉那個實例（跑不起來時沒有實例可丟）；下一次呼叫用新的實例。[`test/poseidon2.test.ts`](test/poseidon2.test.ts) 拿 `spec/vectors/poseidon2.json`（Go 的 `crl/poseidon2` 讀的同一份）的 `hash_2`、`hash_3`、`scoped_id` 每一案核對。
 
 ### 和原生的 `bb verify` 逐案比對
 
@@ -312,12 +313,15 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/mirror.ts` | 清冊鏡像 |
 | `src/roster.ts` | 名冊的 Durable Object（空的類別） |
 | `src/target.ts`、`src/issuers.ts` | 部署用的發證金鑰、清冊網址、時鐘、等清冊的上限 |
-| `src/verify.ts` | 驗證證明的介面和在 Worker 裡驗的實作 |
+| `src/in-worker.ts` | 在 Worker 裡用的 `proofVerifier` 和 `poseidon2Hash`：把下面幾個檔和 WASM 檔、驗證金鑰接起來，只有它引用 `generated/` |
+| `src/verify.ts` | 驗證證明的介面 `ProofVerifier`、呼叫 Barretenberg 之前的檢查 |
 | `src/poseidon2.ts` | Poseidon2 的雜湊 |
-| `src/engine.ts`、`src/barretenberg.ts` | Barretenberg 的實例（丟例外就換）、WASM 的載入程式 |
+| `src/circuits.ts` | 接受的電路：名稱、公開輸入的個數、驗證金鑰的 SHA-256。`worker/` 裡電路的清單只有這一份 |
+| `src/engine.ts`、`src/barretenberg.ts` | Barretenberg 的實例（丟例外或答覆不對就換）、WASM 的載入程式 |
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
-| `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明 |
+| `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
+| `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
 | `test/*.test.ts` | 測試 |
 | `scripts/dev.ts` | `pnpm dev` |

@@ -10,14 +10,14 @@
 // way (an array of numbers, pieces put together when the Worker runs) is
 // not.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { basename } from "node:path";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
-import { VK_SHA256, WASM_FILE, WASM_SHA256, vkFile } from "../scripts/engine-files.ts";
+import { WASM_FILE, WASM_SHA256, vkFile } from "../scripts/engine-files.ts";
+import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { type TestBuildValues, WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./harness.ts";
+import { sha256Hex } from "./proofs.ts";
 
 function filesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -47,7 +47,7 @@ function build(kind: "deploy" | "test", values: TestBuildValues): Build {
       code: files.map((f) => readFileSync(f, "utf8")).join("\n"),
       output,
       // wrangler names such a module `<hash>-<the file's name>`.
-      files: Object.fromEntries(others.map((f) => [basename(f).replace(/^[0-9a-f]{40}-/, ""), createHash("sha256").update(readFileSync(f)).digest("hex")])),
+      files: Object.fromEntries(others.map((f) => [basename(f).replace(/^[0-9a-f]{40}-/, ""), sha256Hex(readFileSync(f))])),
     };
   } finally {
     rmSync(out, { recursive: true, force: true });
@@ -129,11 +129,12 @@ test("the test build holds another key, the fake MOICA and the clock's switch: t
 });
 
 test("the proof verifier's files in a build are Barretenberg's module and the two verification keys, each with its SHA-256", () => {
-  const checked = { [WASM_FILE]: WASM_SHA256, ...Object.fromEntries(Object.entries(VK_SHA256).map(([circuit, sha]) => [vkFile(circuit), sha])) };
+  const checked = { [WASM_FILE]: WASM_SHA256, ...Object.fromEntries(CIRCUIT_NAMES.map((circuit) => [vkFile(circuit), CIRCUITS[circuit].verificationKeySha256])) };
   // The test build calls the verifier (test-build/index.ts), so it holds the files.
   assert.deepEqual(build("test", values).files, checked);
   // The deployed Worker has nothing that calls the verifier yet, so the
-  // bundler leaves it out. Once it verifies submissions (#67), its files
-  // must be these same ones.
+  // bundler leaves it out and this `if` is never true. #67, which makes
+  // the deployed Worker verify submissions, removes the `if`: from then on
+  // the deploy build's files must be these same ones.
   if (Object.keys(deploy.files).length > 0) assert.deepEqual(deploy.files, checked);
 });

@@ -4,12 +4,14 @@
 // no API of its own yet, the proof verifier and the Poseidon2 hash. Never
 // in the deployed build (test/bundle.test.ts).
 //
-// The two doors call the same src/verify.ts and src/poseidon2.ts the
-// deployed Worker has; nothing of them is replaced here.
+// The two doors call the same verifier and hash the deployed Worker has
+// (src/in-worker.ts); nothing of them is replaced here. They are
+// temporary: once the real API verifies a submitted record's proof and the
+// CRL mirror builds its tree (#67, #65), the tests go through those and
+// the doors go.
 import { bytesOfHex, hexOf } from "iamreal-protocol/bytes.ts";
 import worker from "../src/index.ts";
-import { poseidon2Hash } from "../src/poseidon2.ts";
-import { proofVerifier } from "../src/verify.ts";
+import { poseidon2Hash, proofVerifier } from "../src/in-worker.ts";
 import { setTestClock } from "./target.ts";
 
 export { Roster } from "../src/index.ts";

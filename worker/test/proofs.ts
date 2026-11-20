@@ -1,22 +1,29 @@
-// The Go verifier's test proofs (verifier/testdata/README.md): one real
-// proof per circuit, made with throwaway keys, and the public inputs
-// `bb prove` wrote next to each.
+// What the tests of the proof verifier share: the Go verifier's test
+// proofs (verifier/testdata/README.md: one real proof per circuit, made
+// with throwaway keys, and the public inputs `bb prove` wrote next to
+// each), its verification keys, and a few helpers.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { bytesOfBigint } from "iamreal-protocol/bytes.ts";
+import { CIRCUIT_NAMES, type CircuitName } from "../src/circuits.ts";
+import { fieldElements } from "../src/verify.ts";
 import { WORKER_DIR } from "./build.ts";
 
-const TESTDATA = join(WORKER_DIR, "..", "verifier", "testdata");
+const VERIFIER = join(WORKER_DIR, "..", "verifier");
 
-export const CIRCUITS = ["card_proof_rs2048", "card_proof_rs4096"] as const;
-export type CircuitName = (typeof CIRCUITS)[number];
+/** SHA-256 as lowercase hex. */
+export const sha256Hex = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
-/** The BN254 scalar field modulus, 32 bytes big-endian (spec/proof-verification.md). */
-export const P_HEX = "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+/** `x` as a 32-byte big-endian value, the form of a public input. `x` need not be below the field's modulus. */
+export const bytes32 = (x: bigint): Uint8Array => bytesOfBigint(x, 32);
 
-/** `bytes` cut into the 32-byte values it is made of. */
-export function fields(bytes: Uint8Array): Uint8Array[] {
-  if (bytes.length % 32 !== 0) throw new Error(`${bytes.length} bytes is not a whole number of fields`);
-  return Array.from({ length: bytes.length / 32 }, (_, i) => bytes.slice(32 * i, 32 * i + 32));
+/** The verification key of a circuit: the file the Go verifier embeds. */
+export const verificationKey = (circuit: CircuitName): Uint8Array => new Uint8Array(readFileSync(join(VERIFIER, "vk", `${circuit}.vk`)));
+
+/** The key of every circuit. */
+export function verificationKeys(): Record<CircuitName, Uint8Array> {
+  return Object.fromEntries(CIRCUIT_NAMES.map((c) => [c, verificationKey(c)])) as Record<CircuitName, Uint8Array>;
 }
 
 export interface TestProof {
@@ -29,11 +36,11 @@ export interface TestProof {
 }
 
 export function testProof(circuit: CircuitName): TestProof {
-  const read = (name: string): Uint8Array => new Uint8Array(readFileSync(join(TESTDATA, name)));
+  const read = (name: string): Uint8Array => new Uint8Array(readFileSync(join(VERIFIER, "testdata", name)));
   return {
     circuit,
     proof: read(`${circuit}.proof`),
-    publicInputs: fields(read(`${circuit}.public_inputs`)),
+    publicInputs: fieldElements(read(`${circuit}.public_inputs`)),
     noZkProof: read(`${circuit}.no-zk.proof`),
   };
 }

@@ -2,7 +2,7 @@
 // bb.js 6.0.0 ships (scripts/engine-files.ts says where the file comes from
 // and checks its SHA-256). bb.js loads the module by compiling bytes it
 // fetched, which a Worker may not do; here the module arrives already
-// compiled, as an import (src/engine.ts).
+// compiled, as an import (src/in-worker.ts).
 //
 // What this does is what bb.js 6.0.0 does, read from its source
 // (src/barretenberg_wasm/barretenberg_wasm_base/index.ts,
@@ -15,7 +15,9 @@
 // that memory in whatever state the module was in when it stopped, and an
 // instance that keeps throwing ends up refusing correct proofs too (#16):
 // the caller drops an instance that threw and starts another.
+import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { Decoder, Encoder } from "msgpackr";
+import type { Instance } from "./engine.ts";
 
 /** One page of WebAssembly memory. */
 const PAGE = 65536;
@@ -35,10 +37,16 @@ G1[31] = 1;
 G1[63] = 2;
 
 /**
- * The G2 point of Barretenberg's CRS, the 128 bytes bb.js downloads as
- * `g2.dat`. The module has the point built in and aborts in `SrsInitSrs` if
- * this is not it, so a wrong byte here is a Worker that verifies nothing,
- * not one that verifies wrongly.
+ * The G2 point of Barretenberg's CRS: the 128 bytes of
+ * https://crs.aztec-cdn.foundation/g2.dat, the address bb.js 6.0.0
+ * downloads it from (its src/crs/net_crs.ts). That file, fetched on
+ * 2026-11-20, is these bytes; its SHA-256 is
+ * 01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f. The
+ * four values are X.c0, X.c1, Y.c0, Y.c1, 32 bytes each, big-endian.
+ *
+ * The Worker does not download it. The module checks the point itself (#16
+ * tried one changed byte: `SrsInitSrs` aborts), so a wrong byte here is a
+ * Worker that verifies nothing, not one that verifies wrongly.
  */
 const G2 = bytesOfHex(
   "0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0" +
@@ -47,12 +55,6 @@ const G2 = bytesOfHex(
     "04fc6369f7110fe3d25156c1bb9a72859cf2a04641f99ba4ee413c80da6a5fe4",
 );
 
-function bytesOfHex(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(2 * i, 2 * i + 2), 16);
-  return out;
-}
-
 interface Exports {
   readonly _initialize: () => void;
   readonly bbmalloc: (size: number) => number;
@@ -60,11 +62,8 @@ interface Exports {
   readonly bbapi: (input: number, inputLength: number, outputPointerAt: number, outputSizeAt: number) => void;
 }
 
-/** What a command answered: the name of the answer's kind and its fields. */
-export type Answer = readonly [kind: string, fields: Record<string, unknown>];
-
 /** One instance of the module, with the CRS loaded. */
-export class Barretenberg {
+export class Barretenberg implements Instance {
   readonly #memory: WebAssembly.Memory;
   readonly #exports: Exports;
   readonly #input: number;
@@ -102,16 +101,18 @@ export class Barretenberg {
     this.#exports._initialize();
     this.#input = this.#exports.bbmalloc(SCRATCH) >>> 0;
     this.#output = this.#exports.bbmalloc(SCRATCH) >>> 0;
-    const [kind] = this.call("SrsInitSrs", { points_buf: G1, num_points: 1, g2_point: G2 });
-    if (kind !== "SrsInitSrsResponse") throw new Error(`loading the CRS answered ${kind}`);
+    const answer = this.call("SrsInitSrs", { points_buf: G1, num_points: 1, g2_point: G2 });
+    if (!Array.isArray(answer) || answer[0] !== "SrsInitSrsResponse") throw new Error("loading the CRS did not answer SrsInitSrsResponse");
   }
 
   /**
-   * Sends one command to `bbapi` and returns its answer. Throws whatever
-   * the module throws; after that this instance must not be used again.
+   * Sends one command to `bbapi` and returns its answer as the module
+   * encoded it: a pair, the name of the answer's kind and its fields.
+   * Throws whatever the module throws; after that this instance must not
+   * be used again.
    */
-  call(command: string, fields: Record<string, unknown>): Answer {
-    const input = new Encoder({ useRecords: false }).pack([[command, fields]]);
+  call(command: string, args: Record<string, unknown>): unknown {
+    const input = new Encoder({ useRecords: false }).pack([[command, args]]);
     const own = input.length > SCRATCH;
     const inputAt = own ? this.#exports.bbmalloc(input.length) >>> 0 : this.#input;
     new Uint8Array(this.#memory.buffer).set(input, inputAt);
@@ -134,12 +135,7 @@ export class Barretenberg {
     const answerAt = view.getUint32(pointerAt, true);
     const answer = new Uint8Array(this.#memory.buffer).slice(answerAt, answerAt + view.getUint32(sizeAt, true));
     if (answerAt !== room) this.#exports.bbfree(answerAt);
-    return new Decoder({ useRecords: false }).unpack(answer) as Answer;
-  }
-
-  /** The module's memory now, in bytes. */
-  get memoryBytes(): number {
-    return this.#memory.buffer.byteLength;
+    return new Decoder({ useRecords: false }).unpack(answer);
   }
 
   #textAt(address: number): string {

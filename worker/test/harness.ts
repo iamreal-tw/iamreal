@@ -134,12 +134,12 @@ export interface TestWorker {
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
   /**
-   * Asks the Worker's proof verifier (src/verify.ts) through the test
+   * Asks the Worker's proof verifier (src/in-worker.ts) through the test
    * build's `POST /__test/verify`: true if the proof is accepted.
    */
   verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
   /**
-   * The Worker's Poseidon2 hash (src/poseidon2.ts) of these field elements,
+   * The Worker's Poseidon2 hash (src/in-worker.ts) of these field elements,
    * through the test build's `POST /__test/poseidon2`. Elements and hash
    * are 64 hex digits, big-endian. Rejects if the Worker refuses the inputs.
    */

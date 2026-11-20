@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { WASM_FILE, vkFile } from "../scripts/engine-files.ts";
+import { CIRCUIT_NAMES } from "../src/circuits.ts";
 import { WORKER_DIR } from "./build.ts";
 
 const pkg = JSON.parse(readFileSync(join(WORKER_DIR, "package.json"), "utf8")) as {
@@ -22,10 +24,10 @@ test("every development package is pinned to one exact version", () => {
   for (const [name, version] of Object.entries(pkg.devDependencies ?? {})) assert.match(version, /^\d+\.\d+\.\d+$/, name);
 });
 
-/** The proof verifier and the Poseidon2 hash: the loader, the instance, and the two that use it. */
-const ENGINE = ["barretenberg.ts", "engine.ts", "verify.ts", "poseidon2.ts"];
-/** What a build writes into generated/. */
-const GENERATED = /^\.\.\/generated\/(barretenberg\.wasm|card_proof_rs(2048|4096)\.vk\.bin)$/;
+/** The proof verifier and the Poseidon2 hash: where they are wired to the module, and what that file wires together. */
+const ENGINE = ["in-worker.ts", "barretenberg.ts", "circuits.ts", "engine.ts", "verify.ts", "poseidon2.ts"];
+/** What a build writes into generated/: the module, and a key per circuit of src/circuits.ts. */
+const GENERATED = [WASM_FILE, ...CIRCUIT_NAMES.map(vkFile)].map((file) => `../generated/${file}`);
 
 test("the code that runs in the Worker imports its own files, protocol/ and the runtime, nothing else; the proof verifier also msgpackr and its generated files", () => {
   const seen: string[] = [];
@@ -36,7 +38,7 @@ test("the code that runs in the Worker imports its own files, protocol/ and the 
         const specifier = (m[1] ?? m[2])!;
         seen.push(specifier);
         const own = dir === "src" ? /^\.\/[a-z0-9-]+\.ts$/ : /^\.\/[a-z0-9-]+\.ts$|^\.\.\/src\/[a-z0-9-]+\.ts$/;
-        const engines = dir === "src" && ((file === "barretenberg.ts" && specifier === "msgpackr") || (ENGINE.includes(file) && GENERATED.test(specifier)));
+        const engines = dir === "src" && ((file === "barretenberg.ts" && specifier === "msgpackr") || (file === "in-worker.ts" && GENERATED.includes(specifier)));
         assert.ok(engines || own.test(specifier) || specifier === "#target" || specifier === "cloudflare:workers" || /^iamreal-protocol\/[a-z-]+\.ts$/.test(specifier), `${dir}/${file} imports ${specifier}`);
       }
     }
@@ -62,6 +64,9 @@ test("the proof verifier takes nothing from what the test build replaces", () =>
       if (own) visit(own[1]!);
     }
   };
-  for (const file of ["verify.ts", "poseidon2.ts"]) visit(file);
+  visit("in-worker.ts");
   assert.deepEqual([...reachable].sort(), [...ENGINE].sort());
+  // And it imports the module and the key of every circuit.
+  const wiring = readFileSync(join(WORKER_DIR, "src", "in-worker.ts"), "utf8");
+  for (const specifier of GENERATED) assert.ok(wiring.includes(`from "${specifier}"`), `src/in-worker.ts does not import ${specifier}`);
 });

@@ -1,4 +1,4 @@
-// Case by case: the Worker's proof verifier (src/verify.ts, Barretenberg's
+// Case by case: the Worker's proof verifier (src/in-worker.ts, Barretenberg's
 // WebAssembly module in the local workerd) against the native
 // `bb verify -t noir-recursive`. Accepted or rejected must be the same in
 // every case.
@@ -25,20 +25,20 @@
 // setting is the only one the Worker's verifier has.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { VK_SHA256 } from "../scripts/engine-files.ts";
+import { bigintOfBytes, concatBytes } from "iamreal-protocol/bytes.ts";
+import { P } from "iamreal-protocol/field.ts";
+import { CIRCUITS, CIRCUIT_NAMES, type CircuitName } from "../src/circuits.ts";
+import { fieldElements } from "../src/verify.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CIRCUITS, P_HEX, fields, testProof } from "./proofs.ts";
+import { bytes32, sha256Hex, testProof, verificationKey } from "./proofs.ts";
 
 const REPO = join(WORKER_DIR, "..");
 const BB = process.env.IAMREAL_BB;
 const skip = BB === undefined || BB === "" ? "IAMREAL_BB is not set: no native bb to compare with" : false;
-
-const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
 mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
 const tmp = mkdtempSync(join(WORKER_DIR, "test-output", "compare-"));
@@ -53,21 +53,12 @@ interface Case {
   readonly publicInputs: Uint8Array;
 }
 
-/** The key of each circuit, as the Go verifier has it. */
-const vkOf = (circuit: string): Uint8Array => new Uint8Array(readFileSync(join(REPO, "verifier", "vk", `${circuit}.vk`)));
-
 /** The name the Worker's verifier knows a key by. Throws for a key it has no name for: such a case cannot be asked. */
-function circuitOf(vk: Uint8Array): string {
-  const sha = sha256(vk);
-  const found = Object.entries(VK_SHA256).find(([, s]) => s === sha);
+function circuitOf(vk: Uint8Array): CircuitName {
+  const sha = sha256Hex(vk);
+  const found = CIRCUIT_NAMES.find((c) => CIRCUITS[c].verificationKeySha256 === sha);
   if (!found) throw new Error(`a case uses a verification key the Worker has no name for (SHA-256 ${sha})`);
-  return found[0];
-}
-
-/** The public inputs file as the list the verifier takes; a file that is not whole values ends in a short value. */
-function inputsOf(file: Uint8Array): Uint8Array[] {
-  const whole = file.length - (file.length % 32);
-  return [...fields(file.slice(0, whole)), ...(whole < file.length ? [file.slice(whole)] : [])];
+  return found;
 }
 
 /** The 64 bytes of bn254_g1.dat (spec/proof-verification.md, "The CRS"), so that bb downloads nothing. */
@@ -134,7 +125,7 @@ exec "$IAMREAL_COMPARE_BB" "$@"
   for (const call of calls) {
     const read = (name: string): Uint8Array => new Uint8Array(readFileSync(join(recorded, call, name)));
     const c = { vk: read("vk"), proof: read("proof"), publicInputs: read("public_inputs") };
-    const id = sha256(Buffer.concat([Buffer.from(sha256(c.vk)), Buffer.from(sha256(c.proof)), Buffer.from(sha256(c.publicInputs))]));
+    const id = sha256Hex(Buffer.from(sha256Hex(c.vk) + sha256Hex(c.proof) + sha256Hex(c.publicInputs)));
     if (seen.has(id)) continue;
     seen.add(id);
     cases.push({ name: `from the Go tests, ${circuitOf(c.vk)}, proof of ${c.proof.length} bytes (${id.slice(0, 12)})`, ...c });
@@ -144,24 +135,22 @@ exec "$IAMREAL_COMPARE_BB" "$@"
 
 /** The inputs the Go verifier rejects before running bb. */
 function casesGoTurnsAway(): Case[] {
-  const P = BigInt(`0x${P_HEX}`);
-  const bytesOf = (x: bigint): Uint8Array => new Uint8Array(Buffer.from(x.toString(16).padStart(64, "0"), "hex"));
-  const cat = (parts: Uint8Array[]): Uint8Array => new Uint8Array(Buffer.concat(parts));
+  const cat = (parts: Uint8Array[]): Uint8Array => concatBytes(...parts);
   const cases: Case[] = [];
-  for (const circuit of CIRCUITS) {
+  for (const circuit of CIRCUIT_NAMES) {
     const p = testProof(circuit);
     const other = testProof(circuit === "card_proof_rs2048" ? "card_proof_rs4096" : "card_proof_rs2048");
-    const vk = vkOf(circuit);
+    const vk = verificationKey(circuit);
     const inputs = cat(p.publicInputs);
     const add = (name: string, change: Partial<Omit<Case, "name">>): void => void cases.push({ name: `${circuit}: ${name}`, vk, proof: p.proof, publicInputs: inputs, ...change });
     const withInput = (i: number, value: Uint8Array): Uint8Array => cat(p.publicInputs.map((f, j) => (j === i ? value : f)));
-    const valueOf = (i: number): bigint => BigInt(`0x${Buffer.from(p.publicInputs[i]!).toString("hex")}`);
+    const valueOf = (i: number): bigint => bigintOfBytes(p.publicInputs[i]!);
     const last = p.publicInputs.length - 1;
 
-    add("the first public input plus the modulus", { publicInputs: withInput(0, bytesOf(valueOf(0) + P)) });
-    add("the last public input plus the modulus", { publicInputs: withInput(last, bytesOf(valueOf(last) + P)) });
-    add("a public input equal to the modulus", { publicInputs: withInput(0, bytesOf(P)) });
-    add("a public input of 2^256 - 1", { publicInputs: withInput(last, bytesOf(2n ** 256n - 1n)) });
+    add("the first public input plus the modulus", { publicInputs: withInput(0, bytes32(valueOf(0) + P)) });
+    add("the last public input plus the modulus", { publicInputs: withInput(last, bytes32(valueOf(last) + P)) });
+    add("a public input equal to the modulus", { publicInputs: withInput(0, bytes32(P)) });
+    add("a public input of 2^256 - 1", { publicInputs: withInput(last, bytes32(2n ** 256n - 1n)) });
     add("no public inputs", { publicInputs: new Uint8Array(0) });
     add("one public input fewer", { publicInputs: inputs.slice(0, -32) });
     add("one public input more", { publicInputs: cat([inputs, new Uint8Array(32)]) });
@@ -172,8 +161,8 @@ function casesGoTurnsAway(): Case[] {
     add("a proof one value short", { proof: p.proof.slice(0, -32) });
     add("a proof one value long", { proof: cat([p.proof, new Uint8Array(32)]) });
     add("the proof made without zero knowledge", { proof: p.noZkProof });
-    add("the other circuit's key", { vk: vkOf(other.circuit) });
-    add("the other circuit's key and its count of public inputs", { vk: vkOf(other.circuit), publicInputs: cat(other.publicInputs) });
+    add("the other circuit's key", { vk: verificationKey(other.circuit) });
+    add("the other circuit's key and its count of public inputs", { vk: verificationKey(other.circuit), publicInputs: cat(other.publicInputs) });
   }
   return cases;
 }
@@ -194,12 +183,12 @@ test("accepted or rejected is the same as the native bb verify, case by case", {
     worker = await startWorker();
     for (const c of [...fromGo.cases, ...turnedAway]) {
       const expected = native(c);
-      const got = await worker.verify(circuitOf(c.vk), c.proof, inputsOf(c.publicInputs));
+      const got = await worker.verify(circuitOf(c.vk), c.proof, fieldElements(c.publicInputs));
       counts[expected ? "accepted" : "rejected"]++;
       if (got !== expected) different.push(`${c.name}: native ${expected ? "accepts" : "rejects"}, the Worker ${got ? "accepts" : "rejects"}`);
     }
     // After all of them, the correct proofs still verify.
-    for (const circuit of CIRCUITS) {
+    for (const circuit of CIRCUIT_NAMES) {
       const p = testProof(circuit);
       assert.equal(await worker.verify(p.circuit, p.proof, p.publicInputs), true, `${circuit} after every case`);
     }
