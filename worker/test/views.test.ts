@@ -195,9 +195,12 @@ describe("the views written again from the records", () => {
         const again = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(submission) });
         assert.deepEqual([again.status, JSON.parse(await again.text())], [500, { error: "internal" }], `submission ${i + 2}`);
       }
-      // Each start tries again, and says so in one line.
+      // Each start tries again, and says so in one line; and it sets its alarm for a try a minute later, which it could.
       await worker.roster.restart();
       await wantUnavailable("/");
+      const alarm = await worker.roster.alarmInMs();
+      assert.ok(alarm !== null && alarm <= 60 * 1000, `the alarm is ${alarm} ms ahead`);
+      assert.deepEqual(worker.logLines().filter((l) => l.includes("alarm_not_set")), []);
       assert.ok(worker.logLines().filter((l) => l === JSON.stringify({ event: "views_not_filled", error: "Error" })).length >= 2);
 
       await worker.roster.failWritesTo(null);

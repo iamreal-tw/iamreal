@@ -111,6 +111,30 @@ func TestSnapshot(t *testing.T) {
 		t.Errorf("fingerprints %q", got)
 	}
 
+	// The card state file of each date, written before its line: empty for
+	// the empty roster; then a row for each of the 1,001 cards, which reads
+	// as a card state file and is the rows the rules give for the roster.
+	if got := readFile(t, filepath.Join(out, filepath.FromSlash(roster.CardStateName(mustDate(t, "2026-11-19"))))); got != "" {
+		t.Errorf("the card state file of the empty roster: %q", got)
+	}
+	cardStates := []byte(readFile(t, filepath.Join(out, filepath.FromSlash(roster.CardStateName(mustDate(t, "2026-11-20"))))))
+	rows, brokenFile := roster.ReadCardStateFile(cardStates, verifier.Test)
+	if brokenFile != nil || len(rows) != 1001 {
+		t.Fatalf("the card state file: %d rows, %v", len(rows), brokenFile)
+	}
+	x := roster.NewRules(verifier.Test, everyProof{}, everyRootOn("2026-11-20"))
+	for _, r := range records {
+		if res, err := x.Apply(r); err != nil || !res.Valid {
+			t.Fatalf("seq %d: %v %v", r.Seq, res, err)
+		}
+	}
+	if want := roster.CardStateFile(x.CardRows()); !bytes.Equal(cardStates, want) {
+		t.Errorf("the card state file is not the rows the rules give for the roster")
+	}
+	if c := roster.CompareCardStates(rows, 1001, 1001, x.CardRows()); !c.Passes() {
+		t.Errorf("the card state file differs from the rules' rows")
+	}
+
 	// The same day again, nothing new: nothing to do.
 	if code, stdout, _ := h.snapshot("2026-11-20"); code != 0 || !strings.Contains(stdout, "already published today") {
 		t.Errorf("again: %d %s", code, stdout)
@@ -246,4 +270,18 @@ func TestSnapshotCommand(t *testing.T) {
 	if code != 1 || !strings.Contains(errOut.String(), "broken at line 1") {
 		t.Errorf("production: exit %d %s", code, errOut.String())
 	}
+}
+
+// everyProof verifies every record, and everyRootOn knows every root as
+// that of a CRL of one date: the rules alone, for rows to compare a card
+// state file with.
+type everyProof struct{}
+
+func (everyProof) VerifyRecord(*verifier.Record) error { return nil }
+
+type everyRootOn string
+
+func (d everyRootOn) CRLDates(string, string) ([]verifier.Date, error) {
+	date, err := verifier.ParseDate(string(d))
+	return []verifier.Date{date}, err
 }
