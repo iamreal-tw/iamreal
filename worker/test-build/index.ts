@@ -36,7 +36,9 @@
 //   read the rows it keeps of its records and of the roster as a whole,
 //   which no endpoint shows yet; and wait before it hashes a record, so
 //   that requests sent at once do cross where the deployed object lets
-//   them (in the local workerd the hash alone does not let another in).
+//   them (in the local workerd the hash alone does not let another in);
+//   and make a write or a read of the data bucket go wrong, to see what
+//   becomes of a full roster file that could not be moved there.
 import { byBytes, bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
@@ -47,10 +49,11 @@ import { writeCard } from "../src/card-table.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
+import type { FileBucket } from "../src/roster-files.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import { VIEW_TABLE_KEYS, viewOf, writeView } from "../src/views.ts";
-import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
+import { VIEW_TABLE_KEYS, clearViews, viewOf, writeView } from "../src/views.ts";
+import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -108,6 +111,8 @@ export class Roster extends DeployedRoster {
   /** How long the object waits before it hashes a record, in milliseconds, and how many records it has hashed. */
   #hashDelayMs = 0;
   #hashes = 0;
+  /** How the object's writes or reads of one object of the data bucket go wrong, if the test chose so. */
+  #bucketFault: BucketFault = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, testEnv(env));
@@ -137,6 +142,37 @@ export class Roster extends DeployedRoster {
     return super.hashOf(record);
   }
 
+  /** The data bucket, with the fault the test chose (BucketFault) on the one object it chose it for. */
+  protected override bucket(): FileBucket {
+    const real = super.bucket();
+    const fault = this.#bucketFault;
+    if (fault === null) return real;
+    const faulty = {
+      put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
+        if (key !== fault.key) return real.put(key, value, options);
+        if (fault.how === "put fails") throw new Error("the test makes this write fail");
+        if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
+        // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
+        if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
+        const headers = options.httpMetadata as R2HTTPMetadata;
+        const otherHeaders = fault.how === "put writes another Cache-Control" ? { cacheControl: "public, max-age=60" } : fault.how === "put writes another Content-Type" ? { contentType: "application/octet-stream" } : {};
+        const written = await real.put(key, value, { ...options, httpMetadata: { ...headers, ...otherHeaders } });
+        if (fault.how === "put loses its answer") throw new Error("the test loses the answer of this write");
+        return written;
+      },
+      get: async (key: string): Promise<R2ObjectBody | null> => {
+        if (key === fault.key && fault.how === "get fails") throw new Error("the test makes this read fail");
+        return real.get(key);
+      },
+    };
+    return faulty as unknown as FileBucket;
+  }
+
+  /** From now on the object's use of the data bucket goes wrong as `fault` says, or, with null, not at all. Kept in memory. */
+  testSetBucketFault(fault: BucketFault): void {
+    this.#bucketFault = fault;
+  }
+
   /** From now on the object waits this long before it hashes a record. */
   testSetHashDelay(ms: number): void {
     this.#hashDelayMs = ms;
@@ -164,8 +200,13 @@ export class Roster extends DeployedRoster {
     return [...this.#extraRuns];
   }
 
-  /** Runs the alarm now, whatever time it is set for. */
+  /**
+   * Runs the alarm now, whatever time it is set for. As when it rings by
+   * itself, the alarm that was set is spent first: the handler then finds
+   * none set, and sets the next one.
+   */
   async testRunAlarm(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
     await this.alarm();
   }
 
@@ -242,9 +283,17 @@ export class Roster extends DeployedRoster {
    * them. The object fills them from its records when it starts again.
    */
   testClearViews(): void {
-    const sql = this.ctx.storage.sql;
-    for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
-    sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
+    this.ctx.storage.transactionSync(() => clearViews(this.ctx.storage.sql));
+  }
+
+  /** How many records the object keeps, and the first and the last `seq` among them. */
+  testKept(): KeptRecords {
+    return this.ctx.storage.sql.exec<{ count: number; first: number | null; last: number | null }>("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS last FROM records").one();
+  }
+
+  /** Waits until the object has filled its views, or has given up (src/roster.ts, `viewsFilling`). */
+  async testViewsFilled(): Promise<void> {
+    await this.viewsFilling;
   }
 
   /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
@@ -365,14 +414,20 @@ export default {
    *   that card, and the cards of every declared account of the scope.
    * - `GET /__test/roster/views` answers a StoredViews: every row of the
    *   views; `DELETE` clears them, and the object fills them from its
-   *   records when it starts again.
+   *   records when it starts again. `POST /__test/roster/views-filled`
+   *   answers once the running object has filled them or given up.
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
-   *   fingerprint of its row of the roster.
+   *   fingerprint of its row of the roster. `GET /__test/roster/kept`
+   *   answers a KeptRecords: only how many it keeps, and from which `seq`
+   *   to which.
    * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
    *   object waits that long before it hashes a record it is asked to
    *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
    *   how many times it has hashed one.
+   * - `PUT /__test/roster/bucket-fault` with a BucketFault: from now on the
+   *   object's writes or reads of one object of the data bucket go wrong
+   *   in one way, or, with null, none does.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
    * - `GET /__test/newest-crls` answers what the roster's object knows of
@@ -468,9 +523,14 @@ export default {
       return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
     }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "GET /__test/roster/kept") return json(await testRosterOf(env).testKept());
     if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
     if (route === "DELETE /__test/roster/views") {
       await testRosterOf(env).testClearViews();
+      return done();
+    }
+    if (route === "POST /__test/roster/views-filled") {
+      await testRosterOf(env).testViewsFilled();
       return done();
     }
     if (route === "PUT /__test/roster/hash-delay") {
@@ -480,6 +540,10 @@ export default {
       return done();
     }
     if (route === "GET /__test/roster/hash-delay") return json({ hashes: await testRosterOf(env).testHashes() });
+    if (route === "PUT /__test/roster/bucket-fault") {
+      await testRosterOf(env).testSetBucketFault((await request.json()) as BucketFault);
+      return done();
+    }
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });

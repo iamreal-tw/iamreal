@@ -588,6 +588,40 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.close();
     }
   });
+
+  test("an alarm that rings by itself sets the next one: after the work that was due, the alarm is the challenge's, with no request in between", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await issue(worker);
+      await worker.roster.setExtraWork(START, DAY);
+      // Nothing is asked of the object while its alarm rings, a second from now, so nothing but the alarm's own handler sets the next.
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      await alarmIsAhead(worker, 10, "once the alarm rang by itself");
+    } finally {
+      await worker.close();
+    }
+  });
+
+  test("challenges issued more often than the alarm's least wait do not keep pushing the alarm away: work that is due runs within seconds", async () => {
+    const worker = await startWorker();
+    try {
+      await worker.setClock(START);
+      await issue(worker);
+      // Work that is due now, while a challenge is issued every 300 ms for three seconds: each of them sets the alarm.
+      await worker.roster.setExtraWork(START, DAY);
+      for (let i = 0; i < 10; i++) {
+        await issue(worker);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      // The alarm is then the challenges' own again.
+      await alarmIsAhead(worker, 10, "once the other work ran");
+    } finally {
+      await worker.close();
+    }
+  });
 });
 
 /** The one line the back end wrote about each of its own failures, in order. */

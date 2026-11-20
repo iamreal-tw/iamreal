@@ -389,6 +389,243 @@ carry the date.
   signing. Two card proofs of one card made from the same earlier state are
   applied in `seq` order, and the later list replaces the earlier.
 
+## The card state file
+
+The server does not compute the state of a card from the first record each
+time: it keeps the state of every card, and judges the next record of a
+card against the state it kept. A kept state that is wrong would accept
+records that cannot be taken out of the roster. So once a day the server
+publishes the states it keeps, as a **card state file**, and a re-verifier
+compares them with the states it computes itself from the roster
+(ADR-0025). The file is there to be checked. Nobody takes the state of a
+card from it: the state of a card is what these rules give from the
+records.
+
+A card state file belongs to one date: the date in Taiwan on which it was
+written. How a file is named after its date, where it is published and how
+long it is kept are not part of this specification (ADR-0027).
+
+**The file of a date holds the state of every card after the first `count`
+records**, `count` being the one in the fingerprint file's line of the same
+date ([`record.md`](record.md), "The published roster"). The count is not
+written in the file, and every line of the file is a card. The server reads
+the count and the states it keeps at one moment, and writes the file and
+then the fingerprint line from them.
+
+**Which cards.** Every card that has a valid record among those records has
+one row, and no other card has one, as in the output ("Output"). A card
+that has withdrawn everything has a row. A roster without a valid record
+gives the empty file.
+
+### A row
+
+A row is one line, in the same one-spelling form as a roster line
+([`record.md`](record.md), "Lines and files"): this template, followed by
+one `LF` (`0x0A`).
+
+```
+{"scope_string":"SCOPE_STRING","scoped_id":"SCOPED_ID","last_seq":LAST_SEQ,"last_card_proof":"LAST_CARD_PROOF","proofs_on_last_date":PROOFS_ON_LAST_DATE,"slots":SLOTS}
+```
+
+| Field | Format |
+|---|---|
+| `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
+| `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
+| `last_seq` | The `seq` of the card's last valid record: a decimal integer from `1` to `9007199254740991` (2^53 − 1), without leading zeros |
+| `last_card_proof` | The item of that name ("State"): a date, `YYYY-MM-DD`, as in a challenge ([`challenge.md`](challenge.md)): a year from `2000` to `2049`, a date that exists. Never `null`: a card with a row has a valid record |
+| `proofs_on_last_date` | The item of that name: `0`, or a decimal integer without leading zeros, at most `9007199254740991` |
+| `slots` | The slots of the card, below |
+
+The names are those of "State", and one more: `last_seq`. An invalid record
+changes no state, so it is never the `last_seq` of its card.
+
+```
+SLOTS = "{" "}"
+      | "{" SLOT { "," SLOT } "}"
+SLOT  = "PLATFORM":{"current":CURRENT,"last_declared":LAST_DECLARED,"switch_count":SWITCH_COUNT,"correction_date":CORRECTION_DATE}
+```
+
+| Part | Format |
+|---|---|
+| `PLATFORM` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
+| `current`, `last_declared` | `null` for none; otherwise the `username` in double quotes, in the `username` format of the slot's platform ([`scope.md`](scope.md)) |
+| `switch_count` | `0`, or a decimal integer without leading zeros, at most `9007199254740991` |
+| `correction_date` | `null` for none; otherwise the date in double quotes, `YYYY-MM-DD` as above |
+
+- **Only the slots that are not in the initial state are listed.** A slot
+  is in the initial state when all four of its items have their initial
+  value ("State"): `current`, `last_declared` and `correction_date` none,
+  `switch_count` 0. Such a slot is never listed, and every other slot of
+  the card is. A platform that is not in `slots` therefore is a slot in
+  the initial state, and the row of a card does not change when a platform
+  is added to the table ([`scope.md`](scope.md), "Adding a platform").
+  In these rules a slot in the initial state and no slot are the same
+  thing: a card has a slot on every platform, and its slots on the
+  platforms where no valid record of the card has had a kind are in the
+  initial state.
+- **Order**: the slots are in ascending order of `PLATFORM`, compared by
+  byte values, each strictly greater than the one before it. So no platform
+  appears twice.
+- None is `null`, without quotes. A string is never `null`'s spelling of
+  none: no `username` format allows the empty string, and `"null"` is a
+  `username` like any other where its platform's format allows it.
+- Inside a slot the keys are `current`, `last_declared`, `switch_count`,
+  `correction_date`, in this order, all four. No whitespace, no escape
+  sequence, no other key.
+
+The template needs no escape sequence: a scope string, a scoped ID, a date
+and a platform ID are printable ASCII without `"` or `\`, and none of the
+`username` formats allows `"`, `\`, a control character or a non-ASCII
+character ([`scope.md`](scope.md), "The `username` format"). A platform
+whose format allowed one of them could not be added without changing this
+template and the record's.
+
+**Check a row** like a roster line: parse it in any way, check every value
+against the tables, then write the row again from the template, with its
+slots in ascending order of `PLATFORM` and without any slot in the initial
+state, and compare bytes. The row's bytes up to and including its `LF` must
+equal what was written. If they differ, the row is malformed. This one
+comparison rejects everything JSON would otherwise allow (other key orders,
+whitespace, escapes, duplicate keys, a platform twice, numbers written as
+`1.0` or `1e0`, lines ending in `CR LF`), slots in another order, and a
+slot in the initial state that is listed.
+
+**The format checks each value by itself**, not whether the row is a state
+these rules can leave. Under these rules a listed slot always has a
+`last_declared` and a `correction_date`, and only `current` can be none; a
+card with a row has at least one slot listed; `proofs_on_last_date` is 1 to
+3 and `switch_count` at most 5. A row that says otherwise (a
+`correction_date` of `null` beside a `last_declared`, a `switch_count` of
+6) is well formed. It is equal to no state a re-verifier computes, so the
+comparison below reports its card. The file exists to show a wrong kept
+state, and a format that refused to write one would hide it.
+
+### The file
+
+A card state file is its rows concatenated, in order of `scope_string`,
+then of `scoped_id`, both compared by byte values (the order of "Output").
+`scoped_id` is compared as the text it is written as, not as the number it
+encodes. It has no byte order mark and no empty lines, and its last byte is
+the `LF` of the last row. A file without rows is the empty file. Every byte
+of a valid file is ASCII.
+
+The file is valid only if:
+
+| Check | Code if it fails |
+|---|---|
+| Every line is a well-formed row | `line` |
+| The card of every row after the first is after the card of the row before it, in the order above | `order` |
+
+Lines are checked one at a time, in order. For each line the two checks run
+in the order of the table; the first failure ends the check, and the file
+is reported as broken with that line's number (counting from 1) and the
+code. Bytes after the last `LF`, an empty line, a byte order mark and bytes
+that are not UTF-8 fail the first check on the line where they occur; a
+line is the bytes up to and including the next `LF`, before any decoding.
+The file is checked as bytes: decoding it as text first can drop a byte
+order mark or replace bytes, and a broken file then reads as valid. The
+same card in two rows fails the second check on the later row, whether or
+not the two rows say the same. A broken file is not compared.
+
+The same states therefore have one file: the same cards with the same
+items give the same bytes.
+
+The file carries no version number of these rules. The server computes
+states with one version: when the states it keeps were computed by another
+number than the code running, it accepts no card proof until they are
+rebuilt ("The version number").
+
+### Comparing
+
+A re-verifier compares a valid card state file with its own computation.
+It needs:
+
+- `count`: the count in the fingerprint file's line of the file's date,
+  as that line is written. Whether the line's fingerprint is right is a
+  check of the fingerprint file ([`record.md`](record.md)), reported by
+  itself. The file is not compared when there is not exactly one such
+  line, counting only lines written to the fingerprint file's template
+  (a line that is not is a problem of the fingerprint file). With none, there is nothing to say which records the file covers;
+  that is not a difference, because the file is written before its line
+  (ADR-0027). With two or more, the fingerprint file is broken, and that
+  is what the re-verifier reports.
+- N: the number of records, from the first, the re-verifier has applied
+  these rules to. N can be less than `count` (the re-verifier is behind the
+  file), equal to it, or more (the roster has grown since).
+- Its own state of every card that has a valid record among those N
+  records, and for each the `seq` of its last valid record: the card's own
+  `last_seq`, which is at most N.
+
+Every card that has a row, or a valid record among the N records, or both,
+gets one outcome, by the first line that applies:
+
+| # | Condition | Outcome |
+|---|---|---|
+| 1 | The card has a row, and the row's `last_seq` is greater than `count` | `different` |
+| 2 | The card has a row, and the row's `last_seq` is greater than N | `skipped` |
+| 3 | The re-verifier has the card, and its own `last_seq` is greater than `count` | `skipped` |
+| 4 | The card has a row, and the re-verifier has no valid record of it | `different` |
+| 5 | The re-verifier has the card, and the file has no row for it | `different` |
+| 6 | The row and the re-verifier's state are equal | `same` |
+| 7 | otherwise | `different` |
+
+The row and the state are equal when `last_seq`, `last_card_proof`,
+`proofs_on_last_date` and, on every platform of the table, the four items
+of the slot are equal; a platform the row does not list, or the
+re-verifier's state has no slot for, is a slot in the initial state.
+
+**Any `different` fails the comparison**, and the re-verifier names the
+card (ADR-0025). **`skipped` is not a failure**: the card is compared with
+a later N or in a later file.
+
+Why each line is there:
+
+1. **No row is beyond `count`.** The file holds the states after the first
+   `count` records, so the last valid record of a card in it is one of
+   those. A row that names a later record is not such a state, whatever N
+   is and whether or not that record is a valid record of the card. Without
+   this line, a server that kept something else than a `seq` as `last_seq`
+   (a time, a number larger than the roster) would have every row skipped
+   by line 2 on every day, and the comparison would pass having compared
+   nothing.
+2. **The re-verifier is behind the file.** The row's state comes from a
+   record between N and `count` that the re-verifier has not reached. It
+   is compared once N is at least the row's `last_seq`. This line applies
+   only when N is less than `count`.
+3. **The card changed after the file.** Its own last valid record is after
+   `count`, so the re-verifier's state of it is not the state the file was
+   to hold; the file of a later date has it. Nothing is said about the row,
+   present or not. This line applies only when N is greater than `count`.
+4. **The server keeps a state no record gave.** The row's `last_seq` is at
+   most N, and among those N records the roster has no valid record of the
+   card.
+5. **A card whose last valid record is at or before `count` has a row.**
+6. and 7. Both sides are now the card's state after the first `count`
+   records: the row by what the file is, the re-verifier's because the
+   card has no valid record after its own `last_seq`, which is at most
+   `count`. Every item must be equal, `last_seq` included. A row that
+   names an earlier record than the card's last valid one is `different`:
+   the file missed a record it was to cover. That is so once N is at least
+   `count`. With a smaller N the re-verifier's state is the card's after
+   the first N records only, and `same` is not yet the last word: a valid
+   record of the card between N and `count` that the row missed shows as
+   `different` when N has reached it.
+
+The outcome of a card is one of the seven lines for every combination of
+a row or none, the row's `last_seq` against `count` and N, a state of the
+re-verifier's or none, and its own `last_seq` against `count`.
+
+**When N equals `count`, no card is skipped**: line 2 needs a row beyond N
+that is not beyond `count`, and line 3 an own `last_seq` beyond `count`,
+which is beyond N. Every card is then `same` or `different`, and whatever
+the server kept wrongly for the first `count` records shows as
+`different`: a card left out (line 5), a card no record gave (line 1 or
+4), a valid record missed or a `last_seq` too small (line 7), a `last_seq`
+too large (line 1 or, up to `count`, line 7), any other item (line 7). A
+re-verifier that has verified the published roster up to the last line of
+the fingerprint file, and compares the file of that line's date, has N
+equal to `count`. With another N, the cards of lines 2 and 3 wait.
+
 ## Changing these rules
 
 These rules may change after launch. A change keeps two things of every
@@ -546,3 +783,28 @@ sequence of events with the outcome of each and the final state.
   slot as it was.
 - Every case has one scope string. Cases with two scope strings in one
   roster belong to retiring a scope and will be added with it.
+
+[`vectors/card-state-file.json`](vectors/card-state-file.json), for "The
+card state file":
+
+- `rules_version` is the version number of these rules the files below
+  that come from `roster-rules.json` were computed by ("The version
+  number"). When the number goes up, those files are computed again.
+- `files`: card state files, valid or broken, each with the `roster` it is
+  read with. A valid one has its bytes (`content`) and its rows as states
+  (`cards`, in the order of the file; `slots` has exactly the slots the row
+  lists), so that both writing and reading can be tested. A broken one has
+  the first line that fails and the code. A file whose bytes are not UTF-8
+  has them as hex digits (`content_hex`) in place of `content`.
+- Some valid files are the final state of a case of
+  `roster-rules.json`, named by `roster_rules_case`: the case's cards
+  without `accounts` and without the slots in the initial state, each with
+  the `seq` of its last valid result as `last_seq`.
+- One valid file has rows that are well formed but are not states these
+  rules leave (`rules_leave` false).
+- `comparisons`: a file, its `count`, the number of records the re-verifier
+  has applied the rules to (`verified`), its own cards (`computed`), and
+  the outcome of every card ("Comparing").
+- Every file has one scope string, like the cases above: a roster accepts
+  one until a scope is retired. Files with rows of two scope strings will
+  be added with it.

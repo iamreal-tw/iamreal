@@ -9,6 +9,7 @@ import { bytesOfHex, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { KEY_WORDS, Unusable, parseCrl, usableCrl, wordsOfKey } from "../src/crl/crl.ts";
 import { type TreeResult, buildPart, checkAbsence } from "../src/crl/tree.ts";
+import { importRsaKey } from "../src/issuers.ts";
 import { formatDay, taiwanDayOfSeconds } from "iamreal-protocol/date.ts";
 import { scopedId, signatureLimbs } from "iamreal-protocol/scoped-id.ts";
 import { poseidon } from "./bb.ts";
@@ -54,6 +55,45 @@ describe("poseidon2.json", async () => {
           assert.equal(r.proof.oldKey, BigInt(a.old_key));
           assert.equal(r.proof.oldValue, BigInt(a.old_value));
         }
+      });
+    }
+  }
+});
+
+describe("revocation-tree.json", async () => {
+  const p = await poseidon();
+  const v = vectors("revocation-tree.json");
+  const keyOf = async (issuer: string) => {
+    const i = v.issuers.find((x: { issuer: string }) => x.issuer === issuer);
+    return { key: await importRsaKey(BigInt(i.modulus), i.modulus_bits), bits: i.modulus_bits };
+  };
+  const crls = new Map<string, { root: bigint; keys: Uint32Array; count: number }>();
+  for (const c of v.crls) {
+    test(`CRL ${c.name}: usable, and its root`, async () => {
+      const { key, bits } = await keyOf(c.issuer);
+      const crl = await usableCrl(bytesOfHex(c.crl), key, bits);
+      const root = buildPart(crl.keys, crl.count, p.hasher, null, 0).root;
+      assert.equal(hex64(root), c.root);
+      crls.set(c.name, { root, keys: crl.keys, count: crl.count });
+    });
+  }
+  for (const c of v.cases) {
+    for (const runners of [1, 2, 4]) {
+      test(`${c.label} (${c.crl}), ${runners} part(s)`, async () => {
+        const crl = crls.get(c.crl)!;
+        const r = await buildWith(Array.from({ length: runners }, () => p.runner()), crl.keys, crl.count, BigInt(c.serial));
+        assert.equal(r.inTree, c.in_tree);
+        if (r.inTree) return;
+        assert.deepEqual(
+          {
+            smt_root: hex64(r.proof.root),
+            smt_siblings: r.proof.siblings.map(hex64),
+            smt_old_key: hex64(r.proof.oldKey),
+            smt_old_value: hex64(r.proof.oldValue),
+            smt_is_old0: r.proof.isOld0,
+          },
+          c.path,
+        );
       });
     }
   }
