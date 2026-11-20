@@ -1,12 +1,13 @@
 // Poseidon2, the tree and the CRL checks against spec/vectors/poseidon2.json
-// and against crl/testdata/ (the files and results the Go tests use).
+// and against crl/testdata/ (the files and results the Go tests use). Which
+// CRL the device uses is tested against spec/vectors/device-checks.json
+// (device-checks.test.ts).
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { describe, test } from "node:test";
 import { bytesOfHex, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { buildWith } from "../src/crl/build.ts";
 import { KEY_WORDS, Unusable, parseCrl, usableCrl, wordsOfKey } from "../src/crl/crl.ts";
-import { chooseFromIndex } from "../src/crl/revocation.ts";
 import { type TreeResult, buildPart, checkAbsence } from "../src/crl/tree.ts";
 import { importRsaKey } from "../src/issuers.ts";
 import { formatDay, taiwanDayOfSeconds } from "iamreal-protocol/date.ts";
@@ -151,19 +152,4 @@ describe("crl/testdata against crl/testdata/expected.json", async () => {
     const c = parseCrl(repoFile("crl/testdata/bad-signature.crl"));
     assert.equal(formatDay(taiwanDayOfSeconds(c.thisUpdate)), e.crl_date);
   });
-});
-
-describe("choosing from the archive index", () => {
-  const line = (issuer: string, n: string, sha: string, root = "11".repeat(32)) =>
-    `{"issuer":"${issuer}","crl_number":"${n}","this_update":"2026-11-15T16:30:00Z","next_update":"2026-11-17T04:30:00Z","crl_date":"2026-11-16","sha256":"${sha}","root":"${root}"}`;
-  test("the usable line of the issuer with the highest number", () => {
-    const idx = [line("G2", "9", "aa".repeat(32)), line("G3", "7", "bb".repeat(32)), line("G3", "10", "cc".repeat(32)), line("G3", "11", "dd".repeat(32), "-not_usable_signature"), "garbage", ""].join("\n");
-    assert.deepEqual(chooseFromIndex(idx, "G3"), { crlNumber: 10n, sha256: "cc".repeat(32) });
-    assert.deepEqual(chooseFromIndex(idx, "G2"), { crlNumber: 9n, sha256: "aa".repeat(32) });
-  });
-  test("two files with the highest number: no choice", () => {
-    const idx = [line("G3", "10", "cc".repeat(32)), line("G3", "10", "ee".repeat(32))].join("\n");
-    assert.equal((chooseFromIndex(idx, "G3") as { code: string }).code, "crl_unavailable");
-  });
-  test("no line", () => assert.equal((chooseFromIndex("", "G3") as { code: string }).code, "crl_unavailable"));
 });
