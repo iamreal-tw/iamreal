@@ -174,6 +174,10 @@ type cardState struct {
 	// A card's dates do not go back (check 4), so it is the only count check
 	// 6 can ask for.
 	proofsOnLastDate int
+	// lastSeq is the seq of the card's last valid record, 0 before the
+	// first. It is not an item of the State table: the card state file
+	// writes it beside the state.
+	lastSeq uint64
 }
 
 func (cs *cardState) clone() *cardState {
@@ -181,6 +185,7 @@ func (cs *cardState) clone() *cardState {
 		slots:            make(map[string]*slotState, len(cs.slots)),
 		lastCardProof:    cs.lastCardProof,
 		proofsOnLastDate: cs.proofsOnLastDate,
+		lastSeq:          cs.lastSeq,
 	}
 	for p, s := range cs.slots {
 		ns := *s
@@ -371,7 +376,7 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 		return invalid(CodeDailyLimit, fmt.Sprintf("%d valid records dated %s", n, d))
 	}
 	// Check 4 made d no earlier than last_card_proof.
-	next.lastCardProof, next.proofsOnLastDate = &d, n+1
+	next.lastCardProof, next.proofsOnLastDate, next.lastSeq = &d, n+1, r.Seq
 	res.Valid, res.Kinds = true, kinds
 	return res, next, nil
 }
@@ -481,6 +486,22 @@ func cardStateOf(cs *cardState) CardState {
 	return out
 }
 
+// CardRows returns every card with a valid record among the records
+// applied, with its state and the seq of its last valid record, in the
+// order of a card state file (spec/roster-rules.md, "The card state file"):
+// the rows a re-verifier compares with the file. The values are copies.
+func (x *Rules) CardRows() []CardRow {
+	var rows []CardRow
+	for k, cs := range x.cards {
+		if cs.lastCardProof == nil {
+			continue
+		}
+		rows = append(rows, CardRow{ScopeString: k.scope, ScopedID: k.scopedID, LastSeq: cs.lastSeq, State: cardStateOf(cs)})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].before(rows[j]) })
+	return rows
+}
+
 // AccountCards returns the number of cards in the scope scopeString whose
 // current account on platform is username: the cards the output lists
 // under that account ("Output", accounts). The same username on another
@@ -492,13 +513,22 @@ func (x *Rules) AccountCards(scopeString, platform, username string) int {
 // Apply applies the rules to the records of a valid roster file of roster
 // r, in order: Rules.Apply on each record.
 func Apply(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*State, error) {
+	x, err := applyAll(records, r, proofs, crls)
+	if err != nil {
+		return nil, err
+	}
+	return x.State(), nil
+}
+
+// applyAll returns the rules after Rules.Apply on each record, in order.
+func applyAll(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Rules, error) {
 	x := NewRules(r, proofs, crls)
 	for _, rec := range records {
 		if _, err := x.Apply(rec); err != nil {
 			return nil, err
 		}
 	}
-	return x.State(), nil
+	return x, nil
 }
 
 func rootRecognized(crls CRLArchive, r *verifier.Record, d verifier.Date) (bool, error) {
@@ -569,6 +599,9 @@ type Report struct {
 	Fingerprint string  // the roster fingerprint of a valid file
 	Records     int     // the number of records of a valid file
 	State       *State  // the rules applied to a valid file
+	// Cards is every card with a valid record in a valid file, as
+	// Rules.CardRows returns them.
+	Cards []CardRow
 }
 
 // Check reads a roster file of roster r and, if it is valid, applies the
@@ -578,9 +611,9 @@ func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive
 	if broken != nil {
 		return &Report{Broken: broken}, nil
 	}
-	st, err := Apply(records, r, proofs, crls)
+	x, err := applyAll(records, r, proofs, crls)
 	if err != nil {
 		return nil, err
 	}
-	return &Report{Fingerprint: fingerprint, Records: len(records), State: st}, nil
+	return &Report{Fingerprint: fingerprint, Records: len(records), State: x.State(), Cards: x.CardRows()}, nil
 }
