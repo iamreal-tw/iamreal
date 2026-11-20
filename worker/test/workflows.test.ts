@@ -19,12 +19,15 @@ import {
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
   CHECK_BB,
+  CHECKS_GROUP,
+  CHECKS_ON,
   GRADLE_BUILD,
   GRADLE_DISTRIBUTION_SHA256,
   GRADLE_VERSION,
   GRADLE_WRAPPER_JAR_SHA256,
   INSTALL_PNPM,
   IOS_PATHS,
+  REQUIRED_CHECKS,
   type Yaml,
   readYaml,
   workflowProblems,
@@ -55,6 +58,8 @@ const DOWNLOAD = "      - uses: actions/download-artifact@9000827ccba6bdab643e8b
 const BUILD_JOB = "  build:\n    runs-on: ubuntu-24.04\n";
 const DEPLOY_JOB = "  deploy:\n    needs: build\n";
 const GO_JOB = "  go:\n    runs-on: ubuntu-24.04\n";
+/** How checks.yml is triggered by the merge queue (#180), as written there. */
+const MERGE_GROUP = "  merge_group:\n    types:\n      - checks_requested\n";
 
 type Change = (files: Record<string, string>) => void;
 /** Replaces the first `from` in `file`; fails if it is not there, so a change never quietly does nothing. */
@@ -195,6 +200,18 @@ const CHANGES: Record<string, Change[]> = {
   "124 the android job running the wrapper of another directory": [replace(C, `        working-directory: android\n        run: ${GRADLE_BUILD}`, `        working-directory: web\n        run: ${GRADLE_BUILD}`)],
   "125 one more step in the android job": [replace(C, "      - name: gradlew build\n", "      - run: sudo snap install zig\n      - name: gradlew build\n")],
   "126 the android job without the parameter files' script": [replace(C, "        working-directory: device-core\n        run: ./fetch-crs.sh", "        working-directory: device-core\n        run: curl -o vendor/crs/bn254_g2.dat https://example.com/g2.dat")],
+  // The merge queue (#180): checks.yml also runs on merge_group, and nothing else does.
+  "130 deploy-test.yml also on merge_group": [replace(D, "on:\n  push:\n", `on:\n${MERGE_GROUP}  push:\n`)],
+  "131 checks-browser.yml also on merge_group": [replace(B, "on:\n", `on:\n${MERGE_GROUP}`)],
+  "132 checks.yml on merge_group only, so a pull request gets no checks": [replace(C, "  pull_request:\n", "")],
+  "133 merge_group in checks.yml with another activity type": [replace(C, MERGE_GROUP, `${MERGE_GROUP}      - destroyed\n`)],
+  "134 checks.yml's group by pull request number, so the merge groups' runs share one and cancel each other": [replace(C, `  group: ${CHECKS_GROUP}\n`, "  group: checks-${{ github.event.pull_request.number }}\n")],
+  "135 a job of checks.yml renamed, so the check the ruleset of main requires never reports": [replace(C, GO_JOB, "  golang:\n    runs-on: ubuntu-24.04\n")],
+  "136 a job of checks.yml given a name, which is the name its check reports": [replace(C, GO_JOB, `${GO_JOB}    name: Go\n`)],
+  "137 one job more in checks.yml than the checks main requires": [replace(C, "\n  device-core:\n", `\n  other:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ${CHECK_BB}\n\n  device-core:\n`)],
+  "138 a secret in the env at the top of checks.yml, which a merge group's run would be given": [replace(C, '  WRANGLER_HIDE_BANNER: "true"\n', `  WRANGLER_HIDE_BANNER: "true"\n  T: ${SECRET}\n`)],
+  "139 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
+  "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -226,8 +243,8 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
-  assert.deepEqual(doc.on, { pull_request: null });
-  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript", "device-core", "android"]);
+  assert.deepEqual(doc.on, CHECKS_ON);
+  assert.deepEqual(Object.keys(doc.jobs as object), REQUIRED_CHECKS);
   const browserDoc = readYaml(realFiles()[B]!) as Record<string, Yaml>;
   // `paths`: a list of strings under pull_request, each as written (`**` is no special character in YAML here).
   const paths = (browserDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths as string[];

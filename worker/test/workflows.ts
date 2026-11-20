@@ -394,6 +394,41 @@ export const SECRET_LINES: readonly string[] = [
 ];
 
 /**
+ * The checks the ruleset of main requires before a pull request is merged,
+ * and that the merge queue waits for (#180): checks.yml's jobs, exactly,
+ * none with a `name`. Required checks are matched by job name ("make sure
+ * that job names are unique across all workflows. Using the same job name in
+ * multiple workflows can cause ambiguous status check results",
+ * https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches),
+ * and `name` sets "a name for the job, which is displayed in the GitHub UI"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idname).
+ * That a job with no `name` reports under its id is not written there; it is
+ * what is seen: the ruleset of main requires go, typescript and device-core,
+ * the ids of these jobs, none with a name (read 2026-11-21). android, the job
+ * added after that, goes into the ruleset with the merge queue (#180). A job
+ * renamed or given a name reports a check the ruleset does not wait for, and
+ * the one it waits for never comes.
+ */
+export const REQUIRED_CHECKS: readonly string[] = ["go", "typescript", "device-core", "android"];
+
+/**
+ * How checks.yml is triggered: on every pull request, and on every merge
+ * group of the merge queue (#180), with merge_group's one activity type
+ * named ("specifying the activity type will keep your workflow specific if
+ * more activity types are added in the future",
+ * https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
+ */
+export const CHECKS_ON: Yaml = { pull_request: null, merge_group: { types: ["checks_requested"] } };
+
+/**
+ * checks.yml's concurrency group: a pull request's number, or where the event
+ * has none (merge_group) github.ref, the merge group's own branch, so that
+ * the merge groups' runs do not cancel each other
+ * (.github/workflows/checks.yml, the comment at the top).
+ */
+export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || github.ref }}";
+
+/**
  * The three workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
  * exactly, its concurrency group, and its runner when that is not
@@ -401,12 +436,30 @@ export const SECRET_LINES: readonly string[] = [
  * names must be unique across workflows to avoid canceling in-progress jobs
  * or runs from other workflows"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
+ *
+ * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
+ * they are the checks main requires. checks-browser.yml and checks-ios.yml
+ * do not run in the merge queue (#180).
  */
-const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string; readonly runsOn?: string; readonly envRequired?: true }>> = {
+const PULL_REQUEST_RULES: Readonly<
+  Record<
+    string,
+    {
+      readonly on: Yaml;
+      readonly env: YamlMap;
+      readonly jobEnv?: YamlMap;
+      readonly group: string;
+      readonly runsOn?: string;
+      readonly envRequired?: true;
+      readonly requiredChecks?: readonly string[];
+    }
+  >
+> = {
   "checks.yml": {
-    on: { pull_request: null },
+    on: CHECKS_ON,
     env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
-    group: "checks-${{ github.event.pull_request.number }}",
+    group: CHECKS_GROUP,
+    requiredChecks: REQUIRED_CHECKS,
   },
   "checks-browser.yml": {
     on: { pull_request: { paths: [...BROWSER_PATHS] } },
@@ -489,21 +542,26 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     // permissions in pull requests from forked repositories" hold for pull_request, while "The
     // workflow started by the workflow_run event is able to access secrets and write tokens"
     // (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+    // merge_group only in checks.yml: the documentation does not say that limit holds for a merge
+    // group's run, so what keeps it safe is the rest of these rules (no secret, read only).
     // `paths` only where the rules say, as they say: a path left out is a check that does not run.
-    if (!same(doc.on, rules.on)) p(`not triggered by pull_request only, as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
+    if (!same(doc.on, rules.on)) p(`not triggered as written in test/workflows.ts: ${JSON.stringify(doc.on)}`);
     if ((doc.env !== undefined || rules.envRequired) && !same(doc.env, rules.env)) p("the env at the top is not the one in test/workflows.ts");
     if (!same(doc.concurrency, { group: rules.group, "cancel-in-progress": "true" })) p(`concurrency is not group ${rules.group}, cancelling the run before`);
     if (!isMap(doc.jobs) || Object.keys(doc.jobs).length === 0) {
       p("no jobs");
       continue;
     }
+    const required = rules.requiredChecks;
+    if (required !== undefined && !same(Object.keys(doc.jobs).sort(), [...required].sort())) p(`the jobs are not exactly the checks main requires, ${required.join(", ")}: ${Object.keys(doc.jobs).join(", ")}`);
     for (const [name, job] of Object.entries(doc.jobs)) {
       const j = (s: string): number => p(`job ${name}: ${s}`);
       if (!isMap(job)) {
         j("not a map");
         continue;
       }
-      const wrongJob = extra(job, ["name", "runs-on", "timeout-minutes", "env", "steps"]);
+      // A job's name is the name its check reports: none where main requires the checks by id.
+      const wrongJob = extra(job, [...(required === undefined ? ["name"] : []), "runs-on", "timeout-minutes", "env", "steps"]);
       if (wrongJob.length) j(`keys not allowed: ${wrongJob.join(", ")}`);
       const runsOn = rules.runsOn ?? "ubuntu-24.04";
       if (job["runs-on"] !== runsOn) j(`runs-on is not ${runsOn}`);

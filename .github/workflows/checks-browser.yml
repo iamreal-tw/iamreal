@@ -5,7 +5,8 @@
 # request. These take about 16 minutes on GitHub's runner, so they run only
 # when the pull request changes a file they use (#123).
 #
-# The same rules as checks.yml: triggered by pull_request only, never
+# The same rules as checks.yml, but not on merge_group: these do not run in
+# the merge queue (#180). Triggered by pull_request only, never
 # pull_request_target; read-only; no secret; nothing cached; ASCII only.
 # worker/test/workflows.test.ts checks this file against the rules in
 # worker/test/workflows.ts, and checks that `paths` holds every top-level
