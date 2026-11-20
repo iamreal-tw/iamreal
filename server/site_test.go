@@ -154,10 +154,10 @@ func TestHomePage(t *testing.T) {
 	}
 	// The preview, the <title> and the summary.
 	title, site, summary := previewLines(t, "home.md")
-	if got := firstMatch(titleTag, page); got != "島民｜iamreal.tw" {
+	if got := firstMatch(titleTag, page); got != "島民證明｜iamreal.tw" {
 		t.Errorf("<title> %q", got)
 	}
-	if !strings.Contains(copySection(t, "home.md", "連結被貼出去時的預覽"), "`島民｜iamreal.tw`") {
+	if !strings.Contains(copySection(t, "home.md", "連結被貼出去時的預覽"), "`島民證明｜iamreal.tw`") {
 		t.Error("home.md does not give the <title>")
 	}
 	if firstMatch(ogTitle, page) != title || firstMatch(ogSite, page) != site || firstMatch(ogDescription, page) != summary {
