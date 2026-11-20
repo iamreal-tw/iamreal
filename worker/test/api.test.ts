@@ -9,7 +9,7 @@ import { after, before, describe, test } from "node:test";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { BAD_PROOF, GOOD_PROOF, circuitOf, publishG3 } from "./records.ts";
+import { BAD_PROOF, GOOD_PROOF, circuitOf, mustSubmit, publishCrl, publishG3, sub } from "./records.ts";
 
 const repoText = (path: string): string => readFileSync(join(WORKER_DIR, "..", path), "utf8");
 
@@ -222,21 +222,29 @@ describe("POST /api/v1/card-state", () => {
     assert.deepEqual(await jsonOf(res), { error: "malformed" });
   });
 
-  test("a card with records: its own items, each slot's, and the empty slot for a platform its state does not have", async () => {
-    // As the rules leave a card after: threads first (alice) on 11-04; on 11-19 test-example first
-    // (a-b) and threads switch (bob); then, the same day, a list without threads (a withdrawal).
-    await worker.roster.writeCard({
-      scope_string: TEST_SCOPE,
-      scoped_id: CARD,
-      seq: 3,
-      last_card_proof: "2026-11-19",
-      proofs_on_last_date: 2,
-      platforms: {
-        "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" },
-        threads: { current: null, last_declared: "bob", switch_count: 1, correction_date: "2026-11-19" },
-      },
-    });
-    // A state written before test-example was a platform of the table.
+  test("a card with records: its own items and each slot's, as the records left them", async () => {
+    // Written by submitting: threads first (alice) on 11-04; on 11-19 test-example first (a-b) and
+    // threads switch (bob); then, the same day, a list without threads (a withdrawal). The proofs
+    // are placeholders, so the stand-in verifier (test/records.ts).
+    await worker.setVerifier("stand-in");
+    await worker.setClock(new Date("2026-11-04T12:00:00+08:00"));
+    const root = await publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: new Date("2026-11-03T21:00:00Z"), serials: [11, 12] });
+    await mustSubmit(worker, await sub(worker, CARD, root, "threads:alice"), "threads first");
+    await worker.setClock(new Date("2026-11-19T12:00:00+08:00"));
+    await publishCrl(worker, { issuer: "G3", number: 2, thisUpdate: new Date("2026-11-18T21:00:00Z"), serials: [11, 12] });
+    await mustSubmit(worker, await sub(worker, CARD, root, "test-example:a-b", "threads:bob"), "test-example first, threads switch");
+    await mustSubmit(worker, await sub(worker, CARD, root, "test-example:a-b"), "test-example refresh, threads withdraw");
+
+    assert.equal(
+      await (await askFor(CARD)).text(),
+      '{"last_card_proof":"2026-11-19","proofs_on_last_date":2,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":null,"last_declared":"bob","switch_count":1,"correction_date":"2026-11-19"}},"count":3}',
+    );
+    // Another card is still one without a record.
+    assert.deepEqual(((await jsonOf(await askFor(THIRD_CARD))) as { last_card_proof: unknown }).last_card_proof, null);
+  });
+
+  test("a stored state without a slot for a platform of the table, as one written before the platform was added: the empty slot for it", async () => {
+    // No record leaves such a row, since the rules keep a slot for every platform of the table: it is written as it is.
     await worker.roster.writeCard({
       scope_string: TEST_SCOPE,
       scoped_id: OTHER_CARD,
@@ -245,36 +253,23 @@ describe("POST /api/v1/card-state", () => {
       proofs_on_last_date: 3,
       platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
     });
-
-    assert.equal(
-      await (await askFor(CARD)).text(),
-      '{"last_card_proof":"2026-11-19","proofs_on_last_date":2,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":null,"last_declared":"bob","switch_count":1,"correction_date":"2026-11-19"}},"count":0}',
-    );
     assert.deepEqual(await jsonOf(await askFor(OTHER_CARD)), {
       last_card_proof: "2026-03-02",
       proofs_on_last_date: 3,
       platforms: { "test-example": NEVER_USED, threads: { current: "alice", last_declared: "alice", switch_count: 5, correction_date: "2026-03-02" } },
-      count: 0,
+      count: 3,
     });
-    // Another card is still one without a record.
-    assert.deepEqual(((await jsonOf(await askFor(THIRD_CARD))) as { last_card_proof: unknown }).last_card_proof, null);
   });
 
-  test("a later state of a card replaces the earlier one, and is still there after the object starts again", async () => {
-    await worker.roster.writeCard({
-      scope_string: TEST_SCOPE,
-      scoped_id: CARD,
-      seq: 5,
-      last_card_proof: "2026-11-20",
-      proofs_on_last_date: 1,
-      platforms: {
-        "test-example": { current: "a-b", last_declared: "a-b", switch_count: 0, correction_date: "2026-11-19" },
-        threads: { current: "carol", last_declared: "carol", switch_count: 2, correction_date: "2026-11-20" },
-      },
-    });
+  test("a later record of a card replaces its state, which is still there after the object starts again", async () => {
+    await worker.setClock(NOON);
+    const root = await publishCrl(worker, { issuer: "G3", number: 3, thisUpdate: new Date("2026-11-19T21:00:00Z"), serials: [11, 12] });
+    await mustSubmit(worker, await sub(worker, CARD, root, "test-example:a-b", "threads:carol"), "test-example refresh, threads switch");
     const before = await (await askFor(CARD)).text();
-    assert.ok(before.startsWith('{"last_card_proof":"2026-11-20","proofs_on_last_date":1,'), before);
-    assert.ok(before.includes('"threads":{"current":"carol","last_declared":"carol","switch_count":2,"correction_date":"2026-11-20"}'), before);
+    assert.equal(
+      before,
+      '{"last_card_proof":"2026-11-20","proofs_on_last_date":1,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":"carol","last_declared":"carol","switch_count":2,"correction_date":"2026-11-20"}},"count":4}',
+    );
 
     await worker.roster.restart();
 

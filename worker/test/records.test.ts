@@ -562,3 +562,30 @@ describe("the order of the codes when several apply", () => {
     await wantError(worker, used, 400, "challenge_unknown");
   });
 });
+
+describe("which verifier `records` asks in the test build", () => {
+  let own: TestWorker;
+  before(async () => {
+    own = await startWorker();
+  });
+  after(() => own.close());
+
+  test("the deployed one, unless a test asks for the stand-in: placeholder bytes the stand-in accepts are proof", async () => {
+    await freshRoster(own);
+    const root = await publishG3(own);
+    await wantError(own, await sub(own, newCard(), root, "threads:alice"), 400, "proof");
+    assert.equal((await checkRoster(own)).length, 0);
+  });
+
+  test("the deployed one again once the whole Worker has started again, whatever a test chose before", async () => {
+    await freshRoster(own);
+    const root = await publishG3(own);
+    await own.setVerifier("stand-in");
+    await mustSubmit(own, await sub(own, newCard(), root, "threads:alice"), "threads first");
+    await own.restart();
+    // The clock and the settings went with the restart: the same again, on a new roster.
+    await freshRoster(own);
+    await wantError(own, await sub(own, newCard(), await publishG3(own), "threads:alice"), 400, "proof");
+    assert.equal((await checkRoster(own)).length, 0);
+  });
+});

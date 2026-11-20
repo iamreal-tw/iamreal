@@ -181,9 +181,12 @@ pnpm typecheck   # 型別檢查
 後台認哪些發證金鑰、去哪裡抓內政部的清冊、現在幾點，都寫在程式裡，不是設定值（ADR-0028）：設定寫錯，不會讓後台收下假卡片簽的東西。
 
 - [`src/target.ts`](src/target.ts) 是部署用的那一份：內政部的兩把發證金鑰（[`src/issuers.ts`](src/issuers.ts)，測試拿 `spec/vectors/issuers.json` 核對）、內政部的兩個清冊網址（和 [`crl/README.md`](../crl/README.md) 寫的相同）、真的時鐘。其他程式用 `#target` 這個名字引用它（`package.json` 的 `imports`）。
-- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和兩個入口：`POST /__test/verify` 讓測試直接呼叫驗證證明，`GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊。入口呼叫的就是 `src/in-worker.ts` 的 `proofVerifier` 和 `src/roster.ts` 的 `newestCrls`，沒有換掉任何一部分。這兩個入口原本說送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）之後拿掉，現在還留著：和原生的 `bb verify` 逐案比對的 1,128 案大多是任何一筆紀錄都帶不出來的公開輸入，走不了 `records`；清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
+- [`test-build/`](test-build) 是測試專用的建置換上的那一份：`target.ts` 是測試當場產生的發證金鑰、假的內政部的網址、可以調的時鐘；`index.ts` 是進入點，在 Worker 前面多一個調時鐘的開關 `PUT /__test/clock`，和三個常設的入口，各測一件 `records` 看不到或到不了的事：
+  - `POST /__test/verify` 讓測試直接呼叫驗證證明，呼叫的就是 `src/in-worker.ts` 的 `proofVerifier`，沒有換掉任何一部分。`records` 到不了的：和原生的 `bb verify` 逐案比對的 1,128 案，大多是任何一筆紀錄都帶不出來的公開輸入。
+  - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
+  - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（任何請求都寫不出來的狀態：壞掉的、平台加進表之前寫的）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件，對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件，對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台還沒有介面讀得到它們）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -195,7 +198,7 @@ pnpm typecheck   # 型別檢查
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
-**驗證證明的程式兩種建置相同。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，送出一筆時呼叫驗證的也是它的 `proofVerifier`。測試專用的建置可以把 `records` 用的驗證器換成只看第一個位元組的那一個（上面的 `PUT /__test/verifier`），預設不換；換上的那一個在 `test-build/index.ts`，不在這六個檔裡。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
+**驗證證明的程式兩種建置相同，測試專用的建置預設用的也是真的那一個；它另外能在測試明確要求時（`PUT /__test/verifier`）把 `records` 用的驗證器換成替身，替身進不了部署的那一包。** 測試專用的建置換掉的只有 `#target` 和進入點；驗證證明和 Poseidon2 的六個檔（`src/in-worker.ts` 和它引用的 `src/verify.ts`、`src/poseidon2.ts`、`src/engine.ts`、`src/barretenberg.ts`、`src/circuits.ts`）不引用 `#target`，也不引用 `src/` 裡這六個以外的檔（[`test/layout.test.ts`](test/layout.test.ts) 檢查）。兩包裡不是 JavaScript 的模組都恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個：部署的那一包由 `scripts/deploy-build-checks.ts` 的 `checkEngineFiles` 檢查，少一個、多一個、內容不同都不過。部署的那一包從清冊鏡像開始含這三個檔：鏡像引用 `src/in-worker.ts` 的 `poseidon2Hash`，驗證金鑰跟著同一個檔進來，送出一筆時呼叫驗證的也是它的 `proofVerifier`。測試專用的建置可以把 `records` 用的驗證器換成只看第一個位元組的那一個（上面的 `PUT /__test/verifier`），預設不換，重啟整個 Worker 之後也變回真的（[`test/records.test.ts`](test/records.test.ts) 有這兩個案例）；換上的那一個在 `test-build/index.ts`，不在這六個檔裡。部署的那一包沒有它：進入點是 `src/index.ts`，`scripts/deploy-build-checks.ts` 的 `checkNothingOfTheTestBuild` 不准那一包裡有 `/__test/`、`test-build` 這些字。找網址和金鑰長度的字串只掃 JavaScript，不掃這三個檔（它們的內容由 SHA-256 定死）。
 
 `target.ts` 還有兩樣時間，也是測試專用的建置會換的：等內政部一份清冊最久等多久（部署的是 5 分鐘，測試換成一兩秒，測逾時才不用等幾分鐘），和一輪鏡像補之前留下的檔最久補多久（部署的是 5 分鐘，測試可以設成 0 來測這條界線）。
 
@@ -482,13 +485,13 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 要一個題目 | `worker.issueChallenge()`；`worker.issueChallenge(十六進位的 16 個位元組)` 指定題目的亂數那一段 |
 | 換 `records` 用的驗證器 | `worker.setVerifier("stand-in")`、`("real")` |
 | 送出一筆、看卡片現況、發一份清冊、換一份空的名冊 | [`test/records.ts`](test/records.ts) 的 `sub`、`submit`、`mustSubmit`、`wantError`、`cardState`、`publishCrl`、`day`、`freshRoster` |
-| 寫卡片狀態表的一列 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。只用在任何請求都寫不出來的狀態 |
+| 寫卡片狀態表的一列 | `worker.roster.writeCard({…})`，寫法和 `card-state` 的回應相同。只用在名冊規則不會留下的狀態（壞掉的、少了某個平台的名額的）和那些壞掉的案例的起點；其他規則會留下的狀態用 `sub`、`mustSubmit` 真的送出 |
 | 後台還認得哪些題目 | `worker.roster.knownChallenges()`：問 `records`，回 `challenge_unknown` 的就是不認得。問一次算一次送出 |
 | 讓某一張表的寫入失敗 | `worker.roster.failWritesTo("cards")`，`(null)` 恢復 |
 | 把存著的規則版本改成另一個數字、改回來 | `worker.roster.setStoredRulesVersion("another")`、`("the build's")`，之後 `worker.roster.restart()` |
 | 對存著的狀態跑一筆標準答案的事件 | `worker.roster.applyRuleEvent(事件)` |
 | 讓後台自己出錯 | `worker.roster.breakTables()` |
-| 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外 |
+| 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
 | 讀存著的紀錄和名冊那一列、照規格重算 | `worker.roster.stored()` 讀出來；`test/records.ts` 的 `checkRoster(worker)` 重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |
 | 讓同時送出的請求真的交錯 | `worker.roster.setHashDelay(毫秒)`：算紀錄雜湊之前先等；`worker.roster.hashes()` 是算過幾次 |
 | 驗證花了時間的證明 | `test/records.ts` 的 `SLOW_PROOF`（替身驗證器）：通過，但時鐘往後 1 毫秒 |

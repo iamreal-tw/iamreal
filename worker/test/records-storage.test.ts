@@ -15,7 +15,7 @@ import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
 import type { CardState } from "iamreal-protocol/roster-rules.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
-import { type Answer, type Submission, TEST_SCOPE, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
+import { type Answer, type Submission, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -199,7 +199,7 @@ describe("a failure after the roster rules accepted the record", () => {
     assert.equal((await cardState(worker, card)).last_card_proof, null);
 
     // With the row as the rules left it, the same submission is written: its challenge was not marked.
-    await worker.roster.writeCard({ scope_string: TEST_SCOPE, scoped_id: broken, seq: 1, last_card_proof: "2026-11-20", proofs_on_last_date: 1, platforms: { threads: { current: "alice", last_declared: "alice", switch_count: 0, correction_date: "2026-11-20" } } });
+    await worker.roster.mendCard(broken);
     const answer = await submit(worker, s);
     assert.equal(answer.status, 201, JSON.stringify(answer.body));
     assert.deepEqual([answer.body.seq, answer.body.kinds], [2, [{ platform: "threads", kind: "first", username: "alice", account_cards: 2 }]]);
