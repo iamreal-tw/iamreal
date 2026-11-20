@@ -1,27 +1,23 @@
-// The two builds of the Worker, both made by wrangler as a dry run, which
-// uploads nothing and needs no account:
+// The two builds of the Worker, both made by `bundleWorker`
+// (scripts/deploy.ts) as a wrangler dry run, which uploads nothing and
+// needs no account:
 //
-// - "deploy": what `pnpm run deploy:test` uploads. The arguments and the
-//   environment are that command's own (scripts/deploy.ts), with
-//   `--dry-run --outdir` added and no token.
+// - "deploy": the build every deploy uploads, made the same way.
 // - "test": the test build. The entry point is test-build/index.ts and
 //   `#target` (package.json, "imports") is test-build/target.ts in place of
 //   src/target.ts; the fake MOICA's address, the wait for it and the test's
 //   issuer keys come in as `--define`.
 //
 // Both start, as deploying does, by putting the proof verifier's files into
-// `generated/` after checking their SHA-256 (scripts/engine-files.ts).
+// `generated/` after checking their SHA-256 (scripts/engine-files.ts):
+// `bundleWorker` does that before every build.
 //
 // test/bundle.test.ts checks that the deploy build holds nothing of the
 // test build.
-import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { DEPLOY_ARGS, wranglerEnv } from "../scripts/deploy.ts";
-import { prepareEngineFiles } from "../scripts/engine-files.ts";
+import { WORKER_DIR, bundleWorker } from "../scripts/deploy.ts";
 import type { IssuerKey } from "../src/issuers.ts";
 
-export const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+export { WORKER_DIR };
 
 export interface TestBuildValues {
   /** The fake MOICA's origin. */
@@ -37,11 +33,10 @@ export interface TestBuildValues {
 export function buildWorker(kind: "deploy", outDir: string): string;
 export function buildWorker(kind: "test", outDir: string, values: TestBuildValues): string;
 export function buildWorker(kind: "deploy" | "test", outDir: string, values?: TestBuildValues): string {
-  prepareEngineFiles();
-  const args = [...DEPLOY_ARGS, "--dry-run", "--outdir", outDir];
-  if (kind === "test") {
-    args.splice(1, 0, "test-build/index.ts");
-    args.push(
+  if (kind === "deploy") return bundleWorker(outDir);
+  return bundleWorker(outDir, {
+    entry: "test-build/index.ts",
+    extraArgs: [
       "--alias",
       "#target:./test-build/target.ts",
       "--define",
@@ -52,9 +47,6 @@ export function buildWorker(kind: "deploy" | "test", outDir: string, values?: Te
       `__IAMREAL_TEST_CRL_CATCH_UP_MS__:${JSON.stringify(values!.crlCatchUpMs)}`,
       "--define",
       `__IAMREAL_TEST_ISSUERS__:${JSON.stringify(values!.issuers)}`,
-    );
-  }
-  const r = spawnSync(join(WORKER_DIR, "node_modules", ".bin", "wrangler"), args, { cwd: WORKER_DIR, encoding: "utf8", env: wranglerEnv(process.env) });
-  if (r.status !== 0) throw new Error(`wrangler ${args.join(" ")}:\n${r.stdout}\n${r.stderr}`);
-  return r.stdout;
+    ],
+  });
 }

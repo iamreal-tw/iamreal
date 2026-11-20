@@ -1,5 +1,6 @@
 // The requests to the server (docs/api/card-proof.md). Every path is on the
-// page's own origin. Each response is read strictly, and what the device then
+// page's own origin, except the CRL archive's, which is on the data domain
+// (dataOriginFetch). Each response is read strictly, and what the device then
 // does with each value is in the README's table. Nothing here reports a
 // failure of the device's own checks to the server (ADR-0016): there is no
 // request for that.
@@ -22,8 +23,9 @@
 //                    signature, so nothing secret waits on them.
 import type { Account } from "iamreal-protocol/declaration-code.ts";
 import { type Day, parseDay } from "iamreal-protocol/date.ts";
+import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/roster-rules.ts";
-import { type UsernameFormat, isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
+import { isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
 export const API_TIMEOUT_MS = 30_000;
@@ -46,6 +48,29 @@ export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; b
     referrerPolicy: "no-referrer",
     signal: init?.signal,
   });
+}
+
+/**
+ * The fetch of the data domain's files (the CRL archive, ADR-0027): `GET`
+ * of a path on `origin`, which the page's build fixes (src/target.ts); the
+ * empty origin is the page's own. No credentials, no cache, no redirects,
+ * like sameOriginFetch. The page's Content-Security-Policy allows this one
+ * origin besides its own (README.md).
+ */
+export function dataOriginFetch(origin: string, fetchFn: typeof fetch = fetch): Fetch {
+  return (path, init) => {
+    if (!path.startsWith("/") || path.startsWith("//")) throw new Error("not a path");
+    if ((init?.method ?? "GET") !== "GET" || init?.body !== undefined) throw new Error("the data domain is only read");
+    return fetchFn(origin + path, {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: init?.signal,
+    });
+  };
 }
 
 /**
@@ -132,14 +157,13 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
   return body.challenge;
 }
 
-/** A row of the platform table the device can read (docs/api/card-proof.md, `config`). */
-export interface PlatformRow {
-  /** The platform ID. */
-  readonly platform: string;
-  /** The display name, as the server sends it; the screen shows the ID beside it before the card signs. */
-  readonly displayName: string;
-  readonly format: UsernameFormat;
-}
+/**
+ * A row of the platform table the device can read (docs/api/card-proof.md,
+ * `config`): the row type of protocol/, which the roster rules take. The
+ * display name is as the server sends it; the screen shows the ID beside it
+ * before the card signs.
+ */
+export type { PlatformRow };
 
 export interface Config {
   /** `crl_max_age_days`; the caller takes the smaller of it and the built-in 7 (crl/revocation.ts). */
@@ -247,7 +271,7 @@ export async function requestCardState(fetchFn: Fetch, scopeString: string, scop
   // A count: an integer; possibleCard then bounds it.
   if (typeof b.proofs_on_last_date !== "number" || !Number.isSafeInteger(b.proofs_on_last_date)) bad();
   const proofsOnLastDate = b.proofs_on_last_date as number;
-  if (!possibleCard(lastCardProof, proofsOnLastDate, today)) bad();
+  if (!possibleCard({ lastCardProof, proofsOnLastDate }, today)) bad();
   if (!isObject(b.platforms)) bad();
   const entries = b.platforms as Record<string, unknown>;
 

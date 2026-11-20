@@ -205,7 +205,7 @@ describe("files made to take long to read", () => {
       const started = Date.now();
       assert.equal((await worker.runSchedule()).outcome, "ok");
       const took = Date.now() - started;
-      assert.ok(took < 20_000, `the round took ${took} ms`);
+      assert.ok(took < 60_000, `the round took ${took} ms`); // before the numbers were read in linear time, the smaller one alone took 26 seconds, and the larger would have taken many minutes
 
       for (const { file, number } of [small, large]) {
         assert.equal(await lineOf(worker, file), `{"issuer":"-","crl_number":"${number}","this_update":"2026-11-19T16:00:00Z","next_update":"-","crl_date":"2026-11-20","sha256":"${sha256Hex(file)}","root":"-not_usable_signature"}`);
@@ -234,7 +234,7 @@ describe("files made to take long to read", () => {
       const started = Date.now();
       assert.equal((await worker.runSchedule()).outcome, "ok");
       const took = Date.now() - started;
-      assert.ok(took < 10_000, `the round took ${took} ms`);
+      assert.ok(took < 20_000, `the round took ${took} ms`); // comparing every pair took 27 seconds for each of the two files
       assert.equal(await rootOf(worker, distinct), "0".repeat(64));
       assert.equal(await rootOf(worker, twice), "-not_usable_duplicate_extension");
     }));

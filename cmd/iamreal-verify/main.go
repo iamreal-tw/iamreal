@@ -1,7 +1,8 @@
 // Command iamreal-verify re-verifies a roster file, or a published roster
-// directory with its record hash lists and fingerprint file: whether the
-// roster as a whole is valid, the result of each record, and the state of
-// every card and account (spec/roster-rules.md). See README.md.
+// directory with its record hash lists and fingerprint file, by default the
+// one published at https://data.iamreal.tw/ with its CRL archive: whether
+// the roster as a whole is valid, the result of each record, and the state
+// of every card and account (spec/roster-rules.md). See README.md.
 package main
 
 import (
@@ -11,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/iamreal-tw/iamreal/crl"
 	"github.com/iamreal-tw/iamreal/roster"
@@ -31,6 +34,14 @@ const (
 var testOptions func(fs *flag.FlagSet) func(*deps) error
 
 func main() {
+	// An interrupted command removes what it downloaded too.
+	interrupted := make(chan os.Signal, 1)
+	signal.Notify(interrupted, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-interrupted
+		removeTempDirs()
+		os.Exit(exitError)
+	}()
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, deps{newVerifier, openArchive(crl.MOICAKeys)}))
 }
 
@@ -101,10 +112,11 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	timeout := fs.Duration("timeout", verifier.DefaultTimeout, "time one `bb verify` may take before the proof counts as rejected")
 	kind := fs.String("roster", "production", "whose accepted scopes apply: production or test")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+"; without it no root is recognized")
+	data := fs.String("data", defaultData, "`URL or directory` of the published files, without a roster file: the roster directory under roster/, the CRL archive under crl/")
+	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+", for a roster file or directory; without it no root is recognized")
 	trustIndex := fs.Bool("crl-trust-index", false, "read only the archive's index, without checking it against the CRL files")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] <roster file | roster directory | ->")
+		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] [roster file | roster directory | -]")
 		fs.PrintDefaults()
 	}
 	var applyTestOptions func(*deps) error
@@ -120,7 +132,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			return exitError
 		}
 	}
-	if fs.NArg() != 1 || *bb == "" || *crs == "" {
+	if fs.NArg() > 1 || *bb == "" || *crs == "" {
 		fs.Usage()
 		return exitError
 	}
@@ -134,28 +146,77 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: -roster %q: want production or test\n", *kind)
 		return exitError
 	}
-	input := fs.Arg(0)
-	isDir := false
-	if input != "-" {
-		if info, err := os.Stat(input); err == nil && info.IsDir() {
-			isDir = true
+	given := map[string]bool{} // the flags given on the command line
+	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+	// What to read: a roster file or directory with -crl-archive, or else
+	// the published files at -data.
+	var input string
+	var dirSrc source // the roster directory, if the roster is one
+	var crlSrc source // the CRL archive at -data, if read from there
+	without := everyFileWithoutCount
+	if fs.NArg() == 1 {
+		if given["data"] {
+			fmt.Fprintln(stderr, "iamreal-verify: -data reads the roster from the published files: give it or a roster file, not both")
+			return exitError
 		}
-	}
-	var data []byte
-	var dirBroken *roster.Broken
-	var err error
-	if isDir {
-		data, dirBroken, err = readDirectory(input)
+		input = fs.Arg(0)
+		if input != "-" {
+			if info, err := os.Stat(input); err == nil && info.IsDir() {
+				dirSrc = dirSource(input)
+			}
+		}
 	} else {
-		data, err = readInput(input)
+		if *archiveDir != "" {
+			fmt.Fprintln(stderr, "iamreal-verify: -crl-archive goes with a roster file; with -data the archive is its crl/")
+			return exitError
+		}
+		src, err := openSource(*data)
+		if err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: -data: %v\n", err)
+			return exitError
+		}
+		dirSrc, crlSrc, without = src.sub("roster"), src.sub("crl"), noneWithoutCount
+		fmt.Fprintf(stderr, "iamreal-verify: reading the published files at %s\n", src)
+	}
+	if *trustIndex && *archiveDir == "" && crlSrc == nil {
+		fmt.Fprintln(stderr, "iamreal-verify: -crl-trust-index needs -crl-archive")
+		return exitError
+	}
+	var rosterFile []byte
+	var pub *publishedRoster
+	var err error
+	if dirSrc != nil {
+		if pub, err = readPublished(dirSrc, without); err == nil {
+			rosterFile = pub.data
+			switch {
+			case pub.published != nil:
+				fmt.Fprintf(stderr, "iamreal-verify: %s: %d record(s) published; later records are not checked\n", fingerprintsFileName, *pub.published)
+			case without == noneWithoutCount:
+				fmt.Fprintf(stderr, "iamreal-verify: %s does not say how many records are published: none is checked\n", fingerprintsFileName)
+			default:
+				fmt.Fprintf(stderr, "iamreal-verify: %s does not say how many records are published: checking every roster file there is\n", fingerprintsFileName)
+			}
+		}
+	} else {
+		rosterFile, err = readInput(input)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if *trustIndex && *archiveDir == "" {
-		fmt.Fprintln(stderr, "iamreal-verify: -crl-trust-index needs -crl-archive")
-		return exitError
+	archive := *archiveDir // the CRL archive's directory, given or made from -data
+	var archiveProblems []string
+	if crlSrc != nil {
+		dir, problems, cleanup, err := crlSrc.crlArchive(*trustIndex, stderr)
+		if err != nil {
+			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
+			return exitError
+		}
+		defer cleanup()
+		archive, archiveProblems = dir, problems
+		for _, p := range problems {
+			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %s\n", p)
+		}
 	}
 	v, err := d.verifier(verifier.Config{BB: *bb, CRSDir: *crs, Timeout: *timeout})
 	if err != nil {
@@ -165,16 +226,16 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	var crls roster.CRLArchive = noArchive{}
 	var diffs []crl.IndexMismatch
 	switch {
-	case *archiveDir == "":
+	case archive == "":
 		fmt.Fprintln(stderr, "iamreal-verify: no CRL archive (-crl-archive): no root is recognized, so check 3 (root) fails for every record that verifies")
 	case *trustIndex:
 		fmt.Fprintln(stderr, "iamreal-verify: trusting the CRL archive's index without checking it against the CRLs")
 	default:
 		fmt.Fprintln(stderr, "iamreal-verify: rebuilding the CRL archive's index from its CRLs")
 	}
-	if *archiveDir != "" {
+	if archive != "" {
 		progress := func(name string) { fmt.Fprintf(stderr, "iamreal-verify: CRL %s\n", name) }
-		if crls, diffs, err = d.archive(*archiveDir, *trustIndex, progress); err != nil {
+		if crls, diffs, err = d.archive(archive, *trustIndex, progress); err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %v\n", err)
 			return exitError
 		}
@@ -188,9 +249,9 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 	}
 	var rep *roster.Report
-	if dirBroken != nil {
-		rep = &roster.Report{Broken: dirBroken}
-	} else if rep, err = roster.Check(data, r, v, crls); err != nil {
+	if pub != nil && pub.broken != nil {
+		rep = &roster.Report{Broken: pub.broken}
+	} else if rep, err = roster.Check(rosterFile, r, v, crls); err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
@@ -198,18 +259,14 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	// directory: each is checked against the records; every problem is
 	// reported.
 	var dirProblems []string
-	if isDir && rep.Broken == nil {
-		records, _, _ := roster.ReadFile(data, r) // valid: Check read it
-		listProblems, lists, err := checkHashLists(input, records)
+	if pub != nil && rep.Broken == nil {
+		records, _, _ := roster.ReadFile(rosterFile, r) // valid: Check read it
+		listProblems, lists, err := checkHashLists(dirSrc, pub, records)
 		if err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 			return exitError
 		}
-		fpProblems, fpLines, err := checkFingerprints(input, records)
-		if err != nil {
-			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
-			return exitError
-		}
+		fpProblems := checkFingerprints(pub, records)
 		dirProblems = append(listProblems, fpProblems...)
 		for _, p := range dirProblems {
 			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
@@ -218,7 +275,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the roster's\n", roster.HashListDir, lists)
 		}
 		if len(fpProblems) == 0 {
-			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, fpLines)
+			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, len(splitLines(pub.fingerprints.data)))
 		}
 	}
 	if *asJSON {
@@ -230,7 +287,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	if rep.Broken != nil || len(diffs) > 0 || len(dirProblems) > 0 {
+	if rep.Broken != nil || len(diffs) > 0 || len(archiveProblems) > 0 || len(dirProblems) > 0 {
 		return exitInvalid
 	}
 	for _, res := range rep.State.Records {

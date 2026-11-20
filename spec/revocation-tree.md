@@ -242,6 +242,10 @@ Subdirectories are not part of the archive. The mirror stores only files it
 has not seen (by SHA-256), so no two lines are the same. Two different files
 with the same CRL number get two lines.
 
+The mirror names each CRL file by its SHA-256 (64 lowercase hex digits)
+followed by `.crl`; the index does not depend on file names. Where the
+archive is published is not part of this specification (ADR-0027).
+
 **Re-verifying with the index.** The index is a convenience: a re-verifier
 can rebuild it from the files, and the rebuilt index is the one that counts.
 A re-verifier that rebuilds it and finds a difference reports every
@@ -251,12 +255,6 @@ the rebuilt index does not need them. One that trusts the index without
 rebuilding it checks every line's form, and that `root` is below `p`; there
 a missing or malformed index is an error, since nothing else can stand in
 for it.
-
-## Open items
-
-- Where the archive is published. In the mirror, each CRL file is named by
-  its SHA-256 (64 lowercase hex digits) followed by `.crl`; the index does not
-  depend on file names.
 
 ## Test vectors
 

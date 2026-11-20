@@ -27,6 +27,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 - 名冊規則有兩份實作：Go 的 `roster/`（重驗的指令用）和 TypeScript 的 `protocol/`（後台和裝置共用）。後台、裝置和指令呼叫它，自己不判斷一筆紀錄有效或無效
 - 改名冊規則時，`spec/roster-rules.md`、`spec/vectors/`、Go、TypeScript 在同一個 PR 改好，名冊規則的版本號加一號（ADR-0030）
+- 改到名冊規則的函式（`protocol/` 的 `applyRecord`、`applyList`，Go 的 `roster/rules.go`）而版本號沒有加：PR 的說明寫明存著的卡片狀態為什麼不受影響。什麼樣的修改要加一號，寫在 `spec/roster-rules.md`「The version number」
 - 改名冊規則的 PR 附上新舊兩版在最新正式名冊上逐筆比較的結果：全部相同才往回套用，否則寫明生效日（ADR-0031）
 - 兩種以上語言都實作的算法，測試讀 `spec/vectors/` 裡同一份標準答案
 
@@ -57,6 +58,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - wrangler 的設定檔，特別是 `build.command`：部署時會執行它（[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)）
 - `package.json` 的 `scripts`，特別是 `preinstall`、`install`、`postinstall`、`prepare`：安裝套件時就會執行
 - 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
+- 安裝套件和 wrangler 啟動時會讀的檔：`.npmrc`、`.pnpmfile.cjs`（或 `.mjs`、`.js`）、`pnpm-workspace.yaml`、`worker/` 底下的 `.env*`
 - 部署的工作會呼叫的任何腳本
 
 審外人的 PR 時，`/code-review` 照這份清單列出動到哪幾項、每一項改了什麼；動到任何一項，維護者自己看過才合併。
@@ -81,5 +83,5 @@ PR 的說明照 `/pr` 的格式，「Evidence」列出下面每一項的結果�
 - `go test -count=1 -tags iamrealtest ./...`（要設 `IAMREAL_BB` 指到 `bb`）
 - 動到 `protocol/` 時：在 `protocol/` 跑 `pnpm typecheck`、`pnpm test`，再跑下面 `web/` 和 `worker/` 的那幾項（兩邊都引用它）
 - 動到 `web/` 時：在 `web/` 跑 `pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
-- 動到 `worker/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`
+- 動到 `worker/` 或 `.github/workflows/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`（工作流程的檢查在 `worker/test/workflows.test.ts`）
 - 動到畫面時：桌機和手機寬度的截圖

@@ -275,11 +275,13 @@ record that is `empty` or `switch_limit` is never counted towards the 3 of
 its card, and never reported as `daily_limit`.
 
 A list that cannot be read in one way is not an invalid record: a platform
-outside the table, a platform twice, accounts out of order make the line
-malformed and the whole file broken ([`record.md`](record.md)). The rules
-only ever see lists with at most one entry per platform. An implementation
-of the rules that is handed a list naming a platform outside the table
-stops with an error; it does not give the record a reason code.
+outside the table, a platform twice, accounts out of order, a `username`
+outside the format of its platform make the line malformed and the whole
+file broken ([`record.md`](record.md), "The account list"). The rules only
+ever see lists with at most one entry per platform, each `username` in the
+format of its platform. An implementation of the rules that is handed a
+list with any of these four stops with an error before check 1; it does not
+give the record a reason code.
 
 ## How far dates are trusted
 
@@ -432,11 +434,73 @@ these rules.
 These rules do not have a table of versions yet (which version applies from
 which date). It is added the first time an effective date is needed, and
 adding it changes the result of no record. A version is numbered by the
-version number of these rules (ADR-0025, ADR-0030).
+version number of these rules ("The version number").
 
 The tables of [`scope.md`](scope.md) that these rules read only widen and
 grow, so that every record already written stays well formed ("Changing
 the tables").
+
+### The version number
+
+These rules have a version number, a positive integer.
+
+**These rules are version 1.**
+
+Each implementation of these rules has the number as a constant
+(`RulesVersion` in Go's `roster/`, `RULES_VERSION` in TypeScript's
+`protocol/`), and the test vectors carry it (`rules_version`). The tests of
+both implementations check their constant against the sentence above and
+against the vectors.
+
+What the number is for: a state of a card that is stored, not recomputed,
+was computed by one version of these rules. The server stores with its card
+states the number they were computed by; when that is not the number of the
+code running, it stops accepting card proofs until the states are rebuilt
+from the records. A new number also starts a re-verification of the roster
+from its first record (ADR-0025).
+
+**The number goes up by one with every change to these rules**: a change
+that can give any record another result (valid or invalid, its kinds, its
+reason code), or that changes which items the state of a card has or what
+an item means. That is every change to "Per record", "State" and "Event
+rules", and to the numbers in them: the 3 records a date, the 5 switches,
+the 4 days of check 4, the bounds of check 3
+([`revocation-tree.md`](revocation-tree.md)). Whether the change applies to
+every record or from an effective date makes no difference to the number.
+The specification, the vectors and both implementations change in the same
+pull request (ADR-0030).
+
+This is on purpose also for a change that leaves every stored state as it
+was, such as another number for a limit: the number goes up, and the server
+stops accepting card proofs until its states are rebuilt. Nobody then has
+to judge whether a change makes the stored states wrong, where a wrong
+judgement means records accepted on a wrong state that cannot be taken out
+of the roster; and only a new number starts the re-verification from the
+first record (ADR-0025, ADR-0031).
+
+**It also goes up when an implementation is corrected**: when one of them
+gave a record a result, or a card a state, that these rules do not give,
+and states computed by it may be stored. The text of these rules does not
+change then; the number does, because the stored states cannot be trusted
+(ADR-0025). For now only the server stores states, so this is the case of
+an error in the server. Correcting an error in Go's `roster/` does not
+change the number: nothing stored was computed by it, and the new version
+of the re-verification command starts the re-verification from the first
+record (ADR-0025).
+
+The number stays when nothing a record or a stored state could show has
+changed:
+
+- the wording of this document, and test vectors added for behaviour that
+  did not change;
+- a platform added to the table of [`scope.md`](scope.md), or a `username`
+  format widened: the slot of a new platform starts empty, and a stored
+  state that has no slot for it reads as the empty slot;
+- the rules of the server that are not these rules ("Not part of these
+  rules");
+- an implementation rewritten without changing any result or any state.
+  The pull request says why the stored states are not affected
+  ([`CONTRIBUTING.md`](../CONTRIBUTING.md)).
 
 ### When proofs can no longer be trusted
 
@@ -463,6 +527,8 @@ circuit, or all the records, may then be voided:
 [`vectors/roster-rules.json`](vectors/roster-rules.json): cases, each a
 sequence of events with the outcome of each and the final state.
 
+- `rules_version` is the version number of these rules the cases were
+  written for ("The version number").
 - `roster` says which roster the case is: `production` or `test`. It
   decides the platform table the event rules go through
   ([`scope.md`](scope.md)).
