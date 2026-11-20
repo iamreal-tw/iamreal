@@ -12,7 +12,7 @@
 | 名冊的 Durable Object：題目表、紀錄、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
-| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過 | 在 Cloudflare 上公布過的紀錄：這一版還沒部署。儲存桶的生命週期規則（卡片狀態檔留 7 天）要營運者在儀表板設（同一節「部署後要營運者做的」） |
+| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過 | 在 Cloudflare 上公布過的紀錄：這一版還沒部署 |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | 其餘的訪客頁面：查詢頁、名冊頁、常見問題、怎麼驗證、掛上去（[#72](https://github.com/iamreal-tw/iamreal/issues/72)）。首頁上連到它們的連結現在是 `404` |
 | 首頁 `/`、島民證明 `/p/<短編號>`、過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時把 `web/` 的建置放進 Static Assets：測試網站的建置模式在 [#69](https://github.com/iamreal-tw/iamreal/issues/69)，在那之前部署出去的 `/proof` 是 `404` |
 | 測試專用的建置和測試的工具 | |
@@ -324,7 +324,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 **部署後要營運者做的**
 
-- 儲存桶的生命週期規則：刪掉 `roster/card-state/` 底下超過 7 天的物件（ADR-0027「留多久」）。這是儲存桶的設定，程式不刪卡片狀態檔；沒設的話每天多一個檔，一直留著。
+- 儲存桶的生命週期規則：刪掉 `roster/card-state/` 底下超過 7 天的物件（ADR-0027「留多久」）。這是儲存桶的設定，程式不刪卡片狀態檔；沒設的話每天多一個檔，一直留著。測試的儲存桶 `iamreal-test-data` 已經有這條規則：名稱 `card-state-7-days`，前綴 `roster/card-state/`，物件建立 7 天後刪除（2026-11-20 在儀表板確認，[#185](https://github.com/iamreal-tw/iamreal/issues/185)）。正式的儲存桶建立時同樣要設（[#111](https://github.com/iamreal-tw/iamreal/issues/111)）。
 - 部署後第一個台灣午夜過後，看 `https://test-data.iamreal.tw/roster/fingerprints.jsonl` 有沒有那一天的一行、`roster/card-state/<那一天>.jsonl` 在不在、兩個的 `Cache-Control` 是不是 `public, max-age=60`；`wrangler tail` 有沒有 `roster_not_published`。然後用 `iamreal-verify -roster test -data https://test-data.iamreal.tw/` 重驗一次。
 - 測試名冊在這一版之前已經有紀錄：第一次公布會把它們全部算進第一行，卡片狀態檔是那時存著的每一張。
 
@@ -752,7 +752,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **它不只管排程。** 這是每一次呼叫的上限：每個 HTTP 請求一樣是 300,000 毫秒；名冊的 Durable Object 也是，它的每次呼叫和 alarm 用同一個設定（[Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)：「Durable Objects are Worker scripts, and have the same per invocation CPU limits as any Workers do」，2026-11-20 讀的）。所以一個請求能讓後台算多久，現在是程式擋，不是這個上限擋。
 - **現在可以接受的理由**：請求的內容最多讀 64 KiB（`src/api.ts` 的 `MAX_BODY_BYTES`），超過就拒絕；五個介面做的事和內容的大小無關或只和這 64 KiB 有關。送出一筆（[送出一筆](#送出一筆)）每次驗一筆證明，工作量是固定的，本機約 15 ms（[量到的](#量到的)），而且一個題目最多驗 5 次。Durable Object 裡沒有照請求內容放大的計算：寫入一筆和頁面的每個查詢各走索引；一個短編號對到的卡片通常只有一張，島民證明要讀的是那張卡片的全部紀錄，一張卡片一天最多 3 筆。頁面只收 `GET`，不讀請求的內容。之後加的介面要守住這一點：有哪個請求能讓後台算上幾秒，這個上限就不再是它的保護。
 
-之後加正式環境，是在 `env` 底下多一段；Worker 的程式不用改，但 Static Assets 的檔案要分開：兩種名冊的 `_headers` 不同，共用同一個 `site/` 過不了部署前的檢查（[Static Assets](#static-assets)「加正式環境時」），`test/environments.test.ts` 也要加對應的一段。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
+之後加正式環境，是在 `env` 底下多一段；Worker 的程式不用改，但 Static Assets 的檔案要分開：兩種名冊的 `_headers` 不同，共用同一個 `site/` 過不了部署前的檢查（[Static Assets](#static-assets)「加正式環境時」），`test/environments.test.ts` 也要加對應的一段。正式的儲存桶要有和測試的同樣的生命週期規則（[每天換日公布名冊](#每天換日公布名冊)「部署後要營運者做的」）。最上層沒有 `name`，也沒有 binding：指令沒帶 `--env` 時，wrangler 拿套件名稱 `iamreal-worker` 當 Worker 的名稱，不會是 `iamreal-test`。
 
 ## 排程做什麼
 
