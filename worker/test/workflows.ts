@@ -217,6 +217,14 @@ export const BB_AMD64_LINUX_SHA256 = "5bbb64800d431c6760a70d8723be4eaf37ed10e8fb
 export const BB_PATH = "${{ github.workspace }}/web/node_modules/@aztec-foundation/bb.js/build/amd64-linux/bb";
 export const CHECK_BB = `echo "${BB_AMD64_LINUX_SHA256}  $IAMREAL_BB" | sha256sum --check --strict`;
 
+/**
+ * The one job that does not check bb's SHA-256: device-core/ runs no bb. The
+ * Barretenberg it links is the static library device-core/fetch-barretenberg.sh
+ * downloads, whose SHA-256 that script checks against
+ * device-core/barretenberg.sha256 before unpacking it.
+ */
+export const DEVICE_CORE_JOB = "device-core";
+
 /** What each action may be given, exactly. */
 const WITH: Readonly<Record<string, YamlMap>> = {
   "actions/checkout": { "persist-credentials": "false" },
@@ -396,7 +404,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -410,7 +418,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
           }
         }
       }
-      if (!checksBb) j("does not check bb's SHA-256");
+      if (!checksBb && !(f === "checks.yml" && name === DEVICE_CORE_JOB)) j("does not check bb's SHA-256");
     }
   }
   return problems;

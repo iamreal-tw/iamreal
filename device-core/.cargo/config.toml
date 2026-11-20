@@ -1,0 +1,7 @@
+# barretenberg-rs downloads Barretenberg's static library by itself, without
+# checking it, when BB_LIB_DIR is not set. This default points at a place
+# that holds no library, so that a build without BB_LIB_DIR stops instead:
+# the library comes from fetch-barretenberg.sh, which checks its SHA-256
+# (README.md). A BB_LIB_DIR set in the environment replaces this one.
+[env]
+BB_LIB_DIR = { value = "vendor/barretenberg/set-BB_LIB_DIR-see-README", relative = true }

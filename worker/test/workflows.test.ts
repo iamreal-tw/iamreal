@@ -151,6 +151,8 @@ const CHANGES: Record<string, Change[]> = {
   "95 CHROME back in a job of checks.yml": [replace(C, GO_JOB, `${GO_JOB}    env:\n      CHROME: /usr/bin/google-chrome\n`)],
   "96 the WRANGLER values in checks-browser.yml": [replace(B, "env:\n  # bb", 'env:\n  WRANGLER_SEND_METRICS: "false"\n  # bb')],
   "97 a fourth workflow": [addFile("checks-other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
+  "98 a job of checks.yml other than device-core without the check of bb": [replace(C, "\n  device-core:\n", "\n  device-core-2:\n")],
+  "99 a step of the device-core job in another directory": [replace(C, "        working-directory: device-core\n        run: cargo fmt --check", "        working-directory: device-core/vendor\n        run: cargo fmt --check")],
   "98 a job of checks-browser.yml without the check of bb": [replace(B, '        run: echo "5bbb', '        run: echo "0bbb')],
 };
 
@@ -184,7 +186,7 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
   assert.deepEqual(doc.on, { pull_request: null });
-  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript"]);
+  assert.deepEqual(Object.keys(doc.jobs as object), ["go", "typescript", "device-core"]);
   const browserDoc = readYaml(realFiles()[B]!) as Record<string, Yaml>;
   // `paths`: a list of strings under pull_request, each as written (`**` is no special character in YAML here).
   const paths = (browserDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths as string[];

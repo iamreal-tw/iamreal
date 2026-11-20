@@ -1,0 +1,6 @@
+# The one Rust this directory is built with, on every machine and in the
+# checks of a pull request (.github/workflows/checks.yml reads this file).
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

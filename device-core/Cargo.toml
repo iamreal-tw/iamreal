@@ -1,0 +1,32 @@
+# device-core/: the core shared by the Android and iOS apps (ADR-0034).
+# Two packages: checks/ never touches Barretenberg; prover/ links it and
+# holds the C functions. README.md says what each is for.
+[workspace]
+resolver = "3"
+members = ["checks", "prover"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+publish = false
+
+# Exact versions, as CONTRIBUTING.md requires of every package; the versions
+# of what they depend on are in Cargo.lock.
+[workspace.dependencies]
+barretenberg-rs = { version = "=6.0.0", default-features = false, features = ["ffi"] }
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+# The C functions must stay in the static library: `strip = "symbols"` takes
+# them out with the rest (issue #88). The app's own link strips symbols.
+strip = "debuginfo"
+# The C functions catch a panic and return IDC_ERR_INTERNAL (prover/src/lib.rs).
+panic = "unwind"
+# An integer overflow stops the computation instead of wrapping.
+overflow-checks = true

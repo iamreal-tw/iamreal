@@ -30,7 +30,7 @@ declaration code, not in the scope string.
 `vectors/` holds one JSON file per document. `poseidon2.json` and
 `poseidon2-constants.json` belong to `scoped-id.md` and
 `revocation-tree.md`. Every implementation (Go,
-TypeScript, and later the mobile apps) runs its tests against these same
+TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
 tests.
 

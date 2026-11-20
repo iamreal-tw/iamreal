@@ -30,6 +30,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - 改到名冊規則的函式（`protocol/` 的 `applyRecord`、`applyList`，Go 的 `roster/rules.go`）而版本號沒有加：PR 的說明寫明存著的卡片狀態為什麼不受影響。什麼樣的修改要加一號，寫在 `spec/roster-rules.md`「The version number」
 - 改名冊規則的 PR 附上新舊兩版在最新正式名冊上逐筆比較的結果：全部相同才往回套用，否則寫明生效日（ADR-0031）
 - 兩種以上語言都實作的算法，測試讀 `spec/vectors/` 裡同一份標準答案
+- Go、TypeScript、Rust（`device-core/`，ADR-0034）的實作互不引用，只共用 `spec/`：不複製另一種語言的程式，也不從它產生。改 `spec/` 裡三種語言都有的算法時，規格、標準答案和三份實作在同一個 PR 改好
 
 ## 頁面
 
@@ -85,4 +86,5 @@ PR 的說明照 `/pr` 的格式，「Evidence」列出下面每一項的結果�
 - 動到 `protocol/` 時：在 `protocol/` 跑 `pnpm typecheck`、`pnpm test`，再跑下面 `web/` 和 `worker/` 的那幾項（兩邊都引用它）
 - 動到 `web/` 時：在 `web/` 跑 `pnpm typecheck`、`pnpm test`、`pnpm test:e2e`、`pnpm test:ui`
 - 動到 `worker/` 或 `.github/workflows/` 時：在 `worker/` 跑 `pnpm typecheck`、`pnpm test`（工作流程的檢查在 `worker/test/workflows.test.ts`）
+- 動到 `device-core/` 或 `spec/vectors/` 時：在 `device-core/` 跑 `cargo fmt --check`、`cargo clippy --locked --release --all-targets -- -D warnings`、`cargo test --locked --release`（要設 `BB_LIB_DIR`，見 `device-core/README.md`）
 - 動到畫面時：桌機和手機寬度的截圖
