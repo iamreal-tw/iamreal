@@ -30,11 +30,14 @@
 //   the API answers when the back end itself fails; drop the table of the
 //   newest CRLs; and run the roster rules on the object's stored state for
 //   an event the API would never write (an invalid record of a roster);
-//   and read the rows it keeps of its records and of the roster as a
-//   whole, which no endpoint shows yet.
+//   read the rows it keeps of its records and of the roster as a whole,
+//   which no endpoint shows yet; and wait before it hashes a record, so
+//   that requests sent at once do cross where the deployed object lets
+//   them (in the local workerd the hash alone does not let another in).
 import { bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
+import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
 import { writeCard } from "../src/card-table.ts";
@@ -88,6 +91,9 @@ export class Roster extends DeployedRoster {
   readonly #extraRuns: number[] = [];
   /** The random bytes of the next challenge, if the test chose them. */
   #nextRandom: Uint8Array | null = null;
+  /** How long the object waits before it hashes a record, in milliseconds, and how many records it has hashed. */
+  #hashDelayMs = 0;
+  #hashes = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, testEnv(env));
@@ -108,6 +114,23 @@ export class Roster extends DeployedRoster {
     const chosen = this.#nextRandom;
     this.#nextRandom = null;
     return chosen ?? super.challengeRandom();
+  }
+
+  protected override async hashOf(record: RosterRecord): Promise<string> {
+    this.#hashes++;
+    // A timer, unlike the hash, lets the requests that are waiting run.
+    if (this.#hashDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#hashDelayMs));
+    return super.hashOf(record);
+  }
+
+  /** From now on the object waits this long before it hashes a record. */
+  testSetHashDelay(ms: number): void {
+    this.#hashDelayMs = ms;
+  }
+
+  /** How many times the object has hashed a record since it started. */
+  testHashes(): number {
+    return this.#hashes;
   }
 
   /** The next challenge has these 16 bytes in place of random ones. */
@@ -259,6 +282,10 @@ export default {
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster.
+   * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
+   *   object waits that long before it hashes a record it is asked to
+   *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
+   *   how many times it has hashed one.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
    * - `GET /__test/newest-crls` answers what the roster's object knows of
@@ -339,6 +366,13 @@ export default {
     }
     if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "PUT /__test/roster/hash-delay") {
+      const ms = Number(await request.text());
+      if (!Number.isSafeInteger(ms) || ms < 0) return new Response(null, { status: 400 });
+      await testRosterOf(env).testSetHashDelay(ms);
+      return done();
+    }
+    if (route === "GET /__test/roster/hash-delay") return json({ hashes: await testRosterOf(env).testHashes() });
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });

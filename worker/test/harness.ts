@@ -266,6 +266,16 @@ export interface TestWorker {
      * is what checks them.
      */
     stored(): Promise<StoredRoster>;
+    /**
+     * From now on the object waits this many milliseconds before it hashes
+     * a record it is asked to write (test build,
+     * `PUT /__test/roster/hash-delay`): other requests run during the wait,
+     * which they do not during the hash itself in the local workerd. Kept
+     * in memory: gone when the object starts again.
+     */
+    setHashDelay(ms: number): Promise<void>;
+    /** How many times the object has hashed a record since it started: more than the submissions it was asked to write, if any was hashed again for another `seq`. */
+    hashes(): Promise<number>;
   };
   close(): Promise<void>;
 }
@@ -458,6 +468,15 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/stored");
         if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredRoster;
+      },
+      async setHashDelay(ms) {
+        const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });
+        if (res.status !== 204) throw new Error(`setting the wait before a hash: HTTP ${res.status}`);
+      },
+      async hashes() {
+        const res = await server.fetch("/__test/roster/hash-delay");
+        if (res.status !== 200) throw new Error(`reading the number of hashes: HTTP ${res.status}`);
+        return ((await res.json()) as { hashes: number }).hashes;
       },
       async breakTables() {
         const res = await server.fetch("/__test/roster/break", { method: "POST" });

@@ -51,6 +51,33 @@ describe("records submitted at once", () => {
     assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
   });
 
+  test("20 requests at the same moment, each giving way to the others while its record is hashed: still 20 records, `seq`s 1 to 20, a roster file that checks", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    const submissions: Submission[] = [];
+    for (let i = 0; i < 20; i++) submissions.push(await sub(worker, newCard(), root, "threads:alice"));
+    // In the local workerd, hashing a record does not let another request in, so the case above never
+    // has two requests holding the same count. Here every hash waits 5 ms first, which does let them in.
+    await worker.roster.setHashDelay(5);
+    const answers = await Promise.all(submissions.map((s) => submit(worker, s)));
+    for (const a of answers) assert.equal(a.status, 201, JSON.stringify(a.body));
+    assert.deepEqual(answers.map((a) => a.body.seq as number).sort((x, y) => x - y), Array.from({ length: 20 }, (_, i) => i + 1));
+    assert.deepEqual(answers.map((a) => [a.body.seq, a.body.kinds[0].account_cards]).sort((x, y) => x[0] - y[0]), Array.from({ length: 20 }, (_, i) => [i + 1, i + 1]));
+    const stored = await checkRoster(worker);
+    assert.equal(stored.length, 20);
+    for (const [i, s] of submissions.entries()) assert.equal(stored[answers[i]!.body.seq - 1]!.scopedId, s.scoped_id);
+    assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
+    // The requests did cross: some record was hashed for a `seq` another one took, and hashed again.
+    assert.ok((await worker.roster.hashes()) > 20);
+
+    // One challenge twice, crossing in the same way: both passed the first look at the challenge, and one is written.
+    const twice = await sub(worker, newCard(), root, "threads:alice");
+    const two = await Promise.all([submit(worker, twice), submit(worker, { ...twice, scoped_id: newCard() })]);
+    assert.deepEqual(two.map((a) => a.status).sort(), [201, 400], JSON.stringify(two.map((a) => a.body)));
+    assert.deepEqual(two.find((a) => a.status === 400)!.body, { error: "challenge_used" });
+    assert.equal((await checkRoster(worker)).length, 21);
+  });
+
   test("20 requests of one card at the same moment: 3 records of that date, and 17 times daily_limit", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);

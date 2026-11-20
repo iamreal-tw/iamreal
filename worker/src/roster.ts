@@ -316,10 +316,21 @@ export class Roster extends DurableObject<Env> {
     for (;;) {
       const { count, fingerprint } = this.#rosterRow();
       const record: RosterRecord = { ...fields, seq: count + 1 };
-      const hash = await recordHash(record);
+      const hash = await this.hashOf(record);
       const answer = this.#acceptAt(record, hash, await nextFingerprint(fingerprint, hash));
       if (answer !== "the count moved") return answer;
     }
+  }
+
+  /**
+   * The record hash of a record (protocol/, recordHash). A method of its
+   * own for the test build alone: test-build/index.ts overrides it to wait
+   * before the hash, so that other requests run in between, which is what
+   * the check of the count in `accept` is for. Nothing else overrides or
+   * calls it.
+   */
+  protected hashOf(record: RosterRecord): Promise<string> {
+    return recordHash(record);
   }
 
   #rosterRow(): { count: number; fingerprint: string } {
