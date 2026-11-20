@@ -91,8 +91,13 @@ export type BucketFault = { readonly key: string; readonly how: "put fails" | "p
  * What `GET /__test/roster/kept` answers: how many records the roster's
  * object keeps, and the first and the last `seq` among them (null without
  * one). For a roster that keeps more than `GET /__test/roster/stored` can
- * answer with: that one sends every line, some 20 KB each, and an answer
- * of more than 32 MiB does not come back from the object.
+ * answer with: that one sends every line, some 20 KB each. Cloudflare's
+ * documentation gives a limit for a call of an object's method: "The
+ * maximum serialized RPC limit is 32 MiB."
+ * (https://developers.cloudflare.com/workers/runtime-apis/rpc/,
+ * "Limitations"). It does not say whether that is of what is sent, of what
+ * is answered, or both; in the local workerd an answer of 1,500 stored
+ * records (30 MB) came back and one of 1,700 was a 500.
  */
 export interface KeptRecords {
   readonly count: number;

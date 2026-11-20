@@ -377,7 +377,8 @@ export class Roster extends DurableObject<Env> {
     } catch (e) {
       logFailure("views_not_filled", e);
       this.#fillAgainAt = now().getTime() + VIEWS_RETRY_MS;
-      // The alarm for the next try, once the constructor has returned (`timedWork` is a subclass's to override too).
+      // The alarm for the next try. A filling that failed before it waited for anything is still inside the
+      // constructor, and the alarm is set once that has returned, for the same reason as above (`timedWork`).
       await Promise.resolve();
       await this.#setAlarmWithoutFailing();
     }
@@ -385,15 +386,14 @@ export class Roster extends DurableObject<Env> {
 
   /**
    * Filling views that could not be filled, again: due a minute after a
-   * filling failed, and not at all otherwise. A move of full files that is
-   * going on ends first, so that the files and the records are not moved
-   * under the filling.
+   * filling failed, and not at all otherwise. No move of full files goes on
+   * meanwhile: both are pieces of the alarm's work, which runs one piece
+   * after the other.
    */
   #viewsBehind: TimedWork = {
     due: () => this.#fillAgainAt,
     run: async () => {
       this.#fillAgainAt = null;
-      await this.#moving?.catch(() => undefined);
       this.viewsFilling = this.#fillViews();
       await this.viewsFilling;
     },
@@ -825,9 +825,10 @@ export class Roster extends DurableObject<Env> {
    * now each time, and this is called for every challenge issued: with
    * work that is due and challenges coming more often than that, the alarm
    * would never ring. An alarm left sooner than the work needs rings with
-   * nothing due, and is then set for the right time. While the alarm's own
-   * handler runs there is no alarm to leave (`getAlarm` gives null), so
-   * the handler's own call always sets the next one.
+   * nothing due, and is then set for the right time. The alarm that rang is
+   * no longer set while its handler runs, so when the handler ends, having
+   * called this last, an alarm is set that is no later than the work needs:
+   * the one this call sets, or a sooner one set while the handler ran.
    *
    * The wait is measured on the object's clock and set on the runtime's;
    * the two differ only in the test build.

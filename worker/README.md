@@ -139,7 +139,7 @@ pnpm typecheck   # 型別檢查
 
 - 每一件工作回答兩件事：自己下一次什麼時候到期（沒事可做就說沒有）、到期時做什麼。它不知道別的工作。
 - 物件的 alarm 不晚於所有工作裡最早到期的那一個；都沒事可做就沒有 alarm。任何一件工作的到期時間可能變了（例如發了一個題目），就看一次要不要重設（`setAlarmForTimedWork`）。
-- **已經有一個不晚於要設的時間的 alarm 時，不重設。** 每次設都至少設在 1 秒後（免得一件一直到期的工作讓 alarm 空轉），而每發一個題目就會看一次：如果每次都重設，題目發得比一秒一個密的時候，alarm 會一直被往後推、永遠不響，到期的工作（搬檔、之後的換日）就一直不做。留下來的 alarm 可能比需要的早（例如到期時間後來往後了），那一次響了沒有工作到期，再設成對的時間，只是多醒一次。alarm 自己的處理函式執行時讀不到已設的 alarm（同一頁：「If `getAlarm` is called while an `alarm` is already running, it returns `null` unless `setAlarm` has also been called since the alarm handler started running」），所以處理函式最後那一次一定會設下一個。
+- **已經有一個不晚於要設的時間的 alarm 時，不重設。** 每次設都至少設在 1 秒後（免得一件一直到期的工作讓 alarm 空轉），而每發一個題目就會看一次：如果每次都重設，題目發得比一秒一個密的時候，alarm 會一直被往後推、永遠不響，到期的工作（搬檔、之後的換日）就一直不做。留下來的 alarm 可能比需要的早（例如到期時間後來往後了），那一次響了沒有工作到期，再設成對的時間，只是多醒一次。響過的那個 alarm 在它的處理函式執行時已經不算設著（同一頁：「If `getAlarm` is called while an `alarm` is already running, it returns `null` unless `setAlarm` has also been called since the alarm handler started running」），而處理函式最後一定會看一次要不要設，所以處理函式結束時，一定留著一個不晚於需要的 alarm：最後那一次設的，或處理函式執行途中設的、更早的一個（例如等 R2 的時候有人來拿題目）。alarm 自己響、之後沒有任何請求時下一個 alarm 有設好，測試看過（`test/api.test.ts`）。
 - alarm 響的時候，到期的工作各做一次，沒到期的不做，然後重設。
 
 現在有三件：
@@ -367,7 +367,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有名冊檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨名冊的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
-- **重建失敗會自己再試。** 失敗後一分鐘再做一次（`timedWork()` 的一件），物件每次啟動也做一次；成功的那一刻頁面和送出就恢復，不必重啟物件。讀 R2 的失敗有會自己好的（逾時、暫時的錯誤），所以要再試。資料或程式造成的失敗（R2 裡的檔不見或被改過、這一版讀不懂的一行、規則不接受的一筆）再試也不會好：物件醒著的時候**每分鐘寫一行 `views_not_filled`**，每次都把衍生表清空重做到失敗的地方，直到原因排除。有檔在 R2 時每一次重試會重讀前面的每一檔。
+- **重建失敗會自己再試。** 失敗後一分鐘再做一次（`timedWork()` 的一件），物件每次啟動也做一次；成功的那一刻頁面和送出就恢復，不必重啟物件。讀 R2 的失敗有會自己好的（逾時、暫時的錯誤），所以要再試。資料或程式造成的失敗（R2 裡的檔不見或被改過、這一版讀不懂的一行、規則不接受的一筆）再試也不會好：**每分鐘寫一行 `views_not_filled`**，直到原因排除。每一次重試做的事照上面兩種：紀錄都還在物件裡時，失敗的那個交易整個退回，衍生表維持原樣；有檔在 R2 時，先清空，重讀前面的每一檔、重寫它們的每一筆，停在失敗的那一檔。
 - **衍生表沒跟上時**（物件啟動時決定；重建做完的那一刻改成跟上）：衍生表反映到的筆數和名冊的筆數不同，而且重建失敗、從 R2 的重建還沒做完，或正在 `paused` 不能重建。這時候物件照樣啟動，但不用衍生表：
   - 首頁和島民證明回 `500`（純文字，`no-store`）。不拿沒跟上的衍生表出頁面：那會是「現在有 0 張」，或把一張存在的島民證明說成找不到，還被快取 60 秒。格式不對的短編號和「找不到這一頁」不問名冊，照常。
   - 送出一筆（`POST /api/v1/records`）回 `500` `internal`，和後台自己出錯時相同（`docs/api/card-proof.md`），什麼都不寫，題目不算用過、也不算送過一次。`paused` 時照舊是 `503` `paused`。
@@ -864,7 +864,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 把一張卡片存著的名額弄壞 | `worker.roster.breakCard(匿名編號)`：改成不是 JSON 的字，讀到那一列的都會丟例外；`worker.roster.mendCard(匿名編號)` 改回原樣 |
 | 讀存著的紀錄和名冊那一列、照規格重算整份名冊 | `worker.roster.stored()` 讀出物件裡還留著的；`test/records.ts` 的 `checkRoster(worker)` 連同 R2 裡寫滿的名冊檔和雜湊清單，重算每一行、紀錄雜湊、名冊指紋，回傳每一筆紀錄 |
 | 讓搬名冊檔的某一步出錯 | `worker.roster.setBucketFault({ key, how })`，`(null)` 恢復；`how` 是 `put fails`、`put sends other bytes`（送給儲存桶的位元組少一個，SHA-256 照原樣帶）、`put writes other bytes`（儲存桶存下的位元組少一個）、`put writes another Cache-Control`、`put writes another Content-Type`、`put loses its answer`、`get fails`。記在記憶體裡，物件重啟就沒有了 |
-| 物件裡還留著幾筆紀錄、從哪一筆到哪一筆 | `worker.roster.kept()`。`stored()` 把每一行都傳回來，一行約 20 KB，物件的回應超過 32 MiB（約 1,600 筆）就回不來；物件裡卡著兩檔以上時用這個 |
+| 物件裡還留著幾筆紀錄、從哪一筆到哪一筆 | `worker.roster.kept()`。`stored()` 把每一行都傳回來，一行約 20 KB，留著約 1,600 筆以上時拿不到。Cloudflare 的文件寫呼叫物件方法的上限是「The maximum serialized RPC limit is 32 MiB.」（[Workers RPC](https://developers.cloudflare.com/workers/runtime-apis/rpc/)「Limitations」，2026-11-20 讀的），沒有寫算的是送過去的、回傳的，還是兩者；回傳的超過就回 `500` 是在本機的 workerd 上看到的（1,500 筆、30 MB 回得來，1,700 筆是 `500`），Cloudflare 上沒有確認。物件裡卡著兩檔以上時用 `kept()` |
 | 等衍生表從 R2 重建完 | `worker.roster.viewsFilled()` |
 | 讓同時送出的請求真的交錯 | `worker.roster.setHashDelay(毫秒)`：算紀錄雜湊之前先等；`worker.roster.hashes()` 是算過幾次 |
 | 驗證花了時間的證明 | `test/records.ts` 的 `SLOW_PROOF`（替身驗證器）：通過，但時鐘往後 1 毫秒 |

@@ -317,7 +317,8 @@ export interface TestWorker {
      * How many records the object keeps, and the first and the last `seq`
      * among them (test build, `GET /__test/roster/kept`): for a roster
      * that keeps more than `stored()` can answer with, which is some 1,600
-     * records (an answer of more than 32 MiB does not come back).
+     * records (test-build/card-door.ts, `KeptRecords`, says what is known
+     * of that limit).
      */
     kept(): Promise<KeptRecords>;
     /**

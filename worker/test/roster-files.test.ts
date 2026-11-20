@@ -256,6 +256,9 @@ describe("the 1,000th record fills a roster file", () => {
     const lines = notFilled();
     assert.deepEqual((await worker.roster.views()).view_state, [{ id: 1, seq: LINES_PER_FILE }]);
     await wantUnavailable("/");
+    // The object set its alarm for the next try by itself: within the minute, where the challenges' own is minutes away.
+    const alarm = await worker.roster.alarmInMs();
+    assert.ok(alarm !== null && alarm <= 60 * 1000, `the alarm is ${alarm} ms ahead`);
 
     // An alarm before the minute is over does not try; the one after it does, and says that it failed again.
     await worker.roster.runAlarm();

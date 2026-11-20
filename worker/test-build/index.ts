@@ -151,12 +151,12 @@ export class Roster extends DeployedRoster {
       put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
         if (key !== fault.key) return real.put(key, value, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
-        const headers = options.httpMetadata as R2HTTPMetadata;
-        const stored = fault.how === "put writes another Cache-Control" ? { ...options, httpMetadata: { ...headers, cacheControl: "public, max-age=60" } } : fault.how === "put writes another Content-Type" ? { ...options, httpMetadata: { ...headers, contentType: "application/octet-stream" } } : options;
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
         // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
         if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
-        const written = await real.put(key, value, stored);
+        const headers = options.httpMetadata as R2HTTPMetadata;
+        const otherHeaders = fault.how === "put writes another Cache-Control" ? { cacheControl: "public, max-age=60" } : fault.how === "put writes another Content-Type" ? { contentType: "application/octet-stream" } : {};
+        const written = await real.put(key, value, { ...options, httpMetadata: { ...headers, ...otherHeaders } });
         if (fault.how === "put loses its answer") throw new Error("the test loses the answer of this write");
         return written;
       },
