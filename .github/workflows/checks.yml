@@ -28,7 +28,9 @@
 # with the pull request's change in it, from a fork too, and GitHub's
 # documentation does not say that limit holds for it.
 # What keeps its runs safe is this file: nothing here refers to a secret,
-# the token can only read, and nothing is cached, so a run writes nothing
+# the token can only read, and caches can only be restored, never saved
+# (cache-mode: read, which the cache service enforces whatever a step runs;
+# cache.yml, on pushes to main, is what saves), so a run writes nothing
 # another run reads; and a change to this file is read line by line before
 # it is merged (CONTRIBUTING.md). worker/test/workflows.test.ts checks this
 # file against the rules in worker/test/workflows.ts.
@@ -53,6 +55,11 @@ on:
 
 permissions:
   contents: read
+
+# Caches can be restored and not saved, by any step: "Access is enforced with
+# scoped cache tokens, so a job cannot restore or save caches beyond the mode
+# it is granted" (GitHub's "Workflow syntax", cache-mode).
+cache-mode: read
 
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
@@ -85,7 +92,7 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes cmd/** crl/** roster/** server/** verifier/** spec/** design/copy/** web/README.md docs/adr/0004-scoped-ids-and-proofs-are-public.md protocol/package.json web/package.json worker/package.json"
       TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes protocol/** worker/** web/** design/** spec/** cmd/** crl/** roster/** server/** verifier/** android/** ios/** device-core/** .github/workflows/** docs/adr/0004-scoped-ids-and-proofs-are-public.md"
-      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/**"
+      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/** .github/workflows/cache.yml"
       ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/copy/**"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -183,6 +190,9 @@ jobs:
   # emptied for cargo test, so that they are not also handed to a bb this job
   # never installed. fetch-crs.sh downloads the common reference string the
   # proofs need and checks it against crs.sha256.
+  # cargo's registry and target/ are restored from the caches cache.yml saved
+  # on main, for exactly the files hashed in the keys (no restore-keys); with
+  # no cache the job builds everything, as before.
   device-core:
     needs: changes
     if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.device-core == 'true')
@@ -196,6 +206,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target
+          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml

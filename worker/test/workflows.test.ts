@@ -16,6 +16,7 @@ import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
 import {
+  ACTIONS,
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
   BROWSER_PATHS,
@@ -26,6 +27,7 @@ import {
   CHECKS_GROUP,
   CHECKS_ON,
   type CheckLists,
+  DEVICE_CORE_CACHES,
   EVERY_CHECK_PATHS,
   GRADLE_BUILD,
   GRADLE_DISTRIBUTION_SHA256,
@@ -236,40 +238,40 @@ const CHANGES: Record<string, Change[]> = {
   "139 checks.yml asking for an OIDC token": [replace(C, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  id-token: write\n")],
   "140 checks-ios.yml also on merge_group": [replace(I, "on:\n", `on:\n${MERGE_GROUP}`)],
   // Skipping by path (#206): a required check runs through the changes job, always in the merge queue, and fails when that job fails.
-  "150 a required check that does not go through the changes job": [replace(C, GO_HEAD, "  go:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n")],
-  "151 a required check that does not need the changes job, whose result and output are then empty": [replace(C, GO_JOB, "  go:\n")],
-  "152 a required check that needs another job": [replace(C, GO_JOB, "  go:\n    needs: typescript\n")],
-  "153 a required check with no if: skipped when the changes job fails": [replace(C, GO_IF, "")],
-  "154 a required check whose if has no status function: skipped when the changes job fails": [replace(C, GO_IF, "    if: needs.changes.outputs.go == 'true'\n")],
-  "155 a required check whose if does not look at the changes job's result: skipped when that job fails": [replace(C, GO_IF, "    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.go == 'true')\n")],
-  "156 a required check with success() for always(): skipped when the changes job fails": [replace(C, GO_IF, GO_IF.replace("always()", "success()"))],
-  "157 a required check with !cancelled() for always(): skipped when the run is cancelled before the changes job ends": [replace(C, GO_IF, `    if: "${GO_IF.slice("    if: ".length, -1).replace("always()", "!cancelled()")}"\n`)],
-  "158 a required check that can be skipped on merge_group": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.go == 'true')\n")],
-  "159 a required check that runs on merge_group only when the changes job says so": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || (github.event_name != 'pull_request' && needs.changes.outputs.go == 'true') || needs.changes.outputs.go == 'true')\n")],
-  "160 a required check that reads another check's output": [replace(C, jobIf("android"), jobIf("go"))],
-  "161 a required check skipped when its output is true": [replace(C, GO_IF, GO_IF.replace("== 'true'", "!= 'true'"))],
-  "162 a required check without the step that fails unless the changes job succeeded": [replace(C, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n`)],
-  "163 a required check whose first step succeeds whatever the changes job did": [replace(C, 'run: test "$CHANGES_RESULT" = success\n', 'run: test "$CHANGES_RESULT" != skipped\n')],
-  "182 the changes job's result put into the first step's command, not its env": [replace(C, CHANGES_SUCCEEDED, '      - name: The changes job succeeded\n        run: test "${{ needs.changes.result }}" = success\n')],
-  "183 the first step reading another job's result": [replace(C, "          CHANGES_RESULT: ${{ needs.changes.result }}\n", "          CHANGES_RESULT: ${{ needs.typescript.result }}\n")],
-  "164 the step about the changes job after the others": [replace(C, `${CHANGES_SUCCEEDED}      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n`, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${CHANGES_SUCCEEDED}`)],
-  "165 a required check whose if reads something else": [replace(C, GO_IF, GO_IF.replace("always() &&", "always() && github.actor != 'x' &&"))],
-  "166 a required check that reports success when it fails": [replace(C, GO_JOB, `${GO_JOB}    continue-on-error: true\n`)],
-  "167 the changes job with an action that is not GitHub's, in place of the checkout": [replace(C, CHANGES_CHECKOUT, `      - uses: dorny/paths-filter@${SHA} # v3.0.2\n`)],
-  "168 the changes job with an action that is not GitHub's, after the checkout": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: tj-actions/changed-files@${SHA} # v46.0.5\n`)],
-  "169 the changes job with an action of the list that it does not need": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: 22.23.4\n          package-manager-cache: false\n`)],
-  "170 the changes job running a command other than the script": [replace(C, CHANGES_RUN, '        run: echo "go=false" >> "$GITHUB_OUTPUT"\n')],
-  "171 the changes job running the script and something more": [replace(C, CHANGES_RUN, "        run: bash .github/workflows/changed-paths.sh || true\n")],
-  "172 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
-  "173 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
-  "174 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** roster/**", " crl/** roster/**")],
-  "175 a path more in a list the changes job is given": [replace(C, ' design/copy/**"\n', ' design/copy/** docs/**"\n')],
-  "176 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
-  "177 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
-  "178 the changes job with an if": [replace(C, "  changes:\n", "  changes:\n    if: github.event_name == 'pull_request'\n")],
-  "179 the changes job that cannot fail": [replace(C, "  changes:\n", "  changes:\n    continue-on-error: true\n")],
-  "180 no changes job": [replace(C, "  changes:\n", "  other:\n")],
-  "181 the commits put into the script's command, not its env": [replace(C, CHANGES_RUN, "        run: BASE_SHA=${{ github.event.pull_request.base.sha }} bash .github/workflows/changed-paths.sh\n")],
+  "200 a required check that does not go through the changes job": [replace(C, GO_HEAD, "  go:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n")],
+  "201 a required check that does not need the changes job, whose result and output are then empty": [replace(C, GO_JOB, "  go:\n")],
+  "202 a required check that needs another job": [replace(C, GO_JOB, "  go:\n    needs: typescript\n")],
+  "203 a required check with no if: skipped when the changes job fails": [replace(C, GO_IF, "")],
+  "204 a required check whose if has no status function: skipped when the changes job fails": [replace(C, GO_IF, "    if: needs.changes.outputs.go == 'true'\n")],
+  "205 a required check whose if does not look at the changes job's result: skipped when that job fails": [replace(C, GO_IF, "    if: always() && (github.event_name != 'pull_request' || needs.changes.outputs.go == 'true')\n")],
+  "206 a required check with success() for always(): skipped when the changes job fails": [replace(C, GO_IF, GO_IF.replace("always()", "success()"))],
+  "207 a required check with !cancelled() for always(): skipped when the run is cancelled before the changes job ends": [replace(C, GO_IF, `    if: "${GO_IF.slice("    if: ".length, -1).replace("always()", "!cancelled()")}"\n`)],
+  "208 a required check that can be skipped on merge_group": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.go == 'true')\n")],
+  "209 a required check that runs on merge_group only when the changes job says so": [replace(C, GO_IF, "    if: always() && (needs.changes.result != 'success' || (github.event_name != 'pull_request' && needs.changes.outputs.go == 'true') || needs.changes.outputs.go == 'true')\n")],
+  "210 a required check that reads another check's output": [replace(C, jobIf("android"), jobIf("go"))],
+  "211 a required check skipped when its output is true": [replace(C, GO_IF, GO_IF.replace("== 'true'", "!= 'true'"))],
+  "212 a required check without the step that fails unless the changes job succeeded": [replace(C, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHANGES_SUCCEEDED}`, `${GO_IF}    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n`)],
+  "213 a required check whose first step succeeds whatever the changes job did": [replace(C, 'run: test "$CHANGES_RESULT" = success\n', 'run: test "$CHANGES_RESULT" != skipped\n')],
+  "232 the changes job's result put into the first step's command, not its env": [replace(C, CHANGES_SUCCEEDED, '      - name: The changes job succeeded\n        run: test "${{ needs.changes.result }}" = success\n')],
+  "233 the first step reading another job's result": [replace(C, "          CHANGES_RESULT: ${{ needs.changes.result }}\n", "          CHANGES_RESULT: ${{ needs.typescript.result }}\n")],
+  "214 the step about the changes job after the others": [replace(C, `${CHANGES_SUCCEEDED}      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n`, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n${CHANGES_SUCCEEDED}`)],
+  "215 a required check whose if reads something else": [replace(C, GO_IF, GO_IF.replace("always() &&", "always() && github.actor != 'x' &&"))],
+  "216 a required check that reports success when it fails": [replace(C, GO_JOB, `${GO_JOB}    continue-on-error: true\n`)],
+  "217 the changes job with an action that is not GitHub's, in place of the checkout": [replace(C, CHANGES_CHECKOUT, `      - uses: dorny/paths-filter@${SHA} # v3.0.2\n`)],
+  "218 the changes job with an action that is not GitHub's, after the checkout": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: tj-actions/changed-files@${SHA} # v46.0.5\n`)],
+  "219 the changes job with an action of the list that it does not need": [replace(C, CHANGES_CHECKOUT, `${CHANGES_CHECKOUT}      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0\n        with:\n          node-version: 22.23.4\n          package-manager-cache: false\n`)],
+  "220 the changes job running a command other than the script": [replace(C, CHANGES_RUN, '        run: echo "go=false" >> "$GITHUB_OUTPUT"\n')],
+  "221 the changes job running the script and something more": [replace(C, CHANGES_RUN, "        run: bash .github/workflows/changed-paths.sh || true\n")],
+  "222 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
+  "223 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
+  "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** roster/**", " crl/** roster/**")],
+  "225 a path more in a list the changes job is given": [replace(C, ' design/copy/**"\n', ' design/copy/** docs/**"\n')],
+  "226 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
+  "227 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
+  "228 the changes job with an if": [replace(C, "  changes:\n", "  changes:\n    if: github.event_name == 'pull_request'\n")],
+  "229 the changes job that cannot fail": [replace(C, "  changes:\n", "  changes:\n    continue-on-error: true\n")],
+  "230 no changes job": [replace(C, "  changes:\n", "  other:\n")],
+  "231 the commits put into the script's command, not its env": [replace(C, CHANGES_RUN, "        run: BASE_SHA=${{ github.event.pull_request.base.sha }} bash .github/workflows/changed-paths.sh\n")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -296,6 +298,154 @@ for (const [name, changes] of Object.entries(CHANGES)) {
     const files = realFiles();
     for (const change of changes) change(files);
     assert.notDeepEqual(workflowProblems(files), [], "the rules let this change through");
+  });
+}
+
+// The caches (#203): only cache.yml, on pushes to main, may save one; checks.yml only restores;
+// the other workflows use none. Each change here must be turned away for the reason given, not
+// only because a job is no longer the one written in test/workflows.ts.
+const K = "cache.yml";
+const { registry: REGISTRY, target: TARGET } = DEVICE_CORE_CACHES;
+const cacheStep = (action: string, cache: { readonly path: string; readonly key: string }): string => {
+  const { sha, version } = ACTIONS["actions/cache"]!;
+  return `      - uses: ${action}@${sha} # ${version}\n        with:\n          path: ${cache.path}\n          key: ${cache.key}\n`;
+};
+const GO_BUILD = "      - run: go build ./...\n";
+const AFTER_CHECKOUT = "          persist-credentials: false\n";
+const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
+const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
+  "150 a job of checks.yml with the action that also saves": {
+    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache", REGISTRY)}${GO_BUILD}`)],
+    problem: /^checks\.yml: line \d+: uses actions\/cache, which saves a cache: this workflow may only restore one/,
+  },
+  "151 a job of checks.yml with the action that only saves": {
+    changes: [replace(C, GO_BUILD, `${GO_BUILD}${cacheStep("actions/cache/save", REGISTRY)}`)],
+    problem: /^checks\.yml: line \d+: uses actions\/cache\/save, which saves a cache: this workflow may only restore one/,
+  },
+  "152 deploy-test.yml restoring a cache, so that what is deployed depends on it": {
+    changes: [replace(D, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", REGISTRY)}`)],
+    problem: /^deploy-test\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
+  "153 checks-browser.yml restoring a cache": {
+    changes: [replace(B, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache/restore", REGISTRY)}`)],
+    problem: /^checks-browser\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
+  "154 checks-ios.yml with the action that also saves": {
+    changes: [replace(I, AFTER_CHECKOUT, `${AFTER_CHECKOUT}${cacheStep("actions/cache", TARGET)}`)],
+    problem: /^checks-ios\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  },
+  "155 cache.yml also on pull_request, where a pull request's code would run before the save": {
+    changes: [replace(K, "on:\n  push:\n", "on:\n  pull_request:\n  push:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "156 cache.yml on a push to any branch": {
+    changes: [replace(K, "  push:\n    branches:\n      - main\n", "  push:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "157 cache.yml also on merge_group, whose branch holds a pull request's change": {
+    changes: [replace(K, "on:\n", `on:\n${MERGE_GROUP}`)],
+    problem: NOT_ONLY_MAIN,
+  },
+  "158 cache.yml also started by hand, on any branch": {
+    changes: [replace(K, "on:\n", "on:\n  workflow_dispatch:\n")],
+    problem: NOT_ONLY_MAIN,
+  },
+  "159 cache.yml in the concurrency group of the deploy, which would then wait for it": {
+    changes: [replace(K, "  group: cache\n", "  group: deploy-test\n")],
+    problem: /^cache\.yml: concurrency is not group cache, one run at a time and none cancelled/,
+  },
+  "160 a secret in cache.yml, which the step that saves would hold": {
+    changes: [replace(K, "    timeout-minutes: 30\n", `    timeout-minutes: 30\n    env:\n      T: ${SECRET}\n`)],
+    problem: /^the lines with "secrets" in them are /,
+  },
+  "161 cache.yml with a token that can write": {
+    changes: [replace(K, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+    problem: /^cache\.yml: permissions is not exactly contents: read/,
+  },
+  "162 cache.yml with one more permission (actions: write can delete caches)": {
+    changes: [replace(K, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  actions: write\n")],
+    problem: /^cache\.yml: permissions is not exactly contents: read/,
+  },
+  "163 a job of cache.yml with its own permissions": {
+    changes: [replace(K, "    timeout-minutes: 30\n", "    timeout-minutes: 30\n    permissions:\n      contents: write\n")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "164 one more step in cache.yml before the save": {
+    changes: [replace(K, "      - name: cargo clippy\n", "      - run: curl -o target/x https://example.invalid/x\n        working-directory: device-core\n      - name: cargo clippy\n")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "165 a cache of checks.yml restored by the start of its key, so for another Cargo.lock or another Rust": {
+    changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          restore-keys: device-core-target-\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "166 a cache of checks.yml with a key that leaves out the files": {
+    changes: [replace(C, `          key: ${TARGET.key}\n`, "          key: device-core-target\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "167 a restored cache that fails the check when there is none": {
+    changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          fail-on-cache-miss: true\n")],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "169 a job of checks.yml other than device-core restoring device-core's cache": {
+    changes: [replace(C, GO_BUILD, `${cacheStep("actions/cache/restore", TARGET)}${GO_BUILD}`)],
+    problem: /^checks\.yml: job go: step \d+: restores a cache that is not this job's/,
+  },
+  // cache-mode: what the cache service lets a job do, whatever its steps are.
+  "170 checks.yml with no cache-mode, so with whatever the trigger's default is": {
+    changes: [(f) => void (f[C] = f[C]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^checks\.yml: cache-mode is not read/,
+  },
+  "171 checks.yml allowed to save caches": {
+    changes: [(f) => void (f[C] = f[C]!.replace(/^cache-mode: .*$/m, "cache-mode: write"))],
+    problem: /^checks\.yml: cache-mode is not read/,
+  },
+  "172 deploy-test.yml allowed to restore caches": {
+    changes: [(f) => void (f[D] = f[D]!.replace(/^cache-mode: .*$/m, "cache-mode: read"))],
+    problem: /^deploy-test\.yml: cache-mode is not none/,
+  },
+  "173 deploy-test.yml with no cache-mode": {
+    changes: [(f) => void (f[D] = f[D]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^deploy-test\.yml: cache-mode is not none/,
+  },
+  "174 checks-browser.yml with no cache-mode": {
+    changes: [(f) => void (f[B] = f[B]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^checks-browser\.yml: cache-mode is not none/,
+  },
+  "175 checks-ios.yml allowed to save caches": {
+    changes: [(f) => void (f[I] = f[I]!.replace(/^cache-mode: .*$/m, "cache-mode: write-only"))],
+    problem: /^checks-ios\.yml: cache-mode is not none/,
+  },
+  "176 cache.yml with no cache-mode": {
+    changes: [(f) => void (f[K] = f[K]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^cache\.yml: cache-mode is not write/,
+  },
+  "177 a job of checks.yml with its own cache-mode, which overrides the workflow's": {
+    changes: [replace(C, GO_JOB, `${GO_JOB}    cache-mode: write\n`)],
+    problem: /^checks\.yml: line \d+: cache-mode below the top level/,
+  },
+  "178 a job of deploy-test.yml with its own cache-mode": {
+    changes: [replace(D, BUILD_JOB, `${BUILD_JOB}    cache-mode: read\n`)],
+    problem: /^deploy-test\.yml: line \d+: cache-mode below the top level/,
+  },
+  "179 a new workflow with no cache-mode": {
+    changes: [addFile("other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
+    problem: /^other\.yml: cache-mode is not none/,
+  },
+  "168 a new workflow that saves a cache": {
+    changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", TARGET)}`)],
+    problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
+  },
+};
+
+for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
+  test(`turned away: ${name}`, () => {
+    const files = realFiles();
+    for (const change of changes) change(files);
+    const problems = workflowProblems(files);
+    assert.ok(
+      problems.some((p) => problem.test(p)),
+      `no problem like ${problem}: ${JSON.stringify(problems)}`,
+    );
   });
 }
 
@@ -701,6 +851,7 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["the script", [".github/workflows/changed-paths.sh"], ALL],
     ["the rules", ["worker/test/workflows.ts"], ALL],
     ["another workflow", [".github/workflows/checks-ios.yml"], ["typescript"]],
+    ["the workflow that saves the caches the device-core job restores", [".github/workflows/cache.yml"], ["typescript", "device-core"]],
     ["the Worker", ["worker/src/x.ts"], ["typescript"]],
     ["the page", ["web/src/x.ts"], ["typescript"]],
     ["the page's README, whose headers the Go server's tests read", ["web/README.md"], ["go", "typescript"]],
