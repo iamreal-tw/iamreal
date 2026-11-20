@@ -124,7 +124,7 @@ func TestCardStateSkipped(t *testing.T) {
 func TestCardStateNotCompared(t *testing.T) {
 	// No file for the date of the fingerprint file's last line.
 	code, _, errOut := runDir(t, writeDir(t, published(5), cardStateFingerprints))
-	if code != exitAllValid || !strings.Contains(errOut, "card-state/2026-11-20.jsonl is not there: no card state compared\n") {
+	if code != exitInvalid || !strings.Contains(errOut, "iamreal-verify: card-state/2026-11-20.jsonl is missing\n") {
 		t.Errorf("no file: exit %d\n%s", code, errOut)
 	}
 	// A date without a line in the fingerprint file: the file is not read.

@@ -8,7 +8,8 @@
 // anywhere in the Worker sends one of these files to anybody: they are
 // downloaded from the data domain, which does not run the Worker.
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
-import { LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
+import { type Day, formatDay } from "iamreal-protocol/date.ts";
+import { FINGERPRINT_FILE_NAME, LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
 
 /** The roster directory's place in the data bucket (ADR-0027). */
 export const ROSTER_DIRECTORY = "roster/";
@@ -20,6 +21,22 @@ export const ROSTER_DIRECTORY = "roster/";
  * (README.md, "寫滿的名冊檔搬到 R2").
  */
 export const CACHE_FULL_FILE = "public, max-age=31536000, immutable";
+
+/**
+ * The `Cache-Control` of what the roster's object writes once a day and
+ * writes again the next: the last roster file, which is not full, and its
+ * record hash list; the card state file of a date; the fingerprint file
+ * (ADR-0027).
+ */
+export const CACHE_DAILY = "public, max-age=60";
+
+/** The fingerprint file's place in the data bucket. */
+export const FINGERPRINT_FILE = ROSTER_DIRECTORY + FINGERPRINT_FILE_NAME;
+
+/** The place in the data bucket of the card state file of a date in Taiwan (ADR-0027). */
+export function cardStateFileKey(date: Day): string {
+  return `${ROSTER_DIRECTORY}card-state/${formatDay(date)}.jsonl`;
+}
 
 /**
  * The `Content-Type` of the roster directory's files of lines of JSON
@@ -67,10 +84,18 @@ export type FileBucket = Pick<R2Bucket, "put" | "get">;
  *
  * Writing the same bytes again leaves the same object, so a caller that
  * does not know how far an earlier try came simply calls this again.
+ *
+ * With `over`, the object is written only over the one the caller read:
+ * the object of that ETag, or, with null, only where there is still no
+ * object. If the bucket holds anything else by then, nothing is written
+ * and this throws.
  */
-export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders): Promise<string> {
+export async function writeAndReadBack(bucket: FileBucket, key: string, bytes: Uint8Array, headers: FileHeaders, over?: { readonly etag: string | null }): Promise<string> {
   const sha256 = await sha256Hex(bytes);
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256 });
+  const onlyIf = over === undefined ? undefined : over.etag === null ? new Headers({ "If-None-Match": "*" }) : { etagMatches: over.etag };
+  const written = await bucket.put(key, bytes, { httpMetadata: { cacheControl: headers.cacheControl, contentType: headers.contentType }, sha256, ...(onlyIf !== undefined && { onlyIf }) });
+  // A write whose condition does not hold stores nothing and gives null.
+  if (written === null) throw new Error(`${key} is no longer the object that was read: it was not written over`);
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket after it was written`);
   if (stored.httpMetadata?.cacheControl !== headers.cacheControl || stored.httpMetadata.contentType !== headers.contentType) throw new Error(`${key} does not carry the headers it was written with`);
