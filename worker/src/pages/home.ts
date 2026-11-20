@@ -26,7 +26,7 @@ const QUESTIONS: readonly { readonly question: string; readonly answer: Html }[]
   },
   {
     question: "政府會知道我是哪個帳號嗎？",
-    answer: html`<p>查不出來。Threads、政府、島民，都查不出一張島民證明是哪一張卡片換的。這也是只收實體卡片的原因。</p>
+    answer: html`<p>查不出來。Threads、政府、我們，都查不出一張島民證明是哪一張卡片換的。這也是只收實體卡片的原因。</p>
 <p>這靠的是現在破解不了的加密，不是永久的保證。 <a href="/faq#security">了解更多</a></p>`,
   },
   {
@@ -48,19 +48,19 @@ const QUESTIONS: readonly { readonly question: string; readonly answer: Html }[]
     answer: html`<p>不用。換島民證明、更新、更換帳號、收回，都免費。</p>`,
   },
   {
-    question: "誰在做島民？",
+    question: "誰在做島民證明？",
     answer: html`<p>一個興趣使然的台灣工程師。有任何技術問題或建議，歡迎到 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a> 討論。</p>`,
   },
 ];
 
 /** The link preview (home.md, 連結被貼出去時的預覽): its title, the <title>, and the first screen's two lines as one sentence. */
-const TITLE = "島民";
-const TAB_TITLE = "島民｜iamreal.tw";
+const TITLE = "島民證明";
+const TAB_TITLE = "島民證明｜iamreal.tw";
 const DESCRIPTION = "讓 Threads 上的人知道，你是真的台灣人。用自然人憑證證明，除了 Threads 帳號名稱，不會揭露任何個資。";
 
 export function homePage(numbers: HomeNumbers): Document {
   const content = html`<section class="hero">
-<p class="brand"><b>島民</b> <span>iamreal.tw</span></p>
+<p class="brand"><b>島民證明</b> <span>iamreal.tw</span></p>
 <h1 class="headline"><span class="line">讓 Threads 上的人知道，你是真的台灣人。</span><span class="line">用自然人憑證證明，除了 Threads 帳號名稱，不會揭露任何個資。</span></h1>
 <p class="actions"><a class="button big" href="/proof">我要換島民證明</a> <a href="/roster">看已經換出的島民證明</a></p>
 <p class="small needs">${NEEDS}</p>
@@ -84,7 +84,7 @@ export function homePage(numbers: HomeNumbers): Document {
 <h2 class="big-heading"><span class="line">留言區裡，</span><span class="line">哪些是真的人？</span></h2>
 <p>社群平台上的假帳號越來越多，AI 只會讓假帳號更便宜、更像真人。靠每個人自己封鎖，只怕會是螳臂當車。</p>
 <p>我們可以立場不同、支持不同的黨。但知道彼此是同一國的人，討論才有意義。</p>
-<p>島民讓你不用告訴任何人你是誰，就能證明你是中華民國國民、證明你是台灣人。</p>
+<p>島民證明讓你不用告訴任何人你是誰，也能讓人知道你是中華民國國民、你是台灣人。</p>
 </section>
 
 <section class="how">
@@ -130,7 +130,7 @@ ${QUESTIONS.map((q) => html`<details><summary>${q.question}</summary>\n${q.answe
 </section>
 
 <section class="helps">
-<h2 class="big-heading">所以島民可以幫上什麼忙？</h2>
+<h2 class="big-heading">所以島民證明可以幫上什麼忙？</h2>
 <ul class="uses">
 <li><span class="when">現在</span><div><b>協助判斷一個 Threads 帳號背後是不是台灣人</b>
 <span class="sub">注意：還是有人會出售或出借自己的自然人憑證。</span>
@@ -148,7 +148,7 @@ ${QUESTIONS.map((q) => html`<details><summary>${q.question}</summary>\n${q.answe
 <p class="lead">站出來的台灣人越多，假帳號就越難假裝成「大家」。</p>
 <p><a class="button big" href="/proof">我要換島民證明</a></p>
 <p class="small">還沒有自然人憑證？本人帶身分證到戶政事務所，250 元，當天拿到。任何一間戶政事務所都可以辦，不限戶籍地。</p>
-<p class="small">${NEEDS}島民只收台灣中華民國國民的自然人憑證正卡。</p>
+<p class="small">${NEEDS}我們只收台灣中華民國國民的自然人憑證正卡。</p>
 </section>`;
   return { title: TITLE, tabTitle: TAB_TITLE, description: DESCRIPTION, kind: "home", content };
 }
