@@ -76,7 +76,8 @@ int32_t idc_scope_string(uint32_t roster, idc_buf *out);
  * message the card signs.
  *
  * accounts_json: a JSON array of {"platform":"...","username":"..."}, in
- * ascending order of platform, each platform at most once.
+ * ascending order of platform, each platform at most once, each username 1
+ * or more printable ASCII characters without '"' and '\'.
  * challenge: the challenge as the server issued it.
  * IDC_ERR_INPUT when the list is not that, or the challenge is not in its
  * one spelling. */
@@ -84,6 +85,43 @@ int32_t idc_declaration_code(uint32_t roster,
                              const uint8_t *accounts_json, size_t accounts_json_len,
                              const uint8_t *challenge, size_t challenge_len,
                              idc_buf *out);
+
+/* What a list does on every platform, before the card signs it
+ * (spec/list-consequence.md): JSON in *out, for the confirmation screen.
+ *
+ * platforms_json: the `platforms` of GET /api/v1/config, as the server
+ * sent it.
+ * card_state_json: the answer of POST /api/v1/card-state, as the server
+ * sent it.
+ * known_platforms_json: the platforms the app has its own definition of
+ * (its names, how it writes an account), a JSON array of platform IDs, none
+ * twice. Built into the app, never from the server.
+ * accounts_json: the cardholder's list for the platforms offered, in the
+ * shape of a record's accounts (ascending order of platform, each platform
+ * at most once), each username as typed after the app tidied it. The kept
+ * accounts are not in it: the core adds them.
+ * now: seconds since 1970-01-01T00:00:00Z by the device's clock; the date
+ * is the one in Taiwan.
+ *
+ * *out is one of:
+ *   {"valid":true,"accounts":[...],"rows":[{"platform":"threads","known":true,"kind":"switch","username":"carol","current":"bob","previous":"bob","switches_left":3}],"first_record":false}
+ *   {"valid":false,"reason":"switch_limit","platform":"threads"}
+ *   {"valid":false,"reason":"username","platform":"threads"}
+ *   {"valid":false,"reason":"empty"}   (or "daily_limit")
+ * accounts is the list the card signs (pass it to idc_declaration_code); a
+ * row and the reasons are those of spec/list-consequence.md, "What the list
+ * does". valid false is not offered for signing.
+ *
+ * IDC_ERR_INPUT when the table or the state cannot be read, when the list
+ * names a platform that is not offered or is not in the shape above (a
+ * mistake of the app, but one the core sees only in the bytes), when the
+ * known platforms are not in the shape above, or when now is outside the
+ * years 2000 to 2049 in Taiwan. */
+int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_json_len,
+                             const uint8_t *card_state_json, size_t card_state_json_len,
+                             const uint8_t *known_platforms_json, size_t known_platforms_json_len,
+                             const uint8_t *accounts_json, size_t accounts_json_len,
+                             int64_t now, idc_buf *out);
 
 /*
  * A session: one card proof in progress (device-core/README.md, "檢查都通過

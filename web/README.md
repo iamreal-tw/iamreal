@@ -315,7 +315,8 @@ pnpm build            # 正式的建置，到 dist/
 
 | 檔案 | 測什麼 |
 |---|---|
-| `test/tables.test.ts` | 寫死在頁面裡的表對 `spec/`：`issuers.json`（G2、G3 的發證金鑰，加上 `crl/` 的兩張發證憑證）；Threads 的輸入整理只把 ASCII 改小寫，整理後的帳號照 `spec/scope.md` 平台表的格式檢查；`test-example` 照輸入原樣、沒有前綴。規格裡的算法對 `spec/vectors/` 的測試在 `protocol/`（見 `protocol/README.md`） |
+| `test/tables.test.ts` | 寫死在頁面裡的表對 `spec/`：`issuers.json`（G2、G3 的發證金鑰，加上 `crl/` 的兩張發證憑證）；Threads 的輸入整理只把 ASCII 改小寫，整理後的帳號照 `spec/scope.md` 平台表的格式檢查；`test-example` 照輸入原樣、沒有前綴。規格裡的算法對 `spec/vectors/` 的測試在 `protocol/`（見 `protocol/README.md`），只有頁面自己做的在這裡（`test/list-consequence.test.ts`） |
+| `test/list-consequence.test.ts` | `spec/vectors/list-consequence.json` 的每一案：`requestConfig` 讀平台表、`requestCardState` 讀現況（只留頁面有自己那一份的平台）、`consequenceOfChoice`（`src/flow.ts`）算清單在每個平台上的後果，和標準答案相同。`device-core/` 讀同一份 |
 | `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`spec/vectors/revocation-tree.json`（整份清冊可用、樹根，清冊裡每個序號的路徑或「在樹裡」，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；分份建樹和一次建的結果相同 |
 | `test/device-checks.test.ts` | `spec/vectors/device-checks.json`（`spec/device-checks.md`）：選憑證和檢查憑證（`src/certificate.ts` 的 `selectCertificate`），每一案的結果是選出的憑證和讀到的值，或原因；`crl_max_age_days` 哪些值讀得懂、清冊多舊算過期的 `L`、從索引選哪個檔、鏡像給的清冊用不用（`src/api.ts` 的 `requestConfig`，`src/crl/revocation.ts` 的 `crlMaxAge`、`chooseFromIndex`、`loadCrl`），每一案的結果是用的清冊或原因，和之後記住的編號。標準答案由 `test/generate/device-checks.ts` 用 `test/fixtures/` 產生，每一案的結果手寫在產生器裡（見 `spec/device-checks.md`「Test vectors」） |
 | `test/circuit-inputs.test.ts` | `spec/vectors/circuit-inputs.json`：每一案的憑證通過檢查、選到的電路，電路的輸入（`src/prover/inputs.ts`）和預期的公開輸入都和標準答案相同。標準答案由 `test/generate/circuit-inputs.ts` 從 `test/fixtures/` 產生，產生時讓電路執行過每一案 |
@@ -326,6 +327,14 @@ pnpm build            # 正式的建置，到 dist/
 | `test/api.test.ts` | 請求的時間上限（換掉 `setTimeout`）：現況不回答，30 秒到時當成沒有回應、請求被中斷；`fetch` 不理會中斷也一樣；回應的標頭來了、內容不來，當成沒有回應而不是讀不懂；靜態檔 30 秒時還在等、5 分鐘到時停；`requestConfig` 讀得懂哪幾列、整張表讀不懂的 9 種 |
 | `test/build.test.ts` | 正式的建置有內政部的發證金鑰、`http://localhost:61161`、公開名冊的場合字串，沒有假卡片、測試的發證金鑰、假元件、`test-example` 的那一份，`localhost` 以外的本機網址一個都沒有；本機用真卡片的建置（`localcard`）一樣有內政部的金鑰和元件、沒有任何測試的東西，但簽的是測試名冊的場合字串、認得 `test-example` |
 | `test/flow.test.ts` | 伺服器或鏡像給了不該接受的值，每一個都停下來，之後沒有請求，沒有請求帶著原因：日期不是今天的題目、寫法不唯一的題目（6 種）、章不對的清冊、舊於 `L` 天的清冊、`/api/v1/config` 回 365、編號比記住的低的清冊、分段的清冊、索引指到不存在的檔案、內容和檔名的雜湊不符的清冊、雜湊不對的電路檔、序號在清冊上。平台表讀不懂（8 種：不是清單、一列都讀不懂、代號重複或沒照順序等）時停在讀卡，不簽章、沒有 `card-state`；格式不是 `[…]{m,n}`、顯示名稱有控制字元的那一列是裝置不認得的平台。現況讀不懂（45 種：結構不對、名冊規則產生不出來的名額和卡片、裝置不認得的平台上不合最低限度檢查的帳號）停在 `malformed_response`，規則產生得出來的照常。卡片簽的場合字串只有公開名冊的那一個；裝置不認得的平台上的帳號原樣保留、照位元組順序排進清單、簽進宣告碼、送出；平台表上有、現況裡沒有那一項的平台不提供。每個平台的種類（`first`、`refresh`、收回後的 `refresh`、`correction`、`switch`、`withdraw`）；當天更正在更換 0、3、5 次時都可以；第 4、第 5 次照常是更換，5 次之後是 `switch_limit`，流程不結束，清空或不改那一列照常；空清單是 `empty`；今天 3 筆是 `daily_limit`，在更換的原因之後。帳號用了別的平台的格式、帳號沒有剛好涵蓋提供的平台，引擎拒絕；`proceed` 傳的清單不是引擎算的那一份（4 種）時不簽第二次；更正跨過午夜變成更換時停在 `state`、不要題目。送出的內容（鍵的順序、`accounts`）。回應的 `kinds` 讀不懂（9 種）時是 `null`、照樣完成；`account_cards` 讀不懂只有那一項是 `null`；`seq`、`record_hash` 不對照舊是 `malformed_response`。送出後比對：畫面說更正、記下的是更換（漏洞 M9）、別的帳號、少一個平台、多一個平台、收回而不是不變。再送得到 `challenge_used`（假的後台）：整份清單和 `last_card_proof` 相符時完成（`kinds` 是 `null`）；不相符（7 種，含多一個帳號、少一項）停在 `challenge_used`；現況讀不懂時停在那個原因；第一次送出就得到 `challenge_used` 時不查現況。另外，和改之前相同的：過期的憑證在任何請求之前停下；PIN 錯可以重試、PIN 不留；第 4、5 步來回不簽章、不發請求；PIN 最多等 5 分鐘（換掉時鐘和計時器）；`cancel()` 在每一種等待中；三次點擊各被擋一次；序號在清冊上、清冊不可用、電路檔或通用參數雜湊不對時卡片沒有被要求簽章、沒有 `card-state`；`crl_stale` 結束流程、`internal` 可以原封不動再送；讀卡機說簽章的憑證不是選出的那一張；伺服器拖住回答；過卡跨過午夜；清掉的憑證、簽章和電路的輸入；一步進行中又被呼叫；給畫面的事件；沒有讀卡機、兩張都通過的憑證；確認之後過了午夜（按下之前、題目在路上時）：每一列的結果和畫面說的不同就停在 `date_changed`、不簽第二次、不送出，相同就照常；`201` 的內容讀不懂（`seq`、`record_hash` 讀不懂、不是 JSON、是清單、空的）：完成，`kinds` 是 `null`；後台的表有、頁面沒有自己那一份的平台：有帳號就原樣保留、不能改，沒有就不顯示；PIN 在算證明時已經不在（第二次簽章後就丟），送不出去時也不在。`src/flow.ts` 清 PIN 的每一處，拿掉任何一處都有測試變紅 |
+
+### 標準答案的產生器
+
+`test/generate/list-consequence.ts` 寫出 `spec/vectors/list-consequence.json`（`spec/list-consequence.md`）。每一案的結果手寫在產生器裡；這個目錄的程式算出來的不同，就停下、不寫檔。改了讀平台表、讀現況或算後果的程式，或要加案例時，在這個目錄跑：
+
+```
+node --experimental-strip-types test/generate/list-consequence.ts
+```
 
 ### 無頭瀏覽器的測試（`pnpm test:e2e`）
 

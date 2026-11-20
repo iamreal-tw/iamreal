@@ -645,8 +645,9 @@ these rules.
 
 - **Once an effective date is used, every version stays.** Computing the
   state from the first record, or rebuilding the state of every card from
-  the records, picks the version for each record by its date. Both
-  implementations of these rules (ADR-0030) keep every version for good.
+  the records, picks the version for each record by its date. Every
+  implementation of these rules (ADR-0030, ADR-0034) keeps every version
+  for good.
 - **A card never goes back from a new version to an old one.** The dates of
   a card's valid records only stay the same or move forward, by the
   condition of check 4 on the card's own `last_card_proof` (ADR-0024). A
@@ -685,9 +686,9 @@ These rules have a version number, a positive integer.
 
 Each implementation of these rules has the number as a constant
 (`RulesVersion` in Go's `roster/`, `RULES_VERSION` in TypeScript's
-`protocol/`), and the test vectors carry it (`rules_version`). The tests of
-both implementations check their constant against the sentence above and
-against the vectors.
+`protocol/` and in Rust's `device-core/`), and the test vectors carry it
+(`rules_version`). The tests of every implementation check their constant
+against the sentence above and against the vectors.
 
 What the number is for: a state of a card that is stored, not recomputed,
 was computed by one version of these rules. The server stores with its card
@@ -704,8 +705,8 @@ rules", and to the numbers in them: the 3 records a date, the 5 switches,
 the 4 days of check 4, the bounds of check 3
 ([`revocation-tree.md`](revocation-tree.md)). Whether the change applies to
 every record or from an effective date makes no difference to the number.
-The specification, the vectors and both implementations change in the same
-pull request (ADR-0030).
+The specification, the vectors and every implementation change in the same
+pull request (ADR-0030, ADR-0034).
 
 This is on purpose also for a change that leaves every stored state as it
 was, such as another number for a limit: the number goes up, and the server
