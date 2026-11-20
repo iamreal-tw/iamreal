@@ -230,15 +230,14 @@ async function getConfig(_request: Request, env: Env): Promise<Reply> {
 }
 
 /**
- * `GET /api/v1/fingerprint`: the last line of the fingerprint file the
- * roster's object published, its date, count and roster fingerprint
- * (ADR-0021); for a roster never published, no date, no record and the
+ * `GET /api/v1/fingerprint`: the last line the roster's object wrote to
+ * the fingerprint file, its date, count and roster fingerprint (ADR-0021); for a roster never published, no date, no record and the
  * roster fingerprint of the empty roster.
  */
 async function getFingerprint(_request: Request, env: Env): Promise<Reply> {
   settings(env);
   const line = await askRoster(() => rosterOf(env).lastPublished());
-  return ok(line === null ? { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT } : { date: line.date, count: line.count, fingerprint: line.fingerprint });
+  return ok(line === null ? { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT } : { date: formatDay(line.date), count: line.count, fingerprint: line.fingerprint });
 }
 
 /** What the API is given besides the environment: the pieces that are behind an interface, so that each can be replaced by itself. */

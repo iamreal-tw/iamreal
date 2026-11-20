@@ -14,7 +14,7 @@
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
 //   published    the lines of the fingerprint file: the days the roster was
 //                published on
-//   publication  one row: the date the roster is published after
+//   first_day    one row: the date the roster is published after
 //   view_*       the views: what the visitors' pages read (views.ts)
 //
 // The views are derived from the records: they are written with each record,
@@ -31,8 +31,8 @@ import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { cardStateFile } from "iamreal-protocol/card-state-file.ts";
-import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
+import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamreal-protocol/date.ts";
+import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
 import { CARD_TABLE, everyCard, readCard, writeCard } from "./card-table.ts";
@@ -115,8 +115,8 @@ export const RESTRICTED_FROM = 4;
  * back, then 1. The table came after the others, with SCHEMA_VERSION
  * unchanged.
  *
- * publication: exactly one row (`id` 1), written when an object first
- * starts with a build that publishes: `since` is the date in Taiwan of that
+ * first_day: exactly one row (`id` 1), written when an object first
+ * starts with a build that publishes: `date` is the date in Taiwan of that
  * start. The roster is first published when the date after it begins, not
  * on the day the object, or the build, is new. SCHEMA_VERSION is unchanged.
  *
@@ -169,9 +169,9 @@ const TABLES: readonly string[] = [
      fingerprint TEXT    NOT NULL,
      in_bucket   INTEGER NOT NULL
    ) WITHOUT ROWID`,
-  `CREATE TABLE IF NOT EXISTS publication (
-     id    INTEGER PRIMARY KEY CHECK (id = 1),
-     since TEXT    NOT NULL
+  `CREATE TABLE IF NOT EXISTS first_day (
+     id   INTEGER PRIMARY KEY CHECK (id = 1),
+     date TEXT    NOT NULL
    )`,
   // The views (views.ts). They came after the others, with SCHEMA_VERSION unchanged: an object made without them
   // gets them when it next starts, and fills them from its records (the constructor).
@@ -269,8 +269,12 @@ const MIN_ALARM_WAIT_MS = 1000;
 /** How long after the roster could not be published the object tries again: one minute, as for a full file that could not be moved. */
 const PUBLICATION_RETRY_MS = 60 * 1000;
 
-/** The first moment of a date in Taiwan (UTC+8, no daylight saving), in milliseconds since the epoch. */
-const startOfTaiwanDay = (day: Day): number => day * 24 * 3600 * 1000 - 8 * 3600 * 1000;
+/**
+ * The data bucket's fingerprint file is not the beginning of the one this
+ * object would write: it has a line the object does not keep, or one that
+ * is not the object's. The object then publishes nothing (`#publish`).
+ */
+class FingerprintFileDiffers extends Error {}
 
 /** How long after views could not be filled the object tries again: one minute, as for a full file that could not be moved. */
 const VIEWS_RETRY_MS = 60 * 1000;
@@ -356,8 +360,8 @@ export class Roster extends DurableObject<Env> {
     this.viewsFilling = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused ? this.#fillViews() : Promise.resolve();
     ctx.waitUntil(this.viewsFilling);
     if (this.#tablesAreThisVersion) {
-      // The roster is published from the date after this one on (`#publication`); on an object that has the row this changes nothing.
-      sql.exec("INSERT OR IGNORE INTO publication (id, since) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
+      // The roster is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
+      sql.exec("INSERT OR IGNORE INTO first_day (id, date) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
       // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
       ctx.waitUntil(Promise.resolve().then(() => this.#setAlarmWithoutFailing()));
@@ -854,16 +858,27 @@ export class Roster extends DurableObject<Env> {
     });
   }
 
-  /** The last line of the fingerprint file as the data bucket has it, or null if the roster was never published: what `GET /api/v1/fingerprint` answers from. */
-  lastPublished(): { date: string; count: number; fingerprint: string } | null {
+  /**
+   * The last line this object wrote to the data bucket's fingerprint file
+   * and read back, or null if it never published the roster: what
+   * `GET /api/v1/fingerprint` answers from. It is what the object keeps of
+   * its own writing; the bucket is not asked.
+   */
+  lastPublished(): FingerprintLine | null {
     this.#checkTables();
-    return this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string }>("SELECT date, count, fingerprint FROM published WHERE in_bucket = 1 ORDER BY date DESC LIMIT 1").toArray()[0] ?? null;
+    const row = this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string }>("SELECT date, count, fingerprint FROM published WHERE in_bucket = 1 ORDER BY date DESC LIMIT 1").toArray()[0];
+    return row === undefined ? null : this.#lineOf(row);
+  }
+
+  /** A row of `published` as a line of the fingerprint file. */
+  #lineOf(row: { date: string; count: number; fingerprint: string }): FingerprintLine {
+    const date = parseDay(row.date);
+    if (date === null) throw new Error("published: a date is not a date");
+    return { date, count: row.count, fingerprint: row.fingerprint };
   }
 
   /** When a publication that failed is tried again, on the object's clock. Kept in memory: an object that starts again tries at once. */
   #publishAgainAt = 0;
-  /** The publication that is going on, if one is. */
-  #publishing: Promise<void> | null = null;
 
   /**
    * Publishing the roster, once for each date in Taiwan (ADR-0027): due
@@ -881,27 +896,30 @@ export class Roster extends DurableObject<Env> {
    *
    * A failure is this piece's own: one line says so, and the alarm goes on
    * to the other pieces.
+   *
+   * Nothing here keeps two publications, or a publication and a move of a
+   * full file, from running at once: an object has one alarm, whose
+   * handler does not run twice at once, and the handler runs the pieces of
+   * `timedWork()` one after the other. Both write the roster file of the
+   * same name at different times, so this is what the order of their
+   * writes rests on.
    */
-  #publication: TimedWork = {
+  #dailyPublication: TimedWork = {
     due: () => {
       if (this.#paused) return null;
       const sql = this.ctx.storage.sql;
       const { last, behind } = sql.exec<{ last: string | null; behind: number }>("SELECT MAX(date) AS last, COALESCE(SUM(in_bucket = 0), 0) AS behind FROM published").one();
       if (behind > 0) return this.#publishAgainAt;
-      const after = parseDay(last ?? sql.exec<{ since: string }>("SELECT since FROM publication WHERE id = 1").one().since);
+      const after = parseDay(last ?? sql.exec<{ date: string }>("SELECT date FROM first_day WHERE id = 1").one().date);
       if (after === null) throw new Error("published: a date is not a date");
       return Math.max(startOfTaiwanDay(after + 1), this.#publishAgainAt);
     },
     run: async (time) => {
       try {
-        // The alarm's handler does not run twice at once; the test build's door to it can, while the alarm itself rings.
-        this.#publishing ??= this.#publish().finally(() => {
-          this.#publishing = null;
-        });
-        await this.#publishing;
+        await this.#publish();
       } catch (e) {
         this.#publishAgainAt = time + PUBLICATION_RETRY_MS;
-        logFailure("roster_not_published", e);
+        logFailure(e instanceof FingerprintFileDiffers ? "fingerprint_file_differs" : "roster_not_published", e);
       }
     },
   };
@@ -933,15 +951,19 @@ export class Roster extends DurableObject<Env> {
    *   (spec/record.md: "publishing again on the same date … with more
    *   records it is refused"). If the fingerprint file could not be
    *   written after it, only the file is written again, from the table.
-   * - **The fingerprint file is written from the table**, whole, and never
-   *   read from the bucket: whatever the bucket's file was, it is the
-   *   table's lines after this.
+   * - **The fingerprint file is written from the table**, whole, and only
+   *   over a file that is the beginning of it (`#fingerprintFile`): no line
+   *   that is in the bucket's file is ever taken out of it or changed. A
+   *   file that has anything else stops the publication before it writes
+   *   anything, of this date and of every later one, until somebody has
+   *   looked: the bucket may hold the roster directory of another object.
    * - The last roster file has the name a full one gets once it is full,
    *   so it is written here only, in the alarm's work, where no move of a
    *   full file runs meanwhile (`#moveFile`).
    */
   async #publish(): Promise<void> {
     const sql = this.ctx.storage.sql;
+    await this.#fingerprintFile();
     await this.#moveFullFiles();
     const moment = this.#readForPublication();
     if (moment !== null) {
@@ -988,28 +1010,45 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
+   * The fingerprint file as this object would write it now: every row of
+   * `published` as its line, in order of date; and whether a row is not in
+   * the bucket's file yet.
+   *
+   * Throws `FingerprintFileDiffers` unless the bucket's fingerprint file is
+   * the beginning of it: no file, an empty one, one that lacks lines at its
+   * end or ends inside a line are all beginnings, and are written over with
+   * the whole. A file with a line the object does not keep, or with a line
+   * that is not the object's, is not: the object never takes a line out of
+   * the published file, and never changes one.
+   */
+  async #fingerprintFile(): Promise<{ file: Uint8Array; lastDate: string | null; behind: boolean }> {
+    const rows = this.ctx.storage.sql.exec<{ date: string; count: number; fingerprint: string; in_bucket: number }>("SELECT date, count, fingerprint, in_bucket FROM published ORDER BY date").toArray();
+    const file = new TextEncoder().encode(rows.map((row) => fingerprintLine(this.#lineOf(row))).join(""));
+    const stored = await this.bucket().get(FINGERPRINT_FILE);
+    if (stored !== null) {
+      const there = new Uint8Array(await stored.arrayBuffer());
+      if (there.length > file.length || there.some((byte, i) => byte !== file[i])) throw new FingerprintFileDiffers("the bucket's fingerprint file is not the beginning of the object's");
+    }
+    return { file, lastDate: rows.at(-1)?.date ?? null, behind: rows.some((row) => row.in_bucket === 0) };
+  }
+
+  /**
    * Writes the fingerprint file from the rows of `published`, if a row is
-   * not in the bucket's file yet: every line, in order of date, in one
-   * object that replaces the one there, read back before the rows are
-   * marked as in the bucket.
+   * not in the bucket's file yet: every line, in one object that replaces
+   * the one there (which is the beginning of it, or this throws), read back
+   * before the rows are marked as in the bucket.
    */
   async #writeFingerprintFile(): Promise<void> {
-    const sql = this.ctx.storage.sql;
-    const rows = sql.exec<{ date: string; count: number; fingerprint: string; in_bucket: number }>("SELECT date, count, fingerprint, in_bucket FROM published ORDER BY date").toArray();
-    if (rows.every((row) => row.in_bucket === 1)) return;
-    const file = rows.map((row) => {
-      const date = parseDay(row.date);
-      if (date === null) throw new Error("published: a date is not a date");
-      return fingerprintLine({ date, count: row.count, fingerprint: row.fingerprint });
-    });
-    await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, new TextEncoder().encode(file.join("")), { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
+    const { file, lastDate, behind } = await this.#fingerprintFile();
+    if (!behind) return;
+    await writeAndReadBack(this.bucket(), FINGERPRINT_FILE, file, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
     // The rows that were written: one written meanwhile is not among them.
-    sql.exec("UPDATE published SET in_bucket = 1 WHERE date <= ?", rows.at(-1)!.date);
+    this.ctx.storage.sql.exec("UPDATE published SET in_bucket = 1 WHERE date <= ?", lastDate);
   }
 
   /** Every piece of timed work of the object (TimedWork). Whatever comes to need the alarm is added here. */
   protected timedWork(): readonly TimedWork[] {
-    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles, this.#publication];
+    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles, this.#dailyPublication];
   }
 
   /**

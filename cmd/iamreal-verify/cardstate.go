@@ -15,20 +15,12 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// cardStateDir is the subdirectory of the roster directory that holds the
-// card state files, one per date (ADR-0027).
-const cardStateDir = "card-state"
-
 // maxCardStateFile is the largest card state file the command reads. In the
 // production roster, a row is at most 212 bytes plus 151 for each slot it
 // lists when its numbers are ones the rules leave, 227 plus 166 at the
 // format's limits: 393 for a card that has used Threads. 4 GiB holds more
 // than 10.9 million such rows.
 const maxCardStateFile = 4 << 30
-
-// cardStateName is the path, in the roster directory, of the card state
-// file of date d.
-func cardStateName(d verifier.Date) string { return cardStateDir + "/" + d.String() + ".jsonl" }
 
 // checkCardState compares the card state file of a date with rep, the
 // roster's own computation, for a valid roster directory p of roster r read
@@ -55,7 +47,7 @@ func checkCardState(src source, p *publishedRoster, r verifier.Roster, rep *rost
 	default:
 		date = lines[len(lines)-1].Date
 	}
-	name := cardStateName(date)
+	name := roster.CardStateName(date)
 	var dated []fingerprintLine
 	for _, fl := range lines {
 		if fl.Date == date {

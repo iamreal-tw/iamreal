@@ -201,6 +201,23 @@ export class Roster extends DeployedRoster {
     return [...this.#extraRuns];
   }
 
+  /** The handler of the alarm that is running or was last to run, however it was started. */
+  #alarms: Promise<void> = Promise.resolve();
+
+  /**
+   * The alarm's handler, one run at a time. The deployed object's handler
+   * never runs twice at once, and its timed work counts on that
+   * (src/roster.ts, `#dailyPublication`); only this build has a second way
+   * to start it (`testRunAlarm`), which could run it while the alarm
+   * itself rings. So here every run, the alarm's own too, waits for the
+   * one before it.
+   */
+  override alarm(): Promise<void> {
+    const run = this.#alarms.then(() => super.alarm());
+    this.#alarms = run.catch(() => undefined);
+    return run;
+  }
+
   /**
    * Runs the alarm now, whatever time it is set for. As when it rings by
    * itself, the alarm that was set is spent first: the handler then finds

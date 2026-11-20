@@ -15,6 +15,11 @@ export function taiwanDay(epochMs: number): Day {
   return Math.floor((epochMs + TAIWAN_OFFSET_MS) / MS_PER_DAY);
 }
 
+/** The first moment of a date in Taiwan, in milliseconds since the epoch: the least time `taiwanDay` gives that date for. */
+export function startOfTaiwanDay(day: Day): number {
+  return day * MS_PER_DAY - TAIWAN_OFFSET_MS;
+}
+
 export function dayOf(year: number, month: number, day: number): Day {
   return Math.floor(Date.UTC(year, month - 1, day) / MS_PER_DAY);
 }

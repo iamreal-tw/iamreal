@@ -255,7 +255,7 @@ describe("a publication that cannot be finished", () => {
     time = tw("2026-11-21", "00:00:00").getTime();
     await worker.setClock(new Date(time));
 
-    // Everything but the fingerprint file is written; the answer of its write is lost, then it cannot be written, and the object starts again.
+    // Everything but the fingerprint file is written: that one cannot be written, and the object starts again.
     await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put fails" });
     await worker.roster.runAlarm();
     const before = await directory();
@@ -272,17 +272,94 @@ describe("a publication that cannot be finished", () => {
     assert.equal(text(files.get(FINGERPRINTS)!), line("2026-11-21", 1, moment.roster.fingerprint));
     for (const name of before.keys()) assert.deepEqual(files.get(name), before.get(name), `${name} is not written again`);
     assert.deepEqual(await published(), { date: "2026-11-21", count: 1, fingerprint: moment.roster.fingerprint });
+  });
 
-    // The bucket's fingerprint file is changed, or gone: the next date's publication writes every line again from what the object keeps.
-    for (const [n, spoil] of [() => worker.putFile(`roster/${FINGERPRINTS}`, line("2026-11-21", 2, EMPTY_FINGERPRINT)), () => worker.deleteFile(`roster/${FINGERPRINTS}`)].entries()) {
+  test("the bucket's fingerprint file is never made shorter or changed: lines that are missing are written again, and a file with a line the object does not have stops the publication", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    await alarmAt("2026-11-21", "00:00:00");
+    await alarmAt("2026-11-22", "00:00:00");
+    const two = text((await directory()).get(FINGERPRINTS)!);
+    const [first, second] = [two.slice(0, two.indexOf("\n") + 1), two.slice(two.indexOf("\n") + 1)];
+    assert.deepEqual([first, second].map((l) => JSON.parse(l).date), ["2026-11-21", "2026-11-22"]);
+    const differs = (): number => worker.logLines().filter((l) => l === JSON.stringify({ event: "fingerprint_file_differs", error: "Error" })).length;
+    assert.equal(differs(), 0);
+
+    // The file is gone, then it lacks its last line, then it ends in the middle of one: each is the beginning of what
+    // the object keeps, and the next date's publication writes every line.
+    let date = 22;
+    const spoils = [() => worker.deleteFile(`roster/${FINGERPRINTS}`), () => worker.putFile(`roster/${FINGERPRINTS}`, first), () => worker.putFile(`roster/${FINGERPRINTS}`, two.slice(0, -40))];
+    let whole = two;
+    for (const spoil of spoils) {
       await spoil();
-      const now = await worker.roster.stored();
-      await alarmAt(`2026-11-2${2 + n}`, "00:00:00");
-      const lines = text((await directory()).get(FINGERPRINTS)!).split("\n");
-      assert.equal(`${lines[0]}\n`, line("2026-11-21", 1, moment.roster.fingerprint));
-      assert.equal(`${lines[n + 1]}\n`, line(`2026-11-2${2 + n}`, 2, now.roster.fingerprint));
-      assert.equal(lines.length, n + 3);
+      await alarmAt(`2026-11-${++date}`, "00:00:00");
+      const file = text((await directory()).get(FINGERPRINTS)!);
+      assert.ok(file.startsWith(whole) && file.split("\n").length === whole.split("\n").length + 1, `the lines so far and the one of 2026-11-${date}`);
+      whole = file;
     }
+    assert.equal(differs(), 0);
+
+    // The file has a line the object does not have, after its own or in place of one of them: nothing is written, of
+    // this date or of any later one, and nothing of the file changes.
+    const foreign = line("2026-11-20", 7, EMPTY_FINGERPRINT);
+    for (const other of [whole + foreign, foreign + whole.slice(whole.indexOf("\n") + 1), whole.replace('"count":1,', '"count":2,')]) {
+      await worker.putFile(`roster/${FINGERPRINTS}`, other, MINUTE, ROSTER_FILE_TYPE);
+      const before = await directory();
+      const answered = await published();
+      const logged = differs();
+      await alarmAt(`2026-11-${++date}`, "00:00:00");
+      assert.deepEqual(await directory(), before, "no file is written, not the last roster file or a card state file either");
+      assert.deepEqual(await published(), answered);
+      assert.equal(differs(), logged + 1, "one line says that the bucket's fingerprint file is not the object's");
+      // A minute later it is tried again, and stops again.
+      await worker.setClock(tw(`2026-11-${date}`, "00:01:00"));
+      await worker.roster.runAlarm();
+      assert.deepEqual(await directory(), before);
+      assert.equal(differs(), logged + 2);
+    }
+
+    // Once the bucket's file is the object's again, the roster is published as on any day: no line for the dates it was not.
+    await worker.putFile(`roster/${FINGERPRINTS}`, whole, MINUTE, ROSTER_FILE_TYPE);
+    await alarmAt(`2026-11-${++date}`, "00:00:00");
+    const file = text((await directory()).get(FINGERPRINTS)!);
+    assert.ok(file.startsWith(whole));
+    assert.deepEqual(file.slice(whole.length).split("\n").map((l) => (l === "" ? "" : JSON.parse(l).date)), [`2026-11-${date}`, ""]);
+  });
+
+  test("the date changes while the bucket is being written: no line is written for the day that ended, and the next try publishes the new date", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    // The publication begins a second before midnight of 2026-11-21, and its card state file takes a while.
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-21.jsonl", how: "put takes a while" });
+    await worker.setClock(tw("2026-11-21", "23:59:59"));
+    const publishing = worker.roster.runAlarm();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await worker.setClock(tw("2026-11-22", "00:00:00"));
+    await publishing;
+    await worker.roster.setBucketFault(null);
+    assert.equal((await directory()).has(FINGERPRINTS), false);
+    assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
+    assert.equal(notPublished(), failures + 1);
+
+    await worker.setClock(tw("2026-11-22", "00:01:00"));
+    await worker.roster.runAlarm();
+    const files = await directory();
+    assert.match(text(files.get(FINGERPRINTS)!), /^\{"date":"2026-11-22","count":1,[^\n]*\n$/);
+    assert.equal(files.has("card-state/2026-11-22.jsonl"), true);
+  });
+
+  test("alarms that ring at once at midnight publish once", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    await worker.setClock(tw("2026-11-21", "00:00:00"));
+    await Promise.all([worker.roster.runAlarm(), worker.roster.runAlarm(), worker.roster.runAlarm()]);
+    assert.equal(text((await directory()).get(FINGERPRINTS)!).split("\n").length, 2);
+    assert.equal(notPublished(), failures);
   });
 
   test("a paused roster is not published, and is once it is no longer paused", async () => {

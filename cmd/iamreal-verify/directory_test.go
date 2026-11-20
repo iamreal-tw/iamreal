@@ -96,7 +96,7 @@ func withCardState(files map[string][]byte, fps string) map[string][]byte {
 		return files
 	}
 	last := lines[len(lines)-1]
-	out := map[string][]byte{cardStateName(last.Date): longCardStates(int(min(last.Count, uint64(len(longRoster())))))}
+	out := map[string][]byte{roster.CardStateName(last.Date): longCardStates(int(min(last.Count, uint64(len(longRoster())))))}
 	for name, b := range files {
 		out[name] = b
 	}
