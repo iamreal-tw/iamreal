@@ -180,6 +180,15 @@ jobs:
   # Gradle downloads is checked against android/gradle/verification-metadata.xml.
   # `build` assembles both installers, runs the unit tests on the JVM against
   # the same Rust, runs lint, and checks what was built (android/README.md).
+  # cargo's registry, the three directories of device-core/target/ it builds
+  # into, and Gradle's caches and wrapper are restored from the caches
+  # cache.yml saved on main, for exactly the files hashed in the keys (no
+  # restore-keys); with no cache the job builds everything, as before. Gradle
+  # hashes again each library it takes from the restored cache and checks it
+  # against verification-metadata.xml: the hashes it has computed are kept in
+  # android/.gradle/, which is not cached. What Gradle made from the
+  # libraries, the wrapper's distribution and target/ are not checked again
+  # (.github/README.md, on caches).
   android:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -187,6 +196,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: android-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/release
+          key: android-target-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/aarch64-linux-android
+          key: android-target-aarch64-linux-android-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/x86_64-linux-android
+          key: android-target-x86_64-linux-android-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/caches
+          key: android-gradle-caches-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/wrapper
+          key: android-gradle-wrapper-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml, with the targets of Android

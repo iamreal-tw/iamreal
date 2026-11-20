@@ -15,8 +15,10 @@ import { test } from "node:test";
 import { unstable_readConfig } from "wrangler";
 import { WORKER_DIR } from "./build.ts";
 import {
+  ANDROID_CACHES,
   ANDROID_SDK_PARTS,
   BB_AMD64_LINUX_SHA256,
+  CACHE_KEY_FILES,
   BROWSER_PATHS,
   ACTIONS,
   CHECK_BB,
@@ -248,12 +250,16 @@ for (const [name, changes] of Object.entries(CHANGES)) {
 // only because a job is no longer the one written in test/workflows.ts.
 const K = "cache.yml";
 const { registry: REGISTRY, target: TARGET } = DEVICE_CORE_CACHES;
+const { gradleCaches: GRADLE } = ANDROID_CACHES;
 const cacheStep = (action: string, cache: { readonly path: string; readonly key: string }): string => {
   const { sha, version } = ACTIONS["actions/cache"]!;
   return `      - uses: ${action}@${sha} # ${version}\n        with:\n          path: ${cache.path}\n          key: ${cache.key}\n`;
 };
 const GO_BUILD = "      - run: go build ./...\n";
 const AFTER_CHECKOUT = "          persist-credentials: false\n";
+const CHECKOUT = `      - uses: actions/checkout@${ACTIONS["actions/checkout"]!.sha} # ${ACTIONS["actions/checkout"]!.version}\n        with:\n${AFTER_CHECKOUT}`;
+const ANDROID_STEPS_START = `  android:\n    runs-on: ubuntu-24.04\n    timeout-minutes: 30\n    steps:\n${CHECKOUT}`;
+const GRADLE_CLEANUP = `      - name: Leave Gradle's lock files and gc.properties out of the cache\n        run: find "$HOME/.gradle/caches" -type f \\( -name "*.lock" -o -name gc.properties \\) -delete\n`;
 const NOT_ONLY_MAIN = /^cache\.yml: saves a cache and is not triggered by a push to main only/;
 const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
   "150 a job of checks.yml with the action that also saves": {
@@ -377,6 +383,43 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", TARGET)}`)],
     problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,
   },
+  // android's caches (#207): its own, with keys that hash every file deciding what is in them.
+  "190 the android job restoring device-core's target/, built by other commands": {
+    changes: [replace(C, ANDROID_STEPS_START, `${ANDROID_STEPS_START}${cacheStep("actions/cache/restore", TARGET)}`)],
+    problem: /^checks\.yml: job android: step 2: actions\/cache\/restore is not given exactly /,
+  },
+  "191 the device-core job restoring android's Gradle cache": {
+    changes: [replace(C, `          path: ${TARGET.path}\n          key: ${TARGET.key}\n`, `          path: ${GRADLE.path}\n          key: ${GRADLE.key}\n`)],
+    problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
+  },
+  "192 an android cache whose key leaves out verification-metadata.xml, so that other libraries get the old cache": {
+    changes: [replace(C, ", 'android/gradle/verification-metadata.xml'", "")],
+    problem: /^checks\.yml: job android: step 2: actions\/cache\/restore is not given exactly /,
+  },
+  "193 an android cache restored by the start of its key, so for other libraries or another Gradle": {
+    changes: [replace(C, `          key: ${GRADLE.key}\n`, `          key: ${GRADLE.key}\n          restore-keys: android-gradle-caches-\n`)],
+    problem: /^checks\.yml: job android: step \d+: actions\/cache\/restore is not given exactly /,
+  },
+  "194 the whole Gradle home restored, with its init scripts and properties": {
+    changes: [replace(C, `          path: ${GRADLE.path}\n`, "          path: ~/.gradle\n")],
+    problem: /^checks\.yml: job android: step \d+: actions\/cache\/restore is not given exactly /,
+  },
+  "195 cache.yml's android job leaving a Gradle daemon running while the caches are saved": {
+    changes: [replace(K, "./gradlew --no-daemon build", "./gradlew build")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "196 cache.yml's android job building with another JDK than the check, which then reuses nothing": {
+    changes: [replace(K, "$JAVA_HOME_17_X64", "$JAVA_HOME_21_X64")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "197 cache.yml's android job saving Gradle's lock files and gc.properties": {
+    changes: [replace(K, GRADLE_CLEANUP, "")],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
+  "198 cache.yml's android job deleting more than Gradle's lock files before the save": {
+    changes: [replace(K, 'find "$HOME/.gradle/caches"', 'find "$HOME/.gradle"')],
+    problem: /^cache\.yml: the jobs are not exactly the ones in test\/workflows\.ts/,
+  },
 };
 
 for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
@@ -390,6 +433,15 @@ for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
     );
   });
 }
+
+test("every file the caches' keys hash is there: hashFiles would leave a misspelt one out of the key without a word", () => {
+  for (const f of CACHE_KEY_FILES) assert.ok(existsSync(join(REPO, f)), `${f} is not in the repository`);
+  for (const cache of [...Object.values(DEVICE_CORE_CACHES), ...Object.values(ANDROID_CACHES)]) {
+    const hashed = [...cache.key.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+    assert.ok(hashed.length > 1, cache.key);
+    for (const f of hashed) assert.ok(CACHE_KEY_FILES.includes(f), `${f}, in the key of ${cache.path}, is not in CACHE_KEY_FILES`);
+  }
+});
 
 test("the reader reads the part of YAML the workflows are written in, values as written", () => {
   const doc = readYaml(realFiles()[C]!) as Record<string, Yaml>;
