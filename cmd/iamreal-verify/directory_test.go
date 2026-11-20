@@ -132,50 +132,51 @@ func TestDirectory(t *testing.T) {
 	}
 }
 
+// The fingerprint file of each case says every record is published (count).
 func TestDirectoryBroken(t *testing.T) {
-	h := fingerprintEntry("2026-11-16", 0)
 	for _, c := range []struct {
 		name  string
+		count int
 		files func() map[string][]byte
 		line  int
 		code  string
 		want  string
 	}{
-		{"missing file", func() map[string][]byte {
+		{"missing file", 2001, func() map[string][]byte {
 			f := cut(2001)
 			delete(f, "0000000000001000.jsonl")
 			return f
-		}, 1001, "directory", "is 0000000000002000.jsonl, not 0000000000001000.jsonl"},
-		{"short file", func() map[string][]byte {
+		}, 1001, "directory", "0000000000001000.jsonl, the file that starts at line 1001, is missing"},
+		{"short file", 1001, func() map[string][]byte {
 			return map[string][]byte{
 				"0000000000000000.jsonl": lines(longRoster()[:999]),
 				"0000000000000999.jsonl": lines(longRoster()[999:1001]),
 			}
 		}, 1, "directory", "has 999 lines, not 1000"},
-		{"last file too long", func() map[string][]byte {
+		{"last file too long", 1000, func() map[string][]byte {
 			return map[string][]byte{"0000000000000000.jsonl": lines(longRoster()[:1001])}
 		}, 1, "directory", "1001 lines, more than 1000"},
-		{"empty file", func() map[string][]byte {
+		{"empty file", 1001, func() map[string][]byte {
 			f := cut(1000)
 			f["0000000000001000.jsonl"] = nil
 			return f
 		}, 1001, "directory", "is empty"},
-		{"first file named by its first seq, as before ADR-0027", func() map[string][]byte {
+		{"first file named by its first seq, as before ADR-0027", 1, func() map[string][]byte {
 			return map[string][]byte{"0000000000000001.jsonl": lines(longRoster()[:1])}
-		}, 1, "directory", "is 0000000000000001.jsonl, not 0000000000000000.jsonl"},
-		{"second file named by its first seq, as before ADR-0027", func() map[string][]byte {
+		}, 1, "directory", "0000000000000000.jsonl, the file that starts at line 1, is missing"},
+		{"second file named by its first seq, as before ADR-0027", 1001, func() map[string][]byte {
 			f := cut(1001)
 			f["0000000000001001.jsonl"] = f["0000000000001000.jsonl"]
 			delete(f, "0000000000001000.jsonl")
 			return f
-		}, 1001, "directory", "is 0000000000001001.jsonl, not 0000000000001000.jsonl"},
-		{"a file without its last LF", func() map[string][]byte {
+		}, 1001, "directory", "0000000000001000.jsonl, the file that starts at line 1001, is missing"},
+		{"a file without its last LF", 1001, func() map[string][]byte {
 			f := cut(1001)
 			b := f["0000000000000000.jsonl"]
 			f["0000000000000000.jsonl"] = b[:len(b)-1]
 			return f
 		}, 1000, "line", ""},
-		{"files of the right length, records out of order", func() map[string][]byte {
+		{"files of the right length, records out of order", 1001, func() map[string][]byte {
 			f := cut(1001)
 			b := f["0000000000000000.jsonl"]
 			last := bytes.LastIndexByte(b[:len(b)-1], '\n') + 1
@@ -185,7 +186,7 @@ func TestDirectoryBroken(t *testing.T) {
 		}, 1000, "seq", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := writeDir(t, c.files(), h)
+			dir := writeDir(t, c.files(), fingerprintEntry("2026-11-16", c.count))
 			code, out, _ := runDir(t, dir)
 			want := fmt.Sprintf("roster file: broken at line %d: %s", c.line, c.code)
 			if code != exitInvalid || !strings.HasPrefix(out, want) || !strings.Contains(out, c.want) {
@@ -264,11 +265,6 @@ func TestHashLists(t *testing.T) {
 		}, []string{"hashes/0000000000001000.txt is missing"}},
 		{"none", func() map[string][]byte { return cut(1001) },
 			[]string{"hashes/0000000000000000.txt is missing", "hashes/0000000000001000.txt is missing"}},
-		{"a list without a roster file", func() map[string][]byte {
-			f := published(1001)
-			f["hashes/0000000000002000.txt"] = []byte(roster.EmptyFingerprint + "\n")
-			return f
-		}, []string{"hashes/0000000000002000.txt has no roster file"}},
 		{"a hash changed", func() map[string][]byte {
 			f := published(1001)
 			b := append([]byte(nil), f["hashes/0000000000000000.txt"]...)

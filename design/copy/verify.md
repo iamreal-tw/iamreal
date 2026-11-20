@@ -94,6 +94,4 @@
 - 名冊和廢止清冊的存檔放上 `data.iamreal.tw`（ADR-0027）
 - `cmd/iamreal-verify/README.md` 寫得讓 AI 程式助理照著做得完（下載的網址 `data.iamreal.tw`、`bb` 怎麼取得）
 
-## 還沒做的
-
-- 把第 3 塊的提示詞逐字放進 `cmd/iamreal-verify/README.md`
+第 3 塊的提示詞逐字放在 `cmd/iamreal-verify/README.md`「讓 AI 程式助理幫你驗證」，那裡的測試檢查兩邊相同。

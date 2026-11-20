@@ -2,18 +2,14 @@ package main
 
 // The published roster (spec/record.md, "The published roster"): a roster
 // directory, cut every 1,000 lines, its record hash lists and its
-// fingerprint file.
+// fingerprint file. A re-verifier checks the roster up to the count of the
+// fingerprint file's last line; records after it are not published yet.
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 
 	"github.com/iamreal-tw/iamreal/roster"
@@ -28,118 +24,165 @@ const (
 	codeDirectory = "directory"
 )
 
-// rosterFilePattern matches the names of the files of a roster directory:
-// 16 decimal digits and ".jsonl". Other files of the directory
-// (fingerprints.jsonl among them) are not part of the roster file.
-var rosterFilePattern = regexp.MustCompile(`^[0-9]{16}\.jsonl$`)
+// publishedRoster is a roster directory as read by readPublished.
+type publishedRoster struct {
+	// data is the roster file: the roster files concatenated in name
+	// order, without the records after the published count.
+	data []byte
+	// broken is where the directory breaks the rules of the cut, if it
+	// does; data is then nil.
+	broken *roster.Broken
+	// fingerprints is the fingerprint file; nil if fingerprintsMissing.
+	fingerprints        []byte
+	fingerprintsMissing bool
+	// count is how many records the fingerprint file says are published
+	// (publishedCount), if countKnown. Without it every roster file there
+	// is was read.
+	count      uint64
+	countKnown bool
+	// files is the number of roster files read.
+	files int
+	// cut is true if the last file read holds records after count: they
+	// are not in data, and its record hash list is checked up to count.
+	cut bool
+}
 
-// hashListPattern matches the names of the record hash lists in
-// roster.HashListDir.
-var hashListPattern = regexp.MustCompile(`^[0-9]{16}\.txt$`)
-
-// readDirectory reads a roster directory and returns the roster file, the
-// concatenation of its files in name order. If the directory breaks the
-// rules of the cut, it returns where: the line where the offending file
-// starts or should start, and the code "directory".
+// readPublished reads the roster directory at src. The fingerprint file
+// says how many records are published (its last line's count,
+// publishedCount), and so which roster files there are: the file that
+// follows the first b records is named b in 16 digits, for every b below
+// the count in steps of 1,000. Nothing is listed, so src can be a URL.
+// Without a count (no fingerprint file, or no line of it as the spec
+// writes it) it reads every roster file there is, from the first until one
+// is missing; checkFingerprints reports why.
 //
-// The rules: the file that follows the first b records is named b in 16
-// digits; every file holds exactly 1,000 lines but the last, which holds 1
-// to 1,000; there is no empty file. Lines are counted by LF, plus one for
-// bytes after the last LF; a file whose lines are not well formed is then
-// found by the checks of the roster file.
-func readDirectory(dir string) ([]byte, *roster.Broken, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, nil, err
+// The cut: every file holds exactly 1,000 lines but the last, which holds
+// 1 to 1,000; there is no empty file; with a count, every file below it is
+// there. Lines are counted by LF, plus one for bytes after the last LF; a
+// file whose lines are not well formed is then found by the checks of the
+// roster file. A last file with fewer records than the count is not a
+// break of the cut: checkFingerprints reports the count.
+func readPublished(src source) (*publishedRoster, error) {
+	p := &publishedRoster{}
+	fp, err := src.get(fingerprintsFileName)
+	switch {
+	case errors.Is(err, errNotFound):
+		p.fingerprintsMissing = true
+	case err != nil:
+		return nil, err
+	default:
+		p.fingerprints = fp
+		p.count, p.countKnown = publishedCount(fp)
 	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() && rosterFilePattern.MatchString(e.Name()) {
-			names = append(names, e.Name())
+	broken := func(line uint64, format string, args ...any) (*publishedRoster, error) {
+		p.data, p.broken = nil, &roster.Broken{Line: int(line), Code: codeDirectory, Err: fmt.Errorf(format, args...)}
+		return p, nil
+	}
+	// The files there are, from the first until one is missing. With a
+	// count, a file below it that is missing breaks the directory where
+	// it should start, unless a file before it already did.
+	var files [][]byte
+	missing := false
+	for before := uint64(0); !p.countKnown || before < p.count; before += roster.LinesPerFile {
+		b, err := src.get(roster.RosterFileName(before))
+		if errors.Is(err, errNotFound) {
+			missing = p.countKnown
+			break
 		}
-	}
-	sort.Strings(names)
-	broken := func(line int, format string, args ...any) ([]byte, *roster.Broken, error) {
-		return nil, &roster.Broken{Line: line, Code: codeDirectory, Err: fmt.Errorf(format, args...)}, nil
-	}
-	var file []byte
-	for i, name := range names {
-		before := i * roster.LinesPerFile
-		first := before + 1
-		if want := roster.RosterFileName(uint64(before)); name != want {
-			return broken(first, "the file that starts at line %d is %s, not %s", first, name, want)
-		}
-		b, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
+		files = append(files, b)
+	}
+	p.files = len(files)
+	for i, b := range files {
+		before := uint64(i) * roster.LinesPerFile
+		name := roster.RosterFileName(before)
 		lines := bytes.Count(b, []byte("\n"))
 		if len(b) > 0 && b[len(b)-1] != '\n' {
 			lines++
 		}
-		last := i == len(names)-1
-		switch {
+		switch last := i == len(files)-1 && !missing; {
 		case lines == 0:
-			return broken(first, "%s is empty", name)
+			return broken(before+1, "%s is empty", name)
 		case !last && lines != roster.LinesPerFile:
-			return broken(first, "%s has %d lines, not %d", name, lines, roster.LinesPerFile)
+			return broken(before+1, "%s has %d lines, not %d", name, lines, roster.LinesPerFile)
 		case last && lines > roster.LinesPerFile:
-			return broken(first, "%s has %d lines, more than %d", name, lines, roster.LinesPerFile)
+			return broken(before+1, "%s has %d lines, more than %d", name, lines, roster.LinesPerFile)
 		}
-		file = append(file, b...)
+		if p.countKnown && before+roster.LinesPerFile > p.count {
+			// The file that holds record count: keep its lines up to it.
+			keep, end := p.count-before, 0
+			for n := uint64(0); n < keep; n++ {
+				i := bytes.IndexByte(b[end:], '\n')
+				if i < 0 {
+					end = len(b)
+					break
+				}
+				end += i + 1
+			}
+			p.cut = end < len(b)
+			b = b[:end]
+		}
+		p.data = append(p.data, b...)
 	}
-	return file, nil, nil
+	if missing {
+		before := uint64(len(files)) * roster.LinesPerFile
+		return broken(before+1, "%s, the file that starts at line %d, is missing", roster.RosterFileName(before), before+1)
+	}
+	return p, nil
 }
 
-// checkHashLists checks the record hash lists of a roster directory against
-// the roster's records: every list is in roster.HashListDir with the bytes
-// written from the records, and there is no list without a roster file. It
-// returns every problem, one per list, in name order, and the number of
-// lists.
-func checkHashLists(dir string, records []*verifier.Record) ([]string, int, error) {
-	want := map[string][]byte{}
-	for _, p := range roster.DirectoryFiles(records) {
-		want[path.Base(p.HashList.Name)] = p.HashList.Data
-	}
-	listDir := filepath.Join(dir, roster.HashListDir)
-	entries, err := os.ReadDir(listDir)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, 0, err
-	}
-	found := map[string]bool{}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() && hashListPattern.MatchString(e.Name()) {
-			found[e.Name()] = true
-			names = append(names, e.Name())
+// publishedCount returns how many records a fingerprint file says are
+// published: the largest count of its lines that are as the spec writes
+// them, if any is. In a fingerprint file without problems that is the
+// count of its last line. In one with problems, every line that can be
+// read is then checked against the records it names, and each problem is
+// reported on its own line: a count that decreases on line 2, not a count
+// beyond the roster on line 1.
+func publishedCount(fp []byte) (uint64, bool) {
+	var count uint64
+	known := false
+	for len(fp) > 0 {
+		end := bytes.IndexByte(fp, '\n') + 1
+		if end == 0 {
+			end = len(fp)
 		}
-	}
-	for name := range want {
-		if !found[name] {
-			names = append(names, name)
+		if fl, err := parseFingerprintLine(fp[:end]); err == nil {
+			count, known = max(count, fl.Count), true
 		}
+		fp = fp[end:]
 	}
-	sort.Strings(names)
+	return count, known
+}
+
+// checkHashLists checks the record hash list of every roster file read
+// against the roster's records: it is in roster.HashListDir with the bytes
+// written from the records; for a file cut at the count, its lines up to
+// the count are. It returns every problem, one per list, in name order,
+// and the number of lists.
+func checkHashLists(src source, p *publishedRoster, records []*verifier.Record) ([]string, int, error) {
 	var problems []string
-	for _, name := range names {
-		listPath := path.Join(roster.HashListDir, name)
-		w, ok := want[name]
+	parts := roster.DirectoryFiles(records)
+	for i, part := range parts {
+		want := part.HashList
+		got, err := src.get(want.Name)
 		switch {
-		case !ok:
-			problems = append(problems, listPath+" has no roster file")
-		case !found[name]:
-			problems = append(problems, listPath+" is missing")
-		default:
-			got, err := os.ReadFile(filepath.Join(listDir, name))
-			if err != nil {
-				return nil, 0, err
-			}
-			if !bytes.Equal(got, w) {
-				problems = append(problems, listPath+" is not the record hash list of the roster")
-			}
+		case errors.Is(err, errNotFound):
+			problems = append(problems, want.Name+" is missing")
+			continue
+		case err != nil:
+			return nil, 0, err
+		}
+		ok := bytes.Equal(got, want.Data)
+		if p.cut && i == len(parts)-1 {
+			ok = bytes.HasPrefix(got, want.Data)
+		}
+		if !ok {
+			problems = append(problems, want.Name+" is not the record hash list of the roster")
 		}
 	}
-	return problems, len(names), nil
+	return problems, len(parts), nil
 }
 
 // fingerprintLine is one line of the fingerprint file.
@@ -161,14 +204,11 @@ var fingerprintLinePattern = regexp.MustCompile(`^\{"date":"([0-9-]{10})","count
 // fingerprint is the roster fingerprint of the first count records. It
 // returns every problem, one per line at most, in order, and the number of
 // lines. A missing fingerprint file is one problem.
-func checkFingerprints(dir string, records []*verifier.Record) ([]string, int, error) {
-	data, err := os.ReadFile(filepath.Join(dir, fingerprintsFileName))
-	if errors.Is(err, fs.ErrNotExist) {
-		return []string{fingerprintsFileName + " is missing"}, 0, nil
+func checkFingerprints(p *publishedRoster, records []*verifier.Record) []string {
+	if p.fingerprintsMissing {
+		return []string{fingerprintsFileName + " is missing"}
 	}
-	if err != nil {
-		return nil, 0, err
-	}
+	data := p.fingerprints
 	fingerprints := make([]string, 0, len(records)+1)
 	fingerprints = append(fingerprints, roster.EmptyFingerprint)
 	for _, r := range records {
@@ -195,7 +235,16 @@ func checkFingerprints(dir string, records []*verifier.Record) ([]string, int, e
 		}
 		prev = &fl
 	}
-	return problems, n, nil
+	return problems
+}
+
+// fingerprintLines is the number of lines of a fingerprint file.
+func fingerprintLines(data []byte) int {
+	n := bytes.Count(data, []byte("\n"))
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		n++
+	}
+	return n
 }
 
 // parseFingerprintLine reads a line of the fingerprint file, including its
