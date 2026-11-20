@@ -26,7 +26,7 @@ The repository is public: anyone with a GitHub account can open an issue, commen
 
 ## Merging a pull request
 
-`main` uses a merge queue (`.github/README.md`, #180). `gh pr merge <number>` adds the PR to the queue when its required checks have passed, and turns on auto-merge when they have not; the queue then runs `checks.yml` again on top of the latest `main` and merges. Merging with the REST endpoint (`PUT /repos/{owner}/{repo}/pulls/{n}/merge`) does not work on `main`. Merge only when the maintainer has said to, for that PR.
+`main` uses a merge queue (`.github/README.md`, #180). `gh pr merge <number>` adds the PR to the queue when its required checks have passed, and turns on auto-merge when they have not; the queue then runs `checks.yml` again on top of the latest `main` and merges. Merging with the REST endpoint (`PUT /repos/{owner}/{repo}/pulls/{n}/merge`) does not work on `main`. Merge only when the maintainer has said to, for that PR. `browser` and `ios` are not required checks and do not run in the queue: check that they passed on the PR before `gh pr merge`. Do not merge `main` into the branch just to catch up; the queue reruns the checks on top of the latest `main`. Merge `main` in only on a conflict or when the PR needs something new from `main` (`.github/README.md`, merge queue).
 
 ## Pull requests as a triage surface
 
