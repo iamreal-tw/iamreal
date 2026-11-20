@@ -4,3 +4,5 @@
 worker-configuration.d.ts
 # Test runs: the builds the tests make.
 test-output/
+# The proof verifier's files, written at each build after their SHA-256 is checked (scripts/engine-files.ts).
+generated/

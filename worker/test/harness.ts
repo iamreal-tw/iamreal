@@ -133,6 +133,17 @@ export interface TestWorker {
   setClock(time: Date): Promise<void>;
   /** What the Worker has written to its log since it started. */
   logLines(): string[];
+  /**
+   * Asks the Worker's proof verifier (src/in-worker.ts) through the test
+   * build's `POST /__test/verify`: true if the proof is accepted.
+   */
+  verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
+  /**
+   * The Worker's Poseidon2 hash (src/in-worker.ts) of these field elements,
+   * through the test build's `POST /__test/poseidon2`. Elements and hash
+   * are 64 hex digits, big-endian. Rejects if the Worker refuses the inputs.
+   */
+  poseidon2(inputs: readonly string[]): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -200,6 +211,17 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       if (res.status !== 204) throw new Error(`setting the clock: HTTP ${res.status}`);
     },
     logLines: () => server.getLogs().map((l) => l.message),
+    async verify(circuit, proof, publicInputs) {
+      const hex = (b: Uint8Array): string => Buffer.from(b).toString("hex");
+      const res = await server.fetch("/__test/verify", { method: "POST", body: JSON.stringify({ circuit, proof: hex(proof), publicInputs: publicInputs.map(hex) }) });
+      if (res.status !== 200) throw new Error(`verifying: HTTP ${res.status} ${await res.text()}`);
+      return ((await res.json()) as { verified: boolean }).verified;
+    },
+    async poseidon2(inputs) {
+      const res = await server.fetch("/__test/poseidon2", { method: "POST", body: JSON.stringify({ inputs }) });
+      if (res.status !== 200) throw new Error(`hashing: HTTP ${res.status} ${await res.text()}`);
+      return ((await res.json()) as { hash: string }).hash;
+    },
     async close() {
       await server.close();
       await moica.close();
