@@ -34,6 +34,8 @@ on:
 permissions:
   contents: read
 
+cache-mode: write
+
 # One run at a time, the newest last; a running one is not stopped halfway,
 # so that pushes that follow each other closely still leave a cache.
 concurrency:

@@ -180,7 +180,7 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
   "actions/upload-artifact": { sha: "cf430e030ddbb5b0abf93d22962f4752f3646cd9", version: "v7.0.2" },
   "actions/download-artifact": { sha: "9000827ccba6bdab643e8b6fd33ac0654aef8333", version: "v8.0.2" },
   // One repository, one commit: `actions/cache` restores and has a step after the job that saves;
-  // `actions/cache/restore` only restores. Which workflow may use which: CACHE_USE, below.
+  // `actions/cache/restore` only restores. Which workflow may use which: CACHE_MODE, below.
   "actions/cache": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
   "actions/cache/restore": { sha: "55cc8345863c7cc4c66a329aec7e433d2d1c52a9", version: "v6.1.0" },
 };
@@ -292,27 +292,44 @@ const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[acti
  * The caches (#203, ADR-0029).
  *
  * Who may write one: only cache.yml, which runs on pushes to main and on
- * nothing else. GitHub scopes a cache to the branch of the run that made it:
+ * nothing else. What holds the others to that is `cache-mode`, at the top of
+ * every workflow: `read` "allows cache restores but prevents cache saves",
+ * `none` "prevents all cache access"
+ * (https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode),
+ * and "Access is enforced with scoped cache tokens, so a job cannot restore
+ * or save caches beyond the mode it is granted"
+ * (https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax#cache-mode).
+ * That is the boundary, and not which action a step uses: the commands of
+ * checks.yml run a pull request's code, and code in a job can talk to the
+ * cache service with the job's own token, without any action
+ * (https://adnanthekhan.com/2024/12/21/cacheract-the-monster-in-your-build-cache/).
+ * "Job-level settings override workflow-level settings" (the changelog), so
+ * `cache-mode` anywhere below the top level is a problem. A mode left out is
+ * a problem too: "If you omit `cache-mode`, a `read` or `write` default is
+ * used based on the trigger type" (the syntax page).
+ *
+ * Under that, GitHub scopes a cache to the branch of the run that made it:
  * "Workflow runs can restore caches created in either the current branch or
  * the default branch (usually `main`)", and a cache a pull request's run
  * makes "can only be restored by re-runs of the pull request"
  * (https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
- * A merge group's run is on a temporary branch of this repository with a
- * pull request's change in it; no rule here rests on what its caches would
- * be scoped to, because checks.yml saves nothing at all. It uses
- * `actions/cache/restore`, which "works similarly to the `cache` action
- * except that it doesn't have a post step to save the cache"
- * (https://github.com/actions/cache/blob/v6.1.0/restore/README.md). The
- * other workflows use no cache: the deploy must not depend on one, and the
- * two that run by path are not what is slow to build.
  *
- * CACHE_USE: what each workflow may do with a cache. A file not named here
- * may do nothing with one.
+ * The actions follow the mode, so that the file says what it does:
+ * checks.yml (`read`) uses only `actions/cache/restore`, which "works
+ * similarly to the `cache` action except that it doesn't have a post step to
+ * save the cache" (https://github.com/actions/cache/blob/v6.1.0/restore/README.md);
+ * a workflow with `none` uses no cache action. A step that is not permitted
+ * would not fail ("the cache step logs an informational message and
+ * continues", the syntax page), so the wrong action would go unseen.
+ *
+ * CACHE_MODE: each workflow's `cache-mode`, exactly. A file not named here,
+ * a new one too, must say `none`.
  */
 export const CACHE_WORKFLOW = "cache.yml";
-export const CACHE_USE: Readonly<Record<string, "restore" | "save">> = { "checks.yml": "restore", [CACHE_WORKFLOW]: "save" };
-/** The action each use is written with. `actions/cache/save` is in no list: nothing here needs it. */
-const CACHE_ACTION = { restore: "actions/cache/restore", save: "actions/cache" } as const;
+export const CACHE_MODE: Readonly<Record<string, "read" | "write">> = { "checks.yml": "read", [CACHE_WORKFLOW]: "write" };
+const cacheMode = (file: string): "read" | "write" | "none" => CACHE_MODE[file] ?? "none";
+/** The action each mode is written with. `actions/cache/save` is in no list: nothing here needs it. */
+const CACHE_ACTION = { read: "actions/cache/restore", write: "actions/cache" } as const;
 
 /**
  * The files whose hash is in the keys of device-core's caches: what decides
@@ -336,7 +353,7 @@ export const DEVICE_CORE_CACHES: readonly YamlMap[] = [
   { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
 ];
 export const CACHES: readonly YamlMap[] = [...DEVICE_CORE_CACHES];
-const cacheSteps = (use: "restore" | "save", caches: readonly YamlMap[]): YamlMap[] => caches.map((c) => ({ uses: uses(CACHE_ACTION[use]), with: c }));
+const cacheSteps = (use: "read" | "write", caches: readonly YamlMap[]): YamlMap[] => caches.map((c) => ({ uses: uses(CACHE_ACTION[use]), with: c }));
 
 /**
  * The device-core job, exactly. cargo reads device-core/.cargo/config.toml only when it runs in
@@ -348,7 +365,7 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
   "timeout-minutes": "30",
   steps: [
     step("actions/checkout"),
-    ...cacheSteps("restore", DEVICE_CORE_CACHES),
+    ...cacheSteps("read", DEVICE_CORE_CACHES),
     { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
     { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
     { name: "cargo fmt --check", "working-directory": "device-core", run: "cargo fmt --check" },
@@ -463,7 +480,7 @@ export const CACHE_JOBS: YamlMap = {
     "timeout-minutes": "30",
     steps: [
       step("actions/checkout"),
-      ...cacheSteps("save", DEVICE_CORE_CACHES),
+      ...cacheSteps("write", DEVICE_CORE_CACHES),
       { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
       { name: "Install the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup toolchain install" },
       { name: "cargo clippy", "working-directory": "device-core", run: `${FETCH_BARRETENBERG}cargo clippy --locked --release --all-targets -- -D warnings` },
@@ -567,21 +584,26 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 const extra = (v: YamlMap, allowed: readonly string[]): string[] => Object.keys(v).filter((k) => !allowed.includes(k));
 
 /**
- * The problems with caches (CACHE_USE), read line by line as written, so that
- * it holds whatever job or step the line is in. A line with `actions/cache`
- * in it that is not a comment is a use of a cache action. The caches the
- * other actions keep are off where they are used: WITH gives setup-node
- * `package-manager-cache: false` and setup-go `cache: false`, exactly.
+ * The problems with caches (CACHE_MODE) that are read line by line as
+ * written, so that they hold whatever job or step the line is in: a
+ * `cache-mode` below the top level, which would override the workflow's, and
+ * a cache action the workflow's mode does not go with. A line with
+ * `actions/cache` in it that is not a comment is a use of a cache action. The
+ * caches the other actions keep are off where they are used: WITH gives
+ * setup-node `package-manager-cache: false` and setup-go `cache: false`,
+ * exactly.
  */
 function cacheProblems(file: string, text: string): string[] {
   const problems: string[] = [];
+  const mode = cacheMode(file);
   for (const [i, l] of text.split("\n").entries()) {
-    if (!/actions\/cache/.test(l) || /^ *#/.test(l)) continue;
+    if (/^ *#/.test(l)) continue;
+    if (/cache-mode/.test(l) && !/^cache-mode: /.test(l)) problems.push(`${file}: line ${i + 1}: cache-mode below the top level, or not written as the key of a line`);
+    if (!/actions\/cache/.test(l)) continue;
     const action = /uses: (actions\/cache(?:\/[\w.-]+)*)@/.exec(l)?.[1] ?? "actions/cache";
     const p = (s: string): number => problems.push(`${file}: line ${i + 1}: uses ${action}${s}`);
-    const use = CACHE_USE[file];
-    if (use === undefined) p(": this workflow may use no cache");
-    else if (use === "restore" && action !== CACHE_ACTION.restore) p(", which saves a cache: this workflow may only restore one");
+    if (mode === "none") p(": this workflow may use no cache");
+    else if (mode === "read" && action !== CACHE_ACTION.read) p(", which saves a cache: this workflow may only restore one");
   }
   return problems;
 }
@@ -628,9 +650,11 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       p("not a map");
       continue;
     }
-    const wrong = extra(doc, ["name", "on", "permissions", "concurrency", "env", "jobs"]);
+    const wrong = extra(doc, ["name", "on", "permissions", "cache-mode", "concurrency", "env", "jobs"]);
     if (wrong.length) p(`keys not allowed at the top: ${wrong.join(", ")}`);
     if (!same(doc.permissions, { contents: "read" })) p("permissions is not exactly contents: read");
+    // What the cache service lets the workflow's jobs do (CACHE_MODE): said in every file, never left to the trigger's default.
+    if (doc["cache-mode"] !== cacheMode(f)) p(`cache-mode is not ${cacheMode(f)}`);
     const c = doc.concurrency;
     if (c !== undefined && !(isMap(c) && extra(c, ["group", "cancel-in-progress"]).length === 0 && Object.values(c).every((v) => typeof v === "string"))) p("concurrency is not group and cancel-in-progress");
     if (doc.name !== undefined && typeof doc.name !== "string") p("name is not a string");
@@ -645,7 +669,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
     // request, a merge group, a run started by hand on a branch) the code that runs before the
     // save is not main's. With the rule for every file above (permissions exactly contents: read)
     // and SECRET_LINES, the step that saves holds no secret and a token that can only read.
-    if (CACHE_USE[f] === "save" && !same(doc.on, CACHE_ON)) p(`saves a cache and is not triggered by a push to main only: ${JSON.stringify(doc.on)}`);
+    if (cacheMode(f) === "write" && !same(doc.on, CACHE_ON)) p(`saves a cache and is not triggered by a push to main only: ${JSON.stringify(doc.on)}`);
     if (f === CACHE_WORKFLOW) {
       if (!same(doc.concurrency, { group: CACHE_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${CACHE_GROUP}, one run at a time and none cancelled`);
       if (doc.env !== undefined) p("an env at the top");

@@ -44,6 +44,8 @@ on:
 permissions:
   contents: read
 
+cache-mode: none
+
 # Not the group of checks.yml: "concurrency group names must be unique across workflows to avoid
 # canceling in-progress jobs or runs from other workflows" (GitHub's workflow syntax,
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).

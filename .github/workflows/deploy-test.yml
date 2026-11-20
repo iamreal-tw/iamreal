@@ -33,6 +33,8 @@ on:
 permissions:
   contents: read
 
+cache-mode: none
+
 # One deploy at a time, the newest last; a running one is not stopped halfway.
 concurrency:
   group: deploy-test

@@ -327,6 +327,47 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     changes: [replace(C, "          path: device-core/target\n", "          path: device-core/target\n          fail-on-cache-miss: true\n")],
     problem: /^checks\.yml: job device-core: step 3: actions\/cache\/restore is not given exactly /,
   },
+  // cache-mode: what the cache service lets a job do, whatever its steps are.
+  "170 checks.yml with no cache-mode, so with whatever the trigger's default is": {
+    changes: [(f) => void (f[C] = f[C]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^checks\.yml: cache-mode is not read/,
+  },
+  "171 checks.yml allowed to save caches": {
+    changes: [(f) => void (f[C] = f[C]!.replace(/^cache-mode: .*$/m, "cache-mode: write"))],
+    problem: /^checks\.yml: cache-mode is not read/,
+  },
+  "172 deploy-test.yml allowed to restore caches": {
+    changes: [(f) => void (f[D] = f[D]!.replace(/^cache-mode: .*$/m, "cache-mode: read"))],
+    problem: /^deploy-test\.yml: cache-mode is not none/,
+  },
+  "173 deploy-test.yml with no cache-mode": {
+    changes: [(f) => void (f[D] = f[D]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^deploy-test\.yml: cache-mode is not none/,
+  },
+  "174 checks-browser.yml with no cache-mode": {
+    changes: [(f) => void (f[B] = f[B]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^checks-browser\.yml: cache-mode is not none/,
+  },
+  "175 checks-ios.yml allowed to save caches": {
+    changes: [(f) => void (f[I] = f[I]!.replace(/^cache-mode: .*$/m, "cache-mode: write-only"))],
+    problem: /^checks-ios\.yml: cache-mode is not none/,
+  },
+  "176 cache.yml with no cache-mode": {
+    changes: [(f) => void (f[K] = f[K]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^cache\.yml: cache-mode is not write/,
+  },
+  "177 a job of checks.yml with its own cache-mode, which overrides the workflow's": {
+    changes: [replace(C, GO_JOB, `${GO_JOB}    cache-mode: write\n`)],
+    problem: /^checks\.yml: line \d+: cache-mode below the top level/,
+  },
+  "178 a job of deploy-test.yml with its own cache-mode": {
+    changes: [replace(D, BUILD_JOB, `${BUILD_JOB}    cache-mode: read\n`)],
+    problem: /^deploy-test\.yml: line \d+: cache-mode below the top level/,
+  },
+  "179 a new workflow with no cache-mode": {
+    changes: [addFile("other.yml", "name: other\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo hi\n")],
+    problem: /^other\.yml: cache-mode is not none/,
+  },
   "168 a new workflow that saves a cache": {
     changes: [addFile("cache-2.yml", `name: cache-2\non:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n${cacheStep("actions/cache", 1)}`)],
     problem: /^cache-2\.yml: line \d+: uses actions\/cache: this workflow may use no cache/,

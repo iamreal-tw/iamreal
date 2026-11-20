@@ -33,6 +33,8 @@ on:
 permissions:
   contents: read
 
+cache-mode: none
+
 # Its own group: see checks-browser.yml.
 concurrency:
   group: checks-ios-${{ github.event.pull_request.number }}
