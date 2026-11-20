@@ -58,16 +58,16 @@
 
 ## 快取（#203）
 
-`device-core` 的檢查從零編要 4 分多鐘（#203 量的）。現在它還原推到 `main` 時存下的 cargo 快取，依賴的套件不必重編。`android` 從零要 11 分鐘（#203 量的：Rust 從頭編三次約 5.5 分、lint 約 3 分、下載 Gradle 約 1 分），它還原 cargo 和 Gradle 的快取，Rust 的依賴不必重編，Gradle 和它的依賴不必下載；lint 每次照跑。
+`device-core` 的檢查還原推到 `main` 時存下的 cargo 快取，依賴的套件不必重編。`android` 還原 cargo 和 Gradle 的快取，Rust 的依賴不必重編，Gradle 和它的依賴不必下載；lint 每次照跑。
 
-2026-11-21 量的，同一個提交各跑一次沒有快取、有快取（只重跑那一個工作）：
+2026-11-20（UTC）量的，同一個提交各跑一次沒有快取、有快取（只重跑那一個工作）：
 
 | 工作 | 沒有快取 | 有快取 | 量的執行 |
 |---|---|---|---|
 | `device-core` | 6 分 21 秒（`cargo clippy` 25 秒、`cargo test` 301 秒） | 5 分 46 秒（2 秒、275 秒） | [44802298028](https://github.com/iamreal-tw/iamreal/actions/runs/44802298028) 第 1、2 次 |
 | `android` | 7 分 19 秒（`gradlew build` 361 秒） | 6 分 31 秒（299 秒，還原六份 25 秒） | [44811758760](https://github.com/iamreal-tw/iamreal/actions/runs/44811758760) 第 1、2 次 |
 
-省得不多。有快取時，時間大半花在兩個工作區的 crate 本身：`device-core/` 的 release 設定是 `lto = true`、`codegen-units = 1`，每次都要重做 LTO，快取幫不上（`device-core` 的 `cargo test` 裡這一段約 4 分；`android` 的 `gradlew build` 裡三次 `cargo build --release --lib` 各約 55 秒）。要再快得從這裡下手（#212）。
+省得不多。有快取時，時間大半花在 `device-core/` 自己的兩個 crate（`checks`、`prover`）：`device-core/` 的 release 設定是 `lto = true`、`codegen-units = 1`，每次都要重做 LTO，快取幫不上（`device-core` 的 `cargo test` 裡這一段約 4 分；`android` 的 `gradlew build` 裡三次 `cargo build --release --lib` 各約 1 分）。要再快得從這裡下手（#212）。
 
 **誰能寫、誰能讀：靠每個工作流程最上面的 `cache-mode`。**
 
@@ -124,19 +124,19 @@
 - **`cache.yml` 編的和 `checks.yml` 編的相同**：`cache-device-core` 和 `device-core` 在同一個目錄、用同樣的 `BB_LIB_DIR`、同樣的 `cargo clippy --locked --release --all-targets` 和 `cargo test --locked --release`，只差測試加了 `--no-run`（只編不跑：跑測試不會在 `target/` 留下之後用得到的東西）。`cache-android` 和 `android` 的步驟相同：同樣的 SDK、同樣的 JDK 17、同一行 `./gradlew --no-daemon build`，測試和 lint 也照跑；`cache-android` 只在最後多一步刪掉鎖檔和 `gc.properties`。兩邊不一樣的話，cargo 和 Gradle 會當成不同的東西重編，快取就白存了；`worker/test/workflows.ts` 裡兩邊共用的步驟和指令只寫一次，改一邊不改另一邊，測試會失敗。
 - **沒有快取時照樣通過，只是慢**：第一次、換了鍵、被刪掉的時候。`actions/cache/restore` 的 `fail-on-cache-miss` 預設是 `false`，這裡不設。快取 7 天沒人讀會被刪（「GitHub will remove any cache entries that have not been accessed in over 7 days」），整個程式庫超過 10 GB 時從最久沒用的開始刪（[Usage limits and eviction policy](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy)）；被刪之後要等下一次推到 `main` 才會再存。
 
-**大小：10 GB 是 `device-core` 和 `android` 的八份快取加起來的上限。** 2026-11-21 第一次存完的大小（`gh cache list`，壓縮後）：
+**大小：10 GB 是 `device-core` 和 `android` 的八份快取加起來的上限。** 2026-11-20（UTC）第一次存完的大小（`gh cache list` 的 `sizeInBytes`，壓縮後，單位 MiB）：
 
-| 快取 | 大小 |
+| 快取 | MiB |
 |---|---|
-| `android-gradle-caches` | 351 MB |
-| `device-core-target` | 207 MB |
-| `android-target-host` | 145 MB |
-| `android-gradle-wrapper` | 127 MB |
-| `android-target-aarch64-linux-android` | 119 MB |
-| `android-target-x86_64-linux-android` | 117 MB |
-| `device-core-cargo-registry`、`android-cargo-registry` | 各 16 MB |
+| `android-gradle-caches` | 352 |
+| `device-core-target` | 207 |
+| `android-target-host` | 145 |
+| `android-gradle-wrapper` | 128 |
+| `android-target-aarch64-linux-android` | 119 |
+| `android-target-x86_64-linux-android` | 117 |
+| `device-core-cargo-registry`、`android-cargo-registry` | 各 17 |
 
-一組約 1.1 GB，換鍵那一週兩組同時在也約 2.2 GB，離 10 GB 很遠。開發用的 Mac 上建置過 `android/` 的 Gradle 可以當參考（2026-11-21 用 `du` 量的，壓縮前）：`~/.gradle/caches` 約 940 MB（程式庫 460 MB、轉換過的 430 MB），`~/.gradle/wrapper` 約 150 MB。換鍵之後舊的那一組不會馬上刪，要等 7 天沒人讀或被擠掉，所以改了 `Cargo.lock` 或 Gradle 的版本那一週，兩組會同時在。合併後這樣量：
+一組約 1.1 GB，換鍵那一週兩組同時在也約 2.3 GB，離 10 GB 很遠。換鍵之後舊的那一組不會馬上刪，要等 7 天沒人讀或被擠掉，所以改了 `Cargo.lock` 或 Gradle 的版本那一週，兩組會同時在。重新量：
 
 ```sh
 gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort size_in_bytes \
