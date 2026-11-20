@@ -61,7 +61,7 @@ test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the roster's object, the data bucket and the object's name", () => {
+test("the test environment's only settings are the roster's object, the data bucket, the object's name and which roster it is", () => {
   checkBindings(deploy.output);
 });
 
