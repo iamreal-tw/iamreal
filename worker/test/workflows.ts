@@ -202,7 +202,6 @@ export const BROWSER_PATHS: readonly string[] = [
   "cmd/**",
   "go.mod",
   "go.sum",
-  "package.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   ".github/workflows/checks-browser.yml",
@@ -281,11 +280,12 @@ export const SECRET_LINES: readonly string[] = [
 /**
  * The two workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
- * exactly, and its concurrency group. The groups differ: a group is shared
- * by every workflow of the repository, so one name would have each cancel
- * the other.
+ * exactly, and its concurrency group. The groups differ: "concurrency group
+ * names must be unique across workflows to avoid canceling in-progress jobs
+ * or runs from other workflows"
+ * (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
  */
-const PULL_REQUEST_FILES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string }>> = {
+const PULL_REQUEST_RULES: Readonly<Record<string, { readonly on: Yaml; readonly env: YamlMap; readonly jobEnv?: YamlMap; readonly group: string }>> = {
   "checks.yml": {
     on: { pull_request: null },
     env: { IAMREAL_BB: BB_PATH, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true" },
@@ -356,7 +356,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>): strin
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
-    const rules = PULL_REQUEST_FILES[f];
+    const rules = PULL_REQUEST_RULES[f];
     if (rules === undefined) continue;
 
     // Not pull_request_target, workflow_run or any other: "secrets are not passed to the runner

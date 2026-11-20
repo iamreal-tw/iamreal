@@ -36,7 +36,6 @@ on:
       - cmd/**
       - go.mod
       - go.sum
-      - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - .github/workflows/checks-browser.yml
@@ -44,8 +43,9 @@ on:
 permissions:
   contents: read
 
-# Not the group of checks.yml: a group is shared by all the workflows, and one name would have
-# each cancel the other.
+# Not the group of checks.yml: "concurrency group names must be unique across workflows to avoid
+# canceling in-progress jobs or runs from other workflows" (GitHub's workflow syntax,
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
 concurrency:
   group: checks-browser-${{ github.event.pull_request.number }}
   cancel-in-progress: true
