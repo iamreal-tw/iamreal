@@ -52,7 +52,7 @@ pnpm test
 - `scope.json`：兩個場合字串和打包值；每份名冊的平台表（`platformsOf`）和標準答案、`spec/scope.md` 的表相同（代號、顯示名稱、格式）；平台代號；帳號名稱照它的平台的格式（格式字串從 `spec/scope.md` 的平台表讀出來，交給 `username-format.ts` 自己解析，和標準答案逐案相同；格式字串不是那一種寫法時讀不懂）
 - `declaration-code.json`：整份清單的原文、SHA-256、宣告碼、打包值
 - `scoped-id.json`：匿名編號的文字寫法、短編號 10 個字元、讀不懂的寫法
-- `min-app.json`：每個案例的 `config`、平台、app 自己的版本、裝置時鐘的時間，讀出來的結果（照常、照常但先提醒起算日、停下來、讀不懂）和標準答案相同
+- `min-app.json`：每個案例的 `config`、平台、app 自己的版本、裝置時鐘的時間，讀出來的結果（照常、照常但先提醒起算日、停下來、讀不懂）和標準答案相同。這份標準答案由 `test/generate/min-app.ts` 寫出（在 `protocol/` 跑 `node --experimental-strip-types test/generate/min-app.ts`）：每一案的結果手寫在裡面，寫檔前先用 `src/min-app.ts` 讀一次，有一案不同就不寫
 
 `test/roster-rules.test.ts`：
 

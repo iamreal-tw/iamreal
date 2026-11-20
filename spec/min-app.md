@@ -80,4 +80,5 @@ of `config`, the app's platform, the app's own build, the device clock's time
 `ok_until`. The cases cover the last second before `from` and the first
 second of it in Taiwan (still the day before in UTC), equal, lower and
 higher builds, the members that are ignored, and the field missing or in the
-wrong form.
+wrong form. The file is written by `protocol/test/generate/min-app.ts`, where
+each expected verdict is written by hand.

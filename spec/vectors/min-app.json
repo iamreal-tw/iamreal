@@ -2,6 +2,7 @@
   "spec": "min-app",
   "status": "draft",
   "note": "Each case: the parsed body of GET /api/v1/config, the app's platform, the app's own build number, the device clock's time (now: seconds since the epoch, UTC; now_in_taiwan only for reading), and the verdict. from is given for ok_until.",
+  "generated_by": "protocol/test/generate/min-app.ts",
   "cases": [
     {
       "name": "android, smaller build, the last second before the start date",
