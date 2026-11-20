@@ -189,6 +189,12 @@ describe("the views written again from the records", () => {
       assert.deepEqual([res.status, res.headers.get("cache-control"), JSON.parse(await res.text())], [500, "no-store", { error: "internal" }]);
       assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "roster", error: "Error" }]);
       assert.deepEqual(await checkRoster(worker), stored);
+      // Nor is the submission counted against its challenge: sent more often than a challenge takes submissions
+      // (five), it is the same 500 each time, never challenge_attempts, and it is still written once the views are filled (below).
+      for (let i = 0; i < 6; i++) {
+        const again = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(submission) });
+        assert.deepEqual([again.status, JSON.parse(await again.text())], [500, { error: "internal" }], `submission ${i + 2}`);
+      }
       // Each start tries again, and says so in one line.
       await worker.roster.restart();
       await wantUnavailable("/");
