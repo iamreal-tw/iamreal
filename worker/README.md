@@ -305,7 +305,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 - **最後一檔和它的雜湊清單。** 最多 999 行、約 20 MB。組的時候同時有三份：讀出來的每一行、接起來的字串、編成的位元組，約 60 MB；寫 R2 的時候留著位元組那一份。搬檔（`#moveFile`）是直接寫進一塊緩衝區、沒有中間的字串，這裡沒有照做。沒有量過。
 - 兩樣是同時握著的：最後一檔快寫滿的那一天，卡片狀態檔能用的就少約 60 MB。
 
-Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的）。照上面的數字，這個做法大約撐到一兩萬張卡片，最後一檔接近寫滿時更少。**正式名冊到一萬張之前要先改成一邊讀一邊寫**（#TBD；卡片狀態表本來就照檔案要的順序排）。測試名冊離這個數字很遠。
+Worker 的一個 isolate 上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)：「Each isolate can consume up to 128 MB of memory, including the JavaScript heap and WebAssembly allocations」，2026-11-20 讀的）。照上面的數字，這個做法大約撐到一兩萬張卡片，最後一檔接近寫滿時更少。**正式名冊到一萬張之前要先改成一邊讀一邊寫**（[#183](https://github.com/iamreal-tw/iamreal/issues/183)；卡片狀態表本來就照檔案要的順序排）。測試名冊離這個數字很遠。
 
 **撞到上限時會怎樣**（照程式和文件推的，沒有試過）：
 
