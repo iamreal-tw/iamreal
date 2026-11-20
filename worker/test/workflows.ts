@@ -17,8 +17,8 @@
 // - what the commands of checks.yml run: they run the repository's code,
 //   by design, with no secret and a token that can only read;
 // - what the commands of cache.yml leave in the caches it saves: they run
-//   the code of main (device-core/'s build), and every later check that
-//   restores a cache builds on what that run left in it;
+//   the code of main (the builds of device-core/ and android/), and every
+//   later check that restores a cache builds on what that run left in it;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
@@ -346,8 +346,50 @@ const CACHE_ACTION = { read: "actions/cache/restore", write: "actions/cache" } a
  * cache, restored for exactly these files or not at all: no `restore-keys`,
  * so a run never gets a target/ built for another Cargo.lock or another Rust.
  */
-const DEVICE_CORE_HASH =
-  "${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}";
+const DEVICE_CORE_KEY_FILES: readonly string[] = [
+  "device-core/Cargo.lock",
+  "device-core/Cargo.toml",
+  "device-core/checks/Cargo.toml",
+  "device-core/prover/Cargo.toml",
+  "device-core/rust-toolchain.toml",
+  "device-core/.cargo/config.toml",
+  "device-core/barretenberg.sha256",
+  "device-core/fetch-barretenberg.sh",
+];
+/**
+ * The files whose hash is in the keys of android's caches: device-core's,
+ * as the android job builds device-core/ too; android/build-native.sh, which
+ * holds the cargo command, its flags and the C compiler of the NDK that
+ * cc-rs is given; the Gradle build files, which name the plugins, the
+ * libraries, the SDK, the NDK and minSdk (the API level of that compiler);
+ * gradle/verification-metadata.xml, the SHA-256 of every file Gradle
+ * downloads, so that a new version of anything is a new key; and the
+ * wrapper's properties, which name the Gradle. Not fetch-zig.sh and
+ * zig.sha256: Zig only links the app's library, in Gradle's build directory,
+ * which is not cached.
+ */
+const ANDROID_KEY_FILES: readonly string[] = [
+  ...DEVICE_CORE_KEY_FILES,
+  "android/build-native.sh",
+  "android/settings.gradle.kts",
+  "android/build.gradle.kts",
+  "android/app/build.gradle.kts",
+  "android/gradle.properties",
+  "android/gradle/verification-metadata.xml",
+  "android/gradle/wrapper/gradle-wrapper.properties",
+];
+/** cache.yml, the first file of every key: it holds the commands that fill the caches. */
+const CACHE_WORKFLOW_PATH = `.github/workflows/${CACHE_WORKFLOW}`;
+const hashOf = (files: readonly string[]): string => `\${{ hashFiles(${[CACHE_WORKFLOW_PATH, ...files].map((f) => `'${f}'`).join(", ")}) }}`;
+/**
+ * Every file a key hashes (android's list holds device-core's).
+ * test/workflows.test.ts checks that each one is there: hashFiles skips a
+ * path that matches nothing, so a misspelt one would quietly leave its file
+ * out of the key.
+ */
+export const CACHE_KEY_FILES: readonly string[] = [CACHE_WORKFLOW_PATH, ...ANDROID_KEY_FILES];
+const DEVICE_CORE_HASH = hashOf(DEVICE_CORE_KEY_FILES);
+const ANDROID_HASH = hashOf(ANDROID_KEY_FILES);
 const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
 /**
  * The caches, exactly: what a step that restores or saves one is given. One
@@ -363,9 +405,33 @@ export const DEVICE_CORE_CACHES = {
   registry: { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
   target: { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
 } as const satisfies Record<string, Cache>;
+/**
+ * android's caches: cargo's registry; the three directories of target/ the
+ * android job's cargo builds into (android/build-native.sh): `release`, the
+ * library the unit tests load on the JVM, which also holds the build scripts
+ * and procedural macros of the two Android builds, and one directory per
+ * Android target; and Gradle's caches and wrapper. One cache per directory,
+ * so that `gh cache list` shows each one's size. Only `caches` and `wrapper`
+ * of ~/.gradle: not its init scripts, its properties or the daemon's
+ * directories. Gradle hashes again each library it takes from the restored
+ * cache and checks it against verification-metadata.xml (the hashes it has
+ * computed are kept in android/.gradle/, which is not cached); the wrapper
+ * checks the distribution only when it downloads it; what Gradle made from
+ * the libraries (transforms, compiled build scripts) and cargo's target/ are
+ * not checked again (.github/README.md, "快取"). Lock files and gc.properties
+ * are taken out before the save (GRADLE_CACHE_CLEANUP).
+ */
+export const ANDROID_CACHES = {
+  registry: { path: "~/.cargo/registry", key: cacheKey("android-cargo-registry", ANDROID_HASH) },
+  host: { path: "device-core/target/release", key: cacheKey("android-target-host", ANDROID_HASH) },
+  aarch64: { path: "device-core/target/aarch64-linux-android", key: cacheKey("android-target-aarch64-linux-android", ANDROID_HASH) },
+  x86_64: { path: "device-core/target/x86_64-linux-android", key: cacheKey("android-target-x86_64-linux-android", ANDROID_HASH) },
+  gradleCaches: { path: "~/.gradle/caches", key: cacheKey("android-gradle-caches", ANDROID_HASH) },
+  gradleWrapper: { path: "~/.gradle/wrapper", key: cacheKey("android-gradle-wrapper", ANDROID_HASH) },
+} as const satisfies Record<string, Cache>;
 const cacheSteps = (use: "read" | "write", caches: Readonly<Record<string, Cache>>): YamlMap[] => Object.values(caches).map((c) => ({ uses: uses(CACHE_ACTION[use]), with: { ...c } }));
 /** The caches each job of checks.yml may restore: its own. */
-const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES };
+const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES, [ANDROID_JOB]: ANDROID_CACHES };
 
 /**
  * The steps the device-core job of checks.yml and the job of cache.yml that
@@ -400,6 +466,32 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
 };
 
 /**
+ * The steps the android job of checks.yml and the job of cache.yml that
+ * fills its caches share, written once, for the reason given at
+ * DEVICE_CORE_SETUP: cargo and Gradle reuse what they find only for the same
+ * commands with the same SDK and JDK. The same `gradlew build` in both: with
+ * --no-daemon no Gradle is left running when cache.yml's caches are saved.
+ */
+const ANDROID_BUILD: readonly YamlMap[] = [
+  { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+  { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
+  { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
+  { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
+  { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
+];
+/**
+ * The last step of cache.yml's android job, before actions/cache saves after
+ * the job: Gradle's lock files and gc.properties out of ~/.gradle/caches.
+ * Gradle's documentation, on copying its dependency cache: "Do not copy the
+ * `*.lock` or `gc.properties` files if they exist"
+ * (https://docs.gradle.org/current/userguide/dependency_caching.html).
+ */
+const GRADLE_CACHE_CLEANUP: YamlMap = {
+  name: "Leave Gradle's lock files and gc.properties out of the cache",
+  run: `find "$HOME/.gradle/caches" -type f \\( -name "*.lock" -o -name gc.properties \\) -delete`,
+};
+
+/**
  * The android job of checks.yml, exactly, written out for the same reason
  * as the device-core job: what it runs is the Gradle wrapper of android/
  * (`build`: both installers, the unit tests, lint, the checks of what was
@@ -410,14 +502,7 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
 export const ANDROID_JOB_STEPS: YamlMap = {
   "runs-on": "ubuntu-24.04",
   "timeout-minutes": "30",
-  steps: [
-    step("actions/checkout"),
-    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
-    { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
-    { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
-    { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
-    { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
-  ],
+  steps: [step("actions/checkout"), ...cacheSteps("read", ANDROID_CACHES), ...ANDROID_BUILD],
 };
 
 /**
@@ -492,11 +577,12 @@ export const CACHE_GROUP = "cache";
 /**
  * The jobs of cache.yml, exactly. Each compiles what its job of checks.yml
  * compiles, with the same commands in the same directory (the same
- * constants, above), so that the
- * target/ it saves is the one that job's cargo looks in: clippy's check of
- * every target and the tests, with --release. The tests are built and not
- * run (`--no-run`): running them leaves nothing in target/ that a later
- * run reuses. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
+ * constants, above), so that what it saves is what that job's cargo and
+ * Gradle look for. cache-device-core: clippy's check of every target and the
+ * tests, with --release; the tests are built and not run (`--no-run`):
+ * running them leaves nothing in target/ that a later run reuses.
+ * cache-android: the whole `gradlew build` of the android job, tests and
+ * lint included. A job's id is no id of checks.yml's jobs (REQUIRED_CHECKS,
  * below, on why names are unique across workflows).
  */
 export const CACHE_JOBS: YamlMap = {
@@ -510,6 +596,11 @@ export const CACHE_JOBS: YamlMap = {
       DEVICE_CORE_CLIPPY,
       { name: "cargo test, built and not run", "working-directory": "device-core", run: `${DEVICE_CORE_TEST} --no-run` },
     ],
+  },
+  "cache-android": {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "30",
+    steps: [step("actions/checkout"), ...cacheSteps("write", ANDROID_CACHES), ...ANDROID_BUILD, GRADLE_CACHE_CLEANUP],
   },
 };
 
@@ -647,8 +738,8 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
  * restores (a change to it is a job that builds from nothing).
  */
 export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**", ".github/workflows/cache.yml"];
-/** The android job: the app, the Rust it links, the files Gradle bundles into the app, and the ones its unit tests read. */
-export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/copy/**"];
+/** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, and cache.yml, hashed into the keys of its caches like device-core's. */
+export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/copy/**", ".github/workflows/cache.yml"];
 /** A list of patterns for each required check, by the check's name. */
 export type CheckLists = Readonly<Record<string, readonly string[]>>;
 /** Each required check's list. */
@@ -659,7 +750,9 @@ export const matchesPaths = (patterns: readonly string[], path: string): boolean
 
 /**
  * The problems in the lists themselves: a pattern of another form, a list
- * without the paths every list has, or, where `isDirectory` says which
+ * without the paths every list has, a list without a file that is hashed
+ * into the key of a cache its job restores (a change to that file changes
+ * what the job restores, so the job runs), or, where `isDirectory` says which
  * paths are directories of the repository, a directory written without
  * `/**`, which the script takes for one file's name and which then matches
  * nothing.
@@ -671,6 +764,9 @@ export function pathsProblems(lists: CheckLists, isDirectory: (path: string) => 
     for (const p of list) if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*(\/\*\*)?$/.test(p) || p.split("/").some((part) => part === "." || part === "..")) problems.push(`${check}: not a path or <directory>/**: ${p}`);
     for (const p of list) if (!p.endsWith("/**") && isDirectory(p)) problems.push(`${check}: a directory without /**: ${p}`);
     for (const p of EVERY_CHECK_PATHS) if (!list.includes(p)) problems.push(`${check}: ${p} is not in the list`);
+    // The files a key of the job's caches hashes, as written in the key: `hashFiles('<file>', ...)`.
+    const hashed = new Set(Object.values(CACHES_OF_JOB[check] ?? {}).flatMap((c) => [...(/hashFiles\(([^)]*)\)/.exec(c.key)?.[1] ?? "").matchAll(/'([^']*)'/g)].map((m) => m[1]!)));
+    for (const f of hashed) if (!matchesPaths(list, f)) problems.push(`${check}: ${f} is in the key of a cache the job restores, and not in the list`);
   }
   return problems;
 }
