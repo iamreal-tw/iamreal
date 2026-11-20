@@ -8,6 +8,13 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
+// RulesVersion is the version number of the rules this package implements
+// (spec/roster-rules.md, "The version number"). The TypeScript
+// implementation has the same constant (protocol/'s RULES_VERSION). It goes
+// up by one with every change to the rules, and when this implementation is
+// corrected for a result or a state the rules do not give.
+const RulesVersion = 1
+
 // Reason codes of an invalid record (spec/roster-rules.md, "Per record").
 const (
 	CodeProof           = "proof"

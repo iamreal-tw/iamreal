@@ -36,6 +36,8 @@ go test ./roster
 
 `incremental_test.go`：同一份 `roster-rules.json`，一筆一筆用 `Rules` 套用，每一筆先 `Check` 兩次（答案相同、狀態沒變）、`CheckWithCard`（答案和 `Check` 相同；有效時的卡片狀態和 `Apply` 之後的 `Card` 相同，無效時是空的）再 `Apply`（和 `Check` 的答案相同），結果、最後的現況（含 `proofs_on_last_date` 和每個名額的 `current`、`last_declared`、`switch_count`、`correction_date`）都和標準答案、整份的 `Apply` 相同；`AccountCards` 和輸出的每個帳號的卡片數一致，同一個帳號名稱在別的平台沒有卡片時是 0；`Card` 和輸出的每張卡片一致。`TestCard` 另測：沒有紀錄的卡片每個名額都沒用過；收回後保留上次宣告的帳號、更換次數和 `correction_date`；收回的種類帶著被收回的帳號；回傳的是副本。
 
+`version_test.go`：規則的版本號 `RulesVersion` 等於 `spec/roster-rules.md`「The version number」寫的那一版，也等於 `roster-rules.json` 的 `rules_version`。TypeScript 的 `protocol/` 拿它的 `RULES_VERSION` 比同樣兩個地方，所以兩邊的常數相同。
+
 `rules_test.go` 另外測：同一個樹根對應好幾份清冊時任一份符合就承認；驗證器或清冊存檔出錯時規則停下來。
 
 用真的證明跑一份測試名冊的測試在 `verifier/proof_test.go`（`TestRealProofRoster`）。
