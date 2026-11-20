@@ -3,11 +3,26 @@
 
 use serde_json::Value;
 
+/// A file of this repository, by its path from the root.
+pub fn repo_file(path: &str) -> Vec<u8> {
+    let full = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(path);
+    std::fs::read(full).unwrap_or_else(|_| panic!("{path}"))
+}
+
 pub fn vectors(name: &str) -> Value {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../spec/vectors")
-        .join(name);
-    serde_json::from_slice(&std::fs::read(path).expect("the vectors file")).expect("JSON")
+    serde_json::from_slice(&repo_file(&format!("spec/vectors/{name}"))).expect("JSON")
+}
+
+/// SHA-256 for the checks that take it from their caller.
+pub struct TestSha256;
+
+impl iamreal_device_checks::hash::Sha256 for TestSha256 {
+    fn sha256(&mut self, data: &[u8]) -> [u8; 32] {
+        use sha2::Digest;
+        sha2::Sha256::digest(data).into()
+    }
 }
 
 pub fn cases<'a>(v: &'a Value, key: &str) -> &'a Vec<Value> {

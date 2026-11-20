@@ -9,13 +9,22 @@
 //! certificate, a CRL or an account.
 
 pub mod base32;
+pub mod certificate;
 pub mod challenge;
+pub mod crl;
 pub mod date;
 pub mod declaration_code;
+pub mod der;
 pub mod field;
 pub mod hash;
+pub mod hex;
+pub mod issuers;
+pub mod key;
+pub mod revocation;
+pub mod rsa;
 pub mod scope;
 pub mod scoped_id;
+pub mod tree;
 pub mod username_format;
 
 /// Overwrites `bytes` with zeros: for signatures, certificates and what is
