@@ -346,8 +346,43 @@ const CACHE_ACTION = { read: "actions/cache/restore", write: "actions/cache" } a
  * cache, restored for exactly these files or not at all: no `restore-keys`,
  * so a run never gets a target/ built for another Cargo.lock or another Rust.
  */
-const DEVICE_CORE_HASH =
-  "${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}";
+const DEVICE_CORE_KEY_FILES: readonly string[] = [
+  "device-core/Cargo.lock",
+  "device-core/Cargo.toml",
+  "device-core/checks/Cargo.toml",
+  "device-core/prover/Cargo.toml",
+  "device-core/rust-toolchain.toml",
+  "device-core/.cargo/config.toml",
+  "device-core/barretenberg.sha256",
+  "device-core/fetch-barretenberg.sh",
+];
+/**
+ * The files whose hash is in the keys of android's caches: device-core's,
+ * as the android job builds device-core/ too; android/build-native.sh, which
+ * holds the cargo command, its flags and the C compiler of the NDK that
+ * cc-rs is given; the Gradle build files, which name the plugins, the
+ * libraries, the SDK, the NDK and minSdk (the API level of that compiler);
+ * gradle/verification-metadata.xml, the SHA-256 of every file Gradle
+ * downloads, so that a new version of anything is a new key; and the
+ * wrapper's properties, which name the Gradle. Not fetch-zig.sh and
+ * zig.sha256: Zig only links the app's library, in Gradle's build directory,
+ * which is not cached.
+ */
+const ANDROID_KEY_FILES: readonly string[] = [
+  ...DEVICE_CORE_KEY_FILES,
+  "android/build-native.sh",
+  "android/settings.gradle.kts",
+  "android/build.gradle.kts",
+  "android/app/build.gradle.kts",
+  "android/gradle.properties",
+  "android/gradle/verification-metadata.xml",
+  "android/gradle/wrapper/gradle-wrapper.properties",
+];
+const hashOf = (files: readonly string[]): string => `\${{ hashFiles(${[`.github/workflows/${CACHE_WORKFLOW}`, ...files].map((f) => `'${f}'`).join(", ")}) }}`;
+/** Every file a key hashes. test/workflows.test.ts checks that each one is there: hashFiles skips a path that matches nothing, so a misspelt one would quietly leave its file out of the key. */
+export const CACHE_KEY_FILES: readonly string[] = [`.github/workflows/${CACHE_WORKFLOW}`, ...new Set([...DEVICE_CORE_KEY_FILES, ...ANDROID_KEY_FILES])];
+const DEVICE_CORE_HASH = hashOf(DEVICE_CORE_KEY_FILES);
+const ANDROID_HASH = hashOf(ANDROID_KEY_FILES);
 const cacheKey = (name: string, hash: string): string => `${name}-\${{ runner.os }}-\${{ runner.arch }}-${hash}`;
 /**
  * The caches, exactly: what a step that restores or saves one is given. One
@@ -363,9 +398,31 @@ export const DEVICE_CORE_CACHES = {
   registry: { path: "~/.cargo/registry", key: cacheKey("device-core-cargo-registry", DEVICE_CORE_HASH) },
   target: { path: "device-core/target", key: cacheKey("device-core-target", DEVICE_CORE_HASH) },
 } as const satisfies Record<string, Cache>;
+/**
+ * android's caches: cargo's registry; the three directories of target/ the
+ * android job's cargo builds into (android/build-native.sh): `release`, the
+ * library the unit tests load on the JVM, which also holds the build scripts
+ * and procedural macros of the two Android builds, and one directory per
+ * Android target; and Gradle's caches and wrapper. One cache per directory,
+ * so that `gh cache list` shows each one's size. Only `caches` and `wrapper`
+ * of ~/.gradle: not its init scripts, its properties or the daemon's
+ * directories. Gradle checks the libraries in its cache against
+ * verification-metadata.xml on every build; the wrapper checks the
+ * distribution only when it downloads it; what Gradle made from the libraries
+ * (transforms, compiled build scripts) and cargo's target/ are not checked
+ * again (.github/README.md, "快取").
+ */
+export const ANDROID_CACHES = {
+  registry: { path: "~/.cargo/registry", key: cacheKey("android-cargo-registry", ANDROID_HASH) },
+  host: { path: "device-core/target/release", key: cacheKey("android-target-host", ANDROID_HASH) },
+  arm64: { path: "device-core/target/aarch64-linux-android", key: cacheKey("android-target-aarch64-linux-android", ANDROID_HASH) },
+  x86_64: { path: "device-core/target/x86_64-linux-android", key: cacheKey("android-target-x86_64-linux-android", ANDROID_HASH) },
+  gradle: { path: "~/.gradle/caches", key: cacheKey("android-gradle-caches", ANDROID_HASH) },
+  wrapper: { path: "~/.gradle/wrapper", key: cacheKey("android-gradle-wrapper", ANDROID_HASH) },
+} as const satisfies Record<string, Cache>;
 const cacheSteps = (use: "read" | "write", caches: Readonly<Record<string, Cache>>): YamlMap[] => Object.values(caches).map((c) => ({ uses: uses(CACHE_ACTION[use]), with: { ...c } }));
 /** The caches each job of checks.yml may restore: its own. */
-const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES };
+const CACHES_OF_JOB: Readonly<Record<string, Readonly<Record<string, Cache>>>> = { [DEVICE_CORE_JOB]: DEVICE_CORE_CACHES, [ANDROID_JOB]: ANDROID_CACHES };
 
 /**
  * The steps the device-core job of checks.yml and the job of cache.yml that
@@ -400,6 +457,21 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
 };
 
 /**
+ * The steps the android job of checks.yml and the job of cache.yml that
+ * fills its caches share, written once, for the reason given at
+ * DEVICE_CORE_SETUP: cargo and Gradle reuse what they find only for the same
+ * commands with the same SDK and JDK. The same `gradlew build` in both: with
+ * --no-daemon no Gradle is left running when cache.yml's caches are saved.
+ */
+const ANDROID_BUILD: readonly YamlMap[] = [
+  { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
+  { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
+  { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
+  { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
+  { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
+];
+
+/**
  * The android job of checks.yml, exactly, written out for the same reason
  * as the device-core job: what it runs is the Gradle wrapper of android/
  * (`build`: both installers, the unit tests, lint, the checks of what was
@@ -410,14 +482,7 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
 export const ANDROID_JOB_STEPS: YamlMap = {
   "runs-on": "ubuntu-24.04",
   "timeout-minutes": "30",
-  steps: [
-    step("actions/checkout"),
-    { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
-    { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
-    { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
-    { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
-    { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
-  ],
+  steps: [step("actions/checkout"), ...cacheSteps("read", ANDROID_CACHES), ...ANDROID_BUILD],
 };
 
 /**
@@ -510,6 +575,11 @@ export const CACHE_JOBS: YamlMap = {
       DEVICE_CORE_CLIPPY,
       { name: "cargo test, built and not run", "working-directory": "device-core", run: `${DEVICE_CORE_TEST} --no-run` },
     ],
+  },
+  "cache-android": {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "30",
+    steps: [step("actions/checkout"), ...cacheSteps("write", ANDROID_CACHES), ...ANDROID_BUILD],
   },
 };
 
