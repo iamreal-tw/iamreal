@@ -37,7 +37,10 @@ export default {
     for (const r of round.sources) console.log(JSON.stringify({ event: "crl_mirror", at, ...r }));
     for (const f of round.files) {
       if (f.result === "failed") console.log(JSON.stringify({ event: "crl_index", at, ...f }));
-      else console.log(JSON.stringify({ event: "crl_index", at, result: f.result, ...f.line, entries: f.entries, keys: f.keys, hashes: f.hashes, read_ms: f.readMs, tree_ms: f.treeMs }));
+      else {
+        const { issuer, crlNumber, crlDate, sha256, root } = f.line;
+        console.log(JSON.stringify({ event: "crl_index", at, result: f.result, sha256, issuer, crl_number: crlNumber, crl_date: crlDate, root, entries: f.entries, keys: f.keys, hashes: f.hashes, read_ms: f.readMs, tree_ms: f.treeMs }));
+      }
     }
     // Thrown after everything was tried, so that the run shows as failed.
     if (errors.length > 0) throw new Error(`CRL mirror: ${errors.join("; ")}`);

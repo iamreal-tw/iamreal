@@ -9,16 +9,17 @@
 // 1. Only the root is wanted, so no node is kept: the only hashes alive are
 // those on the way down to the subtree being built.
 //
-// MOICA's G2 CRL takes about 830,000 hashes, some 25 seconds. The Worker
-// has one thread, so the tree is built in parts, the subtrees PART_LEVELS
-// below the root, and `pause` is awaited between them: a request that
-// arrived meanwhile is answered then (#26).
+// MOICA's G2 CRL takes about 830,000 hashes, half a minute in the local
+// workerd. The Worker has one thread, so the tree is built in parts, the
+// subtrees PART_LEVELS below the root, and `pause` is awaited between them:
+// a request that arrived meanwhile is answered then (#26). README.md,
+// "清冊鏡像量到的", has what was measured.
 import { KEY_WORDS, type TreeKeys, reversed } from "./crl.ts";
 import type { Poseidon2Hash } from "./poseidon2.ts";
 
 /** The tree is built in up to 2^12 parts, each a subtree 12 levels below the root. */
 const PART_LEVELS = 12;
-/** A pause comes once the parts built since the last one hold this many keys: about 20 ms of hashing. */
+/** A pause comes once the parts built since the last one hold this many keys: some 25 ms of hashing in the local workerd. */
 const KEYS_BETWEEN_PAUSES = 256;
 
 export interface TreeRoot {

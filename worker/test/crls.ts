@@ -70,6 +70,12 @@ export interface TestCrl {
   readonly thisUpdate: Date;
   /** The revoked serial numbers; none by default. */
   readonly serials?: readonly bigint[];
+  /**
+   * `thisUpdate` as these characters in place of the usual UTCTime, as a
+   * UTCTime (`utc`) or a GeneralizedTime (`generalized`): for times written
+   * in ways MOICA does not write them.
+   */
+  readonly thisUpdateAs?: { readonly utc: string } | { readonly generalized: string };
 }
 
 /** A complete CRL (RFC 5280 section 5) in DER, signed by a test issuer key. */
@@ -81,7 +87,7 @@ export function makeCrl(c: TestCrl): Uint8Array {
     integer(1n), // v2
     SHA256_WITH_RSA,
     name,
-    utcTime(c.thisUpdate),
+    c.thisUpdateAs === undefined ? utcTime(c.thisUpdate) : "utc" in c.thisUpdateAs ? der(0x17, Buffer.from(c.thisUpdateAs.utc)) : der(0x18, Buffer.from(c.thisUpdateAs.generalized)),
     utcTime(new Date(c.thisUpdate.getTime() + 36 * 3600 * 1000)),
     ...(revoked.length > 0 ? [der(0x30, ...revoked)] : []),
     der(0xa0, der(0x30, der(0x30, oid(0x55, 0x1d, 0x14), der(0x04, integer(c.number))))),
