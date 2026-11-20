@@ -41,12 +41,12 @@ const EMPTY_FINGERPRINT = "0".repeat(64);
  * (the timed work below), so a challenge that is not here is unknown.
  *
  * roster: exactly one row (`id` 1), written when the object first starts.
- * `kind` is which roster the object holds, "test" or "production", as the
- * environment's setting said then; it never changes. `count` is the number
- * of records; `fingerprint` their roster fingerprint; `latest_valid_date`
- * the latest date among the valid records, `YYYY-MM-DD`, or NULL without
- * one; `rules_version` the version of the roster rules the rows of `cards`
- * were computed by (spec/roster-rules.md, "The version number").
+ * `count` is the number of records; `fingerprint` their roster fingerprint;
+ * `latest_valid_date` the latest date among the valid records,
+ * `YYYY-MM-DD`, or NULL without one; `rules_version` the version of the
+ * roster rules the rows of `cards` were computed by (spec/roster-rules.md,
+ * "The version number"); `schema_version` the SCHEMA_VERSION of the build
+ * that made the tables.
  */
 const TABLES: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS challenges (
@@ -59,13 +59,41 @@ const TABLES: readonly string[] = [
   CARD_TABLE,
   `CREATE TABLE IF NOT EXISTS roster (
      id                INTEGER PRIMARY KEY CHECK (id = 1),
-     kind              TEXT    NOT NULL,
      count             INTEGER NOT NULL,
      fingerprint       TEXT    NOT NULL,
      latest_valid_date TEXT,
-     rules_version     INTEGER NOT NULL
+     rules_version     INTEGER NOT NULL,
+     schema_version    INTEGER NOT NULL
    )`,
 ];
+
+/**
+ * The version of the tables above, as this build makes and reads them.
+ *
+ * **Add one whenever a table that already exists changes**: a column added
+ * or removed, a column that comes to mean something else, another primary
+ * key. A new table, or a new index, does not change it: the statements
+ * above make those on an object that lacks them.
+ *
+ * An object keeps the version its tables were made by (`roster`,
+ * `schema_version`) and compares when it starts. If it is not this one, the
+ * object reads and writes nothing more: `CREATE TABLE IF NOT EXISTS` left
+ * its tables as they were, and this build would read them wrongly. There is
+ * no code that carries tables from one version to the next; the way out is
+ * a new object (README.md, "兩個版本號").
+ *
+ * It is not the version of the roster rules (`rules_version`,
+ * protocol/'s RULES_VERSION), which says what the stored state of the cards
+ * was computed by.
+ */
+export const SCHEMA_VERSION = 1;
+
+/**
+ * The message of the error every method throws when the object's tables
+ * were made by another SCHEMA_VERSION. The Worker tells this failure from
+ * any other by it (api.ts); it is never written anywhere.
+ */
+export const OTHER_SCHEMA = "the object's tables were made by another SCHEMA_VERSION";
 
 /** What `card-state` is answered from. */
 export interface CardStateAnswer {
@@ -74,13 +102,6 @@ export interface CardStateAnswer {
   /** The number of records the state was computed at. */
   readonly count: number;
 }
-
-/**
- * The message of the error every method throws when the object holds
- * another roster than the environment's setting names. The Worker tells
- * this failure from any other by it (api.ts); it is never written anywhere.
- */
-export const OTHER_ROSTER = "the object holds another roster than ROSTER_KIND names";
 
 /**
  * Something the object does at a time of its own choosing. An object has
@@ -105,34 +126,34 @@ const MIN_ALARM_WAIT_MS = 1000;
  * here: settings.ts.)
  */
 export class Roster extends DurableObject<Env> {
-  /** The environment's roster, if it is the one this object holds; null if the object holds another. */
-  readonly #settings: RosterSettings | null;
+  readonly #settings: RosterSettings;
+  /** Whether the object's tables were made by this build's SCHEMA_VERSION. */
+  readonly #tablesAreThisVersion: boolean;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const settings = rosterSettingsOf(env);
+    // Before anything is read or written: with settings that do not fit each
+    // other (settings.ts) the object does not start. The Worker reads the
+    // same settings before it asks the object, so it does not get this far.
+    this.#settings = rosterSettingsOf(env);
     const sql = ctx.storage.sql;
     for (const statement of TABLES) sql.exec(statement);
-    // A new roster: of the kind the setting names, no record, and a state computed by the rules of this build.
+    // A new roster: no record, a state computed by the rules of this build,
+    // tables made by this build. On an object that has the row this changes
+    // nothing: neither version is ever brought up to the build's here.
     sql.exec(
-      "INSERT OR IGNORE INTO roster (id, kind, count, fingerprint, latest_valid_date, rules_version) VALUES (1, ?, 0, ?, NULL, ?)",
-      settings.kind,
+      "INSERT OR IGNORE INTO roster (id, count, fingerprint, latest_valid_date, rules_version, schema_version) VALUES (1, 0, ?, NULL, ?, ?)",
       EMPTY_FINGERPRINT,
       RULES_VERSION,
+      SCHEMA_VERSION,
     );
-    const { kind } = sql.exec<{ kind: string }>("SELECT kind FROM roster WHERE id = 1").one();
-    this.#settings = kind === settings.kind ? settings : null;
+    const { schema_version } = sql.exec<{ schema_version: number }>("SELECT schema_version FROM roster WHERE id = 1").one();
+    this.#tablesAreThisVersion = schema_version === SCHEMA_VERSION;
   }
 
-  /**
-   * The settings, for a method about to read or write the roster. Throws if
-   * the object holds another roster than the setting names: a test roster's
-   * object answering as the production roster, or the reverse, would mix
-   * the two, so it does nothing at all until the setting is put right.
-   */
-  #roster(): RosterSettings {
-    if (this.#settings === null) throw new Error(OTHER_ROSTER);
-    return this.#settings;
+  /** For a method about to read or write the tables: throws if they were made by another SCHEMA_VERSION. */
+  #checkTables(): void {
+    if (!this.#tablesAreThisVersion) throw new Error(OTHER_SCHEMA);
   }
 
   /**
@@ -141,7 +162,7 @@ export class Roster extends DurableObject<Env> {
    * given out, so a challenge anybody holds is one this object knows.
    */
   async issueChallenge(): Promise<string> {
-    this.#roster();
+    this.#checkTables();
     const issued = now().getTime();
     const challenge = `${formatDay(taiwanDay(issued))}.${encodeBase32(crypto.getRandomValues(new Uint8Array(16)))}`;
     // A date outside 2000 to 2049 is not a challenge.
@@ -153,7 +174,8 @@ export class Roster extends DurableObject<Env> {
 
   /** The state of one card and the number of records it was computed at. */
   cardState(scopeString: string, scopedId: string): CardStateAnswer {
-    const { platforms } = this.#roster();
+    this.#checkTables();
+    const { platforms } = this.#settings;
     const sql = this.ctx.storage.sql;
     const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
     return { card: readCard(sql, platforms, scopeString, scopedId)?.card ?? null, count };
@@ -194,8 +216,8 @@ export class Roster extends DurableObject<Env> {
 
   /** The alarm: each piece of timed work that is due runs once, and the alarm is set again. */
   override async alarm(): Promise<void> {
-    // An object that holds another roster than the setting names does nothing.
-    if (this.#settings === null) return;
+    // With tables of another version the object does nothing, and asks for no further alarm.
+    if (!this.#tablesAreThisVersion) return;
     const time = now().getTime();
     for (const work of this.timedWork()) {
       const due = work.due();

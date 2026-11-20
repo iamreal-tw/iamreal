@@ -13,11 +13,12 @@
 //
 // The doors to the roster's object do what no request can do yet or ever.
 // The object of the test build is the deployed one (src/roster.ts) with
-// six methods added: run its alarm now; read when the alarm is set for;
+// seven methods added: run its alarm now; read when the alarm is set for;
 // write the state of a card (until submitting a record does, #67); break
 // its tables, to see what the API answers when the back end itself fails;
-// and give it a second piece of timed work, and read when that one ran, to
-// see that two pieces share the one alarm without disturbing each other.
+// give it a second piece of timed work, and read when that one ran, to see
+// that two pieces share the one alarm without disturbing each other; and
+// change the version its tables say they were made by.
 //
 // The settings a test replaces (`ROSTER_KIND`, `ROSTER_OBJECT_NAME`) are
 // kept here, in memory, and laid over the environment the Worker and the
@@ -29,7 +30,7 @@ import type { CardState, SlotState } from "iamreal-protocol/roster-rules.ts";
 import { writeCard } from "../src/card-table.ts";
 import worker from "../src/index.ts";
 import { poseidon2Hash, proofVerifier } from "../src/in-worker.ts";
-import { Roster as DeployedRoster, type TimedWork, rosterOf } from "../src/roster.ts";
+import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import type { CardToWrite, TestSettings } from "./card-door.ts";
 import { setTestClock } from "./target.ts";
@@ -87,6 +88,11 @@ export class Roster extends DeployedRoster {
     writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
   }
 
+  /** Makes the stored version of the tables another one than the build's, or the build's. Takes effect when the object starts again. */
+  testSetStoredSchemaVersion(to: "another" | "the build's"): void {
+    this.ctx.storage.sql.exec("UPDATE roster SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
+  }
+
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
   testBreak(): void {
     this.ctx.storage.sql.exec("DROP TABLE challenges");
@@ -112,6 +118,8 @@ export default {
    * - `PUT /__test/roster/extra-work` with `{due, every}` gives the object a
    *   second piece of timed work; `GET` answers `{runs}`, when it ran.
    * - `PUT /__test/roster/card` writes the state of a card (CardToWrite).
+   * - `PUT /__test/roster/schema-version` with `{to}`, "another" or "the
+   *   build's", changes the version the object's tables say they were made by.
    * - `POST /__test/roster/break` drops the tables the API reads.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
@@ -154,6 +162,11 @@ export default {
         slots.set(platform, slot);
       }
       await testRosterOf(env).testWriteCard(body.scope_string, body.scoped_id, { lastCardProof: parseDay(body.last_card_proof), proofsOnLastDate: body.proofs_on_last_date, slots }, body.seq);
+      return done();
+    }
+    if (route === "PUT /__test/roster/schema-version") {
+      const { to } = (await request.json()) as { to: "another" | "the build's" };
+      await testRosterOf(env).testSetStoredSchemaVersion(to);
       return done();
     }
     if (route === "POST /__test/roster/break") {

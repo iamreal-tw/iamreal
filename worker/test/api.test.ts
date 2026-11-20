@@ -664,10 +664,23 @@ describe("a stored state of a card that the rules cannot have left", () => {
 describe("the setting that says which roster the environment serves", () => {
   const cardState = (worker: TestWorker, scope: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scope, scoped_id: CARD }) });
 
-  for (const kind of ["staging", "", "Test", "production "]) {
-    test(`ROSTER_KIND ${JSON.stringify(kind)} names no roster: every endpoint is 500, and the line says it is the settings`, async () => {
-      const worker = await startWorker({ settings: { ROSTER_KIND: kind } });
+  // The name of a test roster's object starts with `test-`, that of the production roster's does not.
+  const WRONG: [why: string, kind: string, name: string][] = [
+    ["a kind that names no roster", "staging", "test-1"],
+    ["an empty kind", "", "test-1"],
+    ["a kind in another case", "Test", "test-1"],
+    ["a kind with a space after it", "production ", "roster-1"],
+    ["the production roster on the test roster's object", "production", "test-1"],
+    ["the production roster on any object named as a test one", "production", "test-"],
+    ["the test roster on an object not named as a test one", "test", "roster-1"],
+    ["the test roster on an object named `test` without the hyphen", "test", "test"],
+    ["the test roster on an object named in another case", "test", "Test-1"],
+  ];
+  for (const [why, kind, name] of WRONG) {
+    test(`${why} (ROSTER_KIND ${JSON.stringify(kind)}, ROSTER_OBJECT_NAME ${JSON.stringify(name)}): every endpoint is 500, the line says it is the settings, and the object is not asked`, async () => {
+      const worker = await startWorker({ settings: { ROSTER_KIND: kind, ROSTER_OBJECT_NAME: name } });
       try {
+        await worker.setClock(NOON);
         const answers = [
           await worker.fetch("/api/v1/challenges", { method: "POST" }),
           await cardState(worker, TEST_SCOPE),
@@ -690,6 +703,12 @@ describe("the setting that says which roster the environment serves", () => {
         // What does not need the settings is as ever.
         assert.equal((await worker.fetch("/api/v1/nothing")).status, 404);
         assert.equal((await worker.fetch("/api/v1/config", { method: "POST" })).status, 405);
+
+        // With settings that fit the same object, it turns out never to have issued a challenge.
+        await worker.setSettings({ ROSTER_KIND: name.startsWith("test-") ? "test" : "production", ROSTER_OBJECT_NAME: name });
+        assert.deepEqual(await worker.roster.storedChallenges(), []);
+        const first = await issue(worker);
+        assert.deepEqual(await worker.roster.storedChallenges(), [first]);
       } finally {
         await worker.close();
       }
@@ -734,40 +753,50 @@ describe("the setting that says which roster the environment serves", () => {
     }
   });
 
-  test("an object that holds the test roster does nothing once the setting says production: 500, nothing read or written, until the setting is put back", async () => {
+  test("tables made by another version than the build's: the object reads and writes nothing, the endpoints that ask it are 500 and the line says it is the schema, until the version is the build's again", async () => {
     const worker = await startWorker();
     try {
       await worker.setClock(NOON);
       const challenge = await issue(worker);
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
 
-      // As a deploy with the wrong setting would: the setting changes and the object starts again.
-      await worker.setSettings({ ROSTER_KIND: "production" });
+      // As a deploy of a build with another version would find it: the stored version differs when the object starts.
+      await worker.roster.setStoredSchemaVersion("another");
       await worker.roster.restart();
 
-      const refused = [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, PRODUCTION_SCOPE)];
-      for (const res of refused) {
-        assert.equal(res.status, 500);
-        assert.deepEqual(await jsonOf(res), { error: "internal" });
-      }
+      const refuse = async (): Promise<Response[]> => {
+        const answers = [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, TEST_SCOPE)];
+        for (const res of answers) {
+          assert.equal(res.status, 500);
+          assert.deepEqual(await jsonOf(res), { error: "internal" });
+        }
+        return answers;
+      };
+      const refused = await refuse();
       assert.deepEqual(
         failuresIn(worker).map((l) => [l.endpoint, l.where, l.id]),
         [
-          ["/api/v1/challenges", "roster_kind", refused[0]!.headers.get("X-Request-Id")],
-          ["/api/v1/card-state", "roster_kind", refused[1]!.headers.get("X-Request-Id")],
+          ["/api/v1/challenges", "schema", refused[0]!.headers.get("X-Request-Id")],
+          ["/api/v1/card-state", "schema", refused[1]!.headers.get("X-Request-Id")],
         ],
       );
+      // What does not ask the object is as ever: config, which the Worker answers by itself, and the paths that are no endpoint.
+      assert.equal((await worker.fetch("/api/v1/config")).status, 200);
+      assert.equal((await worker.fetch("/api/v1/nothing")).status, 404);
+      assert.equal((await worker.fetch("/api/v1/challenges")).status, 405);
+      assert.equal((await worker.fetch("/")).status, 404);
       // No challenge was issued, and the alarm deletes none, however late it is.
       assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
       await worker.setClock(new Date(NOON.getTime() + 60 * 60_000));
       await worker.roster.runAlarm();
       assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
-      // The test roster's scope is not the setting's: the Worker refuses it before it asks the object.
-      assert.equal((await cardState(worker, TEST_SCOPE)).status, 400);
+      // Starting again does not make the stored version the build's.
+      await worker.roster.restart();
+      await refuse();
+      assert.deepEqual(failuresIn(worker).map((l) => l.where), ["schema", "schema", "schema", "schema"]);
 
-      // The setting put back, the object is the test roster's again, with what it had.
       await worker.setClock(NOON);
-      await worker.setSettings({});
+      await worker.roster.setStoredSchemaVersion("the build's");
       await worker.roster.restart();
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
       const next = await issue(worker);
@@ -777,15 +806,29 @@ describe("the setting that says which roster the environment serves", () => {
     }
   });
 
-  test("config does not ask the roster's object, so it cannot see that the object holds another roster: it answers with the setting's table", async () => {
+  test("a running test roster whose setting is changed to production: nothing answers, the object keeps what it had, and it goes on once the setting is put back", async () => {
     const worker = await startWorker();
     try {
-      await issue(worker);
+      await worker.setClock(NOON);
+      const challenge = await issue(worker);
+      assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
+
+      // As a deploy with the wrong setting would: the setting changes and the object starts again.
       await worker.setSettings({ ROSTER_KIND: "production" });
       await worker.roster.restart();
-      const res = await worker.fetch("/api/v1/config");
-      assert.equal(res.status, 200);
-      assert.deepEqual(((await jsonOf(res)) as { platforms: { platform: string }[] }).platforms.map((p) => p.platform), ["threads"]);
+      for (const res of [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, PRODUCTION_SCOPE), await cardState(worker, TEST_SCOPE), await worker.fetch("/api/v1/config")]) {
+        assert.equal(res.status, 500);
+        assert.deepEqual(await jsonOf(res), { error: "internal" });
+      }
+      assert.deepEqual(failuresIn(worker).map((l) => l.where), ["settings", "settings", "settings", "settings"]);
+
+      // The object was stopped and nothing has started it since: with the setting put back it starts from what it stored.
+      await worker.setSettings({});
+      await assert.rejects(worker.roster.restart(), /not currently running/);
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge]);
+      assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
+      const next = await issue(worker);
+      assert.deepEqual(await worker.roster.storedChallenges(), [challenge, next].sort());
     } finally {
       await worker.close();
     }

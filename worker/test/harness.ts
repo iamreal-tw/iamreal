@@ -172,6 +172,13 @@ export interface TestWorker {
     /** The times, on the object's clock, at which that second piece ran. */
     extraWorkRuns(): Promise<Date[]>;
     /**
+     * Changes the version the object's tables say they were made by: to
+     * another one than the build's, or back (test build,
+     * `PUT /__test/roster/schema-version`). The object compares when it
+     * starts: `restart()` after this.
+     */
+    setStoredSchemaVersion(to: "another" | "the build's"): Promise<void>;
+    /**
      * The challenges the object still holds, read from its storage. A
      * stopgap: no endpoint shows yet whether a challenge is known. When
      * submitting a record does (`challenge_unknown`, #67), the tests ask
@@ -305,6 +312,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         if (res.status !== 200) throw new Error(`reading the alarm: HTTP ${res.status}`);
         const { alarm } = (await res.json()) as { alarm: number | null };
         return alarm === null ? null : alarm - Date.now();
+      },
+      async setStoredSchemaVersion(to) {
+        const res = await server.fetch("/__test/roster/schema-version", { method: "PUT", body: JSON.stringify({ to }) });
+        if (res.status !== 204) throw new Error(`changing the stored schema version: HTTP ${res.status}`);
       },
       async storedChallenges() {
         const storage = await worker.getDurableObjectStorage("ROSTER" as never, rosterObject());

@@ -18,7 +18,7 @@ import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { readStrings } from "./json.ts";
-import { OTHER_ROSTER, rosterOf } from "./roster.ts";
+import { OTHER_SCHEMA, rosterOf } from "./roster.ts";
 import { rosterSettingsOf } from "./settings.ts";
 import { type SlotJson, slotToJson } from "./slot-json.ts";
 
@@ -46,12 +46,15 @@ const MALFORMED = fail(400, "malformed");
 /**
  * Where the back end failed, as the one line about it says (`where`):
  *
- *   settings      `ROSTER_KIND` names no roster
- *   roster_kind   the roster's object holds another roster than `ROSTER_KIND` names
- *   roster        anything else in the roster's object, a stored state that is broken among it
- *   handler       anywhere else
+ *   settings   the settings are not right: `ROSTER_KIND` names no roster, or
+ *              does not fit `ROSTER_OBJECT_NAME` (settings.ts)
+ *   schema     the tables of the roster's object were made by another
+ *              SCHEMA_VERSION than this build's (roster.ts)
+ *   roster     anything else in the roster's object, a stored state that is
+ *              broken among it
+ *   handler    anywhere else
  */
-type Where = "settings" | "roster_kind" | "roster" | "handler";
+type Where = "settings" | "schema" | "roster" | "handler";
 
 /** A failure of the back end itself. */
 class Internal extends Error {
@@ -71,12 +74,12 @@ function settings(env: Env): ReturnType<typeof rosterSettingsOf> {
   }
 }
 
-/** Asks the roster's object; a failure is `roster`, or `roster_kind` when the object says it holds another roster. */
+/** Asks the roster's object; a failure is `roster`, or `schema` when the object says its tables are of another version. */
 async function askRoster<T>(run: () => T | Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    throw new Internal(e instanceof Error && e.message === OTHER_ROSTER ? "roster_kind" : "roster", e);
+    throw new Internal(e instanceof Error && e.message === OTHER_SCHEMA ? "schema" : "roster", e);
   }
 }
 
