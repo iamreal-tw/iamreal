@@ -1,0 +1,4 @@
+# The card proof page is at /proof and nowhere else (scripts/site-files.ts).
+/proof /proof/index.html 200
+/proof/ /proof 301
+/proof/index.html /proof 301

@@ -6,3 +6,5 @@ worker-configuration.d.ts
 test-output/
 # The proof verifier's files, written at each build after their SHA-256 is checked (scripts/engine-files.ts).
 generated/
+# The build of web/ among the files of Static Assets (wrangler.jsonc, "assets"); site/pages.css is in the repository.
+site/proof/

@@ -18,6 +18,22 @@
   // of each call and alarm of the roster's Durable Object. A request can make the Worker
   // compute for that long only if the code lets it: README.md, "設定檔", says why it cannot now.
   "limits": { "cpu_ms": 300000 },
+  // Static Assets: the files of site/, which Cloudflare sends itself (README.md, "Static Assets").
+  // site/pages.css, the visitors' style sheet, is in the repository; site/proof/ is where a build of
+  // web/ goes: no deploy puts one there yet, and a deploy build with a file there does not pass its
+  // checks (scripts/deploy-build-checks.ts, `checkSiteFiles`).
+  // - "run_worker_first": the Worker runs first for every path but the files' own: /pages.css, /proof
+  //   and everything under /proof/ (a "!" pattern wins over "/*"). There Static Assets looks for a file
+  //   first, and a file that is there is sent without running the Worker. In the local workerd a request
+  //   for one of those paths never runs the Worker, whether the file is there or not; on Cloudflare
+  //   that is not confirmed for a file that is not there, which by the documentation may be handed to
+  //   the Worker (README.md, "Static Assets", has the sentences and what to look at after a deploy).
+  // - No "binding": the Worker cannot read the files, so whichever it is, none of its code can choose
+  //   what a card holder is sent as a file of the card proof page.
+  // - Their headers are site/_headers and the one address of /proof is site/_redirects, both written
+  //   by scripts/site-files.ts; a path is otherwise a file's own or 404 ("html_handling",
+  //   "not_found_handling": no index.html found for a directory, no page for what is not there).
+  "assets": { "directory": "./site", "run_worker_first": ["/*", "!/pages.css", "!/proof", "!/proof/*"], "html_handling": "none", "not_found_handling": "none" },
   "env": {
     // The test site (ADR-0028).
     "test": {
@@ -40,7 +56,12 @@
         // It must fit the name above: "test" with a name that starts with "test-", "production"
         // with one that does not. Otherwise the API answers nothing but 500 (src/settings.ts),
         // and test/environments.test.ts fails before that.
-        "ROSTER_KIND": "test"
+        "ROSTER_KIND": "test",
+        // The date the test roster was last cleared on, YYYY-MM-DD: every page says it beside the mark
+        // of a test roster (design/copy/test-site.md). It has not been cleared yet, so this is the date
+        // the test site was first deployed (README.md, "第一次部署量到的"). Change it together with
+        // ROSTER_OBJECT_NAME when the roster is cleared.
+        "TEST_ROSTER_CLEARED_ON": "2026-11-19"
       }
     }
   }

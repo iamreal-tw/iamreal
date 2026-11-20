@@ -146,8 +146,8 @@ describe("an object that is stopped between every two writes", () => {
 });
 
 describe("a write that fails in the middle", () => {
-  // In the order the record is written: its line, the card, the roster's row, the mark on the challenge. The last, `challenges`,
-  // fails earlier: when the submission is counted, before the proof is looked at.
+  // In the order the record is written: its line, the card, the roster's row, (the views: test/views.test.ts,) the mark on the
+  // challenge. The last, `challenges`, fails earlier: when the submission is counted, before the proof is looked at.
   for (const table of ["records", "cards", "roster", "challenges.accepted", "challenges"] as const) {
     test(`at \`${table}\`: 500, and the record, the card's state and the challenge are as before`, async () => {
       await freshRoster(worker);
@@ -179,33 +179,6 @@ describe("a write that fails in the middle", () => {
       await wantError(worker, s, 400, "challenge_used");
     });
   }
-});
-
-describe("a failure after the roster rules accepted the record", () => {
-  test("counting the cards of the account fails on another card's broken row: 500, and the record is not written without its answer", async () => {
-    await freshRoster(worker);
-    const root = await publishG3(worker);
-    const broken = newCard();
-    await mustSubmit(worker, await sub(worker, broken, root, "threads:alice"), "threads first");
-    const card = newCard();
-    const s = await sub(worker, card, root, "threads:alice");
-    // The answer of a `201` counts the cards that declare the account, which reads the row of every card of the scope.
-    await worker.roster.breakCard(broken);
-    const logged = worker.logLines().length;
-    const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(s) });
-    assert.equal(res.status, 500);
-    assert.deepEqual(JSON.parse(await res.text()), { error: "internal" });
-    assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "roster", error: "Error" }]);
-    assert.equal((await checkRoster(worker)).length, 1);
-    assert.equal((await cardState(worker, card)).last_card_proof, null);
-
-    // With the row as the rules left it, the same submission is written: its challenge was not marked.
-    await worker.roster.mendCard(broken);
-    const answer = await submit(worker, s);
-    assert.equal(answer.status, 201, JSON.stringify(answer.body));
-    assert.deepEqual([answer.body.seq, answer.body.kinds], [2, [{ platform: "threads", kind: "first", username: "alice", account_cards: 2 }]]);
-    assert.equal((await checkRoster(worker)).length, 2);
-  });
 });
 
 describe("a stored state computed by another version of the roster rules", () => {

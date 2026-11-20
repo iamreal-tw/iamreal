@@ -1,14 +1,16 @@
 // The Worker (ADR-0023). So far: the API of a card proof (api.ts), the
 // hourly CRL mirror (mirror.ts), and the roster's Durable Object
-// (roster.ts), which writes the records and keeps what the mirror tells it.
-// It has no page yet.
+// (roster.ts), which writes the records and keeps what the mirror tells it,
+// the visitors' pages and the card proof page (visitor.ts).
 import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#target";
 import { type ApiParts, api, isApiPath } from "./api.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
+import { pageDataOfRoster } from "./page-data.ts";
 import { rosterOf } from "./roster.ts";
 import { rosterSettingsOf } from "./settings.ts";
+import { type VisitorParts, visitor } from "./visitor.ts";
 
 export { Roster } from "./roster.ts";
 
@@ -21,7 +23,9 @@ const API_PARTS: ApiParts = { verifier: proofVerifier };
 export default {
   async fetch(request, env, _ctx): Promise<Response> {
     if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS);
-    return new Response(null, { status: 404 });
+    // The only place that says where the pages read the roster from (src/page-data.ts, `PageData`): its Durable Object.
+    const parts: VisitorParts = { pageData: pageDataOfRoster(env) };
+    return visitor(request, env, parts);
   },
 
   /** The hourly schedule (wrangler.jsonc, "triggers"): one round of the CRL mirror. */

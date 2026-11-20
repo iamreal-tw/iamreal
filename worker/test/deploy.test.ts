@@ -121,6 +121,8 @@ test("wrangler reads none of the .env files it would read by default", () => {
     copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(dir, "wrangler.jsonc"));
     symlinkSync(join(WORKER_DIR, "node_modules"), join(dir, "node_modules"));
     mkdirSync(join(dir, "out"));
+    // The directory wrangler.jsonc names for Static Assets has to be there for wrangler to start.
+    mkdirSync(join(dir, "site"));
     writeFileSync(join(dir, "out", "index.js"), "export class Roster {}\nexport default { fetch() { return new Response(null, { status: 404 }); } };\n");
     const read: string[] = [];
     const files = [".env", ".env.local", ".env.test", ".env.test.local"];

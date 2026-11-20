@@ -246,7 +246,6 @@ function status(slots: SlotStatus[], o: Partial<CardStatus> = {}): CardStatus {
     dailyLimit: false,
     today: TODAY,
     count: 1,
-    head: "0".repeat(64),
     ...o,
   };
 }

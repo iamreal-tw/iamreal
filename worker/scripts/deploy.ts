@@ -8,7 +8,12 @@
 //    before bundling (now: the proof verifier's files, engine-files.ts) is
 //    done there and nowhere else.
 // 2. `uploadArgs(entry)`: wrangler uploads that directory as it is
-//    (`--no-bundle`), with the token.
+//    (`--no-bundle`), with the token. With it wrangler uploads the files
+//    of Static Assets, which are not in that directory: it reads them from
+//    site/ beside wrangler.jsonc (`assets.directory`), in the checkout it
+//    runs in. Step 1 checked which files are there and what they hold
+//    (`checkSiteFiles`); in the workflow the two jobs check out the same
+//    commit.
 //
 // `pnpm run deploy:test` (deploy-test.ts) does both on this computer. The
 // workflow (.github/workflows/deploy-test.yml) runs build-deploy.ts in one

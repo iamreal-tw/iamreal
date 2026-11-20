@@ -264,9 +264,8 @@ export interface CardStatus {
    */
   dailyLimit: boolean;
   today: string;
-  /** The roster's size and head the answer was computed at. */
+  /** The number of records of the roster the answer was computed at. */
   count: number;
-  head: string;
 }
 
 /** What a list does on one platform, for the screen before the second signature. */
@@ -1158,7 +1157,6 @@ function statusOf(state: CardStateResponse, table: readonly PlatformRow[], idTex
     dailyLimit: dailyLimitReached(state, today),
     today: formatDay(today),
     count: state.count,
-    head: state.head,
   };
 }
 

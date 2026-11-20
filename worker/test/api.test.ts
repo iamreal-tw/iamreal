@@ -111,8 +111,8 @@ describe("every answer under /api/", () => {
     }
   });
 
-  test("outside /api/ there is still no page", async () => {
-    for (const path of ["/", "/api", "/apix/v1/config"]) assert.equal((await worker.fetch(path)).status, 404, path);
+  test("outside /api/, what is neither a page nor a file of one is 404 (the pages: test/pages.test.ts)", async () => {
+    for (const path of ["/api", "/apix/v1/config", "/nothing"]) assert.equal((await worker.fetch(path)).status, 404, path);
   });
 });
 
@@ -788,7 +788,7 @@ describe("the setting that says which roster the environment serves", () => {
       assert.equal((await worker.fetch("/api/v1/config")).status, 200);
       assert.equal((await worker.fetch("/api/v1/nothing")).status, 404);
       assert.equal((await worker.fetch("/api/v1/challenges")).status, 405);
-      assert.equal((await worker.fetch("/")).status, 404);
+      assert.equal((await worker.fetch("/nothing")).status, 404);
       // The alarm deletes nothing, however late it is: the challenge is still known once the version is the build's again (below).
       await worker.setClock(new Date(NOON.getTime() + 60 * 60_000));
       await worker.roster.runAlarm();

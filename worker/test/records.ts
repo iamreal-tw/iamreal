@@ -104,11 +104,11 @@ let rosters = 0;
  * without a CRL, at noon of 2026-11-20 in Taiwan: a roster's object with a
  * new name, and an empty bucket. Returns the object's name.
  */
-export async function freshRoster(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean } = {}): Promise<string> {
+export async function freshRoster(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
   for (const file of await worker.files()) await worker.deleteFile(file.key);
   rosters++;
   const name = settings.kind === "production" ? `roster-${rosters}` : `test-records-${rosters}`;
-  await worker.setSettings({ ROSTER_KIND: settings.kind ?? "test", ROSTER_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }) });
+  await worker.setSettings({ ROSTER_KIND: settings.kind ?? "test", ROSTER_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_ROSTER_CLEARED_ON: settings.clearedOn }) });
   await worker.setClock(START);
   return name;
 }

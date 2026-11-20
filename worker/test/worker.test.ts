@@ -27,9 +27,10 @@ describe("the Worker in the local workerd", () => {
   });
   after(() => worker.close());
 
-  test("it starts without a Cloudflare account and answers HTTP; it has an API (test/api.test.ts) and no page yet", async () => {
-    const res = await fetch(new URL("/", worker.url));
+  test("it starts without a Cloudflare account and answers HTTP; it has an API (test/api.test.ts) and pages (test/pages.test.ts)", async () => {
+    const res = await fetch(new URL("/nothing", worker.url));
     assert.equal(res.status, 404);
+    assert.equal((await fetch(new URL("/", worker.url))).status, 200);
     assert.equal((await worker.fetch("/api/v1/config")).status, 200);
   });
 

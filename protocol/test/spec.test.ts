@@ -10,7 +10,7 @@ import { declarationCode, declarationPreimage } from "../src/declaration-code.ts
 import { fieldBytes, pack31 } from "../src/field.ts";
 import { platformsOf } from "../src/platforms.ts";
 import { lookupScope, scopeOf } from "../src/scope.ts";
-import { parseScopedId, scopedIdText, shortId } from "../src/scoped-id.ts";
+import { parseScopedId, readShortIdInUrl, scopedIdText, shortId } from "../src/scoped-id.ts";
 import { isAnyUsername, isPlatformId, parseUsernameFormat } from "../src/username-format.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
@@ -193,6 +193,9 @@ describe("scoped-id.json", () => {
   }
   for (const e of v.invalid) {
     test(`rejects ${JSON.stringify(e.scoped_id)} (${e.reason})`, () => assert.equal(parseScopedId(e.scoped_id), null));
+  }
+  for (const e of v.short_id_in_urls) {
+    test(`a short ID in a URL: ${JSON.stringify(e.typed)} ${e.reads_as === null ? `does not read (${e.reason})` : `reads as ${e.reads_as}`}`, () => assert.equal(readShortIdInUrl(e.typed), e.reads_as));
   }
 });
 

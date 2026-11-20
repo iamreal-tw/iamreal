@@ -13,6 +13,7 @@
 // A note on names: in protocol/ `Roster` is a type, which roster,
 // "production" or "test". In worker/ `Roster` is the Durable Object's class
 // (roster.ts). So worker/ imports protocol/'s type as `RosterKind`, always.
+import { parseDay } from "iamreal-protocol/date.ts";
 import { type PlatformRow, platformsOf } from "iamreal-protocol/platforms.ts";
 import type { Roster as RosterKind } from "iamreal-protocol/scope.ts";
 
@@ -39,7 +40,27 @@ export interface RosterSettings {
    * wrangler.jsonc does not set it, so by default there is no such policy.
    */
   readonly restrictLateSwitches: boolean;
+  /**
+   * For a test roster, the date it was last cleared on, `YYYY-MM-DD`
+   * (`TEST_ROSTER_CLEARED_ON`; ADR-0028): every page of the site says it
+   * beside the mark of a test roster. Before the first clearing it is the
+   * date the test site was first deployed. Null for the production roster,
+   * whose pages have no such mark; the setting is then not read.
+   */
+  readonly testRosterClearedOn: string | null;
+  /**
+   * The domain this roster's site is at (`SITE_HOSTS`): what a page writes
+   * where it writes its own address.
+   */
+  readonly siteHost: string;
 }
+
+/**
+ * The domain of each roster's site (ADR-0028). It follows from which roster
+ * it is and is not a setting of its own: a page never takes it from the
+ * request's `Host`, which is whatever the visitor's client sent.
+ */
+export const SITE_HOSTS: Readonly<Record<RosterKind, string>> = { production: "iamreal.tw", test: "test.iamreal.tw" };
 
 /**
  * What is wrong with the two settings, or null: `ROSTER_KIND` is "test" or
@@ -67,5 +88,8 @@ export function rosterSettingsOf(env: Env): RosterSettings {
   // Not one of the environment's declared settings (wrangler.jsonc): absent, or exactly "true" or "false".
   const restrict: unknown = (env as { RESTRICT_LATE_SWITCHES?: unknown }).RESTRICT_LATE_SWITCHES;
   if (restrict !== undefined && restrict !== "true" && restrict !== "false") throw new Error("RESTRICT_LATE_SWITCHES is neither true nor false");
-  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true" };
+  // A test roster's pages are not served without the date beside their mark.
+  const cleared: unknown = (env as { TEST_ROSTER_CLEARED_ON?: unknown }).TEST_ROSTER_CLEARED_ON;
+  if (kind === "test" && (typeof cleared !== "string" || parseDay(cleared) === null)) throw new Error("TEST_ROSTER_CLEARED_ON is not a date");
+  return { kind, platforms: platformsOf(kind), restrictLateSwitches: restrict === "true", testRosterClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }

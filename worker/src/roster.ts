@@ -10,9 +10,12 @@
 //   cards        the roster rules' state of each card (card-table.ts)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
+//   view_*       the views: what the visitors' pages read (views.ts)
 //
-// Nothing here is derived for a page: those tables are separate, and can be
-// rebuilt from the records, which the rules' state cannot be thrown away for.
+// The views are derived from the records: they are written with each record,
+// in its transaction, and can be cleared and written again from the records
+// at any time. The rules' state (`cards`) cannot: it is kept apart from
+// them, and nothing that decides about a record reads a view.
 //
 // Whether a record is valid is never decided here: that is the roster rules'
 // (protocol/, applyRecord), called with the state this object keeps. What
@@ -24,11 +27,14 @@ import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT, type RecordFields, type RosterRecord, nextFingerprint, readRecordLine, recordHash, recordLine } from "iamreal-protocol/record.ts";
+import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
 import { CARD_TABLE, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
+import type { CardsOfShortId, Counts } from "./page-data.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
+import { VIEW_TABLES, accountCards, cardsOfShortId, counts, rebuildViews, viewOf, viewSeq, writeView } from "./views.ts";
 
 /**
  * A challenge can be used for less than this long after it is issued
@@ -115,6 +121,9 @@ const TABLES: readonly string[] = [
      crl_date   TEXT    NOT NULL,
      PRIMARY KEY (issuer, place)
    ) WITHOUT ROWID`,
+  // The views (views.ts). They came after the others, with SCHEMA_VERSION unchanged: an object made without them
+  // gets them when it next starts, and fills them from its records (the constructor).
+  ...VIEW_TABLES,
 ];
 
 /**
@@ -144,6 +153,9 @@ export const SCHEMA_VERSION = 1;
  * any other by it (api.ts); it is never written anywhere.
  */
 export const OTHER_SCHEMA = "the object's tables were made by another SCHEMA_VERSION";
+
+/** What the object throws for what needs the views while they are not at the last record (`#viewsAtLastRecord`). */
+export const VIEWS_BEHIND = "the object's views are not at its last record";
 
 /** Why the object does not take a submission: the roster is paused, or the challenge is not one to submit (docs/api/card-proof.md). */
 export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
@@ -227,6 +239,17 @@ export class Roster extends DurableObject<Env> {
    * build did not leave; everything else goes on.
    */
   readonly #paused: boolean;
+  /**
+   * Whether the views the pages read (views.ts) reflect every record, as
+   * the object found or made them when it started. When they do not, a page
+   * would show a roster that is not this one (no card at all, or a card as
+   * not found), and a record could not be written with its change to them:
+   * the pages' reads and a submission then throw `VIEWS_BEHIND`, which the
+   * Worker answers as its own failure. Challenges, card states and the CRL
+   * archive do not read the views and go on. It is decided once, when the
+   * object starts; the next start decides again.
+   */
+  readonly #viewsAtLastRecord: boolean;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -248,6 +271,32 @@ export class Roster extends DurableObject<Env> {
     const { schema_version, rules_version } = sql.exec<{ schema_version: number; rules_version: number }>("SELECT schema_version, rules_version FROM roster WHERE id = 1").one();
     this.#tablesAreThisVersion = schema_version === SCHEMA_VERSION;
     this.#paused = rules_version !== RULES_VERSION;
+    // Views that are not at the last record are written again from the records: an object that has records
+    // from before it had the views, or whose views were cleared. Not while the roster is paused: the stored
+    // records were then taken by other rules than the ones this build would compute their kinds by.
+    //
+    // Writing them again can fail: a stored line this build does not read, a record its rules do not take. The
+    // object starts all the same, with views it does not use (`#viewsAtLastRecord`): the transaction leaves them
+    // as they were, one line says so, and the next start tries again.
+    let atLastRecord = false;
+    if (this.#tablesAreThisVersion) {
+      atLastRecord = viewSeq(sql) === this.#rosterRow().count;
+      if (!atLastRecord && !this.#paused) {
+        try {
+          ctx.storage.transactionSync(() => rebuildViews(sql, this.settings.kind, this.settings.platforms));
+          atLastRecord = true;
+        } catch (e) {
+          console.error(JSON.stringify({ event: "views_not_filled", error: e instanceof Error ? e.name : "unknown" }));
+        }
+      }
+    }
+    this.#viewsAtLastRecord = atLastRecord;
+  }
+
+  /** For a method about to read the views, or to write a record with them: throws if they are not at the last record. */
+  #checkViews(): void {
+    this.#checkTables();
+    if (!this.#viewsAtLastRecord) throw new Error(VIEWS_BEHIND);
   }
 
   /** For a method about to read or write the tables: throws if they were made by another SCHEMA_VERSION. */
@@ -289,6 +338,8 @@ export class Roster extends DurableObject<Env> {
   beginSubmission(challenge: string): "ok" | SubmissionRefusal {
     this.#checkTables();
     if (this.#paused) return "paused";
+    // Before the submission is counted: a record could not be written, and the challenge stays as it was.
+    this.#checkViews();
     const row = this.#challenge(challenge);
     if (row === null) return "challenge_unknown";
     if (row.accepted) return "challenge_used";
@@ -321,6 +372,7 @@ export class Roster extends DurableObject<Env> {
   async accept(fields: RecordFields): Promise<AcceptAnswer> {
     this.#checkTables();
     if (this.#paused) return refused("paused");
+    this.#checkViews();
     for (;;) {
       const { count, fingerprint } = this.#rosterRow();
       const record: RosterRecord = { ...fields, seq: count + 1 };
@@ -397,13 +449,17 @@ export class Roster extends DurableObject<Env> {
       return { platform, kind: what, username };
     });
 
-    // One transaction: the record with its `seq`, the card's state, the roster's row, the challenge. The answer counts
-    // the cards of each account in the state the record leaves, so it is made in the transaction too: if the count
-    // fails, the record is not written.
+    // What the record changes in the views, from the states the rules read and left.
+    const view = viewOf(record, date, kinds, before, outcome.card);
+
+    // One transaction: the record with its `seq`, the card's state, the roster's row, the views, the challenge. The
+    // answer counts the cards of each account in the views the record leaves, so it is made in the transaction too:
+    // if anything fails, nothing of the record is written.
     const written = this.ctx.storage.transactionSync((): Accepted => {
       sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
       this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
       sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
+      writeView(sql, view);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
       return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })) };
     });
@@ -435,16 +491,31 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * The number of cards of a scope whose `current` on a platform is this
-   * username. It reads every card's row: the tables a page reads will have
-   * this number by account (#68), and this then asks them.
+   * The home page's two numbers for a platform, in the roster's open scope,
+   * on today's date in Taiwan (page-data.ts, `PageData`).
+   */
+  pageCounts(platform: string): Counts {
+    this.#checkViews();
+    return counts(this.ctx.storage.sql, scopeOf(this.settings.kind), platform, taiwanDay(now().getTime()));
+  }
+
+  /** The cards of a short ID in the roster's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
+  pageCards(shortId: string): CardsOfShortId {
+    this.#checkViews();
+    return { today: taiwanDay(now().getTime()), cards: cardsOfShortId(this.ctx.storage.sql, scopeOf(this.settings.kind), shortId) };
+  }
+
+  /**
+   * The number of cards of a scope that give their place on a platform to
+   * this username now, counted in the views (views.ts, `accountCards`): one
+   * index, and no card's stored state is read.
    *
    * `protected`, like `ruleState`, so that the test build counts the cards
    * of each account with this same query when it compares the stored state
    * with Go's roster/ (its `testRuleState`). It is not overridden.
    */
   protected accountCards(scopeString: string, platform: string, username: string): number {
-    return this.ctx.storage.sql.exec<{ cards: number }>("SELECT COUNT(*) AS cards FROM cards WHERE scope_string = ? AND json_extract(slots, ?) = ?", scopeString, `$."${platform}".current`, username).one().cards;
+    return accountCards(this.ctx.storage.sql, scopeString, platform, username);
   }
 
   /** The state of one card and the number of records it was computed at. */

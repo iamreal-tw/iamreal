@@ -8,6 +8,10 @@
 // (`limits.cpu_ms`) to what a round of the CRL mirror counts on
 // (src/round-budget.ts).
 //
+// And the files of Static Assets are routed and headed as the roster of the
+// environment needs (`checkSiteFiles`): the card proof page's files never
+// run the Worker, and only a test roster's site says noindex.
+//
 // This is the first of two guards. The second is in the Worker
 // (src/settings.ts): at every request it checks that `ROSTER_KIND` and
 // `ROSTER_OBJECT_NAME` fit each other, which also holds for a deploy from a
@@ -20,7 +24,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
-import { checkCpuLimit, configuredCpuMs } from "../scripts/deploy-build-checks.ts";
+import { type ConfiguredSite, checkClearedOn, checkCpuLimit, checkSiteFiles, configuredClearedOn, configuredCpuMs, configuredSites } from "../scripts/deploy-build-checks.ts";
+import { PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
 import { CRL_CATCH_UP_MS, RESERVED_FOR_LARGEST_CRL_MS, ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WORKER_DIR } from "./build.ts";
 
@@ -107,6 +112,74 @@ test("a configuration in which an environment has another CPU time than the mirr
   }
   // And a configuration with no environment has nothing that was checked.
   assert.throws(() => checkCpuLimit({}), /has an environment/);
+});
+
+test("every environment sends the files of site/ past the Worker, with the headers of its kind of roster", () => {
+  const sites = configuredSites();
+  assert.deepEqual(Object.keys(sites).sort(), Object.keys(ENVIRONMENTS).sort());
+  for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
+    assert.deepEqual(sites[env], {
+      kind: expected.kind,
+      runWorkerFirst: ["/*", "!/pages.css", "!/proof", "!/proof/*"],
+      binding: undefined,
+      htmlHandling: "none",
+      notFoundHandling: "none",
+      headers: siteHeaders(expected.kind),
+      redirects: SITE_REDIRECTS,
+      files: ["_headers", "_redirects", "pages.css"],
+      styleSheetSha256: PAGES_CSS_SHA256,
+    });
+  }
+  assert.deepEqual(RUN_WORKER_FIRST, ["/*", "!/pages.css", "!/proof", "!/proof/*"]);
+  assert.deepEqual(SITE_FILES, ["_headers", "_redirects", "pages.css"]);
+  assert.match(PAGES_CSS_SHA256, /^[0-9a-f]{64}$/);
+  checkSiteFiles(sites);
+  // Set once, at the top level, which every environment shares.
+  const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
+  for (const [env, settings] of Object.entries(rawConfig.env ?? {})) assert.equal((settings as { assets?: unknown }).assets, undefined, `env.${env} has no assets of its own`);
+});
+
+test("a configuration that runs the Worker for the card proof page's files, lets it read them, or sends them with another roster's headers is turned away", () => {
+  const real = configuredSites().test!;
+  const cases: [string, Partial<ConfiguredSite>, RegExp][] = [
+    ["the Worker first for everything", { runWorkerFirst: true }, /run_worker_first of the test environment/],
+    ["no rule at all: a file that is not there would run the Worker", { runWorkerFirst: undefined }, /run_worker_first of the test environment/],
+    ["/proof itself not among the rules", { runWorkerFirst: ["/*", "!/pages.css", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["a binding to read the files by", { binding: "ASSETS" }, /no binding/],
+    ["index.html found for directories", { htmlHandling: "auto-trailing-slash" }, /html_handling/],
+    ["a page for what is not there", { notFoundHandling: "single-page-application" }, /not_found_handling/],
+    ["a production roster's headers on the test site: no noindex", { headers: siteHeaders("production") }, /_headers of the test environment/],
+    ["a header changed by hand", { headers: real.headers!.replace("same-origin-allow-popups", "unsafe-none") }, /_headers of the test environment/],
+    ["no _headers", { headers: null }, /_headers of the test environment/],
+    ["no _redirects", { redirects: null }, /_redirects of the test environment/],
+    ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
+    ["a kind that is none", { kind: "staging" }, /ROSTER_KIND of the test environment/],
+    // site/proof/ is not in the repository (.gitignore): whatever a computer has there would be uploaded and sent as the card proof page.
+    ["a file under site/proof/", { files: [...real.files, "proof/index.html"] }, /files of the test environment/],
+    ["another file beside the three", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
+    ["no style sheet", { files: ["_headers", "_redirects"], styleSheetSha256: null }, /files of the test environment/],
+    ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],
+  ];
+  for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
+  // A production roster's site with the test site's files says noindex: turned away too.
+  assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
+  checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });
+  assert.throws(() => checkSiteFiles({}), /has an environment/);
+});
+
+test("the date the test roster was last cleared on is a date of the calendar; a configuration with another value is turned away before it is deployed", () => {
+  const configured = configuredClearedOn();
+  assert.deepEqual(Object.keys(configured).sort(), Object.keys(ENVIRONMENTS).sort());
+  assert.deepEqual(configured.test, { kind: "test", clearedOn: read("test").vars.TEST_ROSTER_CLEARED_ON });
+  assert.match(String(configured.test!.clearedOn), /^\d{4}-\d{2}-\d{2}$/);
+  checkClearedOn(configured);
+  // Deployed, such a value makes the test site answer nothing but 500 (src/settings.ts).
+  for (const other of ["2026-11-31", "2026-02-30", "2026-13-01", "2026-11-00", "2026-1-9", "20261119", "2026/11/19", "2026-11-19 ", "soon", "", undefined, 20261119]) {
+    assert.throws(() => checkClearedOn({ test: { kind: "test", clearedOn: other } }), /TEST_ROSTER_CLEARED_ON of the test environment/, String(other));
+  }
+  // A production roster's pages have no mark: the setting is not read, and is not asked for.
+  checkClearedOn({ test: configured.test!, production: { kind: "production", clearedOn: undefined } });
+  assert.throws(() => checkClearedOn({}), /has an environment/);
 });
 
 test("a round stops starting older files 2.5 minutes in: what is left of the CPU time is several times what the largest CRL's tree was measured to take", () => {

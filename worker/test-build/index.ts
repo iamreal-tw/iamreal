@@ -49,7 +49,8 @@ import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
 import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
 import { slotOfJson } from "../src/slot-json.ts";
-import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, TestSettings } from "./card-door.ts";
+import { VIEW_TABLE_KEYS, viewOf, writeView } from "../src/views.ts";
+import type { CardToWrite, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -76,6 +77,9 @@ const STAND_IN: ApiParts = {
 
 let standIn = false;
 
+/** The requests that reached the Worker's code, the doors aside (`GET /__test/seen`). */
+const seen: string[] = [];
+
 /**
  * What a test can make every write to fail on: a table the object writes,
  * or only the mark that a record was written for a challenge (the column
@@ -87,6 +91,10 @@ const FAILING_WRITES = {
   roster: "ON roster",
   challenges: "ON challenges",
   "challenges.accepted": "OF accepted ON challenges",
+  view_cards: "ON view_cards",
+  view_slots: "ON view_slots",
+  view_history: "ON view_history",
+  view_state: "ON view_state",
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
 
@@ -222,6 +230,23 @@ export class Roster extends DeployedRoster {
     if (what !== "challenges.accepted") sql.exec(`CREATE TRIGGER test_fail_insert BEFORE INSERT ${FAILING_WRITES[what]} ${fail}`);
   }
 
+  /** Every row of the views (src/views.ts), table by table, each in the order of its primary key. */
+  testViews(): StoredViews {
+    const out: Record<string, Record<string, string | number | null>[]> = {};
+    for (const [table, key] of Object.entries(VIEW_TABLE_KEYS)) out[table] = this.ctx.storage.sql.exec<Record<string, string | number | null>>(`SELECT * FROM ${table} ORDER BY ${key}`).toArray();
+    return out;
+  }
+
+  /**
+   * Clears the views, as on an object that has records from before it had
+   * them. The object fills them from its records when it starts again.
+   */
+  testClearViews(): void {
+    const sql = this.ctx.storage.sql;
+    for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
+    sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
+  }
+
   /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
   testStored(): StoredRoster {
     const sql = this.ctx.storage.sql;
@@ -235,7 +260,8 @@ export class Roster extends DeployedRoster {
    * What the stored state says besides the cards' rows (RuleStateAnswer):
    * the latest valid date as `ruleState` reads it, and the cards of each
    * account as `accountCards` counts them. Which accounts there are is read
-   * here from the rows; the count is the deployed query's.
+   * here from the rows of the card states; the count is the deployed
+   * query's, which asks the views.
    */
   testRuleState(scopeString: string, scopedId: string): RuleStateAnswer {
     const { latestValidDate } = this.ruleState(scopeString, scopedId);
@@ -255,7 +281,13 @@ export class Roster extends DeployedRoster {
    * Runs the roster rules for one event of spec/vectors/roster-rules.json on
    * the state the object stores, and keeps what a valid one leaves: the
    * same reading and the same writing of the state as for a submitted
-   * record (src/roster.ts, `ruleState`, `keepRuleState`). The answers the
+   * record (src/roster.ts, `ruleState`, `keepRuleState`), and the same
+   * change to the views (src/views.ts, `viewOf`, `writeView`), which is
+   * where the deployed object counts the cards of an account. No record is
+   * stored for an event, so the views' own count of records is put back to
+   * the roster's afterwards: the object would otherwise take the views for
+   * stale when it next starts, and fill them from records that are not
+   * there. The answers the
    * rules take from outside the roster come with the event. Which
    * challenges were used is kept in a table of the test's own, since the
    * back end never writes an invalid record and so keeps no challenge of
@@ -277,7 +309,13 @@ export class Roster extends DeployedRoster {
       crlDates: e.crl_dates.map((d) => parseDay(d)!),
     });
     this.ctx.storage.transactionSync(() => {
-      if (outcome.result.valid) this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+      if (outcome.result.valid) {
+        this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
+        const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
+        sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", e.seq - 1);
+        writeView(sql, viewOf({ seq: e.seq, scopeString: e.scope_string, scopedId: e.scoped_id }, date, outcome.result.kinds, card, outcome.card));
+        sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", count);
+      }
       sql.exec("INSERT OR IGNORE INTO test_used_challenges (challenge) VALUES (?)", e.challenge);
     });
     return outcome.result;
@@ -325,6 +363,9 @@ export default {
    * - `POST /__test/roster/rule-state` with `{scope_string, scoped_id}`
    *   answers a RuleStateAnswer: the latest valid date the rules read for
    *   that card, and the cards of every declared account of the scope.
+   * - `GET /__test/roster/views` answers a StoredViews: every row of the
+   *   views; `DELETE` clears them, and the object fills them from its
+   *   records when it starts again.
    * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster.
@@ -337,11 +378,17 @@ export default {
    * - `GET /__test/newest-crls` answers what the roster's object knows of
    *   the CRL archive (src/roster.ts, `newestCrls`).
    *
+   * - `GET /__test/seen` answers the method and path of every request that
+   *   reached this code since it was last asked, the doors aside: what
+   *   Static Assets answers by itself is not among them.
+   *
    * Anything else is the Worker's.
    */
   async fetch(request, deployedEnv, ctx): Promise<Response> {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname}`;
+    if (route === "GET /__test/seen") return json(seen.splice(0));
+    if (!pathname.startsWith("/__test/")) seen.push(route);
     if (route === "PUT /__test/clock") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms)) return new Response(null, { status: 400 });
@@ -421,6 +468,11 @@ export default {
       return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
     }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
+    if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
+    if (route === "DELETE /__test/roster/views") {
+      await testRosterOf(env).testClearViews();
+      return done();
+    }
     if (route === "PUT /__test/roster/hash-delay") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms) || ms < 0) return new Response(null, { status: 400 });
