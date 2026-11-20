@@ -10,6 +10,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { unstable_readConfig } from "wrangler";
+import { DEPLOY_ARGS } from "../scripts/deploy.ts";
 import { WORKER_DIR } from "./build.ts";
 
 const WORKFLOWS_DIR = join(WORKER_DIR, "..", ".github", "workflows");
@@ -101,4 +103,81 @@ test("a pull request's checks are triggered by pull_request only, can only read 
     secretsReferred().filter((s) => s.file === w.file),
     [],
   );
+});
+
+/** The steps of a job: each one's lines, from its `- ` on. */
+function steps(jobLines: readonly string[]): string[][] {
+  const out: string[][] = [];
+  let inSteps = false;
+  for (const line of jobLines) {
+    if (/^ {4}\S/.test(line)) inSteps = line === "    steps:";
+    else if (inSteps && line.startsWith("      - ")) out.push([line]);
+    else if (inSteps) out.at(-1)!.push(line);
+  }
+  return out;
+}
+
+function jobLines(w: Workflow, job: string): string[] {
+  const lines = linesByJob(w)
+    .filter((l) => l.job === job)
+    .map((l) => l.line);
+  assert.ok(lines.length > 0, `${w.file} has the job ${job}`);
+  return lines;
+}
+
+test("the test site is deployed on a push to main, by a build job and a deploy job after it", () => {
+  const w = workflow("deploy-test.yml");
+  assert.deepEqual(topLevel(w, "on"), ["on:", "  push:", "    branches:", "      - main"]);
+  assert.deepEqual(topLevel(w, "permissions"), ["permissions:", "  contents: read"]);
+  assert.deepEqual(
+    [...new Set(linesByJob(w).map((l) => l.job))].filter((j) => j !== ""),
+    ["build", "deploy"],
+  );
+  assert.ok(jobLines(w, "deploy").includes("    needs: build"));
+});
+
+test("only the deploy job has the deploy token, and only in the step that uploads", () => {
+  const referred = secretsReferred();
+  assert.deepEqual(
+    referred.map((s) => `${s.file} ${s.job} ${s.line}`),
+    [
+      "deploy-test.yml deploy CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
+      "deploy-test.yml deploy CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+    ],
+  );
+  // The two are in the env of the last step, which uploads what the build job made and builds nothing.
+  const last = steps(jobLines(workflow("deploy-test.yml"), "deploy")).at(-1)!;
+  for (const s of referred) assert.ok(last.some((l) => l.trim() === s.line), `${s.line} is in the last step`);
+  assert.ok(last.some((l) => l.trim() === "env:"), "in the step's env");
+  assert.equal(
+    last.find((l) => l.trim().startsWith("run:"))?.trim(),
+    `run: node_modules/.bin/wrangler deploy "$RUNNER_TEMP/worker-build/index.js" --config wrangler.jsonc --no-bundle ${DEPLOY_ARGS.slice(1).join(" ")}`,
+  );
+});
+
+test("before the upload, the deploy job runs no install script of a package and no script of the repository", () => {
+  const before = steps(jobLines(workflow("deploy-test.yml"), "deploy")).slice(0, -1).flat();
+  const runs = before.filter((l) => /^\s*(- )?run:/.test(l));
+  for (const l of runs) assert.doesNotMatch(l, /run:\s*[|>]/, `one line per command: ${l.trim()}`);
+  const installs = runs.filter((l) => /\binstall\b/.test(l));
+  assert.ok(installs.length > 0, "the check read the installs");
+  for (const l of installs) assert.match(l, /--ignore-scripts\b/, l.trim());
+  for (const l of runs) assert.doesNotMatch(l, /\bpnpm (run|exec|test|dlx)\b|\bnode\b|\bnpx\b|wrangler/, l.trim());
+});
+
+test("the build job makes the build the tests check: the arguments of `pnpm run deploy:test` and --dry-run", () => {
+  // test/build.ts makes the build test/bundle.test.ts checks with the same arguments.
+  const build = jobLines(workflow("deploy-test.yml"), "build");
+  const step = `run: node_modules/.bin/wrangler ${DEPLOY_ARGS.join(" ")} --dry-run --outdir "$RUNNER_TEMP/worker-build"`;
+  assert.ok(
+    build.some((l) => l.trim() === step),
+    step,
+  );
+});
+
+test("deploying runs no command of the repository: the wrangler configuration has no build command", () => {
+  // wrangler runs `build.command` before it uploads, even with --no-bundle, so a command there would
+  // run in the deploy job with the token (CONTRIBUTING.md, "部署會執行到的東西").
+  const config = unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" });
+  assert.equal(config.build.command, undefined);
 });

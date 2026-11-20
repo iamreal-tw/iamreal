@@ -1,0 +1,85 @@
+# Deploys the test site (the Worker iamreal-test, test.iamreal.tw) with each
+# push to main (ADR-0029).
+#
+# Two jobs. "build" makes the Worker the way worker/test/build.ts makes the
+# deploy build that worker/test/bundle.test.ts checks, and hands it on as an
+# artifact; it has no secret. "deploy" uploads that build as it is. Only its
+# last step has the deploy token (the repository's secrets
+# CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID); before it, the job
+# runs no install script and no script of the repository, so nothing left
+# running from an earlier step is there to read the token.
+# worker/test/workflows.test.ts checks this.
+name: deploy-test
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One deploy at a time, the newest last; a running one is not stopped halfway.
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+env:
+  # wrangler sends Cloudflare no usage report and asks npm for no newer version (worker/README.md, "套件").
+  WRANGLER_SEND_METRICS: "false"
+  WRANGLER_HIDE_BANNER: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts pnpm@10.16.1
+      - run: pnpm install --frozen-lockfile
+      # The arguments of `pnpm run deploy:test` (worker/scripts/deploy.ts) and --dry-run: bundles, uploads nothing.
+      - name: Build the Worker
+        working-directory: worker
+        run: node_modules/.bin/wrangler deploy --env test --experimental-provision=false --dry-run --outdir "$RUNNER_TEMP/worker-build"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: worker-build
+          path: ${{ runner.temp }}/worker-build
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # The checkout gives wrangler.jsonc, which has the bindings, and the lockfile wrangler is installed from.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts pnpm@10.16.1
+      - name: Install wrangler, running no install script
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter iamreal-worker
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: worker-build
+          path: ${{ runner.temp }}/worker-build
+      # Uploads the build job's bundle as it is (--no-bundle), with the bindings of wrangler.jsonc.
+      # wrangler.jsonc has no build command for wrangler to run (worker/test/workflows.test.ts).
+      - name: Upload to iamreal-test
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node_modules/.bin/wrangler deploy "$RUNNER_TEMP/worker-build/index.js" --config wrangler.jsonc --no-bundle --env test --experimental-provision=false
