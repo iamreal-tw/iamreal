@@ -161,8 +161,8 @@ not know" is one that has no row it can read in the platform table of
 - **A platform of the table has no entry**: the device does not offer it.
 - **No response, a response without `platforms`, or one in which it cannot
   read `last_card_proof`, `proofs_on_last_date`, `count` or the entry of a
-  platform it knows**: the device treats the state as unread and does not go on to
-  the declaration. Without the state it cannot build the list.
+  platform it knows**: the device treats the state as unread and does not
+  go on to the declaration. Without the state it cannot build the list.
 - **A field it does not know, in the response or inside an entry it can
   otherwise read**: the device ignores the field.
 
