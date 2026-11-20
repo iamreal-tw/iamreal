@@ -12,8 +12,10 @@
 # For Android the link is done by Zig 0.15.1 (fetch-zig.sh), the Zig Aztec
 # builds Barretenberg with, and libc++ is linked in statically: Aztec's
 # library uses LLVM's libc++ (std::__1), which does not link against the
-# NDK's (std::__ndk1) (issue #88). The NDK gives only the C headers and
-# libraries of Android (its sysroot), named by ANDROID_NDK_ROOT.
+# NDK's (std::__ndk1) (issue #88). The NDK gives the C headers and
+# libraries of Android (its sysroot), named by ANDROID_NDK_ROOT, and the C
+# compiler for the one crate with C in it: blake3 (through Noir's ACVM)
+# compiles its SIMD code, C and assembly, with cc-rs. That code uses no C++.
 #
 # Reads: ANDROID_NDK_ROOT (Android), JAVA_HOME and CC (host).
 set -eu
@@ -73,6 +75,11 @@ esac
 sysroot=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/$ndk_host/sysroot
 crt=$sysroot/usr/lib/$triple/$api
 [ -d "$crt" ] || { echo "build-native: the NDK has no API level $api for $triple" >&2; exit 1; }
+
+# cc-rs reads CC_<target> and AR_<target>, the target's dashes as underscores.
+ndk_bin=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/$ndk_host/bin
+cc_target=$(printf %s "$triple" | tr - _)
+export "CC_$cc_target=$ndk_bin/$triple$api-clang" "AR_$cc_target=$ndk_bin/llvm-ar"
 
 zig=$("$here/fetch-zig.sh")
 build_core "$platform" "$triple"

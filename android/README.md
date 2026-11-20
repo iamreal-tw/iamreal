@@ -34,7 +34,7 @@
 Aztec 給 Android 的 Barretenberg 靜態函式庫是用 Zig 0.15.1 編的（函式庫裡每個目的檔的 `.comment` 寫的是 zig-bootstrap 的 clang 20.1.2），用的是 LLVM 的 libc++（`std::__1`）。NDK 的 libc++ 是 `std::__ndk1`，兩者連結不起來（[#88](https://github.com/iamreal-tw/iamreal/issues/88)）。所以：
 
 - `.so` 由同一版 Zig 連結，libc++ 靜態連進去。Zig 由 `fetch-zig.sh` 從 ziglang.org 下載，核對 `zig.sha256`（取自 ziglang.org 的下載頁）
-- NDK 只提供 Android 的 C 標頭檔和函式庫（sysroot）。Rust 編靜態函式庫不需要 NDK 的編譯器
+- NDK 提供 Android 的 C 標頭檔和函式庫（sysroot），和一個 C 編譯器：`device-core/` 的套件裡只有 `blake3`（Noir 的 ACVM 帶進來的）有 C 和組合語言（SIMD 的部分），由 cc-rs 編。`build-native.sh` 把 NDK 的 `<target><minSdk>-clang` 和 `llvm-ar` 交給 cc-rs（`CC_<target>`、`AR_<target>`），這是 Rust 在 Android 上常見的設法，編出來的程式碼和 minSdk 一致。這段 C 沒有用到 C++，和上面 libc++ 的問題無關；最後的連結仍由 Zig 做
 - `.so` 只開放 Java 執行環境要找的函式（`jni/exports.map`）：`JNI_OnLoad` 和 `DeviceCore` 的幾個。Barretenberg 自己的 C 函式和 `idc_` 的函式都在裡面，但從 `.so` 外面呼叫不到
 - 不連結 `liblog`
 - 連結時加 `-z defs`：有函式沒人定義，連結就停，不會等到手機上載入才失敗
