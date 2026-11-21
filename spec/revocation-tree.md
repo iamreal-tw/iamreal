@@ -219,13 +219,14 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | 1 | `not_usable_der` | is not a DER `CertificateList`, or has a time not spelled as in "Times" |
 | 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
 | 3 | `not_usable_signature` | has a signature that verifies under neither key |
-| 4 | `not_usable_too_many_extensions` or `not_usable_duplicate_extension` | has more than 16 extensions of the CRL, or one of them twice; in this order |
-| 5 | `not_usable_critical_extension` | has a critical extension of the CRL |
-| 6 | `not_usable_delta` | has `deltaCRLIndicator` (see row 7 for a file that also has `issuingDistributionPoint`) |
-| 7 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 6 and 7 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
-| 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER of at most 20 content bytes |
-| 9 | `not_usable_too_many_extensions`, `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with more than 16 extensions, an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
-| 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
+| 4 | `not_usable_too_many_extensions` | has more than 16 extensions of the CRL |
+| 5 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
+| 6 | `not_usable_critical_extension` | has a critical extension of the CRL |
+| 7 | `not_usable_delta` | has `deltaCRLIndicator` (see row 8 for a file that also has `issuingDistributionPoint`) |
+| 8 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 7 and 8 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
+| 9 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER of at most 20 content bytes |
+| 10 | `not_usable_too_many_extensions`, `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with more than 16 extensions, an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
+| 11 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
 
 **Order.** Lines are sorted by `issuer` (bytes: `-` before `G2` before `G3`),
 then `crl_number` as a number with `-` before every number, then `sha256`.

@@ -148,18 +148,18 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Critical: true, Value: Integer(4659)}}
-	add("delta", "a delta CRL with a critical deltaCRLIndicator: the critical extension (check 5) comes before the delta (check 6)", false, "not_usable_critical_extension", c)
+	add("delta", "a delta CRL with a critical deltaCRLIndicator: the critical extension (check 6) comes before the delta (check 7)", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
 	add("delta-noncritical", "deltaCRLIndicator marked non-critical", false, "not_usable_delta", c)
 	c = base(r, Serial(hexBytes("05")))
 	idp, _ := asn1.Marshal(struct{}{}) // IssuingDistributionPoint with every field absent
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Critical: true, Value: idp}}
-	add("idp", "a partitioned CRL with a critical issuingDistributionPoint: the critical extension (check 5) comes before the partition (check 7)", false, "not_usable_critical_extension", c)
+	add("idp", "a partitioned CRL with a critical issuingDistributionPoint: the critical extension (check 6) comes before the partition (check 8)", false, "not_usable_critical_extension", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}}
 	add("idp-noncritical", "issuingDistributionPoint marked non-critical", false, "not_usable_partitioned", c)
-	// Both: checks 6 and 7 are one step, and the extension that comes first
+	// Both: checks 7 and 8 are one step, and the extension that comes first
 	// in the CRL decides (spec/revocation-tree.md, "Reason codes").
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDIssuingDistributionPoint, Value: idp}, {ID: OIDDeltaCRLIndicator, Value: Integer(4659)}}
@@ -184,7 +184,7 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 		{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, 1}, Critical: true, Value: []byte{5, 0}},
 		{ID: OIDCRLNumber, Value: Integer(4660)},
 	}
-	add("critical-and-duplicate", "a critical CRL extension, then cRLNumber twice: the duplicate (check 4) comes before the critical extension (check 5)", false, "not_usable_duplicate_extension", c)
+	add("critical-and-duplicate", "a critical CRL extension, then cRLNumber twice: the duplicate (check 5) comes before the critical extension (check 6)", false, "not_usable_duplicate_extension", c)
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	c.Entries[1].Extensions = []Extension{{ID: asn1.ObjectIdentifier{2, 5, 29, 29}, Critical: true, Value: []byte{0x30, 0}}}
 	add("entry-critical", "an entry with a critical certificateIssuer extension (an indirect CRL)", false, "not_usable_critical_extension", c)
@@ -200,7 +200,7 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	c = base(r, Serial(hexBytes("05")))
 	c.Entries[0].CriticalReason = true
 	c.Number = -1
-	add("no-number-entry-critical", "no cRLNumber, and an entry with a critical reasonCode: the CRL number (check 8) comes before the entries (check 9)", false, "not_usable_crl_number", c)
+	add("no-number-entry-critical", "no cRLNumber, and an entry with a critical reasonCode: the CRL number (check 9) comes before the entries (check 10)", false, "not_usable_crl_number", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Number = -1
 	add("no-number", "no cRLNumber extension", false, "not_usable_crl_number", c)
@@ -241,7 +241,7 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	add("seventeen-extensions", "17 extensions of the CRL", false, "not_usable_too_many_extensions", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = append(others(14), Extension{ID: OIDCRLNumber, Value: Integer(4661)})
-	add("seventeen-extensions-one-twice", "17 extensions of the CRL, cRLNumber twice among them: too many (check 4) comes before the duplicate", false, "not_usable_too_many_extensions", c)
+	add("seventeen-extensions-one-twice", "17 extensions of the CRL, cRLNumber twice among them: too many (check 4) comes before the duplicate (check 5)", false, "not_usable_too_many_extensions", c)
 	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
 	c.Entries[1].Extensions = others(15)
 	add("entry-sixteen-extensions", "an entry with 16 extensions, the most: reasonCode and 15 others", true, "", c)
