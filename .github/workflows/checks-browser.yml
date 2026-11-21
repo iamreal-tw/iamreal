@@ -1,9 +1,10 @@
-# The browser tests of a pull request: web/'s `pnpm test:e2e` and
-# `pnpm test:ui`, the headless Chrome with the fake card, the fake
-# component and the Go server (items of the definition of done in
-# CONTRIBUTING.md). The other items run in checks.yml, on every pull
-# request. These take about 16 minutes on GitHub's runner, so they run only
-# when the pull request changes a file they use (#123).
+# The browser tests of a pull request: web/'s `pnpm test:e2e`,
+# `pnpm test:ui` and `pnpm test:worker`, the headless Chrome with the fake
+# card, the fake component and the Worker in the local workerd (#69; items
+# of the definition of done in CONTRIBUTING.md). The other items run in
+# checks.yml, on every pull request. The first two took about 16 minutes on
+# GitHub's runner when they ran against the Go server (#119), so they run
+# only when the pull request changes a file they use (#123).
 #
 # The same rules as checks.yml, but not on merge_group: these do not run in
 # the merge queue (#180). Triggered by pull_request only, never
@@ -11,14 +12,14 @@
 # worker/test/workflows.test.ts checks this file against the rules in
 # worker/test/workflows.ts, and checks that `paths` holds every top-level
 # directory and file the two tests use (read from their source and the Go
-# packages they build).
+# packages they build: now only cmd/iamreal-verify, which re-verifies what
+# the Worker published).
 #
 # `paths`: the workflow runs if at least one changed file matches a pattern;
 # `**` matches any characters, `/` included, and a pattern matches the whole
 # path from the repository's root (GitHub's workflow syntax,
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore).
-# When web/'s end-to-end tests run against the Worker (#69), worker/** goes
-# in the list. A workflow skipped by `paths` reports no check: if this check
+# A workflow skipped by `paths` reports no check: if this check
 # is ever made required for merging, a pull request it skips waits forever
 # (.github/README.md).
 name: checks-browser
@@ -30,7 +31,7 @@ on:
       - protocol/**
       - design/**
       - spec/**
-      - server/**
+      - worker/**
       - verifier/**
       - roster/**
       - crl/**
@@ -71,7 +72,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # pnpm test:ui builds and starts the Go server.
+      # pnpm test:ui builds iamreal-verify, which re-verifies the roster the Worker published.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -97,3 +98,6 @@ jobs:
       - name: web/ test:ui
         working-directory: web
         run: pnpm test:ui
+      - name: web/ test:worker
+        working-directory: web
+        run: pnpm test:worker

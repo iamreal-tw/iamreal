@@ -126,6 +126,7 @@ test("every environment sends the files of site/ past the Worker, with the heade
       notFoundHandling: "none",
       headers: siteHeaders(expected.kind),
       redirects: SITE_REDIRECTS,
+      // site/proof/, where a deploy builds the card proof page, is not in the repository and not left behind by a deploy.
       files: ["_headers", "_redirects", "pages.css"],
       styleSheetSha256: PAGES_CSS_SHA256,
     });
@@ -154,13 +155,13 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["no _redirects", { redirects: null }, /_redirects of the test environment/],
     ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
     ["a kind that is none", { kind: "staging" }, /ROSTER_KIND of the test environment/],
-    // site/proof/ is not in the repository (.gitignore): whatever a computer has there would be uploaded and sent as the card proof page.
-    ["a file under site/proof/", { files: [...real.files, "proof/index.html"] }, /files of the test environment/],
     ["another file beside the three", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
     ["no style sheet", { files: ["_headers", "_redirects"], styleSheetSha256: null }, /files of the test environment/],
     ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],
   ];
   for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
+  // What is under site/proof/ is the card proof page's build, which is not this check's: `checkProofPages` looks at it (test/proof-page.test.ts).
+  checkSiteFiles({ test: { ...real, files: [...real.files, "proof/index.html", "proof/assets/index.js"].sort() } });
   // A production roster's site with the test site's files says noindex: turned away too.
   assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
   checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });

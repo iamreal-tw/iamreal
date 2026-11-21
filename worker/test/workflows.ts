@@ -196,14 +196,17 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
  * https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore).
  * test/workflows.test.ts checks that every top-level directory and file the
  * browser tests use is here. spec/ is here though the check does not find
- * it used: the page's rules and their answers change together.
+ * it used: the page's rules and their answers change together. worker/ is
+ * here since the tests run against the Worker (#69); server/, the Go back
+ * end they ran against before, is not: they build no package that imports
+ * it.
  */
 export const BROWSER_PATHS: readonly string[] = [
   "web/**",
   "protocol/**",
   "design/**",
   "spec/**",
-  "server/**",
+  "worker/**",
   "verifier/**",
   "roster/**",
   "crl/**",
@@ -287,6 +290,15 @@ const WITH: Readonly<Record<string, YamlMap>> = {
   "actions/upload-artifact": { name: "worker-build", path: "${{ runner.temp }}/worker-build", "if-no-files-found": "error" },
   "actions/download-artifact": { name: "worker-build", path: "${{ runner.temp }}/worker-build" },
 };
+
+/**
+ * The second artifact of a deploy: the card proof page, which the build job
+ * builds and checks in worker/site/proof/ of its checkout
+ * (scripts/build-deploy.ts) and the deploy job puts at the same place of
+ * its own, where wrangler finds it among the files of Static Assets
+ * (wrangler.jsonc, `assets.directory`).
+ */
+const PROOF_PAGE_ARTIFACT: YamlMap = { name: "proof-page", path: "worker/site/proof" };
 
 const uses = (action: string): string => `${action}@${ACTIONS[action]!.sha}`;
 const step = (action: string): YamlMap => ({ uses: uses(action), with: WITH[action]! });
@@ -541,8 +553,11 @@ export const DEPLOY_JOBS: YamlMap = {
       step("actions/setup-node"),
       { name: "Install pnpm", run: INSTALL_PNPM },
       { run: "pnpm install --frozen-lockfile" },
-      { name: "Build the Worker and check the build", "working-directory": "worker", run: 'node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"' },
+      // The common reference string the card proof page proves with: downloaded and checked against its SHA-256 (web/scripts/fetch-crs.mjs).
+      { name: "web/ fetch-crs", "working-directory": "web", run: "pnpm fetch-crs" },
+      { name: "Build the card proof page and the Worker, and check both builds", "working-directory": "worker", run: 'node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"' },
       step("actions/upload-artifact"),
+      { uses: uses("actions/upload-artifact"), with: { ...PROOF_PAGE_ARTIFACT, "if-no-files-found": "error" } },
     ],
   },
   deploy: {
@@ -558,6 +573,7 @@ export const DEPLOY_JOBS: YamlMap = {
         run: "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-worker",
       },
       step("actions/download-artifact"),
+      { uses: uses("actions/download-artifact"), with: PROOF_PAGE_ARTIFACT },
       {
         name: "Upload to iamreal-test",
         "working-directory": "worker",

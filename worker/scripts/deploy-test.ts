@@ -3,8 +3,12 @@
 // `.env.local` that can deploy that Worker and no other (ADR-0029). It does
 // not use `wrangler login`.
 //
-// The same two steps as the workflow (deploy.ts):
+// The same steps as the workflow (deploy.ts):
 //
+// 0. `buildSite`: the card proof page, the test site's build of web/, into
+//    site/proof/, checked. It needs web/crs/ (`pnpm fetch-crs` in web/).
+//    The directory is removed again when this ends, uploaded or not: it is
+//    not in the repository, and the tests of site/ expect none.
 // 1. `buildDeploy`: the deploy build into a temporary directory, checked.
 //    Before it, the proof verifier's files are checked against their
 //    SHA-256 (engine-files.ts); a file that does not match stops the deploy
@@ -30,7 +34,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKER_DIR, WRANGLER, buildDeploy, deployTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
+import { WORKER_DIR, WRANGLER, buildDeploy, buildSite, deployTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
+import { PROOF_DIR } from "./proof-page.ts";
 
 const ENV_FILE = join(WORKER_DIR, "..", ".env.local");
 
@@ -44,11 +49,13 @@ if (!existsSync(ENV_FILE)) throw new Error(`${ENV_FILE} is missing: it holds CLO
 const dir = mkdtempSync(join(tmpdir(), "iamreal-deploy-"));
 let status = 1;
 try {
+  buildSite();
   buildDeploy(dir);
   const token = deployTokenOf(readFileSync(ENV_FILE, "utf8"));
   const r = spawnSync(WRANGLER, [...uploadArgs(join(dir, "index.js")), ...extra], { cwd: WORKER_DIR, stdio: "inherit", env: wranglerEnv(process.env, token) });
   status = r.status ?? 1;
 } finally {
   rmSync(dir, { recursive: true, force: true });
+  rmSync(PROOF_DIR, { recursive: true, force: true });
 }
 process.exit(status);

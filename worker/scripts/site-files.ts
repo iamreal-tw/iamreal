@@ -38,12 +38,11 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
 export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
- * Every file of site/ a deploy uploads, by its path under site/, sorted:
- * the style sheet and the two files of rules. There is no build of web/
- * under site/proof/ yet; the deploy that puts one there (#69) changes this
- * list. site/proof/ is not in the repository (.gitignore), so on a computer
- * it can hold anything: a deploy build made there does not pass with a file
- * that is not listed here (deploy-build-checks.ts, `checkSiteFiles`).
+ * Every file of site/ a deploy uploads besides the card proof page's, by
+ * its path under site/, sorted: the style sheet and the two files of rules.
+ * The page's files are under site/proof/, which is not in the repository
+ * (.gitignore): a deploy builds them there (deploy.ts, `buildSite`) and
+ * checks what the directory then holds (proof-page.ts).
  */
 export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "pages.css"];
 

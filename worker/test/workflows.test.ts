@@ -136,7 +136,11 @@ const CHANGES: Record<string, Change[]> = {
   "22 an action that runs a script, pinned to a commit": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - uses: actions/github-script@${SHA} # v9.0.0\n        with:\n          script: require("./scripts/anything.cjs")\n`)],
   "23 the deploy job checks out another ref": [replace(D, "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n      - name: Install wrangler", "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n          ref: some-other-branch\n      - name: Install wrangler")],
   "24 the build job rewrites index.js before handing it on": [replace(D, "      - uses: actions/upload-artifact@", '      - run: node scripts/anything.js > "$RUNNER_TEMP/worker-build/index.js"\n      - uses: actions/upload-artifact@')],
-  "25 the artifact of another run, with github.token": [replace(D, "          path: ${{ runner.temp }}/worker-build\n      # The build's", "          path: ${{ runner.temp }}/worker-build\n          run-id: 123\n          github-token: ${{ github.token }}\n      # The build's")],
+  "25 the artifact of another run, with github.token": [replace(D, "          path: ${{ runner.temp }}/worker-build\n      # The card proof page, to", "          path: ${{ runner.temp }}/worker-build\n          run-id: 123\n          github-token: ${{ github.token }}\n      # The card proof page, to")],
+  "25a the card proof page of another run": [replace(D, "          path: worker/site/proof\n      # The build's", "          path: worker/site/proof\n          run-id: 123\n          github-token: ${{ github.token }}\n      # The build's")],
+  "25b the deploy job uploads without the card proof page the build job checked": [replace(D, "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        with:\n          name: proof-page\n          path: worker/site/proof\n", "")],
+  "25c the build job hands on a page from another directory": [replace(D, "          name: proof-page\n          path: worker/site/proof\n          if-no-files-found: error\n", "          name: proof-page\n          path: web/dist\n          if-no-files-found: error\n")],
+  "25d the build job builds the page without the common reference string": [replace(D, "      - name: web/ fetch-crs\n        working-directory: web\n        run: pnpm fetch-crs\n", "")],
   "26 an if: on the upload": [replace(D, "      - name: Upload to iamreal-test\n", "      - name: Upload to iamreal-test\n        if: github.actor == 'someone'\n")],
   "30 on: [pull_request] in checks.yml": [replace(C, "on:\n  pull_request:\n", "on: [pull_request]\n")],
   "31 run: | before the upload": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - run: |\n          echo hi\n`)],
@@ -617,10 +621,13 @@ function workspacePackages(): Map<string, string> {
 }
 
 /**
- * What the browser tests (web/'s `pnpm test:e2e` and `pnpm test:ui`,
- * test/e2e/run.ts and ui.ts) use, found by reading their source, from every
- * file of web/src/, web/test/e2e/, web/vite.config.ts and the pages' HTML
- * in web/ (Vite builds the page from them), and the files those import:
+ * What the browser tests (web/'s `pnpm test:e2e`, `pnpm test:ui` and
+ * `pnpm test:worker`: test/e2e/run.ts, test/e2e/ui.ts and
+ * test/worker-card-proof.ts) use, found by reading their source, from every
+ * file of web/src/, web/test/e2e/, test/worker-card-proof.ts,
+ * web/vite.config.ts and the pages' HTML in web/ (Vite builds the page
+ * from them), and the files those import (the Worker's test harness among
+ * them, and through it the Worker's scripts and code):
  *
  * - `files`: the files reached by an import written `from "…"`,
  *   `import("…")` or `import "…"` with a relative path (JSON included), or
@@ -636,8 +643,9 @@ function workspacePackages(): Map<string, string> {
  * string (`${repo}/docs`), joined with `+`, or put together some other way
  * when the tests run; an import with a query (`?raw`); CSS `@import`; a Go
  * package named through a variable; what the programs the tests start read
- * at run time (the Go server reads only the directories the test hands
- * it); npm packages (the lockfile stands for them); the tools on the runner
+ * at run time (wrangler, which bundles the Worker from worker/ and reads
+ * worker/wrangler.jsonc and worker/site/: all of worker/ is in the paths;
+ * iamreal-verify reads only the directories the test hands it); npm packages (the lockfile stands for them); the tools on the runner
  * (Chrome, Go, bb). So this is one more reminder, not the list: whoever
  * makes the tests use another directory adds it to the paths.
  */
@@ -666,6 +674,7 @@ function readBrowserTests(): { used: Set<string>; goPackages: Set<string> } {
   const roots = [
     ...filesUnder(join(web, "src")),
     ...filesUnder(join(web, "test", "e2e")),
+    join(web, "test", "worker-card-proof.ts"),
     join(web, "vite.config.ts"),
     ...readdirSync(web)
       .filter((f) => f.endsWith(".html"))
@@ -717,8 +726,10 @@ const inPaths = (top: string): boolean => BROWSER_PATHS.includes(existsSync(join
 
 test("the browser tests run when anything they use changes: each top-level directory and file their source names is in the paths", () => {
   const { used } = readBrowserTests();
-  // The check sees the page, the shared rules and the screen's sentences.
-  for (const d of ["web", "protocol", "design", "verifier"]) assert.ok(used.has(d), `the check found ${d}`);
+  // The check sees the page, the shared rules, the screen's sentences and the back end the tests run against.
+  for (const d of ["web", "protocol", "design", "verifier", "worker"]) assert.ok(used.has(d), `the check found ${d}`);
+  // The Go back end is no longer among what they use (#69).
+  assert.ok(!used.has("server") && !BROWSER_PATHS.includes("server/**"));
   assert.deepEqual(
     [...used].filter((u) => !inPaths(u)),
     [],
@@ -744,11 +755,13 @@ test(
   () => {
     assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
     const { goPackages } = readBrowserTests();
-    assert.ok(goPackages.has("./server") && goPackages.has("./cmd/iamreal-verify"), "the check read the Go builds");
+    // The one Go program they build re-verifies what the Worker published; the Go server is not built (#69).
+    assert.deepEqual([...goPackages], ["./cmd/iamreal-verify"], "the check read the Go builds");
     const format = '{{if .Module}}{{if eq .Module.Path "github.com/iamreal-tw/iamreal"}}{{.Dir}}{{end}}{{end}}';
     const dirs = execFileSync("go", ["list", "-tags", "iamrealtest", "-deps", "-f", format, ...goPackages], { cwd: REPO, encoding: "utf8" });
     const used = new Set(["go.mod", "go.sum", ...dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep)[0]!)]);
-    for (const d of ["server", "verifier", "cmd", "crl", "roster"]) assert.ok(used.has(d), `the check found ${d}`);
+    for (const d of ["verifier", "cmd", "crl", "roster"]) assert.ok(used.has(d), `the check found ${d}`);
+    assert.ok(!used.has("server"), "iamreal-verify does not import the Go server");
     assert.deepEqual(
       [...used].filter((u) => !inPaths(u)),
       [],

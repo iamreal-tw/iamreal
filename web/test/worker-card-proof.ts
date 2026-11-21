@@ -12,11 +12,10 @@
 //    verifies the proof with its own verifier and writes the record.
 // 3. Has the Worker's hourly schedule mirror the two CRLs from the fake
 //    MOICA into the simulated R2 bucket.
-// 4. Puts a small server in front of the Worker, in the place of the data
-//    domain: the test build of the page takes the CRL archive from its own
-//    origin (test/e2e/target.ts, DATA_ORIGIN), and the Worker has no route
-//    that sends a file of it. The server answers /crl/… from the bucket,
-//    read-only, and hands every other request to the Worker as it is.
+// 4. The page is opened through the small server in front of the Worker
+//    that stands in the place of the data domain (test/e2e/worker-site.ts):
+//    it answers /crl/… from the Worker's bucket, read-only, and hands every
+//    other request to the Worker as it is.
 // 5. Clicks through the six steps like a cardholder (real mouse events,
 //    cdp.ts), declaring @alice on Threads.
 // 6. Opens the home page and /p/<short ID>: the page of the card lists the
@@ -24,23 +23,22 @@
 //    Takes screenshots of both at a desktop's and a phone's width.
 //
 // The screens' own sentences, every way a card proof stops and every kind
-// of record are test/e2e/ui.ts's, which still runs against the Go backend.
-// This file is not under test/e2e/: the checks of a pull request do not run
-// it, and what they run is what worker/test/workflows.test.ts reads there.
+// of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
+// what only this file looks at is the visitors' pages after a card proof.
+// The checks of a pull request run it with the other two browser tests
+// (.github/workflows/checks-browser.yml).
 //
 // The browser resolves no host name but localhost and 127.0.0.1
 // (--host-resolver-rules): the profile a page of a card embeds gets no
 // further than its name.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { startWorker } from "../../worker/test/harness.ts";
 import { COPY } from "../src/ui/copy.ts";
 import { Browser, type Page } from "./e2e/cdp.ts";
 import { FakeComponent } from "./e2e/fake-component.ts";
+import { startWorkerSite } from "./e2e/worker-site.ts";
 import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./fixtures/certs.ts";
 import { makeCrl } from "./fixtures/crls.ts";
 import { hex, makeKey } from "./fixtures/der-build.ts";
@@ -104,34 +102,10 @@ await build({
 });
 
 console.log("starting the Worker (test build) with that page");
-const worker = await startWorker({ proofFiles: dist, issuers });
+const site = await startWorkerSite({ proofFiles: dist, issuers });
+const { worker } = site;
 const component = new FakeComponent();
 let browser: Browser | undefined;
-const front = createServer(async (req, res) => {
-  try {
-    const path = (req.url ?? "/").split("?")[0]!;
-    // 4. In the place of the data domain: the CRL archive, from the bucket, read-only.
-    if (path.startsWith("/crl/")) {
-      if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405).end();
-      const file = (await worker.files(path.slice(1))).find((f) => f.key === path.slice(1));
-      if (file === undefined) return void res.writeHead(404).end();
-      return void res.writeHead(200, { "Content-Type": path.endsWith(".jsonl") ? "application/jsonl" : "application/pkix-crl", "Cache-Control": "no-store" }).end(Buffer.from(file.bytes));
-    }
-    const chunks: Buffer[] = [];
-    for await (const c of req) chunks.push(c as Buffer);
-    const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !["host", "connection", "content-length"].includes(k)) headers[k] = v;
-    const answer = await worker.fetch(req.url ?? "/", { method: req.method, headers, redirect: "manual", ...(chunks.length > 0 && { body: Buffer.concat(chunks) }) });
-    const out: Record<string, string> = {};
-    answer.headers.forEach((value, key) => {
-      // The body is sent as this server has it, not as the local workerd encoded it.
-      if (!["content-encoding", "mf-content-encoding", "transfer-encoding", "content-length", "connection"].includes(key)) out[key] = value;
-    });
-    res.writeHead(answer.status, out).end(Buffer.from(await answer.arrayBuffer()));
-  } catch (e) {
-    res.writeHead(502).end(String(e));
-  }
-});
 
 try {
   // 3. The mirror ----------------------------------------------------------------
@@ -141,8 +115,8 @@ try {
   const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
   check(round.outcome === "ok" && index.split("\n").filter(Boolean).length === 2, `the Worker's schedule mirrored the two CRLs (${round.outcome})`);
 
-  await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
-  const ORIGIN = `http://localhost:${(front.address() as AddressInfo).port}`;
+  // 4. In the place of the data domain: the server in front of the Worker.
+  const ORIGIN = site.origin;
   await component.start(COMPONENT_PORT);
   component.card = { certificates: [encryption, signing], signingCertificate: signing, signingKey: cardKey.privateKey, pin: PIN, tries: 3 };
 
@@ -251,9 +225,7 @@ try {
 } finally {
   await browser?.close().catch(() => undefined);
   await component.stop().catch(() => undefined);
-  front.closeAllConnections();
-  await new Promise((r) => front.close(r));
-  await worker.close();
+  await site.close();
 }
 
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);
