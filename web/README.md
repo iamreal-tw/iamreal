@@ -260,7 +260,7 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ## 頁面需要的標頭
 
-伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（舊後台是 `server/headers.go` 的 `pageHeaders`；`worker/` 定義在 `worker/src/headers.ts` 的 `PROOF_PAGE_HEADERS`，寫進 `worker/site/_headers`，由 Cloudflare 的 Static Assets 直接加在檔案上，不經過 Worker 的程式，見 `worker/README.md`「Static Assets」；`server/` 和 `worker/` 的測試各自檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
+伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（舊後台是 `server/headers.go` 的 `pageHeaders`；`worker/` 定義在 `worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`，由 Cloudflare 的 Static Assets 直接加在檔案上，不經過 Worker 的程式，見 `worker/README.md`「Static Assets」；`server/` 和 `worker/` 的測試各自檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
 
 ### `Content-Security-Policy`
 
@@ -270,6 +270,12 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ```
 default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+```
+
+測試網站（`test.iamreal.tw`）送的只差資料網域，是測試名冊的那一個：
+
+```
+default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://test-data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 ```
 
 - `'wasm-unsafe-eval'`：bb.js 和 Noir 要編譯 WebAssembly。

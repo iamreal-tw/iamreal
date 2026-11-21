@@ -4,8 +4,9 @@
 //   site/_headers    the headers of the card proof page's files and of the
 //                    style sheet, written here from src/headers.ts, the one
 //                    place they are defined. A test roster's site and a
-//                    production roster's differ in one header (noindex), so
-//                    the file is written for one kind of roster.
+//                    production roster's differ in one header (noindex) and
+//                    in the data domain the card proof page may connect to,
+//                    so the file is written for one kind of roster.
 //   site/_redirects  the one address of the card proof page.
 //
 // Both are in the repository as a test roster's site needs them, the only
@@ -21,7 +22,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EVERY_RESPONSE, PROOF_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
+import { EVERY_RESPONSE, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
 
 const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
 
@@ -63,7 +64,7 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
  * The text of site/_headers for a site of that kind of roster.
  *
  * - /proof and everything under it: the card proof page's headers
- *   (`PROOF_PAGE_HEADERS`). In the local workerd a rule matches whether or
+ *   (`proofPageHeaders`, with the data domain of that kind of roster). In the local workerd a rule matches whether or
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
@@ -74,7 +75,7 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
  */
 export function siteHeaders(kind: RosterKind): string {
   const every = { ...EVERY_RESPONSE, ...(kind === "test" ? TEST_SITE_HEADERS : {}) };
-  const proof = { ...PROOF_PAGE_HEADERS, ...every };
+  const proof = { ...proofPageHeaders(kind), ...every };
   return `${[
     `# The headers Static Assets sends with the files of this directory, for a ${kind} roster's site.`,
     "# Written by scripts/site-files.ts from src/headers.ts: change them there, not here.",

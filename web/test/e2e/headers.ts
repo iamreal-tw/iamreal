@@ -1,10 +1,19 @@
-// The response headers the headless browser test serves the page with. The
-// Content-Security-Policy is the one README.md asks the server to send; the
-// test checks that README.md quotes it exactly.
+// The response headers the headless browser tests expect the card proof page
+// to come with, and serve it with where a test serves the page itself. The
+// Content-Security-Policy is the one README.md asks the server to send: the
+// page may connect to its own origin and to its roster's data domain, so
+// the production roster's site and the test roster's differ in that one
+// address. The tests check that README.md quotes both exactly.
 
-export const CONTENT_SECURITY_POLICY =
-  "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; " +
+const policy = (dataOrigin: string): string =>
+  `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ${dataOrigin}; ` +
   "img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+/** The production roster's site (iamreal.tw). */
+export const CONTENT_SECURITY_POLICY = policy("https://data.iamreal.tw");
+
+/** The test roster's site (test.iamreal.tw), and the Worker the tests run in the local workerd, which is set up as that site. */
+export const TEST_SITE_CONTENT_SECURITY_POLICY = policy("https://test-data.iamreal.tw");
 
 /**
  * Cross-origin isolation for multithreaded proving in Chromium. Unlike COOP

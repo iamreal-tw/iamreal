@@ -2,14 +2,14 @@
 # Written by scripts/site-files.ts from src/headers.ts: change them there, not here.
 
 /proof
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://test-data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Document-Isolation-Policy: isolate-and-credentialless
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   X-Content-Type-Options: nosniff
   X-Robots-Tag: noindex
 
 /proof/*
-  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://test-data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Document-Isolation-Policy: isolate-and-credentialless
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   X-Content-Type-Options: nosniff
