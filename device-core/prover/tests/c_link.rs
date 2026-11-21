@@ -64,6 +64,19 @@ fn static_library() -> PathBuf {
         library.exists(),
         "cargo build leaves the static library in target/<profile>/"
     );
+    // Built without the feature `test-issuers`, as for an app that goes
+    // out: the function that trusts other issuer keys is not in it.
+    let bytes = std::fs::read(&library).expect("the static library");
+    for mark in [
+        &b"idc_testing_session_open"[..],
+        b"iamreal-device-core:testing-issuer-keys",
+    ] {
+        assert!(
+            !bytes.windows(mark.len()).any(|w| w == mark),
+            "the library an app links has {}",
+            String::from_utf8_lossy(mark)
+        );
+    }
     library
 }
 

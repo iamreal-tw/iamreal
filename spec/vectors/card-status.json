@@ -1,0 +1,1077 @@
+{
+  "spec": "list-consequence",
+  "status": "draft",
+  "note": "The card's state as the screen of its accounts shows it (list-consequence.md, \"The card's state, as shown\"). Each case has the two answers as the server sent them, the platforms the device has its own definition of, and today's date in Taiwan. How the answers are read, and every way one cannot be read, is in list-consequence.json.",
+  "generated_by": "web/test/generate/card-status.ts",
+  "cases": [
+    {
+      "name": "a card without a record",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 0,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": null,
+        "days_since": null,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "an account declared 12 days ago, never switched",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-04"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "one switch used: four left",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "switches_left": 4,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "an account put there today: a change today is a correction",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-16"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-16",
+        "days_since": 0,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "the same state a day later: no longer a correction",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-16"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-17",
+      "result": {
+        "last_card_proof": "2026-11-16",
+        "days_since": 1,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "withdrawn: the account last declared stays",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": "bob",
+            "switch_count": 2,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": null,
+            "last_declared": "bob",
+            "switch_count": 2,
+            "switches_left": 3,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "five switches used: none left",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 5,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 5,
+            "switches_left": 0,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "three records today: the daily limit",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 3,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": "bob",
+            "switch_count": 5,
+            "correction_date": "2026-11-16"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-16",
+        "days_since": 0,
+        "daily_limit": true,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": null,
+            "last_declared": "bob",
+            "switch_count": 5,
+            "switches_left": 0,
+            "correction_today": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "two records today: not the daily limit",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 2,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-16"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-16",
+        "days_since": 0,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "three records on an earlier date: not today's limit",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-15",
+        "proofs_on_last_date": 3,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-04"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-15",
+        "days_since": 1,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a record dated tomorrow by the server's clock: minus one day",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-17",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-17"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-17",
+        "days_since": -1,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "two platforms the device knows, in ascending order",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-04"
+          },
+          "test-example": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "test-example",
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "test-example",
+            "known": true,
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          },
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "an account on a platform the device has no definition of is kept, shown as it is",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          },
+          "test-example": {
+            "current": "alice-b",
+            "last_declared": "alice-b",
+            "switch_count": 3,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "test-example",
+            "known": false,
+            "current": "alice-b"
+          },
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 1,
+            "switches_left": 4,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a platform the table names without a row it can read: its account is kept too",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-04"
+          },
+          "test-example": {
+            "current": "alice-b",
+            "last_declared": "alice-b",
+            "switch_count": 0,
+            "correction_date": "2026-11-04"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-04",
+        "days_since": 12,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "test-example",
+            "known": false,
+            "current": "alice-b"
+          },
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "three records today, with a kept account",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 3,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-11-16"
+          },
+          "test-example": {
+            "current": "alice-b",
+            "last_declared": "alice-b",
+            "switch_count": 0,
+            "correction_date": "2026-11-16"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": "2026-11-16",
+        "days_since": 0,
+        "daily_limit": true,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "test-example",
+            "known": false,
+            "current": "alice-b"
+          },
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "the days are counted across the end of a year",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-12-28",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2026-12-28"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2027-01-02",
+      "result": {
+        "last_card_proof": "2026-12-28",
+        "days_since": 5,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "and across the end of February in a leap year",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2028-02-28",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "correction_date": "2028-02-28"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2028-03-01",
+      "result": {
+        "last_card_proof": "2028-02-28",
+        "days_since": 2,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": "alice",
+            "last_declared": "alice",
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a platform the device does not know, without an account, has no row",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 0,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          },
+          "test-example": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": null,
+        "days_since": null,
+        "daily_limit": false,
+        "known_platforms": [
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a platform the device knows without an entry in the state is not offered, but is a platform of the table",
+      "platforms": [
+        {
+          "platform": "test-example",
+          "display_name": "Example (no real service)",
+          "username_format": "[a-z0-9-]{1,20}"
+        },
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 0,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "last_card_proof": null,
+        "days_since": null,
+        "daily_limit": false,
+        "known_platforms": [
+          "test-example",
+          "threads"
+        ],
+        "rows": [
+          {
+            "platform": "threads",
+            "known": true,
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "switches_left": 5,
+            "correction_today": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "a table that cannot be read",
+      "platforms": {
+        "threads": {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      },
+      "card_state": {
+        "last_card_proof": null,
+        "proofs_on_last_date": 0,
+        "platforms": {
+          "threads": {
+            "current": null,
+            "last_declared": null,
+            "switch_count": 0,
+            "correction_date": null
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "unread": "platforms"
+      }
+    },
+    {
+      "name": "a state that cannot be read: six switches",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-04",
+        "proofs_on_last_date": 1,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 6,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "unread": "card_state"
+      }
+    },
+    {
+      "name": "a state that cannot be read: four records on the last date",
+      "platforms": [
+        {
+          "platform": "threads",
+          "display_name": "Threads",
+          "username_format": "[a-z0-9._]{1,30}"
+        }
+      ],
+      "card_state": {
+        "last_card_proof": "2026-11-16",
+        "proofs_on_last_date": 4,
+        "platforms": {
+          "threads": {
+            "current": "bob",
+            "last_declared": "bob",
+            "switch_count": 1,
+            "correction_date": "2026-03-02"
+          }
+        },
+        "count": 137
+      },
+      "known_platforms": [
+        "test-example",
+        "threads"
+      ],
+      "today": "2026-11-16",
+      "result": {
+        "unread": "card_state"
+      }
+    }
+  ]
+}
