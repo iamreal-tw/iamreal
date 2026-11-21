@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The name under the icon, as design/copy/app.md writes it for the test app. -->
+    <!-- The name under the icon of the store's build, as design/copy/app.md writes it. The development build has its own (src/debug/). -->
     <string name="app_name">島民證明 測試</string>
 </resources>

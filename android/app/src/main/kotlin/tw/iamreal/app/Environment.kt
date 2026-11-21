@@ -1,9 +1,11 @@
 package tw.iamreal.app
 
 /**
- * The one environment this app is built for (ADR-0036): the test site and
- * the test roster. It is written here and nowhere else; nothing in the app
- * or from the server changes it.
+ * The environment the app is built for: the test site and the test roster.
+ * Both builds have it (ADR-0037): the development build always, the store's
+ * build until launch, when one PR gives the store's build the production
+ * site and roster of its own. It is written here and nowhere else; nothing
+ * in the app or from the server changes it.
  */
 internal object Environment {
     /** The site the app talks to (ADR-0028). */

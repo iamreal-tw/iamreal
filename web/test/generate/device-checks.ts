@@ -325,7 +325,7 @@ await crlCase(
 );
 await crlCase("a partitioned CRL", { crls: [G3_100(0, { extraExtensions: [IDP] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_partitioned", highest_after: null }));
 await crlCase("a delta CRL", { crls: [G3_100(0, { extraExtensions: [DELTA] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_delta", highest_after: null }));
-// Both extensions: the one that comes first in the CRL decides (spec/revocation-tree.md, rows 6 and 7).
+// Both extensions: the one that comes first in the CRL decides (spec/revocation-tree.md, rows 7 and 8).
 await crlCase(
   "issuingDistributionPoint before deltaCRLIndicator: partitioned",
   { crls: [G3_100(0, { extraExtensions: [IDP, DELTA] })] },

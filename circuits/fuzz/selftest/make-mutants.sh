@@ -1,0 +1,42 @@
+#!/bin/bash
+# Builds deliberately broken copies of the Noir circuits, one check removed
+# each, under $FUZZ_WORK/mutants/<name>/target. The fuzzer must report every
+# one. FUZZ_WORK is a directory outside the repository (inside it, nargo finds
+# circuits/Nargo.toml and builds the real circuits instead); by default
+# circuits-fuzz in the system's temporary directory. Uses the nargo of
+# fetch-nargo.sh, and stops if that fails. Exits 1 if a mutant does not
+# compile.
+set -eu
+SRC=$(cd "$(dirname "$0")/../.." && pwd)
+W=${FUZZ_WORK:-${TMPDIR:-/tmp}/circuits-fuzz}
+nargo=$("$SRC/fetch-nargo.sh")
+PATH=$(dirname "$nargo"):$PATH
+export PATH
+failed=0
+mk() {
+  name=$1; file=$2; from=$3; to=$4
+  d=$W/mutants/$name
+  rm -rf "$d"; mkdir -p "$d"
+  cp -R "$SRC/Nargo.toml" "$SRC/lib" "$SRC/card_proof_rs2048" "$SRC/card_proof_rs4096" "$SRC/comparison" "$d/"
+  mkdir -p "$d/tests" && cp -R "$SRC/tests/probes" "$d/tests/"   # workspace members
+  python3 - "$d/$file" "$from" "$to" <<'PY'
+import sys
+p, a, b = sys.argv[1:]
+s = open(p).read()
+assert s.count(a) == 1, (p, a)
+open(p, "w").write(s.replace(a, b))
+PY
+  if (cd "$d" && nargo compile >/dev/null 2>&1); then echo "$name compiled"; else echo "$name FAILED"; failed=1; fi
+}
+mk no-keyusage lib/src/der.nr "expect(tbs, exponent + 77, KEY_USAGE);" ""
+mk no-end-bound lib/src/der.nr "assert(exponent + 168 <= tbs_len);" ""
+mk no-sig-in-field lib/src/rsa.nr "signature.validate_in_field();" ""
+mk no-yy50 lib/src/der.nr "assert(tbs[offset] < 53);" ""
+mk no-oldkey-ne lib/src/smt.nr "assert(is_old0 | (old_key != key));" ""
+mk no-scope-kind lib/src/lib.nr 'assert(is_scope_kind(scope[0]), "not a scope string");' ""
+mk subject-81-any lib/src/der.nr "assert(!is_long | (b2 >= 128));" ""
+# Added with the fixes after the AI-assisted review (circuits/REVIEW.md). The
+# card proof still rejects a short key (the library checks it again); the
+# certificate part alone must not accept.
+mk no-key-top-bit lib/src/der.nr "assert(modulus[0] >= 0x80);" ""
+exit "$failed"

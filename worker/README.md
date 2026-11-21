@@ -14,10 +14,11 @@
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
 | 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)） | 在 Cloudflare 上公布有紀錄的名冊：測試名冊還是 0 筆 |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
-| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時放進 Static Assets 的 `web/` 建置在 Cloudflare 上跑過的紀錄：建置和檢查有了（[#69](https://github.com/iamreal-tw/iamreal/issues/69)，[Static Assets](#static-assets)），帶著它的第一次部署還沒做，在那之前線上的 `/proof` 是 `404` |
+| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 用真卡片在測試網站過卡（[#71](https://github.com/iamreal-tw/iamreal/issues/71)）。帶著 `web/` 建置的部署 2026-11-21 做了（`main` 的 `1400e11`），不插卡看得到的都看過（[Static Assets](#static-assets)「Cloudflare 上看過的」） |
 | 測試專用的建置和測試的工具 | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
+| 清空測試名冊的步驟（[清空測試名冊](#清空測試名冊)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；營運者手動設的東西的清單（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)） | 在測試網站上真的清空一次 |
 
 ## 單獨執行
 
@@ -133,7 +134,7 @@ pnpm typecheck   # 型別檢查
 | 程式裡的常數 | `protocol/` 的 `RULES_VERSION` | `src/roster.ts` 的 `SCHEMA_VERSION`，現在是 1 |
 | 什麼時候加一號 | 名冊規則改了、存著的卡片狀態因此失效（`spec/roster-rules.md`「The version number」） | **改到任何一張已經存在的表**：加欄位、拿掉欄位、欄位的意思變了、改主鍵。只是多一張新的表、多一個索引不用加：建表的程式會在沒有它們的物件上補上 |
 | 存著的和程式的不同時 | 不收過卡：`challenges` 和 `records` 回 `503` `paused`，不發題目、不計次、不寫入；`card-state` 和 `config` 照常。`records` 的請求本身讀不懂時（`malformed`、`scope`、`platform`）仍然先回那個代碼，那一段不問 Durable Object。這不是後台出錯，不寫那一行紀錄 | Durable Object 的每個方法都不讀不寫，丟錯誤；`challenges`、`card-state`、`records` 回 `500`，那一行紀錄的 `where` 是 `schema`。alarm 響了也什麼都不做 |
-| 怎麼處理 | 重建狀態（[#51](https://github.com/iamreal-tw/iamreal/issues/51)） | 現在沒有搬移表的程式。處理的方法是清空測試名冊：換一個 `ROSTER_OBJECT_NAME`（維持 `test-` 開頭）。真正的搬移留給 [#118](https://github.com/iamreal-tw/iamreal/issues/118)，封閉試用之前定 |
+| 怎麼處理 | 重建狀態（[#51](https://github.com/iamreal-tw/iamreal/issues/51)） | 現在沒有搬移表的程式。處理的方法是清空測試名冊（[清空測試名冊](#清空測試名冊)）。真正的搬移留給 [#118](https://github.com/iamreal-tw/iamreal/issues/118)，封閉試用之前定 |
 
 兩件事不共用代碼：`paused` 是規則的版本，`schema` 是表的版本。
 
@@ -159,7 +160,7 @@ pnpm typecheck   # 型別檢查
 - 把寫滿的名冊檔搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）：物件裡有寫滿的檔就到期；搬不成時，等一段時間才到期。
 - 每天公布名冊（[每天換日公布名冊](#每天換日公布名冊)）：上一次公布的日期的隔天，台灣時間零點到期；公布不成時，等一段時間才到期。`paused` 時沒有這件事。
 
-每天公布永遠有下一次，所以物件啟動過之後通常一直有 alarm，最晚是下一個台灣午夜。兩種時候沒有：`paused` 時沒有每天公布這件事，別的工作也都沒事時就沒有 alarm；表的版本和程式不同時物件什麼都不做，也不設 alarm。物件啟動時（建構子跑完之後）自己設一次 alarm，不等有人來拿題目；之後每一次 alarm 響完都會設下一個。物件平常不會整天沒人叫醒：清冊鏡像每小時把最新的清冊交給它一次（[排程做什麼](#排程做什麼)）。
+每天公布永遠有下一次，所以物件啟動過之後通常一直有 alarm，最晚是下一個台灣午夜。三種時候沒有：`paused` 時沒有每天公布這件事，別的工作也都沒事時就沒有 alarm；表的版本和程式不同時物件什麼都不做，也不設 alarm；清空測試名冊之後被換掉的那個物件不做任何定時的工作，啟動時就把 alarm 刪掉（[清空測試名冊](#清空測試名冊)）。物件啟動時（建構子跑完之後）自己設一次 alarm，不等有人來拿題目；之後每一次 alarm 響完都會設下一個。物件平常不會整天沒人叫醒：清冊鏡像每小時把最新的清冊交給它一次（[排程做什麼](#排程做什麼)）。
 
 一件工作占著 alarm 不會讓別的晚做，一件工作失敗也不會讓排在它後面的不做，題目每 300 毫秒發一個時到期的工作照樣在幾秒內做：測試用測試專用的建置多塞一件假的工作來確認（`test/api.test.ts`），搬檔本身也測一次（`test/roster-files.test.ts`）。過期的題目有沒有被刪，從介面看不出來（過期的題目不管刪了沒有都是不認得），所以這一點是用那件假的工作確認的。
 
@@ -236,7 +237,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 | `roster/0000000000000000.jsonl`、`roster/0000000000001000.jsonl`…… | 寫滿的名冊檔：1,000 筆紀錄的那一行，照序號接起來 | `public, max-age=31536000, immutable` | `application/x-ndjson` |
 | `roster/hashes/0000000000000000.txt`…… | 那一檔的雜湊清單：第一行是前一檔結尾的名冊指紋（第一檔是 64 個 0），之後每筆紀錄的雜湊一行 | `public, max-age=31536000, immutable` | `text/plain; charset=utf-8` |
 
-寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。
+寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。唯一會讓同一個網址換內容的是清空測試名冊，那時要另外清快取（[清空測試名冊](#清空測試名冊)第 4 步、「清不到的快取」）。
 
 `Content-Type` 寫入時一起設（營運者 2026-11-20 決定，[#149](https://github.com/iamreal-tw/iamreal/issues/149)），兩個字串定義在 `src/roster-files.ts` 一處，之後名冊目錄裡其他 `.jsonl` 的檔用同一個：
 
@@ -306,7 +307,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 為什麼整個不做、不是只跳過第 3 步：儲存桶裡的指紋檔不是這個物件的，最可能的原因是整個名冊目錄是另一個物件寫的；那時連最後一檔和卡片狀態檔也不該蓋。
   - 那一列寫了、指紋檔還沒寫成的時候（上一條）也是同一個檢查：儲存桶的檔不是開頭就不寫，每次嘗試一行。
   - **只蓋掉剛看過的那一份。** 看完到寫入之間儲存桶的檔如果又變了，寫入不會發生：寫入帶著條件，只有儲存桶裡還是剛才讀到的那一版（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)，同一頁 `put` 的說明：「In the event that a precondition specified in `options` fails, `put()` returns `null`, and the object will not be stored.」，2026-11-20 讀的；清冊鏡像寫索引用的是同一個做法）。沒寫成算一般的失敗（`roster_not_published`），一分鐘後重新讀、重新比：是開頭就補，不是就 `fingerprint_file_differs`。本機 workerd 的 R2 模擬上，「有檔、ETag 不同了」「讀的時候有、現在沒有」「讀的時候沒有、現在有」三種都不會寫入（`test/publication.test.ts`）；Cloudflare 上沒有另外確認。
-  - **會碰到的兩種情況，和營運者要做的**：(1) 清空測試名冊時換了 `ROSTER_OBJECT_NAME`、沒有清空儲存桶：新的物件表是空的，儲存桶裡還有舊名冊的指紋檔。照清空的步驟把儲存桶的 `roster/` 清掉（[測試名冊的標示](#測試名冊的標示)「清空測試名冊時」），下一次重試就會公布。(2) 之後從名冊重建物件（ADR-0033）：重建出來的物件要先把 `published` 表從公開的指紋檔灌回來，不然它的表比公開的檔短，會停在這裡。正式名冊上看到這一行事件，表示公開的指紋檔和物件記的不一樣，要先查出是哪一邊，不要為了讓它公布而刪掉儲存桶的檔。
+  - **會碰到的兩種情況，和營運者要做的**：(1) 清空測試名冊時換了 `ROSTER_OBJECT_NAME`、沒有清空儲存桶：新的物件表是空的，儲存桶裡還有舊名冊的指紋檔。照清空的步驟把儲存桶的 `roster/` 清掉（[清空測試名冊](#清空測試名冊)第 3 步），下一次重試就會公布。(2) 之後從名冊重建物件（ADR-0033）：重建出來的物件要先把 `published` 表從公開的指紋檔灌回來，不然它的表比公開的檔短，會停在這裡。正式名冊上看到這一行事件，表示公開的指紋檔和物件記的不一樣，要先查出是哪一邊，不要為了讓它公布而刪掉儲存桶的檔。
   - 這個檢查擋的只有每天公布寫的四樣。寫滿的名冊檔照搬：換了物件名稱沒清儲存桶時，新名冊寫滿的檔會蓋掉舊名冊同名的檔。
 - **寫入那一行之前再看一次日期**：寫 R2 的時候剛好跨過午夜的話，這一次不算，一分鐘後照新的日期重做。一行的日期是它寫入那天的台灣日期。
 - **失敗**：寫一行 `{"event":"roster_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做；連續失敗時等得更久，兩種失敗算在一起（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。一件失敗不擋別的定時工作，各自算各自的等待（[過期的題目怎麼刪](#過期的題目怎麼刪)）。上面寫「一分鐘後」的地方，都是指連續失敗的第一次。
@@ -524,7 +525,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
 - **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試名冊寫 `test.iamreal.tw/p/<短編號>`，正式名冊寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結和「複製連結」複製的也是同一個網域：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `ROSTER_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
 - **過卡的頁面上的這一行不是 Worker 加的。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；標示由 `web/` 測試網站的建置自己寫在頁面最上面（`web/README.md`「三種用真元件的建置」），句子同樣來自 `design/copy/test-site.md`，日期是建置時從 `wrangler.jsonc` 的 `TEST_ROSTER_CLEARED_ON` 帶進去的。所以改這個日期要重新部署才會兩邊一致；部署前的檢查核對頁面裡的日期就是設定裡的那一個（`scripts/proof-page.ts`）。`web/test/e2e/ui.ts` 在本機的 workerd 上比過：過卡頁面上的那一行和 Worker 產生的首頁上的相同。
-- **清空測試名冊時**一起改三樣：`ROSTER_OBJECT_NAME`、清空測試的儲存桶、`TEST_ROSTER_CLEARED_ON`。
+- **清空測試名冊時**一起改 `ROSTER_OBJECT_NAME` 和 `TEST_ROSTER_CLEARED_ON`，部署之後營運者刪掉測試的儲存桶裡的 `roster/`。順序和每一步之後怎麼確認在[清空測試名冊](#清空測試名冊)。過卡的頁面上的日期是建置時從 `wrangler.jsonc` 讀的，所以同一次部署就跟著變。
 
 ### 頁面送的標頭
 
@@ -589,7 +590,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
 - GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的四個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
-- 帶著這份建置的部署還沒做過（這一版還沒合併）。在那之前線上的 `/proof` 沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`：Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭，沒有跑 Worker（見下面「Cloudflare 上看過的」）。
+- 帶著這份建置的第一次部署是 2026-11-21（`main` 的 `1400e11`，GitHub Actions）。線上看到的在下面「Cloudflare 上看過的」。
 
 設定的每一項：
 
@@ -660,14 +661,40 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   這是看到的行為，文件沒有保證；部署前後的檢查沒有一項會發現它變了。它變了的話，檔案不存在的 `/proof` 網址會由 Worker 回「找不到這一頁」；Worker 仍然送不出檔案（沒有 binding），也改不了一個存在的檔。
 - `_headers` 的規則套在不是檔案的回應上：`301` 和不存在的檔的 `404` 都帶。
 
-**Cloudflare 上還沒確認的**（都要 `site/proof/` 有檔才看得到；[#69](https://github.com/iamreal-tw/iamreal/issues/69) 之後的第一次部署會帶著頁面，部署完要看這幾項，把結果寫回這裡）：
+2026-11-21，[#235](https://github.com/iamreal-tw/iamreal/pull/235) 合併（`1400e11`）由 GitHub Actions 部署之後，用 `curl` 看的。這是第一次帶著 `web/` 的建置（`site/proof/` 有檔）。只送了 `GET`、`HEAD`，和為了看 `405` 對 `/proof` 底下的檔送的 `POST`、`DELETE`：
 
-- 檔案存在時直接送、不跑 Worker。
-- `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
-- `/proof` 底下存在的檔用 `POST` 等其他方法是不是 `405`（`/copy.js` 線上是），帶不帶 `/proof` 的標頭。本機是、有帶。
-- 上面「和 Worker 自己送的時候不同的地方」那張表裡 `307` 的那一列，和 `ETag`、`304`。
-- 只能部署 `iamreal-test` 的那把權杖上傳得了這份建置（合計約 22 MB，最大的檔是 8 MiB 的通用參數）；之前上傳過的只有 `pages.css` 一個檔。
-- 真的瀏覽器打開 `https://test.iamreal.tw/proof`：頁面是跨來源隔離的、證明引擎啟動、沒有違反 CSP、標示在最上面。`web/test/e2e/smoke.ts` 可以不插卡做這件事（`web/README.md`「在本機用真卡片過卡」）。
+| 請求 | 線上回的 | 和本機 |
+|---|---|---|
+| 部署 | 成功：只能部署 `iamreal-test` 的那把權杖（GitHub Actions 用的那一把）上傳得了整份建置。最大的檔 `crs/bn254_g1_compressed_2p18.dat` 下載回來是 8,388,608 位元組，`bb/barretenberg-threads.wasm.gz` 是 4,071,596 位元組 | |
+| `GET /proof` | `200`，`text/html`，495 位元組，內容是 `web/` 建置的那種 `index.html`（引用 `/proof/assets/` 底下的一支程式和標示的樣式表）；帶 `/proof` 的那一組標頭：`Content-Security-Policy`（`connect-src 'self' https://test-data.iamreal.tw`）、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`、`X-Content-Type-Options`、`X-Robots-Tag: noindex`。所以 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有套上 | 標頭相同 |
+| `GET /proof/help.html`、`GET /proof/assets/<程式>.js` | `200`，同一組標頭；`Content-Type` 是 `text/html`、`text/javascript`，不帶 `charset` | 標頭相同 |
+| `/proof` 和它的檔的 `Cache-Control`、`ETag` | `Cache-Control: public, max-age=0, must-revalidate`，有 `ETag`；帶 `If-None-Match` 再要一次是 `304`，標頭照樣帶 | |
+| `GET /proof/`、`GET /proof/index.html`（不跟著轉） | `301` 到 `/proof`，帶同一組標頭，沒有 `Cache-Control` | 相同 |
+| `GET /proof//index.html`、`/proof/%69ndex.html`、`/proof/assets%2f<程式>.js` | `307` 到那個檔自己的路徑，帶同一組標頭 | 相同 |
+| `GET /proof/nothing.js`、`GET /proof/crs/` | 空的 `404`，帶同一組標頭 | 相同 |
+| `GET /proof/..%2fpages.css` | 空的 `404` | 相同 |
+| `GET /proof/../pages.css`（`curl --path-as-is`，路徑原樣送出） | `200`，是樣式表和樣式表的標頭 | 相同 |
+| `POST /proof`、`POST` 和 `DELETE /proof/assets/<程式>.js` | `405`，內容是空的，沒有 `Allow`，帶 `/proof` 的那一組標頭 | 相同 |
+| `POST /proof/`（不跟著轉） | `301` 到 `/proof` | 相同 |
+| `POST /proof/nothing.js` | 空的 `404` | 相同 |
+| `POST /api/v1/challenges` | `200`（經營運者同意送的一次）：名冊不是 `paused` | |
+
+所以上面那張「和 Worker 自己送的時候不同的地方」的表，除了「設定讀不出來時」那一列（線上的設定是對的，看不到），每一列線上都和本機相同；`_headers` 的規則在 `200`、`301`、`304`、`307`、`404`、`405` 上都有套。
+
+**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（2026-11-21 看到的，當天營運者關掉了：[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。
+
+- **看到什麼**：請求帶 `Accept: text/html` 時（瀏覽器都帶），Worker 產生的每一種頁面和 `/proof`、`/proof/help.html` 回來的 HTML 都多一個 `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…" integrity="…" data-cf-beacon="…">`。不帶這個標頭（`curl` 和 Node 的 `fetch` 的預設）就沒有，所以上面用 `curl` 看到的 `/proof` 還是 495 位元組。
+- **怎麼重現**：`curl -s --compressed -H 'Accept: text/html' https://test.iamreal.tw/faq | grep -c cloudflareinsights` 印 1，拿掉 `-H` 印 0；或跑 `test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），「沒有一頁有不是自己網站的 script」那一項不過。
+- **不是這個程式庫加的**：Worker 的頁面沒有這一段，`web/` 的建置也沒有；是 Cloudflare 在回應送出去的路上加的。
+- **瀏覽器沒有執行它**：兩種頁面的 CSP 都不准它載入（訪客的頁面是 `default-src 'none'`，過卡的頁面是 `script-src 'self' 'wasm-unsafe-eval'`）。過卡的頁面上，無頭的 Chrome 記了一筆 CSP 違規、沒有載入它；訪客的頁面沒有另外用瀏覽器看。但送到瀏覽器的頁面因此不是建置出來的那一份，訪客的頁面也不再是沒有 `<script>`。
+- **是什麼**：Cloudflare 的 Real User Measurements（RUM，儀表板上的標題是 Web Analytics）。這個 zone 的 RUM 從來沒有設定過，頁面裡就已經被加了它。Cloudflare 的文件寫，經過 Cloudflare 的網站加進 Web Analytics 之後「is now using Web Analytics through the automatic setup, which is enabled by default」（[Get started](https://developers.cloudflare.com/web-analytics/get-started/)「Sites proxied through Cloudflare」）；自動安裝「will inject the JS snippet on all pages (sub-domains) under the zone」、加的 `<script>` 帶 `type="module"` 和 `integrity`（[FAQ](https://developers.cloudflare.com/web-analytics/faq/)）。都是 2026-11-21 讀的。
+- **怎麼關的**：文件寫的是在 Web Analytics 那個網站的 **Manage site** 把自動安裝改成 **Disable**，但帳號層的 Web Analytics 清單裡沒有 `iamreal.tw`，沒有那個 Manage site。實際關的地方在 zone：`iamreal.tw` → Speed → Real user monitoring（網址結尾 `/iamreal.tw/speed/rum`）。畫面有 Enable Globally、Exclude EU 兩個按鈕和一行 Disable completely；按 Disable completely，確認視窗按 Disable RUM，之後畫面寫「RUM is currently disabled for this zone.」。只有營運者能做（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。這和 ADR-0032「沒有第三方的程式」有關：不關的話，要靠每一頁的 CSP 一直擋著它。
+- **關掉之後**（等過訪客頁面 60 秒的快取）：上面的 `curl` 帶 `-H` 也印 0，`test/site-check.ts` 21 項全過。
+
+**Cloudflare 上還沒確認的**：
+
+- 檔案存在時直接送、不跑 Worker。線上沒有 `GET /__test/seen` 這種入口，從外面分不出一個回應有沒有經過 Worker；本機的 workerd 上是不跑。
+- 真的瀏覽器打開 `https://test.iamreal.tw/proof`、從 `https` 的網域開內政部元件的視窗、用真卡片走完六步：等 [#71](https://github.com/iamreal-tw/iamreal/issues/71)。無頭的 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件沒有收到請求）看過一次，2026-11-21，`web/test/e2e/smoke.ts`：頁面是跨來源隔離的、證明引擎啟動（3.5 秒）、畫面是第 1 步、`Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 對。它有三項不過：連到別的網域和 CSP 違規，都是上面那個被加進來的 script；`Content-Security-Policy` 那一項是 `smoke.ts` 比的是正式名冊的那一份（`connect-src` 是 `data.iamreal.tw`），測試網站的是 `test-data.iamreal.tw`，要改的是 `smoke.ts`（[#241](https://github.com/iamreal-tw/iamreal/issues/241)）。
 
 **加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式名冊的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
 
@@ -698,7 +725,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
-  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`），或一次寫一批（`PUT /__test/roster/cards`，只給量測用，見[每天換日公布名冊](#每天換日公布名冊)「大小的上限」）；單獨複製卡片狀態表或刪掉複本（`POST /__test/roster/cards-copy`，也只給量測用）；列出物件資料庫裡的表（`GET /__test/roster/tables`，看公布完沒有留下複本）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、寫到串流中間斷掉、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
+  - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候（這兩個加 `?object=<名稱>` 時問的是那個名稱的物件，不是設定指的那一個：清空之後被換掉的物件只有這樣叫得到）；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`），或一次寫一批（`PUT /__test/roster/cards`，只給量測用，見[每天換日公布名冊](#每天換日公布名冊)「大小的上限」）；單獨複製卡片狀態表或刪掉複本（`POST /__test/roster/cards-copy`，也只給量測用）；列出物件資料庫裡的表（`GET /__test/roster/tables`，看公布完沒有留下複本）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、寫到串流中間斷掉、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_ROSTER_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
@@ -822,9 +849,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
-| `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
+| `vars.ROSTER_OBJECT_NAME` | `test-2` | 名冊那個 Durable Object 的名稱。清空測試名冊時換成下一個號碼，用過的名稱不再用（[清空測試名冊](#清空測試名冊)）；維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
 | `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
-| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-19` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。還沒清空過，所以是測試網站第一次部署的日期（[第一次部署量到的](#第一次部署量到的)）。清空時和 `ROSTER_OBJECT_NAME` 一起改 |
+| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-21` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。第一次清空是 2026-11-21（名冊規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `ROSTER_OBJECT_NAME` 一起改（[清空測試名冊](#清空測試名冊)） |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
@@ -867,8 +894,8 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一輪假設自己拿得到 300,000 毫秒的 CPU 時間（`wrangler.jsonc` 的 `limits.cpu_ms` 設的數字；排程實際拿到的是不是這個數字還沒量到，見 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，留的是本機的 5 倍；Cloudflare 上量到的是四棵樹約 157 秒，不到本機的 2 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。**這個算法靠時鐘是新的，而 Cloudflare 上的時鐘只在 I/O 之後才前進**：程式在算的時候 `Date.now()` 停在上一次 I/O 的時間（[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)：「only advance or increment after I/O occurs」；[Security model](https://developers.cloudflare.com/workers/reference/security-model/)：「`Date.now()` returns the time of the last I/O. It does not advance during code execution」；2026-11-20 讀的）。一棵樹是幾十秒沒有 I/O 的計算，所以每次要不要再起一份之前，先對儲存桶問一次索引在不在（`head`），問完才讀時鐘（`src/mirror.ts` 的 `elapsedMs`）；前一份失敗、後面沒有任何 I/O 的時候也一樣。把讀時鐘挪到別的地方，這條界線在線上會無聲地失效，而本機的 workerd 時鐘照常前進（同一頁：「In local development, however, timers will increment regardless of whether I/O happens or not」），測試看不出來。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
 - **一輪做到一半被停掉，寫好的行留著。** 用完 CPU 時間的那一次呼叫會被 Cloudflare 停掉。索引每做完一個檔就寫一次、寫完就告訴 Durable Object，所以停在第二份的建樹時，第一份的行已經在索引裡、Durable Object 也知道；第二份的檔已經存著，之後的某一輪補它的行。這一輪抓到的兩份不看時間、一定做：兩份加起來超過一次呼叫的上限時，沒有哪一輪做得完，那是把鏡像搬出 Worker 的時候（ADR-0023）。
 - **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
-- **讀一個檔花的時間不超過它大小的線性倍數，除了一處。** 延伸欄位有沒有重複用集合找，不是兩兩比。清冊編號沒有長度上限（和 Go 相同），位元組一次轉成整數；但把整數印成十進位是 JavaScript 引擎做的，比線性慢：見[量到的](#清冊鏡像量到的)。
-- **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
+- **讀一個檔花的時間和記憶體不超過它大小的線性倍數。** 清冊編號最多 20 個位元組、延伸欄位最多 16 個是規格的規定（[#120](https://github.com/iamreal-tw/iamreal/issues/120)）：超過的清冊不可用，讀的時候先看長度、只數個數，不轉成數字、不留下來。16 個以內的延伸欄位兩兩比有沒有重複。見[量到的](#清冊鏡像量到的)「故意做來拖時間的檔」。
+- **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，簽章驗得過之後再走一遍，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。沒有簽章的檔不配置鍵的陣列。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
 - **建樹時讓出執行緒。** 樹切成最多 4,096 塊（樹根往下 12 層的子樹），每做完約 256 個鍵就等一次 `setTimeout(0)`，同一個實例裡等著的請求在這時候被處理。
 
 **三、告訴名冊的 Durable Object。** 從索引取每把發證金鑰最新兩份可用的清冊（照清冊編號，和裝置選清冊的方法相同；不可用的不算），把樹根、編號、清冊日期交給名冊的 Durable Object，它整份換掉自己存的（[`src/roster.ts`](src/roster.ts) 的 `setNewestCrls`）。每一輪一開始讀完索引就交一次，不管有沒有新的清冊；之後每寫完一次索引再交一次，所以 G2 的新清冊不用等 G3 的樹建完。
@@ -915,11 +942,11 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 [`test/crl-testdata.test.ts`](test/crl-testdata.test.ts)，在 `pnpm test` 裡。每一份清冊當成假的內政部的回應，經過本機 workerd 裡的整個 Worker，看儲存桶裡的索引。
 
-1. `crl/testdata/` 的 37 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go 的測試讀的同一份）相同。
-2. `crl/testdata/times/` 的 48 份：`thisUpdate`、`nextUpdate` 用各種寫法（沒有秒的 UTCTime、帶時差、西元 0 年以前和 9999 年以後、不存在的日期……；線上那兩份清冊的時間都是 12 位數字加 `Z` 的 UTCTime）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同，Go 的測試讀同一份。這些案例記的是 Go 的 `crl/` 和這裡現在得到相同的結果，不是規格的標準答案。時間接受哪些寫法，規格還沒有定：[#120](https://github.com/iamreal-tw/iamreal/issues/120) 會收窄成 RFC 5280 的寫法，那時這些案例的答案會跟著改。`web/` 現在的讀法比這裡嚴（只收 `Z` 結尾、有秒的寫法），沒有讀這些案例。
-3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 85 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+1. `crl/testdata/` 的 48 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
+2. `crl/testdata/times/` 的 58 份：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
+3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 106 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
 
-2026-11-20 跑的結果：三項都過，共 89 個檔，索引 89 行，沒有一行不同。
+2026-11-21 跑的結果（#120 之後）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
 
 ### 清冊鏡像量到的
 
@@ -956,21 +983,33 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 - WASM 的線性記憶體另計，上限 16 MiB，建樹用到 2.5 MiB 上下（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）。
 - 抓和存的那一步，兩份清冊同時在記憶體裡，約 26 MB；補索引時一次只讀一份。兩份都剛好是上限 32 MiB 時，這一步是 64 MiB；沒有 `Content-Length` 的回應在接起來的那一刻多佔一倍。
 
-**故意做來拖時間的檔**，在 Node 22 裡量讀一個檔（`readCrl`）的時間。這種檔不需要簽章就會被存下來：內政部的網址是 `http://`，路上的人可以換掉回應。
+**故意做來拖時間的檔。** 這種檔不需要簽章就會被存下來：內政部的網址是 `http://`，路上的人可以換掉回應；存下來之後，每一個重驗的人都要讀它。[#120](https://github.com/iamreal-tw/iamreal/issues/120) 之前，清冊編號沒有長度上限、延伸欄位沒有個數上限，第二輪審查 2026-11-20 在 Node 裡量到：清冊編號 1 MB 的檔讀一次記憶體的高點多 97 MiB，4 MB 多 339 MiB，32 MiB 多 2.7 GiB；280 萬個清冊層級延伸欄位的檔多 623 MiB；Go 讀 16 MB 的清冊編號要 44.4 秒。現在規格給了上限（[`spec/revocation-tree.md`](../spec/revocation-tree.md)「Which CRLs」）：清冊編號最多 20 個位元組，超過的先看長度就停，不轉成數字；清冊和每一筆的延伸欄位最多 16 個，超過的只數、不留。
 
-| 檔案 | 讀一次 | Go 的 `iamreal-crl check` |
-|---|---|---|
-| 清冊編號是 400,000 個位元組的整數 | 0.2 秒（修正前 26.3 秒） | 0.14 秒 |
-| 清冊編號是 4,000,000 個位元組的整數 | 2.9 秒 | 5.0 秒 |
-| 清冊編號是 16,000,000 個位元組的整數 | 14.9 秒 | 44.4 秒 |
-| 30,000 個不同的延伸欄位（390 KB） | 12 ms（修正前 27.2 秒） | 沒量 |
+照下載上限 32 MiB（33,554,432 個位元組）之內能造的最壞情況重量，每一種一個檔。檔案由 [`crl/internal/crltest/makelarge`](../crl/internal/crltest/makelarge) 寫（`go run ./crl/internal/crltest/makelarge -out DIR`），用一把當場產生、沒有人信任的金鑰簽，所以都是 `-not_usable_signature`。量法是 [`test/crl-size.ts`](test/crl-size.ts)（`node --experimental-strip-types test/crl-size.ts DIR [INDEX]`，不是 `pnpm test` 的一部分）：每個檔一個 Node 的程序，從讀檔前到 `readCrl` 回來，程序的最高常駐記憶體（`maxRSS`）多了多少。
 
-- 清冊編號的時間幾乎都花在把整數印成十進位，這一步是一次同步的呼叫，中間不讓出執行緒；Go 也是這裡慢。
-- **記憶體才是問題。** 第二輪審查 2026-11-20 在 Node 裡量讀這種檔時記憶體的高點多出多少：清冊編號 1 MB 時多 97 MiB，4 MB 時多 339 MiB，32 MiB（下載上限之內最大的）時多 2.7 GiB；280 萬個延伸欄位的檔多 623 MiB。把 JavaScript 的記憶體限在 100 MB，這兩種檔都讓程序當掉。這些數字不是這裡量的，也不是在 workerd 裡量的。
-- **在 Cloudflare 上會怎樣沒有量過。** 每個實例的記憶體上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)），照上面的數字，讀這種檔比較可能的結果是實例被終止，不是多等幾十秒。
-- **這種檔會讓每一輪都停在它。** 它存進了儲存桶、沒有行，之後每一輪都會再讀它；讀它的那一輪如果被終止，排在它後面的檔和那一輪之後的事都做不到。下載上限 32 MiB 擋不住：上面最小的例子是 1 MB。
-- 讀得完的時候，索引的那一行帶著整個十進位的編號：4 MB 的整數是 960 萬個數字的一行。清冊檔和它的行都不刪（ADR-0027），所以這一行會一直留在每台裝置過卡時都要下載的索引裡。
-- 清冊編號和清冊層級延伸欄位的上限由 [#120](https://github.com/iamreal-tw/iamreal/issues/120) 在規格裡定，這一版沒有做。
+2026-11-21，Node 22.23.4，Apple Silicon（M1 Max），同一份量兩次，數字差不到 10%，表裡是第一次的：
+
+| 檔案 | 大小 | `readCrl` | 記憶體高點多用 | 其中檔案本身 |
+|---|---|---|---|---|
+| 清冊編號 1,000,000 個位元組 | 1,000,482 | 3 ms | 2.7 MiB | 1.0 MiB |
+| 清冊編號 4,000,000 個位元組 | 4,000,482 | 4 ms | 6.4 MiB | 0.7 MiB |
+| 清冊編號約 33,553,000 個位元組（上限之內最長） | 33,553,490 | 23 ms | 66.0 MiB | 32.1 MiB |
+| 3,050,361 個不同的清冊層級延伸欄位 | 33,554,428 | 113 ms | 68.4 MiB | 32.1 MiB |
+| 一筆帶 3,050,356 個不同的延伸欄位 | 33,554,423 | 112 ms | 68.0 MiB | 32.1 MiB |
+| 1,677,697 筆廢止（一個位元組的序號，沒有延伸欄位） | 33,554,417 | 147 ms | 68.6 MiB | 32.1 MiB |
+| 一筆的序號約 33,553,000 個位元組 | 33,553,505 | 23 ms | 66.0 MiB | 32.2 MiB |
+| 發證者名稱約 33,553,000 個位元組 | 33,553,457 | 23 ms | 66.0 MiB | 32.1 MiB |
+| 一個延伸欄位的 OID 約 3,355 萬節 | 33,553,505 | 90 ms | 66.1 MiB | 32.1 MiB |
+| 16 個延伸欄位，其中 15 個的 OID 各約 224 萬節、只差最後一節 | 33,554,176 | 441 ms | 66.1 MiB | 32.2 MiB |
+| 對照：線上的 G2（2026-11-21 05 時，340,633 筆，可用） | 16,873,034 | 229 ms | 59.3 MiB | 16.2 MiB |
+
+- 小的檔「其中檔案本身」比檔案小：讀檔用到的是程序原本就有、還沒算進高點的記憶體。
+- **記憶體的高點約是檔案的兩倍，不管內容是什麼。** 多出來的那一份是驗章：Node 的 `crypto.subtle.verify` 把要驗的內容複製一份（另外量過：驗一段 32 MiB 的內容，高點多 32.9 MiB），驗完放掉。鍵的陣列（每筆 20 個位元組，排序時再兩份）只在簽章驗得過之後才配置，所以沒有簽章的檔用不到它；上表最後一列可用的 G2 有。上限之內最大的檔，讀的這一步約 66 到 69 MiB，離每個實例的 128 MB（約 122 MiB）有約 50 MiB；實例本身另外用的（JavaScript 的程式、WASM 的 16 MiB 上限）沒有量進來。
+- **時間和大小成線性。** 最慢的是 15 個長得幾乎一樣的 OID，0.44 秒（Spec 審查用 16 個各 1.9 MB 的量到 0.58 秒）：找重複的延伸欄位是兩兩比（最多 16 個，120 次），每一對都要比到最後一節，比的位元組總數最多是檔案大小的 15 倍左右。其次是 168 萬筆，0.15 秒。找重複不再用集合，也不替 OID 建字串。
+- **其他沒有給上限的，和為什麼不用：** 筆數、序號的長度、發證者名稱的長度、OID 的長度，上表各有一列，都在檔案大小的兩倍之內；序號超過 20 個位元組的先看長度就不讀。巢狀沒有列：讀的程式只走固定的幾層（`CertificateList`、`tbsCertList`、每一筆、延伸欄位），發證者名稱和延伸欄位的內容不往下讀（清冊編號除外，它是一個 INTEGER），所以裡面巢狀再深也只是一段位元組。
+- **Go 的 `iamreal-crl index` 對這 10 個檔寫出的索引，和 `test/crl-size.ts` 用 `src/crl-index.ts` 寫的逐位元組相同。** Go 讀完 10 個檔共 1.5 秒，程序的最高常駐記憶體 702 MB：Go 的 `crl.Parse` 把 OID 的每一節存成一個 `int`，每一筆存成一個結構。Go 的程式是重驗的人在自己的電腦上跑的，不在 Worker 裡。
+- **數字只說明量級。** 是在 Node 裡量的，不是在 workerd 裡；本機的 workerd 不限記憶體，量不到。workerd 的 `crypto.subtle.verify` 會不會也複製一份沒有查。Cloudflare 上超過記憶體上限時實際會怎樣也沒有試過。
+- **這種檔不再讓每一輪停在它。** 它照樣存進儲存桶、照樣有一行（`-not_usable_signature` 或更前面的原因），之後每一輪讀到它的時間和記憶體都在上表之內，排在它後面的檔照常補。索引的那一行不會變長：超過 20 個位元組的清冊編號寫 `-`。
 
 **部署之後要看的**（第一項有答案了，其餘還沒有）：
 
@@ -1030,6 +1069,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
 | 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
 | 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
+| 清空測試名冊之後，被換掉的那個物件 | `worker.clearedRoster(原本的名稱)`：`.restart()` 讓它重新啟動（部署會做的事），`.runAlarm()` 讓它的 alarm 響，`.hasAlarm()` 看它還有沒有設 alarm。`worker.roster` 的每一項問的都是設定現在指的那個物件 |
 | 跑 Durable Object 的 alarm、看它設在多久之後 | `worker.roster.runAlarm()`、`worker.roster.alarmInMs()` |
 | 要一個題目 | `worker.issueChallenge()`；`worker.issueChallenge(十六進位的 16 個位元組)` 指定題目的亂數那一段 |
 | 換 `records` 用的驗證器 | `worker.setVerifier("stand-in")`、`("real")` |
@@ -1168,6 +1208,151 @@ pnpm run deploy:test
 
 還沒看過的：內政部回錯誤、斷線、逾時的時候，Cloudflare 上的行為和本機的 workerd 是不是一樣（「排程做什麼」最後一段寫的那兩件事）。
 
+## 清空測試名冊
+
+測試名冊不定期清空（ADR-0028）：規則或紀錄的格式改了、舊的測試紀錄照新規則讀不懂的時候，或要從空的名冊試某種狀況的時候。這份說明裡碰到這兩種情況要清空的地方：存著的規則版本和程式的不同（`paused`）、表的版本和程式的不同（[兩個版本號](#兩個版本號)）。只有營運者能清；Worker 裡沒有任何清空名冊的介面，正式網站上也就沒有這樣的程式。
+
+**清空是換一個物件，不是刪掉資料。** `ROSTER_OBJECT_NAME` 換成新的名稱之後，後台問的是一個新的、空的 Durable Object；資料儲存桶裡 `roster/` 底下的檔由營運者刪掉。原本的那個物件還在 Cloudflare 上，連同它存的紀錄；這些步驟不刪它，之後也沒有請求會到它那裡。
+
+- **被換掉的物件不再做任何定時的工作。** 物件啟動時比對自己是不是設定指的那一個（`ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME))`，[Durable Object ID](https://developers.cloudflare.com/durable-objects/api/id/)：「`equals` is used to compare equality between two instances of `DurableObjectId`」，2026-11-21 讀的）；不是的話，alarm 響了什麼都不做，也不再設下一次（`src/roster.ts` 的 `#replaced`）。沒有這一條的話，它的 alarm 是還當著名冊的時候設的，下一個台灣午夜照樣會響，把舊名冊的最後一檔、雜湊清單、卡片狀態檔和整份舊的指紋檔寫回同一個儲存桶：在本機照下面的步驟做的時候看到的就是這樣（`test/clearing.test.ts`，拿掉這一條就不過）。那之後新的物件要公布時，儲存桶裡的指紋檔不是它的，照[每天換日公布名冊](#每天換日公布名冊)會停在 `fingerprint_file_differs`。這個比對在 Cloudflare 上還沒看過：下面第 5 步的確認就是在看它。
+- **被換掉的物件每次啟動寫一行即時輸出** `{"event":"roster_object_replaced","object":"<它的名稱>"}`（`wrangler tail` 或儀表板的即時紀錄，沒有開保存；名稱是 `ctx.id.name`，拿不到時是 `null`）。真的被換掉的物件最多寫一次：部署之後它的 alarm 響的那一次，啟動時就把 alarm 刪了，之後沒有東西會再叫醒它。兩種例外：部署傳到每個地方的那幾秒，還跑著舊設定的 Worker 可能再問到它，每叫醒它一次多一行；被換掉時本來就沒有 alarm 的物件（表的版本和程式不同的那種）不會被叫醒，一行都不寫。**現任的物件不該寫這一行**；每隔一陣子就看到它，表示比對把現任的物件當成被換掉的了，那時不公布、不搬寫滿的檔、不刪過期的題目，而過卡照收。不看即時輸出也看得出來：指紋檔不再每天多一行，`test/site-check.ts` 有一項看這個（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）。
+- **名稱不重複使用。** 把名稱改回用過的，後台問的就是那個舊物件，它存的紀錄都還在，也會重新開始公布。新的名稱用下一個號碼（`test-1` 之後是 `test-2`），維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)）。
+- **營運者刪儲存桶的檔，依據是 ADR-0028 和 ADR-0029。** 儲存桶只有 Worker 透過 binding 寫（ADR-0027、ADR-0029），例外有兩個，都寫在 ADR-0029：從副本換回一個檔（ADR-0033），和清空測試名冊時營運者在儀表板刪掉測試的儲存桶裡名冊的目錄（ADR-0028「清空」）。正式的儲存桶沒有後面這個步驟。
+- **`crl/` 不清。** 清冊存檔和名冊無關，檔名是內容的雜湊。留著的話，過卡的頁面一直下載得到清冊，鏡像也不必重抓、重建每一棵樹。
+
+### 步驟
+
+照順序做。第 1、2 步 agent 可以做到開 PR 為止；第 3、4 步只有營運者能做。
+
+1. **改設定，開 PR。** `wrangler.jsonc` 的 `env.test.vars`：
+   - `ROSTER_OBJECT_NAME`：下一個號碼
+   - `TEST_ROSTER_CLEARED_ON`：部署那一天的台灣日期，`YYYY-MM-DD`
+
+   [設定檔](#設定檔)表格裡的這兩個值跟著改。要改的只有這兩個檔：測試的工具從 `wrangler.jsonc` 讀物件的名稱，看頁面上日期的測試各自設自己的日期，沒有測試寫死這兩個值（把這兩個值換成 `test-2`、`2026-11-20` 跑過 `worker/` 整套，都過）。
+   - 測試擋得到的：名稱是 `test-` 開頭、日期是日曆上有的日期（[`test/environments.test.ts`](test/environments.test.ts)）；日期不在今天（台灣日期）之後（[`test/clearing.test.ts`](test/clearing.test.ts)）。
+   - **測試擋不到的：只改了名稱、忘了改日期，或日期填成更早的某一天。** 兩個值各自都合法，測試看不到上一次的值。看 PR 的人要看這兩行是不是一起改的；部署之後首頁最上面那一行的日期是另一次機會。`wrangler.jsonc` 是「部署會執行到的東西」（`CONTRIBUTING.md`），這個 PR 由營運者看過才合併。清空是因為程式改了的時候（規則的版本加了一號），這兩行和那個修改放在同一個 PR，或緊接著合併：改名稱的部署先出去的話，新的物件第一次啟動時記下的是舊程式的版本號，程式一換又是 `paused`。
+2. **部署。** 合併到 `main`，由 GitHub Actions 部署（[從 GitHub Actions 部署](#從-github-actions-部署)）；或營運者在自己的電腦上 `pnpm run deploy:test`。部署完成之後：
+   - `curl -s https://test.iamreal.tw/api/v1/fingerprint` 回 `{"date":null,"count":0,"fingerprint":"000…0"}`（64 個 0）：後台問的是新的物件，它還沒公布過
+   - 首頁最上面那一行的日期是新的日期，兩個數字都是 0。頁面最多被快取 60 秒，剛部署完看到舊的，過一兩分鐘再看
+   - **從這時候到鏡像的下一輪（整點，最長一小時），過卡送出會回 `crl_stale`**：新的物件不知道任何一份清冊，鏡像每一輪一開始把索引列著的最新清冊交給名冊的物件（[排程做什麼](#排程做什麼)第三步）。發題目、查卡片現況照常
+3. **營運者清空儲存桶的 `roster/`。** 在 Cloudflare 的儀表板：R2 → `iamreal-test-data` → 勾「View prefixes as directories」→ 選 `roster/` 這個目錄 → Delete（[Delete objects](https://developers.cloudflare.com/r2/objects/delete-objects/)：「Select the objects or folders you want to delete」，2026-11-21 讀的）。`crl/` 不要選。部署的權杖做不到這一步：它沒有 R2 的權限，連讀儲存桶的資料都被拒絕（[第一次部署量到的](#第一次部署量到的)），這個專案也沒有 R2 的 API 權杖（ADR-0029）。
+   - **在部署之後做，不要在之前。** 部署之前，舊的物件還是名冊的物件：台灣午夜一到它會把剛刪掉的檔再寫出來。
+   - **在部署後的第一個台灣午夜之前做完最好。** 新的物件在它第一次啟動那天不公布，隔天的台灣午夜才第一次公布。那時 `roster/fingerprints.jsonl` 還是舊名冊的那一份的話，這一次公布整個不做（`fingerprint_file_differs`），之後每隔一段時間再看一次（最長一小時），到 `roster/` 清掉為止；清掉之後的下一次嘗試就公布，不用再部署（`test/clearing.test.ts` 的第二項）。舊名冊從來沒有公布過（沒有指紋檔）的話不會停，但舊的卡片狀態檔會留到生命週期規則刪掉它。
+   - 清完之後：`curl -sI https://test-data.iamreal.tw/roster/fingerprints.jsonl` 回 `404`。`-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過 Cloudflare 的快取（回應是 `cf-cache-status: DYNAMIC`，2026-11-21 看到的），所以刪了馬上就是 `404`；用 `GET` 下載的人最多 60 秒內還會拿到快取著的舊檔
+4. **營運者清資料網域上 `roster/` 的快取。** 舊名冊有寫滿的名冊檔（滿 1,000 筆）時才需要；沒有的話 `roster/` 底下每個檔都只快取 60 秒，等一分鐘就好，做了也無妨。在 Cloudflare 的儀表板：`iamreal.tw` 這個 zone → Caching → Configuration → Purge Cache → Custom Purge → Purge by 選 Prefix → 填 `test-data.iamreal.tw/roster` → Purge（[Purge cache by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/)，2026-11-21 讀的；每一種方案都能用，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)「Availability and limits」）。部署的權杖只有一個 Worker 的權限（ADR-0029），做不到這一步。
+   - **為什麼要清**：寫滿的名冊檔和它的雜湊清單標的是 `public, max-age=31536000, immutable`（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)），那是照「同一個網址的內容不會再變」標的。清空之後新的名冊從 0 筆開始，寫滿第一檔時用的是同一個網址 `roster/0000000000000000.jsonl`，內容不同。不清的話，Cloudflare 上快取著舊檔的地方最長一年照樣送舊檔。
+   - **在第 3 步之後做。** 先清快取、後刪檔的話，中間有人下載，舊檔又被快取一年。
+   - **用 Prefix，不用 Single-file（URL）。** 資料網域的回應帶 `Vary: Origin`（2026-11-21 線上看到的）；Cloudflare 的文件寫，從儀表板照網址清，清不掉請求帶 `Origin` 的那一份（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)「Resources with special headers」：「A single-file purge performed through your Cloudflare dashboard does not clear objects that contain any of the following: Origin header…」，2026-11-21 讀的）。照前綴清的文件寫的是那個目錄底下的每一個網址都清（Purge cache by prefix：「any URI for a resource within the purged directory is purged」），沒有另外講帶 `Origin` 的那一份，所以下面確認時兩種都問。
+   - **清完之後確認，用 `GET`**：舊名冊每一個寫滿的檔（檔名 0、1000、2000……小於舊名冊筆數的每一個）和它的雜湊清單，帶和不帶 `Origin` 各下載一次，都要是 `404`，而且不是 `cf-cache-status: HIT`（文件：「To verify a purge, request the asset after purging and confirm that `CF-Cache-Status` is no longer `HIT`」，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)）。回 `200`、`HIT` 就是快取裡還有舊檔。
+
+     ```sh
+     for f in roster/0000000000000000.jsonl roster/hashes/0000000000000000.txt; do
+       curl -s -o /dev/null -D - "https://test-data.iamreal.tw/$f" | grep -i -e '^HTTP' -e '^cf-cache-status' -e '^age'
+       curl -s -o /dev/null -D - -H 'Origin: https://test.iamreal.tw' "https://test-data.iamreal.tw/$f" | grep -i -e '^HTTP' -e '^cf-cache-status' -e '^age'
+     done
+     ```
+
+     - **不能用 `curl -I`。** `-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過快取、直接問儲存桶：第 3 步刪了檔之後，不管快取清了沒有都是 `404`。2026-11-21 對一份標一年的清冊檔（`crl/<SHA-256>.crl`）看到的：`GET` 是 `cf-cache-status: HIT`、帶著 `age`，同一個網址的 `HEAD` 是 `DYNAMIC`。
+     - **帶和不帶 `Origin` 是兩份快取，兩種都要問。** 同一天對同一個檔：不帶 `Origin` 的 `GET` 是 `HIT`、`age` 約 144,000 秒；帶 `Origin: https://test.iamreal.tw` 的是另一份（第一次 `MISS`，接著 `HIT`、`age` 幾十秒，帶 `Access-Control-Allow-Origin`）。過卡的頁面在瀏覽器裡下載時帶的是後面那一種。
+     - **每個來源各有一份，指令問不完。** 2026-11-21 對 `roster/fingerprints.jsonl` 用 `GET` 看到的：不帶 `Origin` 的第二次是 `HIT`；帶 `Origin: https://test.iamreal.tw` 的第一次 `MISS`、第二次 `HIT`，多 `Access-Control-Allow-Origin`；帶別的來源的又是它自己的一份，第一次 `MISS`、第二次 `HIT`，沒有那個標頭。所以任何一個網站的頁面下載過舊檔，快取裡就多一份帶它那個來源的。照前綴清會不會把這些都清掉，文件沒有講；測試名冊還沒有寫滿的檔，現在也驗不到。上面的指令只問得到不帶來源和帶測試網站來源的這兩份。
+     - 不存在的檔不會被快取（`404` 的回應是 `cf-cache-status: BYPASS`，同一天看到的），所以清乾淨之後這兩行都是 `404`，不會因為問過一次就留下東西。
+     - 新的名冊已經公布過才做這一步的話，`roster/0000000000000000.jsonl` 可能是新名冊還沒寫滿的最後一檔：`200`，`Cache-Control` 是 `public, max-age=60`，不是一年的那一種。
+     - 這個指令問到的應該只是回答這一次請求的那個 Cloudflare 機房：這是從文件推的，沒有實測。文件寫清掉的檔之後是在「the specific Cloudflare data center that served the request」重新放進快取（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)），也就是每個機房各有自己的一份；其他機房沒辦法從外面一個一個問。
+5. **確認。**
+   - `node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的名冊還沒公布過，所以指紋檔那兩項比的是「沒有檔、介面回的日期是 `null`」。**它全過不表示可以過卡**：它只送 `GET`，看不到名冊是不是 `paused`，也看不到新的物件知不知道清冊，這兩種狀態下每個 `GET` 的回答都和平常一樣
+   - **名冊收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），名冊上不留任何東西。agent 送之前要營運者同意。
+
+     | 回應 | 意思 |
+     |---|---|
+     | `200`、`{"challenge":"<今天的台灣日期>.…"}` | 收。存著的規則版本和程式的相同 |
+     | `503`、`{"error":"paused"}` | 不收：物件存著的規則版本和程式的不同（[兩個版本號](#兩個版本號)）。剛清空就看到這個，表示後台問的還是舊的物件（設定沒有部署出去），或新的物件是在程式換掉之前第一次啟動的（第 1 步講的順序） |
+     | `500` | 設定對不上（`ROSTER_KIND` 和名稱、`TEST_ROSTER_CLEARED_ON` 不是日期），或表的版本和程式的不同 |
+
+   - **新的物件知不知道清冊，沒有不過卡就能確認的方法。** 發題目不看清冊，`200` 不表示送出不會回 `crl_stale`。靠的是時間：部署後的第一個整點那一輪鏡像交給它（第 2 步）。那一輪有沒有成功，看儀表板上排程的那一次是不是成功的，或 `wrangler tail` 那一輪沒有以例外結束（[排程做什麼](#排程做什麼)：沒交給 Durable Object 的一輪以例外結束）。整點過後第一次真的過卡（營運者用真卡片）才是最後的確認
+   - 部署後的第一個台灣午夜過後：`https://test-data.iamreal.tw/roster/fingerprints.jsonl` 恰好一行，日期是那一天，筆數是新名冊的筆數；`roster/card-state/` 只有那一天的檔。這一行多於一行、或筆數是舊名冊的筆數，表示被換掉的物件還在寫（上面「被換掉的物件」那一條在 Cloudflare 上沒有成立），那時回報，不要再刪一次了事
+   - 然後 `iamreal-verify -roster test -data https://test-data.iamreal.tw/` 重驗一次（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)）
+
+### 做到一半停下來時
+
+| 停在 | 測試網站的狀態 | 接下來 |
+|---|---|---|
+| 第 1 步的 PR 還沒合併 | 沒有變。清空是因為 `paused` 的話，照舊不收過卡，頁面照常 | 合併 |
+| 部署沒有成功 | 用 `GET /api/v1/fingerprint` 看：回的還是舊名冊的那一行，就是沒有換 | 修好再部署 |
+| 部署了，`roster/` 還沒清 | 後台和頁面已經是空的名冊；資料網域上還是舊名冊的檔，`iamreal-verify` 重驗資料網域看到的是舊名冊。隔天起不公布，每次嘗試一行 `fingerprint_file_differs` | 做第 3 步 |
+| `roster/` 清了，快取還沒清 | 舊名冊有寫滿的檔時，那幾個網址在快取著它的地方還是舊檔（最長一年）；其餘同下一列 | 做第 4 步 |
+| `roster/` 和快取都清了，還沒到午夜 | 資料網域上沒有名冊的檔（`404`），`iamreal-verify` 當成公布了 0 筆、報少了指紋檔 | 等午夜，做第 5 步 |
+
+清空之後，測試網站上原本的島民證明連結都是「找不到」，頁面上的清空日期說明原因（ADR-0028）。別人下載過的舊名冊收不回來（`design/copy/privacy.md`）。
+
+### 清不到的快取
+
+第 4 步清的只有 Cloudflare 自己的快取。清不到的：
+
+- **瀏覽器的快取。** 用瀏覽器打開過舊名冊寫滿的檔的人，瀏覽器在一年內可以直接用存著的那一份，重新整理也不必再問（`immutable`：「The user should not send a conditional revalidation request … to check for updates, even when the user explicitly refreshes the page」，[Cloudflare 的 Cache-Control 說明](https://developers.cloudflare.com/cache/concepts/cache-control/)，2026-11-21 讀的）。清掉瀏覽器自己的快取才會拿到新的。
+- **Cloudflare 以外的快取。** 回應標的是 `public`，下載的人和 Cloudflare 之間的代理伺服器可以存一年。
+- **已經下載到自己電腦上的檔。**
+
+`iamreal-verify` 自己沒有快取，但它送的是一般的 `GET`，一樣經過 Cloudflare 的快取：它拿到的是回答它的那個機房存著的、不帶 `Origin` 的那一份。所以第 4 步清到了，它拿到的才是新的；第 4 步沒做或沒清到，它也會拿到舊檔。它不受影響的只有瀏覽器的快取那一層。過卡的頁面只從資料網域拿 `crl/`，不拿 `roster/`，不受影響。
+
+**重驗的人拿到舊檔時會看到什麼。** 舊名冊的檔本身是一份完整的名冊檔，每一行都讀得懂，所以不會是「讀不懂」；對不上的是它和每天重寫的那幾樣（指紋檔、還沒寫滿的最後一檔的雜湊清單、卡片狀態檔，都只快取 60 秒）：
+
+- 名冊檔是舊的、指紋檔是新的：指紋檔的行對不上名冊，`iamreal-verify` 每一行印 `fingerprints.jsonl line <行號>: fingerprint … is not the roster fingerprint of the first <筆數> records, …`，或筆數超過時 `count <筆數>, but the roster has <筆數> records`
+- 名冊檔和雜湊清單一新一舊：`<檔名> is not the record hash list of the roster`
+- 卡片狀態檔和從舊紀錄算出來的卡片逐張不同
+
+這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，最可能是 Cloudflare 的快取沒清到（第 4 步沒做，或回答你的那個機房還留著），也可能是你和 Cloudflare 之間的代理存著舊檔；從外面分不出是哪一種。換一個網路再下載一次；還是舊檔就在這個程式庫開 issue，請營運者再做一次第 4 步。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
+
+### 在本機照著做
+
+[`test/clearing.test.ts`](test/clearing.test.ts) 在本機的 workerd 上照上面的步驟做一次：一份有紀錄、公布過的測試名冊；換物件的名稱和日期、所有物件重新啟動（部署）；刪掉儲存桶的 `roster/`；鏡像跑一輪；寫入新的一筆；過兩個台灣午夜，舊的物件的 alarm 各響一次。它確認每一步之後這裡寫的狀態，被換掉的物件寫了一行 `roster_object_replaced`、沒有設 alarm，和兩個午夜之後儲存桶裡只有新名冊的檔、沒有 `fingerprint_file_differs`。第二項是晚了才清儲存桶的情況：午夜時不公布、寫一行 `fingerprint_file_differs`、舊名冊的檔原樣留著，清掉之後的下一次 alarm 就公布。儀表板上的那兩個動作（選目錄、刪除）本機做不到，用測試的工具刪檔代替。
+
+## 部署之後不插卡的檢查
+
+```sh
+node --experimental-strip-types test/site-check.ts
+node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https://test-data.iamreal.tw   # 同上，寫明兩個網址
+```
+
+[`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
+
+- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試名冊的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_ROSTER_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
+- 沒有一頁有不是自己網站的 script：Worker 產生的頁面、`/proof`、`/proof/help.html` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
+- 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
+- 樣式表、複製按鈕的程式、過卡的頁面 `/proof` 和 `/proof/help.html` 在不在，和它們帶的 `noindex`、`nosniff`
+- `GET /api/v1/config`、`GET /api/v1/fingerprint` 的狀態碼和標頭；`config` 是測試名冊的平台表，`crl_max_age_days` 是 3
+- 資料網域的 `crl/index.jsonl`：兩把發證金鑰各有一份可用的清冊，清冊日期不早於今天（台灣日期）往前 3 天
+- 資料網域的 `roster/fingerprints.jsonl` 最後一行就是 `GET /api/v1/fingerprint` 回的那一行；名冊還沒公布過時（沒有檔），介面回的日期要是 `null`
+- 名冊每天有在公布：`GET /api/v1/fingerprint` 回的日期是今天或昨天（台灣日期）。公布在台灣午夜之後 alarm 響的時候做，所以午夜剛過、還沒公布時最後一行是昨天的，照樣過；要到整整一天沒有公布才不過。`paused` 的名冊不公布，隔一天起這一項不過，那是對的。日期是 `null`（還沒公布過）只在今天不晚於 `wrangler.jsonc` 的上次清空日期加 2 天時算過：清空當天物件第一次啟動，隔天午夜公布第一行；部署剛好壓在午夜前、物件隔天才第一次啟動的話再晚一天。過了這兩天還是 `null`，就是新的物件沒有在公布（啟動時就是 `paused`，或把自己當成被換掉的），不過
+- 資料網域的 CORS：帶 `Origin: https://test.iamreal.tw` 問 `crl/index.jsonl`，回應的 `Access-Control-Allow-Origin` 是它；帶別的來源問，沒有這個標頭。過卡的頁面在瀏覽器裡下載清冊存檔靠的是這個（ADR-0027）
+
+[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早、清空超過兩天還沒公布過；過卡的頁面或它的說明頁被加了 script、不在；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
+
+**它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 5 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
+
+**它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）；它對線上跑的結果在 [Static Assets](#static-assets)「Cloudflare 上還沒確認的」。
+
+**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），營運者當天關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)）之後重跑，21 項全過。改成照瀏覽器的送法之後，其他各項的結果沒有變。
+
+## 營運者在 Cloudflare 和 GitHub 上設的
+
+部署的權杖做不到、由營運者在儀表板手動做的事（ADR-0029）。測試網站的這幾項是 2026-11-19 做的（[#58](https://github.com/iamreal-tw/iamreal/issues/58)，那裡有做的時候和原本計畫不同的地方）；之後加正式環境時照同一份做，名稱換成正式的。程式和部署靠的是右邊那一欄。
+
+| 在哪裡 | 設了什麼 | 程式和部署靠它的地方 |
+|---|---|---|
+| Cloudflare 的 DNS | `iamreal.tw` 的名稱伺服器在 Cloudflare | 兩個自訂網域要這個 zone 在 Cloudflare 上 |
+| Cloudflare 的帳號 | Workers 的付費方案 | 驗一筆證明、建一棵樹的 CPU 時間（ADR-0023；[設定檔](#設定檔)的 `limits.cpu_ms`） |
+| Workers | Worker `iamreal-test`，從 Hello World 範本建的（儀表板不能建空的）；自訂網域 `test.iamreal.tw` | 部署的權杖建不了 Worker、改不了自訂網域。`workers.dev` 的網址由 `wrangler.jsonc` 的 `workers_dev: false` 關掉 |
+| R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
+| R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
+| R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `roster/card-state/`，物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布名冊](#每天換日公布名冊)「部署後要營運者做的」） |
+| `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)、[每天換日公布名冊](#每天換日公布名冊)）；沒設的物件不會被快取 |
+| Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
+| `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |
+| Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在營運者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
+| GitHub 組織的 Actions 設定 | 所有外部貢獻者的工作流程都要先核准才跑 | ADR-0029「外人的 PR」 |
+
+平常要營運者動手的只有三件：看過並合併動到「部署會執行到的東西」的 PR（`CONTRIBUTING.md`）、清空測試名冊時清儲存桶和資料網域的快取（[清空測試名冊](#清空測試名冊)第 3、4 步）、用真卡片過卡。從營運者的電腦部署測試網站是 `pnpm run deploy:test`（[部署測試環境](#部署測試環境)）。
+
 ## 套件
 
 都釘精確版本。
@@ -1223,6 +1408,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
 | `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
+| `test/clearing.test.ts` | 清空測試名冊，照[清空測試名冊](#清空測試名冊)的步驟在本機做一次：新的名冊是空的、鏡像下一輪之後收得下紀錄、隔天公布的只有新名冊；被換掉的物件啟動時寫一行、不再設 alarm、alarm 響了什麼都不寫；晚了才清儲存桶時清掉就恢復；`wrangler.jsonc` 的清空日期不在今天之後 |
+| `test/site-check.ts`、`test/site-check.test.ts` | 部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），和在本機的 Worker 上確認它每一項都擋得到的測試 |
 | `test/crls.ts` | 測試的發證金鑰、用它們簽的清冊 |
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |

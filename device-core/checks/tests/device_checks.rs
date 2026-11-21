@@ -162,6 +162,57 @@ fn which_crls_are_usable() {
     }
 }
 
+/// crl/testdata/times/: which spellings of thisUpdate, nextUpdate and
+/// revocationDate are read (spec/revocation-tree.md, "Times"), and the
+/// times read, as the Go crl/, worker/ and the web page give them.
+#[test]
+fn time_spellings_are_those_of_rfc_5280() {
+    use iamreal_device_checks::crl::{parse_crl, usable_crl};
+    use iamreal_device_checks::date::civil_from_days;
+    let expected: Value =
+        serde_json::from_slice(&common::repo_file("crl/testdata/times/expected.json")).unwrap();
+    // Nobody trusts the key that signed these: a file read at all is not
+    // usable for its signature.
+    let modulus = modulus_of_spki(&common::repo_file("crl/testdata/issuer-public-key.der"));
+    let cases = list(&expected, "expected");
+    assert!(cases.len() >= 50, "{} cases", cases.len());
+    let mut read = 0;
+    for e in cases {
+        let name = text(e, "name");
+        let der = common::repo_file(&format!("crl/testdata/times/{name}.crl"));
+        let line: Value = serde_json::from_str(text(e, "line")).unwrap();
+        let reason = usable_crl(&der, &modulus, &mut TestSha256)
+            .err()
+            .expect("not usable");
+        assert_eq!(format!("-{}", reason.code()), text(&line, "root"), "{name}");
+        if reason.code() == "not_usable_der" {
+            continue;
+        }
+        let seconds = parse_crl(&der).ok().unwrap().this_update();
+        let (y, mo, d) = civil_from_days(seconds.div_euclid(86_400));
+        let s = seconds.rem_euclid(86_400);
+        let written = format!(
+            "{y:04}-{mo:02}-{d:02}T{:02}:{:02}:{:02}Z",
+            s / 3600,
+            s / 60 % 60,
+            s % 60
+        );
+        assert_eq!(written, text(&line, "this_update"), "{name}");
+        let (y, mo, d) = civil_from_days((seconds + 8 * 3600).div_euclid(86_400));
+        assert_eq!(
+            format!("{y:04}-{mo:02}-{d:02}"),
+            text(&line, "crl_date"),
+            "{name}"
+        );
+        read += 1;
+    }
+    assert!(
+        read >= 10 && cases.len() - read >= 10,
+        "{read} of {} read",
+        cases.len()
+    );
+}
+
 #[test]
 fn the_age_bound_is_the_smaller_of_the_servers_and_7() {
     use iamreal_device_checks::revocation::crl_max_age;

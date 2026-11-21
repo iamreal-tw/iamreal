@@ -15,6 +15,7 @@ pub enum Unusable {
     Der,
     Algorithm,
     Signature,
+    TooManyExtensions,
     DuplicateExtension,
     CriticalExtension,
     Delta,
@@ -30,6 +31,7 @@ impl Unusable {
             Unusable::Der => "not_usable_der",
             Unusable::Algorithm => "not_usable_algorithm",
             Unusable::Signature => "not_usable_signature",
+            Unusable::TooManyExtensions => "not_usable_too_many_extensions",
             Unusable::DuplicateExtension => "not_usable_duplicate_extension",
             Unusable::CriticalExtension => "not_usable_critical_extension",
             Unusable::Delta => "not_usable_delta",
@@ -141,11 +143,19 @@ fn is_time(t: &Tlv) -> bool {
     t.tag == der::UTC_TIME || t.tag == der::GENERALIZED_TIME
 }
 
+/// The most extensions the CRL, and each entry, may have
+/// (spec/revocation-tree.md, "Which CRLs").
+pub const MAX_EXTENSIONS: usize = 16;
+
+/// Reads `Extensions`. Every extension is read, so that one that is not DER
+/// makes the file not DER, but only the first `MAX_EXTENSIONS + 1` are
+/// kept: enough to tell there are too many.
 fn read_extensions<'a>(der: &'a [u8], sequence: &Tlv) -> Result<Vec<Extension<'a>>, NotDer> {
     if sequence.tag != der::SEQUENCE {
         return Err(NotDer);
     }
     let mut extensions = Vec::new();
+    let mut count = 0;
     for extension in der::children(der, sequence) {
         let extension = extension?;
         if extension.tag != der::SEQUENCE {
@@ -174,13 +184,16 @@ fn read_extensions<'a>(der: &'a [u8], sequence: &Tlv) -> Result<Vec<Extension<'a
         if next + 1 != parts.len() {
             return Err(NotDer);
         }
-        extensions.push(Extension {
-            oid: oid.content(der),
-            critical,
-            value: value.content(der),
-        });
+        if extensions.len() <= MAX_EXTENSIONS {
+            extensions.push(Extension {
+                oid: oid.content(der),
+                critical,
+                value: value.content(der),
+            });
+        }
+        count += 1;
     }
-    if extensions.is_empty() {
+    if count == 0 {
         return Err(NotDer);
     }
     Ok(extensions)
@@ -291,8 +304,19 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
     })
 }
 
-/// No extension twice, then no critical extension.
+impl ParsedCrl<'_> {
+    /// thisUpdate, in seconds since 1970-01-01T00:00:00Z.
+    pub fn this_update(&self) -> i64 {
+        self.this_update
+    }
+}
+
+/// At most `MAX_EXTENSIONS`, then no extension twice, then no critical
+/// extension.
 fn check_extensions(extensions: &[Extension<'_>]) -> Result<(), Unusable> {
+    if extensions.len() > MAX_EXTENSIONS {
+        return Err(Unusable::TooManyExtensions);
+    }
     for (i, extension) in extensions.iter().enumerate() {
         if extensions[..i].iter().any(|e| e.oid == extension.oid) {
             return Err(Unusable::DuplicateExtension);
@@ -304,14 +328,21 @@ fn check_extensions(extensions: &[Extension<'_>]) -> Result<(), Unusable> {
     Ok(())
 }
 
+/// The most content bytes a `cRLNumber` may have, a leading 00 included
+/// (RFC 5280 section 5.2.3).
+pub const MAX_CRL_NUMBER_BYTES: usize = 20;
+
 /// The value of a `cRLNumber` extension: a non-negative DER INTEGER in its
-/// shortest encoding.
+/// shortest encoding, of at most `MAX_CRL_NUMBER_BYTES` content bytes.
 fn read_crl_number(value: &[u8]) -> Option<CrlNumber> {
     let integer = der::read_tlv(value, 0, value.len()).ok()?;
     if integer.tag != der::INTEGER || integer.end != value.len() {
         return None;
     }
     let content = integer.content(value);
+    if content.len() > MAX_CRL_NUMBER_BYTES {
+        return None;
+    }
     let first = *content.first()?;
     let negative = first & 0x80 != 0;
     let padded = content.len() > 1 && first == 0 && content[1] & 0x80 == 0;

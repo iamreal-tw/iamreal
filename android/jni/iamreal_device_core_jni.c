@@ -274,6 +274,17 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCh
   return result(env, code, &out);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCheckChallenge(JNIEnv *env, jobject self, jlong session, jlong now,
+                                                                                             jbyteArray challenge) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, challenge, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_check_challenge((idc_session)session, (int64_t)now, in.ptr, in.len, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
 JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCardStateRequest(JNIEnv *env, jobject self, jlong session,
                                                                                               jlong now, jbyteArray scope_signature) {
   (void)self;

@@ -22,7 +22,7 @@
 | 檔案（`checks/src/`） | 規格 | 內容 |
 |---|---|---|
 | `scope.rs` | `spec/scope.md` | 每份名冊的場合字串，寫死在這裡，不從後台來（ADR-0016、ADR-0035） |
-| `challenge.rs` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
+| `challenge.rs` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time`；裝置收到題目時的檢查（唯一的寫法、日期是今天）和原因代碼 |
 | `declaration_code.rs` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
 | `scoped_id.rs` | `spec/scoped-id.md` | 匿名編號（簽章切成 18 段、Poseidon2 串起來）、文字寫法、短編號 |
 | `username_format.rs` | `spec/scope.md`「Platforms」 | 帳號名稱的格式 `[…]{m,n}`，自己逐字解析，不交給正規表示式引擎；平台代號；不認得的平台上帳號最低限度的檢查 |
@@ -58,7 +58,7 @@
 
 讀後台回應的規則（`spec/list-consequence.md` 的「Reading the platform table」「Reading the card's state」）在 `prover/src/server_state.rs`，不在 `checks/`：它要讀 JSON，而 `checks/` 沒有執行期的套件。所以 `list-consequence.json` 的測試在 `prover/tests/`，要連結 Barretenberg 才跑得到。
 
-還沒有的（各有自己的票）：檢查後台其他的回應（題目、送出的回應）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
+還沒有的（各有自己的票）：讀送出之後後台的回應（#221）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
 
 ## 「檢查都通過了」
 
@@ -76,16 +76,17 @@
 | 4 | `idc_session_check_artifacts` | app 帶的電路檔、驗證金鑰、參數檔（兩個）就是寫死雜湊的那幾個。第 1 步之後任何時候都可以做 |
 | | `idc_session_check_date` | 日期換了之後：憑證還在效期內、清冊還沒過期。通過的 session 才能在新的那一天繼續用 |
 | | `idc_session_card_state_request` | **四步都通過、而且是在通過的那一天才做**：驗卡片對場合字串的簽章、算匿名編號、組出查現況的請求 |
-| | `idc_session_records_request` | **四步都通過、而且題目的日期就是通過的那一天才做**：驗卡片的兩個簽章、算見證和證明、核對證明帶的公開輸入、組出送出的請求。見下面「算證明」 |
+| | `idc_session_check_challenge` | **四步都通過才做**：後台給的題目是唯一的寫法、日期是今天（台灣）。不是就停在 `challenge_malformed`、`challenge_not_today`；今天不是 session 的日期（跨過午夜）時，同時把日期的條件再核一次。通過的題目 session 記住 |
+| | `idc_session_records_request` | **四步都通過、而且題目就是 `idc_session_check_challenge` 最後收下的那一個、它的日期就是通過的那一天才做**：驗卡片的兩個簽章、算見證和證明、核對證明帶的公開輸入、組出送出的請求。見下面「算證明」 |
 | | `idc_session_close` | 關掉，清掉 |
 
 - **只有通過四步的 session 算得出匿名編號。** 算匿名編號、組送後台的內容的函式都收 session；算證明、組送出的請求的函式也一樣，從同一個 `passed()` 拿憑證和路徑。
-- **重做前面的步驟，後面的就不算。** 再檢查一次憑證，整個 session 從頭來；再選一次清冊，樹要重建。檔案核對失敗一次，就要重新核對到通過。
+- **重做前面的步驟，後面的就不算。** 再檢查一次憑證，整個 session 從頭來；再選一次清冊，樹要重建。檔案核對失敗一次，就要重新核對到通過。再選一次清冊或再核對一次檔案，收下的題目也不算了，要再收一次。
 - **停下來的答案不是錯誤。** 檢查的結果是規格裡的原因代碼時（憑證過期、清冊太舊、被廢止），函式回 `IDC_OK` 和一段 JSON：`{"ok":false,"problem":"…"}`，加上規格說要回報的細節；通過時是 `{"ok":true,…}`。每個函式的 JSON 寫在 `prover/src/session.rs` 和標頭檔。
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給；通過只算在那一天。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。`idc_session_check_certificates` 的那一天就是這個 session 的日期，清冊多舊算過期用同一天。算匿名編號的函式也收 `now`：日期和 session 的不同就回 `IDC_ERR_REFUSED`，要先用 `idc_session_check_date` 拿新的日期再核一次憑證的效期和清冊的日期（過卡可能跨過午夜；網頁版在拿題目之前和第二次簽章之前各核一次，app 照做）。核不過就停，session 從頭來。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；先前通過的也一起作廢。 算證明的函式不收 `now`：紀錄的日期是題目的日期，題目的日期不是 session 的日期就回 `IDC_ERR_REFUSED`。
+- **時間由 app 給；通過只算在那一天。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。`idc_session_check_certificates` 的那一天就是這個 session 的日期，清冊多舊算過期用同一天。算匿名編號的函式也收 `now`：日期和 session 的不同就回 `IDC_ERR_REFUSED`，要先用 `idc_session_check_date` 拿新的日期再核一次憑證的效期和清冊的日期（過卡可能跨過午夜；網頁版在拿題目之前和拿到題目之後各核一次，app 照做：拿題目之前用 `idc_session_check_date`，拿到之後由 `idc_session_check_challenge` 一起核）。核不過就停，session 從頭來。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；先前通過的也一起作廢。 算證明的函式不收 `now`：紀錄的日期是題目的日期，所以題目由 `idc_session_check_challenge` 在收到時拿 `now` 核過是今天，算證明時只收那一個題目，而且它的日期要是 session 的日期，否則 `IDC_ERR_REFUSED`。收到題目時已經過了午夜，題目是昨天的、session 也是昨天通過的，就停在 `challenge_not_today`，拿不到證明。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
@@ -99,9 +100,9 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 
 `idc_session_records_request` 收四個檔、帳號清單、題目、卡片的兩個簽章，回 `POST /api/v1/records` 的內容（`spec/record.md` 的欄位，沒有 `seq`）。它照這個順序做，哪一步不過就停：
 
-1. session 四步都通過，否則 `IDC_ERR_REFUSED`。
+1. session 四步都通過，而且題目就是 `idc_session_check_challenge` 最後收下的那一個，否則 `IDC_ERR_REFUSED`。
 2. 四個檔再核對一次 SHA-256（ADR-0035）：第 4 步核對過之後核心沒有留下它們，這裡收到的是另一次交進來的位元組。不對是 `IDC_ERR_INPUT`，而且第 4 步要重新通過。
-3. 題目是唯一的寫法；它的日期決定 `current_time`，也是紀錄的日期。它要和 session 的日期相同，否則 `IDC_ERR_REFUSED`：過卡跨過午夜時，app 在拿題目之前先用 `idc_session_check_date` 把 session 移到新的一天（上面「時間由 app 給」）。這個函式因此不收 `now`。
+3. 題目的日期決定 `current_time`，也是紀錄的日期。它要和 session 的日期相同，否則 `IDC_ERR_REFUSED`：題目收下之後又用 `idc_session_check_date` 把 session 移到另一天，就要再收一次題目（上面「時間由 app 給」）。這個函式因此不收 `now`。
 4. 帳號清單和題目算出宣告碼；兩個簽章分別是這張卡片對場合字串、對這個宣告碼簽的（`spec/device-checks.md`：卡片的每個簽章用之前都先驗）。不是就是 `IDC_ERR_INPUT`。清單裡的平台和帳號格式這裡只做每個平台都成立的檢查；名冊收不收，簽章之前由 `idc_list_consequence` 算（名冊規則的第 5、6 項），後台也會擋。
 5. 電路輸入（`spec/circuit-inputs.md`）、見證、證明。電路解不出見證是 `IDC_ERR_INPUT`：前面都過了還解不出來，是電路自己的檢查不成立。
 6. 證明帶的公開輸入和核心自己算的那一份逐一比對（發證金鑰、樹根、`current_time`、匿名編號、場合字串、宣告碼），有一個不同就什麼都不回（`IDC_ERR_INTERNAL`）。
@@ -115,7 +116,7 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 ### 清掉
 
 - **進來的位元組是呼叫的人的**，核心不改它。憑證、簽章、PIN 以外的東西也一樣：誰配置誰釋放，用完自己清掉。
-- **核心留下來的只有 session 裡的**：選中的那張憑證（含姓名）、從清冊算出來的鍵和路徑。`idc_session_add_certificate` 複製的憑證在 `idc_session_check_certificates` 做完時蓋成零，只留選中的那一張。`idc_session_close` 把 session 裡剩下的蓋成零再釋放；另一個執行緒正在這個 session 裡跑的話，等它回來才清。
+- **核心留下來的只有 session 裡的**：選中的那張憑證（含姓名）、從清冊算出來的鍵和路徑，和收下的題目（不是秘密）。`idc_session_add_certificate` 複製的憑證在 `idc_session_check_certificates` 做完時蓋成零，只留選中的那一張。`idc_session_close` 把 session 裡剩下的蓋成零再釋放；另一個執行緒正在這個 session 裡跑的話，等它回來才清。
 - **簽章不留。** `idc_session_card_state_request` 驗完、算完就把自己的那一份蓋成零，session 裡沒有簽章。`idc_session_records_request` 兩個簽章都重新收一次，用完同樣不留：它自己的兩份、電路輸入（憑證的內容、簽章切成的段）、交給 Barretenberg 的見證，在回傳之前蓋成零；ACVM 解見證時自己配置的那些，由配置器在釋放時蓋。
 - **`idc_buf` 還給核心時蓋成零。** `idc_session_check_certificates` 的 JSON 裡有姓名：姓名顯示出來之後就用 `idc_buf_free` 還掉。
 - **這個函式庫釋放的每一塊記憶體都先蓋成零**（`prover/src/alloc.rs`）。`barretenberg-rs` 把 Poseidon2 的輸入複製進自己的緩衝區、用完直接釋放，`serde_json` 寫姓名時也一樣；這些複本核心的程式碰不到，所以在配置器那一層蓋。
@@ -251,7 +252,7 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 
 測試讀 `spec/vectors/` 的標準答案，不複製，也不從另一種語言產生。
 
-- `checks/tests/vectors.rs`（不需要 Barretenberg）：`challenge.json`（唯一的寫法、日期、`current_time` 和它的公開輸入、亂數的位元組）、`scope.json`（兩個場合字串和打包值、每份名冊收和不收的平台、帳號名稱照它的平台的格式）、`declaration-code.json`（原文、SHA-256、宣告碼、打包值）、`scoped-id.json`（文字寫法、短編號、讀不懂的寫法、網址裡的短編號）
+- `checks/tests/vectors.rs`（不需要 Barretenberg）：`challenge.json`（唯一的寫法、日期、`current_time` 和它的公開輸入、亂數的位元組；`device` 的每一案，裝置的時鐘換成台灣的日期、收不收和原因代碼）、`scope.json`（兩個場合字串和打包值、每份名冊收和不收的平台、帳號名稱照它的平台的格式）、`declaration-code.json`（原文、SHA-256、宣告碼、打包值）、`scoped-id.json`（文字寫法、短編號、讀不懂的寫法、網址裡的短編號）
 - 沒有讀的：`poseidon2-constants.json`（Poseidon2 的置換是 Barretenberg 的，這裡沒有自己實作）
 - `prover/tests/vectors.rs`：`poseidon2.json` 的 `hash_2`、`hash_3`（Barretenberg 的 Poseidon2），和 `scoped_id`（簽章切出的 18 段、串起來的匿名編號）
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
@@ -259,14 +260,14 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 - `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
 - `prover/tests/c_card_status.rs`：`idc_card_status`，照 app 呼叫的方式。`card-status.json` 的每一案，結果和標準答案相同；`list-consequence.json` 裡每一個讀不懂的回應都不收；只有 C 函式才有的：認得的平台的形狀、時鐘、`NULL`
 - `prover/tests/c_short_id.rs`：`idc_short_id`。`scoped-id.json` 每一個匿名編號的短編號，和不是唯一寫法的都不收
-- `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同
+- `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同；`crl/testdata/times/` 的每一份（時間的各種寫法）哪些收、哪些是 `not_usable_der`，收的 `thisUpdate` 和清冊日期和 `times/expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）
-- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替；`idc_testing_session_open`（feature `test-issuers`）：給它標準答案的測試金鑰，測試憑證通過第一步；不是金鑰清單的輸入、正式名冊都不開
+- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；題目：不是唯一的寫法、不是今天的各停在自己的原因代碼，跨過台灣午夜的兩種（昨天的題目配昨天通過的 session、今天的題目配昨天通過的 session）、沒有收下題目或拿另一個題目時算證明的函式拒絕；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替；`idc_testing_session_open`（feature `test-issuers`）：給它標準答案的測試金鑰，測試憑證通過第一步；不是金鑰清單的輸入、正式名冊都不開
 - `prover/tests/no_values_in_errors.rs`：把一段記號寫進憑證、清冊、索引、`config`、記住的編號（各幾種寫法），走 C 函式，所有停下來的答案和錯誤裡都找不到那段記號
 - `prover/tests/quiet.rs`：核心裡的 panic 什麼都不印（另開一個行程，讀它印出來的東西）
 - `checks/tests/circuit_inputs.rs`（不需要 Barretenberg）：`circuit-inputs.json` 每一案的每一個電路輸入，和預期的公開輸入（匿名編號取標準答案的，它要 Poseidon2）
 - `prover/tests/witness.rs`：`circuit-inputs.json` 每一案的輸入，`web/circuits/` 的電路都解得出見證；改掉任何一項（日期、宣告碼、場合字串、簽章、樹根、路徑、憑證、發證金鑰）就解不出來
-- `prover/tests/proof.rs`：從 C 函式走，算真的證明。`circuit-inputs.json` 的每一案走完四步、拿查現況的請求、算證明：請求的每一個欄位、匿名編號和標準答案相同；證明配上標準答案的 `public_inputs` 驗得過，改掉後五個公開輸入的任何一個就驗不過；設了 `IAMREAL_BB` 時再用 `bb verify` 拿 `verifier/vk/` 的金鑰驗，並執行 Go 的 `go test ./verifier -run TestDeviceCoreRequests`（`verifier/device_core_test.go`），它把每個請求當成一筆紀錄，照 `spec/proof-verification.md` 重建公開輸入來驗。少任何一步、檔案的雜湊不對、簽章不是這張卡片對這份清單和這個題目簽的、題目的日期上檢查不成立，都拿不到證明。算證明時 stderr 沒有任何輸出；Barretenberg 的執行緒數在算完之後等於核心數。帳號和題目取自 `declaration-code.json` 裡宣告碼相同的那一案
+- `prover/tests/proof.rs`：從 C 函式走，算真的證明。`circuit-inputs.json` 的每一案走完四步、拿查現況的請求、算證明：請求的每一個欄位、匿名編號和標準答案相同；證明配上標準答案的 `public_inputs` 驗得過，改掉後五個公開輸入的任何一個就驗不過；設了 `IAMREAL_BB` 時再用 `bb verify` 拿 `verifier/vk/` 的金鑰驗，並執行 Go 的 `go test ./verifier -run TestDeviceCoreRequests`（`verifier/device_core_test.go`），它把每個請求當成一筆紀錄，照 `spec/proof-verification.md` 重建公開輸入來驗。少任何一步、檔案的雜湊不對、簽章不是這張卡片對這份清單和這個題目簽的、題目不是 session 收下的那一個、題目的日期上檢查不成立，都拿不到證明。算證明時 stderr 沒有任何輸出；Barretenberg 的執行緒數在算完之後等於核心數。帳號和題目取自 `declaration-code.json` 裡宣告碼相同的那一案
 - `prover/tests/c_link.rs`：用 `cargo build` 編出靜態函式庫，拿 `include/iamreal_device_core.h` 編 `prover/tests/smoke.c`、連結、執行。標頭檔和函式庫對不上、函式庫裡沒有對外的函式時，這一個會失敗
 
 ## 連結 Barretenberg 時要注意的

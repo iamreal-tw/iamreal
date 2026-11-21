@@ -51,7 +51,7 @@
         // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
         // The name of a test roster's object always starts with "test-"; keep that when changing it.
         // The production roster's never does.
-        "ROSTER_OBJECT_NAME": "test-1",
+        "ROSTER_OBJECT_NAME": "test-2",
         // Which roster this environment serves, "test" or "production". It selects the scope
         // string and the platform table, which are written in protocol/ (src/settings.ts).
         // It must fit the name above: "test" with a name that starts with "test-", "production"
@@ -59,10 +59,9 @@
         // and test/environments.test.ts fails before that.
         "ROSTER_KIND": "test",
         // The date the test roster was last cleared on, YYYY-MM-DD: every page says it beside the mark
-        // of a test roster (design/copy/test-site.md). It has not been cleared yet, so this is the date
-        // the test site was first deployed (README.md, "第一次部署量到的"). Change it together with
-        // ROSTER_OBJECT_NAME when the roster is cleared.
-        "TEST_ROSTER_CLEARED_ON": "2026-11-19"
+        // of a test roster (design/copy/test-site.md). Change it together with ROSTER_OBJECT_NAME when
+        // the roster is cleared (README.md, "清空測試名冊").
+        "TEST_ROSTER_CLEARED_ON": "2026-11-21"
       }
     }
   }
