@@ -7,7 +7,7 @@ import { copyFileSync, cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } f
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { createTestHarness } from "wrangler";
+import { createTestHarness, unstable_readConfig } from "wrangler";
 import { siteHeaders } from "../scripts/site-files.ts";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
@@ -199,6 +199,17 @@ export interface TestWorker {
    * build's `POST /__test/verify`: true if the proof is accepted.
    */
   verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
+  /**
+   * The object of a roster that was cleared: one the settings named before
+   * they were given another name (README.md, "清空測試名冊"). No request
+   * reaches it any more; it is still there, with what it stored.
+   */
+  clearedRoster(name: string): {
+    /** Stops the running object, as a deploy does: it starts again when its alarm rings. */
+    restart(): Promise<void>;
+    /** Runs the object's alarm now, as when it rings by itself (test build, `POST /__test/roster/alarm?object=`). */
+    runAlarm(): Promise<void>;
+  };
   /** The roster's Durable Object, beyond what the API shows of it. */
   readonly roster: {
     /**
@@ -354,8 +365,12 @@ export interface TestWorker {
 
 export type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
 
-/** The name of the roster's object in the test environment (wrangler.jsonc, `ROSTER_OBJECT_NAME`). */
-const DEPLOYED_ROSTER_OBJECT = "test-1";
+/**
+ * The name of the roster's object in the test environment (wrangler.jsonc,
+ * `ROSTER_OBJECT_NAME`), read from the file: clearing the test roster
+ * changes it there (README.md, "清空測試名冊"), and nothing here.
+ */
+const DEPLOYED_ROSTER_OBJECT = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.ROSTER_OBJECT_NAME);
 
 export interface StartOptions {
   /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
@@ -494,6 +509,13 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     async restart() {
       await server.update((current) => ({ ...current }));
     },
+    clearedRoster: (name) => ({
+      restart: () => worker.evictDurableObject("ROSTER" as never, { name }),
+      async runAlarm() {
+        const res = await server.fetch(`/__test/roster/alarm?object=${encodeURIComponent(name)}`, { method: "POST" });
+        if (res.status !== 204) throw new Error(`running the alarm of ${name}: HTTP ${res.status}`);
+      },
+    }),
     roster: {
       restart: () => worker.evictDurableObject("ROSTER" as never, rosterObject()),
       async dropNewestCrls() {
