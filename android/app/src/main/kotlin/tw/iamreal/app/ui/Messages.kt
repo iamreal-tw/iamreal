@@ -1,0 +1,162 @@
+package tw.iamreal.app.ui
+
+import tw.iamreal.app.card.CardException
+import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.flow.Platforms
+import tw.iamreal.app.flow.Stop
+
+/**
+ * Which sentence of the copy a screen shows (design/copy/card-proof.md,
+ * the parts marked app and the shared ones): for each reason a card proof
+ * stopped, for each row of the card's list, for the list to be signed and
+ * for what was recorded. The same choices as web/src/ui/messages.ts, with
+ * the app's sentences where the copy has them.
+ *
+ * Where the copy says the app's sentence is not written yet, there is none
+ * here: the screen shows that it stopped (common.halted) and nothing more.
+ */
+internal class Messages(private val c: Copy) {
+    /** Where a stop is shown: the sentences differ by the step. */
+    enum class At { READ, PIN, DECLARE }
+
+    /** The sentence for a stop, or null where the copy has none for the app. */
+    fun stop(stop: Stop, at: At): String? = when (stop.code) {
+        "card" -> when (stop.values["reason"]) {
+            CardException.Reason.NO_TAP.name -> c.say("app_stops.no_tap", "spot" to c.say("app_read.spot_android"))
+            CardException.Reason.DROPPED.name -> when (at) {
+                At.READ -> c.say("app_stops.read_dropped")
+                At.PIN -> c.say("app_stops.dropped_pin_kept")
+                At.DECLARE -> c.say("app_stops.dropped")
+            }
+            CardException.Reason.PIN_INCORRECT.name -> c.say("pin.pin_incorrect")
+            // On the panels of reading and of the PIN, cancelling says nothing.
+            CardException.Reason.CANCELLED.name -> if (at == At.DECLARE) c.say("app_stops.tap_cancelled") else null
+            else -> null
+        }
+        "other_card" -> if (at == At.DECLARE) c.say("app_stops.other_card_declare") else c.say("app_stops.other_card")
+        "certificate" -> when (stop.values["problem"]) {
+            "expired" -> stop.values["date"]?.let { c.say("stops.expired", "expiry_date" to it) }
+            "not_yet_valid" -> stop.values["date"]?.let { c.say("stops.not_yet_valid", "valid_from" to it) }
+            "not_citizen_primary" -> c.say("stops.not_citizen_primary")
+            "unsupported_format" -> c.say("stops.unsupported_format")
+            "unknown_issuer" -> c.say("stops.unknown_issuer")
+            "no_certificate" -> c.say("app_stops.no_certificate")
+            else -> null
+        }
+        "crl" -> when (stop.values["code"]) {
+            "crl_stale" -> c.say("stops.crl_stale", "crl_days" to stop.values.getValue("days"))
+            "crl_rollback" -> c.say("app_stops.crl_rollback")
+            else -> c.say("stops.crl_unavailable", "code" to stop.values.getValue("code"))
+        }
+        "revoked" -> c.say("stops.revoked")
+        "server" -> when (val code = stop.values.getValue("code")) {
+            "network" -> if (at == At.DECLARE && stop.values["submitting"] == "true") c.say("stops.submit_failed") else c.say("stops.server_unreadable", "code" to code)
+            "crl_stale" -> c.say("stops.server_crl_stale")
+            "daily_limit" -> c.say("stops.daily_limit")
+            "switch_restricted" -> c.say("stops.switch_restricted")
+            // The app's sentences for these three are not written yet.
+            "challenge_unknown", "switch_limit", "empty" -> null
+            in REJECTED -> c.say("stops.rejected", "code" to code)
+            else -> c.say("stops.server_unreadable", "code" to code)
+        }
+        "date_mismatch" -> c.say("app_stops.date_mismatch")
+        "date_changed" -> c.say("stops.date_changed")
+        else -> null
+    }
+
+    /** The format hint of a platform (card-proof.json, `formats`), or the general sentence. */
+    fun formatHint(platform: String): String =
+        Platforms.of(platform)?.formatHint?.takeIf { c.has("formats.$it") }?.let { c.say("formats.$it") } ?: c.say("accounts.format_no_hint")
+
+    /** The one platform's name when the screens speak of one platform (card-proof.md, "只有一個平台時"); null otherwise. */
+    fun onePlatform(status: CardProof.Status): String? =
+        if (status.tablePlatforms.size == 1 && status.slots.all { it.known }) Platforms.of(status.tablePlatforms[0])?.name else null
+
+    /** The lines above the list of step 4. */
+    fun accountsLead(status: CardProof.Status, single: String?): List<String> {
+        val fillOne = if (single != null) c.say("accounts.fill_one_single", "platform" to single) else c.say("accounts.fill_one")
+        val days = status.daysSince
+        return when {
+            status.slots.any { it.current != null } && days != null -> listOf(
+                c.say("accounts.current") + if (days == 0) c.say("accounts.last_card_proof_today") else c.say("accounts.last_card_proof", "days_ago" to days),
+            )
+            days != null -> listOf(c.say("accounts.nothing_now"), fillOne)
+            else -> listOf(c.say("accounts.none_yet"), fillOne)
+        }
+    }
+
+    /** The notes below the list of step 4, before the button; each with whether links.more follows it. */
+    fun accountsNotes(status: CardProof.Status, single: String?): List<Pair<String, Boolean>> {
+        if (status.dailyLimit) return emptyList()
+        val change = c.say("accounts.how_change") + c.say("accounts.switches_limited") to true
+        val preview = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name)) to false
+        return when {
+            status.slots.any { it.current != null } -> listOf(c.say("accounts.how_refresh") to false, change, preview)
+            status.lastCardProof != null -> listOf(change, preview)
+            else -> listOf(
+                (if (single != null) c.say("accounts.one_per_platform_single", "platform" to single) else c.say("accounts.one_per_platform")) + c.say("accounts.switches_limited") to true,
+                preview,
+            )
+        }
+    }
+
+    /** The lines under one row of step 4 (card-proof.md, "每一列下面的那一行"). None for a platform the app does not know: that sentence is not written yet. */
+    fun rowLines(slot: CardProof.Slot): List<String> {
+        if (!slot.known) return emptyList()
+        val lastDeclared = slot.lastDeclared ?: return listOf(c.say("accounts.row_unused"))
+        val last = Platforms.handle(slot.platform, lastDeclared)
+        val lines = mutableListOf<String>()
+        if (slot.current == null) lines += c.say("accounts.row_withdrawn", "last_declared" to last)
+        lines += when {
+            slot.switchCount == 0 -> c.say("accounts.row_no_switches_yet", "switches_left" to slot.switchesLeft)
+            slot.switchesLeft > 0 -> c.say("accounts.row_switches", "switches_used" to slot.switchCount, "switches_left" to slot.switchesLeft)
+            else -> c.say("accounts.row_used_up", "switches_used" to slot.switchCount)
+        }
+        // An account put there today can be changed today without a switch, even when none is left.
+        if (slot.correctionToday) {
+            if (slot.current != null) lines += c.say("accounts.row_today")
+        } else if (slot.switchesLeft == 0) {
+            lines += if (slot.current != null) c.say("accounts.row_can_clear") else c.say("accounts.row_only_back", "last_declared" to last)
+        }
+        return lines
+    }
+
+    /** What a row does (step 5, "每一列下面寫會發生什麼"; step 6 uses the same). */
+    fun kind(platform: String, kind: String, username: String, current: String?, previous: String?): String = when (kind) {
+        "first" -> c.say("kinds.first")
+        "refresh" -> if (current == username) c.say("kinds.unchanged") else c.say("kinds.again")
+        "withdraw" -> c.say("kinds.withdraw")
+        else -> c.say("kinds.switch", "previous" to Platforms.handle(platform, previous ?: ""))
+    }
+
+    /** What step 5 writes under a row: what it does, and for a switch or a correction what it uses up. */
+    fun rowSentences(row: CardProof.Row): String = kind(row.platform, row.kind, row.username, row.current, row.previous) + when {
+        row.kind == "correction" -> c.say("confirm.switch_not_counted")
+        row.kind != "switch" -> ""
+        row.switchesLeft == 0 -> c.say("confirm.uses_final_switch")
+        else -> c.say("confirm.uses_switch", "switches_left" to row.switchesLeft!!)
+    }
+
+    private fun allUnchanged(rows: List<Triple<String, String, String?>>): Boolean = rows.all { (kind, username, current) -> kind == "refresh" && current == username }
+
+    /** The button of step 5, by the whole list. */
+    fun confirmButton(q: CardProof.Consequence, single: String?): String = when {
+        q.accounts.isEmpty() -> c.say("confirm.button_withdraw_all")
+        allUnchanged(q.rows.map { Triple(it.kind, it.username, it.current) }) -> c.say("confirm.button_refresh")
+        single != null -> c.say("confirm.button_declare_single")
+        else -> c.say("confirm.button_declare")
+    }
+
+    /** The title of step 6, by what the confirmation screen said the list would do. */
+    fun doneTitle(d: CardProof.Done): String = when {
+        d.firstRecord -> c.say("done.first")
+        d.accounts.isEmpty() -> c.say("done.withdraw_all")
+        allUnchanged(d.rows.map { Triple(it.kind, it.username, it.current) }) -> c.say("done.refresh")
+        else -> c.say("done.changed")
+    }
+
+    private companion object {
+        /** Codes of a submission the server did not accept that have no sentence of their own (card-proof.md, step 5). */
+        val REJECTED = setOf("scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order")
+    }
+}

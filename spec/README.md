@@ -22,6 +22,7 @@ there are the names used here.
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
 | [`circuit-inputs.md`](circuit-inputs.md) | What the device gives the circuit, from the certificate, the signatures and the path, and the public inputs it expects back | Draft |
 | [`min-app.md`](min-app.md) | The minimum app version in the server's `config`: how an app reads `min_app`, and when it goes on, warns or stops | Draft |
+| [`card-channel.md`](card-channel.md) | The secure channel of second-generation cards, field by field as in its vectors | Draft |
 
 The public roster is one scope shared by every public platform: a card has
 one scoped ID there and one slot on each platform (ADR-0017). One card
@@ -38,7 +39,7 @@ declaration code, not in the scope string.
 `list-consequence.md` ("The card's state, as shown"). Every implementation (Go,
 TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
-tests.
+tests. `card-channel.json` is read by the tests of `android/` and `ios/`.
 
 ## Shared conventions
 

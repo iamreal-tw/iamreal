@@ -33,7 +33,7 @@ import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type RosterRecord, readRecordLine } from "iamreal-protocol/record.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, applyList, newCard } from "iamreal-protocol/roster-rules.ts";
 import { SHORT_ID_LENGTH, shortId } from "iamreal-protocol/scoped-id.ts";
-import type { Counts, HistoryRow, PageCard } from "./page-data.ts";
+import type { AccountCard, Counts, HistoryRow, LatestPlace, LatestSlot, PageCard } from "./page-data.ts";
 import type { RosterKind } from "./settings.ts";
 
 /** The tables and their indexes. Every statement can run again on an object that has them. */
@@ -274,6 +274,45 @@ export function storedLines(sql: SqlStorage): Iterable<NumberedLine> {
  */
 export function accountCards(sql: SqlStorage, scopeString: string, platform: string, username: string): number {
   return sql.exec<{ cards: number }>("SELECT COUNT(*) AS cards FROM view_slots INDEXED BY view_slots_account WHERE scope_string = ? AND platform = ? AND current = ?", scopeString, platform, username).one().cards;
+}
+
+/**
+ * The cards of a scope whose account on a platform is this username now,
+ * by the date from which each gives its place to it, the earliest first,
+ * and cards of the same date by the `seq` of that record. It reads the
+ * index `view_slots_account`, which covers it. The Go backend's
+ * `AccountCards` (server/store/sqlite_view.go).
+ */
+export function cardsOfAccount(sql: SqlStorage, scopeString: string, platform: string, username: string): AccountCard[] {
+  return sql
+    .exec<{ scoped_id: string; since_date: number; last_card_proof: number }>(
+      `SELECT scoped_id, since_date, last_card_proof FROM view_slots INDEXED BY view_slots_account
+       WHERE scope_string = ? AND platform = ? AND current = ? ORDER BY since_date, since_seq`,
+      scopeString,
+      platform,
+      username,
+    )
+    .toArray()
+    .map((row) => ({ scopedId: row.scoped_id, since: row.since_date, lastCardProof: row.last_card_proof }));
+}
+
+/**
+ * At most `n` slots of a scope on a platform that have an account now, the
+ * latest first by the date from which each gives its place to it, and
+ * slots of the same date by the `seq` of that record, the latest first.
+ * With `after`, only the slots after that place: passing the place of the
+ * last slot returned gives the next ones. It reads the index
+ * `view_slots_latest` backwards, which covers it. The Go backend's
+ * `Recent` (server/store/sqlite_view.go).
+ */
+export function latestSlots(sql: SqlStorage, scopeString: string, platform: string, after: LatestPlace | null, n: number): LatestSlot[] {
+  const select = "SELECT since_seq, since_date, current, scoped_id FROM view_slots INDEXED BY view_slots_latest WHERE scope_string = ? AND platform = ? AND current IS NOT NULL";
+  const order = "ORDER BY since_date DESC, since_seq DESC LIMIT ?";
+  const rows =
+    after === null
+      ? sql.exec<{ since_seq: number; since_date: number; current: string; scoped_id: string }>(`${select} ${order}`, scopeString, platform, n)
+      : sql.exec<{ since_seq: number; since_date: number; current: string; scoped_id: string }>(`${select} AND (since_date, since_seq) < (?, ?) ${order}`, scopeString, platform, after.since, after.sinceSeq, n);
+  return rows.toArray().map((row) => ({ scopedId: row.scoped_id, username: row.current, since: row.since_date, sinceSeq: row.since_seq }));
 }
 
 /**

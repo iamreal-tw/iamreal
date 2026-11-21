@@ -35,7 +35,7 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 - **營運者的電腦上不用 `wrangler login`。** 它的授權不能只給一個 Worker（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）；電腦上跑的程式和 coding agent 就碰得到正式網站。
 - **營運者電腦上的 coding agent 不推版本標籤、不核准正式部署。** 電腦上的 `gh` 登入的是營運者，GitHub 分不出核准的是人還是 agent，所以靠營運者本機的設定擋。
 - **部署的權杖做不到的事，營運者在 Cloudflare 的儀表板手動做**：建立 Worker、自訂網域、R2 儲存桶和它的 CORS、WAF 和限流的規則。只給一個 Worker 的權杖建立不了新的 Worker，也改不了自訂網域（[Workers authorization](https://developers.cloudflare.com/workers/authorization/workers/)）。這些事一年做不到幾次，步驟寫在營運者的說明裡。要比 `Editor` 大的權限時，臨時做一把權杖，用完刪掉。
-- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。唯一的例外是從副本換回一個檔：營運者臨時做一把只能寫這個儲存桶的權杖，換完刪掉（ADR-0033）。
+- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。例外有兩個：從副本換回一個檔，營運者臨時做一把只能寫這個儲存桶的權杖，換完刪掉（ADR-0033）；清空測試名冊時，營運者在儀表板刪掉測試的儲存桶裡名冊的目錄（ADR-0028）。
 - **`iamreal-tw/fingerprints` 只有它自己的排程用自己的 `GITHUB_TOKEN` 提交。** 外人對它開的 PR 不合併：那份檔案只該由排程寫。
 - **GitHub 組織和 Cloudflare 帳號的 admin 只有營運者一個人。** 營運者自己進不去時，靠備用碼和實體安全金鑰。
 

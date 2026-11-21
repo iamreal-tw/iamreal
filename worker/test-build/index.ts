@@ -439,8 +439,10 @@ export default {
    *   started with until it starts again.
    * - `PUT /__test/verifier` with `real` or `stand-in` chooses the proof
    *   verifier `records` asks from now on.
-   * - `POST /__test/roster/alarm` runs the alarm of the roster's object;
-   *   `GET` answers `{alarm}`, the time it is set for or null.
+   * - `POST /__test/roster/alarm` runs the alarm of the roster's object,
+   *   or with `?object=<name>` of the object of that name;
+   *   `GET` answers `{alarm}`, the time it is set for or null, with
+   *   `?object=<name>` of the object of that name.
    * - `PUT /__test/roster/extra-work` with `{due, every}` gives the object a
    *   second piece of timed work; `GET` answers `{runs}`, when it ran.
    * - `PUT /__test/roster/next-random` with 16 bytes in hex: the next
@@ -519,10 +521,15 @@ export default {
     }
     const env = testEnv(deployedEnv);
     if (route === "POST /__test/roster/alarm") {
-      await testRosterOf(env).testRunAlarm();
+      // `?object=` names another object than the settings': the one of a roster that was cleared (README.md, "清空測試名冊").
+      const named = new URL(request.url).searchParams.get("object");
+      await testRosterOf(named === null ? env : { ...env, ROSTER_OBJECT_NAME: named }).testRunAlarm();
       return done();
     }
-    if (route === "GET /__test/roster/alarm") return json({ alarm: await testRosterOf(env).testAlarmTime() });
+    if (route === "GET /__test/roster/alarm") {
+      const named = new URL(request.url).searchParams.get("object");
+      return json({ alarm: await testRosterOf(named === null ? env : { ...env, ROSTER_OBJECT_NAME: named }).testAlarmTime() });
+    }
     if (route === "PUT /__test/roster/extra-work") {
       const { due, every } = (await request.json()) as { due: number; every: number };
       await testRosterOf(env).testSetExtraWork(due, every);

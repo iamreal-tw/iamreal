@@ -7,6 +7,7 @@
 // (the card proof page's, the style sheet) are sent by Static Assets, past
 // the Worker's code, with the headers of site/_headers, which
 // scripts/site-files.ts writes from the values here.
+import type { Roster as RosterKind } from "iamreal-protocol/scope.ts";
 
 /** Sent with every response. */
 export const EVERY_RESPONSE: Readonly<Record<string, string>> = {
@@ -35,19 +36,41 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Sent with every file of the card proof page (/proof and under /proof/),
- * besides EVERY_RESPONSE: the pages, their scripts and workers, the
- * circuits and the CRS. Static Assets sends them, by site/_headers; nothing
- * of the Worker's code does. web/README.md, "頁面需要的標頭", explains each
- * and quotes the policy; a test checks that what is sent is what it quotes
- * (test/proof-files.test.ts).
+ * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
+ * two pages that load the copy buttons' script, /verify and
+ * /hang/<short ID>. Only scripts of this origin, which is that one file: no
+ * inline script, no other site's. The Go backend's `scriptPageHeaders`.
  */
-export const PROOF_PAGE_HEADERS: Readonly<Record<string, string>> = {
-  "Content-Security-Policy":
-    "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-  "Document-Isolation-Policy": "isolate-and-credentialless",
-  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+export const SCRIPT_PAGE_HEADERS: Readonly<Record<string, string>> = {
+  ...VISITOR_HEADERS,
+  "Content-Security-Policy": VISITOR_HEADERS["Content-Security-Policy"]!.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; "),
 };
+
+/**
+ * The data domain of each kind of roster (ADR-0027, ADR-0028): where its
+ * public files are downloaded from, the CRL archive the card proof page
+ * reads among them. The page's build names the same one (web/README.md,
+ * "資料網域").
+ */
+export const DATA_ORIGINS: Readonly<Record<RosterKind, string>> = { production: "https://data.iamreal.tw", test: "https://test-data.iamreal.tw" };
+
+/**
+ * Sent with every file of the card proof page (/proof and under /proof/) of
+ * a site of that kind of roster, besides EVERY_RESPONSE: the pages, their
+ * scripts and workers, the circuits and the CRS. Static Assets sends them,
+ * by site/_headers; nothing of the Worker's code does. The page may connect
+ * to its own origin and to its roster's data domain, so the two kinds
+ * differ in that one address. web/README.md, "頁面需要的標頭", explains each
+ * and quotes both policies; a test checks that what is sent is what it
+ * quotes (test/proof-files.test.ts).
+ */
+export function proofPageHeaders(kind: RosterKind): Readonly<Record<string, string>> {
+  return {
+    "Content-Security-Policy": `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ${DATA_ORIGINS[kind]}; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    "Document-Isolation-Policy": "isolate-and-credentialless",
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  };
+}
 
 /**
  * Sent with all of the above on a test roster's site: no page of it, and no
@@ -59,8 +82,8 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The style sheet's Cache-Control: asked for again every time it is used,
- * by its ETag (site/_headers).
+ * The Cache-Control of the style sheet and of the copy buttons' script
+ * (site/_headers): asked for again every time they are used, by their ETag.
  */
 export const STYLE_SHEET_CACHE = "no-cache";
 

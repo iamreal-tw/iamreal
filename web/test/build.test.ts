@@ -6,10 +6,14 @@
 // `pnpm local`) holds MOICA's keys and the real component too and nothing
 // of the tests, but signs the test roster's scope string and knows the test
 // roster's platforms; it fetches the CRL from its own origin (the local
-// server), so it names no data domain.
+// server), so it names no data domain. The test site's build (mode
+// "testsite", what a deploy of test.iamreal.tw serves at /proof) is the local
+// one with the test roster's data domain, https://test-data.iamreal.tw, and
+// the mark of a test roster (design/copy/test-site.md) with the date it is
+// built with.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
@@ -23,17 +27,37 @@ function filesUnder(dir: string): string[] {
   });
 }
 
-/** The scripts, HTML and CSS of a build in `mode`. */
-async function codeOf(mode: "production" | "localcard"): Promise<string> {
+type Mode = "production" | "localcard" | "testsite";
+
+/** A build in `mode`: its files by their path under the build, and the scripts, HTML and CSS among them one after another. */
+async function buildOf(mode: Mode): Promise<{ files: Map<string, string>; code: string }> {
   const out = join(web, "test-output", `build-check-${mode}`);
   rmSync(out, { recursive: true, force: true });
   await build({ root: web, configFile: join(web, "vite.config.ts"), mode, logLevel: "silent", build: { outDir: out, emptyOutDir: true } });
-  const code = filesUnder(out)
-    .filter((f) => /\.(js|html|css)$/.test(f))
-    .map((f) => readFileSync(f, "utf8"))
-    .join("\n");
+  const files = new Map(filesUnder(out).filter((f) => /\.(js|html|css)$/.test(f)).map((f) => [relative(out, f).split(sep).join("/"), readFileSync(f, "utf8")]));
+  const all = filesUnder(out).map((f) => relative(out, f).split(sep).join("/"));
   rmSync(out, { recursive: true, force: true });
-  return code;
+  for (const f of all) if (!files.has(f)) files.set(f, "");
+  return { files, code: [...files.values()].join("\n") };
+}
+
+/** The scripts, HTML and CSS of a build in `mode`. */
+const codeOf = async (mode: Mode): Promise<string> => (await buildOf(mode)).code;
+
+/** The first hex digits of the moduli of MOICA's G2 and G3 issuer keys. */
+const MOICA_KEYS = ["9fd8089c05559d63d5ab34bc5df685fb", "ae5ae964e29305a7dec0863d7f57aa66"];
+
+/** Everything a page of a build loads when it opens: the scripts and style sheets its HTML names, and what those scripts import, by path under the build. */
+function loadedBy(files: Map<string, string>, page: string): string[] {
+  const seen = new Set<string>();
+  const queue = [...files.get(page)!.matchAll(/(?:src|href)="\/proof\/([^"]+)"/g)].map((m) => m[1]!);
+  while (queue.length > 0) {
+    const f = queue.pop()!;
+    if (seen.has(f)) continue;
+    seen.add(f);
+    for (const m of (files.get(f) ?? "").matchAll(/(?:from|import)\s*\(?\s*["'`]\.\/([^"'`]+)["'`]/g)) queue.push(`assets/${m[1]!}`);
+  }
+  return [...seen].sort();
 }
 
 /** What both builds hold, and what neither does. `dataOrigin` is the one other origin the build may name, if any. */
@@ -41,7 +65,7 @@ function realCardOnly(code: string, mode: string, dataOrigin: string | null): vo
   assert.ok(code.length > 100_000, `${mode}: the build has its scripts`);
   // MOICA's component and issuer keys (the first hex digits of G2's and G3's moduli).
   assert.ok(code.includes("http://localhost:61161"), `${mode}: the component's address`);
-  assert.ok(code.includes("9fd8089c05559d63d5ab34bc5df685fb") && code.includes("ae5ae964e29305a7dec0863d7f57aa66"), `${mode}: MOICA's issuer keys`);
+  assert.ok(MOICA_KEYS.every((k) => code.includes(k)), `${mode}: MOICA's issuer keys`);
   // Nothing of the fake card (src/card/fake.ts), the test target or the fake component.
   for (const s of ["the card signs 31 bytes", "__IAMREAL_TEST", "FakeCard", "fake-component", "testIssuer", "PRIVATE KEY", "pkcs8"]) {
     assert.ok(!code.includes(s), `${mode}: the build contains ${JSON.stringify(s)}`);
@@ -74,6 +98,61 @@ test("the local build (pnpm local): MOICA's keys and component, nothing of the t
   assert.ok(code.includes("Example (no real service)"), "the local build knows test-example");
 });
 
+/** The date a test site's build is given: when its roster was last cleared (worker/wrangler.jsonc has the deployed one). */
+const CLEARED_ON = "2026-10-31";
+/** The sentence beside the mark of a test roster (design/copy/test-site.md), up to its date. */
+const MARK = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8"))![1]!;
+
+test("the test site's build: MOICA's keys and component, nothing of the tests, the test roster's scope string, its data domain and no other address, the test site's links, the mark of a test roster", async () => {
+  process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = CLEARED_ON;
+  const { files, code } = await buildOf("testsite").finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+  realCardOnly(code, "testsite", "https://test-data.iamreal.tw");
+  assert.ok(code.includes("iamreal-test:public:0__________"), "the test roster's scope string");
+  assert.ok(code.includes("Example (no real service)"), "the test site's build knows test-example");
+  assert.ok(!code.includes("https://data.iamreal.tw"), "not the production roster's data domain");
+  // The link of the last screen is the card's page on the test site (src/target-test-site.ts, SITE_DOMAIN).
+  assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
+  assert.doesNotMatch(code, /["'`]iamreal\.tw["'`]/, "not the public site's domain");
+  // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
+  assert.ok(MARK.startsWith("測試名冊"));
+  const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });
+  const script = [...files.keys()].filter((f) => /^assets\/test-roster-[\w-]+\.js$/.test(f));
+  assert.equal(script.length, 1, "the mark's script");
+  assert.ok(files.get(script[0]!)!.replaceAll("\\", "").includes(mark), `the mark's script holds ${mark}`);
+  // Both pages load it.
+  for (const page of ["index.html", "help.html"]) assert.ok(loadedBy(files, page).includes(script[0]!), `${page} loads the mark's script`);
+});
+
+test("the production build has nothing of the mark, and its help page loads nothing of the target: no issuer key, no address of the component, no scope string", async () => {
+  const { files, code } = await buildOf("production");
+  assert.ok(![...files.keys()].some((f) => f.includes("test-roster")) && !code.includes("測試名冊") && !code.includes("test-roster"), "no file and no word of the mark");
+  assert.match(code, /["'`]iamreal\.tw["'`]/, "the public site's domain, for the link of the last screen");
+  assert.ok(!code.includes("test.iamreal.tw") && !code.includes("test-data.iamreal.tw"), "nothing of the test site");
+  // The help page is a title and a sentence: the scripts it loads are the copy, the logo and the style sheet.
+  const help = loadedBy(files, "help.html");
+  assert.ok(help.length >= 2 && help.some((f) => f.endsWith(".js")), `the help page's files: ${help.join(", ")}`);
+  const loaded = help.map((f) => files.get(f)!).join("\n");
+  for (const s of [...MOICA_KEYS, "localhost:61161", "data.iamreal.tw", "iamreal:public:0", "iamreal-test:public:0"]) assert.ok(!loaded.includes(s), `the help page loads ${JSON.stringify(s)}`);
+  // The card proof page does load them: the check above can tell.
+  const page = loadedBy(files, "index.html").map((f) => files.get(f)!).join("\n");
+  for (const s of [...MOICA_KEYS, "localhost:61161", "iamreal:public:0"]) assert.ok(page.includes(s), `the card proof page loads ${JSON.stringify(s)}`);
+});
+
+test("no other build has the mark of a test roster", async () => {
+  for (const mode of ["production", "localcard"] as const) {
+    const code = await codeOf(mode);
+    assert.ok(!code.includes("測試名冊") && !code.includes("test-roster") && !code.includes("test.iamreal.tw"), mode);
+  }
+});
+
+test("the test site's build is not made without the date its roster was last cleared on, or with one the calendar does not have", async () => {
+  for (const date of [undefined, "", "2026-11-31", "20261120", "2026-11-20 "]) {
+    if (date === undefined) delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON;
+    else process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = date;
+    await assert.rejects(codeOf("testsite"), /IAMREAL_TEST_ROSTER_CLEARED_ON/, JSON.stringify(date)).finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+  }
+});
+
 test("the local target signs the test roster's scope string; the production target the public roster's", async () => {
   const local = await import("../src/target-local.ts");
   const production = await import("../src/target.ts");
@@ -88,4 +167,24 @@ test("the local target signs the test roster's scope string; the production targ
   assert.equal(local.DATA_ORIGIN, "");
   assert.deepEqual(local.PRESENTATIONS.map((p) => p.platform), ["test-example", "threads"]);
   assert.deepEqual(production.PRESENTATIONS.map((p) => p.platform), ["threads"]);
+});
+
+test("the test site's target is the local one but for the data domain and the site: the test roster's, https://test-data.iamreal.tw and test.iamreal.tw", async () => {
+  const site = await import("../src/target-test-site.ts");
+  const local = await import("../src/target-local.ts");
+  const { scopeOf } = await import("iamreal-protocol/scope.ts");
+  assert.equal(scopeOf(site.ROSTER), "iamreal-test:public:0__________");
+  assert.deepEqual(site.ISSUERS, local.ISSUERS);
+  assert.equal(site.COMPONENT_ORIGIN, local.COMPONENT_ORIGIN);
+  assert.equal(site.IDLE_LIMIT_MS, local.IDLE_LIMIT_MS);
+  assert.deepEqual(site.PRESENTATIONS, local.PRESENTATIONS);
+  assert.equal(site.DATA_ORIGIN, "https://test-data.iamreal.tw");
+  // The link of the last screen: the card's page on the site of the build's roster. On the test site, as
+  // design/copy/test-site.md writes the address of a page of a card (寫出島民證明網址的地方).
+  const copy = readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8");
+  const written = /\n## 寫出島民證明網址的地方\n[\s\S]*?```\n(.*)\n```/.exec(copy)?.[1];
+  const { cardPath } = await import("../src/platforms.ts");
+  assert.equal(`${site.SITE_DOMAIN}/${cardPath("7K2Q9FM4XD")}`, written);
+  const production = await import("../src/target.ts");
+  assert.deepEqual([site.SITE_DOMAIN, production.SITE_DOMAIN, local.SITE_DOMAIN], ["test.iamreal.tw", "iamreal.tw", "iamreal.tw"]);
 });

@@ -9,6 +9,18 @@
 #
 # <api> is the Android API level the library is linked for (minSdk).
 #
+# A fourth word "test-issuers" after <out-dir> (Android), and always for
+# host, builds the library of the tests: device-core/ with its cargo feature
+# `test-issuers`, which adds idc_testing_session_open (a session that trusts the
+# issuer keys a test gives it, for a fake card), and the JNI function for
+# it. That library is in no installer that goes out: only the build type
+# `fake` and the unit tests on the JVM get it (app/build.gradle.kts), and
+# cargo leaves the static library at the same path with and without the
+# feature, so one build runs at a time: a second one in between would have
+# this one link the other's library. Gradle runs them one at a time
+# (app/build.gradle.kts, nativeBuilds), and checkApk fails an installer
+# that goes out with the library of the tests in it.
+#
 # For Android the link is done by Zig 0.15.1 (fetch-zig.sh), the Zig Aztec
 # builds Barretenberg with, and libc++ is linked in statically: Aztec's
 # library uses LLVM's libc++ (std::__1), which does not link against the
@@ -26,27 +38,33 @@ core=$here/../device-core
 abi=$1
 
 BB_LIB_DIR=
+# What the C compiler is told for the library of the tests; nothing for the other.
+testing_flag=
+use_testing() {
+  testing_flag=-DIDC_TESTING
+}
 build_core() { # <Barretenberg's platform, or nothing for this machine> <cargo's target, or nothing>
   BB_LIB_DIR=$("$core/fetch-barretenberg.sh" $1)
   export BB_LIB_DIR
-  (cd "$core" && cargo build --locked --release --package iamreal-device-core --lib ${2:+--target "$2"})
+  (cd "$core" && cargo build --locked --release --package iamreal-device-core --lib ${2:+--target "$2"} ${testing_flag:+--features test-issuers})
 }
 
 if [ "$abi" = host ]; then
   [ $# -eq 2 ] || { echo "build-native: host <out-dir>" >&2; exit 1; }
   out=$2
   : "${JAVA_HOME:?build-native: JAVA_HOME is not set}"
+  use_testing
   build_core "" ""
   mkdir -p "$out"
   case "$(uname -s)" in
     Darwin)
-      "${CC:-cc}" -shared -fPIC -O2 -Wall -Wextra -Werror -I "$core/include" -I "$JAVA_HOME/include" -I "$JAVA_HOME/include/darwin" \
+      "${CC:-cc}" -shared -fPIC -O2 -Wall -Wextra -Werror $testing_flag -I "$core/include" -I "$JAVA_HOME/include" -I "$JAVA_HOME/include/darwin" \
         -o "$out/libiamreal_device_core_jni.dylib" "$here/jni/iamreal_device_core_jni.c" \
         "$core/target/release/libiamreal_device_core.a" -lc++ -liconv -lm
       ;;
     Linux)
       # The libraries device-core/prover/tests/c_link.rs names: LLVM's libc++, not GCC's libstdc++.
-      "${CC:-cc}" -shared -fPIC -O2 -Wall -Wextra -Werror -I "$core/include" -I "$JAVA_HOME/include" -I "$JAVA_HOME/include/linux" \
+      "${CC:-cc}" -shared -fPIC -O2 -Wall -Wextra -Werror $testing_flag -I "$core/include" -I "$JAVA_HOME/include" -I "$JAVA_HOME/include/linux" \
         -o "$out/libiamreal_device_core_jni.so" "$here/jni/iamreal_device_core_jni.c" \
         "$core/target/release/libiamreal_device_core.a" -lc++ -lc++abi -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
       ;;
@@ -55,7 +73,12 @@ if [ "$abi" = host ]; then
   exit 0
 fi
 
-[ $# -eq 3 ] || { echo "build-native: <abi> <api> <out-dir>" >&2; exit 1; }
+case $# in
+  3) ;;
+  4) [ "$4" = test-issuers ] || { echo "build-native: the fourth word is test-issuers or nothing" >&2; exit 1; }
+     use_testing ;;
+  *) echo "build-native: <abi> <api> <out-dir> [test-issuers]" >&2; exit 1 ;;
+esac
 api=$2
 out=$3
 case $api in
@@ -94,7 +117,7 @@ printf 'include_dir=%s\nsys_include_dir=%s\ncrt_dir=%s\nmsvc_lib_dir=\nkernel32_
 # -z defs: a function nobody defines stops the link here, not the app at load.
 # max-page-size: phones with 16 KB pages.
 ZIG_LIBC=$libc "$zig" c++ -target "$triple.$api" -shared -fPIC -O2 -Wall -Wextra -Werror \
-  -I "$core/include" -o "$out/libiamreal_device_core_jni.so" \
+  $testing_flag -I "$core/include" -o "$out/libiamreal_device_core_jni.so" \
   -x c "$here/jni/iamreal_device_core_jni.c" -x none "$core/target/$triple/release/libiamreal_device_core.a" \
   -L"$crt" -lm -ldl \
   -Wl,--gc-sections -Wl,--version-script="$here/jni/exports.map" -Wl,-z,defs -Wl,-z,max-page-size=16384 -s
