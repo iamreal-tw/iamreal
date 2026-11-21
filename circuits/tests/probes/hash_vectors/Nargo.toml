@@ -1,0 +1,8 @@
+[package]
+name = "probe_hash_vectors"
+type = "bin"
+authors = [""]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+card_proof = { path = "../../../lib" }
