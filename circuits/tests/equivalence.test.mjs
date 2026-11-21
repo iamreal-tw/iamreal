@@ -109,6 +109,8 @@ describe("circom and Noir agree on every case", () => {
   });
 
   after(() => {
+    // worker/test/workflows.test.ts reads results/equivalence.md by this layout (the third line
+    // "<n> cases;", the circom column sixth): change one, change the other.
     const head = ["circom test file", "case", "expected", "Noir part", "Noir card proof", "circom", "note"];
     const line = (cells) => `| ${head.map((_, i) => cells[i] ?? "").join(" | ")} |`;
     const differs = (r) => [r[3], r[4], r[5]].some((v) => !["n/a", "not run", r[2]].includes(v));
