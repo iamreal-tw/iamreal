@@ -22,10 +22,12 @@
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
+| `App/Assets.xcassets` | app 的圖示。暫時的：網站的 `--teal`（`#226977`）一整片，沒有字和圖案，正式的圖示在 [#154](https://github.com/iamreal-tw/iamreal/issues/154) 定。App Store Connect 不收沒有圖示的 build |
 | `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；兩種 build 的識別碼和測試網站的環境 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
 | `check-app.sh`、`check-app-test.sh` | 建置時的檢查，和它自己的測試 |
+| `archive.sh`、`check-archive.sh`、`check-archive-test.sh`、`ExportOptions.plist` | 上傳到 TestFlight 的 archive、對它的檢查和檢查的測試、簽章和上傳的設定（「上傳到 TestFlight」） |
 | `Tests/` | 在模擬器上跑的測試，包含假卡片（`Tests/FakeCard.swift`） |
 
 ### PIN、憑證、簽章在哪裡
@@ -47,7 +49,6 @@
 - 文字沒有對應句子的兩種情況，畫面只顯示代碼，和網頁版相同（`web/src/ui/messages.ts`）：核心回了 app 不認得的憑證原因代碼、app 自己把步驟的順序叫錯（`state`）。兩種都是程式的錯，不是持卡人會遇到的情況；要不要有一句話留給 #172
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
 - `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列、完成的畫面讀不出後台回報每個帳號記成什麼時的那一句；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
-- 上傳到 TestFlight（[#176](https://github.com/iamreal-tw/iamreal/issues/176)）
 
 主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
 
@@ -62,7 +63,7 @@
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 dev |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） | 同左，上線後也是 |
 | 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_ROSTER_TEST`） | 同左，上線後也是 |
-| 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳，工作流程還沒有：[#176](https://github.com/iamreal-tw/iamreal/issues/176)） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |
+| 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |
 
 兩個組態都以 `Config/Test.xcconfig` 為底：這個檔照組態定識別碼，並定一個編譯條件 `IAMREAL_ENV_TEST`；`App/AppEnvironment.swift` 照編譯條件給網址和名冊，沒有條件就編不過。名稱照組態寫在專案檔（`INFOPLIST_KEY_CFBundleDisplayName`）。app 裡沒有切換環境的設定，後台也不能叫 app 換環境。上線那天用一個 PR 讓 Release 改用正式網站的設定檔；正式網站的設定現在還沒有。
 
@@ -112,7 +113,7 @@ xcodebuild test -project IamrealApp.xcodeproj -scheme IamrealApp \
 - `build-core.sh simulator` 編兩份函式庫：app 的，和測試用的（見下面「模擬器的函式庫認測試金鑰」）；`build-core.sh device` 只編 app 的
 - `build-core.sh` 先下載 Barretenberg 的靜態函式庫（`device-core/fetch-barretenberg.sh`）和參數檔（`device-core/fetch-crs.sh`），兩者都核對 SHA-256 才用，再用 `cargo build --locked --release` 編出 `device-core/target/<target>/release/libiamreal_device_core.a`。Xcode 專案連結的就是那個位置的檔，所以改了 `device-core/` 要重跑它。它不放進 Xcode 的建置階段：下載不該發生在 Xcode 的建置裡，Xcode 給建置階段的環境變數（`SDKROOT` 等）也是給 iOS 的，不是給 cargo 在 Mac 上跑的建置腳本的。
 - `xcodebuild test` 建置 app、跑 `check-app.sh`、在模擬器上跑 `Tests/`。
-- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/`、它讀的檔（`.github/README.md` 列出來）或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
+- 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，最後照上傳的做法做一次給手機的 archive、跑 `check-archive-test.sh`（「上傳到 TestFlight」），只在改到 `ios/`、`device-core/`、它讀的檔（`.github/README.md` 列出來）或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
 
 要在模擬器上看畫面：用 Xcode 打開 `IamrealApp.xcodeproj` 按執行，或 `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/IamrealApp.app` 再 `xcrun simctl launch booted tw.iamreal.app.dev`。
 
@@ -147,7 +148,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 - 只有模擬器的 Debug 組態連結它（`Config/Shared.xcconfig`），也就是 `xcodebuild test` 跑的那一種
 - 只有 `Tests/` 看得到那個函式（`Tests/Bridge.h`），`App/` 的橋接檔沒有它的宣告
-- 模擬器的 Release、給手機的 Debug 和 Release 連結的都是沒有開 feature 的那一份。`check-app.sh` 擋下這幾種 app 裡出現這個函式的名稱或那個函式庫的記號；`check-app-test.sh` 有這兩案。拉取請求的檢查會建一次模擬器的 Release，上傳的 build 都是給手機的 Release
+- 模擬器的 Release、給手機的 Debug 和 Release 連結的都是沒有開 feature 的那一份。`check-app.sh` 擋下這幾種 app 裡出現這個函式的名稱或那個函式庫的記號；`check-app-test.sh` 有這兩案。拉取請求的檢查會建一次模擬器的 Release 和一次給手機的 archive，上傳的 build 都是給手機的 Release
 
 ### 測試讀什麼
 
@@ -158,6 +159,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
 - `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
+- `check-archive-test.sh`：`check-archive.sh` 讓 `archive.sh` 做的 archive 通過，並擋下每一份改過的副本（「上傳到 TestFlight」）
 
 ## 建置時的檢查（`check-app.sh`）
 
@@ -196,6 +198,52 @@ xcrun devicectl device install app --device <手機的識別碼> build/Build/Pro
 
 團隊的代號不寫進專案檔，每次從命令列給（或在 Xcode 的 Signing & Capabilities 選，不要提交那個改動）。手機要先打開開發者模式。
 
+## 上傳到 TestFlight
+
+商店的 build（Release，`tw.iamreal.app`）只從 GitHub Actions 上傳（ADR-0036、ADR-0037），工作流程是 `.github/workflows/upload-ios.yml`。只能手動觸發，營運者或營運者電腦上的 coding agent 在 `main` 上觸發：
+
+```
+gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main
+```
+
+合併到 `main` 不會上傳。上傳成功之後，App Store Connect 處理完那個 build，TestFlight 的內部群組「營運者」自動收到（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
+
+### 兩個工作
+
+| | `build` | `upload` |
+|---|---|---|
+| 拿得到金鑰 | 不能 | 能：environment `app-test` 的 App Store Connect API 金鑰（開發者角色的團隊金鑰，#161），那個 environment 只讓 `main` 上的執行拿 |
+| 跑什麼 | 這個程式庫的程式：`build-core.sh device`，再 `archive.sh` | 不取出程式庫、不跑它的任何腳本：解開 `build` 交下來的 tar 檔，把團隊代號寫進 `ExportOptions.plist`，跑 Xcode 的 `xcodebuild -exportArchive` |
+| 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
+
+- **`archive.sh`** 做 Release 的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
+- **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那七個，沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份名冊的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和名冊，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
+- **簽章用 Apple 代管的發布憑證。** `ExportOptions.plist` 寫 `method` `app-store-connect`、`destination` `upload`、`signingStyle` `automatic`：Xcode 用 API 金鑰向 Apple 拿描述檔和代管的憑證，簽好直接上傳。發布憑證的私鑰不放在任何地方。開發者角色的金鑰能不能這樣做，是 [#143](https://github.com/iamreal-tw/iamreal/issues/143) 要實測的；做不到時，第一次執行的錯誤訊息記到 #143，再照 ADR-0036 把私鑰放進 `app-test`。
+- **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
+- **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
+
+### 版本和 build
+
+- **版本是觸發那一天的台灣日期**，年.月.日、不補零，例如 `2026.11.5`、`2026.11.21`。App Store Connect 的版本只收三個整數（[`CFBundleShortVersionString`](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)：「The required format is three period-separated integers」），所以同一天上傳第二次不加 `.1`（網站的標籤才加，ADR-0029），版本相同，靠 build 分（ADR-0036）。TestFlight 同一個版本可以有好幾個 build。
+- **build 是這個工作流程的執行編號**（`GITHUB_RUN_NUMBER`），每次觸發加一，同一次執行重跑時不變。重跑一個已經傳上去的執行，App Store Connect 會拒收同一個 build；要再傳就重新觸發一次。
+- **執行編號跟著工作流程走。** `upload-ios.yml` 改名、或刪掉再加回來，GitHub 當成新的工作流程，編號從 1 重來，比 App Store Connect 上已有的小，上傳會被拒。到那時候在 `upload-ios.yml` 給 `archive.sh` 的 build 加上一個固定的數（上一次的 build），並寫在這裡。沒有改成從 App Store Connect 讀最新的 build 再加一：`build` 沒有金鑰，build 要在建置時寫進 app。
+
+### 合併後才驗得到的
+
+這個工作流程只在 `main` 上、手動觸發才跑，拉取請求的檢查跑不到上傳的那一半：
+
+- `build` 交下去的 tar 檔，和 `upload` 把團隊代號寫進 `ExportOptions.plist` 那一步，在本機試過，沒有在 runner 上跑過
+- `build` 的指令：`checks-ios.yml` 每次用同樣的 `archive.sh` 做一次 archive、跑 `check-archive-test.sh`，所以拉取請求時就看得到；它沒有包成 tar 檔交下去
+- `upload` 整個工作：開發者角色的金鑰能不能用代管的憑證簽章（#143）、App Store Connect 收不收這個 build
+- 讀卡（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）加了 entitlement（NFC）之後：archive 沒有簽章，裡面沒有 entitlement；Xcode 匯出時給的 entitlement 有沒有 NFC，要看第一個有讀卡的 build。沒有的話 `build` 改成在 archive 時帶 entitlement 的檔，或在 `upload` 匯出後檢查
+
+### 上傳之後營運者做的
+
+- **第一次觸發之前**：在 environment `app-test` 加 variable `APPLE_TEAM_ID`（團隊代號）。
+
+- **出口管制的加密問題。** `Info.plist` 沒有寫 `ITSAppUsesNonExemptEncryption`，每個 build 在 App Store Connect 會先停在「Missing Compliance」，營運者回答過才會到測試者手上。app 和卡片之間的安全通道有加密，回答前先查 Apple 的說明（「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」）；答案定了可以寫進 `Info.plist`，之後的 build 就不用每次回答。
+- **對外測試的群組**：第一個 build 上傳之後才能建，關掉截圖回饋（#161）。
+
 ## 工具和版本
 
 版本都釘死；沒有任何套件管理工具裝進來的東西。
@@ -205,4 +253,4 @@ xcrun devicectl device install app --device <手機的識別碼> build/Build/Pro
 - **Barretenberg 6.0.0 的靜態函式庫、參數檔**：下載後核對 `device-core/barretenberg.sha256`、`device-core/crs.sha256`
 - 專案檔是手寫的，不用產生專案的工具；沒有 CocoaPods、Swift Package、Carthage
 
-顯示的版本用日期（`MARKETING_VERSION`，例如 `2026.11.20`），`build`（`CURRENT_PROJECT_VERSION`）是遞增的整數（ADR-0036）；現在專案檔裡是固定的值，上傳的那張票改成建置時給。
+顯示的版本用日期（`MARKETING_VERSION`），`build`（`CURRENT_PROJECT_VERSION`）是遞增的整數（ADR-0036）。上傳的 build 由 `archive.sh` 在建置時給（「上傳到 TestFlight」）；專案檔裡的固定值只是用線裝的開發用 build 用的。
