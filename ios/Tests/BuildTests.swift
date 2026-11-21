@@ -56,14 +56,7 @@ final class BuildTests: XCTestCase {
         }
     }
 
-    func testTheShellReportsThatTheCoreAnswers() throws {
-        let report = CoreReport.make()
-        XCTAssertNil(report.selfCheckFailure)
-        XCTAssertEqual(report.abiVersion, DeviceCore.headerABIVersion)
-        XCTAssertEqual(report.scopeString, try Repository.testScopeString())
-    }
-
-    /// The one sentence on the shell's screen is in design/copy/.
+    /// The mark of the test roster, on every screen, is in design/copy/.
     func testTheWordsOnTheScreenAreInDesignCopy() throws {
         let copy = try Repository.text("design/copy/test-site.md")
         XCTAssertTrue(copy.contains("\n\(ScreenCopy.testRoster)\u{3000}"))
@@ -88,5 +81,61 @@ final class BuildTests: XCTestCase {
             XCTAssertTrue(page.contains("name: \"\(parts[1])\""), parts[1])
             XCTAssertTrue(page.contains("sha256: \"\(parts[0])\""), parts[1])
         }
+    }
+
+    /// The sentences the app carries are design/copy/card-proof.json, as it is in the repository.
+    func testTheBundledCopyIsTheOneOfTheRepository() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "card-proof", withExtension: "json"))
+        XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/copy/card-proof.json"))
+    }
+
+    /// Every sentence the sources name is in that file, and the sources
+    /// write none of their own: no character of Chinese outside the mark of
+    /// the test roster.
+    func testTheSourcesTakeEverySentenceFromTheCopy() throws {
+        let copy = Copy(json: try Repository.data("design/copy/card-proof.json"))
+        let key = try NSRegularExpression(pattern: #"copy\("([a-z_]+\.[a-z_]+)""#)
+        var keys = 0
+        for (name, source) in try appSources() {
+            for match in key.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                let named = String(source[try XCTUnwrap(Range(match.range(at: 1), in: source))])
+                XCTAssertNotEqual(copy(named), named, "\(name) names \(named), which design/copy/card-proof.json does not have")
+                keys += 1
+            }
+            for line in source.split(separator: "\n") where !line.contains("static let testRoster") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
+                XCTAssertNil(line.unicodeScalars.first { (0x2E80...0x9FFF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }, "\(name): \(line)")
+            }
+        }
+        XCTAssertGreaterThan(keys, 100)
+    }
+
+    /// The PIN and a card proof under way are in memory only: the sources
+    /// use nothing that writes a file, nothing the system saves and
+    /// restores a scene with, and no content type on a field, by which the
+    /// system would offer to save what is typed. The one thing kept is the highest CRL number
+    /// of each issuer, in App/CRLNumbers.swift.
+    func testNothingOfACardProofIsWrittenToDisk() throws {
+        let forbidden = try NSRegularExpression(pattern: #"SceneStorage|AppStorage|NSUserActivity|restorationIdentifier|encodeRestorableState|UserDefaults|FileManager|NSKeyedArchiver|\.write\(|Keychain|SecItem|NSUbiquitous|CoreData|UIPasteboard|textContentType"#)
+        var allowed = 0
+        for (name, source) in try appSources() {
+            for match in forbidden.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                let word = String(source[try XCTUnwrap(Range(match.range, in: source))])
+                // The CRL numbers, and the link the cardholder asks to copy.
+                if (name == "CRLNumbers.swift" && word == "UserDefaults") || (name == "IamrealApp.swift" && word == "UIPasteboard") {
+                    allowed += 1
+                    continue
+                }
+                XCTFail("\(name) uses \(word)")
+            }
+        }
+        XCTAssertGreaterThan(allowed, 0)
+    }
+
+    /// The Swift sources of the app, by file name.
+    private func appSources() throws -> [(String, String)] {
+        let directory = Repository.root.appendingPathComponent("ios/App")
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }.sorted()
+        XCTAssertGreaterThan(names.count, 8)
+        return try names.map { ($0, try Repository.text("ios/App/\($0)")) }
     }
 }

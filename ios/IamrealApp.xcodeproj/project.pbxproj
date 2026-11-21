@@ -13,6 +13,7 @@
 		1A0000000000000000000010 /* card_proof_rs4096.vk in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000008 /* card_proof_rs4096.vk */; };
 		1A0000000000000000000011 /* bn254_g1_compressed_2p18.dat in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000009 /* bn254_g1_compressed_2p18.dat */; };
 		1A0000000000000000000012 /* bn254_g2.dat in Resources */ = {isa = PBXBuildFile; fileRef = 1A000000000000000000000A /* bn254_g2.dat */; };
+		1A0000000000000000000031 /* card-proof.json in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000030 /* card-proof.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 		1A0000000000000000000008 /* card_proof_rs4096.vk */ = {isa = PBXFileReference; lastKnownFileType = file; name = card_proof_rs4096.vk; path = ../verifier/vk/card_proof_rs4096.vk; sourceTree = SOURCE_ROOT; };
 		1A0000000000000000000009 /* bn254_g1_compressed_2p18.dat */ = {isa = PBXFileReference; lastKnownFileType = file; name = bn254_g1_compressed_2p18.dat; path = ../device-core/vendor/crs/bn254_g1_compressed_2p18.dat; sourceTree = SOURCE_ROOT; };
 		1A000000000000000000000A /* bn254_g2.dat */ = {isa = PBXFileReference; lastKnownFileType = file; name = bn254_g2.dat; path = ../device-core/vendor/crs/bn254_g2.dat; sourceTree = SOURCE_ROOT; };
+		1A0000000000000000000030 /* card-proof.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "card-proof.json"; path = "../design/copy/card-proof.json"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -107,6 +109,7 @@
 				1A0000000000000000000008 /* card_proof_rs4096.vk */,
 				1A0000000000000000000009 /* bn254_g1_compressed_2p18.dat */,
 				1A000000000000000000000A /* bn254_g2.dat */,
+				1A0000000000000000000030 /* card-proof.json */,
 			);
 			name = Bundled;
 			sourceTree = "<group>";
@@ -200,6 +203,7 @@
 				1A0000000000000000000010 /* card_proof_rs4096.vk in Resources */,
 				1A0000000000000000000011 /* bn254_g1_compressed_2p18.dat in Resources */,
 				1A0000000000000000000012 /* bn254_g2.dat in Resources */,
+				1A0000000000000000000031 /* card-proof.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -313,6 +317,7 @@
 				OTHER_LDFLAGS = (
 					"$(IAMREAL_CORE_LIBRARY)",
 					"-lc++",
+					"$(IAMREAL_TESTING_LDFLAGS)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -336,6 +341,7 @@
 				OTHER_LDFLAGS = (
 					"$(IAMREAL_CORE_LIBRARY)",
 					"-lc++",
+					"$(IAMREAL_TESTING_LDFLAGS)",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -354,6 +360,7 @@
 				MARKETING_VERSION = 2026.11.20;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IamrealApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/IamrealApp";
 			};
 			name = Debug;
@@ -369,6 +376,7 @@
 				MARKETING_VERSION = 2026.11.20;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IAMREAL_BUNDLE_IDENTIFIER).tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/IamrealApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/IamrealApp";
 			};
 			name = Release;

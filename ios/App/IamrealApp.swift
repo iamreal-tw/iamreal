@@ -1,53 +1,48 @@
 import SwiftUI
+import UIKit
 
-/// The shell of the iOS app (issue #168): it shows that device-core/ is
-/// linked and answers. The card proof's screens replace ShellView.
+/// The iOS app: the card proof, six screens (CardProofView).
 @main
 struct IamrealApp: App {
+    @StateObject private var model = CardProofModel.ofThisBuild()
+
     var body: some Scene {
         WindowGroup {
-            ShellView()
+            // Under the tests of Tests/, which run inside the app, the app
+            // itself shows nothing and asks the test site for nothing: each
+            // test makes its own model, against a back end of its own.
+            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+                CardProofView(model: model)
+            }
         }
     }
 }
 
-/// The words on the screen, each as design/copy/ writes it
-/// (Tests/BuildTests.swift reads them there).
+extension CardProofModel {
+    /// The card proof of this build: the site and the roster of
+    /// AppEnvironment, the core's own session (MOICA's keys), the files
+    /// the app carries.
+    static func ofThisBuild() -> CardProofModel {
+        let flow = CardProofFlow.Dependencies(
+            roster: AppEnvironment.roster,
+            backend: HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles),
+            card: NoCardReader(),
+            clock: Date.init,
+            crlNumbers: StoredCRLNumbers(),
+            openSession: { try DeviceCore.Session(AppEnvironment.roster) },
+            proofFiles: BundledFile.proofFiles(for:))
+        return CardProofModel(CardProofModel.Dependencies(
+            flow: flow,
+            copy: Copy.bundled(),
+            site: AppEnvironment.site,
+            open: { UIApplication.shared.open($0) },
+            copyText: { UIPasteboard.general.string = $0 }))
+    }
+}
+
+/// The words on every screen that are not the card proof's: each as
+/// design/copy/ writes it (Tests/BuildTests.swift reads them there).
 enum ScreenCopy {
     /// design/copy/test-site.md: the mark of the test roster.
     static let testRoster = "測試名冊"
-}
-
-/// The mark of the test roster, the two hosts this build talks to, then the
-/// names of three functions of the core, each with the value it returned.
-/// The names are identifiers of device-core/include/iamreal_device_core.h,
-/// not sentences.
-struct ShellView: View {
-    @State private var report: CoreReport?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(ScreenCopy.testRoster).font(.headline)
-            Text(AppEnvironment.site.host ?? "-").font(.body.monospaced())
-            Text(AppEnvironment.publicFiles.host ?? "-").font(.body.monospaced())
-            if let report {
-                row("idc_abi_version", "\(report.abiVersion)")
-                row("idc_self_check", "\(report.selfCheckFailure?.code ?? IDC_OK)")
-                row("idc_scope_string", report.scopeString ?? "-")
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .task {
-            report = await Task.detached(priority: .userInitiated) { CoreReport.make() }.value
-        }
-    }
-
-    private func row(_ function: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(function).font(.caption.monospaced()).foregroundColor(.secondary)
-            Text(value).font(.body.monospaced()).accessibilityIdentifier(function)
-        }
-    }
 }
