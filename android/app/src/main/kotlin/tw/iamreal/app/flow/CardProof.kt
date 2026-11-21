@@ -588,16 +588,17 @@ class CardProof(private val deps: Deps) {
                 fail(Stop.server(e))
             }
             live()
-            // In its one spelling, or it is not a challenge.
-            code = try {
-                DeviceCore.declarationCode(accounts, challenge.toByteArray())
-            } catch (e: DeviceCoreException) {
-                fail(Stop("server", mapOf("code" to "challenge_malformed")))
+            // In its one spelling and dated today by the phone's clock: the record is dated the challenge's date.
+            // Midnight may have passed while the server answered: the core checks the date conditions again then.
+            val taken = answer(DeviceCore.sessionCheckChallenge(session, nowSeconds(), challenge.toByteArray()))
+            if (!taken.getBoolean("ok")) {
+                when (taken.getString("problem")) {
+                    "challenge_malformed" -> fail(Stop("server", mapOf("code" to "challenge_malformed")))
+                    "challenge_not_today" -> fail(Stop("date_mismatch"))
+                    else -> fail(Stop.date(taken))
+                }
             }
-            // The record is dated the challenge's date: it must be today's by the phone's clock.
-            if (!challenge.startsWith(today() + ".")) fail(Stop("date_mismatch"))
-            // Midnight may have passed while the server answered.
-            checkDate()
+            code = DeviceCore.declarationCode(accounts, challenge.toByteArray())
             sameAsShown()
         } catch (e: DeviceCoreException) {
             fail(Stop.core(e))

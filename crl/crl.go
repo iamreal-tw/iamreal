@@ -42,7 +42,10 @@ type CRL struct {
 	// CRL can carry.
 	HasNextUpdate bool
 	Entries       []Entry
-	Extensions    []Extension
+	// Extensions holds the CRL's extensions, but no more than
+	// MaxExtensions+1: a CRL with more is not usable, and Parse keeps no
+	// more than it needs to tell.
+	Extensions []Extension
 }
 
 // Entry is one element of revokedCertificates.
@@ -51,7 +54,9 @@ type Entry struct {
 	// length, exactly as encoded.
 	Serial         []byte
 	RevocationDate time.Time
-	Extensions     []Extension
+	// Extensions holds the entry's extensions, but no more than
+	// MaxExtensions+1, as CRL.Extensions.
+	Extensions []Extension
 }
 
 // Extension is one extension of the CRL or of an entry.
@@ -162,21 +167,62 @@ func Parse(der []byte) (*CRL, error) {
 	return c, nil
 }
 
+// readTime reads a time as RFC 5280 spells it (spec/revocation-tree.md,
+// "Times"): a UTCTime YYMMDDHHMMSSZ, whose years 50 to 99 are 19xx and 00
+// to 49 are 20xx, or a GeneralizedTime YYYYMMDDHHMMSSZ, of a time that
+// exists. Anything else, an offset or a missing second included, is an
+// error. Go's cryptobyte reads more than these, so it is not used here.
 func readTime(s *cryptobyte.String) (time.Time, error) {
-	var t time.Time
+	var text cryptobyte.String
+	yearDigits := 0
 	switch {
 	case s.PeekASN1Tag(cbasn1.UTCTime):
-		if !s.ReadASN1UTCTime(&t) {
-			return t, errors.New("malformed UTCTime")
+		yearDigits = 2
+		if !s.ReadASN1(&text, cbasn1.UTCTime) {
+			return time.Time{}, errors.New("malformed UTCTime")
 		}
 	case s.PeekASN1Tag(cbasn1.GeneralizedTime):
-		if !s.ReadASN1GeneralizedTime(&t) {
-			return t, errors.New("malformed GeneralizedTime")
+		yearDigits = 4
+		if !s.ReadASN1(&text, cbasn1.GeneralizedTime) {
+			return time.Time{}, errors.New("malformed GeneralizedTime")
 		}
 	default:
-		return t, errors.New("not a time")
+		return time.Time{}, errors.New("not a time")
 	}
-	return t.UTC(), nil
+	digits := yearDigits + 10
+	if len(text) != digits+1 || text[digits] != 'Z' {
+		return time.Time{}, errors.New("a time not spelled YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ")
+	}
+	n := make([]int, 0, 6)
+	for i := 0; i < digits; {
+		width := 2
+		if i == 0 {
+			width = yearDigits
+		}
+		v := 0
+		for _, c := range text[i : i+width] {
+			if c < '0' || c > '9' {
+				return time.Time{}, errors.New("a time with a character that is not a digit")
+			}
+			v = v*10 + int(c-'0')
+		}
+		n = append(n, v)
+		i += width
+	}
+	year, month, day, hour, minute, second := n[0], n[1], n[2], n[3], n[4], n[5]
+	if yearDigits == 2 {
+		if year >= 50 {
+			year += 1900
+		} else {
+			year += 2000
+		}
+	}
+	t := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.UTC)
+	// time.Date carries what is out of range into the next field.
+	if t.Year() != year || int(t.Month()) != month || t.Day() != day || t.Hour() != hour || t.Minute() != minute || t.Second() != second {
+		return time.Time{}, errors.New("no such time")
+	}
+	return t, nil
 }
 
 func readEntry(s *cryptobyte.String) (Entry, error) {
@@ -204,7 +250,12 @@ func readEntry(s *cryptobyte.String) (Entry, error) {
 	return e, nil
 }
 
+// MaxExtensions is the most extensions the CRL, and each entry, may have
+// (spec/revocation-tree.md, "Which CRLs").
+const MaxExtensions = 16
+
 // readExtensions reads Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension.
+// It checks every extension, but keeps only the first MaxExtensions+1.
 func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 	var seq cryptobyte.String
 	if !s.ReadASN1(&seq, cbasn1.SEQUENCE) || seq.Empty() {
@@ -226,7 +277,9 @@ func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 			return nil, errors.New("malformed Extension")
 		}
 		x.Value = value
-		out = append(out, x)
+		if len(out) <= MaxExtensions {
+			out = append(out, x)
+		}
 	}
 	return out, nil
 }
@@ -253,6 +306,8 @@ const (
 	// The signature does not verify under the issuer key (in the index: under
 	// neither G2 nor G3).
 	ReasonSignature = "not_usable_signature"
+	// More than MaxExtensions extensions, in the CRL or in an entry.
+	ReasonTooManyExtensions = "not_usable_too_many_extensions"
 	// An extension appears twice, in the CRL or in an entry.
 	ReasonDuplicateExtension = "not_usable_duplicate_extension"
 	// A critical extension, whichever it is, in the CRL or in an entry.
@@ -271,10 +326,11 @@ const (
 )
 
 // Reasons lists the reason codes in the order Check applies them to the
-// CRL. ReasonDuplicateExtension, ReasonCriticalExtension and ReasonSerial
-// also apply to each entry, after ReasonCRLNumber (see Check).
+// CRL. ReasonTooManyExtensions, ReasonDuplicateExtension,
+// ReasonCriticalExtension and ReasonSerial also apply to each entry, after
+// ReasonCRLNumber (see Check).
 var Reasons = []string{
-	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonDuplicateExtension,
+	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonTooManyExtensions, ReasonDuplicateExtension,
 	ReasonCriticalExtension, ReasonDelta, ReasonPartitioned, ReasonCRLNumber,
 	ReasonSerial, ReasonCollision,
 }
@@ -303,13 +359,15 @@ var sha256WithRSANull = func() []byte {
 //
 //   - both AlgorithmIdentifiers are sha256WithRSAEncryption with NULL
 //     parameters, and the signature verifies under issuerKey;
+//   - the CRL has at most MaxExtensions extensions;
 //   - no extension of the CRL appears twice;
 //   - no extension of the CRL is critical, whichever it is;
 //   - no deltaCRLIndicator and no issuingDistributionPoint, critical or not;
 //   - a cRLNumber holding a non-negative INTEGER;
-//   - entry by entry, the first entry with a problem deciding: no extension
-//     of the entry appears twice, none is critical, and the serial number
-//     gives a key (KeyFromSerial), in this order;
+//   - entry by entry, the first entry with a problem deciding: at most
+//     MaxExtensions extensions, no extension of the entry appears twice,
+//     none is critical, and the serial number gives a key (KeyFromSerial),
+//     in this order;
 //   - no two different keys share their lowest 127 bits. The same serial
 //     number listed twice is one key.
 func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
@@ -384,10 +442,13 @@ func (c *CRL) signedBy(key *rsa.PublicKey) bool {
 }
 
 // checkExtensions checks the extensions of the CRL or of one entry: first
-// that none appears twice, then that none is critical. No extension may be
-// critical, not even one these rules read (spec/revocation-tree.md, "Which
-// CRLs").
+// that there are at most MaxExtensions, then that none appears twice, then
+// that none is critical. No extension may be critical, not even one these
+// rules read (spec/revocation-tree.md, "Which CRLs").
 func checkExtensions(exts []Extension, where string) error {
+	if len(exts) > MaxExtensions {
+		return unusable(ReasonTooManyExtensions, "%s: more than %d extensions", where, MaxExtensions)
+	}
 	for i, x := range exts {
 		for _, y := range exts[:i] {
 			if x.ID.Equal(y.ID) {
@@ -403,14 +464,30 @@ func checkExtensions(exts []Extension, where string) error {
 	return nil
 }
 
+// MaxCRLNumberBytes is the most content bytes a cRLNumber may have, a
+// leading 00 included (RFC 5280 section 5.2.3).
+const MaxCRLNumberBytes = 20
+
 // Number returns the cRLNumber extension, or nil if there is none. It is an
-// error if the extension does not hold a non-negative INTEGER in DER.
+// error if the extension does not hold a non-negative INTEGER in DER of at
+// most MaxCRLNumberBytes content bytes, or if the CRL has more than
+// MaxExtensions extensions (Parse does not keep them all). The length is
+// checked before the bytes become a number, so a long one costs no more
+// than reading it.
 func (c *CRL) Number() (*big.Int, error) {
+	if len(c.Extensions) > MaxExtensions {
+		return nil, fmt.Errorf("crl: more than %d extensions", MaxExtensions)
+	}
 	for _, x := range c.Extensions {
 		if !x.ID.Equal(oidCRLNumber) {
 			continue
 		}
 		s := cryptobyte.String(x.Value)
+		peek := s
+		var content cryptobyte.String
+		if !peek.ReadASN1(&content, cbasn1.INTEGER) || len(content) > MaxCRLNumberBytes {
+			return nil, errors.New("crl: malformed cRLNumber, or longer than 20 bytes")
+		}
 		n := new(big.Int)
 		if !s.ReadASN1Integer(n) || !s.Empty() || n.Sign() < 0 {
 			return nil, errors.New("crl: malformed cRLNumber")

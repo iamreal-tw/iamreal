@@ -83,7 +83,7 @@ import { ArtifactError, CIRCUITS } from "./prover/artifacts.ts";
 import { circuitInputs, circuitOf, expectedPublicInputs, wipeInputs } from "./prover/inputs.ts";
 import type { Prover, ThreadMode } from "./prover/prover.ts";
 import { PROOF_BYTES } from "./prover/prover.ts";
-import { parseChallenge, currentTime } from "iamreal-protocol/challenge.ts";
+import { checkChallenge, currentTime } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
 import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/roster-rules.ts";
@@ -854,11 +854,14 @@ export class CardProofFlow {
       this.fail(toStop(e));
     }
     this.live();
-    const challengeDay = parseChallenge(challenge);
-    if (challengeDay === null) this.fail({ code: "challenge_malformed" });
     const today = this.today();
-    if (challengeDay !== today) {
-      this.fail({ code: "challenge_not_today", challengeDate: formatDay(challengeDay), today: formatDay(today) });
+    const checked = checkChallenge(challenge, today);
+    if (!checked.ok) {
+      this.fail(
+        checked.problem === "challenge_malformed"
+          ? { code: "challenge_malformed" }
+          : { code: "challenge_not_today", challengeDate: formatDay(checked.challengeDay), today: formatDay(checked.today) },
+      );
     }
     // Midnight may have passed while the server answered.
     this.checkStillValid(today);

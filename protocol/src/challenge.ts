@@ -18,6 +18,25 @@ export function parseChallenge(challenge: unknown): Day | null {
   return parseDay(challenge.slice(0, 10));
 }
 
+/** The device's answer to a challenge the server issued (spec/challenge.md, "The cardholder's device"). */
+export type ChallengeCheck =
+  | { ok: true; day: Day }
+  | { ok: false; problem: "challenge_malformed" }
+  | { ok: false; problem: "challenge_not_today"; challengeDay: Day; today: Day };
+
+/**
+ * The device's check of a challenge the server issued: in its one spelling,
+ * and dated `today`, the date in Taiwan by the device's clock. A challenge
+ * that is not in its one spelling is `challenge_malformed`, whatever date it
+ * starts with.
+ */
+export function checkChallenge(challenge: unknown, today: Day): ChallengeCheck {
+  const day = parseChallenge(challenge);
+  if (day === null) return { ok: false, problem: "challenge_malformed" };
+  if (day !== today) return { ok: false, problem: "challenge_not_today", challengeDay: day, today };
+  return { ok: true, day };
+}
+
 /**
  * `current_time` for a date: the decimal integer YYMMDD155959, the last
  * second of that date in Taiwan written in UTC.

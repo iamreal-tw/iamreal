@@ -31,7 +31,7 @@ extern "C" {
 #endif
 
 /* The version of these functions. It goes up when one changes or goes away. */
-#define IDC_ABI_VERSION 1
+#define IDC_ABI_VERSION 2
 
 /* The function did what it is for. */
 #define IDC_OK 0
@@ -209,8 +209,12 @@ int32_t idc_records_response(const uint8_t *response, size_t response_len,
  *                                        the date has changed
  *   idc_session_card_state_request       only after 1 to 4 all passed,
  *                                        on the date they hold for
- *   idc_session_records_request          likewise, on the date of the
- *                                        challenge: the proof
+ *   idc_session_check_challenge          only after 1 to 4 all passed:
+ *                                        the challenge the server issued
+ *                                        is dated today (moves the date
+ *                                        they hold for to today)
+ *   idc_session_records_request          likewise, for the challenge
+ *                                        taken: the proof
  *
  * Step 1 again starts the session over; step 2 again forgets the tree.
  *
@@ -223,7 +227,7 @@ int32_t idc_records_response(const uint8_t *response, size_t response_len,
  * `now` is the device's clock, in seconds since 1970-01-01T00:00:00Z; the
  * core takes the date in Taiwan from it. What a session checked holds for
  * one date: the date of step 1, which the CRL is checked on too, until
- * idc_session_check_date moves it. IDC_ERR_ARGUMENT for a number that
+ * idc_session_check_date or idc_session_check_challenge moves it. IDC_ERR_ARGUMENT for a number that
  * names no session, and for a clock outside the years 2000 to 2049: no
  * certificate is valid then, the app says to check the phone's clock, and
  * the session starts over (the certificates added are overwritten).
@@ -320,6 +324,28 @@ int32_t idc_session_check_artifacts(idc_session session,
  * IDC_ERR_REFUSED before step 1 passed. */
 int32_t idc_session_check_date(idc_session session, int64_t now, idc_buf *out);
 
+/* The challenge the server issued (spec/challenge.md, "The cardholder's
+ * device"), as soon as the app receives it: in its one spelling, and dated
+ * today in Taiwan by `now`. JSON in *out:
+ *   {"ok":true}                     the session takes it; the proof is made
+ *                                   for this challenge only
+ *   {"ok":false,"problem":"challenge_malformed"}
+ *   {"ok":false,"problem":"challenge_not_today","challenge_date":"YYYY-MM-DD","today":"YYYY-MM-DD"}
+ * When today is not the date the session's checks hold for (midnight
+ * passed since), the date conditions of idc_session_check_date are checked
+ * on today first: if they do not hold, its answers ("expired",
+ * "not_yet_valid", "crl_stale"), and the session starts over; if they
+ * hold, the session's checks hold for today from then on.
+ * The session keeps a copy of the challenge it took (it is not secret).
+ * Any call forgets the challenge taken before, and so does doing step 2 or
+ * step 4 again, or a records request refused for its files. With "ok": false the card
+ * proof stops; the app says why and does not tell the server.
+ * IDC_ERR_REFUSED unless steps 1 to 4 all passed. IDC_ERR_ARGUMENT for a
+ * clock outside the years 2000 to 2049, and the session starts over. */
+int32_t idc_session_check_challenge(idc_session session, int64_t now,
+                                    const uint8_t *challenge, size_t challenge_len,
+                                    idc_buf *out);
+
 /* The body of POST /api/v1/card-state, {"scope_string":"...","scoped_id":"..."},
  * in *out: the scoped ID computed from the card's signature over the scope
  * string of the session's roster (256 bytes).
@@ -342,7 +368,8 @@ int32_t idc_session_card_state_request(idc_session session, int64_t now,
  *                 common reference string to Barretenberg, which keeps it.
  *   accounts_json: the whole list the card declares, as for
  *                 idc_declaration_code
- *   challenge:    the challenge as the server issued it
+ *   challenge:    the challenge as the server issued it, which
+ *                 idc_session_check_challenge took
  *   scope_signature, declaration_code_signature:
  *                 the card's signatures over idc_scope_string and over
  *                 idc_declaration_code of this list and challenge (256
@@ -353,9 +380,10 @@ int32_t idc_session_card_state_request(idc_session session, int64_t now,
  * proof's public inputs with the ones it expects and returns nothing if
  * any differs.
  *
- * IDC_ERR_REFUSED unless steps 1 to 4 all passed and the challenge's date
- * is the date they hold for (idc_session_check_date): the record is dated
- * the challenge's date, so this function takes no clock.
+ * IDC_ERR_REFUSED unless steps 1 to 4 all passed, the challenge is the
+ * one idc_session_check_challenge took last, and its date is the date the
+ * checks hold for (idc_session_check_date after it moves them): the record
+ * is dated the challenge's date, so this function takes no clock.
  * IDC_ERR_INPUT when a file is not the one written into the core (step 4
  * must then pass again), the list or the challenge is not what
  * idc_declaration_code takes, a signature is not the card's over its

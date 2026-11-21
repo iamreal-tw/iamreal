@@ -6,9 +6,11 @@
 // crl/testdata/.
 //
 // MOICA's G2 CRL has about 340,000 entries in 17 MB. Nothing here makes an
-// object per entry (#26): the file is walked as bytes, and each serial
-// number's key goes straight into one Uint32Array. Duplicates and keys that
-// collide are found by sorting that array.
+// object per entry (#26): the file is walked as bytes, and once the
+// signature verifies, each serial number's key goes straight into one
+// Uint32Array. Duplicates and keys that collide are found by sorting that
+// array. A file the issuer did not sign costs little more memory than its
+// bytes, whatever it holds (#120): the archive keeps such files too.
 import { bytesOfHex, equalBytes, hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDate, formatTime, secondsOfCivil } from "./crl-time.ts";
 import type { IssuerKey, IssuerName } from "./issuers.ts";
@@ -18,6 +20,7 @@ export type UnusableReason =
   | "not_usable_der"
   | "not_usable_algorithm"
   | "not_usable_signature"
+  | "not_usable_too_many_extensions"
   | "not_usable_duplicate_extension"
   | "not_usable_critical_extension"
   | "not_usable_delta"
@@ -91,6 +94,7 @@ const OID_DELTA_CRL_INDICATOR = Uint8Array.from([0x55, 0x1d, 0x1b]);
 const OID_ISSUING_DISTRIBUTION_POINT = Uint8Array.from([0x55, 0x1d, 0x1c]);
 
 const MAX_SERIAL_BYTES = 20;
+const MAX_CRL_NUMBER_BYTES = 20;
 
 // The reader's cursor: what the last call of `read` (or `expect`) found.
 // `lastTag` is that element's tag, and its content is
@@ -99,7 +103,7 @@ const MAX_SERIAL_BYTES = 20;
 // one must allocate nothing (#26).
 //
 // So the order of calls matters: every `read` overwrites all three, and so
-// does everything that reads (`expect`, `extensions`, `nonNegativeInteger`).
+// does everything that reads (`expect`, `extensions`, `crlNumberOf`).
 // Code that needs an element's bounds after reading another copies them
 // into constants first (`const [serialFrom, serialTo] = [lastFrom, lastTo]`).
 // `time` reads nothing: it interprets the element last read.
@@ -150,31 +154,23 @@ const two = (der: Uint8Array, at: number): number => digit(der, at) * 10 + digit
 
 /**
  * The UTCTime or GeneralizedTime last read, as seconds since the epoch.
- * The spellings read are those the Go crl/ reads, which are a little more
- * than DER: UTCTime with or without seconds, and either type with `Z` or
- * with an offset `±hhmm` that is not zero. Anything else is not DER.
- * crl/testdata/times/ has a file for each, with what both give. The spec
- * does not say yet which spellings are accepted; #120 will narrow them.
+ * Only the spellings of RFC 5280 are read (spec/revocation-tree.md,
+ * "Times"): UTCTime `YYMMDDHHMMSSZ`, whose years 50 to 99 are 19xx and 00 to
+ * 49 are 20xx, and GeneralizedTime `YYYYMMDDHHMMSSZ`, of a time that exists.
+ * Anything else is not DER. crl/testdata/times/ has a file for each kind.
  */
 function time(der: Uint8Array): number {
   let at = lastFrom;
   let year: number;
-  let digits: number;
-  // How many digits the time has, from the first byte that is not one.
-  let n = 0;
-  while (at + n < lastTo && der[at + n]! >= 0x30 && der[at + n]! <= 0x39) n++;
   if (lastTag === TAG_UTC_TIME) {
-    if (n !== 10 && n !== 12) notDer();
+    if (lastTo - at !== 13) notDer();
     year = two(der, at);
-    // Go reads 69 to 99 as 19xx, and cryptobyte moves 2050 to 2068 back a century.
     year += year >= 50 ? 1900 : 2000;
     at += 2;
-    digits = n - 2;
   } else if (lastTag === TAG_GENERALIZED_TIME) {
-    if (n !== 14) notDer();
+    if (lastTo - at !== 15) notDer();
     year = two(der, at) * 100 + two(der, at + 2);
     at += 4;
-    digits = 10;
   } else {
     return notDer();
   }
@@ -182,31 +178,25 @@ function time(der: Uint8Array): number {
   const day = two(der, at + 2);
   const hour = two(der, at + 4);
   const minute = two(der, at + 6);
-  const second = digits === 10 ? two(der, at + 8) : 0;
-  at += digits;
-  let offset = 0;
-  if (lastTo - at === 1 && der[at] === 0x5a) {
-    // Z
-  } else if (lastTo - at === 5 && (der[at] === 0x2b || der[at] === 0x2d)) {
-    const hh = two(der, at + 1);
-    const mm = two(der, at + 3);
-    // An offset of zero is written Z; Go takes up to 24 hours.
-    if (hh > 24 || mm > 59 || (hh === 0 && mm === 0)) notDer();
-    offset = (hh * 60 + mm) * 60 * (der[at] === 0x2b ? 1 : -1);
-  } else {
-    notDer();
-  }
+  const second = two(der, at + 8);
+  if (der[at + 10] !== 0x5a) notDer(); // Z
   const seconds = secondsOfCivil(year, month, day, hour, minute, second);
   if (seconds === undefined) return notDer();
-  return seconds - offset;
+  return seconds;
 }
+
+/** The most extensions the CRL, and each entry, may have (spec/revocation-tree.md, "Which CRLs"). */
+const MAX_EXTENSIONS = 16;
 
 // What the last call of `extensions` found, five numbers per extension:
 // where the OID's content starts and ends, whether it is critical (1 or 0),
-// and where the content of extnValue starts and ends. One array, emptied
-// and filled again by each call, for the same reason as the cursor above;
-// `extensionProblem` and `isOid` speak of the extensions of that last call.
+// and where the content of extnValue starts and ends. Only the first
+// MAX_EXTENSIONS + 1 are kept; `lastExtensionCount` is how many there were.
+// One array, emptied and filled again by each call, for the same reason as
+// the cursor above; `extensionProblem` and `isOid` speak of the extensions
+// of that last call.
 let lastExtensions: number[] = [];
+let lastExtensionCount = 0;
 
 /** Reads the `Extensions` that start at `at` into `lastExtensions`, replacing what was there; returns where the next element starts. */
 function extensions(der: Uint8Array, at: number, limit: number): number {
@@ -215,6 +205,7 @@ function extensions(der: Uint8Array, at: number, limit: number): number {
   let p = lastFrom;
   if (p === end) notDer(); // SIZE (1..MAX)
   lastExtensions.length = 0;
+  lastExtensionCount = 0;
   while (p < end) {
     p = expect(der, p, end, TAG_SEQUENCE);
     const extensionEnd = lastTo;
@@ -230,7 +221,8 @@ function extensions(der: Uint8Array, at: number, limit: number): number {
     }
     q = expect(der, q, extensionEnd, TAG_OCTET_STRING);
     if (q !== extensionEnd) notDer();
-    lastExtensions.push(oidFrom, oidTo, critical, lastFrom, lastTo);
+    // Every extension is read, so that one that is not DER makes the file not DER; no more are kept than tell there are too many.
+    if (lastExtensionCount++ <= MAX_EXTENSIONS) lastExtensions.push(oidFrom, oidTo, critical, lastFrom, lastTo);
   }
   return next;
 }
@@ -253,18 +245,15 @@ function checkOid(der: Uint8Array, start: number, end: number): void {
 const isOid = (der: Uint8Array, i: number, oid: Uint8Array): boolean => equalBytes(der.subarray(lastExtensions[i]!, lastExtensions[i + 1]!), oid);
 
 /**
- * Of the extensions last read: one that appears twice comes before one
- * that is critical. A file may hold a great many extensions, so those that
- * appear twice are found with a set, not by comparing every pair.
+ * Of the extensions last read: too many comes before one that appears
+ * twice, which comes before one that is critical. With at most 16, every
+ * pair is compared.
  */
 function extensionProblem(der: Uint8Array): UnusableReason | undefined {
-  const count = lastExtensions.length / 5;
-  if (count > 1) {
-    const seen = new Set<string>();
-    for (let i = 0; i < lastExtensions.length; i += 5) {
-      const oid = hexOf(der.subarray(lastExtensions[i]!, lastExtensions[i + 1]!));
-      if (seen.has(oid)) return "not_usable_duplicate_extension";
-      seen.add(oid);
+  if (lastExtensionCount > MAX_EXTENSIONS) return "not_usable_too_many_extensions";
+  for (let i = 0; i < lastExtensions.length; i += 5) {
+    for (let j = 0; j < i; j += 5) {
+      if (equalBytes(der.subarray(lastExtensions[i]!, lastExtensions[i + 1]!), der.subarray(lastExtensions[j]!, lastExtensions[j + 1]!))) return "not_usable_duplicate_extension";
     }
   }
   for (let i = 0; i < lastExtensions.length; i += 5) if (lastExtensions[i + 2] === 1) return "not_usable_critical_extension";
@@ -272,26 +261,22 @@ function extensionProblem(der: Uint8Array): UnusableReason | undefined {
 }
 
 /**
- * The content of an extnValue as a non-negative INTEGER in DER, in decimal;
- * `undefined` if it is not one. There is no limit to its length, as in
- * crl/: the bytes become a BigInt through their hexadecimal digits, which
- * takes time in proportion to their number (adding them one by one would
- * take the square of it).
+ * The content of a cRLNumber's extnValue as a non-negative INTEGER in DER of
+ * at most 20 content bytes, a leading 00 included (RFC 5280 section 5.2.3),
+ * in decimal; `undefined` if it is not one. The length is checked before
+ * the bytes become a number, so a longer one costs nothing.
  */
-function nonNegativeInteger(der: Uint8Array, start: number, end: number): string | undefined {
+function crlNumberOf(der: Uint8Array, start: number, end: number): string | undefined {
   try {
     if (expect(der, start, end, TAG_INTEGER) !== end) return undefined;
   } catch {
     return undefined;
   }
   const length = lastTo - lastFrom;
-  if (length === 0) return undefined;
+  if (length === 0 || length > MAX_CRL_NUMBER_BYTES) return undefined;
   if (length > 1 && ((der[lastFrom] === 0x00 && (der[lastFrom + 1]! & 0x80) === 0) || (der[lastFrom] === 0xff && (der[lastFrom + 1]! & 0x80) !== 0))) return undefined;
   if (der[lastFrom]! & 0x80) return undefined;
-  // In pieces, so that no single string of digits is built a character at a time.
-  const pieces: string[] = [];
-  for (let p = lastFrom; p < lastTo; p += 4096) pieces.push(hexOf(der.subarray(p, Math.min(p + 4096, lastTo))));
-  return BigInt(`0x${pieces.join("")}`).toString();
+  return BigInt(`0x${hexOf(der.subarray(lastFrom, lastTo))}`).toString();
 }
 
 /** The bits of a word in the opposite order. */
@@ -304,14 +289,17 @@ export function reversed(x: number): number {
 }
 
 /**
- * Writes the key of the serial number whose content bytes are
- * `der[from..to)` as key `n` of `words`. Returns false if it gives no key:
- * empty, negative, not in its shortest form, or more than 20 bytes.
+ * Whether the serial number whose content bytes are `der[from..to)` gives a
+ * key: not empty, not negative, in its shortest form, at most 20 bytes.
  */
-function writeKey(der: Uint8Array, from: number, to: number, words: Uint32Array, n: number): boolean {
+function givesKey(der: Uint8Array, from: number, to: number): boolean {
   const length = to - from;
   if (length === 0 || length > MAX_SERIAL_BYTES || der[from]! & 0x80) return false;
-  if (length > 1 && der[from] === 0 && (der[from + 1]! & 0x80) === 0) return false;
+  return !(length > 1 && der[from] === 0 && (der[from + 1]! & 0x80) === 0);
+}
+
+/** Writes the key of the serial number whose content bytes are `der[from..to)`, which gives one, as key `n` of `words`. */
+function writeKey(der: Uint8Array, from: number, to: number, words: Uint32Array, n: number): void {
   const base = n * KEY_WORDS;
   for (let w = 0; w < KEY_WORDS; w++) {
     // Bits 32w to 32w + 31: the four bytes that end 4w bytes before the end.
@@ -322,7 +310,21 @@ function writeKey(der: Uint8Array, from: number, to: number, words: Uint32Array,
     }
     words[base + w] = w < 4 ? reversed(word >>> 0) : word >>> 0;
   }
-  return true;
+}
+
+/**
+ * The keys of the entries of `revokedCertificates`, whose content is
+ * `der[from..to)`, one per entry in the file's order: for a file already
+ * read whole (`parse`), so nothing here is checked again.
+ */
+function keysOf(der: Uint8Array, from: number, to: number, entries: number): Uint32Array {
+  const keys = new Uint32Array(entries * KEY_WORDS);
+  for (let q = from, n = 0; q < to; n++) {
+    q = read(der, q, to);
+    read(der, lastFrom, lastTo);
+    writeKey(der, lastFrom, lastTo, keys, n);
+  }
+  return keys;
 }
 
 /**
@@ -414,7 +416,8 @@ export async function readCrl(der: Uint8Array, issuers: readonly IssuerKey[]): P
   else if (issuer === undefined) reason = "not_usable_signature";
   else if (parsed.problem !== undefined) reason = parsed.problem;
   else {
-    keys = sortKeys(parsed.keys, parsed.entries);
+    // Only now: a file the issuer did not sign gets no array of keys, so reading one costs little more memory than its bytes.
+    keys = sortKeys(keysOf(der, parsed.revokedFrom, parsed.revokedTo, parsed.entries), parsed.entries);
     if (keys === undefined) reason = "not_usable_collision";
   }
   return { ...reading, reason, keys };
@@ -436,8 +439,9 @@ interface Parsed {
    * CRL's extensions, then entry by entry. Collisions are not looked for here.
    */
   readonly problem: UnusableReason | undefined;
-  /** One key per entry, in the file's order; complete only if `problem` is `undefined`. */
-  readonly keys: Uint32Array;
+  /** Where the content of `revokedCertificates` starts and ends; both 0 if there is none. */
+  readonly revokedFrom: number;
+  readonly revokedTo: number;
 }
 
 /** Reads a DER CertificateList (RFC 5280 section 5) strictly; throws NotDer for anything else. */
@@ -475,16 +479,14 @@ function parse(der: Uint8Array): Parsed {
   }
 
   let entries = 0;
-  let keys = new Uint32Array(0);
+  let revokedFrom = 0;
+  let revokedTo = 0;
   let entryProblem: UnusableReason | undefined;
   if (peek(der, p, tbsEnd, TAG_SEQUENCE)) {
     p = read(der, p, tbsEnd);
+    [revokedFrom, revokedTo] = [lastFrom, lastTo];
     const [listFrom, revokedEnd] = [lastFrom, lastTo];
-    // Counted first, so that the keys get one array of the right size.
-    for (let q = listFrom; q < revokedEnd; q = read(der, q, revokedEnd)) entries++;
-    keys = new Uint32Array(entries * KEY_WORDS);
-    let n = 0;
-    for (let q = listFrom; q < revokedEnd; n++) {
+    for (let q = listFrom; q < revokedEnd; entries++) {
       q = expect(der, q, revokedEnd, TAG_SEQUENCE);
       const entryEnd = lastTo;
       let r = expect(der, lastFrom, entryEnd, TAG_INTEGER);
@@ -492,12 +494,13 @@ function parse(der: Uint8Array): Parsed {
       r = read(der, r, entryEnd);
       time(der); // revocationDate
       lastExtensions.length = 0;
+      lastExtensionCount = 0;
       if (peek(der, r, entryEnd, TAG_SEQUENCE)) r = extensions(der, r, entryEnd);
       if (r !== entryEnd) notDer();
       // The first entry with a problem decides; within it, its extensions come before its serial number.
       if (entryProblem === undefined) {
         entryProblem = extensionProblem(der);
-        if (!writeKey(der, serialFrom, serialTo, keys, n)) entryProblem ??= "not_usable_serial";
+        if (!givesKey(der, serialFrom, serialTo)) entryProblem ??= "not_usable_serial";
       }
     }
   }
@@ -505,6 +508,7 @@ function parse(der: Uint8Array): Parsed {
   let problem: UnusableReason | undefined;
   let crlNumber: string | undefined;
   lastExtensions = [];
+  lastExtensionCount = 0;
   if (peek(der, p, tbsEnd, TAG_CONTEXT_0)) {
     if (version !== 2) notDer();
     p = read(der, p, tbsEnd);
@@ -516,9 +520,10 @@ function parse(der: Uint8Array): Parsed {
       if (problem === undefined && isOid(der, i, OID_DELTA_CRL_INDICATOR)) problem = "not_usable_delta";
       if (problem === undefined && isOid(der, i, OID_ISSUING_DISTRIBUTION_POINT)) problem = "not_usable_partitioned";
     }
-    for (let i = 0; i < lastExtensions.length; i += 5) {
+    // With more than 16 extensions not all are kept, so the index has no number (spec/revocation-tree.md, "Archive index").
+    for (let i = 0; lastExtensionCount <= MAX_EXTENSIONS && i < lastExtensions.length; i += 5) {
       if (!isOid(der, i, OID_CRL_NUMBER)) continue;
-      crlNumber = nonNegativeInteger(der, lastExtensions[i + 3]!, lastExtensions[i + 4]!);
+      crlNumber = crlNumberOf(der, lastExtensions[i + 3]!, lastExtensions[i + 4]!);
       break;
     }
   }
@@ -535,6 +540,7 @@ function parse(der: Uint8Array): Parsed {
     crlNumber,
     entries,
     problem,
-    keys,
+    revokedFrom,
+    revokedTo,
   };
 }

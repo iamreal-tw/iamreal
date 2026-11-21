@@ -2,7 +2,7 @@
 //! TypeScript tests read. What needs Poseidon2 is in prover/tests/.
 
 use iamreal_device_checks::base32;
-use iamreal_device_checks::challenge::{current_time, parse_challenge};
+use iamreal_device_checks::challenge::{check_challenge, current_time, parse_challenge};
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{
     Account, PreimageError, declaration_code, declaration_preimage,
@@ -99,6 +99,24 @@ fn challenge_json() {
             "invalid ({}) {challenge:?}",
             text(c, "reason")
         );
+    }
+}
+
+#[test]
+fn the_device_takes_a_challenge_dated_today_in_taiwan() {
+    let v = vectors("challenge.json");
+    for c in cases(&v, "device") {
+        let challenge = text(c, "challenge");
+        let today = Date::in_taiwan(c["now"].as_i64().unwrap()).unwrap();
+        assert_eq!(today.to_string(), text(c, "today"), "{}", text(c, "note"));
+        let result = match check_challenge(challenge.as_bytes(), today) {
+            Ok(date) => {
+                assert_eq!(date, today);
+                "ok"
+            }
+            Err(problem) => problem.code(),
+        };
+        assert_eq!(result, text(c, "result"), "{}", text(c, "note"));
     }
 }
 

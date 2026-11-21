@@ -1,0 +1,8 @@
+[package]
+name = "comparison"
+type = "lib"
+authors = [""]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+card_proof = { path = "../../lib" }

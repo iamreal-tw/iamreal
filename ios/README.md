@@ -22,7 +22,7 @@
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
-| `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；測試 app 的識別碼和環境 |
+| `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；兩種 build 的識別碼和測試網站的環境 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
 | `check-app.sh`、`check-app-test.sh` | 建置時的檢查，和它自己的測試 |
@@ -49,19 +49,22 @@
 - `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列、完成的畫面讀不出後台回報每個帳號記成什麼時的那一句；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
 - 上傳到 TestFlight（[#176](https://github.com/iamreal-tw/iamreal/issues/176)）
 
-主畫面上 app 的名稱是「島民證明 測試」（`design/copy/app.md`，第一版，Android 的測試 app 相同）；正式的名稱、測試 app 和正式 app 怎麼分，在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
+主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
 
 ## 環境在建置時寫死
 
-現在只有測試 app（ADR-0036）：
+同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支 iPhone 上。專案的兩個組態各做一種：
 
-| | 值 |
-|---|---|
-| 識別碼 | `tw.iamreal.app.test` |
-| 連哪裡 | `https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） |
-| 卡片簽的場合字串 | `iamreal-test:public:0`（核心的 `IDC_ROSTER_TEST`） |
+| | 商店的 build | 開發用 build |
+|---|---|---|
+| 組態 | Release | Debug |
+| 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev` |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 dev |
+| 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） | 同左，上線後也是 |
+| 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_ROSTER_TEST`） | 同左，上線後也是 |
+| 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳，工作流程還沒有：[#176](https://github.com/iamreal-tw/iamreal/issues/176)） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |
 
-專案的兩個組態（Debug、Release）都以 `Config/Test.xcconfig` 為底，所以每一個 build 都是測試 app。這個檔定識別碼和一個編譯條件 `IAMREAL_ENV_TEST`；`App/AppEnvironment.swift` 照編譯條件給網址和名冊，沒有條件就編不過。app 裡沒有切換環境的設定，後台也不能叫 app 換環境。
+兩個組態都以 `Config/Test.xcconfig` 為底：這個檔照組態定識別碼，並定一個編譯條件 `IAMREAL_ENV_TEST`；`App/AppEnvironment.swift` 照編譯條件給網址和名冊，沒有條件就編不過。名稱照組態寫在專案檔（`INFOPLIST_KEY_CFBundleDisplayName`）。app 裡沒有切換環境的設定，後台也不能叫 app 換環境。上線那天用一個 PR 讓 Release 改用正式網站的設定檔；正式網站的設定現在還沒有。
 
 ## 最低的 iOS 版本：15.0；只做 iPhone
 
@@ -111,7 +114,7 @@ xcodebuild test -project IamrealApp.xcodeproj -scheme IamrealApp \
 - `xcodebuild test` 建置 app、跑 `check-app.sh`、在模擬器上跑 `Tests/`。
 - 拉取請求的檢查（`.github/workflows/checks-ios.yml`）跑的就是上面的指令（它先 `rustup toolchain install` 裝 `rust-toolchain.toml` 的那一版），再用 `-configuration Release build` 建一次，只在改到 `ios/`、`device-core/`、它讀的檔（`.github/README.md` 列出來）或那個工作流程檔時跑。runner、Xcode、模擬器的來源在 `.github/README.md`。
 
-要在模擬器上看畫面：用 Xcode 打開 `IamrealApp.xcodeproj` 按執行，或 `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/IamrealApp.app` 再 `xcrun simctl launch booted tw.iamreal.app.test`。
+要在模擬器上看畫面：用 Xcode 打開 `IamrealApp.xcodeproj` 按執行，或 `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/IamrealApp.app` 再 `xcrun simctl launch booted tw.iamreal.app.dev`。
 
 ### 用假卡片過卡
 
@@ -151,7 +154,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 測試在模擬器裡跑，直接讀這個程式庫在 Mac 上的檔案（模擬器看得到 Mac 的磁碟），不複製。
 
 - `Tests/DeviceCoreTests.swift`：從 Swift 呼叫核心，對 `spec/vectors/scope.json`（兩份名冊的場合字串）；連結進來的函式庫的版本等於標頭檔的；Barretenberg 有回應
-- `Tests/BuildTests.swift`：這個 build 是測試 app（識別碼、網址、場合字串）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試名冊」的標示和 app 的名稱在 `design/copy/`；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
+- `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試名冊」的標示和 app 的名稱在 `design/copy/`；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
 - `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
@@ -160,7 +163,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 app 的最後一個建置階段跑 `check-app.sh`，不過就是建置失敗。它檢查建出來的 `.app` 和 `App/` 的原始碼：
 
-- 識別碼是 `tw.iamreal.app.test`，環境是 `IAMREAL_ENV_TEST`，執行檔裡有測試網站的兩個網址、沒有正式網站的。卡片簽的是不是測試名冊的場合字串，它從執行檔看不出來（兩條場合字串都寫死在核心裡），由 `Tests/BuildTests.swift` 檢查
+- 識別碼是這個組態的那一種 build 的（Debug 是 `tw.iamreal.app.dev`，Release 是 `tw.iamreal.app`；別的組態一律不過），圖示下面的名稱是 `design/copy/app.md` 給那一種 build 的；環境是 `IAMREAL_ENV_TEST`，執行檔裡有測試網站的兩個網址、沒有正式網站的。卡片簽的是不是測試名冊的場合字串，它從執行檔看不出來（兩條場合字串都寫死在核心裡），由 `Tests/BuildTests.swift` 檢查
 - `UIDeviceFamily` 只有 iPhone
 - 內建的電路檔、驗證金鑰和程式庫裡的逐位元組相同，參數檔的 SHA-256 等於 `device-core/crs.sha256`
 - app 裡沒有任何執行檔連結 `AdSupport` 或 `AppTrackingTransparency`；沒有 `Frameworks/`；專案檔沒有 Swift 套件。這是「沒有第三方 SDK」能從建置看出來的部分
@@ -178,7 +181,7 @@ app 的最後一個建置階段跑 `check-app.sh`，不過就是建置失敗。�
 
 ## 怎麼用線裝到手機
 
-開發用的建置，不經過商店（ADR-0036：營運者的電腦只做這一種）。需要付費的 Apple 開發者帳號，Xcode 登入過；識別碼 `tw.iamreal.app.test` 在帳號裡註冊過。
+開發用 build（Debug，識別碼 `tw.iamreal.app.dev`），不經過商店（ADR-0037）。它和從 TestFlight、App Store 裝的商店 build 識別碼不同，兩個可以同時留在手機上。需要付費的 Apple 開發者帳號，Xcode 登入過；識別碼 `tw.iamreal.app.dev` 在帳號裡註冊過、開了 NFC Tag Reading（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
 
 ```
 cd ios

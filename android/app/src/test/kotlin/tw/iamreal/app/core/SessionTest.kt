@@ -45,7 +45,7 @@ class SessionTest {
     /** Noon in Taiwan on a date `YYYY-MM-DD`, in seconds since 1970. */
     private fun noon(date: String): Long = java.time.LocalDate.parse(date).toEpochDay() * 86_400 + 4 * 3_600
 
-    /** The first case of circuit-inputs.json in the test roster's scope: what a fake card of the test app would hold. */
+    /** The first case of circuit-inputs.json in the test roster's scope: what a fake card for the test site would hold. */
     private val inputs = vectors("circuit-inputs.json")
     private val case = inputs.getJSONArray("cases").objects().first { it.getString("scope_string") == String(DeviceCore.scopeString(), Charsets.US_ASCII) }
     private val issuers = JSONArray(inputs.getJSONArray("issuers").objects().map { JSONObject().put("issuer", it.getString("issuer")).put("modulus", it.getString("modulus").removePrefix("0x")) })
@@ -97,6 +97,12 @@ class SessionTest {
             assertEquals(cardState.getString("scoped_id").substring(0, 10), String(DeviceCore.shortId(cardState.getString("scoped_id").toByteArray())))
             // The other signature is not the card's over the scope string.
             assertEquals(DeviceCoreException.INPUT, assertThrows(DeviceCoreException::class.java) { DeviceCore.sessionCardStateRequest(session, now, codeSignature) }.code)
+
+            // The challenge, dated today in Taiwan.
+            val challenge = declared.getString("challenge").toByteArray()
+            assertEquals("challenge_malformed", json(DeviceCore.sessionCheckChallenge(session, now, challenge.copyOf(10))).getString("problem"))
+            assertEquals("challenge_not_today", json(DeviceCore.sessionCheckChallenge(session, now + 86_400, challenge)).getString("problem"))
+            assertTrue(json(DeviceCore.sessionCheckChallenge(session, now, challenge)).getBoolean("ok"))
 
             val record = json(
                 DeviceCore.sessionRecordsRequest(

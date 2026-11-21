@@ -28,7 +28,9 @@ use base64::Engine;
 use iamreal_device_checks::certificate::{
     CardCertificate, Selection, is_card_signature, select_certificate,
 };
-use iamreal_device_checks::challenge::{current_time, parse_challenge};
+use iamreal_device_checks::challenge::{
+    self as challenge_rules, CHALLENGE_LENGTH, ChallengeProblem, current_time, parse_challenge,
+};
 use iamreal_device_checks::circuit_inputs::circuit_inputs;
 use iamreal_device_checks::crl::CrlNumber;
 use iamreal_device_checks::date::Date;
@@ -101,6 +103,9 @@ struct Session {
     path: Option<AbsenceProof>,
     /// Step 4.
     artifacts_checked: bool,
+    /// The challenge [`check_challenge`] took: dated the session's date
+    /// when it was taken. The proof is made for this one only.
+    challenge: Option<[u8; CHALLENGE_LENGTH]>,
 }
 
 /// What a session that passed every check holds.
@@ -122,6 +127,44 @@ impl Session {
         }
     }
 
+    /// The date conditions on `today`, for a session whose certificate was
+    /// chosen. If they hold, the session's checks hold for `today` from
+    /// now on and this gives `None`; if not, the session starts over and
+    /// this gives the answer that stops the card proof.
+    /// `IDC_ERR_REFUSED` before a certificate was chosen.
+    fn move_to(&mut self, today: Date) -> Result<Option<Value>, i32> {
+        let certificate = self.certificate.as_ref().ok_or(IDC_ERR_REFUSED)?;
+        let time = current_time(today);
+        let stop = if time > certificate.not_after() {
+            Some(json!({
+                "problem": "expired",
+                "not_after": certificate_time(certificate.not_after()),
+            }))
+        } else if time < certificate.not_before() {
+            Some(json!({
+                "problem": "not_yet_valid",
+                "not_before": certificate_time(certificate.not_before()),
+            }))
+        } else {
+            self.crl_age.and_then(|(crl_day, max_age_days)| {
+                let days = today.days_since_1970() - crl_day;
+                (days > 0 && days.unsigned_abs() > max_age_days)
+                    .then(|| json!({ "problem": "crl_stale", "days": days, "max_age_days": max_age_days }))
+            })
+        };
+        match stop {
+            Some(mut result) => {
+                result["ok"] = false.into();
+                self.start_over();
+                Ok(Some(result))
+            }
+            None => {
+                self.today = Some(today);
+                Ok(None)
+            }
+        }
+    }
+
     /// Nothing the session checked holds any more.
     fn start_over(&mut self) {
         self.certificate = None;
@@ -139,6 +182,7 @@ impl Session {
 
     /// Forgets the CRL and what follows from it.
     fn forget_crl(&mut self) {
+        self.challenge = None;
         self.crl_choice = None;
         self.crl_keys = None;
         self.crl_age = None;
@@ -172,6 +216,7 @@ pub fn open(roster: Roster, trust: Trust) -> u64 {
         crl_age: None,
         path: None,
         artifacts_checked: false,
+        challenge: None,
     };
     let handle = NEXT.fetch_add(1, Ordering::Relaxed);
     SESSIONS
@@ -553,6 +598,8 @@ pub fn check_artifacts(
             .as_ref()
             .ok_or(IDC_ERR_REFUSED)?
             .issuer();
+        // Step 4 again: what follows it does not count.
+        session.challenge = None;
         session.artifacts_checked = session.trust.artifacts.match_files(
             issuer,
             circuit,
@@ -592,36 +639,63 @@ pub fn check_date(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
                 return Err(code);
             }
         };
-        let certificate = session.certificate.as_ref().ok_or(IDC_ERR_REFUSED)?;
-        let time = current_time(today);
-        let stop = if time > certificate.not_after() {
-            Some(json!({
-                "problem": "expired",
-                "not_after": certificate_time(certificate.not_after()),
-            }))
-        } else if time < certificate.not_before() {
-            Some(json!({
-                "problem": "not_yet_valid",
-                "not_before": certificate_time(certificate.not_before()),
-            }))
-        } else {
-            session.crl_age.and_then(|(crl_day, max_age_days)| {
-                let days = today.days_since_1970() - crl_day;
-                (days > 0 && days.unsigned_abs() > max_age_days)
-                    .then(|| json!({ "problem": "crl_stale", "days": days, "max_age_days": max_age_days }))
-            })
-        };
-        match stop {
-            Some(mut result) => {
-                result["ok"] = false.into();
+        bytes_of(session.move_to(today)?.unwrap_or_else(|| json!({ "ok": true })))
+    })
+}
+
+/// The challenge the server issued, when the app receives it
+/// (spec/challenge.md, "The cardholder's device"): it is in its one
+/// spelling, and dated today in Taiwan by `now`. The result is JSON:
+///
+/// - `{"ok":true}`: the session takes the challenge, and
+///   [`records_request`] makes a proof for it;
+/// - `{"ok":false,"problem":"challenge_malformed"}`;
+/// - `{"ok":false,"problem":"challenge_not_today","challenge_date":"YYYY-MM-DD","today":"YYYY-MM-DD"}`;
+/// - when today is not the session's date (midnight passed since the
+///   checks), the date conditions are checked on today first, as
+///   [`check_date`] does; if they do not hold, its answers (`expired`,
+///   `not_yet_valid`, `crl_stale`), and the session starts over. If they
+///   hold, the session's checks hold for today from then on.
+///
+/// Any call forgets the challenge taken before, and so does doing step 2
+/// or step 4 again. A challenge that is not taken leaves the session's
+/// checks as they were: the card proof stops, and the app says why.
+///
+/// `IDC_ERR_REFUSED` unless the session passed every check on its date.
+/// `IDC_ERR_ARGUMENT` for a clock outside 2000 to 2049; the session
+/// starts over then.
+pub fn check_challenge(handle: u64, now: i64, challenge: &[u8]) -> Result<Vec<u8>, i32> {
+    with(handle, |session| {
+        let today = match today(now) {
+            Ok(today) => today,
+            Err(code) => {
                 session.start_over();
-                bytes_of(result)
+                return Err(code);
             }
-            None => {
-                session.today = Some(today);
-                bytes_of(json!({ "ok": true }))
+        };
+        session.challenge = None;
+        session
+            .today
+            .and_then(|date| session.passed(date))
+            .ok_or(IDC_ERR_REFUSED)?;
+        let date = match challenge_rules::check_challenge(challenge, today) {
+            Ok(date) => date,
+            Err(problem) => {
+                let mut result = json!({ "ok": false, "problem": problem.code() });
+                if let ChallengeProblem::NotToday { date } = problem {
+                    result["challenge_date"] = date.to_string().into();
+                    result["today"] = today.to_string().into();
+                }
+                return bytes_of(result);
             }
+        };
+        if session.today != Some(date)
+            && let Some(stop) = session.move_to(date)?
+        {
+            return bytes_of(stop);
         }
+        session.challenge = Some(challenge.try_into().map_err(|_| IDC_ERR_INTERNAL)?);
+        bytes_of(json!({ "ok": true }))
     })
 }
 
@@ -717,11 +791,12 @@ pub fn records_request(
 ) -> Result<Vec<u8>, i32> {
     with(handle, |session| {
         // Whatever else is passed in, a session that passed nothing
-        // refuses.
+        // refuses, and so does one that did not take this challenge.
         if session
             .today
             .and_then(|today| session.passed(today))
             .is_none()
+            || session.challenge.as_ref().map(|c| c.as_slice()) != Some(challenge)
         {
             return Err(IDC_ERR_REFUSED);
         }
@@ -739,6 +814,8 @@ pub fn records_request(
             &mut Sha2,
         );
         if !session.artifacts_checked {
+            // Step 4 must pass again, and the challenge be taken again.
+            session.challenge = None;
             return Err(IDC_ERR_INPUT);
         }
         // The record is dated the challenge's date: the session's checks

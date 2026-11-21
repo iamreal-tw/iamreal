@@ -588,20 +588,22 @@ final class CardProofFlow {
             let challenge = try await deps.backend.challenge()
             try live()
             // The record is dated the challenge's date, and the core makes a
-            // proof only for the date its checks hold for: a challenge of
-            // another date stops here, before the PIN goes to the card.
-            // One reading of the clock for both: midnight may have passed
-            // while the server answered.
-            let now = deps.clock()
-            guard challenge.prefix(10) == Self.dateInTaiwan(now) else { throw Stop.challengeNotToday }
-            try stillValid(at: now)
+            // proof only for a challenge it took: dated today in Taiwan, in
+            // its one spelling. Another stops here, before the PIN goes to
+            // the card. Midnight may have passed while the server answered:
+            // the core then checks the date conditions again too.
+            guard let session else { throw Stop.state }
+            let taken = try Self.object(try session.checkChallenge(now: deps.clock(), challenge: Data(challenge.utf8)))
+            if taken["ok"] as? Bool != true {
+                switch taken["problem"] as? String {
+                case "challenge_malformed": throw Stop.server(BackendFailure(code: "challenge_malformed", requestID: nil))
+                case "challenge_not_today": throw Stop.challengeNotToday
+                default: throw Self.dateStop(taken)
+                }
+            }
             try sameAsShown()
             guard let chosen else { throw Stop.state }
-            do {
-                code = try DeviceCore.declarationCode(deps.roster, accounts: chosen.accounts, challenge: Data(challenge.utf8))
-            } catch let failure as DeviceCore.Failure where failure.code == IDC_ERR_INPUT {
-                throw Stop.server(BackendFailure(code: "challenge_malformed", requestID: nil))
-            }
+            code = try DeviceCore.declarationCode(deps.roster, accounts: chosen.accounts, challenge: Data(challenge.utf8))
             self.challenge = challenge
             phase = .readyToSign
         } catch {
@@ -695,11 +697,15 @@ final class CardProofFlow {
     private func stillValid(at now: Date) throws {
         guard let session else { throw Stop.state }
         let answer = try Self.object(try session.checkDate(now: now))
-        guard answer["ok"] as? Bool == true else {
-            let problem = answer["problem"] as? String ?? ""
-            if problem == "crl_stale" { throw Stop.revocation(problem: problem, days: answer["days"] as? Int) }
-            throw Stop.certificate(problem: problem, date: (answer["not_after"] ?? answer["not_before"]) as? String)
-        }
+        guard answer["ok"] as? Bool == true else { throw Self.dateStop(answer) }
+    }
+
+    /// Why the date conditions did not hold: the answer of the core's
+    /// checkDate, or of checkChallenge after midnight.
+    private static func dateStop(_ answer: [String: Any]) -> Stop {
+        let problem = answer["problem"] as? String ?? ""
+        if problem == "crl_stale" { return Stop.revocation(problem: problem, days: answer["days"] as? Int) }
+        return Stop.certificate(problem: problem, date: (answer["not_after"] ?? answer["not_before"]) as? String)
     }
 
     /// The chosen list, worked out again on today's date: it must do on

@@ -10,18 +10,22 @@
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 完成畫面最上面的記號動畫；顏色、字級、間距（`design/tokens.json` 還沒有定，現在是墨色和紙色兩個顏色）
 
-## 這是哪一個 app
+## 兩種 build
 
-測試 app（ADR-0036）：
+同一個 app 有兩種 build（ADR-0037），識別碼不同，可以同時裝在一支手機上：
 
-| | |
-|---|---|
-| 識別碼 | `tw.iamreal.app.test` |
-| 圖示下面的名稱 | 島民證明 測試（`design/copy/app.md`） |
-| 連哪裡 | `https://test.iamreal.tw`、`https://test-data.iamreal.tw` |
-| 簽的場合字串 | `iamreal-test:public:0` |
+| | 商店的 build | 開發用 build |
+|---|---|---|
+| build type | `release` | `debug` |
+| 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev`（`applicationIdSuffix = ".dev"`） |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試（`src/main/res/`） | 島民證明 dev（`src/debug/res/`） |
+| 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
+| 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
+| 怎麼裝 | Google Play（從 GitHub Actions 上傳，ADR-0036、ADR-0037；工作流程還沒有：[#175](https://github.com/iamreal-tw/iamreal/issues/175)） | 用線裝（「怎麼用線裝到手機」） |
 
-環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的名冊永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式名冊的場合字串。正式 app 還沒有。
+環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的名冊永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式名冊的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
+
+第三種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和開發用 build 相同，不會上傳到任何地方。
 
 ## PIN、憑證、簽章在哪裡
 
@@ -72,7 +76,7 @@ Aztec 給 Android 的 Barretenberg 靜態函式庫是用 Zig 0.15.1 編的（函
 - 分頁對齊 16 KB（`max-page-size=16384`）
 - JNI 那一層載入時比對 `idc_abi_version()` 和標頭檔的 `IDC_ABI_VERSION`，不同就不載入
 
-發出去的安裝檔（release）只有 `arm64-v8a`。開發用的建置（debug）多帶 `x86_64`，給 x86-64 電腦上的模擬器；Apple 晶片的 Mac 上，模擬器用的也是 `arm64-v8a`。
+發出去的安裝檔（release）只有 `arm64-v8a`。開發用 build（debug）多帶 `x86_64`，給 x86-64 電腦上的模擬器；Apple 晶片的 Mac 上，模擬器用的也是 `arm64-v8a`。
 
 ## minSdk：29（Android 10）
 
@@ -113,10 +117,10 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看 `.aab` 裡的 manifest、函式庫、內建的檔案和 dex，項目相同）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
-- **合併後的 manifest**（`checkManifest`）：識別碼不是 `tw.iamreal.app.test` 就失敗；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
+- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面沒有畫路徑，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
 - **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：debug 和 release 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
-- **測試 app 不提正式的環境**（`checkApk`）：dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式名冊的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照名冊的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試名冊的那一條。`.so` 裡兩份名冊的場合字串都有（核心是同一份），Kotlin 只傳得出測試名冊的數字
+- **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式名冊的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照名冊的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試名冊的那一條。`.so` 裡兩份名冊的場合字串都有（核心是同一份），Kotlin 只傳得出測試名冊的數字
 - **release build 不輸出 log**：R8 拿掉對 `android.util.Log`、`PrintStream` 的 `print`／`println`、`java.util.logging.Logger` 的 `log` 的呼叫（`app/proguard-rules.pro`；後兩種是 Compose 和 `androidx.concurrent` 裡的幾處警告）。之後 `checkApk` 讀 release 的 dex 裡每一個被呼叫的方法：還提到 `android.util.Log`，或還有呼叫 `java.io.PrintStream` 的任何方法、`java.util.logging.Logger` 除了 `getLogger` 以外的方法、任何 `printStackTrace`，就失敗。留下來的是讀了沒用的 `System.out` 和做了沒用的 `Logger`：R8 拿不掉，但沒有東西寫得出去
 - **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 逐一列名的：Kotlin 的標準函式庫和它引用的標註，畫面用的 Jetpack Compose（`ui`、`foundation`）和 `androidx.activity`，以及這三個帶進來的（都是 Google 的 AndroidX 和 JetBrains 的 kotlinx，見「工具和套件」）。清單以外的一律不過，以檔案加進來的 jar、aar 也算。沒有 Google Play services，沒有 Material 元件
 
@@ -165,14 +169,14 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 `build` 做的事：
 
 1. `build-native.sh` 編 `device-core/`（它會叫 `device-core/fetch-barretenberg.sh` 和 `fetch-zig.sh`，各自核對 SHA-256），連結 `.so`
-2. 做出三個安裝檔：`app/build/outputs/apk/debug/app-debug.apk`、`app/build/outputs/apk/release/app-release-unsigned.apk`（沒有簽章；簽章和上傳在 GitHub Actions，ADR-0036），和只給模擬器測試的 `app/build/outputs/apk/fake/app-fake.apk`（識別碼 `tw.iamreal.app.test.fake`，不會上傳到任何地方）
+2. 做出三個安裝檔：`app/build/outputs/apk/debug/app-debug.apk`、`app/build/outputs/apk/release/app-release-unsigned.apk`（沒有簽章；簽章和上傳在 GitHub Actions，ADR-0036），和只給模擬器測試的 `app/build/outputs/apk/fake/app-fake.apk`（識別碼 `tw.iamreal.app.dev.fake`，不會上傳到任何地方）
 3. 跑單元測試、lint、上面的檢查
 
 拉取請求的檢查（`.github/workflows/checks.yml` 的 `android`）在 Linux 上跑的就是這幾行。
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對圖示下面的名稱和它寫的相同。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對兩種 build 圖示下面的名稱各自和它寫的相同。
 
 這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼（標題「名冊已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 
@@ -194,7 +198,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ```
 (cd ../worker && pnpm install)                                                  # app-backend.ts 要它們的套件
-$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -no-window &                 # 見下面「模擬器」
+$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -skin 1080x2280 -no-window &  # 見下面「模擬器」
 cd ../web && pnpm install
 IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend.ts \
   first,refresh,switch,withdraw -- node --experimental-strip-types ../android/test/card-proof.ts
@@ -206,7 +210,7 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
 
 ## 怎麼用線裝到手機
 
-裝的是開發用的建置（debug），簽的是這台電腦上 Android 開發用的金鑰，不是商店的那一把；它和從 Google Play 裝的測試 app 識別碼相同、簽章不同，手機上只能留一個，要先移除另一個。
+裝的是開發用 build（`debug`，識別碼 `tw.iamreal.app.dev`），簽的是這台電腦上 Android 開發用的金鑰，不是商店的那一把。它和從 Google Play 裝的商店 build 識別碼不同，兩個可以同時留在手機上。ADR-0037 的「少數測試者拿開發用 build 的安裝檔」還沒有做：那要一把固定的簽章金鑰（和商店的無關），不是每台電腦各自的開發用金鑰。
 
 1. 手機：設定裡打開「開發人員選項」和「USB 偵錯」，接上線，在手機上允許這台電腦
 2. `$ANDROID_HOME/platform-tools/adb devices` 看得到手機
@@ -215,7 +219,7 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
    ```
    ./gradlew assembleDebug
    $ANDROID_HOME/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
-   $ANDROID_HOME/platform-tools/adb shell am start -n tw.iamreal.app.test/tw.iamreal.app.MainActivity
+   $ANDROID_HOME/platform-tools/adb shell am start -n tw.iamreal.app.dev/tw.iamreal.app.MainActivity
    ```
 
 打開是過卡的第 1 步。讀卡的程式還沒有進來（上面「還沒有的」），按「感應卡片」會停在「沒有感應到卡片」。
@@ -227,7 +231,9 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
 ```
 sdkmanager "emulator" "system-images;android-29;default;arm64-v8a"    # x86-64 的電腦用 x86_64
 avdmanager create avd -n iamreal-api29 -k "system-images;android-29;default;arm64-v8a"
-$ANDROID_HOME/emulator/emulator -avd iamreal-api29
+$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -skin 1080x2280
 ```
+
+`-skin 1080x2280` 不能省。`avdmanager` 建的 AVD 預設螢幕是 320x640、密度 160；`test/card-proof.ts` 把密度設成手機常見的 420 之後，第 2 步的畫面只放得下標題和一段說明，「感應卡片」在畫面外，捲也捲不到，測試就停在那裡。`adb shell wm size` 只能放大到實體螢幕的兩倍，補不回來，所以要在啟動時給螢幕的大小。
 
 之後和手機相同，`adb -s emulator-5554 install …`。要在模擬器上看 release 的建置，先用一把隨便產生的金鑰簽它（`apksigner sign`），沒有簽章的安裝檔裝不上去。

@@ -16,6 +16,7 @@
 - 金鑰用途只能是簽章。[ADR-0010](0010-check-key-usage-in-certificate-circuit.md)
 - 只認國民的正卡；附卡、行動自然人憑證、外來人口的憑證過不了卡。[ADR-0011](0011-accept-only-citizen-primary-card-certificates.md)
 - 每次證明都要卡片在場，不做通行證和保活證明。[ADR-0006](0006-every-proof-requires-the-card.md)
+- 電路的原始碼在這個程式庫的 `circuits/`，不帶先前的歷史；重建並比對的指令從原始碼重編，和 `web/circuits/`、`verifier/vk/` 逐位元組比對；CI 只在改到電路的 PR 上跑。[ADR-0038](0038-circuit-source-in-this-repository.md)
 
 ## 匿名編號和場合
 
@@ -92,7 +93,7 @@
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
-| 0037 | `android/`、`ios/`、`design/copy/app.md` 寫的是測試 app `tw.iamreal.app.test`，沒有開發用 build | 待開 |
+| 0038 | 沒有 `checks-circuits.yml`；測試資料產生器和 `spec/`、`web/circuits/` 的文件還指向先前的私有程式庫 | [#247](https://github.com/iamreal-tw/iamreal/issues/247)、[#246](https://github.com/iamreal-tw/iamreal/issues/246) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
 `worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明、每天公布名冊有了，其餘的訪客頁面、限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的 `server/` 只當逐案比對的對照。

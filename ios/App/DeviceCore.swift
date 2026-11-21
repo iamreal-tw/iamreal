@@ -176,6 +176,15 @@ enum DeviceCore {
             try output { idc_session_check_date(handle, seconds(now), $0) }
         }
 
+        /// The challenge the server issued: in its one spelling and dated today in
+        /// Taiwan; if midnight passed since the checks, the date conditions again.
+        /// The proof is made for the challenge it took only.
+        func checkChallenge(now: Date, challenge: Data) throws -> Data {
+            try challenge.withUnsafeBytes { c in
+                try output { idc_session_check_challenge(handle, seconds(now), c.bytes, c.count, $0) }
+            }
+        }
+
         /// The body of POST /api/v1/card-state, from the card's signature over the scope string.
         func cardStateRequest(now: Date, scopeSignature: Data) throws -> Data {
             try scopeSignature.withUnsafeBytes { s in

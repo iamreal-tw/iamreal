@@ -1,0 +1,8 @@
+[package]
+name = "cert_chain_rs4096"
+type = "bin"
+authors = [""]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+comparison = { path = "../lib" }

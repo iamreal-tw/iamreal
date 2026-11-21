@@ -681,14 +681,15 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 所以上面那張「和 Worker 自己送的時候不同的地方」的表，除了「設定讀不出來時」那一列（線上的設定是對的，看不到），每一列線上都和本機相同；`_headers` 的規則在 `200`、`301`、`304`、`307`、`404`、`405` 上都有套。
 
-**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（2026-11-21 看到的，在等營運者關掉：[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。
+**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（2026-11-21 看到的，當天營運者關掉了：[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。
 
 - **看到什麼**：請求帶 `Accept: text/html` 時（瀏覽器都帶），Worker 產生的每一種頁面和 `/proof`、`/proof/help.html` 回來的 HTML 都多一個 `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…" integrity="…" data-cf-beacon="…">`。不帶這個標頭（`curl` 和 Node 的 `fetch` 的預設）就沒有，所以上面用 `curl` 看到的 `/proof` 還是 495 位元組。
 - **怎麼重現**：`curl -s --compressed -H 'Accept: text/html' https://test.iamreal.tw/faq | grep -c cloudflareinsights` 印 1，拿掉 `-H` 印 0；或跑 `test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），「沒有一頁有不是自己網站的 script」那一項不過。
 - **不是這個程式庫加的**：Worker 的頁面沒有這一段，`web/` 的建置也沒有；是 Cloudflare 在回應送出去的路上加的。
 - **瀏覽器沒有執行它**：兩種頁面的 CSP 都不准它載入（訪客的頁面是 `default-src 'none'`，過卡的頁面是 `script-src 'self' 'wasm-unsafe-eval'`）。過卡的頁面上，無頭的 Chrome 記了一筆 CSP 違規、沒有載入它；訪客的頁面沒有另外用瀏覽器看。但送到瀏覽器的頁面因此不是建置出來的那一份，訪客的頁面也不再是沒有 `<script>`。
-- **是什麼**：樣子和 Cloudflare Web Analytics 的自動安裝相符，還沒有在儀表板上確認是不是它。Cloudflare 的文件寫，經過 Cloudflare 的網站加進 Web Analytics 之後「is now using Web Analytics through the automatic setup, which is enabled by default」（[Get started](https://developers.cloudflare.com/web-analytics/get-started/)「Sites proxied through Cloudflare」）；自動安裝「will inject the JS snippet on all pages (sub-domains) under the zone」、加的 `<script>` 帶 `type="module"` 和 `integrity`（[FAQ](https://developers.cloudflare.com/web-analytics/faq/)）。都是 2026-11-21 讀的。
-- **怎麼關**：同一頁寫，在 Web Analytics 那個網站的 **Manage site** 把自動安裝改成 **Disable**（「The JS Snippet will not be injected and has been disabled」）。只有營運者能做（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。這和 ADR-0032「沒有第三方的程式」有關：不關的話，要靠每一頁的 CSP 一直擋著它。
+- **是什麼**：Cloudflare 的 Real User Measurements（RUM，儀表板上的標題是 Web Analytics）。這個 zone 的 RUM 從來沒有設定過，頁面裡就已經被加了它。Cloudflare 的文件寫，經過 Cloudflare 的網站加進 Web Analytics 之後「is now using Web Analytics through the automatic setup, which is enabled by default」（[Get started](https://developers.cloudflare.com/web-analytics/get-started/)「Sites proxied through Cloudflare」）；自動安裝「will inject the JS snippet on all pages (sub-domains) under the zone」、加的 `<script>` 帶 `type="module"` 和 `integrity`（[FAQ](https://developers.cloudflare.com/web-analytics/faq/)）。都是 2026-11-21 讀的。
+- **怎麼關的**：文件寫的是在 Web Analytics 那個網站的 **Manage site** 把自動安裝改成 **Disable**，但帳號層的 Web Analytics 清單裡沒有 `iamreal.tw`，沒有那個 Manage site。實際關的地方在 zone：`iamreal.tw` → Speed → Real user monitoring（網址結尾 `/iamreal.tw/speed/rum`）。畫面有 Enable Globally、Exclude EU 兩個按鈕和一行 Disable completely；按 Disable completely，確認視窗按 Disable RUM，之後畫面寫「RUM is currently disabled for this zone.」。只有營運者能做（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。這和 ADR-0032「沒有第三方的程式」有關：不關的話，要靠每一頁的 CSP 一直擋著它。
+- **關掉之後**（等過訪客頁面 60 秒的快取）：上面的 `curl` 帶 `-H` 也印 0，`test/site-check.ts` 21 項全過。
 
 **Cloudflare 上還沒確認的**：
 
@@ -848,9 +849,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
-| `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊時換成下一個號碼，用過的名稱不再用（[清空測試名冊](#清空測試名冊)）；維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
+| `vars.ROSTER_OBJECT_NAME` | `test-2` | 名冊那個 Durable Object 的名稱。清空測試名冊時換成下一個號碼，用過的名稱不再用（[清空測試名冊](#清空測試名冊)）；維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
 | `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
-| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-19` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。還沒清空過，所以是測試網站第一次部署的日期（[第一次部署量到的](#第一次部署量到的)）。清空時和 `ROSTER_OBJECT_NAME` 一起改（[清空測試名冊](#清空測試名冊)） |
+| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-21` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。第一次清空是 2026-11-21（名冊規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `ROSTER_OBJECT_NAME` 一起改（[清空測試名冊](#清空測試名冊)） |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
@@ -893,8 +894,8 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 - **這一輪抓到的檔先做，一定做。** 之前留下、還沒有行的檔接著做，照寫進儲存桶的時間，新的先做（過卡要用的是最新的清冊）；但這一輪開始補索引滿 2.5 分鐘之後就不再開始新的一份，留給下一輪。一輪假設自己拿得到 300,000 毫秒的 CPU 時間（`wrangler.jsonc` 的 `limits.cpu_ms` 設的數字；排程實際拿到的是不是這個數字還沒量到，見 [Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)），留下的 2.5 分鐘給最後開始的那一份建樹：最大的一份（G2）在本機要 27 到 29 秒，留的是本機的 5 倍；Cloudflare 上量到的是四棵樹約 157 秒，不到本機的 2 倍。Worker 裡讀不到自己用了多少 CPU 時間，所以用牆上時間算；補索引這一段不是在算就是在等儲存桶，用掉的 CPU 時間不會比牆上時間多。**這個算法靠時鐘是新的，而 Cloudflare 上的時鐘只在 I/O 之後才前進**：程式在算的時候 `Date.now()` 停在上一次 I/O 的時間（[Performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/)：「only advance or increment after I/O occurs」；[Security model](https://developers.cloudflare.com/workers/reference/security-model/)：「`Date.now()` returns the time of the last I/O. It does not advance during code execution」；2026-11-20 讀的）。一棵樹是幾十秒沒有 I/O 的計算，所以每次要不要再起一份之前，先對儲存桶問一次索引在不在（`head`），問完才讀時鐘（`src/mirror.ts` 的 `elapsedMs`）；前一份失敗、後面沒有任何 I/O 的時候也一樣。把讀時鐘挪到別的地方，這條界線在線上會無聲地失效，而本機的 workerd 時鐘照常前進（同一頁：「In local development, however, timers will increment regardless of whether I/O happens or not」），測試看不出來。整份索引不見時，要分好幾輪才補得完，每一輪寫的行都留著。
 - **一輪做到一半被停掉，寫好的行留著。** 用完 CPU 時間的那一次呼叫會被 Cloudflare 停掉。索引每做完一個檔就寫一次、寫完就告訴 Durable Object，所以停在第二份的建樹時，第一份的行已經在索引裡、Durable Object 也知道；第二份的檔已經存著，之後的某一輪補它的行。這一輪抓到的兩份不看時間、一定做：兩份加起來超過一次呼叫的上限時，沒有哪一輪做得完，那是把鏡像搬出 Worker 的時候（ADR-0023）。
 - **兩輪同時跑，不會蓋掉對方的行。** 索引用條件式寫入：只有儲存桶裡的索引還是這一輪讀到的那一份（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)）。寫不進去就重讀索引、把自己的行加到新的那一份上再寫，最多試 5 次。Durable Object 那邊沒有同樣的保護：`setNewestCrls` 整份換掉、不比新舊，所以兩輪同時跑時，比較晚讀索引的那一輪第一次交，可能把 Durable Object 換回比較舊的兩份，到它下一次交（寫完下一行，或下一輪開始）才又是最新的。排程一小時一次、一輪不到一分鐘，兩輪重疊要有一輪跑超過一小時或被手動觸發。
-- **讀一個檔花的時間不超過它大小的線性倍數，除了一處。** 延伸欄位有沒有重複用集合找，不是兩兩比。清冊編號沒有長度上限（和 Go 相同），位元組一次轉成整數；但把整數印成十進位是 JavaScript 引擎做的，比線性慢：見[量到的](#清冊鏡像量到的)。
-- **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
+- **讀一個檔花的時間和記憶體不超過它大小的線性倍數。** 清冊編號最多 20 個位元組、延伸欄位最多 16 個是規格的規定（[#120](https://github.com/iamreal-tw/iamreal/issues/120)）：超過的清冊不可用，讀的時候先看長度、只數個數，不轉成數字、不留下來。16 個以內的延伸欄位兩兩比有沒有重複。見[量到的](#清冊鏡像量到的)「故意做來拖時間的檔」。
+- **不替每一筆廢止建物件**（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）：在原始位元組上逐筆走，簽章驗得過之後再走一遍，每個序號的鍵直接寫進一個 `Uint32Array`，重複的序號和最低 127 位元相同的鍵用排序找。沒有簽章的檔不配置鍵的陣列。讀完之後檔案的位元組就放掉，建樹時只留著鍵。
 - **建樹時讓出執行緒。** 樹切成最多 4,096 塊（樹根往下 12 層的子樹），每做完約 256 個鍵就等一次 `setTimeout(0)`，同一個實例裡等著的請求在這時候被處理。
 
 **三、告訴名冊的 Durable Object。** 從索引取每把發證金鑰最新兩份可用的清冊（照清冊編號，和裝置選清冊的方法相同；不可用的不算），把樹根、編號、清冊日期交給名冊的 Durable Object，它整份換掉自己存的（[`src/roster.ts`](src/roster.ts) 的 `setNewestCrls`）。每一輪一開始讀完索引就交一次，不管有沒有新的清冊；之後每寫完一次索引再交一次，所以 G2 的新清冊不用等 G3 的樹建完。
@@ -941,11 +942,11 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 
 [`test/crl-testdata.test.ts`](test/crl-testdata.test.ts)，在 `pnpm test` 裡。每一份清冊當成假的內政部的回應，經過本機 workerd 裡的整個 Worker，看儲存桶裡的索引。
 
-1. `crl/testdata/` 的 37 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go 的測試讀的同一份）相同。
-2. `crl/testdata/times/` 的 48 份：`thisUpdate`、`nextUpdate` 用各種寫法（沒有秒的 UTCTime、帶時差、西元 0 年以前和 9999 年以後、不存在的日期……；線上那兩份清冊的時間都是 12 位數字加 `Z` 的 UTCTime）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同，Go 的測試讀同一份。這些案例記的是 Go 的 `crl/` 和這裡現在得到相同的結果，不是規格的標準答案。時間接受哪些寫法，規格還沒有定：[#120](https://github.com/iamreal-tw/iamreal/issues/120) 會收窄成 RFC 5280 的寫法，那時這些案例的答案會跟著改。`web/` 現在的讀法比這裡嚴（只收 `Z` 結尾、有秒的寫法），沒有讀這些案例。
-3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 85 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
+1. `crl/testdata/` 的 48 份自製清冊：每一份的可用不可用、原因代碼、樹根、編號、時間、清冊日期，和 `crl/testdata/expected.json`（Go、`web/`、`device-core/` 的測試讀的同一份）相同。包括清冊編號剛好 20 和 21 個位元組、清冊和一筆的延伸欄位剛好 16 和 17 個。
+2. `crl/testdata/times/` 的 58 份：`thisUpdate`、`nextUpdate`、一筆的 `revocationDate` 用各種寫法（沒有秒的 UTCTime、帶時差、有小數、`Z` 後面還有字元、西元 0 年和 9999 年、不存在的日期……）。每一份在索引裡的那一行，和 `crl/testdata/times/expected.json` 寫的逐字相同；Go、`web/`、`device-core/` 的測試讀同一份。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime 和 GeneralizedTime，其他寫法的檔是 `-not_usable_der`。線上的清冊每個時間都是 12 位數字加 `Z` 的 UTCTime。
+3. 把儲存桶裡的清冊檔寫到一個目錄，跑 Go 的 `iamreal-crl index`，印出來的索引和儲存桶裡的 `crl/index.jsonl` 逐位元組相同。除了上面 106 份，還有 3 個不是清冊的檔和 1 份測試金鑰簽的清冊。**這一項要有 `go`，沒有就跳過；前兩項不用。**
 
-2026-11-20 跑的結果：三項都過，共 89 個檔，索引 89 行，沒有一行不同。
+2026-11-21 跑的結果（#120 之後）：三項都過，共 110 個檔，索引 110 行，沒有一行不同。
 
 ### 清冊鏡像量到的
 
@@ -982,21 +983,33 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 - WASM 的線性記憶體另計，上限 16 MiB，建樹用到 2.5 MiB 上下（[#26](https://github.com/iamreal-tw/iamreal/issues/26)）。
 - 抓和存的那一步，兩份清冊同時在記憶體裡，約 26 MB；補索引時一次只讀一份。兩份都剛好是上限 32 MiB 時，這一步是 64 MiB；沒有 `Content-Length` 的回應在接起來的那一刻多佔一倍。
 
-**故意做來拖時間的檔**，在 Node 22 裡量讀一個檔（`readCrl`）的時間。這種檔不需要簽章就會被存下來：內政部的網址是 `http://`，路上的人可以換掉回應。
+**故意做來拖時間的檔。** 這種檔不需要簽章就會被存下來：內政部的網址是 `http://`，路上的人可以換掉回應；存下來之後，每一個重驗的人都要讀它。[#120](https://github.com/iamreal-tw/iamreal/issues/120) 之前，清冊編號沒有長度上限、延伸欄位沒有個數上限，第二輪審查 2026-11-20 在 Node 裡量到：清冊編號 1 MB 的檔讀一次記憶體的高點多 97 MiB，4 MB 多 339 MiB，32 MiB 多 2.7 GiB；280 萬個清冊層級延伸欄位的檔多 623 MiB；Go 讀 16 MB 的清冊編號要 44.4 秒。現在規格給了上限（[`spec/revocation-tree.md`](../spec/revocation-tree.md)「Which CRLs」）：清冊編號最多 20 個位元組，超過的先看長度就停，不轉成數字；清冊和每一筆的延伸欄位最多 16 個，超過的只數、不留。
 
-| 檔案 | 讀一次 | Go 的 `iamreal-crl check` |
-|---|---|---|
-| 清冊編號是 400,000 個位元組的整數 | 0.2 秒（修正前 26.3 秒） | 0.14 秒 |
-| 清冊編號是 4,000,000 個位元組的整數 | 2.9 秒 | 5.0 秒 |
-| 清冊編號是 16,000,000 個位元組的整數 | 14.9 秒 | 44.4 秒 |
-| 30,000 個不同的延伸欄位（390 KB） | 12 ms（修正前 27.2 秒） | 沒量 |
+照下載上限 32 MiB（33,554,432 個位元組）之內能造的最壞情況重量，每一種一個檔。檔案由 [`crl/internal/crltest/makelarge`](../crl/internal/crltest/makelarge) 寫（`go run ./crl/internal/crltest/makelarge -out DIR`），用一把當場產生、沒有人信任的金鑰簽，所以都是 `-not_usable_signature`。量法是 [`test/crl-size.ts`](test/crl-size.ts)（`node --experimental-strip-types test/crl-size.ts DIR [INDEX]`，不是 `pnpm test` 的一部分）：每個檔一個 Node 的程序，從讀檔前到 `readCrl` 回來，程序的最高常駐記憶體（`maxRSS`）多了多少。
 
-- 清冊編號的時間幾乎都花在把整數印成十進位，這一步是一次同步的呼叫，中間不讓出執行緒；Go 也是這裡慢。
-- **記憶體才是問題。** 第二輪審查 2026-11-20 在 Node 裡量讀這種檔時記憶體的高點多出多少：清冊編號 1 MB 時多 97 MiB，4 MB 時多 339 MiB，32 MiB（下載上限之內最大的）時多 2.7 GiB；280 萬個延伸欄位的檔多 623 MiB。把 JavaScript 的記憶體限在 100 MB，這兩種檔都讓程序當掉。這些數字不是這裡量的，也不是在 workerd 裡量的。
-- **在 Cloudflare 上會怎樣沒有量過。** 每個實例的記憶體上限是 128 MB（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)），照上面的數字，讀這種檔比較可能的結果是實例被終止，不是多等幾十秒。
-- **這種檔會讓每一輪都停在它。** 它存進了儲存桶、沒有行，之後每一輪都會再讀它；讀它的那一輪如果被終止，排在它後面的檔和那一輪之後的事都做不到。下載上限 32 MiB 擋不住：上面最小的例子是 1 MB。
-- 讀得完的時候，索引的那一行帶著整個十進位的編號：4 MB 的整數是 960 萬個數字的一行。清冊檔和它的行都不刪（ADR-0027），所以這一行會一直留在每台裝置過卡時都要下載的索引裡。
-- 清冊編號和清冊層級延伸欄位的上限由 [#120](https://github.com/iamreal-tw/iamreal/issues/120) 在規格裡定，這一版沒有做。
+2026-11-21，Node 22.23.4，Apple Silicon（M1 Max），同一份量兩次，數字差不到 10%，表裡是第一次的：
+
+| 檔案 | 大小 | `readCrl` | 記憶體高點多用 | 其中檔案本身 |
+|---|---|---|---|---|
+| 清冊編號 1,000,000 個位元組 | 1,000,482 | 3 ms | 2.7 MiB | 1.0 MiB |
+| 清冊編號 4,000,000 個位元組 | 4,000,482 | 4 ms | 6.4 MiB | 0.7 MiB |
+| 清冊編號約 33,553,000 個位元組（上限之內最長） | 33,553,490 | 23 ms | 66.0 MiB | 32.1 MiB |
+| 3,050,361 個不同的清冊層級延伸欄位 | 33,554,428 | 113 ms | 68.4 MiB | 32.1 MiB |
+| 一筆帶 3,050,356 個不同的延伸欄位 | 33,554,423 | 112 ms | 68.0 MiB | 32.1 MiB |
+| 1,677,697 筆廢止（一個位元組的序號，沒有延伸欄位） | 33,554,417 | 147 ms | 68.6 MiB | 32.1 MiB |
+| 一筆的序號約 33,553,000 個位元組 | 33,553,505 | 23 ms | 66.0 MiB | 32.2 MiB |
+| 發證者名稱約 33,553,000 個位元組 | 33,553,457 | 23 ms | 66.0 MiB | 32.1 MiB |
+| 一個延伸欄位的 OID 約 3,355 萬節 | 33,553,505 | 90 ms | 66.1 MiB | 32.1 MiB |
+| 16 個延伸欄位，其中 15 個的 OID 各約 224 萬節、只差最後一節 | 33,554,176 | 441 ms | 66.1 MiB | 32.2 MiB |
+| 對照：線上的 G2（2026-11-21 05 時，340,633 筆，可用） | 16,873,034 | 229 ms | 59.3 MiB | 16.2 MiB |
+
+- 小的檔「其中檔案本身」比檔案小：讀檔用到的是程序原本就有、還沒算進高點的記憶體。
+- **記憶體的高點約是檔案的兩倍，不管內容是什麼。** 多出來的那一份是驗章：Node 的 `crypto.subtle.verify` 把要驗的內容複製一份（另外量過：驗一段 32 MiB 的內容，高點多 32.9 MiB），驗完放掉。鍵的陣列（每筆 20 個位元組，排序時再兩份）只在簽章驗得過之後才配置，所以沒有簽章的檔用不到它；上表最後一列可用的 G2 有。上限之內最大的檔，讀的這一步約 66 到 69 MiB，離每個實例的 128 MB（約 122 MiB）有約 50 MiB；實例本身另外用的（JavaScript 的程式、WASM 的 16 MiB 上限）沒有量進來。
+- **時間和大小成線性。** 最慢的是 15 個長得幾乎一樣的 OID，0.44 秒（Spec 審查用 16 個各 1.9 MB 的量到 0.58 秒）：找重複的延伸欄位是兩兩比（最多 16 個，120 次），每一對都要比到最後一節，比的位元組總數最多是檔案大小的 15 倍左右。其次是 168 萬筆，0.15 秒。找重複不再用集合，也不替 OID 建字串。
+- **其他沒有給上限的，和為什麼不用：** 筆數、序號的長度、發證者名稱的長度、OID 的長度，上表各有一列，都在檔案大小的兩倍之內；序號超過 20 個位元組的先看長度就不讀。巢狀沒有列：讀的程式只走固定的幾層（`CertificateList`、`tbsCertList`、每一筆、延伸欄位），發證者名稱和延伸欄位的內容不往下讀（清冊編號除外，它是一個 INTEGER），所以裡面巢狀再深也只是一段位元組。
+- **Go 的 `iamreal-crl index` 對這 10 個檔寫出的索引，和 `test/crl-size.ts` 用 `src/crl-index.ts` 寫的逐位元組相同。** Go 讀完 10 個檔共 1.5 秒，程序的最高常駐記憶體 702 MB：Go 的 `crl.Parse` 把 OID 的每一節存成一個 `int`，每一筆存成一個結構。Go 的程式是重驗的人在自己的電腦上跑的，不在 Worker 裡。
+- **數字只說明量級。** 是在 Node 裡量的，不是在 workerd 裡；本機的 workerd 不限記憶體，量不到。workerd 的 `crypto.subtle.verify` 會不會也複製一份沒有查。Cloudflare 上超過記憶體上限時實際會怎樣也沒有試過。
+- **這種檔不再讓每一輪停在它。** 它照樣存進儲存桶、照樣有一行（`-not_usable_signature` 或更前面的原因），之後每一輪讀到它的時間和記憶體都在上表之內，排在它後面的檔照常補。索引的那一行不會變長：超過 20 個位元組的清冊編號寫 `-`。
 
 **部署之後要看的**（第一項有答案了，其餘還沒有）：
 
@@ -1318,7 +1331,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 
 **它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）；它對線上跑的結果在 [Static Assets](#static-assets)「Cloudflare 上還沒確認的」。
 
-**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），要營運者關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)），關掉之後重跑。改成照瀏覽器的送法之後，其他各項的結果沒有變。
+**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：21 項過 20 項。不過的是「沒有一頁有不是自己網站的 script」，十個頁面都列在那一行：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），營運者當天關掉（[#240](https://github.com/iamreal-tw/iamreal/issues/240)）之後重跑，21 項全過。改成照瀏覽器的送法之後，其他各項的結果沒有變。
 
 ## 營運者在 Cloudflare 和 GitHub 上設的
 
@@ -1333,7 +1346,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
 | R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `roster/card-state/`，物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布名冊](#每天換日公布名冊)「部署後要營運者做的」） |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)、[每天換日公布名冊](#每天換日公布名冊)）；沒設的物件不會被快取 |
-| Web Analytics | **要關、還沒關**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）：線上的每個 HTML 頁面被加了一個 `static.cloudflareinsights.com` 的 `<script>`，樣子是 Web Analytics 的自動安裝。在 Web Analytics 的 Manage site 把自動安裝改成 Disable（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段有文件的網址和怎麼重現）。正式的網域同樣不能開 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。關掉之後 `test/site-check.ts` 才會全過 |
+| Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |
 | Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在營運者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
 | GitHub 組織的 Actions 設定 | 所有外部貢獻者的工作流程都要先核准才跑 | ADR-0029「外人的 PR」 |
