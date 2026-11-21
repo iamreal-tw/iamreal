@@ -19,7 +19,7 @@
 |---|---|---|
 | build type | `release` | `debug` |
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev`（`applicationIdSuffix = ".dev"`） |
-| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試（`src/main/res/`） | 島民證明 開發（`src/debug/res/`） |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試（`src/main/res/`） | 島民證明 dev（`src/debug/res/`） |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
 | 怎麼裝 | Google Play（從 GitHub Actions 上傳，ADR-0036、ADR-0037；工作流程還沒有：[#175](https://github.com/iamreal-tw/iamreal/issues/175)） | 用線裝（「怎麼用線裝到手機」） |

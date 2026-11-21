@@ -50,7 +50,7 @@
 - `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
 - 上傳到 TestFlight（[#176](https://github.com/iamreal-tw/iamreal/issues/176)）
 
-主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 開發」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
+主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
 
 ## 環境在建置時寫死
 
@@ -60,7 +60,7 @@
 |---|---|---|
 | 組態 | Release | Debug |
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev` |
-| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 開發 |
+| 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 dev |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） | 同左，上線後也是 |
 | 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_ROSTER_TEST`） | 同左，上線後也是 |
 | 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳，工作流程還沒有：[#176](https://github.com/iamreal-tw/iamreal/issues/176)） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |
