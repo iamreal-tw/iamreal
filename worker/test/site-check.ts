@@ -12,16 +12,17 @@
 // - no page has a script that is not a file of the site itself. The pages
 //   are asked for as a browser asks (`Accept: text/html`): what stands
 //   between the Worker and the visitor may add to a page only then;
-// - the style sheet, the copy buttons' script and the card proof page are
-//   there (the page in a browser, up to its first screen, is another check:
+// - the style sheet, the copy buttons' script, the card proof page and its
+//   help page are there (the page in a browser, up to its first screen, is another check:
 //   web/test/e2e/smoke.ts);
 // - `config` and `fingerprint` answer, uncached;
 // - the archive index of the data domain has, for each issuer key, a usable
 //   CRL that is at most 3 days old, the age `config` gives devices;
 // - the last line of the published fingerprint file is what `fingerprint`
 //   answers, and its date is today's or yesterday's: a roster whose daily
-//   publication stopped fails here. One that was not published yet (the day
-//   its object first ran) has no file and no date, and passes;
+//   publication stopped fails here. One that was not published yet has no
+//   file and no date, and passes up to two days after the date it was
+//   cleared on;
 // - the data domain lets the site's pages read it from a browser, and no
 //   other site's (CORS).
 //
@@ -53,6 +54,8 @@ const NO_SUCH_CARD = "7K2Q9FM4XD";
 /** How old the newest usable CRL of an issuer key may be, in days: what `config` tells devices (`crl_max_age_days`). */
 const CRL_MAX_AGE_DAYS = 3;
 const DAILY = "public, max-age=60";
+/** For how many days after the date a test roster was cleared on it may be without a published line. */
+const NEVER_PUBLISHED_DAYS = 2;
 
 /** Why the response does not have each of these headers with this value, or null. */
 function headersProblem(res: Response, want: Readonly<Record<string, string>>): string | null {
@@ -69,6 +72,18 @@ function headersProblem(res: Response, want: Readonly<Record<string, string>>): 
  */
 export async function checkSite(parts: { site: Reader; data: Reader; today: string; clearedOn: string; siteOrigin?: string }): Promise<CheckLine[]> {
   const siteOrigin = parts.siteOrigin ?? "https://test.iamreal.tw";
+  // Every request for the site is sent as a browser sends it: what stands between the Worker and the visitor may
+  // answer a request that accepts HTML otherwise than one that does not say (README.md, "Cloudflare 上看過的").
+  const html = (path: string): Promise<Response> => parts.site(path, { Accept: "text/html" });
+  const file = (path: string): Promise<Response> => parts.site(path, { Accept: "*/*" });
+  /** The scripts of a page that are not a file of this site: one from elsewhere, or one written into the page. No page of the repository has either. */
+  const foreignScriptsOf = (page: string): string[] => (page.match(/<script\b[^>]*>/gi) ?? []).filter((tag) => !/\ssrc="\/[^/"][^"]*"/.test(tag));
+  /** The pages whose HTML has such a script. */
+  const foreignScripts: string[] = [];
+  const noteScripts = (path: string, page: string): void => {
+    const foreign = foreignScriptsOf(page);
+    if (foreign.length > 0) foreignScripts.push(`${path} has ${foreign[0]!.slice(0, 120)}`);
+  };
   const lines: CheckLine[] = [];
   /** One line: `problem` is null when the thing is as it should be. A request that fails is the line's problem. */
   const check = async (what: string, problem: () => Promise<string | null>): Promise<void> => {
@@ -93,14 +108,11 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     ["/hang", 200],
     ["/no-such-page", 404],
   ];
-  /** The pages whose HTML has a script from elsewhere, or one written into the page. */
-  const foreignScripts: string[] = [];
   for (const [path, status, script] of pages) {
     await check(`GET ${path}`, async () => {
-      const res = await parts.site(path, { Accept: "text/html" });
+      const res = await html(path);
       const page = await res.text();
-      const foreign = (page.match(/<script\b[^>]*>/gi) ?? []).filter((tag) => !/\ssrc="\/[^/"][^"]*"/.test(tag));
-      if (foreign.length > 0) foreignScripts.push(`${path} has ${foreign[0]!.slice(0, 120)}`);
+      noteScripts(path, page);
       if (res.status !== status) return `the status is ${res.status}, not ${status}`;
       // The sentence of design/copy/test-site.md, its date in an element of its own, as the pages write it (test/pages.ts, `testRosterMark`).
       const mark = `<p class="test-roster">${testRosterLine(parts.clearedOn).replace(parts.clearedOn, `<time>${parts.clearedOn}</time>`)}</p>`;
@@ -110,28 +122,31 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     });
   }
 
-  await check("no page has a script that is not a file of this site", async () => (foreignScripts.length === 0 ? null : foreignScripts.join("; ")));
-
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": STYLE_SHEET_CACHE };
   for (const path of ["/pages.css", "/copy.js"]) {
     await check(`GET ${path}`, async () => {
-      const res = await parts.site(path);
+      const res = await file(path);
       await res.arrayBuffer();
       return res.status === 200 ? headersProblem(res, fileHeaders) : `the status is ${res.status}, not 200`;
     });
   }
-  // The card proof page: that it is there. Its policy and what it does in a browser are web/test/e2e/smoke.ts's to check.
-  await check("GET /proof", async () => {
-    const res = await parts.site("/proof");
-    await res.arrayBuffer();
-    return res.status === 200 ? headersProblem(res, { ...EVERY_RESPONSE, ...TEST_SITE_HEADERS }) : `the status is ${res.status}, not 200`;
-  });
+  // The card proof page and its help page: that they are there. Their policy and what the page does in a browser are web/test/e2e/smoke.ts's to check.
+  for (const path of ["/proof", "/proof/help.html"]) {
+    await check(`GET ${path}`, async () => {
+      const res = await html(path);
+      const page = await res.text();
+      if (res.status !== 200) return `the status is ${res.status}, not 200`;
+      noteScripts(path, page);
+      return headersProblem(res, { ...EVERY_RESPONSE, ...TEST_SITE_HEADERS });
+    });
+  }
+  await check("no page has a script that is not a file of this site", async () => (foreignScripts.length === 0 ? null : foreignScripts.join("; ")));
 
   // The API, as far as a GET goes.
   const apiHeaders = { ...EVERY_RESPONSE, "Cache-Control": "no-store", "Content-Type": "application/json" };
   await check("GET /api/v1/config", async () => {
-    const res = await parts.site("/api/v1/config");
+    const res = await file("/api/v1/config");
     const body = await res.text();
     if (res.status !== 200) return `the status is ${res.status}, not 200`;
     const config = JSON.parse(body) as { crl_max_age_days?: unknown; platforms?: { platform?: unknown }[] };
@@ -142,7 +157,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   });
   let fingerprint: string | null = null;
   await check("GET /api/v1/fingerprint", async () => {
-    const res = await parts.site("/api/v1/fingerprint");
+    const res = await file("/api/v1/fingerprint");
     const body = await res.text();
     if (res.status !== 200) return `the status is ${res.status}, not 200`;
     fingerprint = body;
@@ -171,10 +186,17 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   }
 
   // The roster is published every day: the last line is today's, or yesterday's until the alarm of midnight has run.
-  await check("GET /api/v1/fingerprint: the roster was published today or yesterday, or never yet", async () => {
+  // A roster that was never published has no date. That is so on the day its object first ran, which for the roster
+  // in place after a clearing is the date it was cleared on or, deployed close to midnight, the day after; the first
+  // line is written at the midnight after that. So no date passes up to two days after the clearing, and no longer:
+  // an object that was never published by then does not publish (it started paused, or takes itself for replaced).
+  await check("GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", async () => {
     if (fingerprint === null) return "the API did not answer";
     const { date } = JSON.parse(fingerprint) as { date?: unknown };
-    if (date === null) return null;
+    if (date === null) {
+      const cleared = parseDay(parts.clearedOn);
+      return cleared !== null && today <= cleared + NEVER_PUBLISHED_DAYS ? null : `nothing was published yet, and the roster was last cleared on ${parts.clearedOn}; today is ${parts.today}`;
+    }
     const day = typeof date === "string" ? parseDay(date) : null;
     return day !== null && (day === today || day === today - 1) ? null : `the last line published is dated ${JSON.stringify(date)}; today is ${parts.today}`;
   });
