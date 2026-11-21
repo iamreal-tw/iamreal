@@ -22,11 +22,18 @@
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試（`src/main/res/`） | 島民證明 dev（`src/debug/res/`） |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
-| 怎麼裝 | Google Play（從 GitHub Actions 上傳，ADR-0036、ADR-0037；工作流程還沒有：[#175](https://github.com/iamreal-tw/iamreal/issues/175)） | 用線裝（「怎麼用線裝到手機」） |
+| 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml) 上傳，ADR-0036、ADR-0037；「上傳到 Google Play」） | 用線裝（「怎麼用線裝到手機」） |
+| 版本 | 上傳時給：台灣的日期，同一天第二次起加 `.1`、`.2`；`versionCode` 是工作流程執行的編號 | `1`、`dev` |
 
 環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的名冊永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式名冊的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
 
 第三種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和開發用 build 相同，不會上傳到任何地方。
+
+## 上傳到 Google Play
+
+商店的 build 只從 GitHub Actions 上傳（ADR-0036）：營運者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)，它建置 `bundleRelease`（連 `build.gradle.kts` 的 bundle 檢查，「建置時的檢查」），用上傳金鑰簽章，傳到內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
+
+版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21.1 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候是 `1`、`dev`，所以這台電腦上的建置和拉取請求的檢查都是這兩個值。
 
 ## PIN、憑證、簽章在哪裡
 

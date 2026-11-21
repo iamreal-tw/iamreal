@@ -9,8 +9,9 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, and
-// the jobs of cache.yml, must be exactly the ones written here.
+// workflow's two jobs, the device-core and android jobs of checks.yml, the
+// jobs of cache.yml and the three jobs of upload-android.yml, must be exactly
+// the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -19,6 +20,9 @@
 // - what the commands of cache.yml leave in the caches it saves: they run
 //   the code of main (the builds of device-core/ and android/), and every
 //   later check that restores a cache builds on what that run left in it;
+// - what the scripts upload-android.yml runs do (android-version.sh,
+//   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
+//   with curl replaced, and Google Play's own answers are seen only on GitHub;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
