@@ -1078,7 +1078,7 @@ pnpm run deploy:test
 3. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
    **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 有測試和舊後台的檔比對，SHA-256 也核對過。
 
-兩段共用的參數：
+打包和上傳這兩段的 wrangler 指令共用的參數：
 
 - `--config wrangler.jsonc`：只讀這個設定檔，不會被 `.wrangler/deploy/config.json` 轉到別的檔。
 - `--env test`：環境固定是測試環境。
@@ -1245,9 +1245,11 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/compare.test.ts` | 和原生的 `bb verify` 逐案比對（要設 `IAMREAL_BB`） |
 | `test/*.test.ts` | 測試 |
 | `scripts/dev.ts` | `pnpm dev` |
-| `scripts/deploy.ts` | 部署的兩段：打包唯一的入口 `bundleWorker`、`buildDeploy`、上傳的參數 `uploadArgs`；怎麼讀權杖、給 wrangler 的環境 |
+| `scripts/deploy.ts` | 部署的三段：過卡頁面的建置和檢查 `buildSite`、打包唯一的入口 `bundleWorker` 和 `buildDeploy`、上傳的參數 `uploadArgs`；怎麼讀權杖、給 wrangler 的環境 |
 | `scripts/deploy-build-checks.ts` | 部署那一包上傳之前的檢查 |
 | `scripts/site-files.ts` | 寫出 `site/_headers`（從 `src/headers.ts`，照名冊的種類）和 `site/_redirects`；部署前的檢查和測試拿它核對版控裡的那兩個檔 |
-| `scripts/build-deploy.ts` | GitHub Actions 的 `build` 工作跑的：打包、檢查 |
+| `scripts/proof-page.ts` | 過卡的頁面：核對通用參數、建置 `web/` 的測試網站模式、上傳之前檢查那份建置（[Static Assets](#static-assets)） |
+| `scripts/issuers-in-spec.ts` | 從 `spec/vectors/issuers.json` 讀內政部的兩把發證金鑰，給部署前的兩種檢查比對 |
+| `scripts/build-deploy.ts` | GitHub Actions 的 `build` 工作跑的：建置並檢查過卡的頁面、打包並檢查 Worker |
 | `scripts/deploy-test.ts` | `pnpm run deploy:test` |
 | `test/workflows.ts` | 工作流程的白名單和讀它們的程式 |

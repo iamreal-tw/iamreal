@@ -14,7 +14,7 @@
 #
 # "deploy" uploads the Worker's build as it is, and with it the files of
 # worker/site/ (Static Assets; worker/README.md, "Static Assets"): the
-# style sheet, _headers and _redirects from its own checkout, and under
+# style sheet, copy.js, _headers and _redirects from its own checkout, and under
 # proof/ the card proof page "build" handed on. Only its last step has the token
 # (the repository's CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID).
 # Before that step the job runs the pinned actions, npm installing pnpm
@@ -25,7 +25,7 @@
 # packages of pnpm-lock.yaml, wrangler among them, as pnpm-workspace.yaml
 # and the lockfile describe them; wrangler.jsonc, which wrangler reads
 # when it uploads (it has no build command: wrangler would run it); and
-# worker/site/, which it uploads ("build" checked the three files of the
+# worker/site/, which it uploads ("build" checked the four files of the
 # repository at the same commit, and the page it handed on).
 name: deploy-test
 

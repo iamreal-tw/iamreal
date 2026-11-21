@@ -5,7 +5,7 @@
 //    into site/proof/ beside wrangler.jsonc and checked (proof-page.ts),
 //    after the common reference string it carries is checked against its
 //    SHA-256 (and downloaded, where there is none).
-//    The other files of site/ (the style sheet, _headers, _redirects) are
+//    The other files of site/ (the style sheet, copy.js, _headers, _redirects) are
 //    the repository's.
 // 2. `buildDeploy(outDir)`: the deploy build of the Worker, bundled into a
 //    directory by a wrangler dry run, with no token, then checked
@@ -24,7 +24,7 @@
 // The workflow (.github/workflows/deploy-test.yml) runs build-deploy.ts
 // (steps 1 and 2) in one job and the upload in another: the Worker's build
 // and the page's build go from the first to the second as artifacts, the
-// page's into site/proof/ of the second's checkout; the three files of
+// page's into site/proof/ of the second's checkout; the four files of
 // site/ in the repository are that checkout's, at the same commit.
 // test/workflows.test.ts checks that the workflow's lines are these
 // arguments. Also here: how deploy-test.ts reads the token and the
