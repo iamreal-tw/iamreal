@@ -28,6 +28,7 @@ import {
   CHECK_PATHS,
   CHECKS_GROUP,
   CHECKS_ON,
+  CIRCUITS_PATHS,
   type CheckLists,
   DEVICE_CORE_CACHES,
   EVERY_CHECK_PATHS,
@@ -67,6 +68,7 @@ const D = "deploy-test.yml";
 const C = "checks.yml";
 const B = "checks-browser.yml";
 const I = "checks-ios.yml";
+const CIRCUITS_WORKFLOW = "checks-circuits.yml";
 const BROWSER_JOB = "  browser:\n    runs-on: ubuntu-24.04\n";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SECRET = "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}";
@@ -278,6 +280,22 @@ const CHANGES: Record<string, Change[]> = {
   "229 the changes job that cannot fail": [replace(C, "  changes:\n", "  changes:\n    continue-on-error: true\n")],
   "230 no changes job": [replace(C, "  changes:\n", "  other:\n")],
   "231 the commits put into the script's command, not its env": [replace(C, CHANGES_RUN, "        run: BASE_SHA=${{ github.event.pull_request.base.sha }} bash .github/workflows/changed-paths.sh\n")],
+  // checks-circuits.yml (#247): like checks-browser.yml, and its one job exactly as written in test/workflows.ts.
+  "300 checks-circuits.yml also on merge_group": [replace(CIRCUITS_WORKFLOW, "on:\n", `on:\n${MERGE_GROUP}`)],
+  "301 checks-circuits.yml on every pull request": [replace(CIRCUITS_WORKFLOW, "    paths:\n", "    paths-ignore:\n")],
+  "302 a path less in checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "      - verifier/vk/**\n", "")],
+  "303 checks-circuits.yml on pull_request_target": [replace(CIRCUITS_WORKFLOW, "  pull_request:\n", "  pull_request_target:\n")],
+  "304 checks-circuits.yml in the concurrency group of checks-browser.yml": [replace(CIRCUITS_WORKFLOW, "  group: checks-circuits-", "  group: checks-browser-")],
+  "305 checks-circuits.yml with write permissions": [replace(CIRCUITS_WORKFLOW, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "306 a secret in the env of checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "jobs:\n", "env:\n  T: ${{ secrets.X }}\n\njobs:\n")],
+  "307 an action not in the list in checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "      - name: Install pnpm\n", `      - uses: actions/github-script@${SHA} # v9.0.0\n      - name: Install pnpm\n`)],
+  "308 the circuits job running a nargo that is not the one fetch-nargo.sh checked": [replace(CIRCUITS_WORKFLOW, `run: '"$(./fetch-nargo.sh)" test --workspace'`, "run: nargo test --workspace")],
+  "309 the circuits job taking circom from somewhere else": [replace(CIRCUITS_WORKFLOW, 'run: circom="$(./fetch-circom.sh)"', 'run: cargo install circom && circom="$(which circom)"')],
+  "310 the circuits job without the rebuild": [replace(CIRCUITS_WORKFLOW, "        run: ./rebuild.sh\n", "        run: true\n")],
+  "311 the circuits job taking the circom column's \"not run\"": [replace(CIRCUITS_WORKFLOW, "run: diff -u results/equivalence.md out/equivalence.md && ", "run: ")],
+  "312 one more step in the circuits job": [replace(CIRCUITS_WORKFLOW, "      - name: pnpm test", "      - run: curl -o .zkID/x https://example.invalid/x\n        working-directory: circuits\n      - name: pnpm test")],
+  "313 a step of the circuits job in another directory": [replace(CIRCUITS_WORKFLOW, "        working-directory: circuits\n        run: ./rebuild.sh", "        working-directory: circuits/fuzz\n        run: ./rebuild.sh")],
+  "314 the circuits job with an env": [replace(CIRCUITS_WORKFLOW, "    timeout-minutes: ", "    env:\n      ZKID_CIRCOM_BUILD: /tmp/x\n    timeout-minutes: ")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -443,6 +461,14 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     changes: [(f) => void (f[B] = f[B]!.replace(/^cache-mode: .*\n\n/m, ""))],
     problem: /^checks-browser\.yml: cache-mode is not none/,
   },
+  "180 checks-circuits.yml with no cache-mode": {
+    changes: [(f) => void (f[CIRCUITS_WORKFLOW] = f[CIRCUITS_WORKFLOW]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    problem: /^checks-circuits\.yml: cache-mode is not none/,
+  },
+  "181 checks-circuits.yml restoring a cache": {
+    changes: [replace(CIRCUITS_WORKFLOW, "      - name: Install pnpm\n", `${cacheStep("actions/cache/restore", TARGET)}      - name: Install pnpm\n`)],
+    problem: /^checks-circuits\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
   "175 checks-ios.yml allowed to save caches": {
     changes: [(f) => void (f[I] = f[I]!.replace(/^cache-mode: .*$/m, "cache-mode: write-only"))],
     problem: /^checks-ios\.yml: cache-mode is not none/,
@@ -540,6 +566,9 @@ test("the reader reads the part of YAML the workflows are written in, values as 
   const iosDoc = readYaml(realFiles()[I]!) as Record<string, Yaml>;
   assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...IOS_PATHS]);
   assert.deepEqual(Object.keys(iosDoc.jobs as object), ["ios"]);
+  const circuitsDoc = readYaml(realFiles()[CIRCUITS_WORKFLOW]!) as Record<string, Yaml>;
+  assert.deepEqual((circuitsDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...CIRCUITS_PATHS]);
+  assert.deepEqual(Object.keys(circuitsDoc.jobs as object), ["circuits"]);
   const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;
   assert.deepEqual(browser.env, { CHROME: "/usr/bin/google-chrome" });
   assert.ok((browser.steps as Record<string, Yaml>[]).some((s) => s.run === '"$CHROME" --version'));
@@ -760,6 +789,19 @@ test("the browser tests run when anything they use changes: each top-level direc
   for (const p of ["pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/checks-browser.yml"]) assert.ok(BROWSER_PATHS.includes(p), p);
 });
 
+test("the browser tests and the circuits' check run when a pull request adds a file at the root that changes how every check installs, builds or checks out", () => {
+  // Written out (ROOT_FILES, below), not read from ROOT_FILES_PATHS: e.g. a .pnpmfile.cjs can change what
+  // @aztec-foundation/bb.js resolves to, and bb comes from it; a .gitattributes can change the bytes of
+  // web/circuits/ and verifier/vk/ that rebuild.sh compares.
+  for (const [check, list] of Object.entries({ browser: BROWSER_PATHS, circuits: CIRCUITS_PATHS })) {
+    assert.deepEqual(
+      ROOT_FILES.filter((p) => !list.includes(p)),
+      [],
+      check,
+    );
+  }
+});
+
 /** Whether `go` runs here. */
 const hasGo = ((): boolean => {
   const r = spawnSync("go", ["version"], { encoding: "utf8" });
@@ -809,6 +851,74 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
   for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
   assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
   assert.deepEqual([...read].filter((p) => !matchesPaths(IOS_PATHS, p)), []);
+});
+
+/**
+ * The files and directories of the repository that the sources of circuits/
+ * name, found by reading every tracked file of it: in the JavaScript,
+ * `join(ROOT, ...)` (ROOT is circuits/, tests/lib/run.mjs) and
+ * `join(dirname(fileURLToPath(import.meta.url)), ...)` (the file's
+ * directory), with the parts written as strings, and the imports with a
+ * relative path; in the shell scripts, `$root/<path>` (rebuild.sh's root is
+ * the repository's) and the committed files rebuild.sh compares with
+ * (`compare "<path>`, from the root); in a Nargo.toml, `path = "..."`. A
+ * path cut short by a value put together at run time (`${circuit}.vk`)
+ * stands for its directory. Not seen: a path put together any other way,
+ * what nargo, bb and circom read on their own (the Noir libraries nargo
+ * fetches by tag, bb's common reference string), and what the zkID commit
+ * holds.
+ */
+function namedByCircuits(): Set<string> {
+  const circuits = join(REPO, "circuits");
+  const paths = new Set<string>();
+  const add = (path: string): void => {
+    const found = inRepo(path) ?? inRepo(dirname(path));
+    if (found !== undefined) paths.add(found);
+  };
+  const strings = (args: string): string[] => [...args.matchAll(/"([^"]*)"/g)].map((x) => x[1]!);
+  for (const f of trackedFiles("circuits")) {
+    const file = join(REPO, f);
+    const text = readFileSync(file, "utf8");
+    if (/\.(mjs|js)$/.test(f)) {
+      for (const m of text.matchAll(/\bjoin\(\s*ROOT\s*((?:,\s*"[^"]*"\s*)+)/g)) add(resolve(circuits, ...strings(m[1]!)));
+      for (const m of text.matchAll(/\bjoin\(\s*dirname\(fileURLToPath\(import\.meta\.url\)\)\s*((?:,\s*"[^"]*"\s*)+)/g)) add(resolve(dirname(file), ...strings(m[1]!)));
+      for (const s of namesIn(text).specifiers) if (s.startsWith(".")) add(resolve(dirname(file), s));
+    } else if (f.endsWith(".sh")) {
+      for (const m of text.matchAll(/\$root\/([A-Za-z0-9_./-]+)/g)) add(join(REPO, m[1]!));
+      for (const m of text.matchAll(/\bcompare "([A-Za-z0-9_./-]+)/g)) add(join(REPO, m[1]!));
+    } else if (f.endsWith("Nargo.toml")) {
+      for (const m of text.matchAll(/\bpath\s*=\s*"([^"]+)"/g)) add(resolve(dirname(file), m[1]!));
+    }
+  }
+  return paths;
+}
+
+test("the paths of checks-circuits.yml hold every file of the repository the rebuild and the tests of circuits/ use", () => {
+  const named = namedByCircuits();
+  for (const p of ["spec/vectors/poseidon2.json", "web/scripts/strip-circuit.mjs", "web/circuits", "verifier/vk", "circuits/lib", "circuits/tests/lib/run.mjs"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  const missing = (list: readonly string[]): string[] => [...named].filter((p) => !holds(list, p));
+  assert.deepEqual(missing(CIRCUITS_PATHS), []);
+  // And a list without one of them is caught.
+  assert.deepEqual(missing(CIRCUITS_PATHS.filter((p) => p !== "web/scripts/strip-circuit.mjs")), ["web/scripts/strip-circuit.mjs"]);
+  // What is installed, and the workflow itself.
+  for (const p of ["pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/checks-circuits.yml"]) assert.ok(CIRCUITS_PATHS.includes(p), p);
+});
+
+test("the committed comparison table has a circom verdict for every case: checks-circuits.yml requires the run's table to be this one, so a run whose circom column says \"not run\" fails", () => {
+  // circuits/tests/equivalence.test.mjs writes the table: a header row, a row of ---, then one row per
+  // case, the circom column sixth.
+  const table = readFileSync(join(REPO, "circuits", "results", "equivalence.md"), "utf8");
+  const rows = table
+    .split("\n")
+    .filter((l) => l.startsWith("| "))
+    .map((l) => l.slice(2, -2).split(" | "));
+  assert.equal(rows[0]![5], "circom");
+  const verdicts = rows.slice(2).map((r) => r[5]!);
+  assert.equal(String(verdicts.length), /^(\d+) cases;/m.exec(table)?.[1], "one row per case");
+  assert.deepEqual(
+    verdicts.filter((v) => !["accept", "reject", "same"].includes(v)),
+    [],
+  );
 });
 
 // Skipping by path (#206): the lists of the four required checks, the script that reads them, and
@@ -1149,14 +1259,24 @@ test("the go check runs when anything it uses changes: every directory with a Go
     [...dirs, ...named].filter((p) => !holds(list, p)),
     [],
   );
-  // The job installs the packages, for bb: pnpm compares the lockfile with these.
-  for (const p of ["protocol/package.json", "web/package.json", "worker/package.json"]) assert.ok(list.includes(p), p);
+});
+
+test("every check that runs pnpm install at the root runs when a package of the workspace changes its package.json: pnpm compares the lockfile with each", () => {
+  const packages = [...workspacePackages().values()].map((dir) => `${relative(REPO, dir).split(sep).join("/")}/package.json`);
+  assert.ok(packages.includes("circuits/package.json"), `the check read the workspace: ${packages.join(", ")}`);
+  for (const [check, list] of Object.entries({ go: CHECK_PATHS.go!, typescript: CHECK_PATHS.typescript!, browser: BROWSER_PATHS, circuits: CIRCUITS_PATHS })) {
+    assert.deepEqual(
+      packages.filter((p) => !matchesPaths(list, p)),
+      [],
+      check,
+    );
+  }
 });
 
 test("the typescript check runs when anything it uses changes: every file and directory the sources of protocol/, worker/ and web/ name is in its list", () => {
   const list = CHECK_PATHS.typescript!;
   const { paths, goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
-  for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
+  for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows", "circuits"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
   assert.ok(goPackages.has("./verifier") && goPackages.has("./cmd/iamreal-crl") && goPackages.has("./roster"), `the check read the Go commands: ${[...goPackages].join(", ")}`);
   assert.deepEqual(
     [...paths].filter((p) => !holds(list, p)),

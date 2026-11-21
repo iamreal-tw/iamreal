@@ -116,6 +116,66 @@ esac
   });
 });
 
+describe("fetch-circom.sh", () => {
+  const RELEASE_URL = "https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64";
+  const CIRCOM = "#!/bin/sh\necho circom compiler 2.2.3\n";
+  /**
+   * A copy of the script next to a circom.sha256 with `line`, and stand-ins on
+   * PATH for uname (this machine is `system`) and curl, which "downloads"
+   * `body` to its --output and writes the URL it was given to `asked`.
+   */
+  function setUp({ line, system = "Linux x86_64", body = CIRCOM }) {
+    const dir = fresh();
+    copy(dir, "fetch-circom.sh", "sha256.sh");
+    writeFileSync(join(dir, "circom.sha256"), line + "\n");
+    const bin = fresh();
+    const [s, m] = system.split(" ");
+    executable(join(bin, "uname"), `#!/bin/sh\ncase "$1" in -s) echo ${s} ;; -m) echo ${m} ;; esac\n`);
+    executable(join(bin, "curl"), `#!/bin/sh
+out=
+while [ $# -gt 1 ]; do
+  case "$1" in --output) out=$2; shift ;; esac
+  shift
+done
+echo "$1" > "${join(dir, "asked")}"
+printf '%s' '${body}' > "$out"
+`);
+    return { dir, env: { PATH: `${bin}:${process.env.PATH}` } };
+  }
+  const sha = (text) => {
+    const f = join(fresh(), "f");
+    writeFileSync(f, text);
+    return run(join(ROOT, "sha256.sh"), [f]).stdout.trim();
+  };
+
+  it("downloads circom from its release, checks its SHA-256 against circom.sha256, and prints the path of the executable", () => {
+    const { dir, env } = setUp({ line: `${sha(CIRCOM)}  v2.2.3/circom-linux-amd64` });
+    const r = run(join(dir, "fetch-circom.sh"), [], env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(join(dir, "asked"), "utf8"), RELEASE_URL + "\n");
+    const circom = join(dir, ".tools", "circom", "linux-amd64", "circom");
+    assert.equal(r.stdout, circom + "\n");
+    assert.equal(spawnSync(circom, { encoding: "utf8" }).stdout, "circom compiler 2.2.3\n", "the downloaded file, made executable");
+  });
+
+  it("puts nothing in place of a download whose SHA-256 is not the one in circom.sha256", () => {
+    const { dir, env } = setUp({ line: `${"0".repeat(64)}  v2.2.3/circom-linux-amd64` });
+    const r = run(join(dir, "fetch-circom.sh"), [], env);
+    assert.notEqual(r.status, 0);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /SHA-256/);
+    assert.equal(existsSync(join(dir, ".tools", "circom", "linux-amd64", "circom")), false);
+  });
+
+  it("downloads nothing on a machine circom.sha256 has no circom for", () => {
+    const { dir, env } = setUp({ line: `${sha(CIRCOM)}  v2.2.3/circom-linux-amd64`, system: "Darwin arm64" });
+    const r = run(join(dir, "fetch-circom.sh"), [], env);
+    assert.notEqual(r.status, 0);
+    assert.equal(r.stdout, "");
+    assert.equal(existsSync(join(dir, "asked")), false);
+  });
+});
+
 describe("fuzz/selftest/make-mutants.sh", () => {
   it("stops when fetch-nargo.sh fails, and builds nothing", () => {
     const src = fresh();
