@@ -17,7 +17,7 @@ import (
 // this package, so correcting an error here alone does not change the
 // number; a new version of the re-verification command starts the
 // re-verification from the first record (ADR-0025).
-const RulesVersion = 1
+const RulesVersion = 2
 
 // Reason codes of an invalid record (spec/roster-rules.md, "Per record").
 const (

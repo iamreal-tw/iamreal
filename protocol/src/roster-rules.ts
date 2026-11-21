@@ -15,7 +15,7 @@ import type { PlatformRow } from "./platforms.ts";
  * number"). A stored card state was computed by one version; the Go
  * implementation has the same constant (roster.RulesVersion).
  */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** The state of one slot: one card on one platform (spec/roster-rules.md, "State"). */
 export interface SlotState {
