@@ -39,7 +39,7 @@ status: accepted（部分由 ADR-0037 取代）
 
 ## 版本號和標籤
 
-- **顯示的版本用日期**，例如 `2026.11.20`；同一天第二次加 `.1`。和網站的標籤同一種寫法（ADR-0029）。
+- **顯示的版本用日期**，例如 `2026.11.20`，月、日不補零（`2026.11.5`）。同一天上傳第二次，版本不變，靠 `build` 分：iOS 的版本只收三個整數（「The required format is three period-separated integers」，[CFBundleShortVersionString](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)），`2026.11.20.1` 傳不上去；Android 跟著一樣。網站的標籤照 ADR-0029，同一天第二次加 `.1`。
 - **`build` 是兩個 app 各自遞增的整數**（ADR-0035）。
 - **標籤兩個 app 分開**：`android/v2026.11.20`、`ios/v2026.11.20`。不和網站的 `v*` 共用。
 - **app 和網站的版本不互相對應。** 兩邊靠後台的介面和 `config` 相容。

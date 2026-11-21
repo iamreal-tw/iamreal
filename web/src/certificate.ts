@@ -1,8 +1,8 @@
 // The cardholder's certificate, checked on the device before any PIN is
-// asked: the same structural walk as the circuit (zkid-noir lib/src/der.nr,
-// ADR-0008 to ADR-0011), validity on today's date in Taiwan, and MOICA's
-// signature (spec/issuers.md). A card that cannot pass is told so here, and
-// the reason goes back to the caller only (ADR-0016).
+// asked: the same structural walk as the circuit (circuits/lib/src/der.nr at
+// the repository's root, ADR-0008 to ADR-0011), validity on today's date in
+// Taiwan, and MOICA's signature (spec/issuers.md). A card that cannot pass
+// is told so here, and the reason goes back to the caller only (ADR-0016).
 import { equalBytes } from "iamreal-protocol/bytes.ts";
 import { DerError, TAG, children, content, expectTlv, oidString, readTlv, whole } from "./der.ts";
 import { type IssuerKey, importRsaKey, rsaVerify } from "./issuers.ts";
@@ -46,7 +46,7 @@ export interface CardCertificate {
   name: string;
 }
 
-// The byte strings der.nr pins (zkid-noir 497b610).
+// The byte strings der.nr pins (circuits/lib/src/der.nr).
 const hex = (s: string): Uint8Array => Uint8Array.from(s.match(/../g)!.map((b) => parseInt(b, 16)));
 export const MAX_TBS_LEN = 1536;
 export const MAX_SIGNED_LEN = MAX_TBS_LEN - 9;

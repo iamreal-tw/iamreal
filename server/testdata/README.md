@@ -7,7 +7,7 @@
 | `crl/` | 三份清冊，測試由假的內政部伺服器提供給鏡像 |
 | `issuer-G2.der`、`issuer-G3.der` | 兩把測試用發證金鑰的公鑰（SubjectPublicKeyInfo）。同一把金鑰簽卡片的憑證和清冊 |
 | `card-proofs.json` | 十四次過卡：後台的時鐘（台灣時間）、題目的 16 個亂數位元組、送出的內容（`POST /api/v1/records` 的請求，帶整份帳號清單）、預期的回應（成功時每個平台的種類，失敗時錯誤代碼） |
-| `zkid-noir-commit` | 做證明用的 `zkid-noir` 提交 |
+| `circuits-commit` | 產生測試資料時電路原始碼的提交；提交的這一份記的是先前的私有程式庫的 `497b610…`，在這個程式庫查不到（見「怎麼產生的」） |
 | `generate.go` | 產生上面這些檔案的程式 |
 
 ## 清冊
@@ -49,12 +49,16 @@ G2 的卡的清冊 A 是 2026-11-20 的，所以 G2 的過卡都在 11-23 以前
 
 ## 怎麼產生的
 
-需要 `zkid-noir`（提交見 `zkid-noir-commit`；`pnpm install`、`nargo compile` 過）、`bb` 6.0.0、放 2^18 個點 `bn254_g1.dat` 的通用參數目錄（`bb prove` 要用）。在程式庫的根目錄：
+需要 `circuits/` 的測試程式（`tests/lib/`）和公布的電路檔（`web/circuits/`，`circuits/rebuild.sh` 從原始碼重編、逐位元組比對的那兩個檔）、`bb` 6.0.0、放 2^18 個點 `bn254_g1.dat` 的通用參數目錄（`bb prove` 要用）。在程式庫的根目錄：
 
 ```
-go run ./server/testdata/generate.go -zkid <zkid-noir> -bb <bb> -crs <通用參數目錄>
+pnpm install
+bb=$(circuits/find-bb.sh)
+go run ./server/testdata/generate.go -bb "$bb" -crs <通用參數目錄>
 ```
 
-證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `zkid-noir` 裡。`generate.go` 確認 `zkid-noir` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 25 秒（十四份證明）。
+證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `circuits/`、`web/circuits/` 裡。`generate.go` 確認 `circuits/` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 25 秒（十四份證明）。
+
+提交的這一份是電路的原始碼搬進 `circuits/` 之前做的，`circuits-commit` 寫的是先前的私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`。搬進 `circuits/` 時原始碼相同（ADR-0038），電路檔和驗證金鑰都沒變，所以沒有重新產生。
 
 每次執行的金鑰、題目和證明都不同，測試照樣通過。
