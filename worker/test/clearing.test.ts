@@ -69,6 +69,7 @@ test("the steps of README.md: the roster is empty, takes records, and is publish
   await cleared.hasAlarm();
   assert.equal(await cleared.hasAlarm(), false);
   assert.equal(replacedLines(), 1);
+  assert.deepEqual(worker.logLines().filter((l) => l.includes('"roster_object_replaced"')).map((l) => l.slice(l.indexOf("{"))), [JSON.stringify({ event: "roster_object_replaced", object: clearedName })]);
   // The roster is empty at once: no record, nothing published, the card is unknown, the pages say the new date.
   assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
   assert.equal((await cardState(worker, card)).count, 0);

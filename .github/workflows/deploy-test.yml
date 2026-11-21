@@ -5,13 +5,17 @@
 # file against them.
 #
 # "build" has no token. It runs the repository's code: scripts/build-deploy.ts
-# makes the deploy build the way `pnpm run deploy:test` does (the proof
-# verifier's files checked against their SHA-256, then a wrangler dry run)
-# and checks it, then hands it on as an artifact.
+# builds the card proof page (web/'s build for the test site, after it
+# downloads the common reference string and checks it against its SHA-256)
+# into worker/site/proof/ and checks it, makes the deploy build of the
+# Worker the way `pnpm run deploy:test` does (the proof verifier's files
+# checked against their SHA-256, then a wrangler dry run) and checks it,
+# then hands both on as artifacts.
 #
-# "deploy" uploads that build as it is, and with it the files of worker/site/
-# from its own checkout (Static Assets: the style sheet, _headers, _redirects;
-# worker/README.md, "Static Assets"). Only its last step has the token
+# "deploy" uploads the Worker's build as it is, and with it the files of
+# worker/site/ (Static Assets; worker/README.md, "Static Assets"): the
+# style sheet, copy.js, _headers and _redirects from its own checkout, and under
+# proof/ the card proof page "build" handed on. Only its last step has the token
 # (the repository's CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID).
 # Before that step the job runs the pinned actions, npm installing pnpm
 # before the repository is checked out, and pnpm installing the packages
@@ -21,8 +25,8 @@
 # packages of pnpm-lock.yaml, wrangler among them, as pnpm-workspace.yaml
 # and the lockfile describe them; wrangler.jsonc, which wrangler reads
 # when it uploads (it has no build command: wrangler would run it); and
-# worker/site/, which it uploads ("build" checked those files at the same
-# commit).
+# worker/site/, which it uploads ("build" checked the four files of the
+# repository at the same commit, and the page it handed on).
 name: deploy-test
 
 on:
@@ -57,13 +61,19 @@ jobs:
       - name: Install pnpm
         run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
       - run: pnpm install --frozen-lockfile
-      - name: Build the Worker and check the build
+      - name: Build the card proof page and the Worker, and check both builds
         working-directory: worker
         run: node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: worker-build
           path: ${{ runner.temp }}/worker-build
+          if-no-files-found: error
+      # The card proof page, built and checked in worker/site/proof/ (not in the repository).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: proof-page
+          path: worker/site/proof
           if-no-files-found: error
 
   deploy:
@@ -88,6 +98,11 @@ jobs:
         with:
           name: worker-build
           path: ${{ runner.temp }}/worker-build
+      # The card proof page, to where wrangler reads the files of Static Assets from (wrangler.jsonc, assets.directory).
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: proof-page
+          path: worker/site/proof
       # The build's index.js and the modules next to it, as they are (--no-bundle), with the
       # bindings of wrangler.jsonc. The arguments are uploadArgs of worker/scripts/deploy.ts;
       # --env-file=/dev/null keeps wrangler from loading a .env file of the checkout.

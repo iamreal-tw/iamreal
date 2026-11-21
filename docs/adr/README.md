@@ -65,7 +65,8 @@
 - 限流分三層；被打時過卡先讓路；全站的總量上限擋在 `GET /api/v1/config`。[ADR-0026](0026-rate-limiting-in-three-layers.md)
 - 測試網站是同一個 Worker 專案的另一個環境，只收真卡片，不定期清空。[ADR-0028](0028-test-site-is-a-second-environment.md)
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把；快取只有推到 `main` 的執行能存，部署碰不到快取。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
-- app 傳到商店的每一個 build 只從 GitHub Actions 建置和上傳；測試 app 和正式 app 是兩個識別碼；Android 的簽章金鑰自己產生、不放在 GitHub；Android 能逐檔比對，iOS 比不了。[ADR-0036](0036-apps-built-and-uploaded-only-from-github-actions.md)
+- app 傳到商店的每一個 build 只從 GitHub Actions 建置和上傳；Android 的簽章金鑰自己產生、不放在 GitHub；Android 能逐檔比對，iOS 比不了。[ADR-0036](0036-apps-built-and-uploaded-only-from-github-actions.md)
+- 手機 app 只有一個識別碼 `tw.iamreal.app`，上線前連測試網站、上線起連正式網站；連測試網站的是不上傳商店的開發用 build `tw.iamreal.app.dev`；CI 只上傳到測試軌道，正式版由營運者在商店的後台發布。[ADR-0037](0037-one-app-identifier.md)（部分取代 ADR-0036）
 - 名冊目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從名冊重算；重建卡片狀態走「從名冊重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-roster-and-crl-archive.md)
 
 ## 隱私和營運者看得到什麼
@@ -86,11 +87,12 @@
 | 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
-| 0028 | 測試網站有測試名冊、它的標示、首頁和島民證明，但還不能過卡：部署沒有放過卡的頁面（`/proof`），過卡的頁面上也沒有標示 | [#37](https://github.com/iamreal-tw/iamreal/issues/37) |
+| 0028 | 每天的重驗沒有多跑一份測試名冊 | 第三份規格 |
 | 0029 | 只有測試網站的部署（合併到 main）；沒有推版本標籤部署正式網站的工作流程、production environment、正式的權杖 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從名冊重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
+| 0037 | `android/`、`ios/`、`design/copy/app.md` 寫的是測試 app `tw.iamreal.app.test`，沒有開發用 build | 待開 |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
 `worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明、每天公布名冊有了，其餘的訪客頁面、限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的 `server/` 只當逐案比對的對照。

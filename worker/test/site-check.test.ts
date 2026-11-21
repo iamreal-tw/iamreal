@@ -11,16 +11,17 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshRoster, publishCrl, tw } from "./records.ts";
 import { type Reader, checkSite } from "./site-check.ts";
 
-/** The date the pages of this test's roster say it was last cleared on: the test's own, not wrangler.jsonc's. */
-const CLEARED_ON = "2026-11-07";
+/** The date the pages of this test's roster say it was last cleared on: the test's own, not wrangler.jsonc's. It is the day the roster's object first runs. */
+const CLEARED_ON = "2026-11-20";
 const SITE_ORIGIN = "https://test.iamreal.tw";
 
 let worker: TestWorker;
 let proofFiles: string;
 before(async () => {
-  // A card proof page of one made-up file: the check asks only whether /proof is there.
+  // A card proof page of made-up files, with a script of the site's own as the built page has: the check asks
+  // whether the page and its help page are there, and what scripts they have.
   proofFiles = mkdtempSync(join(tmpdir(), "site-check-"));
-  writeFileSync(join(proofFiles, "index.html"), "<!DOCTYPE html><title>proof</title>");
+  for (const name of ["index.html", "help.html"]) writeFileSync(join(proofFiles, name), '<!DOCTYPE html><title>proof</title><script type="module" crossorigin src="/proof/assets/index.js"></script><body></body>');
   worker = await startWorker({ proofFiles });
   await freshRoster(worker, { clearedOn: CLEARED_ON });
   // A usable CRL of each issuer key, dated 2026-11-20 in Taiwan.
@@ -36,7 +37,7 @@ after(async () => {
   rmSync(proofFiles, { recursive: true, force: true });
 });
 
-const site: Reader = (path) => worker.fetch(path, { redirect: "manual" });
+const site: Reader = (path, headers) => worker.fetch(path, { redirect: "manual", headers: { ...headers } });
 /** The data domain: the files of the bucket, with the headers they were stored with, readable from the site's pages only. */
 const data: Reader = async (path, headers) => {
   const file = (await worker.files(path.slice(1))).find((f) => `/${f.key}` === path);
@@ -49,9 +50,9 @@ const AS_DEPLOYED: Parts = { site, data, today: "2026-11-21", clearedOn: CLEARED
 /** What each failing line is about: its text up to the problem. */
 const failed = async (parts: Partial<Parts>): Promise<string[]> => (await checkSite({ ...AS_DEPLOYED, ...parts })).filter((l) => !l.ok).map((l) => l.what);
 /** The site, with the answer for one path changed. */
-const siteWith = (path: string, change: (res: Response, body: string) => Response): Reader => async (p) => {
-  const res = await site(p);
-  return p === path ? change(res, await res.text()) : res;
+const siteWith = (path: string, change: (res: Response, body: string, headers?: Readonly<Record<string, string>>) => Response): Reader => async (p, headers) => {
+  const res = await site(p, headers);
+  return p === path ? change(res, await res.text(), headers) : res;
 };
 /** The data domain, with the answer for one path replaced. */
 const dataWith = (path: string, answer: (res: Response, headers?: Readonly<Record<string, string>>) => Response | Promise<Response>): Reader => async (p, headers) => {
@@ -69,7 +70,7 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying?: RegExp): 
 test("every check passes on the Worker as it is deployed, with a card proof page and CRLs of both issuer keys", async () => {
   const lines = await checkSite(AS_DEPLOYED);
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  assert.equal(lines.length, 19, "a line for each thing checked");
+  assert.equal(lines.length, 21, "a line for each thing checked");
   // The day after, before the alarm of midnight has run, the last line is yesterday's: that passes too.
   assert.deepEqual(await failed({ today: "2026-11-22" }), []);
 });
@@ -111,8 +112,24 @@ test("a page: another status, a header missing, a cookie, no noindex in the page
   assert.ok(otherDate.every((w) => w.includes("the date 2026-11-22")), otherDate.join("\n"));
 });
 
+test("a script added to a page on its way to a browser fails: one of another origin, or one written into the page", async () => {
+  // What a proxy in front of the site does: only a request that accepts HTML gets the page with the script.
+  const adding = (script: string): Reader =>
+    siteWith("/faq", (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", `${script}</body>`) : body, { status: res.status, headers: res.headers }));
+  const line = "no page has a script that is not a file of this site";
+  await failsOnly({ site: adding('<script type="module" src="https://example.com/beacon.js"></script>') }, line, /\/faq has <script type="module" src="https:\/\/example\.com/);
+  await failsOnly({ site: adding('<script src="//example.com/a.js"></script>') }, line, /\/faq/);
+  await failsOnly({ site: adding("<script>1</script>") }, line, /\/faq has <script>/);
+  // The card proof page and its help page are read for the same.
+  for (const path of ["/proof", "/proof/help.html"]) {
+    const added = siteWith(path, (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", '<script type="module" src="https://example.com/beacon.js"></script></body>') : body, { status: res.status, headers: res.headers }));
+    await failsOnly({ site: added }, line, new RegExp(`${path.replace(/[/.]/g, "\\$&")} has <script type="module" src="https://example\\.com`));
+  }
+});
+
 test("a site without the card proof page, a style sheet kept by caches: each fails", async () => {
   await failsOnly({ site: siteWith("/proof", () => new Response(null, { status: 404 })) }, "GET /proof", /404/);
+  await failsOnly({ site: siteWith("/proof/help.html", () => new Response(null, { status: 404 })) }, "GET /proof/help.html", /404/);
   await failsOnly({ site: siteWith("/pages.css", (res, body) => new Response(body, { headers: { ...Object.fromEntries(res.headers), "cache-control": "public, max-age=60" } })) }, "GET /pages.css", /Cache-Control/);
 });
 
@@ -134,13 +151,21 @@ test("the fingerprint file: a last line that is not what the API answers fails; 
   // The file is gone and the API still answers a date: the bucket was emptied under a roster that was published.
   const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
   await failsOnly({ data: noFile }, "the data domain: the last line of /roster/fingerprints.jsonl is what GET /api/v1/fingerprint answers", /there is no file/);
-  // A roster that was not published yet, as on the day it was cleared: no file, no date. That passes.
+});
+
+test("a roster that was never published passes on the day it was cleared and the two days after, and no longer", async () => {
+  // As after a clearing: no file, no date.
   const neverPublished = siteWith("/api/v1/fingerprint", (res) => new Response(`{"date":null,"count":0,"fingerprint":"${"0".repeat(64)}"}`, { headers: res.headers }));
-  assert.deepEqual(await failed({ site: neverPublished, data: noFile }), []);
+  const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
+  // Cleared on 2026-11-20: the first line is due at the midnight of the 21st, or of the 22nd if the object first ran on the 21st.
+  assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-20" }), []);
+  assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-22" }), []);
+  // The 23rd: the object does not publish. (The CRLs of the 20th are still young enough that day.)
+  await failsOnly({ site: neverPublished, data: noFile, today: "2026-11-23" }, "GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", /nothing was published yet.*2026-11-20; today is 2026-11-23/);
 });
 
 test("a roster whose daily publication stopped fails: the last line is older than yesterday", async () => {
-  await failsOnly({ today: "2026-11-23" }, "GET /api/v1/fingerprint: the roster was published today or yesterday, or never yet", /"2026-11-21"; today is 2026-11-23/);
+  await failsOnly({ today: "2026-11-23" }, "GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", /"2026-11-21"; today is 2026-11-23/);
 });
 
 test("the data domain's CORS: not allowing the site fails, and so does allowing another site", async () => {
