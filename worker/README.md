@@ -14,10 +14,11 @@
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
 | 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)） | 在 Cloudflare 上公布有紀錄的名冊：測試名冊還是 0 筆 |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
-| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時放進 Static Assets 的 `web/` 建置在 Cloudflare 上跑過的紀錄：建置和檢查有了（[#69](https://github.com/iamreal-tw/iamreal/issues/69)，[Static Assets](#static-assets)），帶著它的第一次部署還沒做，在那之前線上的 `/proof` 是 `404` |
+| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 用真卡片在測試網站過卡（[#71](https://github.com/iamreal-tw/iamreal/issues/71)）。帶著 `web/` 建置的部署 2026-11-21 做了（`main` 的 `1400e11`），不插卡看得到的都看過（[Static Assets](#static-assets)「Cloudflare 上看過的」） |
 | 測試專用的建置和測試的工具 | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
+| 清空測試名冊的步驟（[清空測試名冊](#清空測試名冊)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；營運者手動設的東西的清單（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)） | 在測試網站上真的清空一次 |
 
 ## 單獨執行
 
@@ -524,7 +525,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
 - **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試名冊寫 `test.iamreal.tw/p/<短編號>`，正式名冊寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結和「複製連結」複製的也是同一個網域：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `ROSTER_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
 - **過卡的頁面上的這一行不是 Worker 加的。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；標示由 `web/` 測試網站的建置自己寫在頁面最上面（`web/README.md`「三種用真元件的建置」），句子同樣來自 `design/copy/test-site.md`，日期是建置時從 `wrangler.jsonc` 的 `TEST_ROSTER_CLEARED_ON` 帶進去的。所以改這個日期要重新部署才會兩邊一致；部署前的檢查核對頁面裡的日期就是設定裡的那一個（`scripts/proof-page.ts`）。`web/test/e2e/ui.ts` 在本機的 workerd 上比過：過卡頁面上的那一行和 Worker 產生的首頁上的相同。
-- **清空測試名冊時**一起改三樣：`ROSTER_OBJECT_NAME`、清空測試的儲存桶、`TEST_ROSTER_CLEARED_ON`。
+- **清空測試名冊時**一起改 `ROSTER_OBJECT_NAME` 和 `TEST_ROSTER_CLEARED_ON`，部署之後營運者刪掉測試的儲存桶裡的 `roster/`。順序和每一步之後怎麼確認在[清空測試名冊](#清空測試名冊)。過卡的頁面上的日期是建置時從 `wrangler.jsonc` 讀的，所以同一次部署就跟著變。
 
 ### 頁面送的標頭
 
@@ -589,7 +590,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
 - GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的四個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
-- 帶著這份建置的部署還沒做過（這一版還沒合併）。在那之前線上的 `/proof` 沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`：Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭，沒有跑 Worker（見下面「Cloudflare 上看過的」）。
+- 帶著這份建置的第一次部署是 2026-11-21（`main` 的 `1400e11`，GitHub Actions）。線上看到的在下面「Cloudflare 上看過的」。
 
 設定的每一項：
 
@@ -660,14 +661,32 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   這是看到的行為，文件沒有保證；部署前後的檢查沒有一項會發現它變了。它變了的話，檔案不存在的 `/proof` 網址會由 Worker 回「找不到這一頁」；Worker 仍然送不出檔案（沒有 binding），也改不了一個存在的檔。
 - `_headers` 的規則套在不是檔案的回應上：`301` 和不存在的檔的 `404` 都帶。
 
-**Cloudflare 上還沒確認的**（都要 `site/proof/` 有檔才看得到；[#69](https://github.com/iamreal-tw/iamreal/issues/69) 之後的第一次部署會帶著頁面，部署完要看這幾項，把結果寫回這裡）：
+2026-11-21，[#235](https://github.com/iamreal-tw/iamreal/pull/235) 合併（`1400e11`）由 GitHub Actions 部署之後，用 `curl` 看的。這是第一次帶著 `web/` 的建置（`site/proof/` 有檔）。只送了 `GET`、`HEAD`，和為了看 `405` 對 `/proof` 底下的檔送的 `POST`、`DELETE`：
 
-- 檔案存在時直接送、不跑 Worker。
-- `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
-- `/proof` 底下存在的檔用 `POST` 等其他方法是不是 `405`（`/copy.js` 線上是），帶不帶 `/proof` 的標頭。本機是、有帶。
-- 上面「和 Worker 自己送的時候不同的地方」那張表裡 `307` 的那一列，和 `ETag`、`304`。
-- 只能部署 `iamreal-test` 的那把權杖上傳得了這份建置（合計約 22 MB，最大的檔是 8 MiB 的通用參數）；之前上傳過的只有 `pages.css` 一個檔。
-- 真的瀏覽器打開 `https://test.iamreal.tw/proof`：頁面是跨來源隔離的、證明引擎啟動、沒有違反 CSP、標示在最上面。`web/test/e2e/smoke.ts` 可以不插卡做這件事（`web/README.md`「在本機用真卡片過卡」）。
+| 請求 | 線上回的 | 和本機 |
+|---|---|---|
+| 部署 | 成功：只能部署 `iamreal-test` 的那把權杖（GitHub Actions 用的那一把）上傳得了整份建置。最大的檔 `crs/bn254_g1_compressed_2p18.dat` 下載回來是 8,388,608 位元組，`bb/barretenberg-threads.wasm.gz` 是 4,071,596 位元組 | |
+| `GET /proof` | `200`，`text/html`，495 位元組，內容是 `web/` 建置的那種 `index.html`（引用 `/proof/assets/` 底下的一支程式和標示的樣式表）；帶 `/proof` 的那一組標頭：`Content-Security-Policy`（`connect-src 'self' https://test-data.iamreal.tw`）、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`、`X-Content-Type-Options`、`X-Robots-Tag: noindex`。所以 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有套上 | 標頭相同 |
+| `GET /proof/help.html`、`GET /proof/assets/<程式>.js` | `200`，同一組標頭；`Content-Type` 是 `text/html`、`text/javascript`，不帶 `charset` | 標頭相同 |
+| `/proof` 和它的檔的 `Cache-Control`、`ETag` | `Cache-Control: public, max-age=0, must-revalidate`，有 `ETag`；帶 `If-None-Match` 再要一次是 `304`，標頭照樣帶 | |
+| `GET /proof/`、`GET /proof/index.html`（不跟著轉） | `301` 到 `/proof`，帶同一組標頭，沒有 `Cache-Control` | 相同 |
+| `GET /proof//index.html`、`/proof/%69ndex.html`、`/proof/assets%2f<程式>.js` | `307` 到那個檔自己的路徑，帶同一組標頭 | 相同 |
+| `GET /proof/nothing.js`、`GET /proof/crs/` | 空的 `404`，帶同一組標頭 | 相同 |
+| `GET /proof/..%2fpages.css` | 空的 `404` | 相同 |
+| `GET /proof/../pages.css`（`curl --path-as-is`，路徑原樣送出） | `200`，是樣式表和樣式表的標頭 | 相同 |
+| `POST /proof`、`POST` 和 `DELETE /proof/assets/<程式>.js` | `405`，內容是空的，沒有 `Allow`，帶 `/proof` 的那一組標頭 | 相同 |
+| `POST /proof/`（不跟著轉） | `301` 到 `/proof` | 相同 |
+| `POST /proof/nothing.js` | 空的 `404` | 相同 |
+| `POST /api/v1/challenges` | `200`（經營運者同意送的一次）：名冊不是 `paused` | |
+
+所以上面那張「和 Worker 自己送的時候不同的地方」的表，除了「設定讀不出來時」那一列（線上的設定是對的，看不到），每一列線上都和本機相同；`_headers` 的規則在 `200`、`301`、`304`、`307`、`404`、`405` 上都有套。
+
+**線上的頁面被 Cloudflare 加了一個別的網域的 `<script>`**（同一天看到的）。請求帶 `Accept: text/html` 時（瀏覽器都帶），Worker 產生的頁面和 `/proof`、`/proof/help.html` 回來的 HTML 都多一個 `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…" data-cf-beacon="…">`；不帶這個標頭（`curl` 和 Node 的 `fetch` 的預設）就沒有，所以上面用 `curl` 看到的 `/proof` 還是 495 位元組。這個 script 不是這個程式庫的任何一段程式加的，是在 Cloudflare 那一邊加的；是哪一項設定還沒查。兩種頁面的 CSP 都不准它載入（訪客的頁面是 `default-src 'none'`，過卡的頁面是 `script-src 'self' 'wasm-unsafe-eval'`）：過卡的頁面上，無頭的 Chrome 記了一筆 CSP 違規、沒有載入它；訪客的頁面沒有另外用瀏覽器看。但送到瀏覽器的頁面因此不是建置出來的那一份，訪客的頁面也不再是沒有 `<script>`。要營運者在 Cloudflare 上關掉；關掉之前 `test/site-check.ts` 有一項不過（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）。
+
+**Cloudflare 上還沒確認的**：
+
+- 檔案存在時直接送、不跑 Worker。線上沒有 `GET /__test/seen` 這種入口，從外面分不出一個回應有沒有經過 Worker；本機的 workerd 上是不跑。
+- 真的瀏覽器打開 `https://test.iamreal.tw/proof`、從 `https` 的網域開內政部元件的視窗、用真卡片走完六步：等 [#71](https://github.com/iamreal-tw/iamreal/issues/71)。無頭的 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件沒有收到請求）看過一次，2026-11-21，`web/test/e2e/smoke.ts`：頁面是跨來源隔離的、證明引擎啟動（3.5 秒）、畫面是第 1 步、`Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 對。它有三項不過：連到別的網域和 CSP 違規，都是上面那個被加進來的 script；`Content-Security-Policy` 那一項是 `smoke.ts` 比的是正式名冊的那一份（`connect-src` 是 `data.iamreal.tw`），測試網站的是 `test-data.iamreal.tw`，要改的是 `smoke.ts`。
 
 **加正式環境時**：`assets` 在最上層，每個環境共用同一個 `site/`，而 `_headers` 只有一份。正式名冊的 `_headers` 沒有 `X-Robots-Tag`，所以兩個環境不能用同一個目錄；部署前的檢查（`checkSiteFiles`）會擋下來。到時候給正式環境自己的目錄，或在上傳之前照環境寫出 `_headers`。
 
@@ -1239,6 +1258,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 
 - Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試名冊的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_ROSTER_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
+- 沒有一頁有不是自己網站的 script：頁面是照瀏覽器的要法要的（帶 `Accept: text/html`），頁面裡每一個 `<script>` 都要是 `src` 指到自己網站的檔。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面
 - 樣式表、複製按鈕的程式、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`
 - `GET /api/v1/config`、`GET /api/v1/fingerprint` 的狀態碼和標頭；`config` 是測試名冊的平台表，`crl_max_age_days` 是 3
 - 資料網域的 `crl/index.jsonl`：兩把發證金鑰各有一份可用的清冊，清冊日期不早於今天（台灣日期）往前 3 天
@@ -1246,11 +1266,13 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 - 名冊每天有在公布：`GET /api/v1/fingerprint` 回的日期是今天或昨天（台灣日期），或 `null`（還沒公布過：物件第一次啟動那天、清空當天）。公布在台灣午夜之後 alarm 響的時候做，所以午夜剛過、還沒公布時最後一行是昨天的，照樣過；要到整整一天沒有公布才不過。`paused` 的名冊不公布，隔一天起這一項不過，那是對的
 - 資料網域的 CORS：帶 `Origin: https://test.iamreal.tw` 問 `crl/index.jsonl`，回應的 `Access-Control-Allow-Origin` 是它；帶別的來源問，沒有這個標頭。過卡的頁面在瀏覽器裡下載清冊存檔靠的是這個（ADR-0027）
 
-[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
+[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
 
 **它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 4 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
 
-**它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）。部署還沒有帶過卡的頁面之前（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），這裡 `GET /proof` 那一項不過，其餘 18 項都過（2026-11-21 對 `main` 的 `f0ca916` 部署出去的版本跑的結果）。
+**它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）；它對線上跑的結果在 [Static Assets](#static-assets)「Cloudflare 上還沒確認的」。
+
+**2026-11-21 對 `main` 的 `1400e11` 部署出去的版本**：20 項過 19 項。不過的是「沒有一頁有不是自己網站的 script」：Cloudflare 在每一個 HTML 頁面加了一個別的網域的 script（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段），要營運者關掉。這一項是那次部署之後才加進這支程式的；加之前是 19 項全過，因為它原本要頁面時不帶 `Accept: text/html`，看不到那個 script。
 
 ## 營運者在 Cloudflare 和 GitHub 上設的
 

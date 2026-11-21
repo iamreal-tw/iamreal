@@ -9,6 +9,9 @@
 //   the headers of src/headers.ts, says it is a test roster's with the date
 //   wrangler.jsonc has (`TEST_ROSTER_CLEARED_ON`), and sets no cookie; the
 //   page of a card that is not on the roster is a 404;
+// - no page has a script that is not a file of the site itself. The pages
+//   are asked for as a browser asks (`Accept: text/html`): what stands
+//   between the Worker and the visitor may add to a page only then;
 // - the style sheet, the copy buttons' script and the card proof page are
 //   there (the page in a browser, up to its first screen, is another check:
 //   web/test/e2e/smoke.ts);
@@ -90,10 +93,14 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     ["/hang", 200],
     ["/no-such-page", 404],
   ];
+  /** The pages whose HTML has a script from elsewhere, or one written into the page. */
+  const foreignScripts: string[] = [];
   for (const [path, status, script] of pages) {
     await check(`GET ${path}`, async () => {
-      const res = await parts.site(path);
+      const res = await parts.site(path, { Accept: "text/html" });
       const page = await res.text();
+      const foreign = (page.match(/<script\b[^>]*>/gi) ?? []).filter((tag) => !/\ssrc="\/[^/"][^"]*"/.test(tag));
+      if (foreign.length > 0) foreignScripts.push(`${path} has ${foreign[0]!.slice(0, 120)}`);
       if (res.status !== status) return `the status is ${res.status}, not ${status}`;
       // The sentence of design/copy/test-site.md, its date in an element of its own, as the pages write it (test/pages.ts, `testRosterMark`).
       const mark = `<p class="test-roster">${testRosterLine(parts.clearedOn).replace(parts.clearedOn, `<time>${parts.clearedOn}</time>`)}</p>`;
@@ -102,6 +109,8 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
       return headersProblem(res, script === true ? { ...pageHeaders, ...SCRIPT_PAGE_HEADERS } : pageHeaders);
     });
   }
+
+  await check("no page has a script that is not a file of this site", async () => (foreignScripts.length === 0 ? null : foreignScripts.join("; ")));
 
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": STYLE_SHEET_CACHE };

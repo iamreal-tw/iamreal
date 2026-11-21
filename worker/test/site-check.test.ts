@@ -36,7 +36,7 @@ after(async () => {
   rmSync(proofFiles, { recursive: true, force: true });
 });
 
-const site: Reader = (path) => worker.fetch(path, { redirect: "manual" });
+const site: Reader = (path, headers) => worker.fetch(path, { redirect: "manual", headers: { ...headers } });
 /** The data domain: the files of the bucket, with the headers they were stored with, readable from the site's pages only. */
 const data: Reader = async (path, headers) => {
   const file = (await worker.files(path.slice(1))).find((f) => `/${f.key}` === path);
@@ -49,9 +49,9 @@ const AS_DEPLOYED: Parts = { site, data, today: "2026-11-21", clearedOn: CLEARED
 /** What each failing line is about: its text up to the problem. */
 const failed = async (parts: Partial<Parts>): Promise<string[]> => (await checkSite({ ...AS_DEPLOYED, ...parts })).filter((l) => !l.ok).map((l) => l.what);
 /** The site, with the answer for one path changed. */
-const siteWith = (path: string, change: (res: Response, body: string) => Response): Reader => async (p) => {
-  const res = await site(p);
-  return p === path ? change(res, await res.text()) : res;
+const siteWith = (path: string, change: (res: Response, body: string, headers?: Readonly<Record<string, string>>) => Response): Reader => async (p, headers) => {
+  const res = await site(p, headers);
+  return p === path ? change(res, await res.text(), headers) : res;
 };
 /** The data domain, with the answer for one path replaced. */
 const dataWith = (path: string, answer: (res: Response, headers?: Readonly<Record<string, string>>) => Response | Promise<Response>): Reader => async (p, headers) => {
@@ -69,7 +69,7 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying?: RegExp): 
 test("every check passes on the Worker as it is deployed, with a card proof page and CRLs of both issuer keys", async () => {
   const lines = await checkSite(AS_DEPLOYED);
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  assert.equal(lines.length, 19, "a line for each thing checked");
+  assert.equal(lines.length, 20, "a line for each thing checked");
   // The day after, before the alarm of midnight has run, the last line is yesterday's: that passes too.
   assert.deepEqual(await failed({ today: "2026-11-22" }), []);
 });
@@ -109,6 +109,16 @@ test("a page: another status, a header missing, a cookie, no noindex in the page
   const otherDate = await failed({ clearedOn: "2026-11-22" });
   assert.equal(otherDate.length, 8, otherDate.join("\n"));
   assert.ok(otherDate.every((w) => w.includes("the date 2026-11-22")), otherDate.join("\n"));
+});
+
+test("a script added to a page on its way to a browser fails: one of another origin, or one written into the page", async () => {
+  // What a proxy in front of the site does: only a request that accepts HTML gets the page with the script.
+  const adding = (script: string): Reader =>
+    siteWith("/faq", (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", `${script}</body>`) : body, { status: res.status, headers: res.headers }));
+  const line = "no page has a script that is not a file of this site";
+  await failsOnly({ site: adding('<script type="module" src="https://example.com/beacon.js"></script>') }, line, /\/faq has <script type="module" src="https:\/\/example\.com/);
+  await failsOnly({ site: adding('<script src="//example.com/a.js"></script>') }, line, /\/faq/);
+  await failsOnly({ site: adding("<script>1</script>") }, line, /\/faq has <script>/);
 });
 
 test("a site without the card proof page, a style sheet kept by caches: each fails", async () => {
