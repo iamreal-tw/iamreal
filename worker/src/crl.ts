@@ -91,6 +91,7 @@ const OID_DELTA_CRL_INDICATOR = Uint8Array.from([0x55, 0x1d, 0x1b]);
 const OID_ISSUING_DISTRIBUTION_POINT = Uint8Array.from([0x55, 0x1d, 0x1c]);
 
 const MAX_SERIAL_BYTES = 20;
+const MAX_CRL_NUMBER_BYTES = 20;
 
 // The reader's cursor: what the last call of `read` (or `expect`) found.
 // `lastTag` is that element's tag, and its content is
@@ -99,7 +100,7 @@ const MAX_SERIAL_BYTES = 20;
 // one must allocate nothing (#26).
 //
 // So the order of calls matters: every `read` overwrites all three, and so
-// does everything that reads (`expect`, `extensions`, `nonNegativeInteger`).
+// does everything that reads (`expect`, `extensions`, `crlNumberOf`).
 // Code that needs an element's bounds after reading another copies them
 // into constants first (`const [serialFrom, serialTo] = [lastFrom, lastTo]`).
 // `time` reads nothing: it interprets the element last read.
@@ -272,26 +273,22 @@ function extensionProblem(der: Uint8Array): UnusableReason | undefined {
 }
 
 /**
- * The content of an extnValue as a non-negative INTEGER in DER, in decimal;
- * `undefined` if it is not one. There is no limit to its length, as in
- * crl/: the bytes become a BigInt through their hexadecimal digits, which
- * takes time in proportion to their number (adding them one by one would
- * take the square of it).
+ * The content of a cRLNumber's extnValue as a non-negative INTEGER in DER of
+ * at most 20 content bytes, a leading 00 included (RFC 5280 section 5.2.3),
+ * in decimal; `undefined` if it is not one. The length is checked before
+ * the bytes become a number, so a longer one costs nothing.
  */
-function nonNegativeInteger(der: Uint8Array, start: number, end: number): string | undefined {
+function crlNumberOf(der: Uint8Array, start: number, end: number): string | undefined {
   try {
     if (expect(der, start, end, TAG_INTEGER) !== end) return undefined;
   } catch {
     return undefined;
   }
   const length = lastTo - lastFrom;
-  if (length === 0) return undefined;
+  if (length === 0 || length > MAX_CRL_NUMBER_BYTES) return undefined;
   if (length > 1 && ((der[lastFrom] === 0x00 && (der[lastFrom + 1]! & 0x80) === 0) || (der[lastFrom] === 0xff && (der[lastFrom + 1]! & 0x80) !== 0))) return undefined;
   if (der[lastFrom]! & 0x80) return undefined;
-  // In pieces, so that no single string of digits is built a character at a time.
-  const pieces: string[] = [];
-  for (let p = lastFrom; p < lastTo; p += 4096) pieces.push(hexOf(der.subarray(p, Math.min(p + 4096, lastTo))));
-  return BigInt(`0x${pieces.join("")}`).toString();
+  return BigInt(`0x${hexOf(der.subarray(lastFrom, lastTo))}`).toString();
 }
 
 /** The bits of a word in the opposite order. */
@@ -518,7 +515,7 @@ function parse(der: Uint8Array): Parsed {
     }
     for (let i = 0; i < lastExtensions.length; i += 5) {
       if (!isOid(der, i, OID_CRL_NUMBER)) continue;
-      crlNumber = nonNegativeInteger(der, lastExtensions[i + 3]!, lastExtensions[i + 4]!);
+      crlNumber = crlNumberOf(der, lastExtensions[i + 3]!, lastExtensions[i + 4]!);
       break;
     }
   }

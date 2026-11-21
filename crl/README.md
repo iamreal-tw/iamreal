@@ -27,7 +27,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
    | 欄位 | 內容 |
    |---|---|
-   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位、或它不是非負整數時是 `-` |
+   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位、它不是非負整數、或超過 20 個內容位元組時是 `-` |
    | `this_update`、`next_update` | 清冊的 `thisUpdate`、`nextUpdate`（UTC） |
    | `crl_date` | 清冊日期：`thisUpdate` 換成台灣日期（UTC+8） |
    | `sha256` | 整個檔案的 SHA-256 |
@@ -54,7 +54,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | 5 | `not_usable_critical_extension` | 清冊本身有關鍵延伸欄位，不論是哪一個（`authorityKeyIdentifier`、`cRLNumber` 標成關鍵也算） |
 | 6 | `not_usable_delta` | 差異清冊（有 `deltaCRLIndicator`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
 | 7 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 5 列擋下）。第 6、7 列是同一步：兩個延伸欄位都有時，清冊裡排在前面的那一個決定代碼 |
-| 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER |
+| 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER，或超過 20 個內容位元組（前導的 `00` 也算；RFC 5280 5.2.3 的上限） |
 | 9 | `not_usable_duplicate_extension`、`not_usable_critical_extension` 或 `not_usable_serial` | 某一筆的延伸欄位出現兩次、某一筆有關鍵延伸欄位（不論是哪一個，所以帶關鍵 `certificateIssuer` 的間接清冊、`reasonCode` 標成關鍵的清冊都不可用）、或某一筆的序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組）。逐筆檢查，第一個有問題的那一筆決定代碼；同一筆裡照這個順序 |
 | 10 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |
 
@@ -94,7 +94,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | 欄位 | 寫法 |
 |---|---|
 | `issuer` | 簽章驗得過的金鑰，`G2` 或 `G3`；兩把都驗不過時 `-`。這裡的「驗得過」只看 RSA 的 SHA-256 簽章本身，不看演算法欄位，所以演算法欄位不對、但簽章驗得過的清冊有 `issuer`，原因是 `not_usable_algorithm` |
-| `crl_number` | `cRLNumber` 的十進位，沒有前導零；沒有、讀不懂、或是負數時 `-` |
+| `crl_number` | `cRLNumber` 的十進位，沒有前導零；沒有、讀不懂、是負數、或超過 20 個內容位元組時 `-` |
 | `this_update`、`next_update` | UTC，`YYYY-MM-DDTHH:MM:SSZ`；沒有時（或整個檔案讀不懂時）`-` |
 | `crl_date` | 清冊日期；整個檔案讀不懂時 `-` |
 | `sha256` | 整個檔案的 SHA-256 |

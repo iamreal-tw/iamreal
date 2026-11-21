@@ -26,8 +26,10 @@ A CRL is usable if:
 - it is a `CertificateList` (RFC 5280 section 5) in DER, signed with
   sha256WithRSAEncryption with NULL parameters (both in `tbsCertList` and
   outside it), and the signature verifies under the issuer key;
-- it has a `cRLNumber` extension holding a non-negative integer. The device
-  compares CRL numbers ("Who checks what");
+- it has a `cRLNumber` extension holding a non-negative DER INTEGER in its
+  shortest encoding, with at most 20 content bytes (a leading `00` counts),
+  the most RFC 5280 section 5.2.3 allows. The device compares CRL numbers
+  ("Who checks what");
 - it is a complete CRL for everything the key issued: it has neither a
   `deltaCRLIndicator` nor an `issuingDistributionPoint` extension, critical
   or not; no extension appears twice, in the CRL or in an entry; and no
@@ -175,7 +177,7 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | Field | Format |
 |---|---|
 | `issuer` | `G2` or `G3`: the key under which the RSA signature verifies, whatever the algorithm fields say; `-` if neither |
-| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable or negative |
+| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable, negative or longer than 20 content bytes |
 | `this_update`, `next_update` | UTC, `YYYY-MM-DDTHH:MM:SSZ`; `-` if missing |
 | `crl_date` | The CRL date, `YYYY-MM-DD`; `-` if `thisUpdate` is missing |
 | `sha256` | SHA-256 of the file, 64 lowercase hex digits |
@@ -192,7 +194,7 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | 5 | `not_usable_critical_extension` | has a critical extension of the CRL |
 | 6 | `not_usable_delta` | has `deltaCRLIndicator` (see row 7 for a file that also has `issuingDistributionPoint`) |
 | 7 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 6 and 7 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
-| 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER |
+| 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER of at most 20 content bytes |
 | 9 | `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
 | 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
 

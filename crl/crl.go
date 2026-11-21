@@ -403,14 +403,25 @@ func checkExtensions(exts []Extension, where string) error {
 	return nil
 }
 
+// MaxCRLNumberBytes is the most content bytes a cRLNumber may have, a
+// leading 00 included (RFC 5280 section 5.2.3).
+const MaxCRLNumberBytes = 20
+
 // Number returns the cRLNumber extension, or nil if there is none. It is an
-// error if the extension does not hold a non-negative INTEGER in DER.
+// error if the extension does not hold a non-negative INTEGER in DER of at
+// most MaxCRLNumberBytes content bytes. The length is checked before the
+// bytes become a number, so a long one costs no more than reading it.
 func (c *CRL) Number() (*big.Int, error) {
 	for _, x := range c.Extensions {
 		if !x.ID.Equal(oidCRLNumber) {
 			continue
 		}
 		s := cryptobyte.String(x.Value)
+		peek := s
+		var content cryptobyte.String
+		if !peek.ReadASN1(&content, cbasn1.INTEGER) || len(content) > MaxCRLNumberBytes {
+			return nil, errors.New("crl: malformed cRLNumber, or longer than 20 bytes")
+		}
 		n := new(big.Int)
 		if !s.ReadASN1Integer(n) || !s.Empty() || n.Sign() < 0 {
 			return nil, errors.New("crl: malformed cRLNumber")

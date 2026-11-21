@@ -8,7 +8,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "5f591e072811154e94fc1b60f761317269999f4125f957787a32c46b87312157",
+    "sha256": "53dbd56ba354ff8c42b0f68a9b95904ce9521d2de66316a0b0fd38e64ad9d61d",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -20,7 +20,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "2599710075cf52ebba8aab1efc05d7da59ae3dd6c628a193639e8a4711320fd3",
+    "sha256": "34d03b275ae0a386100b74113ec485f0b729af37dca9c7df7a4cd4e8171dd74e",
     "root": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   {
@@ -32,7 +32,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "d03078f3cf2cdf750f76125197b46cf43b3a7575fc0fd33d2702aa49613fc766",
+    "sha256": "03b7b81d52f3fe08d640050e2d5182b2901ead217b0d75d24e9b433a833ff4a3",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -44,7 +44,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b9dd11909bbcc2e5f7560f2848e32fc2268e467e3a6f977c968f9fd828d50f6d",
+    "sha256": "46bcfbbe06ccef3631329f4681640e8616223668b9e6d06846e17865166c47f0",
     "root": "11e7b98ee96f8e2634d4424de62483e5684f725b775b9d54296b758290b4d667"
   },
   {
@@ -56,7 +56,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "7ee41ce571dc048d67439acdd87f5019dc28aef4fffad5cc0f4b21c044f87d1f",
+    "sha256": "a6da8348c810087d9cbf7421a5439b3da6e0f84200e02282e6d73893a4cbe1b2",
     "root": "0676e0325cf2419178f3cf67866e470a4a9e3244fc8c025aed3dbd42d2bb9863"
   },
   {
@@ -69,7 +69,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "532a5ed6813f1f27a62cd25edde2f2591d61c0ef9d44bb34af8c0547237a1944"
+    "sha256": "51cce45ba899b8483fedd18d91f2b3e94ed1fdbacff525b313342e9fe76fa05a"
   },
   {
     "name": "same-low-127",
@@ -81,7 +81,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "ef045a88298e2ce2462a2024ce5966de801e66998ad339fa53a9ff40e1696e5e"
+    "sha256": "8ddd32c0e8d9fed39063dc59d5da5ae352cb065ad055cf65b58e4a4e397c4c30"
   },
   {
     "name": "duplicate",
@@ -92,7 +92,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "ad64b0aa32ab1e60b21970c2a765aa24fbf29db10eaaa82b55600b7f6c8ee774",
+    "sha256": "bcb6af417174ecf34616f7d9a4b5ee2ab1a4475b61d77481fdc4445cd5bf76df",
     "root": "1108b18d39d9b957b639342cf0794a7a622e5df2847f05dac5e39c276e799c4c"
   },
   {
@@ -105,7 +105,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "9cfd317b7264da323140f7bbf3f5a1863e6c8e6450f21f97ac2dec0af73895e8"
+    "sha256": "023954656b343e179423358eb71ba51c90a80b8ddb6e356157a119c926085744"
   },
   {
     "name": "leading-00",
@@ -116,7 +116,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "eea8255eb325a4e5253b9cde1618906c8185cc82dcc869a2f5125791aff04c70",
+    "sha256": "40875399be65b931600af7615ffba1d40f1e54734b566a065c1fa569730cdfad",
     "root": "2e29ee633502d28899a6c6c03b28c542e64283d8e86eef7e68f2681d3bf05d06"
   },
   {
@@ -128,7 +128,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "47512746eac123dc67a46762f7573f6901430cdf09fdbef867541cd741fde1a0",
+    "sha256": "19a8000b779b12f599763435d8c14bb80a797e7b55afb42b7a7874e37ec89746",
     "root": "08e2ec59cc657b2e6d8aeb7c58f8b10f7126ad8ca4414e8f2e1c98ac3264422f"
   },
   {
@@ -141,7 +141,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "5c5dbd3c78fc0e8fdc846fbf0c63cb52d8d0adb884fc44ddac2554d4297349c4"
+    "sha256": "a343e5a1a0fe77d7a9261efcb3188e22d80d874de2c73ba533f84f3ac5cc3cc1"
   },
   {
     "name": "negative",
@@ -153,7 +153,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "19cc6f11383b5cd0fa98a437296ad7a25ddea15d5680381a4d76d864e8d04677"
+    "sha256": "91c7e5930bed6e6baa3d77f78c83b01263339f15b232b06f21a005b6bdd6c392"
   },
   {
     "name": "non-minimal",
@@ -165,7 +165,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "a474f50bc1dfe4d1dffb58418b9d329f2171090e289741598ec40abb37e5289a"
+    "sha256": "15beb2acd6dc83bb3c6dbdecace7ca21468e7df61ab0f8f9be9961deb83fc326"
   },
   {
     "name": "zero",
@@ -176,7 +176,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "217d423834397b227e2a6d0316e5fc2ad3ea95e76c9e30e5d1e555069cd732f2",
+    "sha256": "972e22934c06e5646145e56978f2058b2979191722749996ff1c94c5a67fa9c3",
     "root": "2fca4ef5e48a5d4417d7e27f9616a74ded2c6f90e602009f188fa4f6b083c71f"
   },
   {
@@ -189,7 +189,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "83e2ee4bc998827e061dfc7af8ec2cd3edf664fca43f45dc72ce5986dc32e939"
+    "sha256": "49a7a81541ec50ad7e987f1fc861520243838a8f541f80356c271b1a3726265b"
   },
   {
     "name": "delta-noncritical",
@@ -201,7 +201,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "58484caff35eb103f7ce7f7f4f70c22a393965262071db37ef7cfa345ed5b47a"
+    "sha256": "7888e3bc10c1d7e099ad4175883a4ca43121b1e3bb0331da7aea6cd40d75558f"
   },
   {
     "name": "idp",
@@ -213,7 +213,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "b0999b46580727cfbbbcb41c0efc94018fee26218b0078dc0d85b8f4483ce950"
+    "sha256": "680a18599bd05e95aaa8d94698c1281d5d518fc194ec57c982c76aa8aeae5f70"
   },
   {
     "name": "idp-noncritical",
@@ -225,7 +225,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "91d18ce77c558db4f2d5196bf3c40844fb94cca6bdd4da2c9ebe32899d243396"
+    "sha256": "62cce6b9597e69714801f557f1b5c79ecdcc564a24c7146883e6d302b65e4b8e"
   },
   {
     "name": "idp-then-delta",
@@ -237,7 +237,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "c024b3e553629875588db713c60084d7173305fdc88d5bd773c39aedec5118a3"
+    "sha256": "d844f7851f9c2c877eb04591fca8be0847634b6172d9555e536120d26c81c8e6"
   },
   {
     "name": "delta-then-idp",
@@ -249,7 +249,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "1d14a1733b51c4fd0b6be1b53191b4ba581094006aab825ce88a0d72b72ae71b"
+    "sha256": "7cee181ba275c9ce2fa412328356e2f89cb663c8d82b5073ed6bd64ca1f26db7"
   },
   {
     "name": "unknown-critical",
@@ -261,7 +261,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "4530aa9efd4bf22b2aebb9ae5912f9120288584bee4659e3e272812680d67907"
+    "sha256": "7602192accc86b273e09e05b9d1b73c5d927dded0c3322a2adf1847c8c1ddf61"
   },
   {
     "name": "unknown-noncritical",
@@ -272,7 +272,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "aafe78ca5cba631368ab9ac2c345437a1e776272120be530747e21f1840b01db",
+    "sha256": "647abd2f7616975a77b1aba6c0f16cb5fb9089d55f1e75b4e6a65ad97d5d1d7e",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -285,7 +285,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "ad4b3c725bf1df3553a566e1681c42af30a33d698c4ff5dc02e46fe4ce3c3d85"
+    "sha256": "9a5955d8cb8c903ce2d06907672bb6e6df01e8e22b34e0ec54802cccf2c53bd2"
   },
   {
     "name": "critical-number",
@@ -297,7 +297,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "9c4a0daf00e6f6ef82603056b1513580bad2994b39be19231185ca63c154a7fb"
+    "sha256": "b1521b638d97b0cfddcfebc60827c0b94ac73e2799e61d4e53b99af9b631a9d7"
   },
   {
     "name": "critical-and-duplicate",
@@ -309,7 +309,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "bb35539739b9e8b062c583982ae8933e93d098959c7ef30dfb49f3706584f05e"
+    "sha256": "e0d39f503ecba15a7cd81a292bc7fb95cf0b4ef08bf2707a2932cbe22ce27ef0"
   },
   {
     "name": "entry-critical",
@@ -321,7 +321,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "464d7d450d5067d0e6c5f9b5a3a7b873ee5f50df2f2fc7863f138afdc0c25515"
+    "sha256": "a925b19640975895307379e71b8830a1dd41c89ccca7231810da049c2b27737c"
   },
   {
     "name": "entry-critical-reason",
@@ -333,7 +333,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "e3a8a4cf45e929c2920da821b3ec0836a9b5f5132f9399db123bf634549824f5"
+    "sha256": "1b981ee057997fe6cc5705be906039c5fcc40c554166ddb974c196e792c88b7f"
   },
   {
     "name": "entry-critical-and-negative",
@@ -345,7 +345,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "6794a210e5d25a174bcbddfe62d03174daf37c19e010c2d095a01d58c80bd8df"
+    "sha256": "829eee510ab5ef96a5619a152888189b3c548047379b013e9681b12452b08ed5"
   },
   {
     "name": "negative-then-entry-critical",
@@ -357,7 +357,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "cea37cc44172a0a68b6d12fd8d0f6911789b6d0b5d30ab3a4e2572190daec581"
+    "sha256": "aaed56f8ee6bea7042ea7502d782113a7e0bc22010ac30057ed80308dcd8c943"
   },
   {
     "name": "no-number-entry-critical",
@@ -368,7 +368,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "0c86c855ef2adf69568e7e15cdb9e00ad6d0b2427ea8bd783a7719781ebfebed"
+    "sha256": "ea0a133334c3c9c294afee98acbc239cdead6f980c37b64979869a049aad4fc3"
   },
   {
     "name": "no-number",
@@ -379,7 +379,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "4f76a4ec66b6cc1c14b8f1b6e9d86b12674cbfadf1a6f70bc6abc5825b283d50"
+    "sha256": "9c7e05754137aa1475420769a3d5ecbe11f796ed10354e899197cc7b1f92c1d3"
   },
   {
     "name": "negative-number",
@@ -390,7 +390,30 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "96a194d8c22ae9dbd9219e23a9ffbfd6956fbd456b3f39958d090bae85db2164"
+    "sha256": "e3b597612fae1f27c5ceac4f141057f6e0a26f4fd732164786df453f4d332233"
+  },
+  {
+    "name": "number-twenty-bytes",
+    "what": "a cRLNumber of 20 content bytes, the longest: 7f ff … ff",
+    "usable": true,
+    "entries": 1,
+    "crl_number": "730750818665451459101842416358141509827966271487",
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "860e12a5fd0179ecc86f933ad62c8af418be6560e710d46c79bb96e212ae6964",
+    "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
+  },
+  {
+    "name": "number-twenty-one-bytes",
+    "what": "a cRLNumber of 21 content bytes: 00 then 20 bytes ff, a value below 2^160",
+    "usable": false,
+    "reason": "not_usable_crl_number",
+    "entries": 1,
+    "this_update": "2026-11-15T16:30:00Z",
+    "next_update": "2026-11-17T04:30:00Z",
+    "crl_date": "2026-11-16",
+    "sha256": "42fb776214f3c59d65a6eaee14d4fd35d38276d9c954adcb6a9a01bf7e71b2b2"
   },
   {
     "name": "duplicate-number",
@@ -402,7 +425,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "dd8ea3fb46a14f6aa57cdb246be2af1149e898d66aefed571ff27bf9b36254d0"
+    "sha256": "0bbcf01c615d866923219a49e41d0cb5d59b339a3be09e271d2370cad9563e99"
   },
   {
     "name": "no-next-update",
@@ -412,7 +435,7 @@
     "crl_number": "4660",
     "this_update": "2026-11-15T16:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "33822db0cec3e7d1fbfff9cbcca40b841966fd7b7cc49faf69a98a27c4a2734f",
+    "sha256": "1771c54acb2c4857d7046a19795d71dd08624d49492b2c2ba7d1386edda5f3b6",
     "root": "12b47395d98620576c5a8c714a9407c9b2d3a7ff91661f67ffb79c2b03b7ea32"
   },
   {
@@ -425,7 +448,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "a280b22741357b1491d25c45d0fd2261d27efdefb70a4cded1a5559515ed7edc"
+    "sha256": "daca7efe10a829e8349a2626429daeac3e149713466080b58f4e5a6f5bdbebd4"
   },
   {
     "name": "no-null-outer",
@@ -437,7 +460,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "c51a8de7dad712f1826a543e0c9070d4c5679453dad71725583a2d71bf0c06fe"
+    "sha256": "8bd41c56b78e3b65d033a7f3785aa4ba0a3ba5dfa7bce4188d94887d61cb4a40"
   },
   {
     "name": "bad-signature",
@@ -449,7 +472,7 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "095bafd27de72d6980391fdf51069444f354b4c94d54723f92e83c7938075586"
+    "sha256": "af4725186eb27c8d6653c488d1ed4e4a952c498cf314538413d1c38e6f64719d"
   },
   {
     "name": "other-key",
@@ -461,6 +484,6 @@
     "this_update": "2026-11-15T16:30:00Z",
     "next_update": "2026-11-17T04:30:00Z",
     "crl_date": "2026-11-16",
-    "sha256": "1b5ee577dff5a60c38945bad2a6cacb7e4b97c3910a0403229c1b788131a1397"
+    "sha256": "0500806d9e04a0245d567ee5c4c5d12a58567bd0003be1360c7aedef52eab6d8"
   }
 ]

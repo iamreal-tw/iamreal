@@ -152,13 +152,19 @@ function checkExtensions(exts: Extension[], where: string): void {
   }
 }
 
-/** A non-negative DER INTEGER (minimal encoding) as a bigint, or null. */
-function readNonNegativeInteger(value: Uint8Array): bigint | null {
+/** The most content bytes a cRLNumber may have, a leading 00 included (RFC 5280 section 5.2.3). */
+export const MAX_CRL_NUMBER_BYTES = 20;
+
+/**
+ * A cRLNumber: a non-negative DER INTEGER (minimal encoding) of at most
+ * MAX_CRL_NUMBER_BYTES content bytes, as a bigint, or null.
+ */
+function readCrlNumber(value: Uint8Array): bigint | null {
   try {
     const t = readTlv(value, 0);
     if (t.tag !== TAG.INTEGER || t.end !== value.length) return null;
     const c = content(value, t);
-    if (c.length === 0) return null;
+    if (c.length === 0 || c.length > MAX_CRL_NUMBER_BYTES) return null;
     if (c.length > 1 && ((c[0] === 0 && !(c[1]! & 0x80)) || (c[0] === 0xff && c[1]! & 0x80))) return null;
     if (c[0]! & 0x80) return null; // negative
     let x = 0n;
@@ -211,8 +217,8 @@ export async function checkCrl(c: ParsedCrl, issuerKey: CryptoKey, bits: number)
   }
   const numberExt = c.extensions.find((x) => x.oid === OID_CRL_NUMBER);
   if (!numberExt) throw new Unusable("not_usable_crl_number", "no cRLNumber");
-  const crlNumber = readNonNegativeInteger(numberExt.value);
-  if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber");
+  const crlNumber = readCrlNumber(numberExt.value);
+  if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber, or longer than 20 bytes");
 
   const keys = new Uint32Array(c.entries.length * KEY_WORDS);
   let count = 0;

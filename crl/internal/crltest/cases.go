@@ -208,6 +208,16 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	c.Number = -1
 	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: Integer(-4660)}}
 	add("negative-number", "a cRLNumber that is negative (-4660)", false, "not_usable_crl_number", c)
+	// RFC 5280 section 5.2.3: a cRLNumber is at most 20 octets. Counted as
+	// for serial numbers: the content bytes, a leading 00 included.
+	c = base(r, Serial(hexBytes("05")))
+	c.Number = -1
+	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: append([]byte{0x02, 20, 0x7f}, bytes.Repeat([]byte{0xff}, 19)...)}}
+	add("number-twenty-bytes", "a cRLNumber of 20 content bytes, the longest: 7f ff … ff", true, "", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Number = -1
+	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: append([]byte{0x02, 21, 0x00}, bytes.Repeat([]byte{0xff}, 20)...)}}
+	add("number-twenty-one-bytes", "a cRLNumber of 21 content bytes: 00 then 20 bytes ff, a value below 2^160", false, "not_usable_crl_number", c)
 	c = base(r, Serial(hexBytes("05")))
 	c.Extensions = []Extension{{ID: OIDCRLNumber, Value: Integer(4661)}}
 	add("duplicate-number", "cRLNumber twice", false, "not_usable_duplicate_extension", c)

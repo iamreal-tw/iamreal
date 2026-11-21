@@ -304,14 +304,21 @@ fn check_extensions(extensions: &[Extension<'_>]) -> Result<(), Unusable> {
     Ok(())
 }
 
+/// The most content bytes a `cRLNumber` may have, a leading 00 included
+/// (RFC 5280 section 5.2.3).
+pub const MAX_CRL_NUMBER_BYTES: usize = 20;
+
 /// The value of a `cRLNumber` extension: a non-negative DER INTEGER in its
-/// shortest encoding.
+/// shortest encoding, of at most `MAX_CRL_NUMBER_BYTES` content bytes.
 fn read_crl_number(value: &[u8]) -> Option<CrlNumber> {
     let integer = der::read_tlv(value, 0, value.len()).ok()?;
     if integer.tag != der::INTEGER || integer.end != value.len() {
         return None;
     }
     let content = integer.content(value);
+    if content.len() > MAX_CRL_NUMBER_BYTES {
+        return None;
+    }
     let first = *content.first()?;
     let negative = first & 0x80 != 0;
     let padded = content.len() > 1 && first == 0 && content[1] & 0x80 == 0;
