@@ -99,8 +99,9 @@ export function oidString(bytes: Uint8Array): string {
 }
 
 /**
- * UTCTime `YYMMDDHHMMSSZ` (years 50..99 mean 19xx) or GeneralizedTime
- * `YYYYMMDDHHMMSSZ`, as seconds since the epoch.
+ * UTCTime `YYMMDDHHMMSSZ` (years 50..99 mean 19xx, 00..49 mean 20xx) or
+ * GeneralizedTime `YYYYMMDDHHMMSSZ`, of a time that exists, as seconds since
+ * the epoch: the spellings of RFC 5280 (spec/revocation-tree.md, "Times").
  */
 export function readTime(der: Uint8Array, t: Tlv): number {
   const s = String.fromCharCode(...content(der, t));
@@ -111,10 +112,11 @@ export function readTime(der: Uint8Array, t: Tlv): number {
   const [y, mo, d, h, mi, se] = [0, 4, 6, 8, 10, 12].map((i, k) => Number(full.slice(i, i + (k === 0 ? 4 : 2)))) as [
     number, number, number, number, number, number,
   ];
-  const ms = Date.UTC(y, mo - 1, d, h, mi, se);
-  const back = new Date(ms);
+  // Date.UTC reads the years 0 to 99 as 1900 to 1999; setUTCFullYear does not.
+  const back = new Date(0);
+  back.setUTCFullYear(y, mo - 1, d);
   if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d || h > 23 || mi > 59 || se > 59) {
     throw new DerError("no such time");
   }
-  return ms / 1000;
+  return back.getTime() / 1000 + h * 3600 + mi * 60 + se;
 }

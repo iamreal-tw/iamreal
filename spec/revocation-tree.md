@@ -23,9 +23,10 @@ The device needs only the CRL of its own issuer.
 
 A CRL is usable if:
 
-- it is a `CertificateList` (RFC 5280 section 5) in DER, signed with
-  sha256WithRSAEncryption with NULL parameters (both in `tbsCertList` and
-  outside it), and the signature verifies under the issuer key;
+- it is a `CertificateList` (RFC 5280 section 5) in DER, with its times
+  spelled as in "Times" below, signed with sha256WithRSAEncryption with
+  NULL parameters (both in `tbsCertList` and outside it), and the signature
+  verifies under the issuer key;
 - it has a `cRLNumber` extension holding a non-negative DER INTEGER in its
   shortest encoding, with at most 20 content bytes (a leading `00` counts),
   the most RFC 5280 section 5.2.3 allows. The device compares CRL numbers
@@ -49,6 +50,28 @@ A CRL that fails any of these gives no tree. `crl/` stops with an error; the
 device does not make a proof.
 
 The **CRL date** is `thisUpdate` converted to a date in Taiwan (UTC+8).
+
+### Times
+
+`thisUpdate`, `nextUpdate` and the `revocationDate` of every entry are read
+only in the two spellings RFC 5280 gives them (sections 4.1.2.5.1 and
+4.1.2.5.2, which sections 5.1.2.4 to 5.1.2.6 apply to CRLs):
+
+- `UTCTime` `YYMMDDHHMMSSZ`: twelve digits, then `Z`. `YY` from `50` to `99`
+  is 1950 to 1999, from `00` to `49` is 2000 to 2049;
+- `GeneralizedTime` `YYYYMMDDHHMMSSZ`: fourteen digits, then `Z`, for any
+  year from 0000 to 9999.
+
+The time must exist in the Gregorian calendar, extended backwards to year 0:
+month `01` to `12`, a day the month has, hour `00` to `23`, minute and second
+`00` to `59`. Nothing else is read: no offset such as `+0800`, not even
+`+0000`; no time without seconds; no fraction of a second; no lowercase `z`.
+Which of the two types holds a time is not checked against its year: a
+`GeneralizedTime` in 2026 is read. A file with a time spelled in any other
+way is not a DER `CertificateList`.
+
+MOICA's CRLs, as checked on 2026-11-19, spell every time as a `UTCTime` of
+twelve digits and `Z`.
 
 ## Tree
 
@@ -187,7 +210,7 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 
 | # | Code | The file |
 |---|---|---|
-| 1 | `not_usable_der` | is not a DER `CertificateList` |
+| 1 | `not_usable_der` | is not a DER `CertificateList`, or has a time not spelled as in "Times" |
 | 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
 | 3 | `not_usable_signature` | has a signature that verifies under neither key |
 | 4 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
@@ -235,6 +258,6 @@ prints; a serial number in the tree has none.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
-usable, its reason code and its root (`expected.json`). Its `times/` is not
-a vector of this document: which spellings of a time are accepted is not
-specified yet.
+usable, its reason code and its root (`expected.json`). Its `times/`: CRLs
+whose times are spelled in many ways, each with its line of the archive
+index (`times/expected.json`).

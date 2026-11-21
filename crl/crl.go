@@ -162,21 +162,62 @@ func Parse(der []byte) (*CRL, error) {
 	return c, nil
 }
 
+// readTime reads a time as RFC 5280 spells it (spec/revocation-tree.md,
+// "Times"): a UTCTime YYMMDDHHMMSSZ, whose years 50 to 99 are 19xx and 00
+// to 49 are 20xx, or a GeneralizedTime YYYYMMDDHHMMSSZ, of a time that
+// exists. Anything else, an offset or a missing second included, is an
+// error. Go's cryptobyte reads more than these, so it is not used here.
 func readTime(s *cryptobyte.String) (time.Time, error) {
-	var t time.Time
+	var text cryptobyte.String
+	yearDigits := 0
 	switch {
 	case s.PeekASN1Tag(cbasn1.UTCTime):
-		if !s.ReadASN1UTCTime(&t) {
-			return t, errors.New("malformed UTCTime")
+		yearDigits = 2
+		if !s.ReadASN1(&text, cbasn1.UTCTime) {
+			return time.Time{}, errors.New("malformed UTCTime")
 		}
 	case s.PeekASN1Tag(cbasn1.GeneralizedTime):
-		if !s.ReadASN1GeneralizedTime(&t) {
-			return t, errors.New("malformed GeneralizedTime")
+		yearDigits = 4
+		if !s.ReadASN1(&text, cbasn1.GeneralizedTime) {
+			return time.Time{}, errors.New("malformed GeneralizedTime")
 		}
 	default:
-		return t, errors.New("not a time")
+		return time.Time{}, errors.New("not a time")
 	}
-	return t.UTC(), nil
+	digits := yearDigits + 10
+	if len(text) != digits+1 || text[digits] != 'Z' {
+		return time.Time{}, errors.New("a time not spelled YYMMDDHHMMSSZ or YYYYMMDDHHMMSSZ")
+	}
+	n := make([]int, 0, 6)
+	for i := 0; i < digits; {
+		width := 2
+		if i == 0 {
+			width = yearDigits
+		}
+		v := 0
+		for _, c := range text[i : i+width] {
+			if c < '0' || c > '9' {
+				return time.Time{}, errors.New("a time with a character that is not a digit")
+			}
+			v = v*10 + int(c-'0')
+		}
+		n = append(n, v)
+		i += width
+	}
+	year, month, day, hour, minute, second := n[0], n[1], n[2], n[3], n[4], n[5]
+	if yearDigits == 2 {
+		if year >= 50 {
+			year += 1900
+		} else {
+			year += 2000
+		}
+	}
+	t := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.UTC)
+	// time.Date carries what is out of range into the next field.
+	if t.Year() != year || int(t.Month()) != month || t.Day() != day || t.Hour() != hour || t.Minute() != minute || t.Second() != second {
+		return time.Time{}, errors.New("no such time")
+	}
+	return t, nil
 }
 
 func readEntry(s *cryptobyte.String) (Entry, error) {

@@ -6,9 +6,9 @@
 // from the files the mirror stored, and the two must be the same bytes.
 //
 // The CRLs of crl/testdata/times/ go the same way: times spelled in many
-// ways, each with the line of the index the Go crl/ gives it today (its
-// tests read the same file). That records that the two agree; the spec
-// does not say yet which spellings of a time are accepted (#120).
+// ways, each with its line of the index (spec/revocation-tree.md, "Times":
+// only the spellings of RFC 5280 are read). The Go crl/, web/ and
+// device-core/ read the same file.
 //
 // The test build's G2 key is here the key that signed crl/testdata/ (only
 // its public half exists); its G3 key is the test's own.
@@ -42,7 +42,7 @@ const fileOf = (c: ExpectedCase): Uint8Array => new Uint8Array(readFileSync(join
 const NOT_DER = [new TextEncoder().encode("<!doctype html><title>Service unavailable</title>"), Uint8Array.from([0x30, 0x03, 0x02, 0x01]), new Uint8Array(1)];
 const G3_CRL = makeCrl({ issuer: "G3", number: 7n, thisUpdate: new Date("2026-11-19T16:00:00Z"), serials: [0x1234n, 0x5678n] });
 
-/** crl/testdata/times/: CRLs whose times are spelled in many ways, with the line the Go crl/ gives each today. */
+/** crl/testdata/times/: CRLs whose times are spelled in many ways, with the line of the index of each. */
 interface TimeCase {
   readonly name: string;
   readonly sha256: string;
@@ -87,7 +87,7 @@ test("every case of crl/testdata/expected.json: usable or not, the reason code a
   assert.equal(lines.size, cases.length + OTHERS.length);
 });
 
-test("every case of crl/testdata/times/expected.json: the line of the index is the one the Go crl/ gives", () => {
+test("every case of crl/testdata/times/expected.json: the line of the index is the one expected.json gives", () => {
   assert.ok(timeCases.length >= 48, `${timeCases.length} cases`);
   const lines = new Set(index.split("\n"));
   for (const [i, c] of timeCases.entries()) {
@@ -97,7 +97,7 @@ test("every case of crl/testdata/times/expected.json: the line of the index is t
   // Both kinds are among them, and the times at the edges.
   const refused = timeCases.filter((c) => c.line.includes("-not_usable_der")).length;
   assert.ok(refused >= 10 && timeCases.length - refused >= 10, `${refused} of ${timeCases.length} refused`);
-  for (const edge of ['"this_update":"1950-01-01T00:00:00Z"', '"this_update":"-0001-12-31T23:00:00Z"', '"crl_date":"10000-01-01"', '"next_update":"0001-01-01T00:00:00Z"']) assert.ok(timeCases.some((c) => c.line.includes(edge)), edge);
+  for (const edge of ['"this_update":"1950-01-01T00:00:00Z"', '"this_update":"0000-02-29T00:00:00Z"', '"crl_date":"10000-01-01"', '"next_update":"0001-01-01T00:00:00Z"']) assert.ok(timeCases.some((c) => c.line.includes(edge)), edge);
 });
 
 test("the index the Go crl/ rebuilds from the files in the bucket is the same bytes", async (t) => {

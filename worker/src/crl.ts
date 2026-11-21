@@ -151,31 +151,23 @@ const two = (der: Uint8Array, at: number): number => digit(der, at) * 10 + digit
 
 /**
  * The UTCTime or GeneralizedTime last read, as seconds since the epoch.
- * The spellings read are those the Go crl/ reads, which are a little more
- * than DER: UTCTime with or without seconds, and either type with `Z` or
- * with an offset `±hhmm` that is not zero. Anything else is not DER.
- * crl/testdata/times/ has a file for each, with what both give. The spec
- * does not say yet which spellings are accepted; #120 will narrow them.
+ * Only the spellings of RFC 5280 are read (spec/revocation-tree.md,
+ * "Times"): UTCTime `YYMMDDHHMMSSZ`, whose years 50 to 99 are 19xx and 00 to
+ * 49 are 20xx, and GeneralizedTime `YYYYMMDDHHMMSSZ`, of a time that exists.
+ * Anything else is not DER. crl/testdata/times/ has a file for each kind.
  */
 function time(der: Uint8Array): number {
   let at = lastFrom;
   let year: number;
-  let digits: number;
-  // How many digits the time has, from the first byte that is not one.
-  let n = 0;
-  while (at + n < lastTo && der[at + n]! >= 0x30 && der[at + n]! <= 0x39) n++;
   if (lastTag === TAG_UTC_TIME) {
-    if (n !== 10 && n !== 12) notDer();
+    if (lastTo - at !== 13) notDer();
     year = two(der, at);
-    // Go reads 69 to 99 as 19xx, and cryptobyte moves 2050 to 2068 back a century.
     year += year >= 50 ? 1900 : 2000;
     at += 2;
-    digits = n - 2;
   } else if (lastTag === TAG_GENERALIZED_TIME) {
-    if (n !== 14) notDer();
+    if (lastTo - at !== 15) notDer();
     year = two(der, at) * 100 + two(der, at + 2);
     at += 4;
-    digits = 10;
   } else {
     return notDer();
   }
@@ -183,23 +175,11 @@ function time(der: Uint8Array): number {
   const day = two(der, at + 2);
   const hour = two(der, at + 4);
   const minute = two(der, at + 6);
-  const second = digits === 10 ? two(der, at + 8) : 0;
-  at += digits;
-  let offset = 0;
-  if (lastTo - at === 1 && der[at] === 0x5a) {
-    // Z
-  } else if (lastTo - at === 5 && (der[at] === 0x2b || der[at] === 0x2d)) {
-    const hh = two(der, at + 1);
-    const mm = two(der, at + 3);
-    // An offset of zero is written Z; Go takes up to 24 hours.
-    if (hh > 24 || mm > 59 || (hh === 0 && mm === 0)) notDer();
-    offset = (hh * 60 + mm) * 60 * (der[at] === 0x2b ? 1 : -1);
-  } else {
-    notDer();
-  }
+  const second = two(der, at + 8);
+  if (der[at + 10] !== 0x5a) notDer(); // Z
   const seconds = secondsOfCivil(year, month, day, hour, minute, second);
   if (seconds === undefined) return notDer();
-  return seconds - offset;
+  return seconds;
 }
 
 // What the last call of `extensions` found, five numbers per extension:

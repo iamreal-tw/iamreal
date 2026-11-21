@@ -291,6 +291,13 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
     })
 }
 
+impl ParsedCrl<'_> {
+    /// thisUpdate, in seconds since 1970-01-01T00:00:00Z.
+    pub fn this_update(&self) -> i64 {
+        self.this_update
+    }
+}
+
 /// No extension twice, then no critical extension.
 fn check_extensions(extensions: &[Extension<'_>]) -> Result<(), Unusable> {
     for (i, extension) in extensions.iter().enumerate() {
