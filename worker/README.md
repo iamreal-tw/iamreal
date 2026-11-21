@@ -1175,6 +1175,7 @@ pnpm run deploy:test
 
      - **不能用 `curl -I`。** `-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過快取、直接問儲存桶：第 3 步刪了檔之後，不管快取清了沒有都是 `404`。2026-11-21 對一份標一年的清冊檔（`crl/<SHA-256>.crl`）看到的：`GET` 是 `cf-cache-status: HIT`、帶著 `age`，同一個網址的 `HEAD` 是 `DYNAMIC`。
      - **帶和不帶 `Origin` 是兩份快取，兩種都要問。** 同一天對同一個檔：不帶 `Origin` 的 `GET` 是 `HIT`、`age` 約 144,000 秒；帶 `Origin: https://test.iamreal.tw` 的是另一份（第一次 `MISS`，接著 `HIT`、`age` 幾十秒，帶 `Access-Control-Allow-Origin`）。過卡的頁面在瀏覽器裡下載時帶的是後面那一種。
+     - **每個來源各有一份，指令問不完。** 2026-11-21 對 `roster/fingerprints.jsonl` 用 `GET` 看到的：不帶 `Origin` 的第二次是 `HIT`；帶 `Origin: https://test.iamreal.tw` 的第一次 `MISS`、第二次 `HIT`，多 `Access-Control-Allow-Origin`；帶別的來源的又是它自己的一份，第一次 `MISS`、第二次 `HIT`，沒有那個標頭。所以任何一個網站的頁面下載過舊檔，快取裡就多一份帶它那個來源的。照前綴清會不會把這些都清掉，文件沒有講；測試名冊還沒有寫滿的檔，現在也驗不到。上面的指令只問得到不帶來源和帶測試網站來源的這兩份。
      - 不存在的檔不會被快取（`404` 的回應是 `cf-cache-status: BYPASS`，同一天看到的），所以清乾淨之後這兩行都是 `404`，不會因為問過一次就留下東西。
      - 新的名冊已經公布過才做這一步的話，`roster/0000000000000000.jsonl` 可能是新名冊還沒寫滿的最後一檔：`200`，`Cache-Control` 是 `public, max-age=60`，不是一年的那一種。
      - 這個指令只問得到回答這一次請求的那個 Cloudflare 機房，其他機房沒辦法從外面一個一個問。
