@@ -22,7 +22,7 @@
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試（`src/main/res/`） | 島民證明 開發（`src/debug/res/`） |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
-| 怎麼裝 | Google Play（上傳在 GitHub Actions，ADR-0036、ADR-0037） | 用線裝（「怎麼用線裝到手機」） |
+| 怎麼裝 | Google Play（從 GitHub Actions 上傳，ADR-0036、ADR-0037；工作流程還沒有：[#175](https://github.com/iamreal-tw/iamreal/issues/175)） | 用線裝（「怎麼用線裝到手機」） |
 
 環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的名冊永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式名冊的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
 

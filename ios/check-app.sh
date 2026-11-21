@@ -38,7 +38,9 @@
 # IAMREAL_APP_SOURCES, IAMREAL_TEST_SOURCES, IAMREAL_PROJECT_FILE and
 # IAMREAL_CONFIG_DIR replace the sources, the tests' sources, the project
 # file and the directory of .xcconfig files it reads: check-app-test.sh
-# uses them.
+# uses them. Xcode hands it CONFIGURATION and IAMREAL_ENVIRONMENT; run by
+# hand without them, it takes the app for a Debug build of the test
+# environment.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)

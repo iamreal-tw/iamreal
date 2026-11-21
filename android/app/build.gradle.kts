@@ -434,15 +434,13 @@ abstract class CheckApk : DefaultTask() {
                 if (!testing.get() && text.contains("iamreal-device-core:testing-issuer-keys")) problems += "$lib is the library of the tests: it trusts issuer keys other than MOICA's"
             }
             // A class, a method or a text the Kotlin code refers to is in the dex file as text.
-            val dexes = names.filter { it.endsWith(".dex") }
-            // Until launch both builds talk to the test site (ADR-0037, Environment.kt): its address is in the dex (in a
+            // Until launch both builds talk to the test site (ADR-0037, Environment.kt): its address is in a dex (in a
             // release build, as the start of the addresses R8 put together). The fake build talks to this machine instead.
             val testSite = "https://test.iamreal.tw"
-            if (!testing.get() && dexes.none { String(read(it), Charsets.ISO_8859_1).contains(testSite) }) {
-                problems += "no dex holds $testSite: every build talks to the test site until launch"
-            }
-            for (dex in dexes) {
+            var talksToTestSite = false
+            for (dex in names.filter { it.endsWith(".dex") }) {
                 val text = String(read(dex), Charsets.ISO_8859_1)
+                if (text.contains(testSite)) talksToTestSite = true
                 // Until launch every build signs for the test roster only (ADR-0037).
                 for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
                     if (text.contains(production)) problems += "$dex holds $production: until launch no build names anything of production"
@@ -461,6 +459,7 @@ abstract class CheckApk : DefaultTask() {
                 }.map { (owner, method) -> "$owner.$method" }.toSet()
                 if (writes.isNotEmpty()) problems += "$dex calls $writes: a release build writes no log"
             }
+            if (!testing.get() && !talksToTestSite) problems += "no dex holds $testSite: every build talks to the test site until launch"
         }
         if (problems.isNotEmpty()) throw GradleException("$file:\n" + problems.joinToString("\n"))
     }

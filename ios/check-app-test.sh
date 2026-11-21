@@ -3,7 +3,7 @@
 # each altered copy of it below, with the problem named. One thing it does
 # not try: an executable without the addresses of the test site.
 #
-#   ./check-app-test.sh <path to a built IamrealApp.app, for the simulator>
+#   ./check-app-test.sh <path to a built IamrealApp.app: Debug, for the simulator>
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
