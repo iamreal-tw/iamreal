@@ -91,5 +91,6 @@ release=$(jq --null-input --compact-output --arg track "$track" --arg code "$ver
 api PUT "$api/edits/$edit/tracks/$track" --header 'Content-Type: application/json' --data "$release" > /dev/null
 
 # 5. The commit.
-api POST "$api/edits/$edit:commit" > /dev/null
+# An empty body, so that curl says Content-Length: 0 for this POST.
+api POST "$api/edits/$edit:commit" --data '' > /dev/null
 echo "versionCode $version_code is on the $track track of $package"

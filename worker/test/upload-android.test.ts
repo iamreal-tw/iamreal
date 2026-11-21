@@ -283,6 +283,8 @@ test("play-upload.sh: gets a token with the service account's key, then puts the
   const track = apiCalls[2]!;
   assert.ok(track.args.includes("PUT"), JSON.stringify(track.args));
   assert.deepEqual(JSON.parse(track.args[track.args.indexOf("--data") + 1]!), { track: "internal", releases: [{ versionCodes: ["7"], status: "completed" }] });
+  // A POST with no body still says how long its body is (an empty one): a server may want Content-Length.
+  assert.equal(apiCalls[3]!.args[apiCalls[3]!.args.indexOf("--data") + 1], "");
   assert.match(r.stdout, /versionCode 7/);
 });
 

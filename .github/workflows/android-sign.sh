@@ -21,6 +21,8 @@
 # with the same CRC-32, and the three files of the signature: what goes to
 # Google Play is what the build checked (app/build.gradle.kts, checkBundle).
 set -euo pipefail
+# sort and comm, below, in the same order of bytes wherever this runs.
+export LC_ALL=C
 
 if [ "$#" -ne 2 ]; then
   echo "usage: android-sign.sh <bundle> <signed bundle>" >&2

@@ -181,7 +181,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 [`workflows/upload-android.yml`](workflows/upload-android.yml) 把 Android 的商店 build（`tw.iamreal.app`，ADR-0037）傳到 Google Play 的內部測試軌道。上線前它連測試網站、簽測試名冊的場合字串（`android/README.md`「兩種 build」）。
 
-**怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`、「Run workflow」，分支選 `main`；或在營運者的電腦上 `gh workflow run upload-android.yml --ref main`（coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，後來的排隊，不取消正在跑的（`concurrency`）。
+**怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`、「Run workflow」，分支選 `main`；或在營運者的電腦上 `gh workflow run upload-android.yml --ref main`（coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，不取消正在跑的（`concurrency`）；在它跑的時候再觸發，新的那次等著，但同時只能有一次在等：再觸發一次，等著的那次會被取消（「By default, any existing pending job or workflow in the same concurrency group will be canceled and the new queued job or workflow will take its place」，[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)，2026-11-21 讀）。
 
 **三個工作。**
 
