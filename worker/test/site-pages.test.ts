@@ -185,10 +185,18 @@ describe("hanging a proof on a profile", () => {
     const m1 = cardStarting("M4T8XR6PZ13A");
     const m2 = cardStarting("M4T8XR6PZ13B");
     const gone = cardStarting(CARD_B);
-    await pagesWorld(worker, "2026-11-18", [r("2026-11-01", one, "threads:alice"), r("2026-11-01", m1, "threads:bob"), r("2026-11-01", m2, "threads:carol"), r("2026-11-02", gone, "threads:dave"), r("2026-11-03", gone)]);
+    const elsewhere = cardStarting("5PZ8KR3XQW");
+    await pagesWorld(worker, "2026-11-18", [
+      r("2026-11-01", one, "threads:alice"),
+      r("2026-11-01", m1, "threads:bob"),
+      r("2026-11-01", m2, "threads:carol"),
+      r("2026-11-02", gone, "threads:dave"),
+      r("2026-11-03", gone),
+      r("2026-11-03", elsewhere, "test-example:alice"),
+    ]);
     assert.equal((await getPage(worker, `/hang/${CARD_A}`)).status, 200);
     const unreadable = ["7K2Q9FM4X", "7K2Q9FM4XDD", "7K2Q-FM4XD", "", "a/b", "%3Cb%3Ex%22"];
-    const cases: [string, string][] = [["2HD5WN0J8C", "no card"], ["M4T8XR6PZ1", "two cards"], [CARD_B, "withdrawn"], ...unreadable.map((u): [string, string] => [u, "does not read"])];
+    const cases: [string, string][] = [["2HD5WN0J8C", "no card"], ["M4T8XR6PZ1", "two cards"], [CARD_B, "withdrawn"], ["5PZ8KR3XQW", "an account on another platform only"], ...unreadable.map((u): [string, string] => [u, "does not read"])];
     const redirects = async (): Promise<void> => {
       for (const [typed, to] of [["7k2q9fm4xd", "/hang/7K2Q9FM4XD"], ["7K2Q9FM4XO", "/hang/7K2Q9FM4X0"], ["lK2Q9FM4XD", "/hang/1K2Q9FM4XD"]] as const) {
         const res = await worker.fetch(`/hang/${typed}`, { redirect: "manual" });

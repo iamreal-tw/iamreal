@@ -188,6 +188,12 @@ describe("the roster page", () => {
     assert.equal(unescapeHtml(more[1]!), "/roster?after=2026-10-01.3");
     const next = (await getPage(worker, unescapeHtml(more[1]!))).page;
     assert.equal(rows(next), 2);
+    // Exactly 50 after a place: all of them, and no 更多 to a page with nothing on it. The second row is a50's,
+    // from 2026-10-17 by the 51st card proof.
+    const fifty = (await getPage(worker, "/roster?after=2026-10-17.51")).page;
+    assert.equal(rows(fifty), 50);
+    assert.ok(fifty.includes("@a49") && fifty.includes("@a00") && !fifty.includes("@a50"));
+    notOnPage(fifty, "更多");
     wantLines(next, ["Threads 的 @a01", "Threads 的 @a00"]);
     notOnPage(next, "@a02", "更多", block("roster-page.md", "清單")[0]!);
     for (const after of ["nothing", "2026-10-01", "2026-10-01.", "2026-10-01.0", "2026-10-01.03", "2026-10-01.+3", "2026-13-01.3", "2026-10-01x3", "2026-10-01.18446744073709551616", "2026-10-01.9223372036854775808"]) {
@@ -223,8 +229,9 @@ describe("the roster page", () => {
       notOnPage(page, bad);
       assert.ok(page.includes('name="q" value=""'), `q=${q}: the box is empty`);
     }
-    for (const [q, kept] of [["a-b", "a-b"], ["%40%40alice", "@alice"], ["a%20b", "a b"], ["%40%C3%A5lice%20", "ålice"], ["%EF%BB%BFalice", "﻿alice"], ["%3Cb%3Ex%22", "&lt;b&gt;x&#34;"]] as const) {
-      const { status, page } = await getPage(worker, `/roster?q=${q}&after=2026-10-01.1`);
+    for (const [q, kept] of [["a-b", "a-b"], ["%40%40alice", "@alice"], ["a%20b", "a b"], ["%40%C3%A5lice%20", "ålice"], ["%EF%BB%BFalice", "﻿alice"], ["%3Cb%3Ex%22", "&lt;b&gt;x&#34;"], ["a%00b", "a\uFFFDb"]] as const) {
+      // The place is before @alice's row (from 2026-08-01, the third card proof): read, it would leave the list empty.
+      const { status, page } = await getPage(worker, `/roster?q=${q}&after=2026-08-01.1`);
       assert.equal(status, 200, `q=${q}`);
       wantLines(page, ["查一個 Threads 帳號", "@查", bad, "最近換出的島民證明"]);
       assert.ok(page.includes(`name="q" value="${kept}"`), `q=${q}: the box keeps ${kept}`);

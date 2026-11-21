@@ -384,6 +384,11 @@ describe("every page", () => {
     }
     assert.ok((await getPage(worker, "/p/%3Cb%3Ex%22%27&amp;")).page.includes("test.iamreal.tw/p/&lt;b&gt;x&#34;&#39;&amp;amp;"));
     assert.ok((await getPage(worker, "/roster?q=%3Cb%3Ex%22")).page.includes('value="&lt;b&gt;x&#34;"'), "the lookup box's value is escaped");
+    // A NUL is written as U+FFFD, as the Go backend's html/template wrote it, in text and in a value.
+    for (const [path, want] of [["/p/a%00b", "test.iamreal.tw/p/a\uFFFDb"], ["/roster?q=a%00b", 'value="a\uFFFDb"']] as const) {
+      const { page } = await getPage(worker, path);
+      assert.ok(page.includes(want) && !page.includes("\0"), `${path}: the NUL is U+FFFD`);
+    }
     // The page for what is no page writes nothing of the address back.
     const none = (await getPage(worker, "/%3Cb%3Ex%22%27?q=%3Ci%3E")).page;
     assert.ok(!none.includes("<b>x") && !none.includes("&lt;b&gt;") && !none.includes("<i>") && !none.includes("&lt;i&gt;"));
