@@ -1,6 +1,6 @@
 # .github/：GitHub Actions 的工作流程
 
-**這個目錄讓人檢查的事：PR 的檢查拿不到任何權杖，部署測試網站的權杖只在上傳的那一步，上傳 app 的金鑰只在上傳的那一個工作。**（ADR-0029、ADR-0036）
+**這個目錄讓人檢查的事：PR 的檢查拿不到任何權杖，部署測試網站的權杖只在上傳的那一步，上傳 app 的金鑰只在上傳的那一個工作，那個工作不建置。**（ADR-0029、ADR-0036）
 
 | 檔案 | 什麼時候跑 | 做什麼 |
 |---|---|---|
@@ -9,6 +9,7 @@
 | [`workflows/checks-ios.yml`](workflows/checks-ios.yml) | PR 改到 `ios/`、`device-core/`、app 包進去或測試讀的檔、或這個檔時（`pull_request` 的 `paths`）；不在合併佇列裡跑 | 在 macOS 上編 `device-core/` 給模擬器、建置 `ios/` 的 app、在模擬器上跑它的測試：`ios` 一個工作（`ios/README.md`）。只能讀，不引用任何 secret |
 | [`workflows/checks-circuits.yml`](workflows/checks-circuits.yml) | PR 改到電路的原始碼、編好的電路檔、驗證金鑰，或重建和電路的測試用到的其他檔時（`pull_request` 的 `paths`）；不在合併佇列裡跑 | 從 `circuits/` 重編兩份電路和驗證金鑰，和 `web/circuits/`、`verifier/vk/` 逐位元組比對；`nargo test`；`circuits/` 的 JavaScript 測試，含和 circom 電路的逐案比對：`circuits` 一個工作（下面「`checks-circuits.yml`」）。只能讀，不引用任何 secret |
 | [`workflows/deploy-test.yml`](workflows/deploy-test.yml) | 推到 `main` | 建置過卡的頁面、打包 Worker、檢查兩者，再把它們上傳到測試網站。碰不到快取（`cache-mode: none`） |
+| [`workflows/upload-android.yml`](workflows/upload-android.yml) | 營運者手動觸發（`workflow_dispatch`），只在 `main` 上 | 建置 Android 的商店 build（`tw.iamreal.app`）、用上傳金鑰簽章，傳到 Google Play 的內部測試：`build`、`upload` 兩個工作（下面「上傳 Android 的 app」）。金鑰只在 `upload`，它在 environment `app-test` 裡；碰不到快取（`cache-mode: none`） |
 | [`workflows/upload-ios.yml`](workflows/upload-ios.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 建置 iPhone 的商店 build、檢查它，再簽章、上傳到 App Store Connect（TestFlight）：`build`、`upload` 兩個工作。`build` 沒有金鑰；`upload` 在 environment `app-test`，不取出程式庫、不跑程式庫的腳本，只有最後一步拿到 App Store Connect 的 API 金鑰（[`ios/README.md`「上傳到 TestFlight」](../ios/README.md#上傳到-testflight)）。碰不到快取（`cache-mode: none`） |
 | [`workflows/cache.yml`](workflows/cache.yml) | 推到 `main` | 編譯 `device-core/`、建置 `android/`，把 cargo 的 registry、`device-core/target/`、Gradle 的依賴和 wrapper 存成快取，給 `checks.yml` 的 `device-core`、`android` 還原：`cache-device-core`、`cache-android` 兩個工作。不引用任何 secret，`GITHUB_TOKEN` 只能讀（`contents: read`）；唯一能存快取的工作流程（`cache-mode: write`） |
 
@@ -117,7 +118,7 @@
 |---|---|---|
 | `cache.yml`（推到 `main`） | `write`：能還原、能存 | `actions/cache` |
 | `checks.yml`（PR 和合併佇列） | `read`：能還原、不能存 | `actions/cache/restore` |
-| `deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`checks-circuits.yml`、`upload-ios.yml` | `none`：都不能 | 沒有 |
+| `deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`checks-circuits.yml`、`upload-android.yml`、`upload-ios.yml` | `none`：都不能 | 沒有 |
 
 - **界線是 `cache-mode`，不是用哪個 action。** `read`「allows cache restores but prevents cache saves」，`none`「prevents all cache access」（[2026-09-10 的 changelog](https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode)）；「Access is enforced with scoped cache tokens, so a job cannot restore or save caches beyond the mode it is granted」（[workflow syntax 的 `cache-mode`](https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax#cache-mode)，2026-11-21 讀）。`checks.yml` 的 `run` 步驟跑的是 PR 的程式；工作裡的程式可以不經過任何 action，拿工作自己的權杖直接對快取服務存東西（[Cacheract](https://adnanthekhan.com/2024/12/21/cacheract-the-monster-in-your-build-cache/)）。所以只用沒有存檔步驟的 `actions/cache/restore` 擋不住它，擋住它的是權杖本身不能存。
 - **每個檔都寫明，不靠預設。** 沒寫的時候「a `read` or `write` default is used based on the trigger type」（同一頁）。工作層級不准設：「Job-level settings override workflow-level settings」（changelog）。新的工作流程要寫 `none`。
@@ -189,9 +190,54 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 加起來接近 10 GB 時要拿掉幾份，照每 GB 省下的時間決定先拿掉哪一份：兩個 Android 架構每次 `gradlew build` 都會編（除錯版是兩個都編），沒有哪一份是用不到的。照上面的量法，現在不用拿。被擠掉的快取只會讓下一次檢查變慢，不會讓它失敗。
 
-`worker/test/workflows.ts` 擋下的改動：任何一個檔的 `cache-mode` 和上表不同或沒寫，新的工作流程不是 `none`，工作層級設了 `cache-mode`；`checks.yml` 的工作用會存快取的 `actions/cache` 或 `actions/cache/save`，或還原不是自己的快取；`deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`checks-circuits.yml` 或新的工作流程用任何一種快取的 action；`cache.yml` 在推到 `main` 以外的事件上觸發、引用 secret、權限不是恰好 `contents: read`、工作和寫死的不同；快取的 `path`、`key` 和寫死的不同，或多了 `restore-keys`。
+`worker/test/workflows.ts` 擋下的改動：任何一個檔的 `cache-mode` 和上表不同或沒寫，新的工作流程不是 `none`，工作層級設了 `cache-mode`；`checks.yml` 的工作用會存快取的 `actions/cache` 或 `actions/cache/save`，或還原不是自己的快取；`deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`checks-circuits.yml`、`upload-android.yml` 或新的工作流程用任何一種快取的 action；`cache.yml` 在推到 `main` 以外的事件上觸發、引用 secret、權限不是恰好 `contents: read`、工作和寫死的不同；快取的 `path`、`key` 和寫死的不同，或多了 `restore-keys`。
 
 怎麼部署、上傳那一步還信任什麼：[`worker/README.md`「從 GitHub Actions 部署」](../worker/README.md#從-github-actions-部署)。
+
+## 上傳 Android 的 app（#175）
+
+[`workflows/upload-android.yml`](workflows/upload-android.yml) 把 Android 的商店 build（`tw.iamreal.app`，ADR-0037）傳到 Google Play 的內部測試軌道。上線前它連測試網站、簽測試名冊的場合字串（`android/README.md`「兩種 build」）。
+
+**怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`、「Run workflow」，分支選 `main`；或在營運者的電腦上 `gh workflow run upload-android.yml --ref main`（coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，不取消正在跑的（`concurrency`）；在它跑的時候再觸發，新的那次等著，但同時只能有一次在等：再觸發一次，等著的那次會被取消（「By default, any existing pending job or workflow in the same concurrency group will be canceled and the new queued job or workflow will take its place」，[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)，2026-11-21 讀）。
+
+**兩個工作。**
+
+| 工作 | 拿得到什麼 | 做什麼 |
+|---|---|---|
+| `build` | 沒有 secret；權杖只能讀程式 | 不在 `main` 上就停。用 [`android-version.sh`](workflows/android-version.sh) 算版本。和 `checks.yml` 的 `android` 一樣裝 libc++、Rust、SDK、參數檔，再跑 `./gradlew bundleRelease`，帶上版本。`bundleRelease` 會接著跑 bundle 的檢查（`checkBundle`、`checkManifest`、`checkLibraries`，`android/README.md`「建置時的檢查」）：識別碼、連測試網站、沒有正式網站和正式名冊的場合字串、沒有假卡片和測試的發證金鑰。檢查不過就停，不會上傳。簽哪一份名冊的場合字串由 Kotlin 傳給核心的名冊編號決定（`Environment.kt` 的 `ROSTER`），編進 dex 時只是一個數字，bundle 的檢查找不到它；它由 `DeviceCoreTest` 的「the scope string is the one of the test roster」看著，那是 `checks.yml` 的 `android` 每次都跑的單元測試，`main` 上的每個提交都在合併佇列裡跑過（「合併佇列」），所以這裡不再跑一次。沒有簽章的 `.aab` 留成 artifact `android-bundle` |
+| `upload` | environment `app-test` 的三個 secret | 不建置、不跑 Gradle。拿 `build` 留下的 `.aab`，用 [`android-sign.sh`](workflows/android-sign.sh) 以上傳金鑰簽章，簽好的留成 artifact `android-bundle-signed`，再用 [`play-upload.sh`](workflows/play-upload.sh) 傳到內部測試 |
+
+- **金鑰只在 `upload`。** secret 名稱照 #162：`ANDROID_UPLOAD_KEYSTORE_BASE64`、`ANDROID_UPLOAD_KEYSTORE_PASSWORD` 只在簽章那一步的 `env`，`PLAY_SERVICE_ACCOUNT_JSON` 只在上傳那一步的 `env`。`app-test` 只把 secret 給 `main` 上的工作（#162 的設定），所以在別的分支上觸發時，`build` 先停下來；就算它沒停，`upload` 也拿不到金鑰。
+- **跑 Gradle 的工作拿不到金鑰。** Gradle 的外掛、建置腳本、`build-native.sh` 都在 `build` 裡跑；`upload` 只跑釘住的三個 action、runner 上的 JDK（`jarsigner`）和工具（`bash`、`base64`、`unzip`、`awk`、`curl`、`openssl`、`jq`），和同一個提交的兩個腳本。
+- **傳上去的就是檢查過的。** `android-sign.sh` 簽完先用 `jarsigner -verify` 驗，再比對簽好的檔和 `build` 留下的檔：每個檔的 CRC-32 相同，只多了簽章的三個檔（`META-INF/MANIFEST.MF`、`UPLOAD.SF`、`UPLOAD.RSA`），否則停下來。
+- **app 的簽章金鑰不在這裡。** 上傳金鑰只對 Google Play 證明這個檔是我們傳的；手機上的 app 由 Google Play 用 app 的簽章金鑰重簽，那把由營運者保管（ADR-0036、ADR-0037）。
+- **新 app 的第一個 build 要手動傳。** Google 的文件：「You can only use this API to make changes to an existing app (that has at least one APK uploaded); thus, you will have to upload at least one APK through the Play Console before you can use this API.」（[Edits](https://developers.google.com/android-publisher/edits)，2026-11-21 讀）。所以第一次執行在 `play-upload.sh` 失敗、印出 API 的回答；營運者從這次執行的 artifact 下載 `android-bundle-signed`，在 Play Console 傳到內部測試（#162 第二段）。上傳金鑰不經過營運者的電腦。之後的 build 走 API。
+
+**版本號**（ADR-0036「版本號和標籤」，照 #176 改的；兩個 app 寫法相同）。
+
+- 顯示的版本（`versionName`）是台灣的日期（UTC+8，沒有日光節約時間），年、月、日不補零，例如 `2026.11.5`、`2026.11.21`。日期取的是 `build` 算版本那一步執行的時候：觸發後排隊排過午夜的話，是隔天。同一天的每次上傳顯示的版本相同，靠 `versionCode` 分。不像網站的標籤那樣加 `.1`：iOS 顯示的版本「The required format is three period-separated integers」（[CFBundleShortVersionString](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，2026-11-21 讀），兩個 app 寫法一致（#176）。
+- `versionCode` 是這次執行的編號 `github.run_number`：「A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run.」（[Contexts reference 的 `github`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context)，2026-11-21 讀）。Android 的文件要每一版的 `versionCode` 比前一版大，並說「You can't upload an APK to the Play Store with a versionCode you have already used for a previous version」、「The greatest value Google Play allows for versionCode is 2100000000」（[Version your app](https://developer.android.com/studio/publish/versioning)，同一天讀）。所以：
+  - 重跑一次已經傳上去的執行，`versionCode` 和上次相同，會被 Google Play 拒絕；要重新觸發一次
+  - 這個工作流程檔改名，或刪掉再重建，編號會從 1 重新數，比 Google Play 上已有的小，上傳會被拒絕。（文件只說編號是「each run of a particular workflow」，沒有寫改名或重建之後怎麼算；這裡照最壞的情況處理。）要改名或重建時，在 `android-version.sh` 加上一個固定的數，讓 `versionCode` 接著往上
+- 沒有改用「從 Google Play 讀最大的 `versionCode` 再加一」：`versionCode` 要在建置時寫進 app，而讀 Google Play 要服務帳號的金鑰，`build` 就得拿到金鑰，或多一個拿金鑰的工作。編號重來的情況只在改工作流程的檔名時發生，改的人照上一點處理。
+- 版本由 Gradle 屬性 `iamreal.versionName`、`iamreal.versionCode` 交給 `app/build.gradle.kts`；沒給的建置（拉取請求的檢查、這台電腦）是 `1`、`dev`。
+
+**對 Google Play 的呼叫**（`play-upload.sh`）。不用第三方的 action 或工具，只用 `curl`、`openssl`、`jq` 照 Google 的文件呼叫：
+
+1. 用服務帳號的金鑰簽一個 JWT，換一個 Android Publisher 範圍的 token（[Using OAuth 2.0 for Server to Server Applications](https://developers.google.com/identity/protocols/oauth2/service-account)）。金鑰經由管線交給 `openssl`，不寫進檔案；token 在紀錄裡遮掉（`::add-mask::`），經由標頭檔交給 `curl`，不出現在命令列
+2. 開一個 edit（[`edits.insert`](https://developers.google.com/android-publisher/api-ref/rest/v3/edits/insert)）
+3. 把 `.aab` 傳進去（[`edits.bundles.upload`](https://developers.google.com/android-publisher/api-ref/rest/v3/edits.bundles/upload)），Google Play 回它的 `versionCode`
+4. 內部測試軌道放一個那個 `versionCode` 的版本，狀態 `completed`，也就是發給軌道上的測試者（[`edits.tracks.update`](https://developers.google.com/android-publisher/api-ref/rest/v3/edits.tracks/update)）
+5. 提交這個 edit（[`edits.commit`](https://developers.google.com/android-publisher/api-ref/rest/v3/edits/commit)）
+
+任何一步失敗就停，印出 API 的回答；沒有提交的 edit 不改變任何東西。服務帳號在 Play Console 只有這個 app 的「將應用程式發布至測試群組」和兩項唯讀的權限（#162），發不了正式版。
+
+**合併之後才驗得到的**（本機驗了腳本，見下面「在本機檢查」；工作流程本身在本機跑不起來）：
+
+- `build` 在 runner 上做得出 `.aab`（步驟和 `android` 的檢查相同，只把 `build` 換成 `bundleRelease`）
+- 上傳金鑰、服務帳號的金鑰在 `app-test` 裡，名稱對得上
+- 第一次手動傳之後，API 開的內部測試版本能不能直接是 `completed`（發給測試者）。不行的話，API 的回答會印在紀錄裡，照它改 `play-upload.sh`
+- 營運者從內部測試裝到手機、打得開
 
 ## 在本機檢查
 
@@ -203,4 +249,6 @@ cd worker
 node --experimental-strip-types --test test/workflows.test.ts
 ```
 
-`worker/` 的 `pnpm test` 也包括它。`changed-paths.sh` 的測試要有 `bash` 和 `git`。`paths` 清單的測試要有 `go` 才完整：沒有 `go` 時，檢查 Go 套件的那一項跳過，其他照查；設了 `CI`（GitHub Actions 會設）或 `IAMREAL_BB` 時沒有 `go`，那一項是失敗，不是跳過。這些規則防手誤和明顯的改動，不能代替逐行看（`CONTRIBUTING.md`「部署會執行到的東西」）。
+`upload-android.yml` 的三個腳本的測試在 `worker/test/upload-android.test.ts`：版本號（台灣的日期、`versionCode` 的範圍）、用測試當場產生的上傳金鑰簽章並驗證、對 Google Play 的每一個呼叫（`curl` 換成一個照 API 的文件回答的替身，核對 JWT 的簽章和內容、呼叫的順序、token 沒有出現在命令列、上傳失敗時不提交）。簽章的測試要有 JDK（`JAVA_HOME`，或 Mac 上 `java_home` 找得到的）；沒有時跳過，設了 `CI` 時是失敗。
+
+`worker/` 的 `pnpm test` 也包括它們。`changed-paths.sh` 的測試要有 `bash` 和 `git`。`paths` 清單的測試要有 `go` 才完整：沒有 `go` 時，檢查 Go 套件的那一項跳過，其他照查；設了 `CI`（GitHub Actions 會設）或 `IAMREAL_BB` 時沒有 `go`，那一項是失敗，不是跳過。這些規則防手誤和明顯的改動，不能代替逐行看（`CONTRIBUTING.md`「部署會執行到的東西」）。

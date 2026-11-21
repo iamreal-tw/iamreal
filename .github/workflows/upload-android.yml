@@ -1,0 +1,111 @@
+# Builds the store's build of the Android app (tw.iamreal.app) and puts it
+# on Google Play's internal testing track (ADR-0036, ADR-0037), when the
+# operator starts it by hand on main: Actions, upload-android, "Run
+# workflow"; or `gh workflow run upload-android.yml --ref main`. A push or a
+# merge uploads nothing. Until launch the build talks to the test site and
+# signs for the test roster (android/README.md, the section on the two
+# builds); the checks of the bundle in android/app/build.gradle.kts stop it
+# otherwise.
+# .github/README.md has the details; worker/test/workflows.ts holds this
+# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
+# file against them.
+#
+# "build" has no secret. It stops first when the run is not on main. It
+# gives the build its version: the date in Taiwan, 2026.11.21, the same for
+# every run of a day, and the run's number as the build number
+# (android-version.sh). It builds the bundle with that version the way the
+# android check of checks.yml builds the app (no cache here), which runs the
+# checks of the bundle, and hands the bundle on as an artifact.
+#
+# "upload" is the one job of the environment app-test, which GitHub gives
+# its keys to only for jobs on main (#162). It builds nothing and runs no
+# Gradle: it signs the bundle the build job checked with the upload key
+# (android-sign.sh), keeps the signed bundle as an artifact (the API takes
+# no app's first build: the operator uploads that one by hand, from Play
+# Console; .github/README.md), then uploads it with the Google Play
+# Developer API (play-upload.sh). Each secret is in the env of the one step
+# that uses it. What it trusts besides: the pinned actions; the runner's
+# JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl, openssl,
+# jq); the two scripts, from the same commit as this file; and the bundle
+# the build job handed on.
+name: upload-android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
+# One upload at a time, none cancelled halfway: a build number goes to
+# Google Play in the order the runs were started.
+concurrency:
+  group: upload-android
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Only from main
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The version, the date in Taiwan, and the run's number
+        id: version
+        run: bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Install libc++ (Barretenberg's static library is built with it)
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
+      - name: Install the Rust of rust-toolchain.toml, with the targets of Android
+        working-directory: device-core
+        run: rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android
+      - name: Install the parts of the Android SDK that android/app/build.gradle.kts names
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: Get the parameter files
+        working-directory: device-core
+        run: ./fetch-crs.sh
+      - name: gradlew bundleRelease, with the checks of the bundle
+        working-directory: android
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-bundle
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+  upload:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: app-test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-bundle
+          path: ${{ runner.temp }}/bundle
+      - name: Sign the bundle with the upload key
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+        run: JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/signed/app-release.aab"
+      # Kept with the run: the operator can upload it from Play Console when the API cannot.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-bundle-signed
+          path: ${{ runner.temp }}/signed/app-release.aab
+          if-no-files-found: error
+      - name: Upload to Google Play's internal testing
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"
