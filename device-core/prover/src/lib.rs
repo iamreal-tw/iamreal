@@ -34,6 +34,7 @@ use iamreal_device_checks::hash::Poseidon2;
 use iamreal_device_checks::list_consequence::{Consequence, list_consequence};
 use iamreal_device_checks::roster_rules::{self, Reason};
 use iamreal_device_checks::scope::{Roster, scope_string};
+use iamreal_device_checks::scoped_id::{parse_scoped_id, short_id};
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 use serde_json::json;
 
@@ -521,6 +522,32 @@ pub unsafe extern "C" fn idc_card_status(
             "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
         });
         serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
+    })
+}
+
+/// The short ID of a scoped ID (spec/scoped-id.md): the first 10
+/// characters of its text form, in `*out`. The screens and the address of
+/// the card's page write it.
+///
+/// `scoped_id`: the 52 characters of a scoped ID in its one spelling, as
+/// the body of [`idc_session_card_state_request`] has it. `IDC_ERR_INPUT`
+/// for anything else.
+///
+/// # Safety
+/// `scoped_id` points to `scoped_id_len` bytes; `out` is null or points to
+/// an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_short_id(
+    scoped_id: *const u8,
+    scoped_id_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let text = unsafe { input(scoped_id, scoped_id_len) }?;
+        parse_scoped_id(text).ok_or(IDC_ERR_INPUT)?;
+        let text = std::str::from_utf8(text).map_err(|_| IDC_ERR_INPUT)?;
+        Ok(short_id(text).ok_or(IDC_ERR_INPUT)?.as_bytes().to_vec())
     })
 }
 

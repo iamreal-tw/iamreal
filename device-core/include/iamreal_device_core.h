@@ -154,6 +154,15 @@ int32_t idc_card_status(const uint8_t *platforms_json, size_t platforms_json_len
                         const uint8_t *known_platforms_json, size_t known_platforms_json_len,
                         int64_t now, idc_buf *out);
 
+/* The short ID of a scoped ID (spec/scoped-id.md): the first 10 characters
+ * of its text form, in *out. The screens and the address of the card's
+ * page write it.
+ *
+ * scoped_id: the 52 characters of a scoped ID in its one spelling, as the
+ * body of idc_session_card_state_request has it. IDC_ERR_INPUT for
+ * anything else. */
+int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *out);
+
 /*
  * A session: one card proof in progress (device-core/README.md, "檢查都通過
  * 了"). The core keeps what it checked; the app holds the number that names
