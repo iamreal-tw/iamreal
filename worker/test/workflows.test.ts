@@ -68,7 +68,7 @@ const D = "deploy-test.yml";
 const C = "checks.yml";
 const B = "checks-browser.yml";
 const I = "checks-ios.yml";
-const X = "checks-circuits.yml";
+const CIRCUITS_WORKFLOW = "checks-circuits.yml";
 const BROWSER_JOB = "  browser:\n    runs-on: ubuntu-24.04\n";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const SECRET = "${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}";
@@ -281,21 +281,21 @@ const CHANGES: Record<string, Change[]> = {
   "230 no changes job": [replace(C, "  changes:\n", "  other:\n")],
   "231 the commits put into the script's command, not its env": [replace(C, CHANGES_RUN, "        run: BASE_SHA=${{ github.event.pull_request.base.sha }} bash .github/workflows/changed-paths.sh\n")],
   // checks-circuits.yml (#247): like checks-browser.yml, and its one job exactly as written in test/workflows.ts.
-  "300 checks-circuits.yml also on merge_group": [replace(X, "on:\n", `on:\n${MERGE_GROUP}`)],
-  "301 checks-circuits.yml on every pull request": [replace(X, "    paths:\n", "    paths-ignore:\n")],
-  "302 a path less in checks-circuits.yml": [replace(X, "      - verifier/vk/**\n", "")],
-  "303 checks-circuits.yml on pull_request_target": [replace(X, "  pull_request:\n", "  pull_request_target:\n")],
-  "304 checks-circuits.yml in the concurrency group of checks-browser.yml": [replace(X, "  group: checks-circuits-", "  group: checks-browser-")],
-  "305 checks-circuits.yml with write permissions": [replace(X, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
-  "306 a secret in the env of checks-circuits.yml": [replace(X, "jobs:\n", "env:\n  T: ${{ secrets.X }}\n\njobs:\n")],
-  "307 an action not in the list in checks-circuits.yml": [replace(X, "      - name: Install pnpm\n", `      - uses: actions/github-script@${SHA} # v9.0.0\n      - name: Install pnpm\n`)],
-  "308 the circuits job running a nargo that is not the one fetch-nargo.sh checked": [replace(X, `run: '"$(./fetch-nargo.sh)" test --workspace'`, "run: nargo test --workspace")],
-  "309 the circuits job taking circom from somewhere else": [replace(X, 'run: circom="$(./fetch-circom.sh)"', 'run: cargo install circom && circom="$(which circom)"')],
-  "310 the circuits job without the rebuild": [replace(X, "        run: ./rebuild.sh\n", "        run: true\n")],
-  "311 the circuits job taking the circom column's \"not run\"": [replace(X, "run: diff -u results/equivalence.md out/equivalence.md && ", "run: ")],
-  "312 one more step in the circuits job": [replace(X, "      - name: pnpm test", "      - run: curl -o .zkID/x https://example.invalid/x\n        working-directory: circuits\n      - name: pnpm test")],
-  "313 a step of the circuits job in another directory": [replace(X, "        working-directory: circuits\n        run: ./rebuild.sh", "        working-directory: circuits/fuzz\n        run: ./rebuild.sh")],
-  "314 the circuits job with an env": [replace(X, "    timeout-minutes: ", "    env:\n      ZKID_CIRCOM_BUILD: /tmp/x\n    timeout-minutes: ")],
+  "300 checks-circuits.yml also on merge_group": [replace(CIRCUITS_WORKFLOW, "on:\n", `on:\n${MERGE_GROUP}`)],
+  "301 checks-circuits.yml on every pull request": [replace(CIRCUITS_WORKFLOW, "    paths:\n", "    paths-ignore:\n")],
+  "302 a path less in checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "      - verifier/vk/**\n", "")],
+  "303 checks-circuits.yml on pull_request_target": [replace(CIRCUITS_WORKFLOW, "  pull_request:\n", "  pull_request_target:\n")],
+  "304 checks-circuits.yml in the concurrency group of checks-browser.yml": [replace(CIRCUITS_WORKFLOW, "  group: checks-circuits-", "  group: checks-browser-")],
+  "305 checks-circuits.yml with write permissions": [replace(CIRCUITS_WORKFLOW, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "306 a secret in the env of checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "jobs:\n", "env:\n  T: ${{ secrets.X }}\n\njobs:\n")],
+  "307 an action not in the list in checks-circuits.yml": [replace(CIRCUITS_WORKFLOW, "      - name: Install pnpm\n", `      - uses: actions/github-script@${SHA} # v9.0.0\n      - name: Install pnpm\n`)],
+  "308 the circuits job running a nargo that is not the one fetch-nargo.sh checked": [replace(CIRCUITS_WORKFLOW, `run: '"$(./fetch-nargo.sh)" test --workspace'`, "run: nargo test --workspace")],
+  "309 the circuits job taking circom from somewhere else": [replace(CIRCUITS_WORKFLOW, 'run: circom="$(./fetch-circom.sh)"', 'run: cargo install circom && circom="$(which circom)"')],
+  "310 the circuits job without the rebuild": [replace(CIRCUITS_WORKFLOW, "        run: ./rebuild.sh\n", "        run: true\n")],
+  "311 the circuits job taking the circom column's \"not run\"": [replace(CIRCUITS_WORKFLOW, "run: diff -u results/equivalence.md out/equivalence.md && ", "run: ")],
+  "312 one more step in the circuits job": [replace(CIRCUITS_WORKFLOW, "      - name: pnpm test", "      - run: curl -o .zkID/x https://example.invalid/x\n        working-directory: circuits\n      - name: pnpm test")],
+  "313 a step of the circuits job in another directory": [replace(CIRCUITS_WORKFLOW, "        working-directory: circuits\n        run: ./rebuild.sh", "        working-directory: circuits/fuzz\n        run: ./rebuild.sh")],
+  "314 the circuits job with an env": [replace(CIRCUITS_WORKFLOW, "    timeout-minutes: ", "    env:\n      ZKID_CIRCOM_BUILD: /tmp/x\n    timeout-minutes: ")],
 };
 
 // Spaces outside ASCII. libyaml takes none of them for a space, so a line that starts with them and
@@ -462,11 +462,11 @@ const CACHE_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
     problem: /^checks-browser\.yml: cache-mode is not none/,
   },
   "180 checks-circuits.yml with no cache-mode": {
-    changes: [(f) => void (f[X] = f[X]!.replace(/^cache-mode: .*\n\n/m, ""))],
+    changes: [(f) => void (f[CIRCUITS_WORKFLOW] = f[CIRCUITS_WORKFLOW]!.replace(/^cache-mode: .*\n\n/m, ""))],
     problem: /^checks-circuits\.yml: cache-mode is not none/,
   },
   "181 checks-circuits.yml restoring a cache": {
-    changes: [replace(X, "      - name: Install pnpm\n", `${cacheStep("actions/cache/restore", TARGET)}      - name: Install pnpm\n`)],
+    changes: [replace(CIRCUITS_WORKFLOW, "      - name: Install pnpm\n", `${cacheStep("actions/cache/restore", TARGET)}      - name: Install pnpm\n`)],
     problem: /^checks-circuits\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
   },
   "175 checks-ios.yml allowed to save caches": {
@@ -566,7 +566,7 @@ test("the reader reads the part of YAML the workflows are written in, values as 
   const iosDoc = readYaml(realFiles()[I]!) as Record<string, Yaml>;
   assert.deepEqual((iosDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...IOS_PATHS]);
   assert.deepEqual(Object.keys(iosDoc.jobs as object), ["ios"]);
-  const circuitsDoc = readYaml(realFiles()[X]!) as Record<string, Yaml>;
+  const circuitsDoc = readYaml(realFiles()[CIRCUITS_WORKFLOW]!) as Record<string, Yaml>;
   assert.deepEqual((circuitsDoc.on as Record<string, Record<string, Yaml>>).pull_request!.paths, [...CIRCUITS_PATHS]);
   assert.deepEqual(Object.keys(circuitsDoc.jobs as object), ["circuits"]);
   const browser = (browserDoc.jobs as Record<string, Record<string, Yaml>>).browser!;

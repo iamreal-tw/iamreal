@@ -117,7 +117,7 @@ esac
 });
 
 describe("fetch-circom.sh", () => {
-  const URL = "https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64";
+  const RELEASE_URL = "https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64";
   const CIRCOM = "#!/bin/sh\necho circom compiler 2.2.3\n";
   /**
    * A copy of the script next to a circom.sha256 with `line`, and stand-ins on
@@ -152,7 +152,7 @@ printf '%s' '${body}' > "$out"
     const { dir, env } = setUp({ line: `${sha(CIRCOM)}  v2.2.3/circom-linux-amd64` });
     const r = run(join(dir, "fetch-circom.sh"), [], env);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(readFileSync(join(dir, "asked"), "utf8"), URL + "\n");
+    assert.equal(readFileSync(join(dir, "asked"), "utf8"), RELEASE_URL + "\n");
     const circom = join(dir, ".tools", "circom", "linux-amd64", "circom");
     assert.equal(r.stdout, circom + "\n");
     assert.equal(spawnSync(circom, { encoding: "utf8" }).stdout, "circom compiler 2.2.3\n", "the downloaded file, made executable");
