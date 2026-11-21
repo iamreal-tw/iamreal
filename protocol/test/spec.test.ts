@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { bytesOfHex, hexOf, sha256Hex } from "../src/bytes.ts";
 import { decodeBase32Strict, encodeBase32 } from "../src/base32.ts";
-import { currentTime, parseChallenge } from "../src/challenge.ts";
-import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "../src/date.ts";
+import { checkChallenge, currentTime, parseChallenge } from "../src/challenge.ts";
+import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay, taiwanDayOfSeconds } from "../src/date.ts";
 import { declarationCode, declarationPreimage } from "../src/declaration-code.ts";
 import { fieldBytes, pack31 } from "../src/field.ts";
 import { minAppVerdict } from "../src/min-app.ts";
@@ -33,6 +33,22 @@ describe("challenge.json", () => {
   }
   test("not a string", () => {
     for (const x of [null, 1, {}, ["2026-11-16.000G40R40M30E209185GR38E1W"]]) assert.equal(parseChallenge(x), null);
+  });
+  for (const c of v.device) {
+    test(`on the device at ${c.now_utc}: ${c.result} (${c.note})`, () => {
+      const today = taiwanDayOfSeconds(c.now);
+      assert.equal(formatDay(today), c.today);
+      const checked = checkChallenge(c.challenge, today);
+      assert.equal(checked.ok ? "ok" : checked.problem, c.result);
+      if (checked.ok) assert.equal(checked.day, today);
+      if (!checked.ok && checked.problem === "challenge_not_today") {
+        assert.equal(formatDay(checked.challengeDay), c.challenge.slice(0, 10));
+        assert.equal(checked.today, today);
+      }
+    });
+  }
+  test("on the device, what is not a string is malformed", () => {
+    for (const x of [null, 1, {}]) assert.deepEqual(checkChallenge(x, parseDay("2026-11-16")!), { ok: false, problem: "challenge_malformed" });
   });
 });
 

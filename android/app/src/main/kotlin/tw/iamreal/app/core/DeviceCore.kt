@@ -92,6 +92,13 @@ object DeviceCore {
     fun sessionCheckDate(session: Long, now: Long): ByteArray = nativeSessionCheckDate(session, now)
 
     /**
+     * The challenge the server issued: in its one spelling and dated today in Taiwan by [now]; if midnight
+     * passed since the checks, the date conditions again. JSON. The proof is made for the challenge it took only.
+     */
+    fun sessionCheckChallenge(session: Long, now: Long, challenge: ByteArray): ByteArray =
+        nativeSessionCheckChallenge(session, now, challenge)
+
+    /**
      * The body of `POST /api/v1/card-state`, with the scoped ID computed from the card's signature over the
      * scope string. Throws with [DeviceCoreException.REFUSED] unless every check passed.
      */
@@ -143,6 +150,8 @@ object DeviceCore {
     private external fun nativeSessionCheckArtifacts(session: Long, circuit: ByteArray, verificationKey: ByteArray, crsG1: ByteArray, crsG2: ByteArray)
 
     private external fun nativeSessionCheckDate(session: Long, now: Long): ByteArray
+
+    private external fun nativeSessionCheckChallenge(session: Long, now: Long, challenge: ByteArray): ByteArray
 
     private external fun nativeSessionCardStateRequest(session: Long, now: Long, scopeSignature: ByteArray): ByteArray
 

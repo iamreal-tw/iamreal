@@ -3,7 +3,7 @@
 # each altered copy of it below, with the problem named. One thing it does
 # not try: an executable without the addresses of the test site.
 #
-#   ./check-app-test.sh <path to a built IamrealApp.app, for the simulator>
+#   ./check-app-test.sh <path to a built IamrealApp.app: Debug, for the simulator>
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -44,9 +44,24 @@ else
   failed=1
 fi
 
+# The app as built is a Debug build: the development build (ADR-0037).
 copy
 plutil -replace CFBundleIdentifier -string tw.iamreal.app "$tmp/app/IamrealApp.app/Info.plist"
-expect "the identifier of the production app" "the identifier is tw.iamreal.app"
+expect "the store's identifier in a Debug build" "the identifier is tw.iamreal.app, not tw.iamreal.app.dev"
+
+copy
+expect "the development build's identifier in a Release build" "the identifier is tw.iamreal.app.dev, not tw.iamreal.app" CONFIGURATION=Release
+
+copy
+plutil -replace CFBundleIdentifier -string tw.iamreal.app.other "$tmp/app/IamrealApp.app/Info.plist"
+expect "an identifier of neither build" "the identifier is tw.iamreal.app.other"
+
+copy
+expect "a configuration that is neither build" "the configuration is Profile" CONFIGURATION=Profile
+
+copy
+plutil -replace CFBundleDisplayName -string "島民證明" "$tmp/app/IamrealApp.app/Info.plist"
+expect "another name under the icon" "the name under the icon is 島民證明,"
 
 copy
 plutil -replace UIDeviceFamily -json '[1,2]' "$tmp/app/IamrealApp.app/Info.plist"
