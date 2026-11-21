@@ -848,9 +848,9 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `triggers.crons` | `0 * * * *` | 每小時整點跑一次排程 |
 | `durable_objects` | `ROSTER` → 類別 `Roster` | 一份名冊一個 Durable Object |
 | `r2_buckets` | `DATA` → `iamreal-test-data` | 公開的檔案，經 `test-data.iamreal.tw` 下載（ADR-0027） |
-| `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊時換成下一個號碼，用過的名稱不再用（[清空測試名冊](#清空測試名冊)）；維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
+| `vars.ROSTER_OBJECT_NAME` | `test-2` | 名冊那個 Durable Object 的名稱。清空測試名冊時換成下一個號碼，用過的名稱不再用（[清空測試名冊](#清空測試名冊)）；維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
 | `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
-| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-19` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。還沒清空過，所以是測試網站第一次部署的日期（[第一次部署量到的](#第一次部署量到的)）。清空時和 `ROSTER_OBJECT_NAME` 一起改（[清空測試名冊](#清空測試名冊)） |
+| `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-21` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。第一次清空是 2026-11-21（名冊規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `ROSTER_OBJECT_NAME` 一起改（[清空測試名冊](#清空測試名冊)） |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
