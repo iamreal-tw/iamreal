@@ -20,6 +20,9 @@
 #include <stdlib.h>
 
 #include "iamreal_device_core.h"
+#ifdef IDC_TESTING
+#include "iamreal_device_core_testing.h"
+#endif
 
 /* Failures of this layer itself (no memory, a class not found) use the core's code for its own failures. */
 #define EXCEPTION_CLASS "tw/iamreal/app/core/DeviceCoreException"
@@ -66,6 +69,16 @@ static int copy_in(JNIEnv *env, jbyteArray array, copy *out) {
   return 1;
 }
 
+/* As copy_in, but a null byte[] is no bytes: (NULL, 0). */
+static int copy_in_optional(JNIEnv *env, jbyteArray array, copy *out) {
+  if (array == NULL) {
+    out->ptr = NULL;
+    out->len = 0;
+    return 1;
+  }
+  return copy_in(env, array, out);
+}
+
 static void copy_free(copy *c) {
   if (c->ptr != NULL) {
     wipe(c->ptr, c->len);
@@ -73,6 +86,21 @@ static void copy_free(copy *c) {
   }
   c->ptr = NULL;
   c->len = 0;
+}
+
+/* Copies `n` byte[]s out. False, with an exception pending and nothing left to free, when one cannot be. */
+static int copy_all(JNIEnv *env, int n, const jbyteArray *arrays, copy *out) {
+  for (int i = 0; i < n; i++) {
+    if (!copy_in(env, arrays[i], &out[i])) {
+      while (i-- > 0) copy_free(&out[i]);
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static void copy_free_all(int n, copy *copies) {
+  for (int i = 0; i < n; i++) copy_free(&copies[i]);
 }
 
 /* The bytes of `buf` as a new byte[], or an exception for `code`. Gives `buf` back to the core either way. */
@@ -126,3 +154,164 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeDeclarati
   copy_free(&chal);
   return result(env, code, &out);
 }
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeListConsequence(JNIEnv *env, jobject self, jbyteArray platforms_json,
+                                                                                      jbyteArray card_state_json, jbyteArray known_platforms_json,
+                                                                                      jbyteArray accounts_json, jlong now) {
+  (void)self;
+  copy in[4];
+  if (!copy_all(env, 4, (jbyteArray[]){platforms_json, card_state_json, known_platforms_json, accounts_json}, in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_list_consequence(in[0].ptr, in[0].len, in[1].ptr, in[1].len, in[2].ptr, in[2].len, in[3].ptr, in[3].len, (int64_t)now, &out);
+  copy_free_all(4, in);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCardStatus(JNIEnv *env, jobject self, jbyteArray platforms_json,
+                                                                                 jbyteArray card_state_json, jbyteArray known_platforms_json,
+                                                                                 jlong now) {
+  (void)self;
+  copy in[3];
+  if (!copy_all(env, 3, (jbyteArray[]){platforms_json, card_state_json, known_platforms_json}, in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_card_status(in[0].ptr, in[0].len, in[1].ptr, in[1].len, in[2].ptr, in[2].len, (int64_t)now, &out);
+  copy_free_all(3, in);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeShortId(JNIEnv *env, jobject self, jbyteArray scoped_id) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, scoped_id, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_short_id(in.ptr, in.len, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionOpen(JNIEnv *env, jobject self, jint roster) {
+  (void)self;
+  idc_session session = 0;
+  int32_t code = idc_session_open((uint32_t)roster, &session);
+  if (code != IDC_OK) throw_code(env, code);
+  return (jlong)session;
+}
+
+JNIEXPORT void JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionClose(JNIEnv *env, jobject self, jlong session) {
+  (void)env;
+  (void)self;
+  idc_session_close((idc_session)session);
+}
+
+JNIEXPORT void JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionAddCertificate(JNIEnv *env, jobject self, jlong session,
+                                                                                      jbyteArray certificate) {
+  (void)self;
+  copy cert;
+  if (!copy_in(env, certificate, &cert)) return;
+  int32_t code = idc_session_add_certificate((idc_session)session, cert.ptr, cert.len);
+  copy_free(&cert);
+  if (code != IDC_OK) throw_code(env, code);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCheckCertificates(JNIEnv *env, jobject self, jlong session,
+                                                                                               jlong now) {
+  (void)self;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_check_certificates((idc_session)session, (int64_t)now, &out);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionChooseCrl(JNIEnv *env, jobject self, jlong session,
+                                                                                       jbyteArray index) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, index, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_choose_crl((idc_session)session, in.ptr, in.len, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
+/* `highest` may be null: the device remembers no CRL number for the issuer. */
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCheckCrl(JNIEnv *env, jobject self, jlong session, jbyteArray crl,
+                                                                                      jbyteArray config, jbyteArray highest) {
+  (void)self;
+  copy in[2], high;
+  if (!copy_all(env, 2, (jbyteArray[]){crl, config}, in)) return NULL;
+  if (!copy_in_optional(env, highest, &high)) {
+    copy_free_all(2, in);
+    return NULL;
+  }
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_check_crl((idc_session)session, in[0].ptr, in[0].len, in[1].ptr, in[1].len, high.ptr, high.len, &out);
+  copy_free_all(2, in);
+  copy_free(&high);
+  return result(env, code, &out);
+}
+
+JNIEXPORT void JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionBuildTree(JNIEnv *env, jobject self, jlong session) {
+  (void)self;
+  int32_t code = idc_session_build_tree((idc_session)session);
+  if (code != IDC_OK) throw_code(env, code);
+}
+
+JNIEXPORT void JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCheckArtifacts(JNIEnv *env, jobject self, jlong session,
+                                                                                      jbyteArray circuit, jbyteArray verification_key,
+                                                                                      jbyteArray crs_g1, jbyteArray crs_g2) {
+  (void)self;
+  copy in[4];
+  if (!copy_all(env, 4, (jbyteArray[]){circuit, verification_key, crs_g1, crs_g2}, in)) return;
+  int32_t code = idc_session_check_artifacts((idc_session)session, in[0].ptr, in[0].len, in[1].ptr, in[1].len, in[2].ptr, in[2].len, in[3].ptr,
+                                             in[3].len);
+  copy_free_all(4, in);
+  if (code != IDC_OK) throw_code(env, code);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCheckDate(JNIEnv *env, jobject self, jlong session, jlong now) {
+  (void)self;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_check_date((idc_session)session, (int64_t)now, &out);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionCardStateRequest(JNIEnv *env, jobject self, jlong session,
+                                                                                              jlong now, jbyteArray scope_signature) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, scope_signature, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_card_state_request((idc_session)session, (int64_t)now, in.ptr, in.len, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionRecordsRequest(
+    JNIEnv *env, jobject self, jlong session, jbyteArray circuit, jbyteArray verification_key, jbyteArray crs_g1, jbyteArray crs_g2,
+    jbyteArray accounts_json, jbyteArray challenge, jbyteArray scope_signature, jbyteArray declaration_code_signature) {
+  (void)self;
+  copy in[8];
+  if (!copy_all(env, 8,
+                (jbyteArray[]){circuit, verification_key, crs_g1, crs_g2, accounts_json, challenge, scope_signature, declaration_code_signature},
+                in))
+    return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_session_records_request((idc_session)session, in[0].ptr, in[0].len, in[1].ptr, in[1].len, in[2].ptr, in[2].len, in[3].ptr,
+                                             in[3].len, in[4].ptr, in[4].len, in[5].ptr, in[5].len, in[6].ptr, in[6].len, in[7].ptr, in[7].len,
+                                             &out);
+  copy_free_all(8, in);
+  return result(env, code, &out);
+}
+
+#ifdef IDC_TESTING
+/* Only in the library of the tests (build-native.sh, "test-issuers"): a session that trusts the issuer keys given, for a fake card. */
+JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_TestingCore_nativeSessionOpen(JNIEnv *env, jobject self, jint roster, jbyteArray issuers_json) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, issuers_json, &in)) return 0;
+  idc_session session = 0;
+  int32_t code = idc_testing_session_open((uint32_t)roster, in.ptr, in.len, &session);
+  copy_free(&in);
+  if (code != IDC_OK) throw_code(env, code);
+  return (jlong)session;
+}
+#endif

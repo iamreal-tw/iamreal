@@ -4,3 +4,7 @@ build/
 local.properties
 # Zig, downloaded and checked by fetch-zig.sh
 vendor/
+# What the emulator test leaves (test/card-proof.ts)
+test-output/
+# The Kotlin compiler daemon's session files
+.kotlin/

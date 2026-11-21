@@ -15,5 +15,8 @@ class DeviceCoreException(val code: Int) : Exception("device-core: code $code") 
 
         /** The core failed. */
         const val INTERNAL = 3
+
+        /** The session has not passed the checks the function needs first. */
+        const val REFUSED = 4
     }
 }

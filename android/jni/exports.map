@@ -6,6 +6,8 @@
   global:
     JNI_OnLoad;
     Java_tw_iamreal_app_core_DeviceCore_*;
+    # Only in the library of the tests (build-native.sh, "test-issuers"); the others have no such function.
+    Java_tw_iamreal_app_core_TestingCore_*;
   local:
     *;
 };
