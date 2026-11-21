@@ -1,27 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No permission is asked for yet. A library that brings the advertising
-     ID's permission has it taken out here, and the build fails if the
-     merged manifest still names it (checkManifest in app/build.gradle.kts). -->
+<!-- The one permission asked for is the network: the server and the CRL
+     archive. A library that brings the advertising ID's permission has it
+     taken out here, and the build fails if the merged manifest still names
+     it, or asks for anything not listed in app/build.gradle.kts
+     (checkManifest). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-permission
         android:name="com.google.android.gms.permission.AD_ID"
         tools:node="remove" />
 
-    <!-- Nothing of the app goes into a backup or onto another device. -->
+    <!-- Nothing of the app goes into a backup or onto another device. Only
+         HTTPS: the app talks to no server without it. -->
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.DeviceDefault.DayNight">
+        android:theme="@style/App"
+        android:usesCleartextTraffic="false">
+        <!-- A change of the screen (turned, folded, dark) does not start
+             the activity again: the screens draw themselves anew. -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation|fontScale|locale|layoutDirection"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- What the libraries of the screens would start by themselves when
+             the app opens, taken out: a look for an emoji font, which on a
+             phone with Google Play services asks them for one, and the
+             installing of a start-up profile, with the receiver that lets
+             a development tool ask for it. The app has neither a profile
+             nor a use for either. The build fails if the merged manifest
+             has a component other apps can call besides the activity above
+             (checkManifest). -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:ignore="MissingClass"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                tools:node="remove" />
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                tools:node="remove" />
+        </provider>
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
     </application>
 </manifest>

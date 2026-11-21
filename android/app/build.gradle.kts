@@ -3,6 +3,8 @@
 // bundled files get into the installer, and the checks of what was built.
 import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.zip.ZipFile
 import javax.inject.Inject
@@ -10,6 +12,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // The lowest Android the app runs on: API 29 (Android 10). Barretenberg's
@@ -20,13 +23,91 @@ val minApi = 29
 val bundledLists = files(rootProject.file("bundled.sha256"), rootProject.file("../device-core/crs.sha256"))
 // The one app this directory builds (ADR-0036).
 val appId = "tw.iamreal.app.test"
+// The build type of the emulator test (README.md, "模擬器上過一次卡"): a fake card, the library of the
+// tests, a server on this machine. It is installed next to the app under its own identifier and goes nowhere.
+val fakeBuild = "fake"
+val fakeId = "$appId.$fakeBuild"
 // The ABIs of each kind of build: what goes out is for phones only; a debug build is also for the emulator on x86-64.
 val releaseAbis = listOf("arm64-v8a")
 val debugAbis = listOf("arm64-v8a", "x86_64")
-// The libraries the app may carry: Kotlin's own, and the annotations it names. No SDK of anyone else.
-val allowedLibraries = listOf("org.jetbrains.kotlin:kotlin-stdlib", "org.jetbrains:annotations")
-// The permissions the merged manifest may ask for. None yet.
-val allowedPermissions = emptyList<String>()
+// The libraries the app may carry: Kotlin's own and the annotations it names; Jetpack Compose for the
+// screens (ui, foundation) and androidx.activity, and what those three bring with them, each by name.
+// No SDK of anyone else, no Google Play services, nothing that sends anything anywhere.
+val allowedLibraries = listOf(
+    "org.jetbrains.kotlin:kotlin-stdlib",
+    "org.jetbrains:annotations",
+    // Asked for by name (dependencies, below).
+    "androidx.activity:activity",
+    "androidx.compose.foundation:foundation",
+    "androidx.compose.ui:ui",
+    // What they bring with them.
+    "androidx.activity:activity-ktx",
+    "androidx.annotation:annotation-experimental",
+    "androidx.annotation:annotation-jvm",
+    "androidx.arch.core:core-common",
+    "androidx.arch.core:core-runtime",
+    "androidx.autofill:autofill",
+    "androidx.collection:collection-jvm",
+    "androidx.collection:collection-ktx",
+    "androidx.compose.animation:animation-android",
+    "androidx.compose.animation:animation-core-android",
+    "androidx.compose.foundation:foundation-android",
+    "androidx.compose.foundation:foundation-layout-android",
+    "androidx.compose.runtime:runtime-android",
+    "androidx.compose.runtime:runtime-annotation-android",
+    "androidx.compose.runtime:runtime-retain-android",
+    "androidx.compose.runtime:runtime-saveable-android",
+    "androidx.compose.ui:ui-android",
+    "androidx.compose.ui:ui-geometry-android",
+    "androidx.compose.ui:ui-graphics-android",
+    "androidx.compose.ui:ui-text-android",
+    "androidx.compose.ui:ui-unit-android",
+    "androidx.compose.ui:ui-util-android",
+    "androidx.concurrent:concurrent-futures",
+    "androidx.core:core",
+    "androidx.core:core-ktx",
+    "androidx.core:core-viewtree",
+    "androidx.customview:customview-poolingcontainer",
+    "androidx.documentfile:documentfile",
+    "androidx.dynamicanimation:dynamicanimation",
+    "androidx.emoji2:emoji2",
+    "androidx.graphics:graphics-path",
+    "androidx.interpolator:interpolator",
+    "androidx.legacy:legacy-support-core-utils",
+    "androidx.lifecycle:lifecycle-common-jvm",
+    "androidx.lifecycle:lifecycle-livedata",
+    "androidx.lifecycle:lifecycle-livedata-core",
+    "androidx.lifecycle:lifecycle-livedata-core-ktx",
+    "androidx.lifecycle:lifecycle-process",
+    "androidx.lifecycle:lifecycle-runtime-android",
+    "androidx.lifecycle:lifecycle-runtime-compose-android",
+    "androidx.lifecycle:lifecycle-runtime-ktx-android",
+    "androidx.lifecycle:lifecycle-viewmodel",
+    "androidx.lifecycle:lifecycle-viewmodel-android",
+    "androidx.lifecycle:lifecycle-viewmodel-ktx",
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate-android",
+    "androidx.loader:loader",
+    "androidx.localbroadcastmanager:localbroadcastmanager",
+    "androidx.navigationevent:navigationevent-android",
+    "androidx.print:print",
+    "androidx.profileinstaller:profileinstaller",
+    "androidx.savedstate:savedstate-android",
+    "androidx.savedstate:savedstate-compose-android",
+    "androidx.savedstate:savedstate-ktx",
+    "androidx.startup:startup-runtime",
+    "androidx.tracing:tracing",
+    "androidx.transition:transition",
+    "androidx.versionedparcelable:versionedparcelable",
+    "androidx.window:window",
+    "androidx.window:window-core-android",
+    "com.google.guava:listenablefuture",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
+    "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm",
+    "org.jspecify:jspecify",
+)
+// The permissions the merged manifest may ask for: the network, for the server and the CRL archive.
+val allowedPermissions = listOf("android.permission.INTERNET")
 
 android {
     namespace = "tw.iamreal.app"
@@ -54,6 +135,25 @@ android {
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
         }
+        create(fakeBuild) {
+            // The emulator test's: a debug build with src/fake/ in place of src/real/ (sourceSets, below).
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".$fakeBuild"
+        }
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    sourceSets {
+        // What the app is wired to (Target.kt): the card and the server of the installers that go out
+        // and of a phone on a cable, or the fake card and this machine's server of the emulator test.
+        getByName("debug").kotlin.directories.add("src/real/kotlin")
+        getByName("release").kotlin.directories.add("src/real/kotlin")
+        // TestingCore, for the library of the tests: in the fake build and the unit tests only.
+        getByName(fakeBuild).kotlin.directories.add("src/testing/kotlin")
+        getByName("test").kotlin.directories.add("src/testing/kotlin")
     }
 
     compileOptions {
@@ -69,6 +169,10 @@ android {
     packaging {
         // Descriptions of Kotlin's built-in types, read only by Kotlin's reflection library, which the app does not have.
         resources.excludes += "**/*.kotlin_builtins"
+        // The one native library the installer has is ours (checkApk). androidx.graphics:graphics-path, which
+        // comes with Compose, brings one for walking the segments of a path on Android 13 and older; the
+        // screens draw no path, and the emulator test goes through every screen without it.
+        jniLibs.excludes += "**/libandroidx.graphics.path.so"
     }
 
     // The list of libraries AGP would put in the installer, encrypted for Google Play: left out.
@@ -84,17 +188,31 @@ android {
 }
 
 dependencies {
+    // The screens (README.md, "工具和套件"). Exact versions; what they bring is in allowedLibraries.
+    implementation("androidx.activity:activity:1.13.0")
+    implementation("androidx.compose.foundation:foundation:1.11.4")
+    implementation("androidx.compose.ui:ui:1.11.4")
     // Only for the tests on the JVM. The app itself uses no library but Kotlin's own.
     testImplementation("junit:junit:4.13.2")
     // The JSON reader Android has built in, for the JVM: the tests read spec/vectors/ with it.
     testImplementation("org.json:json:20260814")
 }
 
+/**
+ * One build of the native library at a time: cargo leaves device-core/'s static library at the same path
+ * with and without the feature `test-issuers`, and build-native.sh links what is there when cargo is done.
+ */
+abstract class OneAtATime : BuildService<BuildServiceParameters.None>
+
+val nativeBuilds = gradle.sharedServices.registerIfAbsent("nativeBuilds", OneAtATime::class) { maxParallelUsages = 1 }
+
 /** Runs build-native.sh for each ABI: `out/<abi>/libiamreal_device_core_jni.so`. */
 abstract class BuildNative : DefaultTask() {
     @get:Input abstract val abis: ListProperty<String>
     @get:Input abstract val api: Property<Int>
     @get:Input abstract val ndk: Property<String>
+    /** The library of the tests (build-native.sh, "test-issuers"): for the fake build only. */
+    @get:Input abstract val testing: Property<Boolean>
     @get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) abstract val sources: ConfigurableFileCollection
     @get:Internal abstract val script: RegularFileProperty
     @get:OutputDirectory abstract val out: DirectoryProperty
@@ -105,7 +223,7 @@ abstract class BuildNative : DefaultTask() {
         for (abi in abis.get()) {
             exec.exec {
                 environment("ANDROID_NDK_ROOT", ndk.get())
-                commandLine(script.get().asFile.path, abi, api.get().toString(), out.get().dir(abi).asFile.path)
+                commandLine(listOf(script.get().asFile.path, abi, api.get().toString(), out.get().dir(abi).asFile.path) + if (testing.get()) listOf("test-issuers") else emptyList())
             }
         }
     }
@@ -140,6 +258,31 @@ object Hashes {
         }
 }
 
+/** The methods a dex file calls or defines, each as the class's descriptor and the method's name: `Ljava/io/PrintStream;` to `println`. */
+object Dex {
+    fun methods(dex: ByteArray): List<Pair<String, String>> {
+        val b = ByteBuffer.wrap(dex).order(ByteOrder.LITTLE_ENDIAN)
+        // The header (Android's "Dalvik executable format"): the size and the place of each table.
+        val (stringCount, strings) = b.getInt(0x38) to b.getInt(0x3c)
+        val types = b.getInt(0x44)
+        val (methodCount, methods) = b.getInt(0x58) to b.getInt(0x5c)
+        fun string(i: Int): String {
+            require(i in 0 until stringCount)
+            var at = b.getInt(strings + 4 * i)
+            // The length in UTF-16 units, as ULEB128, then the bytes up to a zero.
+            while (dex[at].toInt() and 0x80 != 0) at++
+            at++
+            var end = at
+            while (dex[end].toInt() != 0) end++
+            return String(dex, at, end - at, Charsets.UTF_8)
+        }
+        return (0 until methodCount).map {
+            val item = methods + 8 * it
+            string(b.getInt(types + 4 * (b.getShort(item).toInt() and 0xffff))) to string(b.getInt(item + 4))
+        }
+    }
+}
+
 /** Copies the bundled files into `out`, each only after its SHA-256 is the one in the lists. */
 abstract class BundleFiles : DefaultTask() {
     @get:InputFiles abstract val lists: ConfigurableFileCollection
@@ -160,7 +303,24 @@ abstract class BundleFiles : DefaultTask() {
     }
 }
 
-/** Fails when the merged manifest is of another app, asks for a permission that is not allowed, or names the advertising ID anywhere. */
+/** Copies the sentences of the card proof (design/copy/card-proof.json) into the app's resources, as they are: `raw/card_proof_copy.json`. */
+abstract class CopySentences : DefaultTask() {
+    @get:InputFile abstract val from: RegularFileProperty
+    @get:OutputDirectory abstract val out: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val dir = out.get().asFile.resolve("raw")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        from.get().asFile.copyTo(dir.resolve("card_proof_copy.json"))
+    }
+}
+
+/**
+ * Fails when the merged manifest is of another app, asks for a permission that is not allowed, names the
+ * advertising ID anywhere, or has a component other apps can call besides the app's one activity.
+ */
 abstract class CheckManifest : DefaultTask() {
     @get:InputFile abstract val manifest: RegularFileProperty
     @get:Input abstract val id: Property<String>
@@ -174,15 +334,20 @@ abstract class CheckManifest : DefaultTask() {
         val root = factory.newDocumentBuilder().parse(file).documentElement
         if (root.getAttribute("package") != id.get()) throw GradleException("the merged manifest is of ${root.getAttribute("package")}, not ${id.get()}")
         val asked = mutableListOf<String>()
+        val open = mutableListOf<String>()
+        val android = "http://schemas.android.com/apk/res/android"
         val nodes = root.getElementsByTagName("*")
         for (i in 0 until nodes.length) {
             val node = nodes.item(i) as org.w3c.dom.Element
-            if (node.tagName.startsWith("uses-permission")) {
-                asked += node.getAttributeNS("http://schemas.android.com/apk/res/android", "name")
+            if (node.tagName.startsWith("uses-permission")) asked += node.getAttributeNS(android, "name")
+            // A component a library brought in that other apps could call.
+            if (node.tagName in listOf("activity", "activity-alias", "service", "receiver", "provider") && node.getAttributeNS(android, "exported") == "true") {
+                open += node.getAttributeNS(android, "name")
             }
         }
         val extra = asked - allowed.get().toSet()
         if (extra.isNotEmpty()) throw GradleException("the merged manifest asks for permissions that are not in app/build.gradle.kts: $extra")
+        if (open != listOf("tw.iamreal.app.MainActivity")) throw GradleException("the components of the merged manifest that other apps can call are $open, not the one activity")
     }
 }
 
@@ -203,8 +368,9 @@ abstract class CheckLibraries : DefaultTask() {
  * what goes out (README.md, "建置時的檢查"):
  * a native library for anything but the ABIs given, or any but ours; a
  * bundled file missing, extra or changed; the production site or the
- * production roster's scope string in the Kotlin code; a way to Android's
- * log.
+ * production roster's scope string in the Kotlin code; a call that writes
+ * to Android's log; the fake card, or the library of the tests with its test issuer
+ * keys (unless `testing`: the fake build, which goes nowhere).
  */
 abstract class CheckApk : DefaultTask() {
     @get:InputDirectory @get:Optional abstract val apks: DirectoryProperty
@@ -214,6 +380,7 @@ abstract class CheckApk : DefaultTask() {
     @get:Input abstract val silent: Property<Boolean>
     @get:Input abstract val id: Property<String>
     @get:Input abstract val allowed: ListProperty<String>
+    @get:Input abstract val testing: Property<Boolean>
 
     @TaskAction
     fun check() {
@@ -258,7 +425,10 @@ abstract class CheckApk : DefaultTask() {
 
             // Every library the native library asks the system for is named in it as text.
             for (lib in libs) {
-                if (String(read(lib), Charsets.ISO_8859_1).contains("liblog.so")) problems += "$lib links Android's log (liblog.so)"
+                val text = String(read(lib), Charsets.ISO_8859_1)
+                if (text.contains("liblog.so")) problems += "$lib links Android's log (liblog.so)"
+                // The mark of device-core/prover/src/lib.rs: the library takes issuer keys from its caller.
+                if (!testing.get() && text.contains("iamreal-device-core:testing-issuer-keys")) problems += "$lib is the library of the tests: it trusts issuer keys other than MOICA's"
             }
             // A class, a method or a text the Kotlin code refers to is in the dex file as text.
             for (dex in names.filter { it.endsWith(".dex") }) {
@@ -267,11 +437,19 @@ abstract class CheckApk : DefaultTask() {
                 for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
                     if (text.contains(production)) problems += "$dex holds $production: the test app names nothing of production"
                 }
-                if (!silent.get()) continue
-                // System.out and System.err are PrintStreams; printStackTrace writes to System.err.
-                for (log in listOf("Landroid/util/Log;", "Ljava/io/PrintStream;", "Ljava/util/logging/Logger;", "printStackTrace")) {
-                    if (text.contains(log)) problems += "$dex refers to $log: a release build writes no log"
+                // The fake card and the session that trusts test keys are in the emulator test's build alone.
+                for (fake in listOf("Ltw/iamreal/app/fake/", "TestingCore")) {
+                    if (!testing.get() && text.contains(fake)) problems += "$dex holds $fake: only the fake build has the fake card and the test keys"
                 }
+                if (!silent.get()) continue
+                // Android's own log is not referred to at all. System.out and System.err are PrintStreams, and
+                // java.util.logging ends in Android's log too: no method of either is called but the one that
+                // makes a Logger, which writes nothing. printStackTrace writes to System.err.
+                if (text.contains("Landroid/util/Log;")) problems += "$dex refers to Landroid/util/Log;: a release build writes no log"
+                val writes = Dex.methods(read(dex)).filter { (owner, method) ->
+                    owner == "Landroid/util/Log;" || owner == "Ljava/io/PrintStream;" || (owner == "Ljava/util/logging/Logger;" && method != "getLogger") || method == "printStackTrace"
+                }.map { (owner, method) -> "$owner.$method" }.toSet()
+                if (writes.isNotEmpty()) problems += "$dex calls $writes: a release build writes no log"
             }
         }
         if (problems.isNotEmpty()) throw GradleException("$file:\n" + problems.joinToString("\n"))
@@ -296,21 +474,32 @@ val nativeSources = files(
 )
 
 val buildNativeHost = tasks.register<BuildNativeHost>("buildNativeHost") {
+    usesService(nativeBuilds)
     sources.from(nativeSources)
     script = rootProject.file("build-native.sh")
     out = layout.buildDirectory.dir("native/host")
 }
 
 androidComponents {
+    // The unit tests run against the code of the app that goes out; the fake build has the emulator test.
+    beforeVariants { variant ->
+        if (variant.buildType == fakeBuild) (variant as com.android.build.api.variant.HasUnitTestBuilder).enableUnitTest = false
+    }
     onVariants { variant ->
         val name = variant.name.replaceFirstChar { it.uppercase() }
         val release = variant.buildType == "release"
+        val fake = variant.buildType == fakeBuild
         val variantAbis = if (release) releaseAbis else debugAbis
+        val variantId = if (fake) fakeId else appId
+        // The network, and what androidx.core declares for itself: a permission of this app's own, which only this app holds.
+        val variantPermissions = allowedPermissions + "$variantId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
         val native = tasks.register<BuildNative>("buildNative$name") {
             abis = variantAbis
             api = minApi
             ndk = androidComponents.sdkComponents.ndkDirectory.map { it.asFile.path }
+            testing = fake
+            usesService(nativeBuilds)
             sources.from(nativeSources)
             script = rootProject.file("build-native.sh")
         }
@@ -323,18 +512,25 @@ androidComponents {
         }
         variant.sources.assets!!.addGeneratedSourceDirectory(bundle, BundleFiles::out)
 
+        // The screens' sentences are design/copy/'s own file, not a copy kept here.
+        val sentences = tasks.register<CopySentences>("copySentences$name") {
+            from = rootProject.file("../design/copy/card-proof.json")
+        }
+        variant.sources.res!!.addGeneratedSourceDirectory(sentences, CopySentences::out)
+
         val checkManifest = tasks.register<CheckManifest>("checkManifest$name") {
             manifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
-            allowed = allowedPermissions
-            id = appId
+            allowed = variantPermissions
+            id = variantId
         }
         val checkApk = tasks.register<CheckApk>("checkApk$name") {
             apks = variant.artifacts.get(SingleArtifact.APK)
             lists.from(bundledLists)
             abis = variantAbis
             silent = release
-            id = appId
-            allowed = allowedPermissions
+            id = variantId
+            allowed = variantPermissions
+            testing = fake
         }
         val checkLibraries = tasks.register<CheckLibraries>("checkLibraries$name") {
             // Every file the app is packaged with, by where it came from: a module of a repository
@@ -352,8 +548,9 @@ androidComponents {
             lists.from(bundledLists)
             abis = variantAbis
             silent = release
-            id = appId
-            allowed = allowedPermissions
+            id = variantId
+            allowed = variantPermissions
+            testing = fake
         }
         // Whoever makes an installer gets it checked, whichever task makes it: an APK
         // (assemble, package) or the bundle Google Play takes (bundle).
@@ -362,12 +559,20 @@ androidComponents {
     }
 }
 
+// No start-up profile in the installer: the libraries of the screens bring one (a list of their methods for
+// Android to compile ahead), which the build would add to assets/ next to the bundled files.
+tasks.configureEach {
+    if (name.matches(Regex("(compile|merge|expand).*ArtProfile.*"))) enabled = false
+}
+
 // The unit tests run on the JVM of this machine, against the same Rust and the same JNI layer built for it.
 tasks.withType<Test>().configureEach {
     // The library is an input: a change in device-core/ or jni/ runs the tests again.
     inputs.files(buildNativeHost)
     systemProperty("java.library.path", layout.buildDirectory.dir("native/host").get().asFile.path)
     systemProperty("iamreal.vectors", rootProject.file("../spec/vectors").path)
+    // The files an installer carries, where bundleFiles takes them from.
+    systemProperty("iamreal.bundled", listOf("../web/circuits", "../verifier/vk", "../device-core/vendor/crs").joinToString(File.pathSeparator) { rootProject.file(it).path })
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)
     systemProperty("iamreal.strings", file("src/main/res/values/strings.xml").path)
     inputs.file(file("src/main/res/values/strings.xml"))

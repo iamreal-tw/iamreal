@@ -93,6 +93,8 @@
 
 app 在模擬器上用假卡片過卡的測試也要測試的發證金鑰，但不該拿到 `testing` 開出來的那些模組。所以另有一個只做一件事的 feature `test-issuers`：開了它，靜態函式庫多一個 C 函式 `idc_testing_session_open`（`include/iamreal_device_core_testing.h`），開一個改認呼叫的人給的發證金鑰的 session，其餘和 `idc_session_open` 相同；Poseidon2、建樹、session 的 Rust 函式照舊不是 `pub`，之後每一步都走一般的 C 函式，核心擋的順序不變。開了它的函式庫裡有一段固定的記號（`iamreal-device-core:testing-issuer-keys`）。它只開測試名冊的 session，正式名冊的不開。`test-issuers` 只給模擬器上跑測試的那一份函式庫；發出去的 app 連結的那一份不開，沒有這個函式（`prover/tests/c_link.rs` 檢查不開 feature 編出來的函式庫裡沒有它），而且由 app 自己的建置檢查擋下帶著這個函式名稱或那段記號的安裝檔。開它的建置和擋它的檢查寫在各 app 的目錄，跟著各 app 的過卡一起加入。審 `android/`、`ios/` 的建置時要看：發出去的那一份沒有開 `test-issuers`，而且 app 自己的程式看不到 `iamreal_device_core_testing.h`。
 
+Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM 上單元測試用的函式庫（`android/build-native.sh` 的第四個字 `test-issuers`）；debug 和 release 的安裝檔不開，`.so` 裡出現那段記號建置就失敗（`android/README.md`「建置時的檢查」）。JNI 那一層只在編測試用的函式庫時才引用 `iamreal_device_core_testing.h`。
+
 ### 算證明
 
 `idc_session_records_request` 收四個檔、帳號清單、題目、卡片的兩個簽章，回 `POST /api/v1/records` 的內容（`spec/record.md` 的欄位，沒有 `seq`）。它照這個順序做，哪一步不過就停：
