@@ -17,18 +17,25 @@
 # - the sources (App/) do not read identifierForVendor and write nothing to
 #   a log or to standard output, and neither do the sources of device-core/
 #   (so a release build logs nothing of its own);
-# - the sources reach C only through App/Bridge.h: it is the project's
+# - the sources reach C only through App/Bridge.h: it is the app's
 #   bridging header, it is one #include of the header of device-core/, and
-#   App/ holds no other C, Objective-C or module map.
+#   App/ holds no other C, Objective-C or module map. The tests have one of
+#   their own, Tests/Bridge.h, which is one #include of the header of the
+#   library of the tests;
+# - only a Debug build for the simulator is linked with the library of the
+#   tests: any other app has no idc_testing_session_open, the function
+#   that opens a session trusting issuer keys other than MOICA's
+#   (build-core.sh).
 #
 # What it does not see: what Barretenberg's own code prints, what Rust
 # prints when the core panics (README.md, on logs), and anything a later
 # change hides from these patterns. It guards against slips; it does not
 # replace reading the change.
 #
-# IAMREAL_APP_SOURCES, IAMREAL_PROJECT_FILE and IAMREAL_CONFIG_DIR replace the
-# sources, the project file and the directory of .xcconfig files it reads:
-# check-app-test.sh uses them.
+# IAMREAL_APP_SOURCES, IAMREAL_TEST_SOURCES, IAMREAL_PROJECT_FILE and
+# IAMREAL_CONFIG_DIR replace the sources, the tests' sources, the project
+# file and the directory of .xcconfig files it reads: check-app-test.sh
+# uses them.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -36,6 +43,7 @@ repo=$here/..
 app=${1:?usage: check-app.sh <path to IamrealApp.app>}
 app=${app%/}
 sources=${IAMREAL_APP_SOURCES:-$here/App}
+tests=${IAMREAL_TEST_SOURCES:-$here/Tests}
 project=${IAMREAL_PROJECT_FILE:-$here/IamrealApp.xcodeproj/project.pbxproj}
 config=${IAMREAL_CONFIG_DIR:-$here/Config}
 problems=0
@@ -80,6 +88,19 @@ for address in https://iamreal.tw https://data.iamreal.tw; do
     problem "the executable has the address of the production site, $address"
   fi
 done
+
+# The library of the tests, in a Debug build for the simulator only: its
+# function, and the bytes device-core/ marks that library with. Xcode hands
+# the configuration to this script; run by hand, on an app whose
+# configuration it cannot know, it goes by the platform alone.
+platforms=$(plutil -extract CFBundleSupportedPlatforms json -o - "$app/Info.plist" 2>/dev/null || true)
+if [ "$platforms" != '["iPhoneSimulator"]' ] || [ "${CONFIGURATION-Debug}" != Debug ]; then
+  for mark in idc_testing_session_open iamreal-device-core:testing-issuer-keys; do
+    if executable_has "$mark"; then
+      problem "an app for $platforms, configuration ${CONFIGURATION-unknown}, is linked with the library of the tests: its executable has $mark"
+    fi
+  done
+fi
 
 # iPhone only.
 family=$(plutil -extract UIDeviceFamily json -o - "$app/Info.plist" 2>/dev/null || true)
@@ -148,7 +169,16 @@ else
   code=$(grep -v -E '^[[:space:]]*(//.*)?$' "$sources/Bridge.h" || true)
   [ "$code" = '#include "iamreal_device_core.h"' ] || problem "App/Bridge.h is more than the #include of iamreal_device_core.h"
 fi
-headers=$(grep -h -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort -u)
-[ "$headers" = 'SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;' ] || problem "the bridging header of the project and of Config/ is not App/Bridge.h alone: $headers"
+if [ ! -f "$tests/Bridge.h" ]; then
+  problem "no Bridge.h in the tests' sources"
+else
+  code=$(grep -v -E '^[[:space:]]*(//.*)?$' "$tests/Bridge.h" || true)
+  [ "$code" = '#include "iamreal_device_core_testing.h"' ] || problem "Tests/Bridge.h is more than the #include of iamreal_device_core_testing.h"
+fi
+# The app's target has App/Bridge.h, the tests' target Tests/Bridge.h, and nothing else names a header.
+headers=$(grep -h -E 'SWIFT_OBJC_BRIDGING_HEADER|MODULEMAP_FILE|OTHER_SWIFT_FLAGS|OTHER_CFLAGS' "$project" "$config"/*.xcconfig | tr -d '\t' | sort | uniq -c | tr -s ' ' | sed 's/^ //')
+want='2 SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;
+2 SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;'
+[ "$headers" = "$want" ] || problem "the bridging headers of the project and of Config/ are not App/Bridge.h for the app and Tests/Bridge.h for the tests: $headers"
 
 exit $problems
