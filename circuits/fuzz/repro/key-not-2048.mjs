@@ -5,7 +5,7 @@
 // BigNumParams::new requires the modulus to be exactly 2048 bits.
 //
 //   ZKID_CIRCOM_BUILD=... node repro/key-not-2048.mjs
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { bigToBytes, FUZZ, loadPool, rngFor, signStd } from "../lib/common.mjs";
 import { genChain, genMessage, manualSpki } from "../lib/gen.mjs";
@@ -47,4 +47,5 @@ for (const group of ["user2047", "user1024"]) {
   console.log(`  card_proof_rs2048 ${v(card)}`);
   out[group] = { walk: walk(c.tbs, c.now).reason, card_proof_rs2048: cardInputs, certChainRS2048: p.circom };
 }
+mkdirSync(join(FUZZ, "findings"), { recursive: true });
 writeFileSync(join(FUZZ, "findings", "min-key-not-2048.json"), JSON.stringify(out));

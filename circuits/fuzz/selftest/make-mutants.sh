@@ -1,10 +1,14 @@
 #!/bin/bash
 # Builds deliberately broken copies of the Noir circuits, one check removed
-# each, under $W/mutants/<name>/target. The fuzzer must report every one.
+# each, under $FUZZ_WORK/mutants/<name>/target. The fuzzer must report every
+# one. FUZZ_WORK is a directory outside the repository (inside it, nargo finds
+# circuits/Nargo.toml and builds the real circuits instead); by default
+# circuits-fuzz in the system's temporary directory. Uses the nargo of
+# fetch-nargo.sh.
 set -eu
-W=$(cd "$(dirname "$0")/../.." && pwd)
-SRC=$W/zkid-noir
-export PATH=$SRC/.tools/nargo:$PATH
+SRC=$(cd "$(dirname "$0")/../.." && pwd)
+W=${FUZZ_WORK:-${TMPDIR:-/tmp}/circuits-fuzz}
+export PATH=$(dirname "$("$SRC/fetch-nargo.sh")"):$PATH
 mk() {
   name=$1; file=$2; from=$3; to=$4
   d=$W/mutants/$name

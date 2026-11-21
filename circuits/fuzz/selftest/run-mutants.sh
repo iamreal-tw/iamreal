@@ -5,7 +5,7 @@
 # finding; each mutant must give at least one.
 set -u
 F=$(cd "$(dirname "$0")/.." && pwd)
-W=$(cd "$F/.." && pwd)
+W=${FUZZ_WORK:-${TMPDIR:-/tmp}/circuits-fuzz}   # as make-mutants.sh
 N=${1:-200}
 OUT=$W/selftest-out
 rm -rf "$OUT"; mkdir -p "$OUT"
@@ -25,5 +25,5 @@ run() {
   by=$(cd "$OUT/$name/findings" 2>/dev/null && ls | sed -E 's/^self-[a-z0-9-]*-?([a-z0-9-]*)-[0-9]+\.json$/\1/' | sort | uniq -c | tr '\n' ' ')
   echo "$name: $n cases, $f with findings  [$by]"
 }
-run baseline "$W/zkid-noir/target"
+run baseline "$F/../target"
 for m in "$W"/mutants/*/; do run "$(basename "$m")" "$m/target"; done

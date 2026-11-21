@@ -6,3 +6,10 @@ out/
 *.log
 Prover.toml
 .zkID/
+# What fuzz/ writes when it runs: its key pool (throwaway private keys), its
+# results, findings, logs and proofs.
+fuzz/keys/
+fuzz/results/
+fuzz/findings/
+fuzz/logs/
+fuzz/proofs/

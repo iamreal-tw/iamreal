@@ -1,5 +1,5 @@
 // Checks the fuzzer's reference judgment against the hand-written expectations
-// of the existing case-by-case comparison (zkid-noir/tests/cases.mjs): every
+// of the existing case-by-case comparison (circuits/tests/cases.mjs): every
 // case it can express must get the same accept / reject.
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";

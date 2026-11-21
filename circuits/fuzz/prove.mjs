@@ -26,7 +26,7 @@ if (res.verdict !== "accept") process.exit(0);
 const dir = join(FUZZ, "proofs", `${a.circuit}-${Date.now()}`);
 mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "witness.gz"), res.witness);
-const bb = join(NOIR_ROOT, ".tools", "bb", "bb");
+const bb = execFileSync(join(NOIR_ROOT, "find-bb.sh")).toString().trim(); // checked against bb.sha256
 const B = join(NOIR_ROOT, "target", `${a.circuit}.json`);
 const crs = join(NOIR_ROOT, ".crs");
 const vkDir = join(dir, "vk");
