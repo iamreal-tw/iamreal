@@ -136,10 +136,10 @@ pub fn is_oid(bytes: &[u8]) -> bool {
     last & 0x80 == 0
 }
 
-/// A UTCTime `YYMMDDHHMMSSZ` (years 50 to 99 are 19xx) or a
-/// GeneralizedTime `YYYYMMDDHHMMSSZ`, as seconds since 1970-01-01T00:00:00Z.
-/// Only these two spellings, of a time that exists; a GeneralizedTime
-/// before the year 100 is not read, as on the web page.
+/// A UTCTime `YYMMDDHHMMSSZ` (years 50 to 99 are 19xx, 00 to 49 are 20xx)
+/// or a GeneralizedTime `YYYYMMDDHHMMSSZ`, as seconds since
+/// 1970-01-01T00:00:00Z. Only these two spellings, those of RFC 5280, of a
+/// time that exists (spec/revocation-tree.md, "Times").
 pub fn read_time(der: &[u8], t: &Tlv) -> Result<i64, NotDer> {
     let s = t.content(der);
     let year_digits = match (t.tag, s.len()) {
@@ -162,8 +162,7 @@ pub fn read_time(der: &[u8], t: &Tlv) -> Result<i64, NotDer> {
     }
     let field = |i: usize| number(year_digits + 2 * i..year_digits + 2 * i + 2);
     let (month, day, hour, minute, second) = (field(0), field(1), field(2), field(3), field(4));
-    let exists = year >= 100
-        && (1..=12).contains(&month)
+    let exists = (1..=12).contains(&month)
         && day >= 1
         && day <= days_in_month(year, month)
         && hour <= 23

@@ -1,5 +1,6 @@
 // Poseidon2, the tree and the CRL checks against spec/vectors/poseidon2.json
-// and against crl/testdata/ (the files and results the Go tests use). Which
+// and against crl/testdata/ and crl/testdata/times/ (the files and results
+// the Go tests use). Which
 // CRL the device uses is tested against spec/vectors/device-checks.json
 // (device-checks.test.ts).
 import assert from "node:assert/strict";
@@ -147,6 +148,24 @@ describe("crl/testdata against crl/testdata/expected.json", async () => {
       }
     });
   }
+  test("crl/testdata/times/: which spellings of a time are read, and the times read, as in expected.json", async () => {
+    const cases: { name: string; sha256: string; line: string }[] = JSON.parse(new TextDecoder().decode(repoFile("crl/testdata/times/expected.json")));
+    assert.ok(cases.length >= 50, `${cases.length} cases`);
+    let read = 0;
+    for (const c of cases) {
+      const der = repoFile(`crl/testdata/times/${c.name}.crl`);
+      assert.equal(await sha256Hex(der), c.sha256, c.name);
+      const line = JSON.parse(c.line) as Record<string, string>;
+      // Nobody trusts the key that signed these: a file that is read at all is not usable for its signature.
+      await assert.rejects(usableCrl(der, key, bits), (err: unknown) => err instanceof Unusable && `-${err.code}` === line.root, c.name);
+      if (line.root === "-not_usable_der") continue;
+      const parsed = parseCrl(der);
+      assert.equal(new Date(parsed.thisUpdate * 1000).toISOString().replace(".000Z", "Z"), line.this_update, c.name);
+      assert.equal(formatDay(taiwanDayOfSeconds(parsed.thisUpdate)), line.crl_date, c.name);
+      read++;
+    }
+    assert.ok(read >= 10 && cases.length - read >= 10, `${read} of ${cases.length} read`);
+  });
   test("parse reads thisUpdate of files that are not usable", () => {
     const e = expected.find((x) => x.name === "bad-signature")!;
     const c = parseCrl(repoFile("crl/testdata/bad-signature.crl"));

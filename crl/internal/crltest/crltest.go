@@ -33,6 +33,9 @@ type Entry struct {
 	// CriticalReason marks the reasonCode extension critical.
 	CriticalReason bool
 	Extensions     []Extension
+	// RevocationDateDER, when not nil, is written as it is in place of
+	// RevocationDate: a whole DER element (see CRL.ThisUpdateDER).
+	RevocationDateDER []byte
 }
 
 // CRL describes the list to write.
@@ -147,7 +150,11 @@ func TBS(c *CRL, keyID []byte) []byte {
 				for _, e := range c.Entries {
 					b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 						b.AddASN1(cbasn1.INTEGER, func(b *cryptobyte.Builder) { b.AddBytes(e.Serial) })
-						addTime(b, e.RevocationDate)
+						if e.RevocationDateDER != nil {
+							b.AddBytes(e.RevocationDateDER)
+						} else {
+							addTime(b, e.RevocationDate)
+						}
 						exts := e.Extensions
 						if e.Reason != 0 {
 							var r cryptobyte.Builder

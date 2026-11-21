@@ -682,7 +682,7 @@ the tables").
 
 These rules have a version number, a positive integer.
 
-**These rules are version 1.**
+**These rules are version 2.**
 
 Each implementation of these rules has the number as a constant
 (`RulesVersion` in Go's `roster/`, `RULES_VERSION` in TypeScript's

@@ -27,7 +27,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
    | 欄位 | 內容 |
    |---|---|
-   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位、或它不是非負整數時是 `-` |
+   | `crl_number` | 清冊編號（`cRLNumber`），十進位；沒有這個延伸欄位、它不是非負整數、超過 20 個內容位元組、或清冊的延伸欄位超過 16 個時是 `-` |
    | `this_update`、`next_update` | 清冊的 `thisUpdate`、`nextUpdate`（UTC） |
    | `crl_date` | 清冊日期：`thisUpdate` 換成台灣日期（UTC+8） |
    | `sha256` | 整個檔案的 SHA-256 |
@@ -50,13 +50,14 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | 1 | `not_usable_der` | 不是 DER 的 `CertificateList`（多餘的位元組、非最短的長度、結構不對） |
 | 2 | `not_usable_algorithm` | `tbsCertList` 裡或外面的簽章演算法不是 sha256WithRSAEncryption，或參數不是 NULL（包括省略） |
 | 3 | `not_usable_signature` | 簽章在發證金鑰下驗不過（索引：兩把都驗不過） |
-| 4 | `not_usable_duplicate_extension` | 清冊本身的同一個延伸欄位出現兩次 |
-| 5 | `not_usable_critical_extension` | 清冊本身有關鍵延伸欄位，不論是哪一個（`authorityKeyIdentifier`、`cRLNumber` 標成關鍵也算） |
-| 6 | `not_usable_delta` | 差異清冊（有 `deltaCRLIndicator`，關鍵與否都算；標成關鍵的先由第 5 列擋下） |
-| 7 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 5 列擋下）。第 6、7 列是同一步：兩個延伸欄位都有時，清冊裡排在前面的那一個決定代碼 |
-| 8 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER |
-| 9 | `not_usable_duplicate_extension`、`not_usable_critical_extension` 或 `not_usable_serial` | 某一筆的延伸欄位出現兩次、某一筆有關鍵延伸欄位（不論是哪一個，所以帶關鍵 `certificateIssuer` 的間接清冊、`reasonCode` 標成關鍵的清冊都不可用）、或某一筆的序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組）。逐筆檢查，第一個有問題的那一筆決定代碼；同一筆裡照這個順序 |
-| 10 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |
+| 4 | `not_usable_too_many_extensions` | 清冊本身的延伸欄位超過 16 個 |
+| 5 | `not_usable_duplicate_extension` | 清冊本身的同一個延伸欄位出現兩次 |
+| 6 | `not_usable_critical_extension` | 清冊本身有關鍵延伸欄位，不論是哪一個（`authorityKeyIdentifier`、`cRLNumber` 標成關鍵也算） |
+| 7 | `not_usable_delta` | 差異清冊（有 `deltaCRLIndicator`，關鍵與否都算；標成關鍵的先由第 6 列擋下） |
+| 8 | `not_usable_partitioned` | 分段清冊（有 `issuingDistributionPoint`，關鍵與否都算；標成關鍵的先由第 6 列擋下）。第 7、8 列是同一步：兩個延伸欄位都有時，清冊裡排在前面的那一個決定代碼 |
+| 9 | `not_usable_crl_number` | 沒有 `cRLNumber`，或它不是非負的 DER INTEGER，或超過 20 個內容位元組（前導的 `00` 也算；RFC 5280 5.2.3 的上限） |
+| 10 | `not_usable_too_many_extensions`、`not_usable_duplicate_extension`、`not_usable_critical_extension` 或 `not_usable_serial` | 某一筆的延伸欄位超過 16 個、某一筆的延伸欄位出現兩次、某一筆有關鍵延伸欄位（不論是哪一個，所以帶關鍵 `certificateIssuer` 的間接清冊、`reasonCode` 標成關鍵的清冊都不可用）、或某一筆的序號不合格（空的、負數、不是最短編碼、超過 20 個內容位元組）。逐筆檢查，第一個有問題的那一筆決定代碼；同一筆裡照這個順序 |
+| 11 | `not_usable_collision` | 兩個**不同**的鍵最低 127 位元相同。同一個序號列兩次算一個鍵，不算衝突 |
 
 代碼在程式裡是 `crl.Reason…` 常數，清單是 `crl.Reasons`。
 
@@ -94,7 +95,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | 欄位 | 寫法 |
 |---|---|
 | `issuer` | 簽章驗得過的金鑰，`G2` 或 `G3`；兩把都驗不過時 `-`。這裡的「驗得過」只看 RSA 的 SHA-256 簽章本身，不看演算法欄位，所以演算法欄位不對、但簽章驗得過的清冊有 `issuer`，原因是 `not_usable_algorithm` |
-| `crl_number` | `cRLNumber` 的十進位，沒有前導零；沒有、讀不懂、或是負數時 `-` |
+| `crl_number` | `cRLNumber` 的十進位，沒有前導零；沒有、讀不懂、是負數、超過 20 個內容位元組、或清冊的延伸欄位超過 16 個時 `-` |
 | `this_update`、`next_update` | UTC，`YYYY-MM-DDTHH:MM:SSZ`；沒有時（或整個檔案讀不懂時）`-` |
 | `crl_date` | 清冊日期；整個檔案讀不懂時 `-` |
 | `sha256` | 整個檔案的 SHA-256 |
@@ -132,9 +133,9 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
-| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間 |
+| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間；`makelarge/` 寫下載上限 32 MiB 之內最壞的幾種檔，用來量讀一份的時間和記憶體（`worker/README.md`「清冊鏡像量到的」） |
 | `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、原因代碼、樹根） |
-| `testdata/times/` | 時間用各種寫法寫的自製清冊，和 `expected.json`（`crl/` 現在給每份的存檔索引那一行）。`worker/` 的測試讀同一份，所以兩邊的結果相同；不是規格的標準答案 |
+| `testdata/times/` | 時間用各種寫法寫的自製清冊，和 `expected.json`（每份在存檔索引裡的那一行，照規格「Times」）。`worker/`、`web/`、`device-core/` 的測試讀同一份 |
 
 ## 測試
 
@@ -145,8 +146,8 @@ go test ./crl/...
 - `spec/vectors/poseidon2-constants.json`：常數、置換；`spec/vectors/poseidon2.json`：`hash_2`、`hash_3`、`scoped_id`、`revocation_tree`（樹根和每一份證明）。
 - 樹和規格裡的遞迴定義（測試裡另寫一份慢的）在亂數的樹上比對；每份證明用電路的檢查方式（`assert_not_in_tree`）重算回樹根。
 - Poseidon2 另有一份 `math/big` 寫的慢版本（`poseidon2/reference_test.go`），兩份互相比對。
-- `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。原因代碼的順序也各有清冊：關鍵延伸欄位先於差異清冊和分段清冊、重複先於關鍵、清冊編號先於逐筆的檢查、同一筆裡關鍵先於序號、第一個有問題的那一筆決定。
-- `testdata/times/` 的每份清冊：它現在在存檔索引裡的那一行（不是規格的標準答案，見下面），包括 `nextUpdate` 剛好是 `0001-01-01T00:00:00Z`（Go 的零值）時照樣寫出來。
+- `testdata/` 的每份自製清冊：可不可用、原因代碼、樹根、清冊日期等，以及它在存檔索引裡的那一行。原因代碼的順序也各有清冊：關鍵延伸欄位先於差異清冊和分段清冊、延伸欄位太多先於重複、重複先於關鍵、清冊編號先於逐筆的檢查、同一筆裡延伸欄位太多先於關鍵和序號、關鍵先於序號、第一個有問題的那一筆決定。上限各有剛好在上限和超過一個的清冊：清冊編號 20 和 21 個位元組，清冊和一筆的延伸欄位 16 和 17 個。
+- `testdata/times/` 的每份清冊：它在存檔索引裡的那一行。時間只收 RFC 5280 的兩種寫法（規格「Times」）：`Z` 結尾、有秒的 UTCTime（`YYMMDDHHMMSSZ`）和 GeneralizedTime（`YYYYMMDDHHMMSSZ`）；帶時差、沒有秒、有小數的，`thisUpdate`、`nextUpdate`、每一筆的 `revocationDate` 都一樣，整份是 `-not_usable_der`。也包括 `nextUpdate` 剛好是 `0001-01-01T00:00:00Z`（Go 的零值）時照樣寫出來。
 - 存檔索引：排序、每一種寫錯的行被拒絕（包括樹根不小於 `p`）、完整重算回報改過的樹根、多出來的檔案、少了的檔案、沒有索引、沒辦法切成行的索引、寫法不對和順序錯的行（附行號），每一個不同都回報，並照重建的索引回答；只信索引時照索引回答，索引不在或寫錯是錯誤。
 
 ### 重新產生自製清冊
@@ -163,9 +164,7 @@ go run ./crl/testdata/generate.go
 go run ./crl/testdata/times/generate.go
 ```
 
-這些案例記的是：Go 的 `crl/` 和 `worker/` 現在對各種時間寫法得到相同的結果。它們不是規格的標準答案。時間接受哪些寫法，規格還沒有定：[#120](https://github.com/iamreal-tw/iamreal/issues/120) 會收窄成 RFC 5280 的寫法，那時這些案例的答案會跟著改。`web/` 現在的讀法比這裡嚴（只收 `Z` 結尾、有秒的寫法），沒有讀這些案例。
-
-每一份現在該得到的那一行手寫在 `generate.go` 裡；`crl/` 算出來的不同，它就停下來、不寫檔。簽章用一把當場產生、沒有人信任的金鑰（私鑰不保留），所以這些檔沒有一份可用：讀得懂的是 `-not_usable_signature`，時間寫法不收的是 `-not_usable_der`。這裡檢查的只有時間怎麼讀、怎麼寫。
+每一份該得到的那一行手寫在 `generate.go` 裡，照規格「Times」；`crl/` 算出來的不同，它就停下來、不寫檔。簽章用一把當場產生、沒有人信任的金鑰（私鑰不保留），所以這些檔沒有一份可用：讀得懂的是 `-not_usable_signature`，時間寫法不收的是 `-not_usable_der`。這裡檢查的只有時間怎麼讀、怎麼寫。
 
 ## 第三方套件
 
