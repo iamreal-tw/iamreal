@@ -179,4 +179,23 @@ func main() {
 		return c
 	})
 	write("oid-longest", fmt.Sprintf("an extension of the CRL whose OID has about %d arcs, and another", n*1000), der)
+
+	// As many extensions as may be, all but authorityKeyIdentifier with
+	// long OIDs that differ only in their last arc: finding a duplicate
+	// compares every pair of them to the end.
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		c.Number = -1
+		for i := range 15 {
+			long := make(asn1.ObjectIdentifier, n*100+3)
+			long[0], long[1] = 1, 2
+			for j := 2; j < len(long)-1; j++ {
+				long[j] = 1 + j%100
+			}
+			long[len(long)-1] = 1 + i
+			c.Extensions = append(c.Extensions, crltest.Extension{ID: long})
+		}
+		return c
+	})
+	write("long-oids-alike", fmt.Sprintf("16 extensions of the CRL, 15 of them with OIDs of about %d arcs that differ only in the last", n*100), der)
 }
