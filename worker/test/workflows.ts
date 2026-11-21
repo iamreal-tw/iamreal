@@ -196,6 +196,16 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
 };
 
 /**
+ * Files at the root that are not in the repository now, and that would
+ * change every check if a pull request added one: where and how pnpm
+ * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
+ * workspace (go.work), a cargo configuration every cargo run below the
+ * root would read (.cargo/config.toml), and how git checks files out
+ * (.gitattributes). A pattern for a file that is not there matches the pull
+ * request that adds it.
+ */
+export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
+/**
  * The paths whose change runs the browser tests (checks-browser.yml,
  * `on.pull_request.paths`), exactly. Each is a pattern of GitHub's (`**`
  * matches any characters, `/` included; a pattern matches the whole path
@@ -209,7 +219,8 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
  * it. circuits/package.json is here as a package of the workspace: the job
  * runs `pnpm install --frozen-lockfile`, which compares the lockfile with
  * every package's package.json (the other three are in directories listed
- * whole).
+ * whole). And ROOT_FILES_PATHS, as in the lists of the required checks: the
+ * job installs with pnpm, builds Go and checks files out.
  */
 export const BROWSER_PATHS: readonly string[] = [
   "web/**",
@@ -226,6 +237,7 @@ export const BROWSER_PATHS: readonly string[] = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   "circuits/package.json",
+  ...ROOT_FILES_PATHS,
   ".github/workflows/checks-browser.yml",
 ];
 
@@ -247,7 +259,10 @@ export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/v
  * (web/scripts/strip-circuit.mjs), the vectors the tests read
  * (spec/vectors/poseidon2.json), what is installed (the lockfile, the
  * workspace, and the package.json of the workspace's other packages, which
- * `pnpm install --frozen-lockfile` compares the lockfile with too) and the
+ * `pnpm install --frozen-lockfile` compares the lockfile with too), the
+ * files at the root that change every check once added (ROOT_FILES_PATHS:
+ * a .pnpmfile.cjs can change what bb.js, and with it bb, resolves to; a
+ * .gitattributes the bytes of the files rebuild.sh compares) and the
  * workflow itself. test/workflows.test.ts checks that every file outside
  * circuits/ that the sources of circuits/ name is here.
  */
@@ -262,6 +277,7 @@ export const CIRCUITS_PATHS: readonly string[] = [
   "protocol/package.json",
   "web/package.json",
   "worker/package.json",
+  ...ROOT_FILES_PATHS,
   ".github/workflows/checks-circuits.yml",
 ];
 /** The one job of checks-circuits.yml. */
@@ -833,17 +849,7 @@ export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || gith
  * check uses, as far as reading the sources finds it (.github/README.md
  * says what that does not find).
  */
-/**
- * Files at the root that are not in the repository now, and that would
- * change every check if a pull request added one: where and how pnpm
- * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
- * workspace (go.work), a cargo configuration every cargo run below the
- * root would read (.cargo/config.toml), and how git checks files out
- * (.gitattributes). A pattern for a file that is not there matches the pull
- * request that adds it.
- */
-export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
-/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and the files above. */
+/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and ROOT_FILES_PATHS. */
 export const EVERY_CHECK_PATHS: readonly string[] = [
   ".github/workflows/checks.yml",
   ".github/workflows/changed-paths.sh",

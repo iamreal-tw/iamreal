@@ -789,6 +789,19 @@ test("the browser tests run when anything they use changes: each top-level direc
   for (const p of ["pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/checks-browser.yml"]) assert.ok(BROWSER_PATHS.includes(p), p);
 });
 
+test("the browser tests and the circuits' check run when a pull request adds a file at the root that changes how every check installs, builds or checks out", () => {
+  // Written out (ROOT_FILES, below), not read from ROOT_FILES_PATHS: e.g. a .pnpmfile.cjs can change what
+  // @aztec-foundation/bb.js resolves to, and bb comes from it; a .gitattributes can change the bytes of
+  // web/circuits/ and verifier/vk/ that rebuild.sh compares.
+  for (const [check, list] of Object.entries({ browser: BROWSER_PATHS, circuits: CIRCUITS_PATHS })) {
+    assert.deepEqual(
+      ROOT_FILES.filter((p) => !list.includes(p)),
+      [],
+      check,
+    );
+  }
+});
+
 /** Whether `go` runs here. */
 const hasGo = ((): boolean => {
   const r = spawnSync("go", ["version"], { encoding: "utf8" });

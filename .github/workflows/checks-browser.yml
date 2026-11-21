@@ -41,6 +41,13 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - circuits/package.json
+      - .npmrc
+      - .pnpmfile.cjs
+      - package.json
+      - go.work
+      - go.work.sum
+      - .cargo/config.toml
+      - .gitattributes
       - .github/workflows/checks-browser.yml
 
 permissions:

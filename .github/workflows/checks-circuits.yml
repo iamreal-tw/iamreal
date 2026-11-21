@@ -42,6 +42,13 @@ on:
       - protocol/package.json
       - web/package.json
       - worker/package.json
+      - .npmrc
+      - .pnpmfile.cjs
+      - package.json
+      - go.work
+      - go.work.sum
+      - .cargo/config.toml
+      - .gitattributes
       - .github/workflows/checks-circuits.yml
 
 permissions:
