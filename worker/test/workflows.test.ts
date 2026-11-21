@@ -818,6 +818,74 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
   assert.deepEqual([...read].filter((p) => !matchesPaths(IOS_PATHS, p)), []);
 });
 
+/**
+ * The files and directories of the repository that the sources of circuits/
+ * name, found by reading every tracked file of it: in the JavaScript,
+ * `join(ROOT, ...)` (ROOT is circuits/, tests/lib/run.mjs) and
+ * `join(dirname(fileURLToPath(import.meta.url)), ...)` (the file's
+ * directory), with the parts written as strings, and the imports with a
+ * relative path; in the shell scripts, `$root/<path>` (rebuild.sh's root is
+ * the repository's) and the committed files rebuild.sh compares with
+ * (`compare "<path>`, from the root); in a Nargo.toml, `path = "..."`. A
+ * path cut short by a value put together at run time (`${circuit}.vk`)
+ * stands for its directory. Not seen: a path put together any other way,
+ * what nargo, bb and circom read on their own (the Noir libraries nargo
+ * fetches by tag, bb's common reference string), and what the zkID commit
+ * holds.
+ */
+function namedByCircuits(): Set<string> {
+  const circuits = join(REPO, "circuits");
+  const paths = new Set<string>();
+  const add = (path: string): void => {
+    const found = inRepo(path) ?? inRepo(dirname(path));
+    if (found !== undefined) paths.add(found);
+  };
+  const strings = (args: string): string[] => [...args.matchAll(/"([^"]*)"/g)].map((x) => x[1]!);
+  for (const f of trackedFiles("circuits")) {
+    const file = join(REPO, f);
+    const text = readFileSync(file, "utf8");
+    if (/\.(mjs|js)$/.test(f)) {
+      for (const m of text.matchAll(/\bjoin\(\s*ROOT\s*((?:,\s*"[^"]*"\s*)+)/g)) add(resolve(circuits, ...strings(m[1]!)));
+      for (const m of text.matchAll(/\bjoin\(\s*dirname\(fileURLToPath\(import\.meta\.url\)\)\s*((?:,\s*"[^"]*"\s*)+)/g)) add(resolve(dirname(file), ...strings(m[1]!)));
+      for (const s of namesIn(text).specifiers) if (s.startsWith(".")) add(resolve(dirname(file), s));
+    } else if (f.endsWith(".sh")) {
+      for (const m of text.matchAll(/\$root\/([A-Za-z0-9_./-]+)/g)) add(join(REPO, m[1]!));
+      for (const m of text.matchAll(/\bcompare "([A-Za-z0-9_./-]+)/g)) add(join(REPO, m[1]!));
+    } else if (f.endsWith("Nargo.toml")) {
+      for (const m of text.matchAll(/\bpath\s*=\s*"([^"]+)"/g)) add(resolve(dirname(file), m[1]!));
+    }
+  }
+  return paths;
+}
+
+test("the paths of checks-circuits.yml hold every file of the repository the rebuild and the tests of circuits/ use", () => {
+  const named = namedByCircuits();
+  for (const p of ["spec/vectors/poseidon2.json", "web/scripts/strip-circuit.mjs", "web/circuits", "verifier/vk", "circuits/lib", "circuits/tests/lib/run.mjs"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  const missing = (list: readonly string[]): string[] => [...named].filter((p) => !holds(list, p));
+  assert.deepEqual(missing(CIRCUITS_PATHS), []);
+  // And a list without one of them is caught.
+  assert.deepEqual(missing(CIRCUITS_PATHS.filter((p) => p !== "web/scripts/strip-circuit.mjs")), ["web/scripts/strip-circuit.mjs"]);
+  // What is installed, and the workflow itself.
+  for (const p of ["pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/checks-circuits.yml"]) assert.ok(CIRCUITS_PATHS.includes(p), p);
+});
+
+test("the committed comparison table has a circom verdict for every case: checks-circuits.yml requires the run's table to be this one, so a run whose circom column says \"not run\" fails", () => {
+  // circuits/tests/equivalence.test.mjs writes the table: a header row, a row of ---, then one row per
+  // case, the circom column sixth.
+  const table = readFileSync(join(REPO, "circuits", "results", "equivalence.md"), "utf8");
+  const rows = table
+    .split("\n")
+    .filter((l) => l.startsWith("| "))
+    .map((l) => l.slice(2, -2).split(" | "));
+  assert.equal(rows[0]![5], "circom");
+  const verdicts = rows.slice(2).map((r) => r[5]!);
+  assert.equal(String(verdicts.length), /^(\d+) cases;/m.exec(table)?.[1], "one row per case");
+  assert.deepEqual(
+    verdicts.filter((v) => !["accept", "reject", "same"].includes(v)),
+    [],
+  );
+});
+
 // Skipping by path (#206): the lists of the four required checks, the script that reads them, and
 // what each check uses.
 
@@ -1173,7 +1241,7 @@ test("every check that runs pnpm install at the root runs when a package of the 
 test("the typescript check runs when anything it uses changes: every file and directory the sources of protocol/, worker/ and web/ name is in its list", () => {
   const list = CHECK_PATHS.typescript!;
   const { paths, goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
-  for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
+  for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows", "circuits"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
   assert.ok(goPackages.has("./verifier") && goPackages.has("./cmd/iamreal-crl") && goPackages.has("./roster"), `the check read the Go commands: ${[...goPackages].join(", ")}`);
   assert.deepEqual(
     [...paths].filter((p) => !holds(list, p)),
