@@ -236,7 +236,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 | `roster/0000000000000000.jsonl`、`roster/0000000000001000.jsonl`…… | 寫滿的名冊檔：1,000 筆紀錄的那一行，照序號接起來 | `public, max-age=31536000, immutable` | `application/x-ndjson` |
 | `roster/hashes/0000000000000000.txt`…… | 那一檔的雜湊清單：第一行是前一檔結尾的名冊指紋（第一檔是 64 個 0），之後每筆紀錄的雜湊一行 | `public, max-age=31536000, immutable` | `text/plain; charset=utf-8` |
 
-寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。
+寫滿的檔和它的清單之後不會再變，所以標一年；資料網域的快取只照物件上的標頭，沒標的不快取。唯一會讓同一個網址換內容的是清空測試名冊，那時要另外清快取（[清空測試名冊](#清空測試名冊)第 4 步、「清不到的快取」）。
 
 `Content-Type` 寫入時一起設（營運者 2026-11-20 決定，[#149](https://github.com/iamreal-tw/iamreal/issues/149)），兩個字串定義在 `src/roster-files.ts` 一處，之後名冊目錄裡其他 `.jsonl` 的檔用同一個：
 
@@ -1135,7 +1135,7 @@ pnpm run deploy:test
 
 **清空是換一個物件，不是刪掉資料。** `ROSTER_OBJECT_NAME` 換成新的名稱之後，後台問的是一個新的、空的 Durable Object；資料儲存桶裡 `roster/` 底下的檔由營運者刪掉。原本的那個物件還在 Cloudflare 上，連同它存的紀錄；這些步驟不刪它，之後也沒有請求會到它那裡。
 
-- **被換掉的物件不再做任何定時的工作。** 物件啟動時比對自己是不是設定指的那一個（`ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME))`，[Durable Object ID](https://developers.cloudflare.com/durable-objects/api/id/)：「`equals` is used to compare equality between two instances of `DurableObjectId`」，2026-11-21 讀的）；不是的話，alarm 響了什麼都不做，也不再設下一次（`src/roster.ts` 的 `#replaced`）。沒有這一條的話，它的 alarm 是還當著名冊的時候設的，下一個台灣午夜照樣會響，把舊名冊的最後一檔、雜湊清單、卡片狀態檔和整份舊的指紋檔寫回同一個儲存桶：在本機照下面的步驟做的時候看到的就是這樣（`test/clearing.test.ts`，拿掉這一條就不過）。那之後新的物件要公布時，儲存桶裡的指紋檔不是它的，照[每天換日公布名冊](#每天換日公布名冊)會停在 `fingerprint_file_differs`。這個比對在 Cloudflare 上還沒看過：下面第 4 步的確認就是在看它。
+- **被換掉的物件不再做任何定時的工作。** 物件啟動時比對自己是不是設定指的那一個（`ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME))`，[Durable Object ID](https://developers.cloudflare.com/durable-objects/api/id/)：「`equals` is used to compare equality between two instances of `DurableObjectId`」，2026-11-21 讀的）；不是的話，alarm 響了什麼都不做，也不再設下一次（`src/roster.ts` 的 `#replaced`）。沒有這一條的話，它的 alarm 是還當著名冊的時候設的，下一個台灣午夜照樣會響，把舊名冊的最後一檔、雜湊清單、卡片狀態檔和整份舊的指紋檔寫回同一個儲存桶：在本機照下面的步驟做的時候看到的就是這樣（`test/clearing.test.ts`，拿掉這一條就不過）。那之後新的物件要公布時，儲存桶裡的指紋檔不是它的，照[每天換日公布名冊](#每天換日公布名冊)會停在 `fingerprint_file_differs`。這個比對在 Cloudflare 上還沒看過：下面第 5 步的確認就是在看它。
 - **被換掉的物件每次啟動寫一行即時輸出** `{"event":"roster_object_replaced"}`（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）。真的被換掉的物件只會寫一次：部署之後它的 alarm 響的那一次，之後沒有東西會再叫醒它。**現任的物件不該寫這一行**；每隔一陣子就看到它，表示比對把現任的物件當成被換掉的了，那時不公布、不搬寫滿的檔、不刪過期的題目，而過卡照收。不看即時輸出也看得出來：指紋檔不再每天多一行，`test/site-check.ts` 有一項看這個（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）。
 - **名稱不重複使用。** 把名稱改回用過的，後台問的就是那個舊物件，它存的紀錄都還在，也會重新開始公布。新的名稱用下一個號碼（`test-1` 之後是 `test-2`），維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)）。
 - **營運者刪儲存桶的檔，依據是 ADR-0028。** ADR-0027、ADR-0029 寫儲存桶只有 Worker 透過 binding 寫，唯一的例外是從副本換回一個檔（ADR-0033）；清空測試名冊時由營運者在儀表板刪 `roster/` 是 ADR-0028「清空」那一段定的另一件事，只發生在測試的儲存桶。正式的儲存桶沒有這個步驟。
@@ -1143,7 +1143,7 @@ pnpm run deploy:test
 
 ### 步驟
 
-照順序做。第 1、2 步 agent 可以做到開 PR 為止；第 3 步只有營運者能做。
+照順序做。第 1、2 步 agent 可以做到開 PR 為止；第 3、4 步只有營運者能做。
 
 1. **改設定，開 PR。** `wrangler.jsonc` 的 `env.test.vars`：
    - `ROSTER_OBJECT_NAME`：下一個號碼
@@ -1160,7 +1160,25 @@ pnpm run deploy:test
    - **在部署之後做，不要在之前。** 部署之前，舊的物件還是名冊的物件：台灣午夜一到它會把剛刪掉的檔再寫出來。
    - **在部署後的第一個台灣午夜之前做完最好。** 新的物件在它第一次啟動那天不公布，隔天的台灣午夜才第一次公布。那時 `roster/fingerprints.jsonl` 還是舊名冊的那一份的話，這一次公布整個不做（`fingerprint_file_differs`），之後每隔一段時間再看一次（最長一小時），到 `roster/` 清掉為止；清掉之後的下一次嘗試就公布，不用再部署（`test/clearing.test.ts` 的第二項）。舊名冊從來沒有公布過（沒有指紋檔）的話不會停，但舊的卡片狀態檔會留到生命週期規則刪掉它。
    - 清完之後：`curl -sI https://test-data.iamreal.tw/roster/fingerprints.jsonl` 回 `404`。`-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過 Cloudflare 的快取（回應是 `cf-cache-status: DYNAMIC`，2026-11-21 看到的），所以刪了馬上就是 `404`；用 `GET` 下載的人最多 60 秒內還會拿到快取著的舊檔
-4. **確認。**
+4. **營運者清資料網域上 `roster/` 的快取。** 舊名冊有寫滿的名冊檔（滿 1,000 筆）時才需要；沒有的話 `roster/` 底下每個檔都只快取 60 秒，等一分鐘就好，做了也無妨。在 Cloudflare 的儀表板：`iamreal.tw` 這個 zone → Caching → Configuration → Purge Cache → Custom Purge → Purge by 選 Prefix → 填 `test-data.iamreal.tw/roster` → Purge（[Purge cache by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/)，2026-11-21 讀的；每一種方案都能用，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)「Availability and limits」）。部署的權杖只有一個 Worker 的權限（ADR-0029），做不到這一步。
+   - **為什麼要清**：寫滿的名冊檔和它的雜湊清單標的是 `public, max-age=31536000, immutable`（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)），那是照「同一個網址的內容不會再變」標的。清空之後新的名冊從 0 筆開始，寫滿第一檔時用的是同一個網址 `roster/0000000000000000.jsonl`，內容不同。不清的話，Cloudflare 上快取著舊檔的地方最長一年照樣送舊檔。
+   - **在第 3 步之後做。** 先清快取、後刪檔的話，中間有人下載，舊檔又被快取一年。
+   - **用 Prefix，不用 Single-file（URL）。** 資料網域的回應帶 `Vary: Origin`；Cloudflare 的文件寫，從儀表板照網址清，清不掉請求帶 `Origin` 的那一份（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)「Resources with special headers」：「A single-file purge performed through your Cloudflare dashboard does not clear objects that contain any of the following: Origin header…」，2026-11-21 讀的）。照前綴清的文件寫的是那個目錄底下的每一個網址都清（Purge cache by prefix：「any URI for a resource within the purged directory is purged」），沒有另外講帶 `Origin` 的那一份，所以下面確認時兩種都問。
+   - **清完之後確認，用 `GET`**：舊名冊每一個寫滿的檔（檔名 0、1000、2000……小於舊名冊筆數的每一個）和它的雜湊清單，帶和不帶 `Origin` 各下載一次，都要是 `404`，而且不是 `cf-cache-status: HIT`（文件：「To verify a purge, request the asset after purging and confirm that `CF-Cache-Status` is no longer `HIT`」，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)）。回 `200`、`HIT` 就是快取裡還有舊檔。
+
+     ```sh
+     for f in roster/0000000000000000.jsonl roster/hashes/0000000000000000.txt; do
+       curl -s -o /dev/null -D - "https://test-data.iamreal.tw/$f" | grep -i -e '^HTTP' -e '^cf-cache-status' -e '^age'
+       curl -s -o /dev/null -D - -H 'Origin: https://test.iamreal.tw' "https://test-data.iamreal.tw/$f" | grep -i -e '^HTTP' -e '^cf-cache-status' -e '^age'
+     done
+     ```
+
+     - **不能用 `curl -I`。** `-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過快取、直接問儲存桶：第 3 步刪了檔之後，不管快取清了沒有都是 `404`。2026-11-21 對一份標一年的清冊檔（`crl/<SHA-256>.crl`）看到的：`GET` 是 `cf-cache-status: HIT`、帶著 `age`，同一個網址的 `HEAD` 是 `DYNAMIC`。
+     - **帶和不帶 `Origin` 是兩份快取，兩種都要問。** 同一天對同一個檔：不帶 `Origin` 的 `GET` 是 `HIT`、`age` 約 144,000 秒；帶 `Origin: https://test.iamreal.tw` 的是另一份（第一次 `MISS`，接著 `HIT`、`age` 幾十秒，帶 `Access-Control-Allow-Origin`）。過卡的頁面在瀏覽器裡下載時帶的是後面那一種。
+     - 不存在的檔不會被快取（`404` 的回應是 `cf-cache-status: BYPASS`，同一天看到的），所以清乾淨之後這兩行都是 `404`，不會因為問過一次就留下東西。
+     - 新的名冊已經公布過才做這一步的話，`roster/0000000000000000.jsonl` 可能是新名冊還沒寫滿的最後一檔：`200`，`Cache-Control` 是 `public, max-age=60`，不是一年的那一種。
+     - 這個指令只問得到回答這一次請求的那個 Cloudflare 機房，其他機房沒辦法從外面一個一個問。
+5. **確認。**
    - `node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的名冊還沒公布過，所以指紋檔那兩項比的是「沒有檔、介面回的日期是 `null`」。**它全過不表示可以過卡**：它只送 `GET`，看不到名冊是不是 `paused`，也看不到新的物件知不知道清冊，這兩種狀態下每個 `GET` 的回答都和平常一樣
    - **名冊收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），名冊上不留任何東西。agent 送之前要營運者同意。
 
@@ -1181,9 +1199,28 @@ pnpm run deploy:test
 | 第 1 步的 PR 還沒合併 | 沒有變。清空是因為 `paused` 的話，照舊不收過卡，頁面照常 | 合併 |
 | 部署沒有成功 | 用 `GET /api/v1/fingerprint` 看：回的還是舊名冊的那一行，就是沒有換 | 修好再部署 |
 | 部署了，`roster/` 還沒清 | 後台和頁面已經是空的名冊；資料網域上還是舊名冊的檔，`iamreal-verify` 重驗資料網域看到的是舊名冊。隔天起不公布，每次嘗試一行 `fingerprint_file_differs` | 做第 3 步 |
-| `roster/` 清了，還沒到午夜 | 資料網域上沒有名冊的檔（`404`），`iamreal-verify` 當成公布了 0 筆、報少了指紋檔 | 等午夜，做第 4 步 |
+| `roster/` 清了，快取還沒清 | 舊名冊有寫滿的檔時，那幾個網址在快取著它的地方還是舊檔（最長一年）；其餘同下一列 | 做第 4 步 |
+| `roster/` 和快取都清了，還沒到午夜 | 資料網域上沒有名冊的檔（`404`），`iamreal-verify` 當成公布了 0 筆、報少了指紋檔 | 等午夜，做第 5 步 |
 
 清空之後，測試網站上原本的島民證明連結都是「找不到」，頁面上的清空日期說明原因（ADR-0028）。別人下載過的舊名冊收不回來（`design/copy/privacy.md`）。
+
+### 清不到的快取
+
+第 4 步清的只有 Cloudflare 自己的快取。清不到的：
+
+- **瀏覽器的快取。** 用瀏覽器打開過舊名冊寫滿的檔的人，瀏覽器在一年內可以直接用存著的那一份，重新整理也不必再問（`immutable`：「The user should not send a conditional revalidation request … to check for updates, even when the user explicitly refreshes the page」，[Cloudflare 的 Cache-Control 說明](https://developers.cloudflare.com/cache/concepts/cache-control/)，2026-11-21 讀的）。清掉瀏覽器自己的快取才會拿到新的。
+- **Cloudflare 以外的快取。** 回應標的是 `public`，下載的人和 Cloudflare 之間的代理伺服器可以存一年。
+- **已經下載的副本。**
+
+`iamreal-verify` 自己下載時不經過瀏覽器，每次都向資料網域要，第 4 步做了它拿到的就是新的。過卡的頁面只從資料網域拿 `crl/`，不拿 `roster/`，不受影響。
+
+**重驗的人拿到舊檔時會看到什麼。** 舊名冊的檔本身是一份完整的名冊檔，每一行都讀得懂，所以不會是「讀不懂」；對不上的是它和每天重寫的那幾樣（指紋檔、還沒寫滿的最後一檔的雜湊清單、卡片狀態檔，都只快取 60 秒）：
+
+- 名冊檔是舊的、指紋檔是新的：指紋檔的行對不上名冊，`iamreal-verify` 每一行印 `fingerprints.jsonl line <行號>: fingerprint … is not the roster fingerprint of the first <筆數> records, …`，或筆數超過時 `count <筆數>, but the roster has <筆數> records`
+- 名冊檔和雜湊清單一新一舊：`<檔名> is not the record hash list of the roster`
+- 卡片狀態檔和從舊紀錄算出來的卡片逐張不同
+
+這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時換一個不經過快取的方式再下載一次（例如直接跑 `iamreal-verify -roster test -data https://test-data.iamreal.tw/`）。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
 
 ### 在本機照著做
 
@@ -1208,7 +1245,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 
 [`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
 
-**它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 4 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
+**它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 5 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
 
 **它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）。部署還沒有帶過卡的頁面之前（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），這裡 `GET /proof` 那一項不過，其餘 18 項都過（2026-11-21 對 `main` 的 `f0ca916` 部署出去的版本跑的結果）。
 
