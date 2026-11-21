@@ -1,4 +1,4 @@
-// The test app (README.md). What this file decides: the identifiers, the
+// The app, as its two builds (README.md, ADR-0037). What this file decides: the identifiers, the
 // one Android version the app is built for, how the native library and the
 // bundled files get into the installer, and the checks of what was built.
 import com.android.build.api.artifact.SingleArtifact
@@ -21,12 +21,12 @@ plugins {
 val minApi = 29
 // The files every installer carries, each with its SHA-256: the circuits and their keys, and the parameter files.
 val bundledLists = files(rootProject.file("bundled.sha256"), rootProject.file("../device-core/crs.sha256"))
-// The one app this directory builds (ADR-0036).
-val appId = "tw.iamreal.app.test"
 // The build type of the emulator test (README.md, "模擬器上過一次卡"): a fake card, the library of the
 // tests, a server on this machine. It is installed next to the app under its own identifier and goes nowhere.
 val fakeBuild = "fake"
-val fakeId = "$appId.$fakeBuild"
+// The identifier each build type must come out with (ADR-0037): release is the store's build, debug the
+// development build, which a phone can have next to the store's. checkManifest holds each build to it.
+val ids = mapOf("release" to "tw.iamreal.app", "debug" to "tw.iamreal.app.dev", fakeBuild to "tw.iamreal.app.dev.fake")
 // The ABIs of each kind of build: what goes out is for phones only; a debug build is also for the emulator on x86-64.
 val releaseAbis = listOf("arm64-v8a")
 val debugAbis = listOf("arm64-v8a", "x86_64")
@@ -116,8 +116,8 @@ android {
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        // The test app (ADR-0036). The site it talks to and the roster it signs for are in Environment.kt.
-        applicationId = appId
+        // The store's build (ADR-0037). The site it talks to and the roster it signs for are in Environment.kt.
+        applicationId = "tw.iamreal.app"
         minSdk = minApi
         targetSdk = 36
         versionCode = 1
@@ -126,11 +126,12 @@ android {
 
     buildTypes {
         debug {
-            // For a phone on a cable and for the emulator.
+            // The development build (ADR-0037): for a phone on a cable and for the emulator, next to the store's.
+            applicationIdSuffix = ".dev"
             ndk { abiFilters += debugAbis }
         }
         release {
-            // What goes out: phones only.
+            // The store's build (ADR-0037): phones only.
             ndk { abiFilters += releaseAbis }
             isMinifyEnabled = true
             proguardFiles("proguard-rules.pro")
@@ -138,7 +139,7 @@ android {
         create(fakeBuild) {
             // The emulator test's: a debug build with src/fake/ in place of src/real/ (sourceSets, below).
             initWith(getByName("debug"))
-            applicationIdSuffix = ".$fakeBuild"
+            applicationIdSuffix = ".dev.$fakeBuild"
         }
     }
 
@@ -153,6 +154,8 @@ android {
         getByName("release").kotlin.directories.add("src/real/kotlin")
         // TestingCore, for the library of the tests: in the fake build and the unit tests only.
         getByName(fakeBuild).kotlin.directories.add("src/testing/kotlin")
+        // The emulator test's build is a development build: it has that build's name under the icon.
+        getByName(fakeBuild).res.directories.add("src/debug/res")
         getByName("test").kotlin.directories.add("src/testing/kotlin")
     }
 
@@ -431,11 +434,18 @@ abstract class CheckApk : DefaultTask() {
                 if (!testing.get() && text.contains("iamreal-device-core:testing-issuer-keys")) problems += "$lib is the library of the tests: it trusts issuer keys other than MOICA's"
             }
             // A class, a method or a text the Kotlin code refers to is in the dex file as text.
-            for (dex in names.filter { it.endsWith(".dex") }) {
+            val dexes = names.filter { it.endsWith(".dex") }
+            // Until launch both builds talk to the test site (ADR-0037, Environment.kt): its address is in the dex (in a
+            // release build, as the start of the addresses R8 put together). The fake build talks to this machine instead.
+            val testSite = "https://test.iamreal.tw"
+            if (!testing.get() && dexes.none { String(read(it), Charsets.ISO_8859_1).contains(testSite) }) {
+                problems += "no dex holds $testSite: every build talks to the test site until launch"
+            }
+            for (dex in dexes) {
                 val text = String(read(dex), Charsets.ISO_8859_1)
-                // The test app talks to the test site and signs for the test roster only (ADR-0036).
+                // Until launch every build signs for the test roster only (ADR-0037).
                 for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
-                    if (text.contains(production)) problems += "$dex holds $production: the test app names nothing of production"
+                    if (text.contains(production)) problems += "$dex holds $production: until launch no build names anything of production"
                 }
                 // The fake card and the session that trusts test keys are in the emulator test's build alone.
                 for (fake in listOf("Ltw/iamreal/app/fake/", "TestingCore")) {
@@ -490,7 +500,7 @@ androidComponents {
         val release = variant.buildType == "release"
         val fake = variant.buildType == fakeBuild
         val variantAbis = if (release) releaseAbis else debugAbis
-        val variantId = if (fake) fakeId else appId
+        val variantId = ids.getValue(variant.buildType!!)
         // The network, and what androidx.core declares for itself: a permission of this app's own, which only this app holds.
         val variantPermissions = allowedPermissions + "$variantId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
@@ -574,8 +584,10 @@ tasks.withType<Test>().configureEach {
     // The files an installer carries, where bundleFiles takes them from.
     systemProperty("iamreal.bundled", listOf("../web/circuits", "../verifier/vk", "../device-core/vendor/crs").joinToString(File.pathSeparator) { rootProject.file(it).path })
     systemProperty("iamreal.copy", rootProject.file("../design/copy").path)
-    systemProperty("iamreal.strings", file("src/main/res/values/strings.xml").path)
-    inputs.file(file("src/main/res/values/strings.xml"))
+    // The name under the icon of each build: the store's in main/, the development build's in debug/.
+    systemProperty("iamreal.strings.store", file("src/main/res/values/strings.xml").path)
+    systemProperty("iamreal.strings.dev", file("src/debug/res/values/strings.xml").path)
+    inputs.files("src/main/res/values/strings.xml", "src/debug/res/values/strings.xml")
     inputs.dir(rootProject.file("../spec/vectors"))
     inputs.file(rootProject.file("../design/copy/app.md"))
 }

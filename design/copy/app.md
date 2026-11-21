@@ -4,14 +4,30 @@
 
 ## 主畫面上的名稱
 
-手機主畫面上，app 圖示底下的名稱。
+手機主畫面上，app 圖示底下的名稱。同一個 app 有兩種 build（ADR-0037），兩個可以同時裝在一支手機上，各有一個名稱。
 
-測試 app（識別碼 `tw.iamreal.app.test`，ADR-0036）：
+### 商店的 build
+
+識別碼 `tw.iamreal.app`，從 Google Play、App Store 裝的那一個：
 
 ```
 島民證明 測試
 ```
 
-- 「島民證明」和「測試」之間是一個半形空格
-- 這是第一版。正式 app 的名稱、兩個 app 並存時怎麼分，在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定；定了之後改這裡，Android 和 iOS 一起改
-- 兩個 app 的測試各自讀這一段，確認安裝檔裡的名稱和它相同
+- 上線前它連的是測試網站，名稱要看得出是測試（ADR-0036）。上線那天改連正式網站時，這個名稱一起改
+
+### 開發用 build
+
+識別碼 `tw.iamreal.app.dev`，不上傳商店，營運者用線裝：
+
+```
+島民證明 開發
+```
+
+- 它永遠連測試網站。和商店的 build 裝在同一支手機上時，靠這個名稱分出哪一個是哪一個
+
+### 兩種 build 都適用的
+
+- 「島民證明」和後面的字之間是一個半形空格
+- 這是第一版。正式的名稱在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定；定了之後改這裡，Android 和 iOS 一起改
+- Android 和 iOS 的測試讀這一段，確認每一種 build 安裝檔裡的名稱和它相同
