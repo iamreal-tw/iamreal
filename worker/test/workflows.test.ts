@@ -38,6 +38,8 @@ import {
   INSTALL_PNPM,
   IOS_PATHS,
   REQUIRED_CHECKS,
+  UPLOAD_ANDROID_SCRIPTS,
+  WORKFLOW_FILES,
   type Yaml,
   matchesPaths,
   pathsEnvName,
@@ -48,13 +50,15 @@ import {
 
 const REPO = join(WORKER_DIR, "..");
 const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
-/** The one file of .github/workflows/ that is not a workflow: the script the changes job of checks.yml runs. */
+/** The script the changes job of checks.yml runs. */
 const CHANGED_PATHS_NAME = basename(CHANGED_PATHS_SCRIPT);
+/** The files of .github/workflows/ that are not workflows: the scripts the workflows run. */
+const SCRIPTS = [CHANGED_PATHS_NAME, ...UPLOAD_ANDROID_SCRIPTS];
 
 function realFiles(): Record<string, string> {
   return Object.fromEntries(
     readdirSync(WORKFLOWS_DIR)
-      .filter((f) => f !== CHANGED_PATHS_NAME)
+      .filter((f) => !SCRIPTS.includes(f))
       .map((f) => [f, readFileSync(join(WORKFLOWS_DIR, f), "utf8")]),
   );
 }
@@ -496,6 +500,89 @@ for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
   });
 }
 
+// upload-android.yml (#175): by hand, on main; the build job has no secret and the upload job runs no build.
+const U = "upload-android.yml";
+const SIGN_ENV = "        env:\n          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}\n          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n";
+const PLAY_ENV = "        env:\n          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}\n";
+const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease';
+const UPLOAD_JOBS_PROBLEM = /^upload-android\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
+const SECRETS_PROBLEM = /^the lines with "secrets" in them are/;
+
+const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
+  "250 upload-android.yml started by a push to main too": {
+    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+    problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
+  },
+  "251 upload-android.yml started by another workflow (workflow_run)": {
+    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_run:\n    workflows:\n      - deploy-test\n")],
+    problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
+  },
+  "252 upload-android.yml taking inputs from whoever starts it": {
+    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n    inputs:\n      track:\n        default: production\n")],
+    problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
+  },
+  "253 the upload key given to the build job, where Gradle runs": {
+    changes: [replace(U, `${BUNDLE_RELEASE}`, `${SIGN_ENV.replace("        env:\n", "")}${BUNDLE_RELEASE}`)],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "254 the build job in the environment app-test": {
+    changes: [replace(U, "    needs: version\n    runs-on: ubuntu-24.04\n", "    needs: version\n    environment: app-test\n    runs-on: ubuntu-24.04\n")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "255 the upload job out of the environment app-test (its secrets would be the repository's, on any branch)": {
+    changes: [replace(U, "    environment: app-test\n", "")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "256 the upload job building the app itself, with the keys in reach": {
+    changes: [replace(U, "      - name: Sign the bundle with the upload key\n", "      - name: Build again\n        working-directory: android\n        run: ./gradlew bundleRelease\n      - name: Sign the bundle with the upload key\n")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "257 the upload key in the env of the upload to Google Play too": {
+    changes: [replace(U, PLAY_ENV, `${PLAY_ENV}          ANDROID_UPLOAD_KEYSTORE_PASSWORD: \${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n`)],
+    problem: SECRETS_PROBLEM,
+  },
+  "258 the service account's key put into the command": {
+    changes: [replace(U, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
+    problem: SECRETS_PROBLEM,
+  },
+  "259 the version job's token able to write": {
+    changes: [replace(U, "      actions: read\n", "      actions: write\n")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "260 the upload job's token able to write the code": {
+    changes: [replace(U, "    environment: app-test\n", "    environment: app-test\n    permissions:\n      contents: write\n")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "261 the version job not stopping off main": {
+    changes: [replace(U, '      - name: Only from main\n        run: test "$GITHUB_REF" = refs/heads/main\n', "")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+  "262 an upload cancelled halfway by the next": {
+    changes: [replace(U, "  group: upload-android\n  cancel-in-progress: false\n", "  group: upload-android\n  cancel-in-progress: true\n")],
+    problem: /^upload-android\.yml: concurrency is not group upload-android/,
+  },
+  "263 a cache restored in the build job": {
+    changes: [replace(U, "      - name: Get the parameter files\n", "      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.gradle/caches\n          key: x\n      - name: Get the parameter files\n")],
+    problem: /^upload-android\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
+  },
+  "264 a step of the upload job continuing when signing fails": {
+    changes: [replace(U, "      - name: Sign the bundle with the upload key\n", "      - name: Sign the bundle with the upload key\n        continue-on-error: true\n")],
+    problem: UPLOAD_JOBS_PROBLEM,
+  },
+};
+
+for (const [name, { changes, problem }] of Object.entries(UPLOAD_ANDROID_CHANGES)) {
+  test(`turned away: ${name}`, () => {
+    const files = realFiles();
+    for (const change of changes) change(files);
+    const problems = workflowProblems(files);
+    assert.ok(
+      problems.some((p) => problem.test(p)),
+      `no problem like ${problem}: ${JSON.stringify(problems)}`,
+    );
+  });
+}
+
 test("every file the caches' keys hash is there: hashFiles would leave a misspelt one out of the key without a word", () => {
   for (const f of CACHE_KEY_FILES) assert.ok(existsSync(join(REPO, f)), `${f} is not in the repository`);
   for (const cache of [...Object.values(DEVICE_CORE_CACHES), ...Object.values(ANDROID_CACHES)]) {
@@ -847,10 +934,10 @@ test("the lists of the required checks: one for each, every one with the paths e
   }
 });
 
-test(".github/workflows/ holds the workflows and the one script the changes job runs", () => {
-  assert.deepEqual(readdirSync(WORKFLOWS_DIR).sort(), [...Object.keys(realFiles()), CHANGED_PATHS_NAME].sort());
-  // Like the workflows: printable ASCII only. It is read line by line with them (CONTRIBUTING.md).
-  assert.equal(/[^\x20-\x7e\n]/.exec(readFileSync(join(WORKFLOWS_DIR, CHANGED_PATHS_NAME), "utf8")), null);
+test(".github/workflows/ holds the workflows and the scripts they run", () => {
+  assert.deepEqual(readdirSync(WORKFLOWS_DIR).sort(), [...WORKFLOW_FILES, ...SCRIPTS].sort());
+  // Like the workflows: printable ASCII only. They are read line by line with them (CONTRIBUTING.md).
+  for (const f of SCRIPTS) assert.equal(/[^\x20-\x7e\n]/.exec(readFileSync(join(WORKFLOWS_DIR, f), "utf8")), null, f);
 });
 
 /** Files at the root that are not there now, and that would change every check if a pull request added them. */

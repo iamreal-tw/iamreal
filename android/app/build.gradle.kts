@@ -120,8 +120,10 @@ android {
         applicationId = "tw.iamreal.app"
         minSdk = minApi
         targetSdk = 36
-        versionCode = 1
-        versionName = "2026.11.20"
+        // The version (ADR-0036): a build for Google Play gets it from .github/workflows/upload-android.yml
+        // (android-version.sh) as two Gradle properties, the date and the run's number. Any other build is 1, "dev".
+        versionCode = providers.gradleProperty("iamreal.versionCode").map { it.toInt() }.getOrElse(1)
+        versionName = providers.gradleProperty("iamreal.versionName").getOrElse("dev")
     }
 
     buildTypes {

@@ -484,13 +484,13 @@ export const DEVICE_CORE_JOB_STEPS: YamlMap = {
  * commands with the same SDK and JDK. The same `gradlew build` in both: with
  * --no-daemon no Gradle is left running when cache.yml's caches are saved.
  */
-const ANDROID_BUILD: readonly YamlMap[] = [
+const ANDROID_SETUP: readonly YamlMap[] = [
   { name: "Install libc++ (Barretenberg's static library is built with it)", run: "sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev" },
   { name: "Install the Rust of rust-toolchain.toml, with the targets of Android", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android" },
   { name: "Install the parts of the Android SDK that android/app/build.gradle.kts names", run: ANDROID_SDK_PARTS },
   { name: "Get the parameter files", "working-directory": "device-core", run: "./fetch-crs.sh" },
-  { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD },
 ];
+const ANDROID_BUILD: readonly YamlMap[] = [...ANDROID_SETUP, { name: "gradlew build", "working-directory": "android", run: GRADLE_BUILD }];
 /**
  * The last step of cache.yml's android job, before actions/cache saves after
  * the job: Gradle's lock files and gc.properties out of ~/.gradle/caches.
@@ -618,10 +618,103 @@ export const CACHE_JOBS: YamlMap = {
   },
 };
 
+/**
+ * upload-android.yml (#175, ADR-0036, ADR-0037): builds the store's build of
+ * the Android app (tw.iamreal.app) and puts it on Google Play's internal
+ * testing track, when the operator starts it by hand (workflow_dispatch) on
+ * main. Its jobs, exactly:
+ *
+ * - version: the date in Taiwan and the run's number
+ *   (.github/workflows/android-version.sh). The one job whose token may read
+ *   more than the code: `actions: read`, to list the workflow's earlier
+ *   successful runs (the day's second upload is .1). It stops first when the
+ *   run is not on main.
+ * - build: no secret. The steps of the android check up to Gradle, then
+ *   `bundleRelease` with that version, which runs the checks of the bundle
+ *   (android/app/build.gradle.kts: checkBundle, checkManifest,
+ *   checkLibraries), and hands the bundle on as an artifact.
+ * - upload: `environment: app-test`, whose secrets GitHub gives only to jobs
+ *   on main (#162). It runs no build: it signs the bundle the build job
+ *   checked with the upload key (android-sign.sh), keeps the signed bundle as
+ *   an artifact (Google Play may take a new app's first build only from Play
+ *   Console, #162), then uploads it (play-upload.sh). Each secret is in the
+ *   env of the one step that uses it.
+ *
+ * Its token reads the code only, like every workflow's (`permissions`), and
+ * it has no cache (`cache-mode: none`).
+ */
+export const UPLOAD_ANDROID_WORKFLOW = "upload-android.yml";
+export const UPLOAD_ANDROID_ON: Yaml = { workflow_dispatch: null };
+export const UPLOAD_ANDROID_GROUP = "upload-android";
+/** The scripts of .github/workflows/ that upload-android.yml runs. */
+export const UPLOAD_ANDROID_SCRIPTS: readonly string[] = ["android-version.sh", "android-sign.sh", "play-upload.sh"];
+/** Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one. */
+const UNSIGNED_BUNDLE: YamlMap = { name: "android-bundle", path: "android/app/build/outputs/bundle/release/app-release.aab" };
+const SIGNED_BUNDLE = "${{ runner.temp }}/signed/app-release.aab";
+const RUNS_OF_UPLOAD_ANDROID = `repos/$GITHUB_REPOSITORY/actions/workflows/${UPLOAD_ANDROID_WORKFLOW}/runs?branch=main&status=success&per_page=100`;
+export const UPLOAD_ANDROID_JOBS: YamlMap = {
+  version: {
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "5",
+    permissions: { actions: "read", contents: "read" },
+    outputs: { name: "${{ steps.version.outputs.name }}", code: "${{ steps.version.outputs.code }}" },
+    steps: [
+      { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
+      step("actions/checkout"),
+      {
+        name: "The version, the date in Taiwan, and the run's number",
+        id: "version",
+        env: { GH_TOKEN: "${{ github.token }}" },
+        run: `gh api "${RUNS_OF_UPLOAD_ANDROID}" > "$RUNNER_TEMP/runs.json" && bash .github/workflows/android-version.sh "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"`,
+      },
+    ],
+  },
+  build: {
+    needs: "version",
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "30",
+    steps: [
+      step("actions/checkout"),
+      ...ANDROID_SETUP,
+      {
+        name: "gradlew bundleRelease, with the checks of the bundle",
+        "working-directory": "android",
+        env: { VERSION_NAME: "${{ needs.version.outputs.name }}", VERSION_CODE: "${{ needs.version.outputs.code }}" },
+        run: 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"',
+      },
+      { uses: uses("actions/upload-artifact"), with: { ...UNSIGNED_BUNDLE, "if-no-files-found": "error" } },
+    ],
+  },
+  upload: {
+    needs: "build",
+    "runs-on": "ubuntu-24.04",
+    "timeout-minutes": "20",
+    environment: "app-test",
+    steps: [
+      step("actions/checkout"),
+      { uses: uses("actions/download-artifact"), with: { name: UNSIGNED_BUNDLE.name!, path: "${{ runner.temp }}/bundle" } },
+      {
+        name: "Sign the bundle with the upload key",
+        env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
+        run: 'JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/signed/app-release.aab"',
+      },
+      { uses: uses("actions/upload-artifact"), with: { name: "android-bundle-signed", path: SIGNED_BUNDLE, "if-no-files-found": "error" } },
+      {
+        name: "Upload to Google Play's internal testing",
+        env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
+        run: 'bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"',
+      },
+    ],
+  },
+};
+
 /** The only lines of all the workflows with the word "secrets" in them, comments included. */
 export const SECRET_LINES: readonly string[] = [
   "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+  "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
+  "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}",
+  "upload-android.yml:          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}",
 ];
 
 /**
@@ -1030,6 +1123,16 @@ function cacheProblems(file: string, text: string): string[] {
   return problems;
 }
 
+/** The workflows, exactly, by file name: one to a line, in order. */
+export const WORKFLOW_FILES: readonly string[] = [
+  "cache.yml",
+  "checks-browser.yml",
+  "checks-ios.yml",
+  "checks.yml",
+  "deploy-test.yml",
+  UPLOAD_ANDROID_WORKFLOW,
+];
+
 /**
  * The problems in a set of workflow files, by file name. None, for files
  * that keep to everything described at the top of this file.
@@ -1037,7 +1140,7 @@ function cacheProblems(file: string, text: string): string[] {
 export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: CheckLists = CHECK_PATHS): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, WORKFLOW_FILES)) problems.push(`the workflows are ${names.join(", ")}, not ${WORKFLOW_FILES.join(", ")}`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -1085,6 +1188,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === UPLOAD_ANDROID_WORKFLOW) {
+      // By hand only: no push, pull request or other workflow starts an upload.
+      if (!same(doc.on, UPLOAD_ANDROID_ON)) p(`not triggered by hand (workflow_dispatch) only: ${JSON.stringify(doc.on)}`);
+      if (!same(doc.concurrency, { group: UPLOAD_ANDROID_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${UPLOAD_ANDROID_GROUP}, one run at a time and none cancelled`);
+      if (doc.env !== undefined) p("an env at the top");
+      if (!same(doc.jobs, UPLOAD_ANDROID_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     // Whatever saves a cache runs on pushes to main and nothing else: on any other event (a pull
