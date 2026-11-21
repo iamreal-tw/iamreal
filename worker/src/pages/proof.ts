@@ -25,7 +25,7 @@ export const LONG_ACCOUNT = 18;
  * both rosters. The page links to and embeds an account by its name, so a
  * name that is not one stops the page.
  */
-function isThreadsUsername(username: string): boolean {
+export function isThreadsUsername(username: string): boolean {
   return platformsOf("production").find((p) => p.platform === PLATFORM)?.format.accepts(username) === true;
 }
 
@@ -43,8 +43,18 @@ export function prefixes(ids: readonly string[]): string[] {
   return ids.map((id) => id.slice(0, n));
 }
 
+/**
+ * The profile of a Threads account, embedded with no script of Threads
+ * (sandbox without allow-scripts), no referrer and no credentials. The
+ * account must be a Threads username already checked; it is escaped all the
+ * same.
+ */
+export function embed(account: string): Html {
+  return html`<iframe class="threads-profile" src="https://www.threads.com/@${account}/embed/" title="Threads 個人檔案：@${account}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>`;
+}
+
 /** How long ago a date was, as the pages write it: 今天 or N 天前, in whole days. A date after today (the clock stepped back) is written as today. */
-function daysAgo(day: number, today: number): string {
+export function daysAgo(day: number, today: number): string {
   return today - day <= 0 ? "今天" : `${today - day} 天前`;
 }
 
@@ -100,7 +110,7 @@ ${when}
 <h2 class="ask">帳號主人承認嗎？你需要自己看。</h2>
 <p>@${account} 的個人檔案上有這個連結，才代表帳號主人承認：</p>
 <p class="backlink">${site.host}/p/${shortId}</p>
-<iframe class="threads-profile" src="https://www.threads.com/@${account}/embed/" title="Threads 個人檔案：@${account}" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>
+${embed(account)}
 <p class="small">@${account} 的個人檔案上沒有 ${shortId}，代表帳號主人可能沒有承認這張證明。</p>
 <p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@${account}">Threads 的 @${account}</a></p>
 </section>`;

@@ -1,0 +1,279 @@
+// The FAQ (/faq), how to verify (/verify), hanging a proof on a profile
+// (/hang, /hang/<short ID>) and the copy buttons' script (/copy.js), through
+// the Worker's HTTP (test/harness.ts), against the words of design/copy/
+// (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
+// The cases are the Go backend's (server/site_test.go).
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, describe, test } from "node:test";
+import { WORKER_DIR } from "./build.ts";
+import { OG_DESCRIPTION, block, codeBlocks, copyLines, copySection, faqQuestions, notOnPage, previewOf, readCopy, squash, testSiteCardAddress, unescapeHtml, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { type TestWorker, startWorker } from "./harness.ts";
+import { CARD_A, CARD_B, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
+import { newCard } from "./records.ts";
+
+const REPO_DIR = join(WORKER_DIR, "..");
+const COPY_DIR = join(REPO_DIR, "design", "copy");
+
+let worker: TestWorker;
+let proofDir: string;
+before(async () => {
+  // A stand-in for the build of web/ (#69): the two files of it the pages link to.
+  proofDir = mkdtempSync(join(tmpdir(), "proof-"));
+  writeFileSync(join(proofDir, "index.html"), "<p>card proof</p>");
+  writeFileSync(join(proofDir, "help.html"), "<p>help</p>");
+  worker = await startWorker({ proofFiles: proofDir });
+  await worker.setVerifier("stand-in");
+});
+after(async () => {
+  await worker.close();
+  rmSync(proofDir, { recursive: true, force: true });
+});
+
+function faqByQuestion(question: string): ReturnType<typeof faqQuestions>[number] {
+  const found = faqQuestions().find((q) => q.question === question);
+  assert.ok(found !== undefined, `faq.md has the question ${question}`);
+  return found;
+}
+
+describe("the FAQ", () => {
+  test("every question of faq.md under its category, in order, each a heading with its id and its answer shown; nothing after the last but the foot", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/faq");
+    assert.equal(status, 200);
+    const questions = faqQuestions();
+    assert.equal(questions.length, 22, "faq.md has the 22 questions the page writes");
+    const want = copyLines(codeBlocks(readCopy("faq.md"))[0]!);
+    let category = "";
+    for (const q of questions) {
+      if (q.category !== category) {
+        category = q.category;
+        want.push(category);
+      }
+      want.push(q.question, ...copyLines(q.answer));
+    }
+    const last = want[want.length - 1]!;
+    const foot = copyLines(block("home.md", "9. "));
+    wantLines(page, [...want, ...foot]);
+    assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
+
+    // Each question a heading with its id, its answer shown: no <details>.
+    assert.ok(!page.includes("<details"), "no answer is folded");
+    const ids = [...page.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1]!);
+    assert.equal(new Set(ids).size, ids.length, "no id twice");
+    for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
+    // Every link to a question that a copy file writes goes to one.
+    for (const file of readdirSync(COPY_DIR).filter((f) => f.endsWith(".md"))) {
+      for (const m of readFileSync(join(COPY_DIR, file), "utf8").matchAll(/\/faq#([A-Za-z0-9_-]+)/g)) assert.ok(ids.includes(m[1]!), `${file} links to /faq#${m[1]}, which is on the page`);
+    }
+
+    // The links of the answers.
+    const security = faqByQuestion("這個技術安全嗎？");
+    for (const link of [
+      `<a href="/faq#${security.id}">了解更多</a>`,
+      '<a href="https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md">完整的說明</a>',
+      '<a href="https://github.com/iamreal-tw/iamreal">GitHub</a> 討論',
+      "<strong>注意：</strong>",
+    ]) {
+      assert.ok(page.includes(link), `the page has ${link}`);
+    }
+    assert.ok(existsSync(join(REPO_DIR, "docs", "adr", "0004-scoped-ids-and-proofs-are-public.md")), "the ADR the answer links to is there");
+    assert.ok(faqByQuestion("政府會知道我是哪個帳號嗎？").answer[2]!.includes("了解更多"));
+    assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「這個技術安全嗎？」"), "faq.md says where 了解更多 goes");
+
+    const { title, site, summary } = previewOf("faq.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+    assert.equal(summary, "");
+    assert.doesNotMatch(page, OG_DESCRIPTION);
+  });
+
+  test("the home page's seven answers are the FAQ's, the same HTML", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const home = (await getPage(worker, "/")).page;
+    const faq = (await getPage(worker, "/faq")).page;
+    const folded = [...home.matchAll(/<details><summary>([^<]*)<\/summary>\n(.*?)<\/details>/gs)];
+    assert.equal(folded.length, 7);
+    for (const [, question, answer] of folded) {
+      const q = faqByQuestion(question!);
+      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(faq);
+      assert.equal(shown?.[1], answer, `${question}: the home page's answer is the FAQ's`);
+    }
+  });
+});
+
+/**
+ * What a copy button reads once it has copied, as `file` writes it (按了之後按鈕寫「…」), checked against
+ * card-proof.json's: the one word for it.
+ */
+function copiedWord(file: string): string {
+  const m = /按了之後按鈕寫「([^」]*)」/.exec(readCopy(file));
+  const copied = (JSON.parse(readCopy("card-proof.json")) as { done: { copied: string } }).done.copied;
+  assert.ok(m !== null && m[1] === copied && copied === "已複製", `${file}: ${m?.[1]}; card-proof.json's copied is ${copied}`);
+  return copied;
+}
+
+describe("how to verify", () => {
+  test("every sentence of verify.md, in order; the prompt exactly; its copy button, shown by the one script; the preview", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/verify");
+    assert.equal(status, 200);
+    wantLines(page, [
+      ...copyLines(block("verify.md", "1. ")),
+      ...copyLines(block("verify.md", "2. ")),
+      ...copyLines(block("verify.md", "3. ", 0)),
+      ...copyLines(block("verify.md", "3. ", 1)),
+      ...copyLines(block("verify.md", "3. ", 2)),
+      ...copyLines(block("verify.md", "4. ")),
+    ]);
+    // The prompt, exactly: one character changed is another prompt.
+    const prompt = /<pre class="prompt" id="prompt">(.*?)<\/pre>/s.exec(page);
+    assert.equal(prompt === null ? null : unescapeHtml(prompt[1]!), block("verify.md", "3. ", 1).join("\n"), "the prompt is verify.md's");
+    // Its copy button (verify.md, section 3), hidden until the script shows it.
+    const button = copyLines(block("verify.md", "3. ", 2));
+    assert.equal(button.length, 1);
+    assert.ok(page.includes(`<button type="button" class="copy" data-copy="prompt" data-copied="${copiedWord("verify.md")}" hidden>${button[0]}</button>`), "the copy button of the prompt");
+    assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md">cmd/iamreal-verify</a>'));
+    assert.ok(existsSync(join(REPO_DIR, "cmd", "iamreal-verify", "README.md")));
+    const { title, site } = previewOf("verify.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+  });
+});
+
+describe("hanging a proof on a profile", () => {
+  test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
+    const { status, page } = await getPage(worker, `/hang/${CARD_A}`);
+    assert.equal(status, 200);
+    wantLines(page, [...copyLines(block("hang.md", "2. ", 0), "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"), ...copyLines(block("hang.md", "3. "))]);
+    // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
+    // roster's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
+    const address = testSiteCardAddress(CARD_A);
+    assert.ok(copySection("hang.md", "2. ").includes("`https://iamreal.tw/p/7K2Q9FM4XD`"), "hang.md says what 複製連結 copies");
+    for (const want of [
+      `<p class="backlink">${address}</p>`,
+      `<button type="button" class="copy button" data-copy-text="https://${address}" data-copied="${copiedWord("hang.md")}" hidden>複製連結</button>`,
+      '<a class="button quiet" href="https://www.threads.com/@carol.tw" target="_blank" rel="noopener noreferrer">打開 Threads</a>',
+      `<a href="/p/${CARD_A}">打開你的島民證明</a>`,
+      '<span class="account">@carol.tw</span>',
+    ]) {
+      assert.ok(page.includes(want), `the page has ${want}`);
+    }
+    notOnPage(page, "還沒有島民證明？", "https://");
+    const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+  });
+
+  test("/hang without a proof: the page from the home page, with no script and no button", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/hang");
+    assert.equal(status, 200);
+    wantLines(page, copyLines(block("hang.md", "2. ", 1)));
+    for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof">我要換島民證明</a>']) {
+      assert.ok(page.includes(want), `the page has ${want}`);
+    }
+    // No 複製連結, not the two lines of part 3.
+    notOnPage(page, "複製連結", "剛才複製的連結", ...copyLines(block("hang.md", "3. ")));
+    assert.ok(!page.includes("<button"), "no button");
+    const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+  });
+
+  test("/hang/<short ID> is the page for one card with an account on Threads only (302 to /hang otherwise); another spelling is redirected (301); one that does not read is answered without the roster's object", async () => {
+    const one = cardStarting(CARD_A);
+    const m1 = cardStarting("M4T8XR6PZ13A");
+    const m2 = cardStarting("M4T8XR6PZ13B");
+    const gone = cardStarting(CARD_B);
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-01", one, "threads:alice"), r("2026-11-01", m1, "threads:bob"), r("2026-11-01", m2, "threads:carol"), r("2026-11-02", gone, "threads:dave"), r("2026-11-03", gone)]);
+    assert.equal((await getPage(worker, `/hang/${CARD_A}`)).status, 200);
+    const unreadable = ["7K2Q9FM4X", "7K2Q9FM4XDD", "7K2Q-FM4XD", "", "a/b", "%3Cb%3Ex%22"];
+    const cases: [string, string][] = [["2HD5WN0J8C", "no card"], ["M4T8XR6PZ1", "two cards"], [CARD_B, "withdrawn"], ...unreadable.map((u): [string, string] => [u, "does not read"])];
+    const redirects = async (): Promise<void> => {
+      for (const [typed, to] of [["7k2q9fm4xd", "/hang/7K2Q9FM4XD"], ["7K2Q9FM4XO", "/hang/7K2Q9FM4X0"], ["lK2Q9FM4XD", "/hang/1K2Q9FM4XD"]] as const) {
+        const res = await worker.fetch(`/hang/${typed}`, { redirect: "manual" });
+        assert.deepEqual([res.status, res.headers.get("location")], [301, to], `/hang/${typed}`);
+        checkVisitorHeaders(`/hang/${typed}`, res, { cache: "public, max-age=60", more: ["location"] });
+      }
+    };
+    for (const [typed, why] of cases) {
+      const res = await worker.fetch(`/hang/${typed}`, { redirect: "manual" });
+      assert.deepEqual([res.status, res.headers.get("location")], [302, "/hang"], `/hang/${typed} (${why})`);
+      checkVisitorHeaders(`/hang/${typed}`, res, { cache: "public, max-age=60", more: ["location"] });
+      assert.ok(!(await res.text()).includes("<b>x"), `/hang/${typed}: escaped`);
+    }
+    await redirects();
+
+    // With an object that answers nothing, a short ID that reads is 500; one that does not, and another spelling,
+    // are answered as before: the Worker did not ask.
+    await worker.roster.setStoredSchemaVersion("another");
+    await worker.roster.restart();
+    try {
+      const logged = worker.logLines().length;
+      const failed = await worker.fetch(`/hang/${CARD_A}`);
+      assert.equal(failed.status, 500);
+      checkVisitorHeaders("a page that failed", failed, { cache: "no-store" });
+      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", page: "hang", where: "schema", error: "Error" }]);
+      for (const typed of unreadable) assert.deepEqual([(await worker.fetch(`/hang/${typed}`, { redirect: "manual" })).status], [302], `/hang/${typed}`);
+      await redirects();
+      assert.equal((await getPage(worker, "/hang")).status, 200, "/hang does not ask the roster");
+    } finally {
+      await worker.roster.setStoredSchemaVersion("the build's");
+      await worker.roster.restart();
+    }
+  });
+});
+
+describe("the copy buttons' script", () => {
+  test("/copy.js: the old back end's, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const res = await worker.fetch("/copy.js");
+    assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/javascript; charset=utf-8"]);
+    checkVisitorHeaders("/copy.js", res, { cache: "no-cache" });
+    const script = await res.text();
+    // The Go backend's, byte for byte, for as long as that one is in the repository.
+    const old = join(REPO_DIR, "server", "pages", "copy.js");
+    if (existsSync(old)) assert.equal(script, readFileSync(old, "utf8"));
+    assert.ok(script.includes('document.querySelectorAll("button[data-copy], button[data-copy-text]")'));
+    for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "import", "eval", "innerHTML", "location"]) assert.ok(!script.includes(s), `copy.js has ${s}`);
+    // The ETag is the first 8 bytes of the script's SHA-256, as the Go backend's.
+    const sha = createHash("sha256").update(script).digest("hex");
+    const etag = res.headers.get("etag");
+    assert.equal(etag, `"${sha.slice(0, 16)}"`);
+    for (const ask of [etag!, `W/${etag}`, `"x", ${etag}`, "*"]) {
+      const again = await worker.fetch("/copy.js", { headers: { "If-None-Match": ask } });
+      assert.deepEqual([again.status, await again.text(), again.headers.get("etag")], [304, "", etag], `If-None-Match: ${ask}`);
+      checkVisitorHeaders(`/copy.js again (${ask})`, again, { cache: "no-cache" });
+    }
+    assert.equal((await worker.fetch("/copy.js", { headers: { "If-None-Match": '"0000000000000000"' } })).status, 200);
+    const head = await worker.fetch("/copy.js", { method: "HEAD" });
+    assert.deepEqual([head.status, await head.text(), head.headers.get("etag")], [200, "", etag]);
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      const no = await worker.fetch("/copy.js", { method });
+      assert.deepEqual([no.status, no.headers.get("allow")], [405, "GET, HEAD"], `${method} /copy.js`);
+    }
+  });
+});
+
+describe("the links", () => {
+  test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
+    const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
+    await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/roster", "/roster?q=a-b", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const links = new Set<string>();
+    for (const path of pages) {
+      const { page } = await getPage(worker, path);
+      for (const m of page.matchAll(/\s(?:href|src|action)="(\/(?!\/)[^"]*)"/g)) links.add(unescapeHtml(m[1]!).replace(/#.*/, ""));
+    }
+    for (const want of ["/", "/proof", "/proof/help.html?topic=prepare", "/verify", "/roster", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
+    assert.ok([...links].some((l) => l.startsWith("/roster?after=")), "更多 is among them");
+    const failing: string[] = [];
+    for (const link of links) {
+      const res = await worker.fetch(link, { redirect: "manual" });
+      if (res.status !== 200) failing.push(`${link}: ${res.status}`);
+    }
+    // /privacy is the FAQ's link to the full privacy notice (design/copy/privacy.md), a page neither back end makes yet.
+    assert.deepEqual(failing, ["/privacy: 404"]);
+  });
+});

@@ -56,13 +56,26 @@ export async function pagesWorld(worker: TestWorker, today: string, recs: readon
 
 export { mustSubmit };
 
-/** The policy of the visitors' pages (README.md, "訪客的頁面送的標頭"). */
+/** The policy of the visitors' pages (README.md, "頁面送的標頭"). */
 export const VISITOR_CSP = "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-/** What a response of the visitors' pages has for headers: these, each with this value, and no other. `noindex` is false on the production roster. */
-export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; more?: readonly string[] }): void {
+/** The policy of the two pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
+export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+/** Whether the page at a path loads the copy buttons' script when it is found: /verify and /hang/<short ID>, nothing else. */
+export function withScript(path: string): boolean {
+  const p = path.split("?")[0]!;
+  return p === "/verify" || p.startsWith("/hang/");
+}
+
+/**
+ * What a response of the visitors' pages has for headers: these, each with
+ * this value, and no other. `noindex` is false on the production roster;
+ * `script` is true for a page that loads the copy buttons' script.
+ */
+export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; script?: boolean; more?: readonly string[] }): void {
   const want: Record<string, string> = {
-    "content-security-policy": VISITOR_CSP,
+    "content-security-policy": expect.script === true ? SCRIPT_PAGE_CSP : VISITOR_CSP,
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
     "cross-origin-opener-policy": "same-origin",
@@ -87,20 +100,29 @@ const NAV_LINKS = `<a href="/verify">怎麼驗證</a>
 /** The mark of a test roster as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
 export const testRosterMark = (date: string): string => `<p class="test-roster">${testRosterLine(date).replace(date, `<time>${date}</time>`)}</p>`;
 
+/** The one script a page may load, as the page writes it. */
+export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
+
 /**
  * Requests a page and checks what every page of the visitors must be: the
- * headers; HTML with no script, no inline style, no event attribute and no
- * description (but the home page's); the navigation bar and the foot; and,
- * on a test roster, the mark with the date it was last cleared on, above
- * everything else, and `noindex`. Returns the status and the body.
+ * headers; HTML with no script (but the copy buttons' script on /verify and
+ * /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
+ * event attribute and no description (but the home page's); the navigation
+ * bar and the foot; and, on a test roster, the mark with the date it was
+ * last cleared on, above everything else, and `noindex`. Returns the status
+ * and the body.
  */
 export async function getPage(worker: TestWorker, path: string, expect: { test?: boolean; cache?: string } = {}): Promise<{ status: number; page: string; res: Response }> {
   const res = await worker.fetch(path, { redirect: "manual" });
   const page = await res.text();
   const test = expect.test !== false;
-  checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test });
+  const script = withScript(path) && res.status === 200;
+  checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test, script });
   assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", `${path}: Content-Type`);
-  assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
+  if (script) {
+    assert.equal(page.match(/<\s*script/gi)?.length, 1, `${path}: one script`);
+    assert.ok(page.includes(COPY_SCRIPT), `${path}: the one script is /copy.js`);
+  } else assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
   assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"|og:image/i : /name="description"|og:description|og:image/i, `${path}: no description`);

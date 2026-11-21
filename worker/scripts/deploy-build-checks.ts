@@ -120,10 +120,16 @@ export function engineFiles(): Record<string, string> {
  * in the same string is part of it here). None of them is fetched: the
  * Worker requests nothing but MOICA's two CRLs.
  *
- *   - the repository, linked from every page (design/copy/home.md, 導覽列);
- *   - Threads: the profile a page of a card embeds and links to
- *     (design/copy/proof-page.md, section 3), and the one origin the pages'
- *     policy allows a frame from (src/headers.ts).
+ *   - the repository, linked from every page (design/copy/home.md, 導覽列),
+ *     and three of its files: iamreal-verify's README (how to verify, and
+ *     its section 下載 from the roster page; the section's name is not
+ *     ASCII and is not read here), and the ADR one answer of the FAQ links to;
+ *   - Threads: the profile a page of a card or of an account embeds and
+ *     links to (design/copy/proof-page.md, section 3; account-page.md), the
+ *     site /hang opens (hang.md), and the one origin the pages' policy
+ *     allows a frame from (src/headers.ts);
+ *   - the page of a card on this site, as 複製連結 of /hang/<short ID>
+ *     copies it (hang.md, part 2), in the site's own domain.
  *
  * The data domain, which the card proof page's policy lets it fetch from,
  * is not among them: that policy is sent by Static Assets (site/_headers),
@@ -131,9 +137,14 @@ export function engineFiles(): Record<string, string> {
  */
 export const PAGE_ADDRESSES: readonly string[] = [
   "https://github.com/iamreal-tw/iamreal",
+  "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md",
+  "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#",
+  "https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "https://www.threads.com/",
   "https://www.threads.com/@${account}",
   "https://www.threads.com/@${account}/embed/",
   "https://www.threads.com;",
+  "https://${site.host}/p/${short}",
 ];
 
 export function checkAddresses(b: BuildContents): void {

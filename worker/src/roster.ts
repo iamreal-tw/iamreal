@@ -40,10 +40,10 @@ import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION
 import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
-import type { CardsOfShortId, Counts } from "./page-data.ts";
+import type { CardsOfAccount, CardsOfShortId, Counts, Latest, LatestPlace } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, FULL_FILE_RETRY_MS, type FileBucket, type FileHeaders, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./roster-files.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
-import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfShortId, clearViews, counts, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
+import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, latestSlots, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
 /**
  * A challenge can be used for less than this long after it is issued
@@ -684,6 +684,19 @@ export class Roster extends DurableObject<Env> {
   pageCards(shortId: string): CardsOfShortId {
     this.#checkViews();
     return { today: taiwanDay(now().getTime()), cards: cardsOfShortId(this.ctx.storage.sql, scopeOf(this.settings.kind), shortId) };
+  }
+
+  /** The cards that give their place on a platform to this username now, in the roster's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
+  pageAccount(platform: string, username: string): CardsOfAccount {
+    this.#checkViews();
+    return { today: taiwanDay(now().getTime()), cards: cardsOfAccount(this.ctx.storage.sql, scopeOf(this.settings.kind), platform, username) };
+  }
+
+  /** The home page's two numbers and at most `n` of the latest slots, after `after`, read at once, in the roster's open scope (page-data.ts, `PageData`). */
+  pageLatest(platform: string, after: LatestPlace | null, n: number): Latest {
+    this.#checkViews();
+    const scope = scopeOf(this.settings.kind);
+    return { counts: counts(this.ctx.storage.sql, scope, platform, taiwanDay(now().getTime())), slots: latestSlots(this.ctx.storage.sql, scope, platform, after, n) };
   }
 
   /**

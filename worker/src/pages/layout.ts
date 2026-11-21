@@ -9,6 +9,9 @@ import { Html, html } from "./html.ts";
 /** Where the style sheet is served, and what the pages link to. */
 export const CSS_PATH = "/pages.css";
 
+/** Where the copy buttons' script is served: the one script of the pages, loaded by /verify and /hang/<short ID> only. */
+export const COPY_JS_PATH = "/copy.js";
+
 /** What every page says about the site that makes it. */
 export interface Site {
   /**
@@ -30,6 +33,10 @@ export interface Document {
   /** The title of the link preview (og:title); the <title> is it followed by ｜島民證明, or `tabTitle` if there is one. */
   readonly title: string;
   readonly tabTitle?: string;
+  /** False for a page with no link preview at all (no og:title, no og:site_name). */
+  readonly preview?: boolean;
+  /** True for a page that loads the copy buttons' script (`COPY_JS_PATH`). */
+  readonly script?: boolean;
   /** og:description, for the one page that has one. */
   readonly description?: string;
   /** Which page: the class of <body>. */
@@ -75,11 +82,12 @@ export function layout(site: Site, d: Document): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${test === null ? new Html("") : new Html('<meta name="robots" content="noindex">\n')}<title>${d.tabTitle ?? `${d.title}｜島民證明`}</title>
-<meta property="og:title" content="${d.title}">
+${d.preview === false ? new Html("") : html`<meta property="og:title" content="${d.title}">
 <meta property="og:site_name" content="島民證明 iamreal.tw">
-${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
+`}${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
-</head>
+${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
+` : new Html("")}</head>
 <body class="${d.kind}">
 ${test === null ? new Html("") : html`<p class="test-roster">測試名冊　不定期清空，上次清空：<time>${test}</time></p>
 `}<main>

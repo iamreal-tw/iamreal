@@ -53,11 +53,54 @@ export interface CardsOfShortId {
   readonly cards: readonly PageCard[];
 }
 
+/** One card that gives its place on a platform to an account now. */
+export interface AccountCard {
+  readonly scopedId: string;
+  /** The date of the record from which the card gives its place to the account: a first declaration, a switch, a correction, or declaring it again after a withdrawal. */
+  readonly since: Day;
+  /** The card's last card proof. */
+  readonly lastCardProof: Day;
+}
+
+/** The cards that give their place to an account, by the date from which (the earliest first), and the date they were read on. */
+export interface CardsOfAccount {
+  /** Today, by Taiwan's date, on the clock of whoever answered. */
+  readonly today: Day;
+  readonly cards: readonly AccountCard[];
+}
+
+/** A place in the list of the latest slots: the date from which a slot gives its place to its account, and the `seq` of that record. */
+export interface LatestPlace {
+  readonly since: Day;
+  readonly sinceSeq: number;
+}
+
+/** One slot that gives its place to an account now, as the roster page lists it. */
+export interface LatestSlot extends LatestPlace {
+  readonly scopedId: string;
+  readonly username: string;
+}
+
+/** The roster page's numbers and a part of its list, read together. */
+export interface Latest {
+  readonly counts: Counts;
+  /** The latest first by the date from which, and slots of the same date by the `seq` of that record. */
+  readonly slots: readonly LatestSlot[];
+}
+
 export interface PageData {
   /** The numbers of the home page for a platform. */
   counts(platform: string): Promise<Counts>;
   /** The cards whose scoped ID starts with this short ID (in its one spelling); none is an empty list. */
   cards(shortId: string): Promise<CardsOfShortId>;
+  /** The cards whose account on a platform is this username now (in its one spelling); none is an empty list. */
+  account(platform: string, username: string): Promise<CardsOfAccount>;
+  /**
+   * The numbers of the home page for a platform, and at most `n` of its
+   * slots that have an account now, the latest first; with `after`, those
+   * after that place only.
+   */
+  latest(platform: string, after: LatestPlace | null, n: number): Promise<Latest>;
 }
 
 /** The page data that asks the roster's Durable Object. */
@@ -65,5 +108,7 @@ export function pageDataOfRoster(env: Env): PageData {
   return {
     counts: (platform) => rosterOf(env).pageCounts(platform),
     cards: (shortId) => rosterOf(env).pageCards(shortId),
+    account: (platform, username) => rosterOf(env).pageAccount(platform, username),
+    latest: (platform, after, n) => rosterOf(env).pageLatest(platform, after, n),
   };
 }

@@ -35,6 +35,17 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
+ * two pages that load the copy buttons' script, /verify and
+ * /hang/<short ID>. Only scripts of this origin, which is that one file: no
+ * inline script, no other site's. The Go backend's `scriptPageHeaders`.
+ */
+export const SCRIPT_PAGE_HEADERS: Readonly<Record<string, string>> = {
+  ...VISITOR_HEADERS,
+  "Content-Security-Policy": VISITOR_HEADERS["Content-Security-Policy"]!.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; "),
+};
+
+/**
  * Sent with every file of the card proof page (/proof and under /proof/),
  * besides EVERY_RESPONSE: the pages, their scripts and workers, the
  * circuits and the CRS. Static Assets sends them, by site/_headers; nothing
@@ -59,8 +70,9 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The style sheet's Cache-Control: asked for again every time it is used,
- * by its ETag (site/_headers).
+ * The Cache-Control of the style sheet (site/_headers) and of the copy
+ * buttons' script (src/visitor.ts): asked for again every time it is used,
+ * by its ETag.
  */
 export const STYLE_SHEET_CACHE = "no-cache";
 
