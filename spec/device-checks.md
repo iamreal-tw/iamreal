@@ -46,8 +46,9 @@ or a reason code, and is marked **signing** or not.
    (`signatureAlgorithm`) is not read; the walk checks the algorithm inside
    the tbs. Anything else: `unsupported_format`, not signing.
 2. **Walk.** The tbs goes through the walk below, the one the circuit makes
-   (zkid-noir `lib/src/der.nr` `check_certificate`, ADR-0008 to ADR-0011),
-   without its date comparison. The walk stops at one of three steps:
+   ([`circuits/lib/src/der.nr`](../circuits/lib/src/der.nr)
+   `check_certificate`, ADR-0008 to ADR-0011), without its date
+   comparison. The walk stops at one of three steps:
    `key_usage`, `holder` or `structure`, or passes. The certificate is
    **signing** unless the walk stopped at `key_usage`: an encryption
    certificate differs from the signing one there first.

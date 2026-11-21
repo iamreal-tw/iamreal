@@ -4,7 +4,7 @@
 
 - **提交的檔案只留三個欄位：`noir_version`、`abi`、`bytecode`。**
 - **`bytecode` 就是電路本身**（ACIR，gzip 後 base64）。任何人都可以從它讀出電路檢查什麼、怎麼檢查；公開這兩個檔案就公開了電路做的事。
-- **電路的原始碼（Noir）尚未公開。** `nargo compile` 寫出的檔案裡有原始碼（`file_map`），這裡的檔案沒有。
+- **電路的原始碼（Noir）在程式庫根目錄的 `circuits/`。** `nargo compile` 寫出的檔案裡有原始碼（`file_map`），這裡的檔案沒有；從 `circuits/` 重編、拿掉這些欄位，就得到和這裡逐位元組相同的檔（下面「來源」）。
 
 | 檔案 | `issuer` | SHA-256（這裡的檔案） | 驗證金鑰的 SHA-256 |
 |---|---|---|---|
@@ -15,7 +15,7 @@
 
 ## 來源
 
-- 電路的程式庫（私有，之後公開）的提交 `497b610c64a3e598ccc769f39e886d1d5ca889ed`，`nargo` 1.0.0（`noirc` 1.0.0+275d3ab1a5c916c6ea73e8d6b943f685f574500c）編譯。
+- 從程式庫根目錄的 `circuits/` 用 `nargo` 1.0.0（`noirc` 1.0.0+275d3ab1a5c916c6ea73e8d6b943f685f574500c）編譯。當初編的是先前私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`，搬進 `circuits/` 時原始碼相同（ADR-0038）。
 - `nargo compile` 寫出的檔案除了上面三個欄位，還有 `file_map`（電路和它用到的函式庫的完整原始碼，以及編譯那台電腦上的路徑）、`debug_symbols`、`hash`。頁面用不到它們，所以用 `scripts/strip-circuit.mjs` 拿掉：
 
   ```
@@ -23,7 +23,15 @@
   node scripts/strip-circuit.mjs <nargo 寫出的 card_proof_rs4096.json> circuits/card_proof_rs4096.json
   ```
 
-  `hash` 是超過 2^53 的整數，JavaScript 的 `JSON.parse` 讀不準，也一起拿掉。`bytecode` 和 `abi` 沒有改：在另一個目錄從同一個提交重新編譯，兩者逐位元組相同。
+  `hash` 是超過 2^53 的整數，JavaScript 的 `JSON.parse` 讀不準，也一起拿掉。`bytecode` 和 `abi` 沒有改。
+- 重建並比對：在程式庫的根目錄跑
+
+  ```
+  pnpm install
+  circuits/rebuild.sh
+  ```
+
+  它用釘住的 `nargo`、`bb`（先核對 SHA-256）從 `circuits/` 重編兩份電路，照上面拿掉三個欄位以外的，和這裡的檔逐位元組比對；再從重編的電路寫出驗證金鑰，和 `verifier/vk/` 逐位元組比對。對不上的，印出檔名、提交的檔和重編的檔的 SHA-256，結束碼非零。步驟見 `circuits/README.md`「重建並比對」。
 
 ## 怎麼核對
 
