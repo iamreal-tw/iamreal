@@ -31,9 +31,10 @@ use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
 use iamreal_device_checks::hash::Poseidon2;
-use iamreal_device_checks::list_consequence::{Consequence, list_consequence};
+use iamreal_device_checks::list_consequence::{Consequence, ReadState, list_consequence};
 use iamreal_device_checks::roster_rules::{self, Reason};
 use iamreal_device_checks::scope::{Roster, scope_string};
+use iamreal_device_checks::scoped_id::{parse_scoped_id, short_id};
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 use serde_json::json;
 
@@ -234,6 +235,47 @@ fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
     }
 }
 
+/// The two answers of the server as a C function takes them, read
+/// (spec/list-consequence.md, "Reading the platform table" and "Reading
+/// the card's state") on the date in Taiwan of `now`.
+struct Answers {
+    today: Date,
+    /// The rows of the platforms the device knows, in ascending order.
+    table: Vec<roster_rules::Platform>,
+    state: ReadState,
+    /// The rows of the platforms offered.
+    offered: Vec<roster_rules::Platform>,
+}
+
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, the known
+/// platforms are not a JSON array of platform IDs, none twice, or `now` is
+/// outside the years 2000 to 2049 in Taiwan.
+fn read_answers(
+    platforms_json: &[u8],
+    card_state_json: &[u8],
+    known_platforms_json: &[u8],
+    now: i64,
+) -> Result<Answers, i32> {
+    let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+    let known = platform_ids_of(known_platforms_json)?;
+    let table: Vec<_> = Json::parse(platforms_json)
+        .as_ref()
+        .and_then(read_platforms)
+        .ok_or(IDC_ERR_INPUT)?
+        .into_iter()
+        .filter(|row| known.iter().any(|id| id == row.id()))
+        .collect();
+    let (state, offered) = Json::parse(card_state_json)
+        .and_then(|state| read_card_state(&state, &table, today))
+        .ok_or(IDC_ERR_INPUT)?;
+    Ok(Answers {
+        today,
+        table,
+        state,
+        offered,
+    })
+}
+
 /// The list a card signs: [`accounts_of`], each username 1 or more
 /// printable ASCII characters without `"` and `\` (what every format
 /// allows at most, spec/scope.md).
@@ -365,18 +407,12 @@ pub unsafe extern "C" fn idc_list_consequence(
                 input(accounts_json, accounts_json_len)?,
             )
         };
-        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
-        let known = platform_ids_of(known_platforms_json)?;
-        let table: Vec<_> = Json::parse(platforms_json)
-            .as_ref()
-            .and_then(read_platforms)
-            .ok_or(IDC_ERR_INPUT)?
-            .into_iter()
-            .filter(|row| known.iter().any(|id| id == row.id()))
-            .collect();
-        let (state, offered) = Json::parse(card_state_json)
-            .and_then(|state| read_card_state(&state, &table, today))
-            .ok_or(IDC_ERR_INPUT)?;
+        let Answers {
+            today,
+            state,
+            offered,
+            ..
+        } = read_answers(platforms_json, card_state_json, known_platforms_json, now)?;
         let list = accounts_of(accounts_json)?;
         let consequence =
             list_consequence(&offered, &state, &list, today).map_err(|_| IDC_ERR_INPUT)?;
@@ -417,6 +453,134 @@ pub unsafe extern "C" fn idc_list_consequence(
     })
 }
 
+/// The state of a card as the screen of its accounts shows it, before the
+/// cardholder changes the list (spec/list-consequence.md, "The card's state,
+/// as shown"): JSON in `*out`.
+///
+/// `platforms_json`, `card_state_json`, `known_platforms_json` and `now`
+/// are those of [`idc_list_consequence`], and are read the same way.
+///
+/// ```text
+/// {"last_card_proof":"2026-11-04","days_since":12,"daily_limit":false,
+///  "known_platforms":["threads"],
+///  "rows":[{"platform":"test-example","known":false,"current":"alice-b"},
+///          {"platform":"threads","known":true,"current":"alice","last_declared":"alice",
+///           "switch_count":1,"switches_left":4,"correction_today":false}]}
+/// ```
+///
+/// - `last_card_proof`: the date of the card's last valid record, or null.
+/// - `days_since`: the days from that date to today; null without one.
+/// - `daily_limit`: the card has 3 valid records dated today, so no list
+///   can be declared today (spec/roster-rules.md, check 6).
+/// - `known_platforms`: the platforms of the table the device knows, in
+///   ascending order, offered or not.
+/// - `rows`, in ascending order of platform: one for every platform
+///   offered (`known` true: the entry's `current`, `last_declared` and
+///   `switch_count`, the switches left by the rules, and whether
+///   `correction_date` is today, when a change is a correction), and one
+///   for every kept account (`known` false: `current`, shown as it is and
+///   not changed).
+///
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, when the
+/// known platforms are not a JSON array of platform IDs, none twice, or
+/// when `now` is outside the years 2000 to 2049 in Taiwan.
+///
+/// # Safety
+/// The three inputs point to as many bytes as their lengths say; `out` is
+/// null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_card_status(
+    platforms_json: *const u8,
+    platforms_json_len: usize,
+    card_state_json: *const u8,
+    card_state_json_len: usize,
+    known_platforms_json: *const u8,
+    known_platforms_json_len: usize,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (platforms_json, card_state_json, known_platforms_json) = unsafe {
+            (
+                input(platforms_json, platforms_json_len)?,
+                input(card_state_json, card_state_json_len)?,
+                input(known_platforms_json, known_platforms_json_len)?,
+            )
+        };
+        let Answers {
+            today,
+            table,
+            state,
+            offered,
+        } = read_answers(platforms_json, card_state_json, known_platforms_json, now)?;
+        let card = &state.card;
+        let mut rows: Vec<(&str, serde_json::Value)> = offered
+            .iter()
+            .map(|row| {
+                // Every platform offered has a slot: that is what offers it.
+                let slot = card.slots.get(row.id()).cloned().unwrap_or_default();
+                let value = json!({
+                    "platform": row.id(),
+                    "known": true,
+                    "current": slot.current,
+                    "last_declared": slot.last_declared,
+                    "switch_count": slot.switch_count,
+                    "switches_left": roster_rules::MAX_SWITCHES - slot.switch_count,
+                    "correction_today": slot.correction_date == Some(today),
+                });
+                (row.id(), value)
+            })
+            .chain(state.kept.iter().map(|account| {
+                let value = json!({
+                    "platform": account.platform,
+                    "known": false,
+                    "current": account.username,
+                });
+                (account.platform.as_str(), value)
+            }))
+            .collect();
+        rows.sort_by(|a, b| a.0.cmp(b.0));
+        let value = json!({
+            "last_card_proof": card.last_card_proof.map(|date| date.to_string()),
+            "days_since": card
+                .last_card_proof
+                .map(|date| today.days_since_1970() - date.days_since_1970()),
+            "daily_limit": card.last_card_proof == Some(today)
+                && card.proofs_on_last_date == roster_rules::MAX_PER_DATE,
+            "known_platforms": table.iter().map(|row| row.id()).collect::<Vec<_>>(),
+            "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
+        });
+        serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
+    })
+}
+
+/// The short ID of a scoped ID (spec/scoped-id.md): the first 10
+/// characters of its text form, in `*out`. The screens and the address of
+/// the card's page write it.
+///
+/// `scoped_id`: the 52 characters of a scoped ID in its one spelling, as
+/// the body of [`idc_session_card_state_request`] has it. `IDC_ERR_INPUT`
+/// for anything else.
+///
+/// # Safety
+/// `scoped_id` points to `scoped_id_len` bytes; `out` is null or points to
+/// an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_short_id(
+    scoped_id: *const u8,
+    scoped_id_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let text = unsafe { input(scoped_id, scoped_id_len) }?;
+        parse_scoped_id(text).ok_or(IDC_ERR_INPUT)?;
+        let text = std::str::from_utf8(text).map_err(|_| IDC_ERR_INPUT)?;
+        Ok(short_id(text).ok_or(IDC_ERR_INPUT)?.as_bytes().to_vec())
+    })
+}
+
 /// Opens a session for one card proof on `roster` and puts the number
 /// that names it in `*out`: never 0. The session checks against MOICA's
 /// keys and the files written into the core. Close it with
@@ -437,6 +601,100 @@ pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
         unsafe { out.write(handle) };
         Ok(())
     })
+}
+
+/// For tests only (the feature `test-issuers`): opens a session as
+/// [`idc_session_open`] does, but one that checks certificates and CRLs
+/// against the issuer keys given in place of MOICA's. The files it checks
+/// are still the ones written into the core. `roster` is
+/// `IDC_ROSTER_TEST`: `IDC_ERR_ARGUMENT` for the production roster.
+///
+/// `issuers_json` is a JSON array of `{"issuer":"G2","modulus":"<hex>"}`:
+/// `issuer` is `G2` or `G3`, each at most once, at least one; `modulus` is
+/// the key's RSA modulus, big-endian. `IDC_ERR_INPUT` for anything else.
+///
+/// The feature adds this function and nothing else: Poseidon2, the tree
+/// and the session's own functions stay out of reach, as without it. The
+/// library of an app that goes out is built without the feature and has no
+/// such function (README.md, "檢查都通過了").
+///
+/// # Safety
+/// `issuers_json` is null or points to `issuers_json_len` bytes that stay
+/// unchanged during the call; `out` is null or points to a `uint64_t` the
+/// core may write.
+#[cfg(feature = "test-issuers")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_testing_session_open(
+    roster: u32,
+    issuers_json: *const u8,
+    issuers_json_len: usize,
+    out: *mut u64,
+) -> i32 {
+    if out.is_null() {
+        return IDC_ERR_ARGUMENT;
+    }
+    // SAFETY: `out` is not null, and the caller's to write.
+    unsafe { out.write(0) };
+    code(|| {
+        // Read here, so that the mark stays in every library that has this function.
+        std::hint::black_box(&IDC_TESTING_MARK);
+        // A test roster only: no session of the production roster trusts another key.
+        let roster = match roster_of(roster)? {
+            Roster::Test => Roster::Test,
+            Roster::Production => return Err(IDC_ERR_ARGUMENT),
+        };
+        // SAFETY: the caller's promise.
+        let bytes = unsafe { input(issuers_json, issuers_json_len) }?;
+        let issuers = testing_issuers(bytes).ok_or(IDC_ERR_INPUT)?;
+        let handle = session::open(
+            roster,
+            session::Trust {
+                issuers,
+                artifacts: artifacts::BUILT_IN,
+            },
+        );
+        // SAFETY: as above.
+        unsafe { out.write(handle) };
+        Ok(())
+    })
+}
+
+/// Marks a library built with the feature `test-issuers`, for the build
+/// checks of the apps: an app that goes out must not hold these bytes.
+#[cfg(feature = "test-issuers")]
+#[used]
+static IDC_TESTING_MARK: [u8; 39] = *b"iamreal-device-core:testing-issuer-keys";
+
+/// The issuer keys of [`idc_testing_session_open`].
+#[cfg(feature = "test-issuers")]
+fn testing_issuers(
+    bytes: &[u8],
+) -> Option<Vec<(iamreal_device_checks::issuers::IssuerName, Vec<u8>)>> {
+    use iamreal_device_checks::issuers::IssuerName;
+    let json = Json::parse(bytes)?;
+    let list = json.as_array()?;
+    let mut issuers: Vec<(IssuerName, Vec<u8>)> = Vec::new();
+    for entry in list {
+        let object = entry.as_object()?;
+        if object.len() != 2 {
+            return None;
+        }
+        let name = IssuerName::parse(object.get("issuer")?.as_str()?)?;
+        let hex = object.get("modulus")?.as_str()?.as_bytes();
+        if hex.is_empty() || hex.len() % 2 != 0 || issuers.iter().any(|(n, _)| *n == name) {
+            return None;
+        }
+        let digit = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+        let modulus = hex
+            .chunks(2)
+            .map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?))
+            .collect::<Option<Vec<u8>>>()?;
+        issuers.push((name, modulus));
+    }
+    if issuers.is_empty() {
+        return None;
+    }
+    Some(issuers)
 }
 
 /// Closes a session: the certificate, the name on it and everything the

@@ -58,15 +58,6 @@ export interface FileHeaders {
   readonly contentType: string;
 }
 
-/**
- * How long after a full roster file could not be moved to the data bucket
- * the object tries again: one minute. Long enough that the second try is
- * never the second write of an object within a second, which R2 refuses
- * (https://developers.cloudflare.com/r2/platform/limits/), and short next
- * to the day after which the file is first needed in the bucket.
- */
-export const FULL_FILE_RETRY_MS = 60 * 1000;
-
 /** What the roster's object uses of the data bucket. */
 export type FileBucket = Pick<R2Bucket, "put" | "get">;
 

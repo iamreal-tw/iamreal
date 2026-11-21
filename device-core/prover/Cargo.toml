@@ -18,6 +18,12 @@ crate-type = ["staticlib", "rlib"]
 # Rust code that depends on this crate gets the C functions and nothing
 # else, unless it turns this feature on itself (README.md, "檢查都通過了").
 testing = []
+# For the apps' tests in a simulator, where a card made of test keys does a
+# card proof: adds the C function idc_testing_session_open, which opens a
+# session that trusts the issuer keys its caller gives, and nothing else.
+# What `testing` makes `pub` stays private. The library of an app that
+# goes out is built without it.
+test-issuers = []
 
 [dependencies]
 iamreal-device-checks = { path = "../checks" }
@@ -31,5 +37,5 @@ serde_json.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
-# The tests of tests/ are built against the library with `testing`.
-iamreal-device-core = { path = ".", features = ["testing"] }
+# The tests of tests/ are built against the library with both features.
+iamreal-device-core = { path = ".", features = ["testing", "test-issuers"] }
