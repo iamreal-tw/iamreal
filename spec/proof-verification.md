@@ -32,6 +32,32 @@ circuit cannot close.
   then handled as [`roster-rules.md`](roster-rules.md), "When proofs can no
   longer be trusted", says.
 
+## Source and rebuilding
+
+The Noir source of both circuits is in [`circuits/`](../circuits/)
+(ADR-0038). Anyone can rebuild the compiled circuits and the verification
+keys from it and compare them with the published ones:
+
+1. In the repository's root, run `pnpm install`. It installs
+   `@aztec-foundation/bb.js` 6.0.0, whose native `bb` the rebuild uses.
+2. Run `circuits/rebuild.sh` (macOS on Apple silicon, or Linux on x86-64).
+   It:
+   - downloads `nargo` 1.0.0 from Noir's GitHub release, and stops unless
+     the download's SHA-256 is the one in `circuits/nargo.sha256`; stops
+     unless the SHA-256 of `bb` is the one in `circuits/bb.sha256`;
+   - compiles `card_proof_rs2048` and `card_proof_rs4096`, keeps only
+     `noir_version`, `abi` and `bytecode` (`web/scripts/strip-circuit.mjs`),
+     and compares each, byte for byte, with `web/circuits/<circuit>.json`;
+   - writes the verification key of each rebuilt circuit with
+     `bb write_vk -t noir-recursive`, and compares it, byte for byte, with
+     `verifier/vk/<circuit>.vk`.
+3. For each file that matches, it prints `same:`, the file and its SHA-256.
+   For each that does not, it prints the file, the SHA-256 of the
+   committed file and of the rebuilt one; it then exits non-zero.
+4. The SHA-256 it prints for `verifier/vk/<circuit>.vk` is the circuit's
+   verification key SHA-256 in the table above, the value of a record's
+   `circuit`.
+
 ## Public inputs
 
 Every public input is one element of the BN254 scalar field, below
@@ -84,7 +110,7 @@ another form.
 | 2 | Checks, before calling `bb`, that the decoded proof is exactly 14,656 bytes and that it wrote exactly 23 or 40 public inputs, the count for the key | Inputs of the wrong count would be checked against the wrong statement, or rejected in a way that depends on `bb`'s parser |
 | 3 | Checks, before calling `bb`, that each public input is below `p` | Another implementation of the verifier may reduce a value modulo `p`, giving a second spelling of the same value |
 | 4 | Runs `bb verify -t noir-recursive`, and only that. A proof that fails is rejected; it is not tried again under another setting | Under `-t noir-recursive-no-zk` the same key accepts a proof made without zero knowledge (13,120 bytes); such a proof does not hide the witness |
-| 5 | Treats every outcome other than success as a rejection: a non-zero exit code, a crash, an exception, a timeout. Runs `bb` where a crash does not take the service down (a child process) | Barretenberg's native verifier can throw or abort on a crafted proof instead of returning failure (advisory GHSA-73xc-j27q-wg75, which lists `@aztec/bb.js`, `@aztec-foundation/bb.js` and `barretenberg-rs`; `bb` 6.0.0 contains the same verifier). bb.js `verifyProof` throws on malformed input instead of returning `false` |
+| 5 | Treats every outcome other than success as a rejection: a non-zero exit code, a crash, an exception, a timeout. Runs `bb` where a crash does not take the service down (a child process) | Barretenberg's native verifier can throw or abort on a crafted proof instead of returning failure (advisory [GHSA-73xc-j27q-wg75](https://github.com/AztecProtocol/aztec-packages/security/advisories/GHSA-73xc-j27q-wg75), which lists `@aztec/bb.js`, `@aztec-foundation/bb.js` and `barretenberg-rs`; `bb` 6.0.0 contains the same verifier). bb.js `verifyProof` throws on malformed input instead of returning `false` |
 | 6 | Builds every public input from the record as [`record.md`](record.md) says, never from a file that came with the proof | A proof verifies for whatever inputs it was made for; only the comparison with the record gives them meaning |
 
 Duplicates and replay are handled by the roster rules, on the record's
@@ -135,8 +161,6 @@ before launch (ADR-0012).
 
 ## Open items
 
-- **Where the circuit source is published**, with the instructions to
-  rebuild the verification keys and compare their SHA-256.
 - **A real proof as a test vector.** One proof per circuit with its public
   inputs, made with test keys, for testing a verifier's handling of the
   checks above.
