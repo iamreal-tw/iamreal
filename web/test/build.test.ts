@@ -6,7 +6,11 @@
 // `pnpm local`) holds MOICA's keys and the real component too and nothing
 // of the tests, but signs the test roster's scope string and knows the test
 // roster's platforms; it fetches the CRL from its own origin (the local
-// server), so it names no data domain.
+// server), so it names no data domain. The test site's build (mode
+// "testsite", what a deploy of test.iamreal.tw serves at /proof) is the local
+// one with the test roster's data domain, https://test-data.iamreal.tw, and
+// the mark of a test roster (design/copy/test-site.md) with the date it is
+// built with.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -24,7 +28,7 @@ function filesUnder(dir: string): string[] {
 }
 
 /** The scripts, HTML and CSS of a build in `mode`. */
-async function codeOf(mode: "production" | "localcard"): Promise<string> {
+async function codeOf(mode: "production" | "localcard" | "testsite"): Promise<string> {
   const out = join(web, "test-output", `build-check-${mode}`);
   rmSync(out, { recursive: true, force: true });
   await build({ root: web, configFile: join(web, "vite.config.ts"), mode, logLevel: "silent", build: { outDir: out, emptyOutDir: true } });
@@ -74,6 +78,33 @@ test("the local build (pnpm local): MOICA's keys and component, nothing of the t
   assert.ok(code.includes("Example (no real service)"), "the local build knows test-example");
 });
 
+/** The date a test site's build is given: when its roster was last cleared (worker/wrangler.jsonc has the deployed one). */
+const CLEARED_ON = "2026-10-31";
+/** The sentence beside the mark of a test roster (design/copy/test-site.md), up to its date. */
+const MARK = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8"))![1]!;
+
+test("the test site's build: MOICA's keys and component, nothing of the tests, the test roster's scope string, its data domain and no other address, the mark of a test roster", async () => {
+  process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = CLEARED_ON;
+  const code = await codeOf("testsite").finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+  realCardOnly(code, "testsite", "https://test-data.iamreal.tw");
+  assert.ok(code.includes("iamreal-test:public:0__________"), "the test roster's scope string");
+  assert.ok(code.includes("Example (no real service)"), "the test site's build knows test-example");
+  assert.ok(MARK.startsWith("測試名冊") && code.includes(MARK) && code.includes(CLEARED_ON), `the mark of a test roster, "${MARK}", and the date ${CLEARED_ON}`);
+  assert.ok(!code.includes("https://data.iamreal.tw"), "not the production roster's data domain");
+});
+
+test("no other build has the mark of a test roster", async () => {
+  for (const mode of ["production", "localcard"] as const) assert.ok(!(await codeOf(mode)).includes("測試名冊"), mode);
+});
+
+test("the test site's build is not made without the date its roster was last cleared on, or with one the calendar does not have", async () => {
+  for (const date of [undefined, "", "2026-11-31", "20261120", "2026-11-20 "]) {
+    if (date === undefined) delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON;
+    else process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = date;
+    await assert.rejects(codeOf("testsite"), /IAMREAL_TEST_ROSTER_CLEARED_ON/, JSON.stringify(date)).finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+  }
+});
+
 test("the local target signs the test roster's scope string; the production target the public roster's", async () => {
   const local = await import("../src/target-local.ts");
   const production = await import("../src/target.ts");
@@ -88,4 +119,16 @@ test("the local target signs the test roster's scope string; the production targ
   assert.equal(local.DATA_ORIGIN, "");
   assert.deepEqual(local.PRESENTATIONS.map((p) => p.platform), ["test-example", "threads"]);
   assert.deepEqual(production.PRESENTATIONS.map((p) => p.platform), ["threads"]);
+});
+
+test("the test site's target is the local one but for the data domain: the test roster's, https://test-data.iamreal.tw", async () => {
+  const site = await import("../src/target-test-site.ts");
+  const local = await import("../src/target-local.ts");
+  const { scopeOf } = await import("iamreal-protocol/scope.ts");
+  assert.equal(scopeOf(site.ROSTER), "iamreal-test:public:0__________");
+  assert.deepEqual(site.ISSUERS, local.ISSUERS);
+  assert.equal(site.COMPONENT_ORIGIN, local.COMPONENT_ORIGIN);
+  assert.equal(site.IDLE_LIMIT_MS, local.IDLE_LIMIT_MS);
+  assert.deepEqual(site.PRESENTATIONS, local.PRESENTATIONS);
+  assert.equal(site.DATA_ORIGIN, "https://test-data.iamreal.tw");
 });

@@ -15,6 +15,7 @@ import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
 import type { Presentation } from "./platforms.ts";
 import { TEST_EXAMPLE } from "./presentations/test-example.ts";
 import { THREADS } from "./presentations/threads.ts";
+import type { TestRosterMark } from "./target.ts";
 import type { Roster } from "iamreal-protocol/scope.ts";
 
 /** The test roster: never the public roster's scope string. */
@@ -31,3 +32,6 @@ export const COMPONENT_ORIGIN = "http://localhost:61161";
 export const DATA_ORIGIN = "";
 
 export const IDLE_LIMIT_MS: number = IDLE_MS;
+
+/** The pages of the local server say which roster it is themselves; this page carries no mark. */
+export const TEST_ROSTER_MARK: TestRosterMark | null = null;

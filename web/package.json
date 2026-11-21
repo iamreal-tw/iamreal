@@ -5,6 +5,7 @@
   "scripts": {
     "typecheck": "tsc -p .",
     "build": "vite build --mode production",
+    "build:test-site": "vite build --mode testsite",
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "test:e2e": "node --experimental-strip-types test/e2e/run.ts",
     "test:ui": "node --experimental-strip-types test/e2e/ui.ts",

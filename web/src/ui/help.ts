@@ -5,7 +5,9 @@ import "./style.css";
 import { COPY } from "./copy.ts";
 import { el, replace } from "./dom.ts";
 import { logo } from "./logo.ts";
+import { showTestRosterMark } from "./test-roster.ts";
 
+showTestRosterMark();
 const topic = new URLSearchParams(location.search).get("topic");
 const titles: Record<string, string> = COPY.links;
 const title = topic !== null && Object.hasOwn(titles, topic) ? titles[topic]! : null;
