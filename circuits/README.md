@@ -69,7 +69,7 @@
 | `bb` | 6.0.0 | `@aztec-foundation/bb.js` 6.0.0 附的原生執行檔，和 `web/` 用的同一個套件；`find-bb.sh` 照 `bb.sha256` 核對 |
 | `@noir-lang/noir_js` | 1.0.0 | 測試用，和 `web/` 釘同一個版本（`package.json`、根目錄的 `pnpm-lock.yaml`） |
 | `@aztec-foundation/bb.js` | 6.0.0 | 測試用（電路外的 Poseidon2）；`bb` 也從它來 |
-| `circom` | 2.2.3 | 只有逐案比對的 circom 那一欄用，版本是 `zkid-commit` 那個提交的 `circomkit.json` 寫的（`build-circom.sh` 檢查）。CI 用 `fetch-circom.sh`：從 circom 在 GitHub 的 release 下載 `circom-linux-amd64`，照 `circom.sha256` 核對；其他電腦自己裝 |
+| `circom` | 2.2.3 | 只有逐案比對的 circom 那一欄用，版本是 `zkid-commit` 那個提交的 `circomkit.json` 寫的；`build-circom.sh` 檢查 PATH 上的是 2.2.3。CI 用 `fetch-circom.sh`：從 circom 在 GitHub 的 release 下載 `circom-linux-amd64`，照 `circom.sha256` 核對；其他電腦自己裝 |
 
 電路引用的 Noir 函式庫（`lib/Nargo.toml` 用標籤寫，下表是標籤指到的提交）：
 

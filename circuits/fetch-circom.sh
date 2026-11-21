@@ -4,11 +4,12 @@
 # .tools/circom/<platform>/. Prints the path of the `circom` executable.
 # Nothing is put in place if the hash does not match.
 #
-# circom.sha256 is the one place the version is written: each line is the
+# circom.sha256 is the one place the download is pinned: each line is the
 # SHA-256 of a release asset and its path under
 # https://github.com/iden3/circom/releases/download/, the release's tag
-# first. circom 2.2.3 is the version the commit in zkid-commit names
-# (build-circom.sh checks it). Only x86-64 Linux, which CI runs on, is
+# first. build-circom.sh checks that the circom on PATH is 2.2.3, the
+# version the circomkit.json of the commit in zkid-commit names; a change
+# of version is made in both. Only x86-64 Linux, which CI runs on, is
 # there; elsewhere install circom 2.2.3 yourself (README.md).
 #
 #   ./fetch-circom.sh
