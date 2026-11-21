@@ -409,6 +409,15 @@ export class Roster extends DurableObject<Env> {
    */
   readonly #paused: boolean;
   /**
+   * Whether the settings name another object than this one: the object of a
+   * test roster that was cleared (README.md, "清空測試名冊"). No request
+   * reaches it any more, but it is not deleted, and its alarm was set when
+   * it still was the roster's. It shares the data bucket with the object
+   * that took its place, so it does no timed work and asks for no further
+   * alarm: it would publish its roster over the new one's.
+   */
+  readonly #replaced: boolean;
+  /**
    * Whether the views the pages read (views.ts) reflect every record, as
    * the object found or made them when it started. When they do not, a page
    * would show a roster that is not this one (no card at all, or a card as
@@ -440,6 +449,10 @@ export class Roster extends DurableObject<Env> {
     // other (settings.ts) the object does not start. The Worker reads the
     // same settings before it asks the object, so it does not get this far.
     this.settings = rosterSettingsOf(env);
+    this.#replaced = !ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME));
+    // One line each time such an object starts. That is once after the deploy that replaced it, when the alarm it
+    // had set rings; an object that is the roster's and says this at every start has the comparison wrong.
+    if (this.#replaced) console.log(JSON.stringify({ event: "roster_object_replaced", object: ctx.id.name ?? null }));
     const sql = ctx.storage.sql;
     for (const statement of TABLES) sql.exec(statement);
     // A new roster: no record, a state computed by the rules of this build,
@@ -1282,7 +1295,7 @@ export class Roster extends DurableObject<Env> {
    * the two differ only in the test build.
    */
   protected async setAlarmForTimedWork(): Promise<void> {
-    const dues = this.timedWork().map((work) => work.due()).filter((due) => due !== null);
+    const dues = this.#replaced ? [] : this.timedWork().map((work) => work.due()).filter((due) => due !== null);
     if (dues.length === 0) return this.ctx.storage.deleteAlarm();
     const wanted = Date.now() + Math.max(MIN_ALARM_WAIT_MS, Math.min(...dues) - now().getTime());
     const set = await this.ctx.storage.getAlarm();
@@ -1291,8 +1304,8 @@ export class Roster extends DurableObject<Env> {
 
   /** The alarm: each piece of timed work that is due runs once, and the alarm is set again. */
   override async alarm(): Promise<void> {
-    // With tables of another version the object does nothing, and asks for no further alarm.
-    if (!this.#tablesAreThisVersion) return;
+    // With tables of another version the object does nothing, and asks for no further alarm. Nor does the object of a roster that was cleared.
+    if (!this.#tablesAreThisVersion || this.#replaced) return;
     const time = now().getTime();
     for (const work of this.timedWork()) {
       const due = work.due();

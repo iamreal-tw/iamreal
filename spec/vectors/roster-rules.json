@@ -1,7 +1,7 @@
 {
   "spec": "roster-rules",
   "status": "draft",
-  "rules_version": 1,
+  "rules_version": 2,
   "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `roster` says whose platform table applies (spec/scope.md): production has threads, a test roster test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none.",
   "cases": [
     {

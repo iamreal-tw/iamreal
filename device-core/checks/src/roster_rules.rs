@@ -22,7 +22,7 @@ use crate::username_format::{UsernameFormat, is_any_username};
 /// The version number of these rules (spec/roster-rules.md, "The version
 /// number"). Go's `roster.RulesVersion` and TypeScript's `RULES_VERSION`
 /// are the same number.
-pub const RULES_VERSION: u32 = 1;
+pub const RULES_VERSION: u32 = 2;
 
 /// At most 3 valid records of a card have the same date (check 6, `daily_limit`).
 pub const MAX_PER_DATE: u32 = 3;

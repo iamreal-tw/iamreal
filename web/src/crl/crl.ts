@@ -10,6 +10,7 @@ export type UnusableReason =
   | "not_usable_der"
   | "not_usable_algorithm"
   | "not_usable_signature"
+  | "not_usable_too_many_extensions"
   | "not_usable_duplicate_extension"
   | "not_usable_critical_extension"
   | "not_usable_delta"
@@ -55,11 +56,21 @@ const OID_DELTA = "2.5.29.27";
 const OID_IDP = "2.5.29.28";
 const CTX0 = 0xa0;
 
+/** The most extensions the CRL, and each entry, may have (spec/revocation-tree.md, "Which CRLs"). */
+export const MAX_EXTENSIONS = 16;
+
+/**
+ * Reads `Extensions`. Every extension is read, so that one that is not DER
+ * makes the file not DER, but only the first MAX_EXTENSIONS + 1 are kept:
+ * enough to tell there are too many.
+ */
 function readExtensions(der: Uint8Array, seq: Tlv): Extension[] {
   if (seq.tag !== TAG.SEQUENCE) throw new DerError("Extensions is not a SEQUENCE");
-  const exts = children(der, seq);
-  if (exts.length === 0) throw new DerError("empty Extensions");
-  return exts.map((e) => {
+  if (seq.contentStart === seq.end) throw new DerError("empty Extensions");
+  const out: Extension[] = [];
+  for (let p = seq.contentStart; p < seq.end; ) {
+    const e = readTlv(der, p, seq.end);
+    p = e.end;
     if (e.tag !== TAG.SEQUENCE) throw new DerError("Extension is not a SEQUENCE");
     const parts = children(der, e);
     const oid = parts[0];
@@ -75,8 +86,10 @@ function readExtensions(der: Uint8Array, seq: Tlv): Extension[] {
     }
     const value = parts[i];
     if (!value || value.tag !== TAG.OCTET_STRING || i + 1 !== parts.length) throw new DerError("malformed Extension");
-    return { oid: oidString(content(der, oid)), critical, value: content(der, value) };
-  });
+    const extension = { oid: oidString(content(der, oid)), critical, value: content(der, value) };
+    if (out.length <= MAX_EXTENSIONS) out.push(extension);
+  }
+  return out;
 }
 
 /** Parses a DER CertificateList strictly (crl.Parse). Throws DerError if it is not one. */
@@ -142,6 +155,7 @@ export function parseCrl(der: Uint8Array): ParsedCrl {
 }
 
 function checkExtensions(exts: Extension[], where: string): void {
+  if (exts.length > MAX_EXTENSIONS) throw new Unusable("not_usable_too_many_extensions", `${where}: more than ${MAX_EXTENSIONS} extensions`);
   for (let i = 0; i < exts.length; i++) {
     for (let j = 0; j < i; j++) {
       if (exts[i]!.oid === exts[j]!.oid) throw new Unusable("not_usable_duplicate_extension", `${where}: ${exts[i]!.oid} twice`);
@@ -152,13 +166,19 @@ function checkExtensions(exts: Extension[], where: string): void {
   }
 }
 
-/** A non-negative DER INTEGER (minimal encoding) as a bigint, or null. */
-function readNonNegativeInteger(value: Uint8Array): bigint | null {
+/** The most content bytes a cRLNumber may have, a leading 00 included (RFC 5280 section 5.2.3). */
+export const MAX_CRL_NUMBER_BYTES = 20;
+
+/**
+ * A cRLNumber: a non-negative DER INTEGER (minimal encoding) of at most
+ * MAX_CRL_NUMBER_BYTES content bytes, as a bigint, or null.
+ */
+function readCrlNumber(value: Uint8Array): bigint | null {
   try {
     const t = readTlv(value, 0);
     if (t.tag !== TAG.INTEGER || t.end !== value.length) return null;
     const c = content(value, t);
-    if (c.length === 0) return null;
+    if (c.length === 0 || c.length > MAX_CRL_NUMBER_BYTES) return null;
     if (c.length > 1 && ((c[0] === 0 && !(c[1]! & 0x80)) || (c[0] === 0xff && c[1]! & 0x80))) return null;
     if (c[0]! & 0x80) return null; // negative
     let x = 0n;
@@ -211,8 +231,8 @@ export async function checkCrl(c: ParsedCrl, issuerKey: CryptoKey, bits: number)
   }
   const numberExt = c.extensions.find((x) => x.oid === OID_CRL_NUMBER);
   if (!numberExt) throw new Unusable("not_usable_crl_number", "no cRLNumber");
-  const crlNumber = readNonNegativeInteger(numberExt.value);
-  if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber");
+  const crlNumber = readCrlNumber(numberExt.value);
+  if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber, or longer than 20 bytes");
 
   const keys = new Uint32Array(c.entries.length * KEY_WORDS);
   let count = 0;

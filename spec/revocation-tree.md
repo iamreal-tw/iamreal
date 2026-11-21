@@ -23,11 +23,14 @@ The device needs only the CRL of its own issuer.
 
 A CRL is usable if:
 
-- it is a `CertificateList` (RFC 5280 section 5) in DER, signed with
-  sha256WithRSAEncryption with NULL parameters (both in `tbsCertList` and
-  outside it), and the signature verifies under the issuer key;
-- it has a `cRLNumber` extension holding a non-negative integer. The device
-  compares CRL numbers ("Who checks what");
+- it is a `CertificateList` (RFC 5280 section 5) in DER, with its times
+  spelled as in "Times" below, signed with sha256WithRSAEncryption with
+  NULL parameters (both in `tbsCertList` and outside it), and the signature
+  verifies under the issuer key;
+- it has a `cRLNumber` extension holding a non-negative DER INTEGER in its
+  shortest encoding, with at most 20 content bytes (a leading `00` counts),
+  the most RFC 5280 section 5.2.3 allows. The device compares CRL numbers
+  ("Who checks what");
 - it is a complete CRL for everything the key issued: it has neither a
   `deltaCRLIndicator` nor an `issuingDistributionPoint` extension, critical
   or not; no extension appears twice, in the CRL or in an entry; and no
@@ -37,6 +40,14 @@ A CRL is usable if:
   entry only a non-critical `reasonCode`. If MOICA starts partitioning its
   CRLs, devices stop rather than build an incomplete tree, and this document
   changes;
+- the CRL has at most 16 extensions, and so does each entry. RFC 5280
+  defines 7 extensions of a CRL (sections 5.2.1 to 5.2.7) and 3 of an entry
+  (5.3.1 to 5.3.3). MOICA's carry 2 and 1: every one of the 16 CRLs in the
+  test site's archive on 2026-11-21 (`test-data.iamreal.tw`, G2 and G3, CRL
+  numbers 2026111917 to 2026112110). The bound keeps the time and memory of
+  reading a file in proportion to its size: the archive keeps every file the mirror
+  downloads, signed or not ("Archive index"), and every re-verifier reads
+  each of them;
 - every serial number in `revokedCertificates` is a valid DER INTEGER in its
   shortest encoding, not negative, with at most 20 content bytes (a leading
   `00` counts), so that it gives a key (below);
@@ -47,6 +58,28 @@ A CRL that fails any of these gives no tree. `crl/` stops with an error; the
 device does not make a proof.
 
 The **CRL date** is `thisUpdate` converted to a date in Taiwan (UTC+8).
+
+### Times
+
+`thisUpdate`, `nextUpdate` and the `revocationDate` of every entry are read
+only in the two spellings RFC 5280 gives them (sections 4.1.2.5.1 and
+4.1.2.5.2, which sections 5.1.2.4 to 5.1.2.6 apply to CRLs):
+
+- `UTCTime` `YYMMDDHHMMSSZ`: twelve digits, then `Z`. `YY` from `50` to `99`
+  is 1950 to 1999, from `00` to `49` is 2000 to 2049;
+- `GeneralizedTime` `YYYYMMDDHHMMSSZ`: fourteen digits, then `Z`, for any
+  year from 0000 to 9999.
+
+The time must exist in the Gregorian calendar, extended backwards to year 0:
+month `01` to `12`, a day the month has, hour `00` to `23`, minute and second
+`00` to `59`. Nothing else is read: no offset such as `+0800`, not even
+`+0000`; no time without seconds; no fraction of a second; no lowercase `z`.
+Which of the two types holds a time is not checked against its year: a
+`GeneralizedTime` in 2026 is read. A file with a time spelled in any other
+way is not a DER `CertificateList`.
+
+MOICA's CRLs, as checked on 2026-11-19, spell every time as a `UTCTime` of
+twelve digits and `Z`.
 
 ## Tree
 
@@ -175,7 +208,7 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | Field | Format |
 |---|---|
 | `issuer` | `G2` or `G3`: the key under which the RSA signature verifies, whatever the algorithm fields say; `-` if neither |
-| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable or negative |
+| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable, negative or longer than 20 content bytes, or if the CRL has more than 16 extensions |
 | `this_update`, `next_update` | UTC, `YYYY-MM-DDTHH:MM:SSZ`; `-` if missing |
 | `crl_date` | The CRL date, `YYYY-MM-DD`; `-` if `thisUpdate` is missing |
 | `sha256` | SHA-256 of the file, 64 lowercase hex digits |
@@ -185,16 +218,17 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 
 | # | Code | The file |
 |---|---|---|
-| 1 | `not_usable_der` | is not a DER `CertificateList` |
+| 1 | `not_usable_der` | is not a DER `CertificateList`, or has a time not spelled as in "Times" |
 | 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
 | 3 | `not_usable_signature` | has a signature that verifies under neither key |
-| 4 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
-| 5 | `not_usable_critical_extension` | has a critical extension of the CRL |
-| 6 | `not_usable_delta` | has `deltaCRLIndicator` (see row 7 for a file that also has `issuingDistributionPoint`) |
-| 7 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 6 and 7 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
-| 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER |
-| 9 | `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
-| 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
+| 4 | `not_usable_too_many_extensions` | has more than 16 extensions of the CRL |
+| 5 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
+| 6 | `not_usable_critical_extension` | has a critical extension of the CRL |
+| 7 | `not_usable_delta` | has `deltaCRLIndicator` (see row 8 for a file that also has `issuingDistributionPoint`) |
+| 8 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 7 and 8 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
+| 9 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER of at most 20 content bytes |
+| 10 | `not_usable_too_many_extensions`, `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with more than 16 extensions, an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
+| 11 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
 
 **Order.** Lines are sorted by `issuer` (bytes: `-` before `G2` before `G3`),
 then `crl_number` as a number with `-` before every number, then `sha256`.
@@ -233,6 +267,6 @@ prints; a serial number in the tree has none.
 [`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
-usable, its reason code and its root (`expected.json`). Its `times/` is not
-a vector of this document: which spellings of a time are accepted is not
-specified yet.
+usable, its reason code and its root (`expected.json`). Its `times/`: CRLs
+whose times are spelled in many ways, each with its line of the archive
+index (`times/expected.json`).
