@@ -17,6 +17,39 @@ pub fn parse_challenge(challenge: &[u8]) -> Option<Date> {
     Date::parse(&challenge[..10])
 }
 
+/// Why the device does not take a challenge (spec/challenge.md, "The
+/// cardholder's device").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChallengeProblem {
+    /// Not a challenge in its one spelling.
+    Malformed,
+    /// Its date is not today in Taiwan.
+    NotToday,
+}
+
+impl ChallengeProblem {
+    /// The reason code of the specification.
+    pub fn code(self) -> &'static str {
+        match self {
+            ChallengeProblem::Malformed => "challenge_malformed",
+            ChallengeProblem::NotToday => "challenge_not_today",
+        }
+    }
+}
+
+/// The device's check of a challenge the server issued: in its one
+/// spelling, and dated `today`, the date in Taiwan by the device's clock.
+/// Gives the challenge's date. A challenge that is not in its one spelling
+/// is `Malformed`, whatever date it starts with.
+pub fn check_challenge(challenge: &[u8], today: Date) -> Result<Date, ChallengeProblem> {
+    let date = parse_challenge(challenge).ok_or(ChallengeProblem::Malformed)?;
+    if date == today {
+        Ok(date)
+    } else {
+        Err(ChallengeProblem::NotToday)
+    }
+}
+
 /// `current_time` for a date: the decimal integer `YYMMDD155959`, the last
 /// second of that date in Taiwan, written in UTC.
 pub fn current_time(date: Date) -> u64 {

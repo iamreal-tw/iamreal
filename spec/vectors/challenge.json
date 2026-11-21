@@ -147,5 +147,127 @@
       "challenge": " 2026-11-16.000G40R40M30E209185GR38E1W",
       "reason": "leading space"
     }
+  ],
+  "device": [
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "now": 1794758400,
+      "now_utc": "2026-11-15T16:00:00Z",
+      "today": "2026-11-16",
+      "result": "ok",
+      "note": "the first second of the date in Taiwan; the date in UTC is the day before"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "ok",
+      "note": "noon in Taiwan"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "now": 1794844799,
+      "now_utc": "2026-11-16T15:59:59Z",
+      "today": "2026-11-16",
+      "result": "ok",
+      "note": "the last second of the date in Taiwan"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "now": 1794844800,
+      "now_utc": "2026-11-16T16:00:00Z",
+      "today": "2026-11-17",
+      "result": "challenge_not_today",
+      "note": "yesterday's challenge, one second after midnight in Taiwan; the date in UTC is still the challenge's"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W",
+      "now": 1794758399,
+      "now_utc": "2026-11-15T15:59:59Z",
+      "today": "2026-11-15",
+      "result": "challenge_not_today",
+      "note": "tomorrow's challenge, one second before midnight in Taiwan"
+    },
+    {
+      "challenge": "2026-11-17.000G40R40M30E209185GR38E1W",
+      "now": 1794848400,
+      "now_utc": "2026-11-16T17:00:00Z",
+      "today": "2026-11-17",
+      "result": "ok",
+      "note": "01:00 in Taiwan; the date in UTC is the day before"
+    },
+    {
+      "challenge": "2026-11-17.000G40R40M30E209185GR38E1W",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_not_today",
+      "note": "tomorrow's challenge"
+    },
+    {
+      "challenge": "2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
+      "now": 1798732800,
+      "now_utc": "2026-12-31T16:00:00Z",
+      "today": "2027-01-01",
+      "result": "ok",
+      "note": "the first second of the year in Taiwan"
+    },
+    {
+      "challenge": "2027-01-01.BQC3JFKB1AYNR9ZE3YV4H4AYRR",
+      "now": 1798732799,
+      "now_utc": "2026-12-31T15:59:59Z",
+      "today": "2026-12-31",
+      "result": "challenge_not_today",
+      "note": "the last second of the year before in Taiwan"
+    },
+    {
+      "challenge": "2028-02-29.XN3EZGS7BY184KGTFKYAKE4DCW",
+      "now": 1835366400,
+      "now_utc": "2028-02-28T16:00:00Z",
+      "today": "2028-02-29",
+      "result": "ok",
+      "note": "a leap day"
+    },
+    {
+      "challenge": "2026-11-16.000g40r40m30e209185gr38e1w",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_malformed",
+      "note": "lowercase letters, dated today"
+    },
+    {
+      "challenge": "2026-11-16.000G40R40M30E209185GR38E1W\n",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_malformed",
+      "note": "trailing line feed, dated today"
+    },
+    {
+      "challenge": "2026-11-16",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_malformed",
+      "note": "the date alone"
+    },
+    {
+      "challenge": "",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_malformed",
+      "note": "empty"
+    },
+    {
+      "challenge": "2026-11-17.000g40r40m30e209185gr38e1w",
+      "now": 1794801600,
+      "now_utc": "2026-11-16T04:00:00Z",
+      "today": "2026-11-16",
+      "result": "challenge_malformed",
+      "note": "not in its one spelling and not dated today: malformed is reported"
+    }
   ]
 }
