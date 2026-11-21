@@ -414,6 +414,41 @@ describe("a full roster file that cannot be moved", () => {
     assert.equal((await checkRoster(worker)).length, 2 * LINES_PER_FILE + 5);
     assert.equal(notMoved(), 10);
   });
+
+  test("a file the daily publication moves, after moves that failed, is a move that succeeded: the next failure waits a minute", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    const at = async (date: string, time: string): Promise<void> => {
+      await worker.setClock(tw(date, time));
+      await worker.roster.runAlarm();
+    };
+
+    // The first file cannot be moved, twice in a row: the next try would be two minutes after the second, at 00:01.
+    await worker.setClock(tw("2026-11-20", "23:58:00"));
+    await worker.roster.setBucketFault({ key: FILE, how: "put fails" });
+    await fillTo(root, LINES_PER_FILE);
+    await worker.roster.runAlarm();
+    const failed = notMoved();
+    await at("2026-11-20", "23:59:00");
+    assert.equal(notMoved(), failed + 1);
+
+    // At midnight the move is not due yet; the publication moves the file before it publishes.
+    await worker.roster.setBucketFault(null);
+    await at("2026-11-21", "00:00:00");
+    await untilDirectoryIs([rosterFileName(0), hashListName(0)]);
+    assert.equal(notMoved(), failed + 1);
+    assert.equal((await worker.roster.stored()).records.length, 0, "the object no longer keeps the file's records");
+
+    // The second file cannot be moved: that is a first failure, tried again a minute later.
+    await worker.setClock(tw("2026-11-21", "00:05:00"));
+    await worker.roster.setBucketFault({ key: `roster/${rosterFileName(LINES_PER_FILE)}`, how: "put fails" });
+    await fillTo(root, 2 * LINES_PER_FILE);
+    await worker.roster.runAlarm();
+    assert.equal(notMoved(), failed + 2);
+    await at("2026-11-21", "00:06:00");
+    assert.equal(notMoved(), failed + 3, "the try a minute after the first failure");
+    await worker.roster.setBucketFault(null);
+  });
 });
 
 describe("a roster file fills while challenges keep being issued", () => {
