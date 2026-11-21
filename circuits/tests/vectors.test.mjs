@@ -1,4 +1,5 @@
-// Fixed answers for the circuit's field hash (tests/vectors/poseidon2.json).
+// Fixed answers for the circuit's field hash (spec/vectors/poseidon2.json,
+// the file the Go, TypeScript and Rust implementations test against too).
 //
 // Every other expected hash in the tests is computed at run time with bb.js.
 // If a library upgrade changed how Poseidon2 absorbs its inputs, the circuit
@@ -15,7 +16,7 @@ import { limbs, SMT_DEPTH } from "./lib/inputs.mjs";
 import { ROOT, runNoir } from "./lib/run.mjs";
 import { Smt } from "./lib/smt.mjs";
 
-const vectors = JSON.parse(readFileSync(join(ROOT, "tests", "vectors", "poseidon2.json"), "utf8"));
+const vectors = JSON.parse(readFileSync(join(ROOT, "..", "spec", "vectors", "poseidon2.json"), "utf8"));
 const big = (s) => BigInt(s);
 const hexOf = (x) => "0x" + x.toString(16);
 const zeros = (n) => Array(n).fill("0x0");

@@ -1,4 +1,4 @@
-// Writes tests/vectors/poseidon2.json: fixed answers for the circuit's field
+// Writes spec/vectors/poseidon2.json: fixed answers for the circuit's field
 // hash, computed outside the circuit with Barretenberg's own Poseidon2
 // (bb.js). Run it once and commit the file; the tests read the file and never
 // recompute it. If a rerun changes the file, the hash changed: nullifiers and
@@ -106,5 +106,5 @@ const out = {
     }),
   },
 };
-writeFileSync(join(dirname(fileURLToPath(import.meta.url)), "poseidon2.json"), JSON.stringify(out, null, 2) + "\n");
+writeFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "spec", "vectors", "poseidon2.json"), JSON.stringify(out, null, 2) + "\n");
 process.exit(0);

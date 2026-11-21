@@ -2,7 +2,7 @@ use card_proof::hash::{chunked_hash, hash_2, hash_3};
 use card_proof::smt::{assert_not_in_tree, SMT_DEPTH};
 
 // ONLY FOR TESTS: the circuit's field hash on its own, so its values can be
-// compared with the fixed answers in tests/vectors/poseidon2.json. Returns
+// compared with the fixed answers in spec/vectors/poseidon2.json. Returns
 // hash_2, hash_3 and the hash chain over 18 elements (the nullifier of a
 // signature with these limbs), and checks one non-membership proof.
 fn main(
