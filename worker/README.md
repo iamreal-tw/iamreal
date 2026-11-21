@@ -12,7 +12,7 @@
 | 名冊的 Durable Object：題目表、紀錄、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
-| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過 | 在 Cloudflare 上公布過的紀錄：這一版還沒部署 |
+| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)） | 在 Cloudflare 上公布有紀錄的名冊：測試名冊還是 0 筆 |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | 其餘的訪客頁面：查詢頁、名冊頁、常見問題、怎麼驗證、掛上去（[#72](https://github.com/iamreal-tw/iamreal/issues/72)）。首頁上連到它們的連結現在是 `404` |
 | 首頁 `/`、島民證明 `/p/<短編號>`、過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時把 `web/` 的建置放進 Static Assets：測試網站的建置模式在 [#69](https://github.com/iamreal-tw/iamreal/issues/69)，在那之前部署出去的 `/proof` 是 `404` |
 | 測試專用的建置和測試的工具 | |
@@ -329,7 +329,11 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 - 儲存桶的生命週期規則：刪掉 `roster/card-state/` 底下超過 7 天的物件（ADR-0027「留多久」）。這是儲存桶的設定，程式不刪卡片狀態檔；沒設的話每天多一個檔，一直留著。測試的儲存桶 `iamreal-test-data` 已經有這條規則：名稱 `card-state-7-days`，前綴 `roster/card-state/`，物件建立 7 天後刪除（2026-11-20 在儀表板確認，[#185](https://github.com/iamreal-tw/iamreal/issues/185)）。正式的儲存桶建立時同樣要設（[#111](https://github.com/iamreal-tw/iamreal/issues/111)）。
 - 部署後第一個台灣午夜過後，看 `https://test-data.iamreal.tw/roster/fingerprints.jsonl` 有沒有那一天的一行、`roster/card-state/<那一天>.jsonl` 在不在、兩個的 `Cache-Control` 是不是 `public, max-age=60`；`wrangler tail` 有沒有 `roster_not_published`。然後用 `iamreal-verify -roster test -data https://test-data.iamreal.tw/` 重驗一次。
-- 測試名冊在這一版之前已經有紀錄：第一次公布會把它們全部算進第一行，卡片狀態檔是那時存著的每一張。
+- **第一次公布看過了**（2026-11-21 03:30 UTC 看的；這一版是 2026-11-20 13:40 UTC 前後部署的）：
+  - 指紋檔在 2026-11-20 16:00:03 UTC 寫出（`Last-Modified`），一行：`{"date":"2026-11-21","count":0,"fingerprint":"000…0"}`（64 個 0）。`GET /api/v1/fingerprint` 回同一行。
+  - `roster/card-state/2026-11-21.jsonl` 在，0 位元組（`Last-Modified` 16:00:02 UTC）。兩個物件都是 `Cache-Control: public, max-age=60`、`Content-Type: application/x-ndjson`。
+  - `main`（`ea18b94`）建出來的 `iamreal-verify -roster test -data https://test-data.iamreal.tw/`：`roster file: valid`、`records: 0`、`fingerprints.jsonl: 1 line(s), every fingerprint is the roster's`、`card-state/2026-11-21.jsonl: … 0 card(s) the same, 0 skipped`，結束碼 0。
+  - **那時測試名冊是 0 筆，所以看到的只有空名冊的公布。** 還沒在 Cloudflare 上看過的：最後一檔和它的雜湊清單（0 筆時沒有這兩個物件，`roster/0000000000000000.jsonl` 是 `404`）、有內容的卡片狀態檔、指紋檔第二行之後的條件式寫入（第一次是「讀的時候沒有、現在也還沒有」那一種）。測試名冊有紀錄之後的下一個台灣午夜要再看一次。
 
 **整條路的比對**（[#70](https://github.com/iamreal-tw/iamreal/issues/70) 的驗收條件），兩個測試，都要有 `go`：
 
