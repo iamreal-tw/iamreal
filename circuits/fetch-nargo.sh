@@ -11,8 +11,6 @@
 # the compiler web/circuits/ was compiled with.
 #
 #   ./fetch-nargo.sh
-#
-# The request carries no project or personal information.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -41,15 +39,10 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-  --user-agent nargo-fetch \
   --output "$tmp/$archive" "https://github.com/noir-lang/noir/releases/download/$path"
-if command -v sha256sum >/dev/null 2>&1; then
-  got=$(sha256sum "$tmp/$archive")
-else
-  got=$(shasum -a 256 "$tmp/$archive")
-fi
-if [ "${got%% *}" != "$want" ]; then
-  echo "fetch-nargo: the SHA-256 of $archive is ${got%% *}, not the one in nargo.sha256 ($want)" >&2
+got=$("$here/sha256.sh" "$tmp/$archive")
+if [ "$got" != "$want" ]; then
+  echo "fetch-nargo: the SHA-256 of $archive is $got, not the one in nargo.sha256 ($want)" >&2
   exit 1
 fi
 

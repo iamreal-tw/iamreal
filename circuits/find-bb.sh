@@ -25,13 +25,9 @@ want=${line%% *}
 
 bb=$here/node_modules/@aztec-foundation/bb.js/build/$platform/bb
 [ -x "$bb" ] || { echo "find-bb: no $bb; run pnpm install first" >&2; exit 1; }
-if command -v sha256sum >/dev/null 2>&1; then
-  got=$(sha256sum "$bb")
-else
-  got=$(shasum -a 256 "$bb")
-fi
-if [ "${got%% *}" != "$want" ]; then
-  echo "find-bb: the SHA-256 of $bb is ${got%% *}, not the one in bb.sha256 ($want)" >&2
+got=$("$here/sha256.sh" "$bb")
+if [ "$got" != "$want" ]; then
+  echo "find-bb: the SHA-256 of $bb is $got, not the one in bb.sha256 ($want)" >&2
   exit 1
 fi
 echo "$bb"

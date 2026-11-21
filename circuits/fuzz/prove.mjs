@@ -41,5 +41,5 @@ try {
 } catch (e) {
   console.log("bb verify: FAILED", String(e.stderr).slice(0, 300));
 }
-console.log("vk sha256:", execFileSync("shasum", ["-a", "256", join(vkDir, "vk")]).toString().split(" ")[0]);
+console.log("vk sha256:", execFileSync(join(NOIR_ROOT, "sha256.sh"), [join(vkDir, "vk")]).toString().trim());
 rmSync(dir, { recursive: true, force: true });

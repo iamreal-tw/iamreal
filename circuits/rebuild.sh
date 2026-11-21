@@ -23,22 +23,14 @@ root=$(cd "$here/.." && pwd)
 nargo=$("$here/fetch-nargo.sh")
 bb=$("$here/find-bb.sh")
 
-sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | cut -d' ' -f1
-  else
-    shasum -a 256 "$1" | cut -d' ' -f1
-  fi
-}
-
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 failed=0
 
 # compare <committed file, from the repository's root> <rebuilt file>
 compare() {
-  expected=$(sha256_of "$root/$1")
-  actual=$(sha256_of "$2")
+  expected=$("$here/sha256.sh" "$root/$1")
+  actual=$("$here/sha256.sh" "$2")
   if cmp -s "$root/$1" "$2"; then
     echo "same: $1 (sha256 $actual)"
   else
