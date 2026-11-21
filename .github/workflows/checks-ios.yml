@@ -1,5 +1,6 @@
 # The iOS check of a pull request: builds device-core/ for the simulator,
-# builds the app of ios/ and runs its tests in the simulator (ios/README.md).
+# builds the app of ios/ and runs its tests in the simulator, and archives
+# the store's build for an iPhone the way upload-ios.yml does (ios/README.md).
 # It runs on macOS, whose minutes count for more than Linux's, so only when
 # the pull request changes ios/, device-core/, a file the app carries or its
 # tests read, or this file (issue #155; .github/README.md).
@@ -69,3 +70,11 @@ jobs:
       - name: Build the release configuration, with its checks
         working-directory: ios
         run: xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build -configuration Release build
+      # The store's build for an iPhone, archived as upload-ios.yml archives it (ios/archive.sh), and the
+      # test of the check that archive passes before it is uploaded (ios/check-archive-test.sh).
+      - name: Build device-core/ for the iPhone
+        working-directory: ios
+        run: rustup target add aarch64-apple-ios && ./build-core.sh device
+      - name: Archive the store's build as upload-ios.yml does, and check-archive.sh turns away what it should
+        working-directory: ios
+        run: ./archive.sh build/IamrealApp.xcarchive 1 2026.1.1 && ./check-archive-test.sh build/IamrealApp.xcarchive 2026.1.1 1

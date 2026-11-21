@@ -523,6 +523,10 @@ export const ANDROID_JOB_STEPS: YamlMap = {
  * device-core/fetch-crs.sh, which check each SHA-256 before use, then runs
  * cargo in device-core/. Xcode links what that step left. The destination is
  * a simulator the runner's image has (.github/README.md gives the source).
+ * The last two steps archive the store's build for an iPhone with the
+ * script upload-ios.yml runs (#176), so that a pull request that breaks the
+ * archive or its check is seen before the upload is started by hand; the
+ * version and build are fixed ones, the check's test is given the same.
  */
 const XCODEBUILD = 'xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build';
 export const IOS_JOB_STEPS: YamlMap = {
@@ -535,6 +539,12 @@ export const IOS_JOB_STEPS: YamlMap = {
     { name: "Build the app and run its tests in the simulator", "working-directory": "ios", run: `${XCODEBUILD} test` },
     { name: "check-app.sh turns away what it should", "working-directory": "ios", run: "./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app" },
     { name: "Build the release configuration, with its checks", "working-directory": "ios", run: `${XCODEBUILD} -configuration Release build` },
+    { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "rustup target add aarch64-apple-ios && ./build-core.sh device" },
+    {
+      name: "Archive the store's build as upload-ios.yml does, and check-archive.sh turns away what it should",
+      "working-directory": "ios",
+      run: "./archive.sh build/IamrealApp.xcarchive 1 2026.1.1 && ./check-archive-test.sh build/IamrealApp.xcarchive 2026.1.1 1",
+    },
   ],
 };
 
@@ -583,6 +593,71 @@ export const DEPLOY_JOBS: YamlMap = {
 };
 
 /**
+ * The workflow that uploads the iPhone app to App Store Connect (#176,
+ * ADR-0036, ADR-0037): started by hand only, one run at a time, none
+ * cancelled; the group's name is no other workflow's. Its environment is the
+ * one Xcode of checks-ios.yml.
+ */
+export const IOS_UPLOAD_WORKFLOW = "upload-ios.yml";
+export const IOS_UPLOAD_ON: Yaml = { workflow_dispatch: null };
+export const IOS_UPLOAD_GROUP = "upload-ios";
+/** The GitHub environment whose App Store Connect key only main's runs get (#161, ADR-0037). */
+export const APP_ENVIRONMENT = "app-test";
+/**
+ * Its two jobs, exactly. "build" has no key and runs the repository's code:
+ * the core for an iPhone (ios/build-core.sh, which checks Barretenberg's
+ * library and the CRS against their SHA-256), then ios/archive.sh, which
+ * archives the store's build unsigned and checks it (ios/check-archive.sh).
+ * It hands on the archive in a tar file, so that its files keep their modes
+ * (an artifact does not keep them), with ios/ExportOptions.plist.
+ * "upload" is the only job in the environment app-test. It does not check
+ * out the repository and runs no script of it: it unpacks the tar file and
+ * runs Xcode's export, which signs and uploads. Only that last step has the
+ * key: it writes the key to a file only it reads, and xcodebuild reads it.
+ */
+const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
+export const IOS_UPLOAD_JOBS: YamlMap = {
+  build: {
+    "runs-on": IOS_RUNNER,
+    "timeout-minutes": "30",
+    steps: [
+      step("actions/checkout"),
+      { name: "Install the Rust of rust-toolchain.toml, with the iPhone's target", "working-directory": "device-core", run: "rustup toolchain install && rustup target add aarch64-apple-ios" },
+      { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
+      { name: "Archive the store's build and check it", "working-directory": "ios", run: './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"' },
+      {
+        name: "Pack the archive, keeping its files' modes, with the export options",
+        run: 'mkdir "$RUNNER_TEMP/ios-upload" && tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar" IamrealApp.xcarchive && cp ios/ExportOptions.plist "$RUNNER_TEMP/ios-upload/"',
+      },
+      { uses: uses("actions/upload-artifact"), with: { ...IOS_UPLOAD_ARTIFACT, "if-no-files-found": "error" } },
+    ],
+  },
+  upload: {
+    needs: "build",
+    "runs-on": IOS_RUNNER,
+    "timeout-minutes": "30",
+    environment: APP_ENVIRONMENT,
+    steps: [
+      { uses: uses("actions/download-artifact"), with: IOS_UPLOAD_ARTIFACT },
+      { name: "Unpack the archive", run: 'tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar"' },
+      {
+        name: "Sign and upload to App Store Connect",
+        env: {
+          APP_STORE_CONNECT_API_KEY_P8: "${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
+          APP_STORE_CONNECT_API_KEY_ID: "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
+          APP_STORE_CONNECT_API_ISSUER_ID: "${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
+        },
+        run: [
+          "umask 077",
+          `printf '%s\\n' "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/key.p8"`,
+          'xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/ios-upload/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates -authenticationKeyPath "$RUNNER_TEMP/key.p8" -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"',
+        ].join(" && "),
+      },
+    ],
+  },
+};
+
+/**
  * How cache.yml is triggered and its concurrency group: pushes to main, one
  * run at a time, none cancelled. The group's name is no other workflow's.
  */
@@ -622,6 +697,9 @@ export const CACHE_JOBS: YamlMap = {
 export const SECRET_LINES: readonly string[] = [
   "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
+  "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}",
+  "upload-ios.yml:          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}",
+  "upload-ios.yml:          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}",
 ];
 
 /**
@@ -1037,7 +1115,8 @@ function cacheProblems(file: string, text: string): string[] {
 export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: CheckLists = CHECK_PATHS): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
+  const workflows = ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml", IOS_UPLOAD_WORKFLOW];
+  if (!same(names, workflows)) problems.push(`the workflows are ${names.join(", ")}, not ${workflows.join(", ")}`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -1085,6 +1164,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === IOS_UPLOAD_WORKFLOW) {
+      // Started by hand only: not on a push, a pull request or any event a change can bring about.
+      if (!same(doc.on, IOS_UPLOAD_ON)) p(`not triggered by hand only: ${JSON.stringify(doc.on)}`);
+      if (!same(doc.env, { DEVELOPER_DIR: IOS_DEVELOPER_DIR })) p("the env at the top is not the one in test/workflows.ts");
+      if (!same(doc.concurrency, { group: IOS_UPLOAD_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${IOS_UPLOAD_GROUP}, one run at a time and none cancelled`);
+      if (!same(doc.jobs, IOS_UPLOAD_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     // Whatever saves a cache runs on pushes to main and nothing else: on any other event (a pull
