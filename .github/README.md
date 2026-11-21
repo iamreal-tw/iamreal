@@ -198,10 +198,10 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 **版本號**（ADR-0036「版本號和標籤」，照 #176 改的；兩個 app 寫法相同）。
 
-- 顯示的版本（`versionName`）是 `build` 算版本那一步執行時的台灣日期（觸發後排隊排過午夜的話，是隔天）（UTC+8，沒有日光節約時間），年、月、日不補零，例如 `2026.11.5`、`2026.11.21`。同一天的每次上傳顯示的版本相同，靠 `versionCode` 分。不像網站的標籤那樣加 `.1`：iOS 顯示的版本只收三個整數（#176），兩個 app 寫法一致。
+- 顯示的版本（`versionName`）是台灣的日期（UTC+8，沒有日光節約時間），年、月、日不補零，例如 `2026.11.5`、`2026.11.21`。日期取的是 `build` 算版本那一步執行的時候：觸發後排隊排過午夜的話，是隔天。同一天的每次上傳顯示的版本相同，靠 `versionCode` 分。不像網站的標籤那樣加 `.1`：iOS 顯示的版本「The required format is three period-separated integers」（[CFBundleShortVersionString](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，2026-11-21 讀），兩個 app 寫法一致（#176）。
 - `versionCode` 是這次執行的編號 `github.run_number`：「A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run.」（[Contexts reference 的 `github`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context)，2026-11-21 讀）。Android 的文件要每一版的 `versionCode` 比前一版大，並說「You can't upload an APK to the Play Store with a versionCode you have already used for a previous version」、「The greatest value Google Play allows for versionCode is 2100000000」（[Version your app](https://developer.android.com/studio/publish/versioning)，同一天讀）。所以：
   - 重跑一次已經傳上去的執行，`versionCode` 和上次相同，會被 Google Play 拒絕；要重新觸發一次
-  - 這個工作流程檔改名，GitHub 會把它當成另一個工作流程，編號可能從 1 重新數（文件說編號是「each run of a particular workflow」，沒有說改名之後怎麼算）。要改名時，在 `android-version.sh` 加上一個固定的數，讓 `versionCode` 接著往上
+  - 這個工作流程檔改名，或刪掉再重建，編號會從 1 重新數，比 Google Play 上已有的小，上傳會被拒絕。（文件只說編號是「each run of a particular workflow」，沒有寫改名或重建之後怎麼算；這裡照最壞的情況處理。）要改名或重建時，在 `android-version.sh` 加上一個固定的數，讓 `versionCode` 接著往上
 - 沒有改用「從 Google Play 讀最大的 `versionCode` 再加一」：`versionCode` 要在建置時寫進 app，而讀 Google Play 要服務帳號的金鑰，`build` 就得拿到金鑰，或多一個拿金鑰的工作。編號重來的情況只在改工作流程的檔名時發生，改的人照上一點處理。
 - 版本由 Gradle 屬性 `iamreal.versionName`、`iamreal.versionCode` 交給 `app/build.gradle.kts`；沒給的建置（拉取請求的檢查、這台電腦）是 `1`、`dev`。
 

@@ -5,9 +5,8 @@
 # month and day with no zeros added (2026.11.5); the build number
 # (Android's versionCode) is the number of the workflow's run, which GitHub
 # counts up by one for each run of a workflow. Uploads on the same day have
-# the same name and different build numbers. iOS takes three numbers and
-# no more for the name shown, and both apps' versions are written alike
-# (.github/README.md, the section on uploading the Android app).
+# the same name and different build numbers, as the iOS app's do (the
+# reason: .github/README.md, the section on uploading the Android app).
 #
 #   android-version.sh <run number> <now>
 #
