@@ -189,6 +189,17 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeShortId(J
   return result(env, code, &out);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeRecordsResponse(JNIEnv *env, jobject self, jbyteArray response,
+                                                                                      jbyteArray rows_json) {
+  (void)self;
+  copy in[2];
+  if (!copy_all(env, 2, (jbyteArray[]){response, rows_json}, in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_records_response(in[0].ptr, in[0].len, in[1].ptr, in[1].len, &out);
+  copy_free_all(2, in);
+  return result(env, code, &out);
+}
+
 JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionOpen(JNIEnv *env, jobject self, jint roster) {
   (void)self;
   idc_session session = 0;

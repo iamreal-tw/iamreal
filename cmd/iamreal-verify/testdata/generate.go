@@ -4,7 +4,7 @@
 // throwaway issuer keys, and a test roster whose records carry real proofs
 // against the roots of those CRLs. Run from the repository root:
 //
-//	go run ./cmd/iamreal-verify/testdata/generate.go -zkid <zkid-noir> -bb <bb> -crs <dir>
+//	go run ./cmd/iamreal-verify/testdata/generate.go -bb <bb> -crs <dir>
 //
 // The CRS directory needs the 2^18-point bn254_g1.dat that bb prove reads.
 // Each run makes new keys, so every file changes. The private keys are not
@@ -83,13 +83,17 @@ var records = []recordSpec{
 }
 
 func main() {
-	zkid := flag.String("zkid", "", "zkid-noir checkout")
 	bb := flag.String("bb", "", "bb 6.0.0")
 	crs := flag.String("crs", "", "directory with the 2^18-point bn254_g1.dat")
 	flag.Parse()
-	if *zkid == "" || *bb == "" || *crs == "" {
+	if *crs == "" {
 		flag.Usage()
 		os.Exit(2)
+	}
+	// Before anything is written: an empty or missing bb is what
+	// $(circuits/find-bb.sh) gives when its SHA-256 check fails.
+	if fi, err := os.Stat(*bb); err != nil || !fi.Mode().IsRegular() {
+		log.Fatalf("bb %q is not a file (see the message of circuits/find-bb.sh)", *bb)
 	}
 	var err error
 	if work, err = os.MkdirTemp("", "iamreal-e2e-"); err != nil {
@@ -192,13 +196,13 @@ func main() {
 	}
 	j, _ := json.Marshal(in)
 	write(filepath.Join(work, "input.json"), j)
-	cmd := exec.Command("node", filepath.Join(dir, "make-proofs.mjs"), *zkid, *bb, *crs, work)
+	cmd := exec.Command("node", filepath.Join(dir, "make-proofs.mjs"), *bb, *crs, work)
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Run(); err != nil {
 		fatal(err)
 	}
 	var out struct {
-		Commit  string `json:"zkid_noir_commit"`
+		Commit  string `json:"circuits_commit"`
 		Records []struct {
 			SMTRoot         string `json:"smt_root"`
 			DeclarationCode string `json:"declaration_code"`
@@ -217,9 +221,9 @@ func main() {
 	var roster []byte
 	for i, rec := range records {
 		o := out.Records[i]
-		// zkid-noir's reference tree and crl/ agree on the root.
+		// The reference tree of circuits/ and crl/ agree on the root.
 		if o.SMTRoot != roots[rec.crl] {
-			fatalf("record %d: root %s from zkid-noir, %s from crl/", i+1, o.SMTRoot, roots[rec.crl])
+			fatalf("record %d: root %s from circuits/, %s from crl/", i+1, o.SMTRoot, roots[rec.crl])
 		}
 		// make-proofs.mjs and verifier/ agree on the declaration code.
 		if code := verifier.DeclarationCode(scope, rec.accounts, in.Records[i].Challenge); o.DeclarationCode != code {
@@ -254,7 +258,7 @@ func main() {
 		roster = append(roster, rr.Line()...)
 	}
 	write(filepath.Join(dir, "roster.jsonl"), roster)
-	write(filepath.Join(dir, "zkid-noir-commit"), []byte(out.Commit+"\n"))
+	write(filepath.Join(dir, "circuits-commit"), []byte(out.Commit+"\n"))
 	fmt.Fprintf(os.Stderr, "roots: A %s, B = C %s\n", roots[0], roots[1])
 }
 

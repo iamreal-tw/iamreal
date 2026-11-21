@@ -92,5 +92,5 @@ final class CountingBackend: Backend {
     func crl(sha256: String) async throws -> Data { try await backend.crl(sha256: sha256) }
     func cardState(_ body: Data) async throws -> Data { try await backend.cardState(body) }
     func challenge() async throws -> String { try await backend.challenge() }
-    func submit(_ body: Data) async throws { try await backend.submit(body) }
+    func submit(_ body: Data) async throws -> Data { try await backend.submit(body) }
 }

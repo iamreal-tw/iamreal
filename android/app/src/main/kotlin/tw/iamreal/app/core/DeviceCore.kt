@@ -56,6 +56,15 @@ object DeviceCore {
     fun shortId(scopedId: ByteArray): ByteArray = nativeShortId(scopedId)
 
     /**
+     * The answer to a submission as step 6 tells it (spec/records-response.md): JSON, as
+     * `idc_records_response` of the header describes it.
+     *
+     * [response] is the body of the server's `201`, as it sent it; [rowsJson] the `rows` of [listConsequence]
+     * for the list the card signed. A body the core cannot read is not a failure: the record is in the roster.
+     */
+    fun recordsResponse(response: ByteArray, rowsJson: ByteArray): ByteArray = nativeRecordsResponse(response, rowsJson)
+
+    /**
      * Opens a session, one card proof in the core (device-core/README.md, "檢查都通過了"): the number that
      * names it. Whoever opens one closes it with [sessionClose], whatever happened in between.
      */
@@ -132,6 +141,8 @@ object DeviceCore {
     private external fun nativeCardStatus(platformsJson: ByteArray, cardStateJson: ByteArray, knownPlatformsJson: ByteArray, now: Long): ByteArray
 
     private external fun nativeShortId(scopedId: ByteArray): ByteArray
+
+    private external fun nativeRecordsResponse(response: ByteArray, rowsJson: ByteArray): ByteArray
 
     private external fun nativeSessionOpen(roster: Int): Long
 

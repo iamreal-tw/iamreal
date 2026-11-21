@@ -1,20 +1,31 @@
 // Makes the real proofs in this directory, one per circuit, with throwaway
 // issuer and card keys. See README.md for how to run it.
 //
-//   node make-proofs.mjs <zkid-noir checkout> <bb> <crs dir> <out dir>
+//   node make-proofs.mjs <bb> <crs dir> <out dir>
 //
-// It uses the test helpers of zkid-noir (tests/lib/) the way its
-// bench/make-inputs.mjs does, and its compiled circuits (target/). Nothing is
-// written into the zkid-noir checkout. The private keys are not kept.
+// It uses the test helpers of circuits/ (tests/lib/) and the published
+// circuits (web/circuits/, which circuits/rebuild.sh rebuilds from the
+// source). Nothing is written into circuits/ or web/circuits/. The private
+// keys are not kept.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const [zkid, bb, crs, out] = process.argv.slice(2).map((p) => resolve(p));
-if (!out) throw new Error("usage: node make-proofs.mjs <zkid-noir> <bb> <crs dir> <out dir>");
-const lib = (f) => import(join(zkid, "tests", "lib", f));
+if (process.argv.length !== 5) throw new Error("usage: node make-proofs.mjs <bb> <crs dir> <out dir>");
+// An empty bb is what $(circuits/find-bb.sh) gives when its SHA-256 check
+// fails; stop here rather than at the first proof.
+if (!process.argv[2] || !statSync(process.argv[2], { throwIfNoEntry: false })?.isFile()) {
+  throw new Error(`bb "${process.argv[2]}" is not a file (see the message of circuits/find-bb.sh)`);
+}
+const [bb, crs, out] = process.argv.slice(2).map((p) => resolve(p));
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const circuitFiles = join(root, "web", "circuits");
+// tests/lib/run.mjs reads the circuits from CIRCUITS_TARGET when it loads.
+process.env.CIRCUITS_TARGET = circuitFiles;
+const lib = (f) => import(join(root, "circuits", "tests", "lib", f));
 const { buildTbs, makeKey, serialOf } = await lib("cert.mjs");
 const { loadPoseidon2 } = await lib("hashes.mjs");
 const { chainCase, noirCardProofInputs } = await lib("inputs.mjs");
@@ -22,8 +33,10 @@ const { runNoir } = await lib("run.mjs");
 const { Smt } = await lib("smt.mjs");
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
-const git = (...args) => execFileSync("git", ["-C", zkid, ...args], { encoding: "utf8" }).trim();
-if (git("status", "--porcelain") !== "") throw new Error("zkid-noir has uncommitted changes");
+const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+if (git("status", "--porcelain", "--", "circuits", "web/circuits") !== "") {
+  throw new Error("circuits/ or web/circuits/ has uncommitted changes");
+}
 
 // The verification keys of spec/record.md, "Accepted circuits".
 const VK_SHA256 = {
@@ -44,7 +57,7 @@ const RECORDS = [
 
 // The declaration code of spec/declaration-code.md: the version tag, the
 // scope string, one line platform:username per account in the order of the
-// list, and the challenge. Written here rather than taken from zkid-noir,
+// list, and the challenge. Written here rather than taken from circuits/,
 // whose helper (tests/lib/declaration-code.mjs) computes an earlier draft.
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function declarationCode({ scopeString, accounts, challenge }) {
@@ -71,7 +84,7 @@ const smt = tree.proveAbsent(serialOf(tbs));
 mkdirSync(out, { recursive: true });
 const work = mkdtempSync(join(tmpdir(), "make-proofs-"));
 const summary = {
-  zkid_noir_commit: git("rev-parse", "HEAD"),
+  circuits_commit: git("rev-parse", "HEAD"),
   scope_string: SCOPE,
   smt_root: smt.root.toString(16).padStart(64, "0"),
   records: [],
@@ -88,7 +101,7 @@ for (const r of RECORDS) {
   const dir = join(work, r.circuit);
   mkdirSync(dir);
   writeFileSync(join(dir, "witness.gz"), result.witness);
-  const bytecode = join(zkid, "target", `${r.circuit}.json`);
+  const bytecode = join(circuitFiles, `${r.circuit}.json`);
   for (const [setting, sub] of [["noir-recursive", "zk"], ["noir-recursive-no-zk", "no-zk"]]) {
     const o = join(dir, sub);
     mkdirSync(o);

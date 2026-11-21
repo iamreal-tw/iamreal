@@ -1,7 +1,8 @@
 // Certificates in the layout of a MOICA citizen's primary-card certificate,
-// issued by a throwaway test key. Ported from zkid-noir tests/lib/cert.mjs
-// (itself from PSE's testCert.ts), so the bytes the circuit sees have the same
-// structure as in the circuit's own tests. No real certificate is involved.
+// issued by a throwaway test key. Ported from circuits/tests/lib/cert.mjs at
+// the repository's root (itself from PSE's testCert.ts), so the bytes the
+// circuit sees have the same structure as in the circuit's own tests. No
+// real certificate is involved.
 import { concatBytes } from "iamreal-protocol/bytes.ts";
 import { type TestKey, ascii, hex, seq, signed, tlv, utf8 } from "./der-build.ts";
 

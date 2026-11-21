@@ -8,7 +8,9 @@ import { Noir } from "@noir-lang/noir_js";
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Where the compiled circuits are. tests/counterfactual/ points this at a
-// build with one check removed.
+// build with one check removed. The test data generators
+// (verifier/testdata/ and cmd/iamreal-verify/testdata/make-proofs.mjs) set
+// it to web/circuits/ before they import this file.
 const NOIR_TARGET = process.env.CIRCUITS_TARGET ?? join(ROOT, "target");
 
 const noirCircuits = new Map();

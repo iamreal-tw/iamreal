@@ -10,12 +10,14 @@
 // (upload-android.yml: in the env of the two steps that use them;
 // upload-ios.yml: in its last step); every action is one of a short list
 // at a fixed commit, and a pull request's checks can only read. It is a
-// whitelist: the files are read by a reader of a small part of YAML (below) and anything outside that part is a problem, and the deploy
+// whitelist: the files are read by a reader of a small part of YAML
+// (below) and anything outside that part is a problem, and the deploy
 // workflow's two jobs, the device-core and android jobs of checks.yml, the
-// jobs of cache.yml, the two jobs of upload-android.yml, and the two jobs of
+// jobs of cache.yml, the two jobs of upload-android.yml, the two jobs of
 // upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), must be exactly the ones
-// written here.
+// Connect key, and that key in its last step only), and the one job each of
+// checks-ios.yml and checks-circuits.yml, must be exactly the ones written
+// here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -201,6 +203,16 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
 };
 
 /**
+ * Files at the root that are not in the repository now, and that would
+ * change every check if a pull request added one: where and how pnpm
+ * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
+ * workspace (go.work), a cargo configuration every cargo run below the
+ * root would read (.cargo/config.toml), and how git checks files out
+ * (.gitattributes). A pattern for a file that is not there matches the pull
+ * request that adds it.
+ */
+export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
+/**
  * The paths whose change runs the browser tests (checks-browser.yml,
  * `on.pull_request.paths`), exactly. Each is a pattern of GitHub's (`**`
  * matches any characters, `/` included; a pattern matches the whole path
@@ -211,7 +223,11 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
  * it used: the page's rules and their answers change together. worker/ is
  * here since the tests run against the Worker (#69); server/, the Go back
  * end they ran against before, is not: they build no package that imports
- * it.
+ * it. circuits/package.json is here as a package of the workspace: the job
+ * runs `pnpm install --frozen-lockfile`, which compares the lockfile with
+ * every package's package.json (the other three are in directories listed
+ * whole). And ROOT_FILES_PATHS, as in the lists of the required checks: the
+ * job installs with pnpm, builds Go and checks files out.
  */
 export const BROWSER_PATHS: readonly string[] = [
   "web/**",
@@ -227,6 +243,8 @@ export const BROWSER_PATHS: readonly string[] = [
   "go.sum",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "circuits/package.json",
+  ...ROOT_FILES_PATHS,
   ".github/workflows/checks-browser.yml",
 ];
 
@@ -240,6 +258,38 @@ export const BROWSER_PATHS: readonly string[] = [
  * ios/check-app.sh name is under one of them.
  */
 export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
+/**
+ * The paths whose change runs the circuits' check (checks-circuits.yml),
+ * exactly (#247): the circuits' source, scripts and tests (circuits/, its
+ * package.json among them), the files the rebuild compares with
+ * (web/circuits/, verifier/vk/) and strips with
+ * (web/scripts/strip-circuit.mjs), the vectors the tests read
+ * (spec/vectors/poseidon2.json), what is installed (the lockfile, the
+ * workspace, and the package.json of the workspace's other packages, which
+ * `pnpm install --frozen-lockfile` compares the lockfile with too), the
+ * files at the root that change every check once added (ROOT_FILES_PATHS:
+ * a .pnpmfile.cjs can change what bb.js, and with it bb, resolves to; a
+ * .gitattributes the bytes of the files rebuild.sh compares) and the
+ * workflow itself. test/workflows.test.ts checks that every file outside
+ * circuits/ that the sources of circuits/ name is here.
+ */
+export const CIRCUITS_PATHS: readonly string[] = [
+  "circuits/**",
+  "web/circuits/**",
+  "verifier/vk/**",
+  "spec/vectors/poseidon2.json",
+  "web/scripts/strip-circuit.mjs",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "protocol/package.json",
+  "web/package.json",
+  "worker/package.json",
+  ...ROOT_FILES_PATHS,
+  ".github/workflows/checks-circuits.yml",
+];
+/** The one job of checks-circuits.yml. */
+export const CIRCUITS_JOB = "circuits";
+
 /**
  * The runner of the iOS check, and the one Xcode it builds with, by its path
  * on that runner's image (.github/README.md gives the sources).
@@ -561,6 +611,36 @@ export const IOS_JOB_STEPS: YamlMap = {
   ],
 };
 
+/**
+ * The circuits job, exactly (#247). Every tool it runs is checked by a
+ * script of circuits/ before use, and the job is written out so that no
+ * step can take one from elsewhere: nargo is the one fetch-nargo.sh
+ * downloads and checks against circuits/nargo.sha256 (rebuild.sh calls it
+ * too); bb, which rebuild.sh runs, is the one find-bb.sh checks against
+ * circuits/bb.sha256, so the job has no step with CHECK_BB; circom is the
+ * one fetch-circom.sh downloads and checks against circuits/circom.sha256,
+ * put first on PATH for build-circom.sh alone. The last step fails unless
+ * the comparison's table is the committed one, which has a circom verdict
+ * for every case: a case whose circom column is "not run" fails it
+ * (test/workflows.test.ts checks the committed table).
+ */
+export const CIRCUITS_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "30",
+  steps: [
+    step("actions/checkout"),
+    step("actions/setup-node"),
+    { name: "Install pnpm", run: INSTALL_PNPM },
+    { name: "Install the packages (noir_js, and bb.js with its bb)", run: "pnpm install --frozen-lockfile" },
+    { name: "Rebuild the two circuits and their verification keys, and compare them with the committed ones", "working-directory": "circuits", run: "./rebuild.sh" },
+    { name: "Compile every circuit of the workspace", "working-directory": "circuits", run: '"$(./fetch-nargo.sh)" compile --workspace' },
+    { name: "nargo test", "working-directory": "circuits", run: '"$(./fetch-nargo.sh)" test --workspace' },
+    { name: "Build the circom witness generators", "working-directory": "circuits", run: 'circom="$(./fetch-circom.sh)" && PATH="${circom%/*}:$PATH" ./build-circom.sh' },
+    { name: "pnpm test, with the case-by-case comparison", "working-directory": "circuits", run: "pnpm test" },
+    { name: "The comparison's table is the committed one, every case run against circom", "working-directory": "circuits", run: "diff -u results/equivalence.md out/equivalence.md && cat out/equivalence.md" },
+  ],
+};
+
 /** The line of the upload step: the arguments of `uploadArgs` (scripts/deploy.ts), with wrangler kept quiet. */
 export const UPLOAD = `${Object.entries(WRANGLER_QUIET)
   .map(([k, v]) => `${k}=${v}`)
@@ -854,17 +934,7 @@ export const CHECKS_GROUP = "checks-${{ github.event.pull_request.number || gith
  * check uses, as far as reading the sources finds it (.github/README.md
  * says what that does not find).
  */
-/**
- * Files at the root that are not in the repository now, and that would
- * change every check if a pull request added one: where and how pnpm
- * installs (.npmrc, .pnpmfile.cjs, a package.json at the root), the Go
- * workspace (go.work), a cargo configuration every cargo run below the
- * root would read (.cargo/config.toml), and how git checks files out
- * (.gitattributes). A pattern for a file that is not there matches the pull
- * request that adds it.
- */
-export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "package.json", "go.work", "go.work.sum", ".cargo/config.toml", ".gitattributes"];
-/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and the files above. */
+/** In every list: the workflow and the script that decides, these rules and their tests, what is installed and how, the Go module, and ROOT_FILES_PATHS. */
 export const EVERY_CHECK_PATHS: readonly string[] = [
   ".github/workflows/checks.yml",
   ".github/workflows/changed-paths.sh",
@@ -893,14 +963,15 @@ export const GO_PATHS: readonly string[] = [
   "design/copy/**",
   "web/README.md",
   "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "circuits/package.json",
   "protocol/package.json",
   "web/package.json",
   "worker/package.json",
 ];
 /**
  * The typescript job: the three packages, what their tests read, the Go
- * programs worker/'s tests build and run, and android/, ios/, device-core/
- * and the workflows, which test/workflows.test.ts reads. That is every
+ * programs worker/'s tests build and run, and android/, ios/, device-core/,
+ * circuits/ and the workflows, which test/workflows.test.ts reads. That is every
  * directory of the repository but docs/, and of docs/ the one ADR the
  * sources of the Go server name (its tests are not run here; the file is
  * listed all the same).
@@ -921,6 +992,7 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
   "ios/**",
   "device-core/**",
   ".github/workflows/**",
+  "circuits/**",
   "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
 ];
 /**
@@ -1129,7 +1201,7 @@ export function requiredCheckProblems(name: string, job: YamlMap): string[] {
 }
 
 /**
- * The three workflows of a pull request's checks: each one's trigger, its
+ * The four workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
  * exactly, its concurrency group, and its runner when that is not
  * ubuntu-24.04. The groups differ: "concurrency group
@@ -1139,8 +1211,8 @@ export function requiredCheckProblems(name: string, job: YamlMap): string[] {
  *
  * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
  * they are the checks main requires; with them, the changes job that
- * decides which of them a pull request runs (#206). checks-browser.yml and checks-ios.yml
- * do not run in the merge queue (#180).
+ * decides which of them a pull request runs (#206). checks-browser.yml, checks-ios.yml and
+ * checks-circuits.yml do not run in the merge queue (#180).
  */
 const PULL_REQUEST_RULES: Readonly<
   Record<
@@ -1167,6 +1239,11 @@ const PULL_REQUEST_RULES: Readonly<
     env: { IAMREAL_BB: BB_PATH },
     jobEnv: { CHROME: "/usr/bin/google-chrome" },
     group: "checks-browser-${{ github.event.pull_request.number }}",
+  },
+  "checks-circuits.yml": {
+    on: { pull_request: { paths: [...CIRCUITS_PATHS] } },
+    env: {},
+    group: "checks-circuits-${{ github.event.pull_request.number }}",
   },
   "checks-ios.yml": {
     on: { pull_request: { paths: [...IOS_PATHS] } },
@@ -1211,6 +1288,7 @@ function cacheProblems(file: string, text: string): string[] {
 export const WORKFLOW_FILES: readonly string[] = [
   "cache.yml",
   "checks-browser.yml",
+  "checks-circuits.yml",
   "checks-ios.yml",
   "checks.yml",
   "deploy-test.yml",
@@ -1361,7 +1439,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android, ios");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android", "ios", "circuits"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android, ios, circuits");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -1394,6 +1472,10 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
         // Exactly the steps written above, for the same reason: the one step that gets Barretenberg
         // and the CRS is ios/build-core.sh, which has each checked before cargo or Xcode uses it.
         if (!same(job, IOS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+      } else if (f === "checks-circuits.yml" && name === CIRCUITS_JOB) {
+        // Exactly the steps written above: nargo, bb and circom each come from the script of circuits/
+        // that checks its SHA-256, and the last step turns away a comparison without circom.
+        if (!same(job, CIRCUITS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }

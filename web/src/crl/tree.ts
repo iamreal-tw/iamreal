@@ -7,7 +7,7 @@
 //
 // Bit l counts from the least significant bit. Built in one recursive pass
 // that keeps only the nodes on the recursion stack and the siblings of one
-// path (after bench/crl-tree/lib/tree.js in zkid-noir, with 160-bit keys).
+// path, over 160-bit keys.
 // The tree can be built in 2^D parts by the D low bits of the keys (the
 // parts run in workers, parallel.ts) and joined by `combine`.
 import { KEY_WORDS } from "./crl.ts";

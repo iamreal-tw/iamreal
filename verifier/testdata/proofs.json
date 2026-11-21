@@ -1,5 +1,5 @@
 {
-  "zkid_noir_commit": "497b610c64a3e598ccc769f39e886d1d5ca889ed",
+  "circuits_commit": "497b610c64a3e598ccc769f39e886d1d5ca889ed",
   "scope_string": "iamreal-test:public:0__________",
   "smt_root": "20ee9f8596ccb21888214c915353b662c52efaeffddc6cf0158223c99638a74a",
   "records": [

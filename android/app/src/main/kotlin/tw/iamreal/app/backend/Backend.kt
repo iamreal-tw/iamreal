@@ -33,8 +33,12 @@ class Backend(private val site: String, private val data: String) {
         }
     }
 
-    /** `POST /api/v1/records` with [body], the core's: the body of the answer (`201`). */
-    fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER)
+    /**
+     * `POST /api/v1/records` with [body], the core's: the body of the answer, which is a `201` and no other
+     * status. A `201` is a record in the roster whatever follows it (spec/records-response.md): a body that
+     * does not arrive whole is no bytes, not a failure.
+     */
+    fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER, created = true)
 
     /** The index of the CRL archive, `crl/index.jsonl`. */
     fun crlIndex(): ByteArray = request("GET", "$data/crl/index.jsonl", null, FILE_TIMEOUT_MS, MAX_INDEX)
@@ -45,7 +49,7 @@ class Backend(private val site: String, private val data: String) {
         return request("GET", "$data/crl/$sha256.crl", null, FILE_TIMEOUT_MS, MAX_CRL)
     }
 
-    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int): ByteArray {
+    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int, created: Boolean = false): ByteArray {
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (e: IOException) {
@@ -67,14 +71,15 @@ class Backend(private val site: String, private val data: String) {
             }
             val status = connection.responseCode
             val requestId = connection.getHeaderField("X-Request-Id")?.takeIf { id -> id.length in 1..64 && id.all { it.isLetterOrDigit() || it == '-' } }
-            if (status !in 200..299) {
-                val code = try {
-                    JSONObject(String(read(connection.errorStream ?: throw IOException(), MAX_ANSWER), Charsets.UTF_8)).getString("error")
-                        .takeIf { c -> c.length in 1..40 && c.all { it in 'a'..'z' || it == '_' } }
-                } catch (e: Exception) {
-                    null
+            if (status !in 200..299) throw ServerException(errorCode { connection.errorStream } ?: "http_$status", status, requestId)
+            if (created) {
+                // Another 2xx is not a record made: like a refusal, by the code its body names.
+                if (status != 201) throw ServerException(errorCode { connection.inputStream } ?: "http_$status", status, requestId)
+                return try {
+                    read(connection.inputStream, most)
+                } catch (e: IOException) {
+                    ByteArray(0)
                 }
-                throw ServerException(code ?: "http_$status", status, requestId)
             }
             return read(connection.inputStream, most)
         } catch (e: IOException) {
@@ -82,6 +87,14 @@ class Backend(private val site: String, private val data: String) {
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** The `error` of an answer's body, where it has one the app can show; null otherwise. */
+    private fun errorCode(body: () -> java.io.InputStream?): String? = try {
+        JSONObject(String(read(body() ?: throw IOException(), MAX_ANSWER), Charsets.UTF_8)).getString("error")
+            .takeIf { c -> c.length in 1..40 && c.all { it in 'a'..'z' || it == '_' } }
+    } catch (e: Exception) {
+        null
     }
 
     /** The whole body, or an [IOException] for one longer than [most] bytes. */

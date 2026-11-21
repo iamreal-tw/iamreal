@@ -361,6 +361,7 @@ IAMREAL_TEST_ROSTER_CLEARED_ON=2026-11-19 pnpm build:test-site   # 測試網站�
 | `test/tables.test.ts` | 寫死在頁面裡的表對 `spec/`：`issuers.json`（G2、G3 的發證金鑰，加上 `crl/` 的兩張發證憑證）；Threads 的輸入整理只把 ASCII 改小寫，整理後的帳號照 `spec/scope.md` 平台表的格式檢查；`test-example` 照輸入原樣、沒有前綴。規格裡的算法對 `spec/vectors/` 的測試在 `protocol/`（見 `protocol/README.md`），只有頁面自己做的在這裡（`test/list-consequence.test.ts`） |
 | `test/list-consequence.test.ts` | `spec/vectors/list-consequence.json` 的每一案：`requestConfig` 讀平台表、`requestCardState` 讀現況（只留頁面有自己那一份的平台）、`consequenceOfChoice`（`src/flow.ts`）算清單在每個平台上的後果，和標準答案相同。`device-core/` 讀同一份 |
 | `test/card-status.test.ts` | `spec/vectors/card-status.json` 的每一案：同樣讀平台表和現況，`statusOf`（`src/flow.ts`）算出「你的帳號」那個畫面要的現況（今天是不是已經 3 筆、每一列還剩幾次、今天改是不是更正、原樣保留的帳號），上次過卡到今天幾天用 `daysBetween`（`src/ui/messages.ts`），和標準答案相同。`device-core/` 讀同一份 |
+| `test/records-response.test.ts` | `spec/vectors/records-response.json` 的每一案：`submitRecord`（`src/api.ts`）讀送出後後台回的 201（`seq`、`record_hash`、`kinds`、`account_cards`），`mismatchesOf`（`src/flow.ts`）比對確認畫面那幾列，和標準答案相同。`device-core/` 讀同一份 |
 | `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`spec/vectors/revocation-tree.json`（整份清冊可用、樹根，清冊裡每個序號的路徑或「在樹裡」，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；`crl/testdata/times/` 的每一份（時間的各種寫法），哪些收、哪些是 `not_usable_der`，收的 `thisUpdate` 和清冊日期和 `times/expected.json` 相同；分份建樹和一次建的結果相同 |
 | `test/device-checks.test.ts` | `spec/vectors/device-checks.json`（`spec/device-checks.md`）：選憑證和檢查憑證（`src/certificate.ts` 的 `selectCertificate`），每一案的結果是選出的憑證和讀到的值，或原因；`crl_max_age_days` 哪些值讀得懂、清冊多舊算過期的 `L`、從索引選哪個檔、鏡像給的清冊用不用（`src/api.ts` 的 `requestConfig`，`src/crl/revocation.ts` 的 `crlMaxAge`、`chooseFromIndex`、`loadCrl`），每一案的結果是用的清冊或原因，和之後記住的編號。標準答案由 `test/generate/device-checks.ts` 用 `test/fixtures/` 產生，每一案的結果手寫在產生器裡（見 `spec/device-checks.md`「Test vectors」） |
 | `test/circuit-inputs.test.ts` | `spec/vectors/circuit-inputs.json`：每一案的憑證通過檢查、選到的電路，電路的輸入（`src/prover/inputs.ts`）和預期的公開輸入都和標準答案相同。標準答案由 `test/generate/circuit-inputs.ts` 從 `test/fixtures/` 產生，產生時讓電路執行過每一案 |
@@ -384,6 +385,12 @@ node --experimental-strip-types test/generate/list-consequence.ts
 
 ```
 node --experimental-strip-types test/generate/card-status.ts
+```
+
+`test/generate/records-response.ts` 同樣寫出 `spec/vectors/records-response.json`（`spec/records-response.md`）：
+
+```
+node --experimental-strip-types test/generate/records-response.ts
 ```
 
 ### 無頭瀏覽器的測試（`pnpm test:e2e`）
@@ -481,7 +488,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `scripts/` | 下載通用參數、從 `nargo` 的輸出寫出 `circuits/` 的檔案、在本機整條跑（`local.ts`） |
 | `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器（Node 裡的測試用）；`test/generate/` 從它們產生 `spec/vectors/` 的標準答案（不是測試，`pnpm test` 不跑）；`test/e2e/` 是無頭瀏覽器的測試、假元件、Worker 前面扮演資料網域的小服務（`worker-site.ts`）、量測。無頭瀏覽器的測試引用 `worker/test/` 的測試工具來啟動 Worker |
 
-執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和電路的程式庫釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
+執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和 `circuits/` 釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
 
 ## 已知的限制
 

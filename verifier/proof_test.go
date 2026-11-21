@@ -35,7 +35,7 @@ type proofCase struct {
 }
 
 type proofData struct {
-	ZkidNoirCommit string      `json:"zkid_noir_commit"`
+	CircuitsCommit string      `json:"circuits_commit"`
 	ScopeString    string      `json:"scope_string"`
 	SMTRoot        string      `json:"smt_root"`
 	Records        []proofCase `json:"records"`
