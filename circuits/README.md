@@ -38,6 +38,7 @@
 | `sha256.sh` | 這裡的 shell 腳本算 SHA-256 都用它（JavaScript 的用 `node:crypto`） |
 | `find-bb.sh`、`bb.sha256` | 找到 `@aztec-foundation/bb.js` 附的 `bb`，核對 SHA-256 |
 | `build-circom.sh`、`zkid-commit` | 建逐案比對用的 circom 見證產生器，從 `zkid-commit` 釘住的提交 |
+| `fetch-circom.sh`、`circom.sha256` | 下載釘住的 `circom` 編譯器，核對 SHA-256。只有 x86-64 的 Linux（CI 用） |
 
 ## 電路檢查哪些事
 
@@ -68,6 +69,7 @@
 | `bb` | 6.0.0 | `@aztec-foundation/bb.js` 6.0.0 附的原生執行檔，和 `web/` 用的同一個套件；`find-bb.sh` 照 `bb.sha256` 核對 |
 | `@noir-lang/noir_js` | 1.0.0 | 測試用，和 `web/` 釘同一個版本（`package.json`、根目錄的 `pnpm-lock.yaml`） |
 | `@aztec-foundation/bb.js` | 6.0.0 | 測試用（電路外的 Poseidon2）；`bb` 也從它來 |
+| `circom` | 2.2.3 | 只有逐案比對的 circom 那一欄用，版本是 `zkid-commit` 那個提交的 `circomkit.json` 寫的（`build-circom.sh` 檢查）。CI 用 `fetch-circom.sh`：從 circom 在 GitHub 的 release 下載 `circom-linux-amd64`，照 `circom.sha256` 核對；其他電腦自己裝 |
 
 電路引用的 Noir 函式庫（`lib/Nargo.toml` 用標籤寫，下表是標籤指到的提交）：
 
@@ -133,9 +135,11 @@ pnpm test                                    # 全部的 JavaScript 測試，含
 
 ### circom 的見證產生器
 
-逐案比對的 circom 那一欄要 circom 電路的見證產生器。`./build-circom.sh` 從 `https://github.com/iamreal-tw/zkID`（PSE zkID 的 fork）只抓 `zkid-commit` 那一個提交（不帶歷史），在暫存目錄照它 `wallet-unit-poc/circom/README.md` 跑 `yarn install`（照 `yarn.lock`，不跑安裝腳本）和 `yarn compile:all`，再只把測試和 `fuzz/` 讀的檔（每份電路的 `.wasm` 和 `witness_calculator.js`、`fuzz/` 要的一個 circom 原始檔）留在 `.zkID/`，約 20 MB；其餘的刪掉。要 git、PATH 上有 circom 2.2.3、corepack（Node 附的）。在 Apple M 系列的電腦上約 3 分鐘，建置時暫存目錄要約 4 GB 的空間。
+逐案比對的 circom 那一欄要 circom 電路的見證產生器。`./build-circom.sh` 從 `https://github.com/iamreal-tw/zkID`（PSE zkID 的 fork）只抓 `zkid-commit` 那一個提交（不帶歷史），在暫存目錄照它 `wallet-unit-poc/circom/README.md` 跑 `yarn install`（照 `yarn.lock`，不跑安裝腳本）和 `yarn compile:all`，再只把測試和 `fuzz/` 讀的檔（每份電路的 `.wasm` 和 `witness_calculator.js`、`fuzz/` 要的一個 circom 原始檔）留在 `.zkID/`，約 20 MB；其餘的刪掉。要 git、PATH 上有 circom 2.2.3、corepack（Node 附的）；x86-64 的 Linux 上可以用 `fetch-circom.sh` 下載核對過的 circom：`circom="$(./fetch-circom.sh)" && PATH="${circom%/*}:$PATH" ./build-circom.sh`。在 Apple M 系列的電腦上約 3 分鐘，建置時暫存目錄要約 4 GB 的空間。
 
 測試預設找 `.zkID/wallet-unit-poc/circom/build`，可以用環境變數 `ZKID_CIRCOM_BUILD` 改。已經有一份建好的（例如另一個 worktree 的 `.zkID/`），用 `ZKID_CIRCOM_BUILD` 指過去就好，不用每個 worktree 各建一份。找不到時 circom 那一欄標 `not run`，Noir 的部分照跑。改電路後要重跑（ADR-0012）。
+
+CI（`.github/workflows/checks-circuits.yml`）在改到電路的 PR 上依序跑上面「重建並比對」和「測試」的每一步，含 circom，最後要求 `out/equivalence.md` 和提交的 `results/equivalence.md` 逐位元組相同（`diff -u`）。所以 circom 那一欄有任何一案是 `not run`、或有任何新的差異，CI 都失敗；有意改變電路接受什麼的 PR，要在同一個 PR 更新 `results/equivalence.md`。
 
 對照的對象：`zkid-commit` 是 fork 的 `primary-card` 分支，在 PSE 上游 `ethereum/zkID` 的 `RSA-X.509-Cert` 分支的 `97210baed65ed53d098a4e86fb551caf1c844b4e` 之上多 7 個提交（`git log 97210ba..e95abdf`）：憑證電路加了效期、公鑰位置由結構推導、金鑰用途、正卡、卡片金鑰剛好 2048 位元的檢查（ADR-0008 到 0011），各有新的 circom 測試；一個 AI 檢查之後的加強；一個把 `currentTime` 接到輸入產生器、證明程式和網頁。逐案比對跑這個提交上每一個 circom 測試的案例。
 

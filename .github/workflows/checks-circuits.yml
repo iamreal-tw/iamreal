@@ -1,0 +1,96 @@
+# The circuits' check of a pull request (#247, ADR-0038). It rebuilds the
+# two card proof circuits and their verification keys from circuits/ and
+# compares them, byte for byte, with web/circuits/ and verifier/vk/
+# (circuits/rebuild.sh); runs nargo's tests and the JavaScript tests of
+# circuits/; and runs the case-by-case comparison with the circom circuit of
+# PSE's zkID (ADR-0012), built from the commit in circuits/zkid-commit. The
+# table the comparison writes must be the committed one,
+# circuits/results/equivalence.md: a new difference, or a case whose circom
+# column is "not run", fails the check (circuits/README.md).
+#
+# The same rules as checks.yml, but not on merge_group: like
+# checks-browser.yml it runs only when the pull request changes a file the
+# rebuild or the tests use, and not in the merge queue (#180). Triggered by
+# pull_request only, never pull_request_target; read-only; no secret;
+# nothing cached; ASCII only. worker/test/workflows.test.ts checks this file
+# against the rules in worker/test/workflows.ts, and checks that `paths`
+# holds every file outside circuits/ that the sources of circuits/ name.
+#
+# What the job downloads, each checked before use: nargo 1.0.0
+# (circuits/fetch-nargo.sh, against circuits/nargo.sha256) and circom 2.2.3
+# (circuits/fetch-circom.sh, against circuits/circom.sha256), from their
+# projects' GitHub releases. bb comes in the package @aztec-foundation/bb.js
+# 6.0.0 (pnpm-lock.yaml); circuits/find-bb.sh checks it against
+# circuits/bb.sha256. circuits/build-circom.sh fetches the one commit of
+# https://github.com/iamreal-tw/zkID and installs its JavaScript packages as
+# its yarn.lock says, running no install script, with the yarn 1.22.22 its
+# package.json names (corepack checks that yarn's hash).
+#
+# A workflow skipped by `paths` reports no check (.github/README.md).
+name: checks-circuits
+
+on:
+  pull_request:
+    paths:
+      - circuits/**
+      - web/circuits/**
+      - verifier/vk/**
+      - spec/vectors/poseidon2.json
+      - web/scripts/strip-circuit.mjs
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - protocol/package.json
+      - web/package.json
+      - worker/package.json
+      - .github/workflows/checks-circuits.yml
+
+permissions:
+  contents: read
+
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
+# Its own group: see checks-browser.yml.
+concurrency:
+  group: checks-circuits-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  circuits:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
+      - name: Install the packages (noir_js, and bb.js with its bb)
+        run: pnpm install --frozen-lockfile
+      # Fails, naming the file and both SHA-256, unless the two circuits and the two keys are the committed ones.
+      - name: Rebuild the two circuits and their verification keys, and compare them with the committed ones
+        working-directory: circuits
+        run: ./rebuild.sh
+      # The tests run the compiled circuits in target/: the two card proof circuits, the comparison's and the probes.
+      - name: Compile every circuit of the workspace
+        working-directory: circuits
+        run: '"$(./fetch-nargo.sh)" compile --workspace'
+      - name: nargo test
+        working-directory: circuits
+        run: '"$(./fetch-nargo.sh)" test --workspace'
+      # circom is put first on PATH for build-circom.sh alone; the witness generators go to circuits/.zkID/.
+      - name: Build the circom witness generators
+        working-directory: circuits
+        run: circom="$(./fetch-circom.sh)" && PATH="${circom%/*}:$PATH" ./build-circom.sh
+      - name: pnpm test, with the case-by-case comparison
+        working-directory: circuits
+        run: pnpm test
+      # The committed table has a circom verdict for every case (worker/test/workflows.test.ts checks it).
+      - name: The comparison's table is the committed one, every case run against circom
+        working-directory: circuits
+        run: diff -u results/equivalence.md out/equivalence.md && cat out/equivalence.md

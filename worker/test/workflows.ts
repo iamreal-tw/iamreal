@@ -9,8 +9,9 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, and
-// the jobs of cache.yml, must be exactly the ones written here.
+// workflow's two jobs, the device-core and android jobs of checks.yml, the
+// jobs of cache.yml, and the one job each of checks-ios.yml and
+// checks-circuits.yml, must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -232,6 +233,34 @@ export const BROWSER_PATHS: readonly string[] = [
  * ios/check-app.sh name is under one of them.
  */
 export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
+/**
+ * The paths whose change runs the circuits' check (checks-circuits.yml),
+ * exactly (#247): the circuits' source, scripts and tests (circuits/, its
+ * package.json among them), the files the rebuild compares with
+ * (web/circuits/, verifier/vk/) and strips with
+ * (web/scripts/strip-circuit.mjs), the vectors the tests read
+ * (spec/vectors/poseidon2.json), what is installed (the lockfile, the
+ * workspace, and the package.json of the workspace's other packages, which
+ * `pnpm install --frozen-lockfile` compares the lockfile with too) and the
+ * workflow itself. test/workflows.test.ts checks that every file outside
+ * circuits/ that the sources of circuits/ name is here.
+ */
+export const CIRCUITS_PATHS: readonly string[] = [
+  "circuits/**",
+  "web/circuits/**",
+  "verifier/vk/**",
+  "spec/vectors/poseidon2.json",
+  "web/scripts/strip-circuit.mjs",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "protocol/package.json",
+  "web/package.json",
+  "worker/package.json",
+  ".github/workflows/checks-circuits.yml",
+];
+/** The one job of checks-circuits.yml. */
+export const CIRCUITS_JOB = "circuits";
+
 /**
  * The runner of the iOS check, and the one Xcode it builds with, by its path
  * on that runner's image (.github/README.md gives the sources).
@@ -539,6 +568,36 @@ export const IOS_JOB_STEPS: YamlMap = {
     { name: "Build the app and run its tests in the simulator", "working-directory": "ios", run: `${XCODEBUILD} test` },
     { name: "check-app.sh turns away what it should", "working-directory": "ios", run: "./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app" },
     { name: "Build the release configuration, with its checks", "working-directory": "ios", run: `${XCODEBUILD} -configuration Release build` },
+  ],
+};
+
+/**
+ * The circuits job, exactly (#247). Every tool it runs is checked by a
+ * script of circuits/ before use, and the job is written out so that no
+ * step can take one from elsewhere: nargo is the one fetch-nargo.sh
+ * downloads and checks against circuits/nargo.sha256 (rebuild.sh calls it
+ * too); bb, which rebuild.sh runs, is the one find-bb.sh checks against
+ * circuits/bb.sha256, so the job has no step with CHECK_BB; circom is the
+ * one fetch-circom.sh downloads and checks against circuits/circom.sha256,
+ * put first on PATH for build-circom.sh alone. The last step fails unless
+ * the comparison's table is the committed one, which has a circom verdict
+ * for every case: a case whose circom column is "not run" fails it
+ * (test/workflows.test.ts checks the committed table).
+ */
+export const CIRCUITS_JOB_STEPS: YamlMap = {
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "45",
+  steps: [
+    step("actions/checkout"),
+    step("actions/setup-node"),
+    { name: "Install pnpm", run: INSTALL_PNPM },
+    { name: "Install the packages (noir_js, and bb.js with its bb)", run: "pnpm install --frozen-lockfile" },
+    { name: "Rebuild the two circuits and their verification keys, and compare them with the committed ones", "working-directory": "circuits", run: "./rebuild.sh" },
+    { name: "Compile every circuit of the workspace", "working-directory": "circuits", run: '"$(./fetch-nargo.sh)" compile --workspace' },
+    { name: "nargo test", "working-directory": "circuits", run: '"$(./fetch-nargo.sh)" test --workspace' },
+    { name: "Build the circom witness generators", "working-directory": "circuits", run: 'circom="$(./fetch-circom.sh)" && PATH="${circom%/*}:$PATH" ./build-circom.sh' },
+    { name: "pnpm test, with the case-by-case comparison", "working-directory": "circuits", run: "pnpm test" },
+    { name: "The comparison's table is the committed one, every case run against circom", "working-directory": "circuits", run: "diff -u results/equivalence.md out/equivalence.md && cat out/equivalence.md" },
   ],
 };
 
@@ -958,7 +1017,7 @@ export function requiredCheckProblems(name: string, job: YamlMap): string[] {
 }
 
 /**
- * The three workflows of a pull request's checks: each one's trigger, its
+ * The four workflows of a pull request's checks: each one's trigger, its
  * environment (values that are not secret) and its jobs' environment,
  * exactly, its concurrency group, and its runner when that is not
  * ubuntu-24.04. The groups differ: "concurrency group
@@ -968,8 +1027,8 @@ export function requiredCheckProblems(name: string, job: YamlMap): string[] {
  *
  * `requiredChecks`: the workflow's jobs, exactly, none with a `name`, where
  * they are the checks main requires; with them, the changes job that
- * decides which of them a pull request runs (#206). checks-browser.yml and checks-ios.yml
- * do not run in the merge queue (#180).
+ * decides which of them a pull request runs (#206). checks-browser.yml, checks-ios.yml and
+ * checks-circuits.yml do not run in the merge queue (#180).
  */
 const PULL_REQUEST_RULES: Readonly<
   Record<
@@ -996,6 +1055,11 @@ const PULL_REQUEST_RULES: Readonly<
     env: { IAMREAL_BB: BB_PATH },
     jobEnv: { CHROME: "/usr/bin/google-chrome" },
     group: "checks-browser-${{ github.event.pull_request.number }}",
+  },
+  "checks-circuits.yml": {
+    on: { pull_request: { paths: [...CIRCUITS_PATHS] } },
+    env: {},
+    group: "checks-circuits-${{ github.event.pull_request.number }}",
   },
   "checks-ios.yml": {
     on: { pull_request: { paths: [...IOS_PATHS] } },
@@ -1043,7 +1107,7 @@ function cacheProblems(file: string, text: string): string[] {
 export function workflowProblems(files: Readonly<Record<string, string>>, checkPaths: CheckLists = CHECK_PATHS): string[] {
   const problems: string[] = [];
   const names = Object.keys(files).sort();
-  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
+  if (!same(names, ["cache.yml", "checks-browser.yml", "checks-circuits.yml", "checks-ios.yml", "checks.yml", "deploy-test.yml"])) problems.push(`the workflows are ${names.join(", ")}, not cache.yml, checks-browser.yml, checks-circuits.yml, checks-ios.yml, checks.yml and deploy-test.yml`);
 
   // Where the word "secrets" is, read line by line as written, comments included.
   const secretLines = names.flatMap((f) =>
@@ -1163,7 +1227,7 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
         const wrongStep = extra(s, ["name", "uses", "with", "run", "working-directory"]);
         if (wrongStep.length) sp(`keys not allowed: ${wrongStep.join(", ")}`);
         if ((s.uses === undefined) === (s.run === undefined)) sp("not exactly one of uses and run");
-        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android", "ios"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android, ios");
+        if (s["working-directory"] !== undefined && !["protocol", "worker", "web", "device-core", "android", "ios", "circuits"].includes(s["working-directory"] as string)) sp("a working directory other than protocol, worker, web, device-core, android, ios, circuits");
         if (s.uses !== undefined) {
           const action = Object.keys(ACTIONS).find((a) => s.uses === uses(a));
           if (!action) sp(`an action not in the list: ${JSON.stringify(s.uses)}`);
@@ -1196,6 +1260,10 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
         // Exactly the steps written above, for the same reason: the one step that gets Barretenberg
         // and the CRS is ios/build-core.sh, which has each checked before cargo or Xcode uses it.
         if (!same(job, IOS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
+      } else if (f === "checks-circuits.yml" && name === CIRCUITS_JOB) {
+        // Exactly the steps written above: nargo, bb and circom each come from the script of circuits/
+        // that checks its SHA-256, and the last step turns away a comparison without circom.
+        if (!same(job, CIRCUITS_JOB_STEPS)) j(`not exactly the job in test/workflows.ts: ${JSON.stringify(job)}`);
       } else if (!checksBb) j("does not check bb's SHA-256");
     }
   }
