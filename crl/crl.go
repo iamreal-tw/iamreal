@@ -42,7 +42,10 @@ type CRL struct {
 	// CRL can carry.
 	HasNextUpdate bool
 	Entries       []Entry
-	Extensions    []Extension
+	// Extensions holds the CRL's extensions, but no more than
+	// MaxExtensions+1: a CRL with more is not usable, and Parse keeps no
+	// more than it needs to tell.
+	Extensions []Extension
 }
 
 // Entry is one element of revokedCertificates.
@@ -51,7 +54,9 @@ type Entry struct {
 	// length, exactly as encoded.
 	Serial         []byte
 	RevocationDate time.Time
-	Extensions     []Extension
+	// Extensions holds the entry's extensions, but no more than
+	// MaxExtensions+1, as CRL.Extensions.
+	Extensions []Extension
 }
 
 // Extension is one extension of the CRL or of an entry.
@@ -245,7 +250,12 @@ func readEntry(s *cryptobyte.String) (Entry, error) {
 	return e, nil
 }
 
+// MaxExtensions is the most extensions the CRL, and each entry, may have
+// (spec/revocation-tree.md, "Which CRLs").
+const MaxExtensions = 16
+
 // readExtensions reads Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension.
+// It checks every extension, but keeps only the first MaxExtensions+1.
 func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 	var seq cryptobyte.String
 	if !s.ReadASN1(&seq, cbasn1.SEQUENCE) || seq.Empty() {
@@ -267,7 +277,9 @@ func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 			return nil, errors.New("malformed Extension")
 		}
 		x.Value = value
-		out = append(out, x)
+		if len(out) <= MaxExtensions {
+			out = append(out, x)
+		}
 	}
 	return out, nil
 }
@@ -294,6 +306,8 @@ const (
 	// The signature does not verify under the issuer key (in the index: under
 	// neither G2 nor G3).
 	ReasonSignature = "not_usable_signature"
+	// More than MaxExtensions extensions, in the CRL or in an entry.
+	ReasonTooManyExtensions = "not_usable_too_many_extensions"
 	// An extension appears twice, in the CRL or in an entry.
 	ReasonDuplicateExtension = "not_usable_duplicate_extension"
 	// A critical extension, whichever it is, in the CRL or in an entry.
@@ -312,10 +326,11 @@ const (
 )
 
 // Reasons lists the reason codes in the order Check applies them to the
-// CRL. ReasonDuplicateExtension, ReasonCriticalExtension and ReasonSerial
-// also apply to each entry, after ReasonCRLNumber (see Check).
+// CRL. ReasonTooManyExtensions, ReasonDuplicateExtension,
+// ReasonCriticalExtension and ReasonSerial also apply to each entry, after
+// ReasonCRLNumber (see Check).
 var Reasons = []string{
-	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonDuplicateExtension,
+	ReasonDER, ReasonAlgorithm, ReasonSignature, ReasonTooManyExtensions, ReasonDuplicateExtension,
 	ReasonCriticalExtension, ReasonDelta, ReasonPartitioned, ReasonCRLNumber,
 	ReasonSerial, ReasonCollision,
 }
@@ -344,13 +359,15 @@ var sha256WithRSANull = func() []byte {
 //
 //   - both AlgorithmIdentifiers are sha256WithRSAEncryption with NULL
 //     parameters, and the signature verifies under issuerKey;
+//   - the CRL has at most MaxExtensions extensions;
 //   - no extension of the CRL appears twice;
 //   - no extension of the CRL is critical, whichever it is;
 //   - no deltaCRLIndicator and no issuingDistributionPoint, critical or not;
 //   - a cRLNumber holding a non-negative INTEGER;
-//   - entry by entry, the first entry with a problem deciding: no extension
-//     of the entry appears twice, none is critical, and the serial number
-//     gives a key (KeyFromSerial), in this order;
+//   - entry by entry, the first entry with a problem deciding: at most
+//     MaxExtensions extensions, no extension of the entry appears twice,
+//     none is critical, and the serial number gives a key (KeyFromSerial),
+//     in this order;
 //   - no two different keys share their lowest 127 bits. The same serial
 //     number listed twice is one key.
 func (c *CRL) Check(issuerKey *rsa.PublicKey) ([]Key, error) {
@@ -425,10 +442,13 @@ func (c *CRL) signedBy(key *rsa.PublicKey) bool {
 }
 
 // checkExtensions checks the extensions of the CRL or of one entry: first
-// that none appears twice, then that none is critical. No extension may be
-// critical, not even one these rules read (spec/revocation-tree.md, "Which
-// CRLs").
+// that there are at most MaxExtensions, then that none appears twice, then
+// that none is critical. No extension may be critical, not even one these
+// rules read (spec/revocation-tree.md, "Which CRLs").
 func checkExtensions(exts []Extension, where string) error {
+	if len(exts) > MaxExtensions {
+		return unusable(ReasonTooManyExtensions, "%s: more than %d extensions", where, MaxExtensions)
+	}
 	for i, x := range exts {
 		for _, y := range exts[:i] {
 			if x.ID.Equal(y.ID) {
@@ -450,9 +470,14 @@ const MaxCRLNumberBytes = 20
 
 // Number returns the cRLNumber extension, or nil if there is none. It is an
 // error if the extension does not hold a non-negative INTEGER in DER of at
-// most MaxCRLNumberBytes content bytes. The length is checked before the
-// bytes become a number, so a long one costs no more than reading it.
+// most MaxCRLNumberBytes content bytes, or if the CRL has more than
+// MaxExtensions extensions (Parse does not keep them all). The length is
+// checked before the bytes become a number, so a long one costs no more
+// than reading it.
 func (c *CRL) Number() (*big.Int, error) {
+	if len(c.Extensions) > MaxExtensions {
+		return nil, fmt.Errorf("crl: more than %d extensions", MaxExtensions)
+	}
 	for _, x := range c.Extensions {
 		if !x.ID.Equal(oidCRLNumber) {
 			continue

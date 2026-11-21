@@ -40,6 +40,12 @@ A CRL is usable if:
   entry only a non-critical `reasonCode`. If MOICA starts partitioning its
   CRLs, devices stop rather than build an incomplete tree, and this document
   changes;
+- the CRL has at most 16 extensions, and so does each entry. RFC 5280
+  defines 7 extensions of a CRL and 4 of an entry; MOICA's carry 2 and 1
+  (checked on 2026-11-21). The bound keeps the time and memory of reading a
+  file in proportion to its size: the archive keeps every file the mirror
+  downloads, signed or not ("Archive index"), and every re-verifier reads
+  each of them;
 - every serial number in `revokedCertificates` is a valid DER INTEGER in its
   shortest encoding, not negative, with at most 20 content bytes (a leading
   `00` counts), so that it gives a key (below);
@@ -200,7 +206,7 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | Field | Format |
 |---|---|
 | `issuer` | `G2` or `G3`: the key under which the RSA signature verifies, whatever the algorithm fields say; `-` if neither |
-| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable, negative or longer than 20 content bytes |
+| `crl_number` | `cRLNumber` in decimal without leading zeros; `-` if missing, unreadable, negative or longer than 20 content bytes, or if the CRL has more than 16 extensions |
 | `this_update`, `next_update` | UTC, `YYYY-MM-DDTHH:MM:SSZ`; `-` if missing |
 | `crl_date` | The CRL date, `YYYY-MM-DD`; `-` if `thisUpdate` is missing |
 | `sha256` | SHA-256 of the file, 64 lowercase hex digits |
@@ -213,12 +219,12 @@ template, keys in this order, no whitespace, each line ending in `LF`.
 | 1 | `not_usable_der` | is not a DER `CertificateList`, or has a time not spelled as in "Times" |
 | 2 | `not_usable_algorithm` | has, in either place, a signature algorithm other than sha256WithRSAEncryption with NULL parameters |
 | 3 | `not_usable_signature` | has a signature that verifies under neither key |
-| 4 | `not_usable_duplicate_extension` | has an extension of the CRL twice |
+| 4 | `not_usable_too_many_extensions` or `not_usable_duplicate_extension` | has more than 16 extensions of the CRL, or one of them twice; in this order |
 | 5 | `not_usable_critical_extension` | has a critical extension of the CRL |
 | 6 | `not_usable_delta` | has `deltaCRLIndicator` (see row 7 for a file that also has `issuingDistributionPoint`) |
 | 7 | `not_usable_partitioned` | has `issuingDistributionPoint`. Rows 6 and 7 are one step: in a file with both extensions, the one that comes first among the CRL's extensions decides |
 | 8 | `not_usable_crl_number` | has no `cRLNumber`, or one that is not a non-negative DER INTEGER of at most 20 content bytes |
-| 9 | `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
+| 9 | `not_usable_too_many_extensions`, `not_usable_duplicate_extension`, `not_usable_critical_extension` or `not_usable_serial` | has an entry with more than 16 extensions, an extension twice, a critical entry extension, or a serial number that gives no key. Entries are checked in order, and the first entry with a problem decides; within it, in this order |
 | 10 | `not_usable_collision` | has two different keys with the same lowest 127 bits |
 
 **Order.** Lines are sorted by `issuer` (bytes: `-` before `G2` before `G3`),

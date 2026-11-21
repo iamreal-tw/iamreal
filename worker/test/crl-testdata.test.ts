@@ -82,7 +82,7 @@ test("every case of crl/testdata/expected.json: usable or not, the reason code a
   }
   // Every reason code but the first is among the cases; the first is the files that are not DER.
   const reasons = new Set(cases.flatMap((c) => (c.reason === undefined ? [] : [c.reason])));
-  assert.equal(reasons.size, 9, [...reasons].join(" "));
+  assert.equal(reasons.size, 10, [...reasons].join(" "));
   for (const bytes of NOT_DER) assert.equal(lines.get(sha256Hex(bytes))?.root, "-not_usable_der");
   assert.equal(lines.size, cases.length + OTHERS.length);
 });

@@ -224,6 +224,38 @@ func Cases(key, other *rsa.PrivateKey) []Case {
 	c = base(r, Serial(hexBytes("05")))
 	c.NextUpdate = time.Time{}
 	add("no-next-update", "no nextUpdate", true, "", c)
+	// At most 16 extensions in the CRL, and in each entry. Others are
+	// unknown and non-critical: 1.3.6.1.4.1.99999.i.
+	others := func(n int) []Extension {
+		out := make([]Extension, n)
+		for i := range out {
+			out[i] = Extension{ID: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 99999, i + 1}, Value: []byte{5, 0}}
+		}
+		return out
+	}
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = others(14)
+	add("sixteen-extensions", "16 extensions of the CRL, the most: authorityKeyIdentifier, cRLNumber and 14 others", true, "", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = others(15)
+	add("seventeen-extensions", "17 extensions of the CRL", false, "not_usable_too_many_extensions", c)
+	c = base(r, Serial(hexBytes("05")))
+	c.Extensions = append(others(14), Extension{ID: OIDCRLNumber, Value: Integer(4661)})
+	add("seventeen-extensions-one-twice", "17 extensions of the CRL, cRLNumber twice among them: too many (check 4) comes before the duplicate", false, "not_usable_too_many_extensions", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].Extensions = others(15)
+	add("entry-sixteen-extensions", "an entry with 16 extensions, the most: reasonCode and 15 others", true, "", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].Extensions = others(16)
+	add("entry-seventeen-extensions", "an entry with 17 extensions", false, "not_usable_too_many_extensions", c)
+	c = base(r, Serial(hexBytes("05")), Serial(hexBytes("06")))
+	c.Entries[1].Extensions = others(16)
+	c.Entries[1].CriticalReason = true
+	c.Entries[1].Serial = []byte{0xff, 0x01}
+	add("entry-seventeen-extensions-critical-negative", "an entry with 17 extensions, one critical, and a negative serial: within the entry, too many comes first", false, "not_usable_too_many_extensions", c)
+	c = base(r, []byte{0xff, 0x01}, Serial(hexBytes("06")))
+	c.Entries[1].Extensions = others(16)
+	add("negative-then-entry-seventeen-extensions", "a negative serial, then an entry with 17 extensions: the first entry with a problem decides", false, "not_usable_serial", c)
 
 	c = base(r, Serial(hexBytes("05")))
 	c.NoNullTBS, c.NoNullOuter = true, true
