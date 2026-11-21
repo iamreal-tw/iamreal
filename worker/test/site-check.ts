@@ -240,9 +240,14 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   return lines;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const site = process.argv[2] ?? "https://test.iamreal.tw";
-  const data = process.argv[3] ?? "https://test-data.iamreal.tw";
+/**
+ * Checks a running site and its data domain as the command line does,
+ * prints a line for each thing checked and a last line, and returns how
+ * many failed. The date of the clearing is wrangler.jsonc's. A data domain
+ * at the site's own origin is the local Worker of `pnpm local`
+ * (scripts/local.ts), checked with `local`.
+ */
+export async function runSiteCheck(site: string, data: string): Promise<number> {
   const { unstable_readConfig } = await import("wrangler");
   const config = join(fileURLToPath(new URL("..", import.meta.url)), "wrangler.jsonc");
   const clearedOn = String(unstable_readConfig({ config, env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON);
@@ -256,5 +261,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const line of lines) console.log(`${line.ok ? "ok    " : "FAIL  "} ${line.what}`);
   const failures = lines.filter((l) => !l.ok).length;
   console.log(failures ? `${failures} check(s) failed` : "all checks passed");
+  return failures;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const failures = await runSiteCheck(process.argv[2] ?? "https://test.iamreal.tw", process.argv[3] ?? "https://test-data.iamreal.tw");
   process.exit(failures ? 1 : 0);
 }

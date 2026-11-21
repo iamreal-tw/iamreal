@@ -1,5 +1,5 @@
 // The roster page: design/copy/roster-page.md. The markup is the Go
-// backend's (server/pages/templates/roster.html), but for the link of
+// backend's (e159ab9:server/pages/templates/roster.html), but for the link of
 // 下載整份名冊, which goes to the part of iamreal-verify's README about
 // downloading (roster-page.md, 下載): the roster is on the data domain
 // (ADR-0027), not under /roster/. This file only turns data into HTML; the

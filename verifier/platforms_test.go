@@ -3,8 +3,9 @@ package verifier_test
 // The platform table's two ways of saying which usernames a platform
 // accepts agree: the format string (UsernameFormat, which the back end's
 // `config` sends and a device reads) and the check function
-// (ValidUsername). Moved from the Go back end's tests (server/api_test.go,
-// TestConfigPlatforms) when that was deleted (#74).
+// (ValidUsername). Moved from the Go back end's tests
+// (e159ab9:server/api_test.go, TestConfigPlatforms) when that was deleted
+// (#74).
 
 import (
 	"errors"

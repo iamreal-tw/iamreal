@@ -1,5 +1,5 @@
 // Hanging a proof on a profile: design/copy/hang.md. The markup is the Go
-// backend's (server/pages/templates/hang.html). This file only turns data
+// backend's (e159ab9:server/pages/templates/hang.html). This file only turns data
 // into HTML; the Worker (src/visitor.ts) reads the address and the roster.
 //
 // With a card's account (/hang/<short ID>): part 2 and the two lines of

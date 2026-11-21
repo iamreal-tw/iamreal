@@ -525,9 +525,13 @@ describe("a publication that cannot be finished", () => {
     // The file has a line the object does not have, after its own or in place of one of them: nothing is written, of
     // this date or of any later one, and nothing of the file changes.
     const foreign = line("2026-11-20", 7, EMPTY_FINGERPRINT);
-    // The failures go on from one date to the next, two a date: the first of each date is the 1st, 3rd and 5th in a row.
-    const waits = [1, 4, 16];
-    for (const [i, other] of [whole + foreign, foreign + whole.slice(whole.indexOf("\n") + 1), whole.replace('"count":1,', '"count":2,')].entries()) {
+    // The last is the object's own line with the same values in another spelling (a space after a comma): a line
+    // is its one spelling (spec/record.md), and the file is compared byte for byte.
+    // The failures go on from one date to the next, two a date: the first of each date is the 1st, 3rd, 5th and 7th in
+    // a row, and the wait stops growing at an hour.
+    const waits = [1, 4, 16, 60];
+    const others = [whole + foreign, foreign + whole.slice(whole.indexOf("\n") + 1), whole.replace('"count":1,', '"count":2,'), whole.replace('"count":1,', '"count":1, ')];
+    for (const [i, other] of others.entries()) {
       await worker.putFile(`roster/${FINGERPRINTS}`, other, MINUTE, ROSTER_FILE_TYPE);
       const before = await directory();
       const answered = await published();

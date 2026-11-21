@@ -13,7 +13,7 @@
 //   tests about everything else (the challenge, the CRLs, the roster rules,
 //   the write) switch to a stand-in that judges a proof by its first byte
 //   (and on one value of it moves the clock, as a verification that took time),
-//   as the Go backend's tests do (server/harness_test.go, fakeProofs). The
+//   as the Go backend's tests do (e159ab9:server/harness_test.go, fakeProofs). The
 //   stand-in is behind the same interface the deployed Worker names its
 //   verifier by (src/index.ts, `API_PARTS`).
 // - A door to the proof verifier itself, for inputs no record can carry

@@ -1,7 +1,7 @@
 // The questions and answers of design/copy/faq.md, each written once: the
 // FAQ page (/faq) shows every one, under its category, the home page seven
 // (design/copy/home.md, section 6). The markup is the Go backend's
-// (server/pages/templates/faq.html, faq-answers.html). A blank line in
+// (e159ab9:server/pages/templates/faq.html, faq-answers.html). A blank line in
 // faq.md is a new paragraph; its lines that start with · are a list.
 import { Html, html } from "./html.ts";
 import type { Document } from "./layout.ts";

@@ -1,6 +1,6 @@
 // The home page: design/copy/home.md, sections 1 to 8 (the navigation bar
 // and section 9 are the layout's). The markup is the Go backend's
-// (server/pages/templates/home.html).
+// (e159ab9:server/pages/templates/home.html).
 //
 // Section 6 shows seven questions of design/copy/faq.md, each with the
 // answer faq.md has for it, from faq.ts, where the FAQ page reads them too.

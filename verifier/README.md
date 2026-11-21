@@ -97,7 +97,9 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 
 **標準答案**（`vectors_test.go`）：`spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`、`record.json` 每一個案例各是一個子測試。`scope.json` 的場合、平台、帳號名稱各自也經過一行紀錄的檢查；`declaration-code.json` 比對原文、雜湊、宣告碼、打包值，以及從紀錄重建的最後一個公開輸入；`record.json` 的 `rosters`（正式名冊、測試名冊）比對清單的寫法、整行和紀錄的雜湊，每一行寫法錯的行都要被拒絕。`record.json` 的名冊指紋、`files` 和公布的名冊由 `roster/` 跑。
 
-`internal_test.go` 另外測：平台表（代號的格式、不重複、正式名冊沒有 `test-` 開頭的、`Platforms` 照代號排序）；`platforms_test.go`：兩份名冊每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
+`internal_test.go` 另外測：平台表（代號的格式、不重複、正式名冊沒有 `test-` 開頭的、`Platforms` 照代號排序）；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
+
+`platforms_test.go`：兩份名冊每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同。
 
 **真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕，以及兩筆紀錄組成的測試名冊經過 `roster/` 的規則。
 

@@ -7,7 +7,7 @@
 // `writeViewsOf`; roster.ts, `#fillViews`, which reads the records where
 // they are); they reflect exactly the records 1 to `viewSeq`.
 //
-// The four tables are the ones of the Go backend (server/store/sqlite_view.go).
+// The four tables are the ones of the Go backend (e159ab9:server/store/sqlite_view.go).
 // A date is a day number (protocol/, `Day`: days since 1970-01-01), so that
 // dates compare as numbers; an account that is none is NULL. Every table is
 // keyed by the scope string, since a roster can hold two scopes while one is
@@ -281,7 +281,7 @@ export function accountCards(sql: SqlStorage, scopeString: string, platform: str
  * by the date from which each gives its place to it, the earliest first,
  * and cards of the same date by the `seq` of that record. It reads the
  * index `view_slots_account`, which covers it. The Go backend's
- * `AccountCards` (server/store/sqlite_view.go).
+ * `AccountCards` (e159ab9:server/store/sqlite_view.go).
  */
 export function cardsOfAccount(sql: SqlStorage, scopeString: string, platform: string, username: string): AccountCard[] {
   return sql
@@ -303,7 +303,7 @@ export function cardsOfAccount(sql: SqlStorage, scopeString: string, platform: s
  * With `after`, only the slots after that place: passing the place of the
  * last slot returned gives the next ones. It reads the index
  * `view_slots_latest` backwards, which covers it. The Go backend's
- * `Recent` (server/store/sqlite_view.go).
+ * `Recent` (e159ab9:server/store/sqlite_view.go).
  */
 export function latestSlots(sql: SqlStorage, scopeString: string, platform: string, after: LatestPlace | null, n: number): LatestSlot[] {
   const select = "SELECT since_seq, since_date, current, scoped_id FROM view_slots INDEXED BY view_slots_latest WHERE scope_string = ? AND platform = ? AND current IS NOT NULL";

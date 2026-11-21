@@ -488,7 +488,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 「找不到這一頁」和其他頁面一樣有導覽列、頁尾，測試名冊時有標示和 `noindex`，快取 60 秒；舊後台對這種網址回的是純文字。`/api/` 底下不認得的路徑不是這一頁，是介面自己的 `404`（JSON）。舊後台放名冊檔的 `/roster/…` 和沒有 `@` 的 `/threads/<名稱>` 也是這一頁：名冊檔在資料網域。
 
-首頁、島民證明、導覽列、頁尾和其他每一頁上連到這個網站的連結都回 `200`，不轉址（`test/site-pages.test.ts` 逐一打開；`/proof` 和 `/proof/help.html` 用一份代替 `web/` 建置的檔）。例外是常見問題裡「營運者看得到什麼？」那一題的「完整的說明」`/privacy`：`design/copy/privacy.md` 那一頁兩個後台都還沒有做，是 `404`。
+首頁、島民證明、導覽列、頁尾和其他每一頁上連到這個網站的連結都回 `200`，不轉址（`test/site-pages.test.ts` 逐一打開；`/proof` 和 `/proof/help.html` 用一份代替 `web/` 建置的檔）。例外是常見問題裡「營運者看得到什麼？」那一題的「完整的說明」`/privacy`：`design/copy/privacy.md` 那一頁還沒有做，是 `404`。
 
 **`/copy.js` 是檔案，和樣式表一樣由 Static Assets 送**：`site/copy.js` 是從舊後台逐位元組搬過來的，帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`，帶著 `If-None-Match` 再要一次時回 `304`。和舊後台不同的地方：`ETag` 的值是 Static Assets 給的（舊後台是 SHA-256 的前 8 個位元組）；其他方法的 `405` 沒有 `Allow`；設定讀不出來時照常送。`Content-Type` 本機是 `text/javascript; charset=utf-8`，和舊後台相同；Cloudflare 上是 `text/javascript`，不帶 `charset`（樣式表線上也是 `text/css`，不帶；見 [Static Assets](#static-assets)「Cloudflare 上看過的」）。這對 `copy.js` 沒有影響：檔裡 ASCII 以外的字只在開頭的註解（兩行，`LC_ALL=C grep -n '[^ -~]' site/copy.js`），程式本身全是 ASCII，照哪一種編碼讀都一樣。之後要在這個檔的程式裡寫 ASCII 以外的字時再看：沒有 `charset` 時瀏覽器用載入它的頁面的編碼來讀（HTML 標準的 [fetch a classic script](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script) 把頁面的編碼當成後備），而這裡的頁面都是 `text/html; charset=utf-8`。
 
@@ -1134,7 +1134,7 @@ pnpm run deploy:test
 1. **過卡的頁面**（`buildSite`）：核對通用參數（沒有就下載），把 `web/` 測試網站的建置做到 `site/proof/`，檢查它（[Static Assets](#static-assets)）。不帶權杖；下載通用參數是唯一可能送出的請求。
 2. **打包**（`buildDeploy`）：先核對 WASM 檔和驗證金鑰的 SHA-256（[WASM 檔和驗證金鑰從哪裡來](#wasm-檔和驗證金鑰從哪裡來)），不對就停；再用 `wrangler deploy --dry-run --outdir <目錄>` 打包，不帶權杖；最後跑部署那一包的檢查（[三樣不是設定值的東西](#三樣不是設定值的東西)）；其中核對 `limits.cpu_ms` 的那一項不是起 wrangler 的指令，是在跑檢查的這個程序裡用 wrangler 的函式庫讀 `wrangler.jsonc`。打包唯一的入口是 `bundleWorker`，測試專用的建置也經過它：打包之前要做的事只寫在那裡。
 3. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
-   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 有測試和舊後台的檔比對，SHA-256 也核對過。
+   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 的 SHA-256 也核對過。
 
 打包和上傳這兩段的 wrangler 指令共用的參數：
 
@@ -1332,7 +1332,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 node --experimental-strip-types test/site-check.ts http://localhost:8080 http://localhost:8080             # pnpm local 的本機 Worker
 ```
 
-兩個網址同一個來源時，當成 `pnpm local` 的本機 Worker（[在本機用真卡片過卡](#在本機用真卡片過卡)；`pnpm local` 啟動時自己跑一次）：不看資料網域的 CORS（頁面從自己的網域讀），也不看每天的公布（本機的名冊只在指令開著跨過午夜時公布），其他 19 項照樣。
+兩個網址同一個來源時，當成 `pnpm local` 的本機 Worker（[在本機用真卡片過卡](#在本機用真卡片過卡)；`pnpm local` 啟動時自己跑一次）：不看資料網域的 CORS（頁面從自己的網域讀），也不看每天的公布（本機的名冊只在指令開著跨過午夜時公布），其他各項照樣。
 
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 

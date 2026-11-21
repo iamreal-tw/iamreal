@@ -31,9 +31,8 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { formatDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { unstable_readConfig, unstable_startWorker } from "wrangler";
-import { type Reader, checkSite } from "../test/site-check.ts";
+import { unstable_startWorker } from "wrangler";
+import { runSiteCheck } from "../test/site-check.ts";
 import { WORKER_DIR } from "./deploy.ts";
 import { prepareEngineFiles } from "./engine-files.ts";
 import { fetchCrs } from "./proof-page.ts";
@@ -46,7 +45,7 @@ const opt = (name: string, def: string): string => {
 };
 const port = Number(opt("--port", "8080"));
 const data = resolve(opt("--data", join(WORKER_DIR, "local")));
-if (resolve(data) === resolve(WEB_DIR, "local")) throw new Error("web/local/ is the Go back end's roster: give another --data");
+if (data === resolve(WEB_DIR, "local")) throw new Error("web/local/ is the Go back end's roster: give another --data");
 
 console.log("1/5 the CRS (web/scripts/fetch-crs.mjs)");
 fetchCrs();
@@ -78,13 +77,7 @@ const round = await fetch(`http://127.0.0.1:${port}/cdn-cgi/handler/scheduled?cr
 console.log(`the mirror: HTTP ${round.status} ${(await round.text()).trim()}`);
 
 console.log("5/5 the check that needs no card (test/site-check.ts)");
-const origin = `http://localhost:${port}`;
-const reader: Reader = (path, headers) => fetch(new URL(path, origin), { redirect: "manual", headers: { ...headers } });
-const clearedOn = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON);
-const lines = await checkSite({ site: reader, data: reader, today: formatDay(taiwanDay(Date.now())), clearedOn, siteOrigin: origin, local: true });
-for (const line of lines.filter((l) => !l.ok)) console.log(`FAIL   ${line.what}`);
-const failed = lines.filter((l) => !l.ok).length;
-console.log(failed ? `${failed} of ${lines.length} checks failed` : `all ${lines.length} checks passed`);
+await runSiteCheck(`http://localhost:${port}`, `http://localhost:${port}`);
 
 console.log(`serving http://localhost:${port}/proof, and the rest of the site at http://localhost:${port}/ (test roster; Ctrl-C to stop)`);
 const stop = async (): Promise<void> => {

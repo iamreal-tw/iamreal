@@ -1,7 +1,7 @@
 // The headers of everything the site sends that is not the API's: the one
 // place they are defined. README.md, "頁面送的標頭", gives the reason for
 // each; the API's are in api.ts. They are the Go backend's
-// (server/headers.go, server/visitor.go), word for word.
+// (e159ab9:server/headers.go, e159ab9:server/visitor.go), word for word.
 //
 // The Worker sends the ones of the pages it makes (visitor.ts). The files
 // (the card proof page's, the style sheet) are sent by Static Assets, past

@@ -1,8 +1,8 @@
-// The whole way with real proofs (cmd/iamreal-verify/testdata/card-proofs/README.md): the mirror
-// fetches the CRLs from a fake MOICA, the back end issues the challenges the
-// fourteen card proofs were made for, verifies each proof with the verifier
-// the deployed Worker has, and accepts or refuses it as
-// cmd/iamreal-verify/testdata/card-proofs/card-proofs.json says. Nothing here stands in for the verifier.
+// The whole way with real proofs (cmd/iamreal-verify/testdata/card-proofs/,
+// its README.md): the mirror fetches the CRLs from a fake MOICA, the back end
+// issues the challenges the fourteen card proofs were made for, verifies each
+// proof with the verifier the deployed Worker has, and accepts or refuses it
+// as card-proofs.json there says. Nothing here stands in for the verifier.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -40,7 +40,7 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
   });
   after(() => worker.close());
 
-  test("each is answered as the Go backend answers it, and a proof submitted with another list is `proof`", async () => {
+  test("each is answered as card-proofs.json says, and a proof submitted with another list is `proof`", async () => {
     assert.equal(cardProofs.length, 14);
     let seq = 0;
     let servesC = false;

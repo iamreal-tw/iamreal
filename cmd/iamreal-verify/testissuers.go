@@ -3,9 +3,10 @@
 package main
 
 // The option -test-issuers exists only in a build with the tag iamrealtest,
-// like verifier.NewWithIssuers, which it uses. The Worker's test with real
-// proofs (worker/test/records-real.test.ts) builds the command with the tag
-// to re-verify a roster whose proofs were made under throwaway issuer keys. A program built without the
+// like verifier.NewWithIssuers, which it uses. The Worker's test with
+// real proofs (worker/test/records-real.test.ts) builds the command with
+// the tag to re-verify a roster whose proofs were made under throwaway
+// issuer keys. A program built without the
 // tag, as README.md says to build it, cannot accept a test key.
 
 import (

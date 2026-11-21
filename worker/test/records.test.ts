@@ -1,7 +1,7 @@
 // `POST /api/v1/records` as the whole Worker answers it in the local workerd
 // (test/harness.ts): every error code, their order, the challenge's 10
 // minutes and 5 submissions, the CRLs' 3 days, midnight in Taiwan, and what
-// a `201` says. The cases are those of the Go backend's server/api_test.go
+// a `201` says. The cases are those of the Go backend's e159ab9:server/api_test.go
 // for this endpoint, and like them they use a verifier that judges a proof
 // by its first byte (test/records.ts, proofText): what is tested here is
 // everything but the proof. test/records-real.test.ts has the real proofs.

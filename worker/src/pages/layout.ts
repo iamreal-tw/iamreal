@@ -2,7 +2,7 @@
 // navigation bar and the foot (design/copy/home.md, 導覽列 and section 9),
 // and on a test roster the mark above everything else
 // (design/copy/test-site.md). The markup is the Go backend's
-// (server/pages/templates/layout.html, parts.html), so that the one style
+// (e159ab9:server/pages/templates/layout.html, parts.html), so that the one style
 // sheet fits both.
 import { Html, html } from "./html.ts";
 
