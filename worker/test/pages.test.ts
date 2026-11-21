@@ -6,10 +6,7 @@
 // 404 page) is here for every page; the other pages are in
 // test/lookup-pages.test.ts and test/site-pages.test.ts.
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testRosterMark, withScript } from "./pages.ts";
@@ -432,8 +429,6 @@ describe("every page", () => {
 `;
     assert.equal(css.split(added).length, 2, "the style sheet has the added rule once");
     assert.ok(css.includes(`  letter-spacing: 0.1em;\n}\n${added}\n[hidden] {`), "right after the rule of the mark");
-    const old = join(WORKER_DIR, "..", "server", "pages", "style.css");
-    if (existsSync(old)) assert.equal(css.replace(added, ""), readFileSync(old, "utf8"));
     // Nothing of another origin, and no script.
     assert.doesNotMatch(css, /url\(|@import|https?:|expression\(/i);
     const etag = res.headers.get("etag");

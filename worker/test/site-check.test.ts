@@ -183,3 +183,22 @@ test("the data domain's CORS: not allowing the site fails, and so does allowing 
   });
   await failsOnly({ data: anyone }, line, /for https:\/\/example\.com/);
 });
+
+test("on the local Worker of `pnpm local` (local: true), the data is the site's own origin: no CORS is asked, and a roster that was never published passes whenever it was cleared", async () => {
+  const noCors: Reader = async (p, headers) => {
+    const res = await data(p, headers);
+    const out = new Headers(res.headers);
+    out.delete("Access-Control-Allow-Origin");
+    return new Response(res.body, { status: res.status, headers: out });
+  };
+  const lines = await checkSite({ ...AS_DEPLOYED, data: noCors, local: true });
+  assert.deepEqual(lines.filter((l) => !l.ok), []);
+  assert.equal(lines.length, 19, "the two lines about Cloudflare's running of the roster are not there");
+  assert.ok(!lines.some((l) => l.what.startsWith("the data domain: CORS") || l.what.startsWith("GET /api/v1/fingerprint: the roster was published")));
+  // A local roster publishes only on a midnight the command was running over: never published, long after the clearing, passes.
+  const neverPublished = siteWith("/api/v1/fingerprint", (res) => new Response(`{"date":null,"count":0,"fingerprint":"${"0".repeat(64)}"}`, { headers: res.headers }));
+  const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
+  assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-23", local: true }), []);
+  // The rest is checked as on the deployed site: a CRL older than 3 days still fails.
+  assert.ok((await failed({ local: true, today: "2026-11-30" })).some((l) => l.startsWith("the data domain: a usable CRL of G2")));
+});

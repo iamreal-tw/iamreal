@@ -1,8 +1,8 @@
-// The whole way with real proofs (server/testdata/README.md): the mirror
+// The whole way with real proofs (test/testdata/README.md): the mirror
 // fetches the CRLs from a fake MOICA, the back end issues the challenges the
 // fourteen card proofs were made for, verifies each proof with the verifier
-// the deployed Worker has, and accepts or refuses it as the Go backend's
-// TestEndToEnd expects. Nothing here stands in for the verifier.
+// the deployed Worker has, and accepts or refuses it as
+// test/testdata/card-proofs.json says. Nothing here stands in for the verifier.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -30,7 +30,7 @@ const crl = (name: string): Uint8Array => new Uint8Array(readFileSync(join(CARD_
 describe("fourteen card proofs with real proofs, from the challenge to the roster", () => {
   let worker: TestWorker;
   before(async () => {
-    // The policy on late switches is on: card proof 10 is a fourth switch (server/testdata/README.md).
+    // The policy on late switches is on: card proof 10 is a fourth switch (test/testdata/README.md).
     worker = await startWorker({ issuers: cardProofIssuers(), settings: { RESTRICT_LATE_SWITCHES: "true" } });
     // MOICA publishes A (G2) and B (G3) on 2026-11-20, C (G3) on 2026-11-21.
     worker.moica.serve("G2", crl("A-G2.crl"));

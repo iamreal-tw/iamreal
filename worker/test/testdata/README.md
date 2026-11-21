@@ -1,6 +1,6 @@
-# 後台端到端測試的資料
+# 用真的證明走完整條路的測試資料
 
-給 `e2e_test.go` 用：廢止清冊、十四次過卡的請求，每一次都帶真的證明。發證金鑰和卡片金鑰都是當場產生的拋棄式金鑰，私鑰沒有留下；憑證和清冊是合成的。**沒有任何真實憑證或清冊的內容。** 兩把發證金鑰只在測試裡注入（驗證器經由 `verifier.NewWithIssuers`，只在建置標籤 `iamrealtest` 下存在），正式的執行檔不認得它們。
+給 `worker/test/records-real.test.ts` 用（Go 的舊後台刪掉之前是它的 `e2e_test.go`）：廢止清冊、十四次過卡的請求，每一次都帶真的證明。發證金鑰和卡片金鑰都是當場產生的拋棄式金鑰，私鑰沒有留下；憑證和清冊是合成的。**沒有任何真實憑證或清冊的內容。** 兩把發證金鑰只在測試裡注入：Worker 的測試建置（`worker/test/build.ts`）、重驗指令經由 `verifier.NewWithIssuers`（只在建置標籤 `iamrealtest` 下存在）；部署的 Worker 和正式的執行檔不認得它們。
 
 | 檔案 | 內容 |
 |---|---|
@@ -37,7 +37,7 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 | 7 | 2026-11-23 09:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads switch`（第 3 次） |
 | 8 | 2026-11-23 10:00 | G2 的卡 | （空的清單） | `201` `threads withdraw` |
 | 9 | 2026-11-23 10:30 | G2 的卡 | （空的清單） | `400` `empty`（這張卡片已經沒有帳號） |
-| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、名冊規則接受；`threads` 第 4 次更換，`e2e_test.go` 開了 `-restrict-late-switches` 那個政策，所以拒絕） |
+| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、名冊規則接受；`threads` 第 4 次更換，測試開了限制晚的更換的政策（`RESTRICT_LATE_SWITCHES`），所以拒絕） |
 | 11 | 2026-11-24 09:30 | G3 的卡 | `test-example:c-d` | `201` `test-example refresh, threads withdraw` |
 | 12 | 2026-11-24 11:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads refresh` |
 | 13 | 2026-11-24 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw, threads withdraw` |
@@ -54,7 +54,7 @@ G2 的卡的清冊 A 是 2026-11-20 的，所以 G2 的過卡都在 11-23 以前
 ```
 pnpm install
 bb=$(circuits/find-bb.sh)
-go run ./server/testdata/generate.go -bb "$bb" -crs <通用參數目錄>
+go run ./worker/test/testdata/generate.go -bb "$bb" -crs <通用參數目錄>
 ```
 
 證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `circuits/`、`web/circuits/` 裡。`generate.go` 確認 `circuits/` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 25 秒（十四份證明）。

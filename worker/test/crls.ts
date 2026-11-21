@@ -46,13 +46,13 @@ export function testdataIssuer(): IssuerKey {
 }
 
 /**
- * Where server/testdata/ is: fourteen card proofs with real proofs, the CRLs
+ * Where test/testdata/ is: fourteen card proofs with real proofs, the CRLs
  * they were made against, and the public halves of the two throwaway keys
  * that signed the cards' certificates and those CRLs (its README.md).
  */
-export const CARD_PROOF_TESTDATA = join(WORKER_DIR, "..", "server", "testdata");
+export const CARD_PROOF_TESTDATA = join(WORKER_DIR, "test", "testdata");
 
-/** The issuer keys of server/testdata/, as the test build takes them. Only their public halves exist. */
+/** The issuer keys of test/testdata/, as the test build takes them. Only their public halves exist. */
 export function cardProofIssuers(): IssuerKey[] {
   return (["G2", "G3"] as const).map((name) => {
     const key = createPublicKey({ key: readFileSync(join(CARD_PROOF_TESTDATA, `issuer-${name}.der`)), format: "der", type: "spki" });
