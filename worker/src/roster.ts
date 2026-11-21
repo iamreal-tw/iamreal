@@ -298,21 +298,31 @@ const CARD_STATE_BATCH = 1000;
  * which R2 refuses (https://developers.cloudflare.com/r2/platform/limits/).
  */
 const FIRST_RETRY_MS = 60 * 1000;
-/** The longest wait: an hour, short next to the day a full file and a publication have. */
+/** The longest wait of moving the full files and of publishing the roster: an hour, short next to the day a full file and a publication have. */
 const LONGEST_RETRY_MS = 60 * 60 * 1000;
+/**
+ * The longest wait of filling the views: five minutes. While they are
+ * behind, the pages and submissions answer 500, and the operator who has
+ * mended the cause has no way to have them tried at once: this is the
+ * longest they then wait. A failure that needs somebody is tried some 288
+ * times a day, not 24.
+ */
+const LONGEST_VIEWS_RETRY_MS = 5 * 60 * 1000;
 
 /**
  * When a piece of timed work that failed is tried again (moving the full
  * files, publishing the roster, filling the views; each keeps its own): a
  * minute after a first failure, and after each failure in a row that
- * follows it, twice as long as before, up to an hour: 1, 2, 4, 8, 16, 32
- * minutes, then an hour each time. A failure that goes away by itself in
- * a few minutes is over a few minutes later: until the waits reach the
- * hour, the try after it went away comes at most about as long after as it
- * had lasted. One that needs somebody (a file missing from the bucket, a
- * line this build does not read, a fingerprint file that is not the
- * object's) is tried, and has its line, once an hour, not every minute.
- * Once the work is done, the next failure waits a minute again.
+ * follows it, twice as long as before, up to the piece's longest wait: an
+ * hour (1, 2, 4, 8, 16, 32 minutes, then an hour each time), or five
+ * minutes for the views (1, 2, 4, then 5 each time). A failure that goes
+ * away by itself in a few minutes is over a few minutes later: until the
+ * waits reach the longest, the try after it went away comes at most about
+ * as long after as it had lasted. One that needs somebody (a file missing
+ * from the bucket, a line this build does not read, a fingerprint file
+ * that is not the object's) is tried, and has its line, once each longest
+ * wait, not every minute. Once the work is done, the next failure waits a
+ * minute again.
  *
  * The failures in a row and the time of the next try are a row of the
  * table `retries`, not something in memory: on Cloudflare an object that
@@ -324,21 +334,33 @@ const LONGEST_RETRY_MS = 60 * 60 * 1000;
 class Retries {
   readonly #sql: SqlStorage;
   readonly #work: string;
+  readonly #longestMs: number;
 
-  constructor(sql: SqlStorage, work: string) {
+  constructor(sql: SqlStorage, work: string, longestMs: number) {
     this.#sql = sql;
     this.#work = work;
+    this.#longestMs = longestMs;
   }
 
-  /** When the work is tried again, on the object's clock; null when its last try did not fail. */
+  /**
+   * When the work is tried again, on the object's clock; null when its last
+   * try did not fail. Never later than the longest wait from now: a time
+   * stored while the clock was ahead is brought back to that, and stored so,
+   * so that the work is not held up until the clock reaches it.
+   */
   againAt(): number | null {
-    return this.#sql.exec<{ again_ms: number }>("SELECT again_ms FROM retries WHERE work = ?", this.#work).toArray()[0]?.again_ms ?? null;
+    const stored = this.#sql.exec<{ again_ms: number }>("SELECT again_ms FROM retries WHERE work = ?", this.#work).toArray()[0]?.again_ms;
+    if (stored === undefined) return null;
+    const latest = now().getTime() + this.#longestMs;
+    if (stored <= latest) return stored;
+    this.#sql.exec("UPDATE retries SET again_ms = ? WHERE work = ?", latest, this.#work);
+    return latest;
   }
 
   /** Notes a failure at `time` on the object's clock, and returns the time of the next try. */
   failedAt(time: number): number {
     const failures = (this.#sql.exec<{ failures: number }>("SELECT failures FROM retries WHERE work = ?", this.#work).toArray()[0]?.failures ?? 0) + 1;
-    const again = time + Math.min(FIRST_RETRY_MS * 2 ** Math.min(failures - 1, 6), LONGEST_RETRY_MS);
+    const again = time + Math.min(FIRST_RETRY_MS * 2 ** Math.min(failures - 1, 30), this.#longestMs);
     this.#sql.exec("INSERT OR REPLACE INTO retries (work, failures, again_ms) VALUES (?, ?, ?)", this.#work, failures, again);
     return again;
   }
@@ -408,7 +430,7 @@ export class Roster extends DurableObject<Env> {
    */
   protected viewsFilling: Promise<void>;
   /** The failures in a row of filling the views, and when they are tried again. */
-  readonly #fillRetries = new Retries(this.ctx.storage.sql, "views");
+  readonly #fillRetries = new Retries(this.ctx.storage.sql, "views", LONGEST_VIEWS_RETRY_MS);
   /** Whether a filling of the views is going on: no other is begun meanwhile. Kept in memory, as the filling is. */
   #filling = false;
 
@@ -444,6 +466,9 @@ export class Roster extends DurableObject<Env> {
     this.viewsFilling = fillOwed && (fillAgainAt === null || fillAgainAt <= now().getTime()) ? this.#fillViews() : Promise.resolve();
     ctx.waitUntil(this.viewsFilling);
     if (this.#tablesAreThisVersion) {
+      // A paused roster neither fills its views nor is published: failures of those from before it was paused are
+      // not counted on once it no longer is.
+      if (this.#paused) sql.exec("DELETE FROM retries WHERE work IN ('views', 'publication')");
       // The roster is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
       sql.exec("INSERT OR IGNORE INTO first_day (id, date) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
@@ -859,7 +884,7 @@ export class Roster extends DurableObject<Env> {
   }
 
   /** The failures in a row of moving the full files, and when they are tried again. */
-  readonly #moveRetries = new Retries(this.ctx.storage.sql, "full_files");
+  readonly #moveRetries = new Retries(this.ctx.storage.sql, "full_files", LONGEST_RETRY_MS);
   /** The move of the full files that is going on, if one is. */
   #moving: Promise<void> | null = null;
 
@@ -987,7 +1012,7 @@ export class Roster extends DurableObject<Env> {
   }
 
   /** The failures in a row of publishing the roster, and when it is tried again. */
-  readonly #publishRetries = new Retries(this.ctx.storage.sql, "publication");
+  readonly #publishRetries = new Retries(this.ctx.storage.sql, "publication", LONGEST_RETRY_MS);
 
   /**
    * Publishing the roster, once for each date in Taiwan (ADR-0027): due

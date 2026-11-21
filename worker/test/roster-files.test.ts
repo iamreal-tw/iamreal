@@ -245,7 +245,7 @@ describe("the 1,000th record fills a roster file", () => {
     }
   });
 
-  test("views that could not be filled from the bucket are tried again a minute later, then two minutes later, without the object starting again; once filled, a failure is a first one again", async () => {
+  test("views that could not be filled from the bucket are tried again after 1, 2, 4, then 5 minutes each, one filling at a time; once filled, a failure is a first one again", async () => {
     const views = await worker.roster.views();
     const pages = [await page("/"), await page(`/p/${CARD_A}`)];
     const second = `roster/${rosterFileName(LINES_PER_FILE)}`;
@@ -279,20 +279,36 @@ describe("the 1,000th record fills a roster file", () => {
     assert.equal(notFilled(), lines);
     await wantUnavailable("/");
 
-    // An alarm before the minute is over does not try; the one after it does, and says that it failed again.
+    // An alarm before the minute is over does not try.
     await worker.roster.runAlarm();
     assert.equal(notFilled(), lines);
-    await minutesLater(1);
-    assert.equal(notFilled(), lines + 1);
+    // Once it is over, the alarm starts the object again, as on Cloudflare it starts one that left memory: the object
+    // begins a filling when it starts, and the alarm's handler, which runs right after, begins none beside it.
+    time += 60 * 1000;
+    await worker.setClock(new Date(time));
+    await worker.roster.restart();
+    await worker.roster.runAlarm();
+    await worker.roster.viewsFilled();
+    assert.equal(notFilled(), lines + 1, "one filling, one line");
     await wantUnavailable("/");
 
-    // The file is back. After a second failure in a row the wait is two minutes: not a minute later, but then.
-    await worker.putFile(second, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
-    await minutesLater(1);
+    // Failing on, the waits are 2 and 4 minutes, then 5 each: the longest wait of this piece of work, shorter than the
+    // others' hour, as pages and submissions wait with it (README.md, "失敗後多久再試").
+    for (const [n, minutes] of [2, 4, 5, 5].entries()) {
+      await minutesLater(minutes - 1);
+      assert.equal(notFilled(), lines + 1 + n, `nothing is tried before ${minutes} minutes are over`);
+      await minutesLater(1);
+      assert.equal(notFilled(), lines + 2 + n, `the try after ${minutes} minutes`);
+    }
     await wantUnavailable("/");
-    // The next try fills the views, and the pages and records go on, the object never having started again.
+
+    // The file is back: the try five minutes after the last failure fills the views, and the pages and records go on.
+    const failed = notFilled();
+    await worker.putFile(second, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
+    await minutesLater(4);
+    await wantUnavailable("/");
     await minutesLater(1);
-    assert.equal(notFilled(), lines + 1);
+    assert.equal(notFilled(), failed);
     assert.deepEqual(await worker.roster.views(), views);
     assert.deepEqual([await page("/"), await page(`/p/${CARD_A}`)], pages);
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
@@ -305,13 +321,13 @@ describe("the 1,000th record fills a roster file", () => {
     await worker.roster.restart();
     await worker.setClock(new Date(time));
     await worker.roster.viewsFilled();
-    assert.equal(notFilled(), lines + 2);
+    assert.equal(notFilled(), failed + 1);
     await minutesLater(1);
-    assert.equal(notFilled(), lines + 3, "the try a minute after the first failure");
+    assert.equal(notFilled(), failed + 2, "the try a minute after the first failure");
     // The file is back, and the try two minutes after the second failure fills the views.
     await worker.putFile(second, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
     await minutesLater(2);
-    assert.equal(notFilled(), lines + 3);
+    assert.equal(notFilled(), failed + 2);
     assert.equal((await page("/"))[0], 200);
   });
 

@@ -384,6 +384,65 @@ describe("a publication that cannot be finished", () => {
     await worker.roster.setBucketFault(null);
   });
 
+  test("a next try stored by a clock that ran ahead is waited for at most the longest wait, an hour", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+
+    // The clock is a year ahead when the publication fails: the next try is stored as a minute after that.
+    await worker.roster.setBucketFault({ key: `roster/${rosterFileName(0)}`, how: "put fails" });
+    await worker.setClock(tw("2027-11-21", "00:00:00"));
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 1);
+
+    // The clock is right again, and the object starts again: it waits an hour from the first time it looks, not a year.
+    await worker.roster.restart();
+    await worker.setClock(tw("2026-11-21", "00:00:00"));
+    await worker.roster.runAlarm();
+    await worker.setClock(tw("2026-11-21", "00:59:59"));
+    await worker.roster.runAlarm();
+    assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
+    await worker.setClock(tw("2026-11-21", "01:00:00"));
+    await worker.roster.runAlarm();
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    assert.equal(notPublished(), failures + 1);
+  });
+
+  test("failures from before the roster was paused are not counted on after it: the first failure after it waits a minute", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    const fault = { key: `roster/${rosterFileName(0)}`, how: "put fails" } as const;
+
+    // Two failures in a row: the next try would be two minutes after the second.
+    await worker.roster.setBucketFault(fault);
+    await alarmAt("2026-11-21", "00:00:00");
+    await alarmAt("2026-11-21", "00:01:00");
+    assert.equal(notPublished(), failures + 2);
+
+    // The roster is paused, and no longer.
+    await worker.roster.setStoredRulesVersion("another");
+    await worker.roster.restart();
+    try {
+      await alarmAt("2026-11-21", "00:02:00");
+      assert.equal(notPublished(), failures + 2, "a paused roster is not published");
+    } finally {
+      await worker.roster.setStoredRulesVersion("the build's");
+      await worker.roster.restart();
+    }
+
+    // The next failure is a first one: tried again a minute later, not four.
+    await worker.setClock(tw("2026-11-21", "00:05:00"));
+    await worker.roster.setBucketFault(fault);
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 3);
+    await alarmAt("2026-11-21", "00:06:00");
+    assert.equal(notPublished(), failures + 4, "the try a minute after the first failure");
+    await worker.roster.setBucketFault(null);
+  });
+
   test("the card state file breaks off while it is written: no line, no copy of the card state table kept; the next try is of its own moment", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);
