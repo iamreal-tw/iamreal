@@ -52,7 +52,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const android = join(here, "..");
 const repo = join(android, "..");
 const out = join(android, "test-output");
-const APP = "tw.iamreal.app.test.fake";
+const APP = "tw.iamreal.app.dev.fake";
 /** The port of the emulator the fake build asks (src/fake/…/Target.kt). */
 const DEVICE_PORT = 18169;
 const SITE = `127.0.0.1:${DEVICE_PORT}`;
