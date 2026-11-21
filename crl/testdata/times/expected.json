@@ -2,337 +2,349 @@
   {
     "name": "utc-minutes",
     "what": "UTCTime without seconds",
-    "sha256": "0f9c9c709e40103dfe4f6f1c1f4855e04e838fc146fe41757c9accda56395d19",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0f9c9c709e40103dfe4f6f1c1f4855e04e838fc146fe41757c9accda56395d19\",\"root\":\"-not_usable_der\"}"
+    "sha256": "52e46e2fe7154262349680fc25f1575d1a6c5da60aacdf33f35f8176da7ccc51",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"52e46e2fe7154262349680fc25f1575d1a6c5da60aacdf33f35f8176da7ccc51\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-plus",
     "what": "UTCTime with an offset east of UTC",
-    "sha256": "1bf949556954eab4f1d63ea0c120ff680c5e3c9386af37cf696f5005126ec6fa",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"1bf949556954eab4f1d63ea0c120ff680c5e3c9386af37cf696f5005126ec6fa\",\"root\":\"-not_usable_der\"}"
+    "sha256": "cdb8a861087134562d2492372315d5743bf52402acf2e31a255203329ee51f03",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"cdb8a861087134562d2492372315d5743bf52402acf2e31a255203329ee51f03\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-minutes-offset-minus",
     "what": "UTCTime without seconds, with an offset west of UTC",
-    "sha256": "ca1bfcb10c47ae67b65c68a5934c05f3311a40924b256c03f4c6991ef630de3d",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"ca1bfcb10c47ae67b65c68a5934c05f3311a40924b256c03f4c6991ef630de3d\",\"root\":\"-not_usable_der\"}"
+    "sha256": "5abf2f59ed7815f787862cb694c41b216c8188c2b5f4f746835042b9d8109662",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"5abf2f59ed7815f787862cb694c41b216c8188c2b5f4f746835042b9d8109662\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-plus-zero",
     "what": "an offset of zero, written +0000",
-    "sha256": "f6b6b9e935b006fc9177a634ecbe805fd1dc9498e9a818233ebf35dd6eef45e9",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"f6b6b9e935b006fc9177a634ecbe805fd1dc9498e9a818233ebf35dd6eef45e9\",\"root\":\"-not_usable_der\"}"
+    "sha256": "3d013a0212ce3fdff838efca38d516c7f2d0a67dfff61552b2eb16d3f4c82ba4",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"3d013a0212ce3fdff838efca38d516c7f2d0a67dfff61552b2eb16d3f4c82ba4\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-minus-zero",
     "what": "an offset of zero, written -0000",
-    "sha256": "b35294bc74aa50edcca66bdf523a27b6b33bf1ac37dba8fc7fb9fc4cd08f6d41",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"b35294bc74aa50edcca66bdf523a27b6b33bf1ac37dba8fc7fb9fc4cd08f6d41\",\"root\":\"-not_usable_der\"}"
+    "sha256": "51dc0ff8690a09daa62f43286e196287d3c086e24ef5d8c347ede89c9e7ba14e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"51dc0ff8690a09daa62f43286e196287d3c086e24ef5d8c347ede89c9e7ba14e\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-24-hours",
     "what": "an offset of 24 hours",
-    "sha256": "29ba4e3654dea7fe2fe7679cdc9090c5e3b0e49bcf29aa20c19aa18b7179c521",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"29ba4e3654dea7fe2fe7679cdc9090c5e3b0e49bcf29aa20c19aa18b7179c521\",\"root\":\"-not_usable_der\"}"
+    "sha256": "fc846d5a10bae60c77c91bcfd8c923f1b3e42f6fa8d4cddcfd23f7885d6e374e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"fc846d5a10bae60c77c91bcfd8c923f1b3e42f6fa8d4cddcfd23f7885d6e374e\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-minus-24-30",
     "what": "an offset of 24 hours and 30 minutes, west",
-    "sha256": "4cd03b8920f651b7da6c9b3f29504b934d7129cd18e84732c0c2936b15c94e57",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"4cd03b8920f651b7da6c9b3f29504b934d7129cd18e84732c0c2936b15c94e57\",\"root\":\"-not_usable_der\"}"
+    "sha256": "040c177673e2490c17f5ef87fe78b8157b130bc0469d9fcca712e20c6e1a2da2",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"040c177673e2490c17f5ef87fe78b8157b130bc0469d9fcca712e20c6e1a2da2\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-25-hours",
     "what": "an offset of more than 24 hours",
-    "sha256": "451ef013ba0d26123598094ed4b6f4ece3f3e73c23092a25ba1754f925f29d04",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"451ef013ba0d26123598094ed4b6f4ece3f3e73c23092a25ba1754f925f29d04\",\"root\":\"-not_usable_der\"}"
+    "sha256": "540f02b4a5a3f30ec4520099b102c98ced84f0d1dcbfab4a91d3a90c9475724e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"540f02b4a5a3f30ec4520099b102c98ced84f0d1dcbfab4a91d3a90c9475724e\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-offset-60-minutes",
     "what": "an offset with 60 minutes",
-    "sha256": "bcc941c1f6d11321e2490c201ec53945089a9442de8fd56b5316ff59cc8501a0",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"bcc941c1f6d11321e2490c201ec53945089a9442de8fd56b5316ff59cc8501a0\",\"root\":\"-not_usable_der\"}"
+    "sha256": "30e34353da2d388159dca0f7d99ec64f4ed9dab5fa18a68dcd3a5f02786f8efa",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"30e34353da2d388159dca0f7d99ec64f4ed9dab5fa18a68dcd3a5f02786f8efa\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-year-49",
     "what": "UTCTime year 49 is 2049",
-    "sha256": "0f0c9d78e1bbe2f0be0fd8c17cd0c8150de045a487c6190fb3d3f42844cb2cbb",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2049-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2050-01-01\",\"sha256\":\"0f0c9d78e1bbe2f0be0fd8c17cd0c8150de045a487c6190fb3d3f42844cb2cbb\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "3f6f03f82717d501ff14a371cdf957cd0c7abf90beb74a8474182d9a02dc0296",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2049-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2050-01-01\",\"sha256\":\"3f6f03f82717d501ff14a371cdf957cd0c7abf90beb74a8474182d9a02dc0296\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-year-50",
     "what": "UTCTime year 50 is 1950",
-    "sha256": "26766e8a77b560c95d6732c9a273152bd27bfc063520d3b9d5c38888a5a64ed9",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1950-01-01T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1950-01-01\",\"sha256\":\"26766e8a77b560c95d6732c9a273152bd27bfc063520d3b9d5c38888a5a64ed9\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "1c652a54a4851c3e2196c188c182c02814eba6cfe17034212bbe3682589e3882",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1950-01-01T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1950-01-01\",\"sha256\":\"1c652a54a4851c3e2196c188c182c02814eba6cfe17034212bbe3682589e3882\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-year-50-offset",
     "what": "an offset, at the turn of the century UTCTime chooses",
-    "sha256": "625a0cf7133b8499c5f10e1769e2076989efad6a0b0d786bf4d5ac28bc668cf5",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"625a0cf7133b8499c5f10e1769e2076989efad6a0b0d786bf4d5ac28bc668cf5\",\"root\":\"-not_usable_der\"}"
+    "sha256": "0d0078f595036b61d76ff84fe309462b306df0e22fd1bec43326e74ddda9c33a",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0d0078f595036b61d76ff84fe309462b306df0e22fd1bec43326e74ddda9c33a\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-year-68-leap-day",
     "what": "UTCTime year 68 is 1968, a leap year",
-    "sha256": "e3d82c76e40641ca01d7643d66f75f10fe19c9a882d959679c7e87794ec8f5b7",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1968-02-29T12:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1968-02-29\",\"sha256\":\"e3d82c76e40641ca01d7643d66f75f10fe19c9a882d959679c7e87794ec8f5b7\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "cb0f2f78bdce9c57b6649c5caf05bcbf862aee8bcde9908d29bc1334aa6d7475",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1968-02-29T12:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1968-02-29\",\"sha256\":\"cb0f2f78bdce9c57b6649c5caf05bcbf862aee8bcde9908d29bc1334aa6d7475\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-year-69",
     "what": "UTCTime year 69 is 1969",
-    "sha256": "afeee258d4f36a5adefaeca28f4f8c32b3ad78dfe846ca5bdbeffbb69b36da62",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1969-01-01T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1969-01-01\",\"sha256\":\"afeee258d4f36a5adefaeca28f4f8c32b3ad78dfe846ca5bdbeffbb69b36da62\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "d9f6a1074d8e8d0814ec3237411eb83523713237b7d1225cb58c496c2be36863",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1969-01-01T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1969-01-01\",\"sha256\":\"d9f6a1074d8e8d0814ec3237411eb83523713237b7d1225cb58c496c2be36863\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-year-99",
     "what": "UTCTime year 99 is 1999",
-    "sha256": "c9629f8304dab2d02db885b2a5ffebc271b10613fc1ec3293c95231edac22069",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1999-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2000-01-01\",\"sha256\":\"c9629f8304dab2d02db885b2a5ffebc271b10613fc1ec3293c95231edac22069\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "55deb7fea6c3c99b219e9118d0c5676fca50bfb880f72b8894952dcf605d8450",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"1999-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2000-01-01\",\"sha256\":\"55deb7fea6c3c99b219e9118d0c5676fca50bfb880f72b8894952dcf605d8450\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-year-99-offset",
     "what": "an offset that would carry into the next century",
-    "sha256": "38ea12dd35a76df6a51ca66085eda66cfb671533a9ea82ff2ff44fa659e5b7f6",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"38ea12dd35a76df6a51ca66085eda66cfb671533a9ea82ff2ff44fa659e5b7f6\",\"root\":\"-not_usable_der\"}"
+    "sha256": "0a19189af68e4747e7a9f56086e3605f46b68006e6c1b04a25ef9795ebff245f",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0a19189af68e4747e7a9f56086e3605f46b68006e6c1b04a25ef9795ebff245f\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-leap-day-2000",
     "what": "2000 is a leap year",
-    "sha256": "d5ca5c76926505053e517e5ec82ba5d1252560e1b5d573b0a782dccf635b87de",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2000-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2000-02-29\",\"sha256\":\"d5ca5c76926505053e517e5ec82ba5d1252560e1b5d573b0a782dccf635b87de\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "d9eaa4a1c74d018f72f6e0cfbfcc7725e6f9b323dde6913ec255b5b886003f04",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2000-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2000-02-29\",\"sha256\":\"d9eaa4a1c74d018f72f6e0cfbfcc7725e6f9b323dde6913ec255b5b886003f04\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "utc-leap-day-2027",
     "what": "29 February of a year that is not a leap year",
-    "sha256": "26bcc08ce2372010fdf742a83434e18ff25085f0d48ac092cc2bb46294ea219e",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"26bcc08ce2372010fdf742a83434e18ff25085f0d48ac092cc2bb46294ea219e\",\"root\":\"-not_usable_der\"}"
+    "sha256": "640745d6eb8e01af888aeaf5c4007e1867da9d2bfb6151373d86e171aaf0a41b",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"640745d6eb8e01af888aeaf5c4007e1867da9d2bfb6151373d86e171aaf0a41b\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-day-31-november",
     "what": "31 November",
-    "sha256": "4ea632ce074cb9fe1bb94558a31acb56a07ec4cd2c6092cee2d43f7da4ec9438",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"4ea632ce074cb9fe1bb94558a31acb56a07ec4cd2c6092cee2d43f7da4ec9438\",\"root\":\"-not_usable_der\"}"
+    "sha256": "0426443300b55cbe0d48bcb1c739d9c3a791e92aad39d60d9030ff571fcdb8df",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0426443300b55cbe0d48bcb1c739d9c3a791e92aad39d60d9030ff571fcdb8df\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-month-13",
     "what": "month 13",
-    "sha256": "f1eb0389d636d32a492c45babe483013141d42505040a9e4b4972f10f97e9c86",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"f1eb0389d636d32a492c45babe483013141d42505040a9e4b4972f10f97e9c86\",\"root\":\"-not_usable_der\"}"
+    "sha256": "cb5f2619a5a60248d843314ac1752c57c8311b078edc0e69089e89bf2407427b",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"cb5f2619a5a60248d843314ac1752c57c8311b078edc0e69089e89bf2407427b\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-month-0",
     "what": "month 0",
-    "sha256": "7d2b92ba59d0eab02e080a09f2d226ff519d25a06c95a0a030a52103469ba91b",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"7d2b92ba59d0eab02e080a09f2d226ff519d25a06c95a0a030a52103469ba91b\",\"root\":\"-not_usable_der\"}"
+    "sha256": "770cec1759cd86904f12d33b90ad40b7df213f3a025fee67fef3c0ee52383a0f",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"770cec1759cd86904f12d33b90ad40b7df213f3a025fee67fef3c0ee52383a0f\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-day-0",
     "what": "day 0",
-    "sha256": "e247e245f642f8d52de73d9e57c06647a0ad1d055a1768d19cc8e1254fd9c540",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"e247e245f642f8d52de73d9e57c06647a0ad1d055a1768d19cc8e1254fd9c540\",\"root\":\"-not_usable_der\"}"
+    "sha256": "35a2e655c71587a5cab9239f0297228bd29d6105f06822d2fedf1ef29c800af3",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"35a2e655c71587a5cab9239f0297228bd29d6105f06822d2fedf1ef29c800af3\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-hour-24",
     "what": "hour 24",
-    "sha256": "9e5705f69a5c3420793034784730963efe2be3b7e17d3ea51602f215200b9446",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"9e5705f69a5c3420793034784730963efe2be3b7e17d3ea51602f215200b9446\",\"root\":\"-not_usable_der\"}"
+    "sha256": "56d6e62423c42e8952dba0ce3dd9d4ebd7327c548d911e4b369a419c23099071",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"56d6e62423c42e8952dba0ce3dd9d4ebd7327c548d911e4b369a419c23099071\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-minute-60",
     "what": "minute 60",
-    "sha256": "b16ac9c5bab2b3deffb7d3a7716f6e222a88ea9fdd0564cc2903192203b74213",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"b16ac9c5bab2b3deffb7d3a7716f6e222a88ea9fdd0564cc2903192203b74213\",\"root\":\"-not_usable_der\"}"
+    "sha256": "21d7ce1cbc7bc82d20fafb04850cf03b56d5c64913cfb1a4763fd5547d0ff613",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"21d7ce1cbc7bc82d20fafb04850cf03b56d5c64913cfb1a4763fd5547d0ff613\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-second-60",
     "what": "second 60",
-    "sha256": "6e727fc1075caa4f5892c4fe6104476b3fa5ae5ff912634a5a87498cb3c9a29d",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"6e727fc1075caa4f5892c4fe6104476b3fa5ae5ff912634a5a87498cb3c9a29d\",\"root\":\"-not_usable_der\"}"
+    "sha256": "cc267e2644aa39f4bffbd3f9041c013b7df87faf0732940aabdc4d84eec056de",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"cc267e2644aa39f4bffbd3f9041c013b7df87faf0732940aabdc4d84eec056de\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-no-zone",
     "what": "no Z and no offset",
-    "sha256": "a5d1fc71e11999fad78cfe4eb0082047914267d1ae7fbfe2888691ff194c2dc1",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"a5d1fc71e11999fad78cfe4eb0082047914267d1ae7fbfe2888691ff194c2dc1\",\"root\":\"-not_usable_der\"}"
+    "sha256": "168043bbe8cfd07a5dd2bdbb7e022ce6669ef7c9e9a97216b00f5760ec8c6218",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"168043bbe8cfd07a5dd2bdbb7e022ce6669ef7c9e9a97216b00f5760ec8c6218\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-lowercase-z",
     "what": "a lowercase z",
-    "sha256": "c76f66990f011c5ddb08e80bedf245befd27b4fd7313386b82c722da3122c92d",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"c76f66990f011c5ddb08e80bedf245befd27b4fd7313386b82c722da3122c92d\",\"root\":\"-not_usable_der\"}"
+    "sha256": "0f2a24b3eabd504f7c18df12ab6fb91c69e8a6c1a3174d14d35fbf94c39950fc",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0f2a24b3eabd504f7c18df12ab6fb91c69e8a6c1a3174d14d35fbf94c39950fc\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-fraction",
     "what": "a fraction of a second",
-    "sha256": "2cca6ae64f145d7328a9bda60227439d4a2649c97e4f76fc4d8e238e612b4549",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"2cca6ae64f145d7328a9bda60227439d4a2649c97e4f76fc4d8e238e612b4549\",\"root\":\"-not_usable_der\"}"
+    "sha256": "e5a077e3c97610d7e415724cedc58eb152236112bc1dda137f1555c81d91bdff",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"e5a077e3c97610d7e415724cedc58eb152236112bc1dda137f1555c81d91bdff\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-11-digits",
     "what": "an odd number of digits",
-    "sha256": "1c41987a980f151a0356ff66ff2d951fdd1791751307c03c3462049b31596288",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"1c41987a980f151a0356ff66ff2d951fdd1791751307c03c3462049b31596288\",\"root\":\"-not_usable_der\"}"
+    "sha256": "c3a32380d628588f2f88be021ad6b2f7451606e49c3fabd938caca4258be4f82",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"c3a32380d628588f2f88be021ad6b2f7451606e49c3fabd938caca4258be4f82\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-four-digit-year",
     "what": "a four-digit year in a UTCTime",
-    "sha256": "d4e1e26bc5b1ce17d74978e888e018bb568367f377f7a382914229ad5edbf121",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"d4e1e26bc5b1ce17d74978e888e018bb568367f377f7a382914229ad5edbf121\",\"root\":\"-not_usable_der\"}"
+    "sha256": "49b7316028c6cd197ed0339760dcceab4c5bea416faee5532feaac307737e8d7",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"49b7316028c6cd197ed0339760dcceab4c5bea416faee5532feaac307737e8d7\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-space",
     "what": "a space",
-    "sha256": "2f024bb921d646e04f18023d6ac0961cf41bfaa3d05acf5af0f11e14ffee5973",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"2f024bb921d646e04f18023d6ac0961cf41bfaa3d05acf5af0f11e14ffee5973\",\"root\":\"-not_usable_der\"}"
+    "sha256": "5d2b2bfa93bf229b5ccf7562800222efacf3a11092a08f71b775ca1112c30909",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"5d2b2bfa93bf229b5ccf7562800222efacf3a11092a08f71b775ca1112c30909\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-sign-in-year",
     "what": "a sign where a digit belongs",
-    "sha256": "a050065bb0ac84619491d94d40b9cb9bf413fb74c100f8efcbff450319b24b56",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"a050065bb0ac84619491d94d40b9cb9bf413fb74c100f8efcbff450319b24b56\",\"root\":\"-not_usable_der\"}"
+    "sha256": "97df3eef5e3c82a084c420d48ccb06cfb77a61e839f6f485b501158a389a562f",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"97df3eef5e3c82a084c420d48ccb06cfb77a61e839f6f485b501158a389a562f\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "utc-empty",
     "what": "an empty UTCTime",
-    "sha256": "8b3a2856890e586e5c81cf77809d68764010875fba221b48d5614678ecc52575",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"8b3a2856890e586e5c81cf77809d68764010875fba221b48d5614678ecc52575\",\"root\":\"-not_usable_der\"}"
+    "sha256": "85d0b0ecfdea2ae48275bc96201d63f73c234e845abbe5536ddc0be9e82af638",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"85d0b0ecfdea2ae48275bc96201d63f73c234e845abbe5536ddc0be9e82af638\",\"root\":\"-not_usable_der\"}"
+  },
+  {
+    "name": "utc-after-z",
+    "what": "a character after the Z",
+    "sha256": "288026a60790813f5a45d3031bc8a7bcbb43ba4f1d165605dd7e9a11fe2af83e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"288026a60790813f5a45d3031bc8a7bcbb43ba4f1d165605dd7e9a11fe2af83e\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized",
     "what": "GeneralizedTime",
-    "sha256": "4c310a3ac3a324aa11da1e6ce5abadb09ae07d0a4b5a401d779b8a393670bee6",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"4c310a3ac3a324aa11da1e6ce5abadb09ae07d0a4b5a401d779b8a393670bee6\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "190f7732f035810f8eaee4f881c576a74c777585082767e0013528255fadae94",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"190f7732f035810f8eaee4f881c576a74c777585082767e0013528255fadae94\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-offset",
     "what": "GeneralizedTime with an offset",
-    "sha256": "715eaf52ca6016c5064063b1441aadf0647895d2bf16697df630a8f1b70cb669",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"715eaf52ca6016c5064063b1441aadf0647895d2bf16697df630a8f1b70cb669\",\"root\":\"-not_usable_der\"}"
+    "sha256": "3a4d7a68f21b7f6dd153645a1facfaf5558d99c3700c73e507662b58bb008046",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"3a4d7a68f21b7f6dd153645a1facfaf5558d99c3700c73e507662b58bb008046\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-minutes",
     "what": "GeneralizedTime without seconds",
-    "sha256": "5b273297a873f8ebdcbb4fa35820717f9e1439e1ad3200dc71ee735168a189d9",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"5b273297a873f8ebdcbb4fa35820717f9e1439e1ad3200dc71ee735168a189d9\",\"root\":\"-not_usable_der\"}"
+    "sha256": "6c29e571c72c337d491d96b00b5e97ca1e3a3082f5675f1227daaf0518ac181d",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"6c29e571c72c337d491d96b00b5e97ca1e3a3082f5675f1227daaf0518ac181d\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-fraction",
     "what": "GeneralizedTime with a fraction of a second",
-    "sha256": "c70ddecd047ad9b316e2c7b076c724e1fecf86007e9ca11c9b73e7a3bda33b6e",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"c70ddecd047ad9b316e2c7b076c724e1fecf86007e9ca11c9b73e7a3bda33b6e\",\"root\":\"-not_usable_der\"}"
+    "sha256": "9f83c15d53760c98aaba106444872d361558bf096b61af4d3323072b81a92bc5",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"9f83c15d53760c98aaba106444872d361558bf096b61af4d3323072b81a92bc5\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-no-zone",
     "what": "GeneralizedTime with no Z and no offset",
-    "sha256": "144e0cbcd8cfac2cddc3f1a3fc8219b7dfac1ab23a061d0089a76561cfaf5484",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"144e0cbcd8cfac2cddc3f1a3fc8219b7dfac1ab23a061d0089a76561cfaf5484\",\"root\":\"-not_usable_der\"}"
+    "sha256": "e4148c65c92d4b8baa5d18692153cb0f64ef256f268701bb3d7513c547bd276c",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"e4148c65c92d4b8baa5d18692153cb0f64ef256f268701bb3d7513c547bd276c\",\"root\":\"-not_usable_der\"}"
+  },
+  {
+    "name": "generalized-after-z",
+    "what": "GeneralizedTime with a character after the Z",
+    "sha256": "4f85557fc6fff0cc34f2f683495d485611c1b2c45714e9cd95450d20e4ec5025",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"4f85557fc6fff0cc34f2f683495d485611c1b2c45714e9cd95450d20e4ec5025\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-before-year-0",
     "what": "an offset that would give a time before year 0",
-    "sha256": "a6e0d0320201c8b1f365e7f9cc64ade6cb992b4b58e55cba585145752e31d91e",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"a6e0d0320201c8b1f365e7f9cc64ade6cb992b4b58e55cba585145752e31d91e\",\"root\":\"-not_usable_der\"}"
+    "sha256": "186aa4f94d3009e31fe2341bdde633098de21248ab61eda0ca9aae4d1c0e2e91",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"186aa4f94d3009e31fe2341bdde633098de21248ab61eda0ca9aae4d1c0e2e91\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-year-0-leap-day",
     "what": "year 0 is a leap year",
-    "sha256": "4c9260e66f4db6cf22ead76ce9cdfeaf04f5c85fffa76131ce0dd62de1219378",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0000-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"0000-02-29\",\"sha256\":\"4c9260e66f4db6cf22ead76ce9cdfeaf04f5c85fffa76131ce0dd62de1219378\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "507102dde40d7e960a6c7fc976f08d2b55c233f7a0cd66edb6ba634626cfd01e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0000-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"0000-02-29\",\"sha256\":\"507102dde40d7e960a6c7fc976f08d2b55c233f7a0cd66edb6ba634626cfd01e\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-year-99",
     "what": "a GeneralizedTime year below 100 is that year, not 19xx",
-    "sha256": "7651fe947cee702d84aa69c2bf851aff02ba0c064a2ce084b222991bebd45788",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0099-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"0100-01-01\",\"sha256\":\"7651fe947cee702d84aa69c2bf851aff02ba0c064a2ce084b222991bebd45788\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "fe265bfab254332def1373d2862c67e502ac3808deaff840e1fa506d6106dab0",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0099-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"0100-01-01\",\"sha256\":\"fe265bfab254332def1373d2862c67e502ac3808deaff840e1fa506d6106dab0\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-year-999",
     "what": "a year below 1000 keeps four digits",
-    "sha256": "f2e2d624d8b231f1fcc59b3310da1bcf8c28ad096708094d51a030adaa0c5da0",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0999-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1000-01-01\",\"sha256\":\"f2e2d624d8b231f1fcc59b3310da1bcf8c28ad096708094d51a030adaa0c5da0\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "ff25e993fda6375ab439a1dce529a9f8bc5dd627cca57c61a36fcdefde20295f",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"0999-12-31T23:59:59Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"1000-01-01\",\"sha256\":\"ff25e993fda6375ab439a1dce529a9f8bc5dd627cca57c61a36fcdefde20295f\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-year-10000",
     "what": "an offset that would give a time in year 10000",
-    "sha256": "bab8731d65cf6b6c625dedfcedf56d17dc6f161bb7e0216a67da84f3627bd8da",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"bab8731d65cf6b6c625dedfcedf56d17dc6f161bb7e0216a67da84f3627bd8da\",\"root\":\"-not_usable_der\"}"
+    "sha256": "16bda9209552808cbb0924e8eb83f478f593502d025281ab1dad8b90bd64eefe",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"16bda9209552808cbb0924e8eb83f478f593502d025281ab1dad8b90bd64eefe\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-year-10000-in-taiwan",
     "what": "year 9999 in UTC, year 10000 in Taiwan",
-    "sha256": "7a1ae80ef7c785f59a465b60d213075b47296eb3cbd56389f741bf278ac578aa",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"9999-12-31T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"10000-01-01\",\"sha256\":\"7a1ae80ef7c785f59a465b60d213075b47296eb3cbd56389f741bf278ac578aa\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "3528937686033539064939570422e6c5631f4b5595b6dab5e9b154eb67e36b04",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"9999-12-31T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"10000-01-01\",\"sha256\":\"3528937686033539064939570422e6c5631f4b5595b6dab5e9b154eb67e36b04\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-leap-day-1900",
     "what": "1900 is not a leap year",
-    "sha256": "0a268d7a058fa3ac36e137d39c7d5fe3ad9257d171551977ae3ef75276a597d1",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0a268d7a058fa3ac36e137d39c7d5fe3ad9257d171551977ae3ef75276a597d1\",\"root\":\"-not_usable_der\"}"
+    "sha256": "4c2cd0b94600f882d810ade8c9d3e40d0df522d1fcd8292559f4a766eacade14",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"4c2cd0b94600f882d810ade8c9d3e40d0df522d1fcd8292559f4a766eacade14\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "generalized-leap-day-2400",
     "what": "2400 is a leap year",
-    "sha256": "d27564895757840a96f8bd75d0fe9c4bb3e7ae097ccac9f2de061c478abf414b",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2400-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2400-02-29\",\"sha256\":\"d27564895757840a96f8bd75d0fe9c4bb3e7ae097ccac9f2de061c478abf414b\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "acb84c31c440cb9277a9fc4036d2674caad21dabf1e4ea3259baf52a75fc7177",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2400-02-29T00:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2400-02-29\",\"sha256\":\"acb84c31c440cb9277a9fc4036d2674caad21dabf1e4ea3259baf52a75fc7177\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "generalized-two-digit-year",
     "what": "a two-digit year in a GeneralizedTime",
-    "sha256": "cb31995b0b39997dd019988e0bdaff3c01911a317a26174a9db1a0574739199e",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"cb31995b0b39997dd019988e0bdaff3c01911a317a26174a9db1a0574739199e\",\"root\":\"-not_usable_der\"}"
+    "sha256": "62c16961c9110eeb88c3d67bfdf509dfae78eb39771cb4dc0ab517d270c59f4a",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"62c16961c9110eeb88c3d67bfdf509dfae78eb39771cb4dc0ab517d270c59f4a\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "next-update-absent",
     "what": "no nextUpdate",
-    "sha256": "cf32e4e31b4ab6ad7f51bd3ec535d7bf1acd7ecbe3c485802b14f4cedb67cc8c",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"-\",\"crl_date\":\"2026-11-20\",\"sha256\":\"cf32e4e31b4ab6ad7f51bd3ec535d7bf1acd7ecbe3c485802b14f4cedb67cc8c\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "26fe4d26892cabdbfd9ede53fc171f4bda38e990985ba241739523b4eb04de0a",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"-\",\"crl_date\":\"2026-11-20\",\"sha256\":\"26fe4d26892cabdbfd9ede53fc171f4bda38e990985ba241739523b4eb04de0a\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "next-update-year-1",
     "what": "nextUpdate is 0001-01-01T00:00:00Z: a time like any other, not a missing one",
-    "sha256": "f522a9a4449caf2a418dcc1d9d70c99051252e8487d1b9856be03286edb3c776",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"0001-01-01T00:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"f522a9a4449caf2a418dcc1d9d70c99051252e8487d1b9856be03286edb3c776\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "8c7abfd9fba807e1a4d23e015478578fc88c33129081feca16c46c1a53cbf7f4",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"0001-01-01T00:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"8c7abfd9fba807e1a4d23e015478578fc88c33129081feca16c46c1a53cbf7f4\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "next-update-offset",
     "what": "nextUpdate with an offset",
-    "sha256": "820c99fd654567e296fb697213442f5ffb75dd73f5c003ad4ec9076ed375657d",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"820c99fd654567e296fb697213442f5ffb75dd73f5c003ad4ec9076ed375657d\",\"root\":\"-not_usable_der\"}"
+    "sha256": "87e835949a643d78065decd227670478812ffc96b72af39df37495cf053f12e7",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"87e835949a643d78065decd227670478812ffc96b72af39df37495cf053f12e7\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "next-update-minutes",
     "what": "nextUpdate without seconds",
-    "sha256": "a1bb91a96a9e49194eb37a1d7367efcfd31fba5a7eb660f29e9f7e87fcfab41a",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"a1bb91a96a9e49194eb37a1d7367efcfd31fba5a7eb660f29e9f7e87fcfab41a\",\"root\":\"-not_usable_der\"}"
+    "sha256": "b225dae3c85c3a8b0b7c121af41646d51ee07d933010263cb7728fe2bbc16f7c",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"b225dae3c85c3a8b0b7c121af41646d51ee07d933010263cb7728fe2bbc16f7c\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "next-update-refused",
     "what": "a nextUpdate that is not a time",
-    "sha256": "c3dcba9edf12f8677afd2de0414329c1972a37bd9003cd0b89707020c4657ff6",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"c3dcba9edf12f8677afd2de0414329c1972a37bd9003cd0b89707020c4657ff6\",\"root\":\"-not_usable_der\"}"
+    "sha256": "be504b90a8ed8ff8428012d0a2283f420631317ecd84430c1139a3f68db131a6",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"be504b90a8ed8ff8428012d0a2283f420631317ecd84430c1139a3f68db131a6\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "revocation-date-generalized",
     "what": "an entry's revocationDate as GeneralizedTime",
-    "sha256": "6e5e4bae4c7818cd4e335c40e39595fac54255622662ae2bfa3be2f0cd54c79b",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"6e5e4bae4c7818cd4e335c40e39595fac54255622662ae2bfa3be2f0cd54c79b\",\"root\":\"-not_usable_signature\"}"
+    "sha256": "aa023480645954b476181fb443eee428d2caee3122a7a47713685f17c65c289e",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"4660\",\"this_update\":\"2026-11-19T16:00:00Z\",\"next_update\":\"2026-11-21T04:00:00Z\",\"crl_date\":\"2026-11-20\",\"sha256\":\"aa023480645954b476181fb443eee428d2caee3122a7a47713685f17c65c289e\",\"root\":\"-not_usable_signature\"}"
   },
   {
     "name": "revocation-date-offset",
     "what": "an entry's revocationDate with an offset",
-    "sha256": "687506179e3c1b222ca832d817b52e5306793b176a17ad866ea423a0bc85db16",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"687506179e3c1b222ca832d817b52e5306793b176a17ad866ea423a0bc85db16\",\"root\":\"-not_usable_der\"}"
+    "sha256": "b10ae710342074a07d5286a87b7647322f0c604c9da94ad460c9733162b4e5a0",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"b10ae710342074a07d5286a87b7647322f0c604c9da94ad460c9733162b4e5a0\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "revocation-date-minutes",
     "what": "an entry's revocationDate without seconds",
-    "sha256": "a34804f031497355a9dbf2c0a6cbf79d15b6e0cb8947d75797007e6340582096",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"a34804f031497355a9dbf2c0a6cbf79d15b6e0cb8947d75797007e6340582096\",\"root\":\"-not_usable_der\"}"
+    "sha256": "0e5f57f8bf012bba21702e669d6dae13deb89ea205a5a2d695270061a47da491",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"0e5f57f8bf012bba21702e669d6dae13deb89ea205a5a2d695270061a47da491\",\"root\":\"-not_usable_der\"}"
   },
   {
     "name": "revocation-date-no-such-day",
     "what": "an entry's revocationDate on 31 November",
-    "sha256": "c50242b895a3a2d96640dc1ee3780fed7e42a77c0262748b6fcd6b51386c60ea",
-    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"c50242b895a3a2d96640dc1ee3780fed7e42a77c0262748b6fcd6b51386c60ea\",\"root\":\"-not_usable_der\"}"
+    "sha256": "ca09d3b35db6a3fbb5902ab6af8eb3b69341f2370ac3c0d4a0eb20c1a0f0aff8",
+    "line": "{\"issuer\":\"-\",\"crl_number\":\"-\",\"this_update\":\"-\",\"next_update\":\"-\",\"crl_date\":\"-\",\"sha256\":\"ca09d3b35db6a3fbb5902ab6af8eb3b69341f2370ac3c0d4a0eb20c1a0f0aff8\",\"root\":\"-not_usable_der\"}"
   }
 ]
