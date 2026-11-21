@@ -7,12 +7,13 @@
 //   node tests/counterfactual/run.mjs NAME...    only these
 //   KEEP=1 node tests/counterfactual/run.mjs ... keep the builds, print where
 //
-// Needs `nargo compile` and `scripts/vk.sh` to have run in the repository
-// (the library sources are copied from ~/nargo, where nargo fetched them, and
-// each variant's verification keys are compared with target/vk). Variants are
-// built in a temporary directory outside the repository (inside it, nargo
-// finds the repository's own workspace instead) and removed afterwards; the
-// table goes to out/counterfactual/result.md.
+// Needs `nargo compile --workspace` to have run in circuits/ (the library
+// sources are copied from ~/nargo, where nargo fetched them). Uses the nargo
+// of fetch-nargo.sh and the bb of find-bb.sh, and compares each variant's
+// verification keys with verifier/vk/. Variants are built in a temporary
+// directory outside the repository (inside it, nargo finds the repository's
+// own workspace instead) and removed afterwards; the table goes to
+// out/counterfactual/result.md.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = join(ROOT, "out", "counterfactual");
-const WORK = join(tmpdir(), `zkid-noir-counterfactual-${process.pid}`);
+const WORK = join(tmpdir(), `circuits-counterfactual-${process.pid}`);
 const NARGO_HOME = join(homedir(), "nargo", "github.com");
 const LIBS = {
   noir_rsa: "zkpassport/noir_rsa/v0.12.1",
@@ -30,7 +31,13 @@ const LIBS = {
   sha256: "noir-lang/sha256/v0.3.0",
   poseidon: "noir-lang/poseidon/v0.3.0",
 };
-const env = { ...process.env, PATH: `${join(ROOT, ".tools", "nargo")}:${join(ROOT, ".tools", "bb")}:${process.env.PATH}` };
+// The pinned tools, each checked against its SHA-256 by the script that finds it.
+const tool = (script) => {
+  const r = spawnSync(join(ROOT, script), { encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`${script} failed\n${r.stderr}`);
+  return dirname(r.stdout.trim());
+};
+const env = { ...process.env, PATH: `${tool("fetch-nargo.sh")}:${tool("find-bb.sh")}:${process.env.PATH}` };
 
 // ---- named changes: exact text, found exactly once ------------------------
 const BARRETT = "    let (q, r): ([u128; N], [u128; N]) =\n        __barrett_reduction(&to_reduce, &params.redc_param, MOD_BITS, &params.modulus);\n    (q, r)";
@@ -42,7 +49,7 @@ const PATCHES = {
   own_no_in_field: ["lib/src/rsa.nr", "    signature.validate_in_field();\n", ""],
   own_no_top_bit: ["lib/src/der.nr", "    assert(modulus[0] >= 0x80);\n", ""],
   own_no_tbs_len_bound: ["lib/src/der.nr", "    assert(tbs_len <= MAX_SIGNED_LEN);\n", ""],
-  // Library lines (audit/round2/b3/REPORT.md section 5).
+  // Library lines (the list at the top of tests/library-guarantees.test.mjs).
   lib_no_factor_range: ["libs/bignum/src/fns/expressions.nr",
     "    lhs_terms.for_each(|lhs_limbs: [[u128; N]; LHS_N]| {\n        lhs_limbs.for_each(|term: [u128; N]| validate_in_range::<N, MOD_BITS>(&term))\n    });\n"
     + "    rhs_terms.for_each(|rhs_limbs: [[u128; N]; RHS_N]| {\n        rhs_limbs.for_each(|term: [u128; N]| validate_in_range::<N, MOD_BITS>(&term))\n    });\n", ""],
@@ -169,14 +176,14 @@ function build(v) {
     const w = spawnSync("bb", ["write_vk", "-b", join(dir, "target", `${circuit}.json`), "-o", out, "-c", join(ROOT, ".crs"), "-t", "noir-recursive"], { env, encoding: "utf8" });
     if (w.status !== 0) throw new Error(`${v.name}: bb write_vk failed for ${circuit}`);
     const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
-    vks[circuit] = sha(join(out, "vk")) === sha(join(ROOT, "target", "vk", circuit, "vk")) ? "same" : "different";
+    vks[circuit] = sha(join(out, "vk")) === sha(join(ROOT, "..", "verifier", "vk", `${circuit}.vk`)) ? "same" : "different";
   }
   return { dir, vks };
 }
 
 function runTests(dir, file, pattern) {
   const r = spawnSync("node", ["--test", "--test-concurrency=1", `--test-name-pattern=${pattern}`, file],
-    { cwd: ROOT, env: { ...env, ZKID_NOIR_TARGET: join(dir, "target") }, encoding: "utf8" });
+    { cwd: ROOT, env: { ...env, CIRCUITS_TARGET: join(dir, "target") }, encoding: "utf8" });
   const count = (k) => Number(new RegExp(`^# ${k} (\\d+)$`, "m").exec(r.stdout)?.[1] ?? -1);
   const failed = [...r.stdout.matchAll(/^\s*not ok \d+ - (.*)$/gm)].map((m) => m[1]);
   return { pass: count("pass"), fail: count("fail"), failed };

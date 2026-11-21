@@ -2,7 +2,7 @@ use card_proof::{card_proof, CardProof};
 
 // The card proof circuit for certificates issued under a 2048-bit issuer key
 // (MOICA G2). Public inputs, in order: issuer_modulus, smt_root, current_time,
-// then the return value (docs/public-inputs.md).
+// then the return value (spec/proof-verification.md, "Public inputs").
 fn main(
     tbs: [u8; 1536],
     tbs_len: u32,

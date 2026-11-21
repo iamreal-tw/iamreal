@@ -1,8 +1,10 @@
 // Builds synthetic TBSCertificates signed by a throwaway test CA, so tests can
 // vary one DER field at a time. No real certificate is involved.
 //
-// Ported from wallet-unit-poc/circom/tests/common/testCert.ts so that the
-// circom circuit and this prototype are tested against the same bytes.
+// Ported from wallet-unit-poc/circom/tests/common/testCert.ts of PSE zkID
+// (https://github.com/iamreal-tw/zkID at the commit in circuits/zkid-commit;
+// MIT License, Copyright (c) 2026 Ethereum Foundation), so that the circom
+// circuit and the Noir circuits are tested against the same bytes.
 import { constants, createHash, generateKeyPairSync, sign } from "node:crypto";
 
 export function tlv(tag, content) {

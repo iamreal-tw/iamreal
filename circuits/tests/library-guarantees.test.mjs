@@ -1,8 +1,9 @@
 // Guarantees of the card proof circuit that rest, or used to rest, on a line
-// inside a library: the list of audit/round2/b3/REPORT.md section 5. A library
-// upgrade can drop such a line without any other test noticing. Each test here
-// fails if its line is gone; tests/counterfactual/ removes each line in a copy
-// and checks that. Run both before changing a library version.
+// inside a library, as the AI-assisted review of the circuit listed them
+// (circuits/README.md). A library upgrade can drop such a line without any
+// other test noticing. Each test here fails if its line is gone;
+// tests/counterfactual/ removes each line in a copy and checks that. Run both
+// before changing a library version.
 //
 //   tag         guarantee                                    held by
 //   [G1-own]    one limb encoding per signature              lib/src/rsa.nr `from_array`

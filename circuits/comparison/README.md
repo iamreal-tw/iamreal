@@ -1,6 +1,6 @@
 # comparison：只為了和 circom 電路逐案比對
 
-**這個目錄不是要上線的電路。** 要上線的是根目錄的 `card_proof_rs2048`、`card_proof_rs4096`。
+**這個目錄不是要上線的電路。** 要上線的是 `circuits/` 底下的 `card_proof_rs2048`、`card_proof_rs4096`。
 
 ADR-0012 規定電路的各個部分各自和 PSE 的 circom 電路逐案比對。circom 那邊把一次過卡拆成三份證明：`CertChainRSA256` 一份，`UserSigRSA256` 跑兩次，三份用公鑰承諾值連起來。這裡把正式電路的各個部分包成和 circom 相同的形狀，同一份位元組才能同時餵給兩邊。
 
@@ -37,12 +37,12 @@ circom 的測試「題目給任何值都接受」（`any value for the per-sessi
 
 ## 重跑
 
-在根目錄：
+在 `circuits/`（`nargo` 用 `fetch-nargo.sh` 下載的那一個）：
 
 ```
-nargo compile
-nargo test --package comparison
+"$(./fetch-nargo.sh)" compile --workspace
+"$(./fetch-nargo.sh)" test --package comparison
 node --test tests/equivalence.test.mjs
 ```
 
-結果寫到 `out/equivalence.md`。每一案同時跑這裡的電路、正式的電路、circom 的電路；表的說明在檔案開頭。circom 那一欄需要它的見證產生器，見根目錄的 `README.md`。
+結果寫到 `out/equivalence.md`。每一案同時跑這裡的電路、正式的電路、circom 的電路；表的說明在檔案開頭。circom 那一欄需要它的見證產生器，見 `circuits/README.md`。

@@ -57,7 +57,7 @@ describe("card proof", () => {
   // signature by the card.
   it("rejects a declaration code computed from another challenge that the card did not sign", async () => {
     const declaration = { action: "declare", scopeString: "iamreal:threads:0______________", username: "alice" };
-    assert.deepEqual(declarationCode({ ...declaration, challenge: "1234567890" }), CODE); // the spec's test vector
+    assert.deepEqual(declarationCode({ ...declaration, challenge: "1234567890" }), CODE); // the draft's example (tests/lib/declaration-code.mjs)
     const otherCode = declarationCode({ ...declaration, challenge: "1234567891" });
     assert.notDeepEqual(otherCode, CODE);
 

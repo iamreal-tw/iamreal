@@ -1,7 +1,9 @@
-// Every test case of the circom circuit (wallet-unit-poc/circom/tests/circuits,
-// branch `primary-card`), rebuilt on throwaway keys, plus the cases added
-// here. Each case is one set of bytes fed to the circom circuit, to the Noir
-// comparison circuit of the same shape, and to the card proof circuit.
+// Every test case of the circom circuit (wallet-unit-poc/circom/tests/circuits
+// of PSE zkID, https://github.com/iamreal-tw/zkID at the commit in
+// circuits/zkid-commit; MIT License, Copyright (c) 2026 Ethereum Foundation),
+// rebuilt on throwaway keys, plus the cases added here. Each case is one set
+// of bytes fed to the circom circuit, to the Noir comparison circuit of the
+// same shape, and to the card proof circuit.
 //
 // The upstream RS2048 / RS4096 / linking / audit tests read fixture files made
 // from a real certificate. Here they run on synthetic certificates instead.
@@ -15,7 +17,8 @@ import { chainCase, sigCase } from "./lib/inputs.mjs";
 // 2026-11-14 15:59:59 UTC as YYMMDDHHMMSS.
 export const NOW = 261114155959n;
 export const SCOPE = Buffer.from("iamreal-test:threads:0_________", "ascii");
-// spec/vectors/declaration-code.json of the public repository: declare, @alice.
+// The code tests/lib/declaration-code.mjs (an earlier draft) gives for declare,
+// @alice, challenge 1234567890.
 export const CODE = Buffer.from("DX8FHVFCJDJXXEVP2Q0W9PJ1EBH5Z8Z", "ascii");
 
 // The first byte of a signed message decides its kind (ADR-0007). `scope`:

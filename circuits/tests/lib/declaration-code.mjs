@@ -1,6 +1,10 @@
-// The declaration code as spec/declaration-code.md of the public repository
-// defines it (draft, iamreal-declaration-v1). The tests use it to make the
-// code of another challenge; the card proof circuit does not compute it.
+// The declaration code as an earlier draft of spec/declaration-code.md
+// defined it, before the preimage took its current form; it is not the
+// algorithm of spec/declaration-code.md now. The tests use it only to make
+// the code of another challenge. The card proof circuit does not compute the
+// declaration code: it checks the card's signature over the 31 bytes and
+// their first byte, and the verifier recomputes the code from the challenge
+// as spec/declaration-code.md says.
 import { createHash } from "node:crypto";
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
