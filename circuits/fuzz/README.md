@@ -7,7 +7,7 @@
 ## 需要
 
 - `circuits/` 已經 `pnpm install`、`"$(./fetch-nargo.sh)" compile --workspace`（`../target/*.json`）。Noir 的執行器和 bb.js 從 `../node_modules` 載入，沒有另外的套件。
-- circom 的見證產生器：`../build-circom.sh` 建在 `../.zkID/`，和 `../tests/` 找的是同一個；環境變數 `ZKID_CIRCOM_BUILD` 可以改。也要讀它的電路原始碼（`components/poseidonP256Constants.circom`，算 circom 那邊的雜湊），預設在 build 的上一層 `circuits/`，可以用 `ZKID_CIRCOM_SRC` 改。只跑 Noir 時加 `--no-circom`。
+- circom 的見證產生器：`../build-circom.sh` 建在 `../.zkID/`，和 `../tests/` 找的是同一個；環境變數 `ZKID_CIRCOM_BUILD` 可以改。也要讀它的一個電路原始檔（`components/poseidonP256Constants.circom`，算 circom 那邊的雜湊），預設在 build 的上一層 `circuits/`（`build-circom.sh` 會留下這個檔），可以用 `ZKID_CIRCOM_SRC` 改。只跑 Noir 時加 `--no-circom`。
 - Node 22。
 - `keys/pool.json`：金鑰池，第一次執行時產生，之後固定。裡面是用完即丟的私鑰，不進版本控制（`../.gitignore`）。同一個種子要重現同一批案例，必須用同一份金鑰池；AI 檢查時用的那一份沒有公開，所以這裡跑同一個種子得到的是另一批案例。
 

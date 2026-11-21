@@ -132,9 +132,9 @@ pnpm test                                    # 全部的 JavaScript 測試，含
 
 ### circom 的見證產生器
 
-逐案比對的 circom 那一欄要 circom 電路的見證產生器。`./build-circom.sh` 從 `https://github.com/iamreal-tw/zkID`（PSE zkID 的 fork）clone 到 `.zkID/`，checkout `zkid-commit` 的提交，在 `wallet-unit-poc/circom` 照那裡的 README 跑 `yarn install`（照 `yarn.lock`，不跑安裝腳本）和 `yarn compile:all`。要 git、PATH 上有 circom 2.2.3、corepack（Node 附的）。在 Apple M 系列的電腦上約 3 分鐘。
+逐案比對的 circom 那一欄要 circom 電路的見證產生器。`./build-circom.sh` 從 `https://github.com/iamreal-tw/zkID`（PSE zkID 的 fork）只抓 `zkid-commit` 那一個提交（不帶歷史），在暫存目錄照它 `wallet-unit-poc/circom/README.md` 跑 `yarn install`（照 `yarn.lock`，不跑安裝腳本）和 `yarn compile:all`，再只把測試和 `fuzz/` 讀的檔（每份電路的 `.wasm` 和 `witness_calculator.js`、`fuzz/` 要的一個 circom 原始檔）留在 `.zkID/`，約 20 MB；其餘的刪掉。要 git、PATH 上有 circom 2.2.3、corepack（Node 附的）。在 Apple M 系列的電腦上約 3 分鐘，建置時暫存目錄要約 4 GB 的空間。
 
-測試預設找 `.zkID/wallet-unit-poc/circom/build`，可以用環境變數 `ZKID_CIRCOM_BUILD` 改。找不到時 circom 那一欄標 `not run`，Noir 的部分照跑。改電路後要重跑（ADR-0012）。
+測試預設找 `.zkID/wallet-unit-poc/circom/build`，可以用環境變數 `ZKID_CIRCOM_BUILD` 改。已經有一份建好的（例如另一個 worktree 的 `.zkID/`），用 `ZKID_CIRCOM_BUILD` 指過去就好，不用每個 worktree 各建一份。找不到時 circom 那一欄標 `not run`，Noir 的部分照跑。改電路後要重跑（ADR-0012）。
 
 對照的對象：`zkid-commit` 是 fork 的 `primary-card` 分支，在 PSE 上游 `privacy-ethereum/zkID` 的 `RSA-X.509-Cert` 分支的 `97210baed65ed53d098a4e86fb551caf1c844b4e` 之上多 7 個提交（`git log 97210ba..e95abdf`）：憑證電路加了效期、公鑰位置由結構推導、金鑰用途、正卡、卡片金鑰剛好 2048 位元的檢查（ADR-0008 到 0011），各有新的 circom 測試；一個 AI 檢查之後的加強；一個把 `currentTime` 接到輸入產生器、證明程式和網頁。逐案比對跑這個提交上每一個 circom 測試的案例。
 
