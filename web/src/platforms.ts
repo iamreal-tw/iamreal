@@ -16,7 +16,7 @@
 // and cannot be changed (src/flow.ts). The server's display name is not
 // shown. The scope string is not a platform's: there is one for the public
 // roster (protocol/src/scope.ts).
-import { PRESENTATIONS } from "./target.ts";
+import { PRESENTATIONS, SITE_DOMAIN } from "./target.ts";
 
 export interface Presentation {
   /** The platform ID this definition is for. */
@@ -54,10 +54,12 @@ export function handle(platform: string, username: string): string {
 }
 
 /**
- * The domain of iamreal's site, as links on the screen write it. The page
- * itself never connects to it (it is served from its own origin).
+ * The domain of the site of the build's roster, as links on the screen
+ * write it: iamreal.tw, and test.iamreal.tw on the test site
+ * (src/target.ts). The page itself never connects to it (it is served from
+ * its own origin).
  */
-export const SITE_DOMAIN = "iamreal.tw";
+export { SITE_DOMAIN };
 
 /** The path of a card's page (its proof page) on iamreal's site, after the domain: `p/` and the 10 characters of the short ID. */
 export function cardPath(shortId: string): string {

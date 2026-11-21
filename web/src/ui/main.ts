@@ -5,7 +5,6 @@ import { HipkiCard } from "../card/hipki.ts";
 import { startEngine } from "../index.ts";
 import { COMPONENT_ORIGIN } from "../target.ts";
 import { startApp } from "./app.ts";
-import { showTestRosterMark } from "./test-roster.ts";
 
 /** Step timings as performance measures: they stay in this page (for the headless test's measurements). */
 const onTiming = (step: string, ms: number): void => {
@@ -16,6 +15,5 @@ const onTiming = (step: string, ms: number): void => {
   }
 };
 
-showTestRosterMark();
 const prover = startEngine((step, ms) => onTiming(`engine_${step}`, ms));
 startApp({ root: document.getElementById("app")!, prover, card: new HipkiCard(COMPONENT_ORIGIN), onTiming });

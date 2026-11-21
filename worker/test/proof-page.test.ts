@@ -28,7 +28,7 @@ const good: ProofPage = {
     "crs/bn254_g1_compressed_2p18.dat": 8_388_608,
     "crs/bn254_g2.dat": 128,
   },
-  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const mark={sentence:"測試名冊　不定期清空，上次清空：",clearedOn:"${CLEARED_ON}"};// see https://www.w3.org/TR/wasm/`,
+  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const site="test.iamreal.tw";const mark=JSON.parse('{"sentence":"測試名冊　不定期清空，上次清空：","clearedOn":"${CLEARED_ON}","scope":"iamreal-test:public:0__________"}');// see https://www.w3.org/TR/wasm/`,
 };
 const withFiles = (change: (files: Record<string, number>) => void): ProofPage => {
   const files = { ...good.files };
@@ -76,6 +76,11 @@ test("a build of another target is turned away: the tests', the production roste
     ["another address of the project", { ...good, code: `${good.code}"https://iamreal.tw/api"` }, /https:\/\/iamreal\.tw/],
     ["no mark of a test roster", withCode("測試名冊", ""), /mark of a test roster/],
     ["the mark with another date than the Worker's setting", withCode(CLEARED_ON, "2026-11-18"), /2026-11-19/],
+    ["a build whose target signs the public roster's scope string", withCode('"scope":"iamreal-test:public:0__________"', '"scope":"iamreal:public:0_______________"'), /says the build signs iamreal-test:public:0__________/],
+    ["a mark that does not say which scope string", withCode(',"scope":"iamreal-test:public:0__________"', ""), /says the build signs/],
+    ["two marks", { ...good, code: `${good.code}'{"clearedOn":"${CLEARED_ON}","scope":"iamreal:public:0_______________"}'` }, /says the build signs/],
+    ["the public site's domain in the links", withCode('"test.iamreal.tw"', '"iamreal.tw"'), /test\.iamreal\.tw/],
+    ["both sites' domains", { ...good, code: `${good.code}const other="iamreal.tw"` }, /links with iamreal\.tw/],
   ];
   for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
   // The date the build must carry is the one it is checked against.
@@ -109,7 +114,10 @@ test("the test site's build of web/ passes, with the date it was given; without 
     else assert.throws(() => checkProofPage(page, "test", CLEARED_ON), /crs\/bn254_g1_compressed_2p18\.dat/);
     // Whatever the CRS, everything else about it holds.
     checkProofPage({ ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } }, "test", CLEARED_ON);
-    assert.throws(() => checkProofPage(page, "test", "2026-11-20"), /2026-11-20/);
+    // The production build of web/ in its place is turned away: it has no mark, the public roster's data domain and the public site's links.
+    // The checks of a pull request have no CRS: the date is looked at on the copy that has one in its place.
+    const whole = { ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } };
+    assert.throws(() => checkProofPage(whole, "test", "2026-11-20"), /2026-11-20/);
     assert.equal(readProofPage(join(dir, "nothing-here")), null);
   } finally {
     rmSync(dir, { recursive: true, force: true });

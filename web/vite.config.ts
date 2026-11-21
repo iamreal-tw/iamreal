@@ -25,8 +25,10 @@
 // - testsite (`pnpm build:test-site`): the same pages, with
 //   src/target-test-site.ts in place of src/target.ts: what test.iamreal.tw
 //   serves. Like localcard, but the CRL archive comes from the test roster's
-//   data domain, and the pages carry the mark of a test roster
-//   (design/copy/test-site.md) with the date the roster was last cleared on.
+//   data domain, the link of the last screen is the test site's, and the
+//   pages carry the mark of a test roster (design/copy/test-site.md) with
+//   the date the roster was last cleared on: src/ui/test-roster.ts, an
+//   entry this mode adds to the pages and no other mode has.
 //   The date is the environment variable IAMREAL_TEST_ROSTER_CLEARED_ON,
 //   YYYY-MM-DD: who builds for a deploy passes the one of the Worker's
 //   settings (worker/wrangler.jsonc). Without it this mode is not built.
@@ -36,6 +38,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Plugin, defineConfig } from "vite";
+import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -97,12 +100,19 @@ const LOCAL_TARGET = join(here, "src", "target-local.ts");
 const TEST_SITE_TARGET = join(here, "src", "target-test-site.ts");
 const OTHER_TARGETS: Record<string, string> = { test: TEST_TARGET, localcard: LOCAL_TARGET, testsite: TEST_SITE_TARGET };
 
+/** The scope strings of spec/scope.md, as protocol/src/scope.ts has them. */
+const TEST_SCOPE = "iamreal-test:public:0__________";
+
 /**
- * The mark of a test roster for the test site's build: the sentence of
- * design/copy/test-site.md up to its example date, and the date of
- * IAMREAL_TEST_ROSTER_CLEARED_ON, which must be a date of the calendar.
+ * The mark of a test roster for the test site's build, as the JSON text
+ * src/ui/test-roster.ts reads: the sentence of design/copy/test-site.md up
+ * to its example date; the date of IAMREAL_TEST_ROSTER_CLEARED_ON, which
+ * must be a date of the calendar; and the scope string the build's target
+ * (src/target-test-site.ts, loaded here) has the card sign, which must be
+ * the test roster's: this mode is not built with a target of the public
+ * roster.
  */
-function testRosterMark(): { sentence: string; clearedOn: string } {
+async function testRosterMark(): Promise<string> {
   const clearedOn = process.env.IAMREAL_TEST_ROSTER_CLEARED_ON ?? "";
   const [y, m, d] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(clearedOn)?.slice(1).map(Number) ?? [];
   const date = y === undefined ? null : new Date(Date.UTC(y, m! - 1, d));
@@ -112,7 +122,18 @@ function testRosterMark(): { sentence: string; clearedOn: string } {
   const copy = readFileSync(join(here, "..", "design", "copy", "test-site.md"), "utf8");
   const sentence = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(copy)?.[1];
   if (sentence === undefined) throw new Error("design/copy/test-site.md: no sentence that ends with a date in its first block");
-  return { sentence, clearedOn };
+  const { ROSTER } = (await import("./src/target-test-site.ts")) as { ROSTER: Roster };
+  const scope = scopeOf(ROSTER);
+  if (scope !== TEST_SCOPE) throw new Error(`vite mode testsite: src/target-test-site.ts has the card sign ${scope}, not the test roster's ${TEST_SCOPE}`);
+  return JSON.stringify({ sentence, clearedOn, scope });
+}
+
+/** Adds the mark's script (src/ui/test-roster.ts) to both pages, before Vite reads their scripts: an entry only this mode's build has. */
+function testRosterEntry(): Plugin {
+  return {
+    name: "iamreal-test-roster-mark",
+    transformIndexHtml: { order: "pre", handler: () => [{ tag: "script", attrs: { type: "module", src: "/src/ui/test-roster.ts" }, injectTo: "head" }] },
+  };
 }
 
 /** In mode "test", src/target.ts is replaced by test/e2e/target.ts; in mode "localcard", by src/target-local.ts; in mode "testsite", by src/target-test-site.ts. */
@@ -127,15 +148,16 @@ function otherTarget(replacement: string): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   const pages = mode !== "engine";
   if (pages && mode !== "production" && !Object.hasOwn(OTHER_TARGETS, mode)) throw new Error(`vite mode ${mode}: production, test, localcard, testsite or engine`);
   return {
     // The pages are served under /proof/ (the card proof page at /proof, server/README.md); the
     // engine's own test page at /. src/base.ts reads it for the page's own paths.
     base: pages ? "/proof/" : "/",
-    plugins: [noDataUrlWasm(), ownOriginAssets(), ...(Object.hasOwn(OTHER_TARGETS, mode) ? [otherTarget(OTHER_TARGETS[mode]!)] : [])],
-    ...(mode === "testsite" && { define: { __IAMREAL_TEST_ROSTER_MARK__: JSON.stringify(testRosterMark()) } }),
+    plugins: [noDataUrlWasm(), ownOriginAssets(), ...(Object.hasOwn(OTHER_TARGETS, mode) ? [otherTarget(OTHER_TARGETS[mode]!)] : []), ...(mode === "testsite" ? [testRosterEntry()] : [])],
+    // The JSON text, as a string in the script: JSON.stringify twice.
+    ...(mode === "testsite" && { define: { __IAMREAL_TEST_ROSTER_MARK__: JSON.stringify(await testRosterMark()) } }),
     build: {
       target: "es2022",
       assetsInlineLimit: 0,
@@ -143,7 +165,7 @@ export default defineConfig(({ mode }) => {
       ...(pages && { rollupOptions: { input: { index: join(here, "index.html"), help: join(here, "help.html") } } }),
     },
     // Worker bundles are built separately and need the plugin too.
-    worker: { format: "es", plugins: () => [noDataUrlWasm()] },
+    worker: { format: "es" as const, plugins: () => [noDataUrlWasm()] },
     optimizeDeps: { exclude: ["@aztec-foundation/bb.js", "@noir-lang/noir_js"] },
   };
 });

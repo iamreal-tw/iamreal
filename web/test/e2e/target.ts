@@ -7,7 +7,6 @@ import type { IssuerKey } from "../../src/issuers.ts";
 import type { Presentation } from "../../src/platforms.ts";
 import { TEST_EXAMPLE } from "../../src/presentations/test-example.ts";
 import { THREADS } from "../../src/presentations/threads.ts";
-import type { TestRosterMark } from "../../src/target.ts";
 import type { Roster } from "iamreal-protocol/scope.ts";
 
 /** The test roster: the card signs `iamreal-test:public:0__________`. */
@@ -29,5 +28,5 @@ export const DATA_ORIGIN = "";
 
 export const IDLE_LIMIT_MS: number = __IAMREAL_TEST_IDLE_MS__;
 
-/** No mark: the screens the tests compare are the ones every build has. The test site's build has its own test (test/build.test.ts, test/e2e/ui.ts). */
-export const TEST_ROSTER_MARK: TestRosterMark | null = null;
+/** The links the screens write, as the production build writes them: the tests compare the screens with design/copy/, whose examples are the public site's. */
+export const SITE_DOMAIN = "iamreal.tw";

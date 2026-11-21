@@ -42,23 +42,6 @@ body {
   line-height: 1.7;
 }
 
-/* A test site says so above everything else (design/copy/test-site.md); as on the site's other pages. */
-.test-roster {
-  margin: 0;
-  padding: 6px 20px;
-  background: var(--teal-bg);
-  color: var(--teal);
-  font-weight: 700;
-  font-size: 15px;
-  text-align: center;
-  letter-spacing: 0.1em;
-}
-
-/* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
-.test-roster time {
-  white-space: nowrap;
-}
-
 main {
   max-width: 560px;
   margin: 0 auto;
