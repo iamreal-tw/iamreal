@@ -317,12 +317,12 @@ describe("an archive of more files than one listing of the bucket gives", () => 
 describe("files made to take long to read", () => {
   // An unsigned file with the structure of a CRL whose cRLNumber is an INTEGER of `bytes` bytes.
   const ALGORITHM = der(0x30, der(0x06, Uint8Array.from([0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b])), der(0x05));
-  const withNumber = (bytes: number): { file: Uint8Array; number: string } => {
+  const withNumber = (bytes: number): { file: Uint8Array } => {
     const content = Buffer.alloc(bytes, 0x9c);
     content[0] = 0x7f;
     const extensions = der(0xa0, der(0x30, der(0x30, der(0x06, Uint8Array.from([0x55, 0x1d, 0x14])), der(0x04, der(0x02, content)))));
     const tbs = der(0x30, der(0x02, Uint8Array.from([1])), ALGORITHM, der(0x30), der(0x17, Buffer.from("261119160000Z")), extensions);
-    return { file: new Uint8Array(der(0x30, tbs, ALGORITHM, der(0x03, Uint8Array.from([0]), Buffer.alloc(256, 1)))), number: BigInt(`0x${content.toString("hex")}`).toString() };
+    return { file: new Uint8Array(der(0x30, tbs, ALGORITHM, der(0x03, Uint8Array.from([0]), Buffer.alloc(256, 1)))) };
   };
 
   describe("a cRLNumber of 400 KB and one of 3 MB", () => {
@@ -339,11 +339,11 @@ describe("files made to take long to read", () => {
     });
     after(() => worker.close());
 
-    test("each gets its line in seconds, with the number in decimal", async () => {
-      // Before the numbers were read in linear time, the smaller one alone took 26 seconds, and the larger would have taken many minutes.
-      assert.ok(took < 60_000, `the round took ${took} ms`);
-      for (const { file, number } of [small, large]) {
-        assert.equal(await lineOf(worker, file), `{"issuer":"-","crl_number":"${number}","this_update":"2026-11-19T16:00:00Z","next_update":"-","crl_date":"2026-11-20","sha256":"${sha256Hex(file)}","root":"-not_usable_signature"}`);
+    test("each gets its line in seconds, without the number: a cRLNumber has at most 20 bytes", async () => {
+      // Before the numbers were read in linear time, the smaller one alone took 26 seconds; before #120 put a bound on their length, each line held the number in decimal.
+      assert.ok(took < 30_000, `the round took ${took} ms`);
+      for (const { file } of [small, large]) {
+        assert.equal(await lineOf(worker, file), `{"issuer":"-","crl_number":"-","this_update":"2026-11-19T16:00:00Z","next_update":"-","crl_date":"2026-11-20","sha256":"${sha256Hex(file)}","root":"-not_usable_signature"}`);
       }
     });
 
@@ -361,7 +361,7 @@ describe("files made to take long to read", () => {
     });
   });
 
-  test("30,000 extensions, the last of them a second cRLNumber: the line comes in seconds and says so", () =>
+  test("30,000 extensions, and the same with a second cRLNumber last: the lines come in seconds and say there are too many", () =>
     withWorker({}, async (worker) => {
       // 2.5.29.<20000 + i>, each a different extension; then cRLNumber, which makeCrl has already written.
       const many = Array.from({ length: 30_000 }, (_, i) => der(0x30, der(0x06, Uint8Array.from([0x55, 0x1d, 0x80 | ((20_000 + i) >> 14), 0x80 | (((20_000 + i) >> 7) & 0x7f), (20_000 + i) & 0x7f])), der(0x04, der(0x05))));
@@ -374,8 +374,11 @@ describe("files made to take long to read", () => {
       assert.equal((await worker.runSchedule()).outcome, "ok");
       const took = Date.now() - started;
       assert.ok(took < 20_000, `the round took ${took} ms`); // comparing every pair took 27 seconds for each of the two files
-      assert.equal(await rootOf(worker, distinct), "0".repeat(64));
-      assert.equal(await rootOf(worker, twice), "-not_usable_duplicate_extension");
+      // More than 16 comes before a duplicate; with more than 16, the index has no number.
+      for (const file of [distinct, twice]) {
+        assert.equal(await rootOf(worker, file), "-not_usable_too_many_extensions");
+        assert.match((await lineOf(worker, file))!, /"crl_number":"-"/);
+      }
     }));
 });
 
