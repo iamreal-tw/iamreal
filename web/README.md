@@ -481,7 +481,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `scripts/` | 下載通用參數、從 `nargo` 的輸出寫出 `circuits/` 的檔案、在本機整條跑（`local.ts`） |
 | `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器（Node 裡的測試用）；`test/generate/` 從它們產生 `spec/vectors/` 的標準答案（不是測試，`pnpm test` 不跑）；`test/e2e/` 是無頭瀏覽器的測試、假元件、Worker 前面扮演資料網域的小服務（`worker-site.ts`）、量測。無頭瀏覽器的測試引用 `worker/test/` 的測試工具來啟動 Worker |
 
-執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和電路的程式庫釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
+執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和 `circuits/` 釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
 
 ## 已知的限制
 

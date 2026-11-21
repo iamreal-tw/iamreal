@@ -1,27 +1,38 @@
 // Makes the real proofs of the records generate.go describes. generate.go
 // runs it; see README.md.
 //
-//   node make-proofs.mjs <zkid-noir checkout> <bb> <crs dir> <work dir>
+//   node make-proofs.mjs <bb> <crs dir> <work dir>
 //
 // It reads <work dir>/input.json: the throwaway issuer keys (PKCS #8 PEM),
 // one card serial number per issuer, and per record its fields and the
 // serial numbers of the CRL whose root it uses. It writes
 // <work dir>/output.json (per record: the root of its tree, built here with
-// zkid-noir's reference tree, the declaration code computed here from the
-// scope string, the record's accounts and its challenge, and the nullifier)
-// and <work dir>/record-<n>.proof.
+// the reference tree of circuits/, the declaration code computed here from
+// the scope string, the record's accounts and its challenge, and the
+// nullifier) and <work dir>/record-<n>.proof.
 //
-// It uses the test helpers of zkid-noir (tests/lib/) and its compiled
-// circuits (target/), as verifier/testdata/make-proofs.mjs does. Nothing is
-// written into the zkid-noir checkout.
+// It uses the test helpers of circuits/ (tests/lib/) and the published
+// circuits (web/circuits/, which circuits/rebuild.sh rebuilds from the
+// source), as verifier/testdata/make-proofs.mjs does. Nothing is written
+// into circuits/ or web/circuits/.
 import { execFileSync } from "node:child_process";
 import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const [zkid, bb, crs, work] = process.argv.slice(2).map((p) => resolve(p));
-if (!work) throw new Error("usage: node make-proofs.mjs <zkid-noir> <bb> <crs dir> <work dir>");
-const lib = (f) => import(join(zkid, "tests", "lib", f));
+if (process.argv.length !== 5) throw new Error("usage: node make-proofs.mjs <bb> <crs dir> <work dir>");
+// An empty bb is what $(circuits/find-bb.sh) gives when its SHA-256 check
+// fails; stop here rather than at the first proof.
+if (!process.argv[2] || !statSync(process.argv[2], { throwIfNoEntry: false })?.isFile()) {
+  throw new Error(`bb "${process.argv[2]}" is not a file (see the message of circuits/find-bb.sh)`);
+}
+const [bb, crs, work] = process.argv.slice(2).map((p) => resolve(p));
+const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const circuitFiles = join(root, "web", "circuits");
+// tests/lib/run.mjs reads the circuits from CIRCUITS_TARGET when it loads.
+process.env.CIRCUITS_TARGET = circuitFiles;
+const lib = (f) => import(join(root, "circuits", "tests", "lib", f));
 const { buildTbs, makeKey, serialOf } = await lib("cert.mjs");
 const { loadPoseidon2 } = await lib("hashes.mjs");
 const { chainCase, noirCardProofInputs } = await lib("inputs.mjs");
@@ -29,8 +40,10 @@ const { runNoir } = await lib("run.mjs");
 const { Smt } = await lib("smt.mjs");
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
-const git = (...args) => execFileSync("git", ["-C", zkid, ...args], { encoding: "utf8" }).trim();
-if (git("status", "--porcelain") !== "") throw new Error("zkid-noir has uncommitted changes");
+const git = (...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+if (git("status", "--porcelain", "--", "circuits", "web/circuits") !== "") {
+  throw new Error("circuits/ or web/circuits/ has uncommitted changes");
+}
 
 // The verification keys of spec/record.md, "Accepted circuits".
 const VK_SHA256 = {
@@ -40,7 +53,7 @@ const VK_SHA256 = {
 
 // The declaration code of spec/declaration-code.md: the version tag, the
 // scope string, one line platform:username per account in the order of the
-// list, and the challenge. Written here rather than taken from zkid-noir,
+// list, and the challenge. Written here rather than taken from circuits/,
 // whose helper (tests/lib/declaration-code.mjs) computes an earlier draft.
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function declarationCode({ scopeString, accounts, challenge }) {
@@ -79,7 +92,7 @@ for (const [issuer, c] of Object.entries(input.cards)) {
 
 const poseidon2 = await loadPoseidon2();
 const vkDone = {};
-const output = { zkid_noir_commit: git("rev-parse", "HEAD"), records: [] };
+const output = { circuits_commit: git("rev-parse", "HEAD"), records: [] };
 for (const [i, r] of input.records.entries()) {
   const tree = new Smt(poseidon2.hash2, poseidon2.hash3);
   for (const s of r.revoked) tree.insert(BigInt("0x" + s));
@@ -95,7 +108,7 @@ for (const [i, r] of input.records.entries()) {
   const dir = join(work, `record-${i + 1}`);
   mkdirSync(dir);
   writeFileSync(join(dir, "witness.gz"), result.witness);
-  const bytecode = join(zkid, "target", `${r.circuit}.json`);
+  const bytecode = join(circuitFiles, `${r.circuit}.json`);
   const vkDir = join(work, `vk-${r.circuit}`);
   if (!vkDone[r.circuit]) {
     mkdirSync(vkDir);

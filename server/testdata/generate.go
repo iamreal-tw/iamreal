@@ -5,10 +5,10 @@
 // their roots, each made for a challenge the test has the server issue.
 // Run from the repository root:
 //
-//	go run ./server/testdata/generate.go -zkid <zkid-noir> -bb <bb> -crs <dir>
+//	go run ./server/testdata/generate.go -bb <bb> -crs <dir>
 //
 // The proofs are made by cmd/iamreal-verify/testdata/make-proofs.mjs, with
-// zkid-noir's test helpers. The CRS directory needs the 2^18-point
+// the test helpers of circuits/. The CRS directory needs the 2^18-point
 // bn254_g1.dat that bb prove reads. Each run makes new keys, so every file
 // changes. The private keys are not kept. See README.md.
 package main
@@ -128,13 +128,17 @@ func accountsOf(list []string) ([]verifier.Account, []inAccount) {
 }
 
 func main() {
-	zkid := flag.String("zkid", "", "zkid-noir checkout")
 	bb := flag.String("bb", "", "bb 6.0.0")
 	crs := flag.String("crs", "", "directory with the 2^18-point bn254_g1.dat")
 	flag.Parse()
-	if *zkid == "" || *bb == "" || *crs == "" {
+	if *crs == "" {
 		flag.Usage()
 		os.Exit(2)
+	}
+	// Before anything is written: an empty or missing bb is what
+	// $(circuits/find-bb.sh) gives when its SHA-256 check fails.
+	if fi, err := os.Stat(*bb); err != nil || !fi.Mode().IsRegular() {
+		log.Fatalf("bb %q is not a file (see the message of circuits/find-bb.sh)", *bb)
 	}
 	var err error
 	if work, err = os.MkdirTemp("", "iamreal-server-e2e-"); err != nil {
@@ -240,13 +244,13 @@ func main() {
 	}
 	j, _ := json.Marshal(in)
 	write(filepath.Join(work, "input.json"), j)
-	cmd := exec.Command("node", "cmd/iamreal-verify/testdata/make-proofs.mjs", *zkid, *bb, *crs, work)
+	cmd := exec.Command("node", "cmd/iamreal-verify/testdata/make-proofs.mjs", *bb, *crs, work)
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	if err := cmd.Run(); err != nil {
 		fatal(err)
 	}
 	var out struct {
-		Commit  string `json:"zkid_noir_commit"`
+		Commit  string `json:"circuits_commit"`
 		Records []struct {
 			SMTRoot         string `json:"smt_root"`
 			DeclarationCode string `json:"declaration_code"`
@@ -265,7 +269,7 @@ func main() {
 	for i, p := range proofs {
 		o := out.Records[i]
 		if o.SMTRoot != roots[p.crl] {
-			fatalf("proof %d: root %s from zkid-noir, %s from crl/", i+1, o.SMTRoot, roots[p.crl])
+			fatalf("proof %d: root %s from circuits/, %s from crl/", i+1, o.SMTRoot, roots[p.crl])
 		}
 		accounts, inAccounts := accountsOf(p.accounts)
 		rec := in.Records[i]
@@ -309,7 +313,7 @@ func main() {
 		fatal(err)
 	}
 	write(filepath.Join(dir, "card-proofs.json"), append(j, '\n'))
-	write(filepath.Join(dir, "zkid-noir-commit"), []byte(out.Commit+"\n"))
+	write(filepath.Join(dir, "circuits-commit"), []byte(out.Commit+"\n"))
 	fmt.Fprintf(os.Stderr, "roots: A %s, B = C %s\n", roots[0], roots[1])
 }
 

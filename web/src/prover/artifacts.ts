@@ -6,7 +6,10 @@ import { BASE } from "../base.ts";
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import type { CircuitName } from "../issuers.ts";
 
-/** circuits/README.md: the compiled circuits of zkid-noir 497b610, stripped. */
+/**
+ * web/circuits/README.md: the circuits compiled from circuits/ at the
+ * repository's root, stripped; circuits/rebuild.sh checks that they match.
+ */
 export const CIRCUITS: Readonly<Record<CircuitName, { path: string; sha256: string; vkSha256: string; publicInputs: number }>> =
   Object.freeze({
     card_proof_rs2048: Object.freeze({
