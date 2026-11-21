@@ -20,7 +20,8 @@
 # not check out the repository and runs no script of it: it unpacks what
 # "build" handed on and gives it to Xcode's own export, which signs it with
 # a distribution certificate Apple keeps (cloud-managed, signingStyle
-# automatic) and uploads it. Only its last step has the key. What it trusts:
+# automatic) and uploads it, for the team the environment's variable
+# APPLE_TEAM_ID names. Only its last step has the key. What it trusts:
 # the pinned action, the runner's Xcode, and the archive and export options
 # "build" made from the same commit. Whether a Developer key may sign with
 # a cloud-managed certificate is issue #143; the first run answers it.
@@ -82,6 +83,12 @@ jobs:
           path: ${{ runner.temp }}/ios-upload
       - name: Unpack the archive
         run: tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar"
+      # The archive is unsigned and names no team: the export is told which, from the
+      # environment's variable APPLE_TEAM_ID (not a key; every signed app shows it).
+      - name: Name the team in the export options
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"
       # The key to a file only this job's runner has, then Xcode's export: it fetches the
       # profile and the cloud-managed certificate with the key, signs, and uploads
       # (ExportOptions.plist: destination upload).

@@ -12,6 +12,7 @@
 #   of it; the version is three integers with no zero in front (App Store
 #   Connect takes no more: CFBundleShortVersionString is "three
 #   period-separated integers") and the build one;
+# - it has an icon (App Store Connect takes no build without one);
 # - the app holds the executable, the files the app carries (README.md) and
 #   what Xcode puts in every app, and nothing else: not the tests, which hold
 #   the fake card (PlugIns/), not a key or a card of the tests; the
@@ -65,11 +66,19 @@ for key in CFBundleIdentifier:tw.iamreal.app CFBundleShortVersionString:$version
   [ "$got" = "${key#*:}" ] || problem "the archive says the ${key%%:*} is $got, not ${key#*:}"
 done
 
+# An icon: App Store Connect takes no build without one. The asset catalog
+# App/Assets.xcassets, compiled into Assets.car, names it in Info.plist.
+got=$(value "$app/Info.plist" CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName)
+[ "$got" = AppIcon ] || problem "the app names no icon AppIcon in Info.plist (CFBundleIcons): App Store Connect takes no build without an icon"
+[ -f "$app/Assets.car" ] || problem "the app has no Assets.car, where its icon is"
+
 # Nothing in the app but these. Xcode's own: the executable, Info.plist,
-# PkgInfo; the files the app carries (README.md, "包進 app 的檔案").
+# PkgInfo, the compiled asset catalog and the icons it writes out for older
+# iOS; the files the app carries (README.md, "包進 app 的檔案").
 if [ -d "$app" ]; then
   extra=$(cd "$app" && find . -mindepth 1 | sed 's|^\./||' | grep -v -x -F \
     -e IamrealApp -e Info.plist -e PkgInfo \
+    -e Assets.car -e AppIcon60x60@2x.png -e AppIcon76x76@2x~ipad.png \
     -e card_proof_rs2048.json -e card_proof_rs4096.json \
     -e card_proof_rs2048.vk -e card_proof_rs4096.vk \
     -e bn254_g1_compressed_2p18.dat -e bn254_g2.dat \

@@ -84,6 +84,13 @@ copy
 printf 'FakeCard\0' >> "$app/IamrealApp"
 expect "the fake card in the executable" "FakeCard"
 
+copy
+plutil -remove CFBundleIcons "$app/Info.plist"
+expect "no icon named in Info.plist" "names no icon"
+copy
+rm "$app/Assets.car"
+expect "no asset catalog" "Assets.car"
+
 # check-app.sh, as for a Release build: the test site, no library of the tests.
 copy
 printf 'https://iamreal.tw\0' >> "$app/IamrealApp"

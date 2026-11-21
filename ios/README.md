@@ -22,6 +22,7 @@
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
+| `App/Assets.xcassets` | app 的圖示。暫時的：網站的 `--teal`（`#226977`）一整片，沒有字和圖案，正式的圖示在 [#154](https://github.com/iamreal-tw/iamreal/issues/154) 定。App Store Connect 不收沒有圖示的 build |
 | `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；兩種 build 的識別碼和測試網站的環境 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
@@ -212,28 +213,33 @@ gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main
 | | `build` | `upload` |
 |---|---|---|
 | 拿得到金鑰 | 不能 | 能：environment `app-test` 的 App Store Connect API 金鑰（開發者角色的團隊金鑰，#161），那個 environment 只讓 `main` 上的執行拿 |
-| 跑什麼 | 這個程式庫的程式：`build-core.sh device`，再 `archive.sh` | 不取出程式庫、不跑它的任何腳本：解開 `build` 交下來的 tar 檔，跑 Xcode 的 `xcodebuild -exportArchive` |
+| 跑什麼 | 這個程式庫的程式：`build-core.sh device`，再 `archive.sh` | 不取出程式庫、不跑它的任何腳本：解開 `build` 交下來的 tar 檔，把團隊代號寫進 `ExportOptions.plist`，跑 Xcode 的 `xcodebuild -exportArchive` |
 | 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
 
 - **`archive.sh`** 做 Release 的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
 - **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo` 和「包進 app 的檔案」那七個，沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份名冊的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和名冊，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
 - **簽章用 Apple 代管的發布憑證。** `ExportOptions.plist` 寫 `method` `app-store-connect`、`destination` `upload`、`signingStyle` `automatic`：Xcode 用 API 金鑰向 Apple 拿描述檔和代管的憑證，簽好直接上傳。發布憑證的私鑰不放在任何地方。開發者角色的金鑰能不能這樣做，是 [#143](https://github.com/iamreal-tw/iamreal/issues/143) 要實測的；做不到時，第一次執行的錯誤訊息記到 #143，再照 ADR-0036 把私鑰放進 `app-test`。
+- **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。
 
 ### 版本和 build
 
 - **版本是觸發那一天的台灣日期**，年.月.日、不補零，例如 `2026.11.5`、`2026.11.21`。App Store Connect 的版本只收三個整數（[`CFBundleShortVersionString`](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)：「The required format is three period-separated integers」），所以沒有 ADR-0036 寫的「同一天第二次加 `.1`」：同一天的每一次上傳版本相同，靠 build 分。TestFlight 同一個版本可以有好幾個 build。
 - **build 是這個工作流程的執行編號**（`GITHUB_RUN_NUMBER`），每次觸發加一，同一次執行重跑時不變。重跑一個已經傳上去的執行，App Store Connect 會拒收同一個 build；要再傳就重新觸發一次。
+- **執行編號跟著工作流程走。** `upload-ios.yml` 改名、或刪掉再加回來，GitHub 當成新的工作流程，編號從 1 重來，比 App Store Connect 上已有的小，上傳會被拒。到那時候在 `upload-ios.yml` 給 `archive.sh` 的 build 加上一個固定的數（上一次的 build），並寫在這裡。沒有改成從 App Store Connect 讀最新的 build 再加一：`build` 沒有金鑰，build 要在建置時寫進 app。
 
 ### 合併後才驗得到的
 
 這個工作流程只在 `main` 上、手動觸發才跑，拉取請求的檢查跑不到上傳的那一半：
 
+- `build` 交下去的 tar 檔，和 `upload` 把團隊代號寫進 `ExportOptions.plist` 那一步，在本機試過，沒有在 runner 上跑過
 - `build` 的指令：`checks-ios.yml` 每次用同樣的 `archive.sh` 做一次 archive、跑 `check-archive-test.sh`，所以拉取請求時就看得到；它沒有包成 tar 檔交下去
 - `upload` 整個工作：開發者角色的金鑰能不能用代管的憑證簽章（#143）、App Store Connect 收不收這個 build
 - 讀卡（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）加了 entitlement（NFC）之後：archive 沒有簽章，裡面沒有 entitlement；Xcode 匯出時給的 entitlement 有沒有 NFC，要看第一個有讀卡的 build。沒有的話 `build` 改成在 archive 時帶 entitlement 的檔，或在 `upload` 匯出後檢查
 
 ### 上傳之後營運者做的
+
+- **第一次觸發之前**：在 environment `app-test` 加 variable `APPLE_TEAM_ID`（團隊代號）。
 
 - **出口管制的加密問題。** `Info.plist` 沒有寫 `ITSAppUsesNonExemptEncryption`，每個 build 在 App Store Connect 會先停在「Missing Compliance」，營運者回答過才會到測試者手上。app 和卡片之間的安全通道有加密，回答前先查 Apple 的說明（「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」）；答案定了可以寫進 `Info.plist`，之後的 build 就不用每次回答。
 - **對外測試的群組**：第一個 build 上傳之後才能建，關掉截圖回饋（#161）。

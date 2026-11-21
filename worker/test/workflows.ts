@@ -612,8 +612,11 @@ export const APP_ENVIRONMENT = "app-test";
  * (an artifact does not keep them), with ios/ExportOptions.plist.
  * "upload" is the only job in the environment app-test. It does not check
  * out the repository and runs no script of it: it unpacks the tar file and
- * runs Xcode's export, which signs and uploads. Only that last step has the
- * key: it writes the key to a file only it reads, and xcodebuild reads it.
+ * runs Xcode's export, which signs and uploads. The archive is unsigned and
+ * names no team, so the export options are given the team the environment
+ * holds as a variable, APPLE_TEAM_ID (not a secret: every signed app shows
+ * it). Only the last step has the key: it writes the key to a file only it
+ * reads, and xcodebuild reads it.
  */
 const IOS_UPLOAD_ARTIFACT: YamlMap = { name: "ios-upload", path: "${{ runner.temp }}/ios-upload" };
 export const IOS_UPLOAD_JOBS: YamlMap = {
@@ -640,6 +643,11 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
     steps: [
       { uses: uses("actions/download-artifact"), with: IOS_UPLOAD_ARTIFACT },
       { name: "Unpack the archive", run: 'tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/ios-upload/IamrealApp.xcarchive.tar"' },
+      {
+        name: "Name the team in the export options",
+        env: { APPLE_TEAM_ID: "${{ vars.APPLE_TEAM_ID }}" },
+        run: 'test -n "$APPLE_TEAM_ID" && plutil -replace teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ios-upload/ExportOptions.plist"',
+      },
       {
         name: "Sign and upload to App Store Connect",
         env: {
