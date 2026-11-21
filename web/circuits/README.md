@@ -15,7 +15,7 @@
 
 ## 來源
 
-- 從程式庫根目錄的 `circuits/` 用 `nargo` 1.0.0（`noirc` 1.0.0+275d3ab1a5c916c6ea73e8d6b943f685f574500c）編譯。當初編的是先前私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`，搬進 `circuits/` 時原始碼相同（ADR-0038）。
+- 從程式庫根目錄的 `circuits/` 用 `nargo` 1.0.0（`noirc` 1.0.0+275d3ab1a5c916c6ea73e8d6b943f685f574500c）編譯。當初編的是先前的私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`，搬進 `circuits/` 時原始碼相同（ADR-0038）。
 - `nargo compile` 寫出的檔案除了上面三個欄位，還有 `file_map`（電路和它用到的函式庫的完整原始碼，以及編譯那台電腦上的路徑）、`debug_symbols`、`hash`。頁面用不到它們，所以用 `scripts/strip-circuit.mjs` 拿掉：
 
   ```
@@ -31,7 +31,7 @@
   circuits/rebuild.sh
   ```
 
-  它用釘住的 `nargo`、`bb`（先核對 SHA-256）從 `circuits/` 重編兩份電路，照上面拿掉三個欄位以外的，和這裡的檔逐位元組比對；再從重編的電路寫出驗證金鑰，和 `verifier/vk/` 逐位元組比對。對不上的，印出檔名、提交的檔和重編的檔的 SHA-256，結束碼非零。步驟見 `circuits/README.md`「重建並比對」。
+  它用釘住的 `nargo`、`bb`（先核對 SHA-256）從 `circuits/` 重編兩份電路，照上面拿掉三個欄位以外的，和這裡的檔逐位元組比對；再從重編的電路寫出驗證金鑰，和 `verifier/vk/` 逐位元組比對。對不上的，印出檔名、提交的檔和重編的檔的 SHA-256，結束碼非零。步驟見根目錄 [`circuits/README.md`](../../circuits/README.md#重建並比對)「重建並比對」。
 
 ## 怎麼核對
 
