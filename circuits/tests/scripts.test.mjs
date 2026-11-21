@@ -53,6 +53,59 @@ describe("sha256.sh", () => {
 });
 
 describe("build-circom.sh", () => {
+  const commit = readFileSync(join(ROOT, "zkid-commit"), "utf8").trim();
+  const circuits = ["certChainRS2048", "certChainRS4096", "userSigRS2048"];
+  /**
+   * Stand-ins on PATH for circom, git and corepack: git "fetches" a tree with
+   * the circom source fuzz/ reads, and `yarn compile:all` writes the witness
+   * generators of the circuits in `built`, and nothing else.
+   */
+  function standIns(built) {
+    const bin = fresh();
+    executable(join(bin, "circom"), "#!/bin/sh\necho 'circom compiler 2.2.3'\n");
+    executable(join(bin, "git"), `#!/bin/sh
+dir=.
+if [ "$1" = -C ]; then dir=$2; shift 2; fi
+case " $* " in
+  *" init "*) for a in "$@"; do last=$a; done; mkdir -p "$last" ;;
+  *" checkout "*) mkdir -p "$dir/wallet-unit-poc/circom/circuits/components" && echo constants > "$dir/wallet-unit-poc/circom/circuits/components/poseidonP256Constants.circom" ;;
+  *" rev-parse "*) echo ${commit} ;;
+esac
+`);
+    executable(join(bin, "corepack"), `#!/bin/sh
+case " $* " in
+  *" compile:all "*) for c in ${built.join(" ")}; do mkdir -p build/$c/\${c}_js && echo wasm > build/$c/\${c}_js/$c.wasm && echo js > build/$c/\${c}_js/witness_calculator.js; done ;;
+esac
+`);
+    return { PATH: `${bin}:${process.env.PATH}` };
+  }
+
+  it("keeps only the witness generators, the circom source fuzz/ reads and COMMIT", () => {
+    const dir = join(fresh(), "zkID");
+    const r = run(join(ROOT, "build-circom.sh"), [dir], standIns(circuits));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(join(dir, "COMMIT"), "utf8"), commit + "\n");
+    for (const c of circuits) {
+      assert.deepEqual(readdirSync(join(dir, "wallet-unit-poc/circom/build", c, `${c}_js`)).sort(), [`${c}.wasm`, "witness_calculator.js"]);
+    }
+    assert.ok(existsSync(join(dir, "wallet-unit-poc/circom/circuits/components/poseidonP256Constants.circom")));
+    assert.deepEqual(readdirSync(dirname(dir)), ["zkID"], "nothing else left next to it");
+  });
+
+  it("stopping half-way leaves the build that was there as it was, and nothing else", () => {
+    const parent = fresh();
+    const dir = join(parent, "zkID");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "COMMIT"), "an older commit\n");
+    writeFileSync(join(dir, "older.wasm"), "older");
+    // userSigRS2048 is not built: copying it fails.
+    const r = run(join(ROOT, "build-circom.sh"), [dir], standIns(circuits.slice(0, 2)));
+    assert.notEqual(r.status, 0);
+    assert.deepEqual(readdirSync(dir).sort(), ["COMMIT", "older.wasm"]);
+    assert.equal(readFileSync(join(dir, "COMMIT"), "utf8"), "an older commit\n");
+    assert.deepEqual(readdirSync(parent), ["zkID"], "nothing left next to it");
+  });
+
   it("refuses a directory it did not make, and leaves it as it was", () => {
     const dir = fresh();
     writeFileSync(join(dir, "notes.txt"), "someone's file");

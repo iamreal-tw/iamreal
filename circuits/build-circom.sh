@@ -14,11 +14,15 @@
 # for certChainRS2048, certChainRS4096 and userSigRS2048; a package.json
 # saying the witness calculators are CommonJS (inside circuits/, whose
 # package.json says "module", Node would read them as ES modules); and a file
-# COMMIT with the commit. Everything else (the clone, node_modules, .r1cs, .sym, the
-# C++ witness generators) is deleted. If the directory already holds a build
-# of that commit, nothing is done. A directory this script did not make (one
-# that is not empty and has no COMMIT) is refused, never deleted. tests/lib/run.mjs and fuzz/ look for it in
-# .zkID/wallet-unit-poc/circom/build unless ZKID_CIRCOM_BUILD says where.
+# COMMIT with the commit. Everything else (the clone, node_modules, .r1cs,
+# .sym, the C++ witness generators) is deleted. The kept files are put
+# together next to the directory, COMMIT last, and only then take its place:
+# a build that stops half-way leaves the directory as it was.
+#
+# If the directory already holds a build of that commit, nothing is done. A
+# directory this script did not make (one that is not empty and has no
+# COMMIT) is refused, never deleted. tests/lib/run.mjs and fuzz/ look for it
+# in .zkID/wallet-unit-poc/circom/build unless ZKID_CIRCOM_BUILD says where.
 #
 #   ./build-circom.sh [<directory>]
 #
@@ -39,7 +43,7 @@ if [ -f "$dir/COMMIT" ] && [ "$(cat "$dir/COMMIT")" = "$commit" ]; then
 fi
 # The build replaces $dir; only one this script made, or an empty one.
 if [ -e "$dir" ] && { [ ! -d "$dir" ] || { [ ! -f "$dir/COMMIT" ] && [ -n "$(ls -A "$dir")" ]; }; }; then
-  echo "build-circom: $dir is not empty and was not made by build-circom.sh (it has no COMMIT); give an empty or new directory" >&2
+  echo "build-circom: $dir is not empty and has no COMMIT, so it was not made by build-circom.sh (or is a half-done build of an older version of it); give an empty or new directory, or check it and delete it yourself" >&2
   exit 1
 fi
 
@@ -48,8 +52,10 @@ case "$(circom --version 2>/dev/null)" in
   *) echo "build-circom: needs circom 2.2.3 on PATH, found: $(circom --version 2>&1 || true)" >&2; exit 1 ;;
 esac
 
+mkdir -p "$(dirname "$dir")"
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+stage=$(mktemp -d "$(dirname "$dir")/.build-circom.XXXXXX")
+trap 'rm -rf "$work" "$stage"' EXIT
 git init --quiet "$work/zkID"
 git -C "$work/zkID" fetch --quiet --depth 1 https://github.com/iamreal-tw/zkID "$commit"
 git -C "$work/zkID" -c advice.detachedHead=false checkout --quiet FETCH_HEAD
@@ -63,8 +69,7 @@ src=$work/zkID/wallet-unit-poc/circom
   corepack yarn compile:all
 )
 
-rm -rf "$dir"
-out=$dir/wallet-unit-poc/circom
+out=$stage/wallet-unit-poc/circom
 for c in $circuits; do
   mkdir -p "$out/build/$c/${c}_js"
   cp "$src/build/$c/${c}_js/$c.wasm" "$src/build/$c/${c}_js/witness_calculator.js" "$out/build/$c/${c}_js/"
@@ -72,5 +77,7 @@ done
 mkdir -p "$out/circuits/components"
 cp "$src/circuits/components/poseidonP256Constants.circom" "$out/circuits/components/"
 echo '{ "type": "commonjs" }' > "$out/package.json"
-echo "$commit" > "$dir/COMMIT"
-echo "build-circom: witness generators in $out/build"
+echo "$commit" > "$stage/COMMIT"
+rm -rf "$dir"
+mv "$stage" "$dir"
+echo "build-circom: witness generators in $dir/wallet-unit-poc/circom/build"
