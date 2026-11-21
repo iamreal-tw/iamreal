@@ -74,7 +74,8 @@ got=$(value "$app/Info.plist" CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName
 
 # Nothing in the app but these. Xcode's own: the executable, Info.plist,
 # PkgInfo, the compiled asset catalog and the icons it writes out for older
-# iOS; the files the app carries (README.md, "包進 app 的檔案").
+# iOS (an iPad's too: an iPad can run an iPhone app in compatibility mode);
+# the files the app carries (README.md, "包進 app 的檔案").
 if [ -d "$app" ]; then
   extra=$(cd "$app" && find . -mindepth 1 | sed 's|^\./||' | grep -v -x -F \
     -e IamrealApp -e Info.plist -e PkgInfo \

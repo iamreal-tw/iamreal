@@ -25,6 +25,8 @@ archive=${1:?$usage}
 build=${2:?$usage}
 version=${3:-$(TZ=Asia/Taipei date +%Y.%-m.%-d)}
 
+# From where it was called: xcodebuild and the check run in ios/.
+case $archive in /*) ;; *) archive=$(pwd)/$archive ;; esac
 [ ! -e "$archive" ] || { echo "archive: $archive is already there" >&2; exit 1; }
 
 cd "$here"

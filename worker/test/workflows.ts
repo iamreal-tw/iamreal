@@ -9,8 +9,10 @@
 // of a short list at a fixed commit, and a pull request's checks can only
 // read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
-// workflow's two jobs, the device-core and android jobs of checks.yml, and
-// the jobs of cache.yml, must be exactly the ones written here.
+// workflow's two jobs, the device-core and android jobs of checks.yml, the
+// jobs of cache.yml, and the two jobs of upload-ios.yml (only its upload job
+// in the environment with the App Store Connect key, and that key in its last
+// step only), must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -19,6 +21,10 @@
 // - what the commands of cache.yml leave in the caches it saves: they run
 //   the code of main (the builds of device-core/ and android/), and every
 //   later check that restores a cache builds on what that run left in it;
+// - what the build job of upload-ios.yml makes (ios/build-core.sh,
+//   ios/archive.sh, Xcode and cargo on the repository's code): its archive
+//   is what gets signed and uploaded; ios/check-archive.sh looks for the
+//   known ways the wrong build could get in, not for everything;
 // - what the code run by the build job (scripts/build-deploy.ts and what it
 //   imports) does: its output is what gets uploaded; its checks
 //   (scripts/deploy-build-checks.ts) look for the known ways the test
@@ -539,7 +545,8 @@ export const IOS_JOB_STEPS: YamlMap = {
     { name: "Build the app and run its tests in the simulator", "working-directory": "ios", run: `${XCODEBUILD} test` },
     { name: "check-app.sh turns away what it should", "working-directory": "ios", run: "./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app" },
     { name: "Build the release configuration, with its checks", "working-directory": "ios", run: `${XCODEBUILD} -configuration Release build` },
-    { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "rustup target add aarch64-apple-ios && ./build-core.sh device" },
+    { name: "Add the iPhone's target to the Rust of rust-toolchain.toml", "working-directory": "device-core", run: "rustup target add aarch64-apple-ios" },
+    { name: "Build device-core/ for the iPhone", "working-directory": "ios", run: "./build-core.sh device" },
     {
       name: "Archive the store's build as upload-ios.yml does, and check-archive.sh turns away what it should",
       "working-directory": "ios",

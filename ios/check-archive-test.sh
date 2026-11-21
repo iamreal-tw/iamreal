@@ -9,10 +9,11 @@
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
-archive=${1:?usage: check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>}
+usage="usage: check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>"
+archive=${1:?$usage}
 archive=${archive%/}
-version=${2:?usage: check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>}
-build=${3:?usage: check-archive-test.sh <path to IamrealApp.xcarchive> <version> <build>}
+version=${2:?$usage}
+build=${3:?$usage}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 failed=0
@@ -60,6 +61,18 @@ expect "the app's build changed after archiving" "the build is 999999"
 copy
 plutil -replace ApplicationProperties.CFBundleShortVersionString -string 2001.2.3 "$a/Info.plist"
 expect "the archive's own record of the version changed" "the archive says the CFBundleShortVersionString is 2001.2.3"
+copy
+plutil -replace ApplicationProperties.CFBundleVersion -string 999999 "$a/Info.plist"
+expect "the archive's own record of the build changed" "the archive says the CFBundleVersion is 999999"
+copy
+plutil -replace ApplicationProperties.CFBundleIdentifier -string tw.iamreal.app.dev "$a/Info.plist"
+expect "the archive's own record of the identifier changed" "the archive says the CFBundleIdentifier is tw.iamreal.app.dev"
+copy
+plutil -replace ApplicationProperties.ApplicationPath -string Applications/Other.app "$a/Info.plist"
+expect "the archive pointing at another app" "the archive says the ApplicationPath is Applications/Other.app"
+copy
+rm -rf "$app"
+expect "no app in the archive" "no app at Products/Applications/IamrealApp.app"
 
 # What App Store Connect takes: three integers for the version, one for the build.
 copy

@@ -318,7 +318,7 @@ Object.assign(CHANGES, {
   "ios-upload 8 the archive not checked": [replace(U, './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"', 'xcodebuild archive -project IamrealApp.xcodeproj -scheme IamrealApp -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"')],
   "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
   "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
-  "ios-upload 11 the key written where the step after it could read it": [replace(U, "        run: umask 077 && ", "        run: ")],
+  "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
 });
 
 for (const [name, changes] of Object.entries(CHANGES)) {
