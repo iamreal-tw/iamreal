@@ -57,7 +57,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - 工作流程用的 action：一律釘在完整的 commit SHA，不用標籤或分支
 - 工作流程用 `pull_request_target` 觸發，或把 secrets 交給建置、測試的步驟：不接受
 - wrangler 的設定檔，特別是 `build.command`：部署時會執行它（[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)）
-- `worker/site/` 裡 wrangler 上傳的檔，特別是 `_headers`、`_redirects`：不會被執行，但決定過卡頁面和樣式表帶什麼標頭、哪個網址送哪個檔（`worker/README.md`「Static Assets」）
+- `worker/site/` 裡 wrangler 上傳的檔：`copy.js` 會在訪客的瀏覽器裡執行；`_headers`、`_redirects` 不會被執行，但決定過卡頁面、樣式表和 `copy.js` 帶什麼標頭、哪個網址送哪個檔（`worker/README.md`「Static Assets」）
 - `package.json` 的 `scripts`，特別是 `preinstall`、`install`、`postinstall`、`prepare`：安裝套件時就會執行
 - 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
 - 安裝套件和 wrangler 啟動時會讀的檔：`.npmrc`、`.pnpmfile.cjs`（或 `.mjs`、`.js`）、`pnpm-workspace.yaml`、`worker/` 底下的 `.env*`

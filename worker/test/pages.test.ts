@@ -2,6 +2,9 @@
 // Worker's HTTP (test/harness.ts): every sentence design/copy/ has for the
 // case, in order, read from the copy files; the headers; the redirects and
 // the 404s; and that what the roster's object writes shows on the next page.
+// What every page shares (the production roster, escaping, the methods, the
+// 404 page) is here for every page; the other pages are in
+// test/lookup-pages.test.ts and test/site-pages.test.ts.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +12,7 @@ import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testRosterMark } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testRosterMark, withScript } from "./pages.ts";
 import { DAY_MS, START, freshRoster, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -341,7 +344,7 @@ describe("the home page", () => {
 describe("every page", () => {
   test("the production roster: no mark of a test roster and no noindex; the pages are otherwise the same", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:alice")], { kind: "production" });
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE"]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/roster", "/faq", "/verify", "/hang", `/hang/${CARD_A}`]) {
       const { page } = await getPage(worker, path, { test: false });
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
@@ -351,6 +354,8 @@ describe("every page", () => {
     assert.ok(card.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>') && !card.includes("test.iamreal.tw"));
     const missing = (await getPage(worker, "/p/7K2Q9FM4XE", { test: false })).page;
     assert.ok(missing.includes('<span class="typed">iamreal.tw/p/7K2Q9FM4XE</span>') && !missing.includes("test.iamreal.tw"));
+    const hang = (await getPage(worker, `/hang/${CARD_A}`, { test: false })).page;
+    assert.ok(hang.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>') && hang.includes('data-copy-text="https://iamreal.tw/p/7K2Q9FM4XD"') && !hang.includes("test.iamreal.tw"));
     const none = await getPage(worker, "/nothing", { test: false });
     assert.equal(none.status, 404);
     wantLines(none.page, copyLines(block("not-found.md", "頁面")));
@@ -372,30 +377,39 @@ describe("every page", () => {
 
   test("what the address has is escaped", async () => {
     await exampleCards(false);
-    for (const path of ["/p/%3Cb%3Ex%22%27&amp;", "/p/javascript:alert(1)", "/p/%3Cscript%3Ealert(1)%3C/script%3E", "/p/%E5%B3%B6"]) {
+    for (const path of ["/p/%3Cb%3Ex%22%27&amp;", "/p/javascript:alert(1)", "/p/%3Cscript%3Ealert(1)%3C/script%3E", "/p/%E5%B3%B6", "/threads/@%3Cb%3Ex%22%27", "/threads/@javascript:alert(1)", "/roster?q=%3Cb%3Ex%22%27"]) {
       const { status, page } = await getPage(worker, path);
-      assert.equal(status, 404, path);
+      assert.equal(status, path.startsWith("/roster") ? 200 : 404, path);
       assert.ok(!page.includes("<b>x") && !page.includes(`x"'`) && !page.includes('href="javascript') && !page.includes('src="javascript'), `${path}: escaped`);
     }
     assert.ok((await getPage(worker, "/p/%3Cb%3Ex%22%27&amp;")).page.includes("test.iamreal.tw/p/&lt;b&gt;x&#34;&#39;&amp;amp;"));
+    assert.ok((await getPage(worker, "/roster?q=%3Cb%3Ex%22")).page.includes('value="&lt;b&gt;x&#34;"'), "the lookup box's value is escaped");
+    // A NUL is written as U+FFFD, as the Go backend's html/template wrote it, in text and in a value.
+    for (const [path, want] of [["/p/a%00b", "test.iamreal.tw/p/a\uFFFDb"], ["/roster?q=a%00b", 'value="a\uFFFDb"']] as const) {
+      const { page } = await getPage(worker, path);
+      assert.ok(page.includes(want) && !page.includes("\0"), `${path}: the NUL is U+FFFD`);
+    }
     // The page for what is no page writes nothing of the address back.
     const none = (await getPage(worker, "/%3Cb%3Ex%22%27?q=%3Ci%3E")).page;
     assert.ok(!none.includes("<b>x") && !none.includes("&lt;b&gt;") && !none.includes("<i>") && !none.includes("&lt;i&gt;"));
   });
 
-  test("the pages and the style sheet take GET and HEAD only", async () => {
+  test("the pages, the style sheet and the script take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css"]) {
-      const cache = path === "/pages.css" ? "no-cache" : "public, max-age=60";
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/roster", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/copy.js"]) {
+      // The style sheet and the script are files of Static Assets.
+      const file = path === "/pages.css" || path === "/copy.js";
+      const cache = file ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
-      assert.equal(head.status, path === "/p/7K2Q9FM4XE" || path === "/nothing" ? 404 : 200, `HEAD ${path}`);
+      assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
       assert.equal(await head.text(), "");
-      checkVisitorHeaders(`HEAD ${path}`, head, { cache });
+      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
-        // The pages are the Worker's; the style sheet is sent by Static Assets, whose 405 has no Allow.
-        assert.deepEqual([res.status, res.headers.get("allow")], [405, path === "/pages.css" ? null : "GET, HEAD"], `${method} ${path}`);
-        checkVisitorHeaders(`${method} ${path}`, res, { cache: path === "/pages.css" ? "no-cache" : "no-store", more: ["allow"] });
+        // The pages are the Worker's; the style sheet and the script are sent by Static Assets, whose 405 has no
+        // Allow. A 405 runs no script: its policy is the pages' without one.
+        assert.deepEqual([res.status, res.headers.get("allow")], [405, file ? null : "GET, HEAD"], `${method} ${path}`);
+        checkVisitorHeaders(`${method} ${path}`, res, { cache: file ? "no-cache" : "no-store", more: ["allow"] });
       }
     }
   });
@@ -434,8 +448,9 @@ describe("every page", () => {
     await freshRoster(worker, { clearedOn: CLEARED_ON });
     const lines = copyLines(block("not-found.md", "頁面"));
     assert.deepEqual(lines, ["找不到這一頁", "這個網址沒有對到任何頁面。請確認網址有沒有抄錯。", "回到首頁"]);
-    // Among them the pages the home page links to and that are not made yet.
-    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/faq", "/roster", "/verify", "/hang", "/threads/@alice", "/nothing?q=1"]) {
+    // Among them what is near a page but none: a slash too many, another case, the old back end's /roster/ of the
+    // roster's files (now on the data domain), a page of an account without its @.
+    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/FAQ", "/faq/", "/roster/", "/roster/fingerprints.jsonl", "/verify/", "/threads/alice", "/threads", "/copy.js/", "/nothing?q=1"]) {
       // getPage checks the headers (noindex among them), the mark of the test roster with its date, the navigation bar and the foot.
       const { status, page } = await getPage(worker, path);
       assert.equal(status, 404, path);

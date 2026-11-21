@@ -53,9 +53,9 @@ const testBuild = build("test", values);
 
 test("the only addresses in the deploy build are MOICA's two, the ones crl/README.md gives, and the ones the pages write", () => {
   checkAddresses(deploy);
-  // The pages' are the repository and Threads, each over HTTPS. (The data domain is in the card proof page's
-  // policy, which is in site/_headers and no longer in the Worker.)
-  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/(github\.com|www\.threads\.com)[/;]/);
+  // The pages' are the repository, Threads and the site's own domain (the link /hang/<short ID> copies), each over
+  // HTTPS. (The data domain is in the card proof page's policy, which is in site/_headers and no longer in the Worker.)
+  for (const address of PAGE_ADDRESSES) assert.match(address, /^https:\/\/(github\.com|www\.threads\.com|\$\{site\.host\})[/;]/);
   assert.ok(!deploy.code.includes("data.iamreal.tw") && !deploy.code.includes("Document-Isolation-Policy"), "the deploy build has nothing of the card proof page's headers");
   assert.throws(() => checkAddresses({ ...deploy, code: `${deploy.code}\nfetch("https://example.org/");` }));
 });

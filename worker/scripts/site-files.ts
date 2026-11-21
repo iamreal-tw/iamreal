@@ -1,8 +1,8 @@
 // The two files of site/ that tell Static Assets how to send the others
 // (wrangler.jsonc, "assets"; README.md, "Static Assets"):
 //
-//   site/_headers    the headers of the card proof page's files and of the
-//                    style sheet, written here from src/headers.ts, the one
+//   site/_headers    the headers of the card proof page's files, of the
+//                    style sheet and of the copy buttons' script, written here from src/headers.ts, the one
 //                    place they are defined. A test roster's site and a
 //                    production roster's differ in one header (noindex), so
 //                    the file is written for one kind of roster.
@@ -34,30 +34,40 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
  * Every file of site/ a deploy uploads, by its path under site/, sorted:
- * the style sheet and the two files of rules. There is no build of web/
+ * the copy buttons' script, the style sheet and the two files of rules. There is no build of web/
  * under site/proof/ yet; the deploy that puts one there (#69) changes this
  * list. site/proof/ is not in the repository (.gitignore), so on a computer
  * it can hold anything: a deploy build made there does not pass with a file
  * that is not listed here (deploy-build-checks.ts, `checkSiteFiles`).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", "pages.css"];
 
 /**
- * The SHA-256 of site/pages.css, the one file of site/ that is not written
- * here: a deploy uploads the style sheet that was reviewed. Change it with
- * the file (`shasum -a 256 site/pages.css`).
+ * The SHA-256 of site/pages.css, one of the two files of site/ that are not
+ * written here: a deploy uploads the style sheet that was reviewed. Change
+ * it with the file (`shasum -a 256 site/pages.css`).
  */
 export const PAGES_CSS_SHA256 = "fac8914e64556eb62ce23073445dfd323f36c5a7ec140a2b1ca2adf27600fc06";
+
+/**
+ * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
+ * site/ that is not written here: a deploy uploads the script that was
+ * reviewed. Change it with the file (`shasum -a 256 site/copy.js`).
+ */
+export const COPY_JS_SHA256 = "d8ecddb598222cea65e621ae5033b916daec9aafacb87a8f650455bdbd2a3e5d";
 
 /** Which roster a site is of (wrangler.jsonc, `ROSTER_KIND`). */
 export type RosterKind = "test" | "production";
 
 const block = (path: string, headers: Readonly<Record<string, string>>, more: readonly string[] = []): string =>
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
+
+/** The headers of the visitors' files, the style sheet and the script: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
+const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${STYLE_SHEET_CACHE}`]);
 
 /**
  * The text of site/_headers for a site of that kind of roster.
@@ -67,9 +77,11 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css: the visitors' pages' headers (`VISITOR_HEADERS`), and
- *   `STYLE_SHEET_CACHE` in place of the Cache-Control Static Assets sends by
- *   itself (taken off with "!", then set: two values would be joined).
+ * - /pages.css and /copy.js: the visitors' pages' headers
+ *   (`VISITOR_HEADERS`), and `STYLE_SHEET_CACHE` in place of the
+ *   Cache-Control Static Assets sends by itself (taken off with "!", then
+ *   set: two values would be joined). The script's policy has no
+ *   script-src: it is the page that loads it whose policy says what runs.
  * - Both: `EVERY_RESPONSE`, and on a test roster's site `TEST_SITE_HEADERS`.
  */
 export function siteHeaders(kind: RosterKind): string {
@@ -83,7 +95,9 @@ export function siteHeaders(kind: RosterKind): string {
     "",
     block("/proof/*", proof),
     "",
-    block("/pages.css", { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${STYLE_SHEET_CACHE}`]),
+    visitorFile("/pages.css", every),
+    "",
+    visitorFile("/copy.js", every),
   ].join("\n")}\n`;
 }
 

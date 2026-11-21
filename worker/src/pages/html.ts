@@ -16,11 +16,15 @@ export class Html {
   }
 }
 
-const ESCAPES: Readonly<Record<string, string>> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#34;", "'": "&#39;" };
+const ESCAPES: Readonly<Record<string, string>> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&#34;", "'": "&#39;", "\0": "\uFFFD" };
 
-/** `text` with the five characters that mean something in HTML, in text and in a quoted attribute, written as entities. */
+/**
+ * `text` with the five characters that mean something in HTML, in text and
+ * in a quoted attribute, written as entities; and NUL, which HTML does not
+ * allow there, as U+FFFD, as the Go backend's html/template wrote it.
+ */
 export function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ESCAPES[c]!);
+  return text.replace(/[&<>"'\0]/g, (c) => ESCAPES[c]!);
 }
 
 type Value = Html | string | number | readonly Html[];
