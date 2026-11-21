@@ -240,10 +240,14 @@ describe("the card state file is written from a copy of the card state table", (
 });
 
 describe("a publication that cannot be finished", () => {
-  /** Each try is one alarm, a minute of the object's clock after the one before. */
+  /**
+   * Each try is one alarm, `minutes` of the object's clock after the one
+   * before: a minute after a first failure, and twice as long after each
+   * further failure in a row (src/roster.ts, `Retries`).
+   */
   let time = 0;
-  const tryAgain = async (): Promise<void> => {
-    time += 60 * 1000;
+  const tryAgain = async (minutes = 1): Promise<void> => {
+    time += minutes * 60 * 1000;
     await worker.setClock(new Date(time));
     await worker.roster.runAlarm();
   };
@@ -278,14 +282,15 @@ describe("a publication that cannot be finished", () => {
     await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-21.jsonl", how: "put writes other bytes" });
     await mustSubmit(worker, next, "threads first");
     const moment = await worker.roster.stored();
-    await tryAgain();
+    // The third failure in a row: two minutes after the second.
+    await tryAgain(2);
     assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), "card-state/2026-11-21.jsonl", hashListName(0)]);
     assert.deepEqual(await published(), nothing);
     assert.equal(notPublished(), failures + 3);
 
-    // Once the bucket takes everything: all of it again, as the roster is now, and the line.
+    // Once the bucket takes everything: all of it again, as the roster is now, and the line, four minutes after the third failure.
     await worker.roster.setBucketFault(null);
-    await tryAgain();
+    await tryAgain(4);
     const files = await directory();
     assert.deepEqual([...files.keys()], [rosterFileName(0), "card-state/2026-11-21.jsonl", FINGERPRINTS, hashListName(0)]);
     assert.equal(text(files.get(rosterFileName(0))!), moment.records.map((row) => row.line).join(""));
@@ -294,6 +299,148 @@ describe("a publication that cannot be finished", () => {
     assert.equal(text(files.get(FINGERPRINTS)!), line("2026-11-21", 2, moment.roster.fingerprint));
     assert.deepEqual(await published(), { date: "2026-11-21", count: 2, fingerprint: moment.roster.fingerprint });
     assert.equal(notPublished(), failures + 3);
+  });
+
+  test("tries that keep failing wait a minute, then 2, 4, 8, 16, 32 minutes, then an hour each; once the roster is published, the next failure waits a minute again", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    const at = async (ms: number): Promise<void> => {
+      await worker.setClock(new Date(ms));
+      await worker.roster.runAlarm();
+    };
+
+    // The last roster file cannot be written, try after try.
+    await worker.roster.setBucketFault({ key: `roster/${rosterFileName(0)}`, how: "put fails" });
+    time = tw("2026-11-21", "00:00:00").getTime();
+    await at(time);
+    assert.equal(notPublished(), failures + 1);
+    for (const [n, minutes] of [1, 2, 4, 8, 16, 32, 60, 60].entries()) {
+      time += minutes * 60 * 1000;
+      // A second before the wait is over, nothing is tried; at its end, the next try fails again.
+      await at(time - 1000);
+      assert.equal(notPublished(), failures + n + 1, `nothing is tried before ${minutes} minutes are over`);
+      await at(time);
+      assert.equal(notPublished(), failures + n + 2, `the try after ${minutes} minutes`);
+    }
+
+    // The bucket takes the files again: the try an hour later publishes the roster.
+    await worker.roster.setBucketFault(null);
+    time += 60 * 60 * 1000;
+    await at(time);
+    assert.equal(text((await directory()).get(FINGERPRINTS)!).split("\n").length, 2);
+
+    // The next date's publication fails: it is tried again a minute later, not an hour.
+    await worker.roster.setBucketFault({ key: "roster/card-state/2026-11-22.jsonl", how: "put fails" });
+    const before = notPublished();
+    time = tw("2026-11-22", "00:00:00").getTime();
+    await at(time);
+    await at(time + 60 * 1000);
+    assert.equal(notPublished(), before + 2);
+    await worker.roster.setBucketFault(null);
+  });
+
+  // On Cloudflare an object that has nothing to do for some 10 seconds leaves memory, and starts again when its alarm
+  // rings (README.md, "失敗後多久再試"): between two tries it is as good as started again.
+  test("an object started again between two tries waits as long as it would have: the failures in a row are kept with it", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    const fault = { key: `roster/${rosterFileName(0)}`, how: "put fails" } as const;
+    /** The object starts again, and its alarm rings at `ms`; the bucket's fault, which the object kept in memory, is set again first. */
+    const startedAgainAt = async (ms: number, bucketFault: typeof fault | null = fault): Promise<void> => {
+      await worker.roster.restart();
+      await worker.setClock(new Date(ms));
+      await worker.roster.setBucketFault(bucketFault);
+      await worker.roster.runAlarm();
+    };
+
+    await worker.roster.setBucketFault(fault);
+    time = tw("2026-11-21", "00:00:00").getTime();
+    await worker.setClock(new Date(time));
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 1);
+    // A minute after the first failure, and two after the second, each time in an object that has just started.
+    await startedAgainAt(time + 59 * 1000);
+    assert.equal(notPublished(), failures + 1, "not before the minute is over");
+    await startedAgainAt(time + 60 * 1000);
+    assert.equal(notPublished(), failures + 2);
+    await startedAgainAt(time + 2 * 60 * 1000);
+    assert.equal(notPublished(), failures + 2, "not a minute after the second failure");
+    await startedAgainAt(time + 3 * 60 * 1000);
+    assert.equal(notPublished(), failures + 3, "two minutes after it");
+
+    // Once published, nothing of the failures is kept: the next date's first failure, in an object started again, is
+    // tried again a minute later, not four.
+    await startedAgainAt(time + 7 * 60 * 1000, null);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    const cardStateFault = { key: "roster/card-state/2026-11-22.jsonl", how: "put fails" } as const;
+    const before = notPublished();
+    await startedAgainAt(tw("2026-11-22", "00:00:00").getTime(), cardStateFault);
+    await startedAgainAt(tw("2026-11-22", "00:01:00").getTime(), cardStateFault);
+    assert.equal(notPublished(), before + 2);
+    await worker.roster.setBucketFault(null);
+  });
+
+  test("a next try stored by a clock that ran ahead is waited for at most the longest wait, an hour", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+
+    // The clock is a year ahead when the publication fails: the next try is stored as a minute after that.
+    await worker.roster.setBucketFault({ key: `roster/${rosterFileName(0)}`, how: "put fails" });
+    await worker.setClock(tw("2027-11-21", "00:00:00"));
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 1);
+
+    // The clock is right again, and the object starts again: it waits an hour from the first time it looks, not a year.
+    await worker.roster.restart();
+    await worker.setClock(tw("2026-11-21", "00:00:00"));
+    await worker.roster.runAlarm();
+    await worker.setClock(tw("2026-11-21", "00:59:59"));
+    await worker.roster.runAlarm();
+    assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
+    await worker.setClock(tw("2026-11-21", "01:00:00"));
+    await worker.roster.runAlarm();
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    assert.equal(notPublished(), failures + 1);
+  });
+
+  test("failures from before the roster was paused are not counted on after it: the first failure after it waits a minute", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    const fault = { key: `roster/${rosterFileName(0)}`, how: "put fails" } as const;
+
+    // Two failures in a row: the next try would be two minutes after the second.
+    await worker.roster.setBucketFault(fault);
+    await alarmAt("2026-11-21", "00:00:00");
+    await alarmAt("2026-11-21", "00:01:00");
+    assert.equal(notPublished(), failures + 2);
+
+    // The roster is paused, and no longer.
+    await worker.roster.setStoredRulesVersion("another");
+    await worker.roster.restart();
+    try {
+      await alarmAt("2026-11-21", "00:02:00");
+      assert.equal(notPublished(), failures + 2, "a paused roster is not published");
+    } finally {
+      await worker.roster.setStoredRulesVersion("the build's");
+      await worker.roster.restart();
+    }
+
+    // The next failure is a first one: tried again a minute later, not four.
+    await worker.setClock(tw("2026-11-21", "00:05:00"));
+    await worker.roster.setBucketFault(fault);
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 3);
+    await alarmAt("2026-11-21", "00:06:00");
+    assert.equal(notPublished(), failures + 4, "the try a minute after the first failure");
+    await worker.roster.setBucketFault(null);
   });
 
   test("the card state file breaks off while it is written: no line, no copy of the card state table kept; the next try is of its own moment", async () => {
@@ -378,7 +525,9 @@ describe("a publication that cannot be finished", () => {
     // The file has a line the object does not have, after its own or in place of one of them: nothing is written, of
     // this date or of any later one, and nothing of the file changes.
     const foreign = line("2026-11-20", 7, EMPTY_FINGERPRINT);
-    for (const other of [whole + foreign, foreign + whole.slice(whole.indexOf("\n") + 1), whole.replace('"count":1,', '"count":2,')]) {
+    // The failures go on from one date to the next, two a date: the first of each date is the 1st, 3rd and 5th in a row.
+    const waits = [1, 4, 16];
+    for (const [i, other] of [whole + foreign, foreign + whole.slice(whole.indexOf("\n") + 1), whole.replace('"count":1,', '"count":2,')].entries()) {
       await worker.putFile(`roster/${FINGERPRINTS}`, other, MINUTE, ROSTER_FILE_TYPE);
       const before = await directory();
       const answered = await published();
@@ -387,8 +536,8 @@ describe("a publication that cannot be finished", () => {
       assert.deepEqual(await directory(), before, "no file is written, not the last roster file or a card state file either");
       assert.deepEqual(await published(), answered);
       assert.equal(differs(), logged + 1, "one line says that the bucket's fingerprint file is not the object's");
-      // A minute later it is tried again, and stops again.
-      await worker.setClock(tw(`2026-11-${date}`, "00:01:00"));
+      // It is tried again after the wait of that many failures in a row, and stops again.
+      await worker.setClock(new Date(tw(`2026-11-${date}`, "00:00:00").getTime() + waits[i]! * 60 * 1000));
       await worker.roster.runAlarm();
       assert.deepEqual(await directory(), before);
       assert.equal(differs(), logged + 2);
@@ -458,12 +607,13 @@ describe("a publication that cannot be finished", () => {
     assert.equal(differs(), logged + 1);
     assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
 
-    // Once the file is the object's again, the line decided on 2026-11-22 is written with the next date's.
+    // Once the file is the object's again, the line decided on 2026-11-22 is written with the next date's: at the
+    // try two minutes after the second failure in a row.
     const before = await directory();
     await alarmAt("2026-11-23", "00:00:00");
     assert.deepEqual(await directory(), before);
     await worker.putFile(`roster/${FINGERPRINTS}`, whole, MINUTE, ROSTER_FILE_TYPE);
-    await alarmAt("2026-11-23", "00:01:00");
+    await alarmAt("2026-11-23", "00:02:00");
     assert.deepEqual(text((await directory()).get(FINGERPRINTS)!).split("\n").slice(0, -1).map((l) => JSON.parse(l).date), ["2026-11-21", "2026-11-22", "2026-11-23"]);
     assert.equal(((await published()) as { date: unknown }).date, "2026-11-23");
   });
@@ -499,11 +649,12 @@ describe("a publication that cannot be finished", () => {
     assert.equal(text((await directory()).get(FINGERPRINTS)!), foreign);
     assert.equal(count("fingerprint_file_differs"), differed + 1);
 
-    // The file is the object's again, and is deleted between the look and the write of the next try: that write does
-    // not happen either, on a file that is no longer the one looked at; the try after it writes every line.
+    // The file is the object's again, and is deleted between the look and the write of the next try (two minutes after
+    // the second failure in a row): that write does not happen either, on a file that is no longer the one looked at;
+    // the try after it (four minutes later) writes every line.
     await worker.putFile(`roster/${FINGERPRINTS}`, whole, MINUTE, ROSTER_FILE_TYPE);
     await worker.roster.setBucketFault({ key: `roster/${FINGERPRINTS}`, how: "put takes a while" });
-    await worker.setClock(tw("2026-11-22", "00:02:00"));
+    await worker.setClock(tw("2026-11-22", "00:03:00"));
     const trying = worker.roster.runAlarm();
     await new Promise((resolve) => setTimeout(resolve, 300));
     await worker.deleteFile(`roster/${FINGERPRINTS}`);
@@ -511,7 +662,7 @@ describe("a publication that cannot be finished", () => {
     await worker.roster.setBucketFault(null);
     assert.equal((await directory()).has(FINGERPRINTS), false);
     assert.equal(count("roster_not_published"), failed + 2);
-    await alarmAt("2026-11-22", "00:03:00");
+    await alarmAt("2026-11-22", "00:07:00");
     assert.deepEqual(await dates(), ["2026-11-21", "2026-11-22"]);
     assert.equal(((await published()) as { date: unknown }).date, "2026-11-22");
 
