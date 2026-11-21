@@ -8,7 +8,6 @@
 
 - **讀卡**。用 NFC 讀真卡片的程式還沒有搬進這個程式庫（[#163](https://github.com/iamreal-tw/iamreal/issues/163)）。在那之前，發出去的安裝檔和用線裝的建置裡，「卡片」的位置是一個永遠讀不到卡的東西（`app/src/real/…/Target.kt` 的 `NoCardReader`）：按「感應卡片」會停在「沒有感應到卡片」，PIN 送不到任何地方
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
-- 完成畫面「名冊記下了這一筆」列的是確認畫面算的那幾列；後台回報每個平台記成什麼、和確認時不同的標示還沒有（[#221](https://github.com/iamreal-tw/iamreal/issues/221)）
 - 完成畫面最上面的記號動畫；顏色、字級、間距（`design/tokens.json` 還沒有定，現在是墨色和紙色兩個顏色）
 
 ## 這是哪一個 app
@@ -175,7 +174,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 `./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對圖示下面的名稱和它寫的相同。
 
-這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。
+這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 
 測到的：Kotlin 到 JNI 到核心這條路的每一個函式、代碼變成例外、傳進去的位元組呼叫後沒有被改、app 自己開的 session 不認測試金鑰。測不到的：Android 上的 `.so`（Zig 連結的那一個）和畫面。那兩樣由下面模擬器的測試看。
 

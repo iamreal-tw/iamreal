@@ -147,12 +147,84 @@ internal class Messages(private val c: Copy) {
         else -> c.say("confirm.button_declare")
     }
 
-    /** The title of step 6, by what the confirmation screen said the list would do. */
-    fun doneTitle(d: CardProof.Done): String = when {
-        d.firstRecord -> c.say("done.first")
-        d.accounts.isEmpty() -> c.say("done.withdraw_all")
-        allUnchanged(d.rows.map { Triple(it.kind, it.username, it.current) }) -> c.say("done.refresh")
-        else -> c.say("done.changed")
+    /** The title of step 6 (card-proof.md, the table of titles), by what the server says was recorded. */
+    fun doneTitle(d: CardProof.Done): String {
+        val kinds = d.answer.kinds ?: return c.say("done.recorded_only")
+        val current = d.expected.associate { it.platform to it.current }
+        return when {
+            d.firstRecord -> c.say("done.first")
+            d.accounts.isEmpty() -> c.say("done.withdraw_all")
+            allUnchanged(kinds.map { Triple(it.kind, it.username, current[it.platform]) }) -> c.say("done.refresh")
+            else -> c.say("done.changed")
+        }
+    }
+
+    /** A row of "名冊記下了這一筆": one platform of the record, as the server says it recorded it. */
+    class DoneRow(
+        val platform: String,
+        /** False for a platform the app does not know: its account is shown as it is. */
+        val known: Boolean,
+        val username: String,
+        /** What was recorded there; null where the server has nothing for a platform step 5 showed, or the sentence would name an account the app does not have. */
+        val kind: String?,
+        /** Where the answer differs from step 5: what step 5 said (done.mismatch_expected). */
+        val expected: String?,
+        /** Where it differs and the server recorded a switch that step 5 did not call one (done.mismatch_switch_used). */
+        val switchUsed: String?,
+    )
+
+    /** What step 6 says of the server's answer. The same choices as doneView of web/src/ui/messages.ts. */
+    class DoneView(
+        /** done.mismatch, above the title: what the server recorded differs from what step 5 said. */
+        val mismatch: String?,
+        /** The roster's line; null when the answer's kinds could not be read. */
+        val record: String?,
+        /** done.kinds_unreadable, in place of the rows. */
+        val kindsUnreadable: String?,
+        val rows: List<DoneRow>,
+        /** One per account of the list that other cards declare too (`account_cards` above 1). */
+        val otherCards: List<String>,
+        /** An account was withdrawn and the list is not empty: its link can be taken down. */
+        val withdrawnLink: Boolean,
+    )
+
+    fun done(d: CardProof.Done, single: String?): DoneView {
+        val expected = d.expected.associateBy { it.platform }
+        val kinds = d.answer.kinds
+        val withdrawAll = d.accounts.isEmpty()
+        // A platform step 5 did not show (the server's answer differs) is named as the app knows it.
+        val knownOf = { platform: String -> expected[platform]?.known ?: (Platforms.of(platform) != null) }
+        val account = { platform: String, username: String -> if (knownOf(platform)) Platforms.handle(platform, username) else username }
+        val expectedOf = { platform: String ->
+            c.say("done.mismatch_expected", "expected" to (expected[platform]?.let { rowSentences(it) } ?: c.say("done.mismatch_no_platform")))
+        }
+        val rows = mutableListOf<DoneRow>()
+        if (kinds != null) {
+            for (k in kinds) {
+                val e = expected[k.platform]
+                // kinds.switch names the account the screen knew was replaced.
+                val previous = e?.previous ?: e?.current
+                val sentence = if ((k.kind == "switch" || k.kind == "correction") && previous == null) null else kind(k.platform, k.kind, k.username, e?.current, previous)
+                val mismatch = k.platform in d.answer.mismatches
+                rows += DoneRow(
+                    k.platform, knownOf(k.platform), k.username, sentence,
+                    if (mismatch) expectedOf(k.platform) else null,
+                    if (mismatch && k.kind == "switch" && e?.kind != "switch") c.say("done.mismatch_switch_used") else null,
+                )
+            }
+            for (e in d.expected) {
+                if (kinds.none { it.platform == e.platform }) rows += DoneRow(e.platform, e.known, e.username, null, expectedOf(e.platform), null)
+            }
+            rows.sortBy { it.platform }
+        }
+        return DoneView(
+            mismatch = if (d.answer.mismatches.isNotEmpty()) c.say("done.mismatch") else null,
+            record = if (kinds == null) null else if (withdrawAll) c.say("done.record_withdraw_all") else if (single != null) c.say("done.record_single") else c.say("done.record_list"),
+            kindsUnreadable = if (kinds == null) c.say("done.kinds_unreadable") else null,
+            rows = rows,
+            otherCards = (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
+            withdrawnLink = !withdrawAll && (kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" }),
+        )
     }
 
     private companion object {

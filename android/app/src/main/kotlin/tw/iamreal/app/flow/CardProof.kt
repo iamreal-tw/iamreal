@@ -134,14 +134,72 @@ class CardProof(private val deps: Deps) {
         val rows: List<Row>,
         val firstRecord: Boolean,
         val today: String,
+        /** [rows] as the core wrote them: what it compares the server's answer with ([Answer.of]). */
+        internal val rowsJson: ByteArray,
+    )
+
+    /** What the server says the record is on one platform: an element of its answer's `kinds`. */
+    class Recorded(
+        val platform: String,
+        val kind: String,
+        /** The account: the list's for that platform, or for `withdraw` the one withdrawn. */
+        val username: String,
+        /** The cards that declare this account once the record is applied; null when the answer has no such count. */
+        val accountCards: Long?,
     )
 
     /**
-     * The card proof is in the roster. [rows] is what the confirmation screen said the list would do: what
-     * the server says it recorded on each platform is not read yet (issue #221).
+     * The server's answer to the submission, a `201`, as the core read it (spec/records-response.md). The
+     * record is in the roster whatever the answer holds: what cannot be read is null, never a failure.
+     */
+    class Answer(
+        /** The record's `seq` and hash; both null when nothing of the answer is told. */
+        val seq: Long?,
+        val recordHash: String?,
+        /** What the server says the record is on each platform, in ascending order; null when it cannot be read. */
+        val kinds: List<Recorded>?,
+        /** The platforms on which [kinds] differs from the confirmation screen's rows, in ascending order; empty when [kinds] is null. */
+        val mismatches: List<String>,
+    ) {
+        companion object {
+            /** An answer of which nothing is told. */
+            val NOTHING = Answer(null, null, null, emptyList())
+
+            /**
+             * Reads [response], the body of the `201`, against [rowsJson], the rows the confirmation screen
+             * showed. The app cannot check the answer; the core only compares.
+             */
+            fun of(response: ByteArray, rowsJson: ByteArray): Answer {
+                val read = try {
+                    JSONObject(String(DeviceCore.recordsResponse(response, rowsJson), Charsets.UTF_8))
+                } catch (e: DeviceCoreException) {
+                    // The record is in the roster: the core failing to read its answer does not undo it.
+                    return NOTHING
+                }
+                val kinds = read.optJSONArray("kinds")
+                val mismatches = read.getJSONArray("mismatches")
+                return Answer(
+                    if (read.isNull("seq")) null else read.getLong("seq"),
+                    if (read.isNull("record_hash")) null else read.getString("record_hash"),
+                    kinds?.let {
+                        (0 until it.length()).map { i ->
+                            val k = it.getJSONObject(i)
+                            Recorded(k.getString("platform"), k.getString("kind"), k.getString("username"), if (k.isNull("account_cards")) null else k.getLong("account_cards"))
+                        }
+                    },
+                    (0 until mismatches.length()).map { mismatches.getString(it) },
+                )
+            }
+        }
+    }
+
+    /**
+     * The card proof is in the roster. [expected] is what the confirmation screen said the list would do;
+     * [answer] what the server says it recorded.
      */
     class Done(
-        val rows: List<Row>,
+        val expected: List<Row>,
+        val answer: Answer,
         val firstRecord: Boolean,
         val date: String,
         val shortId: String,
@@ -457,11 +515,12 @@ class CardProof(private val deps: Deps) {
 
     private fun consequenceOf(entries: Map<String, String>): Consequence {
         val list = entries.filterValues { it.isNotEmpty() }
-        val result = try {
-            answer(DeviceCore.listConsequence(platformsJson!!, cardState!!, Platforms.knownJson, accountsJson(list), nowSeconds()))
+        val bytes = try {
+            DeviceCore.listConsequence(platformsJson!!, cardState!!, Platforms.knownJson, accountsJson(list), nowSeconds())
         } catch (e: DeviceCoreException) {
             fail(Stop.core(e))
         }
+        val result = answer(bytes)
         if (!result.getBoolean("valid")) throw Blocked(result.getString("reason"), result.optString("platform").takeIf { it.isNotEmpty() })
         val accounts = result.getJSONArray("accounts")
         val rows = result.getJSONArray("rows")
@@ -478,6 +537,8 @@ class CardProof(private val deps: Deps) {
             },
             result.getBoolean("first_record"),
             today(),
+            // The core's own words, cut out as they are; a list that is valid has rows.
+            RawJson.member(bytes, "rows") ?: fail(Stop("engine")),
         )
     }
 
@@ -574,13 +635,13 @@ class CardProof(private val deps: Deps) {
         live()
         events.done(Item.PROVED)
 
-        try {
+        val answer = try {
             deps.backend.submit(record)
         } catch (e: ServerException) {
             fail(Stop("server", mapOf("code" to e.code, "submitting" to "true"), e.requestId))
         }
         ended = true
-        return Done(shown.rows, shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts)
+        return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts)
     }
 
     // The end --------------------------------------------------------------------------

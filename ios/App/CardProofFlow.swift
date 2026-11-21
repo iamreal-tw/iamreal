@@ -154,6 +154,60 @@ final class CardProofFlow {
         let today: String
     }
 
+    /// What the server says the record is on one platform: an element of
+    /// its answer's `kinds`.
+    struct Recorded: Equatable {
+        let platform: String
+        let kind: String
+        /// The account: the list's for that platform, or for `withdraw`
+        /// the one withdrawn.
+        let username: String
+        /// The cards that declare this account once the record is applied;
+        /// nil when the answer has no such count.
+        let accountCards: Int?
+    }
+
+    /// The server's answer to the submission, a 201, as the core read it
+    /// (spec/records-response.md). The record is in the roster whatever
+    /// the answer holds: what cannot be read is nil, never a failure.
+    struct Answer: Equatable {
+        /// The record's `seq` and hash; both nil when nothing of the
+        /// answer is told.
+        let seq: Int?
+        let recordHash: String?
+        /// What the server says the record is on each platform, in
+        /// ascending order; nil when it cannot be read.
+        let kinds: [Recorded]?
+        /// The platforms on which `kinds` differs from the confirmation
+        /// screen's rows, in ascending order; empty when `kinds` is nil.
+        let mismatches: [String]
+
+        /// An answer of which nothing is told.
+        static let nothing = Answer(seq: nil, recordHash: nil, kinds: nil, mismatches: [])
+
+        /// Reads `response`, the body of the 201, against `rows`, the
+        /// rows the confirmation screen showed as the core takes them.
+        /// The app cannot check the answer; the core only compares.
+        static func read(_ response: Data, rows: Data) -> Answer {
+            // The record is in the roster: the core failing to read its answer does not undo it.
+            guard let json = try? DeviceCore.recordsResponse(response, rows: rows),
+                  let read = try? JSONSerialization.jsonObject(with: json) as? [String: Any]
+            else { return nothing }
+            let kinds = (read["kinds"] as? [[String: Any]])?.map { kind in
+                Recorded(
+                    platform: kind["platform"] as? String ?? "",
+                    kind: kind["kind"] as? String ?? "",
+                    username: kind["username"] as? String ?? "",
+                    accountCards: kind["account_cards"] as? Int)
+            }
+            return Answer(
+                seq: read["seq"] as? Int,
+                recordHash: read["record_hash"] as? String,
+                kinds: kinds,
+                mismatches: read["mismatches"] as? [String] ?? [])
+        }
+    }
+
     struct Done: Equatable {
         /// The record's date: the challenge's.
         let date: String
@@ -161,7 +215,9 @@ final class CardProofFlow {
         /// The list the card signed: what the record states.
         let accounts: [Account]
         /// What the screen said the list would do, before the card signed.
-        let rows: [ConsequenceRow]
+        let expected: [ConsequenceRow]
+        /// What the server says it recorded.
+        let answer: Answer
         let firstRecord: Bool
     }
 
@@ -214,7 +270,9 @@ final class CardProofFlow {
     private var cardState: Data?
     private var shortID = ""
     private var entries: [String: String]?
-    private var chosen: (consequence: Consequence, accounts: Data)?
+    /// The list chosen: what the screen said of it, the list the card signs
+    /// and the screen's rows, both as the core takes them.
+    private var chosen: (consequence: Consequence, accounts: Data, rows: Data)?
     private var challenge: String?
     private var code: Data?
     private var submission: Data?
@@ -444,9 +502,9 @@ final class CardProofFlow {
     /// the flow: the cardholder changes the list again.
     func choose(_ entries: [String: String]) throws -> Consequence {
         guard phase == .statusKnown || phase == .chosen else { throw Stop.state }
-        let (consequence, accounts) = try consequence(of: entries)
+        let (consequence, accounts, rows) = try consequence(of: entries)
         self.entries = entries
-        chosen = (consequence, accounts)
+        chosen = (consequence, accounts, rows)
         phase = .chosen
         return consequence
     }
@@ -471,8 +529,8 @@ final class CardProofFlow {
     }
 
     /// The core's answer for `entries` on today's date, and the list the
-    /// card signs as the core wrote it.
-    private func consequence(of entries: [String: String]) throws -> (Consequence, Data) {
+    /// card signs and the rows as the core wrote them.
+    private func consequence(of entries: [String: String]) throws -> (Consequence, Data, Data) {
         guard let cardState else { throw Stop.state }
         let list = entries.keys.sorted().compactMap { platform -> [String: String]? in
             let typed = entries[platform] ?? ""
@@ -495,7 +553,10 @@ final class CardProofFlow {
         guard let signed = answer["accounts"] as? [[String: String]],
               let accounts = try? JSONSerialization.data(withJSONObject: signed, options: [.sortedKeys])
         else { throw Stop.core(IDC_ERR_INTERNAL) }
-        let rows = (answer["rows"] as? [[String: Any]] ?? []).map { row in
+        guard let written = answer["rows"] as? [[String: Any]],
+              let rowsJSON = try? JSONSerialization.data(withJSONObject: written, options: [.sortedKeys])
+        else { throw Stop.core(IDC_ERR_INTERNAL) }
+        let rows = written.map { row in
             ConsequenceRow(
                 platform: row["platform"] as? String ?? "",
                 known: row["known"] as? Bool ?? false,
@@ -510,7 +571,7 @@ final class CardProofFlow {
             rows: rows,
             firstRecord: answer["first_record"] as? Bool ?? false,
             today: Self.dateInTaiwan(now))
-        return (consequence, accounts)
+        return (consequence, accounts, rowsJSON)
     }
 
     // Tap 3, the proof, the submission ---------------------------------------------
@@ -599,8 +660,9 @@ final class CardProofFlow {
         guard phase == .submitting || phase == .submitFailed else { throw Stop.state }
         guard let submission, let chosen, let challenge else { throw fail(Stop.state) }
         phase = .submitting
+        let response: Data
         do {
-            try await deps.backend.submit(submission)
+            response = try await deps.backend.submit(submission)
         } catch let failure as BackendFailure where failure.code == "network" {
             try live()
             phase = .submitFailed
@@ -615,7 +677,8 @@ final class CardProofFlow {
             date: String(challenge.prefix(10)),
             shortID: shortID,
             accounts: chosen.consequence.accounts,
-            rows: chosen.consequence.rows,
+            expected: chosen.consequence.rows,
+            answer: Answer.read(response, rows: chosen.rows),
             firstRecord: chosen.consequence.firstRecord)
     }
 

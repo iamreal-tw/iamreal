@@ -303,14 +303,67 @@ struct Screens {
 
     // Step 6: done ----------------------------------------------------------------------
 
+    /// The title of step 6 (card-proof.md, the table of titles), by what
+    /// the server says was recorded.
+    private func doneTitle(_ done: Flow.Done) -> String {
+        guard let kinds = done.answer.kinds else { return copy("done.recorded_only") }
+        if done.firstRecord { return copy("done.first") }
+        if done.accounts.isEmpty { return copy("done.withdraw_all") }
+        let current = Dictionary(done.expected.map { ($0.platform, $0.current) }, uniquingKeysWith: { first, _ in first })
+        let unchanged = kinds.allSatisfy { $0.kind == "refresh" && current[$0.platform] == .some($0.username) }
+        return unchanged ? copy("done.refresh") : copy("done.changed")
+    }
+
+    /// The rows of "名冊記下了這一筆": one for every platform the server
+    /// says the record has a kind on, and one for every platform step 5
+    /// showed that the answer does not have, in ascending order of
+    /// platform. Under a row: what was recorded; where it differs from
+    /// step 5, what step 5 said; and that a switch was used when step 5
+    /// did not say one would be. The same choices as doneView of
+    /// web/src/ui/messages.ts.
+    private func recordedRows(_ done: Flow.Done, kinds: [Flow.Recorded]) -> [Block] {
+        let expected = Dictionary(done.expected.map { ($0.platform, $0) }, uniquingKeysWith: { first, _ in first })
+        // A platform step 5 did not show (the server's answer differs) is named as the app knows it.
+        func known(_ platform: String) -> Bool { expected[platform]?.known ?? (Platform.of(platform) != nil) }
+        func expectedLine(_ platform: String) -> String {
+            let said = expected[platform].map { rowSentences($0).joined() } ?? copy("done.mismatch_no_platform")
+            return copy("done.mismatch_expected", ["expected": said])
+        }
+        var rows: [(platform: String, block: Block)] = kinds.map { kind in
+            let shown = expected[kind.platform]
+            // kinds.switch names the account the screen knew was replaced.
+            let previous = shown?.previous ?? shown?.current
+            var lines: [String] = []
+            if !((kind.kind == "switch" || kind.kind == "correction") && previous == nil) {
+                let recorded = Flow.ConsequenceRow(
+                    platform: kind.platform, known: known(kind.platform), kind: kind.kind, username: kind.username,
+                    current: shown?.current, previous: previous, switchesLeft: nil)
+                lines.append(rowSentences(recorded)[0])
+            }
+            if done.answer.mismatches.contains(kind.platform) {
+                lines.append(expectedLine(kind.platform))
+                if kind.kind == "switch", shown?.kind != "switch" { lines.append(copy("done.mismatch_switch_used")) }
+            }
+            return (kind.platform, .row(
+                name: known(kind.platform) ? Platform.of(kind.platform)?.name ?? kind.platform : kind.platform,
+                account: known(kind.platform) ? Platform.handle(kind.platform, kind.username) : kind.username,
+                lines: lines))
+        }
+        for shown in done.expected where !kinds.contains(where: { $0.platform == shown.platform }) {
+            rows.append((shown.platform, row(shown, lines: [expectedLine(shown.platform)])))
+        }
+        return rows.sorted { $0.platform < $1.platform }.map(\.block)
+    }
+
     /// `single`: the one platform's name, as step 5 decided it. `copied`:
     /// the link was copied.
     func done(_ done: Flow.Done, single: String?, copied: Bool) -> Screen {
         let withdrawAll = done.accounts.isEmpty
-        let title = done.firstRecord
-            ? copy("done.first")
-            : withdrawAll ? copy("done.withdraw_all") : Self.allUnchanged(done.rows) ? copy("done.refresh") : copy("done.changed")
-        var blocks: [Block] = [.title(title)]
+        let kinds = done.answer.kinds
+        var blocks: [Block] = []
+        // What the roster recorded is not what step 5 said: first of all, above the title.
+        if !done.answer.mismatches.isEmpty { blocks.append(.message(copy("done.mismatch"))) }
+        blocks.append(.title(doneTitle(done)))
         let shortID = copy("confirm.short_id", ["short_id": done.shortID])
         if !withdrawAll {
             blocks.append(.heading(copy("done.proof")))
@@ -338,17 +391,25 @@ struct Screens {
                 ]
             }
             if done.firstRecord { blocks.append(.text(copy("done.new_card"))) }
-            if done.rows.contains(where: { $0.kind == "withdraw" }) { blocks.append(.text(copy("done.withdrawn_link"))) }
+            let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
+            if withdrew { blocks.append(.text(copy("done.withdrawn_link"))) }
             blocks.append(.button(Button(label: copy("links.proof"), action: .openProof)))
         }
-        blocks += [
-            .heading(copy("done.recorded")),
-            .text(done.date),
-            .text(withdrawAll ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")),
-        ]
-        // What this record did on each platform: the kind, without what a switch uses up.
-        blocks += done.rows.map { row($0, lines: [rowSentences($0)[0]]) }
-        blocks.append(.text(copy("done.short_id", ["short_id": done.shortID])))
+        blocks += [.heading(copy("done.recorded")), .text(done.date)]
+        if let kinds {
+            blocks.append(.text(withdrawAll ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")))
+            blocks += recordedRows(done, kinds: kinds)
+            blocks.append(.text(copy("done.short_id", ["short_id": done.shortID])))
+            // An account of the list that other cards declare too.
+            blocks += kinds.filter { $0.kind != "withdraw" && ($0.accountCards ?? 0) > 1 }.map { kind in
+                let account = (done.expected.first { $0.platform == kind.platform }?.known ?? (Platform.of(kind.platform) != nil))
+                    ? Platform.handle(kind.platform, kind.username) : kind.username
+                return .text(copy("done.other_cards", ["account": account]))
+            }
+        } else {
+            // The record is in the roster; what it is on each platform the app could not read.
+            blocks.append(.text(copy("done.kinds_unreadable")))
+        }
         var points: [String] = []
         if !withdrawAll { points += [single != nil ? copy("done.advice_single") : copy("done.advice"), copy("done.renamed")] }
         points.append(copy("done.trust"))

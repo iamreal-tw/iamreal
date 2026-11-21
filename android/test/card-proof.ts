@@ -413,7 +413,8 @@ async function cardProof(p: Proof): Promise<string> {
     if (p.done.card) {
       shows(s, "step 6", [say("links.proof"), say("done.proof"), say("confirm.short_id", { short_id: shortId }), say("done.hand_ai"), say("done.hand_profile"), say("done.put_up"), say("done.put_link_single", { platform: THREADS }), link, say("done.copy"), say("app_done.open_platform", { platform: THREADS }), say("app_done.how_to_put", { platform: THREADS }), say("done.advice_single"), say("done.renamed")]);
     }
-    for (const a of [say("done.unplug"), say("done.mismatch"), ...p.done.absent]) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+    // The server's answer was read (the title and the rows are by its kinds) and is what step 5 said.
+    for (const a of [say("done.unplug"), say("done.mismatch"), say("done.kinds_unreadable"), say("done.recorded_only"), say("done.other_cards", { account: p.confirm.account }), ...p.done.absent]) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
   }
   return shortId;
 }

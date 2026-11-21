@@ -33,8 +33,12 @@ class Backend(private val site: String, private val data: String) {
         }
     }
 
-    /** `POST /api/v1/records` with [body], the core's: the body of the answer (`201`). */
-    fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER)
+    /**
+     * `POST /api/v1/records` with [body], the core's: the body of the answer, which is a `201` and no other
+     * status. A `201` is a record in the roster whatever follows it (spec/records-response.md): a body that
+     * does not arrive whole is no bytes, not a failure.
+     */
+    fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER, created = true)
 
     /** The index of the CRL archive, `crl/index.jsonl`. */
     fun crlIndex(): ByteArray = request("GET", "$data/crl/index.jsonl", null, FILE_TIMEOUT_MS, MAX_INDEX)
@@ -45,7 +49,7 @@ class Backend(private val site: String, private val data: String) {
         return request("GET", "$data/crl/$sha256.crl", null, FILE_TIMEOUT_MS, MAX_CRL)
     }
 
-    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int): ByteArray {
+    private fun request(method: String, url: String, body: ByteArray?, timeoutMs: Int, most: Int, created: Boolean = false): ByteArray {
         val connection = try {
             URL(url).openConnection() as HttpURLConnection
         } catch (e: IOException) {
@@ -75,6 +79,14 @@ class Backend(private val site: String, private val data: String) {
                     null
                 }
                 throw ServerException(code ?: "http_$status", status, requestId)
+            }
+            if (created) {
+                if (status != 201) throw ServerException("http_$status", status, requestId)
+                return try {
+                    read(connection.inputStream, most)
+                } catch (e: IOException) {
+                    ByteArray(0)
+                }
             }
             return read(connection.inputStream, most)
         } catch (e: IOException) {
