@@ -58,6 +58,13 @@ keys from it and compare them with the published ones:
    verification key SHA-256 in the table above, the value of a record's
    `circuit`.
 
+The first run needs a network connection. Besides `nargo` itself (kept in
+`circuits/.tools/`), `nargo` fetches the Noir libraries that
+`circuits/lib/Nargo.toml` names, at the git tags it pins, from GitHub into
+`~/nargo`; and `bb write_vk` downloads 2^18 points of Barretenberg's common
+reference string (24 MiB, two files) into `circuits/.crs/`. Later runs
+reuse all three and download nothing.
+
 ## Public inputs
 
 Every public input is one element of the BN254 scalar field, below
