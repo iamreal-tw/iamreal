@@ -1127,8 +1127,18 @@ test("the go check runs when anything it uses changes: every directory with a Go
     [...dirs, ...named].filter((p) => !holds(list, p)),
     [],
   );
-  // The job installs the packages, for bb: pnpm compares the lockfile with these.
-  for (const p of ["protocol/package.json", "web/package.json", "worker/package.json"]) assert.ok(list.includes(p), p);
+});
+
+test("every check that runs pnpm install at the root runs when a package of the workspace changes its package.json: pnpm compares the lockfile with each", () => {
+  const packages = [...workspacePackages().values()].map((dir) => `${relative(REPO, dir).split(sep).join("/")}/package.json`);
+  assert.ok(packages.includes("circuits/package.json"), `the check read the workspace: ${packages.join(", ")}`);
+  for (const [check, list] of Object.entries({ go: CHECK_PATHS.go!, typescript: CHECK_PATHS.typescript!, browser: BROWSER_PATHS })) {
+    assert.deepEqual(
+      packages.filter((p) => !matchesPaths(list, p)),
+      [],
+      check,
+    );
+  }
 });
 
 test("the typescript check runs when anything it uses changes: every file and directory the sources of protocol/, worker/ and web/ name is in its list", () => {

@@ -199,7 +199,10 @@ export const ACTIONS: Readonly<Record<string, { readonly sha: string; readonly v
  * it used: the page's rules and their answers change together. worker/ is
  * here since the tests run against the Worker (#69); server/, the Go back
  * end they ran against before, is not: they build no package that imports
- * it.
+ * it. circuits/package.json is here as a package of the workspace: the job
+ * runs `pnpm install --frozen-lockfile`, which compares the lockfile with
+ * every package's package.json (the other three are in directories listed
+ * whole).
  */
 export const BROWSER_PATHS: readonly string[] = [
   "web/**",
@@ -215,6 +218,7 @@ export const BROWSER_PATHS: readonly string[] = [
   "go.sum",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
+  "circuits/package.json",
   ".github/workflows/checks-browser.yml",
 ];
 
@@ -716,6 +720,7 @@ export const GO_PATHS: readonly string[] = [
   "design/copy/**",
   "web/README.md",
   "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "circuits/package.json",
   "protocol/package.json",
   "web/package.json",
   "worker/package.json",
@@ -744,6 +749,7 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
   "ios/**",
   "device-core/**",
   ".github/workflows/**",
+  "circuits/package.json",
   "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
 ];
 /**
