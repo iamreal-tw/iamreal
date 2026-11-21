@@ -619,7 +619,7 @@ export const IOS_JOB_STEPS: YamlMap = {
  */
 export const CIRCUITS_JOB_STEPS: YamlMap = {
   "runs-on": "ubuntu-24.04",
-  "timeout-minutes": "45",
+  "timeout-minutes": "30",
   steps: [
     step("actions/checkout"),
     step("actions/setup-node"),

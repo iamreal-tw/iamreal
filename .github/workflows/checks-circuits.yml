@@ -66,7 +66,9 @@ concurrency:
 jobs:
   circuits:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # The first run on GitHub (2026-11-21, #262) took about 8.5 minutes, 4 of them building circom:
+    # 30 is about 3.5 times that, the limit of the other jobs.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

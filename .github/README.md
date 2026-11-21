@@ -59,7 +59,7 @@
 
 **`checks-circuits.yml` 的 `paths`**：`circuits/`；重建比對的對象 `web/circuits/`、`verifier/vk/`，和重建時用的 `web/scripts/strip-circuit.mjs`；電路的測試讀的 `spec/vectors/poseidon2.json`；套件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`，和 workspace 其他三個套件的 `package.json`：這個工作在根目錄跑 `pnpm install --frozen-lockfile`，pnpm 拿 lockfile 和每個套件的 `package.json` 比對）；根目錄那七個檔（`ROOT_FILES_PATHS`，和必要檢查的清單同一份）：例如加一個 `.pnpmfile.cjs` 就能改變 `@aztec-foundation/bb.js` 解析到什麼，`bb` 正是從那裡來的，加一個 `.gitattributes` 就能改變取出來的 `web/circuits/`、`verifier/vk/`，也就是 `rebuild.sh` 逐位元組比對的檔；和這個工作流程檔自己。`workflows.test.ts` 讀 `circuits/` 每個進版本控制的檔，找出寫到 `circuits/` 以外的路徑，確認都在清單裡：JavaScript 的 `join(ROOT, …)`（`ROOT` 是 `circuits/`）、`join(dirname(fileURLToPath(import.meta.url)), …)`、相對路徑的 import，shell 腳本的 `$root/…` 和 `rebuild.sh` 的 `compare "…"`，`Nargo.toml` 的 `path = "…"`。看不到的：用其他方式拼出來的路徑，`nargo`、`bb`、circom 自己讀的東西，和 zkID 那個提交裡的檔。
 
-時間：2026-11-21 在一台 Apple M 系列的電腦上照這個工作的步驟依序跑一次，重建並比對 20 秒、編全部電路 13 秒、`nargo test` 6 秒、建 circom 344 秒、含 circom 的 `pnpm test` 367 秒，約 12 分半（那台電腦同時跑著別的工作，`circuits/README.md` 寫的約 3 分鐘是 circom 單獨建的時間）。這個工作流程還沒有在 GitHub 上跑過（寫的時候分支還沒推送）；第一次跑的時間記在加它的 PR。工作的上限是 45 分鐘，比其他工作的 30 分鐘長：GitHub 的 runner 比量的那台慢多少還不知道。
+時間：2026-11-21 第一次在 GitHub 上跑（[#262 的這一次](https://github.com/iamreal-tw/iamreal/actions/runs/44914901525/job/136878301995)）：建 circom 約 4 分鐘、含 circom 的 `pnpm test` 約 3 分半，重建並比對、編全部電路、`nargo test` 加起來約 40 秒，整個工作約 8 分半。工作的上限是 30 分鐘，和其他工作相同，約是這次的 3.5 倍；circom 的建置如果慢到接近上限，照 #243 停下來談要不要改放編好的見證產生器。
 
 **必要檢查在 PR 階段照路徑跳過，合併佇列四項全跑**（#206）。只改文件的 PR 不必等 `android` 的 11 分鐘（2026-11-20 量的，[#203](https://github.com/iamreal-tw/iamreal/issues/203)）。必要檢查不能用 `paths`：被 `paths` 濾掉的工作流程不回報檢查，PR 會停在「Pending」（上面的限制）。所以 `checks.yml` 每次都跑，由裡面的 `changes` 工作決定四個必要檢查各自跑不跑：
 
