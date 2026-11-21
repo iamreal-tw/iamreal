@@ -1004,7 +1004,7 @@ export class CardProofFlow {
     return {
       ...r,
       expected,
-      mismatches: r.kinds === null ? [] : mismatchesOf(expected, r.kinds),
+      mismatches: mismatchesOf(expected, r.kinds),
       firstRecord: this.chosen!.firstRecord,
       date: s.challenge.slice(0, 10),
       scopedId: s.scoped_id,
@@ -1181,8 +1181,14 @@ function sameRows(a: readonly ConsequenceRow[], b: readonly ConsequenceRow[]): b
   );
 }
 
-/** The platforms on which the server's kinds and the expected rows differ: kind, account, or presence. */
-function mismatchesOf(expected: readonly ConsequenceRow[], kinds: readonly AcceptedKind[]): string[] {
+/**
+ * The platforms on which the server's kinds and the expected rows differ:
+ * kind, account, or presence; in ascending order. None when the kinds could
+ * not be read: there is nothing to compare (spec/records-response.md,
+ * "Comparing with what the screen said").
+ */
+export function mismatchesOf(expected: readonly Pick<ConsequenceRow, "platform" | "kind" | "username">[], kinds: readonly AcceptedKind[] | null): string[] {
+  if (kinds === null) return [];
   const platforms = [...new Set([...expected.map((r) => r.platform), ...kinds.map((k) => k.platform)])].sort();
   return platforms.filter((p) => {
     const e = expected.find((r) => r.platform === p);

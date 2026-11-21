@@ -190,11 +190,15 @@ private fun Accounts(m: Model, outside: Outside) {
 
 /** A row of a list of accounts: the platform, the account, and under it what is said of it. */
 @Composable
-private fun ListRow(name: String, value: String, under: String? = null, tag: String? = null) = Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun ListRow(name: String, value: String, under: String? = null, tag: String? = null) = ListRow(name, value, listOfNotNull(under), tag)
+
+/** As above, with a line for each thing said of the account. */
+@Composable
+private fun ListRow(name: String, value: String, under: List<String>, tag: String? = null) = Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
     Body(name, Modifier.width(72.dp))
     Column(if (tag != null) Modifier.testTag(tag) else Modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Body(value)
-        if (under != null) Small(under)
+        for (line in under) Small(line)
     }
 }
 
@@ -266,12 +270,15 @@ private fun Done(m: Model, outside: Outside) {
     val url = m.proofUrl(d.shortId)
     val link = "${m.domain}/p/${d.shortId}"
     var copied by remember { mutableStateOf(false) }
+    val view = m.messages.done(d, single)
 
+    // What the roster recorded is not what step 5 said: first of all, above the title.
+    view.mismatch?.let { Problem(it, Modifier.testTag("done-mismatch")) }
     Title(m.messages.doneTitle(d))
     if (!withdrawAll) {
         Boxed {
             Heading(c.say("done.proof"))
-            for (row in d.rows) if (row.kind != "withdraw") ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), tag = "proof-${row.platform}")
+            for (row in d.expected) if (row.kind != "withdraw") ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), tag = "proof-${row.platform}")
             ListRow(c.say("confirm.date"), d.date)
             ListRow(c.say("confirm.short_id_label"), c.say("confirm.short_id", "short_id" to d.shortId))
             Small(c.say("done.hand_ai"))
@@ -289,19 +296,20 @@ private fun Done(m: Model, outside: Outside) {
         Actions { Button(c.say("app_done.open_platform", "platform" to Platforms.THREADS.name)) { outside.open(Platforms.THREADS.home) } }
         Small(c.say("app_done.how_to_put", "platform" to Platforms.THREADS.name))
         if (d.firstRecord) Body(c.say("done.new_card"))
-        if (d.rows.any { it.kind == "withdraw" }) Body(c.say("done.withdrawn_link"))
+        if (view.withdrawnLink) Body(c.say("done.withdrawn_link"))
         TextButton(c.say("links.proof")) { outside.open(url) }
     }
 
-    // The record, as the confirmation screen said it would be. What the server says it recorded on each
-    // platform, and whether it differs, is not shown yet (issue #221).
+    // The record, as the server says it recorded it; where that differs from the confirmation screen, both.
     Heading(c.say("done.recorded"))
     Body(d.date)
-    Body(if (withdrawAll) c.say("done.record_withdraw_all") else if (single != null) c.say("done.record_single") else c.say("done.record_list"))
-    for (row in d.rows) {
-        ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), m.messages.kind(row.platform, row.kind, row.username, row.current, row.previous), "recorded-${row.platform}")
+    view.record?.let { Body(it) }
+    for (row in view.rows) {
+        ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), listOfNotNull(row.kind, row.expected, row.switchUsed), "recorded-${row.platform}")
     }
-    Body(c.say("done.short_id", "short_id" to d.shortId))
+    if (view.record != null) Body(c.say("done.short_id", "short_id" to d.shortId))
+    view.kindsUnreadable?.let { Body(it) }
+    for (sentence in view.otherCards) Small(sentence)
     if (!withdrawAll) {
         Point(if (single != null) c.say("done.advice_single") else c.say("done.advice"))
         Point(c.say("done.renamed"))

@@ -46,10 +46,9 @@
 
 - 讀卡（NFC，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：entitlement、`NFCReaderUsageDescription`、`Info.plist` 的 AID 清單、系統的讀卡面板和面板上的句子
 - 中斷和錯誤（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：掉線後只重做那一次感應、送 PIN 時掉線、5 分鐘的上限、最低版本（`min_app`）、沒有 NFC。這裡已經有的只有：PIN 不正確時丟掉 PIN 再問一次、第二或第三次感應換了卡時不送 PIN 並可以再感應一次、手機的日期和題目的日期不同時在第三次感應之前停下、後台沒有回應時同一筆再送一次（網頁版在後台回 429、5xx 時也可以再送，再送被回「題目用過了」時會查現況確認那一筆是不是已經記下，這裡還沒有）
-- 完成的畫面「名冊記下了這一筆」列的是確認畫面上那幾列（裝置自己照名冊規則算的），沒有讀後台回應裡的 `kinds`、`account_cards`，所以沒有「和你確認時畫面說的不同」和「還有別的卡片也宣告了」那兩種句子。讀那個回應的規則現在只在 `web/src/api.ts`，還沒有寫進 `spec/`（[#221](https://github.com/iamreal-tw/iamreal/issues/221)）
 - 文字沒有對應句子的兩種情況，畫面只顯示代碼，和網頁版相同（`web/src/ui/messages.ts`）：核心回了 app 不認得的憑證原因代碼、app 自己把步驟的順序叫錯（`state`）。兩種都是程式的錯，不是持卡人會遇到的情況；要不要有一句話留給 #172
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
-- `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
+- `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列、完成的畫面讀不出後台回報每個帳號記成什麼時的那一句；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
 
 主畫面上 app 的名稱，商店的 build 是「島民證明 測試」，開發用 build 是「島民證明 dev」（`design/copy/app.md`，第一版，Android 相同）；正式的名稱在商店頁的那張票定（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。每個畫面最上面有「測試名冊」的標示（`design/copy/test-site.md`）。
 
@@ -158,6 +157,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/DeviceCoreTests.swift`：從 Swift 呼叫核心，對 `spec/vectors/scope.json`（兩份名冊的場合字串）；連結進來的函式庫的版本等於標頭檔的；Barretenberg 有回應
 - `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試名冊」的標示和 app 的名稱在 `design/copy/`；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
+- `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
 - `check-archive-test.sh`：`check-archive.sh` 讓 `archive.sh` 做的 archive 通過，並擋下每一份改過的副本（「上傳到 TestFlight」）
 
