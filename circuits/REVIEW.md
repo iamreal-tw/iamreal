@@ -77,8 +77,8 @@
 
 照兩輪的結果改了電路（第 1、2 項）、補了測試（第 3 到 5 項），然後：
 
-- 逐案比對 110 案（[`results/equivalence.md`](results/equivalence.md)）：修正前就有的 101 案，結果逐列相同；新增 9 案。結果是 29 個有意的差異、1 個單一部分的差異（第 2 項）、0 個其他。
-- 隨機差異測試：第一輪的種子重跑前 10,400 筆、新的種子 10,400 筆，都含 circom；另外 2,000 筆只跑新的案例類別。Noir 沒有任何一筆在參考判斷拒絕時接受。第一輪那 10,400 筆裡，10,316 筆和第一輪是同一案（另外 84 筆換成新的案例類別），這些案的過卡證明的判斷沒有任何一筆改變。
+- 逐案比對 110 案（[`results/equivalence.md`](results/equivalence.md)）：修正前就有的 101 案，結果逐列相同；新增 9 案。結果是 29 個有意的差異、1 個單一部分的差異（`part-level difference`，第 2 項）、0 個其他。
+- 隨機差異測試：第一輪的種子重跑前 10,400 筆、新的種子 10,400 筆，都含 circom；另外 2,000 筆只跑新的案例類別。Noir 沒有任何一筆在參考判斷拒絕時接受。第一輪那 10,400 筆裡，10,316 筆和第一輪是同一案（另外 84 筆換成新的案例類別），這些案的整份證明的判斷沒有任何一筆改變。
 - 反事實測試：在電路的副本裡拿掉一行檢查、重編，確認對應的測試會失敗。17 個變體、33 項檢查、0 項和預期不同。
 - 從乾淨的 clone 照說明重新下載工具和函式庫，編出相同的兩把驗證金鑰。
 
@@ -87,8 +87,8 @@
 另一個 AI 工作階段檢查修正。做修正的和檢查修正的是同一個模型（Claude Fable 5.2），只是不同的工作階段。
 
 - 修正前後的 ACIR 當成圖比對：修正後等於修正前加上 `modulus[0] >= 0x80` 的 4 個 opcode，而這一條在修正前已經被函式庫的最高位檢查蘊含。所以電路接受的東西不變。這是從約束得出的，不是抽樣。
-- 110 案逐案比對餵給修正前編出來的電路：過卡證明那一欄全部相同。
-- 隨機差異測試的 10,400 筆，對修正前和修正後各跑一次（不含 circom）：過卡證明的判斷改變 0 個。
+- 110 案逐案比對餵給修正前編出來的電路：整份證明那一欄全部相同。
+- 隨機差異測試的 10,400 筆，對修正前和修正後各跑一次（不含 circom）：整份證明的判斷改變 0 個。
 - 反事實測試裡我們自己加的三行另外手做一次；庫裡的腳本完整重跑。
 - 一個子代理用兩套不含 Barretenberg 的實作（照論文的程序重新產生常數的 Python、Go 的 `gnark-crypto`）重算 Poseidon2 的標準答案，每一筆都相同。
 
@@ -108,7 +108,7 @@
 
 憑證裡釘死的標頭只固定了模數的長度欄位；較短的金鑰在前面補 0，也寫得進同樣的 256 個位元組。擋住它的是 `noir-bignum` 建立金鑰參數時的最高位檢查；在副本裡拿掉那一行就被接受。不影響匿名編號的唯一性，要內政部簽出這種憑證才會發生。隨機差異測試也撞到它：比對用的 Noir 憑證部分和 circom 都接受這種憑證，Noir 的簽章部分和正式電路拒絕，是一個沒寫進文件的差異。
 
-處理：改了。[`lib/src/der.nr`](lib/src/der.nr) 讀完模數後要求 `modulus[0] >= 0x80`（ADR-0009）。測試：`tests/card_proof.test.mjs` 的 `[key-2048]`，`tests/library-guarantees.test.mjs` 的 `[G3-part]`、`[G3-card]`。對照用的 circom 電路的憑證部分也加了同一條檢查（[`iamreal-tw/zkID` 的 `e95abdf`](https://github.com/iamreal-tw/zkID/commit/e95abdf5800529a2f33c0fad2a2ac3ffeb08cfda)），所以兩邊的整份過卡都拒絕。circom 的簽章部分單獨看仍然接受這把金鑰；逐案比對以整份過卡判斷行為是否相同，這一案記成「單一部分的差異」（[`results/equivalence.md`](results/equivalence.md)）。
+處理：改了。[`lib/src/der.nr`](lib/src/der.nr) 讀完模數後要求 `modulus[0] >= 0x80`（ADR-0009）。測試：`tests/card_proof.test.mjs` 的 `[key-2048]`，`tests/library-guarantees.test.mjs` 的 `[G3-part]`、`[G3-card]`。對照用的 circom 電路的憑證部分也加了同一條檢查（[`iamreal-tw/zkID` 的 `e95abdf`](https://github.com/iamreal-tw/zkID/commit/e95abdf5800529a2f33c0fad2a2ac3ffeb08cfda)），所以 Noir 的整份證明和 circom 的三份證明合起來都拒絕。circom 的簽章部分單獨看仍然接受這把金鑰；逐案比對以整份證明（circom 是三份證明合起來）判斷行為是否相同，這一案記成「單一部分的差異」（[`results/equivalence.md`](results/equivalence.md)）。
 
 ### 測試：補了
 
