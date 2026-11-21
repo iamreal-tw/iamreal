@@ -106,7 +106,7 @@
 
 憑證裡釘死的標頭只固定了模數的長度欄位；較短的金鑰在前面補 0，也寫得進同樣的 256 個位元組。擋住它的是 `noir-bignum` 建立金鑰參數時的最高位檢查；在副本裡拿掉那一行就被接受。不影響匿名編號的唯一性，要內政部簽出這種憑證才會發生。隨機差異測試也撞到它：比對用的 Noir 憑證部分和 circom 都接受這種憑證，Noir 的簽章部分和正式電路拒絕，是一個沒寫進文件的差異。
 
-處理：改了。[`lib/src/der.nr`](lib/src/der.nr) 讀完模數後要求 `modulus[0] >= 0x80`（ADR-0009）。測試：`tests/card_proof.test.mjs` 的 `[key-2048]`，`tests/library-guarantees.test.mjs` 的 `[G3-part]`、`[G3-card]`。對照用的 circom 電路的憑證部分也加了同一條檢查，所以兩邊的整份過卡都拒絕。circom 的簽章部分單獨看仍然接受這把金鑰；逐案比對以整份過卡判斷行為是否相同，這一案記成「只在單一部分的差異」。
+處理：改了。[`lib/src/der.nr`](lib/src/der.nr) 讀完模數後要求 `modulus[0] >= 0x80`（ADR-0009）。測試：`tests/card_proof.test.mjs` 的 `[key-2048]`，`tests/library-guarantees.test.mjs` 的 `[G3-part]`、`[G3-card]`。對照用的 circom 電路的憑證部分也加了同一條檢查（[`iamreal-tw/zkID` 的 `e95abdf`](https://github.com/iamreal-tw/zkID/commit/e95abdf5800529a2f33c0fad2a2ac3ffeb08cfda)），所以兩邊的整份過卡都拒絕。circom 的簽章部分單獨看仍然接受這把金鑰；逐案比對以整份過卡判斷行為是否相同，這一案記成「只在單一部分的差異」。
 
 ### 測試：補了
 
