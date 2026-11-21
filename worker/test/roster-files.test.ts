@@ -46,9 +46,6 @@ async function directory(): Promise<Map<string, StoredFile>> {
   return new Map((await worker.files("roster/")).map((f) => [f.key.slice("roster/".length), f]));
 }
 
-/** A full file that could not be moved is tried again after this long (src/roster-files.ts, `FULL_FILE_RETRY_MS`): a minute. */
-const FULL_FILE_RETRY_MS = 60 * 1000;
-
 const FILE = `roster/${rosterFileName(0)}`;
 const LIST = `roster/${hashListName(0)}`;
 
@@ -241,14 +238,14 @@ describe("the 1,000th record fills a roster file", () => {
     }
   });
 
-  test("views that could not be filled from the bucket are tried again a minute later, without the object starting again", async () => {
+  test("views that could not be filled from the bucket are tried again a minute later, then two minutes later, without the object starting again", async () => {
     const views = await worker.roster.views();
     const pages = [await page("/"), await page(`/p/${CARD_A}`)];
     const second = `roster/${rosterFileName(LINES_PER_FILE)}`;
     const file = (await directory()).get(rosterFileName(LINES_PER_FILE))!;
     let time = tw("2026-11-17", "12:00:00").getTime();
-    const aMinuteLater = async (): Promise<void> => {
-      time += 60 * 1000;
+    const minutesLater = async (minutes: number): Promise<void> => {
+      time += minutes * 60 * 1000;
       await worker.setClock(new Date(time));
       await worker.roster.runAlarm();
       await worker.roster.viewsFilled();
@@ -269,13 +266,16 @@ describe("the 1,000th record fills a roster file", () => {
     // An alarm before the minute is over does not try; the one after it does, and says that it failed again.
     await worker.roster.runAlarm();
     assert.equal(notFilled(), lines);
-    await aMinuteLater();
+    await minutesLater(1);
     assert.equal(notFilled(), lines + 1);
     await wantUnavailable("/");
 
-    // The file is back: the next try fills the views, and the pages and records go on, the object never having started again.
+    // The file is back. After a second failure in a row the wait is two minutes: not a minute later, but then.
     await worker.putFile(second, file.bytes, IMMUTABLE, ROSTER_FILE_TYPE);
-    await aMinuteLater();
+    await minutesLater(1);
+    await wantUnavailable("/");
+    // The next try fills the views, and the pages and records go on, the object never having started again.
+    await minutesLater(1);
     assert.equal(notFilled(), lines + 1);
     assert.deepEqual(await worker.roster.views(), views);
     assert.deepEqual([await page("/"), await page(`/p/${CARD_A}`)], pages);
@@ -302,10 +302,16 @@ describe("a full roster file that cannot be moved", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     await fillTo(root, LINES_PER_FILE - 1);
 
-    // Each try is one alarm, a minute of the object's clock after the one before.
+    // Each try is one alarm, `minutes` of the object's clock after the one before: a minute after a first failure, and
+    // twice as long after each further failure in a row, up to an hour (src/roster.ts, `Retries`). An alarm a second
+    // before that does not try.
     let time = START.getTime();
-    const tryAgain = async (): Promise<void> => {
-      time += FULL_FILE_RETRY_MS;
+    const tryAgain = async (minutes: number): Promise<void> => {
+      time += minutes * 60 * 1000;
+      const lines = notMoved();
+      await worker.setClock(new Date(time - 1000));
+      await worker.roster.runAlarm();
+      assert.equal(notMoved(), lines, `nothing is tried before ${minutes} minutes are over`);
       await worker.setClock(new Date(time));
       await worker.roster.runAlarm();
     };
@@ -338,26 +344,26 @@ describe("a full roster file that cannot be moved", () => {
 
     // The bucket is sent other bytes than the object meant: it refuses them by their SHA-256, and nothing wrong is ever under the file's name.
     await worker.roster.setBucketFault({ key: FILE, how: "put sends other bytes" });
-    await tryAgain();
+    await tryAgain(1);
     assert.deepEqual([...(await directory()).keys()], []);
     await kept(LINES_PER_FILE + 1);
 
     // The bucket stores other bytes than it was sent: the file does not read back as written, and no list is written after it.
     await worker.roster.setBucketFault({ key: FILE, how: "put writes other bytes" });
-    await tryAgain();
+    await tryAgain(2);
     assert.deepEqual([...(await directory()).keys()], [rosterFileName(0)]);
     assert.notEqual(text((await directory()).get(rosterFileName(0))!), fileText);
     await kept(LINES_PER_FILE + 1);
 
     // The roster file cannot be read back.
     await worker.roster.setBucketFault({ key: FILE, how: "get fails" });
-    await tryAgain();
+    await tryAgain(4);
     await kept(LINES_PER_FILE + 1);
 
     // The roster file is written with its bytes and another header: read back, it is not as it was to be written.
-    for (const how of ["put writes another Cache-Control", "put writes another Content-Type"] as const) {
+    for (const [how, minutes] of [["put writes another Cache-Control", 8], ["put writes another Content-Type", 16]] as const) {
       await worker.roster.setBucketFault({ key: FILE, how });
-      await tryAgain();
+      await tryAgain(minutes);
       const files = await directory();
       assert.deepEqual([...files.keys()], [rosterFileName(0)]);
       assert.equal(text(files.get(rosterFileName(0))!), fileText);
@@ -366,9 +372,9 @@ describe("a full roster file that cannot be moved", () => {
     }
 
     // The roster file is there, and its list cannot be written, or does not read back as written.
-    for (const how of ["put fails", "put writes other bytes"] as const) {
+    for (const [how, minutes] of [["put fails", 32], ["put writes other bytes", 60]] as const) {
       await worker.roster.setBucketFault({ key: LIST, how });
-      await tryAgain();
+      await tryAgain(minutes);
       const files = await directory();
       assert.equal(text(files.get(rosterFileName(0))!), fileText);
       assert.equal(files.has(hashListName(0)), how !== "put fails");
@@ -377,7 +383,7 @@ describe("a full roster file that cannot be moved", () => {
 
     // Both are written, and the object stops before it deletes its records: it lost the answer of the last write, and is started again.
     await worker.roster.setBucketFault({ key: LIST, how: "put loses its answer" });
-    await tryAgain();
+    await tryAgain(60);
     assert.equal(notMoved(), 9);
     const written = await directory();
     assert.deepEqual([text(written.get(rosterFileName(0))!), text(written.get(hashListName(0))!)], [fileText, listText]);
@@ -386,6 +392,7 @@ describe("a full roster file that cannot be moved", () => {
     await worker.roster.restart();
     await worker.setClock(new Date(time));
 
+    // Started again, the object has forgotten the failures before: the next one is a first one.
     // The first file still cannot be moved when the second is full: the object keeps both, and every record after them.
     await worker.roster.setBucketFault({ key: FILE, how: "put fails" });
     await fillTo(root, 2 * LINES_PER_FILE + 5);
@@ -394,9 +401,10 @@ describe("a full roster file that cannot be moved", () => {
     assert.deepEqual(await worker.roster.kept(), { count: 2 * LINES_PER_FILE + 5, first: 1, last: 2 * LINES_PER_FILE + 5 });
     assert.deepEqual([...(await directory()).keys()], [rosterFileName(0), hashListName(0)], "nothing of the second file is in the bucket before the first is moved");
 
-    // Once the bucket takes the file, both are moved, the earlier first and with the same bytes, and only their records are deleted.
+    // Once the bucket takes the file, both are moved (a minute after that first failure), the earlier first and with the
+    // same bytes, and only their records are deleted.
     await worker.roster.setBucketFault(null);
-    await tryAgain();
+    await tryAgain(1);
     const files = await directory();
     assert.deepEqual([...files.keys()], [rosterFileName(0), rosterFileName(LINES_PER_FILE), hashListName(0), hashListName(LINES_PER_FILE)]);
     assert.deepEqual(await worker.roster.kept(), { count: 5, first: 2 * LINES_PER_FILE + 1, last: 2 * LINES_PER_FILE + 5 });
