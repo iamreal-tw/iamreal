@@ -13,6 +13,12 @@
 // own (the engine's test page, run.ts) answers those requests before either
 // (`own`).
 //
+// The Worker's test clock shows the time it was last set to and does not
+// run. `setClockAhead` has the server set it, before every request it hands
+// to the Worker, to the machine's time plus a number of milliseconds: the
+// back end's clock then runs that far ahead of the machine's, as a page's
+// does whose Date.now a test moved by the same amount.
+//
 // Nothing here is real: no request leaves this computer, and none goes to
 // MOICA or to MOICA's component.
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
@@ -33,6 +39,14 @@ export interface WorkerSite {
   readonly origin: string;
   /** The method and path of every request the server handed to the Worker that the Worker answered 404, in order. */
   readonly notFound: string[];
+  /** Every answer of the API with a status of 400 or more, in order: its path, status, `error` code and `X-Request-Id`. */
+  readonly refusals: { readonly path: string; readonly status: number; readonly error: string | undefined; readonly requestId: string | null }[];
+  /**
+   * From now on the Worker's clock runs `ms` milliseconds ahead of the
+   * machine's: set now, and again before every request handed to the
+   * Worker (a Worker that was restarted has it again with the next one).
+   */
+  setClockAhead(ms: number): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -49,6 +63,11 @@ export async function startWorkerSite(options: WorkerSiteOptions = {}): Promise<
   const { own, ...start } = options;
   const worker = await startWorker(start);
   const notFound: string[] = [];
+  const refusals: { path: string; status: number; error: string | undefined; requestId: string | null }[] = [];
+  let ahead: number | null = null;
+  const syncClock = async (): Promise<void> => {
+    if (ahead !== null) await worker.setClock(new Date(Date.now() + ahead));
+  };
   const server: Server = createServer(async (req, res) => {
     try {
       const path = (req.url ?? "/").split("?")[0]!;
@@ -65,14 +84,25 @@ export async function startWorkerSite(options: WorkerSiteOptions = {}): Promise<
       for await (const c of req) chunks.push(c as Buffer);
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !["host", "connection", "content-length"].includes(k)) headers[k] = v;
+      await syncClock();
       const answer = await worker.fetch(req.url ?? "/", { method: req.method, headers, redirect: "manual", ...(chunks.length > 0 && { body: Buffer.concat(chunks) }) });
       if (answer.status === 404) notFound.push(`${req.method} ${path}`);
+      const body = Buffer.from(await answer.arrayBuffer());
+      if (path.startsWith("/api/") && answer.status >= 400) {
+        let error: string | undefined;
+        try {
+          error = (JSON.parse(body.toString("utf8")) as { error?: string }).error;
+        } catch {
+          // An answer that is not JSON has no code.
+        }
+        refusals.push({ path, status: answer.status, error, requestId: answer.headers.get("x-request-id") });
+      }
       const out: Record<string, string> = {};
       answer.headers.forEach((value, key) => {
         // The body is sent as this server has it, not as the local workerd encoded it.
         if (!["content-encoding", "mf-content-encoding", "transfer-encoding", "content-length", "connection"].includes(key)) out[key] = value;
       });
-      res.writeHead(answer.status, out).end(Buffer.from(await answer.arrayBuffer()));
+      res.writeHead(answer.status, out).end(body);
     } catch (e) {
       if (!res.headersSent) res.writeHead(502);
       res.end(String(e));
@@ -88,6 +118,11 @@ export async function startWorkerSite(options: WorkerSiteOptions = {}): Promise<
     worker,
     origin: `http://localhost:${(server.address() as AddressInfo).port}`,
     notFound,
+    refusals,
+    async setClockAhead(ms) {
+      ahead = ms;
+      await syncClock();
+    },
     async close() {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
