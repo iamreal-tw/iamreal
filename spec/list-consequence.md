@@ -139,7 +139,7 @@ today's date; every client shows the same for the same answers and date.
 | Field | Value |
 |---|---|
 | `last_card_proof` | The answer's `last_card_proof`: a date, or null |
-| `days_since` | The days from `last_card_proof` to today; null without one. Negative when the date is after today (at most 3 days, by the reading above) |
+| `days_since` | The days from `last_card_proof` to today; null without one. Negative when the date is after today (at most 3 days, by the reading above); what the screen says then is the client's, not defined here |
 | `daily_limit` | True when `last_card_proof` is today and `proofs_on_last_date` is 3: the rules' check 6 refuses every list today |
 | `known_platforms` | The platforms the device knows, in ascending order, offered or not |
 | `rows` | One row for every platform offered and one for every kept account, in ascending order of platform |
@@ -147,8 +147,9 @@ today's date; every client shows the same for the same answers and date.
 A row of a platform offered has `platform`, `known` true, and of the
 platform's entry `current`, `last_declared` and `switch_count`; then
 `switches_left`, 5 minus `switch_count` (the switches the rules still
-allow), and `correction_today`, true when `correction_date` is today: a
-change of the account today is then a `correction`, which uses no switch.
+allow), and `correction_today`, true when `correction_date` is today:
+declaring another account there today is then a `correction`, which uses
+no switch.
 
 A row of a kept account has `platform`, `known` false and `current`, the
 account as the server sent it. The screen shows it and does not offer to

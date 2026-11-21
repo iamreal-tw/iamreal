@@ -31,7 +31,7 @@ use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
 use iamreal_device_checks::hash::Poseidon2;
-use iamreal_device_checks::list_consequence::{Consequence, list_consequence};
+use iamreal_device_checks::list_consequence::{Consequence, ReadState, list_consequence};
 use iamreal_device_checks::roster_rules::{self, Reason};
 use iamreal_device_checks::scope::{Roster, scope_string};
 use iamreal_device_checks::scoped_id::{parse_scoped_id, short_id};
@@ -235,6 +235,47 @@ fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
     }
 }
 
+/// The two answers of the server as a C function takes them, read
+/// (spec/list-consequence.md, "Reading the platform table" and "Reading
+/// the card's state") on the date in Taiwan of `now`.
+struct Answers {
+    today: Date,
+    /// The rows of the platforms the device knows, in ascending order.
+    table: Vec<roster_rules::Platform>,
+    state: ReadState,
+    /// The rows of the platforms offered.
+    offered: Vec<roster_rules::Platform>,
+}
+
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, the known
+/// platforms are not a JSON array of platform IDs, none twice, or `now` is
+/// outside the years 2000 to 2049 in Taiwan.
+fn read_answers(
+    platforms_json: &[u8],
+    card_state_json: &[u8],
+    known_platforms_json: &[u8],
+    now: i64,
+) -> Result<Answers, i32> {
+    let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+    let known = platform_ids_of(known_platforms_json)?;
+    let table: Vec<_> = Json::parse(platforms_json)
+        .as_ref()
+        .and_then(read_platforms)
+        .ok_or(IDC_ERR_INPUT)?
+        .into_iter()
+        .filter(|row| known.iter().any(|id| id == row.id()))
+        .collect();
+    let (state, offered) = Json::parse(card_state_json)
+        .and_then(|state| read_card_state(&state, &table, today))
+        .ok_or(IDC_ERR_INPUT)?;
+    Ok(Answers {
+        today,
+        table,
+        state,
+        offered,
+    })
+}
+
 /// The list a card signs: [`accounts_of`], each username 1 or more
 /// printable ASCII characters without `"` and `\` (what every format
 /// allows at most, spec/scope.md).
@@ -366,18 +407,12 @@ pub unsafe extern "C" fn idc_list_consequence(
                 input(accounts_json, accounts_json_len)?,
             )
         };
-        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
-        let known = platform_ids_of(known_platforms_json)?;
-        let table: Vec<_> = Json::parse(platforms_json)
-            .as_ref()
-            .and_then(read_platforms)
-            .ok_or(IDC_ERR_INPUT)?
-            .into_iter()
-            .filter(|row| known.iter().any(|id| id == row.id()))
-            .collect();
-        let (state, offered) = Json::parse(card_state_json)
-            .and_then(|state| read_card_state(&state, &table, today))
-            .ok_or(IDC_ERR_INPUT)?;
+        let Answers {
+            today,
+            state,
+            offered,
+            ..
+        } = read_answers(platforms_json, card_state_json, known_platforms_json, now)?;
         let list = accounts_of(accounts_json)?;
         let consequence =
             list_consequence(&offered, &state, &list, today).map_err(|_| IDC_ERR_INPUT)?;
@@ -473,22 +508,17 @@ pub unsafe extern "C" fn idc_card_status(
                 input(known_platforms_json, known_platforms_json_len)?,
             )
         };
-        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
-        let known = platform_ids_of(known_platforms_json)?;
-        let table: Vec<_> = Json::parse(platforms_json)
-            .as_ref()
-            .and_then(read_platforms)
-            .ok_or(IDC_ERR_INPUT)?
-            .into_iter()
-            .filter(|row| known.iter().any(|id| id == row.id()))
-            .collect();
-        let (state, offered) = Json::parse(card_state_json)
-            .and_then(|state| read_card_state(&state, &table, today))
-            .ok_or(IDC_ERR_INPUT)?;
+        let Answers {
+            today,
+            table,
+            state,
+            offered,
+        } = read_answers(platforms_json, card_state_json, known_platforms_json, now)?;
         let card = &state.card;
         let mut rows: Vec<(&str, serde_json::Value)> = offered
             .iter()
             .map(|row| {
+                // Every platform offered has a slot: that is what offers it.
                 let slot = card.slots.get(row.id()).cloned().unwrap_or_default();
                 let value = json!({
                     "platform": row.id(),
@@ -517,7 +547,7 @@ pub unsafe extern "C" fn idc_card_status(
                 .last_card_proof
                 .map(|date| today.days_since_1970() - date.days_since_1970()),
             "daily_limit": card.last_card_proof == Some(today)
-                && card.proofs_on_last_date >= roster_rules::MAX_PER_DATE,
+                && card.proofs_on_last_date == roster_rules::MAX_PER_DATE,
             "known_platforms": table.iter().map(|row| row.id()).collect::<Vec<_>>(),
             "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
         });
@@ -576,7 +606,8 @@ pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
 /// For tests only (the feature `test-issuers`): opens a session as
 /// [`idc_session_open`] does, but one that checks certificates and CRLs
 /// against the issuer keys given in place of MOICA's. The files it checks
-/// are still the ones written into the core.
+/// are still the ones written into the core. `roster` is
+/// `IDC_ROSTER_TEST`: `IDC_ERR_ARGUMENT` for the production roster.
 ///
 /// `issuers_json` is a JSON array of `{"issuer":"G2","modulus":"<hex>"}`:
 /// `issuer` is `G2` or `G3`, each at most once, at least one; `modulus` is
@@ -607,7 +638,11 @@ pub unsafe extern "C" fn idc_testing_session_open(
     code(|| {
         // Read here, so that the mark stays in every library that has this function.
         std::hint::black_box(&IDC_TESTING_MARK);
-        let roster = roster_of(roster)?;
+        // A test roster only: no session of the production roster trusts another key.
+        let roster = match roster_of(roster)? {
+            Roster::Test => Roster::Test,
+            Roster::Production => return Err(IDC_ERR_ARGUMENT),
+        };
         // SAFETY: the caller's promise.
         let bytes = unsafe { input(issuers_json, issuers_json_len) }?;
         let issuers = testing_issuers(bytes).ok_or(IDC_ERR_INPUT)?;
@@ -624,9 +659,8 @@ pub unsafe extern "C" fn idc_testing_session_open(
     })
 }
 
-/// Marks a library built with the feature `test-issuers`: the build of an
-/// app that goes out fails when its executable holds these bytes
-/// (ios/check-app.sh).
+/// Marks a library built with the feature `test-issuers`, for the build
+/// checks of the apps: an app that goes out must not hold these bytes.
 #[cfg(feature = "test-issuers")]
 #[used]
 static IDC_TESTING_MARK: [u8; 39] = *b"iamreal-device-core:testing-issuer-keys";
