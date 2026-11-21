@@ -1,6 +1,6 @@
 # .github/：GitHub Actions 的工作流程
 
-**這個目錄讓人檢查的事：PR 的檢查拿不到任何權杖，部署測試網站的權杖只在上傳的那一步；上傳 app 的金鑰只在不建置的那個工作。**（ADR-0029、ADR-0036）
+**這個目錄讓人檢查的事：PR 的檢查拿不到任何權杖，部署測試網站的權杖只在上傳的那一步，上傳 app 的金鑰只在上傳的那一個工作，那個工作不建置。**（ADR-0029、ADR-0036）
 
 | 檔案 | 什麼時候跑 | 做什麼 |
 |---|---|---|
@@ -9,6 +9,7 @@
 | [`workflows/checks-ios.yml`](workflows/checks-ios.yml) | PR 改到 `ios/`、`device-core/`、app 包進去或測試讀的檔、或這個檔時（`pull_request` 的 `paths`）；不在合併佇列裡跑 | 在 macOS 上編 `device-core/` 給模擬器、建置 `ios/` 的 app、在模擬器上跑它的測試：`ios` 一個工作（`ios/README.md`）。只能讀，不引用任何 secret |
 | [`workflows/deploy-test.yml`](workflows/deploy-test.yml) | 推到 `main` | 建置過卡的頁面、打包 Worker、檢查兩者，再把它們上傳到測試網站。碰不到快取（`cache-mode: none`） |
 | [`workflows/upload-android.yml`](workflows/upload-android.yml) | 營運者手動觸發（`workflow_dispatch`），只在 `main` 上 | 建置 Android 的商店 build（`tw.iamreal.app`）、用上傳金鑰簽章，傳到 Google Play 的內部測試：`build`、`upload` 兩個工作（下面「上傳 Android 的 app」）。金鑰只在 `upload`，它在 environment `app-test` 裡；碰不到快取（`cache-mode: none`） |
+| [`workflows/upload-ios.yml`](workflows/upload-ios.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 建置 iPhone 的商店 build、檢查它，再簽章、上傳到 App Store Connect（TestFlight）：`build`、`upload` 兩個工作。`build` 沒有金鑰；`upload` 在 environment `app-test`，不取出程式庫、不跑程式庫的腳本，只有最後一步拿到 App Store Connect 的 API 金鑰（[`ios/README.md`「上傳到 TestFlight」](../ios/README.md#上傳到-testflight)）。碰不到快取（`cache-mode: none`） |
 | [`workflows/cache.yml`](workflows/cache.yml) | 推到 `main` | 編譯 `device-core/`、建置 `android/`，把 cargo 的 registry、`device-core/target/`、Gradle 的依賴和 wrapper 存成快取，給 `checks.yml` 的 `device-core`、`android` 還原：`cache-device-core`、`cache-android` 兩個工作。不引用任何 secret，`GITHUB_TOKEN` 只能讀（`contents: read`）；唯一能存快取的工作流程（`cache-mode: write`） |
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。只動文件、app 或 `server/` 的 PR 和它們無關，不必多等這 16 分鐘（那時這兩套測試配的是 Go 的舊後台，只動 `worker/` 的 PR 也不跑；#69 之後它們對 Worker 跑，`worker/` 有改就跑）。分開的時候程式庫還沒公開，Actions 的用量算在組織免費方案每月含的額度裡，用完就不能再跑；2026-11-21 公開之後，標準的 GitHub-hosted runner 在公開的程式庫不算用量（「The following usage remains free independently and does not reduce the included compute usage: Standard GitHub-hosted runners in public repositories」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)），所以現在分開是為了時間，不是額度。`checks.yml` 的四個必要檢查在 PR 階段也照路徑跳過（#206），但做法不同、在合併佇列裡四項全跑：見下面「必要檢查在 PR 階段照路徑跳過」。
@@ -42,6 +43,9 @@
 - `/Applications/Xcode_27.2.app`（build 27B52）和 iOS 27.2 的模擬器 `iPhone 17`：[這個映像的說明](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)的「Xcode」和「Installed Simulators」。映像上也有 Rust 和 rustup
 - 選它是因為 `ios/` 是用同一版 Xcode（27.2，27B52）開發和測試的。另一個選擇是正式的 `macos-26`，上面最新的是 Xcode 26.6（[macos-26-arm64 的說明](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)）；`ios/` 沒有在 26.6 上建置過
 - 這個工作流程還沒有在 GitHub 上跑過（寫的時候分支還沒推送）；第一次跑的結果記在加它的 PR
+- `upload-ios.yml` 的兩個工作用同一個 runner 和同一個 Xcode，`worker/test/workflows.ts` 用同一組常數寫
+
+**`upload-ios.yml`：上傳的工作還信任什麼。** 它不取出程式庫、不跑程式庫的腳本，金鑰只在最後一步（寫到 runner 的暫存目錄裡只有自己讀得到的檔，交給 `xcodebuild -exportArchive`）。它信任的是：釘住的 `actions/download-artifact`、runner 映像上的 Xcode，`build` 從同一個提交做出來、交下來的 archive 和 `ExportOptions.plist`，和 environment 的 variable `APPLE_TEAM_ID`（團隊代號，寫進 `ExportOptions.plist`）。`build` 跑程式庫的程式，所以上傳的是那個提交建出來的東西，這和部署測試網站相同；Xcode 匯出時不執行 archive 裡的程式。`worker/test/workflows.ts` 擋下：手動以外的觸發、`build` 拿到 environment 或金鑰、`upload` 不在 `app-test`、`upload` 多了任何一步，和兩個工作與寫死的不同。environment `app-test` 只讓 `main` 上的執行拿金鑰是 GitHub 上的設定，不在程式庫裡（#161）。
 
 **`checks-ios.yml` 的 `paths`** 列出 app 和它的測試用到的東西：`ios/`、`device-core/`，app 包進去的檔（`web/circuits/`、`verifier/vk/`），測試讀的檔（`spec/vectors/`、`design/copy/`、`web/scripts/fetch-crs.mjs`），和這個工作流程檔自己。規格只寫了前兩個（「[規格：手機 app 第一份](https://github.com/iamreal-tw/iamreal/issues/155)」：macOS 的分鐘數算得重）；後面幾個不加的話，只改它們的 PR 會讓 iOS 的檢查壞掉而沒有人看到。代價是改 `design/copy/` 或 `spec/vectors/` 的 PR 也會跑一次 macOS。`worker/test/workflows.test.ts` 讀 `ios/Tests/` 和 `ios/check-app.sh` 的原始碼，確認它們寫出來的路徑都在清單裡；用別的方式拼出來的路徑它看不到。
 
@@ -101,7 +105,7 @@
 |---|---|---|
 | `cache.yml`（推到 `main`） | `write`：能還原、能存 | `actions/cache` |
 | `checks.yml`（PR 和合併佇列） | `read`：能還原、不能存 | `actions/cache/restore` |
-| `deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`upload-android.yml` | `none`：都不能 | 沒有 |
+| `deploy-test.yml`、`checks-browser.yml`、`checks-ios.yml`、`upload-android.yml`、`upload-ios.yml` | `none`：都不能 | 沒有 |
 
 - **界線是 `cache-mode`，不是用哪個 action。** `read`「allows cache restores but prevents cache saves」，`none`「prevents all cache access」（[2026-09-10 的 changelog](https://github.blog/changelog/2026-09-10-control-github-actions-cache-access-with-cache-mode)）；「Access is enforced with scoped cache tokens, so a job cannot restore or save caches beyond the mode it is granted」（[workflow syntax 的 `cache-mode`](https://docs.github.com/actions/reference/workflows-and-actions/workflow-syntax#cache-mode)，2026-11-21 讀）。`checks.yml` 的 `run` 步驟跑的是 PR 的程式；工作裡的程式可以不經過任何 action，拿工作自己的權杖直接對快取服務存東西（[Cacheract](https://adnanthekhan.com/2024/12/21/cacheract-the-monster-in-your-build-cache/)）。所以只用沒有存檔步驟的 `actions/cache/restore` 擋不住它，擋住它的是權杖本身不能存。
 - **每個檔都寫明，不靠預設。** 沒寫的時候「a `read` or `write` default is used based on the trigger type」（同一頁）。工作層級不准設：「Job-level settings override workflow-level settings」（changelog）。新的工作流程要寫 `none`。

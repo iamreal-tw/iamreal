@@ -32,3 +32,9 @@ HEADER_SEARCH_PATHS = $(SRCROOT)/../device-core/include
 // inside the app, find it. No other build has that library or that function.
 IAMREAL_CORE_LIBRARY[config=Debug][sdk=iphonesimulator*] = $(SRCROOT)/../device-core/target/test-issuers/$(IAMREAL_RUST_TARGET)/release/libiamreal_device_core.a
 IAMREAL_TESTING_LDFLAGS[config=Debug][sdk=iphonesimulator*] = -Wl,-u,_idc_testing_session_open
+
+// The icon: the one image of App/Assets.xcassets/AppIcon.appiconset, which
+// Xcode makes every size from. A placeholder, one colour of the site
+// (--teal of web/src/ui/style.css) with nothing on it, until the icon is
+// decided (#154). App Store Connect takes no build without an icon.
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon

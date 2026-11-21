@@ -303,6 +303,28 @@ for (const [label, cp] of [
   CHANGES[`71 ${label} in a comment`] = [replace(C, "jobs:\n", `# a comment${ch}with it\njobs:\n`)];
 }
 
+// The upload of the iPhone app (#176): the key in the upload job's last step only, the job that
+// runs the repository's code without it, started by hand only.
+const U = "upload-ios.yml";
+const IOS_KEY_ENV = "        env:\n          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}\n";
+const IOS_ARCHIVE_STEP = "      - name: Archive the store's build and check it\n";
+const IOS_UNPACK_STEP = "      - name: Unpack the archive\n";
+Object.assign(CHANGES, {
+  "ios-upload 1 triggered by a push to main too": [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+  "ios-upload 2 triggered by a pull request instead": [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  pull_request:\n")],
+  "ios-upload 3 the build job in the environment that has the key": [replace(U, "  build:\n    runs-on: xcode-27\n", "  build:\n    runs-on: xcode-27\n    environment: app-test\n")],
+  "ios-upload 4 the key given to the step that archives": [replace(U, `${IOS_ARCHIVE_STEP}        working-directory: ios\n`, `${IOS_ARCHIVE_STEP}        working-directory: ios\n${IOS_KEY_ENV}`)],
+  "ios-upload 5 the upload job outside the environment": [replace(U, "    environment: app-test\n", "")],
+  "ios-upload 6 the upload job checking out the repository and running a script of it": [
+    replace(U, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n      - name: Something of the repository\n        working-directory: ios\n        run: ./archive.sh x 1\n${IOS_UNPACK_STEP}`),
+  ],
+  "ios-upload 7 the key given to the step that unpacks": [replace(U, `${IOS_UNPACK_STEP}`, `${IOS_UNPACK_STEP}${IOS_KEY_ENV}`)],
+  "ios-upload 8 the archive not checked": [replace(U, './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"', 'xcodebuild archive -project IamrealApp.xcodeproj -scheme IamrealApp -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"')],
+  "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
+  "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
+  "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
+});
+
 for (const [name, changes] of Object.entries(CHANGES)) {
   test(`turned away: ${name}`, () => {
     const files = realFiles();
@@ -501,7 +523,7 @@ for (const [name, { changes, problem }] of Object.entries(CACHE_CHANGES)) {
 }
 
 // upload-android.yml (#175): by hand, on main; the build job has no secret and the upload job runs no build.
-const U = "upload-android.yml";
+const A = "upload-android.yml";
 const SIGN_ENV = "        env:\n          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}\n          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n";
 const PLAY_ENV = "        env:\n          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}\n";
 const BUNDLE_RELEASE = '        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease';
@@ -510,63 +532,63 @@ const SECRETS_PROBLEM = /^the lines with "secrets" in them are/;
 
 const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegExp }> = {
   "250 upload-android.yml started by a push to main too": {
-    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+    changes: [replace(A, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
     problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
   },
   "251 upload-android.yml started by another workflow (workflow_run)": {
-    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_run:\n    workflows:\n      - deploy-test\n")],
+    changes: [replace(A, "on:\n  workflow_dispatch:\n", "on:\n  workflow_run:\n    workflows:\n      - deploy-test\n")],
     problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
   },
   "252 upload-android.yml taking inputs from whoever starts it": {
-    changes: [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n    inputs:\n      track:\n        default: production\n")],
+    changes: [replace(A, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n    inputs:\n      track:\n        default: production\n")],
     problem: /^upload-android\.yml: not triggered by hand \(workflow_dispatch\) only/,
   },
   "253 the upload key given to the build job, where Gradle runs": {
-    changes: [replace(U, `${BUNDLE_RELEASE}`, `${SIGN_ENV.replace("        env:\n", "")}${BUNDLE_RELEASE}`)],
+    changes: [replace(A, `${BUNDLE_RELEASE}`, `${SIGN_ENV.replace("        env:\n", "")}${BUNDLE_RELEASE}`)],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "254 the build job in the environment app-test": {
-    changes: [replace(U, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    environment: app-test\n    runs-on: ubuntu-24.04\n")],
+    changes: [replace(A, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    environment: app-test\n    runs-on: ubuntu-24.04\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "255 the upload job out of the environment app-test (its secrets would be the repository's, on any branch)": {
-    changes: [replace(U, "    environment: app-test\n", "")],
+    changes: [replace(A, "    environment: app-test\n", "")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "256 the upload job building the app itself, with the keys in reach": {
-    changes: [replace(U, "      - name: Sign the bundle with the upload key\n", "      - name: Build again\n        working-directory: android\n        run: ./gradlew bundleRelease\n      - name: Sign the bundle with the upload key\n")],
+    changes: [replace(A, "      - name: Sign the bundle with the upload key\n", "      - name: Build again\n        working-directory: android\n        run: ./gradlew bundleRelease\n      - name: Sign the bundle with the upload key\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "257 the upload key in the env of the upload to Google Play too": {
-    changes: [replace(U, PLAY_ENV, `${PLAY_ENV}          ANDROID_UPLOAD_KEYSTORE_PASSWORD: \${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n`)],
+    changes: [replace(A, PLAY_ENV, `${PLAY_ENV}          ANDROID_UPLOAD_KEYSTORE_PASSWORD: \${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}\n`)],
     problem: SECRETS_PROBLEM,
   },
   "258 the service account's key put into the command": {
-    changes: [replace(U, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
+    changes: [replace(A, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
     problem: SECRETS_PROBLEM,
   },
   "259 the build job's token given more than the workflow's": {
-    changes: [replace(U, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    permissions:\n      actions: write\n    runs-on: ubuntu-24.04\n")],
+    changes: [replace(A, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    permissions:\n      actions: write\n    runs-on: ubuntu-24.04\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "260 the upload job's token able to write the code": {
-    changes: [replace(U, "    environment: app-test\n", "    environment: app-test\n    permissions:\n      contents: write\n")],
+    changes: [replace(A, "    environment: app-test\n", "    environment: app-test\n    permissions:\n      contents: write\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "261 the build job not stopping off main": {
-    changes: [replace(U, '      - name: Only from main\n        run: test "$GITHUB_REF" = refs/heads/main\n', "")],
+    changes: [replace(A, '      - name: Only from main\n        run: test "$GITHUB_REF" = refs/heads/main\n', "")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "262 an upload cancelled halfway by the next": {
-    changes: [replace(U, "  group: upload-android\n  cancel-in-progress: false\n", "  group: upload-android\n  cancel-in-progress: true\n")],
+    changes: [replace(A, "  group: upload-android\n  cancel-in-progress: false\n", "  group: upload-android\n  cancel-in-progress: true\n")],
     problem: /^upload-android\.yml: concurrency is not group upload-android/,
   },
   "263 a cache restored in the build job": {
-    changes: [replace(U, "      - name: Get the parameter files\n", "      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.gradle/caches\n          key: x\n      - name: Get the parameter files\n")],
+    changes: [replace(A, "      - name: Get the parameter files\n", "      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0\n        with:\n          path: ~/.gradle/caches\n          key: x\n      - name: Get the parameter files\n")],
     problem: /^upload-android\.yml: line \d+: uses actions\/cache\/restore: this workflow may use no cache/,
   },
   "264 a step of the upload job continuing when signing fails": {
-    changes: [replace(U, "      - name: Sign the bundle with the upload key\n", "      - name: Sign the bundle with the upload key\n        continue-on-error: true\n")],
+    changes: [replace(A, "      - name: Sign the bundle with the upload key\n", "      - name: Sign the bundle with the upload key\n        continue-on-error: true\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
 };
