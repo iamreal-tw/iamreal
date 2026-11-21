@@ -17,7 +17,7 @@
 | `username-format.ts` | `spec/scope.md`「Platforms」 | 帳號名稱的格式 `[…]{m,n}`，自己逐字解析，不交給正規表示式引擎；平台代號；裝置不認得的平台上帳號最低限度的檢查 |
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
 | `scoped-id.ts` | `spec/scoped-id.md` | 匿名編號、它的文字寫法和 10 個字元的短編號 |
-| `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time` |
+| `challenge.ts` | `spec/challenge.md` | 題目的唯一寫法、它的日期、`current_time`；裝置收到題目時的檢查（`checkChallenge`） |
 | `record.ts` | `spec/record.md` | 紀錄：每個欄位的格式（`fieldsProblem`、`accountsProblem`、`decodeProof`）、照樣板寫出名冊檔的那一行（`recordLine`）、紀錄雜湊（`recordHash`）、名冊指紋的下一步（`nextFingerprint`）、讀一行（`readRecordLine`：解析、檢查每個值、照樣板重寫一次比對位元組）；名冊目錄的切法（`LINES_PER_FILE`）、名冊檔和雜湊清單的檔名（`rosterFileName`、`hashListName`）、雜湊清單的寫法（`hashList`）；指紋檔的檔名和一行的寫法（`FINGERPRINT_FILE_NAME`、`fingerprintLine`）。後台寫入一筆、把寫滿的名冊檔搬到 R2、每天公布時用它 |
 | `card-state-file.ts` | `spec/roster-rules.md`「The card state file」 | 卡片狀態檔：`cardStateFile` 收每張有過有效紀錄的卡片（狀態和它最後一筆有效紀錄的序號），照樣板寫出整個檔，卡片自己排序、初始狀態的名額不列；`readCardStateFile` 讀一個檔的位元組（`Uint8Array`，下載到什麼就給什麼，不先解碼：解碼會把位元組順序記號吃掉、把不是 UTF-8 的位元組換掉），每一列解析、檢查每個值、照樣板重寫一次比對，再檢查列的順序，回每一列，或第一個不對的行號和代碼（`line`、`order`）。`cardStateFile` 回的是字串，每個字都是 ASCII，檔案的位元組就是它的 UTF-8。只檢查每個值各自的格式，不判斷這一列是不是規則留得下來的狀態：這個檔是拿來讓人比出存錯的狀態的。`cardStateFileWriter` 是一次寫一列的寫法：卡片要照檔的順序給，每一列寫的時候檢查格式、而且卡片比上一列大，接起來和 `cardStateFile` 寫出的位元組相同。後台每天寫這個檔時用它，一邊讀卡片狀態表的複本一邊寫（`worker/README.md`「每天換日公布名冊」）；`cardStateFile` 留著當逐位元組的對照 |
 | `min-app.ts` | `spec/min-app.md` | 最低版本：app 怎麼讀 `config` 的 `min_app`，這一版照常過卡、先提醒從哪天起不能過卡、還是停下來。網頁版不讀它；後台（`worker/`）的測試拿它讀自己送出的值 |
@@ -49,7 +49,7 @@ pnpm test
 
 `pnpm test` 讀 `spec/vectors/` 的標準答案，不複製。`test/spec.test.ts`：
 
-- `challenge.json`：題目的唯一寫法、日期、`current_time` 和它的公開輸入、亂數的位元組
+- `challenge.json`：題目的唯一寫法、日期、`current_time` 和它的公開輸入、亂數的位元組；`device` 的每一案（裝置的時鐘換成台灣的日期、收不收和原因代碼）
 - `scope.json`：兩個場合字串和打包值；每份名冊的平台表（`platformsOf`）和標準答案、`spec/scope.md` 的表相同（代號、顯示名稱、格式）；平台代號；帳號名稱照它的平台的格式（格式字串從 `spec/scope.md` 的平台表讀出來，交給 `username-format.ts` 自己解析，和標準答案逐案相同；格式字串不是那一種寫法時讀不懂）
 - `declaration-code.json`：整份清單的原文、SHA-256、宣告碼、打包值
 - `scoped-id.json`：匿名編號的文字寫法、短編號 10 個字元、讀不懂的寫法

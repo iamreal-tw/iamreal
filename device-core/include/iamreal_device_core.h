@@ -180,8 +180,10 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  *                                        the date has changed
  *   idc_session_card_state_request       only after 1 to 4 all passed,
  *                                        on the date they hold for
- *   idc_session_check_challenge          likewise: the challenge the
- *                                        server issued is dated today
+ *   idc_session_check_challenge          only after 1 to 4 all passed:
+ *                                        the challenge the server issued
+ *                                        is dated today (moves the date
+ *                                        they hold for to today)
  *   idc_session_records_request          likewise, for the challenge
  *                                        taken: the proof
  *
@@ -196,7 +198,7 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  * `now` is the device's clock, in seconds since 1970-01-01T00:00:00Z; the
  * core takes the date in Taiwan from it. What a session checked holds for
  * one date: the date of step 1, which the CRL is checked on too, until
- * idc_session_check_date moves it. IDC_ERR_ARGUMENT for a number that
+ * idc_session_check_date or idc_session_check_challenge moves it. IDC_ERR_ARGUMENT for a number that
  * names no session, and for a clock outside the years 2000 to 2049: no
  * certificate is valid then, the app says to check the phone's clock, and
  * the session starts over (the certificates added are overwritten).
@@ -302,9 +304,12 @@ int32_t idc_session_check_date(idc_session session, int64_t now, idc_buf *out);
  *   {"ok":false,"problem":"challenge_not_today","challenge_date":"YYYY-MM-DD","today":"YYYY-MM-DD"}
  * When today is not the date the session's checks hold for (midnight
  * passed since), the date conditions of idc_session_check_date are checked
- * on today first, with its answers ("expired", "not_yet_valid",
- * "crl_stale"), after which the session starts over.
- * Any call forgets the challenge taken before. With "ok": false the card
+ * on today first: if they do not hold, its answers ("expired",
+ * "not_yet_valid", "crl_stale"), and the session starts over; if they
+ * hold, the session's checks hold for today from then on.
+ * The session keeps a copy of the challenge it took (it is not secret).
+ * Any call forgets the challenge taken before, and so does doing step 2 or
+ * step 4 again, or a records request refused for its files. With "ok": false the card
  * proof stops; the app says why and does not tell the server.
  * IDC_ERR_REFUSED unless steps 1 to 4 all passed. IDC_ERR_ARGUMENT for a
  * clock outside the years 2000 to 2049, and the session starts over. */

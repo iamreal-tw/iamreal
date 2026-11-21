@@ -1255,6 +1255,35 @@ fn the_proof_is_made_only_for_the_challenge_that_was_taken() {
         session.records_request(card, &challenge),
         Err(IDC_ERR_REFUSED)
     );
+    // Step 4 again: the challenge is to be taken again.
+    session.check_challenge(card.now, &challenge).unwrap();
+    session.check_artifacts(&card.files).unwrap();
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    // A call refused before anything is checked forgets it too.
+    session.check_challenge(card.now, &challenge).unwrap();
+    card.check_certificate(&session);
+    assert_eq!(
+        session.check_challenge(card.now, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    card.check_crl(&session);
+    session.build_tree().unwrap();
+    session.check_artifacts(&card.files).unwrap();
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Step 2 again.
+    session.check_challenge(card.now, &challenge).unwrap();
+    card.check_crl(&session);
+    session.build_tree().unwrap();
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
     // The date moved since the challenge was taken.
     session.check_challenge(card.now, &challenge).unwrap();
     assert_eq!(

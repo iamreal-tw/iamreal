@@ -38,7 +38,7 @@ export function checkChallenge(challenge: unknown, today: Day): ChallengeCheck {
 }
 
 /**
- * `current_time` for a date:the decimal integer YYMMDD155959, the last
+ * `current_time` for a date: the decimal integer YYMMDD155959, the last
  * second of that date in Taiwan written in UTC.
  */
 export function currentTime(day: Day): bigint {

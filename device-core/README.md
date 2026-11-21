@@ -81,12 +81,12 @@
 | | `idc_session_close` | 關掉，清掉 |
 
 - **只有通過四步的 session 算得出匿名編號。** 算匿名編號、組送後台的內容的函式都收 session；算證明、組送出的請求的函式也一樣，從同一個 `passed()` 拿憑證和路徑。
-- **重做前面的步驟，後面的就不算。** 再檢查一次憑證，整個 session 從頭來；再選一次清冊，樹要重建。檔案核對失敗一次，就要重新核對到通過。
+- **重做前面的步驟，後面的就不算。** 再檢查一次憑證，整個 session 從頭來；再選一次清冊，樹要重建。檔案核對失敗一次，就要重新核對到通過。再選一次清冊或再核對一次檔案，收下的題目也不算了，要再收一次。
 - **停下來的答案不是錯誤。** 檢查的結果是規格裡的原因代碼時（憑證過期、清冊太舊、被廢止），函式回 `IDC_OK` 和一段 JSON：`{"ok":false,"problem":"…"}`，加上規格說要回報的細節；通過時是 `{"ok":true,…}`。每個函式的 JSON 寫在 `prover/src/session.rs` 和標頭檔。
 - **數字，不是指標。** `idc_session` 是核心表裡的編號，從 1 開始、不重複使用。關掉之後再拿它呼叫，或拿一個不存在的數字，得到 `IDC_ERR_ARGUMENT`，不會讀到釋放掉的記憶體。同一個 session 一次只跑一個呼叫，第二個會等。
 - **核心不下載。** 索引和清冊由 app 下載後交進來；下載不到是 `crl_unavailable`，由 app 自己說，不問核心。後台的 `config` 整份交進來，核心自己讀 `crl_max_age_days`，取它和內建 7 天中較小的。
 - **記住的清冊編號由 app 存。** 核心不寫檔案：`idc_session_check_crl` 收 app 記住的編號，回 `highest_after`，app 把它存起來。
-- **時間由 app 給；通過只算在那一天。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。`idc_session_check_certificates` 的那一天就是這個 session 的日期，清冊多舊算過期用同一天。算匿名編號的函式也收 `now`：日期和 session 的不同就回 `IDC_ERR_REFUSED`，要先用 `idc_session_check_date` 拿新的日期再核一次憑證的效期和清冊的日期（過卡可能跨過午夜；網頁版在拿題目之前和拿到題目之後各核一次，app 照做：拿題目之前用 `idc_session_check_date`，拿到之後由 `idc_session_check_challenge` 一起核）。核不過就停，session 從頭來。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；先前通過的也一起作廢。 算證明的函式不收 `now`：紀錄的日期是題目的日期，所以題目由 `idc_session_check_challenge` 在收到時拿 `now` 核過是今天，算證明時只收那一個題目，而且它的日期要是 session 的日期，否則 `IDC_ERR_REFUSED`。題目是昨天的、session 也是昨天通過的，過了午夜就停在 `challenge_not_today`，拿不到證明。
+- **時間由 app 給；通過只算在那一天。** `now` 是裝置的時鐘（1970 年起的秒數），核心換成台灣的日期，不看裝置的時區。`idc_session_check_certificates` 的那一天就是這個 session 的日期，清冊多舊算過期用同一天。算匿名編號的函式也收 `now`：日期和 session 的不同就回 `IDC_ERR_REFUSED`，要先用 `idc_session_check_date` 拿新的日期再核一次憑證的效期和清冊的日期（過卡可能跨過午夜；網頁版在拿題目之前和拿到題目之後各核一次，app 照做：拿題目之前用 `idc_session_check_date`，拿到之後由 `idc_session_check_challenge` 一起核）。核不過就停，session 從頭來。時鐘在 2000 到 2049 年之外時回 `IDC_ERR_ARGUMENT`：那不是 app 寫錯，是手機的時間不對，由 app 說；先前通過的也一起作廢。 算證明的函式不收 `now`：紀錄的日期是題目的日期，所以題目由 `idc_session_check_challenge` 在收到時拿 `now` 核過是今天，算證明時只收那一個題目，而且它的日期要是 session 的日期，否則 `IDC_ERR_REFUSED`。收到題目時已經過了午夜，題目是昨天的、session 也是昨天通過的，就停在 `challenge_not_today`，拿不到證明。
 
 這一道擋的是寫錯順序，不是存心繞過：見下面「Poseidon2 不開放成 C 函式」。
 
@@ -116,7 +116,7 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 ### 清掉
 
 - **進來的位元組是呼叫的人的**，核心不改它。憑證、簽章、PIN 以外的東西也一樣：誰配置誰釋放，用完自己清掉。
-- **核心留下來的只有 session 裡的**：選中的那張憑證（含姓名）、從清冊算出來的鍵和路徑。`idc_session_add_certificate` 複製的憑證在 `idc_session_check_certificates` 做完時蓋成零，只留選中的那一張。`idc_session_close` 把 session 裡剩下的蓋成零再釋放；另一個執行緒正在這個 session 裡跑的話，等它回來才清。
+- **核心留下來的只有 session 裡的**：選中的那張憑證（含姓名）、從清冊算出來的鍵和路徑，和收下的題目（不是秘密）。`idc_session_add_certificate` 複製的憑證在 `idc_session_check_certificates` 做完時蓋成零，只留選中的那一張。`idc_session_close` 把 session 裡剩下的蓋成零再釋放；另一個執行緒正在這個 session 裡跑的話，等它回來才清。
 - **簽章不留。** `idc_session_card_state_request` 驗完、算完就把自己的那一份蓋成零，session 裡沒有簽章。`idc_session_records_request` 兩個簽章都重新收一次，用完同樣不留：它自己的兩份、電路輸入（憑證的內容、簽章切成的段）、交給 Barretenberg 的見證，在回傳之前蓋成零；ACVM 解見證時自己配置的那些，由配置器在釋放時蓋。
 - **`idc_buf` 還給核心時蓋成零。** `idc_session_check_certificates` 的 JSON 裡有姓名：姓名顯示出來之後就用 `idc_buf_free` 還掉。
 - **這個函式庫釋放的每一塊記憶體都先蓋成零**（`prover/src/alloc.rs`）。`barretenberg-rs` 把 Poseidon2 的輸入複製進自己的緩衝區、用完直接釋放，`serde_json` 寫姓名時也一樣；這些複本核心的程式碰不到，所以在配置器那一層蓋。

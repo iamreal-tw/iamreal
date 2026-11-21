@@ -23,8 +23,8 @@ pub fn parse_challenge(challenge: &[u8]) -> Option<Date> {
 pub enum ChallengeProblem {
     /// Not a challenge in its one spelling.
     Malformed,
-    /// Its date is not today in Taiwan.
-    NotToday,
+    /// Its date, which is not today in Taiwan.
+    NotToday { date: Date },
 }
 
 impl ChallengeProblem {
@@ -32,7 +32,7 @@ impl ChallengeProblem {
     pub fn code(self) -> &'static str {
         match self {
             ChallengeProblem::Malformed => "challenge_malformed",
-            ChallengeProblem::NotToday => "challenge_not_today",
+            ChallengeProblem::NotToday { .. } => "challenge_not_today",
         }
     }
 }
@@ -46,7 +46,7 @@ pub fn check_challenge(challenge: &[u8], today: Date) -> Result<Date, ChallengeP
     if date == today {
         Ok(date)
     } else {
-        Err(ChallengeProblem::NotToday)
+        Err(ChallengeProblem::NotToday { date })
     }
 }
 
