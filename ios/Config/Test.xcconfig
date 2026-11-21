@@ -1,0 +1,13 @@
+// The test app (ADR-0036): the one environment there is so far. Both
+// configurations of the project (Debug, Release) are based on this file,
+// so every build is of the test app; the environment is fixed when the app
+// is built and nothing in the app switches it.
+//
+// IAMREAL_ENVIRONMENT is a compilation condition: App/AppEnvironment.swift
+// holds the site and the roster that go with it and does not compile
+// without one. check-app.sh has the identifier and the site of the test app
+// written in it, and turns away a build that is not that.
+#include "Shared.xcconfig"
+
+IAMREAL_BUNDLE_IDENTIFIER = tw.iamreal.app.test
+IAMREAL_ENVIRONMENT = IAMREAL_ENV_TEST

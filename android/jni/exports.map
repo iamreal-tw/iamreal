@@ -1,0 +1,11 @@
+# What libiamreal_device_core_jni.so gives to the outside: the functions the
+# Java runtime looks up, and nothing else. Barretenberg's own C functions
+# (bbapi) and the idc_ functions are in the library but cannot be called
+# from outside it.
+{
+  global:
+    JNI_OnLoad;
+    Java_tw_iamreal_app_core_DeviceCore_*;
+  local:
+    *;
+};

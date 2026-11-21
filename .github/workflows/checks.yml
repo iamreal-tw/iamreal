@@ -1,25 +1,68 @@
 # The checks of a pull request: the items of the definition of done in
 # CONTRIBUTING.md (ADR-0029, on pull requests from outside), on every pull
-# request. web/'s browser tests (`pnpm test:e2e`, `pnpm test:ui`) are in
-# checks-browser.yml, which runs only when a file they use changes. The
-# workflows are ASCII only, comments included (worker/test/workflows.ts).
+# request and on every merge group of the merge queue (#180). web/'s browser
+# tests (`pnpm test:e2e`, `pnpm test:ui`) are in checks-browser.yml, which
+# runs only on pull requests that change a file they use, not in the queue.
+# The workflows are ASCII only, comments included (worker/test/workflows.ts).
 #
-# Triggered by pull_request only, never pull_request_target: a pull request
-# from a fork gets no secret and a read-only GITHUB_TOKEN. Nothing here
-# refers to a secret, and nothing is cached, so a pull request writes nothing
-# another run reads (GitHub's "Events that trigger workflows", pull_request,
-# "Workflows in forked repositories"). worker/test/workflows.test.ts checks this file against
-# the rules in worker/test/workflows.ts.
+# Skipping by path (#206). On a pull request the changes job lists the files
+# the pull request changes and each of the four required checks runs only
+# when one of them is in its list (the lists: worker/test/workflows.ts, given
+# to the changes job as its env; the script: changed-paths.sh, beside this
+# file). A check skipped by its `if` reports success, so the pull request can
+# still be merged ("Troubleshooting required status checks", "Handling
+# skipped but required checks"). On merge_group every check runs, whatever
+# the changes job says: a file missing from a list cannot turn main red.
+# Every `if` starts with always(), and every check's first step fails unless
+# the changes job succeeded: without them a check would be skipped, and
+# report success, when the changes job fails (same page: "The dependent job
+# is skipped and may not block merging").
+#
+# Triggered by pull_request, never pull_request_target: a pull request from a
+# fork gets no secret and a read-only GITHUB_TOKEN (GitHub's "Events that
+# trigger workflows", pull_request, "Workflows in forked repositories").
+# And by merge_group, which the merge queue needs: the checks the ruleset of
+# main requires (go, typescript, device-core, android: the ids of the jobs
+# below, which have no name) are reported only by a workflow that runs on it
+# (same page, merge_group). A merge group is a branch of this repository
+# with the pull request's change in it, from a fork too, and GitHub's
+# documentation does not say that limit holds for it.
+# What keeps its runs safe is this file: nothing here refers to a secret,
+# the token can only read, and caches can only be restored, never saved
+# (cache-mode: read, which the cache service enforces whatever a step runs;
+# cache.yml, on pushes to main, is what saves), so a run writes nothing
+# another run reads; and a change to this file is read line by line before
+# it is merged (CONTRIBUTING.md). worker/test/workflows.test.ts checks this
+# file against the rules in worker/test/workflows.ts.
+#
+# Concurrency: a new push to a pull request cancels the run before it, in the
+# group of the pull request's number. A merge group's run has no pull request
+# in its event; its group is github.ref: "The fully-formed ref of the branch
+# or tag that triggered the workflow run. [...] For other triggers, this is
+# the branch or tag ref that triggered the workflow run." (GitHub's "Contexts
+# reference", github context). For merge_group that ref is "Ref of the merge
+# group" ("Events that trigger workflows", merge_group): the temporary branch
+# the queue makes for each pull request in it, gh-readonly-queue/main/...
+# ("Managing a merge queue"). Without it the merge groups' runs would share
+# one group and cancel each other.
 name: checks
 
 on:
   pull_request:
+  merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
 
+# Caches can be restored and not saved, by any step: "Access is enforced with
+# scoped cache tokens, so a job cannot restore or save caches beyond the mode
+# it is granted" (GitHub's "Workflow syntax", cache-mode).
+cache-mode: read
+
 concurrency:
-  group: checks-${{ github.event.pull_request.number }}
+  group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -32,10 +75,44 @@ env:
   WRANGLER_HIDE_BANNER: "true"
 
 jobs:
+  # Which of the required checks below run. It uses no action but GitHub's
+  # checkout, with the whole history: the script compares the pull request's
+  # head with its merge base with the base branch.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.paths.outputs.go }}
+      typescript: ${{ steps.paths.outputs.typescript }}
+      device-core: ${{ steps.paths.outputs.device-core }}
+      android: ${{ steps.paths.outputs.android }}
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      GO_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes cmd/** crl/** roster/** server/** verifier/** spec/** design/copy/** web/README.md docs/adr/0004-scoped-ids-and-proofs-are-public.md protocol/package.json web/package.json worker/package.json"
+      TYPESCRIPT_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes protocol/** worker/** web/** design/** spec/** cmd/** crl/** roster/** server/** verifier/** android/** ios/** device-core/** .github/workflows/** docs/adr/0004-scoped-ids-and-proofs-are-public.md"
+      DEVICE_CORE_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes device-core/** spec/** crl/testdata/** web/circuits/** verifier/vk/** .github/workflows/cache.yml"
+      ANDROID_PATHS: ".github/workflows/checks.yml .github/workflows/changed-paths.sh worker/test/workflows.ts worker/test/workflows.test.ts pnpm-lock.yaml pnpm-workspace.yaml go.mod go.sum .npmrc .pnpmfile.cjs package.json go.work go.work.sum .cargo/config.toml .gitattributes android/** device-core/** web/circuits/** verifier/vk/** spec/vectors/** design/copy/** .github/workflows/cache.yml"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Which checks the changed paths call for
+        id: paths
+        run: bash .github/workflows/changed-paths.sh
+
   go:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.go == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -60,9 +137,15 @@ jobs:
       - run: go test -count=1 -tags iamrealtest ./...
 
   typescript:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.typescript == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -103,13 +186,34 @@ jobs:
   # device-core/: the Rust core of the apps. It installs no package of npm and
   # uses no bb: the Barretenberg it links is the static library that
   # fetch-barretenberg.sh downloads and checks against barretenberg.sha256.
+  # The proofs its tests make are verified by that library; IAMREAL_BB is
+  # emptied for cargo test, so that they are not also handed to a bb this job
+  # never installed. fetch-crs.sh downloads the common reference string the
+  # proofs need and checks it against crs.sha256.
+  # cargo's registry and target/ are restored from the caches cache.yml saved
+  # on main, for exactly the files hashed in the keys (no restore-keys); with
+  # no cache the job builds everything, as before.
   device-core:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.device-core == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: device-core-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target
+          key: device-core-target-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh') }}
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml
@@ -121,6 +225,76 @@ jobs:
       - name: cargo clippy
         working-directory: device-core
         run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo clippy --locked --release --all-targets -- -D warnings
+      - name: Fetch the common reference string
+        working-directory: device-core
+        run: ./fetch-crs.sh
       - name: cargo test
         working-directory: device-core
-        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && cargo test --locked --release
+        run: BB_LIB_DIR="$(./fetch-barretenberg.sh)" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release
+
+  # android/: the Android app. The native library is device-core/ and the JNI
+  # layer, linked by the Zig that android/fetch-zig.sh downloads and checks
+  # against android/zig.sha256; Gradle is the one gradle-wrapper.properties
+  # names, checked against the SHA-256 written there; every plugin and library
+  # Gradle downloads is checked against android/gradle/verification-metadata.xml.
+  # `build` assembles both installers, runs the unit tests on the JVM against
+  # the same Rust, runs lint, and checks what was built (android/README.md).
+  # cargo's registry, the three directories of device-core/target/ it builds
+  # into, and Gradle's caches and wrapper are restored from the caches
+  # cache.yml saved on main, for exactly the files hashed in the keys (no
+  # restore-keys); with no cache the job builds everything, as before. Gradle
+  # hashes again each library it takes from the restored cache and checks it
+  # against verification-metadata.xml: the hashes it has computed are kept in
+  # android/.gradle/, which is not cached. What Gradle made from the
+  # libraries, the wrapper's distribution and target/ are not checked again
+  # (.github/README.md, on caches).
+  android:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.android == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: The changes job succeeded
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: test "$CHANGES_RESULT" = success
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/registry
+          key: android-cargo-registry-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/release
+          key: android-target-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/aarch64-linux-android
+          key: android-target-aarch64-linux-android-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: device-core/target/x86_64-linux-android
+          key: android-target-x86_64-linux-android-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/caches
+          key: android-gradle-caches-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.gradle/wrapper
+          key: android-gradle-wrapper-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/cache.yml', 'device-core/Cargo.lock', 'device-core/Cargo.toml', 'device-core/checks/Cargo.toml', 'device-core/prover/Cargo.toml', 'device-core/rust-toolchain.toml', 'device-core/.cargo/config.toml', 'device-core/barretenberg.sha256', 'device-core/fetch-barretenberg.sh', 'android/build-native.sh', 'android/settings.gradle.kts', 'android/build.gradle.kts', 'android/app/build.gradle.kts', 'android/gradle.properties', 'android/gradle/verification-metadata.xml', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+      - name: Install libc++ (Barretenberg's static library is built with it)
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
+      - name: Install the Rust of rust-toolchain.toml, with the targets of Android
+        working-directory: device-core
+        run: rustup toolchain install && rustup target add aarch64-linux-android x86_64-linux-android
+      - name: Install the parts of the Android SDK that android/app/build.gradle.kts names
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.14206865" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: Get the parameter files
+        working-directory: device-core
+        run: ./fetch-crs.sh
+      - name: gradlew build
+        working-directory: android
+        run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon build

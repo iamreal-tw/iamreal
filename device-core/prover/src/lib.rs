@@ -5,21 +5,40 @@
 //!
 //! Nothing here does I/O: bytes in, bytes out. No function takes a PIN.
 //!
-//! What is `pub` in Rust and not `extern "C"` ([`hashes`]) is for this
-//! crate's tests. The apps reach only the C functions: Poseidon2 is not
-//! one of them, so an app cannot compute a scoped ID by itself (ADR-0034,
-//! "核心擋住的順序").
+//! Without the feature `testing`, the C functions are all this crate
+//! gives: Poseidon2 is not one of them, and the one that computes a
+//! scoped ID takes a session that passed every check (ADR-0034, "核心擋住
+//! 的順序"). The feature is for this crate's tests, which need Poseidon2
+//! and the tree by themselves and a session that trusts test keys.
 
-pub mod hashes;
+mod alloc;
+mod json;
+mod server_state;
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+/// Declares a module that is `pub` only with the feature `testing`.
+macro_rules! for_tests {
+    ($($name:ident),*) => {$(
+        #[cfg(feature = "testing")]
+        pub mod $name;
+        #[cfg(not(feature = "testing"))]
+        mod $name;
+    )*};
+}
+for_tests!(artifacts, hashes, proof, quiet, session, tree, witness);
 
 use iamreal_device_checks::challenge::parse_challenge;
+use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
 use iamreal_device_checks::hash::Poseidon2;
+use iamreal_device_checks::list_consequence::{Consequence, list_consequence};
+use iamreal_device_checks::roster_rules::{self, Reason};
 use iamreal_device_checks::scope::{Roster, scope_string};
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
+use serde_json::json;
+
+use crate::json::Json;
+use crate::server_state::{read_card_state, read_platforms};
 
 /// The version of the C functions: the number the header gives as
 /// `IDC_ABI_VERSION`. It goes up when a function changes or goes away.
@@ -34,6 +53,8 @@ pub const IDC_ERR_ARGUMENT: i32 = 1;
 pub const IDC_ERR_INPUT: i32 = 2;
 /// The core failed: a panic, or Barretenberg did not answer.
 pub const IDC_ERR_INTERNAL: i32 = 3;
+/// The session has not passed the checks this function needs first.
+pub const IDC_ERR_REFUSED: i32 = 4;
 
 /// The production roster.
 pub const IDC_ROSTER_PRODUCTION: u32 = 0;
@@ -53,30 +74,30 @@ const EMPTY: IdcBuf = IdcBuf {
     len: 0,
 };
 
+/// Runs `f` and returns its code.
+fn code(f: impl FnOnce() -> Result<(), i32>) -> i32 {
+    match quiet::guarded(f) {
+        Ok(()) => IDC_OK,
+        Err(code) => code,
+    }
+}
+
 /// Runs `f` and puts its bytes in `*out`. `*out` is empty unless the
-/// result is `IDC_OK`. A panic stops here: it never crosses into C.
+/// result is `IDC_OK`.
 fn output(out: *mut IdcBuf, f: impl FnOnce() -> Result<Vec<u8>, i32>) -> i32 {
     if out.is_null() {
         return IDC_ERR_ARGUMENT;
     }
     // SAFETY: `out` is not null, and the caller gives a pointer to an `idc_buf` it may write.
     unsafe { out.write(EMPTY) };
-    match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(Ok(bytes)) => {
-            let boxed = bytes.into_boxed_slice();
-            let len = boxed.len();
-            let ptr = Box::into_raw(boxed).cast::<u8>();
-            // SAFETY: as above.
-            unsafe { out.write(IdcBuf { ptr, len }) };
-            IDC_OK
-        }
-        Ok(Err(code)) => code,
-        Err(payload) => {
-            // Dropping what a panic carried could panic again.
-            std::mem::forget(payload);
-            IDC_ERR_INTERNAL
-        }
-    }
+    code(|| {
+        let boxed = f()?.into_boxed_slice();
+        let len = boxed.len();
+        let ptr = Box::into_raw(boxed).cast::<u8>();
+        // SAFETY: as above.
+        unsafe { out.write(IdcBuf { ptr, len }) };
+        Ok(())
+    })
 }
 
 /// The `len` bytes at `ptr` the caller passed in, for the length of the call.
@@ -150,16 +171,15 @@ const SELF_CHECK_HASH: [u8; 32] = [
 /// no input.
 #[unsafe(no_mangle)]
 pub extern "C" fn idc_self_check() -> i32 {
-    let check = || hashes::Barretenberg::new()?.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]);
-    match catch_unwind(check) {
-        Ok(Ok(hash)) if hash == SELF_CHECK_HASH => IDC_OK,
-        Ok(_) => IDC_ERR_INTERNAL,
-        Err(payload) => {
-            // As in `output`.
-            std::mem::forget(payload);
-            IDC_ERR_INTERNAL
+    code(|| {
+        let hash = hashes::Barretenberg::new()
+            .and_then(|mut bb| bb.poseidon2(&[fe_of_u64(1), fe_of_u64(2)]));
+        if hash == Ok(SELF_CHECK_HASH) {
+            Ok(())
+        } else {
+            Err(IDC_ERR_INTERNAL)
         }
-    }
+    })
 }
 
 /// The scope string a card signs for `roster`: 31 bytes in `*out`.
@@ -171,61 +191,68 @@ pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 
     output(out, || Ok(scope_string(roster_of(roster)?).to_vec()))
 }
 
-/// One account of the list a C function takes: `{"platform":"…","username":"…"}`,
-/// the shape of a record's `accounts` (spec/record.md). Exactly these two
-/// keys, each once, both strings: a list has one reading.
-struct AccountJson {
-    platform: String,
-    username: String,
+/// Reads the list a C function takes: a JSON array of
+/// `{"platform":"…","username":"…"}`, the shape of a record's `accounts`
+/// (spec/record.md). Each account has exactly these two keys, each once,
+/// both strings, the platform a platform ID: a list has one reading. The
+/// username is any string; each function says what it accepts.
+fn accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
+    let account = |a: &Json| {
+        let a = a.as_object().filter(|a| a.len() == 2)?;
+        let platform = a.get("platform")?.as_str()?;
+        let username = a.get("username")?.as_str()?;
+        is_platform_id(platform.as_bytes()).then(|| roster_rules::Account {
+            platform: platform.to_owned(),
+            username: username.to_owned(),
+        })
+    };
+    Json::parse(json)
+        .as_ref()
+        .and_then(Json::as_array)
+        .and_then(|list| list.iter().map(account).collect())
+        .ok_or(IDC_ERR_INPUT)
 }
 
-impl<'de> serde::Deserialize<'de> for AccountJson {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Keys;
-        impl<'de> serde::de::Visitor<'de> for Keys {
-            type Value = AccountJson;
-
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("an account")
-            }
-
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<AccountJson, A::Error> {
-                use serde::de::Error;
-                let (mut platform, mut username) = (None, None);
-                while let Some(key) = map.next_key::<String>()? {
-                    let slot = match key.as_str() {
-                        "platform" => &mut platform,
-                        "username" => &mut username,
-                        _ => return Err(A::Error::custom("a key that is not of an account")),
-                    };
-                    if slot.replace(map.next_value::<String>()?).is_some() {
-                        return Err(A::Error::custom("a key twice"));
-                    }
-                }
-                match (platform, username) {
-                    (Some(platform), Some(username)) => Ok(AccountJson { platform, username }),
-                    _ => Err(A::Error::custom("a key is missing")),
-                }
-            }
-        }
-        deserializer.deserialize_map(Keys)
+/// The platform IDs a C function takes as a JSON array of strings, each a
+/// platform ID, none twice.
+fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
+    let ids: Vec<String> = Json::parse(json)
+        .as_ref()
+        .and_then(Json::as_array)
+        .and_then(|ids| {
+            ids.iter()
+                .map(|id| id.as_str().filter(|id| is_platform_id(id.as_bytes())))
+                .map(|id| id.map(str::to_owned))
+                .collect()
+        })
+        .ok_or(IDC_ERR_INPUT)?;
+    let distinct: std::collections::BTreeSet<&String> = ids.iter().collect();
+    if distinct.len() == ids.len() {
+        Ok(ids)
+    } else {
+        Err(IDC_ERR_INPUT)
     }
 }
 
-/// Reads the JSON array of accounts and checks each value's form.
-fn accounts_of(json: &[u8]) -> Result<Vec<AccountJson>, i32> {
-    let list: Vec<AccountJson> = serde_json::from_slice(json).map_err(|_| IDC_ERR_INPUT)?;
-    let well_formed = |a: &AccountJson| {
-        is_platform_id(a.platform.as_bytes()) && is_any_username(a.username.as_bytes())
-    };
-    if list.iter().all(well_formed) {
+/// The list a card signs: [`accounts_of`], each username 1 or more
+/// printable ASCII characters without `"` and `\` (what every format
+/// allows at most, spec/scope.md).
+fn signed_accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
+    let list = accounts_of(json)?;
+    if list.iter().all(|a| is_any_username(a.username.as_bytes())) {
         Ok(list)
     } else {
         Err(IDC_ERR_INPUT)
     }
+}
+
+fn accounts(list: &[roster_rules::Account]) -> Vec<Account<'_>> {
+    list.iter()
+        .map(|a| Account {
+            platform: &a.platform,
+            username: &a.username,
+        })
+        .collect()
 }
 
 /// The declaration code (spec/declaration-code.md) of a list of accounts
@@ -233,7 +260,9 @@ fn accounts_of(json: &[u8]) -> Result<Vec<AccountJson>, i32> {
 /// second message the card signs.
 ///
 /// `accounts_json` is a JSON array of `{"platform":"…","username":"…"}` in
-/// ascending order of `platform`, each platform at most once; `challenge`
+/// ascending order of `platform`, each platform at most once, each
+/// `username` 1 or more printable ASCII characters without `"` and `\`
+/// (what every format allows at most, spec/scope.md); `challenge`
 /// is the challenge as the server issued it. `IDC_ERR_INPUT` when the list
 /// is not that, or the challenge is not in its one spelling.
 ///
@@ -258,23 +287,366 @@ pub unsafe extern "C" fn idc_declaration_code(
                 input(challenge, challenge_len)?,
             )
         };
-        let list = accounts_of(accounts_json)?;
-        let accounts: Vec<Account<'_>> = list
-            .iter()
-            .map(|a| Account {
-                platform: &a.platform,
-                username: &a.username,
-            })
-            .collect();
+        let list = signed_accounts_of(accounts_json)?;
         parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
         let code = declaration_code(
             scope_string(roster),
-            &accounts,
+            &accounts(&list),
             challenge,
             &mut hashes::Sha2,
         )
         .map_err(|_| IDC_ERR_INPUT)?;
         Ok(code.to_vec())
+    })
+}
+
+/// What a list does on every platform, before the card signs it
+/// (spec/list-consequence.md): JSON in `*out`, for the confirmation screen.
+///
+/// - `platforms_json`: the `platforms` of `GET /api/v1/config`, as the
+///   server sent it.
+/// - `card_state_json`: the answer of `POST /api/v1/card-state`, as the
+///   server sent it.
+/// - `known_platforms_json`: the platforms the app has its own definition
+///   of (its names, how it writes an account), a JSON array of platform
+///   IDs, none twice. Built into the app, never from the server.
+/// - `accounts_json`: the cardholder's list for the platforms offered, in
+///   the shape of a record's `accounts` (ascending order of platform, each
+///   platform at most once), each `username` as typed after the app tidied
+///   it. The kept accounts are not in it: the core adds them.
+/// - `now`: seconds since 1970-01-01T00:00:00Z by the device's clock; the
+///   date is the one in Taiwan.
+///
+/// The output is one of:
+///
+/// ```text
+/// {"valid":true,"accounts":[…],"rows":[{"platform":"threads","known":true,"kind":"switch","username":"carol","current":"bob","previous":"bob","switches_left":3}],"first_record":false}
+/// {"valid":false,"reason":"switch_limit","platform":"threads"}
+/// {"valid":false,"reason":"username","platform":"threads"}
+/// {"valid":false,"reason":"empty"}
+/// ```
+///
+/// `accounts` is the list the card signs (pass it to
+/// [`idc_declaration_code`]); a row and the reasons are those of
+/// spec/list-consequence.md, "What the list does". `valid` false is not
+/// offered for signing.
+///
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, when the
+/// list names a platform that is not offered or is not in the shape above
+/// (`not_offered` in spec/vectors/list-consequence.json: a mistake of the
+/// app, but one the core sees only in the bytes), when the known platforms
+/// are not in the shape above, or when `now` is outside the years 2000 to
+/// 2049 in Taiwan.
+///
+/// # Safety
+/// The four inputs point to as many bytes as their lengths say; `out` is
+/// null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn idc_list_consequence(
+    platforms_json: *const u8,
+    platforms_json_len: usize,
+    card_state_json: *const u8,
+    card_state_json_len: usize,
+    known_platforms_json: *const u8,
+    known_platforms_json_len: usize,
+    accounts_json: *const u8,
+    accounts_json_len: usize,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (platforms_json, card_state_json, known_platforms_json, accounts_json) = unsafe {
+            (
+                input(platforms_json, platforms_json_len)?,
+                input(card_state_json, card_state_json_len)?,
+                input(known_platforms_json, known_platforms_json_len)?,
+                input(accounts_json, accounts_json_len)?,
+            )
+        };
+        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+        let known = platform_ids_of(known_platforms_json)?;
+        let table: Vec<_> = Json::parse(platforms_json)
+            .as_ref()
+            .and_then(read_platforms)
+            .ok_or(IDC_ERR_INPUT)?
+            .into_iter()
+            .filter(|row| known.iter().any(|id| id == row.id()))
+            .collect();
+        let (state, offered) = Json::parse(card_state_json)
+            .and_then(|state| read_card_state(&state, &table, today))
+            .ok_or(IDC_ERR_INPUT)?;
+        let list = accounts_of(accounts_json)?;
+        let consequence =
+            list_consequence(&offered, &state, &list, today).map_err(|_| IDC_ERR_INPUT)?;
+        let value = match consequence {
+            Consequence::Valid {
+                accounts,
+                rows,
+                first_record,
+            } => json!({
+                "valid": true,
+                "accounts": accounts
+                    .iter()
+                    .map(|a| json!({"platform": a.platform, "username": a.username}))
+                    .collect::<Vec<_>>(),
+                "rows": rows
+                    .iter()
+                    .map(|r| json!({
+                        "platform": r.platform,
+                        "known": r.known,
+                        "kind": r.kind.name(),
+                        "username": r.username,
+                        "current": r.current,
+                        "previous": r.previous,
+                        "switches_left": r.switches_left,
+                    }))
+                    .collect::<Vec<_>>(),
+                "first_record": first_record,
+            }),
+            Consequence::Username { platform } => {
+                json!({"valid": false, "reason": "username", "platform": platform})
+            }
+            Consequence::Invalid(Reason::SwitchLimit { platform }) => {
+                json!({"valid": false, "reason": "switch_limit", "platform": platform})
+            }
+            Consequence::Invalid(reason) => json!({"valid": false, "reason": reason.name()}),
+        };
+        serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
+    })
+}
+
+/// Opens a session for one card proof on `roster` and puts the number
+/// that names it in `*out`: never 0. The session checks against MOICA's
+/// keys and the files written into the core. Close it with
+/// [`idc_session_close`], whatever happened in between.
+///
+/// # Safety
+/// `out` is null or points to a `uint64_t` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
+    if out.is_null() {
+        return IDC_ERR_ARGUMENT;
+    }
+    // SAFETY: `out` is not null, and the caller's to write.
+    unsafe { out.write(0) };
+    code(|| {
+        let handle = session::open(roster_of(roster)?, session::Trust::built_in());
+        // SAFETY: as above.
+        unsafe { out.write(handle) };
+        Ok(())
+    })
+}
+
+/// Closes a session: the certificate, the name on it and everything the
+/// core computed from them are overwritten with zeros and released. A
+/// number that names no session (0, or one already closed) does nothing.
+#[unsafe(no_mangle)]
+pub extern "C" fn idc_session_close(session: u64) {
+    let _ = code(|| {
+        session::close(session);
+        Ok(())
+    });
+}
+
+/// See [`session::add_certificate`].
+///
+/// # Safety
+/// `certificate` points to `certificate_len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_add_certificate(
+    session: u64,
+    certificate: *const u8,
+    certificate_len: usize,
+) -> i32 {
+    code(|| {
+        // SAFETY: the caller's promise.
+        let certificate = unsafe { input(certificate, certificate_len)? };
+        session::add_certificate(session, certificate)
+    })
+}
+
+/// See [`session::check_certificates`].
+///
+/// # Safety
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_certificates(
+    session: u64,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || session::check_certificates(session, now))
+}
+
+/// See [`session::choose_crl`].
+///
+/// # Safety
+/// `index` points to `index_len` bytes; `out` is null or points to an
+/// `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_choose_crl(
+    session: u64,
+    index: *const u8,
+    index_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let index = unsafe { input(index, index_len)? };
+        session::choose_crl(session, index)
+    })
+}
+
+/// See [`session::check_crl`].
+///
+/// # Safety
+/// `crl`, `config` and `highest` point to as many bytes as their lengths
+/// say; `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_crl(
+    session: u64,
+    crl: *const u8,
+    crl_len: usize,
+    config: *const u8,
+    config_len: usize,
+    highest: *const u8,
+    highest_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (crl, config, highest) = unsafe {
+            (
+                input(crl, crl_len)?,
+                input(config, config_len)?,
+                input(highest, highest_len)?,
+            )
+        };
+        session::check_crl(session, crl, config, highest)
+    })
+}
+
+/// See [`session::build_tree`].
+#[unsafe(no_mangle)]
+pub extern "C" fn idc_session_build_tree(session: u64) -> i32 {
+    code(|| session::build_tree(session))
+}
+
+/// See [`session::check_artifacts`].
+///
+/// # Safety
+/// Each pointer points to as many bytes as its length says.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_artifacts(
+    session: u64,
+    circuit: *const u8,
+    circuit_len: usize,
+    verification_key: *const u8,
+    verification_key_len: usize,
+    crs_g1: *const u8,
+    crs_g1_len: usize,
+    crs_g2: *const u8,
+    crs_g2_len: usize,
+) -> i32 {
+    code(|| {
+        // SAFETY: the caller's promise.
+        let (circuit, verification_key, crs_g1, crs_g2) = unsafe {
+            (
+                input(circuit, circuit_len)?,
+                input(verification_key, verification_key_len)?,
+                input(crs_g1, crs_g1_len)?,
+                input(crs_g2, crs_g2_len)?,
+            )
+        };
+        session::check_artifacts(session, circuit, verification_key, crs_g1, crs_g2)
+    })
+}
+
+/// See [`session::check_date`].
+///
+/// # Safety
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_date(session: u64, now: i64, out: *mut IdcBuf) -> i32 {
+    output(out, || session::check_date(session, now))
+}
+
+/// See [`session::card_state_request`].
+///
+/// # Safety
+/// `scope_signature` points to `scope_signature_len` bytes; `out` is null
+/// or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_card_state_request(
+    session: u64,
+    now: i64,
+    scope_signature: *const u8,
+    scope_signature_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let scope_signature = unsafe { input(scope_signature, scope_signature_len)? };
+        session::card_state_request(session, now, scope_signature)
+    })
+}
+
+/// See [`session::records_request`]. It makes the proof: seconds, on as
+/// many threads as the device has cores. Call it from a background thread.
+///
+/// # Safety
+/// Each pointer points to as many bytes as its length says; `out` is null
+/// or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_records_request(
+    session: u64,
+    circuit: *const u8,
+    circuit_len: usize,
+    verification_key: *const u8,
+    verification_key_len: usize,
+    crs_g1: *const u8,
+    crs_g1_len: usize,
+    crs_g2: *const u8,
+    crs_g2_len: usize,
+    accounts_json: *const u8,
+    accounts_json_len: usize,
+    challenge: *const u8,
+    challenge_len: usize,
+    scope_signature: *const u8,
+    scope_signature_len: usize,
+    declaration_code_signature: *const u8,
+    declaration_code_signature_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (files, accounts_json, challenge, scope_signature, declaration_code_signature) = unsafe {
+            (
+                session::Files {
+                    circuit: input(circuit, circuit_len)?,
+                    verification_key: input(verification_key, verification_key_len)?,
+                    crs_g1: input(crs_g1, crs_g1_len)?,
+                    crs_g2: input(crs_g2, crs_g2_len)?,
+                },
+                input(accounts_json, accounts_json_len)?,
+                input(challenge, challenge_len)?,
+                input(scope_signature, scope_signature_len)?,
+                input(declaration_code_signature, declaration_code_signature_len)?,
+            )
+        };
+        // A session that passed nothing refuses, whatever the list is.
+        session::require_passed(session)?;
+        let list = signed_accounts_of(accounts_json)?;
+        session::records_request(
+            session,
+            &files,
+            &accounts(&list),
+            challenge,
+            scope_signature,
+            declaration_code_signature,
+        )
     })
 }
 

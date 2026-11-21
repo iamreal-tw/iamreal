@@ -65,10 +65,12 @@ pnpm typecheck   # 型別檢查
 | `POST /api/v1/challenges` | Durable Object | 日期是發出那一刻的台灣日期，加 16 個隨機位元組；先存進題目表再回。請求的內容不讀。存著的規則版本和程式的不同時不發，回 `503` `paused` |
 | `POST /api/v1/records` | Worker 和 Durable Object 各兩段 | 見[送出一筆](#送出一筆) |
 | `POST /api/v1/card-state` | Worker 檢查格式，Durable Object 讀卡片狀態表 | 場合字串不是這份名冊的、匿名編號不是它唯一的寫法，都是 `malformed`，不問 Durable Object。平台表的每個平台一項；存著的狀態沒有某個平台的名額時，那一項是沒用過的名額。回應沒有 `head` |
-| `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表 |
+| `GET /api/v1/config` | Worker 自己 | `crl_max_age_days` 是 3；`platforms` 是這份名冊的平台表；`min_app` 是這份名冊的最低版本 |
 | `GET /api/v1/fingerprint` | Durable Object | 最近一次公布的那一行：`date`、`count`、`fingerprint`。回的是物件記著自己已經寫進指紋檔、讀回核對過的最後一行，不去讀儲存桶（[每天換日公布名冊](#每天換日公布名冊)）。還沒公布過時 `date` 是 `null`、`count` 是 0、`fingerprint` 是 64 個 0。`paused` 時照常回答。舊後台叫 `head` 的那個介面，Worker 沒有 |
 
 **平台表**寫在 [`protocol/src/platforms.ts`](../protocol/src/platforms.ts)，照名冊分兩張，內容和 `spec/scope.md` 的表一字不差（`protocol/` 的測試拿規格的 Markdown 核對）。後台只從 [`src/settings.ts`](src/settings.ts) 的 `rosterSettingsOf` 一個地方取得它：`config` 送給裝置的、`card-state` 列的、檢查存著的卡片狀態用的是同一張。這個環境用哪一份名冊，是設定 `ROSTER_KIND`（見[設定檔](#設定檔)）；設定只說是哪一份，表的內容不在設定裡。
+
+**最低版本**（`min_app`，`spec/min-app.md`、ADR-0035）寫在 [`src/min-app.ts`](src/min-app.ts)，正式名冊和測試名冊各一組，同樣照 `ROSTER_KIND` 選，從 `rosterSettingsOf` 取得。現在兩組的 `build` 都是最小的 1，不擋任何一版 app。調高時改這個檔和 `test/api.test.ts` 裡逐字比對的 `config`，一次一個 PR，說明裡寫理由。後台收證明時不看 app 的版本；`test/api.test.ts` 確認兩份名冊送出的值兩個 app 都讀得懂（`protocol/src/min-app.ts`）。
 
 ### 名冊和物件的名稱要對得上
 
@@ -351,14 +353,14 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 | 2 | 一串固定種子產生的長序列，`protocol/` 的規則配記憶體（`MemoryRules`），以 Go 的 `roster/` 當答案 | `test/sequence.test.ts` |
 | 3 | 同一串，配 Durable Object 的儲存，每一筆之間重啟名冊的 Durable Object | `test/sequence.test.ts` |
 
-第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，每個 PR 都跑（不到 1 秒）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
+第 2、3 層（[#73](https://github.com/iamreal-tw/iamreal/issues/73)）在同一個檔。第 2 層在 `pnpm test` 裡，改到 `typescript` 清單的 PR 和合併佇列都跑（不到 1 秒；清單見 `.github/README.md`「必要檢查在 PR 階段照路徑跳過」，`worker/` 整個在裡面）。第 3 層約 107 秒，幾乎是這個檔全部的時間，只在設了 `IAMREAL_SEQUENCE_STORAGE=1` 時跑，沒設時測試的輸出列它為跳過並寫明原因。在這個目錄：
 
 ```sh
 node --experimental-strip-types --test test/sequence.test.ts                             # 第 2 層
 IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.test.ts  # 第 2、3 層
 ```
 
-**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層每個 PR 擋著，存了再讀的不同由第 1 層每個 PR 擋著（標準答案的每一案，每筆之間重啟）；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
+**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層擋著，存了再讀的不同由第 1 層擋著（標準答案的每一案，每筆之間重啟），兩層都在改到 `typescript` 清單的 PR 和合併佇列跑；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
 
 要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
 
@@ -703,7 +705,7 @@ IAMREAL_BB=/path/to/bb pnpm test                                                
 IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.ts        # 只跑比對
 ```
 
-`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。GitHub Actions 上，每個 PR 的 `typescript` 工作（`.github/workflows/checks.yml`）設了兩樣，會跑到它；`web/` 的兩套瀏覽器測試在另一個工作流程，只在它們用到的檔改了才跑（`.github/README.md`）。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
+`IAMREAL_BB` 指到 `bb` 6.0.0（和 Go 的測試同一個變數），另外要有 `go`；沒設就跳過。約 80 秒。GitHub Actions 上，`typescript` 工作（`.github/workflows/checks.yml`；改到它的清單的 PR 和合併佇列都跑）設了兩樣，會跑到它；`web/` 的兩套瀏覽器測試在另一個工作流程，只在它們用到的檔改了才跑（`.github/README.md`）。[`test/compare.test.ts`](test/compare.test.ts) 做的事：
 
 1. 用一個頂替 `bb` 的腳本跑 `go test ./verifier`，留下每次交給 `bb verify` 的驗證金鑰、證明、公開輸入，再把同樣的參數交給真的 `bb`。內容相同的算一案。Go 的測試裡有亂數的證明，所以每次跑的案例不完全相同。
 2. 加上 Go 在呼叫 `bb` 之前就擋掉、所以腳本看不到的那幾種，每個電路 16 案：公開輸入加上 `p`、等於 `p`、`2^256 − 1`、個數多一個少一個、沒有、少一個位元組；證明是空的、多或少一個位元組、多或少一個值、非零知識的證明；別的電路的驗證金鑰（配原本的公開輸入、配那個電路的公開輸入）。
@@ -1024,7 +1026,7 @@ pnpm run deploy:test
 - `worker/site/`：Static Assets 的檔案（`pages.css`、`_headers`、`_redirects`）。它們不在 `build` 工作交出來的那一包裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這三個檔（`checkSiteFiles`）
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
-[`test/workflows.ts`](test/workflows.ts) 是工作流程的白名單：`deploy-test.yml` 的兩個工作必須逐字是那裡寫的（上傳那一行由 `uploadArgs` 組出來），PR 的兩個檢查工作流程 `checks.yml`、`checks-browser.yml` 的每個鍵、action、`with`、`env`、`working-directory` 都要在清單裡，觸發條件逐字照寫（`paths` 只准在 `checks-browser.yml`，內容逐字等於 `BROWSER_PATHS`），`concurrency` 的群組各自不同，整個 `.github/workflows/` 有 `secrets` 這個字的行（註解也算）恰好是上傳那一步的兩行。檔案用一個只讀 YAML 一小部分的讀法讀，那部分以外的寫法都算問題；檔裡只准可列印的 ASCII 和換行，註解也一樣，空白只認 ASCII 的空格（不然 U+00A0 這類空白開頭、接著 `#` 的一行，這裡當成註解，libyaml 這類照 YAML 規格只認 ASCII 空白的解析器卻會把它接到上一行的值後面，折進 `run`（#39 第二輪審查用 libyaml 實測））。它防手誤和明顯的改動，不能代替逐行看；它看不到什麼，寫在那個檔的開頭。
+[`test/workflows.ts`](test/workflows.ts) 是工作流程的白名單：`deploy-test.yml` 的兩個工作必須逐字是那裡寫的（上傳那一行由 `uploadArgs` 組出來），PR 的三個檢查工作流程 `checks.yml`、`checks-browser.yml`、`checks-ios.yml` 的每個鍵、action、`with`、`env`、`working-directory` 都要在清單裡，觸發條件逐字照寫（`paths` 只准在 `checks-browser.yml`、`checks-ios.yml`，內容逐字等於 `BROWSER_PATHS`、`IOS_PATHS`；`merge_group` 只准在 `checks.yml`），`checks-ios.yml` 的 runner 和 Xcode 逐字是 `IOS_RUNNER`、`IOS_DEVELOPER_DIR`，`concurrency` 的群組各自不同，`checks.yml` 的工作恰好是 `main` 的 ruleset 要求的四個必要檢查 `go`、`typescript`、`device-core`、`android`（`REQUIRED_CHECKS`），而且都不設 `name`：必要檢查照工作的名稱比對，改了 id 或設了 `name`，合併佇列就等不到它要的檢查（#180，`.github/README.md`「合併佇列」），每個工作流程最上面的 `cache-mode` 逐字照寫（`cache.yml` 是 `write`，`checks.yml` 是 `read`，其他和新的工作流程是 `none`），工作層級不准設；存快取的 `cache.yml` 只在推到 `main` 時觸發、工作逐字是那裡寫的（#203，`.github/README.md`「快取」），整個 `.github/workflows/` 有 `secrets` 這個字的行（註解也算）恰好是上傳那一步的兩行。檔案用一個只讀 YAML 一小部分的讀法讀，那部分以外的寫法都算問題；檔裡只准可列印的 ASCII 和換行，註解也一樣，空白只認 ASCII 的空格（不然 U+00A0 這類空白開頭、接著 `#` 的一行，這裡當成註解，libyaml 這類照 YAML 規格只認 ASCII 空白的解析器卻會把它接到上一行的值後面，折進 `run`（#39 第二輪審查用 libyaml 實測））。它防手誤和明顯的改動，不能代替逐行看；它看不到什麼，寫在那個檔的開頭。
 
 ## 第一次部署量到的
 

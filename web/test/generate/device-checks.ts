@@ -35,7 +35,7 @@ import {
   name,
   subjectDirectoryAttributes,
 } from "../fixtures/certs.ts";
-import { IDP, indexLine, makeCrl } from "../fixtures/crls.ts";
+import { DELTA, IDP, indexLine, makeCrl } from "../fixtures/crls.ts";
 import { SHA256_WITH_RSA, type TestKey, hex, makeKey, seq, signWith, tlv } from "../fixtures/der-build.ts";
 
 const out = new URL("../../../spec/vectors/device-checks.json", import.meta.url);
@@ -246,6 +246,8 @@ interface MirrorCrl {
   thisUpdate: Date;
   signWith?: TestKey;
   extraExtensions?: Uint8Array[];
+  /** Serial numbers on the CRL besides the three every CRL here has. */
+  alsoRevoked?: bigint[];
   /** The index line says this root (for example "-not_usable_signature"). */
   root?: string;
   /** Serve these bytes under the file's name instead. */
@@ -269,7 +271,7 @@ async function mirror(crls: MirrorCrl[], o: MirrorOptions): Promise<{ mirror: Mi
   const files: Mirror = {};
   const shas: string[] = [];
   for (const c of crls) {
-    const der = await makeCrl({ issuer: c.signWith ?? issuerKeys[c.issuer], serials: [3n, 0x1234n, 0xfedcba9876543210n], crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, extraExtensions: c.extraExtensions });
+    const der = await makeCrl({ issuer: c.signWith ?? issuerKeys[c.issuer], serials: [3n, 0x1234n, 0xfedcba9876543210n, ...(c.alsoRevoked ?? [])], crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, extraExtensions: c.extraExtensions });
     lines.push(await indexLine({ issuer: c.issuer, crlNumber: c.crlNumber, thisUpdate: c.thisUpdate, der, root: c.root ?? ROOT }));
     const sha = await sha256Hex(der);
     shas.push(sha);
@@ -285,11 +287,11 @@ async function mirror(crls: MirrorCrl[], o: MirrorOptions): Promise<{ mirror: Mi
 const crlCases: CrlCase[] = [];
 async function crlCase(
   what: string,
-  o: { issuer?: IssuerName; serverDays?: number; highest?: string | null; crls: MirrorCrl[] } & MirrorOptions,
+  o: { issuer?: IssuerName; serverDays?: number; highest?: string | null; serial?: string; crls: MirrorCrl[] } & MirrorOptions,
   result: (m: { shas: string[] }) => CrlCase["result"],
 ) {
   const m = await mirror(o.crls, o);
-  crlCases.push({ what, issuer: o.issuer ?? "G3", today: TODAY, server_max_age_days: o.serverDays ?? 3, highest: o.highest ?? null, mirror: m.mirror, result: result(m) });
+  crlCases.push({ what, issuer: o.issuer ?? "G3", today: TODAY, server_max_age_days: o.serverDays ?? 3, highest: o.highest ?? null, mirror: m.mirror, ...(o.serial !== undefined && { serial: o.serial }), result: result(m) });
 }
 const G3_100 = (daysBefore = 0, more: Partial<MirrorCrl> = {}): MirrorCrl => ({ issuer: "G3", crlNumber: 100n, thisUpdate: crlTime(daysBefore), ...more });
 /** The first CRL of the case is used. */
@@ -322,6 +324,26 @@ await crlCase(
   () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_signature", highest_after: null }),
 );
 await crlCase("a partitioned CRL", { crls: [G3_100(0, { extraExtensions: [IDP] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_partitioned", highest_after: null }));
+await crlCase("a delta CRL", { crls: [G3_100(0, { extraExtensions: [DELTA] })] }, () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_delta", highest_after: null }));
+// Both extensions: the one that comes first in the CRL decides (spec/revocation-tree.md, rows 6 and 7).
+await crlCase(
+  "issuingDistributionPoint before deltaCRLIndicator: partitioned",
+  { crls: [G3_100(0, { extraExtensions: [IDP, DELTA] })] },
+  () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_partitioned", highest_after: null }),
+);
+await crlCase(
+  "deltaCRLIndicator before issuingDistributionPoint: delta",
+  { crls: [G3_100(0, { extraExtensions: [DELTA, IDP] })] },
+  () => ({ ok: false, problem: "crl_unusable", reason: "not_usable_delta", highest_after: null }),
+);
+// The certificate's own serial number (the one of the certificate cases above) on the CRL.
+await crlCase("the certificate is on the CRL", { serial: SERIAL, crls: [G3_100(0, { alsoRevoked: [BigInt(SERIAL)] })] }, () => ({ ok: false, problem: "revoked", highest_after: "100" }));
+await crlCase("the certificate is not on the CRL: another serial number is", { serial: SERIAL, crls: [G3_100(0, { alsoRevoked: [BigInt(SERIAL) + 1n] })] }, used("2026-11-16"));
+await crlCase(
+  "order: stale before revoked",
+  { serial: SERIAL, crls: [G3_100(4, { alsoRevoked: [BigInt(SERIAL)] })] },
+  () => ({ ok: false, problem: "crl_stale", days: 4, max_age_days: 3, highest_after: null }),
+);
 await crlCase(
   "the file's SHA-256 is not the one in its name",
   { crls: [G3_100(0, { serve: await makeCrl({ issuer: g3, serials: [5n], crlNumber: 100n, thisUpdate: crlTime(0) }) })] },

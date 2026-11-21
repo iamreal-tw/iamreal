@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
+import { readMinAppEntry } from "iamreal-protocol/min-app.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { BAD_PROOF, GOOD_PROOF, circuitOf, mustSubmit, publishCrl, publishG3, sub } from "./records.ts";
@@ -38,8 +39,13 @@ describe("GET /api/v1/config", () => {
     assert.equal(res.status, 200);
     assert.equal(
       await res.text(),
-      '{"crl_max_age_days":3,"platforms":[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}',
+      '{"crl_max_age_days":3,"platforms":[{"platform":"test-example","display_name":"Example (no real service)","username_format":"[a-z0-9-]{1,20}"},{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}',
     );
+  });
+
+  test("min_app is one both apps can read (spec/min-app.md)", async () => {
+    const config = await jsonOf(await worker.fetch("/api/v1/config"));
+    for (const app of ["android", "ios"] as const) assert.notEqual(readMinAppEntry(config, app), null, app);
   });
 
   test("each format string is the one spec/scope.md writes, character for character", async () => {
@@ -765,11 +771,12 @@ describe("the setting that says which roster the environment serves", () => {
       const config = await worker.fetch("/api/v1/config");
       assert.equal(config.status, 200);
       const text = await config.text();
-      assert.equal(text, '{"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]}');
+      assert.equal(text, '{"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}');
       // The row is the one under "Production roster" in spec/scope.md, and no row is a test platform.
       const spec = repoText("spec/scope.md");
       assert.ok(spec.slice(spec.indexOf("**Production roster**", spec.indexOf("## Platforms")), spec.indexOf("**Test rosters only**", spec.indexOf("## Platforms"))).includes("| `threads` | Threads | `[a-z0-9._]{1,30}` |"));
       assert.ok(!text.includes("test-"));
+      for (const app of ["android", "ios"] as const) assert.notEqual(readMinAppEntry(JSON.parse(text), app), null, app);
 
       const state = await cardState(worker, PRODUCTION_SCOPE);
       assert.equal(state.status, 200);

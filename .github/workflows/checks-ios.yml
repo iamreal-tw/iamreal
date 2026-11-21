@@ -1,0 +1,71 @@
+# The iOS check of a pull request: builds device-core/ for the simulator,
+# builds the app of ios/ and runs its tests in the simulator (ios/README.md).
+# It runs on macOS, whose minutes count for more than Linux's, so only when
+# the pull request changes ios/, device-core/, a file the app carries or its
+# tests read, or this file (issue #155; .github/README.md).
+#
+# The same rules as checks.yml, but not on merge_group: this does not run in
+# the merge queue (#180). Triggered by pull_request only, never
+# pull_request_target; read-only; no secret; nothing cached; ASCII only.
+# worker/test/workflows.test.ts checks this file against the rules in
+# worker/test/workflows.ts.
+#
+# Nothing is installed from a package registry: Xcode and rustup come with
+# the runner's image, the Rust is the one of device-core/rust-toolchain.toml,
+# and ios/build-core.sh gets Barretenberg's static library and the CRS from
+# device-core/'s two scripts, which check each SHA-256 before use.
+#
+# A workflow skipped by `paths` reports no check (.github/README.md).
+name: checks-ios
+
+on:
+  pull_request:
+    paths:
+      - ios/**
+      - device-core/**
+      - spec/vectors/**
+      - design/copy/**
+      - web/circuits/**
+      - verifier/vk/**
+      - web/scripts/fetch-crs.mjs
+      - .github/workflows/checks-ios.yml
+
+permissions:
+  contents: read
+
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
+# Its own group: see checks-browser.yml.
+concurrency:
+  group: checks-ios-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # The one Xcode the app is built with (ios/README.md), by its path on the runner's image.
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+
+jobs:
+  ios:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust of rust-toolchain.toml, with the simulator's target
+        working-directory: device-core
+        run: rustup toolchain install && rustup target add aarch64-apple-ios-sim
+      - name: Build device-core/ for the simulator
+        working-directory: ios
+        run: ./build-core.sh simulator
+      - name: Build the app and run its tests in the simulator
+        working-directory: ios
+        run: xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build test
+      - name: check-app.sh turns away what it should
+        working-directory: ios
+        run: ./check-app-test.sh build/Build/Products/Debug-iphonesimulator/IamrealApp.app
+      - name: Build the release configuration, with its checks
+        working-directory: ios
+        run: xcodebuild -project IamrealApp.xcodeproj -scheme IamrealApp -destination "platform=iOS Simulator,name=iPhone 17" -derivedDataPath build -configuration Release build

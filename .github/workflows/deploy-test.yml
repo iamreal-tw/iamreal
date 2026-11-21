@@ -33,6 +33,10 @@ on:
 permissions:
   contents: read
 
+# No cache is restored or saved, by any step (GitHub's "Workflow syntax",
+# cache-mode; .github/README.md).
+cache-mode: none
+
 # One deploy at a time, the newest last; a running one is not stopped halfway.
 concurrency:
   group: deploy-test

@@ -1,0 +1,3 @@
+# What xcodebuild writes with -derivedDataPath build, and Xcode's own files of one user.
+build/
+xcuserdata/
