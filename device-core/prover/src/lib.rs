@@ -573,6 +573,96 @@ pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
     })
 }
 
+/// For tests only (the feature `test-issuers`): opens a session as
+/// [`idc_session_open`] does, but one that checks certificates and CRLs
+/// against the issuer keys given in place of MOICA's. The files it checks
+/// are still the ones written into the core.
+///
+/// `issuers_json` is a JSON array of `{"issuer":"G2","modulus":"<hex>"}`:
+/// `issuer` is `G2` or `G3`, each at most once, at least one; `modulus` is
+/// the key's RSA modulus, big-endian. `IDC_ERR_INPUT` for anything else.
+///
+/// The feature adds this function and nothing else: Poseidon2, the tree
+/// and the session's own functions stay out of reach, as without it. The
+/// library of an app that goes out is built without the feature and has no
+/// such function (README.md, "檢查都通過了").
+///
+/// # Safety
+/// `issuers_json` is null or points to `issuers_json_len` bytes that stay
+/// unchanged during the call; `out` is null or points to a `uint64_t` the
+/// core may write.
+#[cfg(feature = "test-issuers")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_testing_session_open(
+    roster: u32,
+    issuers_json: *const u8,
+    issuers_json_len: usize,
+    out: *mut u64,
+) -> i32 {
+    if out.is_null() {
+        return IDC_ERR_ARGUMENT;
+    }
+    // SAFETY: `out` is not null, and the caller's to write.
+    unsafe { out.write(0) };
+    code(|| {
+        // Read here, so that the mark stays in every library that has this function.
+        std::hint::black_box(&IDC_TESTING_MARK);
+        let roster = roster_of(roster)?;
+        // SAFETY: the caller's promise.
+        let bytes = unsafe { input(issuers_json, issuers_json_len) }?;
+        let issuers = testing_issuers(bytes).ok_or(IDC_ERR_INPUT)?;
+        let handle = session::open(
+            roster,
+            session::Trust {
+                issuers,
+                artifacts: artifacts::BUILT_IN,
+            },
+        );
+        // SAFETY: as above.
+        unsafe { out.write(handle) };
+        Ok(())
+    })
+}
+
+/// Marks a library built with the feature `test-issuers`: the build of an
+/// app that goes out fails when its executable holds these bytes
+/// (ios/check-app.sh).
+#[cfg(feature = "test-issuers")]
+#[used]
+static IDC_TESTING_MARK: [u8; 39] = *b"iamreal-device-core:testing-issuer-keys";
+
+/// The issuer keys of [`idc_testing_session_open`].
+#[cfg(feature = "test-issuers")]
+fn testing_issuers(
+    bytes: &[u8],
+) -> Option<Vec<(iamreal_device_checks::issuers::IssuerName, Vec<u8>)>> {
+    use iamreal_device_checks::issuers::IssuerName;
+    let json = Json::parse(bytes)?;
+    let list = json.as_array()?;
+    let mut issuers: Vec<(IssuerName, Vec<u8>)> = Vec::new();
+    for entry in list {
+        let object = entry.as_object()?;
+        if object.len() != 2 {
+            return None;
+        }
+        let name = IssuerName::parse(object.get("issuer")?.as_str()?)?;
+        let hex = object.get("modulus")?.as_str()?.as_bytes();
+        if hex.is_empty() || hex.len() % 2 != 0 || issuers.iter().any(|(n, _)| *n == name) {
+            return None;
+        }
+        let digit = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+        let modulus = hex
+            .chunks(2)
+            .map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?))
+            .collect::<Option<Vec<u8>>>()?;
+        issuers.push((name, modulus));
+    }
+    if issuers.is_empty() {
+        return None;
+    }
+    Some(issuers)
+}
+
 /// Closes a session: the certificate, the name on it and everything the
 /// core computed from them are overwritten with zeros and released. A
 /// number that names no session (0, or one already closed) does nothing.

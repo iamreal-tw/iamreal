@@ -19,7 +19,7 @@ use iamreal_device_core::{
     idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
     idc_session_card_state_request, idc_session_check_artifacts, idc_session_check_certificates,
     idc_session_check_crl, idc_session_check_date, idc_session_choose_crl, idc_session_close,
-    idc_session_open,
+    idc_session_open, idc_testing_session_open,
 };
 use serde_json::{Value, json};
 use sha2::Digest;
@@ -975,5 +975,86 @@ fn a_session_an_app_opens_trusts_only_the_keys_of_moica() {
     assert_eq!(
         session.card_state_request(card.now, &card.scope_signature),
         Err(IDC_ERR_REFUSED)
+    );
+}
+
+#[test]
+fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
+    let v = vectors("device-checks.json");
+    let keys: Vec<Value> = cases(&v, "issuers")
+        .iter()
+        .map(|k| json!({ "issuer": k["issuer"], "modulus": hex(&unhex(text(k, "modulus"))) }))
+        .collect();
+    let open = |issuers: &[u8]| {
+        let mut handle = 7u64;
+        let code = unsafe {
+            idc_testing_session_open(
+                IDC_ROSTER_TEST,
+                issuers.as_ptr(),
+                issuers.len(),
+                &mut handle,
+            )
+        };
+        (code, handle)
+    };
+
+    let (code, handle) = open(&serde_json::to_vec(&keys).unwrap());
+    assert_eq!(code, IDC_OK);
+    assert_ne!(handle, 0);
+    let session = Session(handle);
+    // The first case of the vectors: a certificate the vectors' G3 key issued.
+    let case = &cases(&v["certificate"], "cases")[0];
+    for certificate in case["certificates"].as_array().unwrap() {
+        session
+            .add_certificate(&unhex(certificate.as_str().unwrap()))
+            .unwrap();
+    }
+    let result = session
+        .check_certificates(noon(text(case, "today")))
+        .unwrap();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["issuer"], case["result"]["issuer"]);
+
+    // What is not a list of issuer keys opens nothing.
+    let modulus = text(&keys[0], "modulus");
+    for (what, issuers) in [
+        ("not JSON", "[".to_string()),
+        ("not a list", "{}".to_string()),
+        ("no key", "[]".to_string()),
+        (
+            "an issuer that is neither G2 nor G3",
+            format!(r#"[{{"issuer":"G4","modulus":"{modulus}"}}]"#),
+        ),
+        (
+            "a modulus that is not hex",
+            r#"[{"issuer":"G2","modulus":"zz"}]"#.to_string(),
+        ),
+        (
+            "an empty modulus",
+            r#"[{"issuer":"G2","modulus":""}]"#.to_string(),
+        ),
+        (
+            "an issuer twice",
+            format!(
+                r#"[{{"issuer":"G2","modulus":"{modulus}"}},{{"issuer":"G2","modulus":"{modulus}"}}]"#
+            ),
+        ),
+        (
+            "a key more",
+            format!(r#"[{{"issuer":"G2","modulus":"{modulus}","more":1}}]"#),
+        ),
+    ] {
+        assert_eq!(open(issuers.as_bytes()), (IDC_ERR_INPUT, 0), "{what}");
+    }
+    let mut handle = 0u64;
+    assert_eq!(
+        unsafe { idc_testing_session_open(9, b"[]".as_ptr(), 2, &mut handle) },
+        IDC_ERR_ARGUMENT
+    );
+    assert_eq!(
+        unsafe {
+            idc_testing_session_open(IDC_ROSTER_TEST, b"[]".as_ptr(), 2, std::ptr::null_mut())
+        },
+        IDC_ERR_ARGUMENT
     );
 }
