@@ -33,6 +33,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { ISSUER_NAMES } from "../src/issuers.ts";
+import { testRosterLine } from "./copy.ts";
 import { newestCrls, readIndex } from "../src/crl-index.ts";
 import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, SCRIPT_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
 
@@ -94,7 +95,8 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
       const res = await parts.site(path);
       const page = await res.text();
       if (res.status !== status) return `the status is ${res.status}, not ${status}`;
-      const mark = `<p class="test-roster">測試名冊　不定期清空，上次清空：<time>${parts.clearedOn}</time></p>`;
+      // The sentence of design/copy/test-site.md, its date in an element of its own, as the pages write it (test/pages.ts, `testRosterMark`).
+      const mark = `<p class="test-roster">${testRosterLine(parts.clearedOn).replace(parts.clearedOn, `<time>${parts.clearedOn}</time>`)}</p>`;
       if (!page.includes(mark)) return `the page does not have the mark of a test roster with the date ${parts.clearedOn}`;
       if (!page.includes('<meta name="robots" content="noindex">')) return "the page does not say noindex";
       return headersProblem(res, script === true ? { ...pageHeaders, ...SCRIPT_PAGE_HEADERS } : pageHeaders);
