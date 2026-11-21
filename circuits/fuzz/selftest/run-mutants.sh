@@ -2,7 +2,8 @@
 # Self-test of the fuzzer. Runs Noir-only cases (no circom) against the real
 # circuits and against each mutant (selftest/make-mutants.sh): N random cases
 # plus 40 cases of each focused mutation. The real circuits must give no
-# finding; each mutant must give at least one.
+# finding; each mutant must give at least one. Exits 1 if either does not hold,
+# or if there is no mutant (make-mutants.sh first).
 set -u
 F=$(cd "$(dirname "$0")/.." && pwd)
 W=${FUZZ_WORK:-${TMPDIR:-/tmp}/circuits-fuzz}   # as make-mutants.sh
@@ -21,9 +22,22 @@ run() {
   done
   wait
   n=$(cat "$OUT/$name"/results/*/*.jsonl | wc -l | tr -d ' ')
-  f=$(ls "$OUT/$name/findings" | wc -l | tr -d ' ')
+  f=$(ls "$OUT/$name/findings" 2>/dev/null | wc -l | tr -d ' ')
   by=$(cd "$OUT/$name/findings" 2>/dev/null && ls | sed -E 's/^self-[a-z0-9-]*-?([a-z0-9-]*)-[0-9]+\.json$/\1/' | sort | uniq -c | tr '\n' ' ')
   echo "$name: $n cases, $f with findings  [$by]"
+  if [ "$name" = baseline ] && [ "$f" != 0 ]; then
+    echo "run-mutants: the real circuits gave $f finding(s)" >&2; failed=1
+  elif [ "$name" != baseline ] && [ "$f" = 0 ]; then
+    echo "run-mutants: mutant $name gave no finding" >&2; failed=1
+  fi
 }
+failed=0
 run baseline "$F/../target"
-for m in "$W"/mutants/*/; do run "$(basename "$m")" "$m/target"; done
+mutants=0
+for m in "$W"/mutants/*/; do
+  [ -d "$m" ] || continue
+  mutants=$((mutants + 1))
+  run "$(basename "$m")" "$m/target"
+done
+[ "$mutants" != 0 ] || { echo "run-mutants: no mutant in $W/mutants; run make-mutants.sh first" >&2; failed=1; }
+exit "$failed"

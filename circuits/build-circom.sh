@@ -16,7 +16,8 @@
 # package.json says "module", Node would read them as ES modules); and a file
 # COMMIT with the commit. Everything else (the clone, node_modules, .r1cs, .sym, the
 # C++ witness generators) is deleted. If the directory already holds a build
-# of that commit, nothing is done. tests/lib/run.mjs and fuzz/ look for it in
+# of that commit, nothing is done. A directory this script did not make (one
+# that is not empty and has no COMMIT) is refused, never deleted. tests/lib/run.mjs and fuzz/ look for it in
 # .zkID/wallet-unit-poc/circom/build unless ZKID_CIRCOM_BUILD says where.
 #
 #   ./build-circom.sh [<directory>]
@@ -35,6 +36,11 @@ circuits="certChainRS2048 certChainRS4096 userSigRS2048"
 if [ -f "$dir/COMMIT" ] && [ "$(cat "$dir/COMMIT")" = "$commit" ]; then
   echo "build-circom: $dir already holds the build of $commit"
   exit 0
+fi
+# The build replaces $dir; only one this script made, or an empty one.
+if [ -e "$dir" ] && { [ ! -d "$dir" ] || { [ ! -f "$dir/COMMIT" ] && [ -n "$(ls -A "$dir")" ]; }; }; then
+  echo "build-circom: $dir is not empty and was not made by build-circom.sh (it has no COMMIT); give an empty or new directory" >&2
+  exit 1
 fi
 
 case "$(circom --version 2>/dev/null)" in
