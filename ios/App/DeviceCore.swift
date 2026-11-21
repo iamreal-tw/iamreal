@@ -92,6 +92,19 @@ enum DeviceCore {
         return String(decoding: short, as: UTF8.self)
     }
 
+    /// The answer to a submission as the done screen tells it
+    /// (idc_records_response): JSON. `response` is the body of the
+    /// server's 201 as it sent it, `rows` the rows of listConsequence for
+    /// the list the card signed. A body the core cannot read is not a
+    /// failure: the record is in the roster.
+    static func recordsResponse(_ response: Data, rows: Data) throws -> Data {
+        try response.withUnsafeBytes { a in
+            try rows.withUnsafeBytes { r in
+                try output { idc_records_response(a.bytes, a.count, r.bytes, r.count, $0) }
+            }
+        }
+    }
+
     /// One card proof in progress in the core (the header, "A session").
     /// The core keeps what it checked; this holds the number that names
     /// it and closes the session when it goes away, which overwrites the

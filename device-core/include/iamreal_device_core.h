@@ -163,6 +163,35 @@ int32_t idc_card_status(const uint8_t *platforms_json, size_t platforms_json_len
  * anything else. */
 int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *out);
 
+/* The answer to a submission, as the done screen tells it
+ * (spec/records-response.md): JSON in *out.
+ *
+ * response: the body of the 201 of POST /api/v1/records, as the server sent
+ * it. Only of a 201: with any other status the record was not accepted,
+ * and this function is not called.
+ * rows_json: the rows the confirmation screen showed, the "rows" of
+ * idc_list_consequence's output for the list the card signed. Of a row,
+ * platform, kind and username are read.
+ *
+ * *out is:
+ *   {"seq":138,"record_hash":"...","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}],"mismatches":[]}
+ * seq and record_hash are the record's, or both null when nothing of the
+ * answer is told (the body is not an answer with the two in their form);
+ * kinds is null then too. kinds is what the server says the record is on
+ * each platform, in ascending order of platform, or null when they cannot
+ * be read; account_cards is null when it is not a count. mismatches is the
+ * platforms on which kinds differs from the rows (another kind, another
+ * account, or only one of the two has the platform), in ascending order;
+ * empty when kinds is null.
+ *
+ * A 201 is a record in the roster whatever its body is: no body is an
+ * error. IDC_ERR_INPUT only when the rows are not a JSON array of rows in
+ * ascending order of platform, each platform once: a mistake of the app,
+ * but one the core sees only in the bytes. */
+int32_t idc_records_response(const uint8_t *response, size_t response_len,
+                             const uint8_t *rows_json, size_t rows_json_len,
+                             idc_buf *out);
+
 /*
  * A session: one card proof in progress (device-core/README.md, "檢查都通過
  * 了"). The core keeps what it checked; the app holds the number that names

@@ -223,6 +223,9 @@ Submits one card proof: the card's whole list of accounts.
   that cannot read `kinds` or `account_cards`, or gets a `kind` it does not
   know, treats them as unknown and says only that the list was recorded:
   the record is in the roster by then.
+  [`spec/records-response.md`](../../spec/records-response.md) defines how
+  the device reads this response and how it compares `kinds` with what its
+  confirmation screen said, so that every client tells the same.
 - Errors:
 
   | Status | Code | Meaning |

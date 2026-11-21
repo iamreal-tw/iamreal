@@ -13,6 +13,7 @@
 
 mod alloc;
 mod json;
+mod records_response;
 mod server_state;
 
 /// Declares a module that is `pub` only with the feature `testing`.
@@ -39,6 +40,7 @@ use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 use serde_json::json;
 
 use crate::json::Json;
+use crate::records_response::{mismatches, read_answer, read_shown_rows};
 use crate::server_state::{read_card_state, read_platforms};
 
 /// The version of the C functions: the number the header gives as
@@ -578,6 +580,78 @@ pub unsafe extern "C" fn idc_short_id(
         parse_scoped_id(text).ok_or(IDC_ERR_INPUT)?;
         let text = std::str::from_utf8(text).map_err(|_| IDC_ERR_INPUT)?;
         Ok(short_id(text).ok_or(IDC_ERR_INPUT)?.as_bytes().to_vec())
+    })
+}
+
+/// The answer to a submission, as the done screen tells it
+/// (spec/records-response.md): JSON in `*out`.
+///
+/// - `response`: the body of the `201` of `POST /api/v1/records`, as the
+///   server sent it. Only of a `201`: with any other status the record was
+///   not accepted, and this function is not called.
+/// - `rows_json`: the rows the confirmation screen showed, the `rows` of
+///   [`idc_list_consequence`]'s output for the list the card signed. Of a
+///   row, `platform`, `kind` and `username` are read.
+///
+/// `*out` is `{"seq":138,"record_hash":"…","kinds":[{"platform":"threads",
+/// "kind":"first","username":"alice","account_cards":1}],"mismatches":[]}`:
+///
+/// - `seq`, `record_hash`: the record's, or both null when nothing of the
+///   answer is told (the body is not an answer with the two in their
+///   form). `kinds` is null then too.
+/// - `kinds`: what the server says the record is on each platform, in
+///   ascending order of platform; null when they cannot be read.
+///   `account_cards` is null when it is not a count.
+/// - `mismatches`: the platforms on which `kinds` differs from the rows
+///   (another kind, another account, or only one of the two has the
+///   platform), in ascending order; empty when `kinds` is null.
+///
+/// A `201` is a record in the roster whatever its body is: no body is an
+/// error. `IDC_ERR_INPUT` only when the rows are not a JSON array of rows
+/// in ascending order of platform, each platform once: a mistake of the
+/// app, but one the core sees only in the bytes.
+///
+/// # Safety
+/// The two inputs point to as many bytes as their lengths say; `out` is
+/// null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_records_response(
+    response: *const u8,
+    response_len: usize,
+    rows_json: *const u8,
+    rows_json_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (response, rows_json) = unsafe {
+            (
+                input(response, response_len)?,
+                input(rows_json, rows_json_len)?,
+            )
+        };
+        let shown = read_shown_rows(rows_json).ok_or(IDC_ERR_INPUT)?;
+        let answer = read_answer(response);
+        let kinds = answer.as_ref().and_then(|answer| answer.kinds.as_deref());
+        let value = json!({
+            "seq": answer.as_ref().map(|answer| answer.seq),
+            "record_hash": answer.as_ref().map(|answer| answer.record_hash.as_str()),
+            "kinds": kinds.map(|kinds| {
+                kinds
+                    .iter()
+                    .map(|k| {
+                        json!({
+                            "platform": k.platform,
+                            "kind": k.kind,
+                            "username": k.username,
+                            "account_cards": k.account_cards,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            }),
+            "mismatches": kinds.map(|kinds| mismatches(&shown, kinds)).unwrap_or_default(),
+        });
+        serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
     })
 }
 
