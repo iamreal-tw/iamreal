@@ -417,6 +417,113 @@ pub unsafe extern "C" fn idc_list_consequence(
     })
 }
 
+/// The state of a card as the screen of its accounts shows it, before the
+/// cardholder changes the list (spec/list-consequence.md, "The card's state,
+/// as shown"): JSON in `*out`.
+///
+/// `platforms_json`, `card_state_json`, `known_platforms_json` and `now`
+/// are those of [`idc_list_consequence`], and are read the same way.
+///
+/// ```text
+/// {"last_card_proof":"2026-11-04","days_since":12,"daily_limit":false,
+///  "known_platforms":["threads"],
+///  "rows":[{"platform":"test-example","known":false,"current":"alice-b"},
+///          {"platform":"threads","known":true,"current":"alice","last_declared":"alice",
+///           "switch_count":1,"switches_left":4,"correction_today":false}]}
+/// ```
+///
+/// - `last_card_proof`: the date of the card's last valid record, or null.
+/// - `days_since`: the days from that date to today; null without one.
+/// - `daily_limit`: the card has 3 valid records dated today, so no list
+///   can be declared today (spec/roster-rules.md, check 6).
+/// - `known_platforms`: the platforms of the table the device knows, in
+///   ascending order, offered or not.
+/// - `rows`, in ascending order of platform: one for every platform
+///   offered (`known` true: the entry's `current`, `last_declared` and
+///   `switch_count`, the switches left by the rules, and whether
+///   `correction_date` is today, when a change is a correction), and one
+///   for every kept account (`known` false: `current`, shown as it is and
+///   not changed).
+///
+/// `IDC_ERR_INPUT` when the table or the state cannot be read, when the
+/// known platforms are not a JSON array of platform IDs, none twice, or
+/// when `now` is outside the years 2000 to 2049 in Taiwan.
+///
+/// # Safety
+/// The three inputs point to as many bytes as their lengths say; `out` is
+/// null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_card_status(
+    platforms_json: *const u8,
+    platforms_json_len: usize,
+    card_state_json: *const u8,
+    card_state_json_len: usize,
+    known_platforms_json: *const u8,
+    known_platforms_json_len: usize,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let (platforms_json, card_state_json, known_platforms_json) = unsafe {
+            (
+                input(platforms_json, platforms_json_len)?,
+                input(card_state_json, card_state_json_len)?,
+                input(known_platforms_json, known_platforms_json_len)?,
+            )
+        };
+        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+        let known = platform_ids_of(known_platforms_json)?;
+        let table: Vec<_> = Json::parse(platforms_json)
+            .as_ref()
+            .and_then(read_platforms)
+            .ok_or(IDC_ERR_INPUT)?
+            .into_iter()
+            .filter(|row| known.iter().any(|id| id == row.id()))
+            .collect();
+        let (state, offered) = Json::parse(card_state_json)
+            .and_then(|state| read_card_state(&state, &table, today))
+            .ok_or(IDC_ERR_INPUT)?;
+        let card = &state.card;
+        let mut rows: Vec<(&str, serde_json::Value)> = offered
+            .iter()
+            .map(|row| {
+                let slot = card.slots.get(row.id()).cloned().unwrap_or_default();
+                let value = json!({
+                    "platform": row.id(),
+                    "known": true,
+                    "current": slot.current,
+                    "last_declared": slot.last_declared,
+                    "switch_count": slot.switch_count,
+                    "switches_left": roster_rules::MAX_SWITCHES - slot.switch_count,
+                    "correction_today": slot.correction_date == Some(today),
+                });
+                (row.id(), value)
+            })
+            .chain(state.kept.iter().map(|account| {
+                let value = json!({
+                    "platform": account.platform,
+                    "known": false,
+                    "current": account.username,
+                });
+                (account.platform.as_str(), value)
+            }))
+            .collect();
+        rows.sort_by(|a, b| a.0.cmp(b.0));
+        let value = json!({
+            "last_card_proof": card.last_card_proof.map(|date| date.to_string()),
+            "days_since": card
+                .last_card_proof
+                .map(|date| today.days_since_1970() - date.days_since_1970()),
+            "daily_limit": card.last_card_proof == Some(today)
+                && card.proofs_on_last_date >= roster_rules::MAX_PER_DATE,
+            "known_platforms": table.iter().map(|row| row.id()).collect::<Vec<_>>(),
+            "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
+        });
+        serde_json::to_vec(&value).map_err(|_| IDC_ERR_INTERNAL)
+    })
+}
+
 /// Opens a session for one card proof on `roster` and puts the number
 /// that names it in `*out`: never 0. The session checks against MOICA's
 /// keys and the files written into the core. Close it with

@@ -175,6 +175,7 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_scope_string` | 這份名冊的場合字串（31 個位元組），卡片第一次簽的就是它 |
 | `idc_declaration_code` | 帳號清單和題目的宣告碼（31 個位元組），卡片第二次簽的就是它。清單沒照平台排序、同一個平台兩次、題目不是唯一的寫法，都是 `IDC_ERR_INPUT` |
 | `idc_list_consequence` | 持卡人改過的清單在每個平台上的後果（JSON），給確認的畫面（`spec/list-consequence.md`）。收 `config` 的 `platforms` 和 `card-state` 的回應（照後台送來的原樣）、app 有自己那一份的平台、持卡人的清單、裝置時鐘的現在；讀不懂的回應、清單裡不是提供改的平台，都是 `IDC_ERR_INPUT`。回傳卡片要簽的整份清單（交給 `idc_declaration_code`）和每一列，或不能簽的理由（`username`、`empty`、`switch_limit`、`daily_limit`）。形狀寫在標頭檔 |
+| `idc_card_status` | 這張卡片的現況（JSON），給「你的帳號」那個畫面：上次過卡的日期和到今天幾天、今天是不是已經 3 筆、每個提供改的平台現在的帳號、上一次宣告的帳號、更換過幾次、還剩幾次、今天改是不是更正，以及裝置不認得的平台上原樣保留的帳號。輸入和讀法同 `idc_list_consequence`，算法是 `spec/list-consequence.md` 的「The card's state, as shown」。它不判斷任何一份清單收不收。讀不懂的回應是 `IDC_ERR_INPUT`，錯誤只有代碼。形狀寫在標頭檔 |
 | `idc_session_*` | 一次過卡的檢查、「檢查都通過了」、查現況的請求、證明和送出的請求，見上面那一節的表。每一塊緩衝區由誰釋放寫在標頭檔每個函式的說明裡 |
 
 ## 套件和工具鏈
@@ -251,6 +252,7 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
 - `checks/tests/roster_rules.rs`（不需要 Barretenberg）：`roster-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/roster-rules.md` 寫的、標準答案帶的版本號相同
 - `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
+- `prover/tests/c_card_status.rs`：`idc_card_status`，照 app 呼叫的方式。`card-status.json` 的每一案，結果和標準答案相同；`list-consequence.json` 裡每一個讀不懂的回應都不收；只有 C 函式才有的：認得的平台的形狀、時鐘、`NULL`
 - `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）
 - `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替

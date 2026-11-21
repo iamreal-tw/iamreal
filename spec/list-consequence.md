@@ -130,6 +130,30 @@ A row has:
 A kept account is always a `refresh` with `known` false: the list keeps
 it as it is.
 
+## The card's state, as shown
+
+Before the cardholder changes the list, the screen shows the card's state.
+What it shows is computed from the same two answers, read as above, and
+today's date; every client shows the same for the same answers and date.
+
+| Field | Value |
+|---|---|
+| `last_card_proof` | The answer's `last_card_proof`: a date, or null |
+| `days_since` | The days from `last_card_proof` to today; null without one. Negative when the date is after today (at most 3 days, by the reading above) |
+| `daily_limit` | True when `last_card_proof` is today and `proofs_on_last_date` is 3: the rules' check 6 refuses every list today |
+| `known_platforms` | The platforms the device knows, in ascending order, offered or not |
+| `rows` | One row for every platform offered and one for every kept account, in ascending order of platform |
+
+A row of a platform offered has `platform`, `known` true, and of the
+platform's entry `current`, `last_declared` and `switch_count`; then
+`switches_left`, 5 minus `switch_count` (the switches the rules still
+allow), and `correction_today`, true when `correction_date` is today: a
+change of the account today is then a `correction`, which uses no switch.
+
+A row of a kept account has `platform`, `known` false and `current`, the
+account as the server sent it. The screen shows it and does not offer to
+change it.
+
 ## Test vectors
 
 [`vectors/list-consequence.json`](vectors/list-consequence.json): each case
@@ -145,6 +169,11 @@ has the two answers as the server sent them (`platforms`, `card_state`),
 
 Each case also has `known_platforms`, the platforms the device has its
 own definition of.
+
+[`vectors/card-status.json`](vectors/card-status.json): each case has the
+two answers, `known_platforms` and `today`, and the `result`: the fields of
+"The card's state, as shown", or `{"unread": …}` as above. It is made by
+`web/test/generate/card-status.ts` in the same way.
 
 ## Outside these rules
 
