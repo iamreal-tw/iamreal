@@ -5,8 +5,8 @@
 # file against them.
 #
 # "build" has no token. It runs the repository's code: scripts/build-deploy.ts
-# builds the card proof page (web/'s build for the test site, after the
-# common reference string is downloaded and checked against its SHA-256)
+# builds the card proof page (web/'s build for the test site, after it
+# downloads the common reference string and checks it against its SHA-256)
 # into worker/site/proof/ and checks it, makes the deploy build of the
 # Worker the way `pnpm run deploy:test` does (the proof verifier's files
 # checked against their SHA-256, then a wrangler dry run) and checks it,
@@ -61,10 +61,6 @@ jobs:
       - name: Install pnpm
         run: npm install --global --ignore-scripts --registry=https://registry.npmjs.org/ pnpm@10.16.1
       - run: pnpm install --frozen-lockfile
-      # The common reference string the card proof page proves with, checked against its SHA-256 (web/README.md).
-      - name: web/ fetch-crs
-        working-directory: web
-        run: pnpm fetch-crs
       - name: Build the card proof page and the Worker, and check both builds
         working-directory: worker
         run: node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"

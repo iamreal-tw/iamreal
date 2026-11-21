@@ -11,7 +11,7 @@
 # pull_request_target; read-only; no secret; nothing cached; ASCII only.
 # worker/test/workflows.test.ts checks this file against the rules in
 # worker/test/workflows.ts, and checks that `paths` holds every top-level
-# directory and file the two tests use (read from their source and the Go
+# directory and file the three tests use (read from their source and the Go
 # packages they build: now only cmd/iamreal-verify, which re-verifies what
 # the Worker published).
 #

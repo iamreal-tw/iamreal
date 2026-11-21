@@ -3,13 +3,14 @@
 // `.env.local` that can deploy that Worker and no other (ADR-0029). It does
 // not use `wrangler login`.
 //
-// The same steps as the workflow (deploy.ts):
+// The same three steps as the workflow (deploy.ts):
 //
-// 0. `buildSite`: the card proof page, the test site's build of web/, into
-//    site/proof/, checked. It needs web/crs/ (`pnpm fetch-crs` in web/).
-//    The directory is removed again when this ends, uploaded or not: it is
-//    not in the repository, and the tests of site/ expect none.
-// 1. `buildDeploy`: the deploy build into a temporary directory, checked.
+// 1. `buildSite`: the card proof page, the test site's build of web/, into
+//    site/proof/, checked; before it, the common reference string checked
+//    against its SHA-256, and downloaded if web/crs/ has none. The
+//    directory is removed again when this ends, uploaded or not: it is not
+//    in the repository.
+// 2. `buildDeploy`: the deploy build into a temporary directory, checked.
 //    Before it, the proof verifier's files are checked against their
 //    SHA-256 (engine-files.ts); a file that does not match stops the deploy
 //    there. All of this is done before `.env.local` is read, so the token
@@ -21,14 +22,14 @@
 //      checks (deploy-build-checks.ts, `configuredCpuMs`). This process has
 //      the shell's environment as it is; that code reads the file and
 //      sends nothing.
-// 2. The upload of that directory as it is (`uploadArgs`), with the token:
+// 3. The upload of that directory as it is (`uploadArgs`), with the token:
 //    the two lines CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID of
 //    `.env.local`, read only now, and given to the wrangler command as
 //    CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in its environment.
 //    They are never put into this process's own environment; wrangler's
 //    library stays loaded in it but is not called again.
 //
-// `pnpm run deploy:test --dry-run` does both and uploads nothing (and still
+// `pnpm run deploy:test --dry-run` does all three and uploads nothing (and still
 // wants the two lines).
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";

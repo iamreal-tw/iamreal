@@ -140,7 +140,7 @@ const CHANGES: Record<string, Change[]> = {
   "25a the card proof page of another run": [replace(D, "          path: worker/site/proof\n      # The build's", "          path: worker/site/proof\n          run-id: 123\n          github-token: ${{ github.token }}\n      # The build's")],
   "25b the deploy job uploads without the card proof page the build job checked": [replace(D, "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n        with:\n          name: proof-page\n          path: worker/site/proof\n", "")],
   "25c the build job hands on a page from another directory": [replace(D, "          name: proof-page\n          path: worker/site/proof\n          if-no-files-found: error\n", "          name: proof-page\n          path: web/dist\n          if-no-files-found: error\n")],
-  "25d the build job builds the page without the common reference string": [replace(D, "      - name: web/ fetch-crs\n        working-directory: web\n        run: pnpm fetch-crs\n", "")],
+
   "26 an if: on the upload": [replace(D, "      - name: Upload to iamreal-test\n", "      - name: Upload to iamreal-test\n        if: github.actor == 'someone'\n")],
   "30 on: [pull_request] in checks.yml": [replace(C, "on:\n  pull_request:\n", "on: [pull_request]\n")],
   "31 run: | before the upload": [replace(D, INSTALL_WRANGLER, `${INSTALL_WRANGLER}      - run: |\n          echo hi\n`)],

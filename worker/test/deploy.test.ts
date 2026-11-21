@@ -5,7 +5,7 @@
 // made up; the real `.env.local` is never read by a test.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { WORKER_DIR, buildArgs, deployTokenOf, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
@@ -146,4 +146,23 @@ test("wrangler reads none of the .env files it would read by default", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("both ways of deploying build and check the card proof page before the Worker's build, and before a token is read or anything uploaded", () => {
+  // `buildSite` is not part of `buildDeploy` (a test of the Worker's build has no use for the page), so each way in
+  // calls it itself. Without the call, an upload from this computer would send whatever site/proof/ held, or no
+  // page. Read from the source: the statements, with the comments taken off.
+  const statements = (script: string): string => readFileSync(join(WORKER_DIR, "scripts", script), "utf8").replace(/^\s*\/\/.*$/gm, "");
+  const order = (text: string, calls: readonly string[]): number[] => calls.map((c) => text.indexOf(c));
+  const increasing = (at: readonly number[]): boolean => at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1]!));
+
+  const local = statements("deploy-test.ts");
+  assert.ok(increasing(order(local, ["buildSite();", "buildDeploy(dir);", "deployTokenOf(", "spawnSync(WRANGLER"])), "deploy-test.ts: the page, the Worker's build, the token, the upload, in that order");
+  assert.equal(local.split("buildSite();").length, 2, "deploy-test.ts builds the page once");
+  // What it built is not left for a later upload to find.
+  assert.match(local, /finally \{[\s\S]*?rmSync\(PROOF_DIR, \{ recursive: true, force: true \}\);/);
+
+  const workflow = statements("build-deploy.ts");
+  assert.ok(increasing(order(workflow, ["buildSite();", "buildDeploy(args[0]!)"])), "build-deploy.ts: the page, then the Worker's build");
+  assert.ok(!/deployTokenOf|uploadArgs|WRANGLER\b/.test(workflow), "build-deploy.ts reads no token and uploads nothing");
 });

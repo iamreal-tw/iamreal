@@ -2488,6 +2488,14 @@ await tryStep("the test site's build: the mark of a test roster, the test site's
     await tab.waitFor(step("before"), "the test site's build's step 1");
     const shown = await markOf(tab);
     check(mark !== copy && shown !== null && shown.first && shown.text === mark && shown.date === CLEARED_ON, `the card proof page has the same mark, above everything else, its date in an element of its own: ${JSON.stringify(shown)}`);
+    // The scope string the build's target has the card sign, as the page that runs says it (src/ui/test-roster.ts reads the target the flow reads).
+    const signs = await tab.eval<string>(`document.querySelector("p.test-roster").dataset.scope`);
+    check(signs === SCOPE && signs === "iamreal-test:public:0__________", `the test site's build signs the test roster's scope string: ${signs}`);
+    // The link of the last screen is the card's page on the test site. The screen itself needs a card proof, which this build
+    // makes only with a real card: read from the scripts the page was sent.
+    const sent = [...new Set(browser.responses.filter((r) => r.url.startsWith(`${testSite.origin}/proof/assets/`) && r.url.endsWith(".js")).map((r) => r.url))];
+    const scripts = (await Promise.all(sent.map(async (u) => (await fetch(u)).text()))).join("\n");
+    check(sent.length > 0 && /["'`]test\.iamreal\.tw["'`]/.test(scripts) && !/["'`]iamreal\.tw["'`]/.test(scripts), `the scripts the page was sent write links with test.iamreal.tw, not iamreal.tw (${sent.length} scripts)`);
     const doc = browser.responses.filter((r) => r.url === `${testSite.origin}/proof`).at(-1);
     check(
       doc?.headers["content-security-policy"] === TEST_SITE_CONTENT_SECURITY_POLICY &&
@@ -2511,6 +2519,10 @@ await tryStep("the test site's build: the mark of a test roster, the test site's
     await tab.waitFor(`document.querySelector("[data-help]")`, "the help page");
     const help = await markOf(tab);
     check(help !== null && help.first && help.text === mark, `the help page has the mark too: ${JSON.stringify(help)}`);
+    await screenshot("testsite-help", tab);
+    await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+    await screenshot("testsite-help-phone", tab);
+    await tab.send("Emulation.clearDeviceMetricsOverride");
     const violations = browser.logs.slice(logsBefore).filter((l) => /Content Security Policy/i.test(l.text));
     check(violations.length === 0, `no Content-Security-Policy violation on the test site's build ${JSON.stringify(violations.map((l) => l.text))}`);
   } finally {

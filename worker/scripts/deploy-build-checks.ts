@@ -270,7 +270,7 @@ export interface ConfiguredSite {
   /** The text of `_headers` and of `_redirects` in `assets.directory`; null if the file is not there. */
   readonly headers: string | null;
   readonly redirects: string | null;
-  /** Every file under `assets.directory`, by its path under it, sorted: what wrangler finds there to upload. */
+  /** Every file under `assets.directory` outside proof/, by its path under it, sorted: what wrangler finds there to upload besides the card proof page, which `configuredProofPages` reads. */
   readonly files: readonly string[];
   /** The SHA-256 of `pages.css` there; null if the file is not there. */
   readonly styleSheetSha256: string | null;
@@ -304,7 +304,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       notFoundHandling: config.assets?.not_found_handling,
       headers: textOf("_headers"),
       redirects: textOf("_redirects"),
-      files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).sort(),
+      files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
       styleSheetSha256: css === undefined || !existsSync(css) ? null : createHash("sha256").update(readFileSync(css)).digest("hex"),
     };
   }
@@ -345,11 +345,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.ok(site.kind === "test" || site.kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
     assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} roster's site`);
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
-    assert.deepEqual(
-      site.files.filter((f) => !f.startsWith("proof/")),
-      SITE_FILES,
-      `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`,
-    );
+    assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
   }
 }

@@ -4,8 +4,9 @@
 // checks it (`buildDeploy`). It reads no token and uploads nothing. The
 // workflow's build job runs it (.github/workflows/deploy-test.yml) and hands
 // both on to the job that uploads; `pnpm run deploy:test` does the same
-// through deploy-test.ts. The page's build needs web/crs/ (`pnpm fetch-crs`
-// in web/): without it the page's check fails.
+// through deploy-test.ts. site/proof/ stays as this leaves it: the workflow
+// hands it on from there. It is not in the repository, and the next deploy
+// build empties it first.
 import { buildDeploy, buildSite } from "./deploy.ts";
 import { PROOF_DIR } from "./proof-page.ts";
 

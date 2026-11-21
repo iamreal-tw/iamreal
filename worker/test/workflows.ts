@@ -553,8 +553,6 @@ export const DEPLOY_JOBS: YamlMap = {
       step("actions/setup-node"),
       { name: "Install pnpm", run: INSTALL_PNPM },
       { run: "pnpm install --frozen-lockfile" },
-      // The common reference string the card proof page proves with: downloaded and checked against its SHA-256 (web/scripts/fetch-crs.mjs).
-      { name: "web/ fetch-crs", "working-directory": "web", run: "pnpm fetch-crs" },
       { name: "Build the card proof page and the Worker, and check both builds", "working-directory": "worker", run: 'node --experimental-strip-types scripts/build-deploy.ts "$RUNNER_TEMP/worker-build"' },
       step("actions/upload-artifact"),
       { uses: uses("actions/upload-artifact"), with: { ...PROOF_PAGE_ARTIFACT, "if-no-files-found": "error" } },

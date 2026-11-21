@@ -126,7 +126,8 @@ test("every environment sends the files of site/ past the Worker, with the heade
       notFoundHandling: "none",
       headers: siteHeaders(expected.kind),
       redirects: SITE_REDIRECTS,
-      // site/proof/, where a deploy builds the card proof page, is not in the repository and not left behind by a deploy.
+      // Without site/proof/, where a deploy builds the card proof page: that build is `configuredProofPages`'s to read
+      // (test/proof-page.test.ts), and one left there by a deploy build made on this computer changes nothing here.
       files: ["_headers", "_redirects", "pages.css"],
       styleSheetSha256: PAGES_CSS_SHA256,
     });
@@ -160,8 +161,6 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],
   ];
   for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
-  // What is under site/proof/ is the card proof page's build, which is not this check's: `checkProofPages` looks at it (test/proof-page.test.ts).
-  checkSiteFiles({ test: { ...real, files: [...real.files, "proof/index.html", "proof/assets/index.js"].sort() } });
   // A production roster's site with the test site's files says noindex: turned away too.
   assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
   checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });

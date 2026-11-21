@@ -2,7 +2,9 @@
 // deploying takes:
 //
 // 1. `buildSite()`: the card proof page, the test site's build of web/, put
-//    into site/proof/ beside wrangler.jsonc and checked (proof-page.ts).
+//    into site/proof/ beside wrangler.jsonc and checked (proof-page.ts),
+//    after the common reference string it carries is checked against its
+//    SHA-256 (and downloaded, where there is none).
 //    The other files of site/ (the style sheet, _headers, _redirects) are
 //    the repository's.
 // 2. `buildDeploy(outDir)`: the deploy build of the Worker, bundled into a
@@ -32,7 +34,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkClearedOn, checkDeployBuild, checkProofPages, configuredClearedOn, configuredProofPages } from "./deploy-build-checks.ts";
 import { prepareEngineFiles } from "./engine-files.ts";
-import { PROOF_DIR, buildProofPage } from "./proof-page.ts";
+import { PROOF_DIR, buildProofPage, fetchCrs } from "./proof-page.ts";
 
 export const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -102,12 +104,16 @@ const DEPLOYED_ENV = "test";
  * (emptied first: whatever a computer had there is gone) and checks it;
  * throws if a check fails. The date beside the page's mark of a test
  * roster is `TEST_ROSTER_CLEARED_ON` of wrangler.jsonc, checked to be a
- * date before the build is given it. It runs web/'s build and reads
- * wrangler.jsonc; it has no token and sends nothing.
+ * date before the build is given it. Before the build it has the common
+ * reference string checked against its SHA-256, and downloaded if this
+ * checkout has none (`fetchCrs`): the same on a computer and in the
+ * workflow. It runs web/'s build and reads wrangler.jsonc; it has no token,
+ * and that download is the only request it sends.
  */
 export function buildSite(): void {
   const configured = configuredClearedOn();
   checkClearedOn(configured);
+  fetchCrs();
   buildProofPage(PROOF_DIR, configured[DEPLOYED_ENV]!.clearedOn as string);
   checkProofPages(configuredProofPages());
 }

@@ -39,6 +39,18 @@ const WEB_DIR = join(WORKER_DIR, "..", "web");
 /** Where a deploy has the page: site/proof/ beside wrangler.jsonc. */
 export const PROOF_DIR = join(WORKER_DIR, "site", "proof");
 
+/**
+ * Has web/crs/ hold the common reference string the page proves with: runs
+ * web/scripts/fetch-crs.mjs, which checks each of the two files against its
+ * SHA-256 and downloads the ones that are missing or differ (from Aztec's
+ * CDN: the one request a deploy build sends, and only then). Throws if a
+ * file cannot be had with its SHA-256.
+ */
+export function fetchCrs(): void {
+  const r = spawnSync(process.execPath, [join(WEB_DIR, "scripts", "fetch-crs.mjs")], { cwd: WEB_DIR, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`web/scripts/fetch-crs.mjs:\n${r.stdout}\n${r.stderr}${r.error ? `\n${r.error.message}` : ""}`);
+}
+
 /** A build of the page, as the checks look at it. */
 export interface ProofPage {
   /** Every file of the directory, by its path under it, and its size in bytes. */
