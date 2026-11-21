@@ -209,6 +209,8 @@ export interface TestWorker {
     restart(): Promise<void>;
     /** Runs the object's alarm now, as when it rings by itself (test build, `POST /__test/roster/alarm?object=`). */
     runAlarm(): Promise<void>;
+    /** Whether the object has an alarm set (test build, `GET /__test/roster/alarm?object=`). Asking starts an object that is not running. */
+    hasAlarm(): Promise<boolean>;
   };
   /** The roster's Durable Object, beyond what the API shows of it. */
   readonly roster: {
@@ -514,6 +516,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async runAlarm() {
         const res = await server.fetch(`/__test/roster/alarm?object=${encodeURIComponent(name)}`, { method: "POST" });
         if (res.status !== 204) throw new Error(`running the alarm of ${name}: HTTP ${res.status}`);
+      },
+      async hasAlarm() {
+        const res = await server.fetch(`/__test/roster/alarm?object=${encodeURIComponent(name)}`);
+        if (res.status !== 200) throw new Error(`reading the alarm of ${name}: HTTP ${res.status}`);
+        return ((await res.json()) as { alarm: number | null }).alarm !== null;
       },
     }),
     roster: {

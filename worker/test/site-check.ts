@@ -16,7 +16,15 @@
 // - the archive index of the data domain has, for each issuer key, a usable
 //   CRL that is at most 3 days old, the age `config` gives devices;
 // - the last line of the published fingerprint file is what `fingerprint`
-//   answers.
+//   answers, and its date is today's or yesterday's: a roster whose daily
+//   publication stopped fails here. One that was not published yet (the day
+//   its object first ran) has no file and no date, and passes;
+// - the data domain lets the site's pages read it from a browser, and no
+//   other site's (CORS).
+//
+// What it cannot see, sending only GET: whether a card proof would be taken.
+// A paused roster and one whose object knows no CRL yet answer every GET as
+// any other (README.md says how to tell).
 //
 // The same checks run on the local Worker in test/site-check.test.ts. Not a
 // part of `pnpm test` by itself: it is the test's to say that the check
@@ -28,8 +36,8 @@ import { ISSUER_NAMES } from "../src/issuers.ts";
 import { newestCrls, readIndex } from "../src/crl-index.ts";
 import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, SCRIPT_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
 
-/** Sends a GET for a path of the site or of the data domain; redirects are not followed. */
-export type Reader = (path: string) => Promise<Response>;
+/** Sends a GET for a path of the site or of the data domain, with these request headers if any; redirects are not followed. */
+export type Reader = (path: string, headers?: Readonly<Record<string, string>>) => Promise<Response>;
 
 export interface CheckLine {
   readonly ok: boolean;
@@ -55,7 +63,8 @@ function headersProblem(res: Response, want: Readonly<Record<string, string>>): 
  * `today` is the date in Taiwan (YYYY-MM-DD), `clearedOn` the date the
  * pages are to say the test roster was last cleared on.
  */
-export async function checkSite(parts: { site: Reader; data: Reader; today: string; clearedOn: string }): Promise<CheckLine[]> {
+export async function checkSite(parts: { site: Reader; data: Reader; today: string; clearedOn: string; siteOrigin?: string }): Promise<CheckLine[]> {
+  const siteOrigin = parts.siteOrigin ?? "https://test.iamreal.tw";
   const lines: CheckLine[] = [];
   /** One line: `problem` is null when the thing is as it should be. A request that fails is the line's problem. */
   const check = async (what: string, problem: () => Promise<string | null>): Promise<void> => {
@@ -150,6 +159,27 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     });
   }
 
+  // The roster is published every day: the last line is today's, or yesterday's until the alarm of midnight has run.
+  await check("GET /api/v1/fingerprint: the roster was published today or yesterday, or never yet", async () => {
+    if (fingerprint === null) return "the API did not answer";
+    const { date } = JSON.parse(fingerprint) as { date?: unknown };
+    if (date === null) return null;
+    const day = typeof date === "string" ? parseDay(date) : null;
+    return day !== null && (day === today || day === today - 1) ? null : `the last line published is dated ${JSON.stringify(date)}; today is ${parts.today}`;
+  });
+
+  // The data domain: a page of the site may read it from a browser, a page of another site may not (ADR-0027).
+  await check(`the data domain: CORS allows ${siteOrigin} and no other origin`, async () => {
+    const allowed = async (origin: string): Promise<string | null> => {
+      const res = await parts.data("/crl/index.jsonl", { Origin: origin });
+      await res.arrayBuffer();
+      return res.headers.get("access-control-allow-origin");
+    };
+    const [own, other] = [await allowed(siteOrigin), await allowed("https://example.com")];
+    if (own !== siteOrigin) return `for ${siteOrigin}, Access-Control-Allow-Origin is ${JSON.stringify(own)}`;
+    return other === null ? null : `for https://example.com, Access-Control-Allow-Origin is ${JSON.stringify(other)}`;
+  });
+
   // The data domain: the last line of the fingerprint file is what the API answers. A roster that was
   // not published yet (the day its object first ran, or the day it was cleared) has no file and no date.
   await check("the data domain: the last line of /roster/fingerprints.jsonl is what GET /api/v1/fingerprint answers", async () => {
@@ -171,10 +201,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { unstable_readConfig } = await import("wrangler");
   const config = join(fileURLToPath(new URL("..", import.meta.url)), "wrangler.jsonc");
   const clearedOn = String(unstable_readConfig({ config, env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON);
-  const reader = (origin: string): Reader => (path) => fetch(new URL(path, origin), { redirect: "manual" });
+  const reader = (origin: string): Reader => (path, headers) => fetch(new URL(path, origin), { redirect: "manual", headers: { ...headers } });
   const today = formatDay(taiwanDay(Date.now()));
   console.log(`${site} and ${data}, ${today} in Taiwan; wrangler.jsonc says the test roster was last cleared on ${clearedOn}`);
-  const lines = await checkSite({ site: reader(site), data: reader(data), today, clearedOn });
+  const lines = await checkSite({ site: reader(site), data: reader(data), today, clearedOn, siteOrigin: new URL(site).origin });
   for (const line of lines) console.log(`${line.ok ? "ok    " : "FAIL  "} ${line.what}`);
   const failures = lines.filter((l) => !l.ok).length;
   console.log(failures ? `${failures} check(s) failed` : "all checks passed");

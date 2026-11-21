@@ -992,7 +992,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 重啟整個 Worker（連同 Durable Object） | `worker.restart()`：儲存的東西和儲存桶的檔案留著，記憶體裡的（包括調過的時鐘）不見 |
 | 換發證金鑰 | `startWorker({ issuers: [G2, G3] })`，預設是測試自己的兩把 |
 | 重啟名冊的 Durable Object | `worker.roster.restart()`：記憶體裡的東西丟掉，存著的留著 |
-| 清空測試名冊之後，被換掉的那個物件 | `worker.clearedRoster(原本的名稱)`：`.restart()` 讓它重新啟動（部署會做的事），`.runAlarm()` 讓它的 alarm 響。`worker.roster` 的每一項問的都是設定現在指的那個物件 |
+| 清空測試名冊之後，被換掉的那個物件 | `worker.clearedRoster(原本的名稱)`：`.restart()` 讓它重新啟動（部署會做的事），`.runAlarm()` 讓它的 alarm 響，`.hasAlarm()` 看它還有沒有設 alarm。`worker.roster` 的每一項問的都是設定現在指的那個物件 |
 | 跑 Durable Object 的 alarm、看它設在多久之後 | `worker.roster.runAlarm()`、`worker.roster.alarmInMs()` |
 | 要一個題目 | `worker.issueChallenge()`；`worker.issueChallenge(十六進位的 16 個位元組)` 指定題目的亂數那一段 |
 | 換 `records` 用的驗證器 | `worker.setVerifier("stand-in")`、`("real")` |
@@ -1136,6 +1136,7 @@ pnpm run deploy:test
 **清空是換一個物件，不是刪掉資料。** `ROSTER_OBJECT_NAME` 換成新的名稱之後，後台問的是一個新的、空的 Durable Object；資料儲存桶裡 `roster/` 底下的檔由營運者刪掉。原本的那個物件還在 Cloudflare 上，連同它存的紀錄；這些步驟不刪它，之後也沒有請求會到它那裡。
 
 - **被換掉的物件不再做任何定時的工作。** 物件啟動時比對自己是不是設定指的那一個（`ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME))`，[Durable Object ID](https://developers.cloudflare.com/durable-objects/api/id/)：「`equals` is used to compare equality between two instances of `DurableObjectId`」，2026-11-21 讀的）；不是的話，alarm 響了什麼都不做，也不再設下一次（`src/roster.ts` 的 `#replaced`）。沒有這一條的話，它的 alarm 是還當著名冊的時候設的，下一個台灣午夜照樣會響，把舊名冊的最後一檔、雜湊清單、卡片狀態檔和整份舊的指紋檔寫回同一個儲存桶：在本機照下面的步驟做的時候看到的就是這樣（`test/clearing.test.ts`，拿掉這一條就不過）。那之後新的物件要公布時，儲存桶裡的指紋檔不是它的，照[每天換日公布名冊](#每天換日公布名冊)會停在 `fingerprint_file_differs`。這個比對在 Cloudflare 上還沒看過：下面第 4 步的確認就是在看它。
+- **被換掉的物件每次啟動寫一行即時輸出** `{"event":"roster_object_replaced"}`（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）。真的被換掉的物件只會寫一次：部署之後它的 alarm 響的那一次，之後沒有東西會再叫醒它。**現任的物件不該寫這一行**；每隔一陣子就看到它，表示比對把現任的物件當成被換掉的了，那時不公布、不搬寫滿的檔、不刪過期的題目，而過卡照收。不看即時輸出也看得出來：指紋檔不再每天多一行，`test/site-check.ts` 有一項看這個（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）。
 - **名稱不重複使用。** 把名稱改回用過的，後台問的就是那個舊物件，它存的紀錄都還在，也會重新開始公布。新的名稱用下一個號碼（`test-1` 之後是 `test-2`），維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)）。
 - **`crl/` 不清。** 清冊存檔和名冊無關，檔名是內容的雜湊。留著的話，過卡的頁面一直下載得到清冊，鏡像也不必重抓、重建每一棵樹。
 
@@ -1147,7 +1148,9 @@ pnpm run deploy:test
    - `ROSTER_OBJECT_NAME`：下一個號碼
    - `TEST_ROSTER_CLEARED_ON`：部署那一天的台灣日期，`YYYY-MM-DD`
 
-   [設定檔](#設定檔)表格裡的這兩個值跟著改。照設計要改的只有這兩個檔：測試的工具從 `wrangler.jsonc` 讀物件的名稱，[`test/environments.test.ts`](test/environments.test.ts) 檢查名稱是 `test-` 開頭、日期是日曆上有的日期，沒有別的測試寫死這兩個值。還沒有真的清過一次；第一次照做時 PR 的檢查會說是不是這樣。`wrangler.jsonc` 是「部署會執行到的東西」（`CONTRIBUTING.md`），這個 PR 由營運者看過才合併。清空是因為程式改了的時候（規則的版本加了一號），這兩行和那個修改放在同一個 PR，或緊接著合併：改名稱的部署先出去的話，新的物件第一次啟動時記下的是舊程式的版本號，程式一換又是 `paused`。
+   [設定檔](#設定檔)表格裡的這兩個值跟著改。要改的只有這兩個檔：測試的工具從 `wrangler.jsonc` 讀物件的名稱，看頁面上日期的測試各自設自己的日期，沒有測試寫死這兩個值（把這兩個值換成 `test-2`、`2026-11-20` 跑過 `worker/` 整套，都過）。
+   - 測試擋得到的：名稱是 `test-` 開頭、日期是日曆上有的日期（[`test/environments.test.ts`](test/environments.test.ts)）；日期不在今天（台灣日期）之後（[`test/clearing.test.ts`](test/clearing.test.ts)）。
+   - **測試擋不到的：只改了名稱、忘了改日期，或日期填成更早的某一天。** 兩個值各自都合法，測試看不到上一次的值。看 PR 的人要看這兩行是不是一起改的；部署之後首頁最上面那一行的日期是另一次機會。`wrangler.jsonc` 是「部署會執行到的東西」（`CONTRIBUTING.md`），這個 PR 由營運者看過才合併。清空是因為程式改了的時候（規則的版本加了一號），這兩行和那個修改放在同一個 PR，或緊接著合併：改名稱的部署先出去的話，新的物件第一次啟動時記下的是舊程式的版本號，程式一換又是 `paused`。
 2. **部署。** 合併到 `main`，由 GitHub Actions 部署（[從 GitHub Actions 部署](#從-github-actions-部署)）；或營運者在自己的電腦上 `pnpm run deploy:test`。部署完成之後：
    - `curl -s https://test.iamreal.tw/api/v1/fingerprint` 回 `{"date":null,"count":0,"fingerprint":"000…0"}`（64 個 0）：後台問的是新的物件，它還沒公布過
    - 首頁最上面那一行的日期是新的日期，兩個數字都是 0。頁面最多被快取 60 秒，剛部署完看到舊的，過一兩分鐘再看
@@ -1155,9 +1158,18 @@ pnpm run deploy:test
 3. **營運者清空儲存桶的 `roster/`。** 在 Cloudflare 的儀表板：R2 → `iamreal-test-data` → 勾「View prefixes as directories」→ 選 `roster/` 這個目錄 → Delete（[Delete objects](https://developers.cloudflare.com/r2/objects/delete-objects/)：「Select the objects or folders you want to delete」，2026-11-21 讀的）。`crl/` 不要選。部署的權杖做不到這一步：它沒有 R2 的權限，連讀儲存桶的資料都被拒絕（[第一次部署量到的](#第一次部署量到的)），這個專案也沒有 R2 的 API 權杖（ADR-0029）。
    - **在部署之後做，不要在之前。** 部署之前，舊的物件還是名冊的物件：台灣午夜一到它會把剛刪掉的檔再寫出來。
    - **在部署後的第一個台灣午夜之前做完最好。** 新的物件在它第一次啟動那天不公布，隔天的台灣午夜才第一次公布。那時 `roster/fingerprints.jsonl` 還是舊名冊的那一份的話，這一次公布整個不做（`fingerprint_file_differs`），之後每隔一段時間再看一次（最長一小時），到 `roster/` 清掉為止；清掉之後的下一次嘗試就公布，不用再部署（`test/clearing.test.ts` 的第二項）。舊名冊從來沒有公布過（沒有指紋檔）的話不會停，但舊的卡片狀態檔會留到生命週期規則刪掉它。
-   - 清完之後：`curl -sI https://test-data.iamreal.tw/roster/fingerprints.jsonl` 回 `404`（清之前有人下載過的話，最多等 60 秒）
+   - 清完之後：`curl -sI https://test-data.iamreal.tw/roster/fingerprints.jsonl` 回 `404`。`-I` 送的是 `HEAD`，這個網域上 `HEAD` 不經過 Cloudflare 的快取（回應是 `cf-cache-status: DYNAMIC`，2026-11-21 看到的），所以刪了馬上就是 `404`；用 `GET` 下載的人最多 60 秒內還會拿到快取著的舊檔
 4. **確認。**
-   - 部署後的下一個整點過後：`node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的名冊還沒公布過，所以指紋檔那一項比的是「沒有檔、介面回的日期是 `null`」
+   - `node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的名冊還沒公布過，所以指紋檔那兩項比的是「沒有檔、介面回的日期是 `null`」。**它全過不表示可以過卡**：它只送 `GET`，看不到名冊是不是 `paused`，也看不到新的物件知不知道清冊，這兩種狀態下每個 `GET` 的回答都和平常一樣
+   - **名冊收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），名冊上不留任何東西。agent 送之前要營運者同意。
+
+     | 回應 | 意思 |
+     |---|---|
+     | `200`、`{"challenge":"<今天的台灣日期>.…"}` | 收。存著的規則版本和程式的相同 |
+     | `503`、`{"error":"paused"}` | 不收：物件存著的規則版本和程式的不同（[兩個版本號](#兩個版本號)）。剛清空就看到這個，表示後台問的還是舊的物件（設定沒有部署出去），或新的物件是在程式換掉之前第一次啟動的（第 1 步講的順序） |
+     | `500` | 設定對不上（`ROSTER_KIND` 和名稱、`TEST_ROSTER_CLEARED_ON` 不是日期），或表的版本和程式的不同 |
+
+   - **新的物件知不知道清冊，沒有不過卡就能確認的方法。** 發題目不看清冊，`200` 不表示送出不會回 `crl_stale`。靠的是時間：部署後的第一個整點那一輪鏡像交給它（第 2 步）。那一輪有沒有成功，看儀表板上排程的那一次是不是成功的，或 `wrangler tail` 那一輪沒有以例外結束（[排程做什麼](#排程做什麼)：沒交給 Durable Object 的一輪以例外結束）。整點過後第一次真的過卡（營運者用真卡片）才是最後的確認
    - 部署後的第一個台灣午夜過後：`https://test-data.iamreal.tw/roster/fingerprints.jsonl` 恰好一行，日期是那一天，筆數是新名冊的筆數；`roster/card-state/` 只有那一天的檔。這一行多於一行、或筆數是舊名冊的筆數，表示被換掉的物件還在寫（上面「被換掉的物件」那一條在 Cloudflare 上沒有成立），那時回報，不要再刪一次了事
    - 然後 `iamreal-verify -roster test -data https://test-data.iamreal.tw/` 重驗一次（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)）
 
@@ -1174,7 +1186,7 @@ pnpm run deploy:test
 
 ### 在本機照著做
 
-[`test/clearing.test.ts`](test/clearing.test.ts) 在本機的 workerd 上照上面的步驟做一次：一份有紀錄、公布過的測試名冊；換物件的名稱和日期、所有物件重新啟動（部署）；刪掉儲存桶的 `roster/`；鏡像跑一輪；寫入新的一筆；過兩個台灣午夜，舊的物件的 alarm 各響一次。它確認每一步之後這裡寫的狀態，和兩個午夜之後儲存桶裡只有新名冊的檔、沒有 `fingerprint_file_differs`。第二項是晚了才清儲存桶的情況：午夜時不公布、寫一行 `fingerprint_file_differs`、舊名冊的檔原樣留著，清掉之後的下一次 alarm 就公布。儀表板上的那兩個動作（選目錄、刪除）本機做不到，用測試的工具刪檔代替。
+[`test/clearing.test.ts`](test/clearing.test.ts) 在本機的 workerd 上照上面的步驟做一次：一份有紀錄、公布過的測試名冊；換物件的名稱和日期、所有物件重新啟動（部署）；刪掉儲存桶的 `roster/`；鏡像跑一輪；寫入新的一筆；過兩個台灣午夜，舊的物件的 alarm 各響一次。它確認每一步之後這裡寫的狀態，被換掉的物件寫了一行 `roster_object_replaced`、沒有設 alarm，和兩個午夜之後儲存桶裡只有新名冊的檔、沒有 `fingerprint_file_differs`。第二項是晚了才清儲存桶的情況：午夜時不公布、寫一行 `fingerprint_file_differs`、舊名冊的檔原樣留著，清掉之後的下一次 alarm 就公布。儀表板上的那兩個動作（選目錄、刪除）本機做不到，用測試的工具刪檔代替。
 
 ## 部署之後不插卡的檢查
 
@@ -1190,10 +1202,14 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 - `GET /api/v1/config`、`GET /api/v1/fingerprint` 的狀態碼和標頭；`config` 是測試名冊的平台表，`crl_max_age_days` 是 3
 - 資料網域的 `crl/index.jsonl`：兩把發證金鑰各有一份可用的清冊，清冊日期不早於今天（台灣日期）往前 3 天
 - 資料網域的 `roster/fingerprints.jsonl` 最後一行就是 `GET /api/v1/fingerprint` 回的那一行；名冊還沒公布過時（沒有檔），介面回的日期要是 `null`
+- 名冊每天有在公布：`GET /api/v1/fingerprint` 回的日期是今天或昨天（台灣日期），或 `null`（還沒公布過：物件第一次啟動那天、清空當天）。公布在台灣午夜之後 alarm 響的時候做，所以午夜剛過、還沒公布時最後一行是昨天的，照樣過；要到整整一天沒有公布才不過。`paused` 的名冊不公布，隔一天起這一項不過，那是對的
+- 資料網域的 CORS：帶 `Origin: https://test.iamreal.tw` 問 `crl/index.jsonl`，回應的 `Access-Control-Allow-Origin` 是它；帶別的來源問，沒有這個標頭。過卡的頁面在瀏覽器裡下載清冊存檔靠的是這個（ADR-0027）
 
-[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過；清冊舊於 3 天、少一把發證金鑰的清冊、一頁少一個標頭、沒有過卡的頁面、標示旁的日期不對、指紋檔和介面回的不同，各自不過。
+[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
 
-**它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）。部署還沒有帶過卡的頁面之前（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），這裡 `GET /proof` 那一項不過，其餘都過（2026-11-21 對 `main` 的 `f0ca916` 部署出去的版本跑的結果）。
+**它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 4 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
+
+**它不開瀏覽器，所以過卡的頁面只看在不在。** 頁面在瀏覽器裡的那一半（標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域，開到第一個畫面為止、不按「讀取卡片」）是 `web/` 的 [`test/e2e/smoke.ts`](../web/test/e2e/smoke.ts)（`web/README.md`）。部署還沒有帶過卡的頁面之前（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），這裡 `GET /proof` 那一項不過，其餘 18 項都過（2026-11-21 對 `main` 的 `f0ca916` 部署出去的版本跑的結果）。
 
 ## 營運者在 Cloudflare 和 GitHub 上設的
 
@@ -1269,7 +1285,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `scripts/engine-files.ts` | 建置的第一步：核對 WASM 檔和驗證金鑰的 SHA-256，寫進 `generated/` |
 | `test-build/` | 測試專用的建置換上的那一份 |
 | `test/harness.ts`、`test/build.ts`、`test/proofs.ts` | 測試的工具、兩種建置、`verifier/testdata/` 的測試證明和驗證的測試共用的小工具 |
-| `test/clearing.test.ts` | 清空測試名冊，照[清空測試名冊](#清空測試名冊)的步驟在本機做一次：新的名冊是空的、鏡像下一輪之後收得下紀錄、隔天公布的只有新名冊；被換掉的物件 alarm 響了什麼都不寫 |
+| `test/clearing.test.ts` | 清空測試名冊，照[清空測試名冊](#清空測試名冊)的步驟在本機做一次：新的名冊是空的、鏡像下一輪之後收得下紀錄、隔天公布的只有新名冊；被換掉的物件啟動時寫一行、不再設 alarm、alarm 響了什麼都不寫；晚了才清儲存桶時清掉就恢復；`wrangler.jsonc` 的清空日期不在今天之後 |
 | `test/site-check.ts`、`test/site-check.test.ts` | 部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)），和在本機的 Worker 上確認它每一項都擋得到的測試 |
 | `test/crls.ts` | 測試的發證金鑰、用它們簽的清冊 |
 | `test/crl-testdata.test.ts` | 清冊鏡像和 Go 的 `crl/` 逐案比對（第三項要有 `go`） |

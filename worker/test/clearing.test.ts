@@ -9,9 +9,12 @@
 // what it stored and with its alarm set, and it shares the bucket with the
 // new one.
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { parseDay } from "iamreal-protocol/date.ts";
+import { parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT, fingerprintLine } from "iamreal-protocol/record.ts";
+import { unstable_readConfig } from "wrangler";
+import { WORKER_DIR } from "./build.ts";
 import { type StoredFile, type TestWorker, startWorker } from "./harness.ts";
 import { cardState, checkRoster, freshRoster, mustSubmit, newCard, publishG3, sub, tw } from "./records.ts";
 
@@ -43,8 +46,9 @@ async function clearedOn(): Promise<string | undefined> {
 }
 
 test("the steps of README.md: the roster is empty, takes records, and is published; the cleared roster's object writes nothing more", async () => {
-  // A test roster with a record, published once.
-  const clearedName = await freshRoster(worker);
+  // A test roster with a record, published once. The dates are this test's own, not wrangler.jsonc's.
+  const replacedLines = (): number => worker.logLines().filter((l) => l.includes('"roster_object_replaced"')).length;
+  const clearedName = await freshRoster(worker, { clearedOn: "2026-11-07" });
   const root = await publishG3(worker);
   const card = newCard();
   await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
@@ -52,7 +56,8 @@ test("the steps of README.md: the roster is empty, takes records, and is publish
   await worker.roster.runAlarm();
   assert.deepEqual([...(await directory()).keys()], FIRST_FILE);
   assert.equal((await published()).count, 1);
-  assert.equal(await clearedOn(), "2026-11-19");
+  assert.equal(await clearedOn(), "2026-11-07");
+  assert.equal(replacedLines(), 0, "the roster's object does not say it was replaced");
   const archive = await worker.files("crl/");
 
   // Steps 1 and 2: the settings name another object and today's date, and are deployed. A deploy starts every object anew.
@@ -60,6 +65,10 @@ test("the steps of README.md: the roster is empty, takes records, and is publish
   const cleared = worker.clearedRoster(clearedName);
   await worker.setSettings({ ROSTER_KIND: "test", ROSTER_OBJECT_NAME: `${clearedName}-cleared`, TEST_ROSTER_CLEARED_ON: "2026-11-21" });
   await cleared.restart();
+  // The object that was replaced says so once when it starts, and from then on has no alarm set.
+  await cleared.hasAlarm();
+  assert.equal(await cleared.hasAlarm(), false);
+  assert.equal(replacedLines(), 1);
   // The roster is empty at once: no record, nothing published, the card is unknown, the pages say the new date.
   assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
   assert.equal((await cardState(worker, card)).count, 0);
@@ -96,6 +105,15 @@ test("the steps of README.md: the roster is empty, takes records, and is publish
   await worker.roster.runAlarm();
   assert.equal(text((await directory()).get("fingerprints.jsonl")!).split("\n").length - 1, 2);
   assert.deepEqual(worker.logLines().filter((l) => l.includes("fingerprint_file_differs") || l.includes("roster_not_published")), []);
+  // The new object never said it was replaced; the old one said it the one time it started.
+  assert.equal(await cleared.hasAlarm(), false);
+  assert.equal(replacedLines(), 1);
+});
+
+test("the date wrangler.jsonc says the test roster was last cleared on is not after today", () => {
+  // It is the date of the deploy that cleared it (README.md, step 1): a date still to come was typed wrong.
+  const clearedOn = parseDay(String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON));
+  assert.ok(clearedOn !== null && clearedOn <= taiwanDay(Date.now()), "TEST_ROSTER_CLEARED_ON is a date, today's in Taiwan or an earlier one");
 });
 
 test("roster/ emptied only after the next midnight: nothing is published until then, and the next try after it publishes", async () => {

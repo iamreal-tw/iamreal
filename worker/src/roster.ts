@@ -450,6 +450,9 @@ export class Roster extends DurableObject<Env> {
     // same settings before it asks the object, so it does not get this far.
     this.settings = rosterSettingsOf(env);
     this.#replaced = !ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME));
+    // One line each time such an object starts. That is once after the deploy that replaced it, when the alarm it
+    // had set rings; an object that is the roster's and says this at every start has the comparison wrong.
+    if (this.#replaced) console.log(JSON.stringify({ event: "roster_object_replaced" }));
     const sql = ctx.storage.sql;
     for (const statement of TABLES) sql.exec(statement);
     // A new roster: no record, a state computed by the rules of this build,
