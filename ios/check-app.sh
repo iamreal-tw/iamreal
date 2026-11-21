@@ -1,14 +1,17 @@
 #!/bin/sh
 # Checks a built IamrealApp.app, and the sources it was built from, against
-# what issue #168 and ADR-0036 require of every build. The last build phase
+# what issue #168, ADR-0036 and ADR-0037 require of every build. The last build phase
 # of the app target runs it, so a build that fails a check fails.
 #
 #   ./check-app.sh <path to IamrealApp.app>
 #
 # What it checks:
-# - the app is the test app: the identifier tw.iamreal.app.test, with the
-#   addresses of the test site in its executable and not the ones of the
-#   production site;
+# - the app is the build its configuration makes (ADR-0037): Debug the
+#   development build, tw.iamreal.app.dev, Release the store's build,
+#   tw.iamreal.app; the name under its icon is the one design/copy/app.md
+#   gives that build; until launch both talk to the test site: the addresses
+#   of the test site in its executable and not the ones of the production
+#   site;
 # - iPhone only;
 # - the two circuits and the two verification keys in the app are the files
 #   of this repository, and the CRS has the SHA-256 of device-core/crs.sha256;
@@ -71,11 +74,35 @@ executable_has() {
   done | grep -q yes
 }
 
-# The test app, the test site.
+# The build the configuration makes (ADR-0037). Xcode hands the
+# configuration to this script; run by hand, it goes by Debug, which is what
+# the tests run in.
+case ${CONFIGURATION-Debug} in
+  Debug) want=tw.iamreal.app.dev build="開發用 build" ;;
+  Release) want=tw.iamreal.app build="商店的 build" ;;
+  *) want= build= ; problem "the configuration is $CONFIGURATION, neither Debug (the development build) nor Release (the store's build)" ;;
+esac
 identifier=$(plist CFBundleIdentifier)
-if [ "$identifier" != tw.iamreal.app.test ]; then
-  problem "the identifier is $identifier, not tw.iamreal.app.test: the only app built so far is the test app"
+if [ -n "$want" ] && [ "$identifier" != "$want" ]; then
+  problem "the identifier is $identifier, not $want: a ${CONFIGURATION-Debug} build is the $build of ADR-0037"
 fi
+# The name under the icon: the first line in a code block under "### <build>"
+# in the section "## 主畫面上的名稱" of design/copy/app.md. awk compares
+# bytes: in a UTF-8 locale macOS's awk compares by collation, and takes
+# the two headings for the same.
+if [ -n "$build" ]; then
+  written=$(LC_ALL=C awk -v build="### $build" '
+    $0 == "## 主畫面上的名稱" { names = 1; next }
+    names && $0 == build { here = 1; next }
+    here && /^#/ { exit }
+    here && $0 == "```" { getline; print; exit }
+  ' "$repo/design/copy/app.md")
+  name=$(plist CFBundleDisplayName)
+  if [ -z "$written" ] || [ "$name" != "$written" ]; then
+    problem "the name under the icon is $name, not \"$written\", the name design/copy/app.md gives the $build"
+  fi
+fi
+# Until launch both builds talk to the test site (ADR-0037).
 # Xcode hands the build settings to this script: the environment of Config/.
 if [ "${IAMREAL_ENVIRONMENT-IAMREAL_ENV_TEST}" != IAMREAL_ENV_TEST ]; then
   problem "the environment is $IAMREAL_ENVIRONMENT, not IAMREAL_ENV_TEST"

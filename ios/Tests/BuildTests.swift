@@ -2,11 +2,13 @@ import CryptoKit
 import XCTest
 @testable import IamrealApp
 
-/// What this build of the app is fixed to (ADR-0036), and what it carries
-/// (ADR-0035).
+/// What this build of the app is fixed to (ADR-0036, ADR-0037), and what it
+/// carries (ADR-0035). The tests run in the Debug configuration: the
+/// development build. check-app.sh holds the Release one, the store's
+/// build, to its identifier, site and name.
 final class BuildTests: XCTestCase {
-    func testTheAppIsTheTestApp() throws {
-        XCTAssertEqual(Bundle.main.bundleIdentifier, "tw.iamreal.app.test")
+    func testTheAppIsTheDevelopmentBuildOnTheTestSite() throws {
+        XCTAssertEqual(Bundle.main.bundleIdentifier, "tw.iamreal.app.dev")
         XCTAssertEqual(AppEnvironment.site.absoluteString, "https://test.iamreal.tw")
         XCTAssertEqual(AppEnvironment.publicFiles.absoluteString, "https://test-data.iamreal.tw")
     }
@@ -62,12 +64,12 @@ final class BuildTests: XCTestCase {
         XCTAssertTrue(copy.contains("\n\(ScreenCopy.testRoster)\u{3000}"))
     }
 
-    /// The name under the app's icon is the one of design/copy/app.md, for the test app.
+    /// The name under the app's icon is the one design/copy/app.md gives the development build.
     func testTheNameOfTheAppIsInDesignCopy() throws {
         let name = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
         let copy = try Repository.text("design/copy/app.md")
-        let section = try XCTUnwrap(copy.components(separatedBy: "\n## 主畫面上的名稱\n").last)
-        XCTAssertTrue(section.contains("測試 app"))
+        let names = try XCTUnwrap(copy.components(separatedBy: "\n## 主畫面上的名稱\n").last)
+        let section = try XCTUnwrap(names.components(separatedBy: "\n### 開發用 build\n").dropFirst().first)
         XCTAssertEqual(section.components(separatedBy: "```\n").dropFirst().first, "\(name)\n")
     }
 
