@@ -364,7 +364,7 @@ node --experimental-strip-types --test test/sequence.test.ts                    
 IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.test.ts  # 第 2、3 層
 ```
 
-**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層擋著，存了再讀的不同由第 1 層擋著（標準答案的每一案，每筆之間重啟），兩層都在改到 `typescript` 清單的 PR 和合併佇列跑；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上要不要在這些路徑有改時自動跑，留給 [#69](https://github.com/iamreal-tw/iamreal/issues/69)。
+**什麼時候要跑第 3 層**：改到名冊規則的狀態怎麼存、怎麼讀的時候，也就是 `src/roster.ts` 的 `ruleState`、`keepRuleState`、`accountCards`，`src/card-table.ts`，數卡片查的衍生表（`src/views.ts` 的 `viewOf`、`writeView`、`accountCards`），和這些表的結構；刪掉舊的後台之前也要跑一次。PR 的說明寫跑的結果。為什麼不是每個 PR 都跑：規則本身的不同由第 2 層擋著，存了再讀的不同由第 1 層擋著（標準答案的每一案，每筆之間重啟），兩層都在改到 `typescript` 清單的 PR 和合併佇列跑；第 3 層多守的是長序列累積出來的狀態存了再讀，只有上面那幾處會改變它，而每個 PR 多跑約 2 分鐘（維護者 2026-11-20 決定）。CI 上不在這些路徑有改時自動跑（[#69](https://github.com/iamreal-tw/iamreal/issues/69) 定的）：`checks.yml` 的工作固定是四個必要檢查，要照路徑多跑一項就得多一個工作流程檔和它在 `test/workflows.ts` 的一份白名單，換來的是這幾個檔有改時少一個手動的步驟；所以照舊手動跑，PR 的說明寫結果。
 
 要有 `go`：沒有時跳過，但設了 `CI` 或 `IAMREAL_BB` 時沒有 `go` 是失敗，和 `test/workflows.test.ts` 相同。
 
