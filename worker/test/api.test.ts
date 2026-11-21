@@ -1,7 +1,7 @@
 // The API of docs/api/card-proof.md as the whole Worker answers it in the
 // local workerd (test/harness.ts): challenges, card-state and config, and
 // what every answer under /api/ has in common. The cases are those of the Go
-// backend's server/api_test.go for these endpoints.
+// backend's e159ab9:server/api_test.go for these endpoints.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,5 +1,5 @@
 // The page of a Threads account: design/copy/account-page.md. The markup is
-// the Go backend's (server/pages/templates/account.html,
+// the Go backend's (e159ab9:server/pages/templates/account.html,
 // account-not-a-name.html). This file only turns data into HTML; the Worker
 // (src/visitor.ts) reads the address and the roster.
 import { formatDay } from "iamreal-protocol/date.ts";

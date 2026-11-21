@@ -3,7 +3,7 @@
 // string, the data domain https://data.iamreal.tw (ADR-0027), and nothing of
 // the tests: no fake card, no test issuer keys, no fake component, no test
 // platform. The build for a real card on this computer (mode "localcard",
-// `pnpm local`) holds MOICA's keys and the real component too and nothing
+// worker/'s `pnpm local`) holds MOICA's keys and the real component too and nothing
 // of the tests, but signs the test roster's scope string and knows the test
 // roster's platforms; it fetches the CRL from its own origin (the local
 // server), so it names no data domain. The test site's build (mode

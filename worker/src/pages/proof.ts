@@ -1,5 +1,5 @@
 // The page of a card: design/copy/proof-page.md. The markup is the Go
-// backend's (server/pages/templates/proof.html, proof-missing.html,
+// backend's (e159ab9:server/pages/templates/proof.html, proof-missing.html,
 // parts.html). This file only turns data into HTML; the Worker
 // (src/visitor.ts) reads the address and the roster.
 import { formatDay } from "iamreal-protocol/date.ts";

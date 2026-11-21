@@ -1,6 +1,6 @@
 // Reading design/copy/ for the tests of the pages: the sentences a page must
 // show are read from the copy files, never written again in a test. The
-// same reading as the Go backend's tests (server/visitor_test.go).
+// same reading as the Go backend's tests (e159ab9:server/visitor_test.go).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

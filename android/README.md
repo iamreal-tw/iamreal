@@ -1,6 +1,6 @@
 # android/：Android 的 app（Kotlin）
 
-**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開手機；手機上做的檢查和算法是 `device-core/` 那一份；發出去的安裝檔裡有什麼。** app 引用 `device-core/`（ADR-0034），不引用 `protocol/`、`worker/`、`server/`。
+**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開手機；手機上做的檢查和算法是 `device-core/` 那一份；發出去的安裝檔裡有什麼。** app 引用 `device-core/`（ADR-0034），不引用 `protocol/`、`worker/`。
 
 現在有過卡能通的路：照網頁版的六步（開始之前、讀取卡片、輸入 PIN、你的帳號、確認、完成），卡片感應三次，PIN 輸入一次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)、[#134](https://github.com/iamreal-tw/iamreal/issues/134)）。畫面用 Jetpack Compose，文字逐字來自 `design/copy/card-proof.json`。在模擬器上用假卡片對著本機的 Worker 過得完（「模擬器上過一次卡」）。
 

@@ -26,6 +26,16 @@
 // - the data domain lets the site's pages read it from a browser, and no
 //   other site's (CORS).
 //
+// On the local Worker of `pnpm local` (scripts/local.ts) the data domain is
+// the site's own origin, and the same command checks it:
+//
+//   node --experimental-strip-types test/site-check.ts http://localhost:8080 http://localhost:8080
+//
+// Two lines are about Cloudflare's running of the roster, not about the
+// build, and are left out there: CORS (the page reads the files from its own
+// origin), and the daily publication (a local roster publishes only at a
+// midnight the command was running over).
+//
 // What it cannot see, sending only GET: whether a card proof would be taken.
 // A paused roster and one whose object knows no CRL yet answer every GET as
 // any other (README.md says how to tell).
@@ -68,9 +78,11 @@ function headersProblem(res: Response, want: Readonly<Record<string, string>>): 
 /**
  * Checks the site and its data domain; a line for each thing checked.
  * `today` is the date in Taiwan (YYYY-MM-DD), `clearedOn` the date the
- * pages are to say the test roster was last cleared on.
+ * pages are to say the test roster was last cleared on. `local`: the
+ * site is the local Worker of `pnpm local`, whose data domain is its own
+ * origin; the two lines about Cloudflare's running of the roster are left out.
  */
-export async function checkSite(parts: { site: Reader; data: Reader; today: string; clearedOn: string; siteOrigin?: string }): Promise<CheckLine[]> {
+export async function checkSite(parts: { site: Reader; data: Reader; today: string; clearedOn: string; siteOrigin?: string; local?: boolean }): Promise<CheckLine[]> {
   const siteOrigin = parts.siteOrigin ?? "https://test.iamreal.tw";
   // Every request for the site is sent as a browser sends it: what stands between the Worker and the visitor may
   // answer a request that accepts HTML otherwise than one that does not say (README.md, "Cloudflare 上看過的").
@@ -190,7 +202,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   // in place after a clearing is the date it was cleared on or, deployed close to midnight, the day after; the first
   // line is written at the midnight after that. So no date passes up to two days after the clearing, and no longer:
   // an object that was never published by then does not publish (it started paused, or takes itself for replaced).
-  await check("GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", async () => {
+  if (parts.local !== true) await check("GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", async () => {
     if (fingerprint === null) return "the API did not answer";
     const { date } = JSON.parse(fingerprint) as { date?: unknown };
     if (date === null) {
@@ -202,7 +214,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   });
 
   // The data domain: a page of the site may read it from a browser, a page of another site may not (ADR-0027).
-  await check(`the data domain: CORS allows ${siteOrigin} and no other origin`, async () => {
+  if (parts.local !== true) await check(`the data domain: CORS allows ${siteOrigin} and no other origin`, async () => {
     const allowed = async (origin: string): Promise<string | null> => {
       const res = await parts.data("/crl/index.jsonl", { Origin: origin });
       await res.arrayBuffer();
@@ -228,18 +240,31 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   return lines;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const site = process.argv[2] ?? "https://test.iamreal.tw";
-  const data = process.argv[3] ?? "https://test-data.iamreal.tw";
+/**
+ * Checks a running site and its data domain as the command line does,
+ * prints a line for each thing checked and a last line, and returns how
+ * many failed. The date of the clearing is wrangler.jsonc's. A data domain
+ * at the site's own origin is the local Worker of `pnpm local`
+ * (scripts/local.ts), checked with `local`.
+ */
+export async function runSiteCheck(site: string, data: string): Promise<number> {
   const { unstable_readConfig } = await import("wrangler");
   const config = join(fileURLToPath(new URL("..", import.meta.url)), "wrangler.jsonc");
   const clearedOn = String(unstable_readConfig({ config, env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON);
   const reader = (origin: string): Reader => (path, headers) => fetch(new URL(path, origin), { redirect: "manual", headers: { ...headers } });
   const today = formatDay(taiwanDay(Date.now()));
+  // The data domain at the site's own origin: the local Worker of `pnpm local`.
+  const local = new URL(site).origin === new URL(data).origin;
   console.log(`${site} and ${data}, ${today} in Taiwan; wrangler.jsonc says the test roster was last cleared on ${clearedOn}`);
-  const lines = await checkSite({ site: reader(site), data: reader(data), today, clearedOn, siteOrigin: new URL(site).origin });
+  if (local) console.log("the data domain is the site's own origin (pnpm local): CORS and the daily publication are not checked");
+  const lines = await checkSite({ site: reader(site), data: reader(data), today, clearedOn, siteOrigin: new URL(site).origin, local });
   for (const line of lines) console.log(`${line.ok ? "ok    " : "FAIL  "} ${line.what}`);
   const failures = lines.filter((l) => !l.ok).length;
   console.log(failures ? `${failures} check(s) failed` : "all checks passed");
+  return failures;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const failures = await runSiteCheck(process.argv[2] ?? "https://test.iamreal.tw", process.argv[3] ?? "https://test-data.iamreal.tw");
   process.exit(failures ? 1 : 0);
 }

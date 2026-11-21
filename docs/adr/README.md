@@ -84,8 +84,7 @@
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
 | 0022 | 不記 IP；`design/copy/` 還有「請經 VPN 過卡」 | [#20](https://github.com/iamreal-tw/iamreal/issues/20)、[#48](https://github.com/iamreal-tw/iamreal/issues/48) |
-| 0023 | `server/` 是 Go 加 SQLite | 地圖 [#1](https://github.com/iamreal-tw/iamreal/issues/1) |
-| 0025 | 後台每天出快照時自己重驗 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
+| 0025 | 沒有營運者每天的重驗（GitHub Actions 的排程）；Go 的舊後台出快照前自己重驗，已經跟著它刪掉 | 通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 每天的重驗沒有多跑一份測試名冊 | 第三份規格 |
@@ -95,7 +94,7 @@
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
 
-`worker/` 還沒做完：清冊鏡像、過卡的四個介面、首頁、島民證明、每天公布名冊有了，其餘的訪客頁面、限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的 `server/` 只當逐案比對的對照。
+`worker/` 還沒做完：清冊鏡像、過卡的四個介面、每一種訪客頁面、每天公布名冊有了，限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的舊後台 `server/` 在 2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）。
 
 ## 還沒定
 

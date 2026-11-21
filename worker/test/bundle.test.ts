@@ -26,7 +26,7 @@ import {
   readBuild,
   urlsIn,
 } from "../scripts/deploy-build-checks.ts";
-import { WRANGLER, buildDeploy, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
+import { WRANGLER, buildDeploy, bundleWorker, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
 import { type TestBuildValues, WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./harness.ts";
 
@@ -98,6 +98,23 @@ test("the test build holds another key, the fake MOICA and the clock's switch: t
   assert.notDeepEqual(urlsIn(testBuild.code), [...addressesInCrlReadme(), ...PAGE_ADDRESSES].sort());
   assert.deepEqual(bindingsIn(testBuild.output), bindingsIn(deploy.output));
   for (const check of [checkAddresses, checkKeys, checkNothingOfTheTestBuild]) assert.throws(() => check(testBuild), check.name);
+});
+
+test("the build for a real card on this computer (local-build/index.ts, `pnpm local`) is the deploy build and a door to the bucket's files: the check of the deploy build finds it", () => {
+  mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
+  const out = mkdtempSync(join(WORKER_DIR, "test-output", "bundle-local-"));
+  try {
+    bundleWorker(out, { entry: "local-build/index.ts", extraArgs: [] });
+    const local = readBuild(out);
+    // MOICA's keys and addresses, as deployed: nothing of the test build's.
+    checkKeys(local);
+    checkAddresses(local);
+    assert.ok(local.code.includes("writeHttpMetadata"), "the local build sends the bucket's files");
+    assert.ok(!deploy.code.includes("writeHttpMetadata"), "the deploy build has no route to the bucket's files (ADR-0027)");
+    assert.throws(() => checkNothingOfTheTestBuild(local), /local-build/);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
 });
 
 test("the proof verifier's files in a build are Barretenberg's module and the two verification keys, each with its SHA-256", () => {

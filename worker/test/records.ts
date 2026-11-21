@@ -190,7 +190,7 @@ export const HASH_LIST_TYPE = "text/plain; charset=utf-8";
  *   - the row of the roster has the number of records and the last
  *     fingerprint, and `card-state` reports the same number.
  *
- * It is the Go backend's `checkRoster` (server/harness_test.go), which asks
+ * It is the Go backend's `checkRoster` (e159ab9:server/harness_test.go), which asks
  * the Go store for the same.
  */
 export async function checkRoster(worker: TestWorker, kind: "test" | "production" = "test"): Promise<RosterRecord[]> {

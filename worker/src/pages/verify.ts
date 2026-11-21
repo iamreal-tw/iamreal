@@ -1,5 +1,5 @@
 // How to verify: design/copy/verify.md. The markup is the Go backend's
-// (server/pages/templates/verify.html). The prompt is written exactly as
+// (e159ab9:server/pages/templates/verify.html). The prompt is written exactly as
 // verify.md has it, in a <pre> that can be selected; the copy buttons'
 // script (/copy.js) shows the button that copies it, hidden without the
 // script.

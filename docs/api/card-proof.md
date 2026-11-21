@@ -1,12 +1,8 @@
 # Card proof API
 
 Status: **Draft**. The interface between the cardholder's device (`web/`,
-later the apps) and the server for one card proof. There are two servers
-for now: the Worker (`worker/`), which has every endpoint here; and the Go
-backend (`server/`), kept for comparison until the Worker has the rest of
-the site, which has not the code `paused`, has `GET /api/v1/head` in place
-of `fingerprint`, and still sends `head` with `card-state` (noted where it
-differs). Terms follow
+later the apps) and the server for one card proof. The server is the
+Worker (`worker/`). Terms follow
 [`GLOSSARY.md`](../../GLOSSARY.md). The formats of the values are defined in
 [`spec/`](../../spec/README.md); this document only says which request
 carries which value.
@@ -111,9 +107,7 @@ for all of them (ADR-0017).
     read them; they are in the roster.
   - `count` is the number of records the answer was computed at: every
     record stored at that moment, not the count of the last line published
-    in `fingerprints.jsonl`. The answer carries no roster fingerprint; the
-    Go backend (`server/`), kept only for comparison, still sends one as
-    `head`.
+    in `fingerprints.jsonl`. The answer carries no roster fingerprint.
 - Errors: `400` `malformed`, also for a scope this roster does not accept.
 
 The server sends facts, not conclusions. The device computes the rest from
@@ -416,10 +410,6 @@ What the device does with what it cannot read:
 - It says nothing of the records written since that line: `count` here can
   be less than the `count` of `card-state`.
 - It is answered while the roster is paused.
-- The Go backend (`server/`), kept only for comparison, has
-  `GET /api/v1/head` instead: `{"count":138,"head":"…"}`, the number of
-  records stored now and their roster fingerprint, not the last line
-  published.
 
 ## Public files
 

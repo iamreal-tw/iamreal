@@ -30,7 +30,7 @@
 
 找不到的寫法（#123 的審查試過）：樣板字串（`` `${repo}/docs` ``）、用 `+` 接起來的路徑、帶 `?raw` 的 import、CSS 的 `@import`、套件名放在變數裡的 `go build`、它們啟動的程式在執行時讀的檔，以及執行時用其他方式拼出來的路徑。所以讓這幾套測試多用一個目錄的人，要自己把它加進清單。
 
-**`worker/**` 在清單裡，`server/**` 不在**（#69）。這三套測試對本機 workerd 裡的 Worker 跑：wrangler 從 `worker/` 打包、讀 `worker/wrangler.jsonc` 和 `worker/site/`，這些是執行時才讀的，上面的讀法看不到，所以整個 `worker/` 手動列進去。Go 的舊後台 `server/` 它們不再建置，也不啟動；`workflows.test.ts` 確認它們建置的 Go 程式只有 `./cmd/iamreal-verify`，而它不引用 `server/`。
+**`worker/**` 在清單裡**（#69）。這三套測試對本機 workerd 裡的 Worker 跑：wrangler 從 `worker/` 打包、讀 `worker/wrangler.jsonc` 和 `worker/site/`，這些是執行時才讀的，上面的讀法看不到，所以整個 `worker/` 手動列進去。`workflows.test.ts` 確認它們建置的 Go 程式只有 `./cmd/iamreal-verify`。
 
 改對 Worker 跑之後，這個工作在 GitHub 的 runner 上跑完過一次：PR #235 的最後一次，11 分 50 秒（2026-11-21）。同一個 PR 的前一次跑了 14 分 43 秒還沒跑完，就因為分支有新的提交被取消了，所以花的時間不只這一個數字，還要再看幾次。在一台同時跑著別的測試的 M1 Max 上，三套依序是約 3 分、6 分、40 秒（同一天）。工作的上限是 30 分鐘。
 

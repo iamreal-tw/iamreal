@@ -866,8 +866,6 @@ test("the browser tests run when anything they use changes: each top-level direc
   const { used } = readBrowserTests();
   // The check sees the page, the shared rules, the screen's sentences and the back end the tests run against.
   for (const d of ["web", "protocol", "design", "verifier", "worker"]) assert.ok(used.has(d), `the check found ${d}`);
-  // The Go back end is no longer among what they use (#69).
-  assert.ok(!used.has("server") && !BROWSER_PATHS.includes("server/**"));
   assert.deepEqual(
     [...used].filter((u) => !inPaths(u)),
     [],
@@ -906,13 +904,12 @@ test(
   () => {
     assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
     const { goPackages } = readBrowserTests();
-    // The one Go program they build re-verifies what the Worker published; the Go server is not built (#69).
+    // The one Go program they build re-verifies what the Worker published (#69).
     assert.deepEqual([...goPackages], ["./cmd/iamreal-verify"], "the check read the Go builds");
     const format = '{{if .Module}}{{if eq .Module.Path "github.com/iamreal-tw/iamreal"}}{{.Dir}}{{end}}{{end}}';
     const dirs = execFileSync("go", ["list", "-tags", "iamrealtest", "-deps", "-f", format, ...goPackages], { cwd: REPO, encoding: "utf8" });
     const used = new Set(["go.mod", "go.sum", ...dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep)[0]!)]);
     for (const d of ["verifier", "cmd", "crl", "roster"]) assert.ok(used.has(d), `the check found ${d}`);
-    assert.ok(!used.has("server"), "iamreal-verify does not import the Go server");
     assert.deepEqual(
       [...used].filter((u) => !inPaths(u)),
       [],
@@ -1150,9 +1147,8 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["the workflow that saves the caches the device-core and android jobs restore", [".github/workflows/cache.yml"], ["typescript", "device-core", "android"]],
     ["the Worker", ["worker/src/x.ts"], ["typescript"]],
     ["the page", ["web/src/x.ts"], ["typescript"]],
-    ["the page's README, whose headers the Go server's tests read", ["web/README.md"], ["go", "typescript"]],
-    ["the ADR the Go server's site links to", ["docs/adr/0004-scoped-ids-and-proofs-are-public.md"], ["go", "typescript"]],
-    ["the Go server", ["server/x.go"], ["go", "typescript"]],
+    ["the page's README, whose headers worker/'s tests read", ["web/README.md"], ["typescript"]],
+    ["the ADR the site links to", ["docs/adr/0004-scoped-ids-and-proofs-are-public.md"], ["typescript"]],
     ["the app for Android", ["android/app/x.kt"], ["typescript", "android"]],
     ["the app for iOS", ["ios/x.swift"], ["typescript"]],
     ["the Rust core", ["device-core/checks/src/x.rs"], ["typescript", "device-core", "android"]],
@@ -1339,9 +1335,9 @@ test("the go check runs when anything it uses changes: every directory with a Go
   assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
   const list = CHECK_PATHS.go!;
   const dirs = goDirectories(["./..."]);
-  for (const d of ["server", "verifier", "cmd/iamreal-verify", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+  for (const d of ["verifier", "cmd/iamreal-verify", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
   const named = namedByGo(trackedFiles(...new Set(dirs.map((d) => d.split("/")[0]!))));
-  for (const p of ["spec/vectors", "design/copy", "web/README.md", "spec/roster-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  for (const p of ["spec/vectors", "design/copy/verify.md", "spec/roster-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
   assert.deepEqual(
     [...dirs, ...named].filter((p) => !holds(list, p)),
     [],
@@ -1379,7 +1375,7 @@ test(
     const list = CHECK_PATHS.typescript!;
     const { goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
     const dirs = goDirectories([...goPackages]);
-    for (const d of ["server", "verifier", "cmd/iamreal-verify", "cmd/iamreal-crl", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+    for (const d of ["verifier", "cmd/iamreal-verify", "cmd/iamreal-crl", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
     const named = namedByGo(trackedFiles(...dirs).filter((f) => dirs.includes(dirname(f))));
     assert.ok(named.has("spec/vectors"), `the check read the Go sources: ${[...named].join(", ")}`);
     assert.deepEqual(

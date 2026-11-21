@@ -1,8 +1,8 @@
 // Can a page on http://localhost, sent with the server's page headers, be
 // cross-origin isolated and still talk to MOICA's real component? Opens a
 // page on http://localhost:PORT with the Content-Security-Policy,
-// Document-Isolation-Policy and Cross-Origin-Opener-Policy of
-// server/headers.go, clicks its one button
+// Document-Isolation-Policy and Cross-Origin-Opener-Policy the server
+// sends (README.md, "頁面需要的標頭"; ./headers.ts), clicks its one button
 // (a real mouse event), which opens the component's window and sends it
 // CheckEnvir, the component's environment check, and nothing else: no
 // certificate is read, nothing is signed, no PIN exists here. The reply is

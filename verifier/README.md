@@ -2,7 +2,7 @@
 
 驗證一筆紀錄：檢查一行紀錄的寫法、算紀錄的雜湊、從紀錄的欄位重建證明的公開輸入，再用 `bb verify` 驗證明。
 
-**這個目錄讓人檢查的事：任何人都能重驗一筆紀錄。** 照 `spec/` 實作，不需要後台，也不引用 `server/`。整份名冊的規則在 `roster/`，把兩者接起來的指令在 `cmd/iamreal-verify/`。
+**這個目錄讓人檢查的事：任何人都能重驗一筆紀錄。** 照 `spec/` 實作，不需要後台。整份名冊的規則在 `roster/`，把兩者接起來的指令在 `cmd/iamreal-verify/`。
 
 ## 內容
 
@@ -99,6 +99,8 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 
 `internal_test.go` 另外測：平台表（代號的格式、不重複、正式名冊沒有 `test-` 開頭的、`Platforms` 照代號排序）；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
 
+`platforms_test.go`：兩份名冊每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同。
+
 **真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕，以及兩筆紀錄組成的測試名冊經過 `roster/` 的規則。
 
 ## 對外的函式
@@ -113,7 +115,7 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 | `PublicInputs(r)`、`EncodePublicInputs` | 從紀錄重建公開輸入、寫成 `bb` 讀的二進位格式 |
 | `ParseChallenge`、`CurrentTime`、`ParseDate` | 題目和日期 |
 | `LookupScope`、`Scopes`、`ScopePacked` | 場合 |
-| `Platforms`、`LookupPlatform` | 平台表（照代號排序）：代號、顯示名稱、帳號名稱格式的字串（`UsernameFormat`，和規格的表一字不差，後台的 `config` 送出它）和檢查函式（`ValidUsername`；兩者一致由 `server/api_test.go` 檢查） |
+| `Platforms`、`LookupPlatform` | 平台表（照代號排序）：代號、顯示名稱、帳號名稱格式的字串（`UsernameFormat`，和規格的表一字不差，後台的 `config` 送出它）和檢查函式（`ValidUsername`；兩者一致由 `platforms_test.go` 檢查） |
 | `DeclarationCode(scope, accounts, challenge)`、`DeclarationPreimage`、`DeclarationCodePacked` | 宣告碼 |
 | `ParseScopedID`、`ScopedIDText`、`ShortID`、`ReadShortIDInURL` | 匿名編號 |
 | `Issuers`、`AcceptedCircuits`、`LookupCircuit`、`ModulusLimbs` | 編進程式的表 |

@@ -1,5 +1,5 @@
 // What the Worker serves that is not the API: the visitors' pages, the Go
-// backend's (server/visitor.go), moved as they were.
+// backend's (e159ab9:server/visitor.go), moved as they were.
 //
 //   /                 the home page (design/copy/home.md)
 //   /p/…              the page of a card (design/copy/proof-page.md)

@@ -3,7 +3,7 @@
 // design/copy/ has for the case (account-page.md, roster-page.md), in order,
 // read from the copy files; the redirects, the 404s, the lookup box, the
 // list a page at a time. The cases are the Go backend's
-// (server/visitor_test.go).
+// (e159ab9:server/visitor_test.go).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

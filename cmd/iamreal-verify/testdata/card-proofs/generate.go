@@ -1,11 +1,12 @@
 //go:build ignore
 
-// Writes the data of the server's end-to-end test (e2e_test.go): CRLs
+// Writes the data of the Worker's test with real proofs
+// (worker/test/records-real.test.ts): CRLs
 // signed by throwaway issuer keys, and card proofs with real proofs against
-// their roots, each made for a challenge the test has the server issue.
+// their roots, each made for a challenge the test has the Worker issue.
 // Run from the repository root:
 //
-//	go run ./server/testdata/generate.go -bb <bb> -crs <dir>
+//	go run ./cmd/iamreal-verify/testdata/card-proofs/generate.go -bb <bb> -crs <dir>
 //
 // The proofs are made by cmd/iamreal-verify/testdata/make-proofs.mjs, with
 // the test helpers of circuits/. The CRS directory needs the 2^18-point
@@ -38,7 +39,7 @@ import (
 )
 
 const (
-	dir   = "server/testdata"
+	dir   = "cmd/iamreal-verify/testdata/card-proofs"
 	scope = "iamreal-test:public:0__________"
 )
 
@@ -60,7 +61,7 @@ var crls = []crlSpec{
 	{"C-G3.crl", "G3", 2026112105, time.Date(2026, 11, 20, 21, 12, 15, 0, time.UTC), "b"}, // CRL date 2026-11-21
 }
 
-// The card proofs, in the order the test submits them. at is the server's
+// The card proofs, in the order the test submits them. at is the back end's
 // clock (Taiwan time) when it issues the challenge and gets the proof.
 // accounts is the card's whole list, "platform:username" in ascending order
 // of platform.
@@ -90,7 +91,7 @@ var proofs = []proofSpec{
 	{"2026-11-24T12:00:00+08:00", "G3", []string{"threads:dave"}, 1, 400, "daily_limit"},
 }
 
-// The file e2e_test.go reads.
+// The file worker/test/records-real.test.ts reads.
 type cardProof struct {
 	At     string `json:"at"`
 	Random string `json:"random"` // the 16 random bytes of the challenge, in hex
@@ -141,7 +142,7 @@ func main() {
 		log.Fatalf("bb %q is not a file (see the message of circuits/find-bb.sh)", *bb)
 	}
 	var err error
-	if work, err = os.MkdirTemp("", "iamreal-server-e2e-"); err != nil {
+	if work, err = os.MkdirTemp("", "iamreal-card-proofs-"); err != nil {
 		log.Fatal(err)
 	}
 	defer os.RemoveAll(work)

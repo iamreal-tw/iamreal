@@ -2,7 +2,7 @@
 // (/hang, /hang/<short ID>) and the copy buttons' script (/copy.js), through
 // the Worker's HTTP (test/harness.ts), against the words of design/copy/
 // (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
-// The cases are the Go backend's (server/site_test.go).
+// The cases are the Go backend's (e159ab9:server/site_test.go).
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -241,9 +241,6 @@ describe("the copy buttons' script", () => {
     checkVisitorHeaders("/copy.js", res, { cache: "no-cache" });
     const script = await res.text();
     assert.equal(script, readFileSync(join(WORKER_DIR, "site", "copy.js"), "utf8"));
-    // The Go backend's, byte for byte, for as long as that one is in the repository.
-    const old = join(REPO_DIR, "server", "pages", "copy.js");
-    if (existsSync(old)) assert.equal(script, readFileSync(old, "utf8"));
     assert.ok(script.includes('document.querySelectorAll("button[data-copy], button[data-copy-text]")'));
     for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "import", "eval", "innerHTML", "location"]) assert.ok(!script.includes(s), `copy.js has ${s}`);
     const etag = res.headers.get("etag");

@@ -5,7 +5,8 @@
 // signature. This file is the production build's
 // (vite.config.ts, mode "production"). The headless browser test builds the
 // page with test/e2e/target.ts in its place (mode "test"); the build for a
-// real card on this computer (`pnpm local`) with src/target-local.ts (mode
+// real card on this computer (worker/'s `pnpm local`) with
+// src/target-local.ts (mode
 // "localcard"). test/build.test.ts checks that a production build holds MOICA's
 // keys, this address, the public roster's scope string, the data domain and
 // nothing of the test's, and what the local build holds.

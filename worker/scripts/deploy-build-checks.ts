@@ -109,8 +109,8 @@ export function bindingsIn(output: string): Record<string, string> {
   return found;
 }
 
-/** What only the test build holds. */
-export const TEST_ONLY: readonly string[] = ["127.0.0.1", "localhost", "__IAMREAL_TEST", "/__test/", "setTestClock", "testClock", "test-build", "crl-paths", "/g2/complete.crl"];
+/** What only the test build holds, and the build for a real card on this computer (local-build/, which sends the bucket's files). */
+export const NOT_DEPLOYED: readonly string[] = ["127.0.0.1", "localhost", "__IAMREAL_TEST", "/__test/", "setTestClock", "testClock", "test-build", "crl-paths", "/g2/complete.crl", "local-build"];
 
 /** The proof verifier's files, by the name they are imported by, and their SHA-256. */
 export function engineFiles(): Record<string, string> {
@@ -177,7 +177,7 @@ export function checkKeys(b: BuildContents): void {
 }
 
 export function checkNothingOfTheTestBuild(b: BuildContents): void {
-  for (const s of TEST_ONLY) assert.ok(!b.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
+  for (const s of NOT_DEPLOYED) assert.ok(!b.code.includes(s), `the deploy build contains ${JSON.stringify(s)}`);
 }
 
 /**

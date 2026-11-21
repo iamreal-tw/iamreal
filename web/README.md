@@ -2,23 +2,23 @@
 
 **這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開持卡人的裝置。** 這裡是從「讀到卡片上的憑證」到「送出證明」之間，在持卡人的瀏覽器裡做的每一件事：過卡的引擎（`src/`，不含畫面）、內政部元件的橋接（`src/card/hipki.ts`）、過卡的畫面（`src/ui/`）。
 
-程式照 `spec/` 和 `docs/api/card-proof.md` 實作，規格裡的算法引用 `protocol/`，不引用 `server/`。裝置上的保護照 ADR-0015、ADR-0016：保護持卡人、對抗伺服器的限制寫死在這裡，伺服器只能讓它更嚴。
+程式照 `spec/` 和 `docs/api/card-proof.md` 實作，規格裡的算法引用 `protocol/`，不引用 `worker/`。裝置上的保護照 ADR-0015、ADR-0016：保護持卡人、對抗伺服器的限制寫死在這裡，伺服器只能讓它更嚴。
 
 ## 在本機用真卡片過卡
 
-需要 Node 22（22.6 以上）、pnpm 10、Go 1.26、`bb` 6.0.0（取得方式見 `verifier/README.md`）、讀卡機和內政部的元件（HiPKI，`http://localhost:61161`）。
+需要 Node 22（22.6 以上）、pnpm 10、讀卡機和內政部的元件（HiPKI，`http://localhost:61161`）。不需要 Cloudflare 的帳號：後台是 `worker/`，跑在本機的 workerd。
 
 ```
-pnpm install --frozen-lockfile             # 在根目錄：pnpm workspace，web/ 和 protocol/ 一起裝
-cd web
-IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄>
+pnpm install --frozen-lockfile             # 在根目錄：pnpm workspace，web/、worker/、protocol/ 一起裝
+cd worker
+pnpm local                                 # 可加 --port 8080、--data <目錄>
 ```
 
-`pnpm local`（`scripts/local.ts`）依序：通用參數不在就下載（`pnpm fetch-crs`）、建置本機用真卡片的頁面（`vite build --mode localcard`，`src/target-local.ts` 換掉 `src/target.ts`：內政部的發證金鑰、元件在 `http://localhost:61161`、沒有假卡片和測試金鑰，和正式的建置相同；**但簽的是測試名冊的場合字串 `iamreal-test:public:0__________`**，在這裡試真卡片算出的匿名編號和公開名冊上的無關；認得測試名冊的兩個平台 `test-example`、`threads`）、建置後台（不帶測試的建置標籤）、跑一次清冊鏡像（抓內政部真的 G2、G3 清冊）、用測試的名冊（`-roster test`）啟動後台並提供頁面，在 `http://localhost:8080/proof`（同一個後台在 `http://localhost:8080/` 提供首頁和其他訪客的頁面）。按 Ctrl-C 停止。名冊、清冊、後台的執行檔在 `web/local/`（不進版控）；刪掉這個目錄就從空的名冊重來。正式的建置（`pnpm build`）不變，簽的是公開名冊的場合字串。
+`pnpm local`（`worker/scripts/local.ts`，`worker/README.md`「在本機用真卡片過卡」）依序：通用參數不在就下載（`pnpm fetch-crs`）、建置本機用真卡片的頁面（`vite build --mode localcard`，`src/target-local.ts` 換掉 `src/target.ts`：內政部的發證金鑰、元件在 `http://localhost:61161`、沒有假卡片和測試金鑰，和正式的建置相同；**但簽的是測試名冊的場合字串 `iamreal-test:public:0__________`**，在這裡試真卡片算出的匿名編號和公開名冊上的無關；認得測試名冊的兩個平台 `test-example`、`threads`）、在本機的 workerd 啟動部署的那一份 Worker（內政部的發證金鑰和清冊網址、Worker 裡的驗證器；測試環境的設定，所以是測試名冊）、跑一次清冊鏡像（抓內政部真的 G2、G3 清冊），在 `http://localhost:8080/proof` 提供頁面（同一個 Worker 在 `http://localhost:8080/` 提供首頁和其他訪客的頁面）。按 Ctrl-C 停止。名冊、清冊存檔、頁面在 `worker/local/`（不進版控）；刪掉這個目錄就從空的名冊重來。Go 的舊後台用的 `web/local/` 不再讀寫。正式的建置（`pnpm build`）不變，簽的是公開名冊的場合字串。
 
 用桌機的 Chrome 開 `http://localhost:8080/proof`。`localhost` 是瀏覽器認定的安全來源，不需要 HTTPS：在後台送的標頭之下，頁面是跨來源隔離的（多執行緒），也能和元件的視窗來回（2026-11-16 在這台 Mac 的 Chrome 157 實測，只送 `CheckEnvir`：`test/e2e/check-component.ts`）。Safari、Firefox 忽略 `Document-Isolation-Policy`，證明用 1 個執行緒；這一頁沒有在它們上面測過。後台另外送 `Cross-Origin-Opener-Policy: same-origin-allow-popups`（見「頁面需要的標頭」）；加了它之後元件還能不能用，Chrome 以外的瀏覽器和真的過卡還沒有確認。
 
-確認頁面本身沒問題、但還不想插卡時：`node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/proof` 用無頭 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件不會收到任何請求），檢查標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域。
+確認頁面本身沒問題、但還不想插卡時：`pnpm local` 啟動時已經跑過不插卡的檢查（`worker/test/site-check.ts`）；`node --experimental-strip-types test/e2e/smoke.ts http://localhost:8080/proof` 再用無頭 Chrome 開到第一個畫面為止（不按「讀取卡片」，元件不會收到任何請求），檢查標頭、跨來源隔離、證明引擎啟動、沒有違反 CSP、沒有連到別的網域。
 
 ## 三種用真元件的建置
 
@@ -31,11 +31,11 @@ IAMREAL_BB=/path/to/bb pnpm local          # 可加 --port 8080、--data <目錄
 | 用在哪裡 | 正式網站 `iamreal.tw` | 測試網站 `test.iamreal.tw`（ADR-0028）：部署時由 `worker/` 建置、放進 Static Assets（`worker/README.md`「Static Assets」） | 這台電腦，`http://localhost:8080/proof` |
 | 卡片簽的場合字串 | 公開名冊的 `iamreal:public:0_______________` | 測試名冊的 `iamreal-test:public:0__________` | 測試名冊的 `iamreal-test:public:0__________` |
 | 裝置認得的平台 | `threads` | `test-example`、`threads` | `test-example`、`threads` |
-| 資料網域（`DATA_ORIGIN`） | `https://data.iamreal.tw` | `https://test-data.iamreal.tw` | 空字串：頁面自己的網域，本機的後台（`server/`）在 `/crl/…` 提供清冊 |
-| 伺服器送的 CSP `connect-src` | `'self' https://data.iamreal.tw` | `'self' https://test-data.iamreal.tw` | `'self' https://data.iamreal.tw`（舊後台只有這一份；頁面只連自己的網域） |
+| 資料網域（`DATA_ORIGIN`） | `https://data.iamreal.tw` | `https://test-data.iamreal.tw` | 空字串：頁面自己的網域，本機的 Worker 在 `/crl/…` 提供清冊（`worker/local-build/`） |
+| 伺服器送的 CSP `connect-src` | `'self' https://data.iamreal.tw` | `'self' https://test-data.iamreal.tw` | `'self' https://test-data.iamreal.tw`（測試網站的那一份；頁面只連自己的網域） |
 | 完成畫面的連結（`SITE_DOMAIN`） | `iamreal.tw/p/<短編號>` | `test.iamreal.tw/p/<短編號>` | `iamreal.tw/p/<短編號>`（本機的網址不寫進連結，照正式的） |
 | 測試名冊的標示 | 沒有 | 每一頁最上面：`測試名冊　不定期清空，上次清空：<日期>`（`design/copy/test-site.md`） | 沒有 |
-| 後台 | `worker/` 的正式環境（還沒有） | `worker/` 的測試環境 | Go 的舊後台 `server/`，用測試的名冊 |
+| 後台 | `worker/` 的正式環境（還沒有） | `worker/` 的測試環境 | `worker/` 的測試環境，跑在本機的 workerd |
 
 其他都相同：發證金鑰、元件的網址、PIN 等第二次簽章的 5 分鐘、每一項檢查。在測試網站或本機試真卡片算出的匿名編號和公開名冊上的無關（`spec/scope.md`）。
 
@@ -74,7 +74,7 @@ IAMREAL_TEST_ROSTER_CLEARED_ON=2026-11-19 pnpm build:test-site
 
 ## 網址
 
-過卡的頁面在 `/proof`，它的每個檔案在 `/proof/` 底下：程式和 worker（`/proof/assets/…`）、bb.js 的 WebAssembly（`/proof/bb/…`）、電路（`/proof/circuits/…`）、通用參數（`/proof/crs/…`）、說明頁（`/proof/help.html`）。網站的 `/` 是首頁，由後台產生（`worker/README.md`「頁面和檔案」；舊後台是 `server/README.md`「訪客看的頁面」）。四種頁面的建置（production、testsite、localcard、test）的 `base` 是 `/proof/`（`vite.config.ts`）；頁面自己寫的路徑從 `src/base.ts` 的 `BASE` 接上去（`import.meta.env.BASE_URL`，建置時寫死；Node 裡的測試沒有建置，是 `/`）。引擎自己的測試頁（mode engine，`pnpm test:e2e`）照舊在 `/`。API（`/api/v1/…`）的路徑不變。
+過卡的頁面在 `/proof`，它的每個檔案在 `/proof/` 底下：程式和 worker（`/proof/assets/…`）、bb.js 的 WebAssembly（`/proof/bb/…`）、電路（`/proof/circuits/…`）、通用參數（`/proof/crs/…`）、說明頁（`/proof/help.html`）。網站的 `/` 是首頁，由後台產生（`worker/README.md`「頁面和檔案」）。四種頁面的建置（production、testsite、localcard、test）的 `base` 是 `/proof/`（`vite.config.ts`）；頁面自己寫的路徑從 `src/base.ts` 的 `BASE` 接上去（`import.meta.env.BASE_URL`，建置時寫死；Node 裡的測試沒有建置，是 `/`）。引擎自己的測試頁（mode engine，`pnpm test:e2e`）照舊在 `/`。API（`/api/v1/…`）的路徑不變。
 
 ### 資料網域
 
@@ -84,12 +84,12 @@ IAMREAL_TEST_ROSTER_CLEARED_ON=2026-11-19 pnpm build:test-site
 |---|---|
 | 正式（production） | `https://data.iamreal.tw` |
 | 測試網站（testsite） | `https://test-data.iamreal.tw` |
-| 本機用真卡片（localcard） | 空字串：頁面自己的網域。本機的後台（`server/`）在 `/crl/…` 提供清冊 |
+| 本機用真卡片（localcard） | 空字串：頁面自己的網域。本機的 Worker 在 `/crl/…` 提供清冊（`worker/local-build/`） |
 | 測試（test，無頭瀏覽器的測試） | 空字串：頁面自己的網域。本機和 CI 沒有資料網域，後台（`worker/`）也沒有把清冊送給人的路由，所以測試在 Worker 前面起一個小服務扮演它：`/crl/…`、`/roster/…` 從 R2 的模擬讀（只讀），其他請求原樣交給 Worker（`test/e2e/worker-site.ts`） |
 
 `test/build.test.ts` 檢查正式的建置含 `https://data.iamreal.tw`、測試網站的建置含 `https://test-data.iamreal.tw` 而不含正式的那一個、本機用真卡片的建置不含任何資料網域。頁面用 `src/api.ts` 的 `dataOriginFetch` 拿這個網域的檔案。
 
-CSP 是送標頭的那一邊定的，不是建置定的：`worker/` 照名冊的種類送各自的資料網域（`worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`），測試網站是 `https://test-data.iamreal.tw`，正式網站是 `https://data.iamreal.tw`；舊後台（`server/headers.go`）只有正式的那一份（見「`Content-Security-Policy`」）。部署前的檢查核對放上測試網站的建置寫的資料網域就是標頭允許的那一個（`worker/scripts/proof-page.ts`）。
+CSP 是送標頭的那一邊定的，不是建置定的：`worker/` 照名冊的種類送各自的資料網域（`worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`），測試網站是 `https://test-data.iamreal.tw`，正式網站是 `https://data.iamreal.tw`（見「`Content-Security-Policy`」）；`pnpm local` 送的是測試網站的那一份。部署前的檢查核對放上測試網站的建置寫的資料網域就是標頭允許的那一個（`worker/scripts/proof-page.ts`）。
 
 完成畫面的「打開這張島民證明」「怎麼驗證」現在連到說明頁（`/proof/help.html?topic=…`），不是 `/p/…`；寫在畫面上的連結 `iamreal.tw/p/<島民編號>` 和複製的 `https://iamreal.tw/p/<島民編號>` 是完整的網址，不受搬家影響。
 
@@ -295,7 +295,7 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 
 ## 頁面需要的標頭
 
-伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（舊後台是 `server/headers.go` 的 `pageHeaders`；`worker/` 定義在 `worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`，由 Cloudflare 的 Static Assets 直接加在檔案上，不經過 Worker 的程式，見 `worker/README.md`「Static Assets」；`server/` 和 `worker/` 的測試各自檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
+伺服器對 `web/` 的每個檔案（`/proof` 和 `/proof/` 底下，見「網址」）送三個標頭（`worker/` 定義在 `worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`，由 Cloudflare 的 Static Assets 直接加在檔案上，不經過 Worker 的程式，見 `worker/README.md`「Static Assets」；`worker/` 的測試檢查這份 README 引用的和它一字不差）：下面的 `Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups`。
 
 ### `Content-Security-Policy`
 
@@ -349,9 +349,9 @@ pnpm build            # 正式的建置，到 dist/
 IAMREAL_TEST_ROSTER_CLEARED_ON=2026-11-19 pnpm build:test-site   # 測試網站的建置，到 dist/
 ```
 
-- `pnpm fetch-crs` 是這個目錄的程式唯一對外的連線（`pnpm local` 另外讓後台的清冊鏡像抓內政部的清冊）：從 `https://crs.aztec-cdn.foundation/` 下載 2^18 個點的 `g1_compressed.dat` 開頭 8 MiB（SHA-256 `5107a7926d504236331b4872b7218a1ca18921b5358d894822576e1aeb684934`）和 `g2.dat`（128 個位元組，`01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f`）。G1 的雜湊和 `bb` 自己下載、檢查過的兩份副本相同；G2 從 Aztec 的兩個網域下載的相同。頁面執行時從自己的網域拿這兩個檔案。
+- `pnpm fetch-crs` 是這個目錄的程式唯一對外的連線（`worker/` 的 `pnpm local` 另外讓後台的清冊鏡像抓內政部的清冊）：從 `https://crs.aztec-cdn.foundation/` 下載 2^18 個點的 `g1_compressed.dat` 開頭 8 MiB（SHA-256 `5107a7926d504236331b4872b7218a1ca18921b5358d894822576e1aeb684934`）和 `g2.dat`（128 個位元組，`01797bfc4de5a96f0e516a9ea4537d18786dc30cb991aca4274c95822b69c32f`）。G1 的雜湊和 `bb` 自己下載、檢查過的兩份副本相同；G2 從 Aztec 的兩個網域下載的相同。頁面執行時從自己的網域拿這兩個檔案。
 - `IAMREAL_BB` 是 `bb` 6.0.0（取得方式見 `verifier/README.md`）。`CHROME` 可以指定 Chrome 的路徑，預設是 macOS 的 Google Chrome。
-- 三套無頭瀏覽器的測試都對本機 workerd 裡的 Worker 跑（`worker/` 測試專用的建置，`worker/README.md`「測試的工具」），不建置也不啟動 Go 的舊後台。它們共用假元件的固定埠 61171 和 `worker/` 的建置目錄，一次跑一套。上面的時間是 2026-11-21 在一台同時跑著別的測試的 M1 Max 上量的。
+- 三套無頭瀏覽器的測試都對本機 workerd 裡的 Worker 跑（`worker/` 測試專用的建置，`worker/README.md`「測試的工具」），它們共用假元件的固定埠 61171 和 `worker/` 的建置目錄，一次跑一套。上面的時間是 2026-11-21 在一台同時跑著別的測試的 M1 Max 上量的。
 - `pnpm test:e2e` 後面可以接設定，例如 `G3-dip G3-none G2-dip G3-dip-t4`：發證金鑰的大小、頁面是否跨來源隔離、證明的執行緒上限。
 
 ### Node 裡的測試（`pnpm test`）

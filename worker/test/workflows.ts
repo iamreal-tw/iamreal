@@ -221,9 +221,7 @@ export const ROOT_FILES_PATHS: readonly string[] = [".npmrc", ".pnpmfile.cjs", "
  * test/workflows.test.ts checks that every top-level directory and file the
  * browser tests use is here. spec/ is here though the check does not find
  * it used: the page's rules and their answers change together. worker/ is
- * here since the tests run against the Worker (#69); server/, the Go back
- * end they ran against before, is not: they build no package that imports
- * it. circuits/package.json is here as a package of the workspace: the job
+ * here since the tests run against the Worker (#69). circuits/package.json is here as a package of the workspace: the job
  * runs `pnpm install --frozen-lockfile`, which compares the lockfile with
  * every package's package.json (the other three are in directories listed
  * whole). And ROOT_FILES_PATHS, as in the lists of the required checks: the
@@ -948,8 +946,7 @@ export const EVERY_CHECK_PATHS: readonly string[] = [
 ];
 /**
  * The go job: every directory with a Go package, what their tests read
- * (the vectors and the specifications they quote, the copy, web/README.md's
- * headers, the ADR the site links to), and the package.json files
+ * (the vectors and the specifications they quote, the copy), and the package.json files
  * `pnpm install --frozen-lockfile` compares the lockfile with (bb comes from it).
  */
 export const GO_PATHS: readonly string[] = [
@@ -957,12 +954,9 @@ export const GO_PATHS: readonly string[] = [
   "cmd/**",
   "crl/**",
   "roster/**",
-  "server/**",
   "verifier/**",
   "spec/**",
   "design/copy/**",
-  "web/README.md",
-  "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
   "circuits/package.json",
   "protocol/package.json",
   "web/package.json",
@@ -973,8 +967,7 @@ export const GO_PATHS: readonly string[] = [
  * programs worker/'s tests build and run, and android/, ios/, device-core/,
  * circuits/ and the workflows, which test/workflows.test.ts reads. That is every
  * directory of the repository but docs/, and of docs/ the one ADR the
- * sources of the Go server name (its tests are not run here; the file is
- * listed all the same).
+ * site links to, whose file worker/'s tests look for.
  */
 export const TYPESCRIPT_PATHS: readonly string[] = [
   ...EVERY_CHECK_PATHS,
@@ -986,7 +979,6 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
   "cmd/**",
   "crl/**",
   "roster/**",
-  "server/**",
   "verifier/**",
   "android/**",
   "ios/**",

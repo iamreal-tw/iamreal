@@ -3,5 +3,6 @@ dist/
 crs/
 # Test runs: fixtures, proofs, browser profiles.
 test-output/
-# pnpm local: the server, its roster and the CRL mirror.
+# Where the Go back end's `pnpm local` kept its roster and CRL mirror, before
+# it was deleted (#74): an operator's computer can still have it.
 local/
