@@ -6,7 +6,7 @@
 // their roots, each made for a challenge the test has the Worker issue.
 // Run from the repository root:
 //
-//	go run ./worker/test/testdata/generate.go -bb <bb> -crs <dir>
+//	go run ./cmd/iamreal-verify/testdata/card-proofs/generate.go -bb <bb> -crs <dir>
 //
 // The proofs are made by cmd/iamreal-verify/testdata/make-proofs.mjs, with
 // the test helpers of circuits/. The CRS directory needs the 2^18-point
@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	dir   = "worker/test/testdata"
+	dir   = "cmd/iamreal-verify/testdata/card-proofs"
 	scope = "iamreal-test:public:0__________"
 )
 

@@ -1,4 +1,4 @@
-// src/target.ts of the build for a real card on this computer (`pnpm local`,
+// src/target.ts of the build for a real card on this computer (worker/'s `pnpm local`,
 // vite.config.ts, mode "localcard"): everything the page trusts is the
 // production build's (MOICA's issuer keys, the component at
 // http://localhost:61161, the 5-minute wait) except the roster and where

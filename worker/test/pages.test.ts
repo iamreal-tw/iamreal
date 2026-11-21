@@ -419,7 +419,7 @@ describe("every page", () => {
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
     const css = await res.text();
     assert.ok(css.includes(".test-roster {") && css.includes(".threads-profile"));
-    // The Go backend's, for as long as that one is in the repository, byte for byte but for one rule added after
+    // The Go back end's style sheet, byte for byte, but for one rule added after
     // the mark of a test roster: the date in it is not broken at a hyphen on a narrow screen.
     const added = `
 /* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */

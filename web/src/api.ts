@@ -108,7 +108,7 @@ export class ServerError extends Error {
   }
 }
 
-/** The server's request ID (server/: 16 hex digits); anything else is not shown. */
+/** The server's request ID (worker/src/api.ts: 16 hex digits); anything else is not shown. */
 function requestIdOf(res: Response): string | null {
   const id = res.headers.get("X-Request-Id");
   return id !== null && /^[0-9a-f]{1,64}$/.test(id) ? id : null;

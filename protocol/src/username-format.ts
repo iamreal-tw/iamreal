@@ -5,7 +5,7 @@
 // hands a server's string to a regular expression engine. A format not in
 // that form is a row the device cannot read.
 //
-// The reading is the one of server/api_test.go (parseUsernameFormat): in the
+// The reading is the one of verifier/platforms_test.go (parseUsernameFormat): in the
 // class, `x-y` is a range and any other character stands for itself (so a
 // `-` first or last is itself). On top of it, what spec/scope.md says no
 // format allows makes the format unreadable here: `"`, `\`, a control

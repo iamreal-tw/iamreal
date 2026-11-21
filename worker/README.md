@@ -4,21 +4,21 @@
 
 ## 現在有什麼
 
-還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、舊後台的每一種訪客頁面、過卡的頁面有了，寫滿的名冊檔會搬到 R2，名冊每天換日公布一次；限流還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
+還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、每一種訪客頁面、過卡的頁面有了，寫滿的名冊檔會搬到 R2，名冊每天換日公布一次；限流還沒有。Go 的舊後台 `server/` 逐案比對完，2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）；它的每個測試檔的案例在這裡的哪一組測試，列在那張票的 PR 說明。
 
 | 有 | 還沒有 |
 |---|---|
-| 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | 在 Cloudflare 上跑過的紀錄：這一版還沒部署 |
+| 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 名冊的 Durable Object：題目表、紀錄、卡片狀態表、名冊的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
-| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)） | 在 Cloudflare 上公布有紀錄的名冊：測試名冊還是 0 筆 |
+| 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
-| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 用真卡片在測試網站過卡（[#71](https://github.com/iamreal-tw/iamreal/issues/71)）。帶著 `web/` 建置的部署 2026-11-21 做了（`main` 的 `1400e11`），不插卡看得到的都看過（[Static Assets](#static-assets)「Cloudflare 上看過的」） |
-| 測試專用的建置和測試的工具 | |
+| 每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | |
+| 測試專用的建置和測試的工具；本機用真卡片過卡的指令（[在本機用真卡片過卡](#在本機用真卡片過卡)） | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
-| 清空測試名冊的步驟（[清空測試名冊](#清空測試名冊)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；營運者手動設的東西的清單（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)） | 在測試網站上真的清空一次 |
+| 清空測試名冊的步驟（[清空測試名冊](#清空測試名冊)），在本機照著做過；部署之後不插卡的檢查（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）；營運者手動設的東西的清單（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。2026-11-21 在測試網站上清空過一次（[#37](https://github.com/iamreal-tw/iamreal/issues/37)） | |
 
 ## 單獨執行
 
@@ -32,9 +32,27 @@ pnpm typecheck   # 型別檢查
 
 `pnpm dev` 啟動的是測試專用的建置，旁邊有一個假的內政部（本機的伺服器），所以不會對內政部送請求。它印出 Worker 的網址；按 Enter 跑一次排程，印出排程寫的紀錄和 R2 的模擬裡的檔案。R2 的模擬每次啟動都是空的。
 
+## 在本機用真卡片過卡
+
+```sh
+pnpm local                       # 可加 --port 8080、--data <目錄>
+```
+
+要讀卡機和內政部的元件（`http://localhost:61161`）；不要 Cloudflare 的帳號、`go`、`bb`。[`scripts/local.ts`](scripts/local.ts) 依序：
+
+1. 通用參數不在就下載（`web/scripts/fetch-crs.mjs`）
+2. 建置本機用真卡片的頁面（`web/` 的 `vite build --mode localcard`，`web/README.md`「三種用真元件的建置」）：內政部的發證金鑰、真的元件，簽測試名冊的場合字串
+3. 在本機的 workerd 啟動 Worker：部署的那一份程式（內政部的發證金鑰和清冊網址、Worker 裡的驗證器），`wrangler.jsonc` 的測試環境的設定，所以是測試名冊。入口是 [`local-build/index.ts`](local-build/index.ts)：部署的 Worker 前面多一件事，`GET`、`HEAD` 的 `/crl/…`、`/roster/…` 從儲存桶送出檔案。Cloudflare 上那是資料網域做的事，Worker 沒有這條路（ADR-0027）；本機沒有資料網域，這個建置的頁面從自己的網域拿清冊存檔。部署的建置不含這個入口（`test/bundle.test.ts`）
+4. 跑一次清冊鏡像，抓內政部真的 G2、G3 清冊。之後不會自己再跑：要新的清冊就重新啟動
+5. 跑[部署之後不插卡的檢查](#部署之後不插卡的檢查)（`local`：資料網域是網站自己的網域，不看 CORS 和每天的公布），印出幾項過了
+
+頁面在 `http://localhost:8080/proof`，首頁和其他訪客的頁面在 `http://localhost:8080/`。按 Ctrl-C 停止。名冊（Durable Object）、儲存桶、頁面在 `local/`（不進版控）；刪掉這個目錄就從空的名冊重來。名冊在指令開著的時候跨過台灣的午夜才公布。Go 的舊後台用的 `web/local/` 不讀也不寫。
+
+對外的連線只有下載通用參數（缺的時候）和清冊鏡像抓內政部的兩份清冊；啟動時不對元件送任何請求，也不開瀏覽器。
+
 ## 題目、卡片現況、設定
 
-介面的格式在 [`docs/api/card-proof.md`](../docs/api/card-proof.md)。這一節寫這個後台怎麼做。程式在 [`src/api.ts`](src/api.ts)、[`src/roster.ts`](src/roster.ts)、[`src/card-table.ts`](src/card-table.ts)、[`src/json.ts`](src/json.ts)；測試在 [`test/api.test.ts`](test/api.test.ts)，案例是從舊後台的 `server/api_test.go` 搬過來的。
+介面的格式在 [`docs/api/card-proof.md`](../docs/api/card-proof.md)。這一節寫這個後台怎麼做。程式在 [`src/api.ts`](src/api.ts)、[`src/roster.ts`](src/roster.ts)、[`src/card-table.ts`](src/card-table.ts)、[`src/json.ts`](src/json.ts)；測試在 [`test/api.test.ts`](test/api.test.ts)，案例是從 Go 舊後台的 `api_test.go` 搬過來的。
 
 ### `/api/` 底下每個回應
 
@@ -197,7 +215,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 - **後台自己不判斷一筆紀錄有效或無效。** 第 4 段把存著的卡片狀態、名冊上最晚的有效日期、樹根對到的清冊日期交給 `protocol/` 的 `applyRecord`，照它的結果回。這個檔自己決定的只有後台自己的事：題目、今天收哪些樹根、更換政策。
 - **題目**：發出滿 10 分鐘就是不認得（剛好 10 分鐘也是）。已經寫入過一筆的題目是 `challenge_used`，不計次。第 6 次送出起是 `challenge_attempts`：第 2 段每通過一次就加一，不管後來停在哪一段，第 4 段再看題目時擋下的（`challenge_used`、`challenge_unknown`）和回 `500` 的（驗證器跑不起來、第 4 段出錯）也算。第 1 段擋下的、`paused` 的、第 2 段就是 `challenge_unknown` 或 `challenge_used` 的不計次；計次的那一次寫入自己失敗（`500`）也沒有計到。
-- **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：`server/submit.go` 只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
+- **第 4 段為什麼再看一次題目**：驗證證明的那段時間，同一個題目可能已經被另一個請求寫入（回 `challenge_used`），也可能剛好過期（回 `challenge_unknown`）。同一個題目同時送兩次，只有一次寫入。過期是照寫入那一刻的時鐘看的：第 2 段時還差 1 毫秒到 10 分鐘、驗證完已經滿 10 分鐘的那一次，回 `challenge_unknown`、不寫入、已經算一次。這一點比 Go 的舊後台嚴，是有意的：它只在第一次看題目時看過期，寫入時只看題目是不是已經用過。
 - **清冊**：`issuer` 那把發證金鑰在鏡像裡沒有可用的清冊，或最新一份的清冊日期加 3 天早於今天（台灣日期），是 `crl_stale`；`smt_root` 不是最新兩份其中一份的樹根，是 `root`。名冊規則的檢查 3 拿到的清冊日期，是這兩份裡樹根相同的那幾份的日期。重驗的人用的是整份清冊存檔，日期只會更多，所以後台收下的紀錄重驗時這一項一定過。
 - **更換政策**（`switch_restricted`）：預設沒有。環境變數 `RESTRICT_LATE_SWITCHES` 是 `"true"` 時，名冊規則接受、但其中有一個更換是那個名額的第 4 次或第 5 次的紀錄，回 `403`。`wrangler.jsonc` 沒有設這個值；要開的話在設定檔加一行，並把它加進 `scripts/deploy-build-checks.ts` 允許的清單。這個值只寫在 `wrangler.jsonc`，不用 `wrangler secret` 設：部署前的檢查讀的是設定檔和 wrangler 列出的 binding，看不到另外設在 Worker 上的 secret，用 secret 開的政策就沒有人在 PR 裡看過。值不是 `"true"` 也不是 `"false"` 時每個介面都回 `500`。
 - **驗證器跑不起來**（`EngineError`，見[驗證證明](#驗證證明)）不是拒絕也不是通過：回 `500`，那一行紀錄的 `where` 是 `verifier`，不問 Durable Object 寫任何東西。這一次送出已經在第 2 段算了一次。
@@ -226,7 +244,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 **序號**是寫入那一刻的筆數加一。紀錄雜湊要用到序號，而算雜湊（WebCrypto）是非同步的，所以做法是：先照現在的筆數算好雜湊和名冊指紋，接著從檢查到寫入一口氣做完、中間不等任何東西，而且一開始先確認筆數沒有變；變了就重算。所以不會有兩筆拿到同一個序號，每一筆都是照前一筆留下的狀態檢查的。本機的 workerd 裡算雜湊不會讓別的請求插進來（20 個請求同時送，筆數也不會在這中間改變），所以測試專用的建置可以讓 Durable Object 在算雜湊之前先等幾毫秒（`PUT /__test/roster/hash-delay`；`src/roster.ts` 的 `hashOf` 就是為了這個拆出來的，只有測試專用的建置覆寫它）：等的時候別的請求會插進來，20 個同時送的請求就會拿著同一個筆數算雜湊。測試確認這時 20 筆仍然各拿到一個序號、存下來的名冊檔驗得過，而且有紀錄重算過。拿掉確認筆數的那一行，這個測試會看到 `500`（序號重複的那一筆因為主鍵寫不進去）。
 
-紀錄寫進 Durable Object 的 `records` 表；一檔寫滿 1,000 筆之後搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)），還沒寫滿的最後一檔留在表裡，每天換日時照那一刻的內容公布一次（[每天換日公布名冊](#每天換日公布名冊)）。存著的那一行、每一筆的紀錄雜湊和名冊指紋、名冊那一列的筆數和名冊指紋，部署的後台沒有任何介面讀得到。測試從兩個地方拿整份名冊：搬走的檔從 R2 的模擬讀，還留著的從測試專用建置的 `GET /__test/roster/stored` 讀。[`test/records.ts`](test/records.ts) 的 `checkRoster` 只拿每一行，用 `protocol/` 照 `spec/record.md` 重算：留著的紀錄緊接在搬走的檔之後、搬走的每一檔在 R2 裡剛好 1,000 行；每一行讀得過（「Check a line」）、序號從 1 連續；R2 裡每一份雜湊清單的每一行、存著的紀錄雜湊和每一筆之後的名冊指紋都對；名冊那一列的筆數和指紋是最後一筆的。它對應 Go 舊後台測試的 `checkRoster`（`server/harness_test.go`），用在同時送出、`empty` 和 `switch_limit`、`switch_restricted`、`daily_limit` 的案例。
+紀錄寫進 Durable Object 的 `records` 表；一檔寫滿 1,000 筆之後搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)），還沒寫滿的最後一檔留在表裡，每天換日時照那一刻的內容公布一次（[每天換日公布名冊](#每天換日公布名冊)）。存著的那一行、每一筆的紀錄雜湊和名冊指紋、名冊那一列的筆數和名冊指紋，部署的後台沒有任何介面讀得到。測試從兩個地方拿整份名冊：搬走的檔從 R2 的模擬讀，還留著的從測試專用建置的 `GET /__test/roster/stored` 讀。[`test/records.ts`](test/records.ts) 的 `checkRoster` 只拿每一行，用 `protocol/` 照 `spec/record.md` 重算：留著的紀錄緊接在搬走的檔之後、搬走的每一檔在 R2 裡剛好 1,000 行；每一行讀得過（「Check a line」）、序號從 1 連續；R2 裡每一份雜湊清單的每一行、存著的紀錄雜湊和每一筆之後的名冊指紋都對；名冊那一列的筆數和指紋是最後一筆的。它對應 Go 舊後台測試的 `checkRoster`（它的 `harness_test.go`），用在同時送出、`empty` 和 `switch_limit`、`switch_restricted`、`daily_limit` 的案例。
 
 ### 寫滿的名冊檔搬到 R2
 
@@ -359,9 +377,9 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 
 | | [`test/publication-verify.test.ts`](test/publication-verify.test.ts) | [`test/records-real.test.ts`](test/records-real.test.ts) 的第二項 |
 |---|---|---|
-| 名冊 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋，是在最後一次公布寫卡片狀態檔的途中寫進來的（改一張檔裡有的卡片、一張新卡片）。有更正、更換、收回、兩個平台 | `server/testdata/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
+| 名冊 | 假卡片 2,005 筆，三天：第一天 998 筆；第二天再 2 筆，剛好寫滿第一檔（那一次公布沒有最後一檔可寫）；第三天到 2,003 筆；之後 2 筆沒有任何一行涵蓋，是在最後一次公布寫卡片狀態檔的途中寫進來的（改一張檔裡有的卡片、一張新卡片）。有更正、更換、收回、兩個平台 | `cmd/iamreal-verify/testdata/card-proofs/` 的 11 筆，五天，最後一天之後公布一次（前面幾天物件自己的 alarm 剛好響了的話，那幾天也各有一行） |
 | 證明 | 佔位的位元組；後台用替身驗證器，Go 用它測試的假驗證器 | 真的證明；後台用部署的驗證器，Go 用原生的 `bb`（要設 `IAMREAL_BB`） |
-| 清冊存檔 | 後台的鏡像從假的內政部抓來寫進 R2 的；Go 用測試的發證金鑰重新驗章、建樹 | 同左，發證金鑰是 `server/testdata/` 的 |
+| 清冊存檔 | 後台的鏡像從假的內政部抓來寫進 R2 的；Go 用測試的發證金鑰重新驗章、建樹 | 同左，發證金鑰是 `cmd/iamreal-verify/testdata/card-proofs/` 的 |
 | Go 怎麼跑 | `go test -run '^TestWorkerData$' ./cmd/iamreal-verify`：指令的 `run`，只給 `-roster test -data <R2 的模擬抄下來的目錄>` | `go build -tags iamrealtest` 建出來的執行檔，`-data` 加測試建置才有的 `-test-issuers` |
 | 結果 | 結束碼 0；2,003 筆每一筆有效、名冊指紋相同；指紋檔三行、三份雜湊清單都對；卡片狀態檔 1,998 張都是相同、沒有跳過；清冊存檔的索引和重建的相同；三張改過清單的卡片的現況和 `card-state` 相同 | 結束碼 0；11 筆每一筆有效；指紋檔的每一行、一份雜湊清單都對；卡片狀態檔 2 張都是相同 |
 
@@ -472,9 +490,9 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 首頁、島民證明、導覽列、頁尾和其他每一頁上連到這個網站的連結都回 `200`，不轉址（`test/site-pages.test.ts` 逐一打開；`/proof` 和 `/proof/help.html` 用一份代替 `web/` 建置的檔）。例外是常見問題裡「營運者看得到什麼？」那一題的「完整的說明」`/privacy`：`design/copy/privacy.md` 那一頁兩個後台都還沒有做，是 `404`。
 
-**`/copy.js` 是檔案，和樣式表一樣由 Static Assets 送**：`site/copy.js` 和舊後台的 `server/pages/copy.js` 逐位元組相同（測試核對），帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`，帶著 `If-None-Match` 再要一次時回 `304`。和舊後台不同的地方：`ETag` 的值是 Static Assets 給的（舊後台是 SHA-256 的前 8 個位元組）；其他方法的 `405` 沒有 `Allow`；設定讀不出來時照常送。`Content-Type` 本機是 `text/javascript; charset=utf-8`，和舊後台相同；Cloudflare 上是 `text/javascript`，不帶 `charset`（樣式表線上也是 `text/css`，不帶；見 [Static Assets](#static-assets)「Cloudflare 上看過的」）。這對 `copy.js` 沒有影響：檔裡 ASCII 以外的字只在開頭的註解（兩行，`LC_ALL=C grep -n '[^ -~]' site/copy.js`），程式本身全是 ASCII，照哪一種編碼讀都一樣。之後要在這個檔的程式裡寫 ASCII 以外的字時再看：沒有 `charset` 時瀏覽器用載入它的頁面的編碼來讀（HTML 標準的 [fetch a classic script](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script) 把頁面的編碼當成後備），而這裡的頁面都是 `text/html; charset=utf-8`。
+**`/copy.js` 是檔案，和樣式表一樣由 Static Assets 送**：`site/copy.js` 是從舊後台逐位元組搬過來的，帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`，帶著 `If-None-Match` 再要一次時回 `304`。和舊後台不同的地方：`ETag` 的值是 Static Assets 給的（舊後台是 SHA-256 的前 8 個位元組）；其他方法的 `405` 沒有 `Allow`；設定讀不出來時照常送。`Content-Type` 本機是 `text/javascript; charset=utf-8`，和舊後台相同；Cloudflare 上是 `text/javascript`，不帶 `charset`（樣式表線上也是 `text/css`，不帶；見 [Static Assets](#static-assets)「Cloudflare 上看過的」）。這對 `copy.js` 沒有影響：檔裡 ASCII 以外的字只在開頭的註解（兩行，`LC_ALL=C grep -n '[^ -~]' site/copy.js`），程式本身全是 ASCII，照哪一種編碼讀都一樣。之後要在這個檔的程式裡寫 ASCII 以外的字時再看：沒有 `charset` 時瀏覽器用載入它的頁面的編碼來讀（HTML 標準的 [fetch a classic script](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script) 把頁面的編碼當成後備），而這裡的頁面都是 `text/html; charset=utf-8`。
 
-- **樣板、樣式表、複製按鈕的程式是舊後台的。** `src/pages/` 的 HTML 照 `server/pages/templates/` 逐段搬過來，`site/copy.js` 就是 `server/pages/copy.js`，`site/pages.css` 是 `server/pages/style.css` 加一條規則（測試名冊標示裡的日期不折行，見[測試名冊的標示](#測試名冊的標示)）；測試核對拿掉那一條之後兩個檔逐位元組相同。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
+- **樣板、樣式表、複製按鈕的程式是舊後台的。** `src/pages/` 的 HTML 照舊後台的樣板逐段搬過來，`site/copy.js` 就是舊後台的那一支，`site/pages.css` 是舊後台的樣式表加一條規則（測試名冊標示裡的日期不折行，見[測試名冊的標示](#測試名冊的標示)）；舊後台刪掉之前，測試核對過這兩個檔和舊後台的逐位元組相同（那一條除外）。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、名冊上的帳號都走這一條。
 - **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有怎麼驗證和帶著島民證明的掛上去：各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），沒有行內的程式；這兩頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，名冊頁另外讀網址的查詢（`q`、`after`）。
 - **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`account`、`roster`、`hang`、`faq`、`verify`、`none`），不含短編號、帳號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
@@ -492,7 +510,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 頁面用的衍生表
 
-名冊的 Durable Object 裡 `view_` 開頭的四張表（[`src/views.ts`](src/views.ts)），內容和舊後台的四張相同（`server/store/sqlite_view.go`）：
+名冊的 Durable Object 裡 `view_` 開頭的四張表（[`src/views.ts`](src/views.ts)），內容和舊後台的四張相同：
 
 | 表 | 一列是什麼 |
 |---|---|
@@ -514,7 +532,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 重建失敗時寫一行 `{event: "views_not_filled", error}`。之後照上一條再試，物件啟動時等的時間已經到了也試；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個名冊檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的名冊檔，不受影響；但已經過卡的人查得到現況，名冊本身（紀錄、卡片狀態、名冊指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是名冊規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。名冊長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同（`server/store/sqlite_view.go`）：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；名冊頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；名冊頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
 - **`?after=` 照舊後台的讀法**：日期、一個點、不是 0、沒有正負號和開頭的 0 的序號，最大 2⁶⁴ − 1；讀不成的從最新的開始列。序號大於 2⁶³ − 1 的讀得成，但也從最新的開始列（舊後台是這樣）。
 
 ### 測試名冊的標示
@@ -529,7 +547,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 頁面送的標頭
 
-定義在 [`src/headers.ts`](src/headers.ts) 一處，和舊後台送的那一組相同（`server/headers.go`、`server/visitor.go`）。測試對每一種回應核對整組標頭：多一個、少一個、值不同都不過。
+定義在 [`src/headers.ts`](src/headers.ts) 一處，和舊後台送的那一組相同。測試對每一種回應核對整組標頭：多一個、少一個、值不同都不過。
 
 送出去的地方有兩個，值都從那一處來：
 
@@ -641,7 +659,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 | 請求 | 線上回的 | 和本機 |
 |---|---|---|
-| `GET /copy.js` | `200`；`Cache-Control: no-cache`，有 `ETag`，帶 `X-Robots-Tag: noindex` 和 `_headers` 那一組 CSP；內容的 SHA-256 和 `server/pages/copy.js` 相同 | 標頭相同。`Content-Type` 線上是 `text/javascript`，本機是 `text/javascript; charset=utf-8` |
+| `GET /copy.js` | `200`；`Cache-Control: no-cache`，有 `ETag`，帶 `X-Robots-Tag: noindex` 和 `_headers` 那一組 CSP；內容的 SHA-256 和 `site/copy.js` 相同 | 標頭相同。`Content-Type` 線上是 `text/javascript`，本機是 `text/javascript; charset=utf-8` |
 | `POST /copy.js` | `405` | 相同：檔案存在時，其他方法是 `405` |
 | `GET /pages.css` | `Content-Type` 是 `text/css`，沒有 `charset` | 和 2026-11-20 看到的相同 |
 | `GET /roster`、`/faq`、`/verify`、`/hang`、`/threads/@alice` | `200`，`Cache-Control: public, max-age=60` | 相同 |
@@ -724,7 +742,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - `POST /__test/verify` 讓測試直接呼叫驗證證明，呼叫的就是 `src/in-worker.ts` 的 `proofVerifier`，沒有換掉任何一部分。`records` 到不了的：和原生的 `bb verify` 逐案比對的 1,128 案，大多是任何一筆紀錄都帶不出來的公開輸入。
   - `GET /__test/newest-crls` 讓測試看得到名冊的 Durable Object 存著的最新清冊，呼叫的就是 `src/roster.ts` 的 `newestCrls`。`records` 看不到的：清冊鏡像的測試比的是 Durable Object 拿到哪幾份的編號和日期，`records` 只回收或不收。
   - `PUT /__test/roster/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：名冊規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
-  - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（`server/harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
+  - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、名冊規則、寫入的那些案例用它，和 Go 舊後台的測試相同（它的 `harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
   - `index.ts` 另外有通到名冊那個 Durable Object 的入口，`/__test/roster/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/roster.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候（這兩個加 `?object=<名稱>` 時問的是那個名稱的物件，不是設定指的那一個：清空之後被換掉的物件只有這樣叫得到）；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/roster/card`），或一次寫一批（`PUT /__test/roster/cards`，只給量測用，見[每天換日公布名冊](#每天換日公布名冊)「大小的上限」）；單獨複製卡片狀態表或刪掉複本（`POST /__test/roster/cards-copy`，也只給量測用）；列出物件資料庫裡的表（`GET /__test/roster/tables`，看公布完沒有留下複本）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/roster-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次名冊規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀名冊上最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/roster/rule-state`，見[名冊規則和 Go 的 `roster/` 逐筆比對](#名冊規則和-go-的-roster-逐筆比對)）；讀出存著的紀錄和名冊那一列（`GET /__test/roster/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/roster/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/roster/bucket-fault`：寫不進去、寫到串流中間斷掉、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/roster.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/roster/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/roster/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
   - `PUT /__test/settings` 換掉環境的設定（`ROSTER_KIND`、`ROSTER_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_ROSTER_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式名冊的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
@@ -1311,7 +1329,10 @@ pnpm run deploy:test
 ```sh
 node --experimental-strip-types test/site-check.ts
 node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https://test-data.iamreal.tw   # 同上，寫明兩個網址
+node --experimental-strip-types test/site-check.ts http://localhost:8080 http://localhost:8080             # pnpm local 的本機 Worker
 ```
+
+兩個網址同一個來源時，當成 `pnpm local` 的本機 Worker（[在本機用真卡片過卡](#在本機用真卡片過卡)；`pnpm local` 啟動時自己跑一次）：不看資料網域的 CORS（頁面從自己的網域讀），也不看每天的公布（本機的名冊只在指令開著跨過午夜時公布），其他 19 項照樣。
 
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 
@@ -1325,7 +1346,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 - 名冊每天有在公布：`GET /api/v1/fingerprint` 回的日期是今天或昨天（台灣日期）。公布在台灣午夜之後 alarm 響的時候做，所以午夜剛過、還沒公布時最後一行是昨天的，照樣過；要到整整一天沒有公布才不過。`paused` 的名冊不公布，隔一天起這一項不過，那是對的。日期是 `null`（還沒公布過）只在今天不晚於 `wrangler.jsonc` 的上次清空日期加 2 天時算過：清空當天物件第一次啟動，隔天午夜公布第一行；部署剛好壓在午夜前、物件隔天才第一次啟動的話再晚一天。過了這兩天還是 `null`，就是新的物件沒有在公布（啟動時就是 `paused`，或把自己當成被換掉的），不過
 - 資料網域的 CORS：帶 `Origin: https://test.iamreal.tw` 問 `crl/index.jsonl`，回應的 `Access-Control-Allow-Origin` 是它；帶別的來源問，沒有這個標頭。過卡的頁面在瀏覽器裡下載清冊存檔靠的是這個（ADR-0027）
 
-[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早、清空超過兩天還沒公布過；過卡的頁面或它的說明頁被加了 script、不在；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。
+[`test/site-check.test.ts`](test/site-check.test.ts) 在本機的 Worker 上跑同一段檢查：照部署的樣子全過（隔天、午夜的 alarm 還沒響時也過）；下面每一樣各自只讓它的那一行不過：清冊舊於 3 天、少一把發證金鑰的清冊；一頁的狀態碼不對、少一個標頭、設了 cookie、頁面裡沒有 `noindex`、標示旁的日期不對；沒有過卡的頁面、樣式表的 `Cache-Control` 不對；頁面在送給瀏覽器的路上被加了別的網域的 script 或寫在頁面裡的 script；`config` 的平台表不是測試名冊的、`crl_max_age_days` 不是 3、回應可以被快取；指紋檔最後一行和介面回的不同、介面說公布過卻沒有指紋檔；最後一行的日期比昨天早、清空超過兩天還沒公布過；過卡的頁面或它的說明頁被加了 script、不在；資料網域不讓測試網站讀、或讓別的網站讀。資料網域在測試裡是儲存桶的模擬加上營運者設的那條 CORS 規則。`local` 時少那兩行，資料網域沒有 CORS 的標頭、清空很久還沒公布過也全過，清冊太舊照樣不過。
 
 **它只送 `GET`，所以回答不了「現在能不能過卡」。** 名冊 `paused`（存著的規則版本和程式的不同）時、清空之後新的物件還不知道清冊時（送出回 `503` `crl_stale`），每個 `GET` 的回答都和平常一樣，這支程式照樣全過。要知道名冊收不收過卡，送一次 `POST /api/v1/challenges`（[清空測試名冊](#清空測試名冊)第 5 步有每一種回應的意思）；那是寫入的請求，不在這支程式裡。
 
@@ -1415,12 +1436,12 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/mirror-invariant.test.ts` | 寫索引出錯時，鏡像交給 Durable Object 的樹根仍然都列在索引裡（在 Node 裡，用假的儲存桶和假的雜湊） |
 | `test/mirror-faults.test.ts` | 清冊鏡像出錯和遇到大東西的時候：拿不到行的檔、拖時間的檔、太大的回應、超過一頁的儲存桶、之前留下的檔和補它們的界線、建樹到一半被停掉的一輪、兩輪同時寫索引 |
 | `test/api.test.ts` | `challenges`、`card-state`、`config` 和 `/api/` 的外框，整個 Worker 在本機的 workerd 裡 |
-| `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的 `server/api_test.go` 的案例），用只看第一個位元組的驗證器 |
-| `test/records-real.test.ts` | `server/testdata/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器；寫出來的名冊公布之後，Go 建出來的 `iamreal-verify` 配原生的 `bb` 重驗通過（這一項要設 `IAMREAL_BB`、要有 `go`） |
+| `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的舊後台的 `api_test.go` 的案例），用只看第一個位元組的驗證器 |
+| `test/records-real.test.ts` | `cmd/iamreal-verify/testdata/card-proofs/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器；寫出來的名冊公布之後，Go 建出來的 `iamreal-verify` 配原生的 `bb` 重驗通過（這一項要設 `IAMREAL_BB`、要有 `go`） |
 | `test/records-storage.test.ts` | 同時送出時序號連續、每筆之間重啟、寫到一半失敗、`paused`、`spec/vectors/roster-rules.json` 配 Durable Object 的儲存 |
 | `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`；每一頁共同的：跳脫、方法、正式名冊、測試名冊的標示、找不到這一頁；讀 `design/copy/` 的工具 |
-| `test/lookup-pages.test.ts` | 查詢頁和名冊頁的每一種情況：`design/copy/` 的每一句和順序、轉址、`404`、查詢框的每一種輸入、名冊頁一頁一頁接著拿、寫入後下一頁就跟上（Go 的 `server/visitor_test.go` 的案例） |
-| `test/site-pages.test.ts` | 常見問題、怎麼驗證、掛上去的每一種情況、`/copy.js`（Static Assets 送、不跑 Worker）（Go 的 `server/site_test.go` 的案例）；每一頁上連到這個網站的連結都回 `200` |
+| `test/lookup-pages.test.ts` | 查詢頁和名冊頁的每一種情況：`design/copy/` 的每一句和順序、轉址、`404`、查詢框的每一種輸入、名冊頁一頁一頁接著拿、寫入後下一頁就跟上（Go 的舊後台的 `visitor_test.go` 的案例） |
+| `test/site-pages.test.ts` | 常見問題、怎麼驗證、掛上去的每一種情況、`/copy.js`（Static Assets 送、不跑 Worker）（Go 的舊後台的 `site_test.go` 的案例）；每一頁上連到這個網站的連結都回 `200` |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
 | `test/publication.test.ts` | 每天換日公布：空的名冊、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、連續失敗時等 1、2、4 … 分鐘到每次一小時、成功之後又從一分鐘算起、兩次嘗試之間物件重啟也照樣等、時鐘跑快時存下的時間最多等一小時、`paused` 之前的失敗不接著算、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |

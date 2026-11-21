@@ -192,4 +192,4 @@ IAMREAL_BB=/path/to/bb go test -tags iamrealtest ./cmd/iamreal-verify   # 加上
 
 ### 只在測試建置裡的選項 `-test-issuers`
 
-加了建置標籤 `iamrealtest` 時（`testissuers.go`），多一個選項 `-test-issuers <目錄>`：目錄裡的 `issuer-G2.der`、`issuer-G3.der`（SubjectPublicKeyInfo）代替內政部的兩把發證金鑰，驗證明（經由 `verifier.NewWithIssuers`）和驗清冊都用它們。`server/` 的端到端測試用 `go build -tags iamrealtest` 建出這個指令，拿來重驗後台出的名冊目錄。照上面「安裝」建出來的執行檔沒有這個選項。
+加了建置標籤 `iamrealtest` 時（`testissuers.go`），多一個選項 `-test-issuers <目錄>`：目錄裡的 `issuer-G2.der`、`issuer-G3.der`（SubjectPublicKeyInfo）代替內政部的兩把發證金鑰，驗證明（經由 `verifier.NewWithIssuers`）和驗清冊都用它們。`worker/` 用真的證明走完整條路的測試（`worker/test/records-real.test.ts`，資料在 `testdata/card-proofs/`）用 `go build -tags iamrealtest` 建出這個指令，拿來重驗後台公布的名冊。照上面「安裝」建出來的執行檔沒有這個選項。

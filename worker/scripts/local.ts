@@ -15,6 +15,9 @@
 //    wrangler.jsonc's test environment (the test roster) and its Durable
 //    Object and bucket kept in DIR
 // 4. one round of the CRL mirror, against MOICA's real CRLs
+// 5. the check that needs no card (test/site-check.ts, `local`): every page,
+//    its headers, the card proof page, the CRL archive. No request goes to
+//    MOICA's component; nothing here opens a browser
 //
 // and it serves the page at http://localhost:PORT/proof and the rest of the
 // site at http://localhost:PORT/. Ctrl-C stops it. The mirror does not run
@@ -22,12 +25,15 @@
 //
 // DIR (default worker/local/) keeps the roster between runs; delete it to
 // start from an empty roster. It is not web/local/, where the Go back end
-// kept its roster. The requests to other hosts are the CRS download (only if
-// web/crs/ lacks a file) and the mirror's download of MOICA's two CRLs.
+// kept its roster, which this does not read or write. The requests to other
+// hosts are the CRS download (only if web/crs/ lacks a file) and the
+// mirror's download of MOICA's two CRLs.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, cpSync, mkdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { unstable_startWorker } from "wrangler";
+import { formatDay, taiwanDay } from "iamreal-protocol/date.ts";
+import { unstable_readConfig, unstable_startWorker } from "wrangler";
+import { type Reader, checkSite } from "../test/site-check.ts";
 import { WORKER_DIR } from "./deploy.ts";
 import { prepareEngineFiles } from "./engine-files.ts";
 import { fetchCrs } from "./proof-page.ts";
@@ -42,10 +48,10 @@ const port = Number(opt("--port", "8080"));
 const data = resolve(opt("--data", join(WORKER_DIR, "local")));
 if (resolve(data) === resolve(WEB_DIR, "local")) throw new Error("web/local/ is the Go back end's roster: give another --data");
 
-console.log("1/4 the CRS (web/scripts/fetch-crs.mjs)");
+console.log("1/5 the CRS (web/scripts/fetch-crs.mjs)");
 fetchCrs();
 
-console.log("2/4 the page (vite build --mode localcard)");
+console.log("2/5 the page (vite build --mode localcard)");
 const site = join(data, "site");
 rmSync(site, { recursive: true, force: true });
 cpSync(join(WORKER_DIR, "site"), site, { recursive: true, filter: (source) => source !== join(WORKER_DIR, "site", "proof") });
@@ -53,7 +59,7 @@ const vite = join(WEB_DIR, "node_modules", ".bin", "vite");
 const built = spawnSync(vite, ["build", "--mode", "localcard", "--outDir", join(site, "proof"), "--emptyOutDir", "--logLevel", "warn"], { cwd: WEB_DIR, stdio: "inherit" });
 if (built.status !== 0) throw new Error("vite build --mode localcard in web/ failed");
 
-console.log("3/4 the Worker (local-build/index.ts, wrangler.jsonc's test environment)");
+console.log("3/5 the Worker (local-build/index.ts, wrangler.jsonc's test environment)");
 prepareEngineFiles();
 mkdirSync(join(data, "state"), { recursive: true });
 // A copy of wrangler.jsonc, byte for byte, beside the site: its "assets.directory" (./site) is then DIR/site.
@@ -66,10 +72,19 @@ const worker = await unstable_startWorker({
 });
 await worker.ready;
 
-console.log("4/4 the CRL mirror, once (MOICA's G2 and G3 CRLs)");
+console.log("4/5 the CRL mirror, once (MOICA's G2 and G3 CRLs)");
 // wrangler's door to the schedule (`testScheduled`): the same handler the hourly trigger runs on Cloudflare.
 const round = await fetch(`http://127.0.0.1:${port}/cdn-cgi/handler/scheduled?cron=${encodeURIComponent("0 * * * *")}`);
 console.log(`the mirror: HTTP ${round.status} ${(await round.text()).trim()}`);
+
+console.log("5/5 the check that needs no card (test/site-check.ts)");
+const origin = `http://localhost:${port}`;
+const reader: Reader = (path, headers) => fetch(new URL(path, origin), { redirect: "manual", headers: { ...headers } });
+const clearedOn = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.TEST_ROSTER_CLEARED_ON);
+const lines = await checkSite({ site: reader, data: reader, today: formatDay(taiwanDay(Date.now())), clearedOn, siteOrigin: origin, local: true });
+for (const line of lines.filter((l) => !l.ok)) console.log(`FAIL   ${line.what}`);
+const failed = lines.filter((l) => !l.ok).length;
+console.log(failed ? `${failed} of ${lines.length} checks failed` : `all ${lines.length} checks passed`);
 
 console.log(`serving http://localhost:${port}/proof, and the rest of the site at http://localhost:${port}/ (test roster; Ctrl-C to stop)`);
 const stop = async (): Promise<void> => {

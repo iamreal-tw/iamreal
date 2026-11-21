@@ -31,7 +31,7 @@ export interface PlatformTableRow {
   username_format: string;
 }
 
-/** The test roster's table (spec/scope.md), as server/ sends it. */
+/** The test roster's table (spec/scope.md), as `config` sends it. */
 export const TEST_PLATFORMS: readonly PlatformTableRow[] = [
   { platform: "test-example", display_name: "Example (no real service)", username_format: "[a-z0-9-]{1,20}" },
   { platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" },

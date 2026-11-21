@@ -47,7 +47,7 @@ const POPUP_FEATURES = "popup,width=420,height=300";
  * A new name for each window: 128 random bits. With a fixed name, a page
  * that opened this one could reach the component's window by that name and
  * navigate it elsewhere (tried in Chrome 157, 2026-11-16; the page's
- * Cross-Origin-Opener-Policy cuts that page off too, server/headers.go).
+ * Cross-Origin-Opener-Policy cuts that page off too, README.md, "頁面需要的標頭").
  * Each window is closed before the next is opened (open(), request()).
  */
 function popupName(): string {

@@ -157,7 +157,7 @@ export default defineConfig(({ mode }) => {
   const pages = mode !== "engine";
   if (pages && mode !== "production" && !Object.hasOwn(OTHER_TARGETS, mode)) throw new Error(`vite mode ${mode}: production, test, localcard, testsite or engine`);
   return {
-    // The pages are served under /proof/ (the card proof page at /proof, server/README.md); the
+    // The pages are served under /proof/ (the card proof page at /proof, worker/README.md "Static Assets"); the
     // engine's own test page at /. src/base.ts reads it for the page's own paths.
     base: pages ? "/proof/" : "/",
     plugins: [noDataUrlWasm(), ownOriginAssets(), ...(Object.hasOwn(OTHER_TARGETS, mode) ? [otherTarget(OTHER_TARGETS[mode]!)] : []), ...(mode === "testsite" ? [testRosterEntry()] : [])],
