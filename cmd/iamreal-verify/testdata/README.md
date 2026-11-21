@@ -7,7 +7,7 @@
 | `archive/` | 存檔：三份清冊和索引 `index.jsonl` |
 | `issuer-G2.der`、`issuer-G3.der` | 兩把測試用發證金鑰的公鑰（SubjectPublicKeyInfo）。同一把金鑰簽卡片的憑證和清冊，和內政部一樣 |
 | `roster.jsonl` | 測試名冊（場合 `iamreal-test:public:0__________`） |
-| `circuits-commit` | 做證明時這個程式庫的提交（見「怎麼產生的」） |
+| `circuits-commit` | 產生測試資料時電路原始碼的提交；提交的這一份記的是先前私有程式庫的 `497b610…`，在這個程式庫查不到（見「怎麼產生的」） |
 | `generate.go`、`make-proofs.mjs` | 產生上面這些檔案的程式 |
 
 ## 存檔

@@ -4,7 +4,7 @@
 
 | 檔案 | 內容 |
 |---|---|
-| `proofs.json` | 產生時這個程式庫的提交（`circuits_commit`，見「怎麼產生的」）、場合字串、廢止清冊的樹根，和每一筆紀錄的欄位（帳號清單、題目）、宣告碼、測試用發證金鑰的模數、電路算出的匿名編號（`nullifier`，大端序） |
+| `proofs.json` | 產生測試資料時電路原始碼的提交（`circuits_commit`；提交的這一份記的是先前私有程式庫的 `497b610…`，在這個程式庫查不到，見「怎麼產生的」）、場合字串、廢止清冊的樹根，和每一筆紀錄的欄位（帳號清單、題目）、宣告碼、測試用發證金鑰的模數、電路算出的匿名編號（`nullifier`，大端序） |
 | `card_proof_rs2048.proof`、`card_proof_rs4096.proof` | 零知識的證明（`-t noir-recursive`），各 14,656 個位元組 |
 | `card_proof_rs2048.public_inputs`、`card_proof_rs4096.public_inputs` | `bb prove` 寫出的公開輸入（736、1,280 個位元組）。測試只拿它和驗證器自己重建的公開輸入比對，驗證時不用它 |
 | `card_proof_rs2048.no-zk.proof`、`card_proof_rs4096.no-zk.proof` | 同一份見證用 `-t noir-recursive-no-zk` 做的非零知識證明，各 13,120 個位元組 |
