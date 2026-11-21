@@ -1163,7 +1163,7 @@ pnpm run deploy:test
 4. **營運者清資料網域上 `roster/` 的快取。** 舊名冊有寫滿的名冊檔（滿 1,000 筆）時才需要；沒有的話 `roster/` 底下每個檔都只快取 60 秒，等一分鐘就好，做了也無妨。在 Cloudflare 的儀表板：`iamreal.tw` 這個 zone → Caching → Configuration → Purge Cache → Custom Purge → Purge by 選 Prefix → 填 `test-data.iamreal.tw/roster` → Purge（[Purge cache by prefix](https://developers.cloudflare.com/cache/how-to/purge-cache/purge_by_prefix/)，2026-11-21 讀的；每一種方案都能用，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)「Availability and limits」）。部署的權杖只有一個 Worker 的權限（ADR-0029），做不到這一步。
    - **為什麼要清**：寫滿的名冊檔和它的雜湊清單標的是 `public, max-age=31536000, immutable`（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)），那是照「同一個網址的內容不會再變」標的。清空之後新的名冊從 0 筆開始，寫滿第一檔時用的是同一個網址 `roster/0000000000000000.jsonl`，內容不同。不清的話，Cloudflare 上快取著舊檔的地方最長一年照樣送舊檔。
    - **在第 3 步之後做。** 先清快取、後刪檔的話，中間有人下載，舊檔又被快取一年。
-   - **用 Prefix，不用 Single-file（URL）。** 資料網域的回應帶 `Vary: Origin`；Cloudflare 的文件寫，從儀表板照網址清，清不掉請求帶 `Origin` 的那一份（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)「Resources with special headers」：「A single-file purge performed through your Cloudflare dashboard does not clear objects that contain any of the following: Origin header…」，2026-11-21 讀的）。照前綴清的文件寫的是那個目錄底下的每一個網址都清（Purge cache by prefix：「any URI for a resource within the purged directory is purged」），沒有另外講帶 `Origin` 的那一份，所以下面確認時兩種都問。
+   - **用 Prefix，不用 Single-file（URL）。** 資料網域的回應帶 `Vary: Origin`（2026-11-21 線上看到的）；Cloudflare 的文件寫，從儀表板照網址清，清不掉請求帶 `Origin` 的那一份（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)「Resources with special headers」：「A single-file purge performed through your Cloudflare dashboard does not clear objects that contain any of the following: Origin header…」，2026-11-21 讀的）。照前綴清的文件寫的是那個目錄底下的每一個網址都清（Purge cache by prefix：「any URI for a resource within the purged directory is purged」），沒有另外講帶 `Origin` 的那一份，所以下面確認時兩種都問。
    - **清完之後確認，用 `GET`**：舊名冊每一個寫滿的檔（檔名 0、1000、2000……小於舊名冊筆數的每一個）和它的雜湊清單，帶和不帶 `Origin` 各下載一次，都要是 `404`，而且不是 `cf-cache-status: HIT`（文件：「To verify a purge, request the asset after purging and confirm that `CF-Cache-Status` is no longer `HIT`」，[Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/)）。回 `200`、`HIT` 就是快取裡還有舊檔。
 
      ```sh
@@ -1178,7 +1178,7 @@ pnpm run deploy:test
      - **每個來源各有一份，指令問不完。** 2026-11-21 對 `roster/fingerprints.jsonl` 用 `GET` 看到的：不帶 `Origin` 的第二次是 `HIT`；帶 `Origin: https://test.iamreal.tw` 的第一次 `MISS`、第二次 `HIT`，多 `Access-Control-Allow-Origin`；帶別的來源的又是它自己的一份，第一次 `MISS`、第二次 `HIT`，沒有那個標頭。所以任何一個網站的頁面下載過舊檔，快取裡就多一份帶它那個來源的。照前綴清會不會把這些都清掉，文件沒有講；測試名冊還沒有寫滿的檔，現在也驗不到。上面的指令只問得到不帶來源和帶測試網站來源的這兩份。
      - 不存在的檔不會被快取（`404` 的回應是 `cf-cache-status: BYPASS`，同一天看到的），所以清乾淨之後這兩行都是 `404`，不會因為問過一次就留下東西。
      - 新的名冊已經公布過才做這一步的話，`roster/0000000000000000.jsonl` 可能是新名冊還沒寫滿的最後一檔：`200`，`Cache-Control` 是 `public, max-age=60`，不是一年的那一種。
-     - 這個指令只問得到回答這一次請求的那個 Cloudflare 機房，其他機房沒辦法從外面一個一個問。
+     - 這個指令問到的應該只是回答這一次請求的那個 Cloudflare 機房：這是從文件推的，沒有實測。文件寫清掉的檔之後是在「the specific Cloudflare data center that served the request」重新放進快取（[Purge by single-file](https://developers.cloudflare.com/cache/how-to/purge-cache/purge-by-single-file/)），也就是每個機房各有自己的一份；其他機房沒辦法從外面一個一個問。
 5. **確認。**
    - `node --experimental-strip-types test/site-check.ts`（[部署之後不插卡的檢查](#部署之後不插卡的檢查)）全過。新的名冊還沒公布過，所以指紋檔那兩項比的是「沒有檔、介面回的日期是 `null`」。**它全過不表示可以過卡**：它只送 `GET`，看不到名冊是不是 `paused`，也看不到新的物件知不知道清冊，這兩種狀態下每個 `GET` 的回答都和平常一樣
    - **名冊收不收過卡**：送一次 `curl -s -X POST https://test.iamreal.tw/api/v1/challenges`。這是唯一會寫入的確認：後台存一個題目，10 分鐘後不認得，之後定時刪掉（[過期的題目怎麼刪](#過期的題目怎麼刪)），名冊上不留任何東西。agent 送之前要營運者同意。
@@ -1211,9 +1211,9 @@ pnpm run deploy:test
 
 - **瀏覽器的快取。** 用瀏覽器打開過舊名冊寫滿的檔的人，瀏覽器在一年內可以直接用存著的那一份，重新整理也不必再問（`immutable`：「The user should not send a conditional revalidation request … to check for updates, even when the user explicitly refreshes the page」，[Cloudflare 的 Cache-Control 說明](https://developers.cloudflare.com/cache/concepts/cache-control/)，2026-11-21 讀的）。清掉瀏覽器自己的快取才會拿到新的。
 - **Cloudflare 以外的快取。** 回應標的是 `public`，下載的人和 Cloudflare 之間的代理伺服器可以存一年。
-- **已經下載的副本。**
+- **已經下載到自己電腦上的檔。**
 
-`iamreal-verify` 自己下載時不經過瀏覽器，每次都向資料網域要，第 4 步做了它拿到的就是新的。過卡的頁面只從資料網域拿 `crl/`，不拿 `roster/`，不受影響。
+`iamreal-verify` 自己沒有快取，但它送的是一般的 `GET`，一樣經過 Cloudflare 的快取：它拿到的是回答它的那個機房存著的、不帶 `Origin` 的那一份。所以第 4 步清到了，它拿到的才是新的；第 4 步沒做或沒清到，它也會拿到舊檔。它不受影響的只有瀏覽器的快取那一層。過卡的頁面只從資料網域拿 `crl/`，不拿 `roster/`，不受影響。
 
 **重驗的人拿到舊檔時會看到什麼。** 舊名冊的檔本身是一份完整的名冊檔，每一行都讀得懂，所以不會是「讀不懂」；對不上的是它和每天重寫的那幾樣（指紋檔、還沒寫滿的最後一檔的雜湊清單、卡片狀態檔，都只快取 60 秒）：
 
@@ -1221,7 +1221,7 @@ pnpm run deploy:test
 - 名冊檔和雜湊清單一新一舊：`<檔名> is not the record hash list of the roster`
 - 卡片狀態檔和從舊紀錄算出來的卡片逐張不同
 
-這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時換一個不經過快取的方式再下載一次（例如直接跑 `iamreal-verify -roster test -data https://test-data.iamreal.tw/`）。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
+這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，就是 Cloudflare 的快取沒清到，請營運者做第 4 步（回報在這個程式庫的 issue）。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
 
 ### 在本機照著做
 
@@ -1267,7 +1267,7 @@ node --experimental-strip-types test/site-check.ts https://test.iamreal.tw https
 | Cloudflare 的 API 權杖 | 兩把 Account API token：範圍「Specified Workers → `iamreal-test`」，權限「Individual Workers: Editor」。`iamreal-test-ci` 放在程式庫的 Actions secrets（`CLOUDFLARE_API_TOKEN_TEST`，帳號編號是 `CLOUDFLARE_ACCOUNT_ID`），`iamreal-test-local` 放在營運者電腦的 `.env.local`，同樣兩個名稱 | [部署測試環境](#部署測試環境)。這把權杖做得到和做不到的事在[第一次部署量到的](#第一次部署量到的) |
 | GitHub 組織的 Actions 設定 | 所有外部貢獻者的工作流程都要先核准才跑 | ADR-0029「外人的 PR」 |
 
-平常要營運者動手的只有三件：看過並合併動到「部署會執行到的東西」的 PR（`CONTRIBUTING.md`）、清空測試名冊時清儲存桶（[清空測試名冊](#清空測試名冊)）、用真卡片過卡。從營運者的電腦部署測試網站是 `pnpm run deploy:test`（[部署測試環境](#部署測試環境)）。
+平常要營運者動手的只有三件：看過並合併動到「部署會執行到的東西」的 PR（`CONTRIBUTING.md`）、清空測試名冊時清儲存桶和資料網域的快取（[清空測試名冊](#清空測試名冊)第 3、4 步）、用真卡片過卡。從營運者的電腦部署測試網站是 `pnpm run deploy:test`（[部署測試環境](#部署測試環境)）。
 
 ## 套件
 
