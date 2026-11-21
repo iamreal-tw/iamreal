@@ -187,23 +187,23 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 | 工作 | 拿得到什麼 | 做什麼 |
 |---|---|---|
-| `version` | 權杖多一項 `actions: read`（列出這個工作流程之前的執行） | 不在 `main` 上就停。用 [`android-version.sh`](workflows/android-version.sh) 算版本，交給 `build` |
-| `build` | 沒有 secret；權杖只能讀程式 | 和 `checks.yml` 的 `android` 一樣裝 libc++、Rust、SDK、參數檔，再跑 `./gradlew bundleRelease`，帶上版本。`bundleRelease` 會接著跑 bundle 的檢查（`checkBundle`、`checkManifest`、`checkLibraries`，`android/README.md`「建置時的檢查」）：識別碼、連測試網站、沒有正式網站和正式名冊的場合字串、沒有假卡片和測試的發證金鑰。檢查不過就停，不會上傳。沒有簽章的 `.aab` 留成 artifact `android-bundle` |
+| `version` | 沒有 secret；權杖只能讀程式 | 不在 `main` 上就停。用 [`android-version.sh`](workflows/android-version.sh) 算版本，交給 `build` |
+| `build` | 沒有 secret；權杖只能讀程式 | 和 `checks.yml` 的 `android` 一樣裝 libc++、Rust、SDK、參數檔，再跑 `./gradlew bundleRelease`，帶上版本。`bundleRelease` 會接著跑 bundle 的檢查（`checkBundle`、`checkManifest`、`checkLibraries`，`android/README.md`「建置時的檢查」）：識別碼、連測試網站、沒有正式網站和正式名冊的場合字串、沒有假卡片和測試的發證金鑰。檢查不過就停，不會上傳。簽哪一份名冊的場合字串由 Kotlin 傳給核心的名冊編號決定（`Environment.kt` 的 `ROSTER`），編進 dex 時只是一個數字，bundle 的檢查找不到它；它由 `DeviceCoreTest` 的「the scope string is the one of the test roster」看著，那是 `checks.yml` 的 `android` 每次都跑的單元測試，`main` 上的每個提交都在合併佇列裡跑過（「合併佇列」），所以這裡不再跑一次。沒有簽章的 `.aab` 留成 artifact `android-bundle` |
 | `upload` | environment `app-test` 的三個 secret | 不建置、不跑 Gradle。拿 `build` 留下的 `.aab`，用 [`android-sign.sh`](workflows/android-sign.sh) 以上傳金鑰簽章，簽好的留成 artifact `android-bundle-signed`，再用 [`play-upload.sh`](workflows/play-upload.sh) 傳到內部測試 |
 
 - **金鑰只在 `upload`。** secret 名稱照 #162：`ANDROID_UPLOAD_KEYSTORE_BASE64`、`ANDROID_UPLOAD_KEYSTORE_PASSWORD` 只在簽章那一步的 `env`，`PLAY_SERVICE_ACCOUNT_JSON` 只在上傳那一步的 `env`。`app-test` 只把 secret 給 `main` 上的工作（#162 的設定），所以在別的分支上觸發時，`version` 先停下來；就算它沒停，`upload` 也拿不到金鑰。
-- **跑 Gradle 的工作拿不到金鑰。** Gradle 的外掛、建置腳本、`build-native.sh` 都在 `build` 裡跑；`upload` 只跑 runner 上的 JDK（`jarsigner`）、`curl`、`openssl`、`jq`，和同一個提交的兩個腳本。
+- **跑 Gradle 的工作拿不到金鑰。** Gradle 的外掛、建置腳本、`build-native.sh` 都在 `build` 裡跑；`upload` 只跑釘住的三個 action、runner 上的 JDK（`jarsigner`）和工具（`bash`、`base64`、`unzip`、`awk`、`curl`、`openssl`、`jq`），和同一個提交的兩個腳本。
 - **傳上去的就是檢查過的。** `android-sign.sh` 簽完先用 `jarsigner -verify` 驗，再比對簽好的檔和 `build` 留下的檔：每個檔的 CRC-32 相同，只多了簽章的三個檔（`META-INF/MANIFEST.MF`、`UPLOAD.SF`、`UPLOAD.RSA`），否則停下來。
 - **app 的簽章金鑰不在這裡。** 上傳金鑰只對 Google Play 證明這個檔是我們傳的；手機上的 app 由 Google Play 用 app 的簽章金鑰重簽，那把由營運者保管（ADR-0036、ADR-0037）。
-- **新 app 的第一個 build。** Google Play 可能只收從 Play Console 手動傳的第一個 build（#162，第三方的說法）。這時 `play-upload.sh` 會失敗、印出 API 的回答；營運者從這次執行的 artifact 下載 `android-bundle-signed`，在 Play Console 手動傳。上傳金鑰不經過營運者的電腦。之後的 build 走 API。
+- **新 app 的第一個 build 要手動傳。** Google 的文件：「You can only use this API to make changes to an existing app (that has at least one APK uploaded); thus, you will have to upload at least one APK through the Play Console before you can use this API.」（[Edits](https://developers.google.com/android-publisher/edits)，2026-11-21 讀）。所以第一次執行在 `play-upload.sh` 失敗、印出 API 的回答；營運者從這次執行的 artifact 下載 `android-bundle-signed`，在 Play Console 傳到內部測試（#162 第二段）。上傳金鑰不經過營運者的電腦。之後的 build 走 API。
 
 **版本號**（ADR-0036「版本號和標籤」）。
 
-- 顯示的版本（`versionName`）是台灣的日期（UTC+8，沒有日光節約時間），例如 `2026.11.21`。同一天在 `main` 上已經有成功的執行時加 `.1`、`.2`。「成功的執行」照 GitHub 列出的這個工作流程的執行算：`version` 用 `gh api` 讀 `actions/workflows/upload-android.yml/runs?branch=main&status=success`，數建立時間落在台灣同一天的幾個。
-- `build`（`versionCode`）是這次執行的編號 `github.run_number`：GitHub 對一個工作流程的每次執行從 1 往上數，重跑同一次執行時不變。Google Play 要每次上傳的 `versionCode` 都比之前大，所以：
-  - 重跑一次已經傳上去的執行，會因為 `versionCode` 重複被 Google Play 拒絕，要重新觸發一次
-  - 這個工作流程檔改名或刪掉重建，編號會從 1 重新數；要接著用的話，在 `android-version.sh` 加上一個固定的數
-- 第一個 build 從 Play Console 手動傳的那次，執行本身是失敗的，所以那天下一次上傳的顯示版本會和它相同。Google Play 只要求 `versionCode` 不同，顯示的版本重複不會被拒絕。
+- 顯示的版本（`versionName`）是台灣的日期（UTC+8，沒有日光節約時間），例如 `2026.11.21`。同一天在 `main` 上已經有比這次早的執行時加 `.1`、`.2`。早的執行照 GitHub 列出的這個工作流程在 `main` 上的執行算（`gh api` 讀 `actions/workflows/upload-android.yml/runs?branch=main`）：編號比這次小、建立時間落在台灣同一天的，不管成功或失敗都算。失敗的也算，是因為上傳失敗的那次的 `.aab` 可能已經由營運者手動傳上去（上面「新 app 的第一個 build 要手動傳」）；這樣同一天的兩個 build 不會同名，代價是號碼可能跳過。
+- 這份清單是公開的，`version` 的權杖不必多要權限：GitHub 的文件寫「This endpoint can be used without authentication or the aforementioned permissions if only public resources are requested」（[List workflow runs for a workflow](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow)，2026-11-21 讀；「aforementioned permissions」是「"Actions" repository permissions (read)」）。程式庫改回私有的話，`version` 要加 `actions: read`。
+- `build`（`versionCode`）是這次執行的編號 `github.run_number`：「A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run.」（[Contexts reference 的 `github`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context)，2026-11-21 讀）。Android 的文件要每一版的 `versionCode` 比前一版大，並說「You can't upload an APK to the Play Store with a versionCode you have already used for a previous version」、「The greatest value Google Play allows for versionCode is 2100000000」（[Version your app](https://developer.android.com/studio/publish/versioning)，同一天讀）。所以：
+  - 重跑一次已經傳上去的執行，`versionCode` 和上次相同，會被 Google Play 拒絕；要重新觸發一次
+  - 這個工作流程檔改名，GitHub 會把它當成另一個工作流程，編號可能從 1 重新數（文件說編號是「each run of a particular workflow」，沒有說改名之後怎麼算）。要改名時，在 `android-version.sh` 加上一個固定的數，讓 `versionCode` 接著往上
 - 版本由 Gradle 屬性 `iamreal.versionName`、`iamreal.versionCode` 交給 `app/build.gradle.kts`；沒給的建置（拉取請求的檢查、這台電腦）是 `1`、`dev`。
 
 **對 Google Play 的呼叫**（`play-upload.sh`）。不用第三方的 action 或工具，只用 `curl`、`openssl`、`jq` 照 Google 的文件呼叫：
@@ -218,10 +218,10 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 **合併之後才驗得到的**（本機驗了腳本，見下面「在本機檢查」；工作流程本身在本機跑不起來）：
 
-- `version` 的權杖讀得到執行的清單，`gh api` 的回答是腳本讀的樣子
+- `version` 用只能讀程式的權杖讀得到執行的清單（上面引的文件），`gh api` 的回答是腳本讀的樣子
 - `build` 在 runner 上做得出 `.aab`（步驟和 `android` 的檢查相同，只把 `build` 換成 `bundleRelease`）
 - 上傳金鑰、服務帳號的金鑰在 `app-test` 裡，名稱對得上
-- Google Play 收不收新 app 第一個用 API 傳的 build；還沒發布過的 app，內部測試的版本能不能是 `completed`（有的說法是要先用 `draft`）。不收的話照上面「新 app 的第一個 build」手動傳一次
+- 第一次手動傳之後，API 開的內部測試版本能不能直接是 `completed`（發給測試者）。不行的話，API 的回答會印在紀錄裡，照它改 `play-upload.sh`
 - 營運者從內部測試裝到手機、打得開
 
 ## 在本機檢查

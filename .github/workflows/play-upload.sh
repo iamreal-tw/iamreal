@@ -15,8 +15,9 @@
 #    for Server to Server Applications",
 #    https://developers.google.com/identity/protocols/oauth2/service-account),
 #    for the API's one scope, valid for ten minutes. The key goes to openssl
-#    through a pipe, never into a file; the token is masked in the log and
-#    goes to curl in a header file, never on a command line.
+#    through a pipe; the token is masked in the log and goes to curl through
+#    a pipe too, as its header file (--header @file), never on a command
+#    line.
 # 2. An edit: the API's changes are made in one and take effect together
 #    when it is committed (edits.insert ... edits.commit).
 # 3. The bundle, uploaded into the edit (edits.bundles.upload). Google Play
@@ -42,44 +43,48 @@ token_url="https://oauth2.googleapis.com/token"
 base64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 # 1. The token.
-email=$(jq --exit-status --raw-output .client_email <<< "$PLAY_SERVICE_ACCOUNT_JSON")
+# A field of a JSON text, which must be there: field <json> <filter>
+field() { printf '%s' "$1" | jq --exit-status --raw-output "$2"; }
+email=$(field "$PLAY_SERVICE_ACCOUNT_JSON" .client_email)
 now=$(date +%s)
 header=$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | base64url)
 claims=$(jq --null-input --compact-output --arg iss "$email" --arg aud "$token_url" --argjson now "$now" \
   '{iss: $iss, scope: "https://www.googleapis.com/auth/androidpublisher", aud: $aud, iat: $now, exp: ($now + 600)}' | base64url)
 signature=$(printf '%s.%s' "$header" "$claims" |
-  openssl dgst -sha256 -binary -sign <(jq --exit-status --raw-output .private_key <<< "$PLAY_SERVICE_ACCOUNT_JSON") | base64url)
+  openssl dgst -sha256 -binary -sign <(field "$PLAY_SERVICE_ACCOUNT_JSON" .private_key) | base64url)
 # curl, with what the server answered printed to the log when the call fails
 # (the answers to a failed call are errors: they hold no token).
+#   call <url> [curl's options...]
 call() {
-  local answer
-  if ! answer=$(curl --silent --show-error --fail-with-body "$@"); then
-    echo "the call to ${*: -1} failed: $answer" >&2
+  local url=$1 answer
+  shift
+  if ! answer=$(curl --silent --show-error --fail-with-body "$@" "$url"); then
+    echo "the call to $url failed: $answer" >&2
     return 1
   fi
   printf '%s' "$answer"
 }
 
 answer=$(printf 'grant_type=%s&assertion=%s.%s.%s' 'urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer' "$header" "$claims" "$signature" |
-  call --data @- "$token_url")
-token=$(jq --exit-status --raw-output .access_token <<< "$answer")
+  call "$token_url" --data @-)
+token=$(field "$answer" .access_token)
 echo "::add-mask::$token"
 
 # A call to the API, with the token: api <method> <url> [curl's options...]
 api() {
   local method=$1 url=$2
   shift 2
-  call --request "$method" --header @<(printf 'Authorization: Bearer %s\n' "$token") "$@" "$url"
+  call "$url" --request "$method" --header @<(printf 'Authorization: Bearer %s\n' "$token") "$@"
 }
 
 # 2. The edit.
 answer=$(api POST "$api/edits" --header 'Content-Type: application/json' --data '{}')
-edit=$(jq --exit-status --raw-output .id <<< "$answer")
+edit=$(field "$answer" .id)
 
 # 3. The bundle.
 answer=$(api POST "$upload_api/edits/$edit/bundles?uploadType=media" --header 'Content-Type: application/octet-stream' \
   --data-binary "@$bundle" --max-time 900)
-version_code=$(jq --exit-status --raw-output .versionCode <<< "$answer")
+version_code=$(field "$answer" .versionCode)
 
 # 4. The release on the track.
 release=$(jq --null-input --compact-output --arg track "$track" --arg code "$version_code" '{track: $track, releases: [{versionCodes: [$code], status: "completed"}]}')

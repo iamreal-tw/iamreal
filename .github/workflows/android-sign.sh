@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Signs the bundle the build job of upload-android.yml made, with the upload
 # key, for Google Play (ADR-0036: the upload key proves to Google Play that
-# we sent it; the app signing key is not here). Google Play's documentation
-# signs a bundle with jarsigner ("Sign your app",
-# https://developer.android.com/studio/publish/app-signing); apksigner signs
-# APKs, not bundles.
+# we sent it; the app signing key is not here). Android's documentation:
+# "you can use jarsigner to sign your app bundle from the command line",
+# "You cannot use apksigner to sign your app bundle" ("Build your app from
+# the command line", https://developer.android.com/build/building-cmdline).
 #
 #   android-sign.sh <bundle> <signed bundle>
 #
@@ -40,14 +40,20 @@ cp "$from" "$to"
   -sigalg SHA256withRSA -digestalg SHA-256 "$to" upload > /dev/null
 rm -f "$keystore"
 
-"$jarsigner" -verify "$to" | grep --quiet --line-regexp 'jar verified.'
+verified=$("$jarsigner" -verify "$to")
+if ! printf '%s\n' "$verified" | grep --quiet --line-regexp 'jar verified.'; then
+  echo "the signed bundle does not verify: $verified" >&2
+  exit 1
+fi
 
-# Each file's CRC-32 and name, as unzip -v lists them.
-crcs() { unzip -v "$1" | awk '$7 ~ /^[0-9a-f]{8}$/ && NF == 8 { print $7, $8 }' | sort; }
-signature='META-INF/MANIFEST.MF|META-INF/UPLOAD.SF|META-INF/UPLOAD.RSA'
-added=$(comm -13 <(crcs "$from") <(crcs "$to") | awk '{ print $2 }' | sort | paste -sd '|' -)
-removed=$(comm -23 <(crcs "$from") <(crcs "$to"))
-if [ -n "$removed" ] || [ "$added" != "$(tr '|' '\n' <<< "$signature" | sort | paste -sd '|' -)" ]; then
-  echo "the signed bundle is not the bundle it was given and the signature: added $added, changed or removed $removed" >&2
+# Each file's CRC-32 and name, as unzip -v lists them: the name is the rest
+# of the line after the CRC-32 and two spaces, spaces in it included.
+crcs() { unzip -v "$1" | awk '$7 ~ /^[0-9a-f]{8}$/ && NF >= 8 { print $7 " " substr($0, index($0, " " $7 "  ") + 11) }' | sort; }
+# The names of the files in one list and not the other, by the side: -13 the signed bundle's, -23 the one it was given.
+names() { comm "$1" <(crcs "$from") <(crcs "$to") | cut -c 10- | sort | paste -sd '|' -; }
+added=$(names -13)
+removed=$(names -23)
+if [ -n "$removed" ] || [ "$added" != 'META-INF/MANIFEST.MF|META-INF/UPLOAD.RSA|META-INF/UPLOAD.SF' ]; then
+  echo "the signed bundle is not the bundle it was given and the signature: added $added; changed or removed $removed" >&2
   exit 1
 fi

@@ -3,11 +3,12 @@
 // test/workflows.test.ts can run it on the real files and on altered copies.
 //
 // What it is: a guard against slips and against plain changes to what
-// ADR-0029 and CONTRIBUTING.md ("部署會執行到的東西") require: only the deploy
-// job's upload step has the token, nothing before it in that job runs code
-// of the repository or of a package's install scripts, every action is one
-// of a short list at a fixed commit, and a pull request's checks can only
-// read. It is a whitelist: the files are read by a reader of a small part of
+// ADR-0029, ADR-0036 and CONTRIBUTING.md ("部署會執行到的東西") require: only
+// the deploy job's upload step has the token, nothing before it in that job
+// runs code of the repository or of a package's install scripts; the keys
+// of the app's upload are only in the env of upload-android.yml's two steps
+// that use them, in the job that builds nothing; every action is one of a
+// short list at a fixed commit, and a pull request's checks can only read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
 // workflow's two jobs, the device-core and android jobs of checks.yml, the
 // jobs of cache.yml and the three jobs of upload-android.yml, must be exactly
@@ -629,10 +630,14 @@ export const CACHE_JOBS: YamlMap = {
  * main. Its jobs, exactly:
  *
  * - version: the date in Taiwan and the run's number
- *   (.github/workflows/android-version.sh). The one job whose token may read
- *   more than the code: `actions: read`, to list the workflow's earlier
- *   successful runs (the day's second upload is .1). It stops first when the
- *   run is not on main.
+ *   (.github/workflows/android-version.sh), from the list of the workflow's
+ *   runs on main (the day's second run is .1). The repository is public, and
+ *   GitHub's REST API documentation says of that list: "This endpoint can be
+ *   used without authentication or the aforementioned permissions if only
+ *   public resources are requested"
+ *   (https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow),
+ *   so the token stays at `contents: read`. It stops first when the run is
+ *   not on main.
  * - build: no secret. The steps of the android check up to Gradle, then
  *   `bundleRelease` with that version, which runs the checks of the bundle
  *   (android/app/build.gradle.kts: checkBundle, checkManifest,
@@ -640,8 +645,8 @@ export const CACHE_JOBS: YamlMap = {
  * - upload: `environment: app-test`, whose secrets GitHub gives only to jobs
  *   on main (#162). It runs no build: it signs the bundle the build job
  *   checked with the upload key (android-sign.sh), keeps the signed bundle as
- *   an artifact (Google Play may take a new app's first build only from Play
- *   Console, #162), then uploads it (play-upload.sh). Each secret is in the
+ *   an artifact (a new app's first build goes up by hand, from Play Console:
+ *   .github/README.md), then uploads it (play-upload.sh). Each secret is in the
  *   env of the one step that uses it.
  *
  * Its token reads the code only, like every workflow's (`permissions`), and
@@ -654,13 +659,12 @@ export const UPLOAD_ANDROID_GROUP = "upload-android";
 export const UPLOAD_ANDROID_SCRIPTS: readonly string[] = ["android-version.sh", "android-sign.sh", "play-upload.sh"];
 /** Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one. */
 const UNSIGNED_BUNDLE: YamlMap = { name: "android-bundle", path: "android/app/build/outputs/bundle/release/app-release.aab" };
-const SIGNED_BUNDLE = "${{ runner.temp }}/signed/app-release.aab";
-const RUNS_OF_UPLOAD_ANDROID = `repos/$GITHUB_REPOSITORY/actions/workflows/${UPLOAD_ANDROID_WORKFLOW}/runs?branch=main&status=success&per_page=100`;
+const SIGNED_BUNDLE = "signed/app-release.aab";
+const RUNS_OF_UPLOAD_ANDROID = `repos/$GITHUB_REPOSITORY/actions/workflows/${UPLOAD_ANDROID_WORKFLOW}/runs?branch=main&per_page=100`;
 export const UPLOAD_ANDROID_JOBS: YamlMap = {
   version: {
     "runs-on": "ubuntu-24.04",
     "timeout-minutes": "5",
-    permissions: { actions: "read", contents: "read" },
     outputs: { name: "${{ steps.version.outputs.name }}", code: "${{ steps.version.outputs.code }}" },
     steps: [
       { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
@@ -700,13 +704,13 @@ export const UPLOAD_ANDROID_JOBS: YamlMap = {
       {
         name: "Sign the bundle with the upload key",
         env: { ANDROID_UPLOAD_KEYSTORE_BASE64: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}", ANDROID_UPLOAD_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}" },
-        run: 'JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/signed/app-release.aab"',
+        run: `JAVA_HOME="$JAVA_HOME_17_X64" bash .github/workflows/android-sign.sh "$RUNNER_TEMP/bundle/app-release.aab" "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
       },
-      { uses: uses("actions/upload-artifact"), with: { name: "android-bundle-signed", path: SIGNED_BUNDLE, "if-no-files-found": "error" } },
+      { uses: uses("actions/upload-artifact"), with: { name: "android-bundle-signed", path: `\${{ runner.temp }}/${SIGNED_BUNDLE}`, "if-no-files-found": "error" } },
       {
         name: "Upload to Google Play's internal testing",
         env: { PLAY_SERVICE_ACCOUNT_JSON: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" },
-        run: 'bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"',
+        run: `bash .github/workflows/play-upload.sh "$RUNNER_TEMP/${SIGNED_BUNDLE}"`,
       },
     ],
   },

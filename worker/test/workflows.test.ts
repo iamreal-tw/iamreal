@@ -545,8 +545,8 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     changes: [replace(U, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
     problem: SECRETS_PROBLEM,
   },
-  "259 the version job's token able to write": {
-    changes: [replace(U, "      actions: read\n", "      actions: write\n")],
+  "259 the version job's token given more than the workflow's": {
+    changes: [replace(U, "    timeout-minutes: 5\n", "    timeout-minutes: 5\n    permissions:\n      actions: write\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "260 the upload job's token able to write the code": {

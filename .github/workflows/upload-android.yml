@@ -10,26 +10,27 @@
 # file's three jobs, exactly, and worker/test/workflows.test.ts checks this
 # file against them.
 #
-# "version" lists this workflow's earlier successful runs on main, the one
-# job whose token may (actions: read), and gives the build its version: the
-# date in Taiwan, with .1 from the day's second upload on, and the run's
-# number as the build number (android-version.sh). It stops first when the
-# run is not on main.
+# "version" lists this workflow's runs on main (a public list: the token
+# needs no more than contents: read) and gives the build its version: the
+# date in Taiwan, with .1 from the day's second run on, and the run's number
+# as the build number (android-version.sh). It stops first when the run is
+# not on main.
 #
 # "build" has no secret. It builds the bundle with that version the way the
 # android check of checks.yml builds the app (no cache here), which runs the
 # checks of the bundle, and hands the bundle on as an artifact.
 #
 # "upload" is the one job of the environment app-test, which GitHub gives
-# its keys to only for jobs on main (#162). It builds nothing and runs no Gradle:
-# it signs the bundle the build job checked with the upload key
-# (android-sign.sh), keeps the signed bundle as an artifact (Google Play may
-# take a new app's first build only from Play Console; the operator then
-# uploads this one by hand, #162), then uploads it with the Google Play
+# its keys to only for jobs on main (#162). It builds nothing and runs no
+# Gradle: it signs the bundle the build job checked with the upload key
+# (android-sign.sh), keeps the signed bundle as an artifact (the API takes
+# no app's first build: the operator uploads that one by hand, from Play
+# Console; .github/README.md), then uploads it with the Google Play
 # Developer API (play-upload.sh). Each secret is in the env of the one step
 # that uses it. What it trusts besides: the pinned actions; the runner's
-# JDK 17 (jarsigner), curl, openssl and jq; the two scripts, from the same
-# commit as this file; and the bundle the build job handed on.
+# JDK 17 (jarsigner) and its tools (bash, base64, unzip, awk, curl, openssl,
+# jq); the two scripts, from the same commit as this file; and the bundle
+# the build job handed on.
 name: upload-android
 
 on:
@@ -52,9 +53,6 @@ jobs:
   version:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions:
-      actions: read
-      contents: read
     outputs:
       name: ${{ steps.version.outputs.name }}
       code: ${{ steps.version.outputs.code }}
@@ -68,7 +66,7 @@ jobs:
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api "repos/$GITHUB_REPOSITORY/actions/workflows/upload-android.yml/runs?branch=main&status=success&per_page=100" > "$RUNNER_TEMP/runs.json" && bash .github/workflows/android-version.sh "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        run: gh api "repos/$GITHUB_REPOSITORY/actions/workflows/upload-android.yml/runs?branch=main&per_page=100" > "$RUNNER_TEMP/runs.json" && bash .github/workflows/android-version.sh "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
   build:
     needs: version
