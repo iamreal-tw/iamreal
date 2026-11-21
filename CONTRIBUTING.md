@@ -51,7 +51,7 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 
 ## 部署會執行到的東西
 
-合併到 `main` 會部署測試網站，推版本標籤會部署正式網站；部署的工作拿著部署的權杖（ADR-0029）。手動觸發的上傳把 `main` 上建出來的 app 傳到商店，上傳的工作拿著商店的金鑰（ADR-0036）。所以 PR 動到下面任何一項，要逐行看，PR 的說明寫出改了什麼、為什麼：
+合併到 `main` 會部署測試網站，推版本標籤會部署正式網站；部署的工作拿著部署的權杖（ADR-0029）。所以 PR 動到下面任何一項，要逐行看，PR 的說明寫出改了什麼、為什麼：
 
 - `.github/workflows/` 裡的任何檔案
 - 工作流程用的 action：一律釘在完整的 commit SHA，不用標籤或分支
@@ -62,7 +62,6 @@ ADR、`CLAUDE.md`、`GLOSSARY.md`、`docs/design/principles.md`、這一份。PR
 - 新增的套件、lockfile 裡的變動：解析到的網址和雜湊要對得上公開的套件庫
 - 安裝套件和 wrangler 啟動時會讀的檔：`.npmrc`、`.pnpmfile.cjs`（或 `.mjs`、`.js`）、`pnpm-workspace.yaml`、`worker/` 底下的 `.env*`
 - 部署的工作會呼叫的任何腳本
-- app 的建置：`ios/`、`android/` 的專案檔、建置設定和腳本，和 `device-core/`。建置的工作沒有金鑰，但它建出來的就是上傳到商店的那一份
 
 審外人的 PR 時，`/code-review` 照這份清單列出動到哪幾項、每一項改了什麼；動到任何一項，維護者自己看過才合併。
 
