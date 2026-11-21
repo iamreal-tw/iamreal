@@ -123,6 +123,17 @@ export const RESTRICTED_FROM = 4;
  * start. The roster is first published when the date after it begins, not
  * on the day the object, or the build, is new. SCHEMA_VERSION is unchanged.
  *
+ * retries: one row per piece of timed work whose last try failed
+ * (`Retries`): `work` names the piece (`views`, `full_files`,
+ * `publication`), `failures` is how many tries in a row failed, `again_ms`
+ * when it is tried again, in milliseconds since the epoch on the object's
+ * clock. The row is deleted when the work is done. It is kept here and not
+ * in memory because an object that has nothing to do for some seconds
+ * leaves memory, and starts again when its alarm rings. The table came
+ * after the others, with SCHEMA_VERSION unchanged: an object made without
+ * it gets it, empty, when it next starts, which is an object with no
+ * failure.
+ *
  * newest_crls: for each issuer key, its newest usable CRLs as the CRL mirror
  * last told them (src/mirror.ts): `place` 0 is the newest. `root` is the
  * root of the CRL's tree, 64 lowercase hex digits; `crl_number` its
@@ -176,6 +187,11 @@ const TABLES: readonly string[] = [
      id   INTEGER PRIMARY KEY CHECK (id = 1),
      date TEXT    NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS retries (
+     work     TEXT    PRIMARY KEY,
+     failures INTEGER NOT NULL,
+     again_ms INTEGER NOT NULL
+   ) WITHOUT ROWID`,
   // The views (views.ts). They came after the others, with SCHEMA_VERSION unchanged: an object made without them
   // gets them when it next starts, and fills them from its records (the constructor).
   ...VIEW_TABLES,
@@ -296,22 +312,40 @@ const LONGEST_RETRY_MS = 60 * 60 * 1000;
  * had lasted. One that needs somebody (a file missing from the bucket, a
  * line this build does not read, a fingerprint file that is not the
  * object's) is tried, and has its line, once an hour, not every minute.
- * Once the work is done, the next failure waits a minute again. Kept in
- * memory, as the time of the next try is: an object that starts again has
- * forgotten its failures, and tries at once.
+ * Once the work is done, the next failure waits a minute again.
+ *
+ * The failures in a row and the time of the next try are a row of the
+ * table `retries`, not something in memory: on Cloudflare an object that
+ * has nothing to do for some 10 seconds leaves memory, and its alarm
+ * starts it again (README.md, "失敗後多久再試"), so in memory every failure
+ * would be a first one. An object that starts again waits as the one before
+ * it would have.
  */
 class Retries {
-  #failures = 0;
+  readonly #sql: SqlStorage;
+  readonly #work: string;
 
-  /** The time of the next try, after a failure at `time` on the object's clock. */
-  failedAt(time: number): number {
-    this.#failures++;
-    return time + Math.min(FIRST_RETRY_MS * 2 ** Math.min(this.#failures - 1, 6), LONGEST_RETRY_MS);
+  constructor(sql: SqlStorage, work: string) {
+    this.#sql = sql;
+    this.#work = work;
   }
 
-  /** The work was done: the next failure is a first one. */
+  /** When the work is tried again, on the object's clock; null when its last try did not fail. */
+  againAt(): number | null {
+    return this.#sql.exec<{ again_ms: number }>("SELECT again_ms FROM retries WHERE work = ?", this.#work).toArray()[0]?.again_ms ?? null;
+  }
+
+  /** Notes a failure at `time` on the object's clock, and returns the time of the next try. */
+  failedAt(time: number): number {
+    const failures = (this.#sql.exec<{ failures: number }>("SELECT failures FROM retries WHERE work = ?", this.#work).toArray()[0]?.failures ?? 0) + 1;
+    const again = time + Math.min(FIRST_RETRY_MS * 2 ** Math.min(failures - 1, 6), LONGEST_RETRY_MS);
+    this.#sql.exec("INSERT OR REPLACE INTO retries (work, failures, again_ms) VALUES (?, ?, ?)", this.#work, failures, again);
+    return again;
+  }
+
+  /** The work was done: the next failure is a first one, and nothing waits. */
   succeeded(): void {
-    this.#failures = 0;
+    this.#sql.exec("DELETE FROM retries WHERE work = ?", this.#work);
   }
 }
 
@@ -373,9 +407,10 @@ export class Roster extends DurableObject<Env> {
    * wait for it; nothing else reads it from outside this file.
    */
   protected viewsFilling: Promise<void>;
-  /** When views that could not be filled are tried again, on the object's clock; null when no try is owed. Kept in memory. */
-  #fillAgainAt: number | null = null;
-  readonly #fillRetries = new Retries();
+  /** The failures in a row of filling the views, and when they are tried again. */
+  readonly #fillRetries = new Retries(this.ctx.storage.sql, "views");
+  /** Whether a filling of the views is going on: no other is begun meanwhile. Kept in memory, as the filling is. */
+  #filling = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -400,8 +435,13 @@ export class Roster extends DurableObject<Env> {
     // Views that are not at the last record are written again from the records: an object that has records
     // from before it had the views, or whose views were cleared. Not while the roster is paused: the stored
     // records were then taken by other rules than the ones this build would compute their kinds by.
+    // A filling that failed is not begun again before its wait is over (`Retries`), also when the object started
+    // again in between: on Cloudflare that is every time the object has had nothing to do for some seconds. The alarm
+    // begins it then (`#viewsBehind`).
     this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#rosterRow().count;
-    this.viewsFilling = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused ? this.#fillViews() : Promise.resolve();
+    const fillOwed = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused;
+    const fillAgainAt = fillOwed ? this.#fillRetries.againAt() : null;
+    this.viewsFilling = fillOwed && (fillAgainAt === null || fillAgainAt <= now().getTime()) ? this.#fillViews() : Promise.resolve();
     ctx.waitUntil(this.viewsFilling);
     if (this.#tablesAreThisVersion) {
       // The roster is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
@@ -434,8 +474,9 @@ export class Roster extends DurableObject<Env> {
    * was written; a line this build does not read, a record its rules do
    * not take. The object runs all the same, with views it does not use;
    * one line says so, and it is tried again a minute later, then after
-   * longer waits while it keeps failing (`#viewsBehind`, `Retries`), and at
-   * the next start: a bucket that did not answer may answer then.
+   * longer waits while it keeps failing (`#viewsBehind`, `Retries`): a
+   * bucket that did not answer may answer then. An object that starts
+   * again while a wait is not over waits for it too.
    * What is wrong with the records or the build fails again each time,
    * with its line. It never throws.
    */
@@ -443,6 +484,7 @@ export class Roster extends DurableObject<Env> {
     const sql = this.ctx.storage.sql;
     const { kind, platforms } = this.settings;
     const cards: CardsSoFar = new Map();
+    this.#filling = true;
     try {
       const files = sql.exec<{ records_before: number; file_sha256: string }>("SELECT records_before, file_sha256 FROM full_files ORDER BY records_before").toArray();
       if (files.length === 0) {
@@ -465,29 +507,31 @@ export class Roster extends DurableObject<Env> {
       }
       if (viewSeq(sql) !== this.#rosterRow().count) throw new Error("the views are not at the last record after they were filled");
       this.#viewsAtLastRecord = true;
-      this.#fillAgainAt = null;
       this.#fillRetries.succeeded();
     } catch (e) {
       logFailure("views_not_filled", e);
-      this.#fillAgainAt = this.#fillRetries.failedAt(now().getTime());
+      this.#fillRetries.failedAt(now().getTime());
+      this.#filling = false;
       // The alarm for the next try. A filling that failed before it waited for anything is still inside the
       // constructor, and the alarm is set once that has returned, for the same reason as above (`timedWork`).
       await Promise.resolve();
       await this.#setAlarmWithoutFailing();
+    } finally {
+      this.#filling = false;
     }
   }
 
   /**
    * Filling views that could not be filled, again: due after the wait of
-   * the failures in a row so far (`Retries`), a minute after the first,
-   * and not at all once the views are filled. No move of full files goes on
+   * the failures in a row so far (`Retries`), a minute after the first;
+   * not while a filling goes on, while the roster is paused, or once the
+   * views are filled. No move of full files goes on
    * meanwhile: both are pieces of the alarm's work, which runs one piece
    * after the other.
    */
   #viewsBehind: TimedWork = {
-    due: () => this.#fillAgainAt,
+    due: () => (this.#viewsAtLastRecord || this.#paused || this.#filling ? null : this.#fillRetries.againAt()),
     run: async () => {
-      this.#fillAgainAt = null;
       this.viewsFilling = this.#fillViews();
       await this.viewsFilling;
     },
@@ -814,9 +858,8 @@ export class Roster extends DurableObject<Env> {
     return first !== null && this.#rosterRow().count >= first - 1 + LINES_PER_FILE ? first - 1 : null;
   }
 
-  /** When a full file that could not be moved is tried again, on the object's clock. Kept in memory: an object that starts again tries at once. */
-  #moveAgainAt = 0;
-  readonly #moveRetries = new Retries();
+  /** The failures in a row of moving the full files, and when they are tried again. */
+  readonly #moveRetries = new Retries(this.ctx.storage.sql, "full_files");
   /** The move of the full files that is going on, if one is. */
   #moving: Promise<void> | null = null;
 
@@ -829,12 +872,12 @@ export class Roster extends DurableObject<Env> {
    * to the other pieces.
    */
   #fullFiles: TimedWork = {
-    due: () => (this.#firstFullFile() === null ? null : this.#moveAgainAt),
+    due: () => (this.#firstFullFile() === null ? null : (this.#moveRetries.againAt() ?? 0)),
     run: async (time) => {
       try {
         await this.#moveFullFiles();
       } catch (e) {
-        this.#moveAgainAt = this.#moveRetries.failedAt(time);
+        this.#moveRetries.failedAt(time);
         logFailure("full_file_not_moved", e);
       }
     },
@@ -850,7 +893,8 @@ export class Roster extends DurableObject<Env> {
       // Not while the views are being filled from the files and the records as they are now.
       await this.viewsFilling;
       for (let before = this.#firstFullFile(); before !== null; before = this.#firstFullFile()) await this.#moveFile(before);
-      // Whichever piece of timed work moved them (this one, or the daily publication first of all): the next failure is a first one.
+      // Whichever piece of timed work moved them (this one, or the daily publication first of all): the next failure is
+      // a first one, and the next file that fills is moved at once.
       this.#moveRetries.succeeded();
     })().finally(() => {
       this.#moving = null;
@@ -942,9 +986,8 @@ export class Roster extends DurableObject<Env> {
     return { date, count: row.count, fingerprint: row.fingerprint };
   }
 
-  /** When a publication that failed is tried again, on the object's clock. Kept in memory: an object that starts again tries at once. */
-  #publishAgainAt = 0;
-  readonly #publishRetries = new Retries();
+  /** The failures in a row of publishing the roster, and when it is tried again. */
+  readonly #publishRetries = new Retries(this.ctx.storage.sql, "publication");
 
   /**
    * Publishing the roster, once for each date in Taiwan (ADR-0027): due
@@ -952,8 +995,8 @@ export class Roster extends DurableObject<Env> {
    * object first ran, for a roster never published), and at once while a
    * line it wrote is not in the bucket's fingerprint file yet; after a
    * failure, not before the wait of the failures in a row so far is over
-   * (`Retries`): a minute after the first. A date on which the alarm never rang gets no
-   * line afterwards: a line is dated the day it is written
+   * (`Retries`): a minute after the first. A date on which the alarm never
+   * rang gets no line afterwards: a line is dated the day it is written
    * (spec/record.md).
    *
    * Not while the roster is paused: the states of the cards were then
@@ -977,17 +1020,18 @@ export class Roster extends DurableObject<Env> {
       if (this.#paused) return null;
       const sql = this.ctx.storage.sql;
       const { last, behind } = sql.exec<{ last: string | null; behind: number }>("SELECT MAX(date) AS last, COALESCE(SUM(in_bucket = 0), 0) AS behind FROM published").one();
-      if (behind > 0) return this.#publishAgainAt;
+      const again = this.#publishRetries.againAt() ?? 0;
+      if (behind > 0) return again;
       const after = parseDay(last ?? sql.exec<{ date: string }>("SELECT date FROM first_day WHERE id = 1").one().date);
       if (after === null) throw new Error("published: a date is not a date");
-      return Math.max(startOfTaiwanDay(after + 1), this.#publishAgainAt);
+      return Math.max(startOfTaiwanDay(after + 1), again);
     },
     run: async (time) => {
       try {
         await this.#publish();
         this.#publishRetries.succeeded();
       } catch (e) {
-        this.#publishAgainAt = this.#publishRetries.failedAt(time);
+        this.#publishRetries.failedAt(time);
         logFailure(e instanceof FingerprintFileDiffers ? "fingerprint_file_differs" : "roster_not_published", e);
       }
     },

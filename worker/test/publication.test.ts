@@ -341,6 +341,49 @@ describe("a publication that cannot be finished", () => {
     await worker.roster.setBucketFault(null);
   });
 
+  // On Cloudflare an object that has nothing to do for some 10 seconds leaves memory, and starts again when its alarm
+  // rings (README.md, "失敗後多久再試"): between two tries it is as good as started again.
+  test("an object started again between two tries waits as long as it would have: the failures in a row are kept with it", async () => {
+    await freshRoster(worker);
+    const root = await publishG3(worker);
+    await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+    const failures = notPublished();
+    const fault = { key: `roster/${rosterFileName(0)}`, how: "put fails" } as const;
+    /** The object starts again, and its alarm rings at `ms`; the bucket's fault, which the object kept in memory, is set again first. */
+    const startedAgainAt = async (ms: number, bucketFault: typeof fault | null = fault): Promise<void> => {
+      await worker.roster.restart();
+      await worker.setClock(new Date(ms));
+      await worker.roster.setBucketFault(bucketFault);
+      await worker.roster.runAlarm();
+    };
+
+    await worker.roster.setBucketFault(fault);
+    time = tw("2026-11-21", "00:00:00").getTime();
+    await worker.setClock(new Date(time));
+    await worker.roster.runAlarm();
+    assert.equal(notPublished(), failures + 1);
+    // A minute after the first failure, and two after the second, each time in an object that has just started.
+    await startedAgainAt(time + 59 * 1000);
+    assert.equal(notPublished(), failures + 1, "not before the minute is over");
+    await startedAgainAt(time + 60 * 1000);
+    assert.equal(notPublished(), failures + 2);
+    await startedAgainAt(time + 2 * 60 * 1000);
+    assert.equal(notPublished(), failures + 2, "not a minute after the second failure");
+    await startedAgainAt(time + 3 * 60 * 1000);
+    assert.equal(notPublished(), failures + 3, "two minutes after it");
+
+    // Once published, nothing of the failures is kept: the next date's first failure, in an object started again, is
+    // tried again a minute later, not four.
+    await startedAgainAt(time + 7 * 60 * 1000, null);
+    assert.equal(((await published()) as { date: unknown }).date, "2026-11-21");
+    const cardStateFault = { key: "roster/card-state/2026-11-22.jsonl", how: "put fails" } as const;
+    const before = notPublished();
+    await startedAgainAt(tw("2026-11-22", "00:00:00").getTime(), cardStateFault);
+    await startedAgainAt(tw("2026-11-22", "00:01:00").getTime(), cardStateFault);
+    assert.equal(notPublished(), before + 2);
+    await worker.roster.setBucketFault(null);
+  });
+
   test("the card state file breaks off while it is written: no line, no copy of the card state table kept; the next try is of its own moment", async () => {
     await freshRoster(worker);
     const root = await publishG3(worker);
