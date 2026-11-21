@@ -1,6 +1,6 @@
 # circuits/：電路的原始碼
 
-過卡證明的電路，用 Noir 寫，用 Barretenberg 的 UltraHonk 算證明和驗證。每次過卡算一份證明（ADR-0013）；發證金鑰有 2048 和 4096 位元兩種，各編一份電路。PSE 的 circom 電路留作對照，同一批測試案例兩邊逐案比對（ADR-0012）。放在這個程式庫的理由在 ADR-0038。
+過卡時算證明的電路，用 Noir 寫，用 Barretenberg 的 UltraHonk 算證明和驗證。每次過卡算一份證明（ADR-0013）；發證金鑰有 2048 和 4096 位元兩種，各編一份電路。PSE 的 circom 電路留作對照，同一批測試案例兩邊逐案比對（ADR-0012）。放在這個程式庫的理由在 ADR-0038。
 
 這個目錄讓人檢查三件事：
 
@@ -10,7 +10,7 @@
 
 **這份電路沒有經過人工稽核，上線前也不會有。** 做過的 AI 輔助檢查：查了什麼、找到什麼、改了哪些、哪些還沒有重新檢查，見 [`REVIEW.md`](REVIEW.md)。
 
-原始碼從先前一個私有的程式庫搬來（提交 `497b610c64a3e598ccc769f39e886d1d5ca889ed`），不帶歷史；搬進來的第一個提交裡每個檔和那個提交的同名檔逐位元組相同（ADR-0038）。測試和逐案比對用的都是自製的金鑰和憑證，沒有任何真實憑證的內容，不需要讀卡機或卡片。
+原始碼從先前一個私有的程式庫搬來（提交 `497b610c64a3e598ccc769f39e886d1d5ca889ed`），不帶歷史（ADR-0038）。搬檔的是兩個提交，裡面每個檔都和 `497b610` 的對應檔逐位元組相同：第一個是電路、測試和逐案比對，第二個是隨機差異測試的程式（`fuzz/`）和兩張結果表（`results/`）。四個檔不在這兩個提交裡，因為它們寫著原本那台電腦上的路徑，改過才放進來：這份 `README.md`（改寫）、`fuzz/README.md`（改寫）、`fuzz/lib/common.mjs` 和 `fuzz/campaign.sh`（只改了那幾行）。改寫和整理都在後面的提交。測試和逐案比對用的都是自製的金鑰和憑證，沒有任何真實憑證的內容，不需要讀卡機或卡片。
 
 ## 目錄
 
@@ -35,6 +35,7 @@
 | `REVIEW.md` | AI 輔助檢查的摘要 |
 | `rebuild.sh` | **重建並比對**：見下面 |
 | `fetch-nargo.sh`、`nargo.sha256` | 下載釘住的 `nargo`，核對 SHA-256 |
+| `sha256.sh` | 這裡的腳本算 SHA-256 都用它 |
 | `find-bb.sh`、`bb.sha256` | 找到 `@aztec-foundation/bb.js` 附的 `bb`，核對 SHA-256 |
 | `build-circom.sh`、`zkid-commit` | 建逐案比對用的 circom 見證產生器，從 `zkid-commit` 釘住的提交 |
 
@@ -125,7 +126,7 @@ pnpm test                                    # 全部的 JavaScript 測試，含
 
 `pnpm test` 跑的：
 
-- `tests/equivalence.test.mjs`：**逐案比對**。circom 的每一個測試案例（`tests/cases.mjs`，改用自製的金鑰和憑證），加上這裡新增的案例，同一份位元組同時餵給三個電路：`comparison/` 裡同形狀的部分、正式的電路（其餘部分照實）、circom 的電路。三者要和預期的接受或拒絕相同，有意的差異除外。結果寫到 `out/equivalence.md`；提交的紀錄是 `results/equivalence.md`，表的開頭說明每一欄、每一種差異，和「行為相同」是拿整份過卡的判斷來比。現在是 110 案：29 案是有意的差異（種類檢查，ADR-0013），1 案是部分層級的差異（見下面「和 circom 電路不同的地方」），其他 0 案不同。
+- `tests/equivalence.test.mjs`：**逐案比對**。circom 的每一個測試案例（`tests/cases.mjs`，改用自製的金鑰和憑證），加上這裡新增的案例，同一份位元組同時餵給三個電路：`comparison/` 裡同形狀的部分、正式的電路（其餘部分照實）、circom 的電路。三者要和預期的接受或拒絕相同，有意的差異除外。結果寫到 `out/equivalence.md`；提交的紀錄是 `results/equivalence.md`，表的開頭說明每一欄、每一種差異，和「行為相同」是拿整份證明的判斷來比（circom 那邊是三份證明合起來）。現在是 110 案：29 案是有意的差異（種類檢查，ADR-0013），1 案是單一部分的差異（`part-level difference`，見下面「和 circom 電路不同的地方」），其他 0 案不同。
 - `tests/card_proof.test.mjs`：逐案比對做不到的部分。兩個簽章是不是用憑證裡的公鑰驗的、兩段字能不能互換、換一個題目算出的宣告碼（卡片沒有重簽）會被拒絕、種類的邊界字元、同一個簽章換一種分段、不到 2048 位元的卡片金鑰、有內容的廢止清冊、電路的輸出和電路外算的雜湊相同。
 - `tests/vectors.test.mjs`：讀 `spec/vectors/poseidon2.json`，和 Go、TypeScript、Rust 的實作讀同一份。其他測試的預期值都是執行時用 bb.js 算的，函式庫改了雜湊的包法時電路和 bb.js 可能一起變，那些測試看不出來；這裡的值寫死在檔案裡，電路和 bb.js 都要算出同一個值。`node tests/vectors/make-poseidon2.mjs` 用 bb.js 重新寫出這個檔；檔案有任何變動，都代表雜湊變了。
 - `tests/library-guarantees.test.mjs`：**函式庫保證的測試**。電路有幾項保證靠函式庫裡的某一行成立（`REVIEW.md`「找到的問題」第 4 項），每一項一個「那一行不見就會失敗」的測試。檔案開頭列了每個測試對應哪一行。
@@ -136,7 +137,7 @@ pnpm test                                    # 全部的 JavaScript 測試，含
 
 測試預設找 `.zkID/wallet-unit-poc/circom/build`，可以用環境變數 `ZKID_CIRCOM_BUILD` 改。已經有一份建好的（例如另一個 worktree 的 `.zkID/`），用 `ZKID_CIRCOM_BUILD` 指過去就好，不用每個 worktree 各建一份。找不到時 circom 那一欄標 `not run`，Noir 的部分照跑。改電路後要重跑（ADR-0012）。
 
-對照的對象：`zkid-commit` 是 fork 的 `primary-card` 分支，在 PSE 上游 `privacy-ethereum/zkID` 的 `RSA-X.509-Cert` 分支的 `97210baed65ed53d098a4e86fb551caf1c844b4e` 之上多 7 個提交（`git log 97210ba..e95abdf`）：憑證電路加了效期、公鑰位置由結構推導、金鑰用途、正卡、卡片金鑰剛好 2048 位元的檢查（ADR-0008 到 0011），各有新的 circom 測試；一個 AI 檢查之後的加強；一個把 `currentTime` 接到輸入產生器、證明程式和網頁。逐案比對跑這個提交上每一個 circom 測試的案例。
+對照的對象：`zkid-commit` 是 fork 的 `primary-card` 分支，在 PSE 上游 `ethereum/zkID` 的 `RSA-X.509-Cert` 分支的 `97210baed65ed53d098a4e86fb551caf1c844b4e` 之上多 7 個提交（`git log 97210ba..e95abdf`）：憑證電路加了效期、公鑰位置由結構推導、金鑰用途、正卡、卡片金鑰剛好 2048 位元的檢查（ADR-0008 到 0011），各有新的 circom 測試；一個 AI 檢查之後的加強；一個把 `currentTime` 接到輸入產生器、證明程式和網頁。逐案比對跑這個提交上每一個 circom 測試的案例。
 
 ### 反事實測試
 
@@ -172,6 +173,6 @@ node tests/counterfactual/run.mjs             # 全部；後面接名稱只跑�
 - 序號由電路自己讀，不是輸入。
 - 卡片簽的字直接是 31 個位元組的輸入，不是補齊後的 1536 個位元組。
 - 大數用 120 位元一段（circom 是 121 位元）。
-- **卡片金鑰剛好 2048 位元在哪裡檢查。** 兩邊的憑證部分都要求模數的第一個位元組不小於 `0x80`。此外，這裡的簽章部分自己也會拒絕不到 2048 位元的金鑰（函式庫建立金鑰參數時檢查）；circom 的簽章電路不看金鑰長度，靠憑證電路和公鑰承諾值。所以單獨比簽章部分時兩邊不同（逐案比對表裡標成 `part-level difference`），整個流程的結果相同。
+- **卡片金鑰剛好 2048 位元在哪裡檢查。** 兩邊的憑證部分都要求模數的第一個位元組不小於 `0x80`。此外，這裡的簽章部分自己也會拒絕不到 2048 位元的金鑰（函式庫建立金鑰參數時檢查）；circom 的簽章電路不看金鑰長度，靠憑證電路和公鑰承諾值。所以單獨比簽章部分時兩邊不同（單一部分的差異，逐案比對表裡標成 `part-level difference`），整份證明（circom 是三份證明合起來）的結果相同。
 - 多兩組私有輸入 `issuer_redc`、`card_redc`，是函式庫算模數乘法用的輔助值。
 - 雜湊是 BN254 純量體上的 Poseidon2，所以匿名編號、廢止清冊的樹根都和 circom 的版本不同。

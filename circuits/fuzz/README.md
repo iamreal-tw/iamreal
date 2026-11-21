@@ -8,7 +8,7 @@
 
 - `circuits/` 已經 `pnpm install`、`"$(./fetch-nargo.sh)" compile --workspace`（`../target/*.json`）。Noir 的執行器和 bb.js 從 `../node_modules` 載入，沒有另外的套件。
 - circom 的見證產生器：`../build-circom.sh` 建在 `../.zkID/`，和 `../tests/` 找的是同一個；環境變數 `ZKID_CIRCOM_BUILD` 可以改。也要讀它的一個電路原始檔（`components/poseidonP256Constants.circom`，算 circom 那邊的雜湊），預設在 build 的上一層 `circuits/`（`build-circom.sh` 會留下這個檔），可以用 `ZKID_CIRCOM_SRC` 改。只跑 Noir 時加 `--no-circom`。
-- Node 22。
+- Node 22；`selftest/make-mutants.sh` 另外要 `python3`（改突變體的原始碼）。
 - `keys/pool.json`：金鑰池，第一次執行時產生，之後固定。裡面是用完即丟的私鑰，不進版本控制（`../.gitignore`）。同一個種子要重現同一批案例，必須用同一份金鑰池；AI 檢查時用的那一份沒有公開，所以這裡跑同一個種子得到的是另一批案例。
 
 ## 檔案
@@ -18,7 +18,7 @@
 | `lib/common.mjs` | 有種子的亂數（sfc32，種子是 `sha256(seed:index)`，每一案獨立）、金鑰池、原始 RSA、circom 那邊的 Poseidon（secq256r1 體） |
 | `lib/oracle.mjs` | 參考判斷：照 ADR-0008 到 0011 和電路文件寫的結構走法、PKCS#1 v1.5 驗章、種類 |
 | `lib/smt.mjs` | circomlib 形狀的廢止清冊樹，可對兩種雜湊各建一份；證明的變造 |
-| `lib/gen.mjs` | 產生案例：憑證（`chain`）、簽章（`sig`）、整份過卡證明（`card`，只有 Noir） |
+| `lib/gen.mjs` | 產生案例：憑證（`chain`）、簽章（`sig`）、整份證明（`card`，只有 Noir 的 `card_proof_*`） |
 | `lib/exec.mjs` | 把一案轉成三個電路的輸入、執行、比對判斷和輸出 |
 | `run.mjs` | 工作行程；一案一行寫到 `results/<seed>/w<id>.jsonl`，有問題的案例把全部輸入寫到 `findings/<seed>-<index>.json` |
 | `campaign.sh` | 平行跑一輪，記錄寫到 `logs/` |
@@ -41,8 +41,8 @@ node run.mjs --seed main1 --case 1234 --verbose                # 重跑一案
 node run.mjs --seed X --only chain --mutation smt --count 50   # 只跑某一類
 node prove.mjs --circuit card_proof_rs2048 --finding findings/<file>.json
 
-selftest/make-mutants.sh                  # 建突變體，見下面
-selftest/run-mutants.sh 200               # 真電路必須 0 個問題，每個突變體至少 1 個
+selftest/make-mutants.sh                  # 建突變體，見下面；有一個編不過就結束碼 1
+selftest/run-mutants.sh 200               # 真電路必須 0 個問題，每個突變體至少 1 個；不成立就結束碼 1
 node selftest/oracle-vs-handwritten.mjs   # 參考判斷對逐案比對的預期
 node repro/key-not-2048.mjs
 ```
@@ -58,7 +58,7 @@ node repro/key-not-2048.mjs
 1. 每個電路的判斷和參考判斷相同（例外：`card` 類改了 `redc` 而其他都合法時，參考判斷是「都可以」，因為 `redc` 只影響不受約束的計算）。
 2. Noir 的比對用部分和 circom 的判斷相同。兩種情況記成 `note`，不算問題：
    - 種類檢查（ADR-0013，有意的差異）：簽章合法、金鑰 2048 位元、只有第一個位元組的種類不對時，Noir 拒絕而 circom 接受。
-   - 金鑰長度（檢查的位置不同）：簽章合法、金鑰不是 2048 位元時，Noir 的簽章部分拒絕，circom 的 `userSigRS2048` 接受。這時另外拿一張其他都合法、帶這把金鑰的憑證餵給 circom 的憑證電路，它必須拒絕；它接受就是問題（circom 整個流程收了不是 2048 位元的金鑰）。
+   - 金鑰長度（檢查的位置不同）：簽章合法、金鑰不是 2048 位元時，Noir 的簽章部分拒絕，circom 的 `userSigRS2048` 接受。這時另外拿一張其他都合法、帶這把金鑰的憑證餵給 circom 的憑證電路，它必須拒絕；它接受就是問題（circom 的三份證明合起來收了不是 2048 位元的金鑰）。
 3. 接受時，輸出和電路外算的值相同：`pk_commit`（兩邊各自的雜湊，對結構上的那把公鑰）、匿名編號（標準簽章的雜湊）、場合字串和宣告碼的打包值。
 
 參考判斷和兩個電路是分開寫的，但描述的是同一份格式規格；三者都錯在同一處的話，這個測試看不出來。
