@@ -27,3 +27,6 @@ export const COMPONENT_ORIGIN: string = __IAMREAL_TEST_COMPONENT__;
 export const DATA_ORIGIN = "";
 
 export const IDLE_LIMIT_MS: number = __IAMREAL_TEST_IDLE_MS__;
+
+/** The links the screens write, as the production build writes them: the tests compare the screens with design/copy/, whose examples are the public site's. */
+export const SITE_DOMAIN = "iamreal.tw";

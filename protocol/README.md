@@ -72,3 +72,5 @@ pnpm test
 - 寫不出來的：沒有有效紀錄的卡片、同一張卡片兩次、不是這份名冊的場合字串或平台、不合格式的帳號、序號和次數不是整數、日期不在寫得出來的年份
 
 另外測台灣的日期（`test/spec.test.ts`）和規則產生不出來的狀態（`test/roster-rules.test.ts`）。
+
+`test/generate/card-channel.ts` 寫出 `spec/vectors/card-channel.json`（`spec/card-channel.md`，在 `protocol/` 跑 `node --experimental-strip-types test/generate/card-channel.ts`）。讀它的是 `android/`、`ios/` 的測試，`src/` 裡沒有對應的程式。

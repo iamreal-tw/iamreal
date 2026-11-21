@@ -3,9 +3,14 @@
 // `.env.local` that can deploy that Worker and no other (ADR-0029). It does
 // not use `wrangler login`.
 //
-// The same two steps as the workflow (deploy.ts):
+// The same three steps as the workflow (deploy.ts):
 //
-// 1. `buildDeploy`: the deploy build into a temporary directory, checked.
+// 1. `buildSite`: the card proof page, the test site's build of web/, into
+//    site/proof/, checked; before it, the common reference string checked
+//    against its SHA-256, and downloaded if web/crs/ has none. The
+//    directory is removed again when this ends, uploaded or not: it is not
+//    in the repository.
+// 2. `buildDeploy`: the deploy build into a temporary directory, checked.
 //    Before it, the proof verifier's files are checked against their
 //    SHA-256 (engine-files.ts); a file that does not match stops the deploy
 //    there. All of this is done before `.env.local` is read, so the token
@@ -17,20 +22,21 @@
 //      checks (deploy-build-checks.ts, `configuredCpuMs`). This process has
 //      the shell's environment as it is; that code reads the file and
 //      sends nothing.
-// 2. The upload of that directory as it is (`uploadArgs`), with the token:
+// 3. The upload of that directory as it is (`uploadArgs`), with the token:
 //    the two lines CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID of
 //    `.env.local`, read only now, and given to the wrangler command as
 //    CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in its environment.
 //    They are never put into this process's own environment; wrangler's
 //    library stays loaded in it but is not called again.
 //
-// `pnpm run deploy:test --dry-run` does both and uploads nothing (and still
+// `pnpm run deploy:test --dry-run` does all three and uploads nothing (and still
 // wants the two lines).
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKER_DIR, WRANGLER, buildDeploy, deployTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
+import { WORKER_DIR, WRANGLER, buildDeploy, buildSite, deployTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
+import { PROOF_DIR } from "./proof-page.ts";
 
 const ENV_FILE = join(WORKER_DIR, "..", ".env.local");
 
@@ -44,11 +50,13 @@ if (!existsSync(ENV_FILE)) throw new Error(`${ENV_FILE} is missing: it holds CLO
 const dir = mkdtempSync(join(tmpdir(), "iamreal-deploy-"));
 let status = 1;
 try {
+  buildSite();
   buildDeploy(dir);
   const token = deployTokenOf(readFileSync(ENV_FILE, "utf8"));
   const r = spawnSync(WRANGLER, [...uploadArgs(join(dir, "index.js")), ...extra], { cwd: WORKER_DIR, stdio: "inherit", env: wranglerEnv(process.env, token) });
   status = r.status ?? 1;
 } finally {
   rmSync(dir, { recursive: true, force: true });
+  rmSync(PROOF_DIR, { recursive: true, force: true });
 }
 process.exit(status);

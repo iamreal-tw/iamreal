@@ -12,6 +12,12 @@
 // environment's kind of roster (`checkSiteFiles`), and a test roster's
 // site has a date to say it was last cleared on (`checkClearedOn`).
 //
+// And the card proof page among those files is the test site's build of
+// web/, with that date (`checkProofPages`; the checks themselves are in
+// proof-page.ts). This one is not part of `checkDeployBuild`: it needs the
+// page built first, which the two ways of deploying do (deploy.ts,
+// `buildSite`) and a test of the Worker's build does not.
+//
 // They run on every deploy build before it can be uploaded: in the
 // workflow's build job and in `pnpm run deploy:test` (both through
 // `buildDeploy`). test/bundle.test.ts runs each on a fresh deploy build, and
@@ -31,9 +37,13 @@ import { parseDay } from "iamreal-protocol/date.ts";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
+import { moduliInSpec } from "./issuers-in-spec.ts";
+import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
 import { COPY_JS_SHA256, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+export { moduliInSpec };
 
 /** What a build directory holds, as the checks look at it. */
 export interface BuildContents {
@@ -69,13 +79,6 @@ export function addressesInCrlReadme(): string[] {
   const found = [...readme.matchAll(/^\s*- G[23]：`(http:\/\/[^`]+)`$/gm)].map((m) => m[1]!);
   assert.equal(found.length, 2, "crl/README.md lists two addresses");
   return found;
-}
-
-/** MOICA's two moduli as spec/vectors/issuers.json gives them: lowercase hex, no prefix. */
-export function moduliInSpec(): string[] {
-  const vectors = JSON.parse(readFileSync(join(REPO, "spec", "vectors", "issuers.json"), "utf8")) as { issuers: { modulus: string }[] };
-  assert.equal(vectors.issuers.length, 2);
-  return vectors.issuers.map((i) => i.modulus.replace(/^0x/, "").toLowerCase());
 }
 
 export const urlsIn = (code: string): string[] => [...new Set([...code.matchAll(/https?:\/\/[^\s"'`\\)]+/g)].map((m) => m[0]))].sort();
@@ -278,7 +281,7 @@ export interface ConfiguredSite {
   /** The text of `_headers` and of `_redirects` in `assets.directory`; null if the file is not there. */
   readonly headers: string | null;
   readonly redirects: string | null;
-  /** Every file under `assets.directory`, by its path under it, sorted: what wrangler finds there to upload. */
+  /** Every file under `assets.directory` outside proof/, by its path under it, sorted: what wrangler finds there to upload besides the card proof page, which `configuredProofPages` reads. */
   readonly files: readonly string[];
   /** The SHA-256 of `pages.css` there; null if the file is not there. */
   readonly styleSheetSha256: string | null;
@@ -318,7 +321,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       notFoundHandling: config.assets?.not_found_handling,
       headers: textOf("_headers"),
       redirects: textOf("_redirects"),
-      files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).sort(),
+      files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
       styleSheetSha256: sha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
     };
@@ -335,10 +338,12 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     the Worker has no binding to read them by. In the local workerd a
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
- *   - the files of the directory are the ones listed (`SITE_FILES`) and no
- *     other, and the style sheet and the script are the ones with the
- *     SHA-256 written down (`PAGES_CSS_SHA256`, `COPY_JS_SHA256`): what a computer has under site/proof/, which is
- *     not in the repository, is not uploaded with a deploy made there;
+ *   - the files of the directory outside proof/ are the ones listed
+ *     (`SITE_FILES`) and no other, and the style sheet and the script are
+ *     the ones with the SHA-256 written down (`PAGES_CSS_SHA256`,
+ *     `COPY_JS_SHA256`). What is under proof/, which is not in the
+ *     repository, is the card proof page's build: `checkProofPages` looks
+ *     at it;
  *   - a path is a file's own or nothing, but for the redirects of
  *     site-files.ts (`SITE_REDIRECTS`);
  *   - their headers are the ones written from src/headers.ts for the
@@ -359,13 +364,62 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.ok(site.kind === "test" || site.kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
     assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} roster's site`);
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
-    assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets are the ones scripts/site-files.ts lists, no more and no fewer`);
+    assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
     assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
   }
 }
 
-/** Every check above on the build in `dir`; throws on the first that fails. */
+/** The card proof page of one environment of wrangler.jsonc, as an upload of that environment would send it. */
+export interface ConfiguredProofPage {
+  /** `ROSTER_KIND` and `TEST_ROSTER_CLEARED_ON`. */
+  readonly kind: unknown;
+  readonly clearedOn: unknown;
+  /** The build under proof/ of `assets.directory`; null if there is none. */
+  readonly page: ProofPage | null;
+}
+
+/**
+ * The card proof page of every environment of wrangler.jsonc: the build
+ * under proof/ of its `assets.directory`, in this checkout, with the kind
+ * of roster and the date it is to be checked against. Read as
+ * `configuredSites` reads.
+ */
+export function configuredProofPages(): Record<string, ConfiguredProofPage> {
+  const { rawConfig } = experimental_readRawConfig({ config: WRANGLER_CONFIG });
+  const out: Record<string, ConfiguredProofPage> = {};
+  for (const env of Object.keys(rawConfig.env ?? {})) {
+    const config = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
+    const directory = config.assets?.directory === undefined ? undefined : join(dirname(WRANGLER_CONFIG), config.assets.directory);
+    out[env] = { kind: config.vars.ROSTER_KIND, clearedOn: config.vars.TEST_ROSTER_CLEARED_ON, page: directory === undefined ? null : readProofPage(join(directory, "proof")) };
+  }
+  return out;
+}
+
+/**
+ * In every environment the card proof page is there and is the build of
+ * its kind of roster's site, with the date of its settings beside the mark
+ * (proof-page.ts, `checkProofPage`): a deploy with no page (where /proof
+ * would answer 404), with what a computer happened to have under
+ * site/proof/, or with a build of another target does not pass.
+ */
+export function checkProofPages(pages: Readonly<Record<string, ConfiguredProofPage>>): void {
+  assert.ok(Object.keys(pages).length > 0, "wrangler.jsonc has an environment");
+  for (const [env, { kind, clearedOn, page }] of Object.entries(pages)) {
+    assert.ok(kind === "test" || kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
+    assert.ok(clearedOn === undefined || typeof clearedOn === "string", `TEST_ROSTER_CLEARED_ON of the ${env} environment is text`);
+    try {
+      checkProofPage(page, kind, clearedOn ?? null);
+    } catch (e) {
+      throw new assert.AssertionError({ message: `the ${env} environment: ${(e as Error).message}` });
+    }
+  }
+}
+
+/** Where the checks expect the page: the directory `buildSite` builds into (deploy.ts). */
+export { PROOF_DIR };
+
+/** Every check above but the card proof page's, on the build in `dir`; throws on the first that fails. */
 export function checkDeployBuild(dir: string, wranglerOutput: string): void {
   const b = readBuild(dir);
   checkAddresses(b);

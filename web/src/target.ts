@@ -42,3 +42,10 @@ export const DATA_ORIGIN = "https://data.iamreal.tw";
 
 /** How long the PIN, the certificate and the first signature wait for the second signature (5 minutes). */
 export const IDLE_LIMIT_MS: number = IDLE_MS;
+
+/**
+ * The domain of the site this build's roster is shown on, as links on the
+ * screen write it (the page of a card is `<domain>/p/<short ID>`). The page
+ * itself never connects to it (it is served from its own origin).
+ */
+export const SITE_DOMAIN = "iamreal.tw";
