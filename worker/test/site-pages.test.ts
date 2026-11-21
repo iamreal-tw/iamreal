@@ -4,7 +4,6 @@
 // (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
 // The cases are the Go backend's (server/site_test.go).
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -226,33 +225,34 @@ describe("hanging a proof on a profile", () => {
 });
 
 describe("the copy buttons' script", () => {
-  test("/copy.js: the old back end's, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
+  test("/copy.js: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
     await pagesWorld(worker, "2026-11-18", []);
+    await worker.seen();
     const res = await worker.fetch("/copy.js");
     assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/javascript; charset=utf-8"]);
     checkVisitorHeaders("/copy.js", res, { cache: "no-cache" });
     const script = await res.text();
+    assert.equal(script, readFileSync(join(WORKER_DIR, "site", "copy.js"), "utf8"));
     // The Go backend's, byte for byte, for as long as that one is in the repository.
     const old = join(REPO_DIR, "server", "pages", "copy.js");
     if (existsSync(old)) assert.equal(script, readFileSync(old, "utf8"));
     assert.ok(script.includes('document.querySelectorAll("button[data-copy], button[data-copy-text]")'));
     for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "import", "eval", "innerHTML", "location"]) assert.ok(!script.includes(s), `copy.js has ${s}`);
-    // The ETag is the first 8 bytes of the script's SHA-256, as the Go backend's.
-    const sha = createHash("sha256").update(script).digest("hex");
     const etag = res.headers.get("etag");
-    assert.equal(etag, `"${sha.slice(0, 16)}"`);
-    for (const ask of [etag!, `W/${etag}`, `"x", ${etag}`, "*"]) {
-      const again = await worker.fetch("/copy.js", { headers: { "If-None-Match": ask } });
-      assert.deepEqual([again.status, await again.text(), again.headers.get("etag")], [304, "", etag], `If-None-Match: ${ask}`);
-      checkVisitorHeaders(`/copy.js again (${ask})`, again, { cache: "no-cache" });
-    }
+    assert.match(etag ?? "", /^"[0-9a-f]+"$/);
+    const again = await worker.fetch("/copy.js", { headers: { "If-None-Match": etag! } });
+    assert.deepEqual([again.status, await again.text()], [304, ""]);
+    checkVisitorHeaders("/copy.js again", again, { cache: "no-cache" });
     assert.equal((await worker.fetch("/copy.js", { headers: { "If-None-Match": '"0000000000000000"' } })).status, 200);
     const head = await worker.fetch("/copy.js", { method: "HEAD" });
     assert.deepEqual([head.status, await head.text(), head.headers.get("etag")], [200, "", etag]);
+    // Static Assets' 405 has no Allow.
     for (const method of ["POST", "PUT", "DELETE"]) {
       const no = await worker.fetch("/copy.js", { method });
-      assert.deepEqual([no.status, no.headers.get("allow")], [405, "GET, HEAD"], `${method} /copy.js`);
+      assert.deepEqual([no.status, no.headers.get("allow")], [405, null], `${method} /copy.js`);
+      checkVisitorHeaders(`${method} /copy.js`, no, { cache: "no-cache" });
     }
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
   });
 });
 

@@ -70,9 +70,8 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The Cache-Control of the style sheet (site/_headers) and of the copy
- * buttons' script (src/visitor.ts): asked for again every time it is used,
- * by its ETag.
+ * The Cache-Control of the style sheet and of the copy buttons' script
+ * (site/_headers): asked for again every time they are used, by their ETag.
  */
 export const STYLE_SHEET_CACHE = "no-cache";
 

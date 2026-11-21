@@ -31,7 +31,7 @@ import { parseDay } from "iamreal-protocol/date.ts";
 import { CIRCUITS, CIRCUIT_NAMES } from "../src/circuits.ts";
 import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
-import { PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { COPY_JS_SHA256, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -282,6 +282,8 @@ export interface ConfiguredSite {
   readonly files: readonly string[];
   /** The SHA-256 of `pages.css` there; null if the file is not there. */
   readonly styleSheetSha256: string | null;
+  /** The SHA-256 of `copy.js` there; null if the file is not there. */
+  readonly scriptSha256: string | null;
 }
 
 /**
@@ -303,7 +305,11 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       const path = join(directory, name);
       return existsSync(path) ? readFileSync(path, "utf8") : null;
     };
-    const css = directory === undefined ? undefined : join(directory, "pages.css");
+    const sha256Of = (name: string): string | null => {
+      if (directory === undefined) return null;
+      const path = join(directory, name);
+      return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+    };
     out[env] = {
       kind: config.vars.ROSTER_KIND,
       runWorkerFirst: config.assets?.run_worker_first,
@@ -313,15 +319,16 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       headers: textOf("_headers"),
       redirects: textOf("_redirects"),
       files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).sort(),
-      styleSheetSha256: css === undefined || !existsSync(css) ? null : createHash("sha256").update(readFileSync(css)).digest("hex"),
+      styleSheetSha256: sha256Of("pages.css"),
+      scriptSha256: sha256Of("copy.js"),
     };
   }
   return out;
 }
 
 /**
- * In every environment, Cloudflare sends the card proof page's files and
- * the style sheet itself, and the Worker's code has no part in what a file
+ * In every environment, Cloudflare sends the card proof page's files, the
+ * style sheet and the copy buttons' script itself, and the Worker's code has no part in what a file
  * is sent as (README.md, "Static Assets"):
  *
  *   - their paths are kept out of the Worker's (`RUN_WORKER_FIRST`), and
@@ -329,8 +336,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
  *   - the files of the directory are the ones listed (`SITE_FILES`) and no
- *     other, and the style sheet is the one with the SHA-256 written down
- *     (`PAGES_CSS_SHA256`): what a computer has under site/proof/, which is
+ *     other, and the style sheet and the script are the ones with the
+ *     SHA-256 written down (`PAGES_CSS_SHA256`, `COPY_JS_SHA256`): what a computer has under site/proof/, which is
  *     not in the repository, is not uploaded with a deploy made there;
  *   - a path is a file's own or nothing, but for the redirects of
  *     site-files.ts (`SITE_REDIRECTS`);
@@ -354,6 +361,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
     assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
+    assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
   }
 }
 

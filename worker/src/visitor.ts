@@ -8,31 +8,29 @@
 //   /faq              the FAQ (design/copy/faq.md)
 //   /verify           how to verify (design/copy/verify.md)
 //   /hang, /hang/…    hanging a proof on a profile (design/copy/hang.md)
-//   /copy.js          the copy buttons' script, loaded by /verify and /hang/…
 //   anything else     the page for what is not there
 //                     (design/copy/not-found.md), with 404
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
-// Their style sheet (/pages.css) and the card proof page (/proof and
-// everything under it) are not: they are files of Static Assets, which
+// Their style sheet (/pages.css), the copy buttons' script that /verify and
+// /hang/… load (/copy.js) and the card proof page (/proof and everything
+// under it) are not: they are files of Static Assets, which
 // sends them itself, and a request for one of those paths does not run the
 // Worker at all (wrangler.jsonc, "assets"; README.md, "Static Assets"). The
 // Worker has no binding to read those files by.
 //
 // Every page takes GET and HEAD only and sets no cookie. A page is made from
-// the request's method and path, and the query of /roster; the script reads
-// If-None-Match too. Nothing is written for a request that is answered; when
+// the request's method and path, and the query of /roster. Nothing is written for a request that is answered; when
 // the back end itself fails, one line says which kind of page and where,
 // never the short ID, the account or anything else of the address.
 import { readShortIdInUrl } from "iamreal-protocol/scoped-id.ts";
-import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, SCRIPT_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
+import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
 import type { PageData } from "./page-data.ts";
 import { accountPage, notAName } from "./pages/account.ts";
-import { COPY_JS } from "./pages/copy-js.ts";
 import { faqPage } from "./pages/faq.ts";
 import { hangPage, hangWithout } from "./pages/hang.ts";
 import { homePage } from "./pages/home.ts";
-import { COPY_JS_PATH, type Document, type Site, layout } from "./pages/layout.ts";
+import { type Document, type Site, layout } from "./pages/layout.ts";
 import { notFoundPage } from "./pages/not-found.ts";
 import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/proof.ts";
 import { PAGE_SIZE, readPlace, rosterPage } from "./pages/roster-page.ts";
@@ -67,7 +65,7 @@ async function ask<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /** Which kind of page a path is, for the log: never the short ID or the account in it. */
-type Kind = "home" | "card" | "account" | "roster" | "hang" | "faq" | "verify" | "script" | "none";
+type Kind = "home" | "card" | "account" | "roster" | "hang" | "faq" | "verify" | "none";
 
 function kindOf(pathname: string): Kind {
   if (pathname === "/") return "home";
@@ -77,7 +75,6 @@ function kindOf(pathname: string): Kind {
   if (pathname === "/faq") return "faq";
   if (pathname === "/verify") return "verify";
   if (pathname === "/hang" || pathname.startsWith("/hang/")) return "hang";
-  if (pathname === COPY_JS_PATH) return "script";
   return "none";
 }
 
@@ -217,32 +214,6 @@ async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<
   return page(site, 200, hangPage(site, short, account));
 }
 
-/** The entity tag of a text, as the Go backend made it: the first 8 bytes of its SHA-256, in hexadecimal, quoted. */
-async function etagOf(text: string): Promise<string> {
-  const sum = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
-  return `"${[...sum.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("")}"`;
-}
-
-/** Whether an If-None-Match asks for what has this entity tag: `*`, or the tag in the list, weak or not. */
-function noneMatch(ifNoneMatch: string | null, etag: string): boolean {
-  if (ifNoneMatch === null) return false;
-  return ifNoneMatch.split(",").some((t) => {
-    const tag = t.trim();
-    return tag === "*" || tag === etag || tag === `W/${etag}`;
-  });
-}
-
-/**
- * `GET /copy.js`: the copy buttons' script (pages/copy-js.ts), with an
- * ETag; asked for again with it, `304` and no body. It is the one thing the
- * Worker sends that reads a header of the request.
- */
-async function copyScript(request: Request): Promise<Answer> {
-  const etag = await etagOf(COPY_JS);
-  if (noneMatch(request.headers.get("If-None-Match"), etag)) return { status: 304, headers: { ETag: etag, "Cache-Control": STYLE_SHEET_CACHE }, body: null };
-  return { status: 200, headers: { "Content-Type": "text/javascript; charset=utf-8", ETag: etag, "Cache-Control": STYLE_SHEET_CACHE }, body: COPY_JS };
-}
-
 /**
  * Answers a request for anything that is not the API's: a page, or, for a
  * path that is none, the page that says so, with 404. That one has what
@@ -264,7 +235,6 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     if (request.method !== "GET" && request.method !== "HEAD") answer = { ...text(405, "method not allowed\n"), headers: { ...text(405, "").headers, Allow: "GET, HEAD" } };
     else if (kind === "home") answer = await home(site, parts);
     else if (kind === "card") answer = await card(site, parts, pathname);
-    else if (kind === "script") answer = await copyScript(request);
     else if (kind === "roster") answer = await roster(site, parts, searchParams);
     else if (kind === "account") answer = await threadsAccount(site, parts, pathname);
     else if (kind === "hang") answer = await hang(site, parts, pathname);

@@ -392,18 +392,19 @@ describe("every page", () => {
   test("the pages, the style sheet and the script take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
     for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/roster", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/copy.js"]) {
+      // The style sheet and the script are files of Static Assets.
       const file = path === "/pages.css" || path === "/copy.js";
       const cache = file ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
       assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
       assert.equal(await head.text(), "");
-      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path), more: path === "/copy.js" ? ["etag"] : [] });
+      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
-        // The pages and the script are the Worker's; the style sheet is sent by Static Assets, whose 405 has no Allow.
-        // A 405 runs no script: its policy is the pages' without one.
-        assert.deepEqual([res.status, res.headers.get("allow")], [405, path === "/pages.css" ? null : "GET, HEAD"], `${method} ${path}`);
-        checkVisitorHeaders(`${method} ${path}`, res, { cache: path === "/pages.css" ? "no-cache" : "no-store", more: ["allow"] });
+        // The pages are the Worker's; the style sheet and the script are sent by Static Assets, whose 405 has no
+        // Allow. A 405 runs no script: its policy is the pages' without one.
+        assert.deepEqual([res.status, res.headers.get("allow")], [405, file ? null : "GET, HEAD"], `${method} ${path}`);
+        checkVisitorHeaders(`${method} ${path}`, res, { cache: file ? "no-cache" : "no-store", more: ["allow"] });
       }
     }
   });
