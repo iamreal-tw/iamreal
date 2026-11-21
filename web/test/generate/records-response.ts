@@ -77,6 +77,12 @@ const CASES: Case[] = [
     rows: [shown("example", "refresh", "Bob Example!")],
     result: read([kind("example", "refresh", "Bob Example!")]),
   },
+  {
+    name: "a platform ID of 21 characters, and a username with the last printable character",
+    body: answer([kind("a".repeat(21), "first", "~alice~")]),
+    rows: [shown("a".repeat(21), "first", "~alice~")],
+    result: read([kind("a".repeat(21), "first", "~alice~")]),
+  },
 
   // --- Nothing of the answer is told --------------------------------------
   { name: "nothing told: an empty body", body: "", result: NOTHING },
@@ -122,6 +128,7 @@ const CASES: Case[] = [
   { name: "kinds not read: a username with a quotation mark", body: answer([kind("threads", "first", 'al"ice')]), result: read(null) },
   { name: "kinds not read: a username with a backslash", body: answer([kind("threads", "first", "al\\ice")]), result: read(null) },
   { name: "kinds not read: a username with a line break", body: answer([kind("threads", "first", "alice\n")]), result: read(null) },
+  { name: "kinds not read: a username with U+007F", body: answer([kind("threads", "first", "alice\u007f")]), result: read(null) },
   { name: "kinds not read: a username beyond ASCII", body: answer([kind("threads", "first", "alicé")]), result: read(null) },
   { name: "kinds not read: a username that is null", body: answer([{ platform: "threads", kind: "withdraw", username: null, account_cards: 0 }]), result: read(null) },
   { name: "kinds not read: the platforms in descending order", body: answer([TWO[1], TWO[0]]), rows: SHOWN_TWO, result: read(null) },

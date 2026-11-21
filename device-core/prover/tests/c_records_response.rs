@@ -49,7 +49,7 @@ fn nothing() -> Value {
 fn every_case_of_the_vectors() {
     let v = vectors("records-response.json");
     let cases = v["cases"].as_array().unwrap();
-    assert!(cases.len() >= 75);
+    assert!(cases.len() >= 77);
     let (mut nothing_told, mut kinds_unknown, mut differ) = (0, 0, 0);
     for c in cases {
         let name = text(c, "name");

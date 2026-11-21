@@ -170,12 +170,18 @@ class CardProof(private val deps: Deps) {
              * showed. The app cannot check the answer; the core only compares.
              */
             fun of(response: ByteArray, rowsJson: ByteArray): Answer {
-                val read = try {
-                    JSONObject(String(DeviceCore.recordsResponse(response, rowsJson), Charsets.UTF_8))
+                // The record is in the roster: the core failing to read its answer does not undo it.
+                return try {
+                    read(JSONObject(String(DeviceCore.recordsResponse(response, rowsJson), Charsets.UTF_8)))
                 } catch (e: DeviceCoreException) {
-                    // The record is in the roster: the core failing to read its answer does not undo it.
-                    return NOTHING
+                    NOTHING
+                } catch (e: org.json.JSONException) {
+                    NOTHING
                 }
+            }
+
+            /** The core's output (the header, idc_records_response). */
+            private fun read(read: JSONObject): Answer {
                 val kinds = read.optJSONArray("kinds")
                 val mismatches = read.getJSONArray("mismatches")
                 return Answer(

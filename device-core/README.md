@@ -55,10 +55,11 @@
 | `quiet.rs` | 核心裡的 panic 不印任何東西 |
 | `json.rs` | 讀 C 函式收到的 JSON：同一個鍵寫兩次的不收，數字照它的值讀 |
 | `server_state.rs` | 讀後台的平台表和 `card-state` 的回應（`spec/list-consequence.md`），見下面 |
+| `records_response.rs` | 讀送出後後台回的 201，和確認畫面那幾列比對（`spec/records-response.md`）。同樣要讀 JSON，所以在這裡 |
 
 讀後台回應的規則（`spec/list-consequence.md` 的「Reading the platform table」「Reading the card's state」）在 `prover/src/server_state.rs`，不在 `checks/`：它要讀 JSON，而 `checks/` 沒有執行期的套件。所以 `list-consequence.json` 的測試在 `prover/tests/`，要連結 Barretenberg 才跑得到。
 
-還沒有的（各有自己的票）：檢查後台其他的回應（題目、送出的回應）。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
+還沒有的（各有自己的票）：檢查後台回的題目。Android 的建置在 `android/`，iOS 的建置在 `ios/`（`ios/README.md`）。
 
 ## 「檢查都通過了」
 

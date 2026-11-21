@@ -528,8 +528,9 @@ final class CardProofFlow {
         phase = .statusKnown
     }
 
-    /// The core's answer for `entries` on today's date, and the list the
-    /// card signs and the rows as the core wrote them.
+    /// The core's answer for `entries` on today's date, with the list the
+    /// card signs and the rows written again as JSON, for the core to
+    /// take.
     private func consequence(of entries: [String: String]) throws -> (Consequence, Data, Data) {
         guard let cardState else { throw Stop.state }
         let list = entries.keys.sorted().compactMap { platform -> [String: String]? in

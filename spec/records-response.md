@@ -29,11 +29,19 @@ checked by anyone who re-verifies the roster
 - **The rows the confirmation screen showed**: the rows of
   [`list-consequence.md`](list-consequence.md), "What the list does", for
   the list the card then signed. Of each row, only `platform`, `kind` and
-  `username` are read here.
+  `username` are read here. They are the client's own, in ascending order
+  of platform, each platform once: rows that are not are a mistake of the
+  program, not a result of this document.
 
 A status `201` means the record is in the roster, whatever the body is.
 Nothing in this document turns it into a failure: there is no result that
 says the card proof did not happen.
+
+The body is what arrived. How long a client waits for it is the client's
+own (its time limits are not defined here), and so is what it does when
+the body of a `201` stops arriving: it reads what it has, which may be no
+bytes, or it treats the submission as unanswered and asks again in its own
+way. It never tells the cardholder that the record was refused.
 
 The body is read as UTF-8 text holding one JSON value. A number is read by
 its value, and a count is a number with no fraction from 0 to 2^53 − 1, as
@@ -112,8 +120,8 @@ file is written.
 ## Outside these rules
 
 As in [`list-consequence.md`](list-consequence.md), "Outside these rules":
-the server never sends a body that is not UTF-8, an object with a key
-twice, a string with an unpaired surrogate, a number beyond the range of a
+the server never sends a body that is not UTF-8 or begins with a byte order
+mark, an object with a key twice, a string with an unpaired surrogate, a number beyond the range of a
 64-bit float or with more digits than one holds, or arrays and objects
 nested more than 128 deep. How a client reads one is not defined here and
 the vectors have none: a JavaScript client's parser reads them,

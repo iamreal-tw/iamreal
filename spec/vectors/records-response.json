@@ -352,6 +352,30 @@
       }
     },
     {
+      "name": "a platform ID of 21 characters, and a username with the last printable character",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"aaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"first\",\"username\":\"~alice~\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "aaaaaaaaaaaaaaaaaaaaa",
+          "kind": "first",
+          "username": "~alice~"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "kinds": [
+          {
+            "platform": "aaaaaaaaaaaaaaaaaaaaa",
+            "kind": "first",
+            "username": "~alice~",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
       "name": "nothing told: an empty body",
       "body": "",
       "rows": [
@@ -1039,6 +1063,23 @@
     {
       "name": "kinds not read: a username with a line break",
       "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\\n\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "kinds": null,
+        "mismatches": []
+      }
+    },
+    {
+      "name": "kinds not read: a username with U+007F",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",

@@ -300,16 +300,14 @@ private fun Done(m: Model, outside: Outside) {
         TextButton(c.say("links.proof")) { outside.open(url) }
     }
 
-    // The record, as the confirmation screen said it would be. What the server says it recorded on each
-    // platform, and whether it differs, is not shown yet (issue #221).
+    // The record, as the server says it recorded it; where that differs from the confirmation screen, both.
     Heading(c.say("done.recorded"))
     Body(d.date)
     view.record?.let { Body(it) }
-    view.kindsUnreadable?.let { Body(it, Modifier.testTag("done-kinds-unreadable")) }
     for (row in view.rows) {
         ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), listOfNotNull(row.kind, row.expected, row.switchUsed), "recorded-${row.platform}")
     }
-    if (view.kindsUnreadable == null) Body(c.say("done.short_id", "short_id" to d.shortId))
+    if (view.record != null) Body(c.say("done.short_id", "short_id" to d.shortId))
     for (sentence in view.otherCards) Small(sentence)
     if (!withdrawAll) {
         Point(if (single != null) c.say("done.advice_single") else c.say("done.advice"))

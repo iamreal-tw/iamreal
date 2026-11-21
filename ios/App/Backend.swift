@@ -84,8 +84,41 @@ struct HTTPBackend: Backend {
     }
 
     func submit(_ body: Data) async throws -> Data {
-        try await api("POST", "api/v1/records", body: body, expecting: 201)
+        var request = URLRequest(url: site.appendingPathComponent("api/v1/records"))
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // The status first, then the body: a 201 is a record in the roster
+        // whatever follows it (spec/records-response.md), so a body that
+        // does not arrive whole is no bytes, not a failure.
+        let bytes: URLSession.AsyncBytes
+        let response: HTTPURLResponse
+        do {
+            let (stream, answer) = try await session.bytes(for: request)
+            guard let http = answer as? HTTPURLResponse else { throw BackendFailure(code: "network", requestID: nil) }
+            (bytes, response) = (stream, http)
+        } catch let failure as BackendFailure {
+            throw failure
+        } catch {
+            throw BackendFailure(code: "network", requestID: nil)
+        }
+        var data = Data()
+        do {
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > Self.mostOfAnAnswer { throw BackendFailure(code: "network", requestID: nil) }
+            }
+        } catch {
+            data = Data()
+        }
+        guard response.statusCode == 201 else {
+            throw BackendFailure(code: Self.errorCode(data) ?? "http_\(response.statusCode)", requestID: Self.requestID(response))
+        }
+        return data
     }
+
+    /// The most the app reads of the answer to a submission: 1 MiB.
+    private static let mostOfAnAnswer = 1 << 20
 
     private func api(_ method: String, _ path: String, body: Data?, expecting status: Int) async throws -> Data {
         var request = URLRequest(url: site.appendingPathComponent(path))

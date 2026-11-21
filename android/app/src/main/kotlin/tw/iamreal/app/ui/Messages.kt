@@ -177,10 +177,12 @@ internal class Messages(private val c: Copy) {
     class DoneView(
         /** done.mismatch, above the title: what the server recorded differs from what step 5 said. */
         val mismatch: String?,
-        /** The roster's line; null when the answer's kinds could not be read. */
+        /**
+         * The roster's line; null when the answer's kinds could not be read. The screen then has the title
+         * (done.recorded_only) and the date and no rows: the sentence that says why is not written for the
+         * app yet (card-proof.md, "完成", app).
+         */
         val record: String?,
-        /** done.kinds_unreadable, in place of the rows. */
-        val kindsUnreadable: String?,
         val rows: List<DoneRow>,
         /** One per account of the list that other cards declare too (`account_cards` above 1). */
         val otherCards: List<String>,
@@ -220,7 +222,6 @@ internal class Messages(private val c: Copy) {
         return DoneView(
             mismatch = if (d.answer.mismatches.isNotEmpty()) c.say("done.mismatch") else null,
             record = if (kinds == null) null else if (withdrawAll) c.say("done.record_withdraw_all") else if (single != null) c.say("done.record_single") else c.say("done.record_list"),
-            kindsUnreadable = if (kinds == null) c.say("done.kinds_unreadable") else null,
             rows = rows,
             otherCards = (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
             withdrawnLink = !withdrawAll && (kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" }),
