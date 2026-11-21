@@ -6,6 +6,9 @@ out/
 *.log
 Prover.toml
 .zkID/
+# build-circom.sh puts the build together here before it takes .zkID/'s place;
+# one is left only if the script is killed.
+.build-circom.*/
 # What fuzz/ writes when it runs: its key pool (throwaway private keys), its
 # results, findings, logs and proofs.
 fuzz/keys/
