@@ -39,8 +39,7 @@ declaration code, not in the scope string.
 `list-consequence.md` ("The card's state, as shown"). Every implementation (Go,
 TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
-tests. `card-channel.json` is for the two apps (Kotlin in `android/`, Swift in
-`ios/`), the only programs that talk to a card.
+tests. `card-channel.json` is read by the tests of `android/` and `ios/`.
 
 ## Shared conventions
 

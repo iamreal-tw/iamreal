@@ -70,6 +70,38 @@
       "card_id": null
     }
   ],
+  "key_information": [
+    {
+      "name": "16-byte keys",
+      "response": "e012c00401300310c00401310310c00401320310",
+      "accepted": true
+    },
+    {
+      "name": "7 bytes",
+      "response": "e00ac004013003",
+      "accepted": false
+    },
+    {
+      "name": "8 bytes, 16-byte keys",
+      "response": "e00ac00401300310",
+      "accepted": true
+    },
+    {
+      "name": "32-byte keys",
+      "response": "e012c00401300320c00401310320c00401320320",
+      "accepted": false
+    },
+    {
+      "name": "another tag",
+      "response": "e112c00401300310c00401310310c00401320310",
+      "accepted": false
+    },
+    {
+      "name": "empty",
+      "response": "",
+      "accepted": false
+    }
+  ],
   "initialize_update": [
     {
       "name": "SCP03",

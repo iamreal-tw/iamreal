@@ -36,13 +36,10 @@ function cmac(key: Buffer, msg: Buffer): Buffer {
   const n = Math.max(1, Math.ceil(msg.length / 16));
   const complete = msg.length > 0 && msg.length % 16 === 0;
   const last = Buffer.alloc(16);
-  if (complete) msg.copy(last, 0, (n - 1) * 16);
-  else {
-    msg.copy(last, 0, (n - 1) * 16);
-    last[msg.length - (n - 1) * 16] = 0x80;
-  }
-  const sub = complete ? k1 : k2;
-  for (let i = 0; i < 16; i++) last[i]! ^= sub[i]!;
+  msg.copy(last, 0, (n - 1) * 16);
+  if (!complete) last[msg.length - (n - 1) * 16] = 0x80;
+  const subkey = complete ? k1 : k2;
+  for (let i = 0; i < 16; i++) last[i]! ^= subkey[i]!;
   let x: Buffer = Buffer.alloc(16);
   for (let j = 0; j < n - 1; j++) {
     const y = Buffer.alloc(16);
@@ -107,6 +104,12 @@ function kdf(key: Buffer, constant: number, context: Buffer, bits: number): Buff
 
 type Session = { s_enc: Buffer; s_mac: Buffer; mcv: Buffer; counter: number };
 
+// What a card that has k_mac answers as its cryptogram.
+function cardCryptogram(kMac: Buffer, host: Buffer, cardChallenge: Buffer): Buffer {
+  const context = Buffer.concat([host, cardChallenge]);
+  return kdf(kdf(kMac, 0x06, context, 128), 0x00, context, 64);
+}
+
 function establish(kEnc: Buffer, kMac: Buffer, host: Buffer, cardChallenge: Buffer, cardCryptogram: Buffer) {
   const context = Buffer.concat([host, cardChallenge]);
   const s_mac = kdf(kMac, 0x06, context, 128);
@@ -123,7 +126,7 @@ function establish(kEnc: Buffer, kMac: Buffer, host: Buffer, cardChallenge: Buff
     expected_card_cryptogram: expected,
     host_cryptogram,
     external_authenticate: { header, body: Buffer.concat([host_cryptogram, mac.subarray(0, 8)]) },
-    session: { s_enc, s_mac, mcv: mac, counter: 1 } satisfies Session,
+    mcv: mac,
   };
 }
 
@@ -212,12 +215,28 @@ for (const c of cardIdCases) {
   if (got !== c.card_id) throw new Error(`card id case "${c.name}": ${got}`);
 }
 
+// GET DATA, tag E0 (key information), from the card manager: the response
+// data. Accepted when byte 7, the key length, is 16.
+const keyInformationCases = [
+  { name: "16-byte keys", response: "e012c00401300310c00401310310c00401320310", accepted: true },
+  { name: "7 bytes", response: "e00ac004013003", accepted: false },
+  { name: "8 bytes, 16-byte keys", response: "e00ac00401300310", accepted: true },
+  { name: "32-byte keys", response: "e012c00401300320c00401310320c00401320320", accepted: false },
+  { name: "another tag", response: "e112c00401300310c00401310310c00401320310", accepted: false },
+  { name: "empty", response: "", accepted: false },
+].map((c) => {
+  const r = unhex(c.response);
+  const accepted = r.length >= 8 && r[0] === 0xe0 && r[7] === 16;
+  if (accepted !== c.accepted) throw new Error(`key information case "${c.name}"`);
+  return c;
+});
+
 // The data of INITIALIZE UPDATE's response.
 const keyDiversification = "00000000000000000000";
 const keyInfo = "300370";
-const iuCases = [
+const initializeUpdateCases = [
   { name: "SCP03", response: keyDiversification + keyInfo + "1122334455667788" + "8877665544332211" + "000001", accepted: true },
-  { name: "exactly 29 bytes", response: keyDiversification + "300370" + "1122334455667788" + "8877665544332211", accepted: true },
+  { name: "exactly 29 bytes", response: keyDiversification + keyInfo + "1122334455667788" + "8877665544332211", accepted: true },
   { name: "SCP02 in the key information", response: keyDiversification + "300270" + "1122334455667788" + "8877665544332211", accepted: false },
   { name: "28 bytes", response: keyDiversification + keyInfo + "1122334455667788" + "88776655443322", accepted: false },
 ].map((c) => {
@@ -231,42 +250,41 @@ const iuCases = [
 
 const card0 = diversify(KEK, MASTER_ENC, unhex(CARD_IDS[0]!));
 const card1 = diversify(KEK, MASTER_ENC, unhex(CARD_IDS[1]!));
+const HOST = unhex("d1d2d3d4d5d6d7d8");
+const CHALLENGE = unhex("c1c2c3c4c5c6c7c8");
+const lastBitFlipped = (b: Buffer) => {
+  const out = Buffer.from(b);
+  out[out.length - 1]! ^= 0x01;
+  return out;
+};
 const sessionInputs = [
-  { name: "a session", k: card0, host: unhex("d1d2d3d4d5d6d7d8"), challenge: unhex("c1c2c3c4c5c6c7c8"), cryptogram: "right" },
-  { name: "another host challenge", k: card0, host: unhex("0102030405060708"), challenge: unhex("c1c2c3c4c5c6c7c8"), cryptogram: "right" },
-  { name: "another card", k: card1, host: unhex("d1d2d3d4d5d6d7d8"), challenge: unhex("c1c2c3c4c5c6c7c8"), cryptogram: "right" },
-  { name: "the card's cryptogram is wrong in the last bit", k: card0, host: unhex("d1d2d3d4d5d6d7d8"), challenge: unhex("c1c2c3c4c5c6c7c8"), cryptogram: "last bit" },
-  { name: "the cryptogram of another card", k: card0, host: unhex("d1d2d3d4d5d6d7d8"), challenge: unhex("c1c2c3c4c5c6c7c8"), cryptogram: "card1" },
-] as const;
+  { name: "a session", k: card0, host: HOST, cryptogram: cardCryptogram(card0.k_mac, HOST, CHALLENGE), accepted: true },
+  { name: "another host challenge", k: card0, host: unhex("0102030405060708"), cryptogram: cardCryptogram(card0.k_mac, unhex("0102030405060708"), CHALLENGE), accepted: true },
+  { name: "another card", k: card1, host: HOST, cryptogram: cardCryptogram(card1.k_mac, HOST, CHALLENGE), accepted: true },
+  { name: "the card's cryptogram is wrong in the last bit", k: card0, host: HOST, cryptogram: lastBitFlipped(cardCryptogram(card0.k_mac, HOST, CHALLENGE)), accepted: false },
+  { name: "the cryptogram of another card", k: card0, host: HOST, cryptogram: cardCryptogram(card1.k_mac, HOST, CHALLENGE), accepted: false },
+];
 const sessionCases = sessionInputs.map((c) => {
-  const context = Buffer.concat([c.host, c.challenge]);
-  const right = kdf(kdf(c.k.k_mac, 0x06, context, 128), 0x00, context, 64);
-  let given: Buffer = right;
-  if (c.cryptogram === "last bit") {
-    given = Buffer.from(right);
-    given[7]! ^= 0x01;
-  } else if (c.cryptogram === "card1") given = kdf(kdf(card1.k_mac, 0x06, context, 128), 0x00, context, 64);
-  const e = establish(c.k.k_enc, c.k.k_mac, c.host, c.challenge, given);
+  const result = establish(c.k.k_enc, c.k.k_mac, c.host, CHALLENGE, c.cryptogram);
+  if (result.accepted !== c.accepted) throw new Error(`session case "${c.name}"`);
   const base = {
     name: c.name,
     k_enc: hex(c.k.k_enc),
     k_mac: hex(c.k.k_mac),
     host_challenge: hex(c.host),
-    card_challenge: hex(c.challenge),
-    card_cryptogram: hex(given),
-    s_enc: hex(e.s_enc),
-    s_mac: hex(e.s_mac),
-    expected_card_cryptogram: hex(e.expected_card_cryptogram),
-    accepted: e.accepted,
+    card_challenge: hex(CHALLENGE),
+    card_cryptogram: hex(c.cryptogram),
+    s_enc: hex(result.s_enc),
+    s_mac: hex(result.s_mac),
+    expected_card_cryptogram: hex(result.expected_card_cryptogram),
+    accepted: result.accepted,
   };
-  if (c.cryptogram === "right" && !e.accepted) throw new Error(`session case "${c.name}" should be accepted`);
-  if (c.cryptogram !== "right" && e.accepted) throw new Error(`session case "${c.name}" should be refused`);
-  if (!e.accepted) return base;
+  if (!result.accepted) return base;
   return {
     ...base,
-    host_cryptogram: hex(e.host_cryptogram),
-    external_authenticate: { header: hex(e.external_authenticate.header), body: hex(e.external_authenticate.body) },
-    mcv: hex(e.session.mcv),
+    host_cryptogram: hex(result.host_cryptogram),
+    external_authenticate: { header: hex(result.external_authenticate.header), body: hex(result.external_authenticate.body) },
+    mcv: hex(result.mcv),
   };
 });
 
@@ -287,17 +305,16 @@ const sequenceSteps: { name: string; cla: number; ins: number; p1: number; p2: n
   { name: "VERIFY after commands without data (a second signing in the same session)", cla: 0x00, ins: 0x20, p1: 0x00, p2: 0x01, data: pinBlock(PIN)!, encrypt: true },
   { name: "SELECT 5030 again", cla: 0x00, ins: 0xa4, p1: 0x00, p2: 0x04, data: unhex("5030"), encrypt: true },
 ];
-const first = establish(card0.k_enc, card0.k_mac, unhex("d1d2d3d4d5d6d7d8"), unhex("c1c2c3c4c5c6c7c8"),
-  kdf(kdf(card0.k_mac, 0x06, unhex("d1d2d3d4d5d6d7d8c1c2c3c4c5c6c7c8"), 128), 0x00, unhex("d1d2d3d4d5d6d7d8c1c2c3c4c5c6c7c8"), 64));
-if (!first.accepted) throw new Error("the sequence's session");
-const s = first.session;
+const opened = establish(card0.k_enc, card0.k_mac, HOST, CHALLENGE, cardCryptogram(card0.k_mac, HOST, CHALLENGE));
+if (!opened.accepted) throw new Error("the sequence's session");
+const session: Session = { s_enc: opened.s_enc, s_mac: opened.s_mac, mcv: opened.mcv, counter: 1 };
 const sequence = {
   name: "one session: a PIN, two selects, a signing, two commands without data, then a second PIN",
-  s_enc: hex(s.s_enc),
-  s_mac: hex(s.s_mac),
-  mcv: hex(s.mcv),
+  s_enc: hex(session.s_enc),
+  s_mac: hex(session.s_mac),
+  mcv: hex(session.mcv),
   steps: sequenceSteps.map((st) => {
-    const w = wrap(s, st.cla, st.ins, st.p1, st.p2, st.data, st.encrypt);
+    const w = wrap(session, st.cla, st.ins, st.p1, st.p2, st.data, st.encrypt);
     return {
       name: st.name,
       cla: st.cla,
@@ -340,7 +357,8 @@ const out = {
   generated_by: "protocol/test/generate/card-channel.ts",
   diversify: diversifyCases,
   card_id: cardIdCases,
-  initialize_update: iuCases,
+  key_information: keyInformationCases,
+  initialize_update: initializeUpdateCases,
   session: sessionCases,
   pin_block: pinCases,
   sign_block: signBlockCase,
