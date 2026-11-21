@@ -164,7 +164,7 @@ pub fn check_certificate(tbs: [u8; MAX_TBS_LEN], tbs_len: u32, current_time: Fie
     }
     // Exactly 2048 bits. The pinned INTEGER header only fixes the length of
     // the encoding; a shorter key with leading zero bits fits it too.
-    assert(modulus[0] >= 0x80);
+    assert(modulus[0] >= 0x81);
 
     let exponent = modulus_offset + SUBJECT_MODULUS_BYTES;
     expect(tbs, exponent, EXPONENT);
