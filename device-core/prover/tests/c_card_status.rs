@@ -58,7 +58,7 @@ fn threads() -> Value {
 fn every_case_of_the_vectors() {
     let v = vectors("card-status.json");
     let cases = v["cases"].as_array().unwrap();
-    assert!(cases.len() >= 18);
+    assert!(cases.len() >= 22);
     let (mut read, mut unread) = (0, 0);
     for c in cases {
         let name = text(c, "name");
@@ -76,7 +76,7 @@ fn every_case_of_the_vectors() {
             read += 1;
         }
     }
-    assert!(read >= 15 && unread >= 3, "{read} read, {unread} unread");
+    assert!(read >= 19 && unread >= 3, "{read} read, {unread} unread");
 }
 
 /// The answers are read as for the consequence of a list: every answer

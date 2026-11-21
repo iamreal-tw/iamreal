@@ -17,7 +17,8 @@ extern "C" {
  * certificates and CRLs against the issuer keys given in place of MOICA's:
  * how a test with a fake card, whose certificate a test key issued, gets
  * past step 1. The files the session checks are still the ones written
- * into the core.
+ * into the core. roster is IDC_ROSTER_TEST: IDC_ERR_ARGUMENT for the
+ * production roster, of which no session trusts another key.
  *
  * issuers_json: a JSON array of {"issuer":"G2","modulus":"<hex>"}; issuer
  * is G2 or G3, each at most once, at least one; modulus is the key's RSA

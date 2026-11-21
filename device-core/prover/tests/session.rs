@@ -15,8 +15,8 @@ use iamreal_device_checks::scope::Roster;
 use iamreal_device_core::artifacts::{self, Artifacts};
 use iamreal_device_core::session::{self, Trust};
 use iamreal_device_core::{
-    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_ROSTER_TEST, IdcBuf,
-    idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
+    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_ROSTER_PRODUCTION,
+    IDC_ROSTER_TEST, IdcBuf, idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
     idc_session_card_state_request, idc_session_check_artifacts, idc_session_check_certificates,
     idc_session_check_crl, idc_session_check_date, idc_session_choose_crl, idc_session_close,
     idc_session_open, idc_testing_session_open,
@@ -1051,6 +1051,21 @@ fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
         unsafe { idc_testing_session_open(9, b"[]".as_ptr(), 2, &mut handle) },
         IDC_ERR_ARGUMENT
     );
+    // No session of the production roster trusts another key.
+    let issuers = serde_json::to_vec(&keys).unwrap();
+    let mut handle = 7u64;
+    assert_eq!(
+        unsafe {
+            idc_testing_session_open(
+                IDC_ROSTER_PRODUCTION,
+                issuers.as_ptr(),
+                issuers.len(),
+                &mut handle,
+            )
+        },
+        IDC_ERR_ARGUMENT
+    );
+    assert_eq!(handle, 0);
     assert_eq!(
         unsafe {
             idc_testing_session_open(IDC_ROSTER_TEST, b"[]".as_ptr(), 2, std::ptr::null_mut())
