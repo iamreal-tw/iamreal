@@ -199,7 +199,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ```
 (cd ../worker && pnpm install)                                                  # app-backend.ts 要它們的套件
-$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -no-window &                 # 見下面「模擬器」
+$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -skin 1080x2280 -no-window &  # 見下面「模擬器」
 cd ../web && pnpm install
 IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend.ts \
   first,refresh,switch,withdraw -- node --experimental-strip-types ../android/test/card-proof.ts
@@ -232,7 +232,9 @@ IAMREAL_BB=<bb 6.0.0 的路徑> node --experimental-strip-types test/app-backend
 ```
 sdkmanager "emulator" "system-images;android-29;default;arm64-v8a"    # x86-64 的電腦用 x86_64
 avdmanager create avd -n iamreal-api29 -k "system-images;android-29;default;arm64-v8a"
-$ANDROID_HOME/emulator/emulator -avd iamreal-api29
+$ANDROID_HOME/emulator/emulator -avd iamreal-api29 -skin 1080x2280
 ```
+
+`-skin 1080x2280` 不能省。`avdmanager` 建的 AVD 預設螢幕是 320x640、密度 160；`test/card-proof.ts` 把密度設成手機常見的 420 之後，第 2 步的畫面只放得下標題和一段說明，「感應卡片」在畫面外，捲也捲不到，測試就停在那裡。`adb shell wm size` 只能放大到實體螢幕的兩倍，補不回來，所以要在啟動時給螢幕的大小。
 
 之後和手機相同，`adb -s emulator-5554 install …`。要在模擬器上看 release 的建置，先用一把隨便產生的金鑰簽它（`apksigner sign`），沒有簽章的安裝檔裝不上去。
