@@ -128,9 +128,17 @@ export const OG_TITLE = /<meta property="og:title" content="([^"]*)">/;
 export const OG_SITE = /<meta property="og:site_name" content="([^"]*)">/;
 export const OG_DESCRIPTION = /<meta property="og:description" content="([^"]*)">/;
 
-/** Checks the page's <title> (`title` followed by ｜島民證明), its og:title (`title`) and its og:site_name (`site`). */
-export function wantPreview(page: string, title: string, site: string): void {
+/**
+ * Checks the page's <title> (`title` followed by ｜島民證明), its og:title
+ * (`title`) and its og:site_name (`site`); with `site` null, that the page
+ * has no link preview at all.
+ */
+export function wantPreview(page: string, title: string, site: string | null): void {
   assert.equal(firstMatch(TITLE_TAG, page), `${title}｜島民證明`, "<title>");
+  if (site === null) {
+    assert.ok(!page.includes("og:"), "no link preview on the page");
+    return;
+  }
   assert.equal(firstMatch(OG_TITLE, page), title, "og:title");
   assert.equal(firstMatch(OG_SITE, page), site, "og:site_name");
 }
@@ -141,8 +149,9 @@ export function previewOf(file: string, heading: string): { title: string; site:
   return { title: value("標題"), site: value("網站"), summary: value("摘要") };
 }
 
-/** One question of faq.md: its heading, its answer (the code block) and its id on the page. */
+/** One question of faq.md: its category (the "## " heading), its heading, its answer (the code block) and its id on the page. */
 export interface FaqQuestion {
+  readonly category: string;
   readonly question: string;
   readonly id: string;
   readonly answer: string[];
@@ -152,13 +161,14 @@ export interface FaqQuestion {
 export function faqQuestions(): FaqQuestion[] {
   const out: FaqQuestion[] = [];
   for (const part of readCopy("faq.md").split("\n## ").slice(1)) {
+    const category = part.slice(0, part.indexOf("\n"));
     for (const q of part.split("\n### ").slice(1)) {
       const question = q.slice(0, q.indexOf("\n"));
       const body = q.slice(q.indexOf("\n") + 1);
       const blocks = codeBlocks(body);
       const ids = [...body.matchAll(/這一題在頁面上的 `id`：`([a-z0-9-]+)`/g)];
       assert.deepEqual([blocks.length, ids.length], [1, 1], `faq.md ${JSON.stringify(question)} has one answer and one id`);
-      out.push({ question, id: ids[0]![1]!, answer: blocks[0]! });
+      out.push({ category, question, id: ids[0]![1]!, answer: blocks[0]! });
     }
   }
   assert.ok(out.length > 0, "faq.md has questions");
@@ -167,7 +177,7 @@ export function faqQuestions(): FaqQuestion[] {
 
 /** The address of a page of a card as a test roster's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
 export function testSiteCardAddress(shortId: string): string {
-  const lines = block("test-site.md", "島民證明上寫的網址");
+  const lines = block("test-site.md", "寫出島民證明網址的地方");
   assert.equal(lines.length, 1);
   assert.ok(lines[0]!.endsWith("/p/7K2Q9FM4XD"));
   return lines[0]!.replace("7K2Q9FM4XD", shortId);

@@ -36,6 +36,17 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
+ * two pages that load the copy buttons' script, /verify and
+ * /hang/<short ID>. Only scripts of this origin, which is that one file: no
+ * inline script, no other site's. The Go backend's `scriptPageHeaders`.
+ */
+export const SCRIPT_PAGE_HEADERS: Readonly<Record<string, string>> = {
+  ...VISITOR_HEADERS,
+  "Content-Security-Policy": VISITOR_HEADERS["Content-Security-Policy"]!.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; "),
+};
+
+/**
  * The data domain of each kind of roster (ADR-0027, ADR-0028): where its
  * public files are downloaded from, the CRL archive the card proof page
  * reads among them. The page's build names the same one (web/README.md,
@@ -71,8 +82,8 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The style sheet's Cache-Control: asked for again every time it is used,
- * by its ETag (site/_headers).
+ * The Cache-Control of the style sheet and of the copy buttons' script
+ * (site/_headers): asked for again every time they are used, by their ETag.
  */
 export const STYLE_SHEET_CACHE = "no-cache";
 

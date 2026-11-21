@@ -179,7 +179,12 @@ test("the test site's target is the local one but for the data domain and the si
   assert.equal(site.IDLE_LIMIT_MS, local.IDLE_LIMIT_MS);
   assert.deepEqual(site.PRESENTATIONS, local.PRESENTATIONS);
   assert.equal(site.DATA_ORIGIN, "https://test-data.iamreal.tw");
-  // The link of the last screen: the card's page on the site of the build's roster.
+  // The link of the last screen: the card's page on the site of the build's roster. On the test site, as
+  // design/copy/test-site.md writes the address of a page of a card (寫出島民證明網址的地方).
+  const copy = readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8");
+  const written = /\n## 寫出島民證明網址的地方\n[\s\S]*?```\n(.*)\n```/.exec(copy)?.[1];
+  const { cardPath } = await import("../src/platforms.ts");
+  assert.equal(`${site.SITE_DOMAIN}/${cardPath("7K2Q9FM4XD")}`, written);
   const production = await import("../src/target.ts");
   assert.deepEqual([site.SITE_DOMAIN, production.SITE_DOMAIN, local.SITE_DOMAIN], ["test.iamreal.tw", "iamreal.tw", "iamreal.tw"]);
 });

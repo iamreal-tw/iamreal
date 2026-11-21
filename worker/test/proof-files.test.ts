@@ -189,11 +189,12 @@ test("the page and its files take GET and HEAD only, and are asked again by thei
   assert.deepEqual(await worker.seen(), []);
 });
 
-test("the settings do not reach the files: with settings the Worker answers 500 for, the page and the style sheet are sent as before", async () => {
+test("the settings do not reach the files: with settings the Worker answers 500 for, the page, the style sheet and the script are sent as before", async () => {
   await worker.setSettings({ ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "test-1" });
   assert.equal((await worker.fetch("/")).status, 500);
   checkProofHeaders("/proof", await worker.fetch("/proof"));
   checkVisitorHeaders("/pages.css", await worker.fetch("/pages.css"), { cache: "no-cache" });
+  checkVisitorHeaders("/copy.js", await worker.fetch("/copy.js"), { cache: "no-cache" });
   await freshRoster(worker);
 });
 
@@ -205,6 +206,7 @@ test("a production roster's site: the same files, the same headers without noind
   checkProofHeaders("/proof/assets/index.js", await production.fetch("/proof/assets/index.js"), { test: false });
   checkProofHeaders("/proof/nothing", await production.fetch("/proof/nothing"), { test: false });
   checkVisitorHeaders("/pages.css", await production.fetch("/pages.css"), { cache: "no-cache", noindex: false });
+  checkVisitorHeaders("/copy.js", await production.fetch("/copy.js"), { cache: "no-cache", noindex: false });
 });
 
 test("a Worker without a build of web/ among its files: /proof and everything under it is 404, with the same headers and without the Worker", async () => {
@@ -215,5 +217,6 @@ test("a Worker without a build of web/ among its files: /proof and everything un
     checkProofHeaders(path, res);
   }
   assert.equal((await bare.fetch("/pages.css")).status, 200);
+  assert.equal((await bare.fetch("/copy.js")).status, 200);
   assert.deepEqual(await bare.seen(), []);
 });

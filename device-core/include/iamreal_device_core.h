@@ -123,6 +123,46 @@ int32_t idc_list_consequence(const uint8_t *platforms_json, size_t platforms_jso
                              const uint8_t *accounts_json, size_t accounts_json_len,
                              int64_t now, idc_buf *out);
 
+/* The state of a card as the screen of its accounts shows it, before the
+ * cardholder changes the list (spec/list-consequence.md, "The card's
+ * state, as shown"): JSON in *out.
+ *
+ * platforms_json, card_state_json, known_platforms_json and now are those
+ * of idc_list_consequence, and are read the same way.
+ *
+ * *out is:
+ *   {"last_card_proof":"2026-11-04","days_since":12,"daily_limit":false,
+ *    "known_platforms":["threads"],
+ *    "rows":[{"platform":"test-example","known":false,"current":"alice-b"},
+ *            {"platform":"threads","known":true,"current":"alice","last_declared":"alice",
+ *             "switch_count":1,"switches_left":4,"correction_today":false}]}
+ * last_card_proof is the date of the card's last valid record, or null;
+ * days_since the days from it to today, or null; daily_limit that the card
+ * has 3 valid records dated today, so no list can be declared today;
+ * known_platforms the platforms of the table the device knows, in
+ * ascending order, offered or not. rows, in ascending order of platform:
+ * one for every platform offered (known true: the entry of the state, the
+ * switches left by the rules, and whether a change today is a correction)
+ * and one for every kept account (known false: shown as it is, not
+ * changed).
+ *
+ * IDC_ERR_INPUT when the table or the state cannot be read, when the known
+ * platforms are not in the shape idc_list_consequence takes, or when now is
+ * outside the years 2000 to 2049 in Taiwan. */
+int32_t idc_card_status(const uint8_t *platforms_json, size_t platforms_json_len,
+                        const uint8_t *card_state_json, size_t card_state_json_len,
+                        const uint8_t *known_platforms_json, size_t known_platforms_json_len,
+                        int64_t now, idc_buf *out);
+
+/* The short ID of a scoped ID (spec/scoped-id.md): the first 10 characters
+ * of its text form, in *out. The screens and the address of the card's
+ * page write it.
+ *
+ * scoped_id: the 52 characters of a scoped ID in its one spelling, as the
+ * body of idc_session_card_state_request has it. IDC_ERR_INPUT for
+ * anything else. */
+int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *out);
+
 /*
  * A session: one card proof in progress (device-core/README.md, "檢查都通過
  * 了"). The core keeps what it checked; the app holds the number that names

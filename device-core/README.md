@@ -91,6 +91,10 @@
 
 **關卡擋的是 Kotlin、Swift 經 C 函式寫錯順序，不擋存心引用 Rust 套件的人。** `prover/` 對外只有 C 函式：session、Poseidon2、建樹的模組在 Rust 裡都不是 `pub`，引用它的 Rust 程式（例如用 Rust 寫的 JNI 層）拿到的也只有 C 函式。但 `checks/` 的 `scoped_id` 是 `pub`（`prover/` 要用），收任何一個 Poseidon2；自己另外引用 `checks/` 和 `barretenberg-rs`、或自己開 `testing` 的 Rust 程式，不經過 session 也算得出匿名編號。那一種要靠審查 `android/`、`ios/` 引用了什麼。測試要用測試的發證金鑰（標準答案裡的憑證不是內政部簽的），所以有一個 cargo feature `testing`：開了它，這幾個模組才是 `pub`，`session::open` 才收得到別的發證金鑰。只有這個目錄的測試開它（`prover/Cargo.toml` 的 `[dev-dependencies]`）；`cargo build` 編出來給 app 連結的靜態函式庫沒有。測試用它開 session，之後每一步都走 C 函式。審 `android/`、`ios/` 的建置時要看：沒有人替 `iamreal-device-core` 開 `testing`。
 
+app 在模擬器上用假卡片過卡的測試也要測試的發證金鑰，但不該拿到 `testing` 開出來的那些模組。所以另有一個只做一件事的 feature `test-issuers`：開了它，靜態函式庫多一個 C 函式 `idc_testing_session_open`（`include/iamreal_device_core_testing.h`），開一個改認呼叫的人給的發證金鑰的 session，其餘和 `idc_session_open` 相同；Poseidon2、建樹、session 的 Rust 函式照舊不是 `pub`，之後每一步都走一般的 C 函式，核心擋的順序不變。開了它的函式庫裡有一段固定的記號（`iamreal-device-core:testing-issuer-keys`）。它只開測試名冊的 session，正式名冊的不開。`test-issuers` 只給模擬器上跑測試的那一份函式庫；發出去的 app 連結的那一份不開，沒有這個函式（`prover/tests/c_link.rs` 檢查不開 feature 編出來的函式庫裡沒有它），而且由 app 自己的建置檢查擋下帶著這個函式名稱或那段記號的安裝檔。開它的建置和擋它的檢查寫在各 app 的目錄，跟著各 app 的過卡一起加入。審 `android/`、`ios/` 的建置時要看：發出去的那一份沒有開 `test-issuers`，而且 app 自己的程式看不到 `iamreal_device_core_testing.h`。
+
+Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM 上單元測試用的函式庫（`android/build-native.sh` 的第四個字 `test-issuers`）；debug 和 release 的安裝檔不開，`.so` 裡出現那段記號建置就失敗（`android/README.md`「建置時的檢查」）。JNI 那一層只在編測試用的函式庫時才引用 `iamreal_device_core_testing.h`。
+
 ### 算證明
 
 `idc_session_records_request` 收四個檔、帳號清單、題目、卡片的兩個簽章，回 `POST /api/v1/records` 的內容（`spec/record.md` 的欄位，沒有 `seq`）。它照這個順序做，哪一步不過就停：
@@ -175,6 +179,8 @@ Android 另外有一層 JNI，把這些 C 函式包成 Kotlin 呼叫得到的函
 | `idc_scope_string` | 這份名冊的場合字串（31 個位元組），卡片第一次簽的就是它 |
 | `idc_declaration_code` | 帳號清單和題目的宣告碼（31 個位元組），卡片第二次簽的就是它。清單沒照平台排序、同一個平台兩次、題目不是唯一的寫法，都是 `IDC_ERR_INPUT` |
 | `idc_list_consequence` | 持卡人改過的清單在每個平台上的後果（JSON），給確認的畫面（`spec/list-consequence.md`）。收 `config` 的 `platforms` 和 `card-state` 的回應（照後台送來的原樣）、app 有自己那一份的平台、持卡人的清單、裝置時鐘的現在；讀不懂的回應、清單裡不是提供改的平台，都是 `IDC_ERR_INPUT`。回傳卡片要簽的整份清單（交給 `idc_declaration_code`）和每一列，或不能簽的理由（`username`、`empty`、`switch_limit`、`daily_limit`）。形狀寫在標頭檔 |
+| `idc_card_status` | 這張卡片的現況（JSON），給「你的帳號」那個畫面：上次過卡的日期和到今天幾天、今天是不是已經 3 筆、每個提供改的平台現在的帳號、上一次宣告的帳號、更換過幾次、還剩幾次、今天改是不是更正，以及裝置不認得的平台上原樣保留的帳號。輸入和讀法同 `idc_list_consequence`，算法是 `spec/list-consequence.md` 的「The card's state, as shown」。它不判斷任何一份清單收不收。讀不懂的回應是 `IDC_ERR_INPUT`，錯誤只有代碼。形狀寫在標頭檔 |
+| `idc_short_id` | 匿名編號的短編號：文字形式的前 10 個字元（`spec/scoped-id.md`）。收查現況的請求裡那 52 個字元；不是唯一寫法的匿名編號是 `IDC_ERR_INPUT`。匿名編號本身只有 `idc_session_card_state_request` 算得出來 |
 | `idc_session_*` | 一次過卡的檢查、「檢查都通過了」、查現況的請求、證明和送出的請求，見上面那一節的表。每一塊緩衝區由誰釋放寫在標頭檔每個函式的說明裡 |
 
 ## 套件和工具鏈
@@ -251,9 +257,11 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
 - `checks/tests/roster_rules.rs`（不需要 Barretenberg）：`roster-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/roster-rules.md` 寫的、標準答案帶的版本號相同
 - `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
+- `prover/tests/c_card_status.rs`：`idc_card_status`，照 app 呼叫的方式。`card-status.json` 的每一案，結果和標準答案相同；`list-consequence.json` 裡每一個讀不懂的回應都不收；只有 C 函式才有的：認得的平台的形狀、時鐘、`NULL`
+- `prover/tests/c_short_id.rs`：`idc_short_id`。`scoped-id.json` 每一個匿名編號的短編號，和不是唯一寫法的都不收
 - `checks/tests/device_checks.rs`（不需要 Barretenberg）：`device-checks.json` 選憑證和檢查憑證的每一案（選到哪一張、發證者、序號、卡片的模數、兩個日期、姓名，或原因代碼）、`L`；`issuers.json`（寫死的兩把發證金鑰）；`crl/testdata/` 的每一份清冊可不可用、原因代碼、編號、清冊日期和 `expected.json` 相同
 - `prover/tests/tree.rs`：`poseidon2.json` 的 `revocation_tree`、`revocation-tree.json`（整份清冊的樹根，每個序號的路徑或「在樹裡」）、`crl/testdata/` 每一份可用清冊的樹根。每一案都用 4 個執行緒建，也分 1、2、4 份各建一次，結果相同。`revocation-tree.json` 就是 `iamreal-crl prove` 印出來的（`cmd/iamreal-crl/vectors_test.go` 讀同一份）
-- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替
+- `prover/tests/session.rs`：從 C 函式走。`device-checks.json` 的憑證、索引、清冊每一案，結果的 JSON 和標準答案相同；`circuit-inputs.json` 的每一案走完四步，查現況的請求裡的匿名編號和標準答案的公開輸入相同；少任何一步、重做前面的步驟、檔案的雜湊不對、簽章不是這張卡片對這個場合字串簽的、日期不是通過的那一天，都拿不到匿名編號；換了日期再核一次，憑證過期、還沒生效、清冊太舊各停在對應的原因代碼；app 開的 session 不認測試金鑰。電路檔和驗證金鑰用這個程式庫裡的（`web/circuits/`、`verifier/vk/`），寫死的雜湊對它們和 `crs.sha256`；參數檔 8 MiB 不在程式庫裡，四步走完的案例用兩個短檔和它們的雜湊代替；`idc_testing_session_open`（feature `test-issuers`）：給它標準答案的測試金鑰，測試憑證通過第一步；不是金鑰清單的輸入、正式名冊都不開
 - `prover/tests/no_values_in_errors.rs`：把一段記號寫進憑證、清冊、索引、`config`、記住的編號（各幾種寫法），走 C 函式，所有停下來的答案和錯誤裡都找不到那段記號
 - `prover/tests/quiet.rs`：核心裡的 panic 什麼都不印（另開一個行程，讀它印出來的東西）
 - `checks/tests/circuit_inputs.rs`（不需要 Barretenberg）：`circuit-inputs.json` 每一案的每一個電路輸入，和預期的公開輸入（匿名編號取標準答案的，它要 Poseidon2）

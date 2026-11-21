@@ -4,7 +4,7 @@
 
 ## 現在有什麼
 
-還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、首頁、島民證明、過卡的頁面有了，寫滿的名冊檔會搬到 R2，名冊每天換日公布一次；其餘的訪客頁面還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
+還沒做完：清冊鏡像、過卡的四個介面（發題目、卡片現況、送出一筆、設定）、舊後台的每一種訪客頁面、過卡的頁面有了，寫滿的名冊檔會搬到 R2，名冊每天換日公布一次；限流還沒有。舊的後台 [`server/`](../server)（Go）還在，還是對照。
 
 | 有 | 還沒有 |
 |---|---|
@@ -13,8 +13,8 @@
 | API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的名冊檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)） | |
 | 每天台灣時間換日公布名冊：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布名冊](#每天換日公布名冊)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的名冊），重驗通過（[部署後要營運者做的](#每天換日公布名冊)） | 在 Cloudflare 上公布有紀錄的名冊：測試名冊還是 0 筆 |
-| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | 其餘的訪客頁面：查詢頁、名冊頁、常見問題、怎麼驗證、掛上去（[#72](https://github.com/iamreal-tw/iamreal/issues/72)）。首頁上連到它們的連結現在是 `404` |
-| 首頁 `/`、島民證明 `/p/<短編號>`、過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時放進 Static Assets 的 `web/` 建置在 Cloudflare 上跑過的紀錄：建置和檢查有了（[#69](https://github.com/iamreal-tw/iamreal/issues/69)，[Static Assets](#static-assets)），帶著它的第一次部署還沒做，在那之前線上的 `/proof` 是 `404` |
+| 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
+| 舊後台的每一種訪客頁面：首頁 `/`、島民證明 `/p/<短編號>`、查詢頁、名冊頁、常見問題、怎麼驗證、掛上去、複製按鈕的程式，過卡的頁面 `/proof`，和頁面用的衍生表（[頁面和檔案](#頁面和檔案)） | 部署時放進 Static Assets 的 `web/` 建置在 Cloudflare 上跑過的紀錄：建置和檢查有了（[#69](https://github.com/iamreal-tw/iamreal/issues/69)，[Static Assets](#static-assets)），帶著它的第一次部署還沒做，在那之前線上的 `/proof` 是 `404` |
 | 測試專用的建置和測試的工具 | |
 | 部署測試環境的指令。2026-11-19 用它第一次部署到 `test.iamreal.tw`（[第一次部署量到的](#第一次部署量到的)） | 推版本標籤時部署正式環境的工作流程 |
 | 合併到 `main` 時部署測試環境的工作流程（[從 GitHub Actions 部署](#從-github-actions-部署)） | |
@@ -121,6 +121,7 @@ pnpm typecheck   # 型別檢查
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布名冊](#每天換日公布名冊)）。
 - `cards_copy` 是換日公布寫卡片狀態檔用的（[#183](https://github.com/iamreal-tw/iamreal/issues/183)），不是一直在的表：公布那一刻建、公布結束就刪，表的版本沒有變（[每天換日公布名冊](#每天換日公布名冊)「同一刻」）。除了公布，沒有程式讀它。
+- `retries` 是失敗後等多久再試（[#181](https://github.com/iamreal-tw/iamreal/issues/181)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上一張空表，等於沒有失敗過。一件定時工作（重建衍生表、搬檔、每天公布）上一次失敗時有一列：連續失敗了幾次、下一次什麼時候試；成功就刪掉那一列（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。
 - `rules_version` 在物件第一次啟動時記下當時程式的版本號；和程式的不同時不收過卡（見下面）。
 
 ### 兩個版本號
@@ -154,13 +155,31 @@ pnpm typecheck   # 型別檢查
 現在有四件：
 
 - 刪過期的題目，到期時間是最舊那個題目發出後 10 分鐘。所以題目表裡只有最近 10 分鐘左右發的題目。
-- 衍生表重建失敗之後再試一次（[頁面用的衍生表](#頁面用的衍生表)）：失敗後一分鐘到期；沒有失敗過就沒有這件事。
-- 把寫滿的名冊檔搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）：物件裡有寫滿的檔就到期；搬不成時，到期時間是一分鐘後。
-- 每天公布名冊（[每天換日公布名冊](#每天換日公布名冊)）：上一次公布的日期的隔天，台灣時間零點到期；公布不成時，到期時間是一分鐘後。`paused` 時沒有這件事。
+- 衍生表重建失敗之後再試一次（[頁面用的衍生表](#頁面用的衍生表)）：失敗後等一段時間到期（下面「失敗後多久再試」）；沒有失敗過就沒有這件事。
+- 把寫滿的名冊檔搬到 R2（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）：物件裡有寫滿的檔就到期；搬不成時，等一段時間才到期。
+- 每天公布名冊（[每天換日公布名冊](#每天換日公布名冊)）：上一次公布的日期的隔天，台灣時間零點到期；公布不成時，等一段時間才到期。`paused` 時沒有這件事。
 
 每天公布永遠有下一次，所以物件啟動過之後通常一直有 alarm，最晚是下一個台灣午夜。兩種時候沒有：`paused` 時沒有每天公布這件事，別的工作也都沒事時就沒有 alarm；表的版本和程式不同時物件什麼都不做，也不設 alarm。物件啟動時（建構子跑完之後）自己設一次 alarm，不等有人來拿題目；之後每一次 alarm 響完都會設下一個。物件平常不會整天沒人叫醒：清冊鏡像每小時把最新的清冊交給它一次（[排程做什麼](#排程做什麼)）。
 
 一件工作占著 alarm 不會讓別的晚做，一件工作失敗也不會讓排在它後面的不做，題目每 300 毫秒發一個時到期的工作照樣在幾秒內做：測試用測試專用的建置多塞一件假的工作來確認（`test/api.test.ts`），搬檔本身也測一次（`test/roster-files.test.ts`）。過期的題目有沒有被刪，從介面看不出來（過期的題目不管刪了沒有都是不認得），所以這一點是用那件假的工作確認的。
+
+**失敗後多久再試**（`src/roster.ts` 的 `Retries`）。重建衍生表、搬檔、每天公布這三件，失敗後等的時間照同一個規則，各算各的：第一次失敗等 1 分鐘，之後每連續再失敗一次，等的時間加倍，到那一件的上限為止，一直試下去，不停下來等人。成功一次，下一次失敗又從 1 分鐘算起。
+
+| 工作 | 上限 | 連續失敗時等的時間 | 從第一次失敗算起，嘗試在第幾分鐘 | 要有人處理的失敗，一天最多試幾次 |
+|---|---|---|---|---|
+| 搬檔、每天公布 | 1 小時 | 1、2、4、8、16、32 分鐘，然後每次 1 小時 | 1、3、7、15、31、63，之後每小時 | 約 24 次 |
+| 重建衍生表 | 5 分鐘 | 1、2、4 分鐘，然後每次 5 分鐘 | 1、3、7、12，之後每 5 分鐘 | 約 288 次 |
+
+- **衍生表的上限比較短**：衍生表沒跟上的時候，首頁、島民證明和送出都回 `500`（[頁面用的衍生表](#頁面用的衍生表)），而營運者排除原因之後，手上沒有辦法叫它馬上再試。上限就是排除原因之後最長還要等多久：衍生表 5 分鐘，搬檔和每天公布 1 小時（這兩件晚一點沒有人看得到）。代價是要有人處理的失敗一天約 288 次嘗試、288 行 `views_not_filled`，每一次都從 R2 重讀到失敗的那一檔為止。
+
+- 第一次等 1 分鐘，是為了避開 R2 一秒只能寫同一個物件一次的限制（[寫滿的名冊檔搬到 R2](#寫滿的名冊檔搬到-r2)）。
+- 會自己好的失敗（R2 逾時、暫時的錯誤）幾分鐘內就恢復，不必重啟物件：原因持續了 2 分鐘的，第 3 分鐘那一次就成功；持續了 10 分鐘的，第 15 分鐘那一次。在等的時間到上限之前，原因消失之後最晚再等大約它已經持續的那麼久。
+- 要有人處理的失敗（R2 上的名冊檔不見或被改過、這一版讀不懂的一筆、儲存桶的指紋檔不是物件的）不會每分鐘整個重做一次：搬檔和每天公布約一小時之後變成每小時一次，衍生表約十分鐘之後變成每 5 分鐘一次，每次照樣寫一行即時輸出（`views_not_filled`、`full_file_not_moved`、`roster_not_published`、`fingerprint_file_differs`）。現在沒有東西通知營運者（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- **失敗的次數和下一次的時間存在物件的儲存裡**（`retries` 表），不是記憶體：Cloudflare 上的物件沒事做大約 10 秒就休眠，記憶體裡的東西丟掉，alarm 響時建構子重跑（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)：「After 10 seconds of no incoming request or event, and all the above conditions satisfied, the Durable Object will transition into the hibernated state」「When hibernated, the in-memory state is discarded, so ensure you persist all important information in the Durable Object's storage」，2026-11-21 讀的）。等的時間最短 1 分鐘，記在記憶體的話，沒人用的物件每一次失敗都會是第一次。所以物件重新啟動（休眠後被叫醒、部署、被換掉）之後，照存著的時間繼續等，不會馬上再試；衍生表的重建也一樣，啟動時還沒到時間就不在啟動當下做，等 alarm（[頁面用的衍生表](#頁面用的衍生表)）。測試的 workerd 不會讓物件休眠，所以測試用「兩次嘗試之間讓物件重啟」代替（`test/publication.test.ts`、`test/roster-files.test.ts`）。
+- 代價：原因排除後（例如把 R2 的檔放回去、部署了讀得懂那一筆的程式），重新部署也不會讓它馬上再試，最晚要等到下一次的時間：衍生表最長 5 分鐘，搬檔和每天公布最長 1 小時。
+- **存著的時間不會比「現在加上限」更晚**：時鐘曾經跑快時存下的時間，讀的時候拉回到現在加上限，也照這樣存回去；不會卡到時鐘走到那個時間才再試。
+- **`paused` 期間不累計**：`paused` 時不重建衍生表、不公布，物件以 `paused` 啟動時刪掉這兩件的那一列；恢復之後的第一次失敗等 1 分鐘，不接著舊的次數算。搬檔 `paused` 時照搬，那一列照常。
+- 1 小時對每天公布也夠短：一天裡還有二十幾次機會；錯過的日子本來就不補（[每天換日公布名冊](#每天換日公布名冊)）。
 
 alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上面那一頁，2026-11-20 讀的：「Retries are performed using exponential backoff starting at a 2 second delay from the first failure with up to 6 retries allowed」，並建議「catch any exceptions inside your `alarm()` handler and schedule a new alarm before returning」）。所以會失敗的工作自己接住例外、自己定下一次的時間，不靠那 6 次。
 
@@ -237,8 +256,8 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 4. 一個交易裡：`full_files` 記下這一檔（它之前的筆數、結尾的名冊指紋、檔案的 SHA-256），刪掉 `records` 裡的那 1,000 筆
 
 - **先寫名冊檔，再寫清單。** 規格說沒有名冊檔的雜湊清單是一個問題（「There is no list without a roster file」），所以任何時刻儲存桶裡不會有清單而沒有它的名冊檔。兩步之間有名冊檔而沒有清單的那一段，那一檔還沒被任何一行指紋檔涵蓋：指紋檔的那一行要等兩個物件都寫好才會有（每天公布的那一步，還沒做）。
-- **任何一步失敗，紀錄不刪。** 寫不進去、R2 收到的位元組和 SHA-256 不符、讀不回來、讀回來的位元組或標頭不同，都停在那一步，寫一行 `{"event":"full_file_not_moved","error":"Error"}`（`error` 是例外的類別名稱），一分鐘後重做。重做是整個再來一次：兩個物件都重寫，位元組和沒失敗時相同。一分鐘是為了避開 R2 的限制：同一個物件一秒最多寫一次，超過回 `429`（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)：「Maximum concurrent writes to the same object name (key)：1 per second」，2026-11-20 讀的）。
-- **寫完 R2、還沒刪就重啟**：物件重新啟動後紀錄還在，照上面重做一次，兩個物件被同樣的位元組重寫，然後才刪。「一分鐘後」只記在記憶體裡，重啟之後的第一個 alarm 就會做。
+- **任何一步失敗，紀錄不刪。** 寫不進去、R2 收到的位元組和 SHA-256 不符、讀不回來、讀回來的位元組或標頭不同，都停在那一步，寫一行 `{"event":"full_file_not_moved","error":"Error"}`（`error` 是例外的類別名稱），一分鐘後重做，連續失敗時等得更久（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。重做是整個再來一次：兩個物件都重寫，位元組和沒失敗時相同。第一次只等一分鐘也不更短，是為了避開 R2 的限制：同一個物件一秒最多寫一次，超過回 `429`（[R2 limits](https://developers.cloudflare.com/r2/platform/limits/)：「Maximum concurrent writes to the same object name (key)：1 per second」，2026-11-20 讀的）。
+- **寫完 R2、還沒刪就重啟**：物件重新啟動後紀錄還在，照上面重做一次，兩個物件被同樣的位元組重寫，然後才刪。重啟之後照存著的下一次的時間做（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。
 - **寫入時帶著 SHA-256**（`put` 的 `sha256` 選項）。只靠讀回來核對的話，錯的位元組要等寫進去之後才看得出來，那時它已經帶著一年的快取標頭在公開的網址上，至少留到一分鐘後重寫。R2 的文件寫這個選項是「A SHA-256 hash to use to check the received object's integrity」（[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)，2026-11-20 讀的），沒有寫不符時會怎樣。**不符時的行為是在本機的 workerd 上看到的，Cloudflare 上還沒確認**：`put` 丟例外（「The SHA-256 checksum you specified did not match what we received」），物件沒有被寫入。所以讀回來核對照樣留著：它不靠這個選項，也管得到「R2 存下來的和它收到的不同」和標頭。
 - **讀回來核對靠得住的理由**：R2 的寫入是強一致的，寫入成功之後的讀取一定看得到新的物件（[R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/)：「R2 writes are strongly consistent. Once the Promise resolves, all subsequent read operations will see this key value pair globally」，2026-11-20 讀的）。
 - **同時只有一次搬檔。** 物件在記憶體裡記著正在進行的那一次；搬檔還沒結束時再被觸發（測試直接跑 alarm 時會發生），等的是同一次。一次搬檔把物件裡寫滿的檔由前往後都搬完。
@@ -283,15 +302,15 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 那一列寫了、指紋檔沒寫成：一分鐘後只重寫指紋檔，內容是那一列記的（公布那一刻的筆數和指紋），最後一檔和卡片狀態檔不重寫。`GET /api/v1/fingerprint` 在指紋檔寫成之前回的還是前一行。
 - **後台不刪、不改任何一行已經公開的指紋。** 指紋檔每次整個從 `published` 表寫出來，但寫之前先讀儲存桶裡現有的那一份：現有的內容必須是要寫的內容的開頭。
   - 是開頭的（檔不存在、是空的、少了後面幾行、斷在一行中間）：照表整個寫，少的行補回來。**補回來的時間是下一次公布**，通常是隔天的台灣午夜：物件只在有一行還沒寫進檔的時候才寫指紋檔，每一行都寫過之後，同一天的 alarm 和物件重啟都不會去看儲存桶。所以儲存桶裡的指紋檔被刪掉的話，最長約一天公開的指紋檔不在，那段時間 `iamreal-verify` 拿不到指紋檔；`GET /api/v1/fingerprint` 照常回答。
-  - 不是的（有一行表裡沒有、或某一行和表裡的不同）：**這一次公布整個不做**，在寫任何東西之前就停：最後一檔、卡片狀態檔、那一列、指紋檔都不寫。寫一行 `{"event":"fingerprint_file_differs","error":"Error"}`（不含檔的內容），一分鐘後再看一次，直到有人處理。`GET /api/v1/fingerprint` 維持原樣。
+  - 不是的（有一行表裡沒有、或某一行和表裡的不同）：**這一次公布整個不做**，在寫任何東西之前就停：最後一檔、卡片狀態檔、那一列、指紋檔都不寫。寫一行 `{"event":"fingerprint_file_differs","error":"Error"}`（不含檔的內容），一分鐘後再看一次，直到有人處理；一直不是的話，看的間隔拉長到每小時一次（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。`GET /api/v1/fingerprint` 維持原樣。
   - 為什麼整個不做、不是只跳過第 3 步：儲存桶裡的指紋檔不是這個物件的，最可能的原因是整個名冊目錄是另一個物件寫的；那時連最後一檔和卡片狀態檔也不該蓋。
-  - 那一列寫了、指紋檔還沒寫成的時候（上一條）也是同一個檢查：儲存桶的檔不是開頭就不寫，每分鐘一行。
+  - 那一列寫了、指紋檔還沒寫成的時候（上一條）也是同一個檢查：儲存桶的檔不是開頭就不寫，每次嘗試一行。
   - **只蓋掉剛看過的那一份。** 看完到寫入之間儲存桶的檔如果又變了，寫入不會發生：寫入帶著條件，只有儲存桶裡還是剛才讀到的那一版（照 ETag），或讀的時候沒有、現在也還沒有，才寫得進去（[R2 的條件式操作](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/#conditional-operations)，同一頁 `put` 的說明：「In the event that a precondition specified in `options` fails, `put()` returns `null`, and the object will not be stored.」，2026-11-20 讀的；清冊鏡像寫索引用的是同一個做法）。沒寫成算一般的失敗（`roster_not_published`），一分鐘後重新讀、重新比：是開頭就補，不是就 `fingerprint_file_differs`。本機 workerd 的 R2 模擬上，「有檔、ETag 不同了」「讀的時候有、現在沒有」「讀的時候沒有、現在有」三種都不會寫入（`test/publication.test.ts`）；Cloudflare 上沒有另外確認。
   - **會碰到的兩種情況，和營運者要做的**：(1) 清空測試名冊時換了 `ROSTER_OBJECT_NAME`、沒有清空儲存桶：新的物件表是空的，儲存桶裡還有舊名冊的指紋檔。照清空的步驟把儲存桶的 `roster/` 清掉（[測試名冊的標示](#測試名冊的標示)「清空測試名冊時」），下一次重試就會公布。(2) 之後從名冊重建物件（ADR-0033）：重建出來的物件要先把 `published` 表從公開的指紋檔灌回來，不然它的表比公開的檔短，會停在這裡。正式名冊上看到這一行事件，表示公開的指紋檔和物件記的不一樣，要先查出是哪一邊，不要為了讓它公布而刪掉儲存桶的檔。
   - 這個檢查擋的只有每天公布寫的四樣。寫滿的名冊檔照搬：換了物件名稱沒清儲存桶時，新名冊寫滿的檔會蓋掉舊名冊同名的檔。
 - **寫入那一行之前再看一次日期**：寫 R2 的時候剛好跨過午夜的話，這一次不算，一分鐘後照新的日期重做。一行的日期是它寫入那天的台灣日期。
-- **失敗**：寫一行 `{"event":"roster_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做。一件失敗不擋別的定時工作，各自算各自的一分鐘（[過期的題目怎麼刪](#過期的題目怎麼刪)）。
-- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每分鐘一行 `roster_not_published`。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。現在沒有東西會通知營運者「今天沒有公布」（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- **失敗**：寫一行 `{"event":"roster_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做；連續失敗時等得更久，兩種失敗算在一起（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。一件失敗不擋別的定時工作，各自算各自的等待（[過期的題目怎麼刪](#過期的題目怎麼刪)）。上面寫「一分鐘後」的地方，都是指連續失敗的第一次。
+- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每次嘗試一行 `roster_not_published`（間隔照上一條拉長）。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。現在沒有東西會通知營運者「今天沒有公布」（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
 
 **什麼時候公布**
 
@@ -321,7 +340,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - R2 裡的卡片狀態檔逐位元組等於 `cardStateFile` 一次組出來的；公布完物件的資料庫裡沒有複本
 - 本機的 workerd 上，物件在等 R2 寫入、讀回的時候不收請求（一次組出整個檔的舊做法在 2 萬張卡片時，一個請求等到寫完 R2：整次 363 ms 裡等了 347 ms）。現在每一批之間有計時器，所以不受這個影響。Cloudflare 上是不是這樣，和上面的數字一起要在 #196 量。
 
-**撞到上限時會怎樣**（照程式和文件推的，沒有試過）：不會寫出截斷的檔。卡片狀態檔寫到一半斷掉時，R2 收到的位元組數或 SHA-256 不對，不存（測試讓寫入在串流中間斷掉，儲存桶裡沒有那個檔、指紋檔沒有那一行、複本沒有留下，重做時照重做那一刻的名冊）；其他物件先在記憶體裡組好、算好 SHA-256 才交給 R2。指紋檔的那一行排在最後。同一頁文件寫超過記憶體上限時「the Workers runtime lets in-flight requests complete and creates a new isolate for subsequent requests」：物件換了 isolate 的話，記憶體裡「一分鐘後再試」的時間也沒了，公布馬上又到期、又撞一次。
+**撞到上限時會怎樣**（照程式和文件推的，沒有試過）：不會寫出截斷的檔。卡片狀態檔寫到一半斷掉時，R2 收到的位元組數或 SHA-256 不對，不存（測試讓寫入在串流中間斷掉，儲存桶裡沒有那個檔、指紋檔沒有那一行、複本沒有留下，重做時照重做那一刻的名冊）；其他物件先在記憶體裡組好、算好 SHA-256 才交給 R2。指紋檔的那一行排在最後。同一頁文件寫超過記憶體上限時「the Workers runtime lets in-flight requests complete and creates a new isolate for subsequent requests」：物件換了 isolate 的話，下一次再試的時間和失敗的次數存在物件的儲存裡，照樣在，等的時間照樣拉長（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。
 
 - **指紋檔**一天多一行，一行 110 個位元組上下：一年約 40 KB，一次公布讀它三次（開始前看一次、寫之前再看一次、寫完讀回核對一次）、整個重寫一次。
 
@@ -436,24 +455,37 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|---|
 | `/` | 首頁（`design/copy/home.md`） | Worker 產生，兩個數字問名冊 |
 | `/p/<短編號>` | 島民證明（`design/copy/proof-page.md`） | Worker 產生，問名冊 |
+| `/threads/@<名稱>` | 查詢頁（`design/copy/account-page.md`） | Worker 產生，名稱合 Threads 的格式才問名冊 |
+| `/roster` | 名冊頁（`design/copy/roster-page.md`）：`?q=` 是查詢框，`?after=` 是「更多」 | Worker 產生，兩個數字和清單一次問名冊；查詢框轉到查詢頁時不問 |
+| `/faq` | 常見問題（`design/copy/faq.md`） | Worker 產生，不問名冊 |
+| `/verify` | 怎麼驗證（`design/copy/verify.md`） | Worker 產生，不問名冊 |
+| `/hang` | 掛上去，從首頁點進來時（`design/copy/hang.md`） | Worker 產生，不問名冊 |
+| `/hang/<短編號>` | 掛上去，帶著一張島民證明（`design/copy/hang.md`） | Worker 產生，短編號讀得成才問名冊 |
+| `/copy.js` | 複製按鈕的程式，只有 `/verify` 和 `/hang/<短編號>` 載入 | Static Assets 直接送 `site/copy.js`，不跑 Worker |
 | `/pages.css` | 訪客頁面的樣式表 | Static Assets 直接送 `site/pages.css`，不跑 Worker |
 | `/proof` | 過卡的頁面：`web/` 建置的 `index.html`；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof` | Static Assets 直接送 `site/proof/` 的檔，不跑 Worker |
 | `/proof/…` | 那份建置的其他檔案 | 同上 |
 | 其他網址 | 「找不到這一頁」（`design/copy/not-found.md`），`404` | Worker 產生，不問名冊 |
 
-「找不到這一頁」和其他頁面一樣有導覽列、頁尾，測試名冊時有標示和 `noindex`，快取 60 秒；舊後台對這種網址回的是純文字。`/api/` 底下不認得的路徑不是這一頁，是介面自己的 `404`（JSON）。首頁上連到查詢頁、名冊頁、常見問題、怎麼驗證、掛上去的連結照樣留著，那些頁面在 [#72](https://github.com/iamreal-tw/iamreal/issues/72)。
+「找不到這一頁」和其他頁面一樣有導覽列、頁尾，測試名冊時有標示和 `noindex`，快取 60 秒；舊後台對這種網址回的是純文字。`/api/` 底下不認得的路徑不是這一頁，是介面自己的 `404`（JSON）。舊後台放名冊檔的 `/roster/…` 和沒有 `@` 的 `/threads/<名稱>` 也是這一頁：名冊檔在資料網域。
 
-- **樣板、樣式表是舊後台的。** `src/pages/` 的 HTML 照 `server/pages/templates/` 逐段搬過來，`site/pages.css` 是 `server/pages/style.css` 加一條規則（測試名冊標示裡的日期不折行，見[測試名冊的標示](#測試名冊的標示)）；測試核對拿掉那一條之後兩個檔逐位元組相同。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
+首頁、島民證明、導覽列、頁尾和其他每一頁上連到這個網站的連結都回 `200`，不轉址（`test/site-pages.test.ts` 逐一打開；`/proof` 和 `/proof/help.html` 用一份代替 `web/` 建置的檔）。例外是常見問題裡「營運者看得到什麼？」那一題的「完整的說明」`/privacy`：`design/copy/privacy.md` 那一頁兩個後台都還沒有做，是 `404`。
+
+**`/copy.js` 是檔案，和樣式表一樣由 Static Assets 送**：`site/copy.js` 和舊後台的 `server/pages/copy.js` 逐位元組相同（測試核對），帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`，帶著 `If-None-Match` 再要一次時回 `304`。和舊後台不同的地方：`ETag` 的值是 Static Assets 給的（舊後台是 SHA-256 的前 8 個位元組）；其他方法的 `405` 沒有 `Allow`；設定讀不出來時照常送。`Content-Type` 本機是 `text/javascript; charset=utf-8`，和舊後台相同；Cloudflare 上是 `text/javascript`，不帶 `charset`（樣式表線上也是 `text/css`，不帶；見 [Static Assets](#static-assets)「Cloudflare 上看過的」）。這對 `copy.js` 沒有影響：檔裡 ASCII 以外的字只在開頭的註解（兩行，`LC_ALL=C grep -n '[^ -~]' site/copy.js`），程式本身全是 ASCII，照哪一種編碼讀都一樣。之後要在這個檔的程式裡寫 ASCII 以外的字時再看：沒有 `charset` 時瀏覽器用載入它的頁面的編碼來讀（HTML 標準的 [fetch a classic script](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script) 把頁面的編碼當成後備），而這裡的頁面都是 `text/html; charset=utf-8`。
+
+- **樣板、樣式表、複製按鈕的程式是舊後台的。** `src/pages/` 的 HTML 照 `server/pages/templates/` 逐段搬過來，`site/copy.js` 就是 `server/pages/copy.js`，`site/pages.css` 是 `server/pages/style.css` 加一條規則（測試名冊標示裡的日期不折行，見[測試名冊的標示](#測試名冊的標示)）；測試核對拿掉那一條之後兩個檔逐位元組相同。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、名冊上的帳號都走這一條。
-- **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑。
-- **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`none`），不含短編號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
+- **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有怎麼驗證和帶著島民證明的掛上去：各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），沒有行內的程式；這兩頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，名冊頁另外讀網址的查詢（`q`、`after`）。
+- **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`account`、`roster`、`hang`、`faq`、`verify`、`none`），不含短編號、帳號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
 
 ### 讀名冊經過一個介面
 
-頁面要的資料只從 [`src/page-data.ts`](src/page-data.ts) 的 `PageData` 拿（ADR-0026）：首頁的兩個數字、一個短編號對到的卡片。現在的實作 `pageDataOfRoster` 問名冊的 Durable Object；用哪一個實作只寫在 `src/index.ts` 一處。之後讀取要搬出 Durable Object（ADR-0026 的 Consequences），換的是這一塊，頁面的程式不動。
+頁面要的資料只從 [`src/page-data.ts`](src/page-data.ts) 的 `PageData` 拿（ADR-0026）：首頁的兩個數字、一個短編號對到的卡片、把名額給了一個帳號的卡片、名冊頁的兩個數字和一段清單（同一次讀）。現在的實作 `pageDataOfRoster` 問名冊的 Durable Object；用哪一個實作只寫在 `src/index.ts` 一處。之後讀取要搬出 Durable Object（ADR-0026 的 Consequences），換的是這一塊，頁面的程式不動。
 
-- **格式不對的短編號不問 Durable Object**：照 `spec/scoped-id.md` 的寬鬆讀法（`protocol/` 的 `readShortIdInUrl`，讀 `spec/vectors/scoped-id.json`）讀不成 10 個字元的，直接回「找不到這張島民證明」那一頁，`404`。讀得成、但寫法不是標準的那一種（小寫、`O`、`I`、`L`），`301` 轉到標準寫法，也不問。測試把 Durable Object 弄成什麼都不答來確認這兩種照樣回答。
-- **快取**：首頁和島民證明的回應帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址也一樣（ADR-0026：沒帶的話，Workers 前面的快取會把 `404` 放更久）。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的名冊。樣式表帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
+- **格式不對的短編號不問 Durable Object**：照 `spec/scoped-id.md` 的寬鬆讀法（`protocol/` 的 `readShortIdInUrl`，讀 `spec/vectors/scoped-id.json`）讀不成 10 個字元的，直接回「找不到這張島民證明」那一頁，`404`。讀得成、但寫法不是標準的那一種（小寫、`O`、`I`、`L`），`301` 轉到標準寫法，也不問。掛上去的 `/hang/<短編號>` 讀法相同，讀不成的 `302` 到 `/hang`，也不問。
+- **格式不對的帳號不問 Durable Object**：查詢頁的名稱先把 A–Z 轉成小寫，不合平台表裡 Threads 的格式就直接回「Threads 沒有這樣的帳號名稱」那一頁，`404`；有大寫的 `301` 轉到小寫。名冊頁的查詢框是 Threads 的名稱時 `303` 轉到查詢頁，也不問。測試把 Durable Object 弄成什麼都不答來確認這幾種照樣回答。
+- **查詢框去掉前後的空白，照舊後台的 `strings.TrimSpace`**：Go 的空白（`unicode.IsSpace`）和 JavaScript 的 `trim` 差兩個字元：U+0085 Go 算空白，U+FEFF 不算。這裡照 Go。
+- **快取**：Worker 產生的每一頁都帶 `Cache-Control: public, max-age=60`，查不到的 `404` 和轉址（`301`、`302`、`303`）也一樣（ADR-0026：沒帶的話，Workers 前面的快取會把 `404` 放更久）；常見問題、怎麼驗證、`/hang` 不問名冊，也用同一個值，不分兩種。所以一筆紀錄寫入後，頁面最慢 60 秒後跟上；Worker 自己不另外存一份，每個跑到 Worker 的請求都問當下的名冊。舊後台把名冊頁的兩個數字在記憶體裡留 60 秒、頁面帶 `no-cache`；這裡數字每次都問，快取靠回應的標頭。樣式表和 `/copy.js` 帶 `no-cache`，靠 `ETag` 重新確認（寫在 `site/_headers`）。`/api/` 的回應是 `no-store`，`405` 和 `500` 也是。
 - **首頁的兩個數字**：現在把 Threads 的名額給了某個帳號的卡片有幾張；其中上次過卡日在今天往回 90 天以內（含第 90 天）的有幾張，今天照台灣的日期。一個查詢、一個索引（`src/views.ts` 的 `counts`）。
 - **頁面只列 Threads**（`src/pages/proof.ts` 的 `PLATFORM`）：測試名冊另一個平台 `test-example` 的帳號不出現在頁面上。
 
@@ -469,27 +501,28 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `view_history` | 一筆有效紀錄在一個平台做了什麼：種類、是不是收回之後、之前和之後的帳號 |
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是名冊規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
-- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和名冊的筆數不同就清掉重寫（`src/roster.ts` 的 `#fillViews`）：照序號讀每一行，用 `protocol/` 的 `applyList`（名冊規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
+- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和名冊的筆數不同就清掉重寫（`src/roster.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（名冊規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有名冊檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨名冊的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
-- **重建失敗會自己再試。** 失敗後一分鐘再做一次（`timedWork()` 的一件），物件每次啟動也做一次；成功的那一刻頁面和送出就恢復，不必重啟物件。讀 R2 的失敗有會自己好的（逾時、暫時的錯誤），所以要再試。資料或程式造成的失敗（R2 裡的檔不見或被改過、這一版讀不懂的一行、規則不接受的一筆）再試也不會好：**每分鐘寫一行 `views_not_filled`**，直到原因排除。每一次重試做的事照上面兩種：紀錄都還在物件裡時，失敗的那個交易整個退回，衍生表維持原樣；有檔在 R2 時，先清空，重讀前面的每一檔、重寫它們的每一筆，停在失敗的那一檔。
+- **重建失敗會自己再試。** 失敗後一分鐘再做一次（`timedWork()` 的一件），連續失敗時等得更久，最長 5 分鐘（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。物件啟動時也做一次，但上一次失敗後等的時間還沒到時不做，等 alarm：Cloudflare 上物件沒事做幾秒就休眠、被叫醒時重新啟動，每次啟動都重建的話，等的時間就沒有意義。成功的那一刻頁面和送出就恢復，不必重啟物件。讀 R2 的失敗有會自己好的（逾時、暫時的錯誤），所以要再試。資料或程式造成的失敗（R2 裡的檔不見或被改過、這一版讀不懂的一行、規則不接受的一筆）再試也不會好：**每次嘗試寫一行 `views_not_filled`**，約十分鐘之後是每 5 分鐘一行，直到原因排除。每一次重試做的事照上面兩種：紀錄都還在物件裡時，失敗的那個交易整個退回，衍生表維持原樣；有檔在 R2 時，先清空，重讀前面的每一檔、重寫它們的每一筆，停在失敗的那一檔。
 - **衍生表沒跟上時**（物件啟動時決定；重建做完的那一刻改成跟上）：衍生表反映到的筆數和名冊的筆數不同，而且重建失敗、從 R2 的重建還沒做完，或正在 `paused` 不能重建。這時候物件照樣啟動，但不用衍生表：
   - 首頁和島民證明回 `500`（純文字，`no-store`）。不拿沒跟上的衍生表出頁面：那會是「現在有 0 張」，或把一張存在的島民證明說成找不到，還被快取 60 秒。格式不對的短編號和「找不到這一頁」不問名冊，照常。
   - 送出一筆（`POST /api/v1/records`）回 `500` `internal`，和後台自己出錯時相同（`docs/api/card-proof.md`），什麼都不寫，題目不算用過、也不算送過一次。`paused` 時照舊是 `503` `paused`。
   - 拿題目、讀卡片現況、清冊鏡像照常：它們不讀衍生表。
-  - 重建失敗時寫一行 `{event: "views_not_filled", error}`。一分鐘後和每次啟動都再試一次（上一條）；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
+  - 重建失敗時寫一行 `{event: "views_not_filled", error}`。之後照上一條再試，物件啟動時等的時間已經到了也試；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個名冊檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的名冊檔，不受影響；但已經過卡的人查得到現況，名冊本身（紀錄、卡片狀態、名冊指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是名冊規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。名冊長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引。這張票只做了首頁和島民證明要的查詢；`view_slots_account` 現在是數卡片在用（`accountCards`，[寫入是一個交易](#寫入是一個交易)），查詢頁之後也用它；名冊頁要的 `view_slots_latest` 已經建了，還沒有查詢用到。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同（`server/store/sqlite_view.go`）：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；名冊頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
+- **`?after=` 照舊後台的讀法**：日期、一個點、不是 0、沒有正負號和開頭的 0 的序號，最大 2⁶⁴ − 1；讀不成的從最新的開始列。序號大於 2⁶³ − 1 的讀得成，但也從最新的開始列（舊後台是這樣）。
 
 ### 測試名冊的標示
 
-`ROSTER_KIND` 是 `test` 時，每一頁最上面有一行 `測試名冊　不定期清空，上次清空：<日期>`（`design/copy/test-site.md`，[#59](https://github.com/iamreal-tw/iamreal/issues/59) 定的字），`404` 的頁面也有；日期是設定值 `TEST_ROSTER_CLEARED_ON`，寫在 `<time>` 裡，樣式表讓它不折行：手機寬度下整行放不下時，斷在日期之前，不斷在日期中間的連字號。每一頁的 `<head>` 有 `<meta name="robots" content="noindex">`，而且 `/api/` 以外的每個回應都帶 `X-Robots-Tag: noindex`（ADR-0028）：Worker 產生的每一頁（包括「找不到這一頁」、`405`、`500`）由 Worker 加，樣式表和 `/proof` 底下的每個回應由 `site/_headers` 加。正式名冊都沒有。
+`ROSTER_KIND` 是 `test` 時，每一頁最上面有一行 `測試名冊　不定期清空，上次清空：<日期>`（`design/copy/test-site.md`，[#59](https://github.com/iamreal-tw/iamreal/issues/59) 定的字），`404` 的頁面也有；日期是設定值 `TEST_ROSTER_CLEARED_ON`，寫在 `<time>` 裡，樣式表讓它不折行：手機寬度下整行放不下時，斷在日期之前，不斷在日期中間的連字號。每一頁的 `<head>` 有 `<meta name="robots" content="noindex">`，而且 `/api/` 以外的每個回應都帶 `X-Robots-Tag: noindex`（ADR-0028）：Worker 產生的每一頁（包括「找不到這一頁」、`405`、`500`）由 Worker 加，樣式表、`/copy.js` 和 `/proof` 底下的每個回應由 `site/_headers` 加。正式名冊都沒有。
 
 - **檔案的 `X-Robots-Tag` 不是 Worker 加的**，是 `site/_headers` 寫的，上傳時就定了，不跟著 `ROSTER_KIND` 變。所以 `_headers` 照名冊的種類各有一份（[`scripts/site-files.ts`](scripts/site-files.ts) 的 `siteHeaders`），版控裡的是測試名冊的；部署前的檢查核對每個環境的 `_headers` 是它那一種名冊的那一份（[Static Assets](#static-assets)）。
-- `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
-- **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試名冊寫 `test.iamreal.tw/p/<短編號>`，正式名冊寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「島民證明上寫的網址」）。網域跟著 `ROSTER_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
+- `TEST_ROSTER_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
+- **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試名冊寫 `test.iamreal.tw/p/<短編號>`，正式名冊寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結和「複製連結」複製的也是同一個網域：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `ROSTER_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
 - **過卡的頁面上的這一行不是 Worker 加的。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；標示由 `web/` 測試網站的建置自己寫在頁面最上面（`web/README.md`「三種用真元件的建置」），句子同樣來自 `design/copy/test-site.md`，日期是建置時從 `wrangler.jsonc` 的 `TEST_ROSTER_CLEARED_ON` 帶進去的。所以改這個日期要重新部署才會兩邊一致；部署前的檢查核對頁面裡的日期就是設定裡的那一個（`scripts/proof-page.ts`）。`web/test/e2e/ui.ts` 在本機的 workerd 上比過：過卡頁面上的那一行和 Worker 產生的首頁上的相同。
 - **清空測試名冊時**一起改三樣：`ROSTER_OBJECT_NAME`、清空測試的儲存桶、`TEST_ROSTER_CLEARED_ON`。
 
@@ -500,7 +533,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 送出去的地方有兩個，值都從那一處來：
 
 - Worker 產生的頁面，由 `src/visitor.ts` 加上。
-- 樣式表和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
+- 樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
 
 每個回應：
 
@@ -508,7 +541,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|---|
 | `X-Content-Type-Options` | `nosniff` | 瀏覽器照 `Content-Type` 處理內容，不自己猜 |
 
-訪客的頁面和樣式表：
+訪客的頁面、樣式表和 `/copy.js`（程式自己的 CSP 不決定什麼能執行，決定的是載入它的頁面的 CSP）：
 
 | 標頭 | 值 | 理由 |
 |---|---|---|
@@ -516,6 +549,8 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `Referrer-Policy` | `no-referrer` | 從頁面點出去的連結、嵌進來的 Threads 個人檔案，都拿不到這一頁的網址（網址裡有短編號） |
 | `Cross-Origin-Opener-Policy` | `same-origin` | 開啟這一頁的別的網站，和這一頁開出去的視窗，彼此拿不到對方 |
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
+
+載入 `/copy.js` 的兩頁（怎麼驗證、帶著島民證明的掛上去）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，這兩個網址的每一種回應都帶 `script-src 'self'`。
 
 過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域照名冊的種類（`src/headers.ts` 的 `DATA_ORIGINS`、`proofPageHeaders`）：測試名冊的網站是 `https://test-data.iamreal.tw`，正式名冊的是 `https://data.iamreal.tw`（舊後台只有後面這一份）。兩份 `web/README.md` 都引用了，測試各比一次。
 
@@ -528,6 +563,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `site/` 裡的 | 是什麼 |
 |---|---|
 | `pages.css` | 訪客頁面的樣式表，在版控裡 |
+| `copy.js` | 複製按鈕的程式，在版控裡 |
 | `proof/` | 過卡的頁面：`web/` 測試網站的建置（`web/README.md`「三種用真元件的建置」），部署時才建置出來，不進版控 |
 | `_headers` | 這些檔案的標頭，在版控裡，由 `scripts/site-files.ts` 寫出來（[頁面送的標頭](#頁面送的標頭)） |
 | `_redirects` | `/proof` 的三條規則，在版控裡，內容是 `scripts/site-files.ts` 的 `SITE_REDIRECTS` |
@@ -549,19 +585,19 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
    這些檢查找的是「放錯了哪一種建置」的幾種已知情況，不是頁面的程式做了什麼；兩種名冊的場合字串都在 `protocol/` 的表裡、每一種建置都有，光找字串分不出簽的是哪一個，所以看的是標示裡那段 JSON 寫的場合字串；它是建置時寫的，不是從打包好的過卡流程讀出來的（`web/test/e2e/ui.ts` 在瀏覽器裡另外看頁面自己說的場合字串）。檔案沒有逐檔的清單和雜湊：`assets/` 多一支或少一支程式、某一支被改過，這裡看不出來。兩個入口每次都清空重建，所以那要建置本身出錯才會發生，結果是測試網站壞掉。電路檔和通用參數的內容這裡不比：頁面自己在用之前核對它們的 SHA-256（`web/README.md`「從伺服器拿到的值」）。正式名冊的環境這裡一律不過：它要另一種建置和自己的檢查，等有正式環境時再加。
 
-`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那三個，`pages.css` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`。改樣式表時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css`）。
+`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那四個，`pages.css` 和 `copy.js` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`、`COPY_JS_SHA256`。改這兩個檔時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css site/copy.js`）。
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
-- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的三個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
+- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的四個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
 - 帶著這份建置的部署還沒做過（這一版還沒合併）。在那之前線上的 `/proof` 沒有檔案可送，首頁的「我要換島民證明」點過去是 `404`：Static Assets 回的空 `404`，帶 `/proof` 的那一組標頭，沒有跑 Worker（見下面「Cloudflare 上看過的」）。
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker。
+- **`run_worker_first` 是 `["/*", "!/copy.js", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表和 `/copy.js` 也確認一次。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。說明頁留在 `/proof/help.html`。
-- **`_headers`**：`/proof`、`/proof/*`、`/pages.css` 三條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶，`405` 還沒看過（要有檔案才有 `405`）。樣式表的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css`、`/copy.js` 四條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶；`405` 線上有了（`POST /copy.js`），它帶不帶這一組標頭還沒看。樣式表和程式的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
 
 沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走，`/proof/help.html` 變成 `307` 到 `/proof/help`，首頁和過卡頁面連到說明頁的每個連結都多轉一次。
 
@@ -600,8 +636,21 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `POST /proof`、`POST /proof/nothing.js` | 空的 `404`，帶 `/proof` 的那一組標頭 | 相同（檔案不在時，其他方法也是 `404`） |
 | `POST /proof/`（不跟著轉） | `301` 到 `/proof` | 相同 |
 
+2026-11-21，[#231](https://github.com/iamreal-tw/iamreal/pull/231) 合併（`f0ca916`）部署之後，用 `curl` 看的（線上的檔案是 `pages.css`、`copy.js`，`site/proof/` 還是空的）：
+
+| 請求 | 線上回的 | 和本機 |
+|---|---|---|
+| `GET /copy.js` | `200`；`Cache-Control: no-cache`，有 `ETag`，帶 `X-Robots-Tag: noindex` 和 `_headers` 那一組 CSP；內容的 SHA-256 和 `server/pages/copy.js` 相同 | 標頭相同。`Content-Type` 線上是 `text/javascript`，本機是 `text/javascript; charset=utf-8` |
+| `POST /copy.js` | `405` | 相同：檔案存在時，其他方法是 `405` |
+| `GET /pages.css` | `Content-Type` 是 `text/css`，沒有 `charset` | 和 2026-11-20 看到的相同 |
+| `GET /roster`、`/faq`、`/verify`、`/hang`、`/threads/@alice` | `200`，`Cache-Control: public, max-age=60` | 相同 |
+| `GET /hang/7K2Q9FM4XD`（名冊上沒有這個短編號） | `302` | 相同 |
+| `GET /privacy` | `404`（這一頁還沒有） | 相同 |
+
 所以：
 
+- **檔案存在時，其他方法是 `405`**，線上和本機相同（之前線上沒有存在的檔可以試）。`/proof` 底下的檔要等帶著頁面的部署才看得到。
+- **Static Assets 在線上送的 `Content-Type` 不帶 `charset`**，樣式表和程式都是；本機的 workerd 會帶。`copy.js` 的程式全是 ASCII，不受影響（[頁面和檔案](#頁面和檔案)講 `copy.js` 的那一段）。`pages.css` 有一個 ASCII 以外的字在值裡（清單記號的 `·`，`list-style-type` 那一行）：沒有 `charset`、檔裡也沒有 `@charset` 時，樣式表照引用它的頁面的編碼讀（CSS Syntax 的 [input byte stream](https://www.w3.org/TR/css-syntax-3/#input-byte-stream) 的後備順序），這裡的頁面都是 UTF-8，所以讀得對；這一點是照規格推的，線上那個記號畫出來的樣子沒有另外看。
 - `Document-Isolation-Policy` 和 `Cross-Origin-Opener-Policy` 寫在 `_headers` 裡，線上照樣送出。
 - **排除的路徑上檔案不存在時，線上是 Static Assets 回 `404`，不轉給 Worker。** Cloudflare 的文件有三句，讀起來不完全一致；線上的行為是第一句和第三句照字面、而「asset-first」裡沒有第二句說的那一步：
   - 排除的路徑「will follow the default asset-first routing behavior」（[Configuration and Bindings](https://developers.cloudflare.com/workers/static-assets/binding/)）。
@@ -615,7 +664,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - 檔案存在時直接送、不跑 Worker。
 - `/proof` 用 `_redirects` 的 `200` 送 `index.html` 時，`_headers` 的 `/proof` 那一條有沒有套上。本機有。
-- 存在的檔用 `POST` 等其他方法是不是 `405`，帶不帶 `/proof` 的標頭。本機是、有帶。
+- `/proof` 底下存在的檔用 `POST` 等其他方法是不是 `405`（`/copy.js` 線上是），帶不帶 `/proof` 的標頭。本機是、有帶。
 - 上面「和 Worker 自己送的時候不同的地方」那張表裡 `307` 的那一列，和 `ETag`、`304`。
 - 只能部署 `iamreal-test` 的那把權杖上傳得了這份建置（合計約 22 MB，最大的檔是 8 MiB 的通用參數）；之前上傳過的只有 `pages.css` 一個檔。
 - 真的瀏覽器打開 `https://test.iamreal.tw/proof`：頁面是跨來源隔離的、證明引擎啟動、沒有違反 CSP、標示在最上面。`web/test/e2e/smoke.ts` 可以不插卡做這件事（`web/README.md`「在本機用真卡片過卡」）。
@@ -654,14 +703,14 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
-  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫、Threads）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊。過卡頁面的 CSP 裡的資料網域不在這一包裡：那一組標頭寫在 `site/_headers`
+  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫和它的幾個檔、Threads、掛上去複製的島民證明網址）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊。過卡頁面的 CSP 裡的資料網域不在這一包裡：那一組標頭寫在 `site/_headers`
   - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數，加上 Barretenberg 通用參數的那一個點（128 個位元組寫成十六進位，用它的 SHA-256 認，要恰好出現一次）。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
   - wrangler 列出的 binding 只有 `ROSTER`、`DATA`、`ROSTER_OBJECT_NAME`、`ROSTER_KIND`、`TEST_ROSTER_CLEARED_ON`，所以金鑰、網址、時鐘沒有設定值可以讀，Worker 也沒有 `ASSETS` 可以讀 Static Assets 的檔。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
   - `wrangler.jsonc` 裡用測試名冊的環境，`TEST_ROSTER_CLEARED_ON` 是日曆上有的日期，讀法和 Worker 執行時相同（`checkClearedOn`）。寫錯的話部署出去的測試網站全部回 `500`，這一項讓它在部署前就被擋下
-  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `ROSTER_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`_headers`、`_redirects`，`pages.css` 的 SHA-256 是 `scripts/site-files.ts` 寫的那一個。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、或 `site/` 多了別的檔，都過不了
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `ROSTER_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 的 SHA-256 是 `scripts/site-files.ts` 寫的那兩個。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、或 `site/` 多了別的檔，都過不了
   - `site/proof/` 裡的過卡頁面另外檢查（`checkProofPages`，[Static Assets](#static-assets) 列了每一項）。它不在 `checkDeployBuild` 裡，因為要先建置頁面；兩種部署的入口（`scripts/build-deploy.ts`、`scripts/deploy-test.ts`）都先呼叫 `buildSite`，建置完就檢查。`test/deploy.test.ts` 讀這兩支腳本，釘住 `buildSite` 在打包、讀權杖、上傳之前
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
@@ -776,7 +825,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `vars.ROSTER_OBJECT_NAME` | `test-1` | 名冊那個 Durable Object 的名稱。清空測試名冊就是換一個名稱；換名稱時維持 `test-` 開頭（[名冊和物件的名稱要對得上](#名冊和物件的名稱要對得上)） |
 | `vars.ROSTER_KIND` | `test` | 這個環境用哪一份名冊，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `ROSTER_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
 | `vars.TEST_ROSTER_CLEARED_ON` | `2026-11-19` | 測試名冊上次清空的日期，每一頁的標示旁寫它（[測試名冊的標示](#測試名冊的標示)）。還沒清空過，所以是測試網站第一次部署的日期（[第一次部署量到的](#第一次部署量到的)）。清空時和 `ROSTER_OBJECT_NAME` 一起改 |
-| `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
+| `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
 
@@ -1027,7 +1076,7 @@ pnpm run deploy:test
 1. **過卡的頁面**（`buildSite`）：核對通用參數（沒有就下載），把 `web/` 測試網站的建置做到 `site/proof/`，檢查它（[Static Assets](#static-assets)）。不帶權杖；下載通用參數是唯一可能送出的請求。
 2. **打包**（`buildDeploy`）：先核對 WASM 檔和驗證金鑰的 SHA-256（[WASM 檔和驗證金鑰從哪裡來](#wasm-檔和驗證金鑰從哪裡來)），不對就停；再用 `wrangler deploy --dry-run --outdir <目錄>` 打包，不帶權杖；最後跑部署那一包的檢查（[三樣不是設定值的東西](#三樣不是設定值的東西)）；其中核對 `limits.cpu_ms` 的那一項不是起 wrangler 的指令，是在跑檢查的這個程序裡用 wrangler 的函式庫讀 `wrangler.jsonc`。打包唯一的入口是 `bundleWorker`，測試專用的建置也經過它：打包之前要做的事只寫在那裡。
 3. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
-   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 有測試和舊後台的樣式表比對。
+   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 有測試和舊後台的檔比對，SHA-256 也核對過。
 
 兩段共用的參數：
 
@@ -1053,7 +1102,7 @@ pnpm run deploy:test
 - npm 上的 pnpm 10.16.1：沒有核對雜湊
 - `pnpm-lock.yaml` 裡的套件，包括 wrangler：pnpm 核對 lockfile 記的雜湊，所以換來源換不了內容，但 lockfile 本身就是提交的一部分
 - `pnpm-workspace.yaml`：安裝時一定會讀，設定能改裝進來的套件（例如 `patchedDependencies` 加一個 `patches/` 的修補，在 `--ignore-scripts --ignore-pnpmfile` 之下照樣套到 wrangler 上，試過）。`test/workflows.test.ts` 確認它只有現在的三個鍵、lockfile 沒有 `patchedDependencies` 這類段落、程式庫沒有追蹤 `.npmrc`、`.pnpmfile.cjs`、`patches/`、`worker/` 底下的 `.env*`
-- `worker/site/`：Static Assets 的檔案。`pages.css`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這三個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
+- `worker/site/`：Static Assets 的檔案。`pages.css`、`copy.js`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這四個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
 - `build` 工作建置過卡頁面時用到的東西，它們決定持卡人在測試網站拿到的頁面：`web/` 和 `protocol/` 的程式、`design/copy/`、lockfile 裡 `web/` 的套件（Vite、bb.js、noir_js），和 `web/scripts/fetch-crs.mjs` 從 Aztec 的 CDN 下載的通用參數（核對 SHA-256）。`build` 工作沒有權杖；它交出去的頁面由部署前的檢查看過幾種已知的錯法，看不到頁面的程式做了什麼
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
@@ -1145,12 +1194,12 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 |---|---|
 | `wrangler.jsonc` | Worker 專案的設定 |
 | `src/index.ts` | 進入點：HTTP（`/api/` 交給 `src/api.ts`，其他交給 `src/visitor.ts`）和排程 |
-| `src/visitor.ts` | `/api/` 以外的網址：首頁、島民證明、樣式表、過卡的頁面和它的檔案；方法、轉址、`404`、快取、出錯時的那一行 |
+| `src/visitor.ts` | `/api/` 以外的網址：每一種訪客頁面和複製按鈕的程式；方法、轉址、`404`、快取、出錯時的那一行 |
 | `src/headers.ts` | 頁面和檔案送的標頭，只定義在這裡 |
 | `src/page-data.ts` | 頁面讀名冊的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、清空和照一串紀錄重寫、頁面的查詢、數有幾張卡片宣告同一個帳號 |
-| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試名冊的標示）、`home.ts`、`proof.ts`、`not-found.ts`（找不到這一頁） |
-| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
+| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試名冊的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`roster-page.ts`（名冊頁和 `?after=` 的寫法）、`faq.ts`（常見問題，首頁的七題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
+| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、五個介面、後台自己出錯時的那一行 |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
 | `src/record-proof.ts` | 從一筆紀錄的欄位重建公開輸入、交給驗證器 |
@@ -1182,12 +1231,14 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/records.test.ts`、`test/records.ts` | `records` 的每個錯誤代碼和先後順序、題目、清冊、午夜、`201` 的內容（Go 的 `server/api_test.go` 的案例），用只看第一個位元組的驗證器 |
 | `test/records-real.test.ts` | `server/testdata/` 的十四份真的證明，從鏡像抓清冊、發題目走到寫入，用部署的那一個驗證器；寫出來的名冊公布之後，Go 建出來的 `iamreal-verify` 配原生的 `bb` 重驗通過（這一項要設 `IAMREAL_BB`、要有 `go`） |
 | `test/records-storage.test.ts` | 同時送出時序號連續、每筆之間重啟、寫到一半失敗、`paused`、`spec/vectors/roster-rules.json` 配 Durable Object 的儲存 |
-| `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`、跳脫、方法、測試名冊的標示；讀 `design/copy/` 的工具 |
+| `test/pages.test.ts`、`test/pages.ts`、`test/copy.ts` | 首頁和島民證明的每一種情況：`design/copy/` 的每一句和順序、標頭、轉址、`404`；每一頁共同的：跳脫、方法、正式名冊、測試名冊的標示、找不到這一頁；讀 `design/copy/` 的工具 |
+| `test/lookup-pages.test.ts` | 查詢頁和名冊頁的每一種情況：`design/copy/` 的每一句和順序、轉址、`404`、查詢框的每一種輸入、名冊頁一頁一頁接著拿、寫入後下一頁就跟上（Go 的 `server/visitor_test.go` 的案例） |
+| `test/site-pages.test.ts` | 常見問題、怎麼驗證、掛上去的每一種情況、`/copy.js`（Static Assets 送、不跑 Worker）（Go 的 `server/site_test.go` 的案例）；每一頁上連到這個網站的連結都回 `200` |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
 | `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
-| `test/publication.test.ts` | 每天換日公布：空的名冊、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
+| `test/publication.test.ts` | 每天換日公布：空的名冊、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、連續失敗時等 1、2、4 … 分鐘到每次一小時、成功之後又從一分鐘算起、兩次嘗試之間物件重啟也照樣等、時鐘跑快時存下的時間最多等一小時、`paused` 之前的失敗不接著算、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
 | `test/publication-verify.test.ts` | 整條路的比對：假卡片寫三天 2,005 筆，Go 的 `iamreal-verify` 用預設的讀法重驗後台寫出來的整個資料網域（要有 `go`） |
-| `test/roster-files.test.ts` | 寫滿 1,000 筆的名冊檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、失敗後一分鐘重試；Worker 沒有送名冊檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
+| `test/roster-files.test.ts` | 寫滿 1,000 筆的名冊檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、連續失敗時等 1、2、4 分鐘然後每次 5 分鐘、物件重啟時還沒到時間不重建、到時間由 alarm 叫醒時只有一次重建、成功之後又從一分鐘算起；搬不成時連續失敗的間隔加倍到一小時、重啟之後照樣等、由每天公布搬成也算成功（下一檔寫滿就馬上搬）；Worker 沒有送名冊檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |
 | `test/sequence.test.ts`、`test/sequence.ts` | 固定種子的長序列：產生器，Go 的 `roster/` 算的答案，配記憶體和配 Durable Object 的儲存逐筆比對（要有 `go`） |
 | `test/environments.test.ts` | `wrangler.jsonc` 裡每個環境的名冊、物件名稱、儲存桶對得上；每個環境的 `limits.cpu_ms` 和鏡像假設的 CPU 時間相同 |
 | `test/engine.test.ts` | Barretenberg 丟例外、答覆不對、跑不起來時的行為（在 Node 裡，用假的實例） |

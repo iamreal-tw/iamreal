@@ -24,3 +24,11 @@ IAMREAL_CORE_LIBRARY = $(SRCROOT)/../device-core/target/$(IAMREAL_RUST_TARGET)/r
 // The header of the core's C functions, for App/Bridge.h. The tests need
 // it too: they import the app's module, which carries the bridging header.
 HEADER_SEARCH_PATHS = $(SRCROOT)/../device-core/include
+
+// The Debug configuration for the simulator, which the tests run in, links
+// the library of the tests instead (build-core.sh): it has
+// idc_testing_session_open, which only Tests/ calls. The linker is told to
+// keep that function in the app's executable, where the tests, which run
+// inside the app, find it. No other build has that library or that function.
+IAMREAL_CORE_LIBRARY[config=Debug][sdk=iphonesimulator*] = $(SRCROOT)/../device-core/target/test-issuers/$(IAMREAL_RUST_TARGET)/release/libiamreal_device_core.a
+IAMREAL_TESTING_LDFLAGS[config=Debug][sdk=iphonesimulator*] = -Wl,-u,_idc_testing_session_open

@@ -164,7 +164,7 @@ describe("the views written again from the records", () => {
     assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
   });
 
-  test("when filling them fails the object still starts: the pages and a submission are 500, challenges and card states go on, and the next start fills them", async () => {
+  test("when filling them fails the object still starts: the pages and a submission are 500, challenges and card states go on, and a start once the wait is over fills them", async () => {
     await everyKind();
     const views = await worker.roster.views();
     const pages = await Promise.all(["/", `/p/${CARD_A}`].map(pageOf));
@@ -195,15 +195,19 @@ describe("the views written again from the records", () => {
         const again = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(submission) });
         assert.deepEqual([again.status, JSON.parse(await again.text())], [500, { error: "internal" }], `submission ${i + 2}`);
       }
-      // Each start tries again, and says so in one line; and it sets its alarm for a try a minute later, which it could.
+      // A start once the wait after the failure is over (a minute; README.md, "失敗後多久再試") tries again, and says
+      // so in one line; and it sets its alarm for the next try, two minutes later after a second failure, which it could.
+      const failedAt = tw("2026-11-18", "12:00:00").getTime();
+      await worker.setClock(new Date(failedAt + 60 * 1000));
       await worker.roster.restart();
       await wantUnavailable("/");
       const alarm = await worker.roster.alarmInMs();
-      assert.ok(alarm !== null && alarm <= 60 * 1000, `the alarm is ${alarm} ms ahead`);
+      assert.ok(alarm !== null && alarm <= 2 * 60 * 1000, `the alarm is ${alarm} ms ahead`);
       assert.deepEqual(worker.logLines().filter((l) => l.includes("alarm_not_set")), []);
       assert.ok(worker.logLines().filter((l) => l === JSON.stringify({ event: "views_not_filled", error: "Error" })).length >= 2);
 
       await worker.roster.failWritesTo(null);
+      await worker.setClock(new Date(failedAt + 3 * 60 * 1000));
       await worker.roster.restart();
       assert.deepEqual(await worker.roster.views(), views);
       assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);

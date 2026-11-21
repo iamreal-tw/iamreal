@@ -39,7 +39,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { COPY_JS_SHA256, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -123,10 +123,16 @@ export function engineFiles(): Record<string, string> {
  * in the same string is part of it here). None of them is fetched: the
  * Worker requests nothing but MOICA's two CRLs.
  *
- *   - the repository, linked from every page (design/copy/home.md, 導覽列);
- *   - Threads: the profile a page of a card embeds and links to
- *     (design/copy/proof-page.md, section 3), and the one origin the pages'
- *     policy allows a frame from (src/headers.ts).
+ *   - the repository, linked from every page (design/copy/home.md, 導覽列),
+ *     and three of its files: iamreal-verify's README (how to verify, and
+ *     its section 下載 from the roster page; the section's name is not
+ *     ASCII and is not read here), and the ADR one answer of the FAQ links to;
+ *   - Threads: the profile a page of a card or of an account embeds and
+ *     links to (design/copy/proof-page.md, section 3; account-page.md), the
+ *     site /hang opens (hang.md), and the one origin the pages' policy
+ *     allows a frame from (src/headers.ts);
+ *   - the page of a card on this site, as 複製連結 of /hang/<short ID>
+ *     copies it (hang.md, part 2), in the site's own domain.
  *
  * The data domain, which the card proof page's policy lets it fetch from,
  * is not among them: that policy is sent by Static Assets (site/_headers),
@@ -134,9 +140,14 @@ export function engineFiles(): Record<string, string> {
  */
 export const PAGE_ADDRESSES: readonly string[] = [
   "https://github.com/iamreal-tw/iamreal",
+  "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md",
+  "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#",
+  "https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "https://www.threads.com/",
   "https://www.threads.com/@${account}",
   "https://www.threads.com/@${account}/embed/",
   "https://www.threads.com;",
+  "https://${site.host}/p/${short}",
 ];
 
 export function checkAddresses(b: BuildContents): void {
@@ -274,6 +285,8 @@ export interface ConfiguredSite {
   readonly files: readonly string[];
   /** The SHA-256 of `pages.css` there; null if the file is not there. */
   readonly styleSheetSha256: string | null;
+  /** The SHA-256 of `copy.js` there; null if the file is not there. */
+  readonly scriptSha256: string | null;
 }
 
 /**
@@ -295,7 +308,11 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       const path = join(directory, name);
       return existsSync(path) ? readFileSync(path, "utf8") : null;
     };
-    const css = directory === undefined ? undefined : join(directory, "pages.css");
+    const sha256Of = (name: string): string | null => {
+      if (directory === undefined) return null;
+      const path = join(directory, name);
+      return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
+    };
     out[env] = {
       kind: config.vars.ROSTER_KIND,
       runWorkerFirst: config.assets?.run_worker_first,
@@ -305,15 +322,16 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       headers: textOf("_headers"),
       redirects: textOf("_redirects"),
       files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
-      styleSheetSha256: css === undefined || !existsSync(css) ? null : createHash("sha256").update(readFileSync(css)).digest("hex"),
+      styleSheetSha256: sha256Of("pages.css"),
+      scriptSha256: sha256Of("copy.js"),
     };
   }
   return out;
 }
 
 /**
- * In every environment, Cloudflare sends the card proof page's files and
- * the style sheet itself, and the Worker's code has no part in what a file
+ * In every environment, Cloudflare sends the card proof page's files, the
+ * style sheet and the copy buttons' script itself, and the Worker's code has no part in what a file
  * is sent as (README.md, "Static Assets"):
  *
  *   - their paths are kept out of the Worker's (`RUN_WORKER_FIRST`), and
@@ -321,10 +339,11 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
  *   - the files of the directory outside proof/ are the ones listed
- *     (`SITE_FILES`) and no other, and the style sheet is the one with the
- *     SHA-256 written down (`PAGES_CSS_SHA256`). What is under proof/, which
- *     is not in the repository, is the card proof page's build:
- *     `checkProofPages` looks at it;
+ *     (`SITE_FILES`) and no other, and the style sheet and the script are
+ *     the ones with the SHA-256 written down (`PAGES_CSS_SHA256`,
+ *     `COPY_JS_SHA256`). What is under proof/, which is not in the
+ *     repository, is the card proof page's build: `checkProofPages` looks
+ *     at it;
  *   - a path is a file's own or nothing, but for the redirects of
  *     site-files.ts (`SITE_REDIRECTS`);
  *   - their headers are the ones written from src/headers.ts for the
@@ -347,6 +366,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
     assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
+    assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
   }
 }
 
