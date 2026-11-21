@@ -288,6 +288,14 @@ export interface TestWorker {
      * build can leave, a broken one or one from before a platform was added.
      */
     writeCard(card: CardToWrite): Promise<void>;
+    /** Writes rows of the card state table as they are given, in one transaction (test build, `PUT /__test/roster/cards`): how a measurement fills it with many cards. */
+    writeCards(cards: readonly CardToWrite[]): Promise<void>;
+    /**
+     * "copy": copies the card state table as a publication does; "drop":
+     * drops the copy (test build, `POST /__test/roster/cards-copy`). How a
+     * measurement times either alone.
+     */
+    cardsCopy(what: "copy" | "drop"): Promise<void>;
     /**
      * Makes the stored slots of one card of the test roster text that is
      * not JSON (test build, `POST /__test/roster/break-card`): what reads
@@ -321,6 +329,8 @@ export interface TestWorker {
      * of that limit).
      */
     kept(): Promise<KeptRecords>;
+    /** The names of the tables of the object's SQLite, in byte order (test build, `GET /__test/roster/tables`). */
+    tables(): Promise<string[]>;
     /**
      * From now on the object waits this many milliseconds before it hashes
      * a record it is asked to write (test build,
@@ -552,6 +562,14 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
       },
+      async writeCards(cards) {
+        const res = await server.fetch("/__test/roster/cards", { method: "PUT", body: JSON.stringify(cards) });
+        if (res.status !== 204) throw new Error(`writing cards: HTTP ${res.status}`);
+      },
+      async cardsCopy(what) {
+        const res = await server.fetch("/__test/roster/cards-copy", { method: "POST", body: JSON.stringify({ what }) });
+        if (res.status !== 204) throw new Error(`the copy of the card state table: HTTP ${res.status} ${await res.text()}`);
+      },
       async ruleState(scopeString, scopedId) {
         const res = await server.fetch("/__test/roster/rule-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) });
         if (res.status !== 200) throw new Error(`reading the rule state: HTTP ${res.status} ${await res.text()}`);
@@ -579,6 +597,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/roster/kept");
         if (res.status !== 200) throw new Error(`reading what the roster keeps: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as KeptRecords;
+      },
+      async tables() {
+        const res = await server.fetch("/__test/roster/tables");
+        if (res.status !== 200) throw new Error(`reading the object's tables: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as string[];
       },
       async setHashDelay(ms) {
         const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });

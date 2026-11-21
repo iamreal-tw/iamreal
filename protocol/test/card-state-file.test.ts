@@ -2,7 +2,7 @@
 // spec/vectors/card-state-file.json, the file the Go tests read.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { type CardRow, cardStateFile, readCardStateFile } from "../src/card-state-file.ts";
+import { type CardRow, cardStateFile, cardStateFileWriter, readCardStateFile } from "../src/card-state-file.ts";
 import { parseDay } from "../src/date.ts";
 import { platformsOf } from "../src/platforms.ts";
 import { EMPTY_SLOT, RULES_VERSION, type SlotState } from "../src/roster-rules.ts";
@@ -59,6 +59,33 @@ describe("card-state-file.json: writing", () => {
       }
       assert.equal(cardStateFile(f.roster, rows), f.content, f.name);
     }
+  });
+});
+
+describe("card-state-file.json: writing one row at a time", () => {
+  for (const f of validFiles) {
+    test(`${f.name} (${f.roster} roster)`, () => {
+      const write = cardStateFileWriter(f.roster);
+      assert.equal(f.cards.map((c: Json) => write(rowOf(c))).join(""), f.content);
+    });
+  }
+
+  test("each row is checked as it is written: one not in its format, or not after the row before, is refused", () => {
+    const f = validFiles.find((k) => k.cards.length >= 2)!;
+    const [first, second] = f.cards.map(rowOf) as [CardRow, CardRow];
+    const writer = (): ((row: CardRow) => string) => cardStateFileWriter(f.roster);
+    assert.throws(() => writer()({ ...first, lastSeq: 0 }), /^Error: card state file: last_seq of a card is not in its format$/);
+    let write = writer();
+    write(second);
+    assert.throws(() => write(first), /^Error: card state file: a card is not after the card before it$/);
+    write = writer();
+    write(first);
+    assert.throws(() => write(first), /^Error: card state file: a card is not after the card before it$/);
+    // A row refused is not the row before: the next row is compared with the last one written.
+    write = writer();
+    write(first);
+    assert.throws(() => write({ ...second, lastSeq: 0 }));
+    assert.equal(write(second), f.content.split("\n")[1] + "\n");
   });
 });
 

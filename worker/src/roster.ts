@@ -10,6 +10,8 @@
 //                bucket yet, each as its line of the roster file
 //   full_files   the full roster files that were moved to the data bucket
 //   cards        the roster rules' state of each card (card-table.ts)
+//   cards_copy   a copy of `cards`, only while the roster is being
+//                published (card-table.ts, `copyCards`)
 //   roster       one row: what is true of the roster as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
 //   published    the lines of the fingerprint file: the days the roster was
@@ -30,16 +32,16 @@ import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
-import { cardStateFile } from "iamreal-protocol/card-state-file.ts";
+import { type CardRow, cardStateFileWriter } from "iamreal-protocol/card-state-file.ts";
 import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
-import { CARD_TABLE, everyCard, readCard, writeCard } from "./card-table.ts";
+import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfShortId, Counts } from "./page-data.ts";
-import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, FULL_FILE_RETRY_MS, type FileBucket, type FileHeaders, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, readFullFile, writeAndReadBack } from "./roster-files.ts";
+import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, FULL_FILE_RETRY_MS, type FileBucket, type FileHeaders, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./roster-files.ts";
 import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfShortId, clearViews, counts, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
@@ -266,6 +268,13 @@ export interface TimedWork {
 
 /** The least the alarm waits, so that work that stays due cannot make the alarm spin. */
 const MIN_ALARM_WAIT_MS = 1000;
+
+/**
+ * How many rows of the card state file are read and written at a time: a
+ * row is some 350 bytes with one slot, so a batch is a few hundred
+ * kilobytes, however many cards there are.
+ */
+const CARD_STATE_BATCH = 1000;
 
 /** How long after the roster could not be published the object tries again: one minute, as for a full file that could not be moved. */
 const PUBLICATION_RETRY_MS = 60 * 1000;
@@ -829,14 +838,31 @@ export class Roster extends DurableObject<Env> {
     const sql = this.ctx.storage.sql;
     const last = before + LINES_PER_FILE;
     if (before % LINES_PER_FILE !== 0) throw new Error("the stored records do not begin at a roster file");
+    const { sha256, fingerprintAfter } = await this.#writeRosterFile(before, last, CACHE_FULL_FILE);
+    this.ctx.storage.transactionSync(() => {
+      sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
+      sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
+    });
+  }
+
+  /**
+   * Writes the roster file of the stored records after the first `before`
+   * up to `last`, both counts of records, and then its record hash list,
+   * each with `cacheControl`, each read back and compared byte for byte.
+   * Returns the SHA-256 of the file and the roster fingerprint at its end.
+   * Throws unless the object keeps every one of those records and knows
+   * the fingerprint at the end of the file before. The file is up to some
+   * 20 MB: its lines are written into one buffer, without a second copy as
+   * text, which is let go when this returns.
+   */
+  async #writeRosterFile(before: number, last: number, cacheControl: string): Promise<{ sha256: string; fingerprintAfter: string }> {
+    const sql = this.ctx.storage.sql;
     // The first line of the list: the roster fingerprint at the end of the file before, which is no longer in `records`.
     const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
-    if (fingerprintBefore === undefined) throw new Error("the file before the first stored record is not among the full files");
+    if (fingerprintBefore === undefined) throw new Error("the file before the roster file is not among the full files");
     const { lines, length } = sql.exec<{ lines: number; length: number | null }>("SELECT COUNT(*) AS lines, SUM(LENGTH(CAST(line AS BLOB))) AS length FROM records WHERE seq > ? AND seq <= ?", before, last).one();
-    if (lines !== LINES_PER_FILE || length === null) throw new Error("the stored records of a full file are not 1,000");
-
-    // The file is some 20 MB: its lines are written into one buffer, without a second copy as text.
-    const file = new Uint8Array(length);
+    if (lines !== last - before) throw new Error("the stored records are not the records of the roster file");
+    const file = new Uint8Array(length ?? 0);
     const encoder = new TextEncoder();
     const hashes: string[] = [];
     let at = 0;
@@ -848,15 +874,11 @@ export class Roster extends DurableObject<Env> {
       hashes.push(row.record_hash);
       fingerprintAfter = row.fingerprint;
     }
-    if (at !== length) throw new Error("the stored lines are shorter than they were counted");
-
+    if (at !== file.length) throw new Error("the stored lines are shorter than they were counted");
     const bucket = this.bucket();
-    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl: CACHE_FULL_FILE, contentType: TYPE_JSON_LINES });
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl: CACHE_FULL_FILE, contentType: TYPE_TEXT });
-    this.ctx.storage.transactionSync(() => {
-      sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
-      sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
-    });
+    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl, contentType: TYPE_JSON_LINES });
+    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl, contentType: TYPE_TEXT });
+    return { sha256, fingerprintAfter };
   }
 
   /**
@@ -937,13 +959,15 @@ export class Roster extends DurableObject<Env> {
    *   3. the line of the date: the row of `published`, then the
    *      fingerprint file with it.
    *
-   * - **One moment.** The count, the roster fingerprint, the lines of the
-   *   last file and the state of every card are read without waiting for
-   *   anything in between (`#readForPublication`), and only then is the
-   *   bucket written: the card state file is the states after exactly the
-   *   line's `count` records (spec/roster-rules.md, "The card state
-   *   file"). Records written while the bucket is written wait for the
-   *   next date.
+   * - **One moment.** The count and the roster fingerprint are read, and
+   *   the card state table copied, without waiting for anything in
+   *   between (`#publicationMoment`). Everything is written from that
+   *   moment: the last file from the records up to the count, which never
+   *   change, and the card state file from the copy, so that it is the
+   *   states after exactly the line's `count` records (spec/roster-rules.md,
+   *   "The card state file"). Records written while the bucket is written
+   *   wait for the next date. The copy is dropped when the publication
+   *   ends, whether the row was written or it broke off.
    * - **The line comes last**, and not at all if anything before it
    *   failed: every record a line covers can be downloaded when the line
    *   is there. A publication that broke off before the row was written is
@@ -967,30 +991,32 @@ export class Roster extends DurableObject<Env> {
     const sql = this.ctx.storage.sql;
     await this.#fingerprintFileToWrite();
     await this.#moveFullFiles();
-    const moment = this.#readForPublication();
-    if (moment !== null) {
-      const bucket = this.bucket();
-      const lines: FileHeaders = { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES };
-      if (moment.lastFile !== null) {
-        await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(moment.lastFile.before), moment.lastFile.file, lines);
-        await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(moment.lastFile.before), moment.lastFile.list, { cacheControl: CACHE_DAILY, contentType: TYPE_TEXT });
+    try {
+      const moment = this.#publicationMoment();
+      if (moment !== null) {
+        await this.#writeLastFile(moment.count);
+        await this.#writeCardStateFile(moment.date);
+        // A line is dated the day it is written: not this one, if the date changed while the bucket was written.
+        if (taiwanDay(now().getTime()) !== moment.date) throw new Error("the date changed while the roster was being published");
+        sql.exec("INSERT INTO published (date, count, fingerprint, in_bucket) VALUES (?, ?, ?, 0)", formatDay(moment.date), moment.count, moment.fingerprint);
       }
-      await writeAndReadBack(bucket, cardStateFileKey(moment.date), moment.cardStates, lines);
-      // A line is dated the day it is written: not this one, if the date changed while the bucket was written.
-      if (taiwanDay(now().getTime()) !== moment.date) throw new Error("the date changed while the roster was being published");
-      sql.exec("INSERT INTO published (date, count, fingerprint, in_bucket) VALUES (?, ?, ?, 0)", formatDay(moment.date), moment.count, moment.fingerprint);
+    } finally {
+      // Whether the line was written or the publication broke off: the next one makes a copy of its own.
+      dropCardsCopy(sql);
     }
     await this.#writeFingerprintFile();
   }
 
   /**
-   * What is published of the roster at this moment, for today's date in
-   * Taiwan, or null if today's line is written already. Nothing here
-   * waits: everything is of the same count of records.
+   * The moment the roster is published as, for today's date in Taiwan, or
+   * null if today's line is written already: the count and the roster
+   * fingerprint, and a copy of the card state table (`copyCards`),
+   * all without waiting for anything in between. What the publication
+   * writes afterwards is read from these alone: the records up to the
+   * count, which never change, and the copy.
    */
-  #readForPublication(): { date: Day; count: number; fingerprint: string; lastFile: { before: number; file: Uint8Array; list: Uint8Array } | null; cardStates: Uint8Array } | null {
+  #publicationMoment(): { date: Day; count: number; fingerprint: string } | null {
     const sql = this.ctx.storage.sql;
-    const encoder = new TextEncoder();
     const date = taiwanDay(now().getTime());
     const { last } = sql.exec<{ last: string | null }>("SELECT MAX(date) AS last FROM published").one();
     if (last !== null && last >= formatDay(date)) {
@@ -998,17 +1024,72 @@ export class Roster extends DurableObject<Env> {
       throw new Error("the roster is already published for a later date than today");
     }
     const { count, fingerprint } = this.#rosterRow();
+    copyCards(sql);
+    return { date, count, fingerprint };
+  }
+
+  /**
+   * Writes the last roster file of the first `count` records, which is not
+   * full, and its record hash list, over those of the day before; nothing
+   * if `count` ends a full file. The file is at most 999 lines and is
+   * built whole in one buffer, which is let go before the card state file
+   * is written. Records after `count` may be written meanwhile and are not
+   * in it.
+   */
+  async #writeLastFile(count: number): Promise<void> {
+    const sql = this.ctx.storage.sql;
     const before = count - (count % LINES_PER_FILE);
-    const kept = sql.exec<{ seq: number; line: string; record_hash: string }>("SELECT seq, line, record_hash FROM records ORDER BY seq").toArray();
-    if (kept.length !== count - before || kept.some((row, i) => row.seq !== before + i + 1)) throw new Error("the stored records are not those of the last roster file");
-    let lastFile: { before: number; file: Uint8Array; list: Uint8Array } | null = null;
-    if (kept.length > 0) {
-      // The first line of the list: the roster fingerprint at the end of the file before.
-      const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
-      if (fingerprintBefore === undefined) throw new Error("the file before the last roster file is not among the full files");
-      lastFile = { before, file: encoder.encode(kept.map((row) => row.line).join("")), list: encoder.encode(hashList(fingerprintBefore, kept.map((row) => row.record_hash))) };
+    // Every full file is in the bucket by now (`#moveFullFiles`): the object keeps no record before the last file.
+    const { earlier } = sql.exec<{ earlier: number }>("SELECT COUNT(*) AS earlier FROM records WHERE seq <= ?", before).one();
+    if (earlier !== 0) throw new Error("the stored records are not those of the last roster file");
+    if (count > before) await this.#writeRosterFile(before, count, CACHE_DAILY);
+  }
+
+  /**
+   * Writes the card state file of `date` from the copy of the card
+   * state table, one batch of rows at a time, holding no more than one
+   * batch however many cards there are. The copy is read twice: once
+   * for the length and the SHA-256 of the file, which are given to the
+   * bucket with it, then as the stream that is written. Every row is
+   * checked as it is written (protocol/, `cardStateFileWriter`), so a row
+   * not in its format, or out of order, stops the publication in the first
+   * reading, before anything of the file is written.
+   */
+  async #writeCardStateFile(date: Day): Promise<void> {
+    const { length, sha256 } = await lengthAndSha256(this.#cardStateChunks());
+    const chunks = this.#cardStateChunks();
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const next = await chunks.next();
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      },
+    });
+    await writeStreamAndReadBack(this.bucket(), cardStateFileKey(date), { stream, length, sha256 }, { cacheControl: CACHE_DAILY, contentType: TYPE_JSON_LINES });
+  }
+
+  /**
+   * The card state file of the copy of the card state table, as one
+   * chunk of bytes for each batch of `CARD_STATE_BATCH` rows. Each batch is
+   * read when the chunk before it has been taken, and only after a timer
+   * has run out: the object takes the requests that came meanwhile, so a
+   * submission waits for one batch, not for the whole file. Without the
+   * timer the first reading, which waits only for the hash of each chunk,
+   * would not let any request in until it had read every card.
+   */
+  async *#cardStateChunks(): AsyncGenerator<Uint8Array> {
+    const sql = this.ctx.storage.sql;
+    const write = cardStateFileWriter(this.settings.kind);
+    const encoder = new TextEncoder();
+    for (let after: CardRow | null = null; ; ) {
+      const rows = copiedCards(sql, after, CARD_STATE_BATCH);
+      if (rows.length === 0) return;
+      let text = "";
+      for (const row of rows) text += write(row);
+      yield encoder.encode(text);
+      after = rows.at(-1)!;
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    return { date, count, fingerprint, lastFile, cardStates: encoder.encode(cardStateFile(this.settings.kind, everyCard(sql))) };
   }
 
   /**

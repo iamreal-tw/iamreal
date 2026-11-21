@@ -45,7 +45,7 @@ import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { RosterRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
-import { writeCard } from "../src/card-table.ts";
+import { copyCards, dropCardsCopy, writeCard } from "../src/card-table.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
@@ -148,10 +148,23 @@ export class Roster extends DeployedRoster {
     const fault = this.#bucketFault;
     if (fault === null) return real;
     const faulty = {
-      put: async (key: string, value: Uint8Array, options: R2PutOptions): Promise<R2Object | null> => {
-        if (key !== fault.key) return real.put(key, value, options);
+      put: async (key: string, sent: Uint8Array | ReadableStream<Uint8Array>, options: R2PutOptions): Promise<R2Object | null> => {
+        if (key !== fault.key) return real.put(key, sent, options);
         if (fault.how === "put fails") throw new Error("the test makes this write fail");
-        if (fault.how === "put takes a while") await new Promise((resolve) => setTimeout(resolve, 600));
+        if (fault.how === "put breaks off") {
+          if (sent instanceof ReadableStream) {
+            const reader = sent.getReader();
+            await reader.read();
+            await reader.cancel();
+          }
+          throw new Error("the test makes this write break off");
+        }
+        if (fault.how === "put takes a while") {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          return real.put(key, sent, options);
+        }
+        // The faults below change the bytes or the headers: a stream is read whole first (a test's files are small).
+        const value = sent instanceof ReadableStream ? new Uint8Array(await new Response(sent).arrayBuffer()) : sent;
         if (fault.how === "put sends other bytes") return real.put(key, value.subarray(0, -1), options);
         // A bucket that stores other bytes than it was sent: the checksum the object gave is not passed on, or the simulated bucket would refuse them.
         if (fault.how === "put writes other bytes") return real.put(key, value.subarray(0, -1), { ...options, sha256: undefined } as R2PutOptions);
@@ -167,6 +180,15 @@ export class Roster extends DeployedRoster {
       },
     };
     return faulty as unknown as FileBucket;
+  }
+
+  /** The names of the tables of the object's SQLite, in byte order. */
+  testTables(): string[] {
+    return this.ctx.storage.sql
+      .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .toArray()
+      .map((row) => row.name)
+      .sort(byBytes);
   }
 
   /** From now on the object's use of the data bucket goes wrong as `fault` says, or, with null, not at all. Kept in memory. */
@@ -236,6 +258,19 @@ export class Roster extends DeployedRoster {
   /** Writes a row of the card state table as it is given (src/card-table.ts): how a test stores a state the rules cannot have left. */
   testWriteCard(scopeString: string, scopedId: string, card: CardState, seq: number): void {
     writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
+  }
+
+  /** Writes rows of the card state table as they are given, in one transaction: how a measurement fills the table with many cards. */
+  testWriteCards(cards: readonly { scopeString: string; scopedId: string; card: CardState; seq: number }[]): void {
+    this.ctx.storage.transactionSync(() => {
+      for (const c of cards) writeCard(this.ctx.storage.sql, c.scopeString, c.scopedId, c.card, c.seq);
+    });
+  }
+
+  /** Copies the card state table, as a publication does (src/card-table.ts, `copyCards`), or drops the copy: how a measurement times either alone. */
+  testCardsCopy(what: "copy" | "drop"): void {
+    if (what === "drop") dropCardsCopy(this.ctx.storage.sql);
+    else copyCards(this.ctx.storage.sql);
   }
 
   /** Makes the stored version of the tables another one than the build's, or the build's. Takes effect when the object starts again. */
@@ -411,7 +446,10 @@ export default {
    * - `PUT /__test/roster/next-random` with 16 bytes in hex: the next
    *   challenge the object issues has them in place of random bytes.
    * - `PUT /__test/roster/card` writes a row of the card state table
-   *   (CardToWrite).
+   *   (CardToWrite); `PUT /__test/roster/cards`, a list of them, in one
+   *   transaction.
+   * - `POST /__test/roster/cards-copy` with `{what}`: "copy" copies the
+   *   card state table as a publication does, "drop" drops the copy.
    * - `PUT /__test/roster/schema-version` and
    *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
    *   build's", change the version the object's tables say they were made
@@ -438,7 +476,8 @@ export default {
    *   object keeps of its records, and the count and the roster
    *   fingerprint of its row of the roster. `GET /__test/roster/kept`
    *   answers a KeptRecords: only how many it keeps, and from which `seq`
-   *   to which.
+   *   to which. `GET /__test/roster/tables` answers the names of the
+   *   tables of its SQLite.
    * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
    *   object waits that long before it hashes a record it is asked to
    *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
@@ -496,15 +535,28 @@ export default {
       await testRosterOf(env).testSetNextRandom(random);
       return done();
     }
-    if (route === "PUT /__test/roster/card") {
-      const body = (await request.json()) as CardToWrite;
-      const slots = new Map<string, SlotState>();
-      for (const [platform, s] of Object.entries(body.platforms)) {
-        const slot = slotOfJson(s);
-        if (slot === null) return new Response(null, { status: 400 });
-        slots.set(platform, slot);
+    if (route === "PUT /__test/roster/card" || route === "PUT /__test/roster/cards") {
+      const many = route === "PUT /__test/roster/cards";
+      const body = (await request.json()) as CardToWrite | CardToWrite[];
+      const cards: { scopeString: string; scopedId: string; card: CardState; seq: number }[] = [];
+      for (const c of many ? (body as CardToWrite[]) : [body as CardToWrite]) {
+        const slots = new Map<string, SlotState>();
+        for (const [platform, s] of Object.entries(c.platforms)) {
+          const slot = slotOfJson(s);
+          if (slot === null) return new Response(null, { status: 400 });
+          slots.set(platform, slot);
+        }
+        cards.push({ scopeString: c.scope_string, scopedId: c.scoped_id, card: { lastCardProof: parseDay(c.last_card_proof), proofsOnLastDate: c.proofs_on_last_date, slots }, seq: c.seq });
       }
-      await testRosterOf(env).testWriteCard(body.scope_string, body.scoped_id, { lastCardProof: parseDay(body.last_card_proof), proofsOnLastDate: body.proofs_on_last_date, slots }, body.seq);
+      const roster = testRosterOf(env);
+      if (many) await roster.testWriteCards(cards);
+      else await roster.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
+      return done();
+    }
+    if (route === "POST /__test/roster/cards-copy") {
+      const { what } = (await request.json()) as { what: "copy" | "drop" };
+      if (what !== "copy" && what !== "drop") return new Response(null, { status: 400 });
+      await testRosterOf(env).testCardsCopy(what);
       return done();
     }
     if (route === "PUT /__test/roster/schema-version") {
@@ -542,6 +594,7 @@ export default {
     }
     if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
     if (route === "GET /__test/roster/kept") return json(await testRosterOf(env).testKept());
+    if (route === "GET /__test/roster/tables") return json(await testRosterOf(env).testTables());
     if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
     if (route === "DELETE /__test/roster/views") {
       await testRosterOf(env).testClearViews();
