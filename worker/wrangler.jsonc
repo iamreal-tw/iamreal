@@ -20,9 +20,9 @@
   "limits": { "cpu_ms": 300000 },
   // Static Assets: the files of site/, which Cloudflare sends itself (README.md, "Static Assets").
   // site/pages.css, the visitors' style sheet, and site/copy.js, the copy buttons' script, are in the
-  // repository; site/proof/ is where a build of
-  // web/ goes: no deploy puts one there yet, and a deploy build with a file there does not pass its
-  // checks (scripts/deploy-build-checks.ts, `checkSiteFiles`).
+  // repository; site/proof/ is where the card proof page goes, the test site's build of web/: every
+  // deploy builds it there first and checks what the directory then holds (scripts/deploy.ts,
+  // `buildSite`; scripts/deploy-build-checks.ts, `checkProofPages`). It is not in the repository.
   // - "run_worker_first": the Worker runs first for every path but the files' own: /copy.js, /pages.css, /proof
   //   and everything under /proof/ (a "!" pattern wins over "/*"). There Static Assets looks for a file
   //   first, and a file that is there is sent without running the Worker. In the local workerd a request

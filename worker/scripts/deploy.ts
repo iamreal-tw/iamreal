@@ -1,30 +1,40 @@
-// Deploying the test environment, in two steps that every way of deploying
-// takes:
+// Deploying the test environment, in three steps that every way of
+// deploying takes:
 //
-// 1. `buildDeploy(outDir)`: the deploy build, bundled into a directory by a
-//    wrangler dry run, with no token, then checked (deploy-build-checks.ts).
-//    `bundleWorker` under it is the only place a build of the Worker is
-//    made, the test build included (test/build.ts): what has to happen
-//    before bundling (now: the proof verifier's files, engine-files.ts) is
-//    done there and nowhere else.
-// 2. `uploadArgs(entry)`: wrangler uploads that directory as it is
+// 1. `buildSite()`: the card proof page, the test site's build of web/, put
+//    into site/proof/ beside wrangler.jsonc and checked (proof-page.ts),
+//    after the common reference string it carries is checked against its
+//    SHA-256 (and downloaded, where there is none).
+//    The other files of site/ (the style sheet, copy.js, _headers, _redirects) are
+//    the repository's.
+// 2. `buildDeploy(outDir)`: the deploy build of the Worker, bundled into a
+//    directory by a wrangler dry run, with no token, then checked
+//    (deploy-build-checks.ts). `bundleWorker` under it is the only place a
+//    build of the Worker is made, the test build included (test/build.ts):
+//    what has to happen before bundling (now: the proof verifier's files,
+//    engine-files.ts) is done there and nowhere else.
+// 3. `uploadArgs(entry)`: wrangler uploads that directory as it is
 //    (`--no-bundle`), with the token. With it wrangler uploads the files
 //    of Static Assets, which are not in that directory: it reads them from
 //    site/ beside wrangler.jsonc (`assets.directory`), in the checkout it
-//    runs in. Step 1 checked which files are there and what they hold
-//    (`checkSiteFiles`); in the workflow the two jobs check out the same
-//    commit.
+//    runs in. Steps 1 and 2 checked which files are there and what they
+//    hold (`checkProofPages`, `checkSiteFiles`).
 //
-// `pnpm run deploy:test` (deploy-test.ts) does both on this computer. The
-// workflow (.github/workflows/deploy-test.yml) runs build-deploy.ts in one
-// job and the upload in another; test/workflows.test.ts checks that its
-// lines are these arguments. Also here: how deploy-test.ts reads the token
-// and the environment wrangler runs in.
+// `pnpm run deploy:test` (deploy-test.ts) does all three on this computer.
+// The workflow (.github/workflows/deploy-test.yml) runs build-deploy.ts
+// (steps 1 and 2) in one job and the upload in another: the Worker's build
+// and the page's build go from the first to the second as artifacts, the
+// page's into site/proof/ of the second's checkout; the four files of
+// site/ in the repository are that checkout's, at the same commit.
+// test/workflows.test.ts checks that the workflow's lines are these
+// arguments. Also here: how deploy-test.ts reads the token and the
+// environment wrangler runs in.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkDeployBuild } from "./deploy-build-checks.ts";
+import { checkClearedOn, checkDeployBuild, checkProofPages, configuredClearedOn, configuredProofPages } from "./deploy-build-checks.ts";
 import { prepareEngineFiles } from "./engine-files.ts";
+import { PROOF_DIR, buildProofPage, fetchCrs } from "./proof-page.ts";
 
 export const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -86,7 +96,29 @@ export function bundleWorker(outDir: string, test?: { entry: string; extraArgs: 
   return r.stdout;
 }
 
-/** The deploy build in `outDir`, checked; throws if a check fails. Returns what wrangler printed. */
+/** The environment these scripts deploy (`--env test` of WRANGLER_ARGS). */
+const DEPLOYED_ENV = "test";
+
+/**
+ * Builds the card proof page of the test environment into site/proof/
+ * (emptied first: whatever a computer had there is gone) and checks it;
+ * throws if a check fails. The date beside the page's mark of a test
+ * roster is `TEST_ROSTER_CLEARED_ON` of wrangler.jsonc, checked to be a
+ * date before the build is given it. Before the build it has the common
+ * reference string checked against its SHA-256, and downloaded if this
+ * checkout has none (`fetchCrs`): the same on a computer and in the
+ * workflow. It runs web/'s build and reads wrangler.jsonc; it has no token,
+ * and that download is the only request it sends.
+ */
+export function buildSite(): void {
+  const configured = configuredClearedOn();
+  checkClearedOn(configured);
+  fetchCrs();
+  buildProofPage(PROOF_DIR, configured[DEPLOYED_ENV]!.clearedOn as string);
+  checkProofPages(configuredProofPages());
+}
+
+/** The deploy build of the Worker in `outDir`, checked; throws if a check fails. Returns what wrangler printed. */
 export function buildDeploy(outDir: string): string {
   const output = bundleWorker(outDir);
   checkDeployBuild(outDir, output);

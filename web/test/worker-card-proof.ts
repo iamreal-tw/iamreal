@@ -12,12 +12,10 @@
 //    verifies the proof with its own verifier and writes the record.
 // 3. Has the Worker's hourly schedule mirror the two CRLs from the fake
 //    MOICA into the simulated R2 bucket.
-// 4. Puts a small server in front of the Worker, in the place of the data
-//    domain: the test build of the page takes the CRL archive from its own
-//    origin (test/e2e/target.ts, DATA_ORIGIN), and the Worker has no route
-//    that sends a file of it. The server (worker-front.ts) answers /crl/…
-//    from the bucket, read-only, and hands every other request to the
-//    Worker as it is.
+// 4. The page is opened through the small server in front of the Worker
+//    that stands in the place of the data domain (test/e2e/worker-site.ts):
+//    it answers /crl/… from the Worker's bucket, read-only, and hands every
+//    other request to the Worker as it is.
 // 5. Clicks through the six steps like a cardholder (real mouse events,
 //    cdp.ts), declaring @alice on Threads.
 // 6. Opens the home page and /p/<short ID>: the page of the card lists the
@@ -25,9 +23,10 @@
 //    Takes screenshots of both at a desktop's and a phone's width.
 //
 // The screens' own sentences, every way a card proof stops and every kind
-// of record are test/e2e/ui.ts's, which still runs against the Go backend.
-// This file is not under test/e2e/: the checks of a pull request do not run
-// it, and what they run is what worker/test/workflows.test.ts reads there.
+// of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
+// what only this file looks at is the visitors' pages after a card proof.
+// The checks of a pull request run it with the other two browser tests
+// (.github/workflows/checks-browser.yml).
 //
 // The browser resolves no host name but localhost and 127.0.0.1
 // (--host-resolver-rules): the profile a page of a card embeds gets no
@@ -36,15 +35,14 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { startWorker } from "../../worker/test/harness.ts";
 import { COPY } from "../src/ui/copy.ts";
 import { Browser, type Page } from "./e2e/cdp.ts";
 import { FakeComponent } from "./e2e/fake-component.ts";
+import { startWorkerSite } from "./e2e/worker-site.ts";
 import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./fixtures/certs.ts";
 import { makeCrl } from "./fixtures/crls.ts";
 import { hex, makeKey } from "./fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "./fixtures/world.ts";
-import { type Front, startFront } from "./worker-front.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..");
@@ -104,10 +102,10 @@ await build({
 });
 
 console.log("starting the Worker (test build) with that page");
-const worker = await startWorker({ proofFiles: dist, issuers });
+const site = await startWorkerSite({ proofFiles: dist, issuers });
+const { worker } = site;
 const component = new FakeComponent();
 let browser: Browser | undefined;
-let front: Front | undefined;
 
 try {
   // 3. The mirror ----------------------------------------------------------------
@@ -117,9 +115,8 @@ try {
   const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
   check(round.outcome === "ok" && index.split("\n").filter(Boolean).length === 2, `the Worker's schedule mirrored the two CRLs (${round.outcome})`);
 
-  // 4. In the place of the data domain: the CRL archive, from the bucket, read-only.
-  front = await startFront(worker);
-  const ORIGIN = front.origin;
+  // 4. In the place of the data domain: the server in front of the Worker.
+  const ORIGIN = site.origin;
   await component.start(COMPONENT_PORT);
   component.card = { certificates: [encryption, signing], signingCertificate: signing, signingKey: cardKey.privateKey, pin: PIN, tries: 3 };
 
@@ -228,8 +225,7 @@ try {
 } finally {
   await browser?.close().catch(() => undefined);
   await component.stop().catch(() => undefined);
-  await front?.close();
-  await worker.close();
+  await site.close();
 }
 
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);

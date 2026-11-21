@@ -126,6 +126,8 @@ test("every environment sends the files of site/ past the Worker, with the heade
       notFoundHandling: "none",
       headers: siteHeaders(expected.kind),
       redirects: SITE_REDIRECTS,
+      // Without site/proof/, where a deploy builds the card proof page: that build is `configuredProofPages`'s to read
+      // (test/proof-page.test.ts), and one left there by a deploy build made on this computer changes nothing here.
       files: ["_headers", "_redirects", "copy.js", "pages.css"],
       styleSheetSha256: PAGES_CSS_SHA256,
       scriptSha256: COPY_JS_SHA256,
@@ -157,8 +159,6 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["no _redirects", { redirects: null }, /_redirects of the test environment/],
     ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
     ["a kind that is none", { kind: "staging" }, /ROSTER_KIND of the test environment/],
-    // site/proof/ is not in the repository (.gitignore): whatever a computer has there would be uploaded and sent as the card proof page.
-    ["a file under site/proof/", { files: [...real.files, "proof/index.html"] }, /files of the test environment/],
     ["another file beside the four", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
     ["no style sheet", { files: ["_headers", "_redirects", "copy.js"], styleSheetSha256: null }, /files of the test environment/],
     ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],

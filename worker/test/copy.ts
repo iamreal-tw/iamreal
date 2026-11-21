@@ -177,7 +177,7 @@ export function faqQuestions(): FaqQuestion[] {
 
 /** The address of a page of a card as a test roster's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
 export function testSiteCardAddress(shortId: string): string {
-  const lines = block("test-site.md", "島民證明上寫的網址");
+  const lines = block("test-site.md", "寫出島民證明網址的地方");
   assert.equal(lines.length, 1);
   assert.ok(lines[0]!.endsWith("/p/7K2Q9FM4XD"));
   return lines[0]!.replace("7K2Q9FM4XD", shortId);
