@@ -43,7 +43,7 @@ use crate::server_state::{read_card_state, read_platforms};
 
 /// The version of the C functions: the number the header gives as
 /// `IDC_ABI_VERSION`. It goes up when a function changes or goes away.
-pub const IDC_ABI_VERSION: u32 = 1;
+pub const IDC_ABI_VERSION: u32 = 2;
 
 /// The function did what it is for.
 pub const IDC_OK: i32 = 0;
@@ -829,6 +829,26 @@ pub unsafe extern "C" fn idc_session_check_artifacts(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn idc_session_check_date(session: u64, now: i64, out: *mut IdcBuf) -> i32 {
     output(out, || session::check_date(session, now))
+}
+
+/// See [`session::check_challenge`].
+///
+/// # Safety
+/// `challenge` points to `challenge_len` bytes; `out` is null or points to
+/// an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_session_check_challenge(
+    session: u64,
+    now: i64,
+    challenge: *const u8,
+    challenge_len: usize,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let challenge = unsafe { input(challenge, challenge_len)? };
+        session::check_challenge(session, now, challenge)
+    })
 }
 
 /// See [`session::card_state_request`].

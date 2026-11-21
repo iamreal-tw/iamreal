@@ -91,14 +91,32 @@ Who checks what. Only the last group can be checked from the public roster.
 - It issued this challenge, less than 10 minutes ago, and has not accepted a
   card proof for it before. It compares challenges as strings.
 
-**The cardholder's device**
+**The cardholder's device**, when it receives the challenge, before the
+card signs anything with it:
 
 - It computes today's date in Taiwan from its clock's absolute time, as
   UTC+8. It does not use the time zone set on the device.
-- If the challenge's date is not today, it does not start the card proof. It
-  shows the reason to the cardholder and does not report it to the server.
+- If the challenge is not in its one spelling, it stops with
+  `challenge_malformed`. This comes first: a string that is not a challenge
+  has no date to compare.
+- If the challenge's date is not today, it stops with
+  `challenge_not_today`, whether the date is earlier or later. The date
+  in Taiwan may have changed while the challenge was on its way: one second
+  after midnight, the challenge of the day before is not today's.
+- When it stops, it does not start the card proof. It shows the reason to
+  the cardholder and does not report it to the server.
 - It sets `current_time` from its own date. This equals the value derived
   from the challenge, or it already stopped.
+- If today is not the date its other checks were made on (midnight passed
+  since the card was read), it makes the checks that depend on the date
+  again on today before the card signs
+  ([`device-checks.md`](device-checks.md): the certificate's validity and
+  the CRL's age).
+
+| Code | The challenge |
+|---|---|
+| `challenge_malformed` | Not a challenge in its one spelling |
+| `challenge_not_today` | In its one spelling, and its date is not today in Taiwan by the device's clock |
 
 The server could otherwise choose the date, and through `current_time` ask
 whether the certificate is valid at a time of its choice. Repeated over
@@ -116,4 +134,8 @@ helps identify the cardholder.
 
 [`vectors/challenge.json`](vectors/challenge.json): valid challenges with the
 16 random bytes they encode, their date, `current_time` and its public input
-bytes; invalid challenges with the reason.
+bytes; invalid challenges with the reason; and, in `device`, the device's
+check: a challenge, the device's clock (`now`, seconds since
+1970-01-01T00:00:00Z, also written as `now_utc`), today's date in Taiwan for
+that clock, and the result, `ok` or the reason code. The cases sit on both
+sides of midnight in Taiwan, where the date in UTC is another one.

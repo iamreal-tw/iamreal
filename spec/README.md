@@ -10,7 +10,7 @@ there are the names used here.
 | Document | Defines | Status |
 |---|---|---|
 | [`scope.md`](scope.md) | Scope strings: format, the accepted list, packing. Platforms: the table of each roster, the `username` format of each platform, how one is added | Draft |
-| [`challenge.md`](challenge.md) | The challenge: format, date, `current_time` | Draft |
+| [`challenge.md`](challenge.md) | The challenge: format, date, `current_time`, and the device's check when it receives one | Draft |
 | [`declaration-code.md`](declaration-code.md) | How the declaration code is computed from a card's list of accounts | Draft |
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
 | [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, roster files, record hash, the roster fingerprint, the published roster, how to verify it | Draft |
@@ -18,7 +18,7 @@ there are the names used here.
 | [`list-consequence.md`](list-consequence.md) | What a cardholder's list does, as the device shows it before the card signs: reading the platform table of `config` and the card's state, the card's state as the screen shows it, the list the card signs, one row per platform | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |
 | [`issuers.md`](issuers.md) | MOICA's issuer keys, their sources, and which circuit each uses | Draft |
-| [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one | Draft |
+| [`device-checks.md`](device-checks.md) | The checks on the device before the card signs: choosing and checking the certificate, which CRL from the mirror it uses and when it refuses one, and the reason codes for answers of the server it does not take | Draft |
 | [`proof-verification.md`](proof-verification.md) | The circuits, the public inputs and their encoding, the checks around `bb verify`, what a proof guarantees | Draft |
 | [`circuit-inputs.md`](circuit-inputs.md) | What the device gives the circuit, from the certificate, the signatures and the path, and the public inputs it expects back | Draft |
 | [`min-app.md`](min-app.md) | The minimum app version in the server's `config`: how an app reads `min_app`, and when it goes on, warns or stops | Draft |
