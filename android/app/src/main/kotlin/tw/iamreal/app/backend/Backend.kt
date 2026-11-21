@@ -71,17 +71,10 @@ class Backend(private val site: String, private val data: String) {
             }
             val status = connection.responseCode
             val requestId = connection.getHeaderField("X-Request-Id")?.takeIf { id -> id.length in 1..64 && id.all { it.isLetterOrDigit() || it == '-' } }
-            if (status !in 200..299) {
-                val code = try {
-                    JSONObject(String(read(connection.errorStream ?: throw IOException(), MAX_ANSWER), Charsets.UTF_8)).getString("error")
-                        .takeIf { c -> c.length in 1..40 && c.all { it in 'a'..'z' || it == '_' } }
-                } catch (e: Exception) {
-                    null
-                }
-                throw ServerException(code ?: "http_$status", status, requestId)
-            }
+            if (status !in 200..299) throw ServerException(errorCode { connection.errorStream } ?: "http_$status", status, requestId)
             if (created) {
-                if (status != 201) throw ServerException("http_$status", status, requestId)
+                // Another 2xx is not a record made: like a refusal, by the code its body names.
+                if (status != 201) throw ServerException(errorCode { connection.inputStream } ?: "http_$status", status, requestId)
                 return try {
                     read(connection.inputStream, most)
                 } catch (e: IOException) {
@@ -94,6 +87,14 @@ class Backend(private val site: String, private val data: String) {
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** The `error` of an answer's body, where it has one the app can show; null otherwise. */
+    private fun errorCode(body: () -> java.io.InputStream?): String? = try {
+        JSONObject(String(read(body() ?: throw IOException(), MAX_ANSWER), Charsets.UTF_8)).getString("error")
+            .takeIf { c -> c.length in 1..40 && c.all { it in 'a'..'z' || it == '_' } }
+    } catch (e: Exception) {
+        null
     }
 
     /** The whole body, or an [IOException] for one longer than [most] bytes. */

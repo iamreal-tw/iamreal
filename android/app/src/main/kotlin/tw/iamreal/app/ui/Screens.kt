@@ -308,6 +308,7 @@ private fun Done(m: Model, outside: Outside) {
         ListRow(rowName(row.platform, row.known), rowAccount(row.platform, row.known, row.username), listOfNotNull(row.kind, row.expected, row.switchUsed), "recorded-${row.platform}")
     }
     if (view.record != null) Body(c.say("done.short_id", "short_id" to d.shortId))
+    view.kindsUnreadable?.let { Body(it) }
     for (sentence in view.otherCards) Small(sentence)
     if (!withdrawAll) {
         Point(if (single != null) c.say("done.advice_single") else c.say("done.advice"))

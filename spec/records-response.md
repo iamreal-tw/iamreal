@@ -43,6 +43,11 @@ the body of a `201` stops arriving: it reads what it has, which may be no
 bytes, or it treats the submission as unanswered and asks again in its own
 way. It never tells the cardholder that the record was refused.
 
+A client may also stop at a length of its own, at least 1 MiB (2^20
+bytes); a body longer than that is read as no bytes, so nothing of the
+answer is told. The server's answer is far shorter: one element of `kinds`
+per platform of the list.
+
 The body is read as UTF-8 text holding one JSON value. A number is read by
 its value, and a count is a number with no fraction from 0 to 2^53 − 1, as
 in [`list-consequence.md`](list-consequence.md), "Input".
@@ -121,9 +126,9 @@ file is written.
 
 As in [`list-consequence.md`](list-consequence.md), "Outside these rules":
 the server never sends a body that is not UTF-8 or begins with a byte order
-mark, an object with a key twice, a string with an unpaired surrogate, a number beyond the range of a
-64-bit float or with more digits than one holds, or arrays and objects
-nested more than 128 deep. How a client reads one is not defined here and
+mark, an object with a key twice, a string with an unpaired surrogate, a
+number beyond the range of a 64-bit float or with more digits than one
+holds, or arrays and objects nested more than 128 deep. How a client reads one is not defined here and
 the vectors have none: a JavaScript client's parser reads them,
 `device-core/` tells nothing of such an answer. Either way the record is in
 the roster.

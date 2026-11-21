@@ -22,7 +22,7 @@ final class DoneScreenTests: XCTestCase {
 
     func testTheAnswerIsWhatTheVectorsSayCaseByCase() throws {
         let cases = try XCTUnwrap(try Repository.vectors("records-response.json")["cases"] as? [[String: Any]])
-        XCTAssertGreaterThanOrEqual(cases.count, 75)
+        XCTAssertGreaterThanOrEqual(cases.count, 77)
         for item in cases {
             let name = try XCTUnwrap(item["name"] as? String)
             let body = Data(try XCTUnwrap(item["body"] as? String).utf8)

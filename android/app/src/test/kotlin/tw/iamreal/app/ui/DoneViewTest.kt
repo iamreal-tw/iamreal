@@ -37,6 +37,7 @@ class DoneViewTest {
         assertEquals(copy.say("done.first"), messages.doneTitle(d))
         assertNull(view.mismatch)
         assertEquals(copy.say("done.record_single"), view.record)
+        assertNull(view.kindsUnreadable)
         assertEquals(listOf(listOf("threads", "alice", copy.say("kinds.first"), null, null)), view.rows.map(::lines))
         assertEquals(emptyList<String>(), view.otherCards)
         assertEquals(false, view.withdrawnLink)
@@ -58,6 +59,7 @@ class DoneViewTest {
     fun `kinds the app cannot read, only that the list was recorded`() {
         val view = messages.done(done(listOf(row("threads", "first", "alice")), null), "Threads")
         assertEquals(listOf(null, null), listOf(view.mismatch, view.record))
+        assertEquals(copy.say("done.kinds_unreadable"), view.kindsUnreadable)
         assertEquals(0, view.rows.size)
         assertEquals(emptyList<String>(), view.otherCards)
     }

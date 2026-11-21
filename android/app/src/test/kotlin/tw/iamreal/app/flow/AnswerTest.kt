@@ -21,7 +21,7 @@ class AnswerTest {
 
     @Test
     fun `the answer is what the vectors say, case by case`() {
-        assertTrue(cases.size >= 75)
+        assertTrue(cases.size >= 77)
         for (case in cases) {
             val name = case.getString("name")
             val expected = case.getJSONObject("result")
