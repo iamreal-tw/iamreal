@@ -299,6 +299,28 @@ for (const [label, cp] of [
   CHANGES[`71 ${label} in a comment`] = [replace(C, "jobs:\n", `# a comment${ch}with it\njobs:\n`)];
 }
 
+// The upload of the iPhone app (#176): the key in the upload job's last step only, the job that
+// runs the repository's code without it, started by hand only.
+const U = "upload-ios.yml";
+const IOS_KEY_ENV = "        env:\n          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}\n";
+const IOS_ARCHIVE_STEP = "      - name: Archive the store's build and check it\n";
+const IOS_UNPACK_STEP = "      - name: Unpack the archive\n";
+Object.assign(CHANGES, {
+  "ios-upload 1 triggered by a push to main too": [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+  "ios-upload 2 triggered by a pull request instead": [replace(U, "on:\n  workflow_dispatch:\n", "on:\n  pull_request:\n")],
+  "ios-upload 3 the build job in the environment that has the key": [replace(U, "  build:\n    runs-on: xcode-27\n", "  build:\n    runs-on: xcode-27\n    environment: app-test\n")],
+  "ios-upload 4 the key given to the step that archives": [replace(U, `${IOS_ARCHIVE_STEP}        working-directory: ios\n`, `${IOS_ARCHIVE_STEP}        working-directory: ios\n${IOS_KEY_ENV}`)],
+  "ios-upload 5 the upload job outside the environment": [replace(U, "    environment: app-test\n", "")],
+  "ios-upload 6 the upload job checking out the repository and running a script of it": [
+    replace(U, IOS_UNPACK_STEP, `      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n      - name: Something of the repository\n        working-directory: ios\n        run: ./archive.sh x 1\n${IOS_UNPACK_STEP}`),
+  ],
+  "ios-upload 7 the key given to the step that unpacks": [replace(U, `${IOS_UNPACK_STEP}`, `${IOS_UNPACK_STEP}${IOS_KEY_ENV}`)],
+  "ios-upload 8 the archive not checked": [replace(U, './archive.sh "$RUNNER_TEMP/IamrealApp.xcarchive" "$GITHUB_RUN_NUMBER"', 'xcodebuild archive -project IamrealApp.xcodeproj -scheme IamrealApp -archivePath "$RUNNER_TEMP/IamrealApp.xcarchive"')],
+  "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
+  "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
+  "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
+});
+
 for (const [name, changes] of Object.entries(CHANGES)) {
   test(`turned away: ${name}`, () => {
     const files = realFiles();
