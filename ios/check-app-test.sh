@@ -98,6 +98,16 @@ copy
 xcrun --sdk iphonesimulator clang -target arm64-apple-ios15.0-simulator -dynamiclib -framework AppTrackingTransparency -o "$tmp/app/IamrealApp.app/Track.dylib" "$tmp/empty.c"
 expect "AppTrackingTransparency linked" "AppTrackingTransparency"
 
+# The app as built is a Debug build for the simulator and holds the library
+# of the tests: the same executable in an app for an iPhone, or in a Release
+# build, is turned away.
+copy
+plutil -replace CFBundleSupportedPlatforms -json '["iPhoneOS"]' "$tmp/app/IamrealApp.app/Info.plist"
+expect "the library of the tests in an app for an iPhone" "idc_testing_session_open"
+
+copy
+expect "the library of the tests in a Release build" "idc_testing_session_open" CONFIGURATION=Release
+
 # Sources that do what the app must not.
 copy
 source_with() {
@@ -139,6 +149,16 @@ rm -rf "$tmp/project"
 mkdir "$tmp/project"
 sed 's|SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;|SWIFT_OBJC_BRIDGING_HEADER = Other/Bridge.h;|' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"
 expect "another bridging header in the project" "bridging header" IAMREAL_PROJECT_FILE="$tmp/project/project.pbxproj"
+
+# The app's target given the tests' header: the app would see idc_testing_session_open.
+sed 's|SWIFT_OBJC_BRIDGING_HEADER = App/Bridge.h;|SWIFT_OBJC_BRIDGING_HEADER = Tests/Bridge.h;|' "$here/IamrealApp.xcodeproj/project.pbxproj" > "$tmp/project/project.pbxproj"
+expect "the tests' bridging header for the app" "bridging header" IAMREAL_PROJECT_FILE="$tmp/project/project.pbxproj"
+
+rm -rf "$tmp/tests"
+mkdir "$tmp/tests"
+cp "$here/Tests/Bridge.h" "$tmp/tests/Bridge.h"
+printf 'void bbapi(void);\n' >> "$tmp/tests/Bridge.h"
+expect "a prototype written into Tests/Bridge.h" "Tests/Bridge.h is more than" IAMREAL_TEST_SOURCES="$tmp/tests"
 
 rm -rf "$tmp/config"
 cp -R "$here/Config" "$tmp/config"

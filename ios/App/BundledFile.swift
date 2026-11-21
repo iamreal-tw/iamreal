@@ -19,4 +19,16 @@ enum BundledFile: String, CaseIterable {
         guard let url = Bundle.main.url(forResource: rawValue, withExtension: nil) else { throw Missing() }
         return try Data(contentsOf: url)
     }
+
+    /// The four files a proof needs, for a certificate `issuer` issued:
+    /// card_proof_rs2048 for G2, card_proof_rs4096 for G3 (spec/issuers.md).
+    static func proofFiles(for issuer: String) throws -> DeviceCore.ProofFiles {
+        let (circuit, key): (BundledFile, BundledFile)
+        switch issuer {
+        case "G2": (circuit, key) = (.circuitRS2048, .verificationKeyRS2048)
+        case "G3": (circuit, key) = (.circuitRS4096, .verificationKeyRS4096)
+        default: throw Missing()
+        }
+        return DeviceCore.ProofFiles(circuit: try circuit.load(), verificationKey: try key.load(), crsG1: try crsG1.load(), crsG2: try crsG2.load())
+    }
 }

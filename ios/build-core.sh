@@ -5,6 +5,15 @@
 #   ./build-core.sh simulator    for the iOS simulator on an Apple silicon Mac
 #   ./build-core.sh device       for an iPhone
 #
+# For the simulator it builds a second library too, the library of the
+# tests: device-core/ with its cargo feature `test-issuers`, which adds
+# idc_testing_session_open, a session that trusts the issuer keys a test
+# gives it (Tests/ runs a card proof with a card made of test keys). It is
+# built in a directory of its own, device-core/target/test-issuers/, so
+# that no build links it by mistake; only the Debug configuration for the
+# simulator links it (Config/Shared.xcconfig), and check-app.sh turns away
+# any other app that holds it. There is no such library for an iPhone.
+#
 # It downloads Barretenberg's static library for that platform and the CRS,
 # each checked against the SHA-256 in device-core/ before it is used
 # (device-core/fetch-barretenberg.sh, device-core/fetch-crs.sh), then runs
@@ -38,3 +47,7 @@ export BB_LIB_DIR
 
 cd "$core"
 cargo build --locked --release --package iamreal-device-core --lib --target "$target"
+if [ "$1" = simulator ]; then
+  cargo build --locked --release --package iamreal-device-core --lib --target "$target" \
+    --features test-issuers --target-dir "$core/target/test-issuers"
+fi
