@@ -1,0 +1,343 @@
+{
+  "spec": "card-channel",
+  "status": "draft",
+  "note": "Every key, identifier, challenge and PIN here is made up; none is the key material of a real card. Bytes are lowercase hex.",
+  "generated_by": "protocol/test/generate/card-channel.ts",
+  "diversify": [
+    {
+      "name": "a card",
+      "kek": "00112233445566778899aabbccddeeff",
+      "master_enc": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "card_id": "01020304050607080900",
+      "master": "863491093846e80d0e491742a58f3f18",
+      "k_enc_input": "0000000000000000000000040000800101010203040506070809005389c00014",
+      "k_enc": "afeeea69ae2bdbe7a1e38be7603b8685",
+      "k_mac_input": "0000000000000000000000060000800102010203040506070809005389c00014",
+      "k_mac": "2adf1591282f964d8ce5073c9f740a38"
+    },
+    {
+      "name": "another card, same key material",
+      "kek": "00112233445566778899aabbccddeeff",
+      "master_enc": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "card_id": "ffeeddccbbaa99887766",
+      "master": "863491093846e80d0e491742a58f3f18",
+      "k_enc_input": "0000000000000000000000040000800101ffeeddccbbaa998877665389c00014",
+      "k_enc": "28fe5d0769ef8ee9fae780e4814f482e",
+      "k_mac_input": "0000000000000000000000060000800102ffeeddccbbaa998877665389c00014",
+      "k_mac": "0f4e69bbaad322f964e7487e78df331d"
+    },
+    {
+      "name": "other key material, same card",
+      "kek": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "master_enc": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "card_id": "01020304050607080900",
+      "master": "49380bb5986c04313e957e1ea6d818bb",
+      "k_enc_input": "0000000000000000000000040000800101010203040506070809005389c00014",
+      "k_enc": "27e928d79964056542ba31a43fcf5737",
+      "k_mac_input": "0000000000000000000000060000800102010203040506070809005389c00014",
+      "k_mac": "bf51890aa807fafa04382397c287983d"
+    }
+  ],
+  "card_id": [
+    {
+      "name": "tag 45, length 10",
+      "response": "450a01020304050607080900",
+      "card_id": "01020304050607080900"
+    },
+    {
+      "name": "bytes after the identifier are ignored",
+      "response": "450affeeddccbbaa998877669f7f00",
+      "card_id": "ffeeddccbbaa99887766"
+    },
+    {
+      "name": "too short",
+      "response": "450a0102030405060708",
+      "card_id": null
+    },
+    {
+      "name": "another tag",
+      "response": "460a01020304050607080900",
+      "card_id": null
+    },
+    {
+      "name": "another length",
+      "response": "450801020304050607080900",
+      "card_id": null
+    },
+    {
+      "name": "empty",
+      "response": "",
+      "card_id": null
+    }
+  ],
+  "initialize_update": [
+    {
+      "name": "SCP03",
+      "response": "0000000000000000000030037011223344556677888877665544332211000001",
+      "accepted": true,
+      "card_challenge": "1122334455667788",
+      "card_cryptogram": "8877665544332211"
+    },
+    {
+      "name": "exactly 29 bytes",
+      "response": "0000000000000000000030037011223344556677888877665544332211",
+      "accepted": true,
+      "card_challenge": "1122334455667788",
+      "card_cryptogram": "8877665544332211"
+    },
+    {
+      "name": "SCP02 in the key information",
+      "response": "0000000000000000000030027011223344556677888877665544332211",
+      "accepted": false
+    },
+    {
+      "name": "28 bytes",
+      "response": "00000000000000000000300370112233445566778888776655443322",
+      "accepted": false
+    }
+  ],
+  "session": [
+    {
+      "name": "a session",
+      "k_enc": "afeeea69ae2bdbe7a1e38be7603b8685",
+      "k_mac": "2adf1591282f964d8ce5073c9f740a38",
+      "host_challenge": "d1d2d3d4d5d6d7d8",
+      "card_challenge": "c1c2c3c4c5c6c7c8",
+      "card_cryptogram": "29f0fc79f30a7a78",
+      "s_enc": "e4fcfa67d741469ada63070b841169e6",
+      "s_mac": "85c24b6c993b2ad43251823ea5d4caf2",
+      "expected_card_cryptogram": "29f0fc79f30a7a78",
+      "accepted": true,
+      "host_cryptogram": "244798ce2396602e",
+      "external_authenticate": {
+        "header": "8482030010",
+        "body": "244798ce2396602e0f16aec7e7255af5"
+      },
+      "mcv": "0f16aec7e7255af5afca5ceb112e5ea8"
+    },
+    {
+      "name": "another host challenge",
+      "k_enc": "afeeea69ae2bdbe7a1e38be7603b8685",
+      "k_mac": "2adf1591282f964d8ce5073c9f740a38",
+      "host_challenge": "0102030405060708",
+      "card_challenge": "c1c2c3c4c5c6c7c8",
+      "card_cryptogram": "350d8aa2684df02d",
+      "s_enc": "f8b1a3fd0e931b607e39119592fc8c9d",
+      "s_mac": "4e9041b92d607d4e17c987f2d96a9c6a",
+      "expected_card_cryptogram": "350d8aa2684df02d",
+      "accepted": true,
+      "host_cryptogram": "77f0a4826fc42938",
+      "external_authenticate": {
+        "header": "8482030010",
+        "body": "77f0a4826fc42938dad0c8dc1f4bb902"
+      },
+      "mcv": "dad0c8dc1f4bb9024b45e39d6909c83f"
+    },
+    {
+      "name": "another card",
+      "k_enc": "28fe5d0769ef8ee9fae780e4814f482e",
+      "k_mac": "0f4e69bbaad322f964e7487e78df331d",
+      "host_challenge": "d1d2d3d4d5d6d7d8",
+      "card_challenge": "c1c2c3c4c5c6c7c8",
+      "card_cryptogram": "ffbeba57f03dee91",
+      "s_enc": "80107e18605f62fc93f3ecb1033e86fb",
+      "s_mac": "f305d906a714c622583a831b65f19ea0",
+      "expected_card_cryptogram": "ffbeba57f03dee91",
+      "accepted": true,
+      "host_cryptogram": "beabb7c7e871269e",
+      "external_authenticate": {
+        "header": "8482030010",
+        "body": "beabb7c7e871269e2479058a576f3f96"
+      },
+      "mcv": "2479058a576f3f962d746c3e4adc3714"
+    },
+    {
+      "name": "the card's cryptogram is wrong in the last bit",
+      "k_enc": "afeeea69ae2bdbe7a1e38be7603b8685",
+      "k_mac": "2adf1591282f964d8ce5073c9f740a38",
+      "host_challenge": "d1d2d3d4d5d6d7d8",
+      "card_challenge": "c1c2c3c4c5c6c7c8",
+      "card_cryptogram": "29f0fc79f30a7a79",
+      "s_enc": "e4fcfa67d741469ada63070b841169e6",
+      "s_mac": "85c24b6c993b2ad43251823ea5d4caf2",
+      "expected_card_cryptogram": "29f0fc79f30a7a78",
+      "accepted": false
+    },
+    {
+      "name": "the cryptogram of another card",
+      "k_enc": "afeeea69ae2bdbe7a1e38be7603b8685",
+      "k_mac": "2adf1591282f964d8ce5073c9f740a38",
+      "host_challenge": "d1d2d3d4d5d6d7d8",
+      "card_challenge": "c1c2c3c4c5c6c7c8",
+      "card_cryptogram": "ffbeba57f03dee91",
+      "s_enc": "e4fcfa67d741469ada63070b841169e6",
+      "s_mac": "85c24b6c993b2ad43251823ea5d4caf2",
+      "expected_card_cryptogram": "29f0fc79f30a7a78",
+      "accepted": false
+    }
+  ],
+  "pin_block": [
+    {
+      "pin": "123456",
+      "block": "313233343536ffffffff"
+    },
+    {
+      "pin": "1234567890",
+      "block": "31323334353637383930"
+    },
+    {
+      "pin": "00000000",
+      "block": "3030303030303030ffff"
+    },
+    {
+      "pin": "12345",
+      "block": null
+    },
+    {
+      "pin": "12345678901",
+      "block": null
+    },
+    {
+      "pin": "12345é",
+      "block": null
+    }
+  ],
+  "sign_block": {
+    "message": "69616d7265616c2d746573743a766563746f72733a636172642d6368616e6e656c",
+    "block": "0001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff003031300d060960864801650304020105000420bc56165c00198f2fc3a9c43898e4a7cf38ffb52ec0037f0686a86765a267bf91"
+  },
+  "sequence": {
+    "name": "one session: a PIN, two selects, a signing, two commands without data, then a second PIN",
+    "s_enc": "e4fcfa67d741469ada63070b841169e6",
+    "s_mac": "85c24b6c993b2ad43251823ea5d4caf2",
+    "mcv": "0f16aec7e7255af5afca5ceb112e5ea8",
+    "steps": [
+      {
+        "name": "VERIFY, the PIN block",
+        "cla": 0,
+        "ins": 32,
+        "p1": 0,
+        "p2": 1,
+        "data": "313233343536ffffffff",
+        "encrypt": true,
+        "counter": 1,
+        "iv": "724b8498e1959f858411647e026b2264",
+        "header": "0420000118",
+        "body": "0ffc19176019396e28f2980e383d5ac8e5711df9744decc7",
+        "mcv": "e5711df9744decc7306df506a4571165"
+      },
+      {
+        "name": "SELECT 5030",
+        "cla": 0,
+        "ins": 164,
+        "p1": 0,
+        "p2": 4,
+        "data": "5030",
+        "encrypt": true,
+        "counter": 2,
+        "iv": "41979e91f1e9b0250d9290ec7d2a8d9a",
+        "header": "04a4000418",
+        "body": "7f7250f870fa58d2f3595c0f34a830ea8cf77d9e1573cd10",
+        "mcv": "8cf77d9e1573cd105a9d52381ce86a83"
+      },
+      {
+        "name": "SELECT 0810",
+        "cla": 0,
+        "ins": 164,
+        "p1": 0,
+        "p2": 4,
+        "data": "0810",
+        "encrypt": true,
+        "counter": 3,
+        "iv": "21d3456a0a779b2d56ec5837cbaa7ffd",
+        "header": "04a4000418",
+        "body": "64a4e8328c1d23863338a521631d4736711631381bbabeac",
+        "mcv": "711631381bbabeac968f84f786d4c3b9"
+      },
+      {
+        "name": "sign, first half of the block",
+        "cla": 128,
+        "ins": 234,
+        "p1": 130,
+        "p2": 129,
+        "data": "0001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "encrypt": true,
+        "counter": 4,
+        "iv": "1cd6d3a7147114c3d64d108578466816",
+        "header": "84ea828198",
+        "body": "aab84ddefae0087d6a96a7749010e9118a6da7b031a6d3fa288693c98f5e20d6ea714c81c9d7010bccac206cbba93fee2e63ee7e7661d019db5269d7712311b0bbe4ea51f6a21f06195e133eb90b97baf78a3fc7ceae86131bb1fab952af72dc58f78371db4d56350cc7719fdca4f70102b0ce3f7be889d15c031f396a7ea46006d8eadba26876f65d0a9413e544a9b6a567c3c7db54fd28",
+        "mcv": "a567c3c7db54fd28a82fbb9d6aa84f54"
+      },
+      {
+        "name": "sign, second half of the block",
+        "cla": 128,
+        "ins": 234,
+        "p1": 2,
+        "p2": 129,
+        "data": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff003031300d060960864801650304020105000420bc56165c00198f2fc3a9c43898e4a7cf38ffb52ec0037f0686a86765a267bf91",
+        "encrypt": true,
+        "counter": 5,
+        "iv": "1e229476462459e297c9a07d27b2eef1",
+        "header": "84ea028198",
+        "body": "9610c620f7b0ef0eedae9042e40d12f0e8c7899fda8797e74bb4bdc8d2b4fa2ec04f0815d88af3e92705cf9936e94192cea32f7315608515619b61bf46e6e6408197e38023194ec26f56702db8d3bda499aa0f3fb308816f93a9c5ef30566152098e56125212e1a60007fd14e7921417d6e7cd73cbeedef73a0d1d6fcfbbbd98976b4655f57190dcd48b6387861ea8b0ef9d5a16fc6ef32c",
+        "mcv": "ef9d5a16fc6ef32c45fefa9cf1ffe71f"
+      },
+      {
+        "name": "read the rest of the signature, no data",
+        "cla": 128,
+        "ins": 193,
+        "p1": 0,
+        "p2": 128,
+        "data": "",
+        "encrypt": false,
+        "counter": 6,
+        "iv": null,
+        "header": "84c1008008",
+        "body": "50f737585689c111",
+        "mcv": "50f737585689c111a1c3afdae7d7a419"
+      },
+      {
+        "name": "read the rest again, no data",
+        "cla": 128,
+        "ins": 193,
+        "p1": 0,
+        "p2": 128,
+        "data": "",
+        "encrypt": false,
+        "counter": 7,
+        "iv": null,
+        "header": "84c1008008",
+        "body": "6ffcca3accb6a947",
+        "mcv": "6ffcca3accb6a9479d21d3a66427ab0a"
+      },
+      {
+        "name": "VERIFY after commands without data (a second signing in the same session)",
+        "cla": 0,
+        "ins": 32,
+        "p1": 0,
+        "p2": 1,
+        "data": "313233343536ffffffff",
+        "encrypt": true,
+        "counter": 8,
+        "iv": "6168179a71aa97babeacb9d3e1b3759d",
+        "header": "0420000118",
+        "body": "850728f121ece6a37ec2590cac3993dfd4775f93d644e4a3",
+        "mcv": "d4775f93d644e4a3b537a75a8229eb19"
+      },
+      {
+        "name": "SELECT 5030 again",
+        "cla": 0,
+        "ins": 164,
+        "p1": 0,
+        "p2": 4,
+        "data": "5030",
+        "encrypt": true,
+        "counter": 9,
+        "iv": "940971ec58fda860c02a5b40ff74aa1a",
+        "header": "04a4000418",
+        "body": "68527ef5471e7c89e151433f49aaceaa972f0d5b6990f7a1",
+        "mcv": "972f0d5b6990f7a18812d0b8ddc1b3f9"
+      }
+    ]
+  }
+}
