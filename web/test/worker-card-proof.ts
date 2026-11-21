@@ -15,8 +15,9 @@
 // 4. Puts a small server in front of the Worker, in the place of the data
 //    domain: the test build of the page takes the CRL archive from its own
 //    origin (test/e2e/target.ts, DATA_ORIGIN), and the Worker has no route
-//    that sends a file of it. The server answers /crl/… from the bucket,
-//    read-only, and hands every other request to the Worker as it is.
+//    that sends a file of it. The server (worker-front.ts) answers /crl/…
+//    from the bucket, read-only, and hands every other request to the
+//    Worker as it is.
 // 5. Clicks through the six steps like a cardholder (real mouse events,
 //    cdp.ts), declaring @alice on Threads.
 // 6. Opens the home page and /p/<short ID>: the page of the card lists the
@@ -32,8 +33,6 @@
 // (--host-resolver-rules): the profile a page of a card embeds gets no
 // further than its name.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
@@ -45,6 +44,7 @@ import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certi
 import { makeCrl } from "./fixtures/crls.ts";
 import { hex, makeKey } from "./fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "./fixtures/world.ts";
+import { type Front, startFront } from "./worker-front.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..");
@@ -107,31 +107,7 @@ console.log("starting the Worker (test build) with that page");
 const worker = await startWorker({ proofFiles: dist, issuers });
 const component = new FakeComponent();
 let browser: Browser | undefined;
-const front = createServer(async (req, res) => {
-  try {
-    const path = (req.url ?? "/").split("?")[0]!;
-    // 4. In the place of the data domain: the CRL archive, from the bucket, read-only.
-    if (path.startsWith("/crl/")) {
-      if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405).end();
-      const file = (await worker.files(path.slice(1))).find((f) => f.key === path.slice(1));
-      if (file === undefined) return void res.writeHead(404).end();
-      return void res.writeHead(200, { "Content-Type": path.endsWith(".jsonl") ? "application/jsonl" : "application/pkix-crl", "Cache-Control": "no-store" }).end(Buffer.from(file.bytes));
-    }
-    const chunks: Buffer[] = [];
-    for await (const c of req) chunks.push(c as Buffer);
-    const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string" && !["host", "connection", "content-length"].includes(k)) headers[k] = v;
-    const answer = await worker.fetch(req.url ?? "/", { method: req.method, headers, redirect: "manual", ...(chunks.length > 0 && { body: Buffer.concat(chunks) }) });
-    const out: Record<string, string> = {};
-    answer.headers.forEach((value, key) => {
-      // The body is sent as this server has it, not as the local workerd encoded it.
-      if (!["content-encoding", "mf-content-encoding", "transfer-encoding", "content-length", "connection"].includes(key)) out[key] = value;
-    });
-    res.writeHead(answer.status, out).end(Buffer.from(await answer.arrayBuffer()));
-  } catch (e) {
-    res.writeHead(502).end(String(e));
-  }
-});
+let front: Front | undefined;
 
 try {
   // 3. The mirror ----------------------------------------------------------------
@@ -141,8 +117,9 @@ try {
   const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
   check(round.outcome === "ok" && index.split("\n").filter(Boolean).length === 2, `the Worker's schedule mirrored the two CRLs (${round.outcome})`);
 
-  await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
-  const ORIGIN = `http://localhost:${(front.address() as AddressInfo).port}`;
+  // 4. In the place of the data domain: the CRL archive, from the bucket, read-only.
+  front = await startFront(worker);
+  const ORIGIN = front.origin;
   await component.start(COMPONENT_PORT);
   component.card = { certificates: [encryption, signing], signingCertificate: signing, signingKey: cardKey.privateKey, pin: PIN, tries: 3 };
 
@@ -251,8 +228,7 @@ try {
 } finally {
   await browser?.close().catch(() => undefined);
   await component.stop().catch(() => undefined);
-  front.closeAllConnections();
-  await new Promise((r) => front.close(r));
+  await front?.close();
   await worker.close();
 }
 
