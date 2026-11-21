@@ -1287,7 +1287,7 @@ pnpm run deploy:test
 - 名冊檔和雜湊清單一新一舊：`<檔名> is not the record hash list of the roster`
 - 卡片狀態檔和從舊紀錄算出來的卡片逐張不同
 
-這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，就是 Cloudflare 的快取沒清到，請營運者做第 4 步（回報在這個程式庫的 issue）。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
+這幾種結束碼都是 1（[`cmd/iamreal-verify/README.md`](../cmd/iamreal-verify/README.md)「名冊目錄」）。在測試名冊上看到這些，先看拿到的名冊檔是不是清空之前的：頁面最上面寫著上次清空的日期，名冊檔裡的紀錄比它早就是。那時先分是哪一層的快取：檔是用瀏覽器下載的，清掉瀏覽器的快取，或改讓 `iamreal-verify` 自己下載（`-data https://test-data.iamreal.tw/`），就不經過瀏覽器的那一層；`iamreal-verify` 自己下載的還是舊檔，最可能是 Cloudflare 的快取沒清到（第 4 步沒做，或回答你的那個機房還留著），也可能是你和 Cloudflare 之間的代理存著舊檔；從外面分不出是哪一種。換一個網路再下載一次；還是舊檔就在這個程式庫開 issue，請營運者再做一次第 4 步。正式名冊不清空，同一個網址的內容不會變，沒有這個問題。
 
 ### 在本機照著做
 
