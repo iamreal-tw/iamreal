@@ -25,7 +25,7 @@ use iamreal_device_core::session::{self, Trust};
 use iamreal_device_core::{
     IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IdcBuf, idc_buf_free, idc_session_add_certificate,
     idc_session_build_tree, idc_session_card_state_request, idc_session_check_artifacts,
-    idc_session_check_certificates, idc_session_check_crl, idc_session_check_date,
+    idc_session_check_certificates, idc_session_check_challenge, idc_session_check_crl,
     idc_session_choose_crl, idc_session_close, idc_session_records_request, proof,
 };
 use serde_json::{Value, json};
@@ -131,6 +131,14 @@ impl Session {
                 scope_signature.len(),
                 &mut out,
             )
+        };
+        finish(code, out)
+    }
+
+    fn check_challenge(&self, now: i64, challenge: &str) -> Result<Value, i32> {
+        let mut out = empty();
+        let code = unsafe {
+            idc_session_check_challenge(self.0, now, challenge.as_ptr(), challenge.len(), &mut out)
         };
         finish(code, out)
     }
@@ -318,9 +326,16 @@ impl Card {
         session
     }
 
-    /// A session that passed every check.
+    /// A session that passed every check and took the card's challenge.
     fn passed(&self) -> Session {
-        self.session_without(None)
+        let session = self.session_without(None);
+        assert_eq!(
+            session.check_challenge(self.now, &self.challenge),
+            Ok(json!({ "ok": true })),
+            "{}",
+            self.label
+        );
+        session
     }
 
     fn declaration(&self) -> Declaration<'_> {
@@ -677,13 +692,6 @@ fn what_the_card_did_not_sign_gives_no_proof() {
             accounts,
         );
     }
-    refused(
-        Declaration {
-            challenge: "2026-11-16.000G40R40M30E209185GR38E20",
-            ..card.declaration()
-        },
-        "another challenge",
-    );
     // What is not a list or a challenge at all.
     for accounts in [
         "",
@@ -700,16 +708,40 @@ fn what_the_card_did_not_sign_gives_no_proof() {
             accounts,
         );
     }
+    // The card signed the declaration code of one challenge: another one
+    // of the same date, which the session took, gives no proof either.
+    let another = "2026-11-16.000G40R40M30E209185GR38E20";
+    assert_eq!(
+        session.check_challenge(card.now, another),
+        Ok(json!({ "ok": true }))
+    );
+    refused(
+        Declaration {
+            challenge: another,
+            ..card.declaration()
+        },
+        "another challenge",
+    );
+    // What is not a challenge at all was never taken.
     for challenge in ["", "2026-11-16", "2026-11-16.000g40r40m30e209185gr38e1w"] {
-        refused(
-            Declaration {
-                challenge,
-                ..card.declaration()
-            },
-            challenge,
+        assert_eq!(
+            session.records_request(
+                &card.files,
+                &Declaration {
+                    challenge,
+                    ..card.declaration()
+                }
+            ),
+            Err(IDC_ERR_REFUSED),
+            "{challenge}"
         );
     }
-    // None of that undid the checks: the session still proves.
+    // None of that undid the checks: with the card's challenge taken
+    // again, the session proves.
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Ok(json!({ "ok": true }))
+    );
     assert!(session.records_request(&card.files, &good).is_ok());
 }
 
@@ -794,7 +826,7 @@ fn challenge_on(card: &Card, date: &str) -> String {
 }
 
 #[test]
-fn the_proof_is_made_for_a_challenge_of_the_sessions_date_only() {
+fn the_proof_is_made_for_the_challenge_taken_on_the_sessions_date_only() {
     let cards = cards();
     let card = &cards[0];
     let session = card.passed();
@@ -812,17 +844,19 @@ fn the_proof_is_made_for_a_challenge_of_the_sessions_date_only() {
     for other in ["2026-11-15", "2026-11-17", "2026-11-24", "2025-12-31"] {
         assert_eq!(on(other), Err(IDC_ERR_REFUSED), "{other}");
     }
-    // After midnight the app has the date conditions checked again, and
-    // the session holds for the new date: a challenge of that date gets
-    // as far as the signatures, which are over another challenge here.
-    let mut out = empty();
-    let code = unsafe { idc_session_check_date(session.0, noon("2026-11-17"), &mut out) };
-    assert_eq!(finish(code, out).unwrap()["ok"], true);
+    // After midnight a challenge of the new date is taken, and the session
+    // holds for that date: the challenge gets as far as the signatures,
+    // which are over another challenge here.
+    assert_eq!(
+        session.check_challenge(noon("2026-11-17"), &challenge_on(card, "2026-11-17")),
+        Ok(json!({ "ok": true }))
+    );
     assert_eq!(on("2026-11-17"), Err(IDC_ERR_INPUT));
     assert_eq!(on("2026-11-16"), Err(IDC_ERR_REFUSED));
     // Back on the day of the challenge the card signed.
-    let mut out = empty();
-    let code = unsafe { idc_session_check_date(session.0, card.now, &mut out) };
-    assert_eq!(finish(code, out).unwrap()["ok"], true);
+    assert_eq!(
+        session.check_challenge(card.now, &card.challenge),
+        Ok(json!({ "ok": true }))
+    );
     assert!(on("2026-11-16").is_ok());
 }

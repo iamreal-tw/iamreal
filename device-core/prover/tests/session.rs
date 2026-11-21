@@ -18,8 +18,9 @@ use iamreal_device_core::{
     IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_ROSTER_PRODUCTION,
     IDC_ROSTER_TEST, IdcBuf, idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
     idc_session_card_state_request, idc_session_check_artifacts, idc_session_check_certificates,
-    idc_session_check_crl, idc_session_check_date, idc_session_choose_crl, idc_session_close,
-    idc_session_open, idc_testing_session_open,
+    idc_session_check_challenge, idc_session_check_crl, idc_session_check_date,
+    idc_session_choose_crl, idc_session_close, idc_session_open, idc_session_records_request,
+    idc_testing_session_open,
 };
 use serde_json::{Value, json};
 use sha2::Digest;
@@ -156,6 +157,47 @@ impl Session {
                 now,
                 scope_signature.as_ptr(),
                 scope_signature.len(),
+                &mut out,
+            )
+        };
+        json_of(finish(code, out))
+    }
+
+    fn check_challenge(&self, now: i64, challenge: &str) -> Result<Value, i32> {
+        let mut out = empty();
+        let code = unsafe {
+            idc_session_check_challenge(self.0, now, challenge.as_ptr(), challenge.len(), &mut out)
+        };
+        json_of(finish(code, out))
+    }
+
+    /// The last step, with the files of `card` and its scope signature in
+    /// place of both signatures: these tests ask only whether it is
+    /// refused before the proof.
+    fn records_request(&self, card: &Card, challenge: &str) -> Result<Value, i32> {
+        let accounts = r#"[{"platform":"threads","username":"alice"}]"#;
+        let signature = &card.scope_signature;
+        let files = &card.files;
+        let mut out = empty();
+        let code = unsafe {
+            idc_session_records_request(
+                self.0,
+                files.circuit.as_ptr(),
+                files.circuit.len(),
+                files.verification_key.as_ptr(),
+                files.verification_key.len(),
+                files.crs_g1.as_ptr(),
+                files.crs_g1.len(),
+                files.crs_g2.as_ptr(),
+                files.crs_g2.len(),
+                accounts.as_ptr(),
+                accounts.len(),
+                challenge.as_ptr(),
+                challenge.len(),
+                signature.as_ptr(),
+                signature.len(),
+                signature.as_ptr(),
+                signature.len(),
                 &mut out,
             )
         };
@@ -1071,5 +1113,181 @@ fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
             idc_testing_session_open(IDC_ROSTER_TEST, b"[]".as_ptr(), 2, std::ptr::null_mut())
         },
         IDC_ERR_ARGUMENT
+    );
+}
+
+/// A challenge of `date` (`YYYY-MM-DD`), in its one spelling.
+fn challenge_of(date: &str) -> String {
+    format!("{date}.000G40R40M30E209185GR38E1W")
+}
+
+/// The first second of a date in Taiwan.
+fn midnight(date: &str) -> i64 {
+    noon(date) - 12 * 3_600
+}
+
+#[test]
+fn a_challenge_is_taken_when_it_is_dated_today_in_taiwan() {
+    let card = &cards()[0];
+    assert_eq!(card.now, noon("2026-11-16"));
+    let session = card.passed();
+    assert_eq!(
+        session.check_challenge(card.now, &challenge_of("2026-11-16")),
+        Ok(json!({ "ok": true }))
+    );
+    for (now, date) in [
+        (card.now, "2026-11-17"),
+        (card.now, "2026-11-15"),
+        // One second before midnight in Taiwan, tomorrow's challenge.
+        (midnight("2026-11-17") - 1, "2026-11-17"),
+    ] {
+        assert_eq!(
+            session.check_challenge(now, &challenge_of(date)),
+            Ok(json!({
+                "ok": false,
+                "problem": "challenge_not_today",
+                "challenge_date": date,
+                "today": "2026-11-16",
+            })),
+            "{date}"
+        );
+    }
+    for malformed in [
+        "",
+        "2026-11-16",
+        "2026-11-16.000g40r40m30e209185gr38e1w",
+        "2026-11-16.000G40R40M30E209185GR38E1W\n",
+        "2026-11-17.000g40r40m30e209185gr38e1w",
+    ] {
+        assert_eq!(
+            session.check_challenge(card.now, malformed),
+            Ok(json!({ "ok": false, "problem": "challenge_malformed" })),
+            "{malformed:?}"
+        );
+    }
+}
+
+#[test]
+fn yesterdays_challenge_on_yesterdays_session_is_not_taken_after_midnight() {
+    let card = &cards()[0];
+    let session = card.passed();
+    let yesterday = challenge_of("2026-11-16");
+    // The session passed on 2026-11-16 and the server issued a challenge
+    // of that date; the phone's clock is past midnight in Taiwan.
+    let after_midnight = midnight("2026-11-17");
+    assert_eq!(
+        session.check_challenge(after_midnight, &yesterday),
+        Ok(json!({
+            "ok": false,
+            "problem": "challenge_not_today",
+            "challenge_date": "2026-11-16",
+            "today": "2026-11-17",
+        }))
+    );
+    // A challenge that was not taken gives no proof, though the session
+    // and the challenge are of the same date.
+    assert_eq!(
+        session.records_request(card, &yesterday),
+        Err(IDC_ERR_REFUSED)
+    );
+}
+
+#[test]
+fn a_challenge_of_the_new_date_moves_the_session_to_it() {
+    const DAY: i64 = 86_400;
+    let card = &cards()[0];
+    // The session passed on 2026-11-16; midnight passed while the
+    // challenge was on its way.
+    let session = card.passed();
+    let after_midnight = midnight("2026-11-17");
+    assert_eq!(
+        session.check_challenge(after_midnight, &challenge_of("2026-11-17")),
+        Ok(json!({ "ok": true }))
+    );
+    // The date conditions were checked again, and the session holds for
+    // the new date, not the old one.
+    assert!(
+        session
+            .card_state_request(after_midnight, &card.scope_signature)
+            .is_ok()
+    );
+    assert_eq!(
+        session.card_state_request(card.now, &card.scope_signature),
+        Err(IDC_ERR_REFUSED)
+    );
+
+    // On a date the CRL is too old for, the card proof stops there and
+    // the session starts over.
+    let session = card.passed();
+    let late = card.now + 8 * DAY;
+    assert_eq!(
+        session.check_challenge(late, &challenge_of("2026-11-24")),
+        Ok(json!({ "ok": false, "problem": "crl_stale", "days": 8, "max_age_days": 7 }))
+    );
+    assert_eq!(session.check_date(late), Err(IDC_ERR_REFUSED));
+}
+
+#[test]
+fn the_proof_is_made_only_for_the_challenge_that_was_taken() {
+    let card = &cards()[0];
+    let challenge = challenge_of("2026-11-16");
+    let session = card.passed();
+    // Not asked about any challenge.
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Asked about one, and given another.
+    session.check_challenge(card.now, &challenge).unwrap();
+    let other = "2026-11-16.ZZZZZZZZZZZZZZZZZZZZZZZZZW";
+    assert_eq!(session.records_request(card, other), Err(IDC_ERR_REFUSED));
+    // The one that was taken gets past the order to the signatures, which
+    // are not the card's over its declaration code here.
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_INPUT)
+    );
+    // A challenge that is not taken forgets the one that was.
+    session
+        .check_challenge(card.now, &challenge_of("2026-11-17"))
+        .unwrap();
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+    // The date moved since the challenge was taken.
+    session.check_challenge(card.now, &challenge).unwrap();
+    assert_eq!(
+        session.check_date(midnight("2026-11-17")).unwrap(),
+        json!({ "ok": true })
+    );
+    assert_eq!(
+        session.records_request(card, &challenge),
+        Err(IDC_ERR_REFUSED)
+    );
+}
+
+#[test]
+fn a_challenge_is_checked_only_on_a_session_that_passed_every_check() {
+    let card = &cards()[0];
+    let session = card.session();
+    assert_eq!(
+        session.check_challenge(card.now, &challenge_of("2026-11-16")),
+        Err(IDC_ERR_REFUSED)
+    );
+    card.check_certificate(&session);
+    assert_eq!(
+        session.check_challenge(card.now, &challenge_of("2026-11-16")),
+        Err(IDC_ERR_REFUSED)
+    );
+    // A clock the core refuses: the session starts over.
+    let session = card.passed();
+    assert_eq!(
+        session.check_challenge(0, &challenge_of("2026-11-16")),
+        Err(IDC_ERR_ARGUMENT)
+    );
+    assert_eq!(
+        session.card_state_request(card.now, &card.scope_signature),
+        Err(IDC_ERR_REFUSED)
     );
 }

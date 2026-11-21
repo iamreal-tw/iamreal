@@ -98,6 +98,12 @@ class SessionTest {
             // The other signature is not the card's over the scope string.
             assertEquals(DeviceCoreException.INPUT, assertThrows(DeviceCoreException::class.java) { DeviceCore.sessionCardStateRequest(session, now, codeSignature) }.code)
 
+            // The challenge, dated today in Taiwan.
+            val challenge = declared.getString("challenge").toByteArray()
+            assertEquals("challenge_malformed", json(DeviceCore.sessionCheckChallenge(session, now, challenge.copyOf(10))).getString("problem"))
+            assertEquals("challenge_not_today", json(DeviceCore.sessionCheckChallenge(session, now + 86_400, challenge)).getString("problem"))
+            assertTrue(json(DeviceCore.sessionCheckChallenge(session, now, challenge)).getBoolean("ok"))
+
             val record = json(
                 DeviceCore.sessionRecordsRequest(
                     session, circuit, key, g1, g2,
