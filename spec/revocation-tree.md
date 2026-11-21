@@ -41,9 +41,11 @@ A CRL is usable if:
   CRLs, devices stop rather than build an incomplete tree, and this document
   changes;
 - the CRL has at most 16 extensions, and so does each entry. RFC 5280
-  defines 7 extensions of a CRL and 4 of an entry; MOICA's carry 2 and 1
-  (checked on 2026-11-21). The bound keeps the time and memory of reading a
-  file in proportion to its size: the archive keeps every file the mirror
+  defines 7 extensions of a CRL (sections 5.2.1 to 5.2.7) and 3 of an entry
+  (5.3.1 to 5.3.3). MOICA's carry 2 and 1: every one of the 16 CRLs in the
+  test site's archive on 2026-11-21 (`test-data.iamreal.tw`, G2 and G3, CRL
+  numbers 2026111917 to 2026112110). The bound keeps the time and memory of
+  reading a file in proportion to its size: the archive keeps every file the mirror
   downloads, signed or not ("Archive index"), and every re-verifier reads
   each of them;
 - every serial number in `revokedCertificates` is a valid DER INTEGER in its
