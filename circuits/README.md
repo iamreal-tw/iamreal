@@ -35,7 +35,7 @@
 | `REVIEW.md` | AI 輔助檢查的摘要 |
 | `rebuild.sh` | **重建並比對**：見下面 |
 | `fetch-nargo.sh`、`nargo.sha256` | 下載釘住的 `nargo`，核對 SHA-256 |
-| `sha256.sh` | 這裡的腳本算 SHA-256 都用它 |
+| `sha256.sh` | 這裡的 shell 腳本算 SHA-256 都用它（JavaScript 的用 `node:crypto`） |
 | `find-bb.sh`、`bb.sha256` | 找到 `@aztec-foundation/bb.js` 附的 `bb`，核對 SHA-256 |
 | `build-circom.sh`、`zkid-commit` | 建逐案比對用的 circom 見證產生器，從 `zkid-commit` 釘住的提交 |
 

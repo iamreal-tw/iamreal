@@ -3,6 +3,7 @@
 // runs `bb prove` and `bb verify` with the circuit's verification key.
 //   node prove.mjs --circuit card_proof_rs2048 (--finding FILE | --seed S --case I)
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -41,5 +42,5 @@ try {
 } catch (e) {
   console.log("bb verify: FAILED", String(e.stderr).slice(0, 300));
 }
-console.log("vk sha256:", execFileSync(join(NOIR_ROOT, "sha256.sh"), [join(vkDir, "vk")]).toString().trim());
+console.log("vk sha256:", createHash("sha256").update(readFileSync(join(vkDir, "vk"))).digest("hex"));
 rmSync(dir, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Prints the SHA-256 of a file, 64 lowercase hex digits, and nothing else:
-# with sha256sum where there is one (Linux), shasum otherwise (macOS). The
-# one place the scripts of circuits/ compute a SHA-256.
+# with sha256sum if there is one, with shasum if not. The one place the shell
+# scripts of circuits/ compute a SHA-256.
 #
 #   ./sha256.sh <file>
 set -eu
