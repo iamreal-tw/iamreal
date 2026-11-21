@@ -1,14 +1,19 @@
-// The whole card proof from the screen, in headless Chrome, against the real
-// server: test keys, a fake card behind a fake component, a fake MOICA for
-// the mirror. Nothing real: no card, no PIN, no certificate, no MOICA key.
+// The whole card proof from the screen, in headless Chrome, against the back
+// end: the Worker (worker/) in the local workerd, its test build, with test
+// keys, a fake card behind a fake component, a fake MOICA for the mirror.
+// Nothing real: no card, no PIN, no certificate, no MOICA key. No Go server
+// is built or started; the one Go program here is iamreal-verify, which
+// re-verifies what the Worker published.
 //
 //   IAMREAL_BB=/path/to/bb node --experimental-strip-types test/e2e/ui.ts
 //
 // 1. Makes throwaway issuer keys (G2, G3), cards and CRLs (test/fixtures/).
-// 2. Builds the server with the tag iamrealtest (server/testissuers.go) and
-//    runs it with those issuer keys, a fake MOICA, the test roster (its
-//    platform table: test-example and threads), and the page built in mode
-//    "test" (vite.config.ts) as its web directory.
+// 2. Starts the Worker's test build (worker-site.ts, worker/test/harness.ts)
+//    with those issuer keys, a fake MOICA, the test roster (its platform
+//    table: test-example and threads), and the page built in mode "test"
+//    (vite.config.ts) as the files of its card proof page (Static Assets).
+//    A small server in front of it stands in the place of the data domain:
+//    it sends the CRL archive from the Worker's bucket, read-only.
 // 3. Runs a fake component (fake-component.ts) on localhost:61171, the
 //    test build's component address.
 // 4. Clicks through the six steps like a cardholder (real mouse events,
@@ -23,10 +28,10 @@
 //    again; a switch the server records as a switch where the screen said a
 //    correction (the card's state changed on its way: the screen tells the
 //    cardholder, kind_mismatch); the third switch; a fourth refused by the
-//    server's policy, which the server was started with for this
-//    (-restrict-late-switches: switch_restricted); a platform the page does
+//    server's policy, which the Worker was started with for this
+//    (RESTRICT_LATE_SWITCHES: switch_restricted); a platform the page does
 //    not know (the config without its row): the account kept in the list as
-//    it is; then the server restarted as it runs by default (no such
+//    it is; then the Worker restarted as it runs by default (no such
 //    policy): the fourth and fifth switches recorded, step 4 saying none is
 //    left and refusing another account typed anyway, and a sixth refused by
 //    the roster rules (switch_limit). Along the way: a submission
@@ -39,10 +44,11 @@
 //    read); a card's state it cannot read; a wrong PIN, a locked card, a PIN
 //    that is not sent; 確認卡片 pressed again while the card is confirmed;
 //    the preview of a profile (a new tab, nothing else); 複製連結. The
-//    card's records fall on several days: the server's clock (-test-clock)
-//    and the page's (Date.now) move ahead together, and the fake MOICA
-//    publishes a CRL each day, fetched by the server's mirror.
-// 5. Publishes the daily snapshot and re-verifies it with iamreal-verify:
+//    card's records fall on several days: the Worker's clock (its test
+//    build's) and the page's (Date.now) move ahead together, and the fake
+//    MOICA publishes a CRL each day, fetched by the Worker's mirror.
+// 5. Has the Worker publish the roster as it does when the date changes,
+//    and re-verifies everything it wrote with iamreal-verify:
 //    every record valid, the kinds those the screens showed, the card's list
 //    the one step 6 showed last. Then other cards: two cards declaring the
 //    same account (還有別的卡片也宣告了), an answer whose kinds cannot be read
@@ -58,15 +64,17 @@
 //    and the card's signatures once a card proof was left.
 // 7. Opens the production build at step 1 (nothing clicked): it knows
 //    Threads only, so step 1 names the one platform.
+// 8. Opens the test site's build (mode "testsite") at step 1, served by a
+//    Worker as a deploy serves it: the mark of a test roster above the
+//    page, the test site's headers, nothing asked of MOICA's component.
 //
 // The browser resolves no host name but localhost and 127.0.0.1
 // (--host-resolver-rules): the preview's new tab, on the platform's
 // address, gets no further than its name.
-import { type ChildProcess, execFile, execFileSync, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { type AddressInfo, createServer as netServer } from "node:net";
+import type { AddressInfo } from "node:net";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
@@ -81,7 +89,8 @@ import { type TestKey, hex, makeKey } from "../fixtures/der-build.ts";
 import { randomSerials, testIssuerKeys } from "../fixtures/world.ts";
 import { Browser, Page, sleep } from "./cdp.ts";
 import { FakeComponent, type FakeCardSpec } from "./fake-component.ts";
-import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS } from "./headers.ts";
+import { CONTENT_SECURITY_POLICY, ISOLATION_HEADERS, OPENER_HEADERS, TEST_SITE_CONTENT_SECURITY_POLICY } from "./headers.ts";
+import { startWorkerSite } from "./worker-site.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, "..", "..");
@@ -119,6 +128,11 @@ mkdirSync(out, { recursive: true });
 // 1. Keys, cards, CRLs ---------------------------------------------------------
 
 const issuerKeys = await testIssuerKeys();
+const issuers = [
+  { name: "G2" as const, modulus: issuerKeys.G2.modulus.toString(16), bits: 2048 as const },
+  { name: "G3" as const, modulus: issuerKeys.G3.modulus.toString(16), bits: 4096 as const },
+];
+// For iamreal-verify (-test-issuers): the keys the CRLs and the cards' certificates are signed by.
 const issuersDir = join(out, "issuers");
 mkdirSync(issuersDir);
 for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${n}.der`), issuerKeys[n].spki);
@@ -126,7 +140,7 @@ for (const n of ["G2", "G3"] as const) writeFileSync(join(issuersDir, `issuer-${
 const yymmdd = (d: Date) => d.toISOString().slice(2, 10).replace(/-/g, "");
 const taiwanDate = (ms: number) => new Date(ms + 8 * 3600_000).toISOString().slice(0, 10);
 /**
- * The test's clock, the server's and the page's together, runs `day` whole
+ * The test's clock, the Worker's and the page's together, runs `day` whole
  * days ahead of the machine's (setDay below): a card has at most 3 valid
  * records a day (spec/roster-rules.md, check 6), a switch counts once a day
  * (a change on the day of the last one is a correction), and this test makes
@@ -189,20 +203,10 @@ const crls = {
 /** The highest G3 CRL number published so far: what the browser remembers once it used it. */
 let g3Number = 300;
 
-const moica = createServer((req, res) => {
-  const m = /^\/(G2|G3)\.crl$/.exec(req.url ?? "");
-  if (!m) return res.writeHead(404).end();
-  res.writeHead(200, { "Content-Type": "application/pkix-crl" }).end(Buffer.from(crls[m[1] as "G2" | "G3"]));
-});
-await new Promise<void>((r) => moica.listen(0, "127.0.0.1", r));
-const moicaUrl = `http://127.0.0.1:${(moica.address() as AddressInfo).port}`;
+// 2. The Worker and the page ------------------------------------------------------
 
-// 2. The server and the page -----------------------------------------------------
-
-console.log("building the server (tag iamrealtest) and iamreal-verify");
-const serverBin = join(out, "iamreal-server");
+console.log("building iamreal-verify (tag iamrealtest: it takes the test's issuer keys)");
 const verifyBin = join(out, "iamreal-verify");
-execFileSync("go", ["build", "-tags", "iamrealtest", "-o", serverBin, "./server"], { cwd: repo, stdio: "inherit" });
 execFileSync("go", ["build", "-tags", "iamrealtest", "-o", verifyBin, "./cmd/iamreal-verify"], { cwd: repo, stdio: "inherit" });
 const crsDir = join(out, "crs");
 mkdirSync(crsDir);
@@ -220,82 +224,35 @@ await build({
   mode: "test",
   logLevel: "warn",
   define: {
-    __IAMREAL_TEST_ISSUERS__: JSON.stringify([
-      { name: "G2", modulus: issuerKeys.G2.modulus.toString(16), bits: 2048 },
-      { name: "G3", modulus: issuerKeys.G3.modulus.toString(16), bits: 4096 },
-    ]),
+    __IAMREAL_TEST_ISSUERS__: JSON.stringify(issuers),
     __IAMREAL_TEST_COMPONENT__: JSON.stringify(COMPONENT),
     __IAMREAL_TEST_IDLE_MS__: JSON.stringify(IDLE_MS),
   },
   build: { outDir: dist, emptyOutDir: true },
 });
 
-const freePort = async (): Promise<number> => {
-  const s = netServer();
-  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
-  const p = (s.address() as AddressInfo).port;
-  await new Promise((r) => s.close(r));
-  return p;
-};
-const serverPort = await freePort();
-const data = join(out, "data");
-/** The server's -test-clock: the days its clock runs ahead. */
-const clockFile = join(out, "clock-days");
-writeFileSync(clockFile, "0");
-let serverLog = "";
-const TEST_OPTIONS = ["-test-issuers", issuersDir, "-test-moica", moicaUrl];
-let server: ChildProcess;
-/**
- * Starts the server on its port, with the same data: the roster carries
- * over. `restrictLate`: -restrict-late-switches (the fourth and fifth switch
- * of a slot refused, switch_restricted; accepted by default).
- */
-async function startServer(o: { restrictLate?: boolean } = {}): Promise<void> {
-  server = spawn(
-    serverBin,
-    [
-      "serve",
-      "-data",
-      data,
-      "-bb",
-      BB!,
-      "-crs",
-      crsDir,
-      "-addr",
-      `127.0.0.1:${serverPort}`,
-      "-web",
-      dist,
-      "-roster",
-      "test",
-      ...TEST_OPTIONS,
-      "-test-clock",
-      clockFile,
-      ...(o.restrictLate ? ["-restrict-late-switches"] : []),
-    ],
-    { stdio: ["ignore", "ignore", "pipe"] },
-  );
-  server.stderr!.on("data", (b: Buffer) => (serverLog += b.toString()));
-  const t0 = Date.now();
-  for (;;) {
-    const lines = await fetch(`http://127.0.0.1:${serverPort}/crl/index.jsonl`)
-      .then((r) => (r.ok ? r.text() : ""))
-      .catch(() => "");
-    if (lines.split("\n").filter(Boolean).length >= 2) break;
-    if (Date.now() - t0 > 30_000) throw new Error(`the server did not start, or its mirror did not fetch the CRLs:\n${serverLog}`);
-    await sleep(200);
-  }
+// Started with the policy on the fourth and fifth switch (the setting
+// RESTRICT_LATE_SWITCHES, which wrangler.jsonc does not have), for the case
+// that checks switch_restricted; restarted as it runs by default before the
+// fourth and fifth switches are made.
+console.log("starting the Worker (test build) with that page");
+const site = await startWorkerSite({ proofFiles: dist, issuers, settings: { RESTRICT_LATE_SWITCHES: "true" } });
+const { worker } = site;
+/** Has the Worker's schedule run once: its mirror fetches what the fake MOICA serves now. */
+async function mirror(): Promise<void> {
+  worker.moica.serve("G2", crls.G2);
+  worker.moica.serve("G3", crls.G3);
+  const round = await worker.runSchedule();
+  if (round.outcome !== "ok") throw new Error(`the Worker's schedule: ${round.outcome}\n${worker.logLines().join("\n")}`);
 }
-async function stopServer(): Promise<void> {
-  const exited = new Promise<void>((r) => server.once("exit", () => r()));
-  server.kill();
-  await exited;
+await site.setClockAhead(0);
+await mirror();
+{
+  const index = new TextDecoder().decode((await worker.files("crl/index.jsonl"))[0]?.bytes ?? new Uint8Array());
+  if (index.split("\n").filter(Boolean).length < 2) throw new Error(`the Worker's mirror did not fetch the two CRLs:\n${index}\n${worker.logLines().join("\n")}`);
 }
-// Started with the policy on the fourth and fifth switch, for the case that
-// checks switch_restricted; restarted as it runs by default before the fourth
-// and fifth switches are made.
-await startServer({ restrictLate: true });
-const PAGE_ORIGIN = `http://localhost:${serverPort}`;
-// The card proof page is at /proof, its files under /proof/ (vite.config.ts `base`, server/README.md).
+const PAGE_ORIGIN = site.origin;
+// The card proof page is at /proof, its files under /proof/ (vite.config.ts `base`, worker/README.md).
 const PAGE = `${PAGE_ORIGIN}/proof`;
 
 // 3. The component -------------------------------------------------------------
@@ -371,22 +328,21 @@ const clockSource = (n: number) => `(() => {
 })()`;
 let clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(0) })).identifier as string;
 /**
- * Moves the server's and the page's clocks to `n` days ahead, and has the
- * fake MOICA publish that day's CRL, which the server's mirror fetches.
+ * Moves the Worker's and the page's clocks to `n` days ahead, and has the
+ * fake MOICA publish that day's CRL, which the Worker's mirror fetches.
  */
 async function setDay(n: number): Promise<void> {
   day = n;
-  writeFileSync(clockFile, String(n));
+  await site.setClockAhead(n * 86_400_000);
   crls.G3 = await g3CrlOf(n);
   g3Number = 300 + n;
-  // Not execFileSync: the fake MOICA answers from this process.
-  await promisify(execFile)(serverBin, ["mirror", "-data", data, ...TEST_OPTIONS]);
+  await mirror();
   await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
   clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(n) })).identifier as string;
   await page.eval(`window.__iamrealClockDays = ${n}`).catch(() => undefined);
   console.log(`\n== day ${n}: ${today()}`);
 }
-/** Moves the page's clock alone to `days` (whole or not) ahead of the machine's; the server's stays. */
+/** Moves the page's clock alone to `days` (whole or not) ahead of the machine's; the Worker's stays. */
 async function setPageClock(days: number): Promise<void> {
   await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: clockScript });
   clockScript = (await page.send("Page.addScriptToEvaluateOnNewDocument", { source: clockSource(days) })).identifier as string;
@@ -412,7 +368,10 @@ const componentCount = (func?: string) => component.requests.filter((r) => func 
 const popupCount = () => new Set(browser.requests.filter((r) => r.url.startsWith(COMPONENT + "/popupForm")).map((r) => r.sessionId)).size;
 const cardStateCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/card-state")).length;
 const challengeCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/challenges")).length;
-const recordCount = async (): Promise<number> => (await (await fetch(`http://127.0.0.1:${serverPort}/api/v1/head`)).json()).count;
+/** How many records the roster has: the Worker has no route that says it between publications, so the test build's door is asked. */
+const recordCount = async (): Promise<number> => (await worker.roster.stored()).roster.count;
+/** Whether the Worker answered a request with that error code and that request ID (worker-site.ts). */
+const refused = (error: string, requestId?: string): boolean => site.refusals.some((r) => r.error === error && (requestId === undefined || r.requestId === requestId));
 
 /** Buttons on the screen: text and whether they can be pressed. */
 const buttons = () => page.eval<{ text: string; disabled: boolean }[]>(`[...document.querySelectorAll('main button')].map((b) => ({ text: b.textContent, disabled: b.disabled }))`);
@@ -701,6 +660,9 @@ const tryStep = async (label: string, f: () => Promise<void>) => {
     await f();
   } catch (e) {
     check(false, `${label}: ${e instanceof Error ? e.stack : String(e)}`);
+    // What the screen showed and what the Worker last refused, to tell a stop of the page from a slow computer.
+    const screen = await page.text().catch(() => "(the page does not answer)");
+    console.log(`   (the screen: ${JSON.stringify(screen.slice(0, 600))}; the Worker's last refusals: ${JSON.stringify(site.refusals.slice(-3))})`);
   }
 };
 
@@ -1101,7 +1063,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
 // The page's headers and isolation, read from the first load.
 {
   const doc = browser.responses.find((r) => r.url === PAGE);
-  check(doc?.headers["content-security-policy"] === CONTENT_SECURITY_POLICY, `the page's Content-Security-Policy: ${doc?.headers["content-security-policy"]}`);
+  check(doc?.headers["content-security-policy"] === TEST_SITE_CONTENT_SECURITY_POLICY && readFileSync(join(web, "README.md"), "utf8").includes(TEST_SITE_CONTENT_SECURITY_POLICY), `the page's Content-Security-Policy: ${doc?.headers["content-security-policy"]}`);
   check(doc?.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"], `the page's Document-Isolation-Policy: ${doc?.headers["document-isolation-policy"]}`);
   check(doc?.headers["cross-origin-opener-policy"] === OPENER_HEADERS["Cross-Origin-Opener-Policy"], `the page's Cross-Origin-Opener-Policy: ${doc?.headers["cross-origin-opener-policy"]}`);
   check(await page.eval<boolean>("crossOriginIsolated"), `the page on ${PAGE_ORIGIN} is cross-origin isolated`);
@@ -1296,7 +1258,7 @@ await tryStep("the server finds 3 records today when the list is sent (daily_lim
   const id = await page.text("[data-request-id]");
   check(!d.done && d.item === "submit" && d.message === `${C.stops.daily_limit}\n${fill(C.stops.request_id, { request_id: id })}`, `the server's daily_limit, under 送出: ${JSON.stringify(d.message)} (${d.item})`);
   const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 400).at(-1);
-  check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id && serverLog.includes(`"error":"daily_limit"`), `the request ID on the screen (${id}) is the response's, and the server logged daily_limit`);
+  check(/^[0-9a-f]{16}$/.test(id) && res?.headers["x-request-id"] === id && refused("daily_limit", id), `the request ID on the screen (${id}) is the response's, and the Worker answered it daily_limit`);
   check(componentCount("MakeSignature") === signs + 1, "the second signature, once");
   check((await recordCount()) === before, "nothing was appended");
   check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), `stopped (the PIN dropped): 再讀一次卡片 only ${JSON.stringify(await buttonTexts())}`);
@@ -1481,10 +1443,10 @@ await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () 
   check(componentCount("MakeSignature") === signs && challengeCount() === challenges, "取消 on step 5: no second signature, no challenge");
 });
 
-// The server was started with -restrict-late-switches: the page offers the
+// The Worker was started with RESTRICT_LATE_SWITCHES: the page offers the
 // fourth switch (the roster rules allow 5), the server's policy refuses it
 // (switch_restricted).
-await tryStep("a fourth switch the server's policy refuses (-restrict-late-switches: switch_restricted)", async () => {
+await tryStep("a fourth switch the server's policy refuses (RESTRICT_LATE_SWITCHES: switch_restricted)", async () => {
   await toAccounts({ samePage: true });
   await typeRows({ [THREADS]: "erin" });
   checkConfirm(
@@ -1502,7 +1464,7 @@ await tryStep("a fourth switch the server's policy refuses (-restrict-late-switc
   const id = await page.text("[data-request-id]");
   check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_restricted}\n${fill(C.stops.request_id, { request_id: id })}`, `switch_restricted, under 送出: ${JSON.stringify(d.message)}`);
   const res = browser.responses.filter((r) => r.url.endsWith("/api/v1/records") && r.status === 403).at(-1);
-  check(res?.headers["x-request-id"] === id && serverLog.includes(`"error":"switch_restricted"`), `403 switch_restricted, its request ID on the screen (${id})`);
+  check(res?.headers["x-request-id"] === id && refused("switch_restricted", id), `403 switch_restricted, its request ID on the screen (${id})`);
   check((await recordCount()) === before, "nothing was appended");
   check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.read.read_again]), "refused: 再讀一次卡片 only");
   await screenshot("switch-restricted-5-progress");
@@ -1645,11 +1607,13 @@ await tryStep("the same page after 回到開頭, 取消 and the wait: card proof
 
 // The server as it runs by default: no policy on the fourth and fifth switch ----------
 
-await tryStep("the server restarted without -restrict-late-switches (the default)", async () => {
-  await stopServer();
-  await startServer();
-  const config = await (await fetch(`http://127.0.0.1:${serverPort}/api/v1/config`)).json();
-  check(Array.isArray(config.platforms) && config.platforms.length === 2, "the server answers again, on the same address, with the same roster");
+await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)", async () => {
+  // The whole Worker and its Durable Object stop and start again: what they stored and the bucket's files stay,
+  // the settings the test gave are gone (worker/test/harness.ts), and the clock is set again with the next request.
+  const before = await recordCount();
+  await worker.restart();
+  const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();
+  check(Array.isArray(config.platforms) && config.platforms.length === 2 && (await recordCount()) === before, `the Worker answers again, on the same address, with the same roster of ${before} records`);
 });
 
 /** A fourth or fifth switch, made on the web like the first three; the server records it. */
@@ -1713,7 +1677,7 @@ await tryStep("5 switches: step 4 says none is left; another account typed anywa
   const d = await waitDoneOrMessage();
   const id = await page.text("[data-request-id]");
   check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_limit}\n${fill(C.stops.request_id, { request_id: id })}`, `the roster rules' switch_limit, under 送出: ${JSON.stringify(d.message)}`);
-  check((await recordCount()) === before && serverLog.includes(`"error":"switch_limit"`), "nothing appended; the server logged switch_limit");
+  check((await recordCount()) === before && refused("switch_limit"), "nothing appended; the Worker answered switch_limit");
   await screenshot("switch-limit-5-progress");
 });
 
@@ -1780,11 +1744,20 @@ const KINDS: [string, string][][] = [
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
 ];
-await tryStep("snapshot and iamreal-verify", async () => {
-  execFileSync(serverBin, ["snapshot", "-data", data, "-bb", BB, "-crs", crsDir, "-roster", "test", "-test-issuers", issuersDir, "-test-clock", clockFile], { stdio: "pipe" });
-  const v = JSON.parse(
-    execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-roster", "test", "-json", "-test-issuers", issuersDir, "-crl-archive", join(data, "crl"), join(data, "roster")], { stdio: ["ignore", "pipe", "pipe"] }).toString(),
-  );
+await tryStep("the roster published, and iamreal-verify", async () => {
+  // The Worker publishes the roster when the date changes in Taiwan (the last roster file and its hash list, the
+  // card state file, a line of the fingerprint file): its alarm rang by itself after the clock moved to this
+  // day, on which nothing was written yet. Run here once more, so that the publication of this day is done
+  // whether or not that alarm has rung already.
+  await worker.roster.runAlarm();
+  // A copy of everything the Worker wrote to its bucket, which is what the data domain serves: iamreal-verify
+  // reads it as it does by default (-data), with the real proofs, and rebuilds the CRL archive from its CRLs.
+  const data = join(out, "data");
+  for (const f of await worker.files()) {
+    mkdirSync(dirname(join(data, f.key)), { recursive: true });
+    writeFileSync(join(data, f.key), f.bytes);
+  }
+  const v = JSON.parse(execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-roster", "test", "-json", "-test-issuers", issuersDir, "-data", data], { stdio: ["ignore", "pipe", "pipe"] }).toString());
   writeFileSync(join(out, "verify.json"), JSON.stringify(v, null, 2));
   const kinds = v.results.map((r: { valid: boolean; kinds?: { platform: string; kind: string }[] }) => (r.valid ? r.kinds!.map((k) => [k.platform, k.kind]) : null));
   check(v.valid === true && v.results.every((r: { valid: boolean }) => r.valid) && JSON.stringify(kinds) === JSON.stringify(KINDS), `iamreal-verify: valid, every record valid, the kinds the screens showed: ${JSON.stringify(kinds)}`);
@@ -2174,7 +2147,7 @@ await tryStep("the answer to the submission lost, the record appended: 再試一
     check((await recordCount()) === before + 1, "the server appended the record all the same");
     await page.clickButton(C.progress.retry);
     const d = await waitDoneOrMessage();
-    const challengeUsed = browser.responses.some((r) => r.url.endsWith("/api/v1/records") && r.status === 400) && serverLog.includes(`"error":"challenge_used"`);
+    const challengeUsed = browser.responses.some((r) => r.url.endsWith("/api/v1/records") && r.status === 400) && refused("challenge_used");
     check(challengeUsed, "the resubmission was answered challenge_used");
     check(cardStateCount() === states + 1, "the card's state asked again");
     // What the server recorded on each platform is not known on this path: the title of an answer not read.
@@ -2481,11 +2454,88 @@ await tryStep("the production build's step 1: one platform, named", async () => 
   }
 });
 
+// The test site's build (mode "testsite"), served as a deploy serves it: by a Worker's Static Assets, with the
+// headers of a test roster's site. Opened to step 1 only, nothing clicked: MOICA's keys and the real component's
+// address are in this build, so any request to the component is failed and counted (there should be none).
+await tryStep("the test site's build: the mark of a test roster, the test site's headers", async () => {
+  const CLEARED_ON = "2026-10-31";
+  const siteDist = join(out, "dist-testsite");
+  process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = CLEARED_ON;
+  await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "testsite", logLevel: "warn", build: { outDir: siteDist, emptyOutDir: true } }).finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+  const testSite = await startWorkerSite({ proofFiles: siteDist, settings: { TEST_ROSTER_CLEARED_ON: CLEARED_ON } });
+  const tab = await browser.newPage();
+  const componentRequests: string[] = [];
+  const off = browser.on((m, p, s) => {
+    if (m !== "Fetch.requestPaused" || s !== tab.sessionId) return;
+    componentRequests.push(p.request.url);
+    void tab.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" }).catch(() => undefined);
+  });
+  const logsBefore = browser.logs.length;
+  try {
+    await tab.send("Page.enable");
+    await tab.send("Fetch.enable", { patterns: [{ urlPattern: "http://localhost:61161/*" }, { urlPattern: "http://127.0.0.1:61161/*" }] });
+    // The mark as the Worker's own pages write it (design/copy/test-site.md): the sentence, then the date.
+    const copy = /```\n(.*)\n```/.exec(readFileSync(join(repo, "design", "copy", "test-site.md"), "utf8"))![1]!;
+    const mark = copy.replace(/\d{4}-\d{2}-\d{2}$/, CLEARED_ON);
+    const markOf = (p: Page) => p.eval<{ first: boolean; text: string; date: string } | null>(`(() => {
+      const m = document.querySelector("p.test-roster");
+      return m ? { first: document.body.firstElementChild === m, text: m.textContent, date: m.querySelector("time")?.textContent ?? "" } : null;
+    })()`);
+    await tab.goto(`${testSite.origin}/`);
+    const home = await markOf(tab);
+    check(home?.text === mark, `the Worker's home page has the mark: "${home?.text}"`);
+    await tab.goto(`${testSite.origin}/proof`);
+    await tab.waitFor(step("before"), "the test site's build's step 1");
+    const shown = await markOf(tab);
+    check(mark !== copy && shown !== null && shown.first && shown.text === mark && shown.date === CLEARED_ON, `the card proof page has the same mark, above everything else, its date in an element of its own: ${JSON.stringify(shown)}`);
+    // The scope string the build's target has the card sign, as the page that runs says it (src/ui/test-roster.ts reads the target the flow reads).
+    const signs = await tab.eval<string>(`document.querySelector("p.test-roster").dataset.scope`);
+    check(signs === SCOPE && signs === "iamreal-test:public:0__________", `the test site's build signs the test roster's scope string: ${signs}`);
+    // The link of the last screen is the card's page on the test site. The screen itself needs a card proof, which this build
+    // makes only with a real card: read from the scripts the page was sent.
+    const sent = [...new Set(browser.responses.filter((r) => r.url.startsWith(`${testSite.origin}/proof/assets/`) && r.url.endsWith(".js")).map((r) => r.url))];
+    const scripts = (await Promise.all(sent.map(async (u) => (await fetch(u)).text()))).join("\n");
+    check(sent.length > 0 && /["'`]test\.iamreal\.tw["'`]/.test(scripts) && !/["'`]iamreal\.tw["'`]/.test(scripts), `the scripts the page was sent write links with test.iamreal.tw, not iamreal.tw (${sent.length} scripts)`);
+    const doc = browser.responses.filter((r) => r.url === `${testSite.origin}/proof`).at(-1);
+    check(
+      doc?.headers["content-security-policy"] === TEST_SITE_CONTENT_SECURITY_POLICY &&
+        doc.headers["document-isolation-policy"] === ISOLATION_HEADERS["Document-Isolation-Policy"] &&
+        doc.headers["cross-origin-opener-policy"] === OPENER_HEADERS["Cross-Origin-Opener-Policy"] &&
+        doc.headers["x-robots-tag"] === "noindex",
+      `the test site's headers on the page: ${JSON.stringify(doc?.headers)}`,
+    );
+    check(await tab.eval<boolean>("crossOriginIsolated"), "the test site's build is cross-origin isolated");
+    const oneProof = await tab.text("[data-one-proof]");
+    check(oneProof === C.before.one_proof, `the test site's build's step 1 is the one of more than one platform (test-example and Threads): "${oneProof}"`);
+    await screenshot("testsite-1-before", tab);
+    await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+    await screenshot("testsite-1-before-phone", tab);
+    await tab.send("Emulation.clearDeviceMetricsOverride");
+    await sleep(1000);
+    const requests = browser.requests.filter((r) => r.sessionId === tab.sessionId || browser.sessions.get(r.sessionId)?.url.startsWith(testSite.origin)).map((r) => r.url);
+    check(requests.length > 0 && requests.every((u) => u.startsWith("about:") || new URL(u).origin === testSite.origin), `the test site's build's step 1 asked for nothing outside its own origin ${JSON.stringify(requests.filter((u) => !u.startsWith(testSite.origin)).slice(0, 5))}`);
+    check(componentRequests.length === 0, `the test site's build's step 1 asked nothing of the component ${JSON.stringify(componentRequests)}`);
+    await tab.goto(`${testSite.origin}/proof/help.html?topic=prepare`);
+    await tab.waitFor(`document.querySelector("[data-help]")`, "the help page");
+    const help = await markOf(tab);
+    check(help !== null && help.first && help.text === mark, `the help page has the mark too: ${JSON.stringify(help)}`);
+    await screenshot("testsite-help", tab);
+    await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+    await screenshot("testsite-help-phone", tab);
+    await tab.send("Emulation.clearDeviceMetricsOverride");
+    const violations = browser.logs.slice(logsBefore).filter((l) => /Content Security Policy/i.test(l.text));
+    check(violations.length === 0, `no Content-Security-Policy violation on the test site's build ${JSON.stringify(violations.map((l) => l.text))}`);
+  } finally {
+    off();
+    await browser.send("Target.closeTarget", { targetId: tab.targetId }).catch(() => undefined);
+    await testSite.close();
+  }
+});
+
 writeFileSync(join(out, "ui-report.json"), JSON.stringify({ results, shown, component: component.requests.map((r) => ({ func: r.func, tbs: r.tbs })) }, null, 2));
 await browser.close();
 await component.stop();
-await stopServer();
-moica.close();
-writeFileSync(join(out, "server.log"), serverLog);
+writeFileSync(join(out, "worker.log"), worker.logLines().join("\n"));
+await site.close();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

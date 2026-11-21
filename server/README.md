@@ -36,7 +36,7 @@ go build -o iamreal-server ./server
 | `-rebuild-views` | 關 | `serve` 開機前先清掉頁面用的衍生表，再從全部紀錄重建（見「頁面用的衍生表」） |
 | `-out` | `DATA/roster` | `snapshot` 寫到哪個目錄 |
 
-發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多三個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）、`-test-clock <檔案>`（檔案裡寫一個整數，時鐘比這台機器的快幾天；每次讀時鐘都重讀這個檔案）。給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入；同一張卡片的過卡分到不同的日期（一張卡片一天最多 3 筆有效紀錄）。照這份 README 建置的執行檔沒有這三個選項。
+發證金鑰（驗證明、驗清冊）和內政部清冊的網址編在程式裡，沒有選項能換。**只有**用建置標籤 `iamrealtest` 建置的執行檔（`go build -tags iamrealtest ./server`，`testissuers.go`），三個子指令多三個選項：`-test-issuers <目錄>`（放 `issuer-G2.der`、`issuer-G3.der`，拋棄式的測試金鑰，取代內政部的）、`-test-moica <網址>`（假的內政部，提供 `G2.crl`、`G3.crl`）、`-test-clock <檔案>`（檔案裡寫一個整數，時鐘比這台機器的快幾天；每次讀時鐘都重讀這個檔案）。原本給 `web/` 的端到端測試（`web/test/e2e/ui.ts`）用：頁面算的假卡片的證明，由真的後台驗證、寫入；同一張卡片的過卡分到不同的日期（一張卡片一天最多 3 筆有效紀錄）。那份測試現在對 `worker/` 跑（[#69](https://github.com/iamreal-tw/iamreal/issues/69)），不再建置這個後台。照這份 README 建置的執行檔沒有這三個選項。
 
 ## 資料放在哪裡
 
