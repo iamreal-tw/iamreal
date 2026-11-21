@@ -13,69 +13,45 @@ import { WORKER_DIR } from "./build.ts";
 
 const WORKFLOWS_DIR = join(WORKER_DIR, "..", ".github", "workflows");
 
-/** A run of the API's list of a workflow's runs, as much of it as the script reads, and a little more. */
-const run = (runNumber: number, createdAt: string, conclusion: string | null = "success"): object => ({
-  run_number: runNumber,
-  status: conclusion === null ? "in_progress" : "completed",
-  conclusion,
-  created_at: createdAt,
-});
-
-/** Runs android-version.sh as the version job does: the API's answer in a file, the run's number, the time now. */
-function version(runs: object[] | null, runNumber: string, now: string): { status: number | null; stdout: string; stderr: string } {
-  const dir = mkdtempSync(join(tmpdir(), "iamreal-android-version-"));
-  try {
-    const file = join(dir, "runs.json");
-    writeFileSync(file, JSON.stringify({ total_count: runs?.length ?? 0, workflow_runs: runs }));
-    const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), file, runNumber, now], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
-    return { status: r.status, stdout: r.stdout, stderr: r.stderr };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+/** Runs android-version.sh as the build job does: the run's number and the time now. */
+function version(runNumber: string, now: string): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync("bash", [join(WORKFLOWS_DIR, "android-version.sh"), runNumber, now], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
-test("android-version.sh: the first upload of a day in Taiwan is that date, the build is the run's number", () => {
-  // Now is 2026-11-21 01:30 in Taiwan; the run before it, 15:59 UTC, was 23:59 on the 20th there.
-  const r = version([run(7, "2026-11-20T17:29:00Z", null), run(6, "2026-11-20T15:59:00Z")], "7", "2026-11-20T17:30:00Z");
+test("android-version.sh: the name is the date in Taiwan, year.month.day with no zeros added; the build is the run's number", () => {
+  // 2026-11-04 17:30 UTC is 01:30 on the 5th in Taiwan.
+  const r = version("7", "2026-11-04T17:30:00Z");
   assert.equal(r.stderr, "");
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, "name=2026.11.21\ncode=7\n");
-});
-
-test("android-version.sh: the day's second run in Taiwan adds .1, the third .2; runs of other days do not count", () => {
+  assert.equal(r.stdout, "name=2026.11.5\ncode=7\n");
   // The day in Taiwan, 2026-11-21, runs from 16:00 UTC on the 20th to 15:59:59 UTC on the 21st.
-  const before = [run(11, "2026-11-20T15:59:59Z"), run(10, "2026-11-19T20:00:00Z")];
-  const today = [run(13, "2026-11-21T09:00:00Z"), run(12, "2026-11-20T16:00:00Z")];
-  assert.equal(version([today[1]!, ...before], "13", "2026-11-21T09:00:01Z").stdout, "name=2026.11.21.1\ncode=13\n");
-  assert.equal(version([...today, ...before], "14", "2026-11-21T15:59:59Z").stdout, "name=2026.11.21.2\ncode=14\n");
-  // Past midnight in Taiwan the count starts again.
-  assert.equal(version([...today, ...before], "14", "2026-11-21T16:00:00Z").stdout, "name=2026.11.22\ncode=14\n");
+  assert.equal(version("8", "2026-11-20T15:59:59Z").stdout, "name=2026.11.20\ncode=8\n");
+  assert.equal(version("9", "2026-11-20T16:00:00Z").stdout, "name=2026.11.21\ncode=9\n");
+  assert.equal(version("10", "2026-12-31T16:00:00Z").stdout, "name=2027.1.1\ncode=10\n");
+  // A second run on the same day: the same name, the next build (.github/README.md).
+  assert.equal(version("11", "2026-11-21T15:59:59Z").stdout, "name=2026.11.21\ncode=11\n");
 });
 
-test("android-version.sh: a run of the day that failed counts too, so no two builds of a day have the same name; this run itself does not", () => {
-  // Run 21 failed at the upload; its signed bundle may have gone to Google Play by hand (.github/README.md).
-  // Run 22 is this one, in the list while it runs; 23 was started after it and waits.
-  const runs = [run(23, "2026-11-21T03:01:00Z", null), run(22, "2026-11-21T03:00:00Z", null), run(21, "2026-11-21T02:00:00Z", "failure"), run(20, "2026-11-21T01:00:00Z", "cancelled")];
-  assert.equal(version(runs, "22", "2026-11-21T03:00:05Z").stdout, "name=2026.11.21.2\ncode=22\n");
-});
-
-test("android-version.sh: stops on an answer that is not a list of runs, a run number that is not a build number, or a time it cannot read", () => {
-  for (const [runs, runNumber, now] of [
-    [null, "7", "2026-11-21T03:00:00Z"],
-    [[run(6, "yesterday")], "7", "2026-11-21T03:00:00Z"],
-    [[{ created_at: "2026-11-21T02:00:00Z" }], "7", "2026-11-21T03:00:00Z"],
-    [[], "0", "2026-11-21T03:00:00Z"],
-    [[], "7a", "2026-11-21T03:00:00Z"],
-    [[], "", "2026-11-21T03:00:00Z"],
+test("android-version.sh: stops on a run number that is not a build number Google Play takes, or a time it cannot read", () => {
+  for (const [runNumber, now] of [
+    ["0", "2026-11-21T03:00:00Z"],
+    ["7a", "2026-11-21T03:00:00Z"],
+    ["", "2026-11-21T03:00:00Z"],
+    ["07", "2026-11-21T03:00:00Z"],
     // "The greatest value Google Play allows for versionCode is 2100000000" (Android's "Version your app").
-    [[], "2100000001", "2026-11-21T03:00:00Z"],
-    [[], "07", "2026-11-21T03:00:00Z"],
-    [[], "7", "2026-11-21 03:00"],
+    ["2100000001", "2026-11-21T03:00:00Z"],
+    ["7", "2026-11-21 03:00"],
+    ["7", "yesterday"],
   ] as const) {
-    const r = version(runs as object[] | null, runNumber, now);
-    assert.notEqual(r.status, 0, JSON.stringify([runs, runNumber, now]));
-    assert.equal(r.stdout, "", JSON.stringify([runs, runNumber, now]));
+    const r = version(runNumber, now);
+    assert.notEqual(r.status, 0, JSON.stringify([runNumber, now]));
+    assert.equal(r.stdout, "", JSON.stringify([runNumber, now]));
   }
+});
+
+test("android-version.sh: the greatest build number Google Play takes is taken", () => {
+  assert.equal(version("2100000000", "2026-11-21T03:00:00Z").stdout, "name=2026.11.21\ncode=2100000000\n");
 });
 
 /**
@@ -298,6 +274,3 @@ test("play-upload.sh: stops when Google Play turns the bundle away, and does not
   assert.ok(!r.calls.some((c) => c.url.endsWith(":commit")), JSON.stringify(r.calls.map((c) => c.url)));
 });
 
-test("android-version.sh: the greatest build number Google Play takes is taken", () => {
-  assert.equal(version([], "2100000000", "2026-11-21T03:00:00Z").stdout, "name=2026.11.21\ncode=2100000000\n");
-});

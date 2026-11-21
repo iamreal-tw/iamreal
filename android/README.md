@@ -9,6 +9,7 @@
 - **讀卡**。用 NFC 讀真卡片的程式還沒有搬進這個程式庫（[#163](https://github.com/iamreal-tw/iamreal/issues/163)）。在那之前，發出去的安裝檔和用線裝的建置裡，「卡片」的位置是一個永遠讀不到卡的東西（`app/src/real/…/Target.kt` 的 `NoCardReader`）：按「感應卡片」會停在「沒有感應到卡片」，PIN 送不到任何地方
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 完成畫面「名冊記下了這一筆」列的是確認畫面算的那幾列；後台回報每個平台記成什麼、和確認時不同的標示還沒有（[#221](https://github.com/iamreal-tw/iamreal/issues/221)）
+- 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
 - 完成畫面最上面的記號動畫；顏色、字級、間距（`design/tokens.json` 還沒有定，現在是墨色和紙色兩個顏色）
 
 ## 兩種 build
@@ -23,7 +24,7 @@
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw` | 同左，上線後也是 |
 | 簽的場合字串 | 上線前：`iamreal-test:public:0` | 同左，上線後也是 |
 | 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml) 上傳，ADR-0036、ADR-0037；「上傳到 Google Play」） | 用線裝（「怎麼用線裝到手機」） |
-| 版本 | 上傳時給：台灣的日期，同一天第二次起加 `.1`、`.2`；`versionCode` 是工作流程執行的編號 | `1`、`dev` |
+| 版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同）；`versionCode` 是工作流程執行的編號 | `1`、`dev` |
 
 環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的名冊永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式名冊的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
 
@@ -33,7 +34,7 @@
 
 商店的 build 只從 GitHub Actions 上傳（ADR-0036）：營運者在 `main` 上手動觸發 [`.github/workflows/upload-android.yml`](../.github/workflows/upload-android.yml)，它建置 `bundleRelease`（連 `build.gradle.kts` 的 bundle 檢查，「建置時的檢查」），用上傳金鑰簽章，傳到內部測試。簽章、上傳、版本號怎麼算，見 [`.github/README.md`「上傳 Android 的 app」](../.github/README.md#上傳-android-的-app175)。
 
-版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21.1 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候是 `1`、`dev`，所以這台電腦上的建置和拉取請求的檢查都是這兩個值。
+版本由兩個 Gradle 屬性給：`-Piamreal.versionName=2026.11.21 -Piamreal.versionCode=42`（`app/build.gradle.kts`）。沒給的時候是 `1`、`dev`，所以這台電腦上的建置和拉取請求的檢查都是這兩個值。
 
 ## PIN、憑證、簽章在哪裡
 

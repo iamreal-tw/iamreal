@@ -526,7 +526,7 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "254 the build job in the environment app-test": {
-    changes: [replace(U, "    needs: version\n    runs-on: ubuntu-24.04\n", "    needs: version\n    environment: app-test\n    runs-on: ubuntu-24.04\n")],
+    changes: [replace(U, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    environment: app-test\n    runs-on: ubuntu-24.04\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "255 the upload job out of the environment app-test (its secrets would be the repository's, on any branch)": {
@@ -545,15 +545,15 @@ const UPLOAD_ANDROID_CHANGES: Record<string, { changes: Change[]; problem: RegEx
     changes: [replace(U, 'run: bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"', 'run: echo "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" > key.json && bash .github/workflows/play-upload.sh "$RUNNER_TEMP/signed/app-release.aab"')],
     problem: SECRETS_PROBLEM,
   },
-  "259 the version job's token given more than the workflow's": {
-    changes: [replace(U, "    timeout-minutes: 5\n", "    timeout-minutes: 5\n    permissions:\n      actions: write\n")],
+  "259 the build job's token given more than the workflow's": {
+    changes: [replace(U, "  build:\n    runs-on: ubuntu-24.04\n", "  build:\n    permissions:\n      actions: write\n    runs-on: ubuntu-24.04\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
   "260 the upload job's token able to write the code": {
     changes: [replace(U, "    environment: app-test\n", "    environment: app-test\n    permissions:\n      contents: write\n")],
     problem: UPLOAD_JOBS_PROBLEM,
   },
-  "261 the version job not stopping off main": {
+  "261 the build job not stopping off main": {
     changes: [replace(U, '      - name: Only from main\n        run: test "$GITHUB_REF" = refs/heads/main\n', "")],
     problem: UPLOAD_JOBS_PROBLEM,
   },

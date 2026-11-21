@@ -7,16 +7,13 @@
 # builds); the checks of the bundle in android/app/build.gradle.kts stop it
 # otherwise.
 # .github/README.md has the details; worker/test/workflows.ts holds this
-# file's three jobs, exactly, and worker/test/workflows.test.ts checks this
+# file's two jobs, exactly, and worker/test/workflows.test.ts checks this
 # file against them.
 #
-# "version" lists this workflow's runs on main (a public list: the token
-# needs no more than contents: read) and gives the build its version: the
-# date in Taiwan, with .1 from the day's second run on, and the run's number
-# as the build number (android-version.sh). It stops first when the run is
-# not on main.
-#
-# "build" has no secret. It builds the bundle with that version the way the
+# "build" has no secret. It stops first when the run is not on main. It
+# gives the build its version: the date in Taiwan, 2026.11.21, the same for
+# every run of a day, and the run's number as the build number
+# (android-version.sh). It builds the bundle with that version the way the
 # android check of checks.yml builds the app (no cache here), which runs the
 # checks of the bundle, and hands the bundle on as an artifact.
 #
@@ -43,19 +40,16 @@ permissions:
 # cache-mode; .github/README.md).
 cache-mode: none
 
-# One upload at a time, none cancelled halfway: the version counts the
-# uploads that came before.
+# One upload at a time, none cancelled halfway: a build number goes to
+# Google Play in the order the runs were started.
 concurrency:
   group: upload-android
   cancel-in-progress: false
 
 jobs:
-  version:
+  build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      name: ${{ steps.version.outputs.name }}
-      code: ${{ steps.version.outputs.code }}
+    timeout-minutes: 30
     steps:
       - name: Only from main
         run: test "$GITHUB_REF" = refs/heads/main
@@ -64,18 +58,7 @@ jobs:
           persist-credentials: false
       - name: The version, the date in Taiwan, and the run's number
         id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api "repos/$GITHUB_REPOSITORY/actions/workflows/upload-android.yml/runs?branch=main&per_page=100" > "$RUNNER_TEMP/runs.json" && bash .github/workflows/android-version.sh "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-  build:
-    needs: version
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+        run: bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - name: Install libc++ (Barretenberg's static library is built with it)
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends libc++-dev libc++abi-dev
       - name: Install the Rust of rust-toolchain.toml, with the targets of Android
@@ -89,8 +72,8 @@ jobs:
       - name: gradlew bundleRelease, with the checks of the bundle
         working-directory: android
         env:
-          VERSION_NAME: ${{ needs.version.outputs.name }}
-          VERSION_CODE: ${{ needs.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
         run: JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

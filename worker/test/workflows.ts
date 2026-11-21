@@ -11,7 +11,7 @@
 // short list at a fixed commit, and a pull request's checks can only read. It is a whitelist: the files are read by a reader of a small part of
 // YAML (below) and anything outside that part is a problem, and the deploy
 // workflow's two jobs, the device-core and android jobs of checks.yml, the
-// jobs of cache.yml and the three jobs of upload-android.yml, must be exactly
+// jobs of cache.yml and the two jobs of upload-android.yml, must be exactly
 // the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
@@ -627,21 +627,14 @@ export const CACHE_JOBS: YamlMap = {
  * upload-android.yml (#175, ADR-0036, ADR-0037): builds the store's build of
  * the Android app (tw.iamreal.app) and puts it on Google Play's internal
  * testing track, when the operator starts it by hand (workflow_dispatch) on
- * main. Its jobs, exactly:
+ * main. Its two jobs, exactly:
  *
- * - version: the date in Taiwan and the run's number
- *   (.github/workflows/android-version.sh), from the list of the workflow's
- *   runs on main (the day's second run is .1). The repository is public, and
- *   GitHub's REST API documentation says of that list: "This endpoint can be
- *   used without authentication or the aforementioned permissions if only
- *   public resources are requested"
- *   (https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow),
- *   so the token stays at `contents: read`. It stops first when the run is
- *   not on main.
- * - build: no secret. The steps of the android check up to Gradle, then
+ * - build: no secret. It stops first when the run is not on main. Then
+ *   the version (.github/workflows/android-version.sh: the date in Taiwan
+ *   and the run's number), the steps of the android check up to Gradle, and
  *   `bundleRelease` with that version, which runs the checks of the bundle
  *   (android/app/build.gradle.kts: checkBundle, checkManifest,
- *   checkLibraries), and hands the bundle on as an artifact.
+ *   checkLibraries); it hands the bundle on as an artifact.
  * - upload: `environment: app-test`, whose secrets GitHub gives only to jobs
  *   on main (#162). It runs no build: it signs the bundle the build job
  *   checked with the upload key (android-sign.sh), keeps the signed bundle as
@@ -660,34 +653,23 @@ export const UPLOAD_ANDROID_SCRIPTS: readonly string[] = ["android-version.sh", 
 /** Where the build job leaves the bundle (AGP's place for it), and where the upload job puts the signed one. */
 const UNSIGNED_BUNDLE: YamlMap = { name: "android-bundle", path: "android/app/build/outputs/bundle/release/app-release.aab" };
 const SIGNED_BUNDLE = "signed/app-release.aab";
-const RUNS_OF_UPLOAD_ANDROID = `repos/$GITHUB_REPOSITORY/actions/workflows/${UPLOAD_ANDROID_WORKFLOW}/runs?branch=main&per_page=100`;
 export const UPLOAD_ANDROID_JOBS: YamlMap = {
-  version: {
+  build: {
     "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "5",
-    outputs: { name: "${{ steps.version.outputs.name }}", code: "${{ steps.version.outputs.code }}" },
+    "timeout-minutes": "30",
     steps: [
       { name: "Only from main", run: 'test "$GITHUB_REF" = refs/heads/main' },
       step("actions/checkout"),
       {
         name: "The version, the date in Taiwan, and the run's number",
         id: "version",
-        env: { GH_TOKEN: "${{ github.token }}" },
-        run: `gh api "${RUNS_OF_UPLOAD_ANDROID}" > "$RUNNER_TEMP/runs.json" && bash .github/workflows/android-version.sh "$RUNNER_TEMP/runs.json" "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"`,
+        run: 'bash .github/workflows/android-version.sh "$GITHUB_RUN_NUMBER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"',
       },
-    ],
-  },
-  build: {
-    needs: "version",
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "30",
-    steps: [
-      step("actions/checkout"),
       ...ANDROID_SETUP,
       {
         name: "gradlew bundleRelease, with the checks of the bundle",
         "working-directory": "android",
-        env: { VERSION_NAME: "${{ needs.version.outputs.name }}", VERSION_CODE: "${{ needs.version.outputs.code }}" },
+        env: { VERSION_NAME: "${{ steps.version.outputs.name }}", VERSION_CODE: "${{ steps.version.outputs.code }}" },
         run: 'JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew --no-daemon bundleRelease -Piamreal.versionName="$VERSION_NAME" -Piamreal.versionCode="$VERSION_CODE"',
       },
       { uses: uses("actions/upload-artifact"), with: { ...UNSIGNED_BUNDLE, "if-no-files-found": "error" } },

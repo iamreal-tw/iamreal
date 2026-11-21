@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The placeholder icon's one colour: the teal of web/src/ui/style.css. -->
+    <color name="icon_background">#226977</color>
+</resources>
