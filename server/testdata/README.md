@@ -53,7 +53,8 @@ G2 的卡的清冊 A 是 2026-11-20 的，所以 G2 的過卡都在 11-23 以前
 
 ```
 pnpm install
-go run ./server/testdata/generate.go -bb "$(circuits/find-bb.sh)" -crs <通用參數目錄>
+bb=$(circuits/find-bb.sh)
+go run ./server/testdata/generate.go -bb "$bb" -crs <通用參數目錄>
 ```
 
 證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `circuits/`、`web/circuits/` 裡。`generate.go` 確認 `circuits/` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 25 秒（十四份證明）。

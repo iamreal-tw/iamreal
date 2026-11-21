@@ -25,10 +25,11 @@
 
 ```
 pnpm install
-node verifier/testdata/make-proofs.mjs "$(circuits/find-bb.sh)" <通用參數目錄> verifier/testdata
+bb=$(circuits/find-bb.sh)
+node verifier/testdata/make-proofs.mjs "$bb" <通用參數目錄> verifier/testdata
 ```
 
-`circuits/find-bb.sh` 印出 `@aztec-foundation/bb.js` 6.0.0 附的 `bb`，印之前核對過 SHA-256。宣告碼由 `make-proofs.mjs` 自己照 `spec/declaration-code.md` 算（`circuits/tests/lib/declaration-code.mjs` 是更早的草稿，不用它）；`proof_test.go` 再確認和 `verifier.DeclarationCode` 相同。`make-proofs.mjs` 不寫任何東西到 `circuits/`、`web/circuits/` 裡。它要求這兩個目錄沒有未提交的修改，在 `circuits_commit` 記下當時這個程式庫的提交，並檢查兩種設定寫出的驗證金鑰都等於 `spec/record.md` 的 SHA-256。`bb prove` 需要 2^18 個點的通用參數（第一次執行時 `bb` 會下載到指定的目錄）。
+`circuits/find-bb.sh` 印出 `@aztec-foundation/bb.js` 6.0.0 附的 `bb`，印之前核對過 SHA-256；核對不過時它說明原因、什麼都不印，產生器拿到空的 `bb` 就停下來，不寫任何檔。宣告碼由 `make-proofs.mjs` 自己照 `spec/declaration-code.md` 算（`circuits/tests/lib/declaration-code.mjs` 是更早的草稿，不用它）；`proof_test.go` 再確認和 `verifier.DeclarationCode` 相同。`make-proofs.mjs` 不寫任何東西到 `circuits/`、`web/circuits/` 裡。它要求這兩個目錄沒有未提交的修改，在 `circuits_commit` 記下當時這個程式庫的提交，並檢查兩種設定寫出的驗證金鑰都等於 `spec/record.md` 的 SHA-256。`bb prove` 需要 2^18 個點的通用參數（第一次執行時 `bb` 會下載到指定的目錄）。
 
 提交的這一份是電路的原始碼搬進 `circuits/` 之前做的，`circuits_commit` 寫的是先前私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`。搬進 `circuits/` 時原始碼相同（ADR-0038），電路檔和驗證金鑰都沒變，所以沒有重新產生。
 

@@ -86,9 +86,14 @@ func main() {
 	bb := flag.String("bb", "", "bb 6.0.0")
 	crs := flag.String("crs", "", "directory with the 2^18-point bn254_g1.dat")
 	flag.Parse()
-	if *bb == "" || *crs == "" {
+	if *crs == "" {
 		flag.Usage()
 		os.Exit(2)
+	}
+	// Before anything is written: an empty or missing bb is what
+	// $(circuits/find-bb.sh) gives when its SHA-256 check fails.
+	if fi, err := os.Stat(*bb); err != nil || !fi.Mode().IsRegular() {
+		log.Fatalf("bb %q is not a file (see the message of circuits/find-bb.sh)", *bb)
 	}
 	var err error
 	if work, err = os.MkdirTemp("", "iamreal-e2e-"); err != nil {

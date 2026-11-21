@@ -17,12 +17,17 @@
 // into circuits/ or web/circuits/.
 import { execFileSync } from "node:child_process";
 import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+if (process.argv.length !== 5) throw new Error("usage: node make-proofs.mjs <bb> <crs dir> <work dir>");
+// An empty bb is what $(circuits/find-bb.sh) gives when its SHA-256 check
+// fails; stop here rather than at the first proof.
+if (!process.argv[2] || !statSync(process.argv[2], { throwIfNoEntry: false })?.isFile()) {
+  throw new Error(`bb "${process.argv[2]}" is not a file (see the message of circuits/find-bb.sh)`);
+}
 const [bb, crs, work] = process.argv.slice(2).map((p) => resolve(p));
-if (!work) throw new Error("usage: node make-proofs.mjs <bb> <crs dir> <work dir>");
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const circuitFiles = join(root, "web", "circuits");
 // tests/lib/run.mjs reads the circuits from CIRCUITS_TARGET when it loads.
