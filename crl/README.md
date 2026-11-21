@@ -133,7 +133,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 | `tree.go` | 樹（circomlib 的稀疏 Merkle 樹，Poseidon2）、樹根、「不在樹裡」的證明 |
 | `issuers.go`、`MOICA2.cer`、`MOICA-G3.cer` | 兩把發證金鑰 |
 | `poseidon2/` | Poseidon2（`spec/scoped-id.md`）。`constants.go` 由 `spec/vectors/poseidon2-constants.json` 產生（`go generate ./crl/poseidon2`） |
-| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間 |
+| `internal/crltest/` | 寫自製清冊的程式；`makecrl/` 寫一份內政部大小的自製清冊，用來量時間；`makelarge/` 寫下載上限 32 MiB 之內最壞的幾種檔，用來量讀一份的時間和記憶體（`worker/README.md`「清冊鏡像量到的」） |
 | `testdata/` | 自製的小清冊、測試發證金鑰的公鑰、`expected.json`（每份可不可用、原因代碼、樹根） |
 | `testdata/times/` | 時間用各種寫法寫的自製清冊，和 `expected.json`（每份在存檔索引裡的那一行，照規格「Times」）。`worker/`、`web/`、`device-core/` 的測試讀同一份 |
 
