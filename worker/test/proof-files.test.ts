@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
-import { PROOF_PAGE_HEADERS } from "../src/headers.ts";
+import { proofPageHeaders } from "../src/headers.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { checkVisitorHeaders } from "./pages.ts";
@@ -43,20 +43,24 @@ after(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** The three headers as web/README.md, "頁面需要的標頭", writes them: the policy in its code block, the other two in their headings. */
-function headersInWebReadme(): Record<string, string> {
+/**
+ * The three headers as web/README.md, "頁面需要的標頭", writes them for a site of that kind of roster: the policy in
+ * the code blocks of its section (the first the production roster's site's, the second the test roster's, which
+ * differ in the data domain alone), the other two in their headings.
+ */
+function headersInWebReadme(kind: "test" | "production"): Record<string, string> {
   const readme = readFileSync(join(WORKER_DIR, "..", "web", "README.md"), "utf8");
   const section = readme.slice(readme.indexOf("\n## 頁面需要的標頭"));
-  const csp = /### `Content-Security-Policy`\n[\s\S]*?\n```\n([^\n]+)\n```\n/.exec(section)?.[1];
-  assert.ok(csp !== undefined, "web/README.md quotes the policy");
+  const policies = [...(/### `Content-Security-Policy`\n([\s\S]*?)\n### /.exec(section)?.[1] ?? "").matchAll(/\n```\n([^\n]+)\n```\n/g)].map((m) => m[1]!);
+  assert.equal(policies.length, 2, "web/README.md quotes the policy of the production roster's site, then the test roster's");
   const others = [...section.matchAll(/^### `([A-Za-z-]+): ([^`]+)`$/gm)].map((m) => [m[1]!.toLowerCase(), m[2]!]);
   assert.equal(others.length, 2, "web/README.md has a heading for each of the other two headers");
-  return { "content-security-policy": csp, ...Object.fromEntries(others) };
+  return { "content-security-policy": policies[kind === "production" ? 0 : 1]!, ...Object.fromEntries(others) };
 }
 
 /** What a response of the card proof page has for headers: the three of web/README.md, nosniff, and on a test roster noindex; what describes the file aside. */
 function checkProofHeaders(what: string, res: Response, expect: { test?: boolean; more?: readonly string[] } = {}): void {
-  const want = { ...headersInWebReadme(), "x-content-type-options": "nosniff", ...(expect.test !== false && { "x-robots-tag": "noindex" }) };
+  const want = { ...headersInWebReadme(expect.test === false ? "production" : "test"), "x-content-type-options": "nosniff", ...(expect.test !== false && { "x-robots-tag": "noindex" }) };
   const got: Record<string, string> = {};
   const aside = new Set(["content-type", "content-length", "transfer-encoding", "mf-content-encoding", "content-encoding", "connection", "date", "vary", "etag", "cache-control", "cf-cache-status", ...(expect.more ?? [])]);
   res.headers.forEach((value, name) => {
@@ -66,18 +70,34 @@ function checkProofHeaders(what: string, res: Response, expect: { test?: boolean
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-test("web/README.md quotes the three headers the page needs, and they are the ones of src/headers.ts", () => {
-  const quoted = headersInWebReadme();
-  assert.deepEqual(Object.keys(quoted).sort(), ["content-security-policy", "cross-origin-opener-policy", "document-isolation-policy"]);
-  assert.deepEqual(quoted, Object.fromEntries(Object.entries(PROOF_PAGE_HEADERS).map(([name, value]) => [name.toLowerCase(), value])));
+test("web/README.md quotes the three headers the page needs for each kind of roster, and they are the ones of src/headers.ts", () => {
+  for (const kind of ["production", "test"] as const) {
+    const quoted = headersInWebReadme(kind);
+    assert.deepEqual(Object.keys(quoted).sort(), ["content-security-policy", "cross-origin-opener-policy", "document-isolation-policy"]);
+    assert.deepEqual(quoted, Object.fromEntries(Object.entries(proofPageHeaders(kind)).map(([name, value]) => [name.toLowerCase(), value])), kind);
+  }
+});
+
+test("the page may connect to its own origin and to the data domain of its roster, and to no other: the two sites' policies differ in that domain alone", () => {
+  const connect = (kind: "test" | "production"): string | undefined => /(?:^|; )connect-src ([^;]*)/.exec(proofPageHeaders(kind)["Content-Security-Policy"]!)?.[1];
+  assert.equal(connect("production"), "'self' https://data.iamreal.tw");
+  assert.equal(connect("test"), "'self' https://test-data.iamreal.tw");
+  assert.equal(proofPageHeaders("test")["Content-Security-Policy"]!.replace("https://test-data.iamreal.tw", "https://data.iamreal.tw"), proofPageHeaders("production")["Content-Security-Policy"]);
 });
 
 test("site/_headers and site/_redirects in the repository are the ones written from src/headers.ts for a test roster", () => {
   assert.equal(readFileSync(join(WORKER_DIR, "site", "_headers"), "utf8"), siteHeaders("test"));
   assert.equal(readFileSync(join(WORKER_DIR, "site", "_redirects"), "utf8"), SITE_REDIRECTS);
-  // A production roster's differ in one thing: no noindex.
-  assert.equal(siteHeaders("production"), siteHeaders("test").replace(/^  X-Robots-Tag: noindex\n/gm, "").replace("a test roster", "a production roster"));
+  // A production roster's differ in two things: no noindex, and its own data domain in the card proof page's policy.
+  assert.equal(
+    siteHeaders("production"),
+    siteHeaders("test")
+      .replace(/^  X-Robots-Tag: noindex\n/gm, "")
+      .replace("a test roster", "a production roster")
+      .replaceAll("https://test-data.iamreal.tw", "https://data.iamreal.tw"),
+  );
   assert.ok(!siteHeaders("production").includes("X-Robots-Tag") && siteHeaders("test").includes("X-Robots-Tag: noindex"));
+  assert.ok(!siteHeaders("production").includes("test-data") && !siteHeaders("test").includes("https://data.iamreal.tw"));
   // Cloudflare's limits (README.md, "Static Assets"): 100 rules, 2,000 characters a line.
   for (const line of siteHeaders("test").split("\n")) assert.ok(line.length <= 2000);
 });
