@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    # The circuit: one proof per card proof, one per issuer key size.
+    "lib",
+    "card_proof_rs2048",
+    "card_proof_rs4096",
+    # Only for the case-by-case comparison against the circom circuit.
+    "comparison/lib",
+    "comparison/cert_chain_rs2048",
+    "comparison/cert_chain_rs4096",
+    "comparison/user_sig_scope",
+    "comparison/user_sig_code",
+    # Only for tests: single functions on their own (tests/probes/README.md).
+    "tests/probes/hash_vectors",
+    "tests/probes/canonical_signature",
+    "tests/probes/sha256_var",
+]

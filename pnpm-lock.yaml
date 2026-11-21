@@ -6,6 +6,15 @@ settings:
 
 importers:
 
+  circuits:
+    dependencies:
+      '@aztec-foundation/bb.js':
+        specifier: 6.0.0
+        version: 6.0.0
+      '@noir-lang/noir_js':
+        specifier: 1.0.0
+        version: 1.0.0
+
   protocol:
     devDependencies:
       '@types/node':
