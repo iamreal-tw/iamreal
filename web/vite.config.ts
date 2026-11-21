@@ -38,7 +38,9 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Plugin, defineConfig } from "vite";
-import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
+// By its path, not by the package's name: Vite bundles this file's relative imports before Node loads it, and
+// leaves a package's to Node, which before 22.18 does not load a .ts file by itself.
+import { type Roster, scopeOf } from "../protocol/src/scope.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -108,11 +110,11 @@ const TEST_SCOPE = "iamreal-test:public:0__________";
  * src/ui/test-roster.ts reads: the sentence of design/copy/test-site.md up
  * to its example date; the date of IAMREAL_TEST_ROSTER_CLEARED_ON, which
  * must be a date of the calendar; and the scope string the build's target
- * (src/target-test-site.ts, loaded here) has the card sign, which must be
+ * (src/target-test-site.ts, its `ROSTER` read here) has the card sign, which must be
  * the test roster's: this mode is not built with a target of the public
  * roster.
  */
-async function testRosterMark(): Promise<string> {
+function testRosterMark(): string {
   const clearedOn = process.env.IAMREAL_TEST_ROSTER_CLEARED_ON ?? "";
   const [y, m, d] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(clearedOn)?.slice(1).map(Number) ?? [];
   const date = y === undefined ? null : new Date(Date.UTC(y, m! - 1, d));
@@ -122,8 +124,11 @@ async function testRosterMark(): Promise<string> {
   const copy = readFileSync(join(here, "..", "design", "copy", "test-site.md"), "utf8");
   const sentence = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(copy)?.[1];
   if (sentence === undefined) throw new Error("design/copy/test-site.md: no sentence that ends with a date in its first block");
-  const { ROSTER } = (await import("./src/target-test-site.ts")) as { ROSTER: Roster };
-  const scope = scopeOf(ROSTER);
+  // The roster of the target, read from its one line: the file is not loaded here (it imports the whole engine,
+  // by package names Node before 22.18 cannot load from a .ts file). A line written another way is no roster.
+  const roster = /^export const ROSTER: Roster = "(production|test)";$/m.exec(readFileSync(TEST_SITE_TARGET, "utf8"))?.[1] as Roster | undefined;
+  if (roster === undefined) throw new Error('vite mode testsite: src/target-test-site.ts has no line `export const ROSTER: Roster = "test";`');
+  const scope = scopeOf(roster);
   if (scope !== TEST_SCOPE) throw new Error(`vite mode testsite: src/target-test-site.ts has the card sign ${scope}, not the test roster's ${TEST_SCOPE}`);
   return JSON.stringify({ sentence, clearedOn, scope });
 }
@@ -148,7 +153,7 @@ function otherTarget(replacement: string): Plugin {
   };
 }
 
-export default defineConfig(async ({ mode }) => {
+export default defineConfig(({ mode }) => {
   const pages = mode !== "engine";
   if (pages && mode !== "production" && !Object.hasOwn(OTHER_TARGETS, mode)) throw new Error(`vite mode ${mode}: production, test, localcard, testsite or engine`);
   return {
@@ -157,7 +162,7 @@ export default defineConfig(async ({ mode }) => {
     base: pages ? "/proof/" : "/",
     plugins: [noDataUrlWasm(), ownOriginAssets(), ...(Object.hasOwn(OTHER_TARGETS, mode) ? [otherTarget(OTHER_TARGETS[mode]!)] : []), ...(mode === "testsite" ? [testRosterEntry()] : [])],
     // The JSON text, as a string in the script: JSON.stringify twice.
-    ...(mode === "testsite" && { define: { __IAMREAL_TEST_ROSTER_MARK__: JSON.stringify(await testRosterMark()) } }),
+    ...(mode === "testsite" && { define: { __IAMREAL_TEST_ROSTER_MARK__: JSON.stringify(testRosterMark()) } }),
     build: {
       target: "es2022",
       assetsInlineLimit: 0,
