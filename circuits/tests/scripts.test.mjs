@@ -97,10 +97,13 @@ describe("fuzz/selftest/make-mutants.sh", () => {
 
 describe("fuzz/selftest/run-mutants.sh", () => {
   /**
-   * A copy of the script next to a stand-in run.mjs that writes one result per
-   * call, and a finding when the circuits it is given are named in `caught`.
+   * A copy of the script next to a stand-in run.mjs. Each call writes as many
+   * results as its --count asks, and a finding when the circuits it is given
+   * are named in `caught`. `crash`: a call whose circuits are named there
+   * exits 1 at once and writes nothing; `short`: one call of such circuits
+   * writes one result fewer.
    */
-  function setUp(caught) {
+  function setUp({ caught, crash = [], short = [] }) {
     const src = fresh();
     copy(src, "fuzz/selftest/run-mutants.sh");
     writeFileSync(join(src, "fuzz/run.mjs"), `
@@ -108,33 +111,52 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 const arg = (k) => process.argv[process.argv.indexOf(k) + 1];
 const out = arg("--out"), seed = arg("--seed"), target = arg("--noir-target");
+const named = (list) => list.some((c) => target.includes(c));
+if (named(${JSON.stringify(crash)})) process.exit(1);
+let count = Number(arg("--count"));
+if (named(${JSON.stringify(short)}) && arg("--id") === "0") count -= 1;
 mkdirSync(join(out, "results", seed), { recursive: true });
 mkdirSync(join(out, "findings"), { recursive: true });
-writeFileSync(join(out, "results", seed, "w" + arg("--id") + ".jsonl"), "{}\\n");
-if (${JSON.stringify(caught)}.some((c) => target.includes(c))) writeFileSync(join(out, "findings", seed + "-1.json"), "{}");
+writeFileSync(join(out, "results", seed, "w" + arg("--id") + ".jsonl"), "{}\\n".repeat(count));
+if (named(${JSON.stringify(caught)})) writeFileSync(join(out, "findings", seed + "-1.json"), "{}");
 `);
     const work = fresh();
     for (const m of ["mutant-a", "mutant-b"]) mkdirSync(join(work, "mutants", m, "target"), { recursive: true });
     return { script: join(src, "fuzz/selftest/run-mutants.sh"), env: { FUZZ_WORK: work } };
   }
 
-  it("exits 0 when the real circuits give no finding and every mutant at least one", () => {
-    const { script, env } = setUp(["mutant-a", "mutant-b"]);
+  it("exits 0 when every case ran, the real circuits give no finding and every mutant at least one", () => {
+    const { script, env } = setUp({ caught: ["mutant-a", "mutant-b"] });
     const r = run(script, ["4"], env);
     assert.equal(r.status, 0, r.stdout + r.stderr);
   });
 
   it("exits non-zero when a mutant gives no finding", () => {
-    const { script, env } = setUp(["mutant-a"]);
+    const { script, env } = setUp({ caught: ["mutant-a"] });
     const r = run(script, ["4"], env);
     assert.notEqual(r.status, 0, r.stdout);
     assert.match(r.stdout + r.stderr, /mutant-b/);
   });
 
   it("exits non-zero when the real circuits give a finding", () => {
-    const { script, env } = setUp(["mutant-a", "mutant-b", "target"]);
+    const { script, env } = setUp({ caught: ["mutant-a", "mutant-b", "target"] });
     const r = run(script, ["4"], env);
     assert.notEqual(r.status, 0, r.stdout);
     assert.match(r.stdout + r.stderr, /baseline/);
+  });
+
+  it("exits non-zero when the workers of the real circuits crash at once, though nothing is found", () => {
+    const { script, env } = setUp({ caught: ["mutant-a", "mutant-b"], crash: ["/fuzz/../target"] });
+    const r = run(script, ["4"], env);
+    assert.notEqual(r.status, 0, r.stdout);
+    assert.match(r.stdout + r.stderr, /baseline/);
+  });
+
+  it("exits non-zero when a round ran fewer cases than asked, and says which, how many and how many expected", () => {
+    const { script, env } = setUp({ caught: ["mutant-a", "mutant-b"], short: ["mutant-a"] });
+    const r = run(script, ["4"], env);
+    assert.notEqual(r.status, 0, r.stdout);
+    // 4 workers of 4 / 4 cases, and 40 cases of each of the 9 focused mutations.
+    assert.match(r.stdout + r.stderr, /mutant-a: 363 cases, expected 364/);
   });
 });

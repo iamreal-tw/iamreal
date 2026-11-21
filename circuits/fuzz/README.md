@@ -42,12 +42,14 @@ node run.mjs --seed X --only chain --mutation smt --count 50   # 只跑某一類
 node prove.mjs --circuit card_proof_rs2048 --finding findings/<file>.json
 
 selftest/make-mutants.sh                  # 建突變體，見下面；有一個編不過就結束碼 1
-selftest/run-mutants.sh 200               # 真電路必須 0 個問題，每個突變體至少 1 個；不成立就結束碼 1
+selftest/run-mutants.sh 200               # 真電路必須 0 個問題，每個突變體至少 1 個，每一輪的案例都跑完；不成立就結束碼 1
 node selftest/oracle-vs-handwritten.mjs   # 參考判斷對逐案比對的預期
 node repro/key-not-2048.mjs
 ```
 
 工作行程 `w` 跑第 `w, w+W, w+2W, ...` 案，所以同一個種子、同一個 `--case` 永遠是同一案，和行程數無關。
+
+`run-mutants.sh` 沒有逾時。偶爾有工作行程一啟動就卡住（不用 CPU、日誌是空的）：停掉它，那一輪會因為工作行程結束碼不是 0、案例數不足而失敗，整個重跑一次。
 
 突變體建在程式庫外面的 `$FUZZ_WORK/mutants/`（預設是系統暫存目錄下的 `circuits-fuzz`）：建在程式庫裡面的話，`nargo` 會找到 `circuits/Nargo.toml`，編的是真的電路。`run-mutants.sh` 的結果也寫在那裡。
 
