@@ -9,7 +9,7 @@ export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Where the compiled circuits are. tests/counterfactual/ points this at a
 // build with one check removed.
-const NOIR_TARGET = process.env.ZKID_NOIR_TARGET ?? join(ROOT, "target");
+const NOIR_TARGET = process.env.CIRCUITS_TARGET ?? join(ROOT, "target");
 
 const noirCircuits = new Map();
 
@@ -27,11 +27,11 @@ export async function runNoir(name, inputs) {
   }
 }
 
-// The circom circuit's witness generators, built from the `primary-card`
-// branch (`yarn compile:all` in wallet-unit-poc/circom). Not part of this
-// repository; without them the circom column is skipped.
+// The circom circuit's witness generators, built by build-circom.sh from the
+// commit in zkid-commit. Not part of this repository; without them the
+// circom column is skipped.
 const CIRCOM_BUILD =
-  process.env.ZKID_CIRCOM_BUILD ?? join(ROOT, "..", "zkID", "wallet-unit-poc", "circom", "build");
+  process.env.ZKID_CIRCOM_BUILD ?? join(ROOT, ".zkID", "wallet-unit-poc", "circom", "build");
 
 const circomCircuits = new Map();
 const require = createRequire(import.meta.url);

@@ -1,9 +1,8 @@
 .tools/
-.home/
-.nargo_home/
 .crs/
 target/
 node_modules/
 out/
 *.log
 Prover.toml
+.zkID/
