@@ -74,7 +74,7 @@ describe("the FAQ", () => {
     for (const link of [
       `<a href="/faq#${security.id}">了解更多</a>`,
       '<a href="https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md">完整的說明</a>',
-      '<a href="https://github.com/iamreal-tw/iamreal">GitHub</a> 討論',
+      '<a href="https://github.com/iamreal-tw/iamreal/discussions">GitHub 的討論區</a>留言',
       "<strong>注意：</strong>",
     ]) {
       assert.ok(page.includes(link), `the page has ${link}`);

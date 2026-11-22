@@ -143,6 +143,7 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md",
   "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#",
   "https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md",
+  "https://github.com/iamreal-tw/iamreal/discussions",
   "https://www.threads.com/",
   "https://www.threads.com/@${account}",
   "https://www.threads.com/@${account}/embed/",
