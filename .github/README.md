@@ -252,3 +252,9 @@ node --experimental-strip-types --test test/workflows.test.ts
 `upload-android.yml` 的三個腳本的測試在 `worker/test/upload-android.test.ts`：版本號（台灣的日期、`versionCode` 的範圍）、用測試當場產生的上傳金鑰簽章並驗證、對 Google Play 的每一個呼叫（`curl` 換成一個照 API 的文件回答的替身，核對 JWT 的簽章和內容、呼叫的順序、token 沒有出現在命令列、上傳失敗時不提交）。簽章的測試要有 JDK（`JAVA_HOME`，或 Mac 上 `java_home` 找得到的）；沒有時跳過，設了 `CI` 時是失敗。
 
 `worker/` 的 `pnpm test` 也包括它們。`changed-paths.sh` 的測試要有 `bash` 和 `git`。`paths` 清單的測試要有 `go` 才完整：沒有 `go` 時，檢查 Go 套件的那一項跳過，其他照查；設了 `CI`（GitHub Actions 會設）或 `IAMREAL_BB` 時沒有 `go`，那一項是失敗，不是跳過。這些規則防手誤和明顯的改動，不能代替逐行看（`CONTRIBUTING.md`「部署會執行到的東西」）。
+
+## 討論區的發文範本
+
+[`DISCUSSION_TEMPLATE/`](DISCUSSION_TEMPLATE/) 是 GitHub Discussions 三個分類的發文表單：`問答.yml`、`建議.yml`、`其他.yml`。檔名要和分類的代號相同（[Syntax for discussion category forms](https://docs.github.com/en/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms)），分類改成中文名稱之後，代號也是中文。「公告」只有維護者能發，沒有範本。
+
+三份都在最上面提醒不要貼出姓名、身分證字號、PIN 碼、卡片的照片或看得到姓名的截圖，送出前要勾選確認；「問答」多一欄選填的請求編號（`design/copy/faq.md`「回報問題時要附的請求編號是什麼？」）。討論區最上面置頂的說明是同一件事（[#269](https://github.com/iamreal-tw/iamreal/discussions/269)）。這些檔不會被建置或部署執行。
