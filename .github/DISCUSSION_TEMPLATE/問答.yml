@@ -1,0 +1,25 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        這裡任何人都看得到。請不要貼出姓名、身分證字號、自然人憑證的 PIN 碼、卡片的照片，或看得到姓名的截圖。
+        島民證明不會在這裡或任何地方問你的 PIN 和身分證字號。
+  - type: textarea
+    id: body
+    attributes:
+      label: 內容
+    validations:
+      required: true
+  - type: input
+    id: request-id
+    attributes:
+      label: 請求編號（過卡出錯時，畫面上那一串）
+    validations:
+      required: false
+  - type: checkboxes
+    id: no-personal-data
+    attributes:
+      label: 送出之前
+      options:
+        - label: 我沒有貼出姓名、身分證字號、PIN 碼、卡片的照片，或看得到姓名的截圖
+          required: true
