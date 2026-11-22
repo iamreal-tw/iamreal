@@ -159,7 +159,8 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
       {
         id: "who",
         question: "誰在做島民證明？",
-        answer: new Html(`<p>一個興趣使然的台灣工程師。有任何技術問題或建議，歡迎到 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a> 討論。</p>`),
+        answer: new Html(`<p>Opass Chang，一個還有一點熱血和理想的台灣工程師，希望能透過這個服務來改善台灣的網路討論環境。目前由本人負擔開發與伺服器維護費用，沒有政黨、政府或公司出資。</p>
+<p>有任何問題或建議，歡迎到 <a href="https://github.com/iamreal-tw/iamreal/discussions">GitHub 的討論區</a>留言。</p>`),
       },
       {
         id: "shutdown",
