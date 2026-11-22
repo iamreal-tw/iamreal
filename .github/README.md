@@ -255,6 +255,6 @@ node --experimental-strip-types --test test/workflows.test.ts
 
 ## 討論區的發文範本
 
-[`DISCUSSION_TEMPLATE/`](DISCUSSION_TEMPLATE/) 是 GitHub Discussions 三個分類的發文表單：`問答.yml`、`建議.yml`、`其他.yml`。檔名要和分類的代號相同（[Syntax for discussion category forms](https://docs.github.com/en/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms)），分類改成中文名稱之後，代號也是中文。「公告」只有維護者能發，沒有範本。
+[`DISCUSSION_TEMPLATE/`](DISCUSSION_TEMPLATE/) 是 GitHub Discussions 三個分類的發文表單：`q-a.yml`（Q&A）、`ideas.yml`（Ideas）、`general.yml`（General）。檔名要和分類的代號相同（[Syntax for discussion category forms](https://docs.github.com/en/discussions/managing-discussions-for-your-community/syntax-for-discussion-category-forms)）。代號跟著分類名稱產生；名稱用中文時代號也是中文，表單對不上（#271 試過，表單沒有出現），所以分類名稱用英文、說明用中文。Announcements 只有維護者能發，沒有範本。
 
-三份都在最上面提醒不要貼出姓名、身分證字號、PIN 碼、卡片的照片或看得到姓名的截圖，送出前要勾選確認；「問答」多一欄選填的請求編號（`design/copy/faq.md`「回報問題時要附的請求編號是什麼？」）。討論區最上面置頂的說明是同一件事（[#269](https://github.com/iamreal-tw/iamreal/discussions/269)）。這些檔不會被建置或部署執行。
+三份都在最上面提醒不要貼出姓名、身分證字號、PIN 碼、卡片的照片或看得到姓名的截圖，送出前要勾選確認；Q&A 多一欄選填的請求編號（`design/copy/faq.md`「回報問題時要附的請求編號是什麼？」）。討論區最上面置頂的說明是同一件事（[#269](https://github.com/iamreal-tw/iamreal/discussions/269)）。這些檔不會被建置或部署執行。
