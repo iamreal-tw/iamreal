@@ -22,12 +22,12 @@
 #   idc_testing_session_open, which trusts issuer keys a test gives it), the
 #   files it carries are the repository's, iPhone only, no AdSupport.
 #
-# Which roster the card signs for is not in the executable as anything it
+# Which proof log the card signs for is not in the executable as anything it
 # can find: both scope strings are in the core. It follows from the site: in
-# App/AppEnvironment.swift the site and the roster are set under the same
+# App/AppEnvironment.swift the site and the proof log are set under the same
 # compilation condition, and the test site's addresses are in the executable
 # and the production site's are not, so the branch built is the test one;
-# Tests/BuildTests.swift checks that this branch signs the test roster's
+# Tests/BuildTests.swift checks that this branch signs the test log's
 # scope, iamreal-test:public:0.
 set -eu
 

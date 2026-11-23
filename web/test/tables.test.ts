@@ -12,16 +12,16 @@ import { presentationOf } from "../src/platforms.ts";
 import { TEST_EXAMPLE } from "../src/presentations/test-example.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
-/** The `username` format of a platform of the production roster, read from spec/scope.md ("## Platforms"). */
+/** The `username` format of a platform of the production log, read from spec/scope.md ("## Platforms"). */
 function productionFormat(platform: string): string {
   const md = new TextDecoder().decode(repoFile("spec/scope.md"));
   const section = md.slice(md.indexOf("## Platforms"), md.indexOf("### Adding a platform"));
-  const table = section.slice(section.indexOf("**Production roster**"), section.indexOf("**Test rosters only**"));
+  const table = section.slice(section.indexOf("**Production log**"), section.indexOf("**Test logs only**"));
   const row = table
     .split("\n")
     .map((l) => l.split("|").map((c) => c.trim()))
     .find((c) => c[1] === "`" + platform + "`");
-  if (!row) throw new Error(`spec/scope.md: no ${platform} in the production roster's table`);
+  if (!row) throw new Error(`spec/scope.md: no ${platform} in the production log's table`);
   return row[3]!.replace(/`/g, "");
 }
 

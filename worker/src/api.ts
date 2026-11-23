@@ -10,19 +10,19 @@
 // own text, which could quote it.
 //
 // Every endpoint reads the environment's settings first (settings.ts): with
-// a `ROSTER_KIND` that names no roster, none of them answers anything but
+// a `PROOF_LOG_KIND` that names no proof log, none of them answers anything but
 // `500`.
 import { ISSUERS } from "#target";
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT } from "iamreal-protocol/record.ts";
-import { EMPTY_SLOT } from "iamreal-protocol/roster-rules.ts";
+import { EMPTY_SLOT } from "iamreal-protocol/record-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { readStrings } from "./json.ts";
 import { recordVerifies } from "./record-proof.ts";
-import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, rosterOf } from "./roster.ts";
-import { rosterSettingsOf } from "./settings.ts";
+import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, proofLogOf } from "./proof-log.ts";
+import { proofLogSettingsOf } from "./settings.ts";
 import { type SlotJson, slotToJson } from "./slot-json.ts";
 import { readSubmission } from "./submission.ts";
 import type { ProofVerifier } from "./verify.ts";
@@ -42,7 +42,7 @@ const fail = (status: number, code: string): Reply => ({ status, body: { error: 
 const MALFORMED = fail(400, "malformed");
 
 /**
- * The status of each code the roster's object refuses a challenge or a
+ * The status of each code the proof log's object refuses a challenge or a
  * record with (docs/api/card-proof.md). `503` when nothing is wrong with
  * the request and the back end cannot take it for now: `paused`, no card
  * proof at all; `crl_stale`, none of the record's issuer key, whose newest
@@ -68,17 +68,17 @@ const refuse = (code: SubmissionRefusal | RecordRefusal): Reply => fail(REFUSAL_
 /**
  * Where the back end failed, as the one line about it says (`where`):
  *
- *   settings   the settings are not right: `ROSTER_KIND` names no roster, or
- *              does not fit `ROSTER_OBJECT_NAME` (settings.ts)
- *   schema     the tables of the roster's object were made by another
- *              SCHEMA_VERSION than this build's (roster.ts)
- *   roster     anything else in the roster's object, a stored state that is
+ *   settings   the settings are not right: `PROOF_LOG_KIND` names no proof log, or
+ *              does not fit `PROOF_LOG_OBJECT_NAME` (settings.ts)
+ *   schema     the tables of the proof log's object were made by another
+ *              SCHEMA_VERSION than this build's (proof-log.ts)
+ *   proof log     anything else in the proof log's object, a stored state that is
  *              broken among it
  *   verifier   the proof verifier could not run (verify.ts): no verdict on
  *              the proof, and nothing is written
  *   handler    anywhere else
  */
-type Where = "settings" | "schema" | "roster" | "verifier" | "handler";
+type Where = "settings" | "schema" | "proof_log" | "verifier" | "handler";
 
 /** A failure of the back end itself. */
 class Internal extends Error {
@@ -90,20 +90,20 @@ class Internal extends Error {
 }
 
 /** Reads the settings; a failure is `settings`. */
-function settings(env: Env): ReturnType<typeof rosterSettingsOf> {
+function settings(env: Env): ReturnType<typeof proofLogSettingsOf> {
   try {
-    return rosterSettingsOf(env);
+    return proofLogSettingsOf(env);
   } catch (e) {
     throw new Internal("settings", e);
   }
 }
 
-/** Asks the roster's object; a failure is `roster`, or `schema` when the object says its tables are of another version. */
-async function askRoster<T>(run: () => T | Promise<T>): Promise<T> {
+/** Asks the proof log's object; a failure is `proof_log`, or `schema` when the object says its tables are of another version. */
+async function askProofLog<T>(run: () => T | Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    throw new Internal(e instanceof Error && e.message === OTHER_SCHEMA ? "schema" : "roster", e);
+    throw new Internal(e instanceof Error && e.message === OTHER_SCHEMA ? "schema" : "proof_log", e);
   }
 }
 
@@ -134,17 +134,17 @@ async function readBody(request: Request): Promise<string | null> {
   }
 }
 
-/** `POST /api/v1/challenges`: the roster's object issues and stores it. The body is not read. */
+/** `POST /api/v1/challenges`: the proof log's object issues and stores it. The body is not read. */
 async function postChallenge(_request: Request, env: Env): Promise<Reply> {
   settings(env);
-  const issued = await askRoster(() => rosterOf(env).issueChallenge());
+  const issued = await askProofLog(() => proofLogOf(env).issueChallenge());
   return issued.challenge === null ? refuse("paused") : ok({ challenge: issued.challenge });
 }
 
 /**
  * `POST /api/v1/records`: one card proof, the card's whole list of accounts.
  * The checks run in the order of docs/api/card-proof.md, and the first that
- * fails gives the error. Between the Worker and the roster's object:
+ * fails gives the error. Between the Worker and the proof log's object:
  *
  *   1. here: the request is read and every field's format checked
  *      (`malformed`, `scope`, `platform`). A submission that ends here does
@@ -152,9 +152,9 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  *   2. the object: the challenge (`challenge_unknown`, `challenge_used`,
  *      `challenge_attempts`); this submission is counted;
  *   3. here: the record verifies (`proof`), outside the object, so that a
- *      proof being verified does not hold up the roster;
+ *      proof being verified does not hold up the proof log;
  *   4. the object: the challenge again, the back end's rule on `smt_root`
- *      (`crl_stale`, `root`), the roster rules, the back end's policy on
+ *      (`crl_stale`, `root`), the record rules, the back end's policy on
  *      switches (`switch_restricted`); then the record is written.
  *
  * A verifier that could not run gives no verdict: the answer is `500`, and
@@ -167,8 +167,8 @@ async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<
   const fields = readSubmission(kind, text);
   if (typeof fields === "string") return fail(400, fields);
 
-  const roster = rosterOf(env);
-  const begun = await askRoster(() => roster.beginSubmission(fields.challenge));
+  const proofLog = proofLogOf(env);
+  const begun = await askProofLog(() => proofLog.beginSubmission(fields.challenge));
   if (begun !== "ok") return refuse(begun);
 
   let verifies: boolean;
@@ -180,7 +180,7 @@ async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<
   if (!verifies) return fail(400, "proof");
 
   // The type is named: left to itself it is inferred from the first member of the union alone.
-  const answer = await askRoster<AcceptAnswer>(() => roster.accept(fields));
+  const answer = await askProofLog<AcceptAnswer>(() => proofLog.accept(fields));
   if (answer.outcome === "refused") return refuse(answer.code);
   const { seq, recordHash, kinds } = answer.record;
   return {
@@ -191,7 +191,7 @@ async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<
 
 /**
  * `POST /api/v1/card-state`: the state of one card on every platform of the
- * roster's table, as the rules left it. Facts, not conclusions. The keys are
+ * proof log's table, as the rules left it. Facts, not conclusions. The keys are
  * in the order of docs/api/card-proof.md.
  */
 async function postCardState(request: Request, env: Env): Promise<Reply> {
@@ -200,11 +200,11 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
   if (text === null) return MALFORMED;
   const fields = readStrings(text, ["scope_string", "scoped_id"]);
   if (fields === null) return MALFORMED;
-  // A scope this roster does not accept is not in the format of scope_string.
+  // A scope this proof log does not accept is not in the format of scope_string.
   if (!lookupScope(kind, fields.scope_string)) return MALFORMED;
   if (parseScopedId(fields.scoped_id) === null) return MALFORMED;
 
-  const { card, count } = await askRoster(() => rosterOf(env).cardState(fields.scope_string, fields.scoped_id));
+  const { card, count } = await askProofLog(() => proofLogOf(env).cardState(fields.scope_string, fields.scoped_id));
   const platforms: Record<string, SlotJson> = {};
   // A platform the stored state has no slot for is a slot never used.
   for (const { platform } of table) platforms[platform] = slotToJson(card?.slots.get(platform) ?? EMPTY_SLOT);
@@ -218,9 +218,9 @@ async function postCardState(request: Request, env: Env): Promise<Reply> {
 
 /**
  * `GET /api/v1/config`: the CRL age bound, the platform table of this
- * roster, in ascending order of platform ID, and the minimum app version
+ * proof log, in ascending order of platform ID, and the minimum app version
  * (src/min-app.ts). The Worker answers by itself, without asking the
- * roster's object.
+ * proof log's object.
  */
 async function getConfig(_request: Request, env: Env): Promise<Reply> {
   const { platforms, minApp } = settings(env);
@@ -232,13 +232,13 @@ async function getConfig(_request: Request, env: Env): Promise<Reply> {
 }
 
 /**
- * `GET /api/v1/fingerprint`: the last line the roster's object wrote to
- * the fingerprint file, its date, count and roster fingerprint (ADR-0021); for a roster never published, no date, no record and the
- * roster fingerprint of the empty roster.
+ * `GET /api/v1/fingerprint`: the last line the proof log's object wrote to
+ * the fingerprint file, its date, count and proof log fingerprint (ADR-0021); for a proof log never published, no date, no record and the
+ * proof log fingerprint of the empty proof log.
  */
 async function getFingerprint(_request: Request, env: Env): Promise<Reply> {
   settings(env);
-  const line = await askRoster(() => rosterOf(env).lastPublished());
+  const line = await askProofLog(() => proofLogOf(env).lastPublished());
   return ok(line === null ? { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT } : { date: formatDay(line.date), count: line.count, fingerprint: line.fingerprint });
 }
 

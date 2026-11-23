@@ -56,7 +56,7 @@ circuits".
   for its size, and a row in the accepted circuits. Rows are not removed:
   old records keep verifying under the key they used.
 - The validity period of an issuer certificate is not checked by the proof or
-  by the roster rules. The proof checks the cardholder's certificate against
+  by the record rules. The proof checks the cardholder's certificate against
   the date of the challenge (ADR-0008). A certificate MOICA issued with this
   key is checked against this key, whatever the date. If MOICA revokes an
   issuer key, this document changes.

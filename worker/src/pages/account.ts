@@ -1,7 +1,7 @@
 // The page of a Threads account: design/copy/account-page.md. The markup is
 // the Go backend's (e159ab9:server/pages/templates/account.html,
 // account-not-a-name.html). This file only turns data into HTML; the Worker
-// (src/visitor.ts) reads the address and the roster.
+// (src/visitor.ts) reads the address and the proof log.
 import { formatDay } from "iamreal-protocol/date.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfAccount } from "../page-data.ts";
@@ -44,7 +44,7 @@ export function notAName(): Document {
   const content = html`<section class="missing">
 <h1 class="title">Threads 沒有這樣的帳號名稱</h1>
 <p>Threads 的帳號名稱只有英文字母、數字、句點和底線。</p>
-<p><a href="/roster#q">查一個 Threads 帳號</a></p>
+<p><a href="/proof-log#q">查一個 Threads 帳號</a></p>
 </section>`;
   return { title: "Threads 沒有這樣的帳號名稱", kind: "account-not-a-name", preview: false, content };
 }

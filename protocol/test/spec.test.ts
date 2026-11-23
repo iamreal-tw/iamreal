@@ -77,7 +77,7 @@ describe("Taiwan date from the clock", () => {
 
 /**
  * The platform tables of spec/scope.md, read from the Markdown: the rows of
- * "Production roster" and "Test rosters only" under "## Platforms". The
+ * "Production log" and "Test logs only" under "## Platforms". The
  * device gets its table from the server (`config`); here the specification's
  * own table stands in for it, so that the device's reading of the formats
  * is checked against the vectors.
@@ -95,18 +95,18 @@ function specPlatformTables(): Record<"production" | "test", { platform: string;
       .map((l) => l.split("|").map((c) => c.trim()))
       .map((c) => ({ platform: c[1]!.replace(/`/g, ""), displayName: c[2]!, format: c[3]!.replace(/`/g, "") }));
   };
-  const production = tableAfter("**Production roster**");
-  const testOnly = tableAfter("**Test rosters only**");
+  const production = tableAfter("**Production log**");
+  const testOnly = tableAfter("**Test logs only**");
   return { production, test: [...production, ...testOnly].sort((a, b) => (a.platform < b.platform ? -1 : 1)) };
 }
 
 describe("scope.json", () => {
   const v = vectors("scope.json");
   for (const s of v.scopes) {
-    test(`${s.roster} ${s.scope_string}`, () => {
-      assert.equal(lookupScope(s.roster, s.scope_string), s.accepted);
+    test(`${s.proof_log} ${s.scope_string}`, () => {
+      assert.equal(lookupScope(s.proof_log, s.scope_string), s.accepted);
       if (s.accepted) {
-        assert.equal(scopeOf(s.roster), s.scope_string);
+        assert.equal(scopeOf(s.proof_log), s.scope_string);
         assert.equal("0x" + pack31(new TextEncoder().encode(s.scope_string)).toString(16).padStart(64, "0"), s.scope_packed);
       }
     });
@@ -116,23 +116,23 @@ describe("scope.json", () => {
     assert.deepEqual(tables.production.map((r) => r.platform), ["threads"]);
     assert.deepEqual(tables.test.map((r) => r.platform), ["test-example", "threads"]);
     for (const p of v.platforms) {
-      const row = tables[p.roster as "production" | "test"].find((r) => r.platform === p.platform);
-      assert.equal(row !== undefined, p.accepted, `${p.roster} ${p.platform}`);
+      const row = tables[p.proof_log as "production" | "test"].find((r) => r.platform === p.platform);
+      assert.equal(row !== undefined, p.accepted, `${p.proof_log} ${p.platform}`);
       if (p.accepted) assert.equal(row!.displayName, p.display_name);
     }
   });
-  test("the platform table of each roster in protocol/ is the one of the vectors and of spec/scope.md", () => {
-    for (const roster of ["production", "test"] as const) {
-      const rows = platformsOf(roster).map((r) => ({ platform: r.platform, displayName: r.displayName, format: r.format.text }));
-      assert.deepEqual(rows, tables[roster], roster);
+  test("the platform table of each proof log in protocol/ is the one of the vectors and of spec/scope.md", () => {
+    for (const proofLog of ["production", "test"] as const) {
+      const rows = platformsOf(proofLog).map((r) => ({ platform: r.platform, displayName: r.displayName, format: r.format.text }));
+      assert.deepEqual(rows, tables[proofLog], proofLog);
       const accepted = v.platforms
-        .filter((p: Record<string, unknown>) => p.roster === roster && p.accepted)
+        .filter((p: Record<string, unknown>) => p.proof_log === proofLog && p.accepted)
         .map((p: Record<string, string>) => ({ platform: p.platform, displayName: p.display_name, format: p.username_format }));
-      assert.deepEqual(rows, accepted, roster);
+      assert.deepEqual(rows, accepted, proofLog);
     }
   });
   for (const p of v.platforms) {
-    // The device cannot know a roster's table but from the server; what it checks of any ID is the syntax.
+    // The device cannot know a proof log's table but from the server; what it checks of any ID is the syntax.
     if (p.accepted) test(`platform ID ${p.platform}`, () => assert.equal(isPlatformId(p.platform), true));
   }
   for (const u of v.usernames) {

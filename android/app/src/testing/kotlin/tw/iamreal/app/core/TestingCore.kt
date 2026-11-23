@@ -17,8 +17,8 @@ object TestingCore {
     fun sessionOpen(issuersJson: ByteArray): Long {
         // The library is loaded by DeviceCore.
         DeviceCore.selfCheck()
-        return nativeSessionOpen(Environment.ROSTER, issuersJson)
+        return nativeSessionOpen(Environment.PROOF_LOG, issuersJson)
     }
 
-    private external fun nativeSessionOpen(roster: Int, issuersJson: ByteArray): Long
+    private external fun nativeSessionOpen(proofLog: Int, issuersJson: ByteArray): Long
 }

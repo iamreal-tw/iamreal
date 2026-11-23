@@ -2,7 +2,7 @@
 
 package main
 
-// The test roster of testdata/ through the command with its real proofs,
+// The test log of testdata/ through the command with its real proofs,
 // checked by bb, and the CRL archive of testdata/. The issuer keys of the
 // test proofs reach the verifier through verifier.NewWithIssuers, which
 // exists only with the build tag iamrealtest:
@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -46,14 +46,14 @@ func TestEndToEnd(t *testing.T) {
 	for _, k := range keys {
 		moduli[k.Name] = k.Key.N
 	}
-	mk := func(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.NewWithIssuers(cfg, moduli) }
+	mk := func(cfg verifier.Config) (prooflog.ProofVerifier, error) { return verifier.NewWithIssuers(cfg, moduli) }
 	runArchiveCases(t, mk, "-bb", bb, "-crs", crs)
 
 	// With the issuer keys compiled into the program, every proof fails.
-	rosterFile := filepath.Join("testdata", "roster.jsonl")
-	a := []string{"-bb", bb, "-crs", crs, "-roster", "test", "-crl-archive", filepath.Join("testdata", "archive"), rosterFile}
+	proofLogFile := filepath.Join("testdata", "proof-log.jsonl")
+	a := []string{"-bb", bb, "-crs", crs, "-proof-log", "test", "-crl-archive", filepath.Join("testdata", "archive"), proofLogFile}
 	var out, errOut strings.Builder
-	prod := func(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.New(cfg) }
+	prod := func(cfg verifier.Config) (prooflog.ProofVerifier, error) { return verifier.New(cfg) }
 	if code := run(a, &out, &errOut, deps{prod, openArchive(testIssuerKeys)}); code != exitInvalid ||
 		strings.Count(out.String(), "invalid proof") != 3 {
 		t.Errorf("MOICA's keys: exit %d\n%s\n%s", code, out.String(), errOut.String())

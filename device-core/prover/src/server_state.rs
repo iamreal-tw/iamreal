@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::list_consequence::ReadState;
-use iamreal_device_checks::roster_rules::{
+use iamreal_device_checks::record_rules::{
     Account, Card, MAX_SWITCHES, Platform, Slot, possible_card, possible_slot,
 };
 use iamreal_device_checks::username_format::{UsernameFormat, is_any_username, is_platform_id};

@@ -1,6 +1,6 @@
-// The roster rules (spec/roster-rules.md, "Per record") as one function that
+// The record rules (spec/record-rules.md, "Per record") as one function that
 // keeps nothing: applyRecord takes a record, the state of its card before it
-// and the three facts about the rest of the roster the checks read, and gives
+// and the three facts about the rest of the proof log the checks read, and gives
 // the record's result and the state of the card after it. It does not know
 // where the state is kept. The server (one card's state read from and written
 // to storage), a recomputation from the first record (rules-memory.ts) and
@@ -11,13 +11,13 @@ import type { Day } from "./date.ts";
 import type { PlatformRow } from "./platforms.ts";
 
 /**
- * The version number of these rules (spec/roster-rules.md, "The version
+ * The version number of these rules (spec/record-rules.md, "The version
  * number"). A stored card state was computed by one version; the Go
- * implementation has the same constant (roster.RulesVersion).
+ * implementation has the same constant (prooflog.RulesVersion).
  */
 export const RULES_VERSION = 2;
 
-/** The state of one slot: one card on one platform (spec/roster-rules.md, "State"). */
+/** The state of one slot: one card on one platform (spec/record-rules.md, "State"). */
 export interface SlotState {
   current: string | null;
   lastDeclared: string | null;
@@ -47,12 +47,12 @@ export const MAX_PER_DATE = 3;
  * among the earlier valid records, of any card (check 4, `date_order`).
  */
 export const DATE_ORDER_DAYS = 4;
-/** A card has 5 switches on each platform, for good (spec/roster-rules.md, "Switches and corrections"). */
+/** A card has 5 switches on each platform, for good (spec/record-rules.md, "Switches and corrections"). */
 export const MAX_SWITCHES = 5;
 /**
- * How many days after today a date in the roster can be: a record's date is
+ * How many days after today a date in the proof log can be: a record's date is
  * at most 3 days after the date of the CRL behind its root
- * (spec/roster-rules.md, "How far dates are trusted").
+ * (spec/record-rules.md, "How far dates are trusted").
  */
 export const MAX_DAYS_AHEAD = 3;
 /**
@@ -76,7 +76,7 @@ export interface PlatformKind {
   kind: Kind;
 }
 
-/** The reason code of an invalid record (spec/roster-rules.md, "Per record"). */
+/** The reason code of an invalid record (spec/record-rules.md, "Per record"). */
 export type Reason = "proof" | "challenge_reused" | "root" | "date_order" | "empty" | "switch_limit" | "daily_limit";
 
 /** The reason codes of checks 5 and 6. */
@@ -88,13 +88,13 @@ export type ListReason = "empty" | "switch_limit" | "daily_limit";
  *
  * `blockedPlatform`, with `switch_limit`, is the first platform blocked. It
  * is an explanation for people: the reason code is the whole result of an
- * invalid record (spec/roster-rules.md, "Output").
+ * invalid record (spec/record-rules.md, "Output").
  */
 export type RecordResult<R extends Reason = Reason> =
   | { valid: true; kinds: PlatformKind[] }
   | (R extends "switch_limit" ? { valid: false; reason: "switch_limit"; blockedPlatform: string } : { valid: false; reason: R });
 
-/** A record as the rules read it: a well-formed record of the roster. */
+/** A record as the rules read it: a well-formed record of the proof log. */
 export interface RuleRecord {
   /**
    * Its list, in ascending order of platform. A platform outside the table
@@ -109,7 +109,7 @@ export interface RuleRecord {
 }
 
 export interface RecordInput {
-  /** The roster's platform table (spec/scope.md; platformsOf of platforms.ts), in any order. */
+  /** The proof log's platform table (spec/scope.md; platformsOf of platforms.ts), in any order. */
   platforms: readonly PlatformRow[];
   record: RuleRecord;
   /**
@@ -118,7 +118,7 @@ export interface RecordInput {
    * a state stored before the platform was added reads the same.
    */
   card: CardState;
-  /** The latest date among the earlier valid records of the roster, of any card; null without one. */
+  /** The latest date among the earlier valid records of the proof log, of any card; null without one. */
   latestValidDate: Day | null;
   /** Whether the record's challenge appears in an earlier record, valid or invalid, of any card. */
   challengeUsed: boolean;
@@ -140,7 +140,7 @@ export interface ListOutcome<R extends Reason = Reason> {
 }
 
 export interface RecordOutcome extends ListOutcome {
-  /** The latest date among the valid records of the roster after the record: an invalid record does not move it. */
+  /** The latest date among the valid records of the proof log after the record: an invalid record does not move it. */
   latestValidDate: Day | null;
 }
 
@@ -150,7 +150,7 @@ export function newCard(platforms: readonly PlatformRow[]): CardState {
 }
 
 /**
- * The event rules for one slot (spec/roster-rules.md, "Event rules"):
+ * The event rules for one slot (spec/record-rules.md, "Event rules"):
  * `entry` is the account the list has for the slot's platform, or null. The
  * first row that applies gives the kind and the slot after it; null is no
  * kind, "blocked" is blocked.
@@ -165,14 +165,14 @@ function applyEntry(slot: SlotState, entry: string | null, day: Day): { kind: Ki
 }
 
 /**
- * What the rules are never asked about (spec/roster-rules.md, "What an
+ * What the rules are never asked about (spec/record-rules.md, "What an
  * invalid record changes"): a list that names a platform outside the table
  * or one platform twice, is not in ascending order of platform, or has a
  * username outside the format of its platform; and a state with a slot
  * outside the table. Such a list is a malformed line, not an invalid record:
  * this throws, and no check runs.
  *
- * Go's roster/ stops the same way before check 1 (verifier.CheckAccounts),
+ * Go's prooflog/ stops the same way before check 1 (verifier.CheckAccounts),
  * and for a list wrong in several ways both report the same thing: account
  * by account, its platform, then its place after the account before, then
  * its username.
@@ -185,15 +185,15 @@ function readList(platforms: readonly PlatformRow[], card: CardState, accounts: 
   let last: string | null = null;
   for (const a of accounts) {
     const row = rows.get(a.platform);
-    if (row === undefined) throw new Error(`roster rules: the list names ${JSON.stringify(a.platform)}, a platform outside the table`);
-    if (last === a.platform) throw new Error(`roster rules: the list names ${a.platform} twice`);
-    if (last !== null && !(last < a.platform)) throw new Error("roster rules: the list is not in ascending order of platform");
-    if (!row.format.accepts(a.username)) throw new Error(`roster rules: a username not in the format of ${a.platform}`);
+    if (row === undefined) throw new Error(`record rules: the list names ${JSON.stringify(a.platform)}, a platform outside the table`);
+    if (last === a.platform) throw new Error(`record rules: the list names ${a.platform} twice`);
+    if (last !== null && !(last < a.platform)) throw new Error("record rules: the list is not in ascending order of platform");
+    if (!row.format.accepts(a.username)) throw new Error(`record rules: a username not in the format of ${a.platform}`);
     list.set(a.platform, a.username);
     last = a.platform;
   }
   for (const p of card.slots.keys()) {
-    if (!rows.has(p)) throw new Error(`roster rules: the card's state has a slot on ${JSON.stringify(p)}, a platform outside the table`);
+    if (!rows.has(p)) throw new Error(`record rules: the card's state has a slot on ${JSON.stringify(p)}, a platform outside the table`);
   }
   return { table: [...rows.keys()].sort(byBytes), list };
 }
@@ -235,13 +235,13 @@ export function applyList(platforms: readonly PlatformRow[], card: CardState, ac
 }
 
 /**
- * The roster rules for one record (spec/roster-rules.md, "Per record"): the
+ * The record rules for one record (spec/record-rules.md, "Per record"): the
  * six checks in order, the first that fails giving the reason code. It reads
  * nothing but its input, changes none of it and keeps nothing; the same
  * input gives the same outcome.
  *
  * What the caller keeps between records: the card's state (`card` of the
- * outcome), the roster's latest valid date (`latestValidDate` of the
+ * outcome), the proof log's latest valid date (`latestValidDate` of the
  * outcome) and, whatever the result, that the record's challenge is used.
  * When it throws, the input was not a record, and the caller keeps nothing.
  */
@@ -278,7 +278,7 @@ export function dailyLimitReached(state: CardItems, day: Day): boolean {
 }
 
 /**
- * False if no roster can give a slot this state by the rules (the device
+ * False if no proof log can give a slot this state by the rules (the device
  * then does not read the server's answer). Only what follows directly from
  * the event rules:
  *
@@ -306,7 +306,7 @@ export function possibleSlot(slot: SlotState, lastCardProof: Day | null): boolea
 }
 
 /**
- * False if no roster can give a card these items: `proofs_on_last_date`
+ * False if no proof log can give a card these items: `proofs_on_last_date`
  * counts the valid records dated `last_card_proof`, at most 3 of a date
  * (check 6), so it is 0 without `last_card_proof` and 1 to 3 with it; and no
  * date is more than MAX_DAYS_AHEAD days after today.

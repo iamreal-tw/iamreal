@@ -5,7 +5,7 @@ Status: **Draft**.
 When the server accepts a card proof it answers `POST /api/v1/records` with
 status `201` ([`docs/api/card-proof.md`](../docs/api/card-proof.md),
 `records`): the record's `seq` and hash, and what the record is on every
-platform. The device uses it to tell the cardholder that the roster has the
+platform. The device uses it to tell the cardholder that the proof log has the
 record, and compares it with what its own screen said before the card
 signed ([`list-consequence.md`](list-consequence.md)). This document
 defines how the device reads that answer and what it compares, so that
@@ -15,10 +15,10 @@ the same answer.
 What the screen says is in `design/copy/`, not here. Terms follow
 [`GLOSSARY.md`](../GLOSSARY.md).
 
-The device cannot check this answer: it has no copy of the roster. A
+The device cannot check this answer: it has no copy of the proof log. A
 difference found here means that the card's state the server sent before,
-or this answer, was not what the roster holds. The record itself is
-checked by anyone who re-verifies the roster
+or this answer, was not what the proof log holds. The record itself is
+checked by anyone who re-verifies the proof log
 ([`record.md`](record.md), "How to verify").
 
 ## Input
@@ -33,7 +33,7 @@ checked by anyone who re-verifies the roster
   of platform, each platform once: rows that are not are a mistake of the
   program, not a result of this document.
 
-A status `201` means the record is in the roster, whatever the body is.
+A status `201` means the record is in the proof log, whatever the body is.
 Nothing in this document turns it into a failure: there is no result that
 says the card proof did not happen.
 
@@ -131,4 +131,4 @@ number beyond the range of a 64-bit float or with more digits than one
 holds, or arrays and objects nested more than 128 deep. How a client reads one is not defined here and
 the vectors have none: a JavaScript client's parser reads them,
 `device-core/` tells nothing of such an answer. Either way the record is in
-the roster.
+the proof log.

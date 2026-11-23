@@ -272,7 +272,7 @@ private fun Done(m: Model, outside: Outside) {
     var copied by remember { mutableStateOf(false) }
     val view = m.messages.done(d, single)
 
-    // What the roster recorded is not what step 5 said: first of all, above the title.
+    // What the proof log recorded is not what step 5 said: first of all, above the title.
     view.mismatch?.let { Problem(it, Modifier.testTag("done-mismatch")) }
     Title(m.messages.doneTitle(d))
     if (!withdrawAll) {

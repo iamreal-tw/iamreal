@@ -1,7 +1,7 @@
-// The roster directory in the data bucket (ADR-0027; spec/record.md, "The
-// published roster"): where its files are, how one is written, and how one
-// is read again. Which files there are and what is in them is the roster's
-// object's (roster.ts); their names and the spelling of a record hash list
+// The log directory in the data bucket (ADR-0027; spec/record.md, "The
+// published proof log"): where its files are, how one is written, and how one
+// is read again. Which files there are and what is in them is the proof log's
+// object's (proof-log.ts); their names and the spelling of a record hash list
 // are protocol/'s.
 //
 // The bucket is written through the binding only, and nothing here or
@@ -9,40 +9,40 @@
 // downloaded from the data domain, which does not run the Worker.
 import { hexOf, sha256Hex } from "iamreal-protocol/bytes.ts";
 import { type Day, formatDay } from "iamreal-protocol/date.ts";
-import { FINGERPRINT_FILE_NAME, LINES_PER_FILE, rosterFileName } from "iamreal-protocol/record.ts";
+import { FINGERPRINT_FILE_NAME, LINES_PER_FILE, proofLogFileName } from "iamreal-protocol/record.ts";
 
-/** The roster directory's place in the data bucket (ADR-0027). */
-export const ROSTER_DIRECTORY = "roster/";
+/** The log directory's place in the data bucket (ADR-0027). */
+export const PROOF_LOG_DIRECTORY = "proof-log/";
 
 /**
- * The `Cache-Control` of a full roster file and of its record hash list:
- * neither ever changes again (spec/record.md, "The published roster"). The
+ * The `Cache-Control` of a full log file and of its record hash list:
+ * neither ever changes again (spec/record.md, "The published proof log"). The
  * data domain caches by the header the object carries and by nothing else
  * (README.md, "寫滿的紀錄檔搬到 R2").
  */
 export const CACHE_FULL_FILE = "public, max-age=31536000, immutable";
 
 /**
- * The `Cache-Control` of what the roster's object writes once a day and
- * writes again the next: the last roster file, which is not full, and its
+ * The `Cache-Control` of what the proof log's object writes once a day and
+ * writes again the next: the last log file, which is not full, and its
  * record hash list; the card state file of a date; the fingerprint file
  * (ADR-0027).
  */
 export const CACHE_DAILY = "public, max-age=60";
 
 /** The fingerprint file's place in the data bucket. */
-export const FINGERPRINT_FILE = ROSTER_DIRECTORY + FINGERPRINT_FILE_NAME;
+export const FINGERPRINT_FILE = PROOF_LOG_DIRECTORY + FINGERPRINT_FILE_NAME;
 
 /** The place in the data bucket of the card state file of a date in Taiwan (ADR-0027). */
 export function cardStateFileKey(date: Day): string {
-  return `${ROSTER_DIRECTORY}card-state/${formatDay(date)}.jsonl`;
+  return `${PROOF_LOG_DIRECTORY}card-state/${formatDay(date)}.jsonl`;
 }
 
 /**
- * The `Content-Type` of the roster directory's files of lines of JSON
- * (`.jsonl`): the roster files, and whatever else of the directory is
+ * The `Content-Type` of the log directory's files of lines of JSON
+ * (`.jsonl`): the log files, and whatever else of the directory is
  * written in that form. It is not a type registered with IANA, only the
- * usual name for such a file; nothing that reads the roster depends on it.
+ * usual name for such a file; nothing that reads the proof log depends on it.
  */
 export const TYPE_JSON_LINES = "application/x-ndjson";
 
@@ -52,13 +52,13 @@ export const TYPE_JSON_LINES = "application/x-ndjson";
  */
 export const TYPE_TEXT = "text/plain; charset=utf-8";
 
-/** The headers an object of the roster directory is written with. */
+/** The headers an object of the log directory is written with. */
 export interface FileHeaders {
   readonly cacheControl: string;
   readonly contentType: string;
 }
 
-/** What the roster's object uses of the data bucket. */
+/** What the proof log's object uses of the data bucket. */
 export type FileBucket = Pick<R2Bucket, "put" | "get">;
 
 /**
@@ -170,13 +170,13 @@ async function isBytes(stream: ReadableStream<Uint8Array>, bytes: Uint8Array): P
 }
 
 /**
- * The lines of a full roster file as the bucket has it, each with its LF:
+ * The lines of a full log file as the bucket has it, each with its LF:
  * the file that follows the first `before` records, whose bytes have this
  * SHA-256. Throws if the file is not there, is not those bytes, or is not
  * 1,000 lines.
  */
 export async function readFullFile(bucket: FileBucket, before: number, sha256: string): Promise<string[]> {
-  const key = ROSTER_DIRECTORY + rosterFileName(before);
+  const key = PROOF_LOG_DIRECTORY + proofLogFileName(before);
   const stored = await bucket.get(key);
   if (stored === null) throw new Error(`${key} is not in the bucket`);
   const bytes = new Uint8Array(await stored.arrayBuffer());

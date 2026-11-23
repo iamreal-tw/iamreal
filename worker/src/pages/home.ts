@@ -28,7 +28,7 @@ export function homePage(numbers: HomeNumbers): Document {
   const content = html`<section class="hero">
 <p class="brand"><b>島民證明</b> <span>iamreal.tw</span></p>
 <h1 class="headline"><span class="line">讓 Threads 上的人知道，你是真的台灣人。</span><span class="line">用自然人憑證證明，除了 Threads 帳號名稱，不會揭露任何個資。</span></h1>
-<p class="actions"><a class="button big" href="/proof">我要換島民證明</a> <a href="/roster">看已經換出的島民證明</a></p>
+<p class="actions"><a class="button big" href="/proof">我要換島民證明</a> <a href="/proof-log">看已經換出的島民證明</a></p>
 <p class="small needs">${NEEDS}</p>
 <div class="mini-proof">
 <p class="mini-top"><span>島民證明</span> <span class="platform">Threads</span></p>

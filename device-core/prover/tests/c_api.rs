@@ -5,9 +5,9 @@ mod common;
 
 use common::{cases, text, vectors};
 use iamreal_device_core::{
-    IDC_ABI_VERSION, IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_OK, IDC_ROSTER_PRODUCTION,
-    IDC_ROSTER_TEST, IdcBuf, idc_abi_version, idc_buf_free, idc_declaration_code, idc_scope_string,
-    idc_self_check,
+    IDC_ABI_VERSION, IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_OK, IDC_PROOF_LOG_PRODUCTION,
+    IDC_PROOF_LOG_TEST, IdcBuf, idc_abi_version, idc_buf_free, idc_declaration_code,
+    idc_scope_string, idc_self_check,
 };
 
 const CHALLENGE: &[u8] = b"2026-11-16.000G40R40M30E209185GR38E1W";
@@ -30,9 +30,9 @@ fn take(mut buf: IdcBuf) -> Vec<u8> {
     bytes
 }
 
-fn scope_string(roster: u32) -> Result<Vec<u8>, i32> {
+fn scope_string(proof_log: u32) -> Result<Vec<u8>, i32> {
     let mut out = empty();
-    match unsafe { idc_scope_string(roster, &mut out) } {
+    match unsafe { idc_scope_string(proof_log, &mut out) } {
         IDC_OK => Ok(take(out)),
         code => {
             assert!(out.ptr.is_null() && out.len == 0, "no bytes with an error");
@@ -41,11 +41,15 @@ fn scope_string(roster: u32) -> Result<Vec<u8>, i32> {
     }
 }
 
-fn declaration_code(roster: u32, accounts_json: &[u8], challenge: &[u8]) -> Result<Vec<u8>, i32> {
+fn declaration_code(
+    proof_log: u32,
+    accounts_json: &[u8],
+    challenge: &[u8],
+) -> Result<Vec<u8>, i32> {
     let mut out = empty();
     let code = unsafe {
         idc_declaration_code(
-            roster,
+            proof_log,
             accounts_json.as_ptr(),
             accounts_json.len(),
             challenge.as_ptr(),
@@ -62,11 +66,11 @@ fn declaration_code(roster: u32, accounts_json: &[u8], challenge: &[u8]) -> Resu
     }
 }
 
-fn roster_number(v: &serde_json::Value) -> u32 {
-    match text(v, "roster") {
-        "production" => IDC_ROSTER_PRODUCTION,
-        "test" => IDC_ROSTER_TEST,
-        other => panic!("roster {other}"),
+fn proof_log_number(v: &serde_json::Value) -> u32 {
+    match text(v, "proof_log") {
+        "production" => IDC_PROOF_LOG_PRODUCTION,
+        "test" => IDC_PROOF_LOG_TEST,
+        other => panic!("proof log {other}"),
     }
 }
 
@@ -81,23 +85,23 @@ fn the_linked_barretenberg_passes_the_self_check() {
 }
 
 #[test]
-fn the_scope_string_of_each_roster() {
+fn the_scope_string_of_each_proof_log() {
     let v = vectors("scope.json");
     let mut seen = 0;
     for s in cases(&v, "scopes") {
         if s["accepted"].as_bool().unwrap() {
             assert_eq!(
-                scope_string(roster_number(s)).unwrap(),
+                scope_string(proof_log_number(s)).unwrap(),
                 text(s, "scope_string").as_bytes()
             );
             seen += 1;
         }
     }
-    assert_eq!(seen, 2, "one accepted scope string for each roster");
+    assert_eq!(seen, 2, "one accepted scope string for each proof log");
     assert_eq!(scope_string(2), Err(IDC_ERR_ARGUMENT));
     assert_eq!(scope_string(u32::MAX), Err(IDC_ERR_ARGUMENT));
     assert_eq!(
-        unsafe { idc_scope_string(IDC_ROSTER_TEST, std::ptr::null_mut()) },
+        unsafe { idc_scope_string(IDC_PROOF_LOG_TEST, std::ptr::null_mut()) },
         IDC_ERR_ARGUMENT
     );
 }
@@ -107,22 +111,25 @@ fn the_declaration_code_of_every_case() {
     let v = vectors("declaration-code.json");
     let scopes = [
         (
-            IDC_ROSTER_PRODUCTION,
-            scope_string(IDC_ROSTER_PRODUCTION).unwrap(),
+            IDC_PROOF_LOG_PRODUCTION,
+            scope_string(IDC_PROOF_LOG_PRODUCTION).unwrap(),
         ),
-        (IDC_ROSTER_TEST, scope_string(IDC_ROSTER_TEST).unwrap()),
+        (
+            IDC_PROOF_LOG_TEST,
+            scope_string(IDC_PROOF_LOG_TEST).unwrap(),
+        ),
     ];
-    let mut rosters_seen = std::collections::BTreeSet::new();
+    let mut proof_logs_seen = std::collections::BTreeSet::new();
     for c in cases(&v, "cases") {
         let label = text(c, "label");
-        // The function takes a roster, not a scope string: the cases are in the two open scopes.
-        let (roster, _) = scopes
+        // The function takes a proof log, not a scope string: the cases are in the two open scopes.
+        let (proof_log, _) = scopes
             .iter()
             .find(|(_, s)| s == text(c, "scope_string").as_bytes())
             .unwrap_or_else(|| panic!("{label}: an open scope"));
-        rosters_seen.insert(*roster);
+        proof_logs_seen.insert(*proof_log);
         let accounts_json = serde_json::to_vec(&c["accounts"]).unwrap();
-        let code = declaration_code(*roster, &accounts_json, text(c, "challenge").as_bytes())
+        let code = declaration_code(*proof_log, &accounts_json, text(c, "challenge").as_bytes())
             .unwrap_or_else(|e| panic!("{label}: {e}"));
         assert_eq!(
             std::str::from_utf8(&code).unwrap(),
@@ -130,13 +137,13 @@ fn the_declaration_code_of_every_case() {
             "{label}"
         );
     }
-    assert_eq!(rosters_seen.len(), 2, "cases in both rosters");
+    assert_eq!(proof_logs_seen.len(), 2, "cases in both proof logs");
 }
 
 #[test]
 fn a_declaration_code_is_not_computed_from_what_is_not_a_list_or_a_challenge() {
     let one = br#"[{"platform":"threads","username":"alice"}]"#;
-    assert!(declaration_code(IDC_ROSTER_TEST, one, CHALLENGE).is_ok());
+    assert!(declaration_code(IDC_PROOF_LOG_TEST, one, CHALLENGE).is_ok());
     for (why, accounts) in [
         ("not JSON", &b"threads:alice"[..]),
         ("no bytes", b""),
@@ -156,12 +163,12 @@ fn a_declaration_code_is_not_computed_from_what_is_not_a_list_or_a_challenge() {
         ("a username outside ASCII", "[{\"platform\":\"threads\",\"username\":\"é\"}]".as_bytes()),
         ("something after the list", br#"[] []"#),
     ] {
-        assert_eq!(declaration_code(IDC_ROSTER_TEST, accounts, CHALLENGE), Err(IDC_ERR_INPUT), "{why}");
+        assert_eq!(declaration_code(IDC_PROOF_LOG_TEST, accounts, CHALLENGE), Err(IDC_ERR_INPUT), "{why}");
     }
     for c in cases(&vectors("challenge.json"), "invalid") {
         let challenge = text(c, "challenge");
         assert_eq!(
-            declaration_code(IDC_ROSTER_TEST, one, challenge.as_bytes()),
+            declaration_code(IDC_PROOF_LOG_TEST, one, challenge.as_bytes()),
             Err(IDC_ERR_INPUT),
             "{challenge:?}"
         );
@@ -177,7 +184,7 @@ fn null_pointers_are_refused() {
     unsafe {
         assert_eq!(
             idc_declaration_code(
-                IDC_ROSTER_TEST,
+                IDC_PROOF_LOG_TEST,
                 null,
                 5,
                 CHALLENGE.as_ptr(),
@@ -187,12 +194,19 @@ fn null_pointers_are_refused() {
             IDC_ERR_ARGUMENT
         );
         assert_eq!(
-            idc_declaration_code(IDC_ROSTER_TEST, one.as_ptr(), one.len(), null, 37, &mut out),
+            idc_declaration_code(
+                IDC_PROOF_LOG_TEST,
+                one.as_ptr(),
+                one.len(),
+                null,
+                37,
+                &mut out
+            ),
             IDC_ERR_ARGUMENT
         );
         assert_eq!(
             idc_declaration_code(
-                IDC_ROSTER_TEST,
+                IDC_PROOF_LOG_TEST,
                 one.as_ptr(),
                 one.len(),
                 CHALLENGE.as_ptr(),
@@ -204,7 +218,7 @@ fn null_pointers_are_refused() {
         // A length no buffer has is refused before anything is read.
         assert_eq!(
             idc_declaration_code(
-                IDC_ROSTER_TEST,
+                IDC_PROOF_LOG_TEST,
                 one.as_ptr(),
                 usize::MAX,
                 CHALLENGE.as_ptr(),
@@ -216,7 +230,7 @@ fn null_pointers_are_refused() {
         // No bytes may be passed as (NULL, 0): here the empty input is not JSON.
         assert_eq!(
             idc_declaration_code(
-                IDC_ROSTER_TEST,
+                IDC_PROOF_LOG_TEST,
                 null,
                 0,
                 CHALLENGE.as_ptr(),

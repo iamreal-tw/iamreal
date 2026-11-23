@@ -6,7 +6,7 @@
 |---|---|
 | `archive/` | 存檔：三份清冊和索引 `index.jsonl` |
 | `issuer-G2.der`、`issuer-G3.der` | 兩把測試用發證金鑰的公鑰（SubjectPublicKeyInfo）。同一把金鑰簽卡片的憑證和清冊，和內政部一樣 |
-| `roster.jsonl` | 測試的證明紀錄（場合 `iamreal-test:public:0__________`） |
+| `proof-log.jsonl` | 測試的證明紀錄（場合 `iamreal-test:public:0__________`） |
 | `circuits-commit` | 產生測試資料時電路原始碼的提交；提交的這一份記的是先前的私有程式庫的 `497b610…`，在這個程式庫查不到（見「怎麼產生的」） |
 | `generate.go`、`make-proofs.mjs` | 產生上面這些檔案的程式 |
 | `card-proofs/` | 另一份資料：十四次過卡的請求，每一次都帶真的證明，給 `worker/` 從題目走到證明紀錄的測試（`worker/test/records-real.test.ts`）用；它自己的拋棄式金鑰、清冊和產生的程式，見那裡的 `README.md`。證明一樣由 `make-proofs.mjs` 做 |

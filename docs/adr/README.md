@@ -29,8 +29,8 @@
 
 ## 紀錄規則
 
-- 證明紀錄只記持卡人的宣告，不確認帳號主人是否承認；承認靠連回，由訪客自己看。[ADR-0003](0003-roster-records-declarations-only.md)
-- 證明紀錄只存事件，現況由公開規則算出；不設到期日、不提供刪除。[ADR-0005](0005-roster-is-an-append-only-event-log.md)
+- 證明紀錄只記持卡人的宣告，不確認帳號主人是否承認；承認靠連回，由訪客自己看。[ADR-0003](0003-proof-log-records-declarations-only.md)
+- 證明紀錄只存事件，現況由公開規則算出；不設到期日、不提供刪除。[ADR-0005](0005-proof-log-is-an-append-only-event-log.md)
 - 更換每個平台終身 5 次；當天的更正不計次；一張卡片同一個日期最多 3 筆有效紀錄。[ADR-0018](0018-five-switches-per-platform-for-life.md)
 - 紀錄的日期：不晚於所用清冊發布日後 3 天，不早於證明紀錄裡最晚的有效日期前 4 天。[ADR-0015](0015-device-builds-revocation-tree.md)
 - 一張卡片的紀錄，日期不早於它自己的上次過卡日。[ADR-0024](0024-card-dates-do-not-go-back.md)
@@ -40,7 +40,7 @@
 ## 證明紀錄的格式和公開的檔案
 
 - 每一筆紀錄只有一種寫法，照樣板重寫後逐位元組比對；寫法錯整份不成立，證明或規則不過只是那一筆無效。[ADR-0014](0014-one-spelling-per-record.md)
-- 紀錄不串成鏈；每天公布一次指紋，另外公開雜湊清單。[ADR-0021](0021-roster-fingerprint-published-daily.md)
+- 紀錄不串成鏈；每天公布一次指紋，另外公開雜湊清單。[ADR-0021](0021-proof-log-fingerprint-published-daily.md)
 - 紀錄目錄、雜湊清單、指紋檔、卡片狀態檔、清冊存檔放在 `data.iamreal.tw`；指紋檔另外由 `iamreal-tw/fingerprints` 每天抄一份。[ADR-0027](0027-public-files-on-data-subdomain.md)
 
 ## 重驗
@@ -70,7 +70,7 @@
 - 正式網站只從 GitHub Actions 部署，推版本標籤、核准後才部署；部署權杖一個 Worker 一把；快取只有推到 `main` 的執行能存，部署碰不到快取。[ADR-0029](0029-production-deploys-only-from-github-actions.md)
 - app 傳到商店的每一個 build 只從 GitHub Actions 建置和上傳；Android 的簽章金鑰自己產生、不放在 GitHub；Android 能逐檔比對，iOS 比不了。[ADR-0036](0036-apps-built-and-uploaded-only-from-github-actions.md)
 - 手機 app 只有一個識別碼 `tw.iamreal.app`，上線前連測試網站、上線起連正式網站；連測試網站的是不上傳商店的開發用 build `tw.iamreal.app.dev`；CI 只上傳到測試軌道，正式版由營運者在商店的後台發布。[ADR-0037](0037-one-app-identifier.md)（部分取代 ADR-0036）
-- 紀錄目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從證明紀錄重算；重建卡片狀態走「從證明紀錄重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-roster-and-crl-archive.md)
+- 紀錄目錄和清冊存檔每天抄一份副本到 Cloudflare 以外，其他的從證明紀錄重算；重建卡片狀態走「從證明紀錄重建」一個步驟；出事時照 `docs/playbooks/` 做。[ADR-0033](0033-off-site-copy-of-proof-log-and-crl-archive.md)
 
 ## 隱私和營運者看得到什麼
 

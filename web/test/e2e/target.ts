@@ -1,5 +1,5 @@
 // src/target.ts of the test build (vite.config.ts, mode "test"): the test
-// roster's scope string, the issuer keys, the component and the (shorter)
+// log's scope string, the issuer keys, the component and the (shorter)
 // wait for the second signature of the headless browser test
 // (test/e2e/ui.ts), which passes them as `define`. Never in a production
 // build (test/build.test.ts).
@@ -7,12 +7,12 @@ import type { IssuerKey } from "../../src/issuers.ts";
 import type { Presentation } from "../../src/platforms.ts";
 import { TEST_EXAMPLE } from "../../src/presentations/test-example.ts";
 import { THREADS } from "../../src/presentations/threads.ts";
-import type { Roster } from "iamreal-protocol/scope.ts";
+import type { ProofLog } from "iamreal-protocol/scope.ts";
 
-/** The test roster: the card signs `iamreal-test:public:0__________`. */
-export const ROSTER: Roster = "test";
+/** The test log: the card signs `iamreal-test:public:0__________`. */
+export const PROOF_LOG: ProofLog = "test";
 
-/** The platforms of the test roster's table. */
+/** The platforms of the test log's table. */
 export const PRESENTATIONS: readonly Presentation[] = Object.freeze([TEST_EXAMPLE, THREADS]);
 
 declare const __IAMREAL_TEST_ISSUERS__: { name: "G2" | "G3"; modulus: string; bits: 2048 | 4096 }[];

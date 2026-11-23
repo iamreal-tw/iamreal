@@ -9,7 +9,7 @@ use iamreal_device_checks::declaration_code::{
 };
 use iamreal_device_checks::field::{Fe, MODULUS, fe_of_u64, is_field_element, pack31};
 use iamreal_device_checks::hash::Sha256;
-use iamreal_device_checks::scope::{Roster, accepts, scope_string};
+use iamreal_device_checks::scope::{ProofLog, accepts, scope_string};
 use iamreal_device_checks::scoped_id::{
     parse_scoped_id, read_short_id_in_url, scoped_id_text, short_id,
 };
@@ -54,11 +54,11 @@ fn fe(s: &str) -> Fe {
     unhex(s).try_into().expect("32 bytes")
 }
 
-fn roster(v: &Value) -> Roster {
-    match text(v, "roster") {
-        "production" => Roster::Production,
-        "test" => Roster::Test,
-        other => panic!("roster {other}"),
+fn proof_log(v: &Value) -> ProofLog {
+    match text(v, "proof_log") {
+        "production" => ProofLog::Production,
+        "test" => ProofLog::Test,
+        other => panic!("proof log {other}"),
     }
 }
 
@@ -170,25 +170,29 @@ fn scope_json_scopes() {
     for s in cases(&v, "scopes") {
         let string = text(s, "scope_string");
         let accepted = s["accepted"].as_bool().unwrap();
-        assert_eq!(accepts(roster(s), string.as_bytes()), accepted, "{string}");
+        assert_eq!(
+            accepts(proof_log(s), string.as_bytes()),
+            accepted,
+            "{string}"
+        );
         if accepted {
-            assert_eq!(scope_string(roster(s)), string.as_bytes());
+            assert_eq!(scope_string(proof_log(s)), string.as_bytes());
             assert_eq!(
-                format!("0x{}", hex(&pack31(scope_string(roster(s))))),
+                format!("0x{}", hex(&pack31(scope_string(proof_log(s))))),
                 text(s, "scope_packed")
             );
         }
     }
 }
 
-/// The platform table of one roster as the vectors give it: the rows that
-/// roster accepts, each with its `username` format as read here. The
+/// The platform table of one proof log as the vectors give it: the rows that
+/// proof log accepts, each with its `username` format as read here. The
 /// device gets its table from the server (`config`); the vectors' rows
 /// stand in for it.
-fn platform_table(v: &Value, of: Roster) -> std::collections::BTreeMap<String, UsernameFormat> {
+fn platform_table(v: &Value, of: ProofLog) -> std::collections::BTreeMap<String, UsernameFormat> {
     let mut table = std::collections::BTreeMap::new();
     for p in cases(v, "platforms") {
-        if roster(p) != of {
+        if proof_log(p) != of {
             continue;
         }
         let platform = text(p, "platform");
@@ -209,20 +213,20 @@ fn platform_table(v: &Value, of: Roster) -> std::collections::BTreeMap<String, U
 }
 
 #[test]
-fn scope_json_platforms_of_each_roster() {
+fn scope_json_platforms_of_each_proof_log() {
     let v = vectors("scope.json");
-    let production = platform_table(&v, Roster::Production);
-    let test = platform_table(&v, Roster::Test);
+    let production = platform_table(&v, ProofLog::Production);
+    let test = platform_table(&v, ProofLog::Test);
     assert_eq!(production.keys().collect::<Vec<_>>(), ["threads"]);
     assert_eq!(test.keys().collect::<Vec<_>>(), ["test-example", "threads"]);
-    // A test roster accepts the production rows, with the same format.
+    // A test log accepts the production rows, with the same format.
     assert_eq!(test["threads"], production["threads"]);
-    // What a roster does not accept is not in its table, whatever the reason:
-    // another spelling of a listed ID, or an ID of the other roster.
+    // What a proof log does not accept is not in its table, whatever the reason:
+    // another spelling of a listed ID, or an ID of the other proof log.
     let mut refused = 0;
     for p in cases(&v, "platforms") {
         if !p["accepted"].as_bool().unwrap() {
-            let table = if roster(p) == Roster::Production {
+            let table = if proof_log(p) == ProofLog::Production {
                 &production
             } else {
                 &test
@@ -241,8 +245,8 @@ fn scope_json_platforms_of_each_roster() {
 #[test]
 fn scope_json_usernames() {
     let v = vectors("scope.json");
-    // Every platform of the vectors is in a test roster's table.
-    let table = platform_table(&v, Roster::Test);
+    // Every platform of the vectors is in a test log's table.
+    let table = platform_table(&v, ProofLog::Test);
     for u in cases(&v, "usernames") {
         let format = &table[text(u, "platform")];
         let username = text(u, "username");
@@ -371,7 +375,7 @@ fn declaration_code_json() {
 
 #[test]
 fn a_list_with_two_readings_is_not_computed() {
-    let scope = scope_string(Roster::Test);
+    let scope = scope_string(ProofLog::Test);
     let challenge = b"2026-11-16.000G40R40M30E209185GR38E1W";
     let account = |platform, username| Account { platform, username };
     let preimage = |list: &[Account<'_>]| declaration_preimage(scope, list, challenge);

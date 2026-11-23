@@ -10,7 +10,7 @@ status: accepted
 
 ```
 data.iamreal.tw/
-  roster/
+  proof-log/
     0000000000000000.jsonl        紀錄目錄，每 1,000 筆一檔
     0000000000001000.jsonl
     fingerprints.jsonl            指紋檔
@@ -42,7 +42,7 @@ data.iamreal.tw/
 
 ## 指紋檔的另一份
 
-公開程式庫 `iamreal-tw/fingerprints` 用它自己的排程，每天換日後下載 `data.iamreal.tw/roster/fingerprints.jsonl`，確認舊的每一行都沒有變、只在後面多了行，才提交新的行。舊的行變了，就不提交，排程公開失敗。
+公開程式庫 `iamreal-tw/fingerprints` 用它自己的排程，每天換日後下載 `data.iamreal.tw/proof-log/fingerprints.jsonl`，確認舊的每一行都沒有變、只在後面多了行，才提交新的行。舊的行變了，就不提交，排程公開失敗。
 
 - 它用那個程式庫自己的權杖，和後台、開發用的程式庫、每天的重驗（ADR-0025）都沒有共用金鑰。
 - 不管那天的重驗有沒有通過都照抄。它要固定的是「公布了什麼」，重驗的結果看重驗的執行紀錄。
@@ -50,7 +50,7 @@ data.iamreal.tw/
 
 ## 留多久
 
-紀錄目錄、雜湊清單、指紋檔、清冊存檔永久保留。卡片狀態檔只留 7 天（ADR-0025），由 R2 的生命週期規則照 `roster/card-state/` 刪（[object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)），不靠後台的程式。
+紀錄目錄、雜湊清單、指紋檔、清冊存檔永久保留。卡片狀態檔只留 7 天（ADR-0025），由 R2 的生命週期規則照 `proof-log/card-state/` 刪（[object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)），不靠後台的程式。
 
 規則只需要有紀錄用到的清冊（`spec/revocation-tree.md`），但沒用到的也保留。
 
@@ -63,7 +63,7 @@ data.iamreal.tw/
 
 ## Considered Options
 
-- **`iamreal.tw/roster/`、`iamreal.tw/crl/`，由 Worker 讀 R2 再送**：只有一個網域，但每次下載都經過 Worker，和頁面共用限流。
+- **`iamreal.tw/proof-log/`、`iamreal.tw/crl/`，由 Worker 讀 R2 再送**：只有一個網域，但每次下載都經過 Worker，和頁面共用限流。
 - **R2 給的 `r2.dev` 網址**：Cloudflare 寫明它給開發用、有限流，不適合正式的流量（[public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/)）。
 - **序號從 0 開始，讓檔名是整數**：筆數和最後一筆的序號會差一，規則、ADR、介面文字裡的「第 1 筆」都要改。
 - **指紋只在一檔寫滿時公布**：量少的時候，可能幾週才公布一次。

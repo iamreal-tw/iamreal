@@ -33,8 +33,8 @@ use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
 use iamreal_device_checks::hash::Poseidon2;
 use iamreal_device_checks::list_consequence::{Consequence, ReadState, list_consequence};
-use iamreal_device_checks::roster_rules::{self, Reason};
-use iamreal_device_checks::scope::{Roster, scope_string};
+use iamreal_device_checks::record_rules::{self, Reason};
+use iamreal_device_checks::scope::{ProofLog, scope_string};
 use iamreal_device_checks::scoped_id::{parse_scoped_id, short_id};
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 use serde_json::json;
@@ -59,10 +59,10 @@ pub const IDC_ERR_INTERNAL: i32 = 3;
 /// The session has not passed the checks this function needs first.
 pub const IDC_ERR_REFUSED: i32 = 4;
 
-/// The production roster.
-pub const IDC_ROSTER_PRODUCTION: u32 = 0;
-/// A test roster.
-pub const IDC_ROSTER_TEST: u32 = 1;
+/// The production log.
+pub const IDC_PROOF_LOG_PRODUCTION: u32 = 0;
+/// A test log.
+pub const IDC_PROOF_LOG_TEST: u32 = 1;
 
 /// Bytes the core hands to its caller. The caller reads `len` bytes at
 /// `ptr` and gives the buffer back with [`idc_buf_free`], once.
@@ -124,10 +124,10 @@ unsafe fn input<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], i32> {
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-fn roster_of(roster: u32) -> Result<Roster, i32> {
-    match roster {
-        IDC_ROSTER_PRODUCTION => Ok(Roster::Production),
-        IDC_ROSTER_TEST => Ok(Roster::Test),
+fn proof_log_of(proof_log: u32) -> Result<ProofLog, i32> {
+    match proof_log {
+        IDC_PROOF_LOG_PRODUCTION => Ok(ProofLog::Production),
+        IDC_PROOF_LOG_TEST => Ok(ProofLog::Test),
         _ => Err(IDC_ERR_ARGUMENT),
     }
 }
@@ -185,13 +185,13 @@ pub extern "C" fn idc_self_check() -> i32 {
     })
 }
 
-/// The scope string a card signs for `roster`: 31 bytes in `*out`.
+/// The scope string a card signs for `proof_log`: 31 bytes in `*out`.
 ///
 /// # Safety
 /// `out` is null or points to an `idc_buf` the core may write.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 {
-    output(out, || Ok(scope_string(roster_of(roster)?).to_vec()))
+pub unsafe extern "C" fn idc_scope_string(proof_log: u32, out: *mut IdcBuf) -> i32 {
+    output(out, || Ok(scope_string(proof_log_of(proof_log)?).to_vec()))
 }
 
 /// Reads the list a C function takes: a JSON array of
@@ -199,12 +199,12 @@ pub unsafe extern "C" fn idc_scope_string(roster: u32, out: *mut IdcBuf) -> i32 
 /// (spec/record.md). Each account has exactly these two keys, each once,
 /// both strings, the platform a platform ID: a list has one reading. The
 /// username is any string; each function says what it accepts.
-fn accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
+fn accounts_of(json: &[u8]) -> Result<Vec<record_rules::Account>, i32> {
     let account = |a: &Json| {
         let a = a.as_object().filter(|a| a.len() == 2)?;
         let platform = a.get("platform")?.as_str()?;
         let username = a.get("username")?.as_str()?;
-        is_platform_id(platform.as_bytes()).then(|| roster_rules::Account {
+        is_platform_id(platform.as_bytes()).then(|| record_rules::Account {
             platform: platform.to_owned(),
             username: username.to_owned(),
         })
@@ -243,10 +243,10 @@ fn platform_ids_of(json: &[u8]) -> Result<Vec<String>, i32> {
 struct Answers {
     today: Date,
     /// The rows of the platforms the device knows, in ascending order.
-    table: Vec<roster_rules::Platform>,
+    table: Vec<record_rules::Platform>,
     state: ReadState,
     /// The rows of the platforms offered.
-    offered: Vec<roster_rules::Platform>,
+    offered: Vec<record_rules::Platform>,
 }
 
 /// `IDC_ERR_INPUT` when the table or the state cannot be read, the known
@@ -281,7 +281,7 @@ fn read_answers(
 /// The list a card signs: [`accounts_of`], each username 1 or more
 /// printable ASCII characters without `"` and `\` (what every format
 /// allows at most, spec/scope.md).
-fn signed_accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
+fn signed_accounts_of(json: &[u8]) -> Result<Vec<record_rules::Account>, i32> {
     let list = accounts_of(json)?;
     if list.iter().all(|a| is_any_username(a.username.as_bytes())) {
         Ok(list)
@@ -290,7 +290,7 @@ fn signed_accounts_of(json: &[u8]) -> Result<Vec<roster_rules::Account>, i32> {
     }
 }
 
-fn accounts(list: &[roster_rules::Account]) -> Vec<Account<'_>> {
+fn accounts(list: &[record_rules::Account]) -> Vec<Account<'_>> {
     list.iter()
         .map(|a| Account {
             platform: &a.platform,
@@ -300,7 +300,7 @@ fn accounts(list: &[roster_rules::Account]) -> Vec<Account<'_>> {
 }
 
 /// The declaration code (spec/declaration-code.md) of a list of accounts
-/// and a challenge, in the scope of `roster`: 31 bytes in `*out`, the
+/// and a challenge, in the scope of `proof_log`: 31 bytes in `*out`, the
 /// second message the card signs.
 ///
 /// `accounts_json` is a JSON array of `{"platform":"…","username":"…"}` in
@@ -315,7 +315,7 @@ fn accounts(list: &[roster_rules::Account]) -> Vec<Account<'_>> {
 /// say; `out` is null or points to an `idc_buf` the core may write.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn idc_declaration_code(
-    roster: u32,
+    proof_log: u32,
     accounts_json: *const u8,
     accounts_json_len: usize,
     challenge: *const u8,
@@ -323,7 +323,7 @@ pub unsafe extern "C" fn idc_declaration_code(
     out: *mut IdcBuf,
 ) -> i32 {
     output(out, || {
-        let roster = roster_of(roster)?;
+        let proof_log = proof_log_of(proof_log)?;
         // SAFETY: the caller's promise.
         let (accounts_json, challenge) = unsafe {
             (
@@ -334,7 +334,7 @@ pub unsafe extern "C" fn idc_declaration_code(
         let list = signed_accounts_of(accounts_json)?;
         parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
         let code = declaration_code(
-            scope_string(roster),
+            scope_string(proof_log),
             &accounts(&list),
             challenge,
             &mut hashes::Sha2,
@@ -473,7 +473,7 @@ pub unsafe extern "C" fn idc_list_consequence(
 /// - `last_card_proof`: the date of the card's last valid record, or null.
 /// - `days_since`: the days from that date to today; null without one.
 /// - `daily_limit`: the card has 3 valid records dated today, so no list
-///   can be declared today (spec/roster-rules.md, check 6).
+///   can be declared today (spec/record-rules.md, check 6).
 /// - `known_platforms`: the platforms of the table the device knows, in
 ///   ascending order, offered or not.
 /// - `rows`, in ascending order of platform: one for every platform
@@ -528,7 +528,7 @@ pub unsafe extern "C" fn idc_card_status(
                     "current": slot.current,
                     "last_declared": slot.last_declared,
                     "switch_count": slot.switch_count,
-                    "switches_left": roster_rules::MAX_SWITCHES - slot.switch_count,
+                    "switches_left": record_rules::MAX_SWITCHES - slot.switch_count,
                     "correction_today": slot.correction_date == Some(today),
                 });
                 (row.id(), value)
@@ -549,7 +549,7 @@ pub unsafe extern "C" fn idc_card_status(
                 .last_card_proof
                 .map(|date| today.days_since_1970() - date.days_since_1970()),
             "daily_limit": card.last_card_proof == Some(today)
-                && card.proofs_on_last_date == roster_rules::MAX_PER_DATE,
+                && card.proofs_on_last_date == record_rules::MAX_PER_DATE,
             "known_platforms": table.iter().map(|row| row.id()).collect::<Vec<_>>(),
             "rows": rows.into_iter().map(|(_, row)| row).collect::<Vec<_>>(),
         });
@@ -606,7 +606,7 @@ pub unsafe extern "C" fn idc_short_id(
 ///   (another kind, another account, or only one of the two has the
 ///   platform), in ascending order; empty when `kinds` is null.
 ///
-/// A `201` is a record in the roster whatever its body is: no body is an
+/// A `201` is a record in the proof log whatever its body is: no body is an
 /// error. `IDC_ERR_INPUT` only when the rows are not a JSON array of rows
 /// in ascending order of platform, each platform once: a mistake of the
 /// app, but one the core sees only in the bytes.
@@ -655,7 +655,7 @@ pub unsafe extern "C" fn idc_records_response(
     })
 }
 
-/// Opens a session for one card proof on `roster` and puts the number
+/// Opens a session for one card proof on `proof_log` and puts the number
 /// that names it in `*out`: never 0. The session checks against MOICA's
 /// keys and the files written into the core. Close it with
 /// [`idc_session_close`], whatever happened in between.
@@ -663,14 +663,14 @@ pub unsafe extern "C" fn idc_records_response(
 /// # Safety
 /// `out` is null or points to a `uint64_t` the core may write.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
+pub unsafe extern "C" fn idc_session_open(proof_log: u32, out: *mut u64) -> i32 {
     if out.is_null() {
         return IDC_ERR_ARGUMENT;
     }
     // SAFETY: `out` is not null, and the caller's to write.
     unsafe { out.write(0) };
     code(|| {
-        let handle = session::open(roster_of(roster)?, session::Trust::built_in());
+        let handle = session::open(proof_log_of(proof_log)?, session::Trust::built_in());
         // SAFETY: as above.
         unsafe { out.write(handle) };
         Ok(())
@@ -680,8 +680,8 @@ pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
 /// For tests only (the feature `test-issuers`): opens a session as
 /// [`idc_session_open`] does, but one that checks certificates and CRLs
 /// against the issuer keys given in place of MOICA's. The files it checks
-/// are still the ones written into the core. `roster` is
-/// `IDC_ROSTER_TEST`: `IDC_ERR_ARGUMENT` for the production roster.
+/// are still the ones written into the core. `proof_log` is
+/// `IDC_PROOF_LOG_TEST`: `IDC_ERR_ARGUMENT` for the production log.
 ///
 /// `issuers_json` is a JSON array of `{"issuer":"G2","modulus":"<hex>"}`:
 /// `issuer` is `G2` or `G3`, each at most once, at least one; `modulus` is
@@ -699,7 +699,7 @@ pub unsafe extern "C" fn idc_session_open(roster: u32, out: *mut u64) -> i32 {
 #[cfg(feature = "test-issuers")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn idc_testing_session_open(
-    roster: u32,
+    proof_log: u32,
     issuers_json: *const u8,
     issuers_json_len: usize,
     out: *mut u64,
@@ -712,16 +712,16 @@ pub unsafe extern "C" fn idc_testing_session_open(
     code(|| {
         // Read here, so that the mark stays in every library that has this function.
         std::hint::black_box(&IDC_TESTING_MARK);
-        // A test roster only: no session of the production roster trusts another key.
-        let roster = match roster_of(roster)? {
-            Roster::Test => Roster::Test,
-            Roster::Production => return Err(IDC_ERR_ARGUMENT),
+        // A test log only: no session of the production log trusts another key.
+        let proof_log = match proof_log_of(proof_log)? {
+            ProofLog::Test => ProofLog::Test,
+            ProofLog::Production => return Err(IDC_ERR_ARGUMENT),
         };
         // SAFETY: the caller's promise.
         let bytes = unsafe { input(issuers_json, issuers_json_len) }?;
         let issuers = testing_issuers(bytes).ok_or(IDC_ERR_INPUT)?;
         let handle = session::open(
-            roster,
+            proof_log,
             session::Trust {
                 issuers,
                 artifacts: artifacts::BUILT_IN,

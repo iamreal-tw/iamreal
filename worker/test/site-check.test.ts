@@ -8,10 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CRL_TIME, freshRoster, publishCrl, tw } from "./records.ts";
+import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
 import { type Reader, checkSite } from "./site-check.ts";
 
-/** The date the pages of this test's roster say it was last cleared on: the test's own, not wrangler.jsonc's. It is the day the roster's object first runs. */
+/** The date the pages of this test's proof log say it was last cleared on: the test's own, not wrangler.jsonc's. It is the day the proof log's object first runs. */
 const CLEARED_ON = "2026-11-20";
 const SITE_ORIGIN = "https://test.iamreal.tw";
 
@@ -23,14 +23,14 @@ before(async () => {
   proofFiles = mkdtempSync(join(tmpdir(), "site-check-"));
   for (const name of ["index.html", "help.html"]) writeFileSync(join(proofFiles, name), '<!DOCTYPE html><title>proof</title><script type="module" crossorigin src="/proof/assets/index.js"></script><body></body>');
   worker = await startWorker({ proofFiles });
-  await freshRoster(worker, { clearedOn: CLEARED_ON });
+  await freshProofLog(worker, { clearedOn: CLEARED_ON });
   // A usable CRL of each issuer key, dated 2026-11-20 in Taiwan.
   await publishCrl(worker, { issuer: "G2", number: 1, thisUpdate: CRL_TIME });
   await publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: CRL_TIME });
-  // The roster's object starts on 2026-11-20, and is published at the next midnight.
+  // The proof log's object starts on 2026-11-20, and is published at the next midnight.
   await worker.fetch("/api/v1/fingerprint");
   await worker.setClock(tw("2026-11-21", "00:00:00"));
-  await worker.roster.runAlarm();
+  await worker.proofLog.runAlarm();
 });
 after(async () => {
   await worker.close();
@@ -76,9 +76,9 @@ test("every check passes on the Worker as it is deployed, with a card proof page
 });
 
 test("a CRL older than 3 days fails, and so does an issuer key without a usable CRL", async () => {
-  // The roster's own date is another line's to judge: here it is published on the day asked about.
+  // The proof log's own date is another line's to judge: here it is published on the day asked about.
   const publishedOn = (date: string): Reader => siteWith("/api/v1/fingerprint", (res, body) => new Response(body.replace("2026-11-21", date), { headers: res.headers }));
-  const fingerprintsOn = (date: string): Reader => dataWith("/roster/fingerprints.jsonl", async (res) => new Response((await res.text()).replace("2026-11-21", date), { headers: res.headers }));
+  const fingerprintsOn = (date: string): Reader => dataWith("/proof-log/fingerprints.jsonl", async (res) => new Response((await res.text()).replace("2026-11-21", date), { headers: res.headers }));
   const on = (date: string): Partial<Parts> => ({ today: date, site: publishedOn(date), data: fingerprintsOn(date) });
   assert.deepEqual(await failed(on("2026-11-23")), []);
   const late = await failed(on("2026-11-24"));
@@ -96,9 +96,9 @@ test("a page: another status, a header missing, a cookie, no noindex in the page
     return new Response(body, { status: res.status, headers });
   };
   await failsOnly({ site: siteWith("/faq", without("Content-Security-Policy")) }, "GET /faq", /Content-Security-Policy/);
-  await failsOnly({ site: siteWith("/roster", without("X-Robots-Tag")) }, "GET /roster", /X-Robots-Tag/);
-  await failsOnly({ site: siteWith("/roster", (res, body) => new Response(body, { status: 500, headers: res.headers })) }, "GET /roster", /status is 500/);
-  // The page of a card that is not on the roster must be a 404, whatever it says.
+  await failsOnly({ site: siteWith("/proof-log", without("X-Robots-Tag")) }, "GET /proof-log", /X-Robots-Tag/);
+  await failsOnly({ site: siteWith("/proof-log", (res, body) => new Response(body, { status: 500, headers: res.headers })) }, "GET /proof-log", /status is 500/);
+  // The page of a card that is not on the proof log must be a 404, whatever it says.
   await failsOnly({ site: siteWith("/p/7K2Q9FM4XD", (res, body) => new Response(body, { status: 200, headers: res.headers })) }, "GET /p/7K2Q9FM4XD", /status is 200/);
   const withCookie = (res: Response, body: string): Response => {
     const headers = new Headers(res.headers);
@@ -133,7 +133,7 @@ test("a site without the card proof page, a style sheet kept by caches: each fai
   await failsOnly({ site: siteWith("/pages.css", (res, body) => new Response(body, { headers: { ...Object.fromEntries(res.headers), "cache-control": "public, max-age=60" } })) }, "GET /pages.css", /Cache-Control/);
 });
 
-test("config: the production roster's platforms, another age for CRLs, an answer a cache may keep; each fails", async () => {
+test("config: the production log's platforms, another age for CRLs, an answer a cache may keep; each fails", async () => {
   const config = (change: (c: Record<string, unknown>) => void, headers?: Record<string, string>): Reader =>
     siteWith("/api/v1/config", (res, body) => {
       const c = JSON.parse(body) as Record<string, unknown>;
@@ -147,25 +147,25 @@ test("config: the production roster's platforms, another age for CRLs, an answer
 
 test("the fingerprint file: a last line that is not what the API answers fails; no file passes only when the API says nothing was published", async () => {
   const line = `{"date":"2026-11-20","count":0,"fingerprint":"${"0".repeat(64)}"}\n`;
-  await failsOnly({ data: dataWith("/roster/fingerprints.jsonl", () => new Response(line)) }, "the data domain: the last line of /roster/fingerprints.jsonl is what GET /api/v1/fingerprint answers", /ends with/);
-  // The file is gone and the API still answers a date: the bucket was emptied under a roster that was published.
-  const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
-  await failsOnly({ data: noFile }, "the data domain: the last line of /roster/fingerprints.jsonl is what GET /api/v1/fingerprint answers", /there is no file/);
+  await failsOnly({ data: dataWith("/proof-log/fingerprints.jsonl", () => new Response(line)) }, "the data domain: the last line of /proof-log/fingerprints.jsonl is what GET /api/v1/fingerprint answers", /ends with/);
+  // The file is gone and the API still answers a date: the bucket was emptied under a proof log that was published.
+  const noFile = dataWith("/proof-log/fingerprints.jsonl", () => new Response(null, { status: 404 }));
+  await failsOnly({ data: noFile }, "the data domain: the last line of /proof-log/fingerprints.jsonl is what GET /api/v1/fingerprint answers", /there is no file/);
 });
 
-test("a roster that was never published passes on the day it was cleared and the two days after, and no longer", async () => {
+test("a proof log that was never published passes on the day it was cleared and the two days after, and no longer", async () => {
   // As after a clearing: no file, no date.
   const neverPublished = siteWith("/api/v1/fingerprint", (res) => new Response(`{"date":null,"count":0,"fingerprint":"${"0".repeat(64)}"}`, { headers: res.headers }));
-  const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
+  const noFile = dataWith("/proof-log/fingerprints.jsonl", () => new Response(null, { status: 404 }));
   // Cleared on 2026-11-20: the first line is due at the midnight of the 21st, or of the 22nd if the object first ran on the 21st.
   assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-20" }), []);
   assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-22" }), []);
   // The 23rd: the object does not publish. (The CRLs of the 20th are still young enough that day.)
-  await failsOnly({ site: neverPublished, data: noFile, today: "2026-11-23" }, "GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", /nothing was published yet.*2026-11-20; today is 2026-11-23/);
+  await failsOnly({ site: neverPublished, data: noFile, today: "2026-11-23" }, "GET /api/v1/fingerprint: the proof log was published today or yesterday, or was cleared at most 2 days ago and not published yet", /nothing was published yet.*2026-11-20; today is 2026-11-23/);
 });
 
-test("a roster whose daily publication stopped fails: the last line is older than yesterday", async () => {
-  await failsOnly({ today: "2026-11-23" }, "GET /api/v1/fingerprint: the roster was published today or yesterday, or was cleared at most 2 days ago and not published yet", /"2026-11-21"; today is 2026-11-23/);
+test("a proof log whose daily publication stopped fails: the last line is older than yesterday", async () => {
+  await failsOnly({ today: "2026-11-23" }, "GET /api/v1/fingerprint: the proof log was published today or yesterday, or was cleared at most 2 days ago and not published yet", /"2026-11-21"; today is 2026-11-23/);
 });
 
 test("the data domain's CORS: not allowing the site fails, and so does allowing another site", async () => {
@@ -184,7 +184,7 @@ test("the data domain's CORS: not allowing the site fails, and so does allowing 
   await failsOnly({ data: anyone }, line, /for https:\/\/example\.com/);
 });
 
-test("on the local Worker of `pnpm local` (local: true), the data is the site's own origin: no CORS is asked, and a roster that was never published passes whenever it was cleared", async () => {
+test("on the local Worker of `pnpm local` (local: true), the data is the site's own origin: no CORS is asked, and a proof log that was never published passes whenever it was cleared", async () => {
   const noCors: Reader = async (p, headers) => {
     const res = await data(p, headers);
     const out = new Headers(res.headers);
@@ -193,11 +193,11 @@ test("on the local Worker of `pnpm local` (local: true), the data is the site's 
   };
   const lines = await checkSite({ ...AS_DEPLOYED, data: noCors, local: true });
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  assert.equal(lines.length, 19, "the two lines about Cloudflare's running of the roster are not there");
-  assert.ok(!lines.some((l) => l.what.startsWith("the data domain: CORS") || l.what.startsWith("GET /api/v1/fingerprint: the roster was published")));
-  // A local roster publishes only on a midnight the command was running over: never published, long after the clearing, passes.
+  assert.equal(lines.length, 19, "the two lines about Cloudflare's running of the proof log are not there");
+  assert.ok(!lines.some((l) => l.what.startsWith("the data domain: CORS") || l.what.startsWith("GET /api/v1/fingerprint: the proof log was published")));
+  // A local proof log publishes only on a midnight the command was running over: never published, long after the clearing, passes.
   const neverPublished = siteWith("/api/v1/fingerprint", (res) => new Response(`{"date":null,"count":0,"fingerprint":"${"0".repeat(64)}"}`, { headers: res.headers }));
-  const noFile = dataWith("/roster/fingerprints.jsonl", () => new Response(null, { status: 404 }));
+  const noFile = dataWith("/proof-log/fingerprints.jsonl", () => new Response(null, { status: 404 }));
   assert.deepEqual(await failed({ site: neverPublished, data: noFile, today: "2026-11-23", local: true }), []);
   // The rest is checked as on the deployed site: a CRL older than 3 days still fails.
   assert.ok((await failed({ local: true, today: "2026-11-30" })).some((l) => l.startsWith("the data domain: a usable CRL of G2")));

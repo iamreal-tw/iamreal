@@ -19,7 +19,7 @@ const good: ProofPage = {
     "index.html": 495,
     "help.html": 494,
     "assets/index-COXnmzfW.js": 234_741,
-    "assets/test-roster-BGxzo_9J.css": 8364,
+    "assets/test-proof-log-BGxzo_9J.css": 8364,
     "assets/acvm_js_bg-D_Jg3KxI.wasm": 3_050_251,
     "bb/barretenberg.wasm.gz": 4_067_387,
     "bb/barretenberg-threads.wasm.gz": 4_071_596,
@@ -40,7 +40,7 @@ const withCode = (from: string, to: string): ProofPage => {
   return { ...good, code: good.code.replace(from, to) };
 };
 
-test("a build as the test site's is passes for a test roster's site with that date", () => {
+test("a build as the test site's is passes for a test log's site with that date", () => {
   checkProofPage(good, "test", CLEARED_ON);
 });
 
@@ -55,14 +55,14 @@ test("a build with a file missing or empty, or a file that is no part of the pag
     ["no script", withFiles((f) => delete f["assets/index-COXnmzfW.js"]), /a script under assets\//],
     ["rules of Static Assets among the page's files", withFiles((f) => (f["_headers"] = 10)), /_headers/],
     ["a file beside the page's", withFiles((f) => (f["notes.txt"] = 10)), /notes\.txt/],
-    ["a directory that is not the build's", withFiles((f) => (f["local/roster.db"] = 10)), /local\/roster\.db/],
+    ["a directory that is not the build's", withFiles((f) => (f["local/proof-log.db"] = 10)), /local\/proof-log\.db/],
     ["a page under assets/", withFiles((f) => (f["assets/other.html"] = 10)), /assets\/other\.html/],
     ["an empty file where the CRS is", withFiles((f) => (f["crs/bn254_g2.dat"] = 0)), /crs\/bn254_g2\.dat of the card proof page is not empty/],
   ];
   for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
 });
 
-test("a build of another target is turned away: the tests', the production roster's, the one for a real card on this computer, or one with another date", () => {
+test("a build of another target is turned away: the tests', the production log's, the one for a real card on this computer, or one with another date", () => {
   const cases: [string, ProofPage, RegExp][] = [
     ["the fake component's address", withCode("http://localhost:61161", "http://localhost:61171"), /localhost:61171|the component/],
     ["a second local address", { ...good, code: `${good.code}fetch("http://127.0.0.1:8080/x")` }, /127\.0\.0\.1:8080/],
@@ -70,13 +70,13 @@ test("a build of another target is turned away: the tests', the production roste
     ["the test target's values", { ...good, code: `${good.code}__IAMREAL_TEST_ISSUERS__` }, /__IAMREAL_TEST/],
     ["the fake card", { ...good, code: `${good.code}class FakeCard{}` }, /FakeCard/],
     ["a private key", { ...good, code: `${good.code}importKey("pkcs8",k)` }, /pkcs8/],
-    ["the production roster's data domain", withCode("https://test-data.iamreal.tw", "https://data.iamreal.tw"), /data\.iamreal\.tw/],
+    ["the production log's data domain", withCode("https://test-data.iamreal.tw", "https://data.iamreal.tw"), /data\.iamreal\.tw/],
     ["both data domains", { ...good, code: `${good.code}"https://data.iamreal.tw"` }, /https:\/\/data\.iamreal\.tw/],
     ["no data domain: the build for a real card on this computer", withCode('"https://test-data.iamreal.tw"', '""'), /test-data\.iamreal\.tw/],
     ["another address of the project", { ...good, code: `${good.code}"https://iamreal.tw/api"` }, /https:\/\/iamreal\.tw/],
-    ["no mark of a test roster", withCode("測試的證明紀錄", ""), /mark of a test roster/],
+    ["no mark of a test log", withCode("測試的證明紀錄", ""), /mark of a test log/],
     ["the mark with another date than the Worker's setting", withCode(CLEARED_ON, "2026-11-18"), /2026-11-19/],
-    ["a build whose target signs the public roster's scope string", withCode('"scope":"iamreal-test:public:0__________"', '"scope":"iamreal:public:0_______________"'), /says the build signs iamreal-test:public:0__________/],
+    ["a build whose target signs the public proof log's scope string", withCode('"scope":"iamreal-test:public:0__________"', '"scope":"iamreal:public:0_______________"'), /says the build signs iamreal-test:public:0__________/],
     ["a mark that does not say which scope string", withCode(',"scope":"iamreal-test:public:0__________"', ""), /says the build signs/],
     ["two marks", { ...good, code: `${good.code}'{"clearedOn":"${CLEARED_ON}","scope":"iamreal:public:0_______________"}'` }, /says the build signs/],
     ["the public site's domain in the links", withCode('"test.iamreal.tw"', '"iamreal.tw"'), /test\.iamreal\.tw/],
@@ -85,17 +85,17 @@ test("a build of another target is turned away: the tests', the production roste
   for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
   // The date the build must carry is the one it is checked against.
   assert.throws(() => checkProofPage(good, "test", "2026-11-20"), /2026-11-20/);
-  // No deploy of a production roster's site is made here yet: its page is not this build.
+  // No deploy of a production log's site is made here yet: its page is not this build.
   assert.throws(() => checkProofPage(good, "production", null), /production/);
 });
 
-test("every environment's page is checked against its own kind of roster and date; an environment without a page is turned away", () => {
+test("every environment's page is checked against its own kind of proof log and date; an environment without a page is turned away", () => {
   checkProofPages({ test: { kind: "test", clearedOn: CLEARED_ON, page: good } });
   assert.throws(() => checkProofPages({ test: { kind: "test", clearedOn: CLEARED_ON, page: null } }), /the test environment: there is no build of web\//);
   assert.throws(() => checkProofPages({ test: { kind: "test", clearedOn: "2026-11-20", page: good } }), /the test environment: .*2026-11-20/);
   assert.throws(() => checkProofPages({ test: { kind: "test", clearedOn: undefined, page: good } }), /the test environment: .*last cleared on/);
-  assert.throws(() => checkProofPages({ test: { kind: "staging", clearedOn: CLEARED_ON, page: good } }), /ROSTER_KIND of the test environment/);
-  // A second environment with the same page is not passed by the first: a production roster's site needs another build.
+  assert.throws(() => checkProofPages({ test: { kind: "staging", clearedOn: CLEARED_ON, page: good } }), /PROOF_LOG_KIND of the test environment/);
+  // A second environment with the same page is not passed by the first: a production log's site needs another build.
   assert.throws(() => checkProofPages({ test: { kind: "test", clearedOn: CLEARED_ON, page: good }, production: { kind: "production", clearedOn: undefined, page: good } }), /the production environment/);
   assert.throws(() => checkProofPages({}), /has an environment/);
 });
@@ -114,7 +114,7 @@ test("the test site's build of web/ passes, with the date it was given; without 
     else assert.throws(() => checkProofPage(page, "test", CLEARED_ON), /crs\/bn254_g1_compressed_2p18\.dat/);
     // Whatever the CRS, everything else about it holds.
     checkProofPage({ ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } }, "test", CLEARED_ON);
-    // The production build of web/ in its place is turned away: it has no mark, the public roster's data domain and the public site's links.
+    // The production build of web/ in its place is turned away: it has no mark, the public proof log's data domain and the public site's links.
     // The checks of a pull request have no CRS: the date is looked at on the copy that has one in its place.
     const whole = { ...page, files: { ...page.files, "crs/bn254_g1_compressed_2p18.dat": 1, "crs/bn254_g2.dat": 1 } };
     assert.throws(() => checkProofPage(whole, "test", "2026-11-20"), /2026-11-20/);

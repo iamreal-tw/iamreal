@@ -109,7 +109,7 @@ const site = await startWorkerSite({
   crlTimeoutMs: 60_000,
   own(req, res, path) {
     // The API and the data domain's files are not this server's.
-    if (current === null || path.startsWith("/api/") || path.startsWith("/crl/") || path.startsWith("/roster/")) return false;
+    if (current === null || path.startsWith("/api/") || path.startsWith("/crl/") || path.startsWith("/proof-log/")) return false;
     const cfg = current;
     res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
     res.setHeader("Cache-Control", "no-store");
@@ -156,7 +156,7 @@ try {
       pin: "123456",
       issuers,
       // A first declaration of two accounts, then a list without one of them
-      // (its withdrawal) on the same page load. The Worker keeps the roster,
+      // (its withdrawal) on the same page load. The Worker keeps the proof log,
       // so the second card proof sees the first.
       runs: RUNS,
       maxThreads: cfg.maxThreads,
@@ -166,7 +166,7 @@ try {
     const reported = new Promise<any>((r) => (resolveReport = r));
     current = { isolation: cfg.isolation, fixture, report: resolveReport, unknown };
     site.notFound.length = 0;
-    const before = (await worker.roster.stored()).roster.count;
+    const before = (await worker.proofLog.stored()).proofLog.count;
 
     const profile = mkdtempSync(join(out, "profile-"));
     const chrome = spawn(CHROME, ["--headless=new", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--disable-extensions", `${site.origin}/`], { stdio: "ignore" });
@@ -202,9 +202,9 @@ try {
     check(st.sessionStorage === 0 && st.indexedDB.length === 0 && st.caches.length === 0 && st.cookies === "", `nothing else stored: ${JSON.stringify({ ...st, localStorage: undefined })}`);
 
     // The record of each card proof: the proof verifies with the native bb.
-    // What the Worker wrote to the roster during this config, in order: the lines of its records.
-    const written = (await worker.roster.stored()).records.filter((r) => r.seq > before);
-    check(written.length === RUNS.length, `the Worker wrote ${written.length} records to the roster`);
+    // What the Worker wrote to the proof log during this config, in order: the lines of its records.
+    const written = (await worker.proofLog.stored()).records.filter((r) => r.seq > before);
+    check(written.length === RUNS.length, `the Worker wrote ${written.length} records to the proof log`);
     const issuer = world.issuers.find((i) => i.name === cfg.issuer)!;
     const circuit = CIRCUIT_OF_BITS[issuer.bits].circuit;
     for (const [i, r] of report.results.entries()) {

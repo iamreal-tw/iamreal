@@ -1,23 +1,23 @@
-// The long sequence of records that Go's roster/ and protocol/'s rules are
+// The long sequence of records that Go's prooflog/ and protocol/'s rules are
 // compared on (test/sequence.test.ts, #73): the generator, the files
 // exchanged with Go, the counts printed, and the comparison of one
 // record's answers.
 //
 // The files are events.json and answers.json, in the shape of a case of
-// spec/vectors/roster-rules.json extended with fields that are not in
+// spec/vectors/record-rules.json extended with fields that are not in
 // spec/ (Sequence, GoAnswers): an agreement between this file and
-// roster/sequence_test.go only.
+// prooflog/sequence_test.go only.
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { type Day, dayOf, formatDay, parseDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
-import type { CardState, Kind, Reason } from "iamreal-protocol/roster-rules.ts";
+import type { CardState, Kind, Reason } from "iamreal-protocol/record-rules.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedIdText } from "iamreal-protocol/scoped-id.ts";
 import { type SlotJson, slotToJson } from "../src/slot-json.ts";
 
 export type { SlotJson };
 
-/** An event of spec/vectors/roster-rules.json: a well-formed record with the answers of checks 1 and 3. */
+/** An event of spec/vectors/record-rules.json: a well-formed record with the answers of checks 1 and 3. */
 export interface SequenceEvent {
   seq: number;
   scope_string: string;
@@ -35,7 +35,7 @@ export interface SequenceEvent {
  */
 export interface Sequence {
   name: string;
-  roster: "test";
+  proof_log: "test";
   events: SequenceEvent[];
   checkpoint_every: number;
 }
@@ -125,7 +125,7 @@ function crlDates(rand: () => number, d: Day): Day[] {
 }
 
 /**
- * A sequence of `length` records of the test roster (two platforms) from a
+ * A sequence of `length` records of the test log (two platforms) from a
  * seed. It knows nothing of the rules: it keeps, for each card, which
  * account it wants on each platform, and sends the lists, dates, challenges
  * and CRL dates that make the rules' cases common: few cards and accounts,
@@ -171,7 +171,7 @@ export function generateSequence({ seed, length, checkpointEvery = 100 }: { seed
       crl_dates: crlDates(rand, parseDay(date)!).map(formatDay),
     });
   }
-  return { name: `sequence of seed ${seed}`, roster: "test", events, checkpoint_every: checkpointEvery };
+  return { name: `sequence of seed ${seed}`, proof_log: "test", events, checkpoint_every: checkpointEvery };
 }
 
 /** A card's state after a record: last_card_proof null for a card without a valid record. */
@@ -212,8 +212,8 @@ export interface AccountCount {
 }
 
 /**
- * answers.json, what Go's roster/ writes for a sequence
- * (roster/sequence_test.go): the case of the vectors with its `results` and
+ * answers.json, what Go's prooflog/ writes for a sequence
+ * (prooflog/sequence_test.go): the case of the vectors with its `results` and
  * final `state`, and, not in spec/: `rules_version`; for each record,
  * `cards`, the state of its card after it, and `latest_valid_dates`, the
  * latest date among the valid records up to it; and `checkpoints`, every
@@ -223,7 +223,7 @@ export interface AccountCount {
 export interface GoAnswers {
   rules_version: number;
   name: string;
-  roster: string;
+  proof_log: string;
   events: SequenceEvent[];
   results: (ResultJson & { seq: number })[];
   cards: (CardJson & { scope_string: string; scoped_id: string })[];
@@ -233,7 +233,7 @@ export interface GoAnswers {
 }
 
 /**
- * The reason codes of spec/roster-rules.md, "Per record", and the kinds of
+ * The reason codes of spec/record-rules.md, "Per record", and the kinds of
  * "Event rules": every one of protocol/'s types, and no other (a code added
  * there and not here fails the type check).
  */
@@ -260,7 +260,7 @@ export function statistics(results: readonly ResultJson[]): { valid: number; rea
   return { valid, reasons, kinds, byPlatform };
 }
 
-/** The cases of spec/roster-rules.md a sequence must hold often (scenarios). */
+/** The cases of spec/record-rules.md a sequence must hold often (scenarios). */
 export type Scenario =
   | "around_midnight"
   | "more_than_4_days_back"
@@ -273,10 +273,10 @@ export type Scenario =
 
 /**
  * How many times each case happens in a sequence, read from its events and
- * Go's answers (the roster's latest valid date before each record, the
+ * Go's answers (the proof log's latest valid date before each record, the
  * state of each card after each record), not from protocol/:
  *
- * - `around_midnight`: a valid record dated the day before the roster's latest valid date
+ * - `around_midnight`: a valid record dated the day before the proof log's latest valid date
  * - `more_than_4_days_back`: a `date_order` record dated more than 4 days before it
  * - `exactly_4_days_back_valid`: a valid record dated exactly 4 days before it
  * - `fifth_switch`: a switch that makes the slot's `switch_count` 5

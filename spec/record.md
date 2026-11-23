@@ -2,11 +2,11 @@
 
 Status: **Draft**. Version tag: `iamreal-record-v1`.
 
-A record is the full public content of one event in the roster: the list
+A record is the full public content of one event in the proof log: the list
 of accounts a card declares from then on, and everything needed to
 re-verify it without the server. One card proof is one record. The
-roster is the list of records in order (ADR-0005). Its rules are in
-[`roster-rules.md`](roster-rules.md).
+proof log is the list of records in order (ADR-0005). Its rules are in
+[`record-rules.md`](record-rules.md).
 
 ## Principle
 
@@ -22,20 +22,20 @@ Not stored, because each is computed:
 | Value | Computed from |
 |---|---|
 | Declaration code | `scope_string`, `accounts`, `challenge` ([`declaration-code.md`](declaration-code.md)) |
-| What the record did on each platform (a first declaration, a switch, a withdrawal) | The card's earlier records ([`roster-rules.md`](roster-rules.md)) |
+| What the record did on each platform (a first declaration, a switch, a withdrawal) | The card's earlier records ([`record-rules.md`](record-rules.md)) |
 | `current_time` | The date in `challenge` ([`challenge.md`](challenge.md)) |
 | Date of the event | The date in `challenge` |
 | Issuer modulus | `issuer` (table below) |
 | The record's own hash | All fields (below) |
-| The hash of the record before it, and the roster fingerprint | The records before it ("Record hash and the roster fingerprint") |
+| The hash of the record before it, and the proof log fingerprint | The records before it ("Record hash and the proof log fingerprint") |
 
 The time the server received the event is not stored either. Nothing proves
 it, and minute-level times would make it easier to link one person's records
-across scopes (the public roster and the scopes of other services).
+across scopes (the public proof log and the scopes of other services).
 
-**Every record has exactly one spelling.** Each line of a roster file is a
+**Every record has exactly one spelling.** Each line of a log file is a
 fixed template with the field values filled in. Each value has exactly one
-accepted form. Two copies of the same roster are the same bytes, and no
+accepted form. Two copies of the same proof log are the same bytes, and no
 line can be read in two ways.
 
 ## Fields
@@ -43,7 +43,7 @@ line can be read in two ways.
 | Field | Format |
 |---|---|
 | `seq` | Decimal integer from `1` to `9007199254740991` (2^53 − 1), without leading zeros |
-| `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
+| `scope_string` | One of the accepted scopes of this proof log ([`scope.md`](scope.md)) |
 | `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
 | `accounts` | The account list, below |
 | `challenge` | 37 characters, in the one accepted spelling ([`challenge.md`](challenge.md)) |
@@ -61,7 +61,7 @@ Every format is printable ASCII without `"`, `\` or any control character;
 is applied: zero or more accounts, at most one per platform (ADR-0017). A
 platform that is not in the list is a platform the card declares no account
 on. There is no field that says "declare" or "withdraw": a withdrawal is a
-list without the account ([`roster-rules.md`](roster-rules.md)).
+list without the account ([`record-rules.md`](record-rules.md)).
 
 ```
 ACCOUNTS = "[" "]"
@@ -71,13 +71,13 @@ ACCOUNT  = {"platform":"PLATFORM","username":"USERNAME"}
 
 | Part | Format |
 |---|---|
-| `platform` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
+| `platform` | One of the platform IDs of this proof log, exactly as in the platform table ([`scope.md`](scope.md)) |
 | `username` | The `username` format of that account's `platform` ([`scope.md`](scope.md)) |
 
 - **Order**: the accounts are in ascending order of `platform`, compared by
   byte values, and each `platform` is strictly greater than the one before
   it. So no platform appears twice, a set of accounts has one spelling, and
-  the list has at most as many accounts as the roster has platforms.
+  the list has at most as many accounts as the proof log has platforms.
 - The empty list is `[]`. It is not left out and it is not `null`.
 - Inside an account the keys are `platform`, then `username`. No
   whitespace, no escape sequence, no other key.
@@ -120,15 +120,15 @@ the list is written again from the parsed accounts, in the order they were
 read, after the checks of "The account list"; a parser that drops or merges
 something gives other bytes.
 
-**A roster file** is its lines concatenated, in `seq` order. It has no byte
+**A log file** is its lines concatenated, in `seq` order. It has no byte
 order mark and no empty lines, and its last byte is the `LF` of the last
-line. A roster with no records is the empty file.
+line. A proof log with no records is the empty file.
 
-**A malformed line breaks the whole roster file**, not just that record
-([`roster-rules.md`](roster-rules.md)). A roster file is valid or broken.
+**A malformed line breaks the whole log file**, not just that record
+([`record-rules.md`](record-rules.md)). A log file is valid or broken.
 Only in a valid one can a single record be valid or invalid.
 
-## Record hash and the roster fingerprint
+## Record hash and the proof log fingerprint
 
 ```
 preimage    = "iamreal-record-v1" LF
@@ -148,7 +148,7 @@ A record hash stands for its one record. A record does not carry the hash
 of the record before it (ADR-0021): that hash is computed from the line
 before.
 
-The **roster fingerprint** stands for the whole roster up to a point: the
+The **proof log fingerprint** stands for the whole proof log up to a point: the
 records from `seq` 1 to `seq` n and their order.
 
 ```
@@ -157,7 +157,7 @@ fingerprint(n) = SHA-256("iamreal-fingerprint-v1" LF fingerprint(n − 1) LF rec
                  written as 64 lowercase hex digits
 ```
 
-- `fingerprint(n)` is the roster fingerprint once the record with `seq` n
+- `fingerprint(n)` is the proof log fingerprint once the record with `seq` n
   is added, and `record_hash(n)` is that record's hash.
 - Inside the preimage both values are written as 64 lowercase hex digits,
   separated by `LF`; there is no trailing `LF`. A preimage is 152 bytes.
@@ -167,7 +167,7 @@ fingerprint(n) = SHA-256("iamreal-fingerprint-v1" LF fingerprint(n − 1) LF rec
 
 What the fingerprint does: once someone has kept `fingerprint(n)`, the
 operator cannot drop or reorder any of the first n records, or show
-someone else a different roster up to n, without the kept fingerprint
+someone else a different proof log up to n, without the kept fingerprint
 failing to match. What it does not do: records not yet published are not
 covered; if nobody kept an old fingerprint, the operator can recompute all
 of them; and someone holding only a record hash cannot tell whether the
@@ -175,13 +175,13 @@ records before it changed. Forging or altering a record is already
 prevented by the proof (ADR-0004); the fingerprint is about omission, order
 and equivocation (ADR-0021).
 
-## The published roster
+## The published proof log
 
-A record is about 20 KB, almost all of it the proof, so the roster is
+A record is about 20 KB, almost all of it the proof, so the proof log is
 published as a directory of files rather than one file. Where the
 directory is published is not part of this specification (ADR-0027).
 
-**Roster directory.** The roster file cut every 1,000 lines:
+**Log directory.** The log file cut every 1,000 lines:
 
 - Each file is named by the number of records before it, written as 16
   decimal digits with leading zeros, followed by `.jsonl`:
@@ -190,21 +190,21 @@ directory is published is not part of this specification (ADR-0027).
   still starts at 1, so a file named `b` starts with the record of `seq`
   `b + 1`.
 - Every file holds exactly 1,000 lines, except the last, which holds 1 to
-  1,000. There is no empty file. A roster with no records has no such file.
-- The roster file is these files concatenated in name order. Everything in
-  this document and in [`roster-rules.md`](roster-rules.md) applies to that
+  1,000. There is no empty file. A proof log with no records has no such file.
+- The log file is these files concatenated in name order. Everything in
+  this document and in [`record-rules.md`](record-rules.md) applies to that
   concatenation.
 
-How the roster is cut depends only on `seq`, so everyone holding the same
+How the proof log is cut depends only on `seq`, so everyone holding the same
 records has the same files, and a file that is full never changes again. A
 directory that breaks one of these rules (a missing file, a file of the
 wrong length, a file whose first `seq` is not its name plus one) is broken,
 like a malformed line; a re-verifier reports it with the code `directory`.
 
 **Record hash lists.** The subdirectory `hashes/` holds one record hash list
-for each roster file, with the same number in its name and `.txt` in place
+for each log file, with the same number in its name and `.txt` in place
 of `.jsonl`: `hashes/0000000000000000.txt`, `hashes/0000000000001000.txt`,
-and so on. The list of the roster file named `b`, which holds k lines, is
+and so on. The list of the log file named `b`, which holds k lines, is
 these lines, each followed by one `LF`:
 
 ```
@@ -214,29 +214,29 @@ record_hash(b + 1)
 record_hash(b + k)
 ```
 
-Each value is 64 lowercase hex digits. The first line is the roster
+Each value is 64 lowercase hex digits. The first line is the proof log
 fingerprint at the end of the file before (64 zeros for the first file), so
 it is the fingerprint the fingerprint file gives for `count` `b`, if it has
 a line with that count. A list has k + 1 lines; a full one (1,001 lines)
-never changes, like its roster file. There is no list without a roster
+never changes, like its log file. There is no list without a log
 file.
 
 Someone who kept `fingerprint(c)` checks a later fingerprint from the lists
 alone, without the records: in the list that holds `record_hash(c + 1)`,
 the first line and the hashes before `record_hash(c + 1)` must give the kept
 `fingerprint(c)`, and from there the formula gives every later fingerprint.
-To check that one record is in the published roster, start from the list
+To check that one record is in the published proof log, start from the list
 that holds its hash. What the lists alone show is that no record was
-dropped or reordered and that nobody was shown a different roster; whether
+dropped or reordered and that nobody was shown a different proof log; whether
 each record verifies needs the record itself.
 
-Everything in a list is computed from the roster, so a re-verifier holding
-the roster writes every list again and compares bytes. A list that differs,
-is missing, or has no roster file is a problem it reports.
+Everything in a list is computed from the proof log, so a re-verifier holding
+the proof log writes every list again and compares bytes. A list that differs,
+is missing, or has no log file is a problem it reports.
 
-**Fingerprint file.** `fingerprints.jsonl`, in the roster directory, has one
-line per day on which the roster was published, in the same one-spelling
-form as a roster line: this template, followed by one `LF`.
+**Fingerprint file.** `fingerprints.jsonl`, in the log directory, has one
+line per day on which the proof log was published, in the same one-spelling
+form as a proof log line: this template, followed by one `LF`.
 
 ```
 {"date":"DATE","count":COUNT,"fingerprint":"FINGERPRINT"}
@@ -249,27 +249,27 @@ form as a roster line: this template, followed by one `LF`.
 | `fingerprint` | `fingerprint(count)`, 64 lowercase hex digits; 64 zeros for `count` `0` |
 
 Lines are in order of `date`, each date at most once, and `count` never
-decreases. Anyone holding the roster can check every line. The file is short
+decreases. Anyone holding the proof log can check every line. The file is short
 (one line per day), so it is easy to keep, and it is also copied every day to
 a place of its own (ADR-0027).
 
-A published roster directory has a fingerprint file; a re-verifier reports a
-directory without one. The roster is published at most once per Taiwan date:
+A published log directory has a fingerprint file; a re-verifier reports a
+directory without one. The proof log is published at most once per Taiwan date:
 publishing again on the same date with the same fingerprint changes nothing,
 and with more records it is refused, so that a date's line never changes.
 
-**What is published when.** A full roster file and its list are published
+**What is published when.** A full log file and its list are published
 when the file is full. Once a day the last file and its list are published,
 then the fingerprint line that covers them (ADR-0027). The directory may
 therefore hold more records than the `count` of the fingerprint file's last
-line: those records are not published yet. A re-verifier checks the roster
+line: those records are not published yet. A re-verifier checks the proof log
 up to that `count`.
 
-With the roster, the server publishes once a day the state it keeps of
+With the proof log, the server publishes once a day the state it keeps of
 every card, as a card state file: the states after the first `count`
 records of that day's line. Its format, and how a re-verifier compares it
-with the states it computes from the roster, are in
-[`roster-rules.md`](roster-rules.md), "The card state file".
+with the states it computes from the proof log, are in
+[`record-rules.md`](record-rules.md), "The card state file".
 
 ## Verifying a record
 
@@ -282,7 +282,7 @@ re-verifying, then:
    - `issuer_modulus`: the modulus for `issuer` ([`issuers.md`](issuers.md)),
      in 120-bit limbs, least significant first;
    - `smt_root`: from the record (whether the root is recognized is a
-     separate roster rule, [`roster-rules.md`](roster-rules.md));
+     separate record rule, [`record-rules.md`](record-rules.md));
    - `current_time`: from the challenge's date;
    - `nullifier`: the field element decoded from `scoped_id`;
    - `scope_packed`: `scope_string` packed as in [`scope.md`](scope.md);
@@ -303,10 +303,10 @@ The checks on the proof bytes and on running `bb verify` are in
 [`proof-verification.md`](proof-verification.md).
 
 The server also checks the challenge before appending: it issued it, it has
-not expired, it is unused. It also applies the roster rules. A record that
-fails any check is not appended. A record in the roster that fails one of the
+not expired, it is unused. It also applies the record rules. A record that
+fails any check is not appended. A record in the proof log that fails one of the
 three steps above is invalid, with reason `proof`
-([`roster-rules.md`](roster-rules.md)).
+([`record-rules.md`](record-rules.md)).
 
 ## Accepted circuits
 
@@ -323,35 +323,35 @@ records keep verifying.
 [`vectors/record.json`](vectors/record.json):
 
 - `fingerprint_version` and `empty_fingerprint`: the version string of the
-  roster fingerprint and `fingerprint(0)`;
-- `rosters`: two rosters of three records, one of the production roster and
-  one of a test roster (only a test roster has a list of two accounts),
+  proof log fingerprint and `fingerprint(0)`;
+- `proof_logs`: two proof logs of three records, one of the production log and
+  one of a test log (only a test log has a list of two accounts),
   each record with its line, the list as written in the line
-  (`accounts_text`), its preimage hash, its record hash and the roster
-  fingerprint once it is added; each roster with its last fingerprint and
+  (`accounts_text`), its preimage hash, its record hash and the proof log
+  fingerprint once it is added; each proof log with its last fingerprint and
   its record hash list (`hash_list`);
 - well-formed lines and malformed lines, each with the reason, among them
   the lines that are malformed because of `accounts` and a line with the
   `prev` key of a draft before ADR-0021;
-- roster files that are valid or broken, with the reason and, for a valid
-  one, its roster fingerprint;
-- `generated_roster`: a roster of 2,001 records generated from one line,
-  the fingerprint at the counts where files begin and end, and roster
+- log files that are valid or broken, with the reason and, for a valid
+  one, its proof log fingerprint;
+- `generated_proof_log`: a proof log of 2,001 records generated from one line,
+  the fingerprint at the counts where files begin and end, and proof log
   directories of 0, 1, 1,000, 1,001 and 2,001 records: the name, first
-  `seq`, number of lines and SHA-256 of each roster file, and the same for
+  `seq`, number of lines and SHA-256 of each log file, and the same for
   each record hash list with its first and last line, and the name and
   content of the fingerprint file of the directory published once, on
   2026-11-16, with every record;
 - `fingerprint_files`: fingerprint files checked against the production
-  roster of `rosters`, valid or with the first line that fails.
+  log of `proof_logs`, valid or with the first line that fails.
 
-Every roster, line, file and directory has a `roster`, `production` or
+Every proof log, line, file and directory has a `proof_log`, `production` or
 `test`: whose accepted scopes and platform table it is read with
-([`scope.md`](scope.md)). The same line can be well formed for one roster
+([`scope.md`](scope.md)). The same line can be well formed for one proof log
 and malformed for the other.
 
 The proofs are placeholder bytes, not real proofs: the vectors test the
-formats, the record hash and the roster fingerprint, not proof
+formats, the record hash and the proof log fingerprint, not proof
 verification. To keep the file small, lines write the proof as a token such
 as `@PROOF@`, to be replaced by the string given under `tokens` before
 testing.

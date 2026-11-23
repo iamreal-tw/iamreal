@@ -23,7 +23,7 @@ import tw.iamreal.app.ui.Step
  * of it goes into the saved state of the activity or onto storage, so an
  * app the system ended starts at step 1 (issue #133).
  *
- * The island proof, the roster and the help pages are not in the app: they
+ * The island proof, the proof log and the help pages are not in the app: they
  * open in the browser.
  */
 class MainActivity : ComponentActivity() {

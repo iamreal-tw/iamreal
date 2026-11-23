@@ -16,10 +16,10 @@ class DeviceCoreTest {
     private fun vectors(name: String) = JSONObject(File(System.getProperty("iamreal.vectors"), name).readText())
 
     @Test
-    fun `the scope string is the one of the test roster`() {
+    fun `the scope string is the one of the test log`() {
         val scopes = vectors("scope.json").getJSONArray("scopes")
         val test = (0 until scopes.length()).map { scopes.getJSONObject(it) }
-            .single { it.getString("roster") == "test" && it.getBoolean("accepted") }
+            .single { it.getString("proof_log") == "test" && it.getBoolean("accepted") }
         assertEquals(test.getString("scope_string"), String(DeviceCore.scopeString(), Charsets.US_ASCII))
     }
 

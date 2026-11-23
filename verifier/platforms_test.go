@@ -17,7 +17,7 @@ import (
 )
 
 func TestUsernameFormatIsTheCheckFunction(t *testing.T) {
-	for _, r := range []verifier.Roster{verifier.Production, verifier.Test} {
+	for _, r := range []verifier.ProofLog{verifier.Production, verifier.Test} {
 		for _, p := range verifier.Platforms(r) {
 			accept, err := parseUsernameFormat(p.UsernameFormat)
 			if err != nil {

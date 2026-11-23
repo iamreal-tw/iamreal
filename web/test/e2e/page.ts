@@ -63,7 +63,7 @@ async function main() {
     const card = new FakeCard({ certificates: fx.certificates.map(b64), signingKey, pin: fx.pin });
     const flow = new CardProofFlow(
       {
-        roster: "test",
+        proofLog: "test",
         issuers,
         knownPlatforms: new Set(["test-example", "threads"]),
         fetch: sameOriginFetch,

@@ -16,14 +16,14 @@ final class DeviceCoreTests: XCTestCase {
         XCTAssertNoThrow(try DeviceCore.selfCheck())
     }
 
-    func testTheScopeStringOfEachRoster() throws {
+    func testTheScopeStringOfEachProofLog() throws {
         let scopes = try XCTUnwrap(try Repository.vectors("scope.json")["scopes"] as? [[String: Any]])
         var seen = 0
-        for (name, roster) in [("production", DeviceCore.Roster.production), ("test", .test)] {
-            let accepted = scopes.filter { $0["roster"] as? String == name && $0["accepted"] as? Bool == true }
+        for (name, proofLog) in [("production", DeviceCore.ProofLog.production), ("test", .test)] {
+            let accepted = scopes.filter { $0["proof_log"] as? String == name && $0["accepted"] as? Bool == true }
             XCTAssertEqual(accepted.count, 1, name)
             let expected = try XCTUnwrap(accepted.first?["scope_string"] as? String)
-            XCTAssertEqual(String(decoding: try DeviceCore.scopeString(roster), as: UTF8.self), expected, name)
+            XCTAssertEqual(String(decoding: try DeviceCore.scopeString(proofLog), as: UTF8.self), expected, name)
             seen += 1
         }
         XCTAssertEqual(seen, 2)

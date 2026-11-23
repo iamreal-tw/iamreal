@@ -280,7 +280,7 @@
       }
     },
     {
-      "name": "the first record of a roster",
+      "name": "the first record of a proof log",
       "body": "{\"seq\":1,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {

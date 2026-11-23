@@ -36,7 +36,7 @@ const say = (template: string, values: Values = {}): Sentence => ({ template, va
  * Codes of a submission the server did not accept, which the copy has no
  * sentence of their own for (design/copy/card-proof.md, step 5, the row of the other codes,
  * the codes other than the rows below it; `platform`, a list naming a
- * platform the roster does not accept, is one of them).
+ * platform the proof log does not accept, is one of them).
  */
 const REJECTED = new Set(["scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order"]);
 
@@ -127,7 +127,7 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
       // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
       if (stop.server === "crl_stale") return { ...say(s.server_crl_stale), ...id };
-      // The roster rules, when the card's state changed since it was asked.
+      // The record rules, when the card's state changed since it was asked.
       if (stop.server === "daily_limit") return { ...say(s.daily_limit), ...id };
       if (stop.server === "switch_limit") return { ...say(s.switch_limit), ...id };
       if (stop.server === "empty") return { ...say(s.empty), ...id };
@@ -358,7 +358,7 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   if (slot.row === null) return [say(a.row_unknown_platform)];
   if (slot.lastDeclared === null) return [say(a.row_unused)];
   const used = slot.switchCount;
-  // The switches left by the roster rules: 5 minus the switches used.
+  // The switches left by the record rules: 5 minus the switches used.
   const count =
     used === 0
       ? say(a.row_no_switches_yet, { switches_left: slot.switchesLeft })
@@ -559,7 +559,7 @@ export interface DoneView {
   newCard: boolean;
   /** An account was withdrawn and the list is not empty: its link can be taken down. */
   withdrawnLink: boolean;
-  /** The roster's line (record_list, with one platform record_single, record_withdraw_all), or null when the answer's kinds could not be read. */
+  /** The proof log's line (record_list, with one platform record_single, record_withdraw_all), or null when the answer's kinds could not be read. */
   record: Sentence | null;
   rows: DoneRecordRow[];
   /** done.kinds_unreadable */

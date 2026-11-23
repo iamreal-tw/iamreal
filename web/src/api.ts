@@ -24,7 +24,7 @@
 import type { Account } from "iamreal-protocol/declaration-code.ts";
 import { type Day, parseDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/roster-rules.ts";
+import { type CardState, type Kind, MAX_SWITCHES, type SlotState, possibleCard, possibleSlot } from "iamreal-protocol/record-rules.ts";
 import { isAnyUsername, isPlatformId, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 /** The time limit of a request with a small JSON answer (see above). */
@@ -159,7 +159,7 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
 
 /**
  * A row of the platform table the device can read (docs/api/card-proof.md,
- * `config`): the row type of protocol/, which the roster rules take. The
+ * `config`): the row type of protocol/, which the record rules take. The
  * display name is as the server sends it; the screen shows the ID beside it
  * before the card signs.
  */
@@ -248,7 +248,7 @@ export interface CardStateResponse extends CardState {
  *     account pass the checks every platform satisfies
  *     (protocol/src/username-format.ts), otherwise the answer is not read.
  *     An entry that is not an object, or has no `current`, is not read.
- *   - A state the roster rules cannot produce (possibleSlot, possibleCard,
+ *   - A state the record rules cannot produce (possibleSlot, possibleCard,
  *     with `today`, the device's Taiwan date) is not read either.
  *
  * Fields the device does not know are ignored.
@@ -327,14 +327,14 @@ export interface AcceptedKind {
    * account once the record is applied. Only says whether other cards
    * declare it too; the device cannot check it, and a wrong number cannot
    * identify the cardholder. null if the element has none, or not a count:
-   * the record is in the roster already, so this field alone does not stop
+   * the record is in the proof log already, so this field alone does not stop
    * the card proof.
    */
   accountCards: number | null;
 }
 
 /**
- * The answer to a submission with status 201: the record is in the roster.
+ * The answer to a submission with status 201: the record is in the proof log.
  * An answer whose body the device cannot read (no `seq` or `record_hash` in
  * their form) is still a 201: `seq`, `recordHash` and `kinds` are then null,
  * and the screen says only that the record was made
@@ -346,7 +346,7 @@ export interface Accepted {
   /**
    * `kinds`, in ascending order of platform; null if the device cannot read
    * it (not a non-empty list of readable elements in that order, or a kind it
-   * does not know). The record is in the roster by then: the device then says
+   * does not know). The record is in the proof log by then: the device then says
    * only that the list was recorded (docs/api/card-proof.md).
    */
   kinds: AcceptedKind[] | null;
@@ -383,7 +383,7 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
   try {
     b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
   } catch (e) {
-    // A 201 is a record in the roster, whatever its body: not a failure (Accepted).
+    // A 201 is a record in the proof log, whatever its body: not a failure (Accepted).
     if (e instanceof ServerError && e.status === 201) return { seq: null, recordHash: null, kinds: null };
     throw e;
   }

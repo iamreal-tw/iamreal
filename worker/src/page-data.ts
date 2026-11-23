@@ -1,12 +1,12 @@
-// What the visitors' pages read of the roster, behind one interface
+// What the visitors' pages read of the proof log, behind one interface
 // (ADR-0026): the pages ask `PageData` and know nothing of where the answer
-// comes from. Now it comes from the roster's Durable Object, from the views
+// comes from. Now it comes from the proof log's Durable Object, from the views
 // it writes with each record (views.ts). If the pages' reads have to leave
 // the object, this is the piece that is replaced; src/index.ts is the only
 // place that says which one it is.
 import type { Day } from "iamreal-protocol/date.ts";
-import type { Kind } from "iamreal-protocol/roster-rules.ts";
-import { rosterOf } from "./roster.ts";
+import type { Kind } from "iamreal-protocol/record-rules.ts";
+import { proofLogOf } from "./proof-log.ts";
 
 /** The home page's two numbers (design/copy/home.md, section 2). */
 export interface Counts {
@@ -21,7 +21,7 @@ export interface HistoryRow {
   /** The record's date. */
   readonly date: Day;
   readonly platform: string;
-  /** The roster rules' kind. */
+  /** The record rules' kind. */
   readonly kind: Kind;
   /** The slot had been declared before and had no account just before this record. */
   readonly afterWithdrawal: boolean;
@@ -75,13 +75,13 @@ export interface LatestPlace {
   readonly sinceSeq: number;
 }
 
-/** One slot that gives its place to an account now, as the roster page lists it. */
+/** One slot that gives its place to an account now, as the proof log page lists it. */
 export interface LatestSlot extends LatestPlace {
   readonly scopedId: string;
   readonly username: string;
 }
 
-/** The roster page's numbers and a part of its list, read together. */
+/** The proof log page's numbers and a part of its list, read together. */
 export interface Latest {
   readonly counts: Counts;
   /** The latest first by the date from which, and slots of the same date by the `seq` of that record. */
@@ -103,12 +103,12 @@ export interface PageData {
   latest(platform: string, after: LatestPlace | null, n: number): Promise<Latest>;
 }
 
-/** The page data that asks the roster's Durable Object. */
-export function pageDataOfRoster(env: Env): PageData {
+/** The page data that asks the proof log's Durable Object. */
+export function pageDataOfProofLog(env: Env): PageData {
   return {
-    counts: (platform) => rosterOf(env).pageCounts(platform),
-    cards: (shortId) => rosterOf(env).pageCards(shortId),
-    account: (platform, username) => rosterOf(env).pageAccount(platform, username),
-    latest: (platform, after, n) => rosterOf(env).pageLatest(platform, after, n),
+    counts: (platform) => proofLogOf(env).pageCounts(platform),
+    cards: (shortId) => proofLogOf(env).pageCards(shortId),
+    account: (platform, username) => proofLogOf(env).pageAccount(platform, username),
+    latest: (platform, after, n) => proofLogOf(env).pageLatest(platform, after, n),
   };
 }

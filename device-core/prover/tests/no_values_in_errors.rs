@@ -10,7 +10,7 @@ mod common;
 
 use common::{cases, hex, repo_file, text, unhex, vectors};
 use iamreal_device_checks::issuers::IssuerName;
-use iamreal_device_checks::scope::Roster;
+use iamreal_device_checks::scope::ProofLog;
 use iamreal_device_core::session::{self, Trust};
 use iamreal_device_core::{
     IDC_OK, IdcBuf, artifacts, idc_buf_free, idc_session_add_certificate,
@@ -80,7 +80,7 @@ fn issuers_of(v: &Value) -> Vec<(IssuerName, Vec<u8>)> {
 
 fn open(v: &Value) -> u64 {
     session::open(
-        Roster::Test,
+        ProofLog::Test,
         Trust {
             issuers: issuers_of(v),
             artifacts: artifacts::BUILT_IN,

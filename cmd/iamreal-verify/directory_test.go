@@ -1,7 +1,7 @@
 package main
 
-// Reading a published roster directory, its record hash lists and its
-// fingerprint file (spec/record.md, "The published roster"), with the fake
+// Reading a published log directory, its record hash lists and its
+// fingerprint file (spec/record.md, "The published proof log"), with the fake
 // verifier and archive of main_test.go.
 
 import (
@@ -15,13 +15,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// longRoster is a valid roster of 2,001 records with placeholder proofs:
+// longProofLog is a valid proof log of 2,001 records with placeholder proofs:
 // every record a first declaration of its own card, dated 2026-11-16.
-var longRoster = sync.OnceValue(func() []*verifier.Record {
+var longProofLog = sync.OnceValue(func() []*verifier.Record {
 	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
 	var out []*verifier.Record
 	for seq := uint64(1); seq <= 2001; seq++ {
@@ -50,11 +50,11 @@ func lines(records []*verifier.Record) []byte {
 func fingerprints(entries ...string) string { return strings.Join(entries, "") }
 
 func fingerprintEntry(date string, count int) string {
-	fp := roster.Fingerprint(longRoster()[:count])
+	fp := prooflog.Fingerprint(longProofLog()[:count])
 	return fmt.Sprintf(`{"date":"%s","count":%d,"fingerprint":"%s"}`+"\n", date, count, fp)
 }
 
-// writeDir writes a roster directory: files by path, and fingerprints.jsonl
+// writeDir writes a log directory: files by path, and fingerprints.jsonl
 // if fingerprintFile is not "-".
 func writeDir(t *testing.T, files map[string][]byte, fingerprintFile string) string {
 	t.Helper()
@@ -73,19 +73,19 @@ func writeDir(t *testing.T, files map[string][]byte, fingerprintFile string) str
 }
 
 // longCardStates returns the card state file of the first n records of
-// longRoster, as the server writes it: every record is a valid first
+// longProofLog, as the server writes it: every record is a valid first
 // declaration of its own card.
 func longCardStates(n int) []byte {
-	x := roster.NewRules(verifier.Production, allVerify{}, everyRoot{})
-	for _, r := range longRoster()[:min(n, len(longRoster()))] {
+	x := prooflog.NewRules(verifier.Production, allVerify{}, everyRoot{})
+	for _, r := range longProofLog()[:min(n, len(longProofLog()))] {
 		if res, err := x.Apply(r); err != nil || !res.Valid {
 			panic(fmt.Sprintf("seq %d: %v %v", r.Seq, res, err))
 		}
 	}
-	return roster.CardStateFile(x.CardRows())
+	return prooflog.CardStateFile(x.CardRows())
 }
 
-// withCardState adds, to the files of a roster directory of longRoster, the
+// withCardState adds, to the files of a log directory of longProofLog, the
 // card state file the server writes with the last line of the fingerprint
 // file fps: that of the line's date, with the states after its count. A
 // published directory has it (ADR-0027), and the command reports one that
@@ -96,14 +96,14 @@ func withCardState(files map[string][]byte, fps string) map[string][]byte {
 		return files
 	}
 	last := lines[len(lines)-1]
-	out := map[string][]byte{roster.CardStateName(last.Date): longCardStates(int(min(last.Count, uint64(len(longRoster())))))}
+	out := map[string][]byte{prooflog.CardStateName(last.Date): longCardStates(int(min(last.Count, uint64(len(longProofLog())))))}
 	for name, b := range files {
 		out[name] = b
 	}
 	return out
 }
 
-// writePublished writes a roster directory of longRoster as the server
+// writePublished writes a log directory of longProofLog as the server
 // publishes it: writeDir, with the card state file of the last line of
 // fingerprintFile.
 func writePublished(t *testing.T, files map[string][]byte, fingerprintFile string) string {
@@ -111,22 +111,22 @@ func writePublished(t *testing.T, files map[string][]byte, fingerprintFile strin
 	return writeDir(t, withCardState(files, fingerprintFile), fingerprintFile)
 }
 
-// cut returns the roster files of the roster directory of the first n
+// cut returns the log files of the log directory of the first n
 // records, without their record hash lists.
 func cut(n int) map[string][]byte {
 	files := map[string][]byte{}
-	for before := 0; before < n; before += roster.LinesPerFile {
-		files[fmt.Sprintf("%016d.jsonl", before)] = lines(longRoster()[before:min(before+roster.LinesPerFile, n)])
+	for before := 0; before < n; before += prooflog.LinesPerFile {
+		files[fmt.Sprintf("%016d.jsonl", before)] = lines(longProofLog()[before:min(before+prooflog.LinesPerFile, n)])
 	}
 	return files
 }
 
-// published returns the roster files and the record hash lists of the
+// published returns the log files and the record hash lists of the
 // first n records.
 func published(n int) map[string][]byte {
 	files := map[string][]byte{}
-	for _, p := range roster.DirectoryFiles(longRoster()[:n]) {
-		files[p.RosterFile.Name] = p.RosterFile.Data
+	for _, p := range prooflog.DirectoryFiles(longProofLog()[:n]) {
+		files[p.ProofLogFile.Name] = p.ProofLogFile.Data
 		files[p.HashList.Name] = p.HashList.Data
 	}
 	return files
@@ -142,17 +142,17 @@ func runDir(t *testing.T, dir string, extra ...string) (int, string, string) {
 
 func TestDirectory(t *testing.T) {
 	files := published(2001)
-	files["README.md"] = []byte("not part of the roster")
+	files["README.md"] = []byte("not part of the proof log")
 	dir := writePublished(t, files, fingerprints(fingerprintEntry("2026-11-16", 0), fingerprintEntry("2026-11-17", 1000), fingerprintEntry("2026-11-19", 1000), fingerprintEntry("2026-11-20", 2001)))
 	code, out, errOut := runDir(t, dir)
-	fp := roster.Fingerprint(longRoster())
+	fp := prooflog.Fingerprint(longProofLog())
 	if code != exitAllValid || !strings.Contains(out, "records: 2001\nfingerprint: "+fp) ||
-		!strings.Contains(errOut, "fingerprints.jsonl: 4 line(s), every fingerprint is the roster's") ||
-		!strings.Contains(errOut, "hashes/: 3 list(s), every list is the roster's") {
+		!strings.Contains(errOut, "fingerprints.jsonl: 4 line(s), every fingerprint is the proof log's") ||
+		!strings.Contains(errOut, "hashes/: 3 list(s), every list is the proof log's") {
 		t.Errorf("exit %d\n%s\n%s", code, out[:200], errOut)
 	}
 	// The same records as one file give the same output.
-	_, outFile, _ := runWith(t, lines(longRoster()), allVerify{}, everyRoot{})
+	_, outFile, _ := runWith(t, lines(longProofLog()), allVerify{}, everyRoot{})
 	if outFile != out {
 		t.Errorf("the directory and the file give different output")
 	}
@@ -164,7 +164,7 @@ func TestDirectory(t *testing.T) {
 			t.Errorf("%d records: exit %d %s", n, code, errOut)
 		}
 	}
-	// No record: no roster file, no record hash list.
+	// No record: no log file, no record hash list.
 	if code, out, errOut := runDir(t, writePublished(t, nil, fingerprintEntry("2026-11-16", 0))); code != exitAllValid || !strings.Contains(out, "records: 0") ||
 		!strings.Contains(errOut, "hashes/: 0 list(s)") {
 		t.Errorf("empty: exit %d %s %s", code, out, errOut)
@@ -188,12 +188,12 @@ func TestDirectoryBroken(t *testing.T) {
 		}, 1001, "directory", "0000000000001000.jsonl, the file that starts at line 1001, is missing"},
 		{"short file", 1001, func() map[string][]byte {
 			return map[string][]byte{
-				"0000000000000000.jsonl": lines(longRoster()[:999]),
-				"0000000000000999.jsonl": lines(longRoster()[999:1001]),
+				"0000000000000000.jsonl": lines(longProofLog()[:999]),
+				"0000000000000999.jsonl": lines(longProofLog()[999:1001]),
 			}
 		}, 1, "directory", "has 999 lines, not 1000"},
 		{"last file too long", 1000, func() map[string][]byte {
-			return map[string][]byte{"0000000000000000.jsonl": lines(longRoster()[:1001])}
+			return map[string][]byte{"0000000000000000.jsonl": lines(longProofLog()[:1001])}
 		}, 1, "directory", "1001 lines, more than 1000"},
 		{"empty file", 1001, func() map[string][]byte {
 			f := cut(1000)
@@ -201,7 +201,7 @@ func TestDirectoryBroken(t *testing.T) {
 			return f
 		}, 1001, "directory", "is empty"},
 		{"first file named by its first seq, as before ADR-0027", 1, func() map[string][]byte {
-			return map[string][]byte{"0000000000000001.jsonl": lines(longRoster()[:1])}
+			return map[string][]byte{"0000000000000001.jsonl": lines(longProofLog()[:1])}
 		}, 1, "directory", "0000000000000000.jsonl, the file that starts at line 1, is missing"},
 		{"second file named by its first seq, as before ADR-0027", 1001, func() map[string][]byte {
 			f := cut(1001)
@@ -227,7 +227,7 @@ func TestDirectoryBroken(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dir := writePublished(t, c.files(), fingerprintEntry("2026-11-16", c.count))
 			code, out, _ := runDir(t, dir)
-			want := fmt.Sprintf("roster file: broken at line %d: %s", c.line, c.code)
+			want := fmt.Sprintf("log file: broken at line %d: %s", c.line, c.code)
 			if code != exitInvalid || !strings.HasPrefix(out, want) || !strings.Contains(out, c.want) {
 				t.Errorf("exit %d: %s\nwant %s … %s", code, out, want, c.want)
 			}
@@ -248,14 +248,14 @@ func TestFingerprints(t *testing.T) {
 		want         []string
 	}{
 		{"missing", "-", []string{"fingerprints.jsonl is missing"}},
-		{"fingerprint of another roster", `{"date":"2026-11-16","count":1000,"fingerprint":"` + other + `"}` + "\n",
-			[]string{"line 1: fingerprint " + other + " is not the roster fingerprint of the first 1000 records"}},
-		{"the record hash of the last record, as a head before ADR-0021", `{"date":"2026-11-16","count":1000,"fingerprint":"` + longRoster()[999].Hash() + `"}` + "\n",
-			[]string{"line 1: fingerprint " + longRoster()[999].Hash() + " is not the roster fingerprint"}},
+		{"fingerprint of another proof log", `{"date":"2026-11-16","count":1000,"fingerprint":"` + other + `"}` + "\n",
+			[]string{"line 1: fingerprint " + other + " is not the proof log fingerprint of the first 1000 records"}},
+		{"the record hash of the last record, as a head before ADR-0021", `{"date":"2026-11-16","count":1000,"fingerprint":"` + longProofLog()[999].Hash() + `"}` + "\n",
+			[]string{"line 1: fingerprint " + longProofLog()[999].Hash() + " is not the proof log fingerprint"}},
 		{"the key head, as before ADR-0021", strings.Replace(fingerprintEntry("2026-11-16", 1), `"fingerprint"`, `"head"`, 1),
 			[]string{"line 1: not the template of the spec"}},
-		{"count beyond the roster", fingerprintEntry("2026-11-16", 0) + `{"date":"2026-11-17","count":1002,"fingerprint":"` + other + `"}` + "\n",
-			[]string{"line 2: count 1002, but the roster has 1001 records"}},
+		{"count beyond the proof log", fingerprintEntry("2026-11-16", 0) + `{"date":"2026-11-17","count":1002,"fingerprint":"` + other + `"}` + "\n",
+			[]string{"line 2: count 1002, but the proof log has 1001 records"}},
 		{"date twice", fingerprintEntry("2026-11-16", 1) + fingerprintEntry("2026-11-16", 2),
 			[]string{"line 2: date 2026-11-16 is not after 2026-11-16"}},
 		{"dates out of order", fingerprintEntry("2026-11-17", 1) + fingerprintEntry("2026-11-16", 2),
@@ -275,7 +275,7 @@ func TestFingerprints(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			code, out, errOut := runDir(t, writePublished(t, files, c.fingerprints))
-			if code != exitInvalid || !strings.Contains(out, "roster file: valid") {
+			if code != exitInvalid || !strings.Contains(out, "log file: valid") {
 				t.Errorf("exit %d\n%s", code, errOut)
 			}
 			for _, w := range c.want {
@@ -283,7 +283,7 @@ func TestFingerprints(t *testing.T) {
 					t.Errorf("stderr does not say %q:\n%s", w, errOut)
 				}
 			}
-			if strings.Contains(errOut, "every fingerprint is the roster's") {
+			if strings.Contains(errOut, "every fingerprint is the proof log's") {
 				t.Errorf("said every fingerprint is fine")
 			}
 		})
@@ -304,38 +304,38 @@ func TestHashLists(t *testing.T) {
 		}, []string{"hashes/0000000000001000.txt is missing"}},
 		{"none", func() map[string][]byte { return cut(1001) },
 			[]string{"hashes/0000000000000000.txt is missing", "hashes/0000000000001000.txt is missing"}},
-		{"a list without a roster file", func() map[string][]byte {
+		{"a list without a log file", func() map[string][]byte {
 			f := published(1001)
-			f["hashes/0000000000002000.txt"] = []byte(roster.EmptyFingerprint + "\n")
+			f["hashes/0000000000002000.txt"] = []byte(prooflog.EmptyFingerprint + "\n")
 			return f
-		}, []string{"hashes/0000000000002000.txt has no roster file"}},
+		}, []string{"hashes/0000000000002000.txt has no log file"}},
 		{"a hash changed", func() map[string][]byte {
 			f := published(1001)
 			b := append([]byte(nil), f["hashes/0000000000000000.txt"]...)
 			b[65] ^= 1
 			f["hashes/0000000000000000.txt"] = b
 			return f
-		}, []string{"hashes/0000000000000000.txt is not the record hash list of the roster"}},
+		}, []string{"hashes/0000000000000000.txt is not the record hash list of the proof log"}},
 		{"the first line is not the fingerprint before the file", func() map[string][]byte {
 			f := published(1001)
 			b := f["hashes/0000000000001000.txt"]
-			f["hashes/0000000000001000.txt"] = append([]byte(roster.EmptyFingerprint+"\n"), b[65:]...)
+			f["hashes/0000000000001000.txt"] = append([]byte(prooflog.EmptyFingerprint+"\n"), b[65:]...)
 			return f
-		}, []string{"hashes/0000000000001000.txt is not the record hash list of the roster"}},
+		}, []string{"hashes/0000000000001000.txt is not the record hash list of the proof log"}},
 		{"no first line", func() map[string][]byte {
 			f := published(1001)
 			f["hashes/0000000000001000.txt"] = f["hashes/0000000000001000.txt"][65:]
 			return f
-		}, []string{"hashes/0000000000001000.txt is not the record hash list of the roster"}},
-		{"the list of a roster of one record in place of the second list", func() map[string][]byte {
+		}, []string{"hashes/0000000000001000.txt is not the record hash list of the proof log"}},
+		{"the list of a proof log of one record in place of the second list", func() map[string][]byte {
 			f := published(1001)
 			f["hashes/0000000000001000.txt"] = published(1)["hashes/0000000000000000.txt"]
 			return f
-		}, []string{"hashes/0000000000001000.txt is not the record hash list of the roster"}},
+		}, []string{"hashes/0000000000001000.txt is not the record hash list of the proof log"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			code, out, errOut := runDir(t, writePublished(t, c.files(), fps))
-			if code != exitInvalid || !strings.Contains(out, "roster file: valid") {
+			if code != exitInvalid || !strings.Contains(out, "log file: valid") {
 				t.Errorf("exit %d\n%s", code, errOut)
 			}
 			for _, w := range c.want {
@@ -343,7 +343,7 @@ func TestHashLists(t *testing.T) {
 					t.Errorf("stderr does not say %q:\n%s", w, errOut)
 				}
 			}
-			if strings.Contains(errOut, "every list is the roster's") {
+			if strings.Contains(errOut, "every list is the proof log's") {
 				t.Errorf("said every list is fine")
 			}
 		})

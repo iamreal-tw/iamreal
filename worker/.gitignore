@@ -8,5 +8,5 @@ test-output/
 generated/
 # The build of web/ among the files of Static Assets (wrangler.jsonc, "assets"); site/pages.css is in the repository.
 site/proof/
-# pnpm local (scripts/local.ts): the roster, the bucket and the site of the build for a real card on this computer.
+# pnpm local (scripts/local.ts): the proof log, the bucket and the site of the build for a real card on this computer.
 local/

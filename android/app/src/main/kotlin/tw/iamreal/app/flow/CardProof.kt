@@ -150,7 +150,7 @@ class CardProof(private val deps: Deps) {
 
     /**
      * The server's answer to the submission, a `201`, as the core read it (spec/records-response.md). The
-     * record is in the roster whatever the answer holds: what cannot be read is null, never a failure.
+     * record is in the proof log whatever the answer holds: what cannot be read is null, never a failure.
      */
     class Answer(
         /** The record's `seq` and hash; both null when nothing of the answer is told. */
@@ -170,7 +170,7 @@ class CardProof(private val deps: Deps) {
              * showed. The app cannot check the answer; the core only compares.
              */
             fun of(response: ByteArray, rowsJson: ByteArray): Answer {
-                // The record is in the roster: the core failing to read its answer does not undo it.
+                // The record is in the proof log: the core failing to read its answer does not undo it.
                 return try {
                     read(JSONObject(String(DeviceCore.recordsResponse(response, rowsJson), Charsets.UTF_8)))
                 } catch (e: DeviceCoreException) {
@@ -200,7 +200,7 @@ class CardProof(private val deps: Deps) {
     }
 
     /**
-     * The card proof is in the roster. [expected] is what the confirmation screen said the list would do;
+     * The card proof is in the proof log. [expected] is what the confirmation screen said the list would do;
      * [answer] what the server says it recorded.
      */
     class Done(

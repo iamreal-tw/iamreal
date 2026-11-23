@@ -383,7 +383,7 @@ func isHex64(s string) bool {
 }
 
 // Archive answers which usable CRLs have a given root: the CRLArchive of
-// roster/ (check 3 of spec/roster-rules.md), with dates as strings so that
+// prooflog/ (check 3 of spec/record-rules.md), with dates as strings so that
 // this package imports nothing of the repository.
 type Archive struct {
 	dates map[[2]string][]string // (issuer, root) → CRL dates

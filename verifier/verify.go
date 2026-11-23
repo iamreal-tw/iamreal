@@ -45,7 +45,7 @@ type Verifier struct {
 }
 
 // Rejection is the error of a record that does not verify: the reason code
-// `proof` of the roster rules. Every other error from VerifyRecord means the
+// `proof` of the record rules. Every other error from VerifyRecord means the
 // verifier itself could not run and says nothing about the record.
 type Rejection struct{ Reason string }
 

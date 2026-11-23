@@ -3,17 +3,17 @@
 //
 //   site/_headers    the headers of the card proof page's files, of the
 //                    style sheet and of the copy buttons' script, written here from src/headers.ts, the one
-//                    place they are defined. A test roster's site and a
-//                    production roster's differ in one header (noindex) and
+//                    place they are defined. A test log's site and a
+//                    production log's differ in one header (noindex) and
 //                    in the data domain the card proof page may connect to,
-//                    so the file is written for one kind of roster.
+//                    so the file is written for one kind of proof log.
 //   site/_redirects  the one address of the card proof page.
 //
-// Both are in the repository as a test roster's site needs them, the only
+// Both are in the repository as a test log's site needs them, the only
 // environment there is: the job that uploads checks the repository out and
 // runs none of its scripts, so what it uploads is what a reader of the
 // repository sees. Every deploy build checks that they are the ones written
-// here for the roster of each environment (deploy-build-checks.ts,
+// here for the proof log of each environment (deploy-build-checks.ts,
 // `checkSiteFiles`), and test/proof-files.test.ts that the local workerd
 // sends what they say.
 //
@@ -52,7 +52,7 @@ export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js
  * written here: a deploy uploads the style sheet that was reviewed. Change
  * it with the file (`shasum -a 256 site/pages.css`).
  */
-export const PAGES_CSS_SHA256 = "fac8914e64556eb62ce23073445dfd323f36c5a7ec140a2b1ca2adf27600fc06";
+export const PAGES_CSS_SHA256 = "dec0f3d69d88421d73aa5e895caa1d362b55319fe47b73a6650aff9a359902da";
 
 /**
  * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
@@ -61,8 +61,8 @@ export const PAGES_CSS_SHA256 = "fac8914e64556eb62ce23073445dfd323f36c5a7ec140a2
  */
 export const COPY_JS_SHA256 = "d8ecddb598222cea65e621ae5033b916daec9aafacb87a8f650455bdbd2a3e5d";
 
-/** Which roster a site is of (wrangler.jsonc, `ROSTER_KIND`). */
-export type RosterKind = "test" | "production";
+/** Which proof log a site is of (wrangler.jsonc, `PROOF_LOG_KIND`). */
+export type ProofLogKind = "test" | "production";
 
 const block = (path: string, headers: Readonly<Record<string, string>>, more: readonly string[] = []): string =>
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
@@ -71,10 +71,10 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
 const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${STYLE_SHEET_CACHE}`]);
 
 /**
- * The text of site/_headers for a site of that kind of roster.
+ * The text of site/_headers for a site of that kind of proof log.
  *
  * - /proof and everything under it: the card proof page's headers
- *   (`proofPageHeaders`, with the data domain of that kind of roster). In the local workerd a rule matches whether or
+ *   (`proofPageHeaders`, with the data domain of that kind of proof log). In the local workerd a rule matches whether or
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
@@ -83,13 +83,13 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
  *   script-src: it is the page that loads it whose policy says what runs.
- * - Both: `EVERY_RESPONSE`, and on a test roster's site `TEST_SITE_HEADERS`.
+ * - Both: `EVERY_RESPONSE`, and on a test log's site `TEST_SITE_HEADERS`.
  */
-export function siteHeaders(kind: RosterKind): string {
+export function siteHeaders(kind: ProofLogKind): string {
   const every = { ...EVERY_RESPONSE, ...(kind === "test" ? TEST_SITE_HEADERS : {}) };
   const proof = { ...proofPageHeaders(kind), ...every };
   return `${[
-    `# The headers Static Assets sends with the files of this directory, for a ${kind} roster's site.`,
+    `# The headers Static Assets sends with the files of this directory, for a ${kind} log's site.`,
     "# Written by scripts/site-files.ts from src/headers.ts: change them there, not here.",
     "",
     block("/proof", proof),
@@ -117,5 +117,5 @@ export const SITE_REDIRECTS = `# The card proof page is at /proof and nowhere el
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(join(SITE_DIR, "_headers"), siteHeaders("test"));
   writeFileSync(join(SITE_DIR, "_redirects"), SITE_REDIRECTS);
-  console.log(`Wrote _headers and _redirects in ${SITE_DIR}, for a test roster's site.`);
+  console.log(`Wrote _headers and _redirects in ${SITE_DIR}, for a test log's site.`);
 }

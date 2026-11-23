@@ -1,10 +1,10 @@
-package roster_test
+package prooflog_test
 
 import (
 	"errors"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -45,7 +45,7 @@ func TestRootOfSeveralCRLs(t *testing.T) {
 		for _, s := range c.dates {
 			ds = append(ds, date(t, s))
 		}
-		st, err := roster.Apply(recs, verifier.Production, fakeProofs{1: true}, fakeArchive{rootOf(1): ds})
+		st, err := prooflog.Apply(recs, verifier.Production, fakeProofs{1: true}, fakeArchive{rootOf(1): ds})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,15 +69,15 @@ func (brokenArchive) CRLDates(string, string) ([]verifier.Date, error) {
 // a code: an error of the verifier says nothing about the record.
 func TestCannotCheckStops(t *testing.T) {
 	recs := oneRecord("2026-03-10.G9PYF6T6FCEQ2GH6DG2XHGFV74")
-	if _, err := roster.Apply(recs, verifier.Production, brokenVerifier{}, fakeArchive{}); err == nil {
+	if _, err := prooflog.Apply(recs, verifier.Production, brokenVerifier{}, fakeArchive{}); err == nil {
 		t.Errorf("verifier error: no error")
 	}
-	if _, err := roster.Apply(recs, verifier.Production, fakeProofs{1: true}, brokenArchive{}); err == nil {
+	if _, err := prooflog.Apply(recs, verifier.Production, fakeProofs{1: true}, brokenArchive{}); err == nil {
 		t.Errorf("archive error: no error")
 	}
 	// A record that does not verify never reaches check 3.
-	st, err := roster.Apply(recs, verifier.Production, fakeProofs{}, brokenArchive{})
-	if err != nil || st.Records[0].Reason != roster.CodeProof {
+	st, err := prooflog.Apply(recs, verifier.Production, fakeProofs{}, brokenArchive{})
+	if err != nil || st.Records[0].Reason != prooflog.CodeProof {
 		t.Errorf("%v %+v", err, st)
 	}
 }

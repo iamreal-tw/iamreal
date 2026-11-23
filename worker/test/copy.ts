@@ -175,7 +175,7 @@ export function faqQuestions(): FaqQuestion[] {
   return out;
 }
 
-/** The address of a page of a card as a test roster's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
+/** The address of a page of a card as a test log's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
 export function testSiteCardAddress(shortId: string): string {
   const lines = block("test-site.md", "寫出島民證明網址的地方");
   assert.equal(lines.length, 1);
@@ -183,8 +183,8 @@ export function testSiteCardAddress(shortId: string): string {
   return lines[0]!.replace("7K2Q9FM4XD", shortId);
 }
 
-/** The sentence beside the mark of a test roster (design/copy/test-site.md), with this date in it. */
-export function testRosterLine(date: string): string {
+/** The sentence beside the mark of a test log (design/copy/test-site.md), with this date in it. */
+export function testProofLogLine(date: string): string {
   const lines = block("test-site.md", "測試的證明紀錄的標示");
   assert.equal(lines.length, 1);
   return lines[0]!.replace(/\d{4}-\d{2}-\d{2}/, date);

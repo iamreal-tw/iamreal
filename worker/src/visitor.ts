@@ -4,7 +4,7 @@
 //   /                 the home page (design/copy/home.md)
 //   /p/…              the page of a card (design/copy/proof-page.md)
 //   /threads/@…       the page of a Threads account (design/copy/account-page.md)
-//   /roster           the roster page (design/copy/roster-page.md)
+//   /proof-log           the proof log page (design/copy/proof-log-page.md)
 //   /faq              the FAQ (design/copy/faq.md)
 //   /verify           how to verify (design/copy/verify.md)
 //   /hang, /hang/…    hanging a proof on a profile (design/copy/hang.md)
@@ -20,11 +20,11 @@
 // Worker has no binding to read those files by.
 //
 // Every page takes GET and HEAD only and sets no cookie. A page is made from
-// the request's method and path, and the query of /roster. Nothing is written for a request that is answered; when
+// the request's method and path, and the query of /proof-log. Nothing is written for a request that is answered; when
 // the back end itself fails, one line says which kind of page and where,
 // never the short ID, the account or anything else of the address.
 import { readShortIdInUrl } from "iamreal-protocol/scoped-id.ts";
-import { EVERY_RESPONSE, ROSTER_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
+import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
 import type { PageData } from "./page-data.ts";
 import { accountPage, notAName } from "./pages/account.ts";
 import { faqPage } from "./pages/faq.ts";
@@ -33,19 +33,19 @@ import { homePage } from "./pages/home.ts";
 import { type Document, type Site, layout } from "./pages/layout.ts";
 import { notFoundPage } from "./pages/not-found.ts";
 import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/proof.ts";
-import { PAGE_SIZE, readPlace, rosterPage } from "./pages/roster-page.ts";
+import { PAGE_SIZE, readPlace, proofLogPage } from "./pages/proof-log-page.ts";
 import { verifyPage } from "./pages/verify.ts";
-import { OTHER_SCHEMA } from "./roster.ts";
-import { rosterSettingsOf } from "./settings.ts";
+import { OTHER_SCHEMA } from "./proof-log.ts";
+import { proofLogSettingsOf } from "./settings.ts";
 
 /** What the pages are given besides the environment: the piece that is behind an interface, so that it can be replaced by itself. */
 export interface VisitorParts {
-  /** What the pages read of the roster (page-data.ts). */
+  /** What the pages read of the proof log (page-data.ts). */
   readonly pageData: PageData;
 }
 
 /** Where the back end failed, as the one line about it says (`where`). */
-type Where = "settings" | "schema" | "roster" | "render";
+type Where = "settings" | "schema" | "proof_log" | "render";
 
 class Internal extends Error {
   readonly where: Where;
@@ -55,23 +55,23 @@ class Internal extends Error {
   }
 }
 
-/** Asks for the roster's data; a failure is `roster`, or `schema` when the object says its tables are of another version. */
+/** Asks for the proof log's data; a failure is `proof_log`, or `schema` when the object says its tables are of another version. */
 async function ask<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    throw new Internal(e instanceof Error && e.message === OTHER_SCHEMA ? "schema" : "roster", e);
+    throw new Internal(e instanceof Error && e.message === OTHER_SCHEMA ? "schema" : "proof_log", e);
   }
 }
 
 /** Which kind of page a path is, for the log: never the short ID or the account in it. */
-type Kind = "home" | "card" | "account" | "roster" | "hang" | "faq" | "verify" | "none";
+type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "none";
 
 function kindOf(pathname: string): Kind {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/p/")) return "card";
   if (pathname.startsWith("/threads/")) return "account";
-  if (pathname === "/roster") return "roster";
+  if (pathname === "/proof-log") return "proof_log";
   if (pathname === "/faq") return "faq";
   if (pathname === "/verify") return "verify";
   if (pathname === "/hang" || pathname.startsWith("/hang/")) return "hang";
@@ -96,10 +96,10 @@ function page(site: Site, status: number, document: Document): Answer {
   } catch (e) {
     throw new Internal("render", e);
   }
-  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": ROSTER_PAGE_CACHE }, body, script: document.script === true };
+  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: document.script === true };
 }
 
-/** `GET /`: the home page, with the roster's two numbers. */
+/** `GET /`: the home page, with the proof log's two numbers. */
 async function home(site: Site, parts: VisitorParts): Promise<Answer> {
   const numbers = await ask(() => parts.pageData.counts(PLATFORM));
   try {
@@ -110,7 +110,7 @@ async function home(site: Site, parts: VisitorParts): Promise<Answer> {
 }
 
 /** A redirect, kept by a cache as long as a page (ADR-0026). */
-const redirect = (status: 301 | 302 | 303, location: string): Answer => ({ status, headers: { Location: location, "Cache-Control": ROSTER_PAGE_CACHE }, body: null });
+const redirect = (status: 301 | 302 | 303, location: string): Answer => ({ status, headers: { Location: location, "Cache-Control": PROOF_LOG_PAGE_CACHE }, body: null });
 
 /** What was typed after `prefix` in the path, percent-encoding read; as it is if it is not percent-encoding. */
 function typedAfter(pathname: string, prefix: string): string {
@@ -127,7 +127,7 @@ function typedAfter(pathname: string, prefix: string): string {
  * spec/scoped-id.md reads one in a URL; another spelling of a short ID is
  * redirected (301) to its one spelling. One that does not read is the page
  * of section 9 with `404`, and so is one that resolves to no card; only for
- * the second is the roster asked (ADR-0026).
+ * the second is the proof log asked (ADR-0026).
  */
 async function card(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
   const typed = typedAfter(pathname, "/p/");
@@ -151,7 +151,7 @@ const lowerAscii = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCa
  * not a card gives its place to it. A name with uppercase letters is
  * redirected (301) to lowercase; a name not in the Threads format has a page
  * of its own (account-page.md, section 4), `404`. Only a name in the format
- * is asked of the roster (ADR-0026). A path without the @ is no page.
+ * is asked of the proof log (ADR-0026). A path without the @ is no page.
  */
 async function threadsAccount(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
   const rest = typedAfter(pathname, "/threads/");
@@ -173,15 +173,15 @@ async function threadsAccount(site: Site, parts: VisitorParts, pathname: string)
 const trimSpace = (s: string): string => s.replace(/^[\t\n\v\f\r \u0085\p{Z}]+|[\t\n\v\f\r \u0085\p{Z}]+$/gu, "");
 
 /**
- * `GET /roster`: the roster page. `?after=` lists the slots after a place
+ * `GET /proof-log`: the proof log page. `?after=` lists the slots after a place
  * in the list (the link 更多); one that does not read lists from the
- * latest. `?q=` is the lookup box (roster-page.md, 查詢): with the spaces
+ * latest. `?q=` is the lookup box (proof-log-page.md, 查詢): with the spaces
  * around it and a leading @ taken off, a Threads name in any case is
- * redirected (303) to its page, without asking the roster; nothing left
+ * redirected (303) to its page, without asking the proof log; nothing left
  * shows the page as it is; anything else shows the page with what was
  * typed in the box and a line under it, from the latest slot.
  */
-async function roster(site: Site, parts: VisitorParts, query: URLSearchParams): Promise<Answer> {
+async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams): Promise<Answer> {
   const typed = trimSpace(query.get("q") ?? "").replace(/^@/, "");
   let badQuery: string | null = null;
   if (typed !== "") {
@@ -191,7 +191,7 @@ async function roster(site: Site, parts: VisitorParts, query: URLSearchParams): 
   }
   const after = badQuery === null && query.has("after") ? readPlace(query.get("after")!) : null;
   const { counts, slots } = await ask(() => parts.pageData.latest(PLATFORM, after?.place ?? null, PAGE_SIZE + 1));
-  return page(site, 200, rosterPage({ counts, slots: slots.slice(0, PAGE_SIZE), more: slots.length > PAGE_SIZE, after: after !== null, badQuery }));
+  return page(site, 200, proofLogPage({ counts, slots: slots.slice(0, PAGE_SIZE), more: slots.length > PAGE_SIZE, after: after !== null, badQuery }));
 }
 
 /**
@@ -200,7 +200,7 @@ async function roster(site: Site, parts: VisitorParts, query: URLSearchParams): 
  * `/p/` reads it, and another spelling redirected (301) to its one
  * spelling. A short ID that does not read, resolves to no card or to
  * several, or to a card with no account on Threads, is redirected (302) to
- * /hang; only a short ID that reads is asked of the roster.
+ * /hang; only a short ID that reads is asked of the proof log.
  */
 async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
   if (pathname === "/hang") return page(site, 200, hangWithout());
@@ -217,7 +217,7 @@ async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<
 /**
  * Answers a request for anything that is not the API's: a page, or, for a
  * path that is none, the page that says so, with 404. That one has what
- * every page has (on a test roster the mark, the date and noindex), and is
+ * every page has (on a test log the mark, the date and noindex), and is
  * kept by a cache as long as the others.
  */
 export async function visitor(request: Request, env: Env, parts: VisitorParts): Promise<Response> {
@@ -227,15 +227,15 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
   let site: Site | null = null;
   try {
     try {
-      const settings = rosterSettingsOf(env);
-      site = { testRosterClearedOn: settings.testRosterClearedOn, host: settings.siteHost };
+      const settings = proofLogSettingsOf(env);
+      site = { testProofLogClearedOn: settings.testProofLogClearedOn, host: settings.siteHost };
     } catch (e) {
       throw new Internal("settings", e);
     }
     if (request.method !== "GET" && request.method !== "HEAD") answer = { ...text(405, "method not allowed\n"), headers: { ...text(405, "").headers, Allow: "GET, HEAD" } };
     else if (kind === "home") answer = await home(site, parts);
     else if (kind === "card") answer = await card(site, parts, pathname);
-    else if (kind === "roster") answer = await roster(site, parts, searchParams);
+    else if (kind === "proof_log") answer = await proofLog(site, parts, searchParams);
     else if (kind === "account") answer = await threadsAccount(site, parts, pathname);
     else if (kind === "hang") answer = await hang(site, parts, pathname);
     else if (kind === "faq") answer = page(site, 200, faqPage());
@@ -250,8 +250,8 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     ...answer.headers,
     ...EVERY_RESPONSE,
     ...(answer.script === true ? SCRIPT_PAGE_HEADERS : VISITOR_HEADERS),
-    // With settings that cannot be read, nothing says this is not a test roster's site.
-    ...(site === null || site.testRosterClearedOn !== null ? TEST_SITE_HEADERS : {}),
+    // With settings that cannot be read, nothing says this is not a test log's site.
+    ...(site === null || site.testProofLogClearedOn !== null ? TEST_SITE_HEADERS : {}),
   });
   return new Response(request.method === "HEAD" ? null : answer.body, { status: answer.status, headers });
 }

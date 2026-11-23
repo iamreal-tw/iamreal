@@ -4,11 +4,11 @@
 // server in the place of the data domain.
 //
 // On this computer and in CI there is no data domain. The Worker writes the
-// CRL archive and the roster's files to a simulated R2 bucket and has no
+// CRL archive and the proof log's files to a simulated R2 bucket and has no
 // route that sends a file of it (ADR-0027: those downloads do not run the
 // back end). The test build of the page takes the data domain's files from
 // its own origin (test/e2e/target.ts, DATA_ORIGIN), so the server here
-// answers /crl/… and /roster/… from the bucket, read-only, and hands every
+// answers /crl/… and /proof-log/… from the bucket, read-only, and hands every
 // other request to the Worker as it is. A test that serves a page of its
 // own (the engine's test page, run.ts) answers those requests before either
 // (`own`).
@@ -27,8 +27,8 @@ import { type StartOptions, type TestWorker, startWorker } from "../../../worker
 
 export type { TestWorker };
 
-/** The paths of the data domain (docs/api/card-proof.md, "Public files"): the CRL archive and the roster directory. */
-const DATA_PATHS = /^\/(crl|roster)\//;
+/** The paths of the data domain (docs/api/card-proof.md, "Public files"): the CRL archive and the log directory. */
+const DATA_PATHS = /^\/(crl|proof-log)\//;
 
 const DATA_TYPES: Readonly<Record<string, string>> = { jsonl: "application/jsonl", crl: "application/pkix-crl", txt: "text/plain" };
 

@@ -5,19 +5,19 @@
 // Cloudflare: send the files of the bucket. Never in the deployed build
 // (test/bundle.test.ts).
 //
-// On Cloudflare the CRL archive and the roster's files are sent by the
+// On Cloudflare the CRL archive and the proof log's files are sent by the
 // bucket's own domain and the Worker has no route to them (ADR-0027). On this
 // computer there is no such domain: the page of this build
 // (web/src/target-local.ts) takes them from its own origin, so `GET` and
-// `HEAD` of /crl/… and /roster/… are answered here from the simulated
+// `HEAD` of /crl/… and /proof-log/… are answered here from the simulated
 // bucket, read-only, with the headers the object was written with. Every
 // other request, and the schedule, is the deployed Worker's.
 import deployed from "../src/index.ts";
 
-export { Roster } from "../src/index.ts";
+export { ProofLog } from "../src/index.ts";
 
-/** The paths of the data domain (docs/api/card-proof.md, "Public files"): the CRL archive and the roster directory. */
-const DATA_PATHS = /^\/(crl|roster)\/./;
+/** The paths of the data domain (docs/api/card-proof.md, "Public files"): the CRL archive and the log directory. */
+const DATA_PATHS = /^\/(crl|proof-log)\/./;
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {

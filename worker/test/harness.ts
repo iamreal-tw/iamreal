@@ -13,7 +13,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "../test-build/card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -150,7 +150,7 @@ export interface TestWorker {
   putFile(key: string, bytes: Uint8Array | string, cacheControl?: string, contentType?: string): Promise<void>;
   deleteFile(key: string): Promise<void>;
   /**
-   * What the roster's Durable Object knows of the CRL archive, through the
+   * What the proof log's Durable Object knows of the CRL archive, through the
    * test build's `GET /__test/newest-crls`.
    */
   newestCrls(): Promise<NewestCrls>;
@@ -158,15 +158,15 @@ export interface TestWorker {
    * Stops the whole Worker and its Durable Objects and starts them again.
    * What they keep in storage and the bucket's files stay; what they held
    * in memory, the test clock and the test's settings included, is gone.
-   * (`roster.restart()` stops only the roster's object.)
+   * (`proofLog.restart()` stops only the proof log's object.)
    */
   restart(): Promise<void>;
   /** From now on the Worker's clock shows `time`. */
   setClock(time: Date): Promise<void>;
   /**
    * From now on the environment has these settings in place of
-   * wrangler.jsonc's (test build, `PUT /__test/settings`). A roster's object
-   * that is running keeps the ones it started with until `roster.restart()`.
+   * wrangler.jsonc's (test build, `PUT /__test/settings`). A proof log's object
+   * that is running keeps the ones it started with until `proofLog.restart()`.
    */
   setSettings(settings: TestSettings): Promise<void>;
   /** What the Worker has written to its log since it started. */
@@ -180,7 +180,7 @@ export interface TestWorker {
   /**
    * Asks `POST /api/v1/challenges` for a challenge and returns it. With
    * `randomHex`, 16 bytes in hex, the challenge has those bytes in place of
-   * random ones (test build, `PUT /__test/roster/next-random`): how a test
+   * random ones (test build, `PUT /__test/proof-log/next-random`): how a test
    * gets the challenge a proof was made for, or the same challenges in two
    * runs.
    */
@@ -200,33 +200,33 @@ export interface TestWorker {
    */
   verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
   /**
-   * The object of a roster that was cleared: one the settings named before
+   * The object of a proof log that was cleared: one the settings named before
    * they were given another name (README.md, "清空測試的證明紀錄"). No request
    * reaches it any more; it is still there, with what it stored.
    */
-  clearedRoster(name: string): {
+  clearedProofLog(name: string): {
     /** Stops the running object, as a deploy does: it starts again when its alarm rings. */
     restart(): Promise<void>;
-    /** Runs the object's alarm now, as when it rings by itself (test build, `POST /__test/roster/alarm?object=`). */
+    /** Runs the object's alarm now, as when it rings by itself (test build, `POST /__test/proof-log/alarm?object=`). */
     runAlarm(): Promise<void>;
-    /** Whether the object has an alarm set (test build, `GET /__test/roster/alarm?object=`). Asking starts an object that is not running. */
+    /** Whether the object has an alarm set (test build, `GET /__test/proof-log/alarm?object=`). Asking starts an object that is not running. */
     hasAlarm(): Promise<boolean>;
   };
-  /** The roster's Durable Object, beyond what the API shows of it. */
-  readonly roster: {
+  /** The proof log's Durable Object, beyond what the API shows of it. */
+  readonly proofLog: {
     /**
      * Stops the running object; the next request starts it again from what
      * it stored. Whatever it held only in memory is gone.
      */
     restart(): Promise<void>;
-    /** Runs the object's alarm now, whatever time it is set for (test build, `POST /__test/roster/alarm`). */
+    /** Runs the object's alarm now, whatever time it is set for (test build, `POST /__test/proof-log/alarm`). */
     runAlarm(): Promise<void>;
-    /** How many milliseconds from now the object's alarm is set for, or null if it has none (test build, `GET /__test/roster/alarm`). */
+    /** How many milliseconds from now the object's alarm is set for, or null if it has none (test build, `GET /__test/proof-log/alarm`). */
     alarmInMs(): Promise<number | null>;
     /**
      * Gives the object a second piece of timed work next to its own: due at
      * `due` on the object's clock, and after each run due again `everyMs`
-     * later (test build, `PUT /__test/roster/extra-work`). It is kept in
+     * later (test build, `PUT /__test/proof-log/extra-work`). It is kept in
      * memory: gone when the object starts again.
      */
     setExtraWork(due: Date, everyMs: number): Promise<void>;
@@ -235,53 +235,53 @@ export interface TestWorker {
     /**
      * Changes the version the object's tables say they were made by: to
      * another one than the build's, or back (test build,
-     * `PUT /__test/roster/schema-version`). The object compares when it
+     * `PUT /__test/proof-log/schema-version`). The object compares when it
      * starts: `restart()` after this.
      */
     setStoredSchemaVersion(to: "another" | "the build's"): Promise<void>;
     /**
-     * Changes the version of the roster rules the object's stored state
+     * Changes the version of the record rules the object's stored state
      * says it was computed by: to another one than the build's, or back
-     * (test build, `PUT /__test/roster/rules-version`). The object compares
+     * (test build, `PUT /__test/proof-log/rules-version`). The object compares
      * when it starts: `restart()` after this.
      */
     setStoredRulesVersion(to: "another" | "the build's"): Promise<void>;
     /**
      * From now on every write of the object to this table fails (or, for
      * `challenges.accepted`, only marking a challenge as accepted), or, with
-     * null, none does (test build, `PUT /__test/roster/fail-writes`).
+     * null, none does (test build, `PUT /__test/proof-log/fail-writes`).
      */
-    failWritesTo(what: "records" | "cards" | "roster" | "challenges" | "challenges.accepted" | "view_cards" | "view_slots" | "view_history" | "view_state" | null): Promise<void>;
+    failWritesTo(what: "records" | "cards" | "proof_log" | "challenges" | "challenges.accepted" | "view_cards" | "view_slots" | "view_history" | "view_state" | null): Promise<void>;
     /**
      * Every row of the views the object keeps for the pages (src/views.ts),
-     * table by table (test build, `GET /__test/roster/views`): for the one
+     * table by table (test build, `GET /__test/proof-log/views`): for the one
      * thing no page can show, that the views written again from the records
      * are row for row the views written record by record.
      */
     views(): Promise<StoredViews>;
     /**
-     * Clears the views (test build, `DELETE /__test/roster/views`): the
+     * Clears the views (test build, `DELETE /__test/proof-log/views`): the
      * object is then as one that has records from before it had the views.
      * It fills them from its records when it starts: `restart()` after this.
      */
     clearViews(): Promise<void>;
     /**
      * Waits until the object that is running has filled its views, or has
-     * given up filling them (test build, `POST /__test/roster/views-filled`):
-     * an object that has roster files in the data bucket fills them after
+     * given up filling them (test build, `POST /__test/proof-log/views-filled`):
+     * an object that has log files in the data bucket fills them after
      * it has started, while it already answers.
      */
     viewsFilled(): Promise<void>;
     /**
-     * Runs the roster rules for one event of spec/vectors/roster-rules.json
+     * Runs the record rules for one event of spec/vectors/record-rules.json
      * on the state the object stores, keeps what a valid one leaves, and
-     * returns the result (test build, `POST /__test/roster/rule-event`).
+     * returns the result (test build, `POST /__test/proof-log/rule-event`).
      */
     applyRuleEvent(event: RuleEvent): Promise<{ valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] }>;
     /**
-     * The latest valid date the roster rules read for a card, and the cards
+     * The latest valid date the record rules read for a card, and the cards
      * of every declared account of its scope as the object counts them
-     * (test build, `POST /__test/roster/rule-state`).
+     * (test build, `POST /__test/proof-log/rule-state`).
      */
     ruleState(scopeString: string, scopedId: string): Promise<RuleStateAnswer>;
     /**
@@ -290,64 +290,64 @@ export interface TestWorker {
      * back end still takes a submission for, sorted. It asks the API: for
      * each, a `POST /api/v1/records` with that challenge and a proof that
      * does not verify, which is `challenge_unknown` for a challenge the back
-     * end does not know (never issued by this roster, expired, deleted) and
+     * end does not know (never issued by this proof log, expired, deleted) and
      * `proof` or `challenge_attempts` for one it knows. Each question counts
      * as a submission of the challenge.
      */
     knownChallenges(): Promise<string[]>;
     /**
      * Writes a row of the card state table as it is given (test build,
-     * `PUT /__test/roster/card`): for the stored states no request to this
+     * `PUT /__test/proof-log/card`): for the stored states no request to this
      * build can leave, a broken one or one from before a platform was added.
      */
     writeCard(card: CardToWrite): Promise<void>;
-    /** Writes rows of the card state table as they are given, in one transaction (test build, `PUT /__test/roster/cards`): how a measurement fills it with many cards. */
+    /** Writes rows of the card state table as they are given, in one transaction (test build, `PUT /__test/proof-log/cards`): how a measurement fills it with many cards. */
     writeCards(cards: readonly CardToWrite[]): Promise<void>;
     /**
      * "copy": copies the card state table as a publication does; "drop":
-     * drops the copy (test build, `POST /__test/roster/cards-copy`). How a
+     * drops the copy (test build, `POST /__test/proof-log/cards-copy`). How a
      * measurement times either alone.
      */
     cardsCopy(what: "copy" | "drop"): Promise<void>;
     /**
-     * Makes the stored slots of one card of the test roster text that is
-     * not JSON (test build, `POST /__test/roster/break-card`): what reads
+     * Makes the stored slots of one card of the test log text that is
+     * not JSON (test build, `POST /__test/proof-log/break-card`): what reads
      * that row then fails, `card-state` for the card and whatever looks at
      * every card of its scope. `mendCard` puts the slots back as they
      * were.
      */
     breakCard(scopedId: string): Promise<void>;
     mendCard(scopedId: string): Promise<void>;
-    /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/roster/break`). */
+    /** Drops the tables the API reads, so that the back end itself fails (test build, `POST /__test/proof-log/break`). */
     breakTables(): Promise<void>;
     /**
      * Drops the table of the newest CRLs (test build,
-     * `POST /__test/roster/drop-newest-crls`): the object is then as one
+     * `POST /__test/proof-log/drop-newest-crls`): the object is then as one
      * made by a build that did not have that table yet. `restart()` after
      * this.
      */
     dropNewestCrls(): Promise<void>;
     /**
      * The rows the object keeps of its records, in the order of `seq`, and
-     * the count and the roster fingerprint of its row of the roster (test
-     * build, `GET /__test/roster/stored`). `checkRoster` of test/records.ts
+     * the count and the proof log fingerprint of its row of the proof log (test
+     * build, `GET /__test/proof-log/stored`). `checkProofLog` of test/records.ts
      * is what checks them.
      */
-    stored(): Promise<StoredRoster>;
+    stored(): Promise<StoredProofLog>;
     /**
      * How many records the object keeps, and the first and the last `seq`
-     * among them (test build, `GET /__test/roster/kept`): for a roster
+     * among them (test build, `GET /__test/proof-log/kept`): for a proof log
      * that keeps more than `stored()` can answer with, which is some 1,600
      * records (test-build/card-door.ts, `KeptRecords`, says what is known
      * of that limit).
      */
     kept(): Promise<KeptRecords>;
-    /** The names of the tables of the object's SQLite, in byte order (test build, `GET /__test/roster/tables`). */
+    /** The names of the tables of the object's SQLite, in byte order (test build, `GET /__test/proof-log/tables`). */
     tables(): Promise<string[]>;
     /**
      * From now on the object waits this many milliseconds before it hashes
      * a record it is asked to write (test build,
-     * `PUT /__test/roster/hash-delay`): other requests run during the wait,
+     * `PUT /__test/proof-log/hash-delay`): other requests run during the wait,
      * which they do not during the hash itself in the local workerd. Kept
      * in memory: gone when the object starts again.
      */
@@ -357,7 +357,7 @@ export interface TestWorker {
     /**
      * From now on the object's writes or reads of one object of the data
      * bucket go wrong in one way, or, with null, none does (test build,
-     * `PUT /__test/roster/bucket-fault`). Kept in memory: gone when the
+     * `PUT /__test/proof-log/bucket-fault`). Kept in memory: gone when the
      * object starts again.
      */
     setBucketFault(fault: BucketFault): Promise<void>;
@@ -365,24 +365,24 @@ export interface TestWorker {
   close(): Promise<void>;
 }
 
-export type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings };
+export type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings };
 
 /**
- * The name of the roster's object in the test environment (wrangler.jsonc,
- * `ROSTER_OBJECT_NAME`), read from the file: clearing the test roster
+ * The name of the proof log's object in the test environment (wrangler.jsonc,
+ * `PROOF_LOG_OBJECT_NAME`), read from the file: clearing the test log
  * changes it there (README.md, "清空測試的證明紀錄"), and nothing here.
  */
-const DEPLOYED_ROSTER_OBJECT = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.ROSTER_OBJECT_NAME);
+const DEPLOYED_PROOF_LOG_OBJECT = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.PROOF_LOG_OBJECT_NAME);
 
 export interface StartOptions {
   /** How long the mirror waits for the fake MOICA, in milliseconds. The deployed build waits minutes (src/target.ts). */
   readonly crlTimeoutMs?: number;
   /**
    * Settings of the environment to start with in place of wrangler.jsonc's:
-   * which roster (`ROSTER_KIND`) and the name of its object
-   * (`ROSTER_OBJECT_NAME`). The configuration file is not changed. With a
-   * production roster the files of Static Assets get the headers of a
-   * production roster's site (scripts/site-files.ts): those are fixed when
+   * which proof log (`PROOF_LOG_KIND`) and the name of its object
+   * (`PROOF_LOG_OBJECT_NAME`). The configuration file is not changed. With a
+   * production log the files of Static Assets get the headers of a
+   * production log's site (scripts/site-files.ts): those are fixed when
    * the Worker starts, and `setSettings` does not change them.
    */
   readonly settings?: TestSettings;
@@ -412,8 +412,8 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   copyFileSync(join(WORKER_DIR, "wrangler.jsonc"), join(run, "wrangler.jsonc"));
   cpSync(join(WORKER_DIR, "site"), join(run, "site"), { recursive: true, filter: (source) => source !== join(WORKER_DIR, "site", "proof") });
   if (options.proofFiles !== undefined) cpSync(options.proofFiles, join(run, "site", "proof"), { recursive: true });
-  // site/_headers in the repository is a test roster's site's; a production roster's has its own.
-  if (options.settings?.ROSTER_KIND === "production") writeFileSync(join(run, "site", "_headers"), siteHeaders("production"));
+  // site/_headers in the repository is a test log's site's; a production log's has its own.
+  if (options.settings?.PROOF_LOG_KIND === "production") writeFileSync(join(run, "site", "_headers"), siteHeaders("production"));
   const server = createTestHarness({ root: run, workers: [{ configPath: "wrangler.jsonc", env: "test", prebuiltWorkerDir: dir }] });
   let url: URL;
   try {
@@ -432,7 +432,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     if (res.status !== 204) throw new Error(`replacing the settings: HTTP ${res.status}`);
     settings = next;
   };
-  const rosterObject = (): { name: string } => ({ name: settings.ROSTER_OBJECT_NAME ?? DEPLOYED_ROSTER_OBJECT });
+  const proofLogObject = (): { name: string } => ({ name: settings.PROOF_LOG_OBJECT_NAME ?? DEPLOYED_PROOF_LOG_OBJECT });
   /** Every challenge `POST /api/v1/challenges` has given out through this object. */
   const issued: string[] = [];
   const fetch = async (input: string, init?: RequestInit): Promise<Response> => {
@@ -480,7 +480,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     },
     async issueChallenge(randomHex) {
       if (randomHex !== undefined) {
-        const set = await server.fetch("/__test/roster/next-random", { method: "PUT", body: randomHex });
+        const set = await server.fetch("/__test/proof-log/next-random", { method: "PUT", body: randomHex });
         if (set.status !== 204) throw new Error(`setting the next challenge's bytes: HTTP ${set.status}`);
       }
       const res = await fetch("/api/v1/challenges", { method: "POST" });
@@ -505,70 +505,70 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     },
     async newestCrls() {
       const res = await server.fetch("/__test/newest-crls");
-      if (res.status !== 200) throw new Error(`asking the roster's object: HTTP ${res.status} ${await res.text()}`);
+      if (res.status !== 200) throw new Error(`asking the proof log's object: HTTP ${res.status} ${await res.text()}`);
       return (await res.json()) as NewestCrls;
     },
     async restart() {
       await server.update((current) => ({ ...current }));
     },
-    clearedRoster: (name) => ({
-      restart: () => worker.evictDurableObject("ROSTER" as never, { name }),
+    clearedProofLog: (name) => ({
+      restart: () => worker.evictDurableObject("PROOF_LOG" as never, { name }),
       async runAlarm() {
-        const res = await server.fetch(`/__test/roster/alarm?object=${encodeURIComponent(name)}`, { method: "POST" });
+        const res = await server.fetch(`/__test/proof-log/alarm?object=${encodeURIComponent(name)}`, { method: "POST" });
         if (res.status !== 204) throw new Error(`running the alarm of ${name}: HTTP ${res.status}`);
       },
       async hasAlarm() {
-        const res = await server.fetch(`/__test/roster/alarm?object=${encodeURIComponent(name)}`);
+        const res = await server.fetch(`/__test/proof-log/alarm?object=${encodeURIComponent(name)}`);
         if (res.status !== 200) throw new Error(`reading the alarm of ${name}: HTTP ${res.status}`);
         return ((await res.json()) as { alarm: number | null }).alarm !== null;
       },
     }),
-    roster: {
-      restart: () => worker.evictDurableObject("ROSTER" as never, rosterObject()),
+    proofLog: {
+      restart: () => worker.evictDurableObject("PROOF_LOG" as never, proofLogObject()),
       async dropNewestCrls() {
-        const res = await server.fetch("/__test/roster/drop-newest-crls", { method: "POST" });
+        const res = await server.fetch("/__test/proof-log/drop-newest-crls", { method: "POST" });
         if (res.status !== 204) throw new Error(`dropping the table of the newest CRLs: HTTP ${res.status}`);
       },
       async setExtraWork(due, everyMs) {
-        const res = await server.fetch("/__test/roster/extra-work", { method: "PUT", body: JSON.stringify({ due: due.getTime(), every: everyMs }) });
+        const res = await server.fetch("/__test/proof-log/extra-work", { method: "PUT", body: JSON.stringify({ due: due.getTime(), every: everyMs }) });
         if (res.status !== 204) throw new Error(`setting the extra work: HTTP ${res.status}`);
       },
       async extraWorkRuns() {
-        const res = await server.fetch("/__test/roster/extra-work");
+        const res = await server.fetch("/__test/proof-log/extra-work");
         if (res.status !== 200) throw new Error(`reading the extra work: HTTP ${res.status}`);
         return ((await res.json()) as { runs: number[] }).runs.map((ms) => new Date(ms));
       },
       async runAlarm() {
-        const res = await server.fetch("/__test/roster/alarm", { method: "POST" });
+        const res = await server.fetch("/__test/proof-log/alarm", { method: "POST" });
         if (res.status !== 204) throw new Error(`running the alarm: HTTP ${res.status}`);
       },
       async alarmInMs() {
-        const res = await server.fetch("/__test/roster/alarm");
+        const res = await server.fetch("/__test/proof-log/alarm");
         if (res.status !== 200) throw new Error(`reading the alarm: HTTP ${res.status}`);
         const { alarm } = (await res.json()) as { alarm: number | null };
         return alarm === null ? null : alarm - Date.now();
       },
       async setStoredSchemaVersion(to) {
-        const res = await server.fetch("/__test/roster/schema-version", { method: "PUT", body: JSON.stringify({ to }) });
+        const res = await server.fetch("/__test/proof-log/schema-version", { method: "PUT", body: JSON.stringify({ to }) });
         if (res.status !== 204) throw new Error(`changing the stored schema version: HTTP ${res.status}`);
       },
       async setStoredRulesVersion(to) {
-        const res = await server.fetch("/__test/roster/rules-version", { method: "PUT", body: JSON.stringify({ to }) });
+        const res = await server.fetch("/__test/proof-log/rules-version", { method: "PUT", body: JSON.stringify({ to }) });
         if (res.status !== 204) throw new Error(`changing the stored rules version: HTTP ${res.status}`);
       },
       async failWritesTo(what) {
-        const res = await server.fetch("/__test/roster/fail-writes", { method: "PUT", body: JSON.stringify({ what }) });
+        const res = await server.fetch("/__test/proof-log/fail-writes", { method: "PUT", body: JSON.stringify({ what }) });
         if (res.status !== 204) throw new Error(`making writes fail: HTTP ${res.status} ${await res.text()}`);
       },
       async applyRuleEvent(event) {
-        const res = await server.fetch("/__test/roster/rule-event", { method: "POST", body: JSON.stringify(event) });
+        const res = await server.fetch("/__test/proof-log/rule-event", { method: "POST", body: JSON.stringify(event) });
         if (res.status !== 200) throw new Error(`applying a rule event: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as { valid: boolean; reason?: string; kinds?: { platform: string; kind: string }[] };
       },
       async knownChallenges() {
         const known: string[] = [];
         for (const challenge of issued) {
-          const production = (settings.ROSTER_KIND ?? "test") === "production";
+          const production = (settings.PROOF_LOG_KIND ?? "test") === "production";
           const body = {
             scope_string: production ? "iamreal:public:0_______________" : "iamreal-test:public:0__________",
             scoped_id: "0400000000000000000000000000000000000000000000000000",
@@ -588,73 +588,73 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         return known.sort();
       },
       async writeCard(card) {
-        const res = await server.fetch("/__test/roster/card", { method: "PUT", body: JSON.stringify(card) });
+        const res = await server.fetch("/__test/proof-log/card", { method: "PUT", body: JSON.stringify(card) });
         if (res.status !== 204) throw new Error(`writing a card: HTTP ${res.status}`);
       },
       async writeCards(cards) {
-        const res = await server.fetch("/__test/roster/cards", { method: "PUT", body: JSON.stringify(cards) });
+        const res = await server.fetch("/__test/proof-log/cards", { method: "PUT", body: JSON.stringify(cards) });
         if (res.status !== 204) throw new Error(`writing cards: HTTP ${res.status}`);
       },
       async cardsCopy(what) {
-        const res = await server.fetch("/__test/roster/cards-copy", { method: "POST", body: JSON.stringify({ what }) });
+        const res = await server.fetch("/__test/proof-log/cards-copy", { method: "POST", body: JSON.stringify({ what }) });
         if (res.status !== 204) throw new Error(`the copy of the card state table: HTTP ${res.status} ${await res.text()}`);
       },
       async ruleState(scopeString, scopedId) {
-        const res = await server.fetch("/__test/roster/rule-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) });
+        const res = await server.fetch("/__test/proof-log/rule-state", { method: "POST", body: JSON.stringify({ scope_string: scopeString, scoped_id: scopedId }) });
         if (res.status !== 200) throw new Error(`reading the rule state: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as RuleStateAnswer;
       },
       async views() {
-        const res = await server.fetch("/__test/roster/views");
+        const res = await server.fetch("/__test/proof-log/views");
         if (res.status !== 200) throw new Error(`reading the views: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredViews;
       },
       async viewsFilled() {
-        const res = await server.fetch("/__test/roster/views-filled", { method: "POST" });
+        const res = await server.fetch("/__test/proof-log/views-filled", { method: "POST" });
         if (res.status !== 204) throw new Error(`waiting for the views: HTTP ${res.status}`);
       },
       async clearViews() {
-        const res = await server.fetch("/__test/roster/views", { method: "DELETE" });
+        const res = await server.fetch("/__test/proof-log/views", { method: "DELETE" });
         if (res.status !== 204) throw new Error(`clearing the views: HTTP ${res.status}`);
       },
       async stored() {
-        const res = await server.fetch("/__test/roster/stored");
-        if (res.status !== 200) throw new Error(`reading the stored roster: HTTP ${res.status} ${await res.text()}`);
-        return (await res.json()) as StoredRoster;
+        const res = await server.fetch("/__test/proof-log/stored");
+        if (res.status !== 200) throw new Error(`reading the stored proof log: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as StoredProofLog;
       },
       async kept() {
-        const res = await server.fetch("/__test/roster/kept");
-        if (res.status !== 200) throw new Error(`reading what the roster keeps: HTTP ${res.status} ${await res.text()}`);
+        const res = await server.fetch("/__test/proof-log/kept");
+        if (res.status !== 200) throw new Error(`reading what the proof log keeps: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as KeptRecords;
       },
       async tables() {
-        const res = await server.fetch("/__test/roster/tables");
+        const res = await server.fetch("/__test/proof-log/tables");
         if (res.status !== 200) throw new Error(`reading the object's tables: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as string[];
       },
       async setHashDelay(ms) {
-        const res = await server.fetch("/__test/roster/hash-delay", { method: "PUT", body: String(ms) });
+        const res = await server.fetch("/__test/proof-log/hash-delay", { method: "PUT", body: String(ms) });
         if (res.status !== 204) throw new Error(`setting the wait before a hash: HTTP ${res.status}`);
       },
       async hashes() {
-        const res = await server.fetch("/__test/roster/hash-delay");
+        const res = await server.fetch("/__test/proof-log/hash-delay");
         if (res.status !== 200) throw new Error(`reading the number of hashes: HTTP ${res.status}`);
         return ((await res.json()) as { hashes: number }).hashes;
       },
       async setBucketFault(fault) {
-        const res = await server.fetch("/__test/roster/bucket-fault", { method: "PUT", body: JSON.stringify(fault) });
+        const res = await server.fetch("/__test/proof-log/bucket-fault", { method: "PUT", body: JSON.stringify(fault) });
         if (res.status !== 204) throw new Error(`setting the bucket's fault: HTTP ${res.status}`);
       },
       async breakCard(scopedId) {
-        const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: false }) });
+        const res = await server.fetch("/__test/proof-log/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: false }) });
         if (res.status !== 204) throw new Error(`breaking a card's row: HTTP ${res.status}`);
       },
       async mendCard(scopedId) {
-        const res = await server.fetch("/__test/roster/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: true }) });
+        const res = await server.fetch("/__test/proof-log/break-card", { method: "POST", body: JSON.stringify({ scope_string: "iamreal-test:public:0__________", scoped_id: scopedId, mend: true }) });
         if (res.status !== 204) throw new Error(`mending a card's row: HTTP ${res.status}`);
       },
       async breakTables() {
-        const res = await server.fetch("/__test/roster/break", { method: "POST" });
+        const res = await server.fetch("/__test/proof-log/break", { method: "POST" });
         if (res.status !== 204) throw new Error(`breaking the tables: HTTP ${res.status}`);
       },
     },

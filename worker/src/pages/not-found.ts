@@ -1,8 +1,8 @@
 // The page for an address that is nothing of the site:
 // design/copy/not-found.md. The Go backend answered such an address in plain
-// text; here it is a page like the others, so that on a test roster's site
+// text; here it is a page like the others, so that on a test log's site
 // it has the mark and the date above it (design/copy/test-site.md: a link
-// that stopped working after the roster was cleared lands here). Nothing of
+// that stopped working after the proof log was cleared lands here). Nothing of
 // the address is written back.
 import { html } from "./html.ts";
 import type { Document } from "./layout.ts";

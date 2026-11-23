@@ -3,15 +3,15 @@
 // in site/proof/ (wrangler.jsonc, "assets"; README.md, "Static Assets").
 //
 //   buildProofPage  builds it into a directory, with the date the test
-//                   roster was last cleared on (wrangler.jsonc,
-//                   TEST_ROSTER_CLEARED_ON), which the page writes beside
-//                   the mark of a test roster.
+//                   log was last cleared on (wrangler.jsonc,
+//                   TEST_PROOF_LOG_CLEARED_ON), which the page writes beside
+//                   the mark of a test log.
 //   checkProofPage  what a deploy build checks before anything is
 //                   uploaded: the directory holds the page's files and no
 //                   other, and its scripts are the test site's target: MOICA's
-//                   issuer keys and component, the test roster's data domain
+//                   issuer keys and component, the test log's data domain
 //                   and no other address of the project or of this computer,
-//                   the mark with that date and with the test roster's
+//                   the mark with that date and with the test log's
 //                   scope string as the one the build's target signs, the
 //                   test site's domain in its links, nothing of the tests.
 //
@@ -20,7 +20,7 @@
 // build made there passes only with a build that these checks pass.
 //
 // What the checks cannot see: they look for the known ways another build
-// could get in (the tests' build, the production roster's, the one for a
+// could get in (the tests' build, the production log's, the one for a
 // real card on this computer), not for everything a script could do. What
 // the page's scripts are is for the reader of web/ and of the lockfile.
 import assert from "node:assert/strict";
@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { CIRCUIT_NAMES } from "../src/circuits.ts";
 import { DATA_ORIGINS } from "../src/headers.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
-import type { RosterKind } from "./site-files.ts";
+import type { ProofLogKind } from "./site-files.ts";
 
 const WORKER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const WEB_DIR = join(WORKER_DIR, "..", "web");
@@ -61,7 +61,7 @@ export interface ProofPage {
 
 /**
  * Builds the test site's page into `outDir`, emptied first, with `clearedOn`
- * as the date beside the mark of a test roster. It runs web/'s own build
+ * as the date beside the mark of a test log. It runs web/'s own build
  * (vite, as `pnpm build:test-site` in web/ does) and nothing else; the
  * build is not made without a date of the calendar (web/vite.config.ts).
  */
@@ -70,7 +70,7 @@ export function buildProofPage(outDir: string, clearedOn: string): void {
   const r = spawnSync(vite, ["build", "--mode", "testsite", "--outDir", outDir, "--emptyOutDir", "--logLevel", "warn"], {
     cwd: WEB_DIR,
     encoding: "utf8",
-    env: { ...process.env, IAMREAL_TEST_ROSTER_CLEARED_ON: clearedOn },
+    env: { ...process.env, IAMREAL_TEST_PROOF_LOG_CLEARED_ON: clearedOn },
   });
   if (r.status !== 0) throw new Error(`vite build --mode testsite in web/:\n${r.stdout}\n${r.stderr}${r.error ? `\n${r.error.message}` : ""}`);
 }
@@ -113,23 +113,23 @@ const ASSET = /^assets\/[A-Za-z0-9_.-]+\.(js|css|wasm)$/;
 const COMPONENT = "http://localhost:61161";
 /** What only a build with the tests' card, keys or component holds (web/test/build.test.ts has the same list). */
 const TEST_ONLY: readonly string[] = ["the card signs 31 bytes", "__IAMREAL_TEST", "FakeCard", "fake-component", "testIssuer", "PRIVATE KEY", "pkcs8"];
-/** The first word of the sentence beside the mark of a test roster (design/copy/test-site.md). */
+/** The first word of the sentence beside the mark of a test log (design/copy/test-site.md). */
 const MARK = "測試的證明紀錄";
-/** The scope string of each kind of roster (spec/scope.md). */
-const SCOPES: Readonly<Record<RosterKind, string>> = { production: "iamreal:public:0_______________", test: "iamreal-test:public:0__________" };
-/** The domain of each kind of roster's site (ADR-0028; src/settings.ts, `SITE_HOSTS`, which a script of Node cannot import). */
-const SITE_HOSTS: Readonly<Record<RosterKind, string>> = { production: "iamreal.tw", test: "test.iamreal.tw" };
+/** The scope string of each kind of proof log (spec/scope.md). */
+const SCOPES: Readonly<Record<ProofLogKind, string>> = { production: "iamreal:public:0_______________", test: "iamreal-test:public:0__________" };
+/** The domain of each kind of proof log's site (ADR-0028; src/settings.ts, `SITE_HOSTS`, which a script of Node cannot import). */
+const SITE_HOSTS: Readonly<Record<ProofLogKind, string>> = { production: "iamreal.tw", test: "test.iamreal.tw" };
 
 /**
  * Throws unless `page` is the card proof page of a site of that kind of
- * roster, built with `clearedOn` as the date beside its mark. Only a test
- * roster's site has one now: the production roster's is not deployed from
+ * proof log, built with `clearedOn` as the date beside its mark. Only a test
+ * log's site has one now: the production log's is not deployed from
  * here yet, and its page would be another build.
  */
-export function checkProofPage(page: ProofPage | null, kind: RosterKind, clearedOn: string | null): void {
-  assert.equal(kind, "test", `the card proof page is checked for a test roster's site only: a ${kind} roster's site needs its own build and its own checks`);
+export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clearedOn: string | null): void {
+  assert.equal(kind, "test", `the card proof page is checked for a test log's site only: a ${kind} log's site needs its own build and its own checks`);
   assert.ok(page !== null, "there is no build of web/ under site/proof/: /proof would answer 404");
-  assert.ok(clearedOn !== null, "a test roster's site has the date it was last cleared on");
+  assert.ok(clearedOn !== null, "a test log's site has the date it was last cleared on");
   const names = Object.keys(page.files);
   for (const needed of NEEDED) assert.ok(names.includes(needed), `the card proof page has ${needed}`);
   assert.ok(names.some((n) => ASSET.test(n) && n.endsWith(".js")), "the card proof page has a script under assets/");
@@ -139,7 +139,7 @@ export function checkProofPage(page: ProofPage | null, kind: RosterKind, cleared
   assert.ok(code.includes(COMPONENT), `the card proof page names the component, ${COMPONENT}`);
   for (const modulus of moduliInSpec()) assert.ok(code.includes(modulus), "the card proof page holds MOICA's issuer keys, the two of spec/vectors/issuers.json");
   for (const s of TEST_ONLY) assert.ok(!code.includes(s), `the card proof page contains ${JSON.stringify(s)}`);
-  // The only addresses of this computer or of the project: the component's and the roster's data domain.
+  // The only addresses of this computer or of the project: the component's and the proof log's data domain.
   const dataOrigin = DATA_ORIGINS[kind];
   const addresses = new Set([...code.matchAll(/https?:\/\/[A-Za-z0-9.-]+(?::\d+)?/g)].map((m) => m[0]));
   for (const address of addresses) {
@@ -149,14 +149,14 @@ export function checkProofPage(page: ProofPage | null, kind: RosterKind, cleared
     assert.ok(!/localhost|127\.0\.0\.1|iamreal/.test(address), `the card proof page names ${address}`);
   }
   assert.ok(addresses.has(dataOrigin), `the card proof page takes the CRL archive from ${dataOrigin}`);
-  // The mark as the build has it: one JSON text in the script of the mark's entry (web/src/ui/test-roster.ts), which
+  // The mark as the build has it: one JSON text in the script of the mark's entry (web/src/ui/test-proof-log.ts), which
   // web/vite.config.ts writes from the date it was given and from the scope string of the target it built with,
-  // and does not write for a target that signs another roster's. It ends with the date and that scope string.
+  // and does not write for a target that signs another proof log's. It ends with the date and that scope string.
   const text = code.replaceAll("\\", "");
-  assert.ok(text.includes(MARK), "the card proof page has the mark of a test roster");
+  assert.ok(text.includes(MARK), "the card proof page has the mark of a test log");
   const marks = [...text.matchAll(/"clearedOn":"([^"]*)","scope":"([^"]*)"\}/g)].map((m) => ({ clearedOn: m[1], scope: m[2] }));
   assert.deepEqual(marks, [{ clearedOn, scope: SCOPES[kind] }], `the card proof page's mark has the date ${clearedOn} and says the build signs ${SCOPES[kind]}`);
-  // The link of the last screen: the card's page on this roster's site, and not on the other's.
+  // The link of the last screen: the card's page on this proof log's site, and not on the other's.
   const quoted = (host: string): boolean => new RegExp(`["'\`]${host.replaceAll(".", "\\.")}["'\`]`).test(code);
   assert.ok(quoted(SITE_HOSTS[kind]), `the card proof page writes its links with ${SITE_HOSTS[kind]}`);
   for (const other of Object.values(SITE_HOSTS)) if (other !== SITE_HOSTS[kind]) assert.ok(!quoted(other), `the card proof page writes links with ${other}`);

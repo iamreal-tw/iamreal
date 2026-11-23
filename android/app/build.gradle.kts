@@ -116,7 +116,7 @@ android {
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
-        // The store's build (ADR-0037). The site it talks to and the roster it signs for are in Environment.kt.
+        // The store's build (ADR-0037). The site it talks to and the proof log it signs for are in Environment.kt.
         applicationId = "tw.iamreal.app"
         minSdk = minApi
         targetSdk = 36
@@ -373,7 +373,7 @@ abstract class CheckLibraries : DefaultTask() {
  * what goes out (README.md, "建置時的檢查"):
  * a native library for anything but the ABIs given, or any but ours; a
  * bundled file missing, extra or changed; the production site or the
- * production roster's scope string in the Kotlin code; a call that writes
+ * production log's scope string in the Kotlin code; a call that writes
  * to Android's log; the fake card, or the library of the tests with its test issuer
  * keys (unless `testing`: the fake build, which goes nowhere).
  */
@@ -443,7 +443,7 @@ abstract class CheckApk : DefaultTask() {
             for (dex in names.filter { it.endsWith(".dex") }) {
                 val text = String(read(dex), Charsets.ISO_8859_1)
                 if (text.contains(testSite)) talksToTestSite = true
-                // Until launch every build signs for the test roster only (ADR-0037).
+                // Until launch every build signs for the test log only (ADR-0037).
                 for (production in listOf("//iamreal.tw", "//data.iamreal.tw", "iamreal:public:")) {
                     if (text.contains(production)) problems += "$dex holds $production: until launch no build names anything of production"
                 }

@@ -34,17 +34,17 @@ func AccountsText(accounts []Account) string {
 	return b.String()
 }
 
-// CheckAccounts checks an account list against the platform table of roster
+// CheckAccounts checks an account list against the platform table of proof log
 // r (spec/record.md, "The account list"): every platform is an ID of the
 // table, exactly as written there; the platforms are in strictly ascending
 // order by byte value, so none is repeated; every username is in the format
 // of its own platform. An empty list is valid. Nothing is sorted or
 // repaired: a list that breaks a rule is an error.
-func CheckAccounts(r Roster, accounts []Account) error {
+func CheckAccounts(r ProofLog, accounts []Account) error {
 	for i, a := range accounts {
 		p, ok := LookupPlatform(r, a.Platform)
 		if !ok {
-			return fmt.Errorf("accounts: %q is not a platform of the %s roster", a.Platform, r)
+			return fmt.Errorf("accounts: %q is not a platform of the %s log", a.Platform, r)
 		}
 		if i > 0 && !(accounts[i-1].Platform < a.Platform) {
 			if accounts[i-1].Platform == a.Platform {

@@ -1,13 +1,13 @@
 // Reading the body of `POST /api/v1/records` (docs/api/card-proof.md,
 // "Reading the request"): the fields of a record except `seq`, and which of
 // `malformed`, `scope` and `platform` a body that is not one gets. Nothing
-// here asks the roster's object, and a submission that ends here does not
+// here asks the proof log's object, and a submission that ends here does not
 // count towards the challenge's five.
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { type RecordAccount, type RecordFields, fieldsProblem } from "iamreal-protocol/record.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { type Json, parseJson } from "./json.ts";
-import type { RosterKind } from "./settings.ts";
+import type { ProofLogKind } from "./settings.ts";
 
 /** The keys of the body whose values are strings, as the document spells them, and the field each is. */
 const STRINGS = [
@@ -40,17 +40,17 @@ function readAccounts(value: Json | undefined): RecordAccount[] | null {
 }
 
 /**
- * The submission a body is, for the roster `kind`, or the code it is refused
+ * The submission a body is, for the proof log `kind`, or the code it is refused
  * with. In the document's order:
  *
  *   1. not one JSON object with exactly the eight keys, each once, every
  *      value but `accounts` a string: `malformed`;
- *   2. a scope string that is not this roster's: `scope`;
- *   3. a list of well-shaped accounts with a platform outside this roster's
+ *   2. a scope string that is not this proof log's: `scope`;
+ *   3. a list of well-shaped accounts with a platform outside this proof log's
  *      table: `platform`;
  *   4. anything else not in its format: `malformed`.
  */
-export function readSubmission(kind: RosterKind, text: string): RecordFields | "malformed" | "scope" | "platform" {
+export function readSubmission(kind: ProofLogKind, text: string): RecordFields | "malformed" | "scope" | "platform" {
   const body = parseJson(text);
   if (!(body instanceof Map) || body.size !== STRINGS.length + 1 || !body.has("accounts")) return "malformed";
   const strings = {} as Record<(typeof STRINGS)[number][1], string>;

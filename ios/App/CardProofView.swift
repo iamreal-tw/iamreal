@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Draws a Screen: the mark of the test roster and the name of the
+/// Draws a Screen: the mark of the test log and the name of the
 /// service, which step it is, the blocks from top to bottom, the buttons.
 /// It has no sentence and no decision of its own; what a button does is
 /// CardProofModel.perform.
@@ -32,7 +32,7 @@ struct CardProofView: View {
 
     private func header(_ screen: Screen) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(ScreenCopy.testRoster)
+            Text(ScreenCopy.testProofLog)
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)

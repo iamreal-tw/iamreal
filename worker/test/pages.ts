@@ -1,21 +1,21 @@
-// What the tests of the visitors' pages share: a roster built by submitting
+// What the tests of the visitors' pages share: a proof log built by submitting
 // card proofs over several days, and the checks every page must pass.
 // Everything goes through the Worker's HTTP (test/harness.ts).
 import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
-import { testRosterLine } from "./copy.ts";
+import { testProofLogLine } from "./copy.ts";
 import type { TestWorker } from "./harness.ts";
-import { freshRoster, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
+import { freshProofLog, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
 
 /** The short ID of the copy files' example, and of a second card. */
 export const CARD_A = "7K2Q9FM4XD";
 export const CARD_B = "3M8T1RZ6WA";
 
-/** The date the test roster of these tests says it was last cleared on (the setting `TEST_ROSTER_CLEARED_ON`). */
+/** The date the test log of these tests says it was last cleared on (the setting `TEST_PROOF_LOG_CLEARED_ON`). */
 export const CLEARED_ON = "2026-11-07";
 
-/** One card proof of a test roster: its date, its card and its list ("platform:username"; none is the empty list). */
+/** One card proof of a test log: its date, its card and its list ("platform:username"; none is the empty list). */
 export interface Rec {
   readonly date: string;
   readonly card: string;
@@ -32,13 +32,13 @@ export function cardStarting(prefix: string): string {
 }
 
 /**
- * A new roster with these card proofs, submitted in order (their dates must
+ * A new proof log with these card proofs, submitted in order (their dates must
  * not go back), each at noon of its date with a CRL of that date in the
  * mirror; the clock is left at noon of `today`. Every submission must be
  * written.
  */
 export async function pagesWorld(worker: TestWorker, today: string, recs: readonly Rec[], settings: { kind?: "test" | "production" } = {}): Promise<void> {
-  await freshRoster(worker, { ...settings, clearedOn: CLEARED_ON });
+  await freshProofLog(worker, { ...settings, clearedOn: CLEARED_ON });
   let root = "";
   const published = new Set<string>();
   for (const x of recs) {
@@ -70,7 +70,7 @@ export function withScript(path: string): boolean {
 
 /**
  * What a response of the visitors' pages has for headers: these, each with
- * this value, and no other. `noindex` is false on the production roster;
+ * this value, and no other. `noindex` is false on the production log;
  * `script` is true for a page that loads the copy buttons' script.
  */
 export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; script?: boolean; more?: readonly string[] }): void {
@@ -93,12 +93,12 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
 }
 
 const NAV_LINKS = `<a href="/verify">怎麼驗證島民證明</a>
-<a href="/roster">證明紀錄</a>
+<a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
 
-/** The mark of a test roster as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
-export const testRosterMark = (date: string): string => `<p class="test-roster">${testRosterLine(date).replace(date, `<time>${date}</time>`)}</p>`;
+/** The mark of a test log as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
+export const testProofLogMark = (date: string): string => `<p class="test-proof-log">${testProofLogLine(date).replace(date, `<time>${date}</time>`)}</p>`;
 
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
@@ -108,7 +108,7 @@ export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
  * headers; HTML with no script (but the copy buttons' script on /verify and
  * /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
  * event attribute and no description (but the home page's); the navigation
- * bar and the foot; and, on a test roster, the mark with the date it was
+ * bar and the foot; and, on a test log, the mark with the date it was
  * last cleared on, above everything else, and `noindex`. Returns the status
  * and the body.
  */
@@ -129,11 +129,11 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   for (const part of ['<link rel="stylesheet" href="/pages.css">', NAV_LINKS, '<a class="button nav-button" href="/proof">我要換島民證明</a>', '<a href="/proof/help.html?topic=prepare">過卡需要什麼</a>']) {
     assert.ok(page.includes(part), `${path}: the page has ${part}`);
   }
-  const mark = testRosterMark(CLEARED_ON);
+  const mark = testProofLogMark(CLEARED_ON);
   assert.equal(page.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄`);
   assert.equal(page.includes('<meta name="robots" content="noindex">'), test, `${path}: noindex in the page`);
   if (test) {
-    assert.ok(page.includes(mark), `${path}: the mark of the test roster, with the date`);
+    assert.ok(page.includes(mark), `${path}: the mark of the test log, with the date`);
     assert.ok(page.indexOf(mark) < page.indexOf("<main>"), `${path}: the mark is above everything else`);
   }
   return { status: res.status, page, res };

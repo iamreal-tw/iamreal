@@ -1,6 +1,6 @@
 // What every page of the visitors has: the document around its content, the
 // navigation bar and the foot (design/copy/home.md, 導覽列 and section 9),
-// and on a test roster the mark above everything else
+// and on a test log the mark above everything else
 // (design/copy/test-site.md). The markup is the Go backend's
 // (e159ab9:server/pages/templates/layout.html, parts.html), so that the one style
 // sheet fits both.
@@ -15,14 +15,14 @@ export const COPY_JS_PATH = "/copy.js";
 /** What every page says about the site that makes it. */
 export interface Site {
   /**
-   * For a test roster, the date it was last cleared on, `YYYY-MM-DD`: every
+   * For a test log, the date it was last cleared on, `YYYY-MM-DD`: every
    * page then says so at its top and asks not to be indexed. Null for the
-   * production roster.
+   * production log.
    */
-  readonly testRosterClearedOn: string | null;
+  readonly testProofLogClearedOn: string | null;
   /**
    * The site's domain, as a page writes it where it writes its own address
-   * (`iamreal.tw/p/…`; on a test roster's site its own,
+   * (`iamreal.tw/p/…`; on a test log's site its own,
    * design/copy/test-site.md).
    */
   readonly host: string;
@@ -57,7 +57,7 @@ const NAV = html`<header class="top">
 <a class="home" href="/">${LOGO}<b>島民證明</b></a>
 <nav class="links">
 <a href="/verify">怎麼驗證島民證明</a>
-<a href="/roster">證明紀錄</a>
+<a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 </nav>
@@ -67,7 +67,7 @@ const NAV = html`<header class="top">
 /** The foot. 過卡需要什麼 is the card proof's help page. */
 const FOOT = html`<footer class="foot">
 <span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
-<a href="/roster">證明紀錄</a>
+<a href="/proof-log">證明紀錄</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 <a href="/proof/help.html?topic=prepare">過卡需要什麼</a>
 <a href="/faq">常見問題</a>
@@ -75,7 +75,7 @@ const FOOT = html`<footer class="foot">
 
 /** The whole document of a page. */
 export function layout(site: Site, d: Document): string {
-  const test = site.testRosterClearedOn;
+  const test = site.testProofLogClearedOn;
   return html`<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -89,7 +89,7 @@ ${d.preview === false ? new Html("") : html`<meta property="og:title" content="$
 ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">
-${test === null ? new Html("") : html`<p class="test-roster">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>
+${test === null ? new Html("") : html`<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>
 `}<main>
 ${NAV}
 ${d.content}

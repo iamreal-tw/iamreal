@@ -72,7 +72,7 @@ fn every_case_of_the_vectors() {
 
 /// What the vectors cannot hold: bodies that are not text, and the answers
 /// device-core/ does not read at all (spec/records-response.md, "Outside
-/// these rules"). The record is in the roster: none is an error.
+/// these rules"). The record is in the proof log: none is an error.
 #[test]
 fn a_body_the_core_cannot_read_is_an_answer_with_nothing_told() {
     let rows = br#"[{"platform":"threads","kind":"first","username":"alice"}]"#;

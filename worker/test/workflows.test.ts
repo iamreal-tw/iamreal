@@ -276,7 +276,7 @@ const CHANGES: Record<string, Change[]> = {
   "221 the changes job running the script and something more": [replace(C, CHANGES_RUN, "        run: bash .github/workflows/changed-paths.sh || true\n")],
   "222 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
   "223 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
-  "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** roster/**", " crl/** roster/**")],
+  "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** prooflog/**", " crl/** prooflog/**")],
   "225 a path more in a list the changes job is given": [replace(C, ' design/copy/** .github/workflows/cache.yml"\n', ' design/copy/** .github/workflows/cache.yml docs/**"\n')],
   "226 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
   "227 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
@@ -909,7 +909,7 @@ test(
     const format = '{{if .Module}}{{if eq .Module.Path "github.com/iamreal-tw/iamreal"}}{{.Dir}}{{end}}{{end}}';
     const dirs = execFileSync("go", ["list", "-tags", "iamrealtest", "-deps", "-f", format, ...goPackages], { cwd: REPO, encoding: "utf8" });
     const used = new Set(["go.mod", "go.sum", ...dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep)[0]!)]);
-    for (const d of ["verifier", "cmd", "crl", "roster"]) assert.ok(used.has(d), `the check found ${d}`);
+    for (const d of ["verifier", "cmd", "crl", "prooflog"]) assert.ok(used.has(d), `the check found ${d}`);
     assert.deepEqual(
       [...used].filter((u) => !inPaths(u)),
       [],
@@ -1155,7 +1155,7 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["a file of the Rust core deleted", [remove("device-core/gone.rs")], ["typescript", "device-core", "android"]],
     ["a Go file moved out to docs/: it counts under its old name", [move("crl/old.go", "docs/old.go")], ["go", "typescript"]],
     ["the copy", ["design/copy/app.md"], ["go", "typescript", "android"]],
-    ["a specification", ["spec/roster-rules.md"], ["go", "typescript", "device-core"]],
+    ["a specification", ["spec/record-rules.md"], ["go", "typescript", "device-core"]],
     ["the circuits", ["web/circuits/x.json"], ["typescript", "device-core", "android"]],
     ["a directory whose name starts like one of a list", ["specs/x.md", "webx/y.ts", "cmd.md"], []],
     ["a document and the Worker", ["docs/b.md", "worker/src/x.ts"], ["typescript"]],
@@ -1335,9 +1335,9 @@ test("the go check runs when anything it uses changes: every directory with a Go
   assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
   const list = CHECK_PATHS.go!;
   const dirs = goDirectories(["./..."]);
-  for (const d of ["verifier", "cmd/iamreal-verify", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+  for (const d of ["verifier", "cmd/iamreal-verify", "crl", "prooflog"]) assert.ok(dirs.includes(d), `the check found ${d}`);
   const named = namedByGo(trackedFiles(...new Set(dirs.map((d) => d.split("/")[0]!))));
-  for (const p of ["spec/vectors", "design/copy/verify.md", "spec/roster-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
+  for (const p of ["spec/vectors", "design/copy/verify.md", "spec/record-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
   assert.deepEqual(
     [...dirs, ...named].filter((p) => !holds(list, p)),
     [],
@@ -1360,7 +1360,7 @@ test("the typescript check runs when anything it uses changes: every file and di
   const list = CHECK_PATHS.typescript!;
   const { paths, goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
   for (const p of ["protocol", "spec/vectors", "design/copy", "crl/testdata", "web/README.md", "crl/README.md", "android/gradle/wrapper", "ios/Tests", ".github/workflows", "circuits"]) assert.ok(paths.has(p), `the check found ${p}: ${[...paths].join(", ")}`);
-  assert.ok(goPackages.has("./verifier") && goPackages.has("./cmd/iamreal-crl") && goPackages.has("./roster"), `the check read the Go commands: ${[...goPackages].join(", ")}`);
+  assert.ok(goPackages.has("./verifier") && goPackages.has("./cmd/iamreal-crl") && goPackages.has("./prooflog"), `the check read the Go commands: ${[...goPackages].join(", ")}`);
   assert.deepEqual(
     [...paths].filter((p) => !holds(list, p)),
     [],
@@ -1375,7 +1375,7 @@ test(
     const list = CHECK_PATHS.typescript!;
     const { goPackages } = namedByTypeScript(trackedFiles("protocol", "worker", "web"));
     const dirs = goDirectories([...goPackages]);
-    for (const d of ["verifier", "cmd/iamreal-verify", "cmd/iamreal-crl", "crl", "roster"]) assert.ok(dirs.includes(d), `the check found ${d}`);
+    for (const d of ["verifier", "cmd/iamreal-verify", "cmd/iamreal-crl", "crl", "prooflog"]) assert.ok(dirs.includes(d), `the check found ${d}`);
     const named = namedByGo(trackedFiles(...dirs).filter((f) => dirs.includes(dirname(f))));
     assert.ok(named.has("spec/vectors"), `the check read the Go sources: ${[...named].join(", ")}`);
     assert.deepEqual(
@@ -1423,7 +1423,7 @@ function namedByDeviceCore(): Set<string> {
 test("the device-core check runs when anything it uses changes: every file and directory its sources name is in its list", () => {
   const list = CHECK_PATHS["device-core"]!;
   const named = namedByDeviceCore();
-  for (const p of ["spec/vectors", "spec/roster-rules.md", "crl/testdata", "web/circuits", "verifier/vk", "device-core/checks", "device-core/include"]) {
+  for (const p of ["spec/vectors", "spec/record-rules.md", "crl/testdata", "web/circuits", "verifier/vk", "device-core/checks", "device-core/include"]) {
     assert.ok([...named].some((x) => x === p || x.startsWith(`${p}/`)), `the check found ${p}: ${[...named].join(", ")}`);
   }
   assert.deepEqual(

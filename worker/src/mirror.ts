@@ -8,10 +8,10 @@
 //    tree (src/crl.ts, src/crl-tree.ts). Usable or not, every file gets a
 //    line. `crl/index.jsonl` is written again after each file.
 // 3. After each time the index is written, and once at the start, tells the
-//    roster's object which are the two newest usable CRLs of each issuer
+//    proof log's object which are the two newest usable CRLs of each issuer
 //    key that the index lists.
 //
-// What holds throughout: the roster's object knows of a root only once the
+// What holds throughout: the proof log's object knows of a root only once the
 // index in the bucket lists it.
 //
 // The second step works from what the bucket holds, not from what the first
@@ -24,7 +24,7 @@
 //
 // A round may be stopped at any moment: Cloudflare ends an invocation that
 // has used its CPU time (wrangler.jsonc, "limits"). Every line written
-// until then stays, and the roster's object has heard of it; the file whose
+// until then stays, and the proof log's object has heard of it; the file whose
 // tree was being built is stored and gets its line in a later round. So
 // that a round is not stopped, it does not start another of the files an
 // earlier round left unless it still has the time the largest takes
@@ -106,7 +106,7 @@ export interface MirrorRound {
   /**
    * Everything that went wrong, in words: a source that failed, a file
    * that got no line, an archive that could not be read, an index that
-   * could not be written, a roster's object that could not be told. Empty
+   * could not be written, a proof log's object that could not be told. Empty
    * if the round did all it had to do.
    */
   readonly errors: readonly string[];
@@ -139,7 +139,7 @@ export interface MirrorParts {
   /** The hash the trees are built with. */
   readonly hash: Poseidon2Hash;
   /**
-   * Tells the roster's object the newest usable CRLs the index lists. The
+   * Tells the proof log's object the newest usable CRLs the index lists. The
    * mirror calls it only with what the index in the bucket holds at that
    * moment.
    */
@@ -208,7 +208,7 @@ export function crlMirrorInWorker(parts: MirrorParts): CrlMirror {
  */
 class ArchiveIndex {
   readonly #bucket: R2Bucket;
-  /** The lines in the bucket: what the roster's object may be told of, while `known`. */
+  /** The lines in the bucket: what the proof log's object may be told of, while `known`. */
   lines: readonly IndexLine[] = [];
   /**
    * Whether `lines` are what the bucket holds. They are not once a write
@@ -304,7 +304,7 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
     }
     return Date.now() - started;
   };
-  /** Tells the roster's object what the index now lists; that it could not be told is said once. */
+  /** Tells the proof log's object what the index now lists; that it could not be told is said once. */
   let untold = false;
   const tell = async (index: ArchiveIndex): Promise<void> => {
     // Only what the bucket is known to hold is told (`ArchiveIndex`, `known`).
@@ -312,7 +312,7 @@ async function indexArchive(parts: MirrorParts, sources: readonly SourceResult[]
     try {
       await parts.tell(newestCrls(index.lines));
     } catch (e) {
-      if (!untold) errors.push(`the roster's object was not told: ${messageOf(e)}`);
+      if (!untold) errors.push(`the proof log's object was not told: ${messageOf(e)}`);
       untold = true;
     }
   };

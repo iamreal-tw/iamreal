@@ -1,5 +1,5 @@
 // The record (spec/record.md): its fields and their formats, its one line,
-// its hash, and the roster fingerprint. A record has exactly one spelling:
+// its hash, and the proof log fingerprint. A record has exactly one spelling:
 // the line is written from a template, and a line is read by writing it
 // again and comparing bytes.
 import { byBytes, sha256Hex } from "./bytes.ts";
@@ -7,14 +7,14 @@ import { parseChallenge } from "./challenge.ts";
 import { type Day, formatDay } from "./date.ts";
 import { P } from "./field.ts";
 import { platformsOf } from "./platforms.ts";
-import { type Roster, lookupScope } from "./scope.ts";
+import { type ProofLog, lookupScope } from "./scope.ts";
 import { parseScopedId } from "./scoped-id.ts";
 
 /** The version tag of the record hash. */
 export const RECORD_VERSION = "iamreal-record-v1";
-/** The version tag of the roster fingerprint. */
+/** The version tag of the proof log fingerprint. */
 export const FINGERPRINT_VERSION = "iamreal-fingerprint-v1";
-/** The roster fingerprint of the roster without a record: 64 zeros. */
+/** The proof log fingerprint of the proof log without a record: 64 zeros. */
 export const EMPTY_FINGERPRINT = "0".repeat(64);
 /** The largest `seq`: 2^53 − 1. */
 export const MAX_SEQ = Number.MAX_SAFE_INTEGER;
@@ -42,8 +42,8 @@ export interface RecordFields {
   readonly proof: string;
 }
 
-/** A record of a roster. */
-export interface RosterRecord extends RecordFields {
+/** A record of a proof log. */
+export interface ProofLogRecord extends RecordFields {
   readonly seq: number;
 }
 
@@ -71,14 +71,14 @@ export function decodeProof(text: string): Uint8Array | null {
 }
 
 /**
- * What is wrong with an account list of `roster` (spec/record.md, "The
- * account list"), or null: every platform is an ID of the roster's table,
+ * What is wrong with an account list of `proofLog` (spec/record.md, "The
+ * account list"), or null: every platform is an ID of the proof log's table,
  * the platforms are in strictly ascending order by byte value, and every
  * username is in the format of its own platform. Account by account: its
  * platform, then its place after the account before, then its username.
  */
-export function accountsProblem(roster: Roster, accounts: readonly RecordAccount[]): "platform" | "order" | "username" | null {
-  const table = platformsOf(roster);
+export function accountsProblem(proofLog: ProofLog, accounts: readonly RecordAccount[]): "platform" | "order" | "username" | null {
+  const table = platformsOf(proofLog);
   let last: string | null = null;
   for (const a of accounts) {
     const row = table.find((p) => p.platform === a.platform);
@@ -91,16 +91,16 @@ export function accountsProblem(roster: Roster, accounts: readonly RecordAccount
 }
 
 /**
- * The first field of `fields` that is not in its format for `roster`
+ * The first field of `fields` that is not in its format for `proofLog`
  * (spec/record.md, "Fields"), by its name in the line, or null if every one
  * is. `circuit` is only checked to be 64 lowercase hex digits: whether it is
  * an accepted circuit, and the one of `issuer`, is part of verifying the
  * record.
  */
-export function fieldsProblem(roster: Roster, fields: RecordFields): string | null {
-  if (!lookupScope(roster, fields.scopeString)) return "scope_string";
+export function fieldsProblem(proofLog: ProofLog, fields: RecordFields): string | null {
+  if (!lookupScope(proofLog, fields.scopeString)) return "scope_string";
   if (parseScopedId(fields.scopedId) === null) return "scoped_id";
-  if (accountsProblem(roster, fields.accounts) !== null) return "accounts";
+  if (accountsProblem(proofLog, fields.accounts) !== null) return "accounts";
   if (parseChallenge(fields.challenge) === null) return "challenge";
   if (fields.issuer !== "G2" && fields.issuer !== "G3") return "issuer";
   if (!LOWER_HEX_64.test(fields.smtRoot) || BigInt(`0x${fields.smtRoot}`) >= P) return "smt_root";
@@ -115,14 +115,14 @@ export function accountsText(accounts: readonly RecordAccount[]): string {
 }
 
 /** The record's line, written from the template and followed by LF. It does not check the values. */
-export function recordLine(r: RosterRecord): string {
+export function recordLine(r: ProofLogRecord): string {
   return `{"seq":${r.seq},"scope_string":"${r.scopeString}","scoped_id":"${r.scopedId}","accounts":${accountsText(r.accounts)},"challenge":"${r.challenge}","issuer":"${r.issuer}","smt_root":"${r.smtRoot}","circuit":"${r.circuit}","proof":"${r.proof}"}\n`;
 }
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 /** The record hash: SHA-256 of the version tag and the nine fields as written in the line, separated by LF; 64 lowercase hex digits. */
-export function recordHash(r: RosterRecord): Promise<string> {
+export function recordHash(r: ProofLogRecord): Promise<string> {
   return sha256Hex(utf8([RECORD_VERSION, String(r.seq), r.scopeString, r.scopedId, accountsText(r.accounts), r.challenge, r.issuer, r.smtRoot, r.circuit, r.proof].join("\n")));
 }
 
@@ -132,28 +132,28 @@ export function nextFingerprint(fingerprint: string, recordHashOfNext: string): 
   return sha256Hex(utf8(`${FINGERPRINT_VERSION}\n${fingerprint}\n${recordHashOfNext}`));
 }
 
-/** A full file of the roster directory has this many lines (spec/record.md, "The published roster"). */
+/** A full file of the log directory has this many lines (spec/record.md, "The published proof log"). */
 export const LINES_PER_FILE = 1000;
 
-/** `before`, the number of records before a roster file, as the 16 digits of its name. */
+/** `before`, the number of records before a log file, as the 16 digits of its name. */
 function fileNumber(before: number): string {
-  if (!Number.isSafeInteger(before) || before < 0 || before % LINES_PER_FILE !== 0) throw new Error("not a number of records a roster file follows");
+  if (!Number.isSafeInteger(before) || before < 0 || before % LINES_PER_FILE !== 0) throw new Error("not a number of records a log file follows");
   return String(before).padStart(16, "0");
 }
 
-/** The name, in the roster directory, of the roster file that follows the first `before` records: `before` in 16 digits, then `.jsonl`. */
-export function rosterFileName(before: number): string {
+/** The name, in the log directory, of the log file that follows the first `before` records: `before` in 16 digits, then `.jsonl`. */
+export function proofLogFileName(before: number): string {
   return `${fileNumber(before)}.jsonl`;
 }
 
-/** The path, in the roster directory, of the record hash list of the roster file `rosterFileName(before)`. */
+/** The path, in the log directory, of the record hash list of the log file `proofLogFileName(before)`. */
 export function hashListName(before: number): string {
   return `hashes/${fileNumber(before)}.txt`;
 }
 
 /**
- * The record hash list of a roster file (spec/record.md, "Record hash
- * lists"): `fingerprintBefore` is the roster fingerprint at the end of the
+ * The record hash list of a log file (spec/record.md, "Record hash
+ * lists"): `fingerprintBefore` is the proof log fingerprint at the end of the
  * file before it (EMPTY_FINGERPRINT for the first file), `recordHashes` the
  * record hash of each of its lines, in order. Each value is followed by LF.
  */
@@ -162,10 +162,10 @@ export function hashList(fingerprintBefore: string, recordHashes: readonly strin
   return [fingerprintBefore, ...recordHashes].map((value) => `${value}\n`).join("");
 }
 
-/** The name of the fingerprint file in the roster directory (spec/record.md, "The published roster"). */
+/** The name of the fingerprint file in the log directory (spec/record.md, "The published proof log"). */
 export const FINGERPRINT_FILE_NAME = "fingerprints.jsonl";
 
-/** A line of the fingerprint file: the roster as it was published on one date in Taiwan. */
+/** A line of the fingerprint file: the proof log as it was published on one date in Taiwan. */
 export interface FingerprintLine {
   /** The date in Taiwan on which the line was written. */
   readonly date: Day;
@@ -178,8 +178,8 @@ export interface FingerprintLine {
 /**
  * A line of the fingerprint file written from its template and followed by
  * LF. Throws for a count that is not 0 to MAX_SEQ or a fingerprint that is
- * not 64 lowercase hex digits; whether the fingerprint is the roster's is
- * for whoever holds the roster.
+ * not 64 lowercase hex digits; whether the fingerprint is the proof log's is
+ * for whoever holds the proof log.
  */
 export function fingerprintLine(line: FingerprintLine): string {
   if (!Number.isSafeInteger(line.count) || line.count < 0) throw new Error("not a number of records");
@@ -190,14 +190,14 @@ export function fingerprintLine(line: FingerprintLine): string {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
- * The record a line of a roster file of `roster` is, or null if the line is
+ * The record a line of a log file of `proofLog` is, or null if the line is
  * malformed (spec/record.md, "Check a line"): `line` is the line's bytes up
  * to and including its LF. The line is parsed, every value checked against
  * its format, and the line written again from the template; if the bytes
  * differ, it is malformed. That one comparison refuses whatever JSON allows
  * beyond the template.
  */
-export function readRecordLine(roster: Roster, line: string): RosterRecord | null {
+export function readRecordLine(proofLog: ProofLog, line: string): ProofLogRecord | null {
   if (!line.endsWith("\n") || line.indexOf("\n") !== line.length - 1) return null;
   let v: unknown;
   try {
@@ -215,7 +215,7 @@ export function readRecordLine(roster: Roster, line: string): RosterRecord | nul
     if (!isObject(a) || typeof a.platform !== "string" || typeof a.username !== "string") return null;
     list.push({ platform: a.platform, username: a.username });
   }
-  const record: RosterRecord = {
+  const record: ProofLogRecord = {
     seq,
     scopeString: scope_string as string,
     scopedId: scoped_id as string,
@@ -226,6 +226,6 @@ export function readRecordLine(roster: Roster, line: string): RosterRecord | nul
     circuit: circuit as string,
     proof: proof as string,
   };
-  if (fieldsProblem(roster, record) !== null) return null;
+  if (fieldsProblem(proofLog, record) !== null) return null;
   return recordLine(record) === line ? record : null;
 }

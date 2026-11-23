@@ -1,11 +1,11 @@
 //! What a list does on every platform, before the card signs it
 //! (spec/list-consequence.md, "What the list does"): the list the card
-//! signs and one row per platform, for the confirmation screen. The roster
+//! signs and one row per platform, for the confirmation screen. The proof log
 //! rules decide it ([`apply_list`], checks 5 and 6), against the state of
 //! the card the server reported, on today's date in Taiwan.
 
 use crate::date::Date;
-use crate::roster_rules::{
+use crate::record_rules::{
     Account, Card, Kind, MAX_SWITCHES, NotARecord, Platform, PlatformKind, Reason, RecordResult,
     Slot, apply_list,
 };

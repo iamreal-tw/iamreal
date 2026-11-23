@@ -19,17 +19,17 @@ struct IamrealApp: App {
 }
 
 extension CardProofModel {
-    /// The card proof of this build: the site and the roster of
+    /// The card proof of this build: the site and the proof log of
     /// AppEnvironment, the core's own session (MOICA's keys), the files
     /// the app carries.
     static func ofThisBuild() -> CardProofModel {
         let flow = CardProofFlow.Dependencies(
-            roster: AppEnvironment.roster,
+            proofLog: AppEnvironment.proofLog,
             backend: HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles),
             card: NoCardReader(),
             clock: Date.init,
             crlNumbers: StoredCRLNumbers(),
-            openSession: { try DeviceCore.Session(AppEnvironment.roster) },
+            openSession: { try DeviceCore.Session(AppEnvironment.proofLog) },
             proofFiles: BundledFile.proofFiles(for:))
         return CardProofModel(CardProofModel.Dependencies(
             flow: flow,
@@ -43,6 +43,6 @@ extension CardProofModel {
 /// The words on every screen that are not the card proof's: each as
 /// design/copy/ writes it (Tests/BuildTests.swift reads them there).
 enum ScreenCopy {
-    /// design/copy/test-site.md: the mark of the test roster.
-    static let testRoster = "測試的證明紀錄"
+    /// design/copy/test-site.md: the mark of the test log.
+    static let testProofLog = "測試的證明紀錄"
 }

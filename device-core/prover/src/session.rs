@@ -40,7 +40,7 @@ use iamreal_device_checks::key::Key;
 use iamreal_device_checks::revocation::{
     CrlProblem, IndexChoice, IndexLine, check_crl_file, choose_from_index, crl_max_age,
 };
-use iamreal_device_checks::scope::{Roster, scope_string};
+use iamreal_device_checks::scope::{ProofLog, scope_string};
 use iamreal_device_checks::scoped_id::{SIGNATURE_LENGTH, scoped_id, scoped_id_text};
 use iamreal_device_checks::tree::{AbsenceProof, TreeResult};
 use iamreal_device_checks::wipe;
@@ -84,7 +84,7 @@ impl Trust {
 }
 
 struct Session {
-    roster: Roster,
+    proof_log: ProofLog,
     trust: Trust,
     /// The certificates the card returned, until they are checked.
     offered: Vec<Vec<u8>>,
@@ -204,9 +204,9 @@ static SESSIONS: Mutex<Option<HashMap<u64, Shared>>> = Mutex::new(None);
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 /// Opens a session and returns the number that names it.
-pub fn open(roster: Roster, trust: Trust) -> u64 {
+pub fn open(proof_log: ProofLog, trust: Trust) -> u64 {
     let session = Session {
-        roster,
+        proof_log,
         trust,
         offered: Vec::new(),
         certificate: None,
@@ -702,7 +702,7 @@ pub fn check_challenge(handle: u64, now: i64, challenge: &[u8]) -> Result<Vec<u8
 /// The body of `POST /api/v1/card-state` (docs/api/card-proof.md):
 /// `{"scope_string":"…","scoped_id":"…"}`, with the scoped ID computed
 /// from the card's signature over the scope string of the session's
-/// roster. The first thing a card proof sends that names the card.
+/// proof log. The first thing a card proof sends that names the card.
 ///
 /// `IDC_ERR_REFUSED` unless the session passed every check and the date
 /// in Taiwan of `now` is the date its checks hold for ([`check_date`]
@@ -712,7 +712,7 @@ pub fn card_state_request(handle: u64, now: i64, scope_signature: &[u8]) -> Resu
     with(handle, |session| {
         let today = today(now)?;
         let passed = session.passed(today).ok_or(IDC_ERR_REFUSED)?;
-        let scope = scope_string(session.roster);
+        let scope = scope_string(session.proof_log);
         if !is_card_signature(passed.certificate, scope, scope_signature, &mut Sha2) {
             return Err(IDC_ERR_INPUT);
         }
@@ -764,7 +764,7 @@ fn scoped_id_of(signature: &[u8]) -> Result<[u8; 32], i32> {
 /// - `accounts`: the whole list the card declares, in the record's order.
 /// - `challenge`: as the server issued it; its date gives `current_time`.
 /// - `scope_signature`, `declaration_code_signature`: the card's
-///   signatures over the scope string of the session's roster and over
+///   signatures over the scope string of the session's proof log and over
 ///   the declaration code of `accounts` and `challenge`.
 ///
 /// The proof's public inputs are compared with the ones the core expects
@@ -822,7 +822,7 @@ pub fn records_request(
         // hold for that date, or there is no proof.
         let date = parse_challenge(challenge).ok_or(IDC_ERR_INPUT)?;
         let passed = session.passed(date).ok_or(IDC_ERR_REFUSED)?;
-        let scope = scope_string(session.roster);
+        let scope = scope_string(session.proof_log);
         let code =
             declaration_code(scope, accounts, challenge, &mut Sha2).map_err(|_| IDC_ERR_INPUT)?;
         // Each of the card's signatures is checked before it is used.

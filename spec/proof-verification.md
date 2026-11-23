@@ -29,7 +29,7 @@ circuit cannot close.
   checks below do.
 - A circuit used by records already written stops being accepted for them
   only when proofs themselves can no longer be trusted. Those records are
-  then handled as [`roster-rules.md`](roster-rules.md), "When proofs can no
+  then handled as [`record-rules.md`](record-rules.md), "When proofs can no
   longer be trusted", says.
 
 ## Source and rebuilding
@@ -120,8 +120,8 @@ another form.
 | 5 | Treats every outcome other than success as a rejection: a non-zero exit code, a crash, an exception, a timeout. Runs `bb` where a crash does not take the service down (a child process) | Barretenberg's native verifier can throw or abort on a crafted proof instead of returning failure (advisory [GHSA-73xc-j27q-wg75](https://github.com/AztecProtocol/aztec-packages/security/advisories/GHSA-73xc-j27q-wg75), which lists `@aztec/bb.js`, `@aztec-foundation/bb.js` and `barretenberg-rs`; `bb` 6.0.0 contains the same verifier). bb.js `verifyProof` throws on malformed input instead of returning `false` |
 | 6 | Builds every public input from the record as [`record.md`](record.md) says, never from a file that came with the proof | A proof verifies for whatever inputs it was made for; only the comparison with the record gives them meaning |
 
-Duplicates and replay are handled by the roster rules, on the record's
-fields: one challenge is used once ([`roster-rules.md`](roster-rules.md)).
+Duplicates and replay are handled by the record rules, on the record's
+fields: one challenge is used once ([`record-rules.md`](record-rules.md)).
 Records have one spelling, so the same event cannot appear twice under
 different bytes.
 
@@ -155,7 +155,7 @@ inputs built as above:
 - `nullifier` is the scoped ID computed from that signature. The signature
   has exactly one accepted encoding (every limb in range, and the integer
   below the modulus), so one card has one scoped ID per scope string: one
-  in the public roster, for all its platforms (ADR-0017).
+  in the public proof log, for all its platforms (ADR-0017).
 - The same key signed the 31 bytes of the declaration code, whose first byte
   is `A`..`Z` other than `S`.
 

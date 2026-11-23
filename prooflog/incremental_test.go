@@ -1,8 +1,8 @@
-package roster_test
+package prooflog_test
 
 // The rules applied one record at a time (Rules) give the same results as
-// the whole roster at once (Apply), on every case of
-// spec/vectors/roster-rules.json. The server uses Rules; re-verifiers use
+// the whole proof log at once (Apply), on every case of
+// spec/vectors/record-rules.json. The server uses Rules; re-verifiers use
 // Apply through Check.
 
 import (
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -20,17 +20,17 @@ func TestVectorsOneAtATime(t *testing.T) {
 	var v struct {
 		Cases []rulesCase `json:"cases"`
 	}
-	load(t, "roster-rules.json", &v)
+	load(t, "record-rules.json", &v)
 	for _, c := range v.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			r := rosterOf(t, c.Roster)
+			r := proofLogOf(t, c.ProofLog)
 			records, proofs, archive := caseRecords(t, c)
-			whole, err := roster.Apply(records, r, proofs, archive)
+			whole, err := prooflog.Apply(records, r, proofs, archive)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			x := roster.NewRules(r, proofs, archive)
+			x := prooflog.NewRules(r, proofs, archive)
 			var got []result
 			for _, rec := range records {
 				// Check says what Apply then does, and changes nothing:
@@ -59,7 +59,7 @@ func TestVectorsOneAtATime(t *testing.T) {
 				if applied.Valid && !reflect.DeepEqual(card, x.Card(rec.ScopeString, rec.ScopedID)) {
 					t.Errorf("seq %d: CheckWithCard's card %+v, Card after Apply %+v", rec.Seq, card, x.Card(rec.ScopeString, rec.ScopedID))
 				}
-				if !applied.Valid && !reflect.DeepEqual(card, roster.CardState{}) {
+				if !applied.Valid && !reflect.DeepEqual(card, prooflog.CardState{}) {
 					t.Errorf("seq %d: invalid, but CheckWithCard gave a card %+v", rec.Seq, card)
 				}
 				got = append(got, resultOf(applied))
@@ -127,7 +127,7 @@ func TestCard(t *testing.T) {
 	const scope = "iamreal-test:public:0__________"
 	const id = "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880"
 	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
-	x := roster.NewRules(verifier.Test, fakeProofs{1: true, 2: true, 3: true}, everyRootRecognized{})
+	x := prooflog.NewRules(verifier.Test, fakeProofs{1: true, 2: true, 3: true}, everyRootRecognized{})
 	c := x.Card(scope, id)
 	if c.LastCardProof != nil || c.ProofsOnLastDate != 0 || len(c.Slots) != 2 {
 		t.Errorf("no record: %+v", c)
@@ -164,15 +164,15 @@ func TestCard(t *testing.T) {
 		t.Errorf("%+v %+v %+v", c, th, te)
 	}
 	// The withdrawals of the last record name the accounts withdrawn.
-	if res := x.State().Records[2]; !reflect.DeepEqual(res.Kinds, []roster.PlatformKind{
-		{Platform: "threads", Kind: roster.KindWithdraw, Username: "bob"},
+	if res := x.State().Records[2]; !reflect.DeepEqual(res.Kinds, []prooflog.PlatformKind{
+		{Platform: "threads", Kind: prooflog.KindWithdraw, Username: "bob"},
 	}) {
 		t.Errorf("kinds %+v", res.Kinds)
 	}
 	// The second record: test-example withdrawn, threads switched.
-	if res := x.State().Records[1]; !reflect.DeepEqual(res.Kinds, []roster.PlatformKind{
-		{Platform: "test-example", Kind: roster.KindWithdraw, Username: "a-b"},
-		{Platform: "threads", Kind: roster.KindSwitch, Username: "bob"},
+	if res := x.State().Records[1]; !reflect.DeepEqual(res.Kinds, []prooflog.PlatformKind{
+		{Platform: "test-example", Kind: prooflog.KindWithdraw, Username: "a-b"},
+		{Platform: "threads", Kind: prooflog.KindSwitch, Username: "bob"},
 	}) {
 		t.Errorf("kinds %+v", res.Kinds)
 	}

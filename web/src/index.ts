@@ -1,5 +1,5 @@
 // The page's entry point to the card proof engine. Everything a server could
-// otherwise influence is fixed here: the roster whose scope string the card
+// otherwise influence is fixed here: the proof log whose scope string the card
 // signs, the issuer keys, the component's address and the data domain
 // (target.ts), the fetch (same origin only; the CRL archive from the data
 // domain), the clock, the one storage key.
@@ -14,9 +14,9 @@ import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
 import { KNOWN_PLATFORMS } from "./platforms.ts";
 import { localStorageStore } from "./storage.ts";
-import { DATA_ORIGIN, IDLE_LIMIT_MS, ISSUERS, ROSTER } from "./target.ts";
+import { DATA_ORIGIN, IDLE_LIMIT_MS, ISSUERS, PROOF_LOG } from "./target.ts";
 
-export { ROSTER };
+export { PROOF_LOG };
 
 /** Where the build puts bb.js's WebAssembly (vite.config.ts), under the build's base. */
 export const BB_WASM_PATH = `${BASE}bb/barretenberg.wasm.gz`;
@@ -38,7 +38,7 @@ export function createCardProof(opts: {
   onProgress?: FlowDeps["onProgress"];
 }): CardProofFlow {
   return new CardProofFlow({
-    roster: ROSTER,
+    proofLog: PROOF_LOG,
     issuers: ISSUERS,
     knownPlatforms: KNOWN_PLATFORMS,
     fetch: sameOriginFetch,

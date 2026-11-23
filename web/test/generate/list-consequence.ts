@@ -20,7 +20,7 @@ interface Case extends Omit<ListConsequenceCase, "known_platforms"> {
 
 const THREADS = { platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" };
 const EXAMPLE = { platform: "test-example", display_name: "Example (no real service)", username_format: "[a-z0-9-]{1,20}" };
-/** The table of the production roster, and of a test roster (spec/scope.md). */
+/** The table of the production log, and of a test log (spec/scope.md). */
 const PRODUCTION = [THREADS];
 const TEST = [EXAMPLE, THREADS];
 

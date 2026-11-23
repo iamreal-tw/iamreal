@@ -108,7 +108,7 @@ iamreal 的賣點是不需要相信營運者。畫面的工作是把事實交給
 
 - 張數不放大，旁邊固定說明：「任何持卡人都可以把名額給任何帳號，張數不代表支持或連署。」
 - 不合併日期。沒有整個帳號的「最近一次過卡」，否則任何人拿一張卡片宣告這個帳號，就能讓它看起來很新。頁面不替訪客標出帳號主人認的是哪一張
-- 排法和文字已經定了，在 `design/copy/account-page.md`；證明紀錄頁在 `design/copy/roster-page.md`
+- 排法和文字已經定了，在 `design/copy/account-page.md`；證明紀錄頁在 `design/copy/proof-log-page.md`
 
 ### 待定
 

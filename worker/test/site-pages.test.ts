@@ -148,7 +148,7 @@ describe("hanging a proof on a profile", () => {
     assert.equal(status, 200);
     wantLines(page, [...copyLines(block("hang.md", "2. ", 0), "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"), ...copyLines(block("hang.md", "3. "))]);
     // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
-    // roster's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
+    // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
     assert.ok(copySection("hang.md", "2. ").includes("`https://iamreal.tw/p/7K2Q9FM4XD`"), "hang.md says what 複製連結 copies");
     for (const want of [
@@ -180,7 +180,7 @@ describe("hanging a proof on a profile", () => {
     wantPreview(page, title, site);
   });
 
-  test("/hang/<short ID> is the page for one card with an account on Threads only (302 to /hang otherwise); another spelling is redirected (301); one that does not read is answered without the roster's object", async () => {
+  test("/hang/<short ID> is the page for one card with an account on Threads only (302 to /hang otherwise); another spelling is redirected (301); one that does not read is answered without the proof log's object", async () => {
     const one = cardStarting(CARD_A);
     const m1 = cardStarting("M4T8XR6PZ13A");
     const m2 = cardStarting("M4T8XR6PZ13B");
@@ -214,8 +214,8 @@ describe("hanging a proof on a profile", () => {
 
     // With an object that answers nothing, a short ID that reads is 500; one that does not, and another spelling,
     // are answered as before: the Worker did not ask.
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       const logged = worker.logLines().length;
       const failed = await worker.fetch(`/hang/${CARD_A}`);
@@ -224,10 +224,10 @@ describe("hanging a proof on a profile", () => {
       assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", page: "hang", where: "schema", error: "Error" }]);
       for (const typed of unreadable) assert.deepEqual([(await worker.fetch(`/hang/${typed}`, { redirect: "manual" })).status], [302], `/hang/${typed}`);
       await redirects();
-      assert.equal((await getPage(worker, "/hang")).status, 200, "/hang does not ask the roster");
+      assert.equal((await getPage(worker, "/hang")).status, 200, "/hang does not ask the proof log");
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
   });
 });
@@ -265,14 +265,14 @@ describe("the links", () => {
   test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
     const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
-    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/roster", "/roster?q=a-b", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/nothing"];
     const links = new Set<string>();
     for (const path of pages) {
       const { page } = await getPage(worker, path);
       for (const m of page.matchAll(/\s(?:href|src|action)="(\/(?!\/)[^"]*)"/g)) links.add(unescapeHtml(m[1]!).replace(/#.*/, ""));
     }
-    for (const want of ["/", "/proof", "/proof/help.html?topic=prepare", "/verify", "/roster", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
-    assert.ok([...links].some((l) => l.startsWith("/roster?after=")), "更多 is among them");
+    for (const want of ["/", "/proof", "/proof/help.html?topic=prepare", "/verify", "/proof-log", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
+    assert.ok([...links].some((l) => l.startsWith("/proof-log?after=")), "更多 is among them");
     const failing: string[] = [];
     for (const link of links) {
       const res = await worker.fetch(link, { redirect: "manual" });

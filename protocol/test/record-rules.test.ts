@@ -1,15 +1,15 @@
-// The roster rules as one function that keeps nothing (src/roster-rules.ts),
+// The record rules as one function that keeps nothing (src/record-rules.ts),
 // and the state kept in memory around it (src/rules-memory.ts), against
-// spec/vectors/roster-rules.json: the same file the Go tests read.
+// spec/vectors/record-rules.json: the same file the Go tests read.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Day, formatDay, parseDay } from "../src/date.ts";
 import { platformsOf } from "../src/platforms.ts";
 import { MemoryRules } from "../src/rules-memory.ts";
-import { type CardState, EMPTY_SLOT, RULES_VERSION, type RecordInput, type SlotState, applyList, applyRecord, dailyLimitReached, newCard, possibleCard, possibleSlot } from "../src/roster-rules.ts";
+import { type CardState, EMPTY_SLOT, RULES_VERSION, type RecordInput, type SlotState, applyList, applyRecord, dailyLimitReached, newCard, possibleCard, possibleSlot } from "../src/record-rules.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
-/** The two tables of spec/scope.md: the production roster's (threads) and a test roster's (test-example, threads). */
+/** The two tables of spec/scope.md: the production log's (threads) and a test log's (test-example, threads). */
 const PRODUCTION = platformsOf("production");
 const TEST = platformsOf("test");
 
@@ -21,36 +21,36 @@ const slotsOut = (card: CardState) =>
   Object.fromEntries([...card.slots].map(([p, s]) => [p, { current: s.current, last_declared: s.lastDeclared, switch_count: s.switchCount, correction_date: dateText(s.correctionDate) }]));
 
 /** The state in memory in the vectors' spelling of `state`. */
-const stateOut = (roster: MemoryRules) =>
-  roster.output().map((scope) => ({
+const stateOut = (proofLog: MemoryRules) =>
+  proofLog.output().map((scope) => ({
     scope_string: scope.scopeString,
     cards: scope.cards.map((c) => {
-      const card = roster.card(scope.scopeString, c.scopedId);
+      const card = proofLog.card(scope.scopeString, c.scopedId);
       return { scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof), accounts: c.accounts, proofs_on_last_date: card.proofsOnLastDate, slots: slotsOut(card) };
     }),
     accounts: scope.accounts.map((a) => ({ platform: a.platform, username: a.username, cards: a.cards.map((c) => ({ scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof) })) })),
   }));
 
 describe("the version number of the rules", () => {
-  // The Go tests check roster.RulesVersion against the same two places (roster/version_test.go).
-  test("the constant is the number spec/roster-rules.md states and the vectors carry", () => {
-    const stated = /^\*\*These rules are version ([1-9][0-9]*)\.\*\*$/m.exec(new TextDecoder().decode(repoFile("spec/roster-rules.md")));
-    assert.notEqual(stated, null, "spec/roster-rules.md states the version in one sentence");
+  // The Go tests check prooflog.RulesVersion against the same two places (prooflog/version_test.go).
+  test("the constant is the number spec/record-rules.md states and the vectors carry", () => {
+    const stated = /^\*\*These rules are version ([1-9][0-9]*)\.\*\*$/m.exec(new TextDecoder().decode(repoFile("spec/record-rules.md")));
+    assert.notEqual(stated, null, "spec/record-rules.md states the version in one sentence");
     assert.equal(String(RULES_VERSION), stated![1]);
-    assert.equal(vectors("roster-rules.json").rules_version, RULES_VERSION);
+    assert.equal(vectors("record-rules.json").rules_version, RULES_VERSION);
   });
 });
 
-describe("roster-rules.json: every case, record by record, through the state in memory", () => {
-  for (const c of vectors("roster-rules.json").cases) {
+describe("record-rules.json: every case, record by record, through the state in memory", () => {
+  for (const c of vectors("record-rules.json").cases) {
     test(c.name, () => {
-      const roster = new MemoryRules(platformsOf(c.roster));
+      const proofLog = new MemoryRules(platformsOf(c.proof_log));
       assert.equal(c.events.length, c.results.length);
       c.events.forEach((e: Record<string, any>, i: number) => {
-        const before = roster.card(e.scope_string, e.scoped_id);
+        const before = proofLog.card(e.scope_string, e.scoped_id);
         const beforeText = JSON.stringify(slotsOut(before));
-        const latestBefore = roster.latestValidDate;
-        const outcome = roster.apply({
+        const latestBefore = proofLog.latestValidDate;
+        const outcome = proofLog.apply({
           scopeString: e.scope_string,
           scopedId: e.scoped_id,
           challenge: e.challenge,
@@ -61,29 +61,29 @@ describe("roster-rules.json: every case, record by record, through the state in 
         const { seq, ...want } = c.results[i];
         assert.equal(seq, i + 1);
         assert.deepEqual(outcome.result.valid ? outcome.result : { valid: false, reason: outcome.result.reason }, want, `event ${e.seq}`);
-        assert.equal(roster.count, i + 1);
-        const after = roster.card(e.scope_string, e.scoped_id);
+        assert.equal(proofLog.count, i + 1);
+        const after = proofLog.card(e.scope_string, e.scoped_id);
         if (want.valid) {
           // "Every valid record": the card's date is the record's.
           assert.equal(dateText(after.lastCardProof), e.date, `event ${e.seq}`);
         } else {
-          // "What an invalid record changes": nothing of its card, not the roster's latest valid date.
+          // "What an invalid record changes": nothing of its card, not the proof log's latest valid date.
           assert.equal(after.lastCardProof, before.lastCardProof, `event ${e.seq}`);
           assert.equal(after.proofsOnLastDate, before.proofsOnLastDate, `event ${e.seq}`);
           assert.equal(JSON.stringify(slotsOut(after)), beforeText, `event ${e.seq}`);
-          assert.equal(roster.latestValidDate, latestBefore, `event ${e.seq}`);
+          assert.equal(proofLog.latestValidDate, latestBefore, `event ${e.seq}`);
         }
         // Every state the rules produce is one the device reads.
         const today = Math.max(day(e.date), after.lastCardProof ?? day(e.date));
         assert.ok(possibleCard(after, today), `event ${e.seq}: the card's items`);
         for (const [p, slot] of after.slots) assert.ok(possibleSlot(slot, after.lastCardProof), `event ${e.seq}: the slot ${p}`);
       });
-      assert.deepEqual(stateOut(roster), c.state);
+      assert.deepEqual(stateOut(proofLog), c.state);
     });
   }
 });
 
-describe("applyRecord: one record, the state of its card, three facts about the roster", () => {
+describe("applyRecord: one record, the state of its card, three facts about the proof log", () => {
   const today = day("2026-11-16");
   const alice: SlotState = { current: "alice", lastDeclared: "alice", switchCount: 1, correctionDate: day("2026-03-02") };
   const card = (o: Partial<SlotState> = {}, lastCardProof = day("2026-11-04"), proofsOnLastDate = 1): CardState => ({ lastCardProof, proofsOnLastDate, slots: new Map([["threads", { ...alice, ...o }]]) });
@@ -97,7 +97,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     ...o,
   });
 
-  test("a valid record: its kinds, the card after it, the roster's latest valid date", () => {
+  test("a valid record: its kinds, the card after it, the proof log's latest valid date", () => {
     assert.deepEqual(applyRecord(input()), {
       result: { valid: true, kinds: [{ platform: "threads", kind: "switch" }] },
       card: { lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", { current: "bob", lastDeclared: "bob", switchCount: 2, correctionDate: today }]]) },
@@ -105,7 +105,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     });
   });
 
-  test("the first record of a card and of the roster", () => {
+  test("the first record of a card and of the proof log", () => {
     assert.deepEqual(applyRecord(input({ card: newCard(PRODUCTION), latestValidDate: null })), {
       result: { valid: true, kinds: [{ platform: "threads", kind: "first" }] },
       card: { lastCardProof: today, proofsOnLastDate: 1, slots: new Map([["threads", { current: "bob", lastDeclared: "bob", switchCount: 0, correctionDate: today }]]) },
@@ -113,7 +113,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     });
   });
 
-  test("a valid record dated before the roster's latest valid date does not move it back", () => {
+  test("a valid record dated before the proof log's latest valid date does not move it back", () => {
     const o = applyRecord(input({ latestValidDate: day("2026-11-18") }));
     assert.equal(o.result.valid, true);
     assert.equal(o.latestValidDate, day("2026-11-18"));
@@ -148,7 +148,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     assert.equal(reason([]), "root");
   });
 
-  test("check 4: 4 days before the roster's latest valid date; not before the card's own last card proof", () => {
+  test("check 4: 4 days before the proof log's latest valid date; not before the card's own last card proof", () => {
     const reason = (o: Partial<RecordInput>) => {
       const r = applyRecord(input(o)).result;
       return r.valid ? "valid" : r.reason;
@@ -192,7 +192,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     assert.deepEqual(left.card.slots.get("test-example"), EMPTY_SLOT);
   });
 
-  test("not a record of the roster: an error, not a reason code, before any check", () => {
+  test("not a record of the proof log: an error, not a reason code, before any check", () => {
     const outside = [{ platform: "example", username: "bob" }];
     const twice = [{ platform: "threads", username: "bob" }, { platform: "threads", username: "carol" }];
     const unordered = [{ platform: "threads", username: "bob" }, { platform: "test-example", username: "carol" }];
@@ -205,7 +205,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
       ["check 1", {}, false],
       ["check 2", { challengeUsed: true }, true],
       ["check 3", { crlDates: [] }, true],
-      ["check 4, the roster's date", { latestValidDate: today + 5 }, true],
+      ["check 4, the proof log's date", { latestValidDate: today + 5 }, true],
       ["check 4, the card's date", { card: card({}, today + 1) }, true],
     ];
     for (const [label, o, verifies] of failing) {
@@ -223,7 +223,7 @@ describe("applyRecord: one record, the state of its card, three facts about the 
     assert.equal(applyList(TEST, newCard(TEST), [{ platform: "test-example", username: "a-b" }], today).result.valid, true);
   });
 
-  test("a list wrong in several ways: the first thing wrong, account by account, as Go's roster/ reports it", () => {
+  test("a list wrong in several ways: the first thing wrong, account by account, as Go's prooflog/ reports it", () => {
     const err = (accounts: { platform: string; username: string }[]) => {
       try {
         applyList(TEST, newCard(TEST), accounts, today);

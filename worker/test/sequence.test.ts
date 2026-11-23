@@ -1,7 +1,7 @@
-// The roster rules over a long sequence of records (#73): Go's roster/ gives
+// The record rules over a long sequence of records (#73): Go's prooflog/ gives
 // the answers, and protocol/'s rules, with their state in memory and with
-// the state the roster's Durable Object stores, must give each record the
-// same result and leave its card, the roster's latest valid date and the
+// the state the proof log's Durable Object stores, must give each record the
+// same result and leave its card, the proof log's latest valid date and the
 // cards of each account the same. The sequence comes from a generator with
 // a fixed seed (test/sequence.ts). worker/README.md says how to run it, what
 // it compares, what it does not, and what it found (#9, item 8 of the
@@ -15,13 +15,13 @@ import { type TestContext, after, before, describe, test } from "node:test";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
-import { RULES_VERSION, type RecordResult } from "iamreal-protocol/roster-rules.ts";
+import { RULES_VERSION, type RecordResult } from "iamreal-protocol/record-rules.ts";
 import { MemoryRules, type OutputScope } from "iamreal-protocol/rules-memory.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { cardState, freshRoster } from "./records.ts";
+import { cardState, freshProofLog } from "./records.ts";
 import {
   type AccountCount,
   type Answer,
@@ -46,7 +46,7 @@ import {
 /** The sequence compared: its seed and length. Another seed is another sequence; the counts it prints must still reach their floors. */
 const SEED = 1;
 const LENGTH = 10_000;
-/** How often the roster's latest valid date and the cards of each account are compared on the Durable Object: after every this many records, and after the last. */
+/** How often the proof log's latest valid date and the cards of each account are compared on the Durable Object: after every this many records, and after the last. */
 const CHECKPOINT_EVERY = 100;
 
 /**
@@ -74,9 +74,9 @@ describe("generateSequence: the same seed, the same records", () => {
     assert.deepEqual(generateSequence({ seed: 7, length: 600 }).events.slice(0, 500), a.events);
   });
 
-  test("every event is a well-formed record of the test roster: seq from 1, its date the challenge's, a list in the table's order and formats", () => {
-    const { roster, events } = generateSequence({ seed: 7, length: 2000 });
-    assert.equal(roster, "test");
+  test("every event is a well-formed record of the test log: seq from 1, its date the challenge's, a list in the table's order and formats", () => {
+    const { proof_log: proofLog, events } = generateSequence({ seed: 7, length: 2000 });
+    assert.equal(proofLog, "test");
     const table = platformsOf("test");
     events.forEach((e, i) => {
       assert.equal(e.seq, i + 1);
@@ -202,12 +202,12 @@ describe("scenarios: the cases a sequence must hold often, counted from its even
 // sets, or IAMREAL_BB), a missing go is a failure, as in workflows.test.ts.
 const hasGo = spawnSync("go", ["version"]).status === 0;
 const goRequired = Boolean(process.env.CI) || Boolean(process.env.IAMREAL_BB);
-const skip = !hasGo && !goRequired ? "go is not installed: no answers from Go's roster/" : false;
+const skip = !hasGo && !goRequired ? "go is not installed: no answers from Go's prooflog/" : false;
 
 // The run on the Durable Object's storage takes about 107 s, nearly all the
 // time of this file, so it runs only when asked for: IAMREAL_SEQUENCE_STORAGE=1.
 // The run in memory (under a second) runs with every `pnpm test`. When to ask
-// for it is in README.md, "紀錄規則和 Go 的 roster/ 逐筆比對".
+// for it is in README.md, "紀錄規則和 Go 的 prooflog/ 逐筆比對".
 const storageSkip = process.env.IAMREAL_SEQUENCE_STORAGE === "1" ? false : "IAMREAL_SEQUENCE_STORAGE is not 1: the run on the Durable Object's storage (about 107 s) is not asked for";
 
 /** protocol/'s result without the explanation for people (`blockedPlatform`): the reason code is the whole result of an invalid record. */
@@ -217,7 +217,7 @@ const resultOf = (r: RecordResult): ResultJson => (r.valid ? { valid: true, kind
 const accountCounts = (scopes: readonly OutputScope[]): AccountCount[] =>
   scopes.flatMap((s) => s.accounts.map((a) => ({ scope_string: s.scopeString, platform: a.platform, username: a.username, account_cards: a.cards.length })));
 
-describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's roster/ gives the answers`, { skip }, () => {
+describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives the answers`, { skip }, () => {
   let dir: string | undefined;
   let sequence: Sequence;
   let go: GoAnswers;
@@ -249,7 +249,7 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's roster/ gives th
     writeFileSync(join(dir, "events.json"), JSON.stringify(sequence));
     assert.ok(hasGo, `go is not installed, and CI or IAMREAL_BB is set: this comparison must run here. ${kept()}`);
     const started = performance.now();
-    const run = spawnSync("go", ["test", "-count=1", "-run", "^TestSequenceAnswers$", "./roster"], { cwd: join(WORKER_DIR, ".."), env: { ...process.env, IAMREAL_ROSTER_SEQUENCE: dir }, encoding: "utf8" });
+    const run = spawnSync("go", ["test", "-count=1", "-run", "^TestSequenceAnswers$", "./prooflog"], { cwd: join(WORKER_DIR, ".."), env: { ...process.env, IAMREAL_PROOF_LOG_SEQUENCE: dir }, encoding: "utf8" });
     goMs = performance.now() - started;
     assert.equal(run.status, 0, `${run.stdout}${run.stderr}\n${kept()}`);
     go = JSON.parse(readFileSync(join(dir, "answers.json"), "utf8")) as GoAnswers;
@@ -331,20 +331,20 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's roster/ gives th
   check("with the state the Durable Object stores, the object stopped between every two records: every record's result and its card after it, and at every checkpoint the latest valid date and the cards of each account, are Go's", async (t) => {
     const started = performance.now();
     worker = await startWorker();
-    await freshRoster(worker, { kind: "test" });
+    await freshProofLog(worker, { kind: "test" });
     let checkpoints = 0;
     for (const [i, e] of sequence.events.entries()) {
       let got: Answer;
       let atCheckpoint: { latest: string | null; accounts: AccountCount[] } | undefined;
       try {
-        const r = await worker.roster.applyRuleEvent(e);
-        await worker.roster.restart();
+        const r = await worker.proofLog.applyRuleEvent(e);
+        await worker.proofLog.restart();
         // A state the object refuses to read (src/card-table.ts, readCard) is a `500` here.
         const { platforms, last_card_proof, proofs_on_last_date } = (await cardState(worker, e.scoped_id, e.scope_string)) as { platforms: CardJson["slots"]; last_card_proof: string | null; proofs_on_last_date: number };
         const result: ResultJson = r.valid ? { valid: true, kinds: r.kinds! } : { valid: false, reason: r.reason! };
         got = { result, card: { last_card_proof, proofs_on_last_date, slots: platforms } };
         if (checkpoint(e.seq) !== undefined) {
-          const rules = await worker.roster.ruleState(e.scope_string, e.scoped_id);
+          const rules = await worker.proofLog.ruleState(e.scope_string, e.scoped_id);
           atCheckpoint = { latest: rules.latest_valid_date, accounts: rules.accounts.map((a) => ({ scope_string: e.scope_string, ...a })) };
         }
       } catch (err) {

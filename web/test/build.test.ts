@@ -1,15 +1,15 @@
 // A production build (vite.config.ts, mode "production") holds MOICA's
-// issuer keys and the component's real address, the public roster's scope
+// issuer keys and the component's real address, the public proof log's scope
 // string, the data domain https://data.iamreal.tw (ADR-0027), and nothing of
 // the tests: no fake card, no test issuer keys, no fake component, no test
 // platform. The build for a real card on this computer (mode "localcard",
 // worker/'s `pnpm local`) holds MOICA's keys and the real component too and nothing
-// of the tests, but signs the test roster's scope string and knows the test
-// roster's platforms; it fetches the CRL from its own origin (the local
+// of the tests, but signs the test log's scope string and knows the test
+// log's platforms; it fetches the CRL from its own origin (the local
 // server), so it names no data domain. The test site's build (mode
 // "testsite", what a deploy of test.iamreal.tw serves at /proof) is the local
-// one with the test roster's data domain, https://test-data.iamreal.tw, and
-// the mark of a test roster (design/copy/test-site.md) with the date it is
+// one with the test log's data domain, https://test-data.iamreal.tw, and
+// the mark of a test log (design/copy/test-site.md) with the date it is
 // built with.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -81,42 +81,42 @@ function realCardOnly(code: string, mode: string, dataOrigin: string | null): vo
   if (dataOrigin !== null) assert.ok(urls.has(dataOrigin), `${mode}: the data domain ${dataOrigin}`);
 }
 
-test("a production build holds nothing of the tests, and signs the public roster's scope string", async () => {
+test("a production build holds nothing of the tests, and signs the public proof log's scope string", async () => {
   const code = await codeOf("production");
   realCardOnly(code, "production", "https://data.iamreal.tw");
-  assert.ok(code.includes("iamreal:public:0_______________"), "the public roster's scope string");
-  // The test roster's second platform is not in it (src/presentations/test-example.ts).
+  assert.ok(code.includes("iamreal:public:0_______________"), "the public proof log's scope string");
+  // The test log's second platform is not in it (src/presentations/test-example.ts).
   assert.ok(!code.includes("Example (no real service)"), "the production build has test-example's definition");
 });
 
-test("the local build (pnpm local): MOICA's keys and component, nothing of the tests, the test roster's scope string and platforms", async () => {
+test("the local build (pnpm local): MOICA's keys and component, nothing of the tests, the test log's scope string and platforms", async () => {
   const code = await codeOf("localcard");
   realCardOnly(code, "localcard", null);
-  // The roster of src/target-local.ts: the test one. Both scope strings are in the table of
+  // The proof log of src/target-local.ts: the test one. Both scope strings are in the table of
   // protocol/src/scope.ts; the target picks the test one (checked in Node below).
-  assert.ok(code.includes("iamreal-test:public:0__________"), "the test roster's scope string");
+  assert.ok(code.includes("iamreal-test:public:0__________"), "the test log's scope string");
   assert.ok(code.includes("Example (no real service)"), "the local build knows test-example");
 });
 
-/** The date a test site's build is given: when its roster was last cleared (worker/wrangler.jsonc has the deployed one). */
+/** The date a test site's build is given: when its proof log was last cleared (worker/wrangler.jsonc has the deployed one). */
 const CLEARED_ON = "2026-10-31";
-/** The sentence beside the mark of a test roster (design/copy/test-site.md), up to its date. */
+/** The sentence beside the mark of a test log (design/copy/test-site.md), up to its date. */
 const MARK = /```\n(.*)\d{4}-\d{2}-\d{2}\n```/.exec(readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8"))![1]!;
 
-test("the test site's build: MOICA's keys and component, nothing of the tests, the test roster's scope string, its data domain and no other address, the test site's links, the mark of a test roster", async () => {
-  process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = CLEARED_ON;
-  const { files, code } = await buildOf("testsite").finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+test("the test site's build: MOICA's keys and component, nothing of the tests, the test log's scope string, its data domain and no other address, the test site's links, the mark of a test log", async () => {
+  process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON = CLEARED_ON;
+  const { files, code } = await buildOf("testsite").finally(() => delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON);
   realCardOnly(code, "testsite", "https://test-data.iamreal.tw");
-  assert.ok(code.includes("iamreal-test:public:0__________"), "the test roster's scope string");
+  assert.ok(code.includes("iamreal-test:public:0__________"), "the test log's scope string");
   assert.ok(code.includes("Example (no real service)"), "the test site's build knows test-example");
-  assert.ok(!code.includes("https://data.iamreal.tw"), "not the production roster's data domain");
+  assert.ok(!code.includes("https://data.iamreal.tw"), "not the production log's data domain");
   // The link of the last screen is the card's page on the test site (src/target-test-site.ts, SITE_DOMAIN).
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
   assert.doesNotMatch(code, /["'`]iamreal\.tw["'`]/, "not the public site's domain");
   // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
   assert.ok(MARK.startsWith("測試的證明紀錄"));
   const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });
-  const script = [...files.keys()].filter((f) => /^assets\/test-roster-[\w-]+\.js$/.test(f));
+  const script = [...files.keys()].filter((f) => /^assets\/test-proof-log-[\w-]+\.js$/.test(f));
   assert.equal(script.length, 1, "the mark's script");
   assert.ok(files.get(script[0]!)!.replaceAll("\\", "").includes(mark), `the mark's script holds ${mark}`);
   // Both pages load it.
@@ -125,7 +125,7 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
 
 test("the production build has nothing of the mark, and its help page loads nothing of the target: no issuer key, no address of the component, no scope string", async () => {
   const { files, code } = await buildOf("production");
-  assert.ok(![...files.keys()].some((f) => f.includes("test-roster")) && !code.includes("測試的證明紀錄") && !code.includes("test-roster"), "no file and no word of the mark");
+  assert.ok(![...files.keys()].some((f) => f.includes("test-proof-log")) && !code.includes("測試的證明紀錄") && !code.includes("test-proof-log"), "no file and no word of the mark");
   assert.match(code, /["'`]iamreal\.tw["'`]/, "the public site's domain, for the link of the last screen");
   assert.ok(!code.includes("test.iamreal.tw") && !code.includes("test-data.iamreal.tw"), "nothing of the test site");
   // The help page is a title and a sentence: the scripts it loads are the copy, the logo and the style sheet.
@@ -138,27 +138,27 @@ test("the production build has nothing of the mark, and its help page loads noth
   for (const s of [...MOICA_KEYS, "localhost:61161", "iamreal:public:0"]) assert.ok(page.includes(s), `the card proof page loads ${JSON.stringify(s)}`);
 });
 
-test("no other build has the mark of a test roster", async () => {
+test("no other build has the mark of a test log", async () => {
   for (const mode of ["production", "localcard"] as const) {
     const code = await codeOf(mode);
-    assert.ok(!code.includes("測試的證明紀錄") && !code.includes("test-roster") && !code.includes("test.iamreal.tw"), mode);
+    assert.ok(!code.includes("測試的證明紀錄") && !code.includes("test-proof-log") && !code.includes("test.iamreal.tw"), mode);
   }
 });
 
-test("the test site's build is not made without the date its roster was last cleared on, or with one the calendar does not have", async () => {
+test("the test site's build is not made without the date its proof log was last cleared on, or with one the calendar does not have", async () => {
   for (const date of [undefined, "", "2026-11-31", "20261120", "2026-11-20 "]) {
-    if (date === undefined) delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON;
-    else process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = date;
-    await assert.rejects(codeOf("testsite"), /IAMREAL_TEST_ROSTER_CLEARED_ON/, JSON.stringify(date)).finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
+    if (date === undefined) delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON;
+    else process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON = date;
+    await assert.rejects(codeOf("testsite"), /IAMREAL_TEST_PROOF_LOG_CLEARED_ON/, JSON.stringify(date)).finally(() => delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON);
   }
 });
 
-test("the local target signs the test roster's scope string; the production target the public roster's", async () => {
+test("the local target signs the test log's scope string; the production target the public proof log's", async () => {
   const local = await import("../src/target-local.ts");
   const production = await import("../src/target.ts");
   const { scopeOf } = await import("iamreal-protocol/scope.ts");
-  assert.equal(scopeOf(local.ROSTER), "iamreal-test:public:0__________");
-  assert.equal(scopeOf(production.ROSTER), "iamreal:public:0_______________");
+  assert.equal(scopeOf(local.PROOF_LOG), "iamreal-test:public:0__________");
+  assert.equal(scopeOf(production.PROOF_LOG), "iamreal:public:0_______________");
   assert.deepEqual(local.ISSUERS, production.ISSUERS);
   assert.equal(local.COMPONENT_ORIGIN, production.COMPONENT_ORIGIN);
   assert.equal(local.IDLE_LIMIT_MS, production.IDLE_LIMIT_MS);
@@ -169,17 +169,17 @@ test("the local target signs the test roster's scope string; the production targ
   assert.deepEqual(production.PRESENTATIONS.map((p) => p.platform), ["threads"]);
 });
 
-test("the test site's target is the local one but for the data domain and the site: the test roster's, https://test-data.iamreal.tw and test.iamreal.tw", async () => {
+test("the test site's target is the local one but for the data domain and the site: the test log's, https://test-data.iamreal.tw and test.iamreal.tw", async () => {
   const site = await import("../src/target-test-site.ts");
   const local = await import("../src/target-local.ts");
   const { scopeOf } = await import("iamreal-protocol/scope.ts");
-  assert.equal(scopeOf(site.ROSTER), "iamreal-test:public:0__________");
+  assert.equal(scopeOf(site.PROOF_LOG), "iamreal-test:public:0__________");
   assert.deepEqual(site.ISSUERS, local.ISSUERS);
   assert.equal(site.COMPONENT_ORIGIN, local.COMPONENT_ORIGIN);
   assert.equal(site.IDLE_LIMIT_MS, local.IDLE_LIMIT_MS);
   assert.deepEqual(site.PRESENTATIONS, local.PRESENTATIONS);
   assert.equal(site.DATA_ORIGIN, "https://test-data.iamreal.tw");
-  // The link of the last screen: the card's page on the site of the build's roster. On the test site, as
+  // The link of the last screen: the card's page on the site of the build's proof log. On the test site, as
   // design/copy/test-site.md writes the address of a page of a card (寫出島民證明網址的地方).
   const copy = readFileSync(join(web, "..", "design", "copy", "test-site.md"), "utf8");
   const written = /\n## 寫出島民證明網址的地方\n[\s\S]*?```\n(.*)\n```/.exec(copy)?.[1];

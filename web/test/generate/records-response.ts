@@ -69,7 +69,7 @@ const CASES: Case[] = [
   },
   { name: "the keys in another order, whitespace between the tokens", body: ` {\n "kinds" : [ { "username" : "alice", "account_cards" : 1, "kind" : "first", "platform" : "threads" } ],\n "record_hash" : "${HASH}", "seq" : 138 }\n`, result: read(FIRST) },
   { name: "numbers are read by their value: 138.0 and 1e0", body: `{"seq":138.0,"record_hash":"${HASH}","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1e0}]}`, result: read(FIRST) },
-  { name: "the first record of a roster", body: answer(FIRST, { seq: 1 }), result: read(FIRST, [], 1) },
+  { name: "the first record of a proof log", body: answer(FIRST, { seq: 1 }), result: read(FIRST, [], 1) },
   { name: "the largest seq read", body: answer(FIRST, { seq: 9007199254740991 }), result: read(FIRST, [], 9007199254740991) },
   {
     name: "an account on a platform the device does not know: any username every format allows",

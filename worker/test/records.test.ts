@@ -17,10 +17,10 @@ import {
   type Submission,
   TEST_SCOPE,
   cardState,
-  checkRoster,
+  checkProofLog,
   circuitOf,
   day,
-  freshRoster,
+  freshProofLog,
   kindsOf,
   list,
   mustSubmit,
@@ -42,7 +42,7 @@ const TEN_MINUTES = 10 * 60 * 1000;
 
 let worker: TestWorker;
 
-const fresh = (settings: Parameters<typeof freshRoster>[1] = {}): Promise<string> => freshRoster(worker, settings);
+const fresh = (settings: Parameters<typeof freshProofLog>[1] = {}): Promise<string> => freshProofLog(worker, settings);
 
 before(async () => {
   worker = await startWorker();
@@ -130,7 +130,7 @@ describe("reading the request: malformed, scope, platform", () => {
     await wantError(worker, good, 400, "challenge_used");
   });
 
-  test("a scope string that is not this roster's is scope, whatever else is wrong", async () => {
+  test("a scope string that is not this proof log's is scope, whatever else is wrong", async () => {
     await fresh();
     const good = await sub(worker, newCard(), await publishG3(worker), "threads:alice");
     for (const scope of [PRODUCTION_SCOPE, "iamreal-test:x:0_______________", "iamreal-test:threads:0_________"]) await wantError(worker, { ...good, scope_string: scope }, 400, "scope", scope);
@@ -161,7 +161,7 @@ describe("reading the request: malformed, scope, platform", () => {
     await mustSubmit(worker, good, "threads first");
   });
 
-  test("the production roster takes its own scope and its own table: test-example is platform, the test scope is scope", async () => {
+  test("the production log takes its own scope and its own table: test-example is platform, the test scope is scope", async () => {
     await fresh({ kind: "production" });
     const root = await publishG3(worker);
     const card = newCard();
@@ -198,7 +198,7 @@ describe("the challenge", () => {
     await worker.setClock(issued);
     s = await sub(worker, newCard(), root, "threads:alice");
     await worker.setClock(new Date(issued.getTime() + TEN_MINUTES));
-    await worker.roster.runAlarm();
+    await worker.proofLog.runAlarm();
     await wantError(worker, s, 400, "challenge_unknown", "deleted");
     await worker.setClock(issued);
     await wantError(worker, s, 400, "challenge_unknown", "deleted, and the clock put back");
@@ -248,7 +248,7 @@ describe("the challenge", () => {
     // One millisecond before its 10 minutes it passes the first look. The verdict comes at 10 minutes exactly.
     await worker.setClock(new Date(START.getTime() + TEN_MINUTES - 1));
     await wantError(worker, { ...s, proof: SLOW_PROOF }, 400, "challenge_unknown");
-    assert.equal((await checkRoster(worker)).length, 1);
+    assert.equal((await checkProofLog(worker)).length, 1);
     assert.equal((await state(s.scoped_id)).last_card_proof, null);
 
     // It was one of the challenge's five: within the 10 minutes again, four more that fail, and the next is one too many.
@@ -269,7 +269,7 @@ describe("the challenge", () => {
       assert.equal(await count(), round + 1);
     }
     // One line for each round, and no trace of the two that were refused.
-    assert.equal((await checkRoster(worker)).length, 5);
+    assert.equal((await checkProofLog(worker)).length, 5);
   });
 });
 
@@ -317,7 +317,7 @@ describe("the proof", () => {
     const other = await sub(worker, newCard(), root, "threads:alice");
     for (let i = 0; i < 5; i++) assert.deepEqual(await submit(worker, { ...other, proof: UNVERIFIABLE_PROOF }), { status: 500, body: { error: "internal" } });
     await wantError(worker, other, 400, "challenge_attempts");
-    assert.equal((await checkRoster(worker)).length, 1);
+    assert.equal((await checkProofLog(worker)).length, 1);
   });
 });
 
@@ -347,7 +347,7 @@ describe("the CRLs", () => {
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
     await worker.setClock(tw("2026-11-24", "00:00:00"));
     await wantError(worker, await sub(worker, newCard(), root, "threads:alice"), 503, "crl_stale");
-    // Stale comes before the root, and before the roster rules.
+    // Stale comes before the root, and before the record rules.
     await wantError(worker, await sub(worker, newCard(), `${"0".repeat(63)}1`), 503, "crl_stale");
     // The proof comes before stale: a record that does not verify is `proof` whatever the age of the CRLs.
     await wantError(worker, { ...(await sub(worker, newCard(), root, "threads:alice")), proof: BAD_PROOF }, 400, "proof");
@@ -359,8 +359,8 @@ describe("the CRLs", () => {
   });
 });
 
-describe("the roster rules", () => {
-  test("date_order: more than 4 days before the roster's latest date, or before the card's own last card proof", async () => {
+describe("the record rules", () => {
+  test("date_order: more than 4 days before the proof log's latest date, or before the card's own last card proof", async () => {
     await fresh();
     await publishCrl(worker, { issuer: "G3", number: 1, thisUpdate: CRL_TIME, serials: [5] });
     const root = await publishCrl(worker, { issuer: "G3", number: 2, thisUpdate: new Date(CRL_TIME.getTime() + 5 * DAY_MS), serials: [5] });
@@ -443,8 +443,8 @@ describe("the roster rules", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:h"), "threads refresh");
     await wantError(worker, await sub(worker, card, root, "threads:i"), 400, "switch_limit");
     assert.equal(await count(), 12);
-    // The stored roster has the twelve records that were written, and nothing of the four that were refused.
-    const stored = await checkRoster(worker);
+    // The stored proof log has the twelve records that were written, and nothing of the four that were refused.
+    const stored = await checkProofLog(worker);
     assert.equal(stored.length, 12);
     assert.ok(stored.every((r) => r.scopedId === card));
     assert.deepEqual(stored.map((r) => r.accounts.map((a) => `${a.platform}:${a.username}`).join(",")), [
@@ -470,7 +470,7 @@ describe("the roster rules", () => {
     await wantError(worker, await sub(worker, card, root), 400, "daily_limit");
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
     assert.equal(await count(), 4);
-    assert.equal((await checkRoster(worker)).length, 4);
+    assert.equal((await checkProofLog(worker)).length, 4);
     assert.deepEqual([(await state(card)).proofs_on_last_date, (await slot(card, "threads")).current], [3, null]);
 
     await worker.setClock(tw("2026-11-21", "00:00:00"));
@@ -517,7 +517,7 @@ describe("the back end's policy on switches", () => {
     await wantError(worker, fourth, 403, "switch_restricted");
     assert.deepEqual(await state(card), before);
     assert.equal(await count(), 7);
-    assert.equal((await checkRoster(worker)).length, 7);
+    assert.equal((await checkProofLog(worker)).length, 7);
     await mustSubmit(worker, { ...fourth, accounts: list("test-example:c-d") }, "test-example refresh, threads withdraw");
     // The card's third record of the day was written: a fourth is the rules' daily_limit, not the policy's code.
     await wantError(worker, await sub(worker, card, root, "threads:e"), 400, "daily_limit");
@@ -529,13 +529,13 @@ describe("the back end's policy on switches", () => {
   });
 
   test("a value of the setting that is neither true nor false: nothing answers", async () => {
-    await worker.setSettings({ ROSTER_KIND: "test", ROSTER_OBJECT_NAME: await fresh(), RESTRICT_LATE_SWITCHES: "yes" });
+    await worker.setSettings({ PROOF_LOG_KIND: "test", PROOF_LOG_OBJECT_NAME: await fresh(), RESTRICT_LATE_SWITCHES: "yes" });
     for (const [method, path] of [["POST", "/api/v1/challenges"], ["GET", "/api/v1/config"], ["POST", "/api/v1/records"]] as const) assert.equal((await worker.fetch(path, { method })).status, 500, path);
   });
 });
 
 describe("the order of the codes when several apply", () => {
-  test("challenge_unknown, challenge_used, challenge_attempts, proof, crl_stale, root, the roster rules", async () => {
+  test("challenge_unknown, challenge_used, challenge_attempts, proof, crl_stale, root, the record rules", async () => {
     await fresh();
     const root = await publishG3(worker);
     const unknownRoot = `${"0".repeat(63)}1`;
@@ -571,21 +571,21 @@ describe("which verifier `records` asks in the test build", () => {
   after(() => own.close());
 
   test("the deployed one, unless a test asks for the stand-in: placeholder bytes the stand-in accepts are proof", async () => {
-    await freshRoster(own);
+    await freshProofLog(own);
     const root = await publishG3(own);
     await wantError(own, await sub(own, newCard(), root, "threads:alice"), 400, "proof");
-    assert.equal((await checkRoster(own)).length, 0);
+    assert.equal((await checkProofLog(own)).length, 0);
   });
 
   test("the deployed one again once the whole Worker has started again, whatever a test chose before", async () => {
-    await freshRoster(own);
+    await freshProofLog(own);
     const root = await publishG3(own);
     await own.setVerifier("stand-in");
     await mustSubmit(own, await sub(own, newCard(), root, "threads:alice"), "threads first");
     await own.restart();
-    // The clock and the settings went with the restart: the same again, on a new roster.
-    await freshRoster(own);
+    // The clock and the settings went with the restart: the same again, on a new proof log.
+    await freshProofLog(own);
     await wantError(own, await sub(own, newCard(), await publishG3(own), "threads:alice"), 400, "proof");
-    assert.equal((await checkRoster(own)).length, 0);
+    assert.equal((await checkProofLog(own)).length, 0);
   });
 });

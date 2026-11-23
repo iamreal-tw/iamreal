@@ -1,5 +1,5 @@
 // What must hold whatever the bucket does: every time the mirror tells the
-// roster's object of a root, the index in the bucket lists that root at
+// proof log's object of a root, the index in the bucket lists that root at
 // that moment. The local workerd's bucket cannot be made to fail, so here
 // the mirror (src/mirror.ts, `crlMirrorInWorker`) runs in Node over a
 // stand-in for the bucket whose writes of the index can go wrong, and the
@@ -133,7 +133,7 @@ async function rounds(fault: Fault, between: (bucket: Bucket, first: { g2: Uint8
 const loseG3 = (bucket: Bucket, first: { g3: Uint8Array }): void => void bucket.objects.delete(`crl/${sha256Hex(first.g3)}.crl`);
 
 for (const fault of ["throws", "throws after writing"] as const) {
-  test(`a write of the index ${fault}: the roster's object is never told of a root the index does not list`, async () => {
+  test(`a write of the index ${fault}: the proof log's object is never told of a root the index does not list`, async () => {
     const { told, bucket } = await rounds(fault);
     assert.deepEqual(told.unlisted, []);
     // And once the bucket works again, the object knows the newest two of each key.

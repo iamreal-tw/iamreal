@@ -1,11 +1,11 @@
-// The card state file (spec/roster-rules.md, "The card state file") against
+// The card state file (spec/record-rules.md, "The card state file") against
 // spec/vectors/card-state-file.json, the file the Go tests read.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type CardRow, cardStateFile, cardStateFileWriter, readCardStateFile } from "../src/card-state-file.ts";
 import { parseDay } from "../src/date.ts";
 import { platformsOf } from "../src/platforms.ts";
-import { EMPTY_SLOT, RULES_VERSION, type SlotState } from "../src/roster-rules.ts";
+import { EMPTY_SLOT, RULES_VERSION, type SlotState } from "../src/record-rules.ts";
 import { vectors } from "./vectors.ts";
 
 const v = vectors("card-state-file.json");
@@ -35,17 +35,17 @@ const bytesOf = (f: Json): Uint8Array => (f.content_hex === undefined ? new Text
 const validFiles: Json[] = v.files.filter((f: Json) => f.valid);
 
 describe("card-state-file.json: the version of the rules its files were computed by", () => {
-  test("it is the version of roster-rules.json and of this implementation", () => {
+  test("it is the version of record-rules.json and of this implementation", () => {
     assert.equal(v.spec, "card-state-file");
-    assert.equal(v.rules_version, vectors("roster-rules.json").rules_version);
+    assert.equal(v.rules_version, vectors("record-rules.json").rules_version);
     assert.equal(v.rules_version, RULES_VERSION);
   });
 });
 
 describe("card-state-file.json: writing", () => {
   for (const f of validFiles) {
-    test(`${f.name} (${f.roster} roster)`, () => {
-      assert.equal(cardStateFile(f.roster, f.cards.map(rowOf)), f.content);
+    test(`${f.name} (${f.proof_log} log)`, () => {
+      assert.equal(cardStateFile(f.proof_log, f.cards.map(rowOf)), f.content);
     });
   }
 
@@ -54,18 +54,18 @@ describe("card-state-file.json: writing", () => {
       const rows = f.cards.map(rowOf).reverse();
       for (const r of rows) {
         const slots = new Map(r.card.slots);
-        for (const p of [...platformsOf(f.roster)].reverse()) if (!slots.has(p.platform)) slots.set(p.platform, { ...EMPTY_SLOT });
+        for (const p of [...platformsOf(f.proof_log)].reverse()) if (!slots.has(p.platform)) slots.set(p.platform, { ...EMPTY_SLOT });
         (r.card as { slots: unknown }).slots = new Map([...slots].reverse());
       }
-      assert.equal(cardStateFile(f.roster, rows), f.content, f.name);
+      assert.equal(cardStateFile(f.proof_log, rows), f.content, f.name);
     }
   });
 });
 
 describe("card-state-file.json: writing one row at a time", () => {
   for (const f of validFiles) {
-    test(`${f.name} (${f.roster} roster)`, () => {
-      const write = cardStateFileWriter(f.roster);
+    test(`${f.name} (${f.proof_log} log)`, () => {
+      const write = cardStateFileWriter(f.proof_log);
       assert.equal(f.cards.map((c: Json) => write(rowOf(c))).join(""), f.content);
     });
   }
@@ -73,7 +73,7 @@ describe("card-state-file.json: writing one row at a time", () => {
   test("each row is checked as it is written: one not in its format, or not after the row before, is refused", () => {
     const f = validFiles.find((k) => k.cards.length >= 2)!;
     const [first, second] = f.cards.map(rowOf) as [CardRow, CardRow];
-    const writer = (): ((row: CardRow) => string) => cardStateFileWriter(f.roster);
+    const writer = (): ((row: CardRow) => string) => cardStateFileWriter(f.proof_log);
     assert.throws(() => writer()({ ...first, lastSeq: 0 }), /^Error: card state file: last_seq of a card is not in its format$/);
     let write = writer();
     write(second);
@@ -91,8 +91,8 @@ describe("card-state-file.json: writing one row at a time", () => {
 
 describe("card-state-file.json: reading", () => {
   for (const f of validFiles) {
-    test(`${f.name} (${f.roster} roster)`, () => {
-      const read = readCardStateFile(f.roster, bytesOf(f));
+    test(`${f.name} (${f.proof_log} log)`, () => {
+      const read = readCardStateFile(f.proof_log, bytesOf(f));
       assert.deepEqual(read, { valid: true, rows: f.cards.map(rowOf) });
       // The slots come in ascending order of platform, as the row lists them.
       if (read.valid) for (const [i, r] of read.rows.entries()) assert.deepEqual([...r.card.slots.keys()], Object.keys(f.cards[i].slots));
@@ -110,32 +110,32 @@ describe("card-state-file.json: reading", () => {
     const withMark = new Uint8Array([0xef, 0xbb, 0xbf, ...bytesOf(f)]);
     // What a decoder gives for these bytes reads as the file without the mark.
     assert.equal(new TextDecoder().decode(withMark), f.content);
-    assert.deepEqual(readCardStateFile(f.roster, withMark), { valid: false, line: 1, code: "line" });
+    assert.deepEqual(readCardStateFile(f.proof_log, withMark), { valid: false, line: 1, code: "line" });
   });
   for (const f of broken) {
-    test(`broken: ${f.name} (${f.roster} roster)`, () => {
-      assert.deepEqual(readCardStateFile(f.roster, bytesOf(f)), { valid: false, line: f.line, code: f.code });
+    test(`broken: ${f.name} (${f.proof_log} log)`, () => {
+      assert.deepEqual(readCardStateFile(f.proof_log, bytesOf(f)), { valid: false, line: f.line, code: f.code });
     });
   }
 
-  test("a file of one roster is not a file of the other: the scope string is not accepted", () => {
+  test("a file of one proof log is not a file of the other: the scope string is not accepted", () => {
     for (const f of validFiles.filter((f) => f.cards.length > 0)) {
-      const other = f.roster === "production" ? "test" : "production";
+      const other = f.proof_log === "production" ? "test" : "production";
       assert.deepEqual(readCardStateFile(other, bytesOf(f)), { valid: false, line: 1, code: "line" }, f.name);
     }
   });
 });
 
-describe("card-state-file.json: the files that are the final state of a case of roster-rules.json", () => {
-  const cases: Json[] = vectors("roster-rules.json").cases;
-  const linked = validFiles.filter((f) => f.roster_rules_case !== undefined);
-  test("there are such files, of both rosters", () => {
-    assert.ok(linked.some((f) => f.roster === "production") && linked.some((f) => f.roster === "test"));
+describe("card-state-file.json: the files that are the final state of a case of record-rules.json", () => {
+  const cases: Json[] = vectors("record-rules.json").cases;
+  const linked = validFiles.filter((f) => f.record_rules_case !== undefined);
+  test("there are such files, of both proof logs", () => {
+    assert.ok(linked.some((f) => f.proof_log === "production") && linked.some((f) => f.proof_log === "test"));
   });
   for (const f of linked) {
-    test(f.roster_rules_case, () => {
-      const c = cases.find((k) => k.name === f.roster_rules_case)!;
-      assert.equal(c.roster, f.roster);
+    test(f.record_rules_case, () => {
+      const c = cases.find((k) => k.name === f.record_rules_case)!;
+      assert.equal(c.proof_log, f.proof_log);
       assert.equal(c.events.length, f.count);
       // The `seq` of each card's last valid result.
       const lastSeq = new Map<string, number>();
@@ -160,10 +160,10 @@ describe("card-state-file.json: the files that are the final state of a case of 
 
 describe("what is not written as a card state file", () => {
   const alice = (): Json => structuredClone(validFiles.find((f) => f.name === "one card, one slot")!.cards[0]);
-  const refused = (change: (c: Json) => void, roster: "production" | "test" = "production"): void => {
+  const refused = (change: (c: Json) => void, proofLog: "production" | "test" = "production"): void => {
     const c = alice();
     change(c);
-    assert.throws(() => cardStateFile(roster, [rowOf(c)]), /^Error: card state file: /);
+    assert.throws(() => cardStateFile(proofLog, [rowOf(c)]), /^Error: card state file: /);
   };
 
   test("the card it starts from is written", () => {
@@ -178,8 +178,8 @@ describe("what is not written as a card state file", () => {
     assert.throws(() => cardStateFile("production", [row, row]), /twice/);
     assert.throws(() => cardStateFile("production", [row, { ...row, lastSeq: 2 }]), /twice/);
   });
-  test("a value that would not be a row of this roster", () => {
-    refused(() => {}, "test"); // the scope string of the production roster
+  test("a value that would not be a row of this proof log", () => {
+    refused(() => {}, "test"); // the scope string of the production log
     refused((c) => (c.scoped_id = c.scoped_id.toLowerCase()));
     refused((c) => (c.last_seq = 0));
     refused((c) => (c.last_seq = 1.5));
@@ -190,7 +190,7 @@ describe("what is not written as a card state file", () => {
     refused((c) => (c.slots.threads.current = 'a"b'));
     refused((c) => (c.slots.threads.last_declared = "a-b")); // the format of test-example, not of threads
     refused((c) => (c.slots.threads.current = ""));
-    refused((c) => (c.slots["test-example"] = c.slots.threads)); // not a platform of the production roster
+    refused((c) => (c.slots["test-example"] = c.slots.threads)); // not a platform of the production log
   });
   test("a date outside the years a date is written with", () => {
     const row = rowOf(alice());

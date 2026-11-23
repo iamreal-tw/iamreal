@@ -1,30 +1,30 @@
-//! The scope string (spec/scope.md, ADR-0007, ADR-0017). The public roster
+//! The scope string (spec/scope.md, ADR-0007, ADR-0017). The public proof log
 //! is one scope, shared by every public platform. The device signs the
-//! scope string of its roster from the table below and never takes one
+//! scope string of its proof log from the table below and never takes one
 //! from a server response (ADR-0016, ADR-0035).
 
-/// Which roster: the production one, or a test roster.
+/// Which proof log: the production one, or a test log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Roster {
+pub enum ProofLog {
     Production,
     Test,
 }
 
 pub const SCOPE_STRING_LENGTH: usize = 31;
 
-/// The open scope string of each roster (spec/scope.md, "Accepted scopes").
+/// The open scope string of each proof log (spec/scope.md, "Accepted scopes").
 const PRODUCTION: &[u8; SCOPE_STRING_LENGTH] = b"iamreal:public:0_______________";
 const TEST: &[u8; SCOPE_STRING_LENGTH] = b"iamreal-test:public:0__________";
 
-/// The scope string a card signs for `roster`.
-pub fn scope_string(roster: Roster) -> &'static [u8; SCOPE_STRING_LENGTH] {
-    match roster {
-        Roster::Production => PRODUCTION,
-        Roster::Test => TEST,
+/// The scope string a card signs for `proof_log`.
+pub fn scope_string(proof_log: ProofLog) -> &'static [u8; SCOPE_STRING_LENGTH] {
+    match proof_log {
+        ProofLog::Production => PRODUCTION,
+        ProofLog::Test => TEST,
     }
 }
 
-/// Whether `roster` accepts `scope_string`, in its exact spelling.
-pub fn accepts(roster: Roster, scope_string: &[u8]) -> bool {
-    self::scope_string(roster) == scope_string
+/// Whether `proof_log` accepts `scope_string`, in its exact spelling.
+pub fn accepts(proof_log: ProofLog, scope_string: &[u8]) -> bool {
+    self::scope_string(proof_log) == scope_string
 }

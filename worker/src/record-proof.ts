@@ -44,7 +44,7 @@ export async function publicInputsOf(fields: RecordFields, issuers: readonly Iss
 }
 
 /**
- * Whether the record verifies: check 1 of the roster rules. False for a
+ * Whether the record verifies: check 1 of the record rules. False for a
  * record whose circuit is not accepted or not its issuer's, and for a proof
  * the verifier does not accept. Rejects when the verifier itself could not
  * run (src/verify.ts): that is no verdict, and the record must not be

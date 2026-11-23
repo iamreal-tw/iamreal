@@ -1,7 +1,7 @@
 // A measurement, not a test (`pnpm test` runs test/*.test.ts only): the
-// daily publication of a roster whose card state table has many cards, in
+// daily publication of a proof log whose card state table has many cards, in
 // the local workerd (#183; README.md, "大小的上限"). It fills the table of
-// the test roster's object with made-up cards through the test build's door,
+// the test log's object with made-up cards through the test build's door,
 // then times, from here:
 //
 //   - copying the card state table, and dropping the copy, alone
@@ -16,13 +16,13 @@
 //   node --experimental-strip-types test/publication-size.ts [cards]
 //
 // `cards` is 200,000 if not given. A card is a row of the table only: the
-// roster has no record, so the publication writes no roster file.
+// proof log has no record, so the publication writes no log file.
 import assert from "node:assert/strict";
 import { type CardRow, cardStateFile } from "iamreal-protocol/card-state-file.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import type { SlotState } from "iamreal-protocol/roster-rules.ts";
+import type { SlotState } from "iamreal-protocol/record-rules.ts";
 import { type CardToWrite, startWorker } from "./harness.ts";
-import { TEST_SCOPE, cardState, freshRoster, newCard, tw } from "./records.ts";
+import { TEST_SCOPE, cardState, freshProofLog, newCard, tw } from "./records.ts";
 
 const count = Number(process.argv[2] ?? 200_000);
 if (!Number.isSafeInteger(count) || count < 1) throw new Error("the number of cards is a positive integer");
@@ -42,7 +42,7 @@ function cardOf(i: number): { door: CardToWrite; row: CardRow } {
 const ms = (start: bigint): number => Number(process.hrtime.bigint() - start) / 1e6;
 const worker = await startWorker();
 try {
-  await freshRoster(worker);
+  await freshProofLog(worker);
   await cardState(worker, newCard()); // the object starts on the date before the one it is published on
 
   const rows: CardRow[] = [];
@@ -54,17 +54,17 @@ try {
       batch.push(door);
       rows.push(row);
     }
-    await worker.roster.writeCards(batch);
+    await worker.proofLog.writeCards(batch);
   }
   console.log(`${count} cards written to the card state table in ${ms(start).toFixed(0)} ms`);
 
-  const tables = await worker.roster.tables();
+  const tables = await worker.proofLog.tables();
   for (let run = 1; run <= 3; run++) {
     start = process.hrtime.bigint();
-    await worker.roster.cardsCopy("copy");
+    await worker.proofLog.cardsCopy("copy");
     const copied = ms(start);
     start = process.hrtime.bigint();
-    await worker.roster.cardsCopy("drop");
+    await worker.proofLog.cardsCopy("drop");
     console.log(`copy, run ${run}: copied in ${copied.toFixed(0)} ms, dropped in ${ms(start).toFixed(0)} ms`);
   }
 
@@ -74,28 +74,28 @@ try {
   const asking = (async () => {
     while (publishing) {
       const asked = process.hrtime.bigint();
-      await worker.roster.kept();
+      await worker.proofLog.kept();
       longest = Math.max(longest, ms(asked));
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   })();
   start = process.hrtime.bigint();
-  await worker.roster.runAlarm();
+  await worker.proofLog.runAlarm();
   const published = ms(start);
   publishing = false;
   await asking;
   console.log(`published in ${published.toFixed(0)} ms; the longest a request to the object waited meanwhile: ${longest.toFixed(0)} ms`);
 
-  const files = await worker.files("roster/");
+  const files = await worker.files("proof-log/");
   assert.deepEqual(
     files.map((f) => f.key),
-    ["roster/card-state/2026-11-21.jsonl", "roster/fingerprints.jsonl"],
+    ["proof-log/card-state/2026-11-21.jsonl", "proof-log/fingerprints.jsonl"],
   );
   const expected = new TextEncoder().encode(cardStateFile("test", rows));
   const written = files[0]!.bytes;
   assert.equal(written.length, expected.length, "the length of the card state file");
   assert.ok(Buffer.from(written).equals(Buffer.from(expected)), "the card state file is the one cardStateFile writes");
-  assert.deepEqual(await worker.roster.tables(), tables, "no copy is left");
+  assert.deepEqual(await worker.proofLog.tables(), tables, "no copy is left");
   console.log(`the card state file (${written.length} bytes) is, byte for byte, the one cardStateFile writes for the same cards`);
 } finally {
   await worker.close();

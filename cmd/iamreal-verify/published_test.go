@@ -1,7 +1,7 @@
 package main
 
-// Re-verifying what is published on a data domain (ADR-0027): the roster
-// directory under roster/ and the CRL archive under crl/, read from a URL
+// Re-verifying what is published on a data domain (ADR-0027): the proof log
+// directory under proof-log/ and the CRL archive under crl/, read from a URL
 // or from a local directory with the same layout (-data).
 
 import (
@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -65,12 +65,12 @@ func under(dir string, files map[string][]byte) map[string][]byte {
 	return out
 }
 
-// dataFiles is a data domain: the published roster of the first n records
-// of longRoster, the fingerprint file fps with the card state file of its
+// dataFiles is a data domain: the published proof log of the first n records
+// of longProofLog, the fingerprint file fps with the card state file of its
 // last line, and an empty CRL archive index.
 func dataFiles(n int, fps string) map[string][]byte {
-	files := under("roster", withCardState(published(n), fps))
-	files["roster/"+fingerprintsFileName] = []byte(fps)
+	files := under("proof-log", withCardState(published(n), fps))
+	files["proof-log/"+fingerprintsFileName] = []byte(fps)
 	files["crl/"+crl.IndexFileName] = nil
 	return files
 }
@@ -89,23 +89,23 @@ func TestDataURL(t *testing.T) {
 	fps := fingerprints(fingerprintEntry("2026-11-16", 0), fingerprintEntry("2026-11-17", 1000), fingerprintEntry("2026-11-20", 2001))
 	srv := serveData(t, dataFiles(2001, fps))
 	code, out, errOut := runData(t, srv.URL)
-	if code != exitAllValid || !strings.Contains(out, "records: 2001\nfingerprint: "+roster.Fingerprint(longRoster())) ||
-		!strings.Contains(errOut, "fingerprints.jsonl: 3 line(s), every fingerprint is the roster's") ||
-		!strings.Contains(errOut, "hashes/: 3 list(s), every list is the roster's") {
+	if code != exitAllValid || !strings.Contains(out, "records: 2001\nfingerprint: "+prooflog.Fingerprint(longProofLog())) ||
+		!strings.Contains(errOut, "fingerprints.jsonl: 3 line(s), every fingerprint is the proof log's") ||
+		!strings.Contains(errOut, "hashes/: 3 list(s), every list is the proof log's") {
 		t.Fatalf("exit %d\n%.300s\n%s", code, out, errOut)
 	}
 	// The same records as one file give the same output.
-	if _, outFile, _ := runWith(t, lines(longRoster()), allVerify{}, everyRoot{}); outFile != out {
+	if _, outFile, _ := runWith(t, lines(longProofLog()), allVerify{}, everyRoot{}); outFile != out {
 		t.Errorf("the URL and the file give different output")
 	}
 	// No listing: the fingerprint file says which files there are, and the
 	// date of its last line which card state file (not there: a 404).
 	want := []string{
 		"GET crl/index.jsonl",
-		"GET roster/0000000000000000.jsonl", "GET roster/0000000000001000.jsonl", "GET roster/0000000000002000.jsonl",
-		"GET roster/card-state/2026-11-20.jsonl",
-		"GET roster/fingerprints.jsonl",
-		"GET roster/hashes/0000000000000000.txt", "GET roster/hashes/0000000000001000.txt", "GET roster/hashes/0000000000002000.txt",
+		"GET proof-log/0000000000000000.jsonl", "GET proof-log/0000000000001000.jsonl", "GET proof-log/0000000000002000.jsonl",
+		"GET proof-log/card-state/2026-11-20.jsonl",
+		"GET proof-log/fingerprints.jsonl",
+		"GET proof-log/hashes/0000000000000000.txt", "GET proof-log/hashes/0000000000001000.txt", "GET proof-log/hashes/0000000000002000.txt",
 	}
 	if got := srv.paths(); !slices.Equal(got, want) {
 		t.Errorf("asked for\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -117,7 +117,7 @@ func TestDataDirectory(t *testing.T) {
 	fps := fingerprints(fingerprintEntry("2026-11-16", 0), fingerprintEntry("2026-11-20", 2001))
 	dir := writeDir(t, dataFiles(2001, fps), "-")
 	code, out, errOut := runData(t, dir)
-	if code != exitAllValid || !strings.Contains(out, "records: 2001\n") || !strings.Contains(errOut, "every list is the roster's") {
+	if code != exitAllValid || !strings.Contains(out, "records: 2001\n") || !strings.Contains(errOut, "every list is the proof log's") {
 		t.Fatalf("exit %d\n%.300s\n%s", code, out, errOut)
 	}
 }
@@ -130,7 +130,7 @@ func TestOnlyUpToTheCount(t *testing.T) {
 		name      string
 		published int
 		count     int
-		asked     int // roster files asked for
+		asked     int // log files asked for
 	}{
 		{"a full file after the count", 1001, 1000, 1},
 		{"records after the count in the last file", 1000, 999, 1},
@@ -140,22 +140,22 @@ func TestOnlyUpToTheCount(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			files := dataFiles(c.published, fingerprintEntry("2026-11-16", c.count))
 			// What is not published yet is not checked: a broken record there changes nothing.
-			last := roster.RosterFileName(uint64((c.published - 1) / roster.LinesPerFile * roster.LinesPerFile))
-			b := files["roster/"+last]
-			files["roster/"+last] = append(b[:len(b)-1:len(b)-1], " \n"...)
+			last := prooflog.ProofLogFileName(uint64((c.published - 1) / prooflog.LinesPerFile * prooflog.LinesPerFile))
+			b := files["proof-log/"+last]
+			files["proof-log/"+last] = append(b[:len(b)-1:len(b)-1], " \n"...)
 			srv := serveData(t, files)
 			code, out, errOut := runData(t, srv.URL)
-			if code != exitAllValid || !strings.Contains(out, fmt.Sprintf("records: %d\nfingerprint: %s", c.count, roster.Fingerprint(longRoster()[:c.count]))) {
+			if code != exitAllValid || !strings.Contains(out, fmt.Sprintf("records: %d\nfingerprint: %s", c.count, prooflog.Fingerprint(longProofLog()[:c.count]))) {
 				t.Fatalf("exit %d\n%.300s\n%s", code, out, errOut)
 			}
 			n := 0
 			for _, p := range srv.paths() {
-				if strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, "GET roster/0") {
+				if strings.HasSuffix(p, ".jsonl") && strings.HasPrefix(p, "GET proof-log/0") {
 					n++
 				}
 			}
 			if n != c.asked {
-				t.Errorf("%d roster files asked for, want %d: %v", n, c.asked, srv.paths())
+				t.Errorf("%d log files asked for, want %d: %v", n, c.asked, srv.paths())
 			}
 		})
 	}
@@ -165,53 +165,53 @@ func TestOnlyUpToTheCount(t *testing.T) {
 // count: the ones up to the count are checked.
 func TestHashListUpToTheCount(t *testing.T) {
 	files := dataFiles(1000, fingerprintEntry("2026-11-16", 999))
-	list := files["roster/hashes/0000000000000000.txt"]
+	list := files["proof-log/hashes/0000000000000000.txt"]
 	changed := append([]byte(nil), list...)
 	changed[len(changed)-2] ^= 1 // the hash of record 1,000, not published
-	files["roster/hashes/0000000000000000.txt"] = changed
+	files["proof-log/hashes/0000000000000000.txt"] = changed
 	if code, _, errOut := runData(t, serveData(t, files).URL); code != exitAllValid {
 		t.Errorf("a hash after the count changed: exit %d\n%s", code, errOut)
 	}
 	changed = append([]byte(nil), list...)
 	changed[len(changed)-67] ^= 1 // the hash of record 999
-	files["roster/hashes/0000000000000000.txt"] = changed
+	files["proof-log/hashes/0000000000000000.txt"] = changed
 	if code, _, errOut := runData(t, serveData(t, files).URL); code != exitInvalid ||
-		!strings.Contains(errOut, "hashes/0000000000000000.txt is not the record hash list of the roster") {
+		!strings.Contains(errOut, "hashes/0000000000000000.txt is not the record hash list of the proof log") {
 		t.Errorf("a hash before the count changed: exit %d\n%s", code, errOut)
 	}
 }
 
 // The CRL archive of testdata/ on a data domain, each file named by its
-// SHA-256 as the mirror names it, with the test roster of testdata/.
+// SHA-256 as the mirror names it, with the test log of testdata/.
 func testDataDomain(t *testing.T) map[string][]byte {
 	t.Helper()
-	rosterFile, err := os.ReadFile(filepath.Join("testdata", "roster.jsonl"))
+	proofLogFile, err := os.ReadFile(filepath.Join("testdata", "proof-log.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	records, fp, broken := roster.ReadFile(rosterFile, verifier.Test)
+	records, fp, broken := prooflog.ReadFile(proofLogFile, verifier.Test)
 	if broken != nil || len(records) != 3 {
 		t.Fatal(broken)
 	}
 	files := map[string][]byte{}
-	for _, p := range roster.DirectoryFiles(records) {
-		files["roster/"+p.RosterFile.Name] = p.RosterFile.Data
-		files["roster/"+p.HashList.Name] = p.HashList.Data
+	for _, p := range prooflog.DirectoryFiles(records) {
+		files["proof-log/"+p.ProofLogFile.Name] = p.ProofLogFile.Data
+		files["proof-log/"+p.HashList.Name] = p.HashList.Data
 	}
-	files["roster/"+fingerprintsFileName] = fmt.Appendf(nil, `{"date":"2026-11-24","count":3,"fingerprint":"%s"}`+"\n", fp)
+	files["proof-log/"+fingerprintsFileName] = fmt.Appendf(nil, `{"date":"2026-11-24","count":3,"fingerprint":"%s"}`+"\n", fp)
 	// The card state file the server writes with that line: the states
 	// after the three records, by the rules with the archive of testdata/.
 	crls, _, err := openArchive(testIssuerKeys)(filepath.Join("testdata", "archive"), true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	x := roster.NewRules(verifier.Test, allVerify{}, crls)
+	x := prooflog.NewRules(verifier.Test, allVerify{}, crls)
 	for _, r := range records {
 		if res, err := x.Apply(r); err != nil || !res.Valid {
 			t.Fatalf("seq %d: %v %v", r.Seq, res, err)
 		}
 	}
-	files["roster/card-state/2026-11-24.jsonl"] = roster.CardStateFile(x.CardRows())
+	files["proof-log/card-state/2026-11-24.jsonl"] = prooflog.CardStateFile(x.CardRows())
 	for _, name := range []string{crlA, crlB, crlC, crl.IndexFileName} {
 		b, err := os.ReadFile(filepath.Join("testdata", "archive", name))
 		if err != nil {
@@ -228,8 +228,8 @@ func testDataDomain(t *testing.T) map[string][]byte {
 func runDataArchive(t *testing.T, source string, extra ...string) (int, string, string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	args := append([]string{"-bb", "bb", "-crs", "crs", "-roster", "test", "-data", source}, extra...)
-	mk := func(verifier.Config) (roster.ProofVerifier, error) { return allVerify{}, nil }
+	args := append([]string{"-bb", "bb", "-crs", "crs", "-proof-log", "test", "-data", source}, extra...)
+	mk := func(verifier.Config) (prooflog.ProofVerifier, error) { return allVerify{}, nil }
 	code := run(args, &out, &errOut, deps{mk, openArchive(testIssuerKeys)})
 	return code, out.String(), errOut.String()
 }
@@ -307,8 +307,8 @@ func TestDataErrors(t *testing.T) {
 	}
 	dir := t.TempDir()
 	for _, args := range [][]string{
-		{"-data", dir, filepath.Join(dir, "roster.jsonl")}, // -data and a roster file
-		{"-crl-archive", dir},                              // an archive without a roster file
+		{"-data", dir, filepath.Join(dir, "proof-log.jsonl")}, // -data and a log file
+		{"-crl-archive", dir}, // an archive without a log file
 		{"-data", "ftp://example.org/"},
 	} {
 		var out, errOut bytes.Buffer
@@ -343,7 +343,7 @@ func TestReadmeQuotesThePrompt(t *testing.T) {
 	}
 }
 
-// Without a roster file or -data, the command reads the production data
+// Without a log file or -data, the command reads the production data
 // domain.
 func TestDataDefault(t *testing.T) {
 	var out, errOut bytes.Buffer

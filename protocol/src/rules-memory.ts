@@ -1,15 +1,15 @@
-// The roster rules with their state kept in memory: the way to compute the
-// state of every card from the first record of a roster. It keeps no record. Everything the rules decide is applyRecord
-// (roster-rules.ts); this file only keeps what that function asks its caller
-// to keep between records: each card's state, the roster's latest valid
+// The record rules with their state kept in memory: the way to compute the
+// state of every card from the first record of a proof log. It keeps no record. Everything the rules decide is applyRecord
+// (record-rules.ts); this file only keeps what that function asks its caller
+// to keep between records: each card's state, the proof log's latest valid
 // date, the challenges used.
 import { byBytes } from "./bytes.ts";
 import { parseChallenge } from "./challenge.ts";
 import type { Day } from "./date.ts";
 import type { PlatformRow } from "./platforms.ts";
-import { type Account, type CardState, type RecordOutcome, applyRecord, newCard } from "./roster-rules.ts";
+import { type Account, type CardState, type RecordOutcome, applyRecord, newCard } from "./record-rules.ts";
 
-/** A well-formed record, with the two answers the rules take from outside the roster. */
+/** A well-formed record, with the two answers the rules take from outside the proof log. */
 export interface MemoryRulesRecord {
   scopeString: string;
   scopedId: string;
@@ -22,7 +22,7 @@ export interface MemoryRulesRecord {
   crlDates: readonly Day[];
 }
 
-/** A card of the output (spec/roster-rules.md, "Output"). */
+/** A card of the output (spec/record-rules.md, "Output"). */
 export interface OutputCard {
   scopedId: string;
   lastCardProof: Day;
@@ -49,7 +49,7 @@ export class MemoryRules {
   private latest: Day | null = null;
   private applied = 0;
 
-  /** `platforms`: the roster's platform table (spec/scope.md; platformsOf of platforms.ts). */
+  /** `platforms`: the proof log's platform table (spec/scope.md; platformsOf of platforms.ts). */
   constructor(platforms: readonly PlatformRow[]) {
     this.platforms = [...platforms].sort((a, b) => byBytes(a.platform, b.platform));
   }
@@ -58,14 +58,14 @@ export class MemoryRules {
    * Applies `r` as the next record. A valid record changes the state of its
    * card; an invalid one changes nothing but marks its challenge as used.
    * Throws, and changes nothing (not the count, not the challenges used),
-   * for what is not a well-formed record of the roster: a challenge not in
+   * for what is not a well-formed record of the proof log: a challenge not in
    * its one spelling, a list naming a platform outside the table or one
    * platform twice, not in ascending order of platform, or with a username
    * outside the format of its platform.
    */
   apply(r: MemoryRulesRecord): RecordOutcome {
     const date = parseChallenge(r.challenge);
-    if (date === null) throw new Error("roster rules: the challenge is not in its one spelling");
+    if (date === null) throw new Error("record rules: the challenge is not in its one spelling");
     const outcome = applyRecord({
       platforms: this.platforms,
       record: { accounts: r.accounts, date, verifies: r.verifies },
@@ -102,7 +102,7 @@ export class MemoryRules {
 
   /**
    * The output of the rules for the records applied so far, per scope
-   * (spec/roster-rules.md, "Output"): every sort by byte value; cards
+   * (spec/record-rules.md, "Output"): every sort by byte value; cards
    * without a valid record, accounts without a card and scopes without a
    * card are not listed.
    */

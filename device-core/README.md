@@ -1,6 +1,6 @@
 # device-core/：Android、iOS 共用的核心（Rust）
 
-**這個目錄讓人檢查的事：兩個 app 在手機上做的檢查和算法是同一份，而且這一份不碰 PIN、網路、NFC、檔案。** `spec/` 的算法、裝置上的檢查、算證明，照 ADR-0034 寫成一份 Rust，Android（Kotlin）和 iOS（Swift）都連結它，不各寫一次。它是 `spec/` 的第三份實作：Go（`verifier/`、`roster/`、`crl/`）、TypeScript（`protocol/`）、Rust 互不引用，測試讀同一份 `spec/vectors/`，哪一份走樣了會在測試時出現。
+**這個目錄讓人檢查的事：兩個 app 在手機上做的檢查和算法是同一份，而且這一份不碰 PIN、網路、NFC、檔案。** `spec/` 的算法、裝置上的檢查、算證明，照 ADR-0034 寫成一份 Rust，Android（Kotlin）和 iOS（Swift）都連結它，不各寫一次。它是 `spec/` 的第三份實作：Go（`verifier/`、`prooflog/`、`crl/`）、TypeScript（`protocol/`）、Rust 互不引用，測試讀同一份 `spec/vectors/`，哪一份走樣了會在測試時出現。
 
 要檢查 PIN 有沒有離開手機，不用看這裡：這裡沒有任何函式收 PIN。看的是兩個 app 裡畫面和讀卡的程式。
 
@@ -39,7 +39,7 @@
 | `key.rs`、`tree.rs` | `spec/revocation-tree.md`「Tree」 | 樹的鍵；樹和「不在樹裡」的路徑，可以分幾份建再合起來 |
 | `circuit_inputs.rs` | `spec/circuit-inputs.md` | 電路的輸入（憑證、發證金鑰、路徑、`current_time`、兩個簽章各自切成的段，和兩個 Barrett 參數），以及裝置預期證明帶的公開輸入 |
 | `hex.rs` | | 寫在程式裡的十六進位常數 |
-| `roster_rules.rs` | `spec/roster-rules.md` | 紀錄規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
+| `record_rules.rs` | `spec/record-rules.md` | 紀錄規則：一筆紀錄的六項檢查（`apply_record`）、其中第 5、6 項（`apply_list`，裝置在簽章之前算的那一半）、從第一筆紀錄算起的現況（`MemoryRules`）、版本號 `RULES_VERSION` 和規則裡的數字。規則跟著版本號寫死在這裡（ADR-0035）；平台表不寫死，由呼叫的人傳進來 |
 | `list_consequence.rs` | `spec/list-consequence.md` | 確認的畫面上每一列的後果：持卡人改過的清單在每個平台上是新宣告、再次過卡、更正、更換還是收回，更換之後還剩幾次；不認得的平台上的帳號照原樣留在清單裡 |
 
 | 檔案（`prover/src/`） | 內容 |
@@ -159,7 +159,7 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 
 **有結構的資料用 JSON。** 清單這類有結構的輸入是 UTF-8 的 JSON，形狀照 `spec/` 和 `docs/api/` 裡同一個東西的形狀（例如帳號清單就是紀錄的 `accounts`）。Kotlin 和 Swift 都有內建的 JSON，不用另外帶套件。
 
-**證明紀錄是數字。** `IDC_ROSTER_PRODUCTION`（0）、`IDC_ROSTER_TEST`（1）。一個 app 建置時就定了是哪一份（ADR-0036），每次呼叫都傳那一個；場合字串由核心照這個數字拿寫死的那一條。
+**證明紀錄是數字。** `IDC_PROOF_LOG_PRODUCTION`（0）、`IDC_PROOF_LOG_TEST`（1）。一個 app 建置時就定了是哪一份（ADR-0036），每次呼叫都傳那一個；場合字串由核心照這個數字拿寫死的那一條。
 
 **執行緒。** 每個函式可以在任何執行緒呼叫，做完才回來。跨呼叫留下來的只有 session；每次呼叫各自開一個 Barretenberg 的介面（`barretenberg-rs` 的說明：一個介面只給一個執行緒用）。會算很久的（建樹、證明）由 app 放到背景的執行緒；建樹自己再開 4 個執行緒，證明由 Barretenberg 開和核心數一樣多的執行緒，都做完才回來。整個行程一次只算一個證明，第二個會等。
 
@@ -258,8 +258,8 @@ IAMREAL_BB=<bb 的路徑> cargo test --locked --release -p iamreal-device-core -
 - 沒有讀的：`poseidon2-constants.json`（Poseidon2 的置換是 Barretenberg 的，這裡沒有自己實作）
 - `prover/tests/vectors.rs`：`poseidon2.json` 的 `hash_2`、`hash_3`（Barretenberg 的 Poseidon2），和 `scoped_id`（簽章切出的 18 段、串起來的匿名編號）
 - `prover/tests/c_api.rs`：C 函式，照 app 呼叫的方式（指標、長度、`idc_buf`、代碼）。場合字串和宣告碼對 `scope.json`、`declaration-code.json`；每一種讀不懂的輸入、`NULL`、代碼不是 `IDC_OK` 時 `idc_buf` 是空的
-- `checks/tests/roster_rules.rs`（不需要 Barretenberg）：`roster-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/roster-rules.md` 寫的、標準答案帶的版本號相同
-- `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`roster-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
+- `checks/tests/record_rules.rs`（不需要 Barretenberg）：`record-rules.json` 的每一案，一筆一筆經過 `MemoryRules`，比對每一筆的結果和最後的現況；`RULES_VERSION` 和 `spec/record-rules.md` 寫的、標準答案帶的版本號相同
+- `prover/tests/c_list_consequence.rs`：`idc_list_consequence`，照 app 呼叫的方式。`list-consequence.json` 的每一案（讀平台表、讀現況、每一列）；`record-rules.json` 裡走到第 5、6 項的每一筆，用它前面的現況當 `card-state` 的回應，後果和標準答案相同；只有 C 函式才有的：清單的形狀、同一個鍵寫兩次、裝置的時區、`NULL`
 - `prover/tests/c_card_status.rs`：`idc_card_status`，照 app 呼叫的方式。`card-status.json` 的每一案，結果和標準答案相同；`list-consequence.json` 裡每一個讀不懂的回應都不收；只有 C 函式才有的：認得的平台的形狀、時鐘、`NULL`
 - `prover/tests/c_short_id.rs`：`idc_short_id`。`scoped-id.json` 每一個匿名編號的短編號，和不是唯一寫法的都不收
 - `prover/tests/c_records_response.rs`：`idc_records_response`，照 app 呼叫的方式。`records-response.json` 的每一案，結果和標準答案相同；標準答案放不進去的內文（不是 UTF-8、同一個鍵寫兩次、巢狀太深、沒有內文）一樣是「什麼都不說」，不是錯誤；`rows` 不是確認畫面那幾列的形狀、`NULL`

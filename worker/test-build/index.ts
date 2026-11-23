@@ -10,18 +10,18 @@
 // - Which proof verifier `records` asks. A test worker starts with the one
 //   the deployed Worker has (src/in-worker.ts), and the tests about proofs
 //   keep it. A proof takes a real card's keys and seconds to make, so the
-//   tests about everything else (the challenge, the CRLs, the roster rules,
+//   tests about everything else (the challenge, the CRLs, the record rules,
 //   the write) switch to a stand-in that judges a proof by its first byte
 //   (and on one value of it moves the clock, as a verification that took time),
 //   as the Go backend's tests do (e159ab9:server/harness_test.go, fakeProofs). The
 //   stand-in is behind the same interface the deployed Worker names its
 //   verifier by (src/index.ts, `API_PARTS`).
 // - A door to the proof verifier itself, for inputs no record can carry
-//   (public inputs that are not a record's), and one to what the roster's
+//   (public inputs that are not a record's), and one to what the proof log's
 //   object knows of the CRL archive. Both call what the deployed Worker has;
 //   nothing of them is replaced here.
-// - Doors to the roster's object, for what no request can do. The object of
-//   the test build is the deployed one (src/roster.ts) with methods added:
+// - Doors to the proof log's object, for what no request can do. The object of
+//   the test build is the deployed one (src/proof-log.ts) with methods added:
 //   run its alarm now and read when it is set for; give it a second piece
 //   of timed work; choose the random bytes of the next challenge, so that a
 //   test gets the challenge a proof was made for; change the versions its
@@ -29,31 +29,31 @@
 //   state table as it is given, for the states the rules cannot leave;
 //   break its tables, or one card's row, or make every write to one of them fail, to see what
 //   the API answers when the back end itself fails; drop the table of the
-//   newest CRLs; and run the roster rules on the object's stored state for
-//   an event the API would never write (an invalid record of a roster),
+//   newest CRLs; and run the record rules on the object's stored state for
+//   an event the API would never write (an invalid record of a proof log),
 //   and read the latest valid date and the cards of each account as the
 //   object reads and counts them;
-//   read the rows it keeps of its records and of the roster as a whole,
+//   read the rows it keeps of its records and of the proof log as a whole,
 //   which no endpoint shows yet; and wait before it hashes a record, so
 //   that requests sent at once do cross where the deployed object lets
 //   them (in the local workerd the hash alone does not let another in);
 //   and make a write or a read of the data bucket go wrong, to see what
-//   becomes of a full roster file that could not be moved there.
+//   becomes of a full log file that could not be moved there.
 import { byBytes, bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
-import type { RosterRecord } from "iamreal-protocol/record.ts";
-import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/roster-rules.ts";
+import type { ProofLogRecord } from "iamreal-protocol/record.ts";
+import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/record-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
 import { copyCards, dropCardsCopy, writeCard } from "../src/card-table.ts";
 import { EngineError } from "../src/engine.ts";
 import worker from "../src/index.ts";
 import { proofVerifier } from "../src/in-worker.ts";
-import type { FileBucket } from "../src/roster-files.ts";
-import { Roster as DeployedRoster, SCHEMA_VERSION, type TimedWork, rosterOf } from "../src/roster.ts";
+import type { FileBucket } from "../src/proof-log-files.ts";
+import { ProofLog as DeployedProofLog, SCHEMA_VERSION, type TimedWork, proofLogOf } from "../src/proof-log.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import { VIEW_TABLE_KEYS, clearViews, viewOf, writeView } from "../src/views.ts";
-import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredRoster, StoredViews, TestSettings } from "./card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -91,7 +91,7 @@ const seen: string[] = [];
 const FAILING_WRITES = {
   records: "ON records",
   cards: "ON cards",
-  roster: "ON roster",
+  proof_log: "ON proof_log",
   challenges: "ON challenges",
   "challenges.accepted": "OF accepted ON challenges",
   view_cards: "ON view_cards",
@@ -101,7 +101,7 @@ const FAILING_WRITES = {
 } as const;
 type FailingWrite = keyof typeof FAILING_WRITES;
 
-export class Roster extends DeployedRoster {
+export class ProofLog extends DeployedProofLog {
   /** The second piece of timed work: when it is next due, how long after each run it is due again, and when it ran. */
   #extraDue: number | null = null;
   #extraEvery = 0;
@@ -135,7 +135,7 @@ export class Roster extends DeployedRoster {
     return chosen ?? super.challengeRandom();
   }
 
-  protected override async hashOf(record: RosterRecord): Promise<string> {
+  protected override async hashOf(record: ProofLogRecord): Promise<string> {
     this.#hashes++;
     // A timer, unlike the hash, lets the requests that are waiting run.
     if (this.#hashDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#hashDelayMs));
@@ -229,7 +229,7 @@ export class Roster extends DeployedRoster {
   /**
    * The alarm's handler, one run at a time. The deployed object's handler
    * never runs twice at once, and its timed work counts on that
-   * (src/roster.ts, `#dailyPublication`); only this build has a second way
+   * (src/proof-log.ts, `#dailyPublication`); only this build has a second way
    * to start it (`testRunAlarm`), which could run it while the alarm
    * itself rings. So here every run, the alarm's own too, waits for the
    * one before it.
@@ -275,12 +275,12 @@ export class Roster extends DeployedRoster {
 
   /** Makes the stored version of the tables another one than the build's, or the build's. Takes effect when the object starts again. */
   testSetStoredSchemaVersion(to: "another" | "the build's"): void {
-    this.ctx.storage.sql.exec("UPDATE roster SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
+    this.ctx.storage.sql.exec("UPDATE proof_log SET schema_version = ? WHERE id = 1", to === "another" ? SCHEMA_VERSION + 1 : SCHEMA_VERSION);
   }
 
-  /** Makes the version of the roster rules the stored state says it was computed by another one than the build's, or the build's. Takes effect when the object starts again. */
+  /** Makes the version of the record rules the stored state says it was computed by another one than the build's, or the build's. Takes effect when the object starts again. */
   testSetStoredRulesVersion(to: "another" | "the build's"): void {
-    this.ctx.storage.sql.exec("UPDATE roster SET rules_version = ? WHERE id = 1", to === "another" ? RULES_VERSION + 1 : RULES_VERSION);
+    this.ctx.storage.sql.exec("UPDATE proof_log SET rules_version = ? WHERE id = 1", to === "another" ? RULES_VERSION + 1 : RULES_VERSION);
   }
 
   /** Drops the table of the newest CRLs: the object is then as one made by a build that did not have it yet. */
@@ -344,17 +344,17 @@ export class Roster extends DeployedRoster {
     return this.ctx.storage.sql.exec<{ count: number; first: number | null; last: number | null }>("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS last FROM records").one();
   }
 
-  /** Waits until the object has filled its views, or has given up (src/roster.ts, `viewsFilling`). */
+  /** Waits until the object has filled its views, or has given up (src/proof-log.ts, `viewsFilling`). */
   async testViewsFilled(): Promise<void> {
     await this.viewsFilling;
   }
 
-  /** The rows of `records`, in the order of `seq`, and the count and the roster fingerprint of the row of `roster`, as they are stored. */
-  testStored(): StoredRoster {
+  /** The rows of `records`, in the order of `seq`, and the count and the proof log fingerprint of the row of `proof_log`, as they are stored. */
+  testStored(): StoredProofLog {
     const sql = this.ctx.storage.sql;
     return {
       records: sql.exec<{ seq: number; line: string; record_hash: string; fingerprint: string }>("SELECT seq, line, record_hash, fingerprint FROM records ORDER BY seq").toArray(),
-      roster: sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM roster WHERE id = 1").one(),
+      proofLog: sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM proof_log WHERE id = 1").one(),
     };
   }
 
@@ -380,17 +380,17 @@ export class Roster extends DeployedRoster {
   }
 
   /**
-   * Runs the roster rules for one event of spec/vectors/roster-rules.json on
+   * Runs the record rules for one event of spec/vectors/record-rules.json on
    * the state the object stores, and keeps what a valid one leaves: the
    * same reading and the same writing of the state as for a submitted
-   * record (src/roster.ts, `ruleState`, `keepRuleState`), and the same
+   * record (src/proof-log.ts, `ruleState`, `keepRuleState`), and the same
    * change to the views (src/views.ts, `viewOf`, `writeView`), which is
    * where the deployed object counts the cards of an account. No record is
    * stored for an event, so the views' own count of records is put back to
-   * the roster's afterwards: the object would otherwise take the views for
+   * the proof log's afterwards: the object would otherwise take the views for
    * stale when it next starts, and fill them from records that are not
    * there. The answers the
-   * rules take from outside the roster come with the event. Which
+   * rules take from outside the proof log come with the event. Which
    * challenges were used is kept in a table of the test's own, since the
    * back end never writes an invalid record and so keeps no challenge of
    * one.
@@ -413,7 +413,7 @@ export class Roster extends DeployedRoster {
     this.ctx.storage.transactionSync(() => {
       if (outcome.result.valid) {
         this.keepRuleState(e.scope_string, e.scoped_id, outcome.card, e.seq, outcome.latestValidDate);
-        const { count } = sql.exec<{ count: number }>("SELECT count FROM roster WHERE id = 1").one();
+        const { count } = sql.exec<{ count: number }>("SELECT count FROM proof_log WHERE id = 1").one();
         sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", e.seq - 1);
         writeView(sql, viewOf({ seq: e.seq, scopeString: e.scope_string, scopedId: e.scoped_id }, date, outcome.result.kinds, card, outcome.card));
         sql.exec("UPDATE view_state SET seq = ? WHERE id = 1", count);
@@ -424,8 +424,8 @@ export class Roster extends DeployedRoster {
   }
 }
 
-/** The roster's object (src/roster.ts, rosterOf), as the class of the test build. */
-const testRosterOf = (env: Env): DurableObjectStub<Roster> => rosterOf(env) as unknown as DurableObjectStub<Roster>;
+/** The proof log's object (src/proof-log.ts, proofLogOf), as the class of the test build. */
+const testProofLogOf = (env: Env): DurableObjectStub<ProofLog> => proofLogOf(env) as unknown as DurableObjectStub<ProofLog>;
 
 const json = (value: unknown, status = 200): Response => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 const done = (): Response => new Response(null, { status: 204 });
@@ -439,58 +439,58 @@ export default {
    *   started with until it starts again.
    * - `PUT /__test/verifier` with `real` or `stand-in` chooses the proof
    *   verifier `records` asks from now on.
-   * - `POST /__test/roster/alarm` runs the alarm of the roster's object,
+   * - `POST /__test/proof-log/alarm` runs the alarm of the proof log's object,
    *   or with `?object=<name>` of the object of that name;
    *   `GET` answers `{alarm}`, the time it is set for or null, with
    *   `?object=<name>` of the object of that name.
-   * - `PUT /__test/roster/extra-work` with `{due, every}` gives the object a
+   * - `PUT /__test/proof-log/extra-work` with `{due, every}` gives the object a
    *   second piece of timed work; `GET` answers `{runs}`, when it ran.
-   * - `PUT /__test/roster/next-random` with 16 bytes in hex: the next
+   * - `PUT /__test/proof-log/next-random` with 16 bytes in hex: the next
    *   challenge the object issues has them in place of random bytes.
-   * - `PUT /__test/roster/card` writes a row of the card state table
-   *   (CardToWrite); `PUT /__test/roster/cards`, a list of them, in one
+   * - `PUT /__test/proof-log/card` writes a row of the card state table
+   *   (CardToWrite); `PUT /__test/proof-log/cards`, a list of them, in one
    *   transaction.
-   * - `POST /__test/roster/cards-copy` with `{what}`: "copy" copies the
+   * - `POST /__test/proof-log/cards-copy` with `{what}`: "copy" copies the
    *   card state table as a publication does, "drop" drops the copy.
-   * - `PUT /__test/roster/schema-version` and
-   *   `PUT /__test/roster/rules-version` with `{to}`, "another" or "the
+   * - `PUT /__test/proof-log/schema-version` and
+   *   `PUT /__test/proof-log/rules-version` with `{to}`, "another" or "the
    *   build's", change the version the object's tables say they were made
    *   by, and the version of the rules its state says it was computed by.
-   * - `POST /__test/roster/break` drops the tables the API reads.
-   * - `POST /__test/roster/break-card` with `{scope_string, scoped_id,
+   * - `POST /__test/proof-log/break` drops the tables the API reads.
+   * - `POST /__test/proof-log/break-card` with `{scope_string, scoped_id,
    *   mend}` makes the stored slots of that card text that is not JSON, or,
    *   with `mend` true, what they were before that.
-   * - `PUT /__test/roster/fail-writes` with `{what}`, a table, or
+   * - `PUT /__test/proof-log/fail-writes` with `{what}`, a table, or
    *   `challenges.accepted`, or null: every write to it fails from now on,
    *   or none does.
-   * - `POST /__test/roster/drop-newest-crls` drops the table of the newest
+   * - `POST /__test/proof-log/drop-newest-crls` drops the table of the newest
    *   CRLs, as on an object made before the build had it.
-   * - `POST /__test/roster/rule-event` with a RuleEvent runs the roster
+   * - `POST /__test/proof-log/rule-event` with a RuleEvent runs the record
    *   rules for it on the object's stored state and answers the result.
-   * - `POST /__test/roster/rule-state` with `{scope_string, scoped_id}`
+   * - `POST /__test/proof-log/rule-state` with `{scope_string, scoped_id}`
    *   answers a RuleStateAnswer: the latest valid date the rules read for
    *   that card, and the cards of every declared account of the scope.
-   * - `GET /__test/roster/views` answers a StoredViews: every row of the
+   * - `GET /__test/proof-log/views` answers a StoredViews: every row of the
    *   views; `DELETE` clears them, and the object fills them from its
-   *   records when it starts again. `POST /__test/roster/views-filled`
+   *   records when it starts again. `POST /__test/proof-log/views-filled`
    *   answers once the running object has filled them or given up.
-   * - `GET /__test/roster/stored` answers a StoredRoster: the rows the
-   *   object keeps of its records, and the count and the roster
-   *   fingerprint of its row of the roster. `GET /__test/roster/kept`
+   * - `GET /__test/proof-log/stored` answers a StoredProofLog: the rows the
+   *   object keeps of its records, and the count and the proof log
+   *   fingerprint of its row of the proof log. `GET /__test/proof-log/kept`
    *   answers a KeptRecords: only how many it keeps, and from which `seq`
-   *   to which. `GET /__test/roster/tables` answers the names of the
+   *   to which. `GET /__test/proof-log/tables` answers the names of the
    *   tables of its SQLite.
-   * - `PUT /__test/roster/hash-delay` with milliseconds: from now on the
+   * - `PUT /__test/proof-log/hash-delay` with milliseconds: from now on the
    *   object waits that long before it hashes a record it is asked to
    *   write, and other requests run meanwhile; `GET` answers `{hashes}`,
    *   how many times it has hashed one.
-   * - `PUT /__test/roster/bucket-fault` with a BucketFault: from now on the
+   * - `PUT /__test/proof-log/bucket-fault` with a BucketFault: from now on the
    *   object's writes or reads of one object of the data bucket go wrong
    *   in one way, or, with null, none does.
    * - `POST /__test/verify` with `{circuit, proof, publicInputs}` (hex, the
    *   inputs as a list) answers `{verified}`: the proof verifier's verdict.
-   * - `GET /__test/newest-crls` answers what the roster's object knows of
-   *   the CRL archive (src/roster.ts, `newestCrls`).
+   * - `GET /__test/newest-crls` answers what the proof log's object knows of
+   *   the CRL archive (src/proof-log.ts, `newestCrls`).
    *
    * - `GET /__test/seen` answers the method and path of every request that
    *   reached this code since it was last asked, the doors aside: what
@@ -520,30 +520,30 @@ export default {
       return done();
     }
     const env = testEnv(deployedEnv);
-    if (route === "POST /__test/roster/alarm") {
-      // `?object=` names another object than the settings': the one of a roster that was cleared (README.md, "清空測試的證明紀錄").
+    if (route === "POST /__test/proof-log/alarm") {
+      // `?object=` names another object than the settings': the one of a proof log that was cleared (README.md, "清空測試的證明紀錄").
       const named = new URL(request.url).searchParams.get("object");
-      await testRosterOf(named === null ? env : { ...env, ROSTER_OBJECT_NAME: named }).testRunAlarm();
+      await testProofLogOf(named === null ? env : { ...env, PROOF_LOG_OBJECT_NAME: named }).testRunAlarm();
       return done();
     }
-    if (route === "GET /__test/roster/alarm") {
+    if (route === "GET /__test/proof-log/alarm") {
       const named = new URL(request.url).searchParams.get("object");
-      return json({ alarm: await testRosterOf(named === null ? env : { ...env, ROSTER_OBJECT_NAME: named }).testAlarmTime() });
+      return json({ alarm: await testProofLogOf(named === null ? env : { ...env, PROOF_LOG_OBJECT_NAME: named }).testAlarmTime() });
     }
-    if (route === "PUT /__test/roster/extra-work") {
+    if (route === "PUT /__test/proof-log/extra-work") {
       const { due, every } = (await request.json()) as { due: number; every: number };
-      await testRosterOf(env).testSetExtraWork(due, every);
+      await testProofLogOf(env).testSetExtraWork(due, every);
       return done();
     }
-    if (route === "GET /__test/roster/extra-work") return json({ runs: await testRosterOf(env).testExtraWorkRuns() });
-    if (route === "PUT /__test/roster/next-random") {
+    if (route === "GET /__test/proof-log/extra-work") return json({ runs: await testProofLogOf(env).testExtraWorkRuns() });
+    if (route === "PUT /__test/proof-log/next-random") {
       const random = bytesOfHex(await request.text());
       if (random.length !== 16) return new Response(null, { status: 400 });
-      await testRosterOf(env).testSetNextRandom(random);
+      await testProofLogOf(env).testSetNextRandom(random);
       return done();
     }
-    if (route === "PUT /__test/roster/card" || route === "PUT /__test/roster/cards") {
-      const many = route === "PUT /__test/roster/cards";
+    if (route === "PUT /__test/proof-log/card" || route === "PUT /__test/proof-log/cards") {
+      const many = route === "PUT /__test/proof-log/cards";
       const body = (await request.json()) as CardToWrite | CardToWrite[];
       const cards: { scopeString: string; scopedId: string; card: CardState; seq: number }[] = [];
       for (const c of many ? (body as CardToWrite[]) : [body as CardToWrite]) {
@@ -555,78 +555,78 @@ export default {
         }
         cards.push({ scopeString: c.scope_string, scopedId: c.scoped_id, card: { lastCardProof: parseDay(c.last_card_proof), proofsOnLastDate: c.proofs_on_last_date, slots }, seq: c.seq });
       }
-      const roster = testRosterOf(env);
-      if (many) await roster.testWriteCards(cards);
-      else await roster.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
+      const proofLog = testProofLogOf(env);
+      if (many) await proofLog.testWriteCards(cards);
+      else await proofLog.testWriteCard(cards[0]!.scopeString, cards[0]!.scopedId, cards[0]!.card, cards[0]!.seq);
       return done();
     }
-    if (route === "POST /__test/roster/cards-copy") {
+    if (route === "POST /__test/proof-log/cards-copy") {
       const { what } = (await request.json()) as { what: "copy" | "drop" };
       if (what !== "copy" && what !== "drop") return new Response(null, { status: 400 });
-      await testRosterOf(env).testCardsCopy(what);
+      await testProofLogOf(env).testCardsCopy(what);
       return done();
     }
-    if (route === "PUT /__test/roster/schema-version") {
+    if (route === "PUT /__test/proof-log/schema-version") {
       const { to } = (await request.json()) as { to: "another" | "the build's" };
-      await testRosterOf(env).testSetStoredSchemaVersion(to);
+      await testProofLogOf(env).testSetStoredSchemaVersion(to);
       return done();
     }
-    if (route === "PUT /__test/roster/rules-version") {
+    if (route === "PUT /__test/proof-log/rules-version") {
       const { to } = (await request.json()) as { to: "another" | "the build's" };
-      await testRosterOf(env).testSetStoredRulesVersion(to);
+      await testProofLogOf(env).testSetStoredRulesVersion(to);
       return done();
     }
-    if (route === "POST /__test/roster/break") {
-      await testRosterOf(env).testBreak();
+    if (route === "POST /__test/proof-log/break") {
+      await testProofLogOf(env).testBreak();
       return done();
     }
-    if (route === "POST /__test/roster/break-card") {
+    if (route === "POST /__test/proof-log/break-card") {
       const { scope_string, scoped_id, mend } = (await request.json()) as { scope_string: string; scoped_id: string; mend: boolean };
-      await testRosterOf(env).testBreakCard(scope_string, scoped_id, mend);
+      await testProofLogOf(env).testBreakCard(scope_string, scoped_id, mend);
       return done();
     }
-    if (route === "PUT /__test/roster/fail-writes") {
+    if (route === "PUT /__test/proof-log/fail-writes") {
       const { what } = (await request.json()) as { what: FailingWrite | null };
-      await testRosterOf(env).testFailWritesTo(what);
+      await testProofLogOf(env).testFailWritesTo(what);
       return done();
     }
-    if (route === "POST /__test/roster/drop-newest-crls") {
-      await testRosterOf(env).testDropNewestCrls();
+    if (route === "POST /__test/proof-log/drop-newest-crls") {
+      await testProofLogOf(env).testDropNewestCrls();
       return done();
     }
-    if (route === "POST /__test/roster/rule-event") return json(await testRosterOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
-    if (route === "POST /__test/roster/rule-state") {
+    if (route === "POST /__test/proof-log/rule-event") return json(await testProofLogOf(env).testApplyRuleEvent((await request.json()) as RuleEvent));
+    if (route === "POST /__test/proof-log/rule-state") {
       const { scope_string, scoped_id } = (await request.json()) as { scope_string: string; scoped_id: string };
-      return json(await testRosterOf(env).testRuleState(scope_string, scoped_id));
+      return json(await testProofLogOf(env).testRuleState(scope_string, scoped_id));
     }
-    if (route === "GET /__test/roster/stored") return json(await testRosterOf(env).testStored());
-    if (route === "GET /__test/roster/kept") return json(await testRosterOf(env).testKept());
-    if (route === "GET /__test/roster/tables") return json(await testRosterOf(env).testTables());
-    if (route === "GET /__test/roster/views") return json(await testRosterOf(env).testViews());
-    if (route === "DELETE /__test/roster/views") {
-      await testRosterOf(env).testClearViews();
+    if (route === "GET /__test/proof-log/stored") return json(await testProofLogOf(env).testStored());
+    if (route === "GET /__test/proof-log/kept") return json(await testProofLogOf(env).testKept());
+    if (route === "GET /__test/proof-log/tables") return json(await testProofLogOf(env).testTables());
+    if (route === "GET /__test/proof-log/views") return json(await testProofLogOf(env).testViews());
+    if (route === "DELETE /__test/proof-log/views") {
+      await testProofLogOf(env).testClearViews();
       return done();
     }
-    if (route === "POST /__test/roster/views-filled") {
-      await testRosterOf(env).testViewsFilled();
+    if (route === "POST /__test/proof-log/views-filled") {
+      await testProofLogOf(env).testViewsFilled();
       return done();
     }
-    if (route === "PUT /__test/roster/hash-delay") {
+    if (route === "PUT /__test/proof-log/hash-delay") {
       const ms = Number(await request.text());
       if (!Number.isSafeInteger(ms) || ms < 0) return new Response(null, { status: 400 });
-      await testRosterOf(env).testSetHashDelay(ms);
+      await testProofLogOf(env).testSetHashDelay(ms);
       return done();
     }
-    if (route === "GET /__test/roster/hash-delay") return json({ hashes: await testRosterOf(env).testHashes() });
-    if (route === "PUT /__test/roster/bucket-fault") {
-      await testRosterOf(env).testSetBucketFault((await request.json()) as BucketFault);
+    if (route === "GET /__test/proof-log/hash-delay") return json({ hashes: await testProofLogOf(env).testHashes() });
+    if (route === "PUT /__test/proof-log/bucket-fault") {
+      await testProofLogOf(env).testSetBucketFault((await request.json()) as BucketFault);
       return done();
     }
     if (route === "POST /__test/verify") {
       const { circuit, proof, publicInputs } = (await request.json()) as { circuit: string; proof: string; publicInputs: string[] };
       return json({ verified: await proofVerifier.verify(circuit, bytesOfHex(proof), publicInputs.map(bytesOfHex)) });
     }
-    if (route === "GET /__test/newest-crls") return json(await rosterOf(env).newestCrls());
+    if (route === "GET /__test/newest-crls") return json(await proofLogOf(env).newestCrls());
     if (standIn && isApiPath(pathname)) return api(request, env, STAND_IN);
     return worker.fetch(request, env, ctx);
   },

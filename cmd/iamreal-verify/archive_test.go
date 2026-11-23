@@ -1,6 +1,6 @@
 package main
 
-// The test roster and CRL archive of testdata/ (see its README.md) with the
+// The test log and CRL archive of testdata/ (see its README.md) with the
 // real archive and a fake proof verifier. e2e_test.go runs the same with the
 // real verifier and bb.
 
@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -207,8 +207,8 @@ func copyTestArchive(t *testing.T) string {
 }
 
 // runArchiveCases runs every case with the proof verifier mk makes.
-func runArchiveCases(t *testing.T, mk func(verifier.Config) (roster.ProofVerifier, error), args ...string) {
-	rosterFile, err := os.ReadFile(filepath.Join("testdata", "roster.jsonl"))
+func runArchiveCases(t *testing.T, mk func(verifier.Config) (prooflog.ProofVerifier, error), args ...string) {
+	proofLogFile, err := os.ReadFile(filepath.Join("testdata", "proof-log.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,9 +218,9 @@ func runArchiveCases(t *testing.T, mk func(verifier.Config) (roster.ProofVerifie
 			if c.edit != nil {
 				c.edit(t, dir)
 			}
-			path := filepath.Join(t.TempDir(), "roster.jsonl")
-			os.WriteFile(path, rosterFile, 0o600)
-			a := append(append([]string{"-roster", "test", "-crl-archive", dir}, args...), path)
+			path := filepath.Join(t.TempDir(), "proof-log.jsonl")
+			os.WriteFile(path, proofLogFile, 0o600)
+			a := append(append([]string{"-proof-log", "test", "-crl-archive", dir}, args...), path)
 			if c.trustIndex {
 				a = append([]string{"-crl-trust-index"}, a...)
 			}
@@ -262,7 +262,7 @@ func runArchiveCases(t *testing.T, mk func(verifier.Config) (roster.ProofVerifie
 }
 
 func TestArchive(t *testing.T) {
-	runArchiveCases(t, func(verifier.Config) (roster.ProofVerifier, error) { return allVerify{}, nil }, "-bb", "bb", "-crs", "crs")
+	runArchiveCases(t, func(verifier.Config) (prooflog.ProofVerifier, error) { return allVerify{}, nil }, "-bb", "bb", "-crs", "crs")
 }
 
 // The index of testdata/archive is the one its files give.

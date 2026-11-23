@@ -69,7 +69,7 @@ func TestPlatformTables(t *testing.T) {
 			t.Errorf("%q in the production table", p.ID)
 		}
 	}
-	for _, r := range []Roster{Production, Test} {
+	for _, r := range []ProofLog{Production, Test} {
 		ps := Platforms(r)
 		for i := 1; i < len(ps); i++ {
 			if !(ps[i-1].ID < ps[i].ID) {
@@ -78,7 +78,7 @@ func TestPlatformTables(t *testing.T) {
 		}
 	}
 	if len(Platforms(Test)) != len(productionPlatforms)+len(testPlatforms) {
-		t.Errorf("a test roster accepts %d platforms", len(Platforms(Test)))
+		t.Errorf("a test log accepts %d platforms", len(Platforms(Test)))
 	}
 }
 

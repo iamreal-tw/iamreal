@@ -59,7 +59,7 @@ describe("what the page writes per platform, and the scope string", () => {
     assert.equal(TEST_EXAMPLE.formatHint, null);
     assert.equal(TEST_EXAMPLE.profileUrl, null);
   });
-  test("the card's page and the scope strings: one for the public roster, none per platform", () => {
+  test("the card's page and the scope strings: one for the public proof log, none per platform", () => {
     assert.equal(SITE_DOMAIN, "iamreal.tw");
     assert.equal(cardPath("7K2Q9FM4XD"), "p/7K2Q9FM4XD");
     assert.equal(scopeOf("production"), "iamreal:public:0_______________");
@@ -107,7 +107,7 @@ describe("stops", () => {
     // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
     [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
-    // The roster rules, when the card's state changed after it was asked.
+    // The record rules, when the card's state changed after it was asked.
     [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", 4],
     [{ code: "server", server: "switch_limit", status: 400 }, "清單裡有一個平台不能再更換，整份清單都沒有記下，證明紀錄沒有變動。請再讀一次卡片。", 4],
     [{ code: "server", server: "empty", status: 400 }, "這張卡片現在沒有宣告任何帳號，沒有可以收回的，證明紀錄沒有變動。請再讀一次卡片。", 4],

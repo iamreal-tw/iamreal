@@ -3,7 +3,7 @@ package main
 // Where the published files are read from: a local directory, or a URL such
 // as the data domain https://data.iamreal.tw/ (ADR-0027). Over HTTP there
 // is no listing of a directory, so the command asks only for files whose
-// names it knows: from the fingerprint file (the roster directory) and from
+// names it knows: from the fingerprint file (the log directory) and from
 // the archive index (the CRL archive).
 
 import (
@@ -23,27 +23,27 @@ import (
 	"time"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// defaultData is the data domain of the production roster (ADR-0027).
+// defaultData is the data domain of the production log (ADR-0027).
 const defaultData = "https://data.iamreal.tw/"
 
 // The largest file of each kind the command reads. A larger one is an
 // error, not read in part.
 const (
-	// maxLine is the longest line of a roster file: the proof, 19,544
+	// maxLine is the longest line of a log file: the proof, 19,544
 	// characters (the base64 of verifier.ProofLength bytes), and 4 KiB
 	// for every other field and the template. Today they take under 1 KB
-	// with both rosters' platform tables (spec/record.md, "Fields"); the
+	// with both proof logs' platform tables (spec/record.md, "Fields"); the
 	// rest leaves room for platforms added later.
 	maxLine = (verifier.ProofLength+2)/3*4 + 4<<10
-	// maxRosterFile is a full roster file of maxLine lines.
-	maxRosterFile = roster.LinesPerFile * maxLine
+	// maxProofLogFile is a full log file of maxLine lines.
+	maxProofLogFile = prooflog.LinesPerFile * maxLine
 	// maxHashList is a full record hash list: 1,001 lines of 64 hex
 	// digits and LF (spec/record.md, "Record hash lists").
-	maxHashList = (roster.LinesPerFile + 1) * 65
+	maxHashList = (prooflog.LinesPerFile + 1) * 65
 	// maxFingerprintFile: a line is at most 128 bytes (a count of 16
 	// digits), one line per day; 8 MiB holds more than 170 years.
 	maxFingerprintFile = 8 << 20
@@ -113,7 +113,7 @@ var httpClient = &http.Client{
 }
 
 // fileTimeout is how long one download may take: the largest files are a
-// full roster file (about 20 MB) and a CRL of G2 (about 17 MB).
+// full log file (about 20 MB) and a CRL of G2 (about 17 MB).
 const fileTimeout = 10 * time.Minute
 
 type dirSource string

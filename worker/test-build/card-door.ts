@@ -2,7 +2,7 @@
 // test harness sends them (test/harness.ts): one definition for both.
 import type { SlotJson } from "../src/slot-json.ts";
 
-/** What `PUT /__test/roster/card` takes: a card's state in the spelling of `card-state`'s answer, the card it is of, and the `seq` of its last valid record. */
+/** What `PUT /__test/proof-log/card` takes: a card's state in the spelling of `card-state`'s answer, the card it is of, and the `seq` of its last valid record. */
 export interface CardToWrite {
   readonly scope_string: string;
   readonly scoped_id: string;
@@ -13,9 +13,9 @@ export interface CardToWrite {
 }
 
 /**
- * What `POST /__test/roster/rule-event` takes: one event of
- * spec/vectors/roster-rules.json, a record as the roster rules read it with
- * the two answers they take from outside the roster.
+ * What `POST /__test/proof-log/rule-event` takes: one event of
+ * spec/vectors/record-rules.json, a record as the record rules read it with
+ * the two answers they take from outside the proof log.
  */
 export interface RuleEvent {
   readonly seq: number;
@@ -30,9 +30,9 @@ export interface RuleEvent {
 }
 
 /**
- * What `POST /__test/roster/rule-state` answers for `{scope_string,
- * scoped_id}`: the latest valid date the roster rules read for that card
- * (src/roster.ts, `ruleState`), and every account of the scope that a
+ * What `POST /__test/proof-log/rule-state` answers for `{scope_string,
+ * scoped_id}`: the latest valid date the record rules read for that card
+ * (src/proof-log.ts, `ruleState`), and every account of the scope that a
  * stored card declares now, with the number of cards that declare it as
  * the deployed query counts them (`accountCards`, the `account_cards` of a
  * `201`). Sorted by platform, then username, by byte value.
@@ -44,33 +44,33 @@ export interface RuleStateAnswer {
 
 /** The settings of the environment a test may replace (`PUT /__test/settings`); wrangler.jsonc has the deployed ones. */
 export interface TestSettings {
-  readonly ROSTER_KIND?: string;
-  readonly ROSTER_OBJECT_NAME?: string;
+  readonly PROOF_LOG_KIND?: string;
+  readonly PROOF_LOG_OBJECT_NAME?: string;
   /** The back end's policy on late switches (src/settings.ts): "true" turns it on. wrangler.jsonc does not set it. */
   readonly RESTRICT_LATE_SWITCHES?: string;
-  /** The date the test roster was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
-  readonly TEST_ROSTER_CLEARED_ON?: string;
+  /** The date the test log was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
+  readonly TEST_PROOF_LOG_CLEARED_ON?: string;
 }
 
 /**
- * What `GET /__test/roster/views` answers: every row of the views
+ * What `GET /__test/proof-log/views` answers: every row of the views
  * (src/views.ts), table by table, each table in the order of its primary
  * key.
  */
 export type StoredViews = Readonly<Record<string, readonly Readonly<Record<string, string | number | null>>[]>>;
 
 /**
- * What `GET /__test/roster/stored` answers: the rows the roster's object
+ * What `GET /__test/proof-log/stored` answers: the rows the proof log's object
  * keeps of its records, in the order of `seq`, and what its one row of the
- * roster says of them. No endpoint of the deployed Worker shows these yet.
+ * proof log says of them. No endpoint of the deployed Worker shows these yet.
  */
-export interface StoredRoster {
+export interface StoredProofLog {
   readonly records: readonly { readonly seq: number; readonly line: string; readonly record_hash: string; readonly fingerprint: string }[];
-  readonly roster: { readonly count: number; readonly fingerprint: string };
+  readonly proofLog: { readonly count: number; readonly fingerprint: string };
 }
 
 /**
- * What `PUT /__test/roster/bucket-fault` takes: from now on the roster's
+ * What `PUT /__test/proof-log/bucket-fault` takes: from now on the proof log's
  * object's writes or reads of one object of the data bucket go wrong in one
  * way, or, with null, none does.
  *
@@ -93,9 +93,9 @@ export interface StoredRoster {
 export type BucketFault = { readonly key: string; readonly how: "put fails" | "put sends other bytes" | "put writes other bytes" | "put writes another Cache-Control" | "put writes another Content-Type" | "put loses its answer" | "put takes a while" | "put breaks off" | "get fails" } | null;
 
 /**
- * What `GET /__test/roster/kept` answers: how many records the roster's
+ * What `GET /__test/proof-log/kept` answers: how many records the proof log's
  * object keeps, and the first and the last `seq` among them (null without
- * one). For a roster that keeps more than `GET /__test/roster/stored` can
+ * one). For a proof log that keeps more than `GET /__test/proof-log/stored` can
  * answer with: that one sends every line, some 20 KB each. Cloudflare's
  * documentation gives a limit for a call of an object's method: "The
  * maximum serialized RPC limit is 32 MiB."

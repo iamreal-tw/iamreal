@@ -1,7 +1,7 @@
 //go:build ignore
 
 // Writes the end-to-end test data of this directory: a CRL archive signed by
-// throwaway issuer keys, and a test roster whose records carry real proofs
+// throwaway issuer keys, and a test log whose records carry real proofs
 // against the roots of those CRLs. Run from the repository root:
 //
 //	go run ./cmd/iamreal-verify/testdata/generate.go -bb <bb> -crs <dir>
@@ -59,7 +59,7 @@ var crls = []crlSpec{
 	{"G3-2026112105.crl", "G3", 2026112105, time.Date(2026, 11, 20, 21, 12, 15, 0, time.UTC), "b"},
 }
 
-// recordSpec is one record of the roster; crl is the index into crls of the
+// recordSpec is one record of the proof log; crl is the index into crls of the
 // CRL whose root it uses.
 type recordSpec struct {
 	issuer   string
@@ -217,8 +217,8 @@ func main() {
 		fatal(err)
 	}
 
-	// The roster.
-	var roster []byte
+	// The proof log.
+	var proofLog []byte
 	for i, rec := range records {
 		o := out.Records[i]
 		// The reference tree of circuits/ and crl/ agree on the root.
@@ -255,9 +255,9 @@ func main() {
 		if _, err := verifier.ParseLine(rr.Line(), verifier.Test); err != nil {
 			fatalf("record %d is not well formed: %v", i+1, err)
 		}
-		roster = append(roster, rr.Line()...)
+		proofLog = append(proofLog, rr.Line()...)
 	}
-	write(filepath.Join(dir, "roster.jsonl"), roster)
+	write(filepath.Join(dir, "proof-log.jsonl"), proofLog)
 	write(filepath.Join(dir, "circuits-commit"), []byte(out.Commit+"\n"))
 	fmt.Fprintf(os.Stderr, "roots: A %s, B = C %s\n", roots[0], roots[1])
 }

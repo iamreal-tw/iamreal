@@ -1,4 +1,4 @@
-# The headers Static Assets sends with the files of this directory, for a test roster's site.
+# The headers Static Assets sends with the files of this directory, for a test log's site.
 # Written by scripts/site-files.ts from src/headers.ts: change them there, not here.
 
 /proof

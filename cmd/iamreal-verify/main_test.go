@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -58,19 +58,19 @@ func (everyRoot) CRLDates(string, string) ([]verifier.Date, error) {
 }
 
 // fakeDeps verifies with pv and opens every archive as crls.
-func fakeDeps(pv roster.ProofVerifier, crls roster.CRLArchive) deps {
+func fakeDeps(pv prooflog.ProofVerifier, crls prooflog.CRLArchive) deps {
 	return deps{
-		verifier: func(verifier.Config) (roster.ProofVerifier, error) { return pv, nil },
-		archive: func(string, bool, func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
+		verifier: func(verifier.Config) (prooflog.ProofVerifier, error) { return pv, nil },
+		archive: func(string, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
 			return crls, nil, nil
 		},
 	}
 }
 
 // runWith runs the command on file with -crl-archive, unless crls is nil.
-func runWith(t *testing.T, file []byte, pv roster.ProofVerifier, crls roster.CRLArchive, extra ...string) (int, string, string) {
+func runWith(t *testing.T, file []byte, pv prooflog.ProofVerifier, crls prooflog.CRLArchive, extra ...string) (int, string, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "roster.jsonl")
+	path := filepath.Join(t.TempDir(), "proof-log.jsonl")
 	os.WriteFile(path, file, 0o600)
 	var out, errOut bytes.Buffer
 	args := append([]string{"-bb", "bb", "-crs", "crs"}, extra...)
@@ -83,7 +83,7 @@ func runWith(t *testing.T, file []byte, pv roster.ProofVerifier, crls roster.CRL
 
 func TestText(t *testing.T) {
 	code, out, _ := runWith(t, threeRecords(t), allVerify{}, everyRoot{})
-	want := `roster file: valid
+	want := `log file: valid
 records: 3
 fingerprint: d12c22458126fee296b6216503b96ffe9c7ed37f7e8f8bb7f6f61b9c8b7d070b
 
@@ -106,11 +106,11 @@ scope iamreal:public:0_______________
 	}
 }
 
-// sameDay is a roster of four records of one card, each listing alice on threads, all
+// sameDay is a proof log of four records of one card, each listing alice on threads, all
 // dated 2026-11-16, made from the first record of threeRecords.
 func sameDay(t *testing.T) []byte {
 	t.Helper()
-	records, _, broken := roster.ReadFile(threeRecords(t), verifier.Production)
+	records, _, broken := prooflog.ReadFile(threeRecords(t), verifier.Production)
 	if broken != nil {
 		t.Fatal(broken)
 	}
@@ -152,7 +152,7 @@ func TestDailyLimit(t *testing.T) {
 // A change of account on the date of the first is a correction, in both
 // outputs; on a later date it is a switch.
 func TestCorrection(t *testing.T) {
-	records, _, broken := roster.ReadFile(threeRecords(t), verifier.Production)
+	records, _, broken := prooflog.ReadFile(threeRecords(t), verifier.Production)
 	if broken != nil {
 		t.Fatal(broken)
 	}
@@ -222,9 +222,9 @@ func TestNoArchive(t *testing.T) {
 	}
 }
 
-func TestEmptyRoster(t *testing.T) {
+func TestEmptyProofLog(t *testing.T) {
 	code, out, _ := runWith(t, nil, allVerify{}, everyRoot{})
-	if code != exitAllValid || !strings.Contains(out, "fingerprint: "+roster.EmptyFingerprint) {
+	if code != exitAllValid || !strings.Contains(out, "fingerprint: "+prooflog.EmptyFingerprint) {
 		t.Errorf("exit %d: %s", code, out)
 	}
 }
@@ -235,8 +235,8 @@ func TestUsage(t *testing.T) {
 	if code := run(nil, &out, &errOut, d); code != exitError {
 		t.Errorf("no arguments: exit %d", code)
 	}
-	if code := run([]string{"-bb", "x", "-crs", "y", "-roster", "staging", "f"}, &out, &errOut, d); code != exitError {
-		t.Errorf("bad roster: exit %d", code)
+	if code := run([]string{"-bb", "x", "-crs", "y", "-proof-log", "staging", "f"}, &out, &errOut, d); code != exitError {
+		t.Errorf("bad proof log: exit %d", code)
 	}
 	if code := run([]string{"-bb", "x", "-crs", "y", "-crl-trust-index", "f"}, &out, &errOut, d); code != exitError {
 		t.Errorf("-crl-trust-index without -crl-archive: exit %d", code)

@@ -5,7 +5,7 @@
 // test (list-consequence.test.ts) both use it.
 import { parseDay } from "iamreal-protocol/date.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
-import type { Account } from "iamreal-protocol/roster-rules.ts";
+import type { Account } from "iamreal-protocol/record-rules.ts";
 import { type CardStateResponse, type Config, requestCardState, requestConfig } from "../src/api.ts";
 import { type Choice, FlowStop, consequenceOfChoice, statusOf } from "../src/flow.ts";
 

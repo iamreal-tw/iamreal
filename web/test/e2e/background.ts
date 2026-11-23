@@ -36,7 +36,7 @@ const fixture = {
   cardKeyPkcs8: b64(new Uint8Array(await crypto.subtle.exportKey("pkcs8", world.card.privateKey))),
   pin: "123456",
   issuers: world.issuers.map((i) => ({ name: i.name, modulus: i.modulus.toString(16), bits: i.bits })),
-  // Each request gets a new fake server (no roster kept): both card proofs are a first declaration.
+  // Each request gets a new fake server (no proof log kept): both card proofs are a first declaration.
   runs: [{ threads: "alice" }, { threads: "alice" }],
 };
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".wasm": "application/wasm", ".json": "application/json", ".gz": "application/gzip", ".dat": "application/octet-stream" };

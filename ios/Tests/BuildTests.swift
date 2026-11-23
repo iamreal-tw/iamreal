@@ -13,10 +13,10 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.publicFiles.absoluteString, "https://test-data.iamreal.tw")
     }
 
-    func testTheCardSignsTheScopeStringOfTheTestRoster() throws {
+    func testTheCardSignsTheScopeStringOfTheTestProofLog() throws {
         let expected = try Repository.testScopeString()
         XCTAssertTrue(expected.hasPrefix("iamreal-test:public:0"))
-        XCTAssertEqual(String(decoding: try DeviceCore.scopeString(AppEnvironment.roster), as: UTF8.self), expected)
+        XCTAssertEqual(String(decoding: try DeviceCore.scopeString(AppEnvironment.proofLog), as: UTF8.self), expected)
     }
 
     func testTheAppRunsOnAniPhoneOnly() throws {
@@ -58,10 +58,10 @@ final class BuildTests: XCTestCase {
         }
     }
 
-    /// The mark of the test roster, on every screen, is in design/copy/.
+    /// The mark of the test log, on every screen, is in design/copy/.
     func testTheWordsOnTheScreenAreInDesignCopy() throws {
         let copy = try Repository.text("design/copy/test-site.md")
-        XCTAssertTrue(copy.contains("\n\(ScreenCopy.testRoster)\u{3000}"))
+        XCTAssertTrue(copy.contains("\n\(ScreenCopy.testProofLog)\u{3000}"))
     }
 
     /// The name under the app's icon is the one design/copy/app.md gives the development build.
@@ -93,7 +93,7 @@ final class BuildTests: XCTestCase {
 
     /// Every sentence the sources name is in that file, and the sources
     /// write none of their own: no character of Chinese outside the mark of
-    /// the test roster.
+    /// the test log.
     func testTheSourcesTakeEverySentenceFromTheCopy() throws {
         let copy = Copy(json: try Repository.data("design/copy/card-proof.json"))
         let key = try NSRegularExpression(pattern: #"copy\("([a-z_]+\.[a-z_]+)""#)
@@ -104,7 +104,7 @@ final class BuildTests: XCTestCase {
                 XCTAssertNotEqual(copy(named), named, "\(name) names \(named), which design/copy/card-proof.json does not have")
                 keys += 1
             }
-            for line in source.split(separator: "\n") where !line.contains("static let testRoster") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
+            for line in source.split(separator: "\n") where !line.contains("static let testProofLog") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
                 XCTAssertNil(line.unicodeScalars.first { (0x2E80...0x9FFF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }, "\(name): \(line)")
             }
         }

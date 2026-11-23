@@ -1,16 +1,16 @@
-// The views: the tables of the roster's Durable Object (roster.ts) that are
+// The views: the tables of the proof log's Durable Object (proof-log.ts) that are
 // derived from the records for the pages visitors read. They hold what each
-// valid record changed, as the roster rules computed it (protocol/,
+// valid record changed, as the record rules computed it (protocol/,
 // applyRecord): nothing here decides a kind. The records are what counts.
 // The views are written in the transaction that writes a record, and can be
 // cleared and written again from the records at any time (`clearViews`,
-// `writeViewsOf`; roster.ts, `#fillViews`, which reads the records where
+// `writeViewsOf`; proof-log.ts, `#fillViews`, which reads the records where
 // they are); they reflect exactly the records 1 to `viewSeq`.
 //
 // The four tables are the ones of the Go backend (e159ab9:server/store/sqlite_view.go).
 // A date is a day number (protocol/, `Day`: days since 1970-01-01), so that
 // dates compare as numbers; an account that is none is NULL. Every table is
-// keyed by the scope string, since a roster can hold two scopes while one is
+// keyed by the scope string, since a proof log can hold two scopes while one is
 // retired.
 //
 //   view_state    one row, the `seq` of the last record the views reflect
@@ -30,11 +30,11 @@
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import type { Day } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type RosterRecord, readRecordLine } from "iamreal-protocol/record.ts";
-import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, applyList, newCard } from "iamreal-protocol/roster-rules.ts";
+import { type ProofLogRecord, readRecordLine } from "iamreal-protocol/record.ts";
+import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, applyList, newCard } from "iamreal-protocol/record-rules.ts";
 import { SHORT_ID_LENGTH, shortId } from "iamreal-protocol/scoped-id.ts";
 import type { AccountCard, Counts, HistoryRow, LatestPlace, LatestSlot, PageCard } from "./page-data.ts";
-import type { RosterKind } from "./settings.ts";
+import type { ProofLogKind } from "./settings.ts";
 
 /** The tables and their indexes. Every statement can run again on an object that has them. */
 export const VIEW_TABLES: readonly string[] = [
@@ -224,45 +224,45 @@ export function clearViews(sql: SqlStorage): void {
   sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
 }
 
-/** A line of the roster file, the LF included, with the `seq` its record must have. */
+/** A line of the log file, the LF included, with the `seq` its record must have. */
 export interface NumberedLine {
   readonly seq: number;
   readonly line: string;
 }
 
-/** The roster rules' state of every card met so far while the views are written again, by scope string and scoped ID. */
+/** The record rules' state of every card met so far while the views are written again, by scope string and scoped ID. */
 export type CardsSoFar = Map<string, CardState>;
 
 /**
- * Writes what a run of the roster's lines changes in the views: `lines` are
- * lines of the roster file with the `seq` each must have, in order, the
+ * Writes what a run of the proof log's lines changes in the views: `lines` are
+ * lines of the log file with the `seq` each must have, in order, the
  * first being the record after the last one the views reflect. `cards` is
  * the state the records before them left, and is brought up to the last of
- * them: empty for the roster's first line, then the same map for each run
+ * them: empty for the proof log's first line, then the same map for each run
  * that follows. The caller runs it in a transaction.
  *
- * Every line is one the back end wrote, so it passed the roster rules'
+ * Every line is one the back end wrote, so it passed the record rules'
  * checks 1 to 4 when it was written; what it did on each platform is
  * computed again by the same rules (protocol/, `applyList`: checks 5 and 6
  * and the effects), from the states the records before it leave. A line
  * that is not well formed, or a record the rules do not take, throws: the
  * transaction then leaves the views as they were before this run.
  */
-export function writeViewsOf(sql: SqlStorage, kind: RosterKind, platforms: readonly PlatformRow[], cards: CardsSoFar, lines: Iterable<NumberedLine>): void {
+export function writeViewsOf(sql: SqlStorage, kind: ProofLogKind, platforms: readonly PlatformRow[], cards: CardsSoFar, lines: Iterable<NumberedLine>): void {
   for (const row of lines) {
-    const record: RosterRecord | null = readRecordLine(kind, row.line);
+    const record: ProofLogRecord | null = readRecordLine(kind, row.line);
     const date = record === null ? null : parseChallenge(record.challenge);
     if (record === null || date === null || record.seq !== row.seq) throw new Error("views: a stored record is not a well-formed line");
     const key = `${record.scopeString}\n${record.scopedId}`;
     const before = cards.get(key) ?? newCard(platforms);
     const outcome = applyList(platforms, before, record.accounts, date);
-    if (!outcome.result.valid) throw new Error("views: a stored record is not one the roster rules take");
+    if (!outcome.result.valid) throw new Error("views: a stored record is not one the record rules take");
     cards.set(key, outcome.card);
     writeView(sql, viewOf(record, date, outcome.result.kinds, before, outcome.card));
   }
 }
 
-/** The rows of the records table (roster.ts), in the order of `seq`, as `writeViewsOf` takes them. */
+/** The rows of the records table (proof-log.ts), in the order of `seq`, as `writeViewsOf` takes them. */
 export function storedLines(sql: SqlStorage): Iterable<NumberedLine> {
   return sql.exec<{ seq: number; line: string }>("SELECT seq, line FROM records ORDER BY seq");
 }

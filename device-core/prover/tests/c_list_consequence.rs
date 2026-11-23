@@ -1,13 +1,13 @@
 //! `idc_list_consequence`, called the way an app calls it: every case of
 //! spec/vectors/list-consequence.json, and every record of
-//! spec/vectors/roster-rules.json that reaches checks 5 and 6; then what
+//! spec/vectors/record-rules.json that reaches checks 5 and 6; then what
 //! only the C function has (the shape of its input, the clock, pointers).
 
 mod common;
 
 use common::{text, vectors};
 use iamreal_device_checks::date::Date;
-use iamreal_device_checks::roster_rules::{
+use iamreal_device_checks::record_rules::{
     Account, Card, MemoryRecord, MemoryRules, Platform, RecordResult,
 };
 use iamreal_device_checks::username_format::UsernameFormat;
@@ -78,14 +78,14 @@ fn consequence(
     )
 }
 
-/// The `platforms` of `config` for one roster: the rows of spec/vectors/scope.json it accepts.
-fn config_platforms(roster: &str) -> Value {
+/// The `platforms` of `config` for one proof log: the rows of spec/vectors/scope.json it accepts.
+fn config_platforms(proof_log: &str) -> Value {
     let v = vectors("scope.json");
     let mut rows: Vec<Value> = v["platforms"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|p| text(p, "roster") == roster && p["accepted"].as_bool().unwrap())
+        .filter(|p| text(p, "proof_log") == proof_log && p["accepted"].as_bool().unwrap())
         .map(|p| json!({"platform": p["platform"], "display_name": p["display_name"], "username_format": p["username_format"]}))
         .collect();
     rows.sort_by(|a, b| text(a, "platform").cmp(text(b, "platform")));
@@ -124,11 +124,11 @@ fn card_state(card: &Card) -> Value {
 
 #[test]
 fn every_case_of_the_vectors_that_reaches_the_event_rules() {
-    let v = vectors("roster-rules.json");
+    let v = vectors("record-rules.json");
     let mut seen = std::collections::BTreeSet::new();
     for c in v["cases"].as_array().unwrap() {
         let name = text(c, "name");
-        let platforms = config_platforms(text(c, "roster"));
+        let platforms = config_platforms(text(c, "proof_log"));
         let mut rules = MemoryRules::new(table(&platforms));
         for (e, want) in c["events"]
             .as_array()
