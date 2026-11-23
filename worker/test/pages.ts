@@ -112,7 +112,7 @@ const LINK_HREFS: Readonly<Record<string, string>> = {
   常見問題: "/faq",
   GitHub: "https://github.com/iamreal-tw/iamreal",
   我要換島民證明: "/proof",
-  過卡需要什麼: "/proof/help.html?topic=prepare",
+  過卡需要什麼: "/prepare",
   意見回饋: "https://github.com/iamreal-tw/iamreal/discussions",
 };
 

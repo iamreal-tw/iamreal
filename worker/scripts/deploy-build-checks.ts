@@ -132,7 +132,11 @@ export function engineFiles(): Record<string, string> {
  *     site /hang opens (hang.md), and the one origin the pages' policy
  *     allows a frame from (src/headers.ts);
  *   - the page of a card on this site, as 複製連結 of /hang/<short ID>
- *     copies it (hang.md, part 2), in the site's own domain.
+ *     copies it (hang.md, part 2), in the site's own domain;
+ *   - MOICA's site, which /prepare links to: its download page of the
+ *     component and its home page (design/copy/prepare.md, sections 3 and
+ *     4). Links only: the CRLs, the one thing fetched from MOICA, are on
+ *     plain HTTP and in crl/README.md.
  *
  * The data domain, which the card proof page's policy lets it fetch from,
  * is not among them: that policy is sent by Static Assets (site/_headers),
@@ -149,6 +153,8 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://www.threads.com/@${account}/embed/",
   "https://www.threads.com;",
   "https://${site.host}/p/${short}",
+  "https://moica.nat.gov.tw/",
+  "https://moica.nat.gov.tw/rac_plugin.html",
 ];
 
 export function checkAddresses(b: BuildContents): void {

@@ -214,7 +214,7 @@
 ```
 
 - 「怎麼驗證島民證明」「證明紀錄」「常見問題」「GitHub」連到的地方和導覽列相同
-- 「過卡需要什麼」連到過卡的說明頁（`/proof/help.html?topic=prepare`，`card-proof.md` 第 2 步也有同一個連結），那一頁的內容現在是待補
+- 「過卡需要什麼」連到「過卡需要什麼」那一頁（`/prepare`，文字在 `prepare.md`；`card-proof.md` 第 2 步也有同一個連結）
 - 「意見回饋」連到公開的程式庫的 GitHub Discussions（https://github.com/iamreal-tw/iamreal/discussions）
 - 桌機排成一行；手機上「島民證明　iamreal.tw」一行，連結排成兩欄
 
