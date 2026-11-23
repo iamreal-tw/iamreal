@@ -83,7 +83,11 @@ test("a build of another target is turned away: the tests', the production log's
     ["two marks", { ...good, code: `${good.code}'{"clearedOn":"${CLEARED_ON}","scope":"iamreal:public:0_______________"}'` }, /says the build signs/],
     ["the public site's domain in the links", withCode('"test.iamreal.tw"', '"iamreal.tw"'), /test\.iamreal\.tw/],
     ["both sites' domains", { ...good, code: `${good.code}const other="iamreal.tw"` }, /links with iamreal\.tw/],
+    // The header's site name is let through once; a link with the public domain beside it is still caught.
+    ["the site's name, and the public domain in a link", { ...good, code: `${good.code}const copy={site_name:"iamreal.tw"};const other="iamreal.tw"` }, /links with iamreal\.tw/],
   ];
+  // The site's name in the header alone: iamreal.tw on every site (design/copy/test-site.md).
+  checkProofPage({ ...good, code: `${good.code}const copy={common:{site_name:\`iamreal.tw\`}}` }, "test", CLEARED_ON);
   for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);
   // The date the build must carry is the one it is checked against.
   assert.throws(() => checkProofPage(good, "test", "2026-11-20"), /2026-11-20/);

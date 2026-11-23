@@ -600,7 +600,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
    - 沒有假卡片、測試的發證金鑰、假元件的痕跡（和 `web/test/build.test.ts` 同一份清單）
    - 寫到這台電腦或這個專案的網址只有元件的和 `https://test-data.iamreal.tw`：正式的建置（寫的是 `data.iamreal.tw`）、本機真卡片的建置（沒有資料網域）、測試的建置（假元件在別的埠）都不過
    - 有測試的證明紀錄的標示。標示在建置裡是一段 JSON（`web/src/ui/test-proof-log.ts`），恰好一段，裡面的日期就是 `TEST_PROOF_LOG_CLEARED_ON`，場合字串是測試的證明紀錄的 `iamreal-test:public:0__________`：那是建置時從它用的 target 算出來寫進去的。把 `target-test-site.ts` 的證明紀錄改成正式的再建置，建置就停；連建置的那一道也拿掉，這裡擋下（兩種都實際改過、跑過）
-   - 完成畫面寫連結用的網域是 `test.iamreal.tw`，沒有 `iamreal.tw`
+   - 完成畫面寫連結用的網域是 `test.iamreal.tw`，沒有 `iamreal.tw`（頁首網站的名字 `common.site_name` 在每個網站都是 `iamreal.tw`，只容許那一個鍵）
    - 沒有建置（`site/proof/` 是空的或不存在）不過：部署出去的 `/proof` 會是 `404`
 
    這些檢查找的是「放錯了哪一種建置」的幾種已知情況，不是頁面的程式做了什麼；兩種證明紀錄的場合字串都在 `protocol/` 的表裡、每一種建置都有，光找字串分不出簽的是哪一個，所以看的是標示裡那段 JSON 寫的場合字串；它是建置時寫的，不是從打包好的過卡流程讀出來的（`web/test/e2e/ui.ts` 在瀏覽器裡另外看頁面自己說的場合字串）。檔案沒有逐檔的清單和雜湊：`assets/` 多一支或少一支程式、某一支被改過，這裡看不出來。兩個入口每次都清空重建，所以那要建置本身出錯才會發生，結果是測試網站壞掉。電路檔和通用參數的內容這裡不比：頁面自己在用之前核對它們的 SHA-256（`web/README.md`「從伺服器拿到的值」）。正式的證明紀錄的環境這裡一律不過：它要另一種建置和自己的檢查，等有正式環境時再加。
