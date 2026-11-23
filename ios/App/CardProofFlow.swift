@@ -52,8 +52,8 @@ import Foundation
 @MainActor
 final class CardProofFlow {
     struct Dependencies {
-        /// Which roster's scope string the card signs: fixed by the build.
-        var roster: DeviceCore.Roster
+        /// Which proof log's scope string the card signs: fixed by the build.
+        var proofLog: DeviceCore.ProofLog
         var backend: Backend
         var card: Card
         /// The device's clock.
@@ -84,7 +84,7 @@ final class CardProofFlow {
         case core(Int32)
         /// The account typed for `platform` is not in its format.
         case username(platform: String)
-        /// The list is not possible by the roster rules: `empty`,
+        /// The list is not possible by the record rules: `empty`,
         /// `daily_limit`, or `switch_limit` on `platform`.
         case blocked(reason: String, platform: String?)
         /// The challenge is not dated today in Taiwan by the device's
@@ -168,7 +168,7 @@ final class CardProofFlow {
     }
 
     /// The server's answer to the submission, a 201, as the core read it
-    /// (spec/records-response.md). The record is in the roster whatever
+    /// (spec/records-response.md). The record is in the proof log whatever
     /// the answer holds: what cannot be read is nil, never a failure.
     struct Answer: Equatable {
         /// The record's `seq` and hash; both nil when nothing of the
@@ -189,7 +189,7 @@ final class CardProofFlow {
         /// rows the confirmation screen showed as the core takes them.
         /// The app cannot check the answer; the core only compares.
         static func read(_ response: Data, rows: Data) -> Answer {
-            // The record is in the roster: the core failing to read its answer does not undo it.
+            // The record is in the proof log: the core failing to read its answer does not undo it.
             guard let json = try? DeviceCore.recordsResponse(response, rows: rows),
                   let read = try? JSONSerialization.jsonObject(with: json) as? [String: Any]
             else { return nothing }
@@ -408,7 +408,7 @@ final class CardProofFlow {
         guard let session else { throw fail(Stop.state) }
         let scope: Data
         do {
-            scope = try DeviceCore.scopeString(deps.roster)
+            scope = try DeviceCore.scopeString(deps.proofLog)
         } catch {
             throw fail(error)
         }
@@ -603,7 +603,7 @@ final class CardProofFlow {
             }
             try sameAsShown()
             guard let chosen else { throw Stop.state }
-            code = try DeviceCore.declarationCode(deps.roster, accounts: chosen.accounts, challenge: Data(challenge.utf8))
+            code = try DeviceCore.declarationCode(deps.proofLog, accounts: chosen.accounts, challenge: Data(challenge.utf8))
             self.challenge = challenge
             phase = .readyToSign
         } catch {

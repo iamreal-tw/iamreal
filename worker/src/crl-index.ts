@@ -1,5 +1,5 @@
 // The index of the CRL archive (spec/revocation-tree.md, "Archive index"):
-// one line per file, in one spelling and one order, and what the roster's
+// one line per file, in one spelling and one order, and what the proof log's
 // object is told of it. The Go crl/ (index.go) writes the same bytes from
 // the same files.
 import { hexOf } from "iamreal-protocol/bytes.ts";
@@ -85,7 +85,7 @@ export function readIndex(text: string): IndexLine[] {
   return [...lines.values()];
 }
 
-/** A usable CRL as the roster's object keeps it. */
+/** A usable CRL as the proof log's object keeps it. */
 export interface KnownCrl {
   /** The root of its tree: 64 lowercase hex digits, as a record's `smt_root`. */
   readonly root: string;

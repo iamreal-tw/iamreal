@@ -45,10 +45,10 @@ extern "C" {
 /* The session has not passed the checks this function needs first. */
 #define IDC_ERR_REFUSED 4
 
-/* Which roster. An app is built for one and passes that one everywhere
+/* Which proof log. An app is built for one and passes that one everywhere
  * (ADR-0036). */
-#define IDC_ROSTER_PRODUCTION 0
-#define IDC_ROSTER_TEST 1
+#define IDC_PROOF_LOG_PRODUCTION 0
+#define IDC_PROOF_LOG_TEST 1
 
 /* Bytes the core hands to its caller. */
 typedef struct idc_buf {
@@ -67,12 +67,12 @@ void idc_buf_free(idc_buf *buf);
  * the Poseidon2 of spec/scoped-id.md: IDC_OK or IDC_ERR_INTERNAL. */
 int32_t idc_self_check(void);
 
-/* The scope string a card signs for `roster` (spec/scope.md): 31 bytes in
+/* The scope string a card signs for `proof_log` (spec/scope.md): 31 bytes in
  * *out. */
-int32_t idc_scope_string(uint32_t roster, idc_buf *out);
+int32_t idc_scope_string(uint32_t proof_log, idc_buf *out);
 
 /* The declaration code (spec/declaration-code.md) of a list of accounts and
- * a challenge, in the scope of `roster`: 31 bytes in *out, the second
+ * a challenge, in the scope of `proof_log`: 31 bytes in *out, the second
  * message the card signs.
  *
  * accounts_json: a JSON array of {"platform":"...","username":"..."}, in
@@ -81,7 +81,7 @@ int32_t idc_scope_string(uint32_t roster, idc_buf *out);
  * challenge: the challenge as the server issued it.
  * IDC_ERR_INPUT when the list is not that, or the challenge is not in its
  * one spelling. */
-int32_t idc_declaration_code(uint32_t roster,
+int32_t idc_declaration_code(uint32_t proof_log,
                              const uint8_t *accounts_json, size_t accounts_json_len,
                              const uint8_t *challenge, size_t challenge_len,
                              idc_buf *out);
@@ -184,7 +184,7 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  * account, or only one of the two has the platform), in ascending order;
  * empty when kinds is null.
  *
- * A 201 is a record in the roster whatever its body is: no body is an
+ * A 201 is a record in the proof log whatever its body is: no body is an
  * error. IDC_ERR_INPUT only when the rows are not a JSON array of rows in
  * ascending order of platform, each platform once: a mistake of the app,
  * but one the core sees only in the bytes. */
@@ -237,9 +237,9 @@ int32_t idc_records_response(const uint8_t *response, size_t response_len,
  */
 typedef uint64_t idc_session;
 
-/* Opens a session on `roster`: its number in *out, never 0. Close it with
+/* Opens a session on `proof_log`: its number in *out, never 0. Close it with
  * idc_session_close, whatever happened in between. */
-int32_t idc_session_open(uint32_t roster, idc_session *out);
+int32_t idc_session_open(uint32_t proof_log, idc_session *out);
 
 /* Closes a session. The certificate, the name on it and everything the
  * core computed from them are overwritten with zeros and released; if
@@ -348,7 +348,7 @@ int32_t idc_session_check_challenge(idc_session session, int64_t now,
 
 /* The body of POST /api/v1/card-state, {"scope_string":"...","scoped_id":"..."},
  * in *out: the scoped ID computed from the card's signature over the scope
- * string of the session's roster (256 bytes).
+ * string of the session's proof log (256 bytes).
  * IDC_ERR_REFUSED unless steps 1 to 4 all passed and the date of `now` is
  * the date they hold for (idc_session_check_date). IDC_ERR_INPUT when the
  * signature is not the one of the session's certificate over that scope

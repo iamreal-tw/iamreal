@@ -1,4 +1,4 @@
-package roster
+package prooflog
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 )
 
 // RulesVersion is the version number of the rules this package implements
-// (spec/roster-rules.md, "The version number"). The TypeScript
+// (spec/record-rules.md, "The version number"). The TypeScript
 // implementation has the same constant (protocol/'s RULES_VERSION). When it
 // goes up is written there: with every change to the rules, and when an
 // implementation is corrected for a result or a state the rules do not give
@@ -19,7 +19,7 @@ import (
 // re-verification from the first record (ADR-0025).
 const RulesVersion = 2
 
-// Reason codes of an invalid record (spec/roster-rules.md, "Per record").
+// Reason codes of an invalid record (spec/record-rules.md, "Per record").
 const (
 	CodeProof           = "proof"
 	CodeChallengeReused = "challenge_reused"
@@ -30,7 +30,7 @@ const (
 	CodeDailyLimit      = "daily_limit"
 )
 
-// Kinds of a valid record on one platform (spec/roster-rules.md, "Event
+// Kinds of a valid record on one platform (spec/record-rules.md, "Event
 // rules").
 const (
 	KindFirst      = "first"
@@ -145,7 +145,7 @@ type ScopeState struct {
 	Accounts    []Account
 }
 
-// State is the output of the rules (spec/roster-rules.md, "Output"). Every
+// State is the output of the rules (spec/record-rules.md, "Output"). Every
 // list is sorted by the byte values of its key; Records is in seq order.
 type State struct {
 	Records []RecordResult
@@ -166,7 +166,7 @@ type slotState struct {
 }
 
 // cardState holds exactly the items of the State table of
-// spec/roster-rules.md: the card's own two, and one slot per platform.
+// spec/record-rules.md: the card's own two, and one slot per platform.
 type cardState struct {
 	slots         map[string]*slotState // one per platform of the table
 	lastCardProof *verifier.Date
@@ -205,14 +205,14 @@ func (cs *cardState) onDate(d verifier.Date) int {
 }
 
 // Rules applies the rules to one record at a time, in seq order, and keeps
-// the state they compute. Apply (a whole roster file) is a loop over it, and
+// the state they compute. Apply (a whole log file) is a loop over it, and
 // the server uses it for each record it appends, so both run the same code.
 //
 // Rules does not check the file as a whole (well-formed lines, seq);
 // ReadFile and ReadLine do.
 type Rules struct {
-	roster      verifier.Roster
-	platforms   []verifier.Platform // the roster's table, in ascending order of ID
+	proofLog    verifier.ProofLog
+	platforms   []verifier.Platform // the proof log's table, in ascending order of ID
 	proofs      ProofVerifier
 	crls        CRLArchive
 	cards       map[cardKey]*cardState
@@ -222,11 +222,11 @@ type Rules struct {
 	results     []RecordResult
 }
 
-// NewRules returns the rules before any record, for a roster whose platform
+// NewRules returns the rules before any record, for a proof log whose platform
 // table is that of r.
-func NewRules(r verifier.Roster, proofs ProofVerifier, crls CRLArchive) *Rules {
+func NewRules(r verifier.ProofLog, proofs ProofVerifier, crls CRLArchive) *Rules {
 	return &Rules{
-		roster: r, platforms: verifier.Platforms(r), proofs: proofs, crls: crls,
+		proofLog: r, platforms: verifier.Platforms(r), proofs: proofs, crls: crls,
 		cards: map[cardKey]*cardState{}, accounts: map[accountKey]int{}, used: map[string]bool{},
 	}
 }
@@ -312,7 +312,7 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 	// The rules only ever see lists of the table, at most one account per
 	// platform: anything else is a malformed line (spec/record.md), which
 	// ReadLine rejects before the rules run.
-	if err := verifier.CheckAccounts(x.roster, r.Accounts); err != nil {
+	if err := verifier.CheckAccounts(x.proofLog, r.Accounts); err != nil {
 		return res, nil, fmt.Errorf("seq %d: %w", r.Seq, err)
 	}
 	invalid := func(code, detail string) (RecordResult, *cardState, error) {
@@ -382,7 +382,7 @@ func (x *Rules) check(r *verifier.Record) (RecordResult, *cardState, error) {
 }
 
 // applyEntry applies a record's entry for one platform to the slot of its
-// card on that platform (spec/roster-rules.md, "Event rules"): listed says
+// card on that platform (spec/record-rules.md, "Event rules"): listed says
 // whether the list has an account u there. The first row of the table that
 // applies gives the kind: first, refresh, correction, switch, or blocked. It
 // returns the kind and its account, no kind, or blocked. When blocked, the
@@ -422,7 +422,7 @@ func (x *Rules) State() *State {
 	return &State{Records: append([]RecordResult(nil), x.results...), Scopes: x.output()}
 }
 
-// Slot is the state of a card's slot on one platform (spec/roster-rules.md,
+// Slot is the state of a card's slot on one platform (spec/record-rules.md,
 // "State"). A slot never used has every pointer nil and SwitchCount 0.
 type Slot struct {
 	Current      *string
@@ -435,7 +435,7 @@ type Slot struct {
 	CorrectionDate *verifier.Date
 }
 
-// CardState is the state of one card (spec/roster-rules.md, "State"): the
+// CardState is the state of one card (spec/record-rules.md, "State"): the
 // card's own items and one slot per platform of the table. A card with no
 // valid record has LastCardProof nil, ProofsOnLastDate 0 and every slot
 // never used.
@@ -444,7 +444,7 @@ type CardState struct {
 	// ProofsOnLastDate is the number of valid records dated LastCardProof
 	// (0 if there is none).
 	ProofsOnLastDate int
-	// Slots has one entry for every platform of the roster's table, keyed
+	// Slots has one entry for every platform of the proof log's table, keyed
 	// by platform ID.
 	Slots map[string]Slot
 }
@@ -488,7 +488,7 @@ func cardStateOf(cs *cardState) CardState {
 
 // CardRows returns every card with a valid record among the records
 // applied, with its state and the seq of its last valid record, in the
-// order of a card state file (spec/roster-rules.md, "The card state file"):
+// order of a card state file (spec/record-rules.md, "The card state file"):
 // the rows a re-verifier compares with the file. The values are copies.
 func (x *Rules) CardRows() []CardRow {
 	var rows []CardRow
@@ -510,9 +510,9 @@ func (x *Rules) AccountCards(scopeString, platform, username string) int {
 	return x.accounts[accountKey{scopeString, platform, username}]
 }
 
-// Apply applies the rules to the records of a valid roster file of roster
+// Apply applies the rules to the records of a valid log file of proof log
 // r, in order: Rules.Apply on each record.
-func Apply(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*State, error) {
+func Apply(records []*verifier.Record, r verifier.ProofLog, proofs ProofVerifier, crls CRLArchive) (*State, error) {
 	x, err := applyAll(records, r, proofs, crls)
 	if err != nil {
 		return nil, err
@@ -521,7 +521,7 @@ func Apply(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, 
 }
 
 // applyAll returns the rules after Rules.Apply on each record, in order.
-func applyAll(records []*verifier.Record, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Rules, error) {
+func applyAll(records []*verifier.Record, r verifier.ProofLog, proofs ProofVerifier, crls CRLArchive) (*Rules, error) {
 	x := NewRules(r, proofs, crls)
 	for _, rec := range records {
 		if _, err := x.Apply(rec); err != nil {
@@ -593,10 +593,10 @@ func (x *Rules) output() []ScopeState {
 	return out
 }
 
-// Report is the result of re-verifying a roster file.
+// Report is the result of re-verifying a log file.
 type Report struct {
 	Broken      *Broken // nil if the file is valid
-	Fingerprint string  // the roster fingerprint of a valid file
+	Fingerprint string  // the proof log fingerprint of a valid file
 	Records     int     // the number of records of a valid file
 	State       *State  // the rules applied to a valid file
 	// Cards is every card with a valid record in a valid file, as
@@ -604,9 +604,9 @@ type Report struct {
 	Cards []CardRow
 }
 
-// Check reads a roster file of roster r and, if it is valid, applies the
+// Check reads a log file of proof log r and, if it is valid, applies the
 // rules to it.
-func Check(data []byte, r verifier.Roster, proofs ProofVerifier, crls CRLArchive) (*Report, error) {
+func Check(data []byte, r verifier.ProofLog, proofs ProofVerifier, crls CRLArchive) (*Report, error) {
 	records, fingerprint, broken := ReadFile(data, r)
 	if broken != nil {
 		return &Report{Broken: broken}, nil

@@ -1,7 +1,7 @@
-package roster_test
+package prooflog_test
 
 // Tests against spec/vectors/card-state-file.json: reading and writing the
-// card state file ("files"), the rows of a case of roster-rules.json, and
+// card state file ("files"), the rows of a case of record-rules.json, and
 // the comparison ("comparisons").
 
 import (
@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -27,14 +27,14 @@ type rowOut struct {
 
 type cardStateFileCase struct {
 	Name            string   `json:"name"`
-	Roster          string   `json:"roster"`
+	ProofLog        string   `json:"proof_log"`
 	Content         string   `json:"content"`
 	ContentHex      string   `json:"content_hex"`
 	Valid           bool     `json:"valid"`
 	Cards           []rowOut `json:"cards"`
 	Line            int      `json:"line"`
 	Code            string   `json:"code"`
-	RosterRulesCase string   `json:"roster_rules_case"`
+	RecordRulesCase string   `json:"record_rules_case"`
 	Count           int      `json:"count"`
 	RulesLeave      *bool    `json:"rules_leave"`
 }
@@ -47,7 +47,7 @@ type outcomeOut struct {
 
 type comparisonCase struct {
 	Name     string       `json:"name"`
-	Roster   string       `json:"roster"`
+	ProofLog string       `json:"proof_log"`
 	Count    uint64       `json:"count"`
 	Verified uint64       `json:"verified"`
 	Content  string       `json:"content"`
@@ -67,10 +67,10 @@ func loadCardStateVectors(t *testing.T) ([]cardStateFileCase, []comparisonCase) 
 	if len(v.Files) == 0 || len(v.Comparisons) == 0 {
 		t.Fatal("no cases")
 	}
-	// The files of roster-rules.json's cases are computed by one version of
-	// the rules, as roster-rules.json's are (version_test.go).
-	if v.RulesVersion == nil || *v.RulesVersion != roster.RulesVersion {
-		t.Fatalf("RulesVersion is %d, spec/vectors/card-state-file.json has %v", roster.RulesVersion, v.RulesVersion)
+	// The files of record-rules.json's cases are computed by one version of
+	// the rules, as record-rules.json's are (version_test.go).
+	if v.RulesVersion == nil || *v.RulesVersion != prooflog.RulesVersion {
+		t.Fatalf("RulesVersion is %d, spec/vectors/card-state-file.json has %v", prooflog.RulesVersion, v.RulesVersion)
 	}
 	return v.Files, v.Comparisons
 }
@@ -94,7 +94,7 @@ func (f cardStateFileCase) bytes(t *testing.T) []byte {
 
 // rowsOut writes rows in the shape of the vectors, without the slots in the
 // initial state.
-func rowsOut(rows []roster.CardRow) []rowOut {
+func rowsOut(rows []prooflog.CardRow) []rowOut {
 	out := []rowOut{}
 	for _, row := range rows {
 		ro := rowOut{ScopeString: row.ScopeString, ScopedID: row.ScopedID, LastSeq: row.LastSeq, ProofsOnLastDate: row.State.ProofsOnLastDate, Slots: map[string]slotOut{}}
@@ -120,7 +120,7 @@ func TestVectorsCardStateFileRead(t *testing.T) {
 	files, _ := loadCardStateVectors(t)
 	for _, f := range files {
 		t.Run(f.Name, func(t *testing.T) {
-			rows, b := roster.ReadCardStateFile(f.bytes(t), rosterOf(t, f.Roster))
+			rows, b := prooflog.ReadCardStateFile(f.bytes(t), proofLogOf(t, f.ProofLog))
 			if !f.Valid {
 				if b == nil {
 					t.Fatalf("valid, want broken at line %d with %s", f.Line, f.Code)
@@ -139,7 +139,7 @@ func TestVectorsCardStateFileRead(t *testing.T) {
 			// Every row has a slot on every platform of the table, as a
 			// CardState does.
 			for _, row := range rows {
-				for _, p := range verifier.Platforms(rosterOf(t, f.Roster)) {
+				for _, p := range verifier.Platforms(proofLogOf(t, f.ProofLog)) {
 					if _, ok := row.State.Slots[p.ID]; !ok {
 						t.Errorf("%s: no slot on %s", row.ScopedID, p.ID)
 					}
@@ -151,18 +151,18 @@ func TestVectorsCardStateFileRead(t *testing.T) {
 
 // rowsIn turns the vectors' `cards` into rows, with a slot in the initial
 // state on every platform of the table that the vector does not list.
-func rowsIn(t *testing.T, cards []rowOut, r verifier.Roster) []roster.CardRow {
+func rowsIn(t *testing.T, cards []rowOut, r verifier.ProofLog) []prooflog.CardRow {
 	t.Helper()
-	var rows []roster.CardRow
+	var rows []prooflog.CardRow
 	for _, c := range cards {
 		d := date(t, c.LastCardProof)
-		row := roster.CardRow{ScopeString: c.ScopeString, ScopedID: c.ScopedID, LastSeq: c.LastSeq,
-			State: roster.CardState{LastCardProof: &d, ProofsOnLastDate: c.ProofsOnLastDate, Slots: map[string]roster.Slot{}}}
+		row := prooflog.CardRow{ScopeString: c.ScopeString, ScopedID: c.ScopedID, LastSeq: c.LastSeq,
+			State: prooflog.CardState{LastCardProof: &d, ProofsOnLastDate: c.ProofsOnLastDate, Slots: map[string]prooflog.Slot{}}}
 		for _, p := range verifier.Platforms(r) {
-			row.State.Slots[p.ID] = roster.Slot{}
+			row.State.Slots[p.ID] = prooflog.Slot{}
 		}
 		for p, s := range c.Slots {
-			slot := roster.Slot{Current: s.Current, LastDeclared: s.LastDeclared, SwitchCount: s.SwitchCount}
+			slot := prooflog.Slot{Current: s.Current, LastDeclared: s.LastDeclared, SwitchCount: s.SwitchCount}
 			if s.CorrectionDate != nil {
 				cd := date(t, *s.CorrectionDate)
 				slot.CorrectionDate = &cd
@@ -181,48 +181,48 @@ func TestVectorsCardStateFileWrite(t *testing.T) {
 			continue
 		}
 		t.Run(f.Name, func(t *testing.T) {
-			rows := rowsIn(t, f.Cards, rosterOf(t, f.Roster))
+			rows := rowsIn(t, f.Cards, proofLogOf(t, f.ProofLog))
 			// In any order: the file sorts them.
 			for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
 				rows[i], rows[j] = rows[j], rows[i]
 			}
-			if got := string(roster.CardStateFile(rows)); got != f.Content {
+			if got := string(prooflog.CardStateFile(rows)); got != f.Content {
 				t.Errorf("file\n got %q\nwant %q", got, f.Content)
 			}
 		})
 	}
 }
 
-// The files that are the final state of a case of roster-rules.json: the
-// rows the rules give, one record at a time and for a whole roster file,
+// The files that are the final state of a case of record-rules.json: the
+// rows the rules give, one record at a time and for a whole log file,
 // are the file's cards, and writing them gives the file.
-func TestVectorsCardStateFileOfRosterRules(t *testing.T) {
+func TestVectorsCardStateFileOfRecordRules(t *testing.T) {
 	files, _ := loadCardStateVectors(t)
 	var v struct {
 		Cases []rulesCase `json:"cases"`
 	}
-	load(t, "roster-rules.json", &v)
+	load(t, "record-rules.json", &v)
 	cases := map[string]rulesCase{}
 	for _, c := range v.Cases {
 		cases[c.Name] = c
 	}
 	n := 0
 	for _, f := range files {
-		if f.RosterRulesCase == "" {
+		if f.RecordRulesCase == "" {
 			continue
 		}
 		n++
 		t.Run(f.Name, func(t *testing.T) {
-			c, ok := cases[f.RosterRulesCase]
+			c, ok := cases[f.RecordRulesCase]
 			if !ok {
-				t.Fatalf("no case %q in roster-rules.json", f.RosterRulesCase)
+				t.Fatalf("no case %q in record-rules.json", f.RecordRulesCase)
 			}
-			if c.Roster != f.Roster || len(c.Events) != f.Count {
-				t.Fatalf("case of the %s roster with %d events, the file says %s and %d", c.Roster, len(c.Events), f.Roster, f.Count)
+			if c.ProofLog != f.ProofLog || len(c.Events) != f.Count {
+				t.Fatalf("case of the %s log with %d events, the file says %s and %d", c.ProofLog, len(c.Events), f.ProofLog, f.Count)
 			}
-			r := rosterOf(t, c.Roster)
+			r := proofLogOf(t, c.ProofLog)
 			records, proofs, archive := caseRecords(t, c)
-			x := roster.NewRules(r, proofs, archive)
+			x := prooflog.NewRules(r, proofs, archive)
 			var file []byte
 			for _, rec := range records {
 				if _, err := x.Apply(rec); err != nil {
@@ -233,10 +233,10 @@ func TestVectorsCardStateFileOfRosterRules(t *testing.T) {
 			if got := rowsOut(x.CardRows()); !reflect.DeepEqual(got, f.Cards) {
 				t.Errorf("Rules.CardRows\n got %s\nwant %s", jsonText(got), jsonText(f.Cards))
 			}
-			if got := string(roster.CardStateFile(x.CardRows())); got != f.Content {
+			if got := string(prooflog.CardStateFile(x.CardRows())); got != f.Content {
 				t.Errorf("file\n got %q\nwant %q", got, f.Content)
 			}
-			rep, err := roster.Check(file, r, proofs, archive)
+			rep, err := prooflog.Check(file, r, proofs, archive)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -246,7 +246,7 @@ func TestVectorsCardStateFileOfRosterRules(t *testing.T) {
 		})
 	}
 	if n == 0 {
-		t.Fatal("no file names a case of roster-rules.json")
+		t.Fatal("no file names a case of record-rules.json")
 	}
 }
 
@@ -254,18 +254,18 @@ func TestVectorsCardStateComparisons(t *testing.T) {
 	_, comparisons := loadCardStateVectors(t)
 	for _, c := range comparisons {
 		t.Run(c.Name, func(t *testing.T) {
-			r := rosterOf(t, c.Roster)
-			rows, b := roster.ReadCardStateFile([]byte(c.Content), r)
+			r := proofLogOf(t, c.ProofLog)
+			rows, b := prooflog.ReadCardStateFile([]byte(c.Content), r)
 			if b != nil {
 				t.Fatalf("the file is broken: %v", b)
 			}
-			cmp := roster.CompareCardStates(rows, c.Count, c.Verified, rowsIn(t, c.Computed, r))
+			cmp := prooflog.CompareCardStates(rows, c.Count, c.Verified, rowsIn(t, c.Computed, r))
 			got := []outcomeOut{}
 			for _, o := range cmp.Outcomes {
 				got = append(got, outcomeOut{o.ScopeString, o.ScopedID, o.Outcome})
 				// What differs is said for every different card, and only
 				// for those.
-				if (o.Outcome == roster.OutcomeDifferent) != (len(o.Differences) > 0) {
+				if (o.Outcome == prooflog.OutcomeDifferent) != (len(o.Differences) > 0) {
 					t.Errorf("%s %s: %s with differences %q", o.ScopedID, o.Outcome, o.Outcome, o.Differences)
 				}
 			}

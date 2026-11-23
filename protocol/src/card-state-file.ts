@@ -1,20 +1,20 @@
-// The card state file (spec/roster-rules.md, "The card state file"): the
+// The card state file (spec/record-rules.md, "The card state file"): the
 // state the server keeps of every card that has a valid record, one row a
 // card, published once a day so that a re-verifier can compare it with the
-// states it computes from the roster (ADR-0025). Like a record, a row has
+// states it computes from the proof log (ADR-0025). Like a record, a row has
 // exactly one spelling: it is written from a template, and read by writing
 // it again and comparing bytes.
 //
 // The format checks each value by itself. Whether a row is a state the
-// roster rules can leave (possibleSlot, possibleCard of roster-rules.ts) is
+// record rules can leave (possibleSlot, possibleCard of record-rules.ts) is
 // not checked here, on purpose: the file is there to show a wrong stored
 // state to whoever compares, not to hide it.
 import { byBytes } from "./bytes.ts";
 import { type Day, formatDay, parseDay } from "./date.ts";
 import { platformsOf } from "./platforms.ts";
 import { MAX_SEQ } from "./record.ts";
-import type { CardState, SlotState } from "./roster-rules.ts";
-import { type Roster, lookupScope } from "./scope.ts";
+import type { CardState, SlotState } from "./record-rules.ts";
+import { type ProofLog, lookupScope } from "./scope.ts";
 import { parseScopedId } from "./scoped-id.ts";
 
 /** A row: a card, its state, and the `seq` of its last valid record. */
@@ -53,18 +53,18 @@ function listedSlots(card: CardState): [string, SlotState][] {
 }
 
 /**
- * The first item of `row` that is not in its format for `roster`
- * (spec/roster-rules.md, "The card state file"), by its name in the row, or
+ * The first item of `row` that is not in its format for `proofLog`
+ * (spec/record-rules.md, "The card state file"), by its name in the row, or
  * null if every one is. Only the slots a row lists are looked at.
  */
-function rowProblem(roster: Roster, row: CardRow): string | null {
+function rowProblem(proofLog: ProofLog, row: CardRow): string | null {
   const { card } = row;
-  if (!lookupScope(roster, row.scopeString)) return "scope_string";
+  if (!lookupScope(proofLog, row.scopeString)) return "scope_string";
   if (parseScopedId(row.scopedId) === null) return "scoped_id";
   if (!isCount(row.lastSeq, 1)) return "last_seq";
   if (card.lastCardProof === null || !isDate(card.lastCardProof)) return "last_card_proof";
   if (!isCount(card.proofsOnLastDate, 0)) return "proofs_on_last_date";
-  const table = platformsOf(roster);
+  const table = platformsOf(proofLog);
   for (const [platform, s] of listedSlots(card)) {
     const tableRow = table.find((p) => p.platform === platform);
     if (tableRow === undefined) return "slots";
@@ -91,7 +91,7 @@ function rowLine(row: CardRow): string {
 const byCard = (a: CardRow, b: CardRow): number => byBytes(a.scopeString, b.scopeString) || byBytes(a.scopedId, b.scopedId);
 
 /**
- * The card state file of `cards` for a roster of `roster`: one row a card,
+ * The card state file of `cards` for a proof log of `proofLog`: one row a card,
  * in the order of the file whatever order they are given in. The file is
  * returned as text; every character is ASCII, and the file's bytes are its
  * UTF-8 encoding. No card gives the empty file.
@@ -102,11 +102,11 @@ const byCard = (a: CardRow, b: CardRow): number => byBytes(a.scopeString, b.scop
  * item, never the card or the value) or if a card is given twice. It does
  * not judge whether a state is one the rules can leave.
  */
-export function cardStateFile(roster: Roster, cards: Iterable<CardRow>): string {
+export function cardStateFile(proofLog: ProofLog, cards: Iterable<CardRow>): string {
   const rows = [...cards].sort(byCard);
   const lines: string[] = [];
   rows.forEach((row, i) => {
-    const problem = rowProblem(roster, row);
+    const problem = rowProblem(proofLog, row);
     if (problem !== null) throw new Error(`card state file: ${problem} of a card is not in its format`);
     if (i > 0 && byCard(rows[i - 1]!, row) === 0) throw new Error("card state file: a card is given twice");
     lines.push(rowLine(row));
@@ -115,7 +115,7 @@ export function cardStateFile(roster: Roster, cards: Iterable<CardRow>): string 
 }
 
 /**
- * Writes a card state file of a roster of `roster` one row at a time, for
+ * Writes a card state file of a proof log of `proofLog` one row at a time, for
  * cards that come already in the order of the file: each call takes the
  * next card and returns its row, followed by LF. The rows returned, one
  * after the other, are the bytes `cardStateFile` gives for the same cards
@@ -129,10 +129,10 @@ export function cardStateFile(roster: Roster, cards: Iterable<CardRow>): string 
  * can so stop before its first byte; one that has must not use what it
  * wrote.
  */
-export function cardStateFileWriter(roster: Roster): (row: CardRow) => string {
+export function cardStateFileWriter(proofLog: ProofLog): (row: CardRow) => string {
   let last: CardRow | null = null;
   return (row) => {
-    const problem = rowProblem(roster, row);
+    const problem = rowProblem(proofLog, row);
     if (problem !== null) throw new Error(`card state file: ${problem} of a card is not in its format`);
     if (last !== null && byCard(last, row) >= 0) throw new Error("card state file: a card is not after the card before it");
     last = row;
@@ -144,14 +144,14 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 const stringOrNull = (v: unknown): v is string | null => v === null || typeof v === "string";
 
 /**
- * The row a line of a card state file of `roster` is, or null if the line
+ * The row a line of a card state file of `proofLog` is, or null if the line
  * is not in its one spelling: `line` is the line's text up to and including
  * its LF. The line is parsed, every value checked against its format, and
  * the row written again from the template; if the text differs, it is
  * malformed. That one comparison refuses whatever JSON allows beyond the
  * template, a slot in the initial state and slots in another order.
  */
-function readRow(roster: Roster, line: string): CardRow | null {
+function readRow(proofLog: ProofLog, line: string): CardRow | null {
   let v: unknown;
   try {
     v = JSON.parse(line);
@@ -175,7 +175,7 @@ function readRow(roster: Roster, line: string): CardRow | null {
   const lastCardProof = parseDay(last_card_proof);
   if (lastCardProof === null) return null;
   const row: CardRow = { scopeString: scope_string, scopedId: scoped_id, lastSeq: last_seq, card: { lastCardProof, proofsOnLastDate: proofs_on_last_date, slots: read } };
-  if (rowProblem(roster, row) !== null) return null;
+  if (rowProblem(proofLog, row) !== null) return null;
   return rowLine(row) === line ? row : null;
 }
 
@@ -196,7 +196,7 @@ function asciiText(bytes: Uint8Array): string | null {
 }
 
 /**
- * Reads a card state file of a roster of `roster` (spec/roster-rules.md,
+ * Reads a card state file of a proof log of `proofLog` (spec/record-rules.md,
  * "The card state file"): `file` is the bytes of the whole file, as
  * downloaded and not decoded. Lines are checked one at a time, in order;
  * for each, that it is a row in its one spelling (`line`), then that its
@@ -205,14 +205,14 @@ function asciiText(bytes: Uint8Array): string | null {
  * empty line, a byte order mark and any other byte outside ASCII fail the
  * first check on the line where they occur. The empty file has no row.
  */
-export function readCardStateFile(roster: Roster, file: Uint8Array): CardStateFileRead {
+export function readCardStateFile(proofLog: ProofLog, file: Uint8Array): CardStateFileRead {
   const rows: CardRow[] = [];
   let start = 0;
   while (start < file.length) {
     const line = rows.length + 1;
     const end = file.indexOf(LF, start);
     const text = end < 0 ? null : asciiText(file.subarray(start, end + 1));
-    const row = text === null ? null : readRow(roster, text);
+    const row = text === null ? null : readRow(proofLog, text);
     if (row === null) return { valid: false, line, code: "line" };
     if (rows.length > 0 && byCard(rows[rows.length - 1]!, row) >= 0) return { valid: false, line, code: "order" };
     rows.push(row);

@@ -181,7 +181,7 @@
 | 15 | 同一把驗證金鑰也接受非零知識的證明（換一個驗證設定）。非零知識的證明不隱藏見證；b5 推論發證單位能從它認出是哪張憑證，最後一步沒有實際做出來 | a4、a5；b4、b5 | 驗證的人先檢查證明剛好 14,656 個位元組，只用 `-t noir-recursive` 驗，不換設定重試（`spec/proof-verification.md` 的第 2、4 項檢查）；網頁版寫死零知識的設定（[`web/src/prover/prover.ts`](../web/src/prover/prover.ts)） |
 | 16 | `bb verify` 接受同一份證明的多種檔案寫法（二進位，和多種 JSON 寫法） | b4 | 只有二進位一種寫法，驗證的人自己從紀錄寫出檔案（`spec/proof-verification.md`「Encoding」） |
 | 17 | Barretenberg 的原生驗證器遇到刻意做壞的證明，可能丟出例外或中止，而不是回傳失敗（公告 [GHSA-73xc-j27q-wg75](https://github.com/AztecProtocol/aztec-packages/security/advisories/GHSA-73xc-j27q-wg75)） | b3 | 成功以外的結果一律當成拒絕，在子行程裡跑（`spec/proof-verification.md` 的第 5 項檢查） |
-| 18 | 持卡人能對同一組公開輸入做出任意多份有效的證明；bb.js 收的匿名編號有多種十六進位寫法 | b4；b6 | 不用證明的位元組去重：一個題目只能用一次，紀錄只有一種寫法（ADR-0014、[`spec/record.md`](../spec/record.md)、[`spec/roster-rules.md`](../spec/roster-rules.md)） |
+| 18 | 持卡人能對同一組公開輸入做出任意多份有效的證明；bb.js 收的匿名編號有多種十六進位寫法 | b4；b6 | 不用證明的位元組去重：一個題目只能用一次，紀錄只有一種寫法（ADR-0014、[`spec/record.md`](../spec/record.md)、[`spec/record-rules.md`](../spec/record-rules.md)） |
 | 19 | 樹根要和發證金鑰配對、要夠新：已廢止的憑證配另一把發證金鑰的樹根或舊的樹根，照樣過卡（`bb verify` 層級） | a4；b2、b6 | 每把發證金鑰一棵樹，樹根要對得上那把金鑰簽的清冊，並限制紀錄的日期（ADR-0015、`spec/revocation-tree.md`） |
 | 20 | 公開輸入看得出憑證由哪一把發證金鑰簽；第二代簽發的卡片展期後換成第三代，證明紀錄裡看得出它展期過 | a5 讀過；b5 | 設計本身的性質，寫在 ADR-0004，連同電路不為此改的理由 |
 | 21 | 能讓卡片簽章一次的人算得出這張卡片的匿名編號；任何能要求卡片簽它指定內容的網站也做得到，包括用自然人憑證登入的政府網站。匿名編號只有持卡人算得出來，前提是卡片的金鑰分解不了；網頁版的簽章經過內政部的元件 | 第一輪讀過；b5 | 設計本身的前提，寫在 ADR-0004 |

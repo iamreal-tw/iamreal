@@ -1,4 +1,4 @@
-// One roster is one Durable Object, the roster's only writer (ADR-0023).
+// One proof log is one Durable Object, the proof log's only writer (ADR-0023).
 // It issues challenges, counts the submissions of each, writes the records,
 // answers for the state of a card, and keeps the newest CRLs the CRL mirror
 // tells it of.
@@ -6,17 +6,17 @@
 // What it keeps, in its SQLite:
 //
 //   challenges   the challenges it issued that have not expired
-//   records      the records of the roster files that are not in the data
-//                bucket yet, each as its line of the roster file
-//   full_files   the full roster files that were moved to the data bucket
-//   cards        the roster rules' state of each card (card-table.ts)
-//   cards_copy   a copy of `cards`, only while the roster is being
+//   records      the records of the log files that are not in the data
+//                bucket yet, each as its line of the log file
+//   full_files   the full log files that were moved to the data bucket
+//   cards        the record rules' state of each card (card-table.ts)
+//   cards_copy   a copy of `cards`, only while the proof log is being
 //                published (card-table.ts, `copyCards`)
-//   roster       one row: what is true of the roster as a whole
+//   proof log       one row: what is true of the proof log as a whole
 //   newest_crls  the newest CRLs, as the CRL mirror last told them
-//   published    the lines of the fingerprint file: the days the roster was
+//   published    the lines of the fingerprint file: the days the proof log was
 //                published on
-//   first_day    one row: the date the roster is published after
+//   first_day    one row: the date the proof log is published after
 //   view_*       the views: what the visitors' pages read (views.ts)
 //
 // The views are derived from the records: they are written with each record,
@@ -24,7 +24,7 @@
 // at any time. The rules' state (`cards`) cannot: it is kept apart from
 // them, and nothing that decides about a record reads a view.
 //
-// Whether a record is valid is never decided here: that is the roster rules'
+// Whether a record is valid is never decided here: that is the record rules'
 // (protocol/, applyRecord), called with the state this object keeps. What
 // this file decides is the back end's own: the challenge, which roots it
 // takes today, and its policy on switches (docs/api/card-proof.md).
@@ -34,15 +34,15 @@ import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { type CardRow, cardStateFileWriter } from "iamreal-protocol/card-state-file.ts";
 import { type Day, formatDay, parseDay, startOfTaiwanDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type RosterRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, rosterFileName } from "iamreal-protocol/record.ts";
+import { EMPTY_FINGERPRINT, type FingerprintLine, LINES_PER_FILE, type RecordFields, type ProofLogRecord, fingerprintLine, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, recordLine, proofLogFileName } from "iamreal-protocol/record.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
-import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
+import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
 import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, Latest, LatestPlace } from "./page-data.ts";
-import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, ROSTER_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./roster-files.ts";
-import { type RosterSettings, rosterSettingsOf } from "./settings.ts";
+import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
+import { type ProofLogSettings, proofLogSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, latestSlots, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
 /**
@@ -64,7 +64,7 @@ export const CRL_MAX_AGE_DAYS = 3;
 /**
  * The first switch of a slot that the back end's policy on late switches
  * refuses when it is on: the fourth (settings.ts, `restrictLateSwitches`).
- * The roster rules allow five.
+ * The record rules allow five.
  */
 export const RESTRICTED_FROM = 4;
 
@@ -77,20 +77,20 @@ export const RESTRICTED_FROM = 4;
  * `accepted` is 1 once a record was written for it. Expired rows are deleted
  * (the timed work below), so a challenge that is not here is unknown.
  *
- * records: one row per record that is not in a roster file of the data
- * bucket yet: the records of the last roster file, which is not full, and
+ * records: one row per record that is not in a log file of the data
+ * bucket yet: the records of the last log file, which is not full, and
  * of a full one until it is moved (`#moveFile`). `seq` is the record's;
- * `line` its line of the roster file, the LF included, so that a roster
+ * `line` its line of the log file, the LF included, so that a log
  * file is its lines in the order of `seq`, one after the other
  * (spec/record.md, "Lines and files"); `record_hash` its record hash;
- * `fingerprint` the roster fingerprint once it is added,
+ * `fingerprint` the proof log fingerprint once it is added,
  * `fingerprint(seq)`. The table came after the first three, with
  * SCHEMA_VERSION unchanged.
  *
- * full_files: one row per full roster file that is in the data bucket and
+ * full_files: one row per full log file that is in the data bucket and
  * whose records this object therefore no longer keeps (spec/record.md, "The
- * published roster"). `records_before` is the number of records before the
- * file, the number in its name; `fingerprint_after` the roster fingerprint
+ * published proof log"). `records_before` is the number of records before the
+ * file, the number in its name; `fingerprint_after` the proof log fingerprint
  * at its end, `fingerprint(records_before + 1000)`, which is the first line
  * of the next file's record hash list; `file_sha256` the SHA-256 of the
  * file's bytes as they were written and read back. The files are those of
@@ -98,17 +98,17 @@ export const RESTRICTED_FROM = 4;
  * `records` begin right after the last of them. The table came after the
  * others, with SCHEMA_VERSION unchanged.
  *
- * roster: exactly one row (`id` 1), written when the object first starts.
- * `count` is the number of records; `fingerprint` their roster fingerprint;
+ * proof log: exactly one row (`id` 1), written when the object first starts.
+ * `count` is the number of records; `fingerprint` their proof log fingerprint;
  * `latest_valid_date` the latest date among the valid records,
  * `YYYY-MM-DD`, or NULL without one; `rules_version` the version of the
- * roster rules the rows of `cards` were computed by (spec/roster-rules.md,
+ * record rules the rows of `cards` were computed by (spec/record-rules.md,
  * "The version number"); `schema_version` the SCHEMA_VERSION of the build
  * that made the tables.
  *
  * published: one row per line of the fingerprint file (spec/record.md,
- * "The published roster"): a date in Taiwan on which the roster was
- * published, `YYYY-MM-DD`, with the number of records and the roster
+ * "The published proof log"): a date in Taiwan on which the proof log was
+ * published, `YYYY-MM-DD`, with the number of records and the proof log
  * fingerprint read at that moment. A row is written once and never changed
  * or deleted: the line of a date does not change. The table is the
  * fingerprint file's source; the file in the data bucket is written from
@@ -120,7 +120,7 @@ export const RESTRICTED_FROM = 4;
  *
  * first_day: exactly one row (`id` 1), written when an object first
  * starts with a build that publishes: `date` is the date in Taiwan of that
- * start. The roster is first published when the date after it begins, not
+ * start. The proof log is first published when the date after it begins, not
  * on the day the object, or the build, is new. SCHEMA_VERSION is unchanged.
  *
  * retries: one row per piece of timed work whose last try failed
@@ -161,7 +161,7 @@ const TABLES: readonly string[] = [
      file_sha256       TEXT    NOT NULL
    )`,
   CARD_TABLE,
-  `CREATE TABLE IF NOT EXISTS roster (
+  `CREATE TABLE IF NOT EXISTS proof_log (
      id                INTEGER PRIMARY KEY CHECK (id = 1),
      count             INTEGER NOT NULL,
      fingerprint       TEXT    NOT NULL,
@@ -205,14 +205,14 @@ const TABLES: readonly string[] = [
  * key. A new table, or a new index, does not change it: the statements
  * above make those on an object that lacks them.
  *
- * An object keeps the version its tables were made by (`roster`,
+ * An object keeps the version its tables were made by (`proof_log`,
  * `schema_version`) and compares when it starts. If it is not this one, the
  * object reads and writes nothing more: `CREATE TABLE IF NOT EXISTS` left
  * its tables as they were, and this build would read them wrongly. There is
  * no code that carries tables from one version to the next; the way out is
  * a new object (README.md, "兩個版本號").
  *
- * It is not the version of the roster rules (`rules_version`,
+ * It is not the version of the record rules (`rules_version`,
  * protocol/'s RULES_VERSION), which says what the stored state of the cards
  * was computed by.
  */
@@ -228,7 +228,7 @@ export const OTHER_SCHEMA = "the object's tables were made by another SCHEMA_VER
 /** What the object throws for what needs the views while they are not at the last record (`#viewsAtLastRecord`). */
 export const VIEWS_BEHIND = "the object's views are not at its last record";
 
-/** Why the object does not take a submission: the roster is paused, or the challenge is not one to submit (docs/api/card-proof.md). */
+/** Why the object does not take a submission: the proof log is paused, or the challenge is not one to submit (docs/api/card-proof.md). */
 export type SubmissionRefusal = "paused" | "challenge_unknown" | "challenge_used" | "challenge_attempts";
 
 /** Why the object does not write a record whose proof verified, in the order of docs/api/card-proof.md. */
@@ -298,7 +298,7 @@ const CARD_STATE_BATCH = 1000;
  * which R2 refuses (https://developers.cloudflare.com/r2/platform/limits/).
  */
 const FIRST_RETRY_MS = 60 * 1000;
-/** The longest wait of moving the full files and of publishing the roster: an hour, short next to the day a full file and a publication have. */
+/** The longest wait of moving the full files and of publishing the proof log: an hour, short next to the day a full file and a publication have. */
 const LONGEST_RETRY_MS = 60 * 60 * 1000;
 /**
  * The longest wait of filling the views: five minutes. While they are
@@ -311,7 +311,7 @@ const LONGEST_VIEWS_RETRY_MS = 5 * 60 * 1000;
 
 /**
  * When a piece of timed work that failed is tried again (moving the full
- * files, publishing the roster, filling the views; each keeps its own): a
+ * files, publishing the proof log, filling the views; each keeps its own): a
  * minute after a first failure, and after each failure in a row that
  * follows it, twice as long as before, up to the piece's longest wait: an
  * hour (1, 2, 4, 8, 16, 32 minutes, then an hour each time), or five
@@ -384,11 +384,11 @@ function logFailure(event: string, e: unknown): void {
 }
 
 /**
- * The roster's Durable Object. (`Roster` is this class everywhere in
- * worker/; protocol/'s type of that name, which roster, is `RosterKind`
+ * The proof log's Durable Object. (`ProofLog` is this class everywhere in
+ * worker/; protocol/'s type of that name, which proof log, is `ProofLogKind`
  * here: settings.ts.)
  */
-export class Roster extends DurableObject<Env> {
+export class ProofLog extends DurableObject<Env> {
   /**
    * The settings the object started with. This and the other `protected`
    * members below (`challengeRandom`, `hashOf`, `ruleState`,
@@ -397,12 +397,12 @@ export class Roster extends DurableObject<Env> {
    * (README.md, "三樣不是設定值的東西"), the only class that extends this
    * one. Nothing else overrides or calls them from outside this file.
    */
-  protected readonly settings: RosterSettings;
+  protected readonly settings: ProofLogSettings;
   /** Whether the object's tables were made by this build's SCHEMA_VERSION. */
   readonly #tablesAreThisVersion: boolean;
   /**
    * Whether the stored state of the cards was computed by another version
-   * of the roster rules than this build's (spec/roster-rules.md, "The
+   * of the record rules than this build's (spec/record-rules.md, "The
    * version number"). The object then issues no challenge and takes no
    * submission, so that no record is written from a state the rules of this
    * build did not leave; everything else goes on.
@@ -410,17 +410,17 @@ export class Roster extends DurableObject<Env> {
   readonly #paused: boolean;
   /**
    * Whether the settings name another object than this one: the object of a
-   * test roster that was cleared (README.md, "清空測試的證明紀錄"). No request
+   * test log that was cleared (README.md, "清空測試的證明紀錄"). No request
    * reaches it any more, but it is not deleted, and its alarm was set when
-   * it still was the roster's. It shares the data bucket with the object
+   * it still was the proof log's. It shares the data bucket with the object
    * that took its place, so it does no timed work and asks for no further
-   * alarm: it would publish its roster over the new one's.
+   * alarm: it would publish its proof log over the new one's.
    */
   readonly #replaced: boolean;
   /**
    * Whether the views the pages read (views.ts) reflect every record, as
    * the object found or made them when it started. When they do not, a page
-   * would show a roster that is not this one (no card at all, or a card as
+   * would show a proof log that is not this one (no card at all, or a card as
    * not found), and a record could not be written with its change to them:
    * the pages' reads and a submission then throw `VIEWS_BEHIND`, which the
    * Worker answers as its own failure. Challenges, card states and the CRL
@@ -448,41 +448,41 @@ export class Roster extends DurableObject<Env> {
     // Before anything is read or written: with settings that do not fit each
     // other (settings.ts) the object does not start. The Worker reads the
     // same settings before it asks the object, so it does not get this far.
-    this.settings = rosterSettingsOf(env);
-    this.#replaced = !ctx.id.equals(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME));
+    this.settings = proofLogSettingsOf(env);
+    this.#replaced = !ctx.id.equals(env.PROOF_LOG.idFromName(env.PROOF_LOG_OBJECT_NAME));
     // One line each time such an object starts. That is once after the deploy that replaced it, when the alarm it
-    // had set rings; an object that is the roster's and says this at every start has the comparison wrong.
-    if (this.#replaced) console.log(JSON.stringify({ event: "roster_object_replaced", object: ctx.id.name ?? null }));
+    // had set rings; an object that is the proof log's and says this at every start has the comparison wrong.
+    if (this.#replaced) console.log(JSON.stringify({ event: "proof_log_object_replaced", object: ctx.id.name ?? null }));
     const sql = ctx.storage.sql;
     for (const statement of TABLES) sql.exec(statement);
-    // A new roster: no record, a state computed by the rules of this build,
+    // A new proof log: no record, a state computed by the rules of this build,
     // tables made by this build. On an object that has the row this changes
     // nothing: neither version is ever brought up to the build's here.
     sql.exec(
-      "INSERT OR IGNORE INTO roster (id, count, fingerprint, latest_valid_date, rules_version, schema_version) VALUES (1, 0, ?, NULL, ?, ?)",
+      "INSERT OR IGNORE INTO proof_log (id, count, fingerprint, latest_valid_date, rules_version, schema_version) VALUES (1, 0, ?, NULL, ?, ?)",
       EMPTY_FINGERPRINT,
       RULES_VERSION,
       SCHEMA_VERSION,
     );
-    const { schema_version, rules_version } = sql.exec<{ schema_version: number; rules_version: number }>("SELECT schema_version, rules_version FROM roster WHERE id = 1").one();
+    const { schema_version, rules_version } = sql.exec<{ schema_version: number; rules_version: number }>("SELECT schema_version, rules_version FROM proof_log WHERE id = 1").one();
     this.#tablesAreThisVersion = schema_version === SCHEMA_VERSION;
     this.#paused = rules_version !== RULES_VERSION;
     // Views that are not at the last record are written again from the records: an object that has records
-    // from before it had the views, or whose views were cleared. Not while the roster is paused: the stored
+    // from before it had the views, or whose views were cleared. Not while the proof log is paused: the stored
     // records were then taken by other rules than the ones this build would compute their kinds by.
     // A filling that failed is not begun again before its wait is over (`Retries`), also when the object started
     // again in between: on Cloudflare that is every time the object has had nothing to do for some seconds. The alarm
     // begins it then (`#viewsBehind`).
-    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#rosterRow().count;
+    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#proofLogRow().count;
     const fillOwed = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused;
     const fillAgainAt = fillOwed ? this.#fillRetries.againAt() : null;
     this.viewsFilling = fillOwed && (fillAgainAt === null || fillAgainAt <= now().getTime()) ? this.#fillViews() : Promise.resolve();
     ctx.waitUntil(this.viewsFilling);
     if (this.#tablesAreThisVersion) {
-      // A paused roster neither fills its views nor is published: failures of those from before it was paused are
+      // A paused proof log neither fills its views nor is published: failures of those from before it was paused are
       // not counted on once it no longer is.
       if (this.#paused) sql.exec("DELETE FROM retries WHERE work IN ('views', 'publication')");
-      // The roster is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
+      // The proof log is published from the date after this one on (`#dailyPublication`); on an object that has the row this changes nothing.
       sql.exec("INSERT OR IGNORE INTO first_day (id, date) VALUES (1, ?)", formatDay(taiwanDay(now().getTime())));
       // An object that starts has its alarm set, once the constructor has returned (`timedWork` is a subclass's to
       // override): the daily publication is due at a time of day, whether or not anything is asked of the object.
@@ -492,21 +492,21 @@ export class Roster extends DurableObject<Env> {
 
   /**
    * Clears the views and writes them again from every record of the
-   * roster, in the order of `seq`: the full roster files in the data
+   * proof log, in the order of `seq`: the full log files in the data
    * bucket, each checked against the SHA-256 it was written with, then the
    * records this object keeps.
    *
    * - An object that keeps all its records does this in one transaction and
    *   without waiting for anything: it is done before the constructor
    *   returns, and a failure leaves the views as they were.
-   * - With roster files in the bucket it reads them one at a time and
+   * - With log files in the bucket it reads them one at a time and
    *   writes each in a transaction of its own, so the views are behind
    *   while it runs and stay behind if it breaks off: until it ends well,
    *   what needs the views throws `VIEWS_BEHIND`. The object answers
    *   meanwhile. It is not held back with `blockConcurrencyWhile`: an
    *   object is reset when that takes more than 30 seconds (README.md,
    *   "頁面用的衍生表", has the sentence of Cloudflare's documentation),
-   *   and this takes longer the more files the roster has.
+   *   and this takes longer the more files the proof log has.
    *
    * It can fail: the bucket does not answer, or does not have a file as it
    * was written; a line this build does not read, a record its rules do
@@ -543,7 +543,7 @@ export class Roster extends DurableObject<Env> {
         // Nothing waits from here on: the records this object keeps are the ones after the last file read.
         this.ctx.storage.transactionSync(() => writeViewsOf(sql, kind, platforms, cards, storedLines(sql)));
       }
-      if (viewSeq(sql) !== this.#rosterRow().count) throw new Error("the views are not at the last record after they were filled");
+      if (viewSeq(sql) !== this.#proofLogRow().count) throw new Error("the views are not at the last record after they were filled");
       this.#viewsAtLastRecord = true;
       this.#fillRetries.succeeded();
     } catch (e) {
@@ -562,7 +562,7 @@ export class Roster extends DurableObject<Env> {
   /**
    * Filling views that could not be filled, again: due after the wait of
    * the failures in a row so far (`Retries`), a minute after the first;
-   * not while a filling goes on, while the roster is paused, or once the
+   * not while a filling goes on, while the proof log is paused, or once the
    * views are filled. No move of full files goes on
    * meanwhile: both are pieces of the alarm's work, which runs one piece
    * after the other.
@@ -590,7 +590,7 @@ export class Roster extends DurableObject<Env> {
    * Issues a challenge (spec/challenge.md): today's date in Taiwan at this
    * moment and 16 random bytes. It is stored with the time before it is
    * given out, so a challenge anybody holds is one this object knows. None
-   * is issued while the roster is paused: the challenge is then null.
+   * is issued while the proof log is paused: the challenge is then null.
    */
   async issueChallenge(): Promise<{ challenge: string | null }> {
     this.#checkTables();
@@ -641,7 +641,7 @@ export class Roster extends DurableObject<Env> {
    * `fields` are the record's fields except `seq`, each in its format. In
    * the order of docs/api/card-proof.md: the challenge again (a record may
    * have been written for it, or it may have expired, while the proof was
-   * being verified); the back end's rule on `smt_root`; the roster rules;
+   * being verified); the back end's rule on `smt_root`; the record rules;
    * the back end's policy on switches.
    *
    * The record's `seq` is the count of records plus one, and its hash needs
@@ -656,12 +656,12 @@ export class Roster extends DurableObject<Env> {
     if (this.#paused) return refused("paused");
     this.#checkViews();
     for (;;) {
-      const { count, fingerprint } = this.#rosterRow();
-      const record: RosterRecord = { ...fields, seq: count + 1 };
+      const { count, fingerprint } = this.#proofLogRow();
+      const record: ProofLogRecord = { ...fields, seq: count + 1 };
       const hash = await this.hashOf(record);
       const answer = this.#acceptAt(record, hash, await nextFingerprint(fingerprint, hash));
       if (answer.outcome === "the count moved") continue;
-      // The record that fills a roster file: the file is due for the data bucket (`#fullFiles`). The record is
+      // The record that fills a log file: the file is due for the data bucket (`#fullFiles`). The record is
       // written whatever becomes of that, so its answer waits for the alarm to be set and for nothing more.
       if (answer.outcome === "written" && answer.record.seq % LINES_PER_FILE === 0) await this.#setAlarmWithoutFailing();
       return answer;
@@ -670,7 +670,7 @@ export class Roster extends DurableObject<Env> {
 
   /**
    * Sets the alarm without ever failing what asked for it: a record that
-   * is in the roster by then, a filling of the views that has ended. An
+   * is in the proof log by then, a filling of the views that has ended. An
    * alarm that could not be set is set by whatever next sets it (the next
    * challenge).
    */
@@ -689,26 +689,26 @@ export class Roster extends DurableObject<Env> {
    * check of the count in `accept` is for. Nothing else overrides or calls
    * it.
    */
-  protected hashOf(record: RosterRecord): Promise<string> {
+  protected hashOf(record: ProofLogRecord): Promise<string> {
     return recordHash(record);
   }
 
-  #rosterRow(): { count: number; fingerprint: string } {
-    return this.ctx.storage.sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM roster WHERE id = 1").one();
+  #proofLogRow(): { count: number; fingerprint: string } {
+    return this.ctx.storage.sql.exec<{ count: number; fingerprint: string }>("SELECT count, fingerprint FROM proof_log WHERE id = 1").one();
   }
 
   /**
    * The checks and the write of `accept`, for a record whose `seq`, hash and
-   * roster fingerprint were computed at a count of `record.seq − 1`. Nothing
+   * proof log fingerprint were computed at a count of `record.seq − 1`. Nothing
    * here waits, so no other request runs in between.
    *
    * Everything that can fail once the rules accepted the record is inside
    * the transaction, the answer included: a record is never written
    * without its answer, and nothing after the transaction can fail.
    */
-  #acceptAt(record: RosterRecord, hash: string, fingerprint: string): AcceptTry {
+  #acceptAt(record: ProofLogRecord, hash: string, fingerprint: string): AcceptTry {
     const sql = this.ctx.storage.sql;
-    if (this.#rosterRow().count !== record.seq - 1) return { outcome: "the count moved" };
+    if (this.#proofLogRow().count !== record.seq - 1) return { outcome: "the count moved" };
     const { kind, platforms } = this.settings;
     const date = parseChallenge(record.challenge);
     if (date === null || (record.issuer !== "G2" && record.issuer !== "G3")) throw new Error("the record's fields are not in their formats");
@@ -724,13 +724,13 @@ export class Roster extends DurableObject<Env> {
     const crlDates = newest.filter((crl) => crl.root === record.smtRoot).map((crl) => crl.date);
     if (crlDates.length === 0) return refused("root");
 
-    // The roster rules, on the state this object keeps.
+    // The record rules, on the state this object keeps.
     const { card: before, latestValidDate } = this.ruleState(record.scopeString, record.scopedId);
     const outcome = applyRecord({ platforms, record: { accounts: record.accounts, date, verifies: true }, card: before, latestValidDate, challengeUsed: challenge.accepted, crlDates });
     if (!outcome.result.valid) {
       const { reason } = outcome.result;
       // The Worker verified the proof, and the challenge was looked at above.
-      if (reason === "proof" || reason === "challenge_reused") throw new Error("the roster rules refused what was already checked");
+      if (reason === "proof" || reason === "challenge_reused") throw new Error("the record rules refused what was already checked");
       return refused(reason);
     }
     const { kinds } = outcome.result;
@@ -738,9 +738,9 @@ export class Roster extends DurableObject<Env> {
     // The back end's policy, if it is on: never a record without a switch.
     if (this.settings.restrictLateSwitches && usesRestrictedSwitch(before, kinds)) return refused("switch_restricted");
 
-    // The line as anyone reading the roster file will check it (spec/record.md, "Check a line").
+    // The line as anyone reading the log file will check it (spec/record.md, "Check a line").
     const line = recordLine(record);
-    if (readRecordLine(kind, line) === null) throw new Error("the record's line is not a well-formed line of the roster");
+    if (readRecordLine(kind, line) === null) throw new Error("the record's line is not a well-formed line of the proof log");
 
     // The account of each kind: the one the list has for the platform, or for `withdraw` the one the slot had.
     const accounts = kinds.map(({ platform, kind: what }) => {
@@ -752,13 +752,13 @@ export class Roster extends DurableObject<Env> {
     // What the record changes in the views, from the states the rules read and left.
     const view = viewOf(record, date, kinds, before, outcome.card);
 
-    // One transaction: the record with its `seq`, the card's state, the roster's row, the views, the challenge. The
+    // One transaction: the record with its `seq`, the card's state, the proof log's row, the views, the challenge. The
     // answer counts the cards of each account in the views the record leaves, so it is made in the transaction too:
     // if anything fails, nothing of the record is written.
     const written = this.ctx.storage.transactionSync((): Accepted => {
       sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
       this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
-      sql.exec("UPDATE roster SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
+      sql.exec("UPDATE proof_log SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       writeView(sql, view);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
       return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })) };
@@ -767,31 +767,31 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * What the roster rules read of this roster besides the record itself
+   * What the record rules read of this proof log besides the record itself
    * (protocol/, applyRecord): the state of the record's card, the empty
    * state for a card without a valid record, and the latest date among the
    * valid records.
    *
    * `protected`, like `keepRuleState`, so that the test build runs the
-   * roster rules on the stored state through the same reading and writing
+   * record rules on the stored state through the same reading and writing
    * (its `testApplyRuleEvent` calls both). Neither is overridden.
    */
   protected ruleState(scopeString: string, scopedId: string): { card: CardState; latestValidDate: Day | null } {
     const { platforms } = this.settings;
-    const { latest_valid_date } = this.ctx.storage.sql.exec<{ latest_valid_date: string | null }>("SELECT latest_valid_date FROM roster WHERE id = 1").one();
+    const { latest_valid_date } = this.ctx.storage.sql.exec<{ latest_valid_date: string | null }>("SELECT latest_valid_date FROM proof_log WHERE id = 1").one();
     const latestValidDate = latest_valid_date === null ? null : parseDay(latest_valid_date);
-    if (latest_valid_date !== null && latestValidDate === null) throw new Error("roster: latest_valid_date is not a date");
+    if (latest_valid_date !== null && latestValidDate === null) throw new Error("proof log: latest_valid_date is not a date");
     return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? newCard(platforms), latestValidDate };
   }
 
-  /** Keeps what the roster rules left after a valid record, `seq` being that record's: the state of its card and the latest valid date. */
+  /** Keeps what the record rules left after a valid record, `seq` being that record's: the state of its card and the latest valid date. */
   protected keepRuleState(scopeString: string, scopedId: string, card: CardState, seq: number, latestValidDate: Day | null): void {
     writeCard(this.ctx.storage.sql, scopeString, scopedId, card, seq);
-    this.ctx.storage.sql.exec("UPDATE roster SET latest_valid_date = ? WHERE id = 1", latestValidDate === null ? null : formatDay(latestValidDate));
+    this.ctx.storage.sql.exec("UPDATE proof_log SET latest_valid_date = ? WHERE id = 1", latestValidDate === null ? null : formatDay(latestValidDate));
   }
 
   /**
-   * The home page's two numbers for a platform, in the roster's open scope,
+   * The home page's two numbers for a platform, in the proof log's open scope,
    * on today's date in Taiwan (page-data.ts, `PageData`).
    */
   pageCounts(platform: string): Counts {
@@ -799,19 +799,19 @@ export class Roster extends DurableObject<Env> {
     return counts(this.ctx.storage.sql, scopeOf(this.settings.kind), platform, taiwanDay(now().getTime()));
   }
 
-  /** The cards of a short ID in the roster's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
+  /** The cards of a short ID in the proof log's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
   pageCards(shortId: string): CardsOfShortId {
     this.#checkViews();
     return { today: taiwanDay(now().getTime()), cards: cardsOfShortId(this.ctx.storage.sql, scopeOf(this.settings.kind), shortId) };
   }
 
-  /** The cards that give their place on a platform to this username now, in the roster's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
+  /** The cards that give their place on a platform to this username now, in the proof log's open scope, and today's date in Taiwan (page-data.ts, `PageData`). */
   pageAccount(platform: string, username: string): CardsOfAccount {
     this.#checkViews();
     return { today: taiwanDay(now().getTime()), cards: cardsOfAccount(this.ctx.storage.sql, scopeOf(this.settings.kind), platform, username) };
   }
 
-  /** The home page's two numbers and at most `n` of the latest slots, after `after`, read at once, in the roster's open scope (page-data.ts, `PageData`). */
+  /** The home page's two numbers and at most `n` of the latest slots, after `after`, read at once, in the proof log's open scope (page-data.ts, `PageData`). */
   pageLatest(platform: string, after: LatestPlace | null, n: number): Latest {
     this.#checkViews();
     const scope = scopeOf(this.settings.kind);
@@ -825,7 +825,7 @@ export class Roster extends DurableObject<Env> {
    *
    * `protected`, like `ruleState`, so that the test build counts the cards
    * of each account with this same query when it compares the stored state
-   * with Go's roster/ (its `testRuleState`). It is not overridden.
+   * with Go's prooflog/ (its `testRuleState`). It is not overridden.
    */
   protected accountCards(scopeString: string, platform: string, username: string): number {
     return accountCards(this.ctx.storage.sql, scopeString, platform, username);
@@ -835,7 +835,7 @@ export class Roster extends DurableObject<Env> {
   cardState(scopeString: string, scopedId: string): CardStateAnswer {
     this.#checkTables();
     const { platforms } = this.settings;
-    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? null, count: this.#rosterRow().count };
+    return { card: readCard(this.ctx.storage.sql, platforms, scopeString, scopedId)?.card ?? null, count: this.#proofLogRow().count };
   }
 
   /**
@@ -890,7 +890,7 @@ export class Roster extends DurableObject<Env> {
   };
 
   /**
-   * The data bucket, for the files of the roster directory. `protected` so
+   * The data bucket, for the files of the log directory. `protected` so
    * that the test build can make a write or a read of it go wrong, by
    * overriding this; nothing else does.
    */
@@ -899,14 +899,14 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * The number of records before the first roster file that is full and
+   * The number of records before the first log file that is full and
    * still in this object, or null if the object keeps no full file: its
-   * rows of `records` begin at that file, and the roster has all 1,000
+   * rows of `records` begin at that file, and the proof log has all 1,000
    * records of it.
    */
   #firstFullFile(): number | null {
     const { first } = this.ctx.storage.sql.exec<{ first: number | null }>("SELECT MIN(seq) AS first FROM records").one();
-    return first !== null && this.#rosterRow().count >= first - 1 + LINES_PER_FILE ? first - 1 : null;
+    return first !== null && this.#proofLogRow().count >= first - 1 + LINES_PER_FILE ? first - 1 : null;
   }
 
   /** The failures in a row of moving the full files, and when they are tried again. */
@@ -915,7 +915,7 @@ export class Roster extends DurableObject<Env> {
   #moving: Promise<void> | null = null;
 
   /**
-   * Moving the roster files that are full to the data bucket: due as soon
+   * Moving the log files that are full to the data bucket: due as soon
    * as the object keeps a full file, and after a failure when the wait of
    * the failures in a row so far is over (`Retries`): a minute after the
    * first.
@@ -935,7 +935,7 @@ export class Roster extends DurableObject<Env> {
   };
 
   /**
-   * Moves every full roster file this object still keeps to the data
+   * Moves every full log file this object still keeps to the data
    * bucket, the earliest first. One move at a time: whoever asks while one
    * is going on waits for that one.
    */
@@ -954,13 +954,13 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * Moves one full roster file, the one that follows the first `before`
+   * Moves one full log file, the one that follows the first `before`
    * records: writes the file and its record hash list to the data bucket,
    * each read back and compared byte for byte, and only then deletes the
    * file's 1,000 records here (ADR-0027).
    *
-   * - The roster file is written before its list: at no moment does the
-   *   bucket hold a list without a roster file (spec/record.md, "Record
+   * - The log file is written before its list: at no moment does the
+   *   bucket hold a list without a log file (spec/record.md, "Record
    *   hash lists").
    * - Both are computed from the stored records alone, so a move that
    *   broke off anywhere is simply made again, and writes the same bytes.
@@ -974,8 +974,8 @@ export class Roster extends DurableObject<Env> {
   async #moveFile(before: number): Promise<void> {
     const sql = this.ctx.storage.sql;
     const last = before + LINES_PER_FILE;
-    if (before % LINES_PER_FILE !== 0) throw new Error("the stored records do not begin at a roster file");
-    const { sha256, fingerprintAfter } = await this.#writeRosterFile(before, last, CACHE_FULL_FILE);
+    if (before % LINES_PER_FILE !== 0) throw new Error("the stored records do not begin at a log file");
+    const { sha256, fingerprintAfter } = await this.#writeProofLogFile(before, last, CACHE_FULL_FILE);
     this.ctx.storage.transactionSync(() => {
       sql.exec("INSERT INTO full_files (records_before, fingerprint_after, file_sha256) VALUES (?, ?, ?)", before, fingerprintAfter, sha256);
       sql.exec("DELETE FROM records WHERE seq > ? AND seq <= ?", before, last);
@@ -983,22 +983,22 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * Writes the roster file of the stored records after the first `before`
+   * Writes the log file of the stored records after the first `before`
    * up to `last`, both counts of records, and then its record hash list,
    * each with `cacheControl`, each read back and compared byte for byte.
-   * Returns the SHA-256 of the file and the roster fingerprint at its end.
+   * Returns the SHA-256 of the file and the proof log fingerprint at its end.
    * Throws unless the object keeps every one of those records and knows
    * the fingerprint at the end of the file before. The file is up to some
    * 20 MB: its lines are written into one buffer, without a second copy as
    * text, which is let go when this returns.
    */
-  async #writeRosterFile(before: number, last: number, cacheControl: string): Promise<{ sha256: string; fingerprintAfter: string }> {
+  async #writeProofLogFile(before: number, last: number, cacheControl: string): Promise<{ sha256: string; fingerprintAfter: string }> {
     const sql = this.ctx.storage.sql;
-    // The first line of the list: the roster fingerprint at the end of the file before, which is no longer in `records`.
+    // The first line of the list: the proof log fingerprint at the end of the file before, which is no longer in `records`.
     const fingerprintBefore = before === 0 ? EMPTY_FINGERPRINT : sql.exec<{ fingerprint_after: string }>("SELECT fingerprint_after FROM full_files WHERE records_before = ?", before - LINES_PER_FILE).toArray()[0]?.fingerprint_after;
-    if (fingerprintBefore === undefined) throw new Error("the file before the roster file is not among the full files");
+    if (fingerprintBefore === undefined) throw new Error("the file before the log file is not among the full files");
     const { lines, length } = sql.exec<{ lines: number; length: number | null }>("SELECT COUNT(*) AS lines, SUM(LENGTH(CAST(line AS BLOB))) AS length FROM records WHERE seq > ? AND seq <= ?", before, last).one();
-    if (lines !== last - before) throw new Error("the stored records are not the records of the roster file");
+    if (lines !== last - before) throw new Error("the stored records are not the records of the log file");
     const file = new Uint8Array(length ?? 0);
     const encoder = new TextEncoder();
     const hashes: string[] = [];
@@ -1013,14 +1013,14 @@ export class Roster extends DurableObject<Env> {
     }
     if (at !== file.length) throw new Error("the stored lines are shorter than they were counted");
     const bucket = this.bucket();
-    const sha256 = await writeAndReadBack(bucket, ROSTER_DIRECTORY + rosterFileName(before), file, { cacheControl, contentType: TYPE_JSON_LINES });
-    await writeAndReadBack(bucket, ROSTER_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl, contentType: TYPE_TEXT });
+    const sha256 = await writeAndReadBack(bucket, PROOF_LOG_DIRECTORY + proofLogFileName(before), file, { cacheControl, contentType: TYPE_JSON_LINES });
+    await writeAndReadBack(bucket, PROOF_LOG_DIRECTORY + hashListName(before), encoder.encode(hashList(fingerprintBefore, hashes)), { cacheControl, contentType: TYPE_TEXT });
     return { sha256, fingerprintAfter };
   }
 
   /**
    * The last line this object wrote to the data bucket's fingerprint file
-   * and read back, or null if it never published the roster: what
+   * and read back, or null if it never published the proof log: what
    * `GET /api/v1/fingerprint` answers from. It is what the object keeps of
    * its own writing; the bucket is not asked.
    */
@@ -1037,20 +1037,20 @@ export class Roster extends DurableObject<Env> {
     return { date, count: row.count, fingerprint: row.fingerprint };
   }
 
-  /** The failures in a row of publishing the roster, and when it is tried again. */
+  /** The failures in a row of publishing the proof log, and when it is tried again. */
   readonly #publishRetries = new Retries(this.ctx.storage.sql, "publication", LONGEST_RETRY_MS);
 
   /**
-   * Publishing the roster, once for each date in Taiwan (ADR-0027): due
+   * Publishing the proof log, once for each date in Taiwan (ADR-0027): due
    * when the date after the last published one begins (after the date the
-   * object first ran, for a roster never published), and at once while a
+   * object first ran, for a proof log never published), and at once while a
    * line it wrote is not in the bucket's fingerprint file yet; after a
    * failure, not before the wait of the failures in a row so far is over
    * (`Retries`): a minute after the first. A date on which the alarm never
    * rang gets no line afterwards: a line is dated the day it is written
    * (spec/record.md).
    *
-   * Not while the roster is paused: the states of the cards were then
+   * Not while the proof log is paused: the states of the cards were then
    * computed by other rules than this build's, and the card state file
    * would be published as this build's. Full files are moved all the same
    * (`#fullFiles`).
@@ -1062,7 +1062,7 @@ export class Roster extends DurableObject<Env> {
    * full file, from running at once: an object has one alarm, whose
    * handler does not run twice at once (README.md, "每天換日公布證明紀錄",
    * has the sentence of Cloudflare's documentation), and the handler runs
-   * the pieces of `timedWork()` one after the other. Both write the roster file of the
+   * the pieces of `timedWork()` one after the other. Both write the log file of the
    * same name at different times, so this is what the order of their
    * writes rests on.
    */
@@ -1083,28 +1083,28 @@ export class Roster extends DurableObject<Env> {
         this.#publishRetries.succeeded();
       } catch (e) {
         this.#publishRetries.failedAt(time);
-        logFailure(e instanceof FingerprintFileDiffers ? "fingerprint_file_differs" : "roster_not_published", e);
+        logFailure(e instanceof FingerprintFileDiffers ? "fingerprint_file_differs" : "proof_log_not_published", e);
       }
     },
   };
 
   /**
-   * Publishes the roster as it is at one moment of today's date in Taiwan
+   * Publishes the proof log as it is at one moment of today's date in Taiwan
    * (ADR-0027; spec/record.md, "What is published when"), in this order:
    *
-   *   0. every full roster file is moved to the bucket (`#moveFullFiles`);
-   *   1. the last roster file, which is not full, and its record hash
+   *   0. every full log file is moved to the bucket (`#moveFullFiles`);
+   *   1. the last log file, which is not full, and its record hash
    *      list, over those of the day before;
    *   2. the card state file of the date;
    *   3. the line of the date: the row of `published`, then the
    *      fingerprint file with it.
    *
-   * - **One moment.** The count and the roster fingerprint are read, and
+   * - **One moment.** The count and the proof log fingerprint are read, and
    *   the card state table copied, without waiting for anything in
    *   between (`#publicationMoment`). Everything is written from that
    *   moment: the last file from the records up to the count, which never
    *   change, and the card state file from the copy, so that it is the
-   *   states after exactly the line's `count` records (spec/roster-rules.md,
+   *   states after exactly the line's `count` records (spec/record-rules.md,
    *   "The card state file"). Records written while the bucket is written
    *   wait for the next date. The copy is dropped when the publication
    *   ends, whether the row was written or it broke off.
@@ -1122,8 +1122,8 @@ export class Roster extends DurableObject<Env> {
    *   that is in the bucket's file is ever taken out of it or changed. A
    *   file that has anything else stops the publication before it writes
    *   anything, of this date and of every later one, until somebody has
-   *   looked: the bucket may hold the roster directory of another object.
-   * - The last roster file has the name a full one gets once it is full,
+   *   looked: the bucket may hold the log directory of another object.
+   * - The last log file has the name a full one gets once it is full,
    *   so it is written here only, in the alarm's work, where no move of a
    *   full file runs meanwhile (`#moveFile`).
    */
@@ -1137,7 +1137,7 @@ export class Roster extends DurableObject<Env> {
         await this.#writeLastFile(moment.count);
         await this.#writeCardStateFile(moment.date);
         // A line is dated the day it is written: not this one, if the date changed while the bucket was written.
-        if (taiwanDay(now().getTime()) !== moment.date) throw new Error("the date changed while the roster was being published");
+        if (taiwanDay(now().getTime()) !== moment.date) throw new Error("the date changed while the proof log was being published");
         sql.exec("INSERT INTO published (date, count, fingerprint, in_bucket) VALUES (?, ?, ?, 0)", formatDay(moment.date), moment.count, moment.fingerprint);
       }
     } finally {
@@ -1148,8 +1148,8 @@ export class Roster extends DurableObject<Env> {
   }
 
   /**
-   * The moment the roster is published as, for today's date in Taiwan, or
-   * null if today's line is written already: the count and the roster
+   * The moment the proof log is published as, for today's date in Taiwan, or
+   * null if today's line is written already: the count and the proof log
    * fingerprint, and a copy of the card state table (`copyCards`),
    * all without waiting for anything in between. What the publication
    * writes afterwards is read from these alone: the records up to the
@@ -1161,15 +1161,15 @@ export class Roster extends DurableObject<Env> {
     const { last } = sql.exec<{ last: string | null }>("SELECT MAX(date) AS last FROM published").one();
     if (last !== null && last >= formatDay(date)) {
       if (last === formatDay(date)) return null;
-      throw new Error("the roster is already published for a later date than today");
+      throw new Error("the proof log is already published for a later date than today");
     }
-    const { count, fingerprint } = this.#rosterRow();
+    const { count, fingerprint } = this.#proofLogRow();
     copyCards(sql);
     return { date, count, fingerprint };
   }
 
   /**
-   * Writes the last roster file of the first `count` records, which is not
+   * Writes the last log file of the first `count` records, which is not
    * full, and its record hash list, over those of the day before; nothing
    * if `count` ends a full file. The file is at most 999 lines and is
    * built whole in one buffer, which is let go before the card state file
@@ -1181,8 +1181,8 @@ export class Roster extends DurableObject<Env> {
     const before = count - (count % LINES_PER_FILE);
     // Every full file is in the bucket by now (`#moveFullFiles`): the object keeps no record before the last file.
     const { earlier } = sql.exec<{ earlier: number }>("SELECT COUNT(*) AS earlier FROM records WHERE seq <= ?", before).one();
-    if (earlier !== 0) throw new Error("the stored records are not those of the last roster file");
-    if (count > before) await this.#writeRosterFile(before, count, CACHE_DAILY);
+    if (earlier !== 0) throw new Error("the stored records are not those of the last log file");
+    if (count > before) await this.#writeProofLogFile(before, count, CACHE_DAILY);
   }
 
   /**
@@ -1304,7 +1304,7 @@ export class Roster extends DurableObject<Env> {
 
   /** The alarm: each piece of timed work that is due runs once, and the alarm is set again. */
   override async alarm(): Promise<void> {
-    // With tables of another version the object does nothing, and asks for no further alarm. Nor does the object of a roster that was cleared.
+    // With tables of another version the object does nothing, and asks for no further alarm. Nor does the object of a proof log that was cleared.
     if (!this.#tablesAreThisVersion || this.#replaced) return;
     const time = now().getTime();
     for (const work of this.timedWork()) {
@@ -1332,10 +1332,10 @@ function usesRestrictedSwitch(card: CardState, kinds: readonly PlatformKind[]): 
 }
 
 /**
- * The roster's object. Its name is a setting of the environment
- * (`ROSTER_OBJECT_NAME`): clearing the test roster is giving it a new name
+ * The proof log's object. Its name is a setting of the environment
+ * (`PROOF_LOG_OBJECT_NAME`): clearing the test log is giving it a new name
  * (ADR-0028).
  */
-export function rosterOf(env: Env): DurableObjectStub<Roster> {
-  return env.ROSTER.get(env.ROSTER.idFromName(env.ROSTER_OBJECT_NAME));
+export function proofLogOf(env: Env): DurableObjectStub<ProofLog> {
+  return env.PROOF_LOG.get(env.PROOF_LOG.idFromName(env.PROOF_LOG_OBJECT_NAME));
 }

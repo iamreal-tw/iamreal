@@ -9,7 +9,7 @@ card signs in a card proof.
 
 A card proof does not add or remove one account. It states the whole list,
 and whatever is not in the list is not declared any more
-([`roster-rules.md`](roster-rules.md)).
+([`record-rules.md`](record-rules.md)).
 
 ## Computation
 
@@ -32,7 +32,7 @@ declaration_code = "D" || first 30 characters of base32(SHA-256(preimage))
 - `account_1` … `account_n` are the accounts of the record's list, in the
   order of the list: ascending by `platform`, each platform at most once
   ([`record.md`](record.md), "The account list"). `n` is the length of the
-  list, from 0 to the number of platforms of the roster. With an empty list
+  list, from 0 to the number of platforms of the proof log. With an empty list
   the preimage has three lines.
 - `platform` is the platform ID, exactly as in the platform table
   ([`scope.md`](scope.md)). `username` is the account name on that platform,
@@ -76,11 +76,11 @@ What keeps a proof made for one purpose from being used for another:
   letter other than `S`, and as the first only a scope string (ADR-0013), so
   a code cannot stand in for a scope string or the reverse. Other first
   letters are reserved for other kinds of codes (ADR-0007).
-- **The scope string.** A code computed for the public roster is not valid
-  for a test roster or for the scope of another service.
+- **The scope string.** A code computed for the public proof log is not valid
+  for a test log or for the scope of another service.
 
-The tag is still `v1`: no roster has records computed the earlier ways, and
-the tag counts the computations that records in a roster were made with. No
+The tag is still `v1`: no proof log has records computed the earlier ways, and
+the tag counts the computations that records in a proof log were made with. No
 preimage of an earlier draft equals one of this document: their second line
 was `declare` or `withdraw`, which is not a scope string.
 

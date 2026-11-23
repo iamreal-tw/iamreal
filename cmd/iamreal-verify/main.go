@@ -1,8 +1,8 @@
-// Command iamreal-verify re-verifies a roster file, or a published roster
+// Command iamreal-verify re-verifies a log file, or a published proof log
 // directory with its record hash lists and fingerprint file, by default the
 // one published at https://data.iamreal.tw/ with its CRL archive: whether
-// the roster as a whole is valid, the result of each record, and the state
-// of every card and account (spec/roster-rules.md). See README.md.
+// the proof log as a whole is valid, the result of each record, and the state
+// of every card and account (spec/record-rules.md). See README.md.
 package main
 
 import (
@@ -17,7 +17,7 @@ import (
 	"syscall"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -48,19 +48,19 @@ func main() {
 // deps makes the verifier and opens the CRL archive. Tests replace them to
 // use test issuer keys; the program uses only MOICA's.
 type deps struct {
-	verifier func(verifier.Config) (roster.ProofVerifier, error)
+	verifier func(verifier.Config) (prooflog.ProofVerifier, error)
 	// archive opens the archive directory dir: reading only its index if
 	// trustIndex, otherwise rebuilding the index from the files. When
 	// rebuilding, it also returns every difference between the index and
 	// the rebuilt one; the archive is that of the rebuilt index.
-	archive func(dir string, trustIndex bool, progress func(name string)) (roster.CRLArchive, []crl.IndexMismatch, error)
+	archive func(dir string, trustIndex bool, progress func(name string)) (prooflog.CRLArchive, []crl.IndexMismatch, error)
 }
 
-func newVerifier(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.New(cfg) }
+func newVerifier(cfg verifier.Config) (prooflog.ProofVerifier, error) { return verifier.New(cfg) }
 
 // openArchive opens an archive whose CRLs are checked under keys.
-func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
-	return func(dir string, trustIndex bool, progress func(string)) (roster.CRLArchive, []crl.IndexMismatch, error) {
+func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
+	return func(dir string, trustIndex bool, progress func(string)) (prooflog.CRLArchive, []crl.IndexMismatch, error) {
 		if trustIndex {
 			a, err := crl.ReadArchiveIndex(dir)
 			if err != nil {
@@ -80,7 +80,7 @@ func openArchive(keys func() ([]crl.NamedKey, error)) func(string, bool, func(st
 	}
 }
 
-// archive is a crl.Archive as roster.CRLArchive: crl/ imports nothing of the
+// archive is a crl.Archive as prooflog.CRLArchive: crl/ imports nothing of the
 // repository, so its dates are strings.
 type archive struct{ a *crl.Archive }
 
@@ -110,14 +110,14 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	bb := fs.String("bb", "", "path of the `bb` 6.0.0 executable (required)")
 	crs := fs.String("crs", "", "`directory` holding "+verifier.CRSFile+" (required)")
 	timeout := fs.Duration("timeout", verifier.DefaultTimeout, "time one `bb verify` may take before the proof counts as rejected")
-	kind := fs.String("roster", "production", "whose accepted scopes apply: production or test")
+	kind := fs.String("proof-log", "production", "whose accepted scopes apply: production or test")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	data := fs.String("data", defaultData, "`URL or directory` of the published files, without a roster file: the roster directory under roster/, the CRL archive under crl/")
-	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+", for a roster file or directory; without it no root is recognized")
+	data := fs.String("data", defaultData, "`URL or directory` of the published files, without a log file: the log directory under proof-log/, the CRL archive under crl/")
+	archiveDir := fs.String("crl-archive", "", "`directory` of the CRL archive, with its index "+crl.IndexFileName+", for a log file or directory; without it no root is recognized")
 	trustIndex := fs.Bool("crl-trust-index", false, "read only the archive's index, without checking it against the CRL files")
-	cardState := fs.String("card-state", "", "`date` (YYYY-MM-DD) of the card state file to compare, for a roster directory; by default that of the fingerprint file's last line")
+	cardState := fs.String("card-state", "", "`date` (YYYY-MM-DD) of the card state file to compare, for a log directory; by default that of the fingerprint file's last line")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] [roster file | roster directory | -]")
+		fmt.Fprintln(stderr, "usage: iamreal-verify -bb <bb> -crs <dir> [flags] [log file | log directory | -]")
 		fs.PrintDefaults()
 	}
 	var applyTestOptions func(*deps) error
@@ -137,27 +137,27 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fs.Usage()
 		return exitError
 	}
-	var r verifier.Roster
+	var r verifier.ProofLog
 	switch *kind {
 	case "production":
 		r = verifier.Production
 	case "test":
 		r = verifier.Test
 	default:
-		fmt.Fprintf(stderr, "iamreal-verify: -roster %q: want production or test\n", *kind)
+		fmt.Fprintf(stderr, "iamreal-verify: -proof-log %q: want production or test\n", *kind)
 		return exitError
 	}
 	given := map[string]bool{} // the flags given on the command line
 	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
-	// What to read: a roster file or directory with -crl-archive, or else
+	// What to read: a log file or directory with -crl-archive, or else
 	// the published files at -data.
 	var input string
-	var dirSrc source // the roster directory, if the roster is one
+	var dirSrc source // the log directory, if the proof log is one
 	var crlSrc source // the CRL archive at -data, if read from there
 	without := everyFileWithoutCount
 	if fs.NArg() == 1 {
 		if given["data"] {
-			fmt.Fprintln(stderr, "iamreal-verify: -data reads the roster from the published files: give it or a roster file, not both")
+			fmt.Fprintln(stderr, "iamreal-verify: -data reads the proof log from the published files: give it or a log file, not both")
 			return exitError
 		}
 		input = fs.Arg(0)
@@ -168,7 +168,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 	} else {
 		if *archiveDir != "" {
-			fmt.Fprintln(stderr, "iamreal-verify: -crl-archive goes with a roster file; with -data the archive is its crl/")
+			fmt.Fprintln(stderr, "iamreal-verify: -crl-archive goes with a log file; with -data the archive is its crl/")
 			return exitError
 		}
 		src, err := openSource(*data)
@@ -176,13 +176,13 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: -data: %v\n", err)
 			return exitError
 		}
-		dirSrc, crlSrc, without = src.sub("roster"), src.sub("crl"), noneWithoutCount
+		dirSrc, crlSrc, without = src.sub("proof-log"), src.sub("crl"), noneWithoutCount
 		fmt.Fprintf(stderr, "iamreal-verify: reading the published files at %s\n", src)
 	}
 	var cardStateDate *verifier.Date // the date asked for by -card-state
 	if *cardState != "" {
 		if dirSrc == nil {
-			fmt.Fprintln(stderr, "iamreal-verify: -card-state goes with a roster directory or -data: a roster file has no fingerprint file")
+			fmt.Fprintln(stderr, "iamreal-verify: -card-state goes with a log directory or -data: a log file has no fingerprint file")
 			return exitError
 		}
 		date, err := verifier.ParseDate(*cardState)
@@ -196,23 +196,23 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintln(stderr, "iamreal-verify: -crl-trust-index needs -crl-archive")
 		return exitError
 	}
-	var rosterFile []byte
-	var pub *publishedRoster
+	var proofLogFile []byte
+	var pub *publishedProofLog
 	var err error
 	if dirSrc != nil {
 		if pub, err = readPublished(dirSrc, without); err == nil {
-			rosterFile = pub.data
+			proofLogFile = pub.data
 			switch {
 			case pub.published != nil:
 				fmt.Fprintf(stderr, "iamreal-verify: %s: %d record(s) published; later records are not checked\n", fingerprintsFileName, *pub.published)
 			case without == noneWithoutCount:
 				fmt.Fprintf(stderr, "iamreal-verify: %s does not say how many records are published: none is checked\n", fingerprintsFileName)
 			default:
-				fmt.Fprintf(stderr, "iamreal-verify: %s does not say how many records are published: checking every roster file there is\n", fingerprintsFileName)
+				fmt.Fprintf(stderr, "iamreal-verify: %s does not say how many records are published: checking every log file there is\n", fingerprintsFileName)
 			}
 		}
 	} else {
-		rosterFile, err = readInput(input)
+		proofLogFile, err = readInput(input)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
@@ -237,7 +237,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	var crls roster.CRLArchive = noArchive{}
+	var crls prooflog.CRLArchive = noArchive{}
 	var diffs []crl.IndexMismatch
 	switch {
 	case archive == "":
@@ -262,19 +262,19 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: CRL archive: %d difference(s) between %s and the CRL files; continuing with the index rebuilt from the files\n", len(diffs), crl.IndexFileName)
 		}
 	}
-	var rep *roster.Report
+	var rep *prooflog.Report
 	if pub != nil && pub.broken != nil {
-		rep = &roster.Report{Broken: pub.broken}
-	} else if rep, err = roster.Check(rosterFile, r, v, crls); err != nil {
+		rep = &prooflog.Report{Broken: pub.broken}
+	} else if rep, err = prooflog.Check(proofLogFile, r, v, crls); err != nil {
 		fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
 		return exitError
 	}
-	// The record hash lists and the fingerprint file of a valid roster
+	// The record hash lists and the fingerprint file of a valid proof log
 	// directory: each is checked against the records; every problem is
 	// reported.
 	var dirProblems []string
 	if pub != nil && rep.Broken == nil {
-		records, _, _ := roster.ReadFile(rosterFile, r) // valid: Check read it
+		records, _, _ := prooflog.ReadFile(proofLogFile, r) // valid: Check read it
 		listProblems, lists, err := checkHashLists(dirSrc, pub, records)
 		if err != nil {
 			fmt.Fprintf(stderr, "iamreal-verify: %v\n", err)
@@ -286,10 +286,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stderr, "iamreal-verify: %s\n", p)
 		}
 		if len(listProblems) == 0 {
-			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the roster's\n", roster.HashListDir, lists)
+			fmt.Fprintf(stderr, "iamreal-verify: %s/: %d list(s), every list is the proof log's\n", prooflog.HashListDir, lists)
 		}
 		if len(fpProblems) == 0 {
-			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the roster's\n", fingerprintsFileName, len(splitLines(pub.fingerprints.data)))
+			fmt.Fprintf(stderr, "iamreal-verify: %s: %d line(s), every fingerprint is the proof log's\n", fingerprintsFileName, len(splitLines(pub.fingerprints.data)))
 		}
 		// The card state file of a date, against the states computed.
 		csProblems, csSummary, err := checkCardState(dirSrc, pub, r, rep, cardStateDate)
@@ -332,13 +332,13 @@ func readInput(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
 
-func writeText(w io.Writer, rep *roster.Report) error {
+func writeText(w io.Writer, rep *prooflog.Report) error {
 	p := &printer{w: w}
 	if rep.Broken != nil {
-		p.f("roster file: broken at line %d: %s (%v)\n", rep.Broken.Line, rep.Broken.Code, rep.Broken.Err)
+		p.f("log file: broken at line %d: %s (%v)\n", rep.Broken.Line, rep.Broken.Code, rep.Broken.Err)
 		return p.err
 	}
-	p.f("roster file: valid\nrecords: %d\nfingerprint: %s\n", rep.Records, rep.Fingerprint)
+	p.f("log file: valid\nrecords: %d\nfingerprint: %s\n", rep.Records, rep.Fingerprint)
 	if len(rep.State.Records) > 0 {
 		p.f("\nrecords:\n")
 	}
@@ -389,7 +389,7 @@ func (p *printer) f(format string, args ...any) {
 }
 
 // The JSON output has the shape of spec/vectors/record.json ("files") and
-// spec/vectors/roster-rules.json ("results", "state"), without the items of
+// spec/vectors/record-rules.json ("results", "state"), without the items of
 // a card's state that the output does not list (proofs_on_last_date, slots).
 type jsonReport struct {
 	Valid       bool         `json:"valid"`
@@ -440,7 +440,7 @@ type jsonScope struct {
 	Accounts    []jsonAccount `json:"accounts"`
 }
 
-func writeJSON(w io.Writer, rep *roster.Report) error {
+func writeJSON(w io.Writer, rep *prooflog.Report) error {
 	out := jsonReport{}
 	if rep.Broken != nil {
 		out.Line, out.Code = rep.Broken.Line, rep.Broken.Code

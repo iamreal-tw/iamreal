@@ -1,16 +1,16 @@
 // The home page (/) and the page of a card (/p/<short ID>), through the
 // Worker's HTTP (test/harness.ts): every sentence design/copy/ has for the
 // case, in order, read from the copy files; the headers; the redirects and
-// the 404s; and that what the roster's object writes shows on the next page.
-// What every page shares (the production roster, escaping, the methods, the
+// the 404s; and that what the proof log's object writes shows on the next page.
+// What every page shares (the production log, escaping, the methods, the
 // 404 page) is here for every page; the other pages are in
 // test/lookup-pages.test.ts and test/site-pages.test.ts.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testRosterLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testRosterMark, withScript } from "./pages.ts";
-import { DAY_MS, START, freshRoster, mustSubmit, newCard, publishG3, sub } from "./records.ts";
+import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
+import { DAY_MS, START, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -20,7 +20,7 @@ before(async () => {
 after(() => worker.close());
 
 /**
- * The roster of the copy files' examples: card A has the history of
+ * The proof log of the copy files' examples: card A has the history of
  * proof-page.md section 4 (now @alice, last card proof 2026-11-06, 12 days
  * before 2026-11-18); with `withB`, card B gives its place to @alice too.
  */
@@ -48,7 +48,7 @@ describe("the page of a card", () => {
     for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
-    // The address to look for on the profile is written, not a link. A test roster's site writes its own domain
+    // The address to look for on the profile is written, not a link. A test log's site writes its own domain
     // (design/copy/test-site.md): that is where this card's page is.
     assert.equal(testSiteCardAddress(CARD_A), "test.iamreal.tw/p/7K2Q9FM4XD");
     assert.ok(page.includes(`<p class="backlink">${testSiteCardAddress(CARD_A)}</p>`));
@@ -171,7 +171,7 @@ describe("the page of a card", () => {
     wantPreview(page, specialTitles()[1]!, "島民證明 iamreal.tw");
   });
 
-  test("a short ID that resolves to no card, or does not read: 404 with section 9, what was typed written back; one that does not read is answered without the roster's object", async () => {
+  test("a short ID that resolves to no card, or does not read: 404 with section 9, what was typed written back; one that does not read is answered without the proof log's object", async () => {
     await exampleCards(false);
     const unreadable = ["7K2Q9FM4X", "7K2Q9FM4XDD", "7K2Q9FM4XU", "7K2Q-FM4XD", "", "a/b"];
     for (const typed of ["7K2Q9FM4XE", ...unreadable]) {
@@ -179,14 +179,14 @@ describe("the page of a card", () => {
       assert.equal(status, 404, `/p/${typed}`);
       wantLines(page, copyLines(block("proof-page.md", "9. "), "7K2Q9FM4XD", typed));
       assert.ok(page.includes(`<span class="typed">${testSiteCardAddress(typed)}</span> 沒有對到任何一張自然人憑證。`), `/p/${typed}: the test site's own domain`);
-      assert.ok(page.includes('<a href="/roster#q">查一個 Threads 帳號</a>'));
+      assert.ok(page.includes('<a href="/proof-log#q">查一個 Threads 帳號</a>'));
       wantPreview(page, specialTitles()[2]!, "島民證明 iamreal.tw");
     }
 
     // With an object that answers nothing (its tables are of another version), a short ID that reads is 500
     // and one that does not is still the 404: the Worker did not ask.
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       const logged = worker.logLines().length;
       const failed = await worker.fetch(`/p/${CARD_A}`);
@@ -198,15 +198,15 @@ describe("the page of a card", () => {
       assert.equal((await worker.fetch("/")).status, 500);
       for (const typed of unreadable) assert.equal((await getPage(worker, `/p/${typed}`)).status, 404, `/p/${typed}`);
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
   });
 
-  test("a short ID in another spelling is redirected (301) to its one spelling, without the roster's object", async () => {
+  test("a short ID in another spelling is redirected (301) to its one spelling, without the proof log's object", async () => {
     await exampleCards(false);
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       for (const typed of ["7k2q9fm4xd", "7K2Q9FM4xD", "7K2Q9FM4XO", "7K2Q9FM4Xo", "IL2Q9FM4XD", "il2q9fm4xd"]) {
         const res = await worker.fetch(`/p/${typed}`, { redirect: "manual" });
@@ -215,14 +215,14 @@ describe("the page of a card", () => {
         checkVisitorHeaders(`/p/${typed}`, res, { cache: "public, max-age=60", more: ["location"] });
       }
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
     assert.equal((await getPage(worker, `/p/${CARD_A}`)).status, 200);
   });
 
   test("a record shows on the next page opened after it is written", async () => {
-    await freshRoster(worker, { clearedOn: CLEARED_ON });
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const root = await publishG3(worker);
     const card = cardStarting(CARD_A);
     assert.equal((await getPage(worker, `/p/${CARD_A}`)).status, 404);
@@ -233,7 +233,7 @@ describe("the page of a card", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
     ({ status, page } = await getPage(worker, `/p/${CARD_A}`));
     wantLines(page, ["@bob", "過卡 2 次", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
-    // An account on another platform of the test roster is not shown: the pages list Threads only.
+    // An account on another platform of the test log is not shown: the pages list Threads only.
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads refresh");
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
     wantLines(page, ["過卡 3 次", "2026-11-20　再次過卡", "2026-11-20　更正：@alice 改成 @bob"]);
@@ -283,7 +283,7 @@ describe("the home page", () => {
       ...copyLines(block("home.md", "9. ")),
     ]);
 
-    for (const link of ['<a href="/roster">看已經換出的島民證明</a>', '<a href="/hang">掛到 Threads 的個人檔案上</a>', '<a href="/verify">零知識證明</a>', '<a href="/faq">更多常見問題</a>']) {
+    for (const link of ['<a href="/proof-log">看已經換出的島民證明</a>', '<a href="/hang">掛到 Threads 的個人檔案上</a>', '<a href="/verify">零知識證明</a>', '<a href="/faq">更多常見問題</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
     // The one main action, in section 1 and section 8.
@@ -305,8 +305,8 @@ describe("the home page", () => {
     assert.equal(summary, first[1]! + first[2]!, "the summary is the first screen's two lines");
   });
 
-  test("the two numbers follow the roster: a declaration, a withdrawal, and a last card proof 90 and 91 days ago", async () => {
-    await freshRoster(worker, { clearedOn: CLEARED_ON });
+  test("the two numbers follow the proof log: a declaration, a withdrawal, and a last card proof 90 and 91 days ago", async () => {
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const root = await publishG3(worker);
     const numbers = async (): Promise<string[]> => {
       const { page } = await getPage(worker, "/");
@@ -331,7 +331,7 @@ describe("the home page", () => {
   });
 
   test("a number above 999 is written with a comma", async () => {
-    // What the page does with a number is the page's, whatever the roster has: a roster of a thousand cards is not built here.
+    // What the page does with a number is the page's, whatever the proof log has: a proof log of a thousand cards is not built here.
     const { thousands } = await import("../src/pages/html.ts");
     assert.deepEqual([0, 7, 999, 1000, 1284, 1234567].map(thousands), ["0", "7", "999", "1,000", "1,284", "1,234,567"]);
     assert.ok(block("home.md", "2. ").join("\n").includes("1,284"));
@@ -339,9 +339,9 @@ describe("the home page", () => {
 });
 
 describe("every page", () => {
-  test("the production roster: no mark of a test roster and no noindex; the pages are otherwise the same", async () => {
+  test("the production log: no mark of a test log and no noindex; the pages are otherwise the same", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:alice")], { kind: "production" });
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/roster", "/faq", "/verify", "/hang", `/hang/${CARD_A}`]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/hang", `/hang/${CARD_A}`]) {
       const { page } = await getPage(worker, path, { test: false });
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
@@ -356,17 +356,17 @@ describe("every page", () => {
     const none = await getPage(worker, "/nothing", { test: false });
     assert.equal(none.status, 404);
     wantLines(none.page, copyLines(block("not-found.md", "頁面")));
-    // The style sheet's headers are fixed when the Worker is uploaded: a production roster's site is in test/proof-files.test.ts.
+    // The style sheet's headers are fixed when the Worker is uploaded: a production log's site is in test/proof-files.test.ts.
   });
 
-  test("the test roster: the mark says the date of the setting, as design/copy/test-site.md writes it", async () => {
-    await freshRoster(worker, { clearedOn: "2026-12-31" });
+  test("the test log: the mark says the date of the setting, as design/copy/test-site.md writes it", async () => {
+    await freshProofLog(worker, { clearedOn: "2026-12-31" });
     const page = await (await worker.fetch("/")).text();
-    assert.ok(page.includes(testRosterMark("2026-12-31")));
-    assert.equal(testRosterMark("2026-12-31"), '<p class="test-roster">測試的證明紀錄　不定期清空，上次清空：<time>2026-12-31</time></p>');
-    assert.equal(testRosterLine("2026-12-31"), "測試的證明紀錄　不定期清空，上次清空：2026-12-31");
+    assert.ok(page.includes(testProofLogMark("2026-12-31")));
+    assert.equal(testProofLogMark("2026-12-31"), '<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>2026-12-31</time></p>');
+    assert.equal(testProofLogLine("2026-12-31"), "測試的證明紀錄　不定期清空，上次清空：2026-12-31");
     // A date that is not one: the test site serves no page rather than a mark without its date.
-    await freshRoster(worker, { clearedOn: "soon" });
+    await freshProofLog(worker, { clearedOn: "soon" });
     assert.equal((await worker.fetch("/")).status, 500);
     assert.equal((await worker.fetch("/p/7K2Q9FM4X")).status, 500);
     assert.equal((await worker.fetch("/nothing")).status, 500);
@@ -374,15 +374,15 @@ describe("every page", () => {
 
   test("what the address has is escaped", async () => {
     await exampleCards(false);
-    for (const path of ["/p/%3Cb%3Ex%22%27&amp;", "/p/javascript:alert(1)", "/p/%3Cscript%3Ealert(1)%3C/script%3E", "/p/%E5%B3%B6", "/threads/@%3Cb%3Ex%22%27", "/threads/@javascript:alert(1)", "/roster?q=%3Cb%3Ex%22%27"]) {
+    for (const path of ["/p/%3Cb%3Ex%22%27&amp;", "/p/javascript:alert(1)", "/p/%3Cscript%3Ealert(1)%3C/script%3E", "/p/%E5%B3%B6", "/threads/@%3Cb%3Ex%22%27", "/threads/@javascript:alert(1)", "/proof-log?q=%3Cb%3Ex%22%27"]) {
       const { status, page } = await getPage(worker, path);
-      assert.equal(status, path.startsWith("/roster") ? 200 : 404, path);
+      assert.equal(status, path.startsWith("/proof-log") ? 200 : 404, path);
       assert.ok(!page.includes("<b>x") && !page.includes(`x"'`) && !page.includes('href="javascript') && !page.includes('src="javascript'), `${path}: escaped`);
     }
     assert.ok((await getPage(worker, "/p/%3Cb%3Ex%22%27&amp;")).page.includes("test.iamreal.tw/p/&lt;b&gt;x&#34;&#39;&amp;amp;"));
-    assert.ok((await getPage(worker, "/roster?q=%3Cb%3Ex%22")).page.includes('value="&lt;b&gt;x&#34;"'), "the lookup box's value is escaped");
+    assert.ok((await getPage(worker, "/proof-log?q=%3Cb%3Ex%22")).page.includes('value="&lt;b&gt;x&#34;"'), "the lookup box's value is escaped");
     // A NUL is written as U+FFFD, as the Go backend's html/template wrote it, in text and in a value.
-    for (const [path, want] of [["/p/a%00b", "test.iamreal.tw/p/a\uFFFDb"], ["/roster?q=a%00b", 'value="a\uFFFDb"']] as const) {
+    for (const [path, want] of [["/p/a%00b", "test.iamreal.tw/p/a\uFFFDb"], ["/proof-log?q=a%00b", 'value="a\uFFFDb"']] as const) {
       const { page } = await getPage(worker, path);
       assert.ok(page.includes(want) && !page.includes("\0"), `${path}: the NUL is U+FFFD`);
     }
@@ -393,7 +393,7 @@ describe("every page", () => {
 
   test("the pages, the style sheet and the script take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/roster", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/copy.js"]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/copy.js"]) {
       // The style sheet and the script are files of Static Assets.
       const file = path === "/pages.css" || path === "/copy.js";
       const cache = file ? "no-cache" : "public, max-age=60";
@@ -412,18 +412,18 @@ describe("every page", () => {
   });
 
   test("the style sheet: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
-    await freshRoster(worker, { clearedOn: CLEARED_ON });
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
     await worker.seen();
     const res = await worker.fetch("/pages.css");
     assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/css; charset=utf-8"]);
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
     const css = await res.text();
-    assert.ok(css.includes(".test-roster {") && css.includes(".threads-profile"));
+    assert.ok(css.includes(".test-proof-log {") && css.includes(".threads-profile"));
     // The Go back end's style sheet, byte for byte, but for one rule added after
-    // the mark of a test roster: the date in it is not broken at a hyphen on a narrow screen.
+    // the mark of a test log: the date in it is not broken at a hyphen on a narrow screen.
     const added = `
 /* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
-.test-roster time {
+.test-proof-log time {
   white-space: nowrap;
 }
 `;
@@ -440,13 +440,13 @@ describe("every page", () => {
   });
 
   test("what is not a page is the 404 page of design/copy/not-found.md, with what every page has; under /api/ it stays the API's answer", async () => {
-    await freshRoster(worker, { clearedOn: CLEARED_ON });
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const lines = copyLines(block("not-found.md", "頁面"));
     assert.deepEqual(lines, ["找不到這一頁", "這個網址沒有對到任何頁面。請確認網址有沒有抄錯。", "回到首頁"]);
-    // Among them what is near a page but none: a slash too many, another case, the old back end's /roster/ of the
-    // roster's files (now on the data domain), a page of an account without its @.
-    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/FAQ", "/faq/", "/roster/", "/roster/fingerprints.jsonl", "/verify/", "/threads/alice", "/threads", "/copy.js/", "/nothing?q=1"]) {
-      // getPage checks the headers (noindex among them), the mark of the test roster with its date, the navigation bar and the foot.
+    // Among them what is near a page but none: a slash too many, another case, the path of the proof log's files on
+    // the data domain (the old back end had its files on this domain), a page of an account without its @.
+    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/FAQ", "/faq/", "/proof-log/", "/proof-log/fingerprints.jsonl", "/verify/", "/threads/alice", "/threads", "/copy.js/", "/nothing?q=1"]) {
+      // getPage checks the headers (noindex among them), the mark of the test log with its date, the navigation bar and the foot.
       const { status, page } = await getPage(worker, path);
       assert.equal(status, 404, path);
       wantLines(page, lines);
@@ -454,14 +454,14 @@ describe("every page", () => {
       assert.equal(firstMatch(TITLE_TAG, page), "找不到這一頁｜島民證明");
       wantPreview(page, "找不到這一頁", "島民證明 iamreal.tw");
     }
-    // The roster is not asked: with an object that answers nothing, the page is the same.
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    // The proof log is not asked: with an object that answers nothing, the page is the same.
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       assert.equal((await getPage(worker, "/nothing")).status, 404);
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
     // Nothing but the pages is cached, and what is not there under /api/ is the API's own 404.
     for (const [path, method] of [["/api/v1/config", "GET"], ["/api/v1/challenges", "POST"], ["/api/v1/nothing", "GET"]] as const) {

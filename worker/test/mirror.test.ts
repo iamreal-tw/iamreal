@@ -1,6 +1,6 @@
 // The CRL mirror in the local workerd (test/harness.ts), seen from outside:
 // the index and the files its rounds leave in the simulated R2 bucket, and
-// what the roster's Durable Object then knows of the archive. The CRLs are
+// what the proof log's Durable Object then knows of the archive. The CRLs are
 // signed by the test's issuer keys (test/crls.ts).
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
@@ -177,12 +177,12 @@ describe("a round that broke off is made good by the next", () => {
     });
   }
 
-  test("the roster's object is told again in every round, so one that missed a round catches up", async () => {
+  test("the proof log's object is told again in every round, so one that missed a round catches up", async () => {
     assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.crlNumber), ["12", "11"]);
   });
 });
 
-describe("the roster's Durable Object keeps the two newest usable CRLs of each issuer key", () => {
+describe("the proof log's Durable Object keeps the two newest usable CRLs of each issuer key", () => {
   let worker: TestWorker;
   before(async () => {
     worker = await startWorker();

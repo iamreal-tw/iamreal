@@ -3,7 +3,7 @@ import XCTest
 
 /// Card proofs from the screens, with a card made of test keys, against
 /// the Worker in the local workerd (web/test/app-backend.ts): what the six
-/// screens say, what goes to the card, and what the roster then holds,
+/// screens say, what goes to the card, and what the proof log then holds,
 /// which the script has Go's iamreal-verify re-verify once these tests end.
 ///
 /// The model is driven the way the screen drives it: a button is pressed by
@@ -34,7 +34,7 @@ final class CardProofTests: XCTestCase {
     // The four kinds, one card ------------------------------------------------------
 
     /// A first declaration, a card proof again, a switch and a withdrawal,
-    /// in that order: the roster then holds `first`, `refresh`, `switch`,
+    /// in that order: the proof log then holds `first`, `refresh`, `switch`,
     /// `withdraw` on Threads. The switch is on the next day: on the day of
     /// the declaration it would be a correction.
     func testACardDeclaresComesAgainSwitchesAndWithdraws() async throws {
@@ -437,7 +437,7 @@ final class CardProofTests: XCTestCase {
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
         self.asked = asked
         let flow = CardProofFlow.Dependencies(
-            roster: .test,
+            proofLog: .test,
             backend: asked,
             card: card,
             clock: { [unowned self] in self.now },

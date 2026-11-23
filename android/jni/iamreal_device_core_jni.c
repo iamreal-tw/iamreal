@@ -132,14 +132,14 @@ JNIEXPORT void JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSelfCheck(JNIEn
   if (code != IDC_OK) throw_code(env, code);
 }
 
-JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeScopeString(JNIEnv *env, jobject self, jint roster) {
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeScopeString(JNIEnv *env, jobject self, jint proof_log) {
   (void)self;
   idc_buf out = {NULL, 0};
-  int32_t code = idc_scope_string((uint32_t)roster, &out);
+  int32_t code = idc_scope_string((uint32_t)proof_log, &out);
   return result(env, code, &out);
 }
 
-JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeDeclarationCode(JNIEnv *env, jobject self, jint roster,
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeDeclarationCode(JNIEnv *env, jobject self, jint proof_log,
                                                                                       jbyteArray accounts_json, jbyteArray challenge) {
   (void)self;
   copy accounts, chal;
@@ -149,7 +149,7 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeDeclarati
     return NULL;
   }
   idc_buf out = {NULL, 0};
-  int32_t code = idc_declaration_code((uint32_t)roster, accounts.ptr, accounts.len, chal.ptr, chal.len, &out);
+  int32_t code = idc_declaration_code((uint32_t)proof_log, accounts.ptr, accounts.len, chal.ptr, chal.len, &out);
   copy_free(&accounts);
   copy_free(&chal);
   return result(env, code, &out);
@@ -200,10 +200,10 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeRecordsRe
   return result(env, code, &out);
 }
 
-JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionOpen(JNIEnv *env, jobject self, jint roster) {
+JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionOpen(JNIEnv *env, jobject self, jint proof_log) {
   (void)self;
   idc_session session = 0;
-  int32_t code = idc_session_open((uint32_t)roster, &session);
+  int32_t code = idc_session_open((uint32_t)proof_log, &session);
   if (code != IDC_OK) throw_code(env, code);
   return (jlong)session;
 }
@@ -326,12 +326,12 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeSessionRe
 
 #ifdef IDC_TESTING
 /* Only in the library of the tests (build-native.sh, "test-issuers"): a session that trusts the issuer keys given, for a fake card. */
-JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_TestingCore_nativeSessionOpen(JNIEnv *env, jobject self, jint roster, jbyteArray issuers_json) {
+JNIEXPORT jlong JNICALL Java_tw_iamreal_app_core_TestingCore_nativeSessionOpen(JNIEnv *env, jobject self, jint proof_log, jbyteArray issuers_json) {
   (void)self;
   copy in;
   if (!copy_in(env, issuers_json, &in)) return 0;
   idc_session session = 0;
-  int32_t code = idc_testing_session_open((uint32_t)roster, in.ptr, in.len, &session);
+  int32_t code = idc_testing_session_open((uint32_t)proof_log, in.ptr, in.len, &session);
   copy_free(&in);
   if (code != IDC_OK) throw_code(env, code);
   return (jlong)session;

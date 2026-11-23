@@ -1,12 +1,12 @@
-//! The roster rules (spec/roster-rules.md), the third implementation after
-//! Go's `roster/` and TypeScript's `protocol/` (ADR-0030, ADR-0034).
+//! The record rules (spec/record-rules.md), the third implementation after
+//! Go's `prooflog/` and TypeScript's `protocol/` (ADR-0030, ADR-0034).
 //!
 //! [`apply_record`] takes a record, the state of its card before it and the
-//! three facts about the rest of the roster the checks read, and gives the
+//! three facts about the rest of the proof log the checks read, and gives the
 //! record's result and the state of the card after it. It keeps nothing.
 //! [`apply_list`] is its second half, checks 5 and 6: what the device
 //! computes for a list before the card signs it. [`MemoryRules`] keeps the
-//! state of every card in memory, to compute a roster from its first
+//! state of every card in memory, to compute a proof log from its first
 //! record.
 //!
 //! The rules and their numbers are built into the core and change with the
@@ -19,8 +19,8 @@ use crate::challenge::parse_challenge;
 use crate::date::Date;
 use crate::username_format::{UsernameFormat, is_any_username};
 
-/// The version number of these rules (spec/roster-rules.md, "The version
-/// number"). Go's `roster.RulesVersion` and TypeScript's `RULES_VERSION`
+/// The version number of these rules (spec/record-rules.md, "The version
+/// number"). Go's `prooflog.RulesVersion` and TypeScript's `RULES_VERSION`
 /// are the same number.
 pub const RULES_VERSION: u32 = 2;
 
@@ -32,7 +32,7 @@ pub const DATE_ORDER_DAYS: i64 = 4;
 /// A card has 5 switches on each platform, for good ("Switches and corrections").
 pub const MAX_SWITCHES: u32 = 5;
 /// A record's date is at most 3 days after the date of the CRL behind its
-/// root ("How far dates are trusted"); no date in the roster is later than
+/// root ("How far dates are trusted"); no date in the proof log is later than
 /// today plus this.
 pub const MAX_DAYS_AHEAD: i64 = 3;
 /// A record's date is at most this many days before the date of the CRL
@@ -187,7 +187,7 @@ impl Platform {
 }
 
 /// What the rules are never asked about ("What an invalid record changes"):
-/// not an invalid record, a list or a state that is not a roster's. No check
+/// not an invalid record, a list or a state that is not a proof log's. No check
 /// runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotARecord {
@@ -214,10 +214,10 @@ pub struct ListOutcome {
     pub card: Card,
 }
 
-/// A record and the facts about the rest of the roster that its checks read.
+/// A record and the facts about the rest of the proof log that its checks read.
 #[derive(Debug, Clone)]
 pub struct RecordInput<'a> {
-    /// The roster's platform table, in any order.
+    /// The proof log's platform table, in any order.
     pub platforms: &'a [Platform],
     /// The record's list, in ascending order of platform.
     pub accounts: &'a [Account],
@@ -227,7 +227,7 @@ pub struct RecordInput<'a> {
     pub verifies: bool,
     /// The state of the record's card before it.
     pub card: &'a Card,
-    /// The latest date among the earlier valid records of the roster, of any card.
+    /// The latest date among the earlier valid records of the proof log, of any card.
     pub latest_valid_date: Option<Date>,
     /// Whether the record's challenge appears in an earlier record, valid or invalid.
     pub challenge_used: bool,
@@ -239,7 +239,7 @@ pub struct RecordInput<'a> {
 pub struct RecordOutcome {
     pub result: RecordResult,
     pub card: Card,
-    /// The latest date among the valid records of the roster after the record.
+    /// The latest date among the valid records of the proof log after the record.
     pub latest_valid_date: Option<Date>,
 }
 
@@ -404,10 +404,10 @@ pub fn apply_list(
     Ok(check_list(&table, card, &list, date))
 }
 
-/// The roster rules for one record ("Per record"): the six checks in order,
+/// The record rules for one record ("Per record"): the six checks in order,
 /// the first that fails giving the reason code. It keeps nothing.
 ///
-/// What the caller keeps between records: the card's state, the roster's
+/// What the caller keeps between records: the card's state, the proof log's
 /// latest valid date and, whatever the result, that the record's challenge
 /// is used. With an error the input was not a record, and the caller keeps
 /// nothing.
@@ -467,7 +467,7 @@ pub fn apply_record(input: &RecordInput<'_>) -> Result<RecordOutcome, NotARecord
     })
 }
 
-/// False if no roster can give a slot this state by the rules:
+/// False if no proof log can give a slot this state by the rules:
 ///
 /// - `current`, when set, is `last_declared` (it is set only together with
 ///   it, and a withdrawal clears `current` only);
@@ -501,7 +501,7 @@ pub fn possible_slot(slot: &Slot, last_card_proof: Option<Date>) -> bool {
     !matches!((correction_date, last_card_proof), (Some(c), Some(l)) if c > &l)
 }
 
-/// False if no roster can give a card these items: `proofs_on_last_date`
+/// False if no proof log can give a card these items: `proofs_on_last_date`
 /// is 0 without `last_card_proof` and 1 to 3 with it (check 6), and no date
 /// is more than [`MAX_DAYS_AHEAD`] days after `today`.
 pub fn possible_card(last_card_proof: Option<Date>, proofs_on_last_date: u32, today: Date) -> bool {
@@ -515,7 +515,7 @@ pub fn possible_card(last_card_proof: Option<Date>, proofs_on_last_date: u32, to
 }
 
 /// A well-formed record, with the two answers the rules take from outside
-/// the roster.
+/// the proof log.
 #[derive(Debug, Clone)]
 pub struct MemoryRecord {
     pub scope_string: String,
@@ -554,8 +554,8 @@ pub struct OutputScope {
     pub accounts: Vec<OutputAccount>,
 }
 
-/// The roster rules with their state kept in memory: the way to compute
-/// the state of every card from the first record of a roster. Everything
+/// The record rules with their state kept in memory: the way to compute
+/// the state of every card from the first record of a proof log. Everything
 /// the rules decide is [`apply_record`]; this keeps what it asks its caller
 /// to keep between records.
 #[derive(Debug, Clone)]
@@ -569,7 +569,7 @@ pub struct MemoryRules {
 }
 
 impl MemoryRules {
-    /// `platforms`: the roster's platform table (spec/scope.md).
+    /// `platforms`: the proof log's platform table (spec/scope.md).
     pub fn new(mut platforms: Vec<Platform>) -> MemoryRules {
         platforms.sort_by(|a, b| a.platform.cmp(&b.platform));
         MemoryRules {

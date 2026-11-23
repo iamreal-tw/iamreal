@@ -22,7 +22,7 @@ status: accepted
 ## Consequences
 
 - **有一種正常的情況會被擋下。** 同一張卡片拿了兩個題目，一個在午夜前發、一個在午夜後發，先送出後發的那一個，先發的那一筆就不收。持卡人重新過卡一次。後台發題目時押的是當下的日期，所以只拿一個題目的持卡人不會遇到。
-- **檢查 4 原本的條件留著。** 它擋的是另一件事：很久沒過卡的卡片把日期押回舊的更換日，讓換帳號算成當天更正（`spec/roster-rules.md`，「How far dates are trusted」）。
+- **檢查 4 原本的條件留著。** 它擋的是另一件事：很久沒過卡的卡片把日期押回舊的更換日，讓換帳號算成當天更正（`spec/record-rules.md`，「How far dates are trusted」）。
 - **日期被押到未來的卡片，在那一天之前不能用當天的日期過卡。** 押到未來要營運者和改過的裝置一起做，最多 3 天（檢查 3），受影響的只有那張卡片自己。
-- 規格的狀態表不用改，`proofs_on_last_date` 現在足以回答檢查 6。`spec/roster-rules.md` 的檢查 4 和說明、`spec/vectors/roster-rules.json`、`roster/`、`web/` 裡的規則、`docs/api/card-proof.md` 對 `date_order` 的說明要跟著改。
+- 規格的狀態表不用改，`proofs_on_last_date` 現在足以回答檢查 6。`spec/record-rules.md` 的檢查 4 和說明、`spec/vectors/record-rules.json`、`prooflog/`、`web/` 裡的規則、`docs/api/card-proof.md` 對 `date_order` 的說明要跟著改。
 - **要在正式的證明紀錄有紀錄之前生效。** 之後才加，已經寫入的紀錄可能變成無效。之後要放寬回去，每張卡片的狀態要多記東西，後台存著的狀態要從紀錄重算。

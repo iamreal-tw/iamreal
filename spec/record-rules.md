@@ -1,8 +1,8 @@
-# Roster rules
+# Record rules
 
 Status: **Draft**.
 
-The roster stores events, not states (ADR-0005). The current state of every
+The proof log stores events, not states (ADR-0005). The current state of every
 card and account is computed from the records by the rules below: which
 account a card declares on each platform, and when the card last made a card
 proof (ADR-0017). One card proof is one record, and a record states the
@@ -13,8 +13,8 @@ server's API.
 
 ## Input
 
-A snapshot: a roster file ([`record.md`](record.md)), usually read from a
-roster directory ("The published roster"). Besides the snapshot, the rules
+A snapshot: a log file ([`record.md`](record.md)), usually read from a
+log directory ("The published proof log"). Besides the snapshot, the rules
 read only fixed tables of this specification (the scopes and platforms of
 [`scope.md`](scope.md), the circuits, the issuer keys) and, for check 3, the
 archive of MOICA's CRLs. Nothing comes from the server.
@@ -34,7 +34,7 @@ first check on the line where they occur. The rules do not compute a state
 from a broken file.
 
 **Each record** of a valid file is valid, or invalid with one reason code.
-An invalid record stays in the roster and is listed, but changes nothing
+An invalid record stays in the proof log and is listed, but changes nothing
 ("What an invalid record changes").
 The server does not append records that would be invalid. Any invalid record
 a re-verifier finds therefore shows the operator appended something it should
@@ -42,10 +42,10 @@ not have.
 
 ## Words
 
-- A **card** is one (`scope_string`, `scoped_id`). The public roster is one
+- A **card** is one (`scope_string`, `scoped_id`). The public proof log is one
   scope ([`scope.md`](scope.md)), so there a card is one `scoped_id`.
 - A **slot** is one (card, `platform`): the card's one place on that
-  platform (ADR-0017). A card has as many slots as the roster has platforms.
+  platform (ADR-0017). A card has as many slots as the proof log has platforms.
 - An **account** is one (`platform`, `username`). The same `username` on two
   platforms is two accounts.
 - The **list** of a record is its `accounts`: at most one account per
@@ -69,7 +69,7 @@ challenge was used before; its challenge still counts as used.
 | 6 | Fewer than 3 earlier valid records of its card have its date | `daily_limit` |
 
 The **date** `d` of a record is the date in its challenge. Order is always by
-`seq`, never by date. Across the roster, dates can step backwards by a day
+`seq`, never by date. Across the proof log, dates can step backwards by a day
 around midnight, because the challenge is dated when it is issued. Within one
 card they cannot (check 4): a card that took one challenge before midnight
 and one after, and sent the later-dated one first, cannot send the earlier
@@ -114,7 +114,7 @@ belong to the platform.
 
 ## Event rules
 
-For a record with date `d`, every platform of the roster's table
+For a record with date `d`, every platform of the proof log's table
 ([`scope.md`](scope.md)) is looked at, whether the list has an entry for it
 or not, against the state of the card's slot on that platform **before**
 the record. The first row that applies gives the kind:
@@ -236,7 +236,7 @@ About the card:
 - **One card has at most 3 valid records per date**, whatever they change.
   One record covers every platform, so three leave room to declare, correct
   a mistyped account and withdraw on the same day; the limit keeps a single
-  card from filling the roster, and does not grow with the number of
+  card from filling the proof log, and does not grow with the number of
   platforms. A day is a date in Taiwan, as in every challenge. Records
   blocked by another rule do not count, and the server does not append them
   anyway.
@@ -261,7 +261,7 @@ An invalid record changes one thing: its challenge counts as used (check
   `correction_date`, on any platform, including the platforms where its
   list asked for nothing new;
 - not the card's `last_card_proof` or `proofs_on_last_date`;
-- not the latest valid date of the roster that check 4 compares with.
+- not the latest valid date of the proof log that check 4 compares with.
 
 So a list with one change that is not allowed cannot carry another change
 through, cannot make the card look recent, cannot use up a switch or a place
@@ -297,14 +297,14 @@ old switch would pass as a correction. Checks 3 and 4 bound this.
   3 days after the date of the CRL behind its root, and MOICA has not signed
   future CRLs.
 - **Into the past: at most 4 days** (check 4), relative to the records
-  already in the roster. The 4 days cover a record dated the full 3 days
+  already in the proof log. The 4 days cover a record dated the full 3 days
   ahead, plus one day around midnight, so an honest record is never caught by
   a record dated ahead of it. Check 3 alone would not stop dates in the past:
   old CRLs stay recognized so that old records keep verifying.
 - **Not before the card's own `last_card_proof`** (check 4). A card proof
   that was signed but never appended can be sent later, by whoever holds
   it. Once the card has a valid record of a later date, a record of an
-  earlier date is invalid, whoever sends it. The records in the roster are
+  earlier date is invalid, whoever sends it. The records in the proof log are
   public, with their proofs, so anyone can also send a copy of one; a copy
   is caught by check 2, whatever its date.
 
@@ -312,7 +312,7 @@ The card's own bound does not replace the 4 days. A card that has made no
 card proof for a long time has its `last_card_proof` on the date of its
 last record, which can be the date of its last switch; a change dated back
 to that date would pass the card's own bound and count as a correction.
-Only the bound relative to the whole roster stops it. It also bounds the
+Only the bound relative to the whole proof log stops it. It also bounds the
 date of a card's first record, which has no `last_card_proof` to compare
 with.
 
@@ -344,7 +344,7 @@ Every sort is by the byte values of the strings (ASCII order), not by a
 locale's collation.
 
 - **Per scope**, scopes sorted by scope string. A scope with no listed card
-  is not listed. A roster has one scope with records, until a version is
+  is not listed. A proof log has one scope with records, until a version is
   retired ([`scope.md`](scope.md)); only then does it hold records of two
   scope strings, and a card of the old one and a card of the new one are two
   cards.
@@ -371,14 +371,14 @@ carry the date.
 
 ## Not part of these rules
 
-- The 10-minute lifetime of a challenge is a server rule. The roster does not
+- The 10-minute lifetime of a challenge is a server rule. The proof log does not
   record when a challenge was issued, so nobody else can check it.
 - A card proof the server rejects under these rules is not appended, so it
   changes nothing, including `last_card_proof`.
 - **The server may decline to append a record these rules would accept.**
   It can make the later switches of a slot subject to conditions of its own
   ([`docs/api/card-proof.md`](../docs/api/card-proof.md)). That is a rule of
-  the server, not of the roster: a record that is in the roster is judged by
+  the server, not of the proof log: a record that is in the proof log is judged by
   these rules only, and the limit that everyone can check is 5.
   Such a rule of the server is not covered by "Changing these rules": when
   it changes, no record already written changes.
@@ -394,9 +394,9 @@ carry the date.
 The server does not compute the state of a card from the first record each
 time: it keeps the state of every card, and judges the next record of a
 card against the state it kept. A kept state that is wrong would accept
-records that cannot be taken out of the roster. So once a day the server
+records that cannot be taken out of the proof log. So once a day the server
 publishes the states it keeps, as a **card state file**, and a re-verifier
-compares them with the states it computes itself from the roster
+compares them with the states it computes itself from the proof log
 (ADR-0025). The file is there to be checked. Nobody takes the state of a
 card from it: the state of a card is what these rules give from the
 records.
@@ -407,19 +407,19 @@ long it is kept are not part of this specification (ADR-0027).
 
 **The file of a date holds the state of every card after the first `count`
 records**, `count` being the one in the fingerprint file's line of the same
-date ([`record.md`](record.md), "The published roster"). The count is not
+date ([`record.md`](record.md), "The published proof log"). The count is not
 written in the file, and every line of the file is a card. The server reads
 the count and the states it keeps at one moment, and writes the file and
 then the fingerprint line from them.
 
 **Which cards.** Every card that has a valid record among those records has
 one row, and no other card has one, as in the output ("Output"). A card
-that has withdrawn everything has a row. A roster without a valid record
+that has withdrawn everything has a row. A proof log without a valid record
 gives the empty file.
 
 ### A row
 
-A row is one line, in the same one-spelling form as a roster line
+A row is one line, in the same one-spelling form as a proof log line
 ([`record.md`](record.md), "Lines and files"): this template, followed by
 one `LF` (`0x0A`).
 
@@ -429,7 +429,7 @@ one `LF` (`0x0A`).
 
 | Field | Format |
 |---|---|
-| `scope_string` | One of the accepted scopes of this roster ([`scope.md`](scope.md)) |
+| `scope_string` | One of the accepted scopes of this proof log ([`scope.md`](scope.md)) |
 | `scoped_id` | 52 characters, in the one accepted spelling ([`scoped-id.md`](scoped-id.md)) |
 | `last_seq` | The `seq` of the card's last valid record: a decimal integer from `1` to `9007199254740991` (2^53 − 1), without leading zeros |
 | `last_card_proof` | The item of that name ("State"): a date, `YYYY-MM-DD`, as in a challenge ([`challenge.md`](challenge.md)): a year from `2000` to `2049`, a date that exists. Never `null`: a card with a row has a valid record |
@@ -447,7 +447,7 @@ SLOT  = "PLATFORM":{"current":CURRENT,"last_declared":LAST_DECLARED,"switch_coun
 
 | Part | Format |
 |---|---|
-| `PLATFORM` | One of the platform IDs of this roster, exactly as in the platform table ([`scope.md`](scope.md)) |
+| `PLATFORM` | One of the platform IDs of this proof log, exactly as in the platform table ([`scope.md`](scope.md)) |
 | `current`, `last_declared` | `null` for none; otherwise the `username` in double quotes, in the `username` format of the slot's platform ([`scope.md`](scope.md)) |
 | `switch_count` | `0`, or a decimal integer without leading zeros, at most `9007199254740991` |
 | `correction_date` | `null` for none; otherwise the date in double quotes, `YYYY-MM-DD` as above |
@@ -480,7 +480,7 @@ character ([`scope.md`](scope.md), "The `username` format"). A platform
 whose format allowed one of them could not be added without changing this
 template and the record's.
 
-**Check a row** like a roster line: parse it in any way, check every value
+**Check a row** like a proof log line: parse it in any way, check every value
 against the tables, then write the row again from the template, with its
 slots in ascending order of `PLATFORM` and without any slot in the initial
 state, and compare bytes. The row's bytes up to and including its `LF` must
@@ -551,7 +551,7 @@ It needs:
   is what the re-verifier reports.
 - N: the number of records, from the first, the re-verifier has applied
   these rules to. N can be less than `count` (the re-verifier is behind the
-  file), equal to it, or more (the roster has grown since).
+  file), equal to it, or more (the proof log has grown since).
 - Its own state of every card that has a valid record among those N
   records, and for each the `seq` of its last valid record: the card's own
   `last_seq`, which is at most N.
@@ -585,7 +585,7 @@ Why each line is there:
    those. A row that names a later record is not such a state, whatever N
    is and whether or not that record is a valid record of the card. Without
    this line, a server that kept something else than a `seq` as `last_seq`
-   (a time, a number larger than the roster) would have every row skipped
+   (a time, a number larger than the proof log) would have every row skipped
    by line 2 on every day, and the comparison would pass having compared
    nothing.
 2. **The re-verifier is behind the file.** The row's state comes from a
@@ -597,7 +597,7 @@ Why each line is there:
    to hold; the file of a later date has it. Nothing is said about the row,
    present or not. This line applies only when N is greater than `count`.
 4. **The server keeps a state no record gave.** The row's `last_seq` is at
-   most N, and among those N records the roster has no valid record of the
+   most N, and among those N records the proof log has no valid record of the
    card.
 5. **A card whose last valid record is at or before `count` has a row.**
 6. and 7. Both sides are now the card's state after the first `count`
@@ -622,7 +622,7 @@ the server kept wrongly for the first `count` records shows as
 `different`: a card left out (line 5), a card no record gave (line 1 or
 4), a valid record missed or a `last_seq` too small (line 7), a `last_seq`
 too large (line 1 or, up to `count`, line 7), any other item (line 7). A
-re-verifier that has verified the published roster up to the last line of
+re-verifier that has verified the published proof log up to the last line of
 the fingerprint file, and compares the file of that line's date, has N
 equal to `count`. With another N, the cards of lines 2 and 3 wait.
 
@@ -659,13 +659,13 @@ these rules.
   period of notice. If the deploy cannot be made in time, another change
   moves `D` later, before `D` arrives.
 - **Whether the results are the same is a comparison, not a judgement.**
-  Before a change is merged, the latest production roster is computed under
+  Before a change is merged, the latest production log is computed under
   the old and the new version and compared record by record
   ([`CONTRIBUTING.md`](../CONTRIBUTING.md)). If every result is the same,
   the change applies to every record; otherwise it has an effective date.
   After the deploy, the re-verification from the first record that a new
   version number of these rules starts (ADR-0025) is the last check. If a
-  record written between that roster and the deploy gets a different
+  record written between that proof log and the deploy gets a different
   result, the operator stops accepting card proofs, goes back to the code
   of the old version, and makes the change again with an effective date.
 
@@ -685,7 +685,7 @@ These rules have a version number, a positive integer.
 **These rules are version 2.**
 
 Each implementation of these rules has the number as a constant
-(`RulesVersion` in Go's `roster/`, `RULES_VERSION` in TypeScript's
+(`RulesVersion` in Go's `prooflog/`, `RULES_VERSION` in TypeScript's
 `protocol/` and in Rust's `device-core/`), and the test vectors carry it
 (`rules_version`). The tests of every implementation check their constant
 against the sentence above and against the vectors.
@@ -694,7 +694,7 @@ What the number is for: a state of a card that is stored, not recomputed,
 was computed by one version of these rules. The server stores with its card
 states the number they were computed by; when that is not the number of the
 code running, it stops accepting card proofs until the states are rebuilt
-from the records. A new number also starts a re-verification of the roster
+from the records. A new number also starts a re-verification of the proof log
 from its first record (ADR-0025).
 
 **The number goes up by one with every change to these rules**: a change
@@ -713,7 +713,7 @@ was, such as another number for a limit: the number goes up, and the server
 stops accepting card proofs until its states are rebuilt. Nobody then has
 to judge whether a change makes the stored states wrong, where a wrong
 judgement means records accepted on a wrong state that cannot be taken out
-of the roster; and only a new number starts the re-verification from the
+of the proof log; and only a new number starts the re-verification from the
 first record (ADR-0025, ADR-0031).
 
 **It also goes up when an implementation is corrected**: when one of them
@@ -721,7 +721,7 @@ gave a record a result, or a card a state, that these rules do not give,
 and states computed by it may be stored. The text of these rules does not
 change then; the number does, because the stored states cannot be trusted
 (ADR-0025). For now only the server stores states, so this is the case of
-an error in the server. Correcting an error in Go's `roster/` does not
+an error in the server. Correcting an error in Go's `prooflog/` does not
 change the number: nothing stored was computed by it, and the new version
 of the re-verification command starts the re-verification from the first
 record (ADR-0025).
@@ -762,12 +762,12 @@ circuit, or all the records, may then be voided:
 
 ## Test vectors
 
-[`vectors/roster-rules.json`](vectors/roster-rules.json): cases, each a
+[`vectors/record-rules.json`](vectors/record-rules.json): cases, each a
 sequence of events with the outcome of each and the final state.
 
 - `rules_version` is the version number of these rules the cases were
   written for ("The version number").
-- `roster` says which roster the case is: `production` or `test`. It
+- `proof_log` says which proof log the case is: `production` or `test`. It
   decides the platform table the event rules go through
   ([`scope.md`](scope.md)).
 - Events stand for well-formed records and carry only the fields the rules
@@ -783,22 +783,22 @@ sequence of events with the outcome of each and the final state.
   They are there so that a case can show that an invalid record left every
   slot as it was.
 - Every case has one scope string. Cases with two scope strings in one
-  roster belong to retiring a scope and will be added with it.
+  proof log belong to retiring a scope and will be added with it.
 
 [`vectors/card-state-file.json`](vectors/card-state-file.json), for "The
 card state file":
 
 - `rules_version` is the version number of these rules the files below
-  that come from `roster-rules.json` were computed by ("The version
+  that come from `record-rules.json` were computed by ("The version
   number"). When the number goes up, those files are computed again.
-- `files`: card state files, valid or broken, each with the `roster` it is
+- `files`: card state files, valid or broken, each with the `proof_log` it is
   read with. A valid one has its bytes (`content`) and its rows as states
   (`cards`, in the order of the file; `slots` has exactly the slots the row
   lists), so that both writing and reading can be tested. A broken one has
   the first line that fails and the code. A file whose bytes are not UTF-8
   has them as hex digits (`content_hex`) in place of `content`.
 - Some valid files are the final state of a case of
-  `roster-rules.json`, named by `roster_rules_case`: the case's cards
+  `record-rules.json`, named by `record_rules_case`: the case's cards
   without `accounts` and without the slots in the initial state, each with
   the `seq` of its last valid result as `last_seq`.
 - One valid file has rows that are well formed but are not states these
@@ -806,6 +806,6 @@ card state file":
 - `comparisons`: a file, its `count`, the number of records the re-verifier
   has applied the rules to (`verified`), its own cards (`computed`), and
   the outcome of every card ("Comparing").
-- Every file has one scope string, like the cases above: a roster accepts
+- Every file has one scope string, like the cases above: a proof log accepts
   one until a scope is retired. Files with rows of two scope strings will
   be added with it.

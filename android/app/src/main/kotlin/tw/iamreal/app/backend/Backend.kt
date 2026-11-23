@@ -35,7 +35,7 @@ class Backend(private val site: String, private val data: String) {
 
     /**
      * `POST /api/v1/records` with [body], the core's: the body of the answer, which is a `201` and no other
-     * status. A `201` is a record in the roster whatever follows it (spec/records-response.md): a body that
+     * status. A `201` is a record in the proof log whatever follows it (spec/records-response.md): a body that
      * does not arrive whole is no bytes, not a failure.
      */
     fun submit(body: ByteArray): ByteArray = request("POST", "$site/api/v1/records", body, API_TIMEOUT_MS, MAX_ANSWER, created = true)

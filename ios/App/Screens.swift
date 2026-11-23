@@ -361,7 +361,7 @@ struct Screens {
         let withdrawAll = done.accounts.isEmpty
         let kinds = done.answer.kinds
         var blocks: [Block] = []
-        // What the roster recorded is not what step 5 said: first of all, above the title.
+        // What the proof log recorded is not what step 5 said: first of all, above the title.
         if !done.answer.mismatches.isEmpty { blocks.append(.message(copy("done.mismatch"))) }
         blocks.append(.title(doneTitle(done)))
         let shortID = copy("confirm.short_id", ["short_id": done.shortID])
@@ -407,7 +407,7 @@ struct Screens {
                 return .text(copy("done.other_cards", ["account": account]))
             }
         } else {
-            // The record is in the roster; what it is on each platform the app could not read.
+            // The record is in the proof log; what it is on each platform the app could not read.
             blocks.append(.text(copy("done.kinds_unreadable")))
         }
         var points: [String] = []

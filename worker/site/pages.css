@@ -1,7 +1,7 @@
 /*
  * The pages visitors read: the home page, the FAQ, how to verify, hanging
  * a proof on a profile, the page of a card, the page of an account and the
- * roster page (server/pages). One column, at most 560 wide, 20 on each
+ * proof log page (server/pages). One column, at most 560 wide, 20 on each
  * side on a phone.
  *
  * Nothing here means a conclusion (docs/design/principles.md, principle 4):
@@ -75,8 +75,8 @@ h2 {
   letter-spacing: 0.04em;
 }
 
-/* A test roster says so above everything else. */
-.test-roster {
+/* A test log says so above everything else. */
+.test-proof-log {
   margin: 0;
   padding: 6px 20px;
   background: var(--teal-bg);
@@ -88,7 +88,7 @@ h2 {
 }
 
 /* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
-.test-roster time {
+.test-proof-log time {
   white-space: nowrap;
 }
 
@@ -382,7 +382,7 @@ section.verify {
   margin-left: auto;
 }
 
-/* The roster page ------------------------------------------------------------------- */
+/* The proof log page ---------------------------------------------------------------- */
 
 .query {
   margin-top: 28px;

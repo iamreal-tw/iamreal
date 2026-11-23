@@ -207,10 +207,10 @@ try {
   for (const line of [`上次過卡：今天（${today}）`, ...section("2. ").slice(1), `iamreal.tw/p/${short}`, `第一次過卡：${today}`, "過卡 1 次", `${today}　新宣告：@alice`]) {
     check(card.includes(squash(line)), `the page of the card says "${line}"`);
   }
-  // The mark of a test roster (design/copy/test-site.md), with the date of the Worker's setting in place of the example's.
+  // The mark of a test log (design/copy/test-site.md), with the date of the Worker's setting in place of the example's.
   const mark = /```\n(.*)\n```/.exec(readFileSync(join(repo, "design", "copy", "test-site.md"), "utf8"))![1]!;
   const marked = new RegExp(squash(mark).replace(/\d{4}-\d{2}-\d{2}/, "\\d{4}-\\d{2}-\\d{2}"));
-  check(/\d{4}-\d{2}-\d{2}$/.test(mark) && marked.test(card), `the page of the card has the mark of a test roster: "${mark}", with its own date`);
+  check(/\d{4}-\d{2}-\d{2}$/.test(mark) && marked.test(card), `the page of the card has the mark of a test log: "${mark}", with its own date`);
 
   await visitor.goto(`${ORIGIN}/`);
   const home = squash(await visitor.text("body"));

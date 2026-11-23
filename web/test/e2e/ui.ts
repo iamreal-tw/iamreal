@@ -9,7 +9,7 @@
 //
 // 1. Makes throwaway issuer keys (G2, G3), cards and CRLs (test/fixtures/).
 // 2. Starts the Worker's test build (worker-site.ts, worker/test/harness.ts)
-//    with those issuer keys, a fake MOICA, the test roster (its platform
+//    with those issuer keys, a fake MOICA, the test log (its platform
 //    table: test-example and threads), and the page built in mode "test"
 //    (vite.config.ts) as the files of its card proof page (Static Assets).
 //    A small server in front of it stands in the place of the data domain:
@@ -34,7 +34,7 @@
 //    it is; then the Worker restarted as it runs by default (no such
 //    policy): the fourth and fifth switches recorded, step 4 saying none is
 //    left and refusing another account typed anyway, and a sixth refused by
-//    the roster rules (switch_limit). Along the way: a submission
+//    the record rules (switch_limit). Along the way: a submission
 //    that did not get through (再試一次), one the server refused (its
 //    request ID on the screen); 回到開頭 and 取消 on steps 4 and 5, then card
 //    proofs again on the same page with the same proof engine; step 3's
@@ -47,7 +47,7 @@
 //    card's records fall on several days: the Worker's clock (its test
 //    build's) and the page's (Date.now) move ahead together, and the fake
 //    MOICA publishes a CRL each day, fetched by the Worker's mirror.
-// 5. Has the Worker publish the roster as it does when the date changes,
+// 5. Has the Worker publish the proof log as it does when the date changes,
 //    and re-verifies everything it wrote with iamreal-verify:
 //    every record valid, the kinds those the screens showed, the card's list
 //    the one step 6 showed last. Then other cards: two cards declaring the
@@ -65,7 +65,7 @@
 // 7. Opens the production build at step 1 (nothing clicked): it knows
 //    Threads only, so step 1 names the one platform.
 // 8. Opens the test site's build (mode "testsite") at step 1, served by a
-//    Worker as a deploy serves it: the mark of a test roster above the
+//    Worker as a deploy serves it: the mark of a test log above the
 //    page, the test site's headers, nothing asked of MOICA's component.
 //
 // The browser resolves no host name but localhost and 127.0.0.1
@@ -102,9 +102,9 @@ if (!BB) throw new Error("set IAMREAL_BB to the bb 6.0.0 executable (verifier/RE
 const COMPONENT_PORT = 61171;
 const COMPONENT = `http://localhost:${COMPONENT_PORT}`;
 const PIN = "834271";
-/** The test roster's scope string: the first signature signs it (protocol/src/scope.ts). */
+/** The test log's scope string: the first signature signs it (protocol/src/scope.ts). */
 const SCOPE = scopeOf("test");
-/** The test roster's platform table, as the server's config sends it (spec/scope.md). */
+/** The test log's platform table, as the server's config sends it (spec/scope.md). */
 const EXAMPLE = "test-example";
 const EXAMPLE_NAME = "Example (no real service)";
 const THREADS = "threads";
@@ -142,7 +142,7 @@ const taiwanDate = (ms: number) => new Date(ms + 8 * 3600_000).toISOString().sli
 /**
  * The test's clock, the Worker's and the page's together, runs `day` whole
  * days ahead of the machine's (setDay below): a card has at most 3 valid
- * records a day (spec/roster-rules.md, check 6), a switch counts once a day
+ * records a day (spec/record-rules.md, check 6), a switch counts once a day
  * (a change on the day of the last one is a correction), and this test makes
  * many with one card. Each day the fake MOICA publishes a CRL dated that day.
  */
@@ -368,8 +368,8 @@ const componentCount = (func?: string) => component.requests.filter((r) => func 
 const popupCount = () => new Set(browser.requests.filter((r) => r.url.startsWith(COMPONENT + "/popupForm")).map((r) => r.sessionId)).size;
 const cardStateCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/card-state")).length;
 const challengeCount = () => browser.requests.filter((r) => r.url.endsWith("/api/v1/challenges")).length;
-/** How many records the roster has: the Worker has no route that says it between publications, so the test build's door is asked. */
-const recordCount = async (): Promise<number> => (await worker.roster.stored()).roster.count;
+/** How many records the proof log has: the Worker has no route that says it between publications, so the test build's door is asked. */
+const recordCount = async (): Promise<number> => (await worker.proofLog.stored()).proofLog.count;
 /** Whether the Worker answered a request with that error code and that request ID (worker-site.ts). */
 const refused = (error: string, requestId?: string): boolean => site.refusals.some((r) => r.error === error && (requestId === undefined || r.requestId === requestId));
 
@@ -637,7 +637,7 @@ async function intercept(pattern: string, act: (p: any) => Promise<unknown>, sta
 
 /**
  * Changes the server's JSON answers on `pattern` on their way to the page
- * (a server that reports something else than its roster holds, or an answer
+ * (a server that reports something else than its proof log holds, or an answer
  * the page cannot read). `seen` gets each answer as the server sent it.
  */
 async function rewrite(pattern: string, f: (body: any) => any, seen: unknown[] = []): Promise<() => Promise<void>> {
@@ -747,7 +747,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check(!st.main.includes("測試用戶") && !(await page.eval<boolean>(`document.documentElement.outerHTML.includes("測試用戶")`)), "the name is gone after step 3");
   check(componentCount("MakeSignature") === signs + 1, "the first signature");
   const lastSign = component.requests.filter((x) => x.func === "MakeSignature").at(-1)!;
-  check(lastSign.tbs === SCOPE && lastSign.pin === PIN, `the first signature: the test roster's public scope string (${lastSign.tbs}), with the PIN`);
+  check(lastSign.tbs === SCOPE && lastSign.pin === PIN, `the first signature: the test log's public scope string (${lastSign.tbs}), with the PIN`);
   check((await workingSeen()).includes(C.pin.signing), `step 3 said, after 確認卡片, "${C.pin.signing}"`);
   check(!st.main.includes(C.accounts.need_one), "step 4: no message before anything is pressed");
   if (o.screenshots) await screenshot(`${o.screenshots}-4-accounts`);
@@ -829,7 +829,7 @@ interface DoneSeen {
   kindsUnreadable: boolean;
   /** Where to put the link (done.put_link or done.put_link_single); "" if none. */
   putLink: string;
-  /** The points under what the roster recorded. */
+  /** The points under what the proof log recorded. */
   points: string[];
   main: string;
 }
@@ -877,7 +877,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(JSON.stringify(v.card) === JSON.stringify(o.card), `${o.label}: the card lists ${JSON.stringify(v.card)}`);
   const sid = /^iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
   check(withdrawAll ? v.link === "" : v.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${v.link}`);
-  check(v.main.includes(C.done.recorded) && v.main.includes(today()) && v.main.includes(C.done.trust) && v.main.includes(C.done.unplug), `${o.label}: step 6, the roster's line, its date, that anyone can verify, unplug`);
+  check(v.main.includes(C.done.recorded) && v.main.includes(today()) && v.main.includes(C.done.trust) && v.main.includes(C.done.unplug), `${o.label}: step 6, the proof log's line, its date, that anyone can verify, unplug`);
   const advice = o.single ? C.done.advice_single : C.done.advice;
   check(v.main.includes(advice) === !withdrawAll && v.main.includes(C.done.put_up) === !withdrawAll, `${o.label}: the advice to come back and how to put it up ${withdrawAll ? "are not there" : "are there"}`);
   const putLink = withdrawAll ? "" : o.single ? fill(C.done.put_link_single, { platform: o.single }) : C.done.put_link;
@@ -1340,7 +1340,7 @@ await setDay(3);
 
 // The card's state says the Threads account was put there today (its
 // correction_date changed on its way): the screen says the change is a
-// correction, not counted. The roster records a switch, and step 6 says that
+// correction, not counted. The proof log records a switch, and step 6 says that
 // what was recorded is not what step 5 said.
 await tryStep("a change the screen called a correction, recorded as a switch (the card's state wrong): kind_mismatch", async () => {
   // A state the rules can produce (the device does not read one they cannot): as if the card had switched to @bob today.
@@ -1444,7 +1444,7 @@ await tryStep("3 switches: the row says 2 are left; 取消 on step 5", async () 
 });
 
 // The Worker was started with RESTRICT_LATE_SWITCHES: the page offers the
-// fourth switch (the roster rules allow 5), the server's policy refuses it
+// fourth switch (the record rules allow 5), the server's policy refuses it
 // (switch_restricted).
 await tryStep("a fourth switch the server's policy refuses (RESTRICT_LATE_SWITCHES: switch_restricted)", async () => {
   await toAccounts({ samePage: true });
@@ -1613,7 +1613,7 @@ await tryStep("the Worker restarted without RESTRICT_LATE_SWITCHES (the default)
   const before = await recordCount();
   await worker.restart();
   const config = await (await fetch(`${PAGE_ORIGIN}/api/v1/config`)).json();
-  check(Array.isArray(config.platforms) && config.platforms.length === 2 && (await recordCount()) === before, `the Worker answers again, on the same address, with the same roster of ${before} records`);
+  check(Array.isArray(config.platforms) && config.platforms.length === 2 && (await recordCount()) === before, `the Worker answers again, on the same address, with the same proof log of ${before} records`);
 });
 
 /** A fourth or fifth switch, made on the web like the first three; the server records it. */
@@ -1651,7 +1651,7 @@ await setDay(7);
 await tryStep("the fifth switch (@erin to @frank)", () => lateSwitch("the fifth switch", "erin", "frank", 4));
 await setDay(8);
 
-await tryStep("5 switches: step 4 says none is left; another account typed anyway is refused; a sixth refused by the roster rules (switch_limit)", async () => {
+await tryStep("5 switches: step 4 says none is left; another account typed anyway is refused; a sixth refused by the record rules (switch_limit)", async () => {
   const st = await toAccounts();
   checkRows("five switches", st.rows, { [EXAMPLE]: [EXAMPLE_NAME, "a-b", [count(0)]], [THREADS]: [THREADS_NAME, "frank", [count(5), A.row_can_clear]] });
   await screenshot("used-up-4-accounts");
@@ -1676,7 +1676,7 @@ await tryStep("5 switches: step 4 says none is left; another account typed anywa
   await page.clickButton(C.confirm.button_declare);
   const d = await waitDoneOrMessage();
   const id = await page.text("[data-request-id]");
-  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_limit}\n${fill(C.stops.request_id, { request_id: id })}`, `the roster rules' switch_limit, under 送出: ${JSON.stringify(d.message)}`);
+  check(!d.done && d.item === "submit" && d.message === `${C.stops.switch_limit}\n${fill(C.stops.request_id, { request_id: id })}`, `the record rules' switch_limit, under 送出: ${JSON.stringify(d.message)}`);
   check((await recordCount()) === before && refused("switch_limit"), "nothing appended; the Worker answered switch_limit");
   await screenshot("switch-limit-5-progress");
 });
@@ -1727,7 +1727,7 @@ await tryStep("the date changes while step 5 is up: not signed, stops.date_chang
 
 // 5. Snapshot and re-verification -----------------------------------------------
 
-/** The kinds of the main card's records, in roster order, as the screens' step 6 showed them. */
+/** The kinds of the main card's records, in proof log order, as the screens' step 6 showed them. */
 const KINDS: [string, string][][] = [
   [[THREADS, "first"]],
   [[THREADS, "refresh"]],
@@ -1744,12 +1744,12 @@ const KINDS: [string, string][][] = [
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
   [[EXAMPLE, "refresh"], [THREADS, "switch"]],
 ];
-await tryStep("the roster published, and iamreal-verify", async () => {
-  // The Worker publishes the roster when the date changes in Taiwan (the last roster file and its hash list, the
+await tryStep("the proof log published, and iamreal-verify", async () => {
+  // The Worker publishes the proof log when the date changes in Taiwan (the last log file and its hash list, the
   // card state file, a line of the fingerprint file): its alarm rang by itself after the clock moved to this
   // day, on which nothing was written yet. Run here once more, so that the publication of this day is done
   // whether or not that alarm has rung already.
-  await worker.roster.runAlarm();
+  await worker.proofLog.runAlarm();
   // A copy of everything the Worker wrote to its bucket, which is what the data domain serves: iamreal-verify
   // reads it as it does by default (-data), with the real proofs, and rebuilds the CRL archive from its CRLs.
   const data = join(out, "data");
@@ -1757,7 +1757,7 @@ await tryStep("the roster published, and iamreal-verify", async () => {
     mkdirSync(dirname(join(data, f.key)), { recursive: true });
     writeFileSync(join(data, f.key), f.bytes);
   }
-  const v = JSON.parse(execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-roster", "test", "-json", "-test-issuers", issuersDir, "-data", data], { stdio: ["ignore", "pipe", "pipe"] }).toString());
+  const v = JSON.parse(execFileSync(verifyBin, ["-bb", BB, "-crs", crsDir, "-proof-log", "test", "-json", "-test-issuers", issuersDir, "-data", data], { stdio: ["ignore", "pipe", "pipe"] }).toString());
   writeFileSync(join(out, "verify.json"), JSON.stringify(v, null, 2));
   const kinds = v.results.map((r: { valid: boolean; kinds?: { platform: string; kind: string }[] }) => (r.valid ? r.kinds!.map((k) => [k.platform, k.kind]) : null));
   check(v.valid === true && v.results.every((r: { valid: boolean }) => r.valid) && JSON.stringify(kinds) === JSON.stringify(KINDS), `iamreal-verify: valid, every record valid, the kinds the screens showed: ${JSON.stringify(kinds)}`);
@@ -2455,14 +2455,14 @@ await tryStep("the production build's step 1: one platform, named", async () => 
 });
 
 // The test site's build (mode "testsite"), served as a deploy serves it: by a Worker's Static Assets, with the
-// headers of a test roster's site. Opened to step 1 only, nothing clicked: MOICA's keys and the real component's
+// headers of a test log's site. Opened to step 1 only, nothing clicked: MOICA's keys and the real component's
 // address are in this build, so any request to the component is failed and counted (there should be none).
-await tryStep("the test site's build: the mark of a test roster, the test site's headers", async () => {
+await tryStep("the test site's build: the mark of a test log, the test site's headers", async () => {
   const CLEARED_ON = "2026-10-31";
   const siteDist = join(out, "dist-testsite");
-  process.env.IAMREAL_TEST_ROSTER_CLEARED_ON = CLEARED_ON;
-  await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "testsite", logLevel: "warn", build: { outDir: siteDist, emptyOutDir: true } }).finally(() => delete process.env.IAMREAL_TEST_ROSTER_CLEARED_ON);
-  const testSite = await startWorkerSite({ proofFiles: siteDist, settings: { TEST_ROSTER_CLEARED_ON: CLEARED_ON } });
+  process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON = CLEARED_ON;
+  await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "testsite", logLevel: "warn", build: { outDir: siteDist, emptyOutDir: true } }).finally(() => delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON);
+  const testSite = await startWorkerSite({ proofFiles: siteDist, settings: { TEST_PROOF_LOG_CLEARED_ON: CLEARED_ON } });
   const tab = await browser.newPage();
   const componentRequests: string[] = [];
   const off = browser.on((m, p, s) => {
@@ -2478,7 +2478,7 @@ await tryStep("the test site's build: the mark of a test roster, the test site's
     const copy = /```\n(.*)\n```/.exec(readFileSync(join(repo, "design", "copy", "test-site.md"), "utf8"))![1]!;
     const mark = copy.replace(/\d{4}-\d{2}-\d{2}$/, CLEARED_ON);
     const markOf = (p: Page) => p.eval<{ first: boolean; text: string; date: string } | null>(`(() => {
-      const m = document.querySelector("p.test-roster");
+      const m = document.querySelector("p.test-proof-log");
       return m ? { first: document.body.firstElementChild === m, text: m.textContent, date: m.querySelector("time")?.textContent ?? "" } : null;
     })()`);
     await tab.goto(`${testSite.origin}/`);
@@ -2488,9 +2488,9 @@ await tryStep("the test site's build: the mark of a test roster, the test site's
     await tab.waitFor(step("before"), "the test site's build's step 1");
     const shown = await markOf(tab);
     check(mark !== copy && shown !== null && shown.first && shown.text === mark && shown.date === CLEARED_ON, `the card proof page has the same mark, above everything else, its date in an element of its own: ${JSON.stringify(shown)}`);
-    // The scope string the build's target has the card sign, as the page that runs says it (src/ui/test-roster.ts reads the target the flow reads).
-    const signs = await tab.eval<string>(`document.querySelector("p.test-roster").dataset.scope`);
-    check(signs === SCOPE && signs === "iamreal-test:public:0__________", `the test site's build signs the test roster's scope string: ${signs}`);
+    // The scope string the build's target has the card sign, as the page that runs says it (src/ui/test-proof-log.ts reads the target the flow reads).
+    const signs = await tab.eval<string>(`document.querySelector("p.test-proof-log").dataset.scope`);
+    check(signs === SCOPE && signs === "iamreal-test:public:0__________", `the test site's build signs the test log's scope string: ${signs}`);
     // The link of the last screen is the card's page on the test site. The screen itself needs a card proof, which this build
     // makes only with a real card: read from the scripts the page was sent.
     const sent = [...new Set(browser.responses.filter((r) => r.url.startsWith(`${testSite.origin}/proof/assets/`) && r.url.endsWith(".js")).map((r) => r.url))];

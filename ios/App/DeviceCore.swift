@@ -13,15 +13,15 @@ import Foundation
 /// of `Session.checkCertificates`, which holds the name on the card: the
 /// caller overwrites it once the name is read (CardProofFlow).
 enum DeviceCore {
-    /// Which roster: the app is built for one (AppEnvironment).
-    enum Roster {
+    /// Which proof log: the app is built for one (AppEnvironment).
+    enum ProofLog {
         case production
         case test
 
         fileprivate var number: UInt32 {
             switch self {
-            case .production: return UInt32(IDC_ROSTER_PRODUCTION)
-            case .test: return UInt32(IDC_ROSTER_TEST)
+            case .production: return UInt32(IDC_PROOF_LOG_PRODUCTION)
+            case .test: return UInt32(IDC_PROOF_LOG_TEST)
             }
         }
     }
@@ -43,18 +43,18 @@ enum DeviceCore {
         guard code == IDC_OK else { throw Failure(code: code) }
     }
 
-    /// The scope string a card signs for `roster`: 31 bytes.
-    static func scopeString(_ roster: Roster) throws -> Data {
-        try output { idc_scope_string(roster.number, $0) }
+    /// The scope string a card signs for `proofLog`: 31 bytes.
+    static func scopeString(_ proofLog: ProofLog) throws -> Data {
+        try output { idc_scope_string(proofLog.number, $0) }
     }
 
     /// The declaration code of a list and a challenge: 31 bytes, the second
     /// message the card signs. `accounts` is the JSON of the list as
     /// `listConsequence` returned it.
-    static func declarationCode(_ roster: Roster, accounts: Data, challenge: Data) throws -> Data {
+    static func declarationCode(_ proofLog: ProofLog, accounts: Data, challenge: Data) throws -> Data {
         try accounts.withUnsafeBytes { a in
             try challenge.withUnsafeBytes { c in
-                try output { idc_declaration_code(roster.number, a.bytes, a.count, c.bytes, c.count, $0) }
+                try output { idc_declaration_code(proofLog.number, a.bytes, a.count, c.bytes, c.count, $0) }
             }
         }
     }
@@ -96,7 +96,7 @@ enum DeviceCore {
     /// (idc_records_response): JSON. `response` is the body of the
     /// server's 201 as it sent it, `rows` the rows of listConsequence for
     /// the list the card signed. A body the core cannot read is not a
-    /// failure: the record is in the roster.
+    /// failure: the record is in the proof log.
     static func recordsResponse(_ response: Data, rows: Data) throws -> Data {
         try response.withUnsafeBytes { a in
             try rows.withUnsafeBytes { r in
@@ -113,9 +113,9 @@ enum DeviceCore {
         private let handle: idc_session
 
         /// A session of the app: it checks against MOICA's keys.
-        convenience init(_ roster: Roster) throws {
+        convenience init(_ proofLog: ProofLog) throws {
             var handle: idc_session = 0
-            let code = idc_session_open(roster.number, &handle)
+            let code = idc_session_open(proofLog.number, &handle)
             guard code == IDC_OK else { throw Failure(code: code) }
             self.init(handle: handle)
         }

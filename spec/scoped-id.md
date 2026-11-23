@@ -6,15 +6,15 @@ The scoped ID identifies one card within one scope. Only the cardholder can
 compute it: it is derived from the card's signature over the scope string
 (ADR-0002). The same card has unrelated scoped IDs in different scopes.
 
-The public roster is one scope, shared by every public platform (ADR-0017):
+The public proof log is one scope, shared by every public platform (ADR-0017):
 there a card has one scoped ID, the same on every platform, and the accounts
 it declares on different platforms are listed under that one ID. The
 platform is not an input of the computation below. Only the scopes of other
 services (scope strings starting with `S`, [`scope.md`](scope.md)) give the
 card other, unrelated scoped IDs.
 
-The roster's state is keyed on (`scope_string`, `scoped_id`) for a card, and
-on the platform within it for a slot ([`roster-rules.md`](roster-rules.md)).
+The proof log's state is keyed on (`scope_string`, `scoped_id`) for a card, and
+on the platform within it for a slot ([`record-rules.md`](record-rules.md)).
 One record states the card's accounts on all platforms at once.
 
 The algorithm does not change after launch (ADR-0012). Changing it would
@@ -134,11 +134,11 @@ short_id = first 10 characters of the text form
 ```
 
 50 bits. It is used only in URLs, to point at one card among all the cards
-of a roster: the page of a card lists the accounts that card declares
+of a proof log: the page of a card lists the accounts that card declares
 (ADR-0017), and its address carries the card's short ID. A card has one
 short ID, whatever the platforms of its accounts.
 
-**Resolving.** A short ID resolves to every card of the roster's open scope
+**Resolving.** A short ID resolves to every card of the proof log's open scope
 whose text form starts with these 10 characters. It is not guaranteed to be
 unique. If it matches more than one card, all of them are listed; a page
 never picks one of them. If it matches none, it does not resolve.

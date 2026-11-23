@@ -1,15 +1,15 @@
-package roster_test
+package prooflog_test
 
 // The answers for worker/'s comparison of a long sequence of records
 // (worker/test/sequence.test.ts, #73): this package applies the rules to the
 // sequence one record at a time and writes what each record gives.
-// TypeScript's protocol/, with its state in memory and in the roster's
+// TypeScript's protocol/, with its state in memory and in the proof log's
 // Durable Object, must give the same.
 //
 // The two implementations do not import each other and share only spec/
 // (CLAUDE.md). The sequence and the answers are exchanged as two files,
 // events.json and answers.json, in the shape of a case of
-// spec/vectors/roster-rules.json, which both already read, extended with
+// spec/vectors/record-rules.json, which both already read, extended with
 // fields that are not in spec/: `checkpoint_every` in events.json, and
 // `rules_version`, `cards`, `latest_valid_dates` and `checkpoints` in
 // answers.json (sequenceAnswers). The extension is an agreement between
@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -34,7 +34,7 @@ type sequenceInput struct {
 	CheckpointEvery int `json:"checkpoint_every"`
 }
 
-// cardAfter is the state of a card (roster.Card) in the spelling of the
+// cardAfter is the state of a card (prooflog.Card) in the spelling of the
 // vectors' `state`, with last_card_proof null for a card with no valid
 // record.
 type cardAfter struct {
@@ -46,7 +46,7 @@ type cardAfter struct {
 }
 
 // accountCount is an account and the number of cards whose current account
-// on that platform it is (roster.Rules.AccountCards: what the server
+// on that platform it is (prooflog.Rules.AccountCards: what the server
 // answers as `account_cards`).
 type accountCount struct {
 	ScopeString  string `json:"scope_string"`
@@ -67,13 +67,13 @@ type checkpoint struct {
 // it, and `latest_valid_dates`, the latest date among the valid records up
 // to it (null before the first); and the accounts at each checkpoint.
 //
-// roster.Rules keeps the latest valid date but does not export it; this
+// prooflog.Rules keeps the latest valid date but does not export it; this
 // file takes it from the dates of the records Rules found valid, which is
-// how spec/roster-rules.md defines it (check 4).
+// how spec/record-rules.md defines it (check 4).
 type sequenceAnswers struct {
 	RulesVersion     int          `json:"rules_version"`
 	Name             string       `json:"name"`
-	Roster           string       `json:"roster"`
+	ProofLog         string       `json:"proof_log"`
 	Events           []event      `json:"events"`
 	Results          []result     `json:"results"`
 	Cards            []cardAfter  `json:"cards"`
@@ -88,9 +88,9 @@ type sequenceAnswers struct {
 func answersOf(t *testing.T, c rulesCase, checkpointEvery int) sequenceAnswers {
 	t.Helper()
 	records, proofs, archive := caseRecords(t, c)
-	rules := roster.NewRules(rosterOf(t, c.Roster), proofs, archive)
+	rules := prooflog.NewRules(proofLogOf(t, c.ProofLog), proofs, archive)
 	out := sequenceAnswers{
-		RulesVersion: roster.RulesVersion, Name: c.Name, Roster: c.Roster, Events: c.Events,
+		RulesVersion: prooflog.RulesVersion, Name: c.Name, ProofLog: c.ProofLog, Events: c.Events,
 		Results: []result{}, Cards: []cardAfter{}, LatestValidDates: []*string{}, Checkpoints: []checkpoint{},
 	}
 	var latest *verifier.Date
@@ -140,7 +140,7 @@ func TestSequenceAnswersOfVectors(t *testing.T) {
 	var v struct {
 		Cases []rulesCase `json:"cases"`
 	}
-	load(t, "roster-rules.json", &v)
+	load(t, "record-rules.json", &v)
 	for _, c := range v.Cases {
 		t.Run(c.Name, func(t *testing.T) {
 			a := answersOf(t, c, 0)
@@ -179,13 +179,13 @@ func TestSequenceAnswersOfVectors(t *testing.T) {
 }
 
 // TestSequenceAnswers writes the answers for worker/'s comparison: with
-// IAMREAL_ROSTER_SEQUENCE set to a directory, it reads events.json there
+// IAMREAL_PROOF_LOG_SEQUENCE set to a directory, it reads events.json there
 // (sequenceInput) and writes answers.json (sequenceAnswers). Without it, it
 // is skipped: worker/test/sequence.test.ts runs it.
 func TestSequenceAnswers(t *testing.T) {
-	dir := os.Getenv("IAMREAL_ROSTER_SEQUENCE")
+	dir := os.Getenv("IAMREAL_PROOF_LOG_SEQUENCE")
 	if dir == "" {
-		t.Skip("IAMREAL_ROSTER_SEQUENCE is not set: worker/test/sequence.test.ts sets it")
+		t.Skip("IAMREAL_PROOF_LOG_SEQUENCE is not set: worker/test/sequence.test.ts sets it")
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "events.json"))
 	if err != nil {

@@ -5,7 +5,7 @@ import tw.iamreal.app.Environment
 /**
  * device-core/ (ADR-0034) as Kotlin calls it. Each function is one C
  * function of device-core/include/iamreal_device_core.h, reached through
- * the JNI layer (android/jni/); the roster is always the one this app is
+ * the JNI layer (android/jni/); the proof log is always the one this app is
  * built for. The app's code calls the core here and nowhere else.
  *
  * A function may be called from any thread and returns when its work is
@@ -23,7 +23,7 @@ object DeviceCore {
     fun selfCheck() = nativeSelfCheck()
 
     /** The scope string a card signs first (spec/scope.md): 31 bytes. */
-    fun scopeString(): ByteArray = nativeScopeString(Environment.ROSTER)
+    fun scopeString(): ByteArray = nativeScopeString(Environment.PROOF_LOG)
 
     /**
      * The declaration code (spec/declaration-code.md) a card signs second: 31 bytes.
@@ -32,7 +32,7 @@ object DeviceCore {
      * platform, each platform at most once; [challenge] is the challenge as the server issued it.
      */
     fun declarationCode(accountsJson: ByteArray, challenge: ByteArray): ByteArray =
-        nativeDeclarationCode(Environment.ROSTER, accountsJson, challenge)
+        nativeDeclarationCode(Environment.PROOF_LOG, accountsJson, challenge)
 
     /**
      * What a list does on every platform, before the card signs it (spec/list-consequence.md): JSON, as
@@ -60,7 +60,7 @@ object DeviceCore {
      * `idc_records_response` of the header describes it.
      *
      * [response] is the body of the server's `201`, as it sent it; [rowsJson] the `rows` of [listConsequence]
-     * for the list the card signed. A body the core cannot read is not a failure: the record is in the roster.
+     * for the list the card signed. A body the core cannot read is not a failure: the record is in the proof log.
      */
     fun recordsResponse(response: ByteArray, rowsJson: ByteArray): ByteArray = nativeRecordsResponse(response, rowsJson)
 
@@ -68,7 +68,7 @@ object DeviceCore {
      * Opens a session, one card proof in the core (device-core/README.md, "檢查都通過了"): the number that
      * names it. Whoever opens one closes it with [sessionClose], whatever happened in between.
      */
-    fun sessionOpen(): Long = nativeSessionOpen(Environment.ROSTER)
+    fun sessionOpen(): Long = nativeSessionOpen(Environment.PROOF_LOG)
 
     /** Closes a session: the core overwrites what it kept of the card. A number that names none does nothing. */
     fun sessionClose(session: Long) = nativeSessionClose(session)
@@ -132,9 +132,9 @@ object DeviceCore {
 
     private external fun nativeSelfCheck()
 
-    private external fun nativeScopeString(roster: Int): ByteArray
+    private external fun nativeScopeString(proofLog: Int): ByteArray
 
-    private external fun nativeDeclarationCode(roster: Int, accountsJson: ByteArray, challenge: ByteArray): ByteArray
+    private external fun nativeDeclarationCode(proofLog: Int, accountsJson: ByteArray, challenge: ByteArray): ByteArray
 
     private external fun nativeListConsequence(platformsJson: ByteArray, cardStateJson: ByteArray, knownPlatformsJson: ByteArray, accountsJson: ByteArray, now: Long): ByteArray
 
@@ -144,7 +144,7 @@ object DeviceCore {
 
     private external fun nativeRecordsResponse(response: ByteArray, rowsJson: ByteArray): ByteArray
 
-    private external fun nativeSessionOpen(roster: Int): Long
+    private external fun nativeSessionOpen(proofLog: Int): Long
 
     private external fun nativeSessionClose(session: Long)
 

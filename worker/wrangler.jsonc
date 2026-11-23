@@ -6,8 +6,14 @@
   "compatibility_date": "2026-11-10",
   // wrangler sends Cloudflare no usage report.
   "send_metrics": false,
-  // The roster's Durable Object keeps its state in SQLite (ADR-0023).
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Roster"] }],
+  // The proof log's Durable Object keeps its state in SQLite (ADR-0023). Cloudflare keeps every
+  // migration it has applied on the list, so v1 stays: it made the class under its first name.
+  // v2 deletes that class with the objects it had, the test log cleared then (README.md,
+  // "清空測試的證明紀錄"), and makes the class of the new name.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Roster"] },
+    { "tag": "v2", "deleted_classes": ["Roster"], "new_sqlite_classes": ["ProofLog"] }
+  ],
   // The CPU time one invocation may use, in every environment: 300,000 ms, the most that can
   // be set. Without it the hourly schedule was stopped after about 30 seconds, less than the
   // tree of one CRL takes; how much the schedule gets with it is not measured yet (README.md,
@@ -15,7 +21,7 @@
   // (src/round-budget.ts); a configuration in which an environment has another one does not
   // pass the checks of a deploy build (scripts/deploy-build-checks.ts).
   // It is the limit of every invocation, not of the schedule alone: of each HTTP request, and
-  // of each call and alarm of the roster's Durable Object. A request can make the Worker
+  // of each call and alarm of the proof log's Durable Object. A request can make the Worker
   // compute for that long only if the code lets it: README.md, "設定檔", says why it cannot now.
   "limits": { "cpu_ms": 300000 },
   // Static Assets: the files of site/, which Cloudflare sends itself (README.md, "Static Assets").
@@ -44,24 +50,24 @@
       "preview_urls": false,
       // The CRL mirror, every hour.
       "triggers": { "crons": ["0 * * * *"] },
-      "durable_objects": { "bindings": [{ "name": "ROSTER", "class_name": "Roster" }] },
+      "durable_objects": { "bindings": [{ "name": "PROOF_LOG", "class_name": "ProofLog" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
       "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],
       "vars": {
-        // The name of the roster's Durable Object: clearing the test roster is giving it a new name.
-        // The name of a test roster's object always starts with "test-"; keep that when changing it.
-        // The production roster's never does.
-        "ROSTER_OBJECT_NAME": "test-2",
-        // Which roster this environment serves, "test" or "production". It selects the scope
+        // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
+        // The name of a test log's object always starts with "test-"; keep that when changing it.
+        // The production log's never does.
+        "PROOF_LOG_OBJECT_NAME": "test-3",
+        // Which proof log this environment serves, "test" or "production". It selects the scope
         // string and the platform table, which are written in protocol/ (src/settings.ts).
         // It must fit the name above: "test" with a name that starts with "test-", "production"
         // with one that does not. Otherwise the API answers nothing but 500 (src/settings.ts),
         // and test/environments.test.ts fails before that.
-        "ROSTER_KIND": "test",
-        // The date the test roster was last cleared on, YYYY-MM-DD: every page says it beside the mark
-        // of a test roster (design/copy/test-site.md). Change it together with ROSTER_OBJECT_NAME when
-        // the roster is cleared (README.md, "清空測試名冊").
-        "TEST_ROSTER_CLEARED_ON": "2026-11-21"
+        "PROOF_LOG_KIND": "test",
+        // The date the test log was last cleared on, YYYY-MM-DD: every page says it beside the mark
+        // of a test log (design/copy/test-site.md). Change it together with PROOF_LOG_OBJECT_NAME when
+        // the proof log is cleared (README.md, "清空測試的證明紀錄").
+        "TEST_PROOF_LOG_CLEARED_ON": "2026-11-23"
       }
     }
   }

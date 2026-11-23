@@ -1,6 +1,6 @@
-// The page of a Threads account (/threads/@<name>) and the roster page
-// (/roster), through the Worker's HTTP (test/harness.ts): every sentence
-// design/copy/ has for the case (account-page.md, roster-page.md), in order,
+// The page of a Threads account (/threads/@<name>) and the proof log page
+// (/proof-log), through the Worker's HTTP (test/harness.ts): every sentence
+// design/copy/ has for the case (account-page.md, proof-log-page.md), in order,
 // read from the copy files; the redirects, the 404s, the lookup box, the
 // list a page at a time. The cases are the Go backend's
 // (e159ab9:server/visitor_test.go).
@@ -12,7 +12,7 @@ import { WORKER_DIR } from "./build.ts";
 import { block, codeBlocks, copyLines, copySection, notOnPage, previewOf, readCopy, unescapeHtml, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
-import { freshRoster, mustSubmit, newCard, publishG3, sub } from "./records.ts";
+import { freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -22,7 +22,7 @@ before(async () => {
 after(() => worker.close());
 
 /**
- * The roster of the copy files' examples (test/pages.test.ts): card A gives
+ * The proof log of the copy files' examples (test/pages.test.ts): card A gives
  * its place to @alice from 2026-08-01, last card proof 2026-11-06; with
  * `withB`, card B gives its place to @alice too, from a later date than A.
  */
@@ -85,12 +85,12 @@ describe("the page of an account", () => {
     wantLines(page, ["島民編號 7K2Q9FM4XD3B 開頭 2026-11-01 起", "島民編號 7K2Q9FM4XD3A 開頭 2026-11-06 起"]);
   });
 
-  test("an account on another platform of the test roster is not one on Threads", async () => {
+  test("an account on another platform of the test log is not one on Threads", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", cardStarting(CARD_A), "test-example:alice")]);
     wantLines((await getPage(worker, "/threads/@alice")).page, copyLines(block("account-page.md", "3. ")));
   });
 
-  test("a name with uppercase letters is redirected (301) to lowercase; one not in the Threads format is the page of section 4, 404, with no profile and no preview, its name not written back; neither asks the roster's object", async () => {
+  test("a name with uppercase letters is redirected (301) to lowercase; one not in the Threads format is the page of section 4, 404, with no profile and no preview, its name not written back; neither asks the proof log's object", async () => {
     await exampleCards(false);
     const notAName = copyLines(block("account-page.md", "4. "));
     const cases = async (): Promise<void> => {
@@ -104,7 +104,7 @@ describe("the page of an account", () => {
         assert.equal(status, 404, `@${inUrl}`);
         wantLines(page, notAName);
         notOnPage(page, copyLines(block("account-page.md", "3. "))[1]!);
-        assert.ok(page.includes('<a href="/roster#q">查一個 Threads 帳號</a>') && !page.includes("<iframe"), `@${inUrl}: the link to the lookup, no profile`);
+        assert.ok(page.includes('<a href="/proof-log#q">查一個 Threads 帳號</a>') && !page.includes("<iframe"), `@${inUrl}: the link to the lookup, no profile`);
         assert.ok(!page.includes("<b>x") && !page.includes("&lt;b&gt;") && !page.includes("javascript"), `@${inUrl}: not written back`);
         wantPreview(page, notAName[0]!, null);
       }
@@ -113,8 +113,8 @@ describe("the page of an account", () => {
     // Without @: no page of an account.
     assert.equal((await getPage(worker, "/threads/alice")).status, 404);
 
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       const logged = worker.logLines().length;
       const failed = await worker.fetch("/threads/@alice");
@@ -124,15 +124,15 @@ describe("the page of an account", () => {
       assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", page: "account", where: "schema", error: "Error" }]);
       await cases();
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
   });
 });
 
-describe("the roster page", () => {
-  /** roster-page.md's first block: the whole page. */
-  const wholePage = (...replace: string[]): string[] => copyLines(codeBlocks(readCopy("roster-page.md"))[0]!, ...replace);
+describe("the proof log page", () => {
+  /** proof-log-page.md's first block: the whole page. */
+  const wholePage = (...replace: string[]): string[] => copyLines(codeBlocks(readCopy("proof-log-page.md"))[0]!, ...replace);
   const rows = (page: string): number => page.split('<li><a href="/p/').length - 1;
 
   test("the numbers, the lookup box, the latest first by the date from which, the download; a withdrawn card is neither counted nor listed; the preview", async () => {
@@ -145,34 +145,34 @@ describe("the roster page", () => {
       r("2026-11-18", a, "threads:alice"),
       r("2026-11-18", old, "threads:carol"), // a refresh: now in the last three months, and its row stays where it was
     ]);
-    const { status, page } = await getPage(worker, "/roster");
+    const { status, page } = await getPage(worker, "/proof-log");
     assert.equal(status, 200);
     wantLines(page, wholePage("1,284", "3", "1,031", "3").filter((l) => l !== "更多"));
     wantLines(page, ["2026-11-17 Threads 的 @bob", "2026-08-01 Threads 的 @carol"]);
-    notOnPage(page, "@dave", "更多", block("roster-page.md", "清單")[0]!);
-    for (const want of [`<a href="/p/${CARD_A}"><time>2026-11-18</time>`, '<form method="get" action="/roster">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">怎麼驗證島民證明</a>']) {
+    notOnPage(page, "@dave", "更多", block("proof-log-page.md", "清單")[0]!);
+    for (const want of [`<a href="/p/${CARD_A}"><time>2026-11-18</time>`, '<form method="get" action="/proof-log">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">怎麼驗證島民證明</a>']) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
-    assert.ok(!page.includes("<iframe"), "no profile on the roster page");
-    const { title, site } = previewOf("roster-page.md", "連結被貼出去時的預覽");
+    assert.ok(!page.includes("<iframe"), "no profile on the proof log page");
+    const { title, site } = previewOf("proof-log-page.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
   });
 
   test("下載整份證明紀錄 links to the part of iamreal-verify's README about downloading", async () => {
     await pagesWorld(worker, "2026-11-18", []);
-    const { page } = await getPage(worker, "/roster");
-    assert.ok(copySection("roster-page.md", "下載").includes("「下載整份證明紀錄」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
+    const { page } = await getPage(worker, "/proof-log");
+    assert.ok(copySection("proof-log-page.md", "下載").includes("「下載整份證明紀錄」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
     assert.ok(readFileSync(join(WORKER_DIR, "..", "cmd", "iamreal-verify", "README.md"), "utf8").includes("\n## 下載\n"), "the README has a section 下載");
     assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">下載整份證明紀錄</a> <a href="/verify">怎麼驗證島民證明</a>'));
-    assert.ok(!page.includes('href="/roster/"'));
+    assert.ok(!page.includes('href="/proof-log/"'));
   });
 
   test("no card yet: one sentence where the list is, without the sentence above the list and without 更多", async () => {
     await pagesWorld(worker, "2026-11-18", []);
-    const { status, page } = await getPage(worker, "/roster");
+    const { status, page } = await getPage(worker, "/proof-log");
     assert.equal(status, 200);
     const all = wholePage("1,284", "0", "1,031", "0");
-    wantLines(page, [...all.slice(0, 5), ...copyLines(block("roster-page.md", "清單")), all[all.length - 1]!]);
+    wantLines(page, [...all.slice(0, 5), ...copyLines(block("proof-log-page.md", "清單")), all[all.length - 1]!]);
     notOnPage(page, all[5]!, "更多");
     assert.ok(!page.includes("<li>"), "no row");
   });
@@ -180,30 +180,30 @@ describe("the roster page", () => {
   test("50 at a time; 更多 is a link to the next ones, the same list from where the page stopped; a place that does not read lists from the start", async () => {
     const recs = Array.from({ length: 52 }, (_, i) => r(`2026-10-${String(1 + Math.floor(i / 3)).padStart(2, "0")}`, newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", recs);
-    const { page } = await getPage(worker, "/roster");
+    const { page } = await getPage(worker, "/proof-log");
     assert.equal(rows(page), 50);
-    const more = /<a href="(\/roster\?after=[^"]*)">更多<\/a>/.exec(page);
+    const more = /<a href="(\/proof-log\?after=[^"]*)">更多<\/a>/.exec(page);
     assert.ok(more !== null, "更多");
     // The place is the last row's: its date and the seq of the record from which (the third card proof).
-    assert.equal(unescapeHtml(more[1]!), "/roster?after=2026-10-01.3");
+    assert.equal(unescapeHtml(more[1]!), "/proof-log?after=2026-10-01.3");
     const next = (await getPage(worker, unescapeHtml(more[1]!))).page;
     assert.equal(rows(next), 2);
     // Exactly 50 after a place: all of them, and no 更多 to a page with nothing on it. The second row is a50's,
     // from 2026-10-17 by the 51st card proof.
-    const fifty = (await getPage(worker, "/roster?after=2026-10-17.51")).page;
+    const fifty = (await getPage(worker, "/proof-log?after=2026-10-17.51")).page;
     assert.equal(rows(fifty), 50);
     assert.ok(fifty.includes("@a49") && fifty.includes("@a00") && !fifty.includes("@a50"));
     notOnPage(fifty, "更多");
     wantLines(next, ["Threads 的 @a01", "Threads 的 @a00"]);
-    notOnPage(next, "@a02", "更多", block("roster-page.md", "清單")[0]!);
+    notOnPage(next, "@a02", "更多", block("proof-log-page.md", "清單")[0]!);
     for (const after of ["nothing", "2026-10-01", "2026-10-01.", "2026-10-01.0", "2026-10-01.03", "2026-10-01.+3", "2026-13-01.3", "2026-10-01x3", "2026-10-01.18446744073709551616", "2026-10-01.9223372036854775808"]) {
-      const bad = (await getPage(worker, `/roster?after=${after}`)).page;
+      const bad = (await getPage(worker, `/proof-log?after=${after}`)).page;
       assert.ok(rows(bad) === 50 && bad.includes("@a51"), `after=${after}: from the start`);
     }
-    // After the last one: no row, and not the sentence of an empty roster.
-    const end = (await getPage(worker, "/roster?after=2026-10-01.1")).page;
+    // After the last one: no row, and not the sentence of an empty proof log.
+    const end = (await getPage(worker, "/proof-log?after=2026-10-01.1")).page;
     assert.equal(rows(end), 0);
-    notOnPage(end, block("roster-page.md", "清單")[0]!, "更多");
+    notOnPage(end, block("proof-log-page.md", "清單")[0]!, "更多");
   });
 
   test("the lookup box: a name, with or without @, in any case and with spaces around it, goes to its page (303); nothing is the page as it is; anything else is the page with what was typed and one more line", async () => {
@@ -218,20 +218,20 @@ describe("the roster page", () => {
       ["+alice+", "/threads/@alice"],
       ["%C2%85alice", "/threads/@alice"],
     ] as const) {
-      const res = await worker.fetch(`/roster?q=${q}`, { redirect: "manual" });
+      const res = await worker.fetch(`/proof-log?q=${q}`, { redirect: "manual" });
       assert.deepEqual([res.status, res.headers.get("location")], [303, to], `q=${q}`);
       checkVisitorHeaders(`q=${q}`, res, { cache: "public, max-age=60", more: ["location"] });
     }
-    const bad = block("roster-page.md", "查詢")[0]!;
+    const bad = block("proof-log-page.md", "查詢")[0]!;
     for (const q of ["", "%20%20", "%40", "%20%40%20"]) {
-      const { status, page } = await getPage(worker, `/roster?q=${q}`);
+      const { status, page } = await getPage(worker, `/proof-log?q=${q}`);
       assert.equal(status, 200, `q=${q}`);
       notOnPage(page, bad);
       assert.ok(page.includes('name="q" value=""'), `q=${q}: the box is empty`);
     }
     for (const [q, kept] of [["a-b", "a-b"], ["%40%40alice", "@alice"], ["a%20b", "a b"], ["%40%C3%A5lice%20", "ålice"], ["%EF%BB%BFalice", "﻿alice"], ["%3Cb%3Ex%22", "&lt;b&gt;x&#34;"], ["a%00b", "a\uFFFDb"]] as const) {
       // The place is before @alice's row (from 2026-08-01, the third card proof): read, it would leave the list empty.
-      const { status, page } = await getPage(worker, `/roster?q=${q}&after=2026-08-01.1`);
+      const { status, page } = await getPage(worker, `/proof-log?q=${q}&after=2026-08-01.1`);
       assert.equal(status, 200, `q=${q}`);
       wantLines(page, ["查一個 Threads 帳號", "@查", bad, "最近換出的島民證明"]);
       assert.ok(page.includes(`name="q" value="${kept}"`), `q=${q}: the box keeps ${kept}`);
@@ -242,37 +242,37 @@ describe("the roster page", () => {
   });
 
   test("a record shows on the next page opened after it is written, the numbers too: the Worker keeps no copy of them", async () => {
-    await freshRoster(worker, { clearedOn: CLEARED_ON });
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const root = await publishG3(worker);
     const card = cardStarting(CARD_A);
     wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
-    wantLines((await getPage(worker, "/roster")).page, ["現在有 0 張島民證明"]);
+    wantLines((await getPage(worker, "/proof-log")).page, ["現在有 0 張島民證明"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["有 1 張自然人憑證", "島民編號 7K2Q9FM4XD 開頭 2026-11-20 起 上次過卡 今天"]);
-    wantLines((await getPage(worker, "/roster")).page, ["現在有 1 張島民證明，其中 1 張在過去三個月內過卡。", "2026-11-20 Threads 的 @alice"]);
+    wantLines((await getPage(worker, "/proof-log")).page, ["現在有 1 張島民證明，其中 1 張在過去三個月內過卡。", "2026-11-20 Threads 的 @alice"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
     wantLines((await getPage(worker, "/threads/@bob")).page, ["有 1 張自然人憑證"]);
-    const roster = (await getPage(worker, "/roster")).page;
-    wantLines(roster, ["現在有 1 張島民證明", "2026-11-20 Threads 的 @bob"]);
-    notOnPage(roster, "@alice");
+    const proofLog = (await getPage(worker, "/proof-log")).page;
+    wantLines(proofLog, ["現在有 1 張島民證明", "2026-11-20 Threads 的 @bob"]);
+    notOnPage(proofLog, "@alice");
   });
 
   test("with an object that answers nothing, the page is 500, and a lookup that goes to a page of an account is answered without it", async () => {
     await exampleCards(false);
-    await worker.roster.setStoredSchemaVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredSchemaVersion("another");
+    await worker.proofLog.restart();
     try {
       const logged = worker.logLines().length;
-      const failed = await worker.fetch("/roster?q=%3Cb%3E");
+      const failed = await worker.fetch("/proof-log?q=%3Cb%3E");
       assert.equal(failed.status, 500);
       checkVisitorHeaders("a page that failed", failed, { cache: "no-store" });
       // The one line about it names the page, never what was typed.
-      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", page: "roster", where: "schema", error: "Error" }]);
-      assert.equal((await worker.fetch("/roster?q=alice", { redirect: "manual" })).status, 303);
+      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", page: "proof_log", where: "schema", error: "Error" }]);
+      assert.equal((await worker.fetch("/proof-log?q=alice", { redirect: "manual" })).status, 303);
     } finally {
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
     }
   });
 });

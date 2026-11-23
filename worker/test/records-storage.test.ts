@@ -1,9 +1,9 @@
-// What the roster's Durable Object keeps between records, seen through the
+// What the proof log's Durable Object keeps between records, seen through the
 // Worker's HTTP (test/harness.ts): records submitted at once get consecutive
 // `seq`s; an object stopped between every two writes decides as one that
 // kept running; a write that fails in the middle leaves nothing; a state
-// computed by another version of the rules pauses the roster; and every
-// case of spec/vectors/roster-rules.json, run on the object's stored state,
+// computed by another version of the rules pauses the proof log; and every
+// case of spec/vectors/record-rules.json, run on the object's stored state,
 // gives what the same rules give with their state in memory.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -12,10 +12,10 @@ import { after, before, describe, test } from "node:test";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
-import type { CardState } from "iamreal-protocol/roster-rules.ts";
+import type { CardState } from "iamreal-protocol/record-rules.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
-import { type Answer, type Submission, cardState, checkRoster, day, freshRoster, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
+import { type Answer, type Submission, cardState, checkProofLog, day, freshProofLog, list, mustSubmit, newCard, publishG3, sub, submit, wantError } from "./records.ts";
 import { cardJsonOf } from "./sequence.ts";
 
 let worker: TestWorker;
@@ -29,7 +29,7 @@ const count = async (): Promise<unknown> => (await cardState(worker, newCard()))
 
 describe("records submitted at once", () => {
   test("20 requests at the same moment: 20 records, their `seq`s 1 to 20, each once", async () => {
-    await freshRoster(worker);
+    await freshProofLog(worker);
     const root = await publishG3(worker);
     const submissions: Submission[] = [];
     for (let i = 0; i < 20; i++) submissions.push(await sub(worker, newCard(), root, "threads:alice"));
@@ -41,46 +41,46 @@ describe("records submitted at once", () => {
     assert.deepEqual(answers.map((a) => [a.body.seq, a.body.kinds[0].account_cards]).sort((x, y) => x[0] - y[0]), Array.from({ length: 20 }, (_, i) => [i + 1, i + 1]));
     assert.equal(await count(), 20);
     for (const s of submissions) assert.equal((await cardState(worker, s.scoped_id)).proofs_on_last_date, 1);
-    // What is stored is a roster file with its hashes and fingerprints, and each line is the submission that was answered with its `seq`.
-    const stored = await checkRoster(worker);
+    // What is stored is a log file with its hashes and fingerprints, and each line is the submission that was answered with its `seq`.
+    const stored = await checkProofLog(worker);
     assert.equal(stored.length, 20);
     for (const [i, s] of submissions.entries()) {
       const { seq, ...fields } = stored[answers[i]!.body.seq - 1]!;
       assert.deepEqual(fields, { scopeString: s.scope_string, scopedId: s.scoped_id, accounts: s.accounts, challenge: s.challenge, issuer: s.issuer, smtRoot: s.smt_root, circuit: s.circuit, proof: s.proof });
       assert.equal(seq, answers[i]!.body.seq);
     }
-    assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
+    assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
   });
 
-  test("20 requests at the same moment, each giving way to the others while its record is hashed: still 20 records, `seq`s 1 to 20, a roster file that checks", async () => {
-    await freshRoster(worker);
+  test("20 requests at the same moment, each giving way to the others while its record is hashed: still 20 records, `seq`s 1 to 20, a log file that checks", async () => {
+    await freshProofLog(worker);
     const root = await publishG3(worker);
     const submissions: Submission[] = [];
     for (let i = 0; i < 20; i++) submissions.push(await sub(worker, newCard(), root, "threads:alice"));
     // In the local workerd, hashing a record does not let another request in, so the case above never
     // has two requests holding the same count. Here every hash waits 5 ms first, which does let them in.
-    await worker.roster.setHashDelay(5);
+    await worker.proofLog.setHashDelay(5);
     const answers = await Promise.all(submissions.map((s) => submit(worker, s)));
     for (const a of answers) assert.equal(a.status, 201, JSON.stringify(a.body));
     assert.deepEqual(answers.map((a) => a.body.seq as number).sort((x, y) => x - y), Array.from({ length: 20 }, (_, i) => i + 1));
     assert.deepEqual(answers.map((a) => [a.body.seq, a.body.kinds[0].account_cards]).sort((x, y) => x[0] - y[0]), Array.from({ length: 20 }, (_, i) => [i + 1, i + 1]));
-    const stored = await checkRoster(worker);
+    const stored = await checkProofLog(worker);
     assert.equal(stored.length, 20);
     for (const [i, s] of submissions.entries()) assert.equal(stored[answers[i]!.body.seq - 1]!.scopedId, s.scoped_id);
-    assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
+    assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash).sort(), answers.map((a) => a.body.record_hash as string).sort());
     // The requests did cross: some record was hashed for a `seq` another one took, and hashed again.
-    assert.ok((await worker.roster.hashes()) > 20);
+    assert.ok((await worker.proofLog.hashes()) > 20);
 
     // One challenge twice, crossing in the same way: both passed the first look at the challenge, and one is written.
     const twice = await sub(worker, newCard(), root, "threads:alice");
     const two = await Promise.all([submit(worker, twice), submit(worker, { ...twice, scoped_id: newCard() })]);
     assert.deepEqual(two.map((a) => a.status).sort(), [201, 400], JSON.stringify(two.map((a) => a.body)));
     assert.deepEqual(two.find((a) => a.status === 400)!.body, { error: "challenge_used" });
-    assert.equal((await checkRoster(worker)).length, 21);
+    assert.equal((await checkProofLog(worker)).length, 21);
   });
 
   test("20 requests of one card at the same moment: 3 records of that date, and 17 times daily_limit", async () => {
-    await freshRoster(worker);
+    await freshProofLog(worker);
     const root = await publishG3(worker);
     const card = newCard();
     const submissions: Submission[] = [];
@@ -90,7 +90,7 @@ describe("records submitted at once", () => {
     for (const a of answers) if (a.status !== 201) assert.deepEqual(a, { status: 400, body: { error: "daily_limit" } });
     assert.equal(await count(), 3);
     assert.equal((await cardState(worker, card)).proofs_on_last_date, 3);
-    assert.equal((await checkRoster(worker)).length, 3);
+    assert.equal((await checkProofLog(worker)).length, 3);
   });
 });
 
@@ -119,7 +119,7 @@ describe("an object that is stopped between every two writes", () => {
   ];
 
   async function run(restart: boolean): Promise<{ answers: Answer[]; states: unknown[] }> {
-    await freshRoster(worker);
+    await freshProofLog(worker);
     const root = await publishG3(worker);
     const answers: Answer[] = [];
     let today = 0;
@@ -127,9 +127,9 @@ describe("an object that is stopped between every two writes", () => {
       if (onDay > today) await day(worker, (today = onDay));
       const random = (0x1000 + i).toString(16).padStart(32, "0");
       const s: Submission = { ...(await sub(worker, CARDS[card]!, root, ...accounts)), challenge: await worker.issueChallenge(random) };
-      if (restart) await worker.roster.restart();
+      if (restart) await worker.proofLog.restart();
       answers.push(await submit(worker, s));
-      if (restart) await worker.roster.restart();
+      if (restart) await worker.proofLog.restart();
     }
     return { answers, states: await Promise.all(CARDS.map((c) => cardState(worker, c))) };
   }
@@ -146,27 +146,27 @@ describe("an object that is stopped between every two writes", () => {
 });
 
 describe("a write that fails in the middle", () => {
-  // In the order the record is written: its line, the card, the roster's row, (the views: test/views.test.ts,) the mark on the
+  // In the order the record is written: its line, the card, the proof log's row, (the views: test/views.test.ts,) the mark on the
   // challenge. The last, `challenges`, fails earlier: when the submission is counted, before the proof is looked at.
-  for (const table of ["records", "cards", "roster", "challenges.accepted", "challenges"] as const) {
+  for (const table of ["records", "cards", "proof_log", "challenges.accepted", "challenges"] as const) {
     test(`at \`${table}\`: 500, and the record, the card's state and the challenge are as before`, async () => {
-      await freshRoster(worker);
+      await freshProofLog(worker);
       const root = await publishG3(worker);
       const card = newCard();
       await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
       const before = await cardState(worker, card);
 
       const s = await sub(worker, card, root, "test-example:a-b", "threads:bob");
-      await worker.roster.failWritesTo(table);
+      await worker.proofLog.failWritesTo(table);
       const logged = worker.logLines().length;
       const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(s) });
       assert.equal(res.status, 500);
       assert.deepEqual(JSON.parse(await res.text()), { error: "internal" });
-      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "roster", error: "Error" }]);
+      assert.deepEqual(worker.logLines().slice(logged).map((l) => JSON.parse(l)), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/records", where: "proof_log", error: "Error" }]);
       assert.deepEqual(await cardState(worker, card), before);
 
-      await worker.roster.failWritesTo(null);
-      await worker.roster.restart();
+      await worker.proofLog.failWritesTo(null);
+      await worker.proofLog.restart();
       assert.deepEqual(await cardState(worker, card), before);
       // The challenge was not marked: the same submission is now written, as the second record.
       const answer = await submit(worker, s);
@@ -181,25 +181,25 @@ describe("a write that fails in the middle", () => {
   }
 });
 
-describe("a stored state computed by another version of the roster rules", () => {
+describe("a stored state computed by another version of the record rules", () => {
   test("challenges and records are 503 paused and nothing is written; card-state and config go on; with the build's version again, so does everything", async () => {
-    await freshRoster(worker);
+    await freshProofLog(worker);
     const root = await publishG3(worker);
     const card = newCard();
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     const s = await sub(worker, card, root, "threads:bob");
     const before = await cardState(worker, card);
 
-    await worker.roster.setStoredRulesVersion("another");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredRulesVersion("another");
+    await worker.proofLog.restart();
     const logged = worker.logLines().length;
     const challenge = await worker.fetch("/api/v1/challenges", { method: "POST" });
     assert.deepEqual([challenge.status, JSON.parse(await challenge.text())], [503, { error: "paused" }]);
     // More often than a challenge can be submitted: none of these counts (see the end).
     for (let i = 0; i < 6; i++) await wantError(worker, s, 503, "paused");
-    // Paused comes before the challenge: one this roster never issued gets the same answer, not `challenge_unknown`.
+    // Paused comes before the challenge: one this proof log never issued gets the same answer, not `challenge_unknown`.
     await wantError(worker, { ...s, challenge: `2026-11-20.${"0".repeat(26)}` }, 503, "paused");
-    // What is wrong with the request itself is still said first: that needs no roster.
+    // What is wrong with the request itself is still said first: that needs no proof log.
     await wantError(worker, { ...s, issuer: "G4" }, 400, "malformed");
     await wantError(worker, { ...s, accounts: list("instagram:alice") }, 400, "platform");
     assert.deepEqual(await cardState(worker, card), before);
@@ -207,23 +207,23 @@ describe("a stored state computed by another version of the roster rules", () =>
     // Not a failure of the back end: no line.
     assert.deepEqual(worker.logLines().slice(logged), []);
 
-    await worker.roster.setStoredRulesVersion("the build's");
-    await worker.roster.restart();
+    await worker.proofLog.setStoredRulesVersion("the build's");
+    await worker.proofLog.restart();
     // The refused submissions were not counted, and the challenge is still the one issued before.
     await mustSubmit(worker, s, "threads correction");
     assert.equal(await count(), 2);
   });
 });
 
-describe("spec/vectors/roster-rules.json on the object's stored state", () => {
+describe("spec/vectors/record-rules.json on the object's stored state", () => {
   interface Case {
     readonly name: string;
-    readonly roster: "production" | "test";
+    readonly proof_log: "production" | "test";
     readonly events: (RuleEvent & { date: string })[];
     readonly results: { seq: number; valid: boolean; reason?: string; kinds?: unknown }[];
     readonly state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; proofs_on_last_date: number; slots: Record<string, unknown> }[] }[];
   }
-  const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "roster-rules.json"), "utf8")) as { cases: Case[] };
+  const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
   /** A card's state from memory, in the spelling of `card-state`'s answer without `count`. */
   const answerOf = (card: CardState): Record<string, unknown> => {
     const { slots, ...items } = cardJsonOf(card);
@@ -238,17 +238,17 @@ describe("spec/vectors/roster-rules.json on the object's stored state", () => {
     assert.ok(cases.length >= 61);
     let events = 0;
     for (const c of cases) {
-      await freshRoster(worker, { kind: c.roster });
-      const memory = new MemoryRules(platformsOf(c.roster));
+      await freshProofLog(worker, { kind: c.proof_log });
+      const memory = new MemoryRules(platformsOf(c.proof_log));
       for (const [i, e] of c.events.entries()) {
         const what = `${c.name}, event ${e.seq}`;
         const { seq, ...want } = c.results[i]!;
         assert.equal(seq, e.seq, what);
         const inMemory = memory.apply({ scopeString: e.scope_string, scopedId: e.scoped_id, challenge: e.challenge, accounts: e.accounts, verifies: e.verifies, crlDates: e.crl_dates.map((d) => parseDay(d)!) });
-        const { valid, reason, kinds } = await worker.roster.applyRuleEvent(e);
+        const { valid, reason, kinds } = await worker.proofLog.applyRuleEvent(e);
         assert.deepEqual(valid ? { valid, kinds } : { valid, reason }, want, what);
         assert.deepEqual(valid ? { valid, kinds } : { valid, reason }, inMemory.result.valid ? inMemory.result : { valid: false, reason: inMemory.result.reason }, what);
-        await worker.roster.restart();
+        await worker.proofLog.restart();
         assert.deepEqual(await stored(e.scope_string, e.scoped_id), answerOf(memory.card(e.scope_string, e.scoped_id)), what);
         events++;
       }

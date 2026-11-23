@@ -74,7 +74,7 @@ function blockWindows(card: FakeCard, which: "readCertificates" | "sign", n: num
 }
 
 async function setup(o: {
-  /** The platforms the page has its own definition of; the test roster's two by default. */
+  /** The platforms the page has its own definition of; the test log's two by default. */
   knownPlatforms?: string[];
   world?: World;
   crls?: Parameters<typeof mirror>[1];
@@ -151,7 +151,7 @@ async function setup(o: {
   const progress: Progress[] = [];
   const flow = new CardProofFlow(
     {
-      roster: "test",
+      proofLog: "test",
       issuers: w.issuers,
       knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
@@ -190,7 +190,7 @@ const slot = (o: SlotJson = {}): Record<string, unknown> => ({ current: null, la
 const has = (u: string, o: SlotJson = {}): Record<string, unknown> => slot({ current: u, last_declared: u, correction_date: "2026-03-02", ...o });
 
 /**
- * A card-state answer: the test roster's two platforms, empty unless
+ * A card-state answer: the test log's two platforms, empty unless
  * `platforms` says otherwise; one record on the last card proof's date unless
  * the test says otherwise. Any other key is added as it is.
  */
@@ -493,7 +493,7 @@ describe("the flow, with a server that gives values the device must not accept",
     assert.deepEqual(s.store.values, { G3: 100n });
   });
 
-  test("the card signs the public roster's scope string; neither config nor the card's state can change it", async () => {
+  test("the card signs the public proof log's scope string; neither config nor the card's state can change it", async () => {
     const s = await setup({
       backend: {
         config: { crl_max_age_days: 3, platforms: [{ platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}", scope_string: "iamreal:threads:0______________" }], scope_string: "iamreal:public:0_______________" },
@@ -806,7 +806,7 @@ describe("the submission and what the server says it recorded", () => {
     assert.ok(raw.includes('"accounts":[{"platform":"test-example","username":"a-b"},{"platform":"threads","username":"alice"}]'), raw.slice(0, 300));
     const code = await declarationCode(SCOPE, cq.accounts, sub.challenge as string);
     assert.deepEqual(s.card.signed[1], code);
-    // The fake server's own roster answers as the rules do: what step 5 showed.
+    // The fake server's own proof log answers as the rules do: what step 5 showed.
     assert.deepEqual(done.kinds, [
       { platform: "test-example", kind: "first", username: "a-b", accountCards: 1 },
       { platform: "threads", kind: "first", username: "alice", accountCards: 1 },
@@ -836,7 +836,7 @@ describe("the submission and what the server says it recorded", () => {
     assert.deepEqual([done.seq, done.recordHash, done.kinds], [9, "c".repeat(64), [{ platform: "threads", kind: "first", username: "alice", accountCards: 3 }]]);
   });
 
-  // The record is in the roster already: kinds the device cannot read do not stop the card proof.
+  // The record is in the proof log already: kinds the device cannot read do not stop the card proof.
   for (const [label, kinds] of [
     ["no kinds", "(none)"],
     ["not a list", { threads: "first" }],
@@ -1396,7 +1396,7 @@ describe("a card proof that crosses midnight", () => {
   });
 });
 
-describe("a card-state answer the device cannot read, or the roster rules cannot produce, is not read", () => {
+describe("a card-state answer the device cannot read, or the record rules cannot produce, is not read", () => {
   const D = "2026-11-04";
   const withThreads = (slotJson: Record<string, unknown>, lcp: string | null = D, extra: Record<string, unknown> = {}) => cardState({ last_card_proof: lcp, platforms: { threads: slotJson }, ...extra });
   const cases: [string, Record<string, unknown>][] = [

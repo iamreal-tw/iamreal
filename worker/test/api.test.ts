@@ -34,7 +34,7 @@ describe("GET /api/v1/config", () => {
   });
   after(() => worker.close());
 
-  test("the test roster's table lists test-example and threads, in ascending order, with the keys in the document's order", async () => {
+  test("the test log's table lists test-example and threads, in ascending order, with the keys in the document's order", async () => {
     const res = await worker.fetch("/api/v1/config");
     assert.equal(res.status, 200);
     assert.equal(
@@ -136,7 +136,7 @@ describe("POST /api/v1/card-state", () => {
   const ask = (body: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body });
   const askFor = (card: string): Promise<Response> => ask(JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: card }));
 
-  test("a card with no record is not an error: null, 0, and an entry for every platform of the test roster", async () => {
+  test("a card with no record is not an error: null, 0, and an entry for every platform of the test log", async () => {
     const res = await askFor(CARD);
     assert.equal(res.status, 200);
     assert.deepEqual(await jsonOf(res), {
@@ -251,7 +251,7 @@ describe("POST /api/v1/card-state", () => {
 
   test("a stored state without a slot for a platform of the table, as one written before the platform was added: the empty slot for it", async () => {
     // No record leaves such a row, since the rules keep a slot for every platform of the table: it is written as it is.
-    await worker.roster.writeCard({
+    await worker.proofLog.writeCard({
       scope_string: TEST_SCOPE,
       scoped_id: OTHER_CARD,
       seq: 4,
@@ -277,7 +277,7 @@ describe("POST /api/v1/card-state", () => {
       '{"last_card_proof":"2026-11-20","proofs_on_last_date":1,"platforms":{"test-example":{"current":"a-b","last_declared":"a-b","switch_count":0,"correction_date":"2026-11-19"},"threads":{"current":"carol","last_declared":"carol","switch_count":2,"correction_date":"2026-11-20"}},"count":4}',
     );
 
-    await worker.roster.restart();
+    await worker.proofLog.restart();
 
     assert.equal(await (await askFor(CARD)).text(), before);
   });
@@ -288,7 +288,7 @@ describe("what the back end writes down about a request", () => {
     const worker = await startWorker();
     try {
       await worker.setClock(NOON);
-      // A roster with a record, written through the API. The mirror's round writes its own lines: the count starts after it.
+      // A proof log with a record, written through the API. The mirror's round writes its own lines: the count starts after it.
       await worker.setVerifier("stand-in");
       const root = await publishG3(worker);
       const logged = worker.logLines().length;
@@ -326,7 +326,7 @@ describe("what the back end writes down about a request", () => {
     try {
       await worker.setClock(NOON);
       const challenge = await issue(worker);
-      await worker.roster.breakTables();
+      await worker.proofLog.breakTables();
 
       const failed = [
         await worker.fetch("/api/v1/challenges", { method: "POST", headers: { "X-Forwarded-For": "203.0.113.7" } }),
@@ -340,13 +340,13 @@ describe("what the back end writes down about a request", () => {
         ids.push(res.headers.get("X-Request-Id")!);
         assert.deepEqual(await jsonOf(res), { error: "internal" });
       }
-      // config does not ask the roster's object, so it still answers.
+      // config does not ask the proof log's object, so it still answers.
       assert.equal((await worker.fetch("/api/v1/config")).status, 200);
 
       const lines = worker.logLines().filter((l) => l.includes("internal_error"));
       assert.deepEqual(lines.map((l) => JSON.parse(l) as unknown), [
-        { event: "internal_error", id: ids[0], endpoint: "/api/v1/challenges", where: "roster", error: "Error" },
-        { event: "internal_error", id: ids[1], endpoint: "/api/v1/card-state", where: "roster", error: "Error" },
+        { event: "internal_error", id: ids[0], endpoint: "/api/v1/challenges", where: "proof_log", error: "Error" },
+        { event: "internal_error", id: ids[1], endpoint: "/api/v1/card-state", where: "proof_log", error: "Error" },
       ]);
       const log = worker.logLines().join("\n");
       for (const secret of [challenge, CARD, "203.0.113.7", TEST_SCOPE]) assert.ok(!log.includes(secret), `the log holds ${secret}`);
@@ -422,15 +422,15 @@ describe("POST /api/v1/challenges", () => {
 
   test("a date no challenge can have (after 2049) is the back end's failure, and no challenge is issued", async () => {
     await worker.setClock(new Date("2050-01-01T00:00:00Z"));
-    const before = await worker.roster.knownChallenges();
+    const before = await worker.proofLog.knownChallenges();
     const res = await worker.fetch("/api/v1/challenges", { method: "POST" });
     assert.equal(res.status, 500);
     assert.deepEqual(await jsonOf(res), { error: "internal" });
-    assert.deepEqual(await worker.roster.knownChallenges(), before);
+    assert.deepEqual(await worker.proofLog.knownChallenges(), before);
   });
 });
 
-describe("the challenges the roster's object keeps", () => {
+describe("the challenges the proof log's object keeps", () => {
   const ISSUED = tw("2026-11-20T23:55:00");
   const LIFETIME_MS = 10 * 60 * 1000;
 
@@ -440,14 +440,14 @@ describe("the challenges the roster's object keeps", () => {
       await worker.setClock(ISSUED);
       const first = await issue(worker);
       const second = await issue(worker);
-      assert.deepEqual(await worker.roster.knownChallenges(), [first, second].sort());
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [first, second].sort());
 
-      await worker.roster.restart();
+      await worker.proofLog.restart();
 
-      assert.deepEqual(await worker.roster.knownChallenges(), [first, second].sort());
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [first, second].sort());
       // And it goes on issuing, next to the ones it had.
       const third = await issue(worker);
-      assert.deepEqual(await worker.roster.knownChallenges(), [first, second, third].sort());
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [first, second, third].sort());
     } finally {
       await worker.close();
     }
@@ -463,20 +463,20 @@ describe("the challenges the roster's object keeps", () => {
 
       // A millisecond before the first expires, nothing is deleted.
       await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS - 1));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), [old, younger].sort());
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [old, younger].sort());
 
       // Exactly 10 minutes after it was issued, after midnight in Taiwan, the first is gone.
       await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), [younger]);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [younger]);
 
       await worker.setClock(new Date(ISSUED.getTime() + LIFETIME_MS + 1));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), []);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), []);
       // With nothing left, running it again does nothing.
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), []);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), []);
     } finally {
       await worker.close();
     }
@@ -490,14 +490,14 @@ describe("the challenges the roster's object keeps", () => {
       for (let minute = 0; minute <= 120; minute += 4) {
         await worker.setClock(new Date(ISSUED.getTime() + minute * 60_000));
         last = await Promise.all(Array.from({ length: 5 }, () => issue(worker)));
-        await worker.roster.runAlarm();
+        await worker.proofLog.runAlarm();
       }
       // The rounds at minutes 112, 116 and 120 are less than 10 minutes old: of the 155 issued, those 15 are known.
-      const known = await worker.roster.knownChallenges();
+      const known = await worker.proofLog.knownChallenges();
       assert.equal(known.length, 15);
       for (const c of last) assert.ok(known.includes(c));
       // And the object keeps nothing older: its alarm is set for when the round of minute 112 expires, 2 minutes ahead.
-      const alarm = await worker.roster.alarmInMs();
+      const alarm = await worker.proofLog.alarmInMs();
       assert.ok(alarm !== null && alarm > 110_000 && alarm <= 120_000, `the alarm is ${alarm} ms ahead`);
     } finally {
       await worker.close();
@@ -509,14 +509,14 @@ describe("the challenges the roster's object keeps", () => {
     try {
       // Noon in Taiwan: an object that has only started has its alarm 12 hours ahead (README.md, "每天換日公布證明紀錄").
       await worker.setClock(tw("2026-11-20T12:00:00"));
-      const midnight = await worker.roster.alarmInMs();
+      const midnight = await worker.proofLog.alarmInMs();
       assert.ok(midnight !== null && midnight > 11.9 * 3600_000 && midnight <= 12 * 3600_000, `the alarm is ${midnight} ms ahead`);
       await issue(worker);
-      const wait = await worker.roster.alarmInMs();
+      const wait = await worker.proofLog.alarmInMs();
       assert.ok(wait !== null && wait > 9 * 60_000 && wait <= 10 * 60_000, `the alarm is ${wait} ms ahead`);
       // A second challenge does not move it.
       await issue(worker);
-      const later = await worker.roster.alarmInMs();
+      const later = await worker.proofLog.alarmInMs();
       assert.ok(later !== null && later <= wait, `the alarm moved from ${wait} to ${later} ms ahead`);
     } finally {
       await worker.close();
@@ -531,7 +531,7 @@ describe("the object's timed work shares its one alarm", () => {
   const at = (minutes: number): Date => new Date(START.getTime() + minutes * MINUTE);
   /** The alarm is `minutes` ahead, give or take the seconds the test itself took. */
   async function alarmIsAhead(worker: TestWorker, minutes: number, what: string): Promise<void> {
-    const wait = await worker.roster.alarmInMs();
+    const wait = await worker.proofLog.alarmInMs();
     assert.ok(wait !== null && wait > (minutes - 0.5) * MINUTE && wait <= minutes * MINUTE, `${what}: the alarm is ${wait} ms ahead, not ${minutes} minutes`);
   }
 
@@ -540,18 +540,18 @@ describe("the object's timed work shares its one alarm", () => {
     try {
       await worker.setClock(START);
       // START is noon in Taiwan, and the object's own daily publication is due at midnight: the other work is due before that.
-      await worker.roster.setExtraWork(at(11 * 60), DAY);
+      await worker.proofLog.setExtraWork(at(11 * 60), DAY);
       await alarmIsAhead(worker, 11 * 60, "with only the other work");
 
       const challenge = await issue(worker);
       await alarmIsAhead(worker, 10, "once a challenge is issued");
 
       await worker.setClock(at(10));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), []);
-      assert.ok(!(await worker.roster.knownChallenges()).includes(challenge));
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), []);
+      assert.ok(!(await worker.proofLog.knownChallenges()).includes(challenge));
       // The other work was not due and did not run; the alarm is now its own.
-      assert.deepEqual(await worker.roster.extraWorkRuns(), []);
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), []);
       await alarmIsAhead(worker, 10 * 60 + 50, "with the challenge gone");
     } finally {
       await worker.close();
@@ -564,37 +564,37 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.setClock(START);
       const challenge = await issue(worker);
       await alarmIsAhead(worker, 10, "with only the challenge");
-      await worker.roster.setExtraWork(at(3), DAY);
+      await worker.proofLog.setExtraWork(at(3), DAY);
       await alarmIsAhead(worker, 3, "with other work due sooner");
 
       // Woken before anything is due: nothing runs.
       await worker.setClock(at(1));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.extraWorkRuns(), []);
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge]);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), []);
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge]);
       await alarmIsAhead(worker, 2, "woken early");
 
       // At 3 minutes the other work runs; the challenge is not touched.
       await worker.setClock(at(3));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3)]);
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge]);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), [at(3)]);
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge]);
       await alarmIsAhead(worker, 7, "after the other work ran");
 
       // At 10 minutes the challenge is deleted; the other work, due again a day later, does not run.
       await worker.setClock(at(10));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.knownChallenges(), []);
-      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3)]);
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.knownChallenges(), []);
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), [at(3)]);
       // The other work is due a day after it ran; before that comes midnight in Taiwan, 12 hours after START, and the daily publication.
       await alarmIsAhead(worker, 12 * 60 - 10, "with the challenge gone and the other work a day ahead");
 
       // Both due at once: both run.
       const second = await issue(worker);
       await worker.setClock(at(24 * 60 + 3));
-      await worker.roster.runAlarm();
-      assert.deepEqual(await worker.roster.extraWorkRuns(), [at(3), at(24 * 60 + 3)]);
-      assert.ok(!(await worker.roster.knownChallenges()).includes(second));
+      await worker.proofLog.runAlarm();
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), [at(3), at(24 * 60 + 3)]);
+      assert.ok(!(await worker.proofLog.knownChallenges()).includes(second));
     } finally {
       await worker.close();
     }
@@ -605,10 +605,10 @@ describe("the object's timed work shares its one alarm", () => {
     try {
       await worker.setClock(START);
       await issue(worker);
-      await worker.roster.setExtraWork(START, DAY);
+      await worker.proofLog.setExtraWork(START, DAY);
       // Nothing is asked of the object while its alarm rings, a second from now, so nothing but the alarm's own handler sets the next.
       await new Promise((resolve) => setTimeout(resolve, 2500));
-      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), [START]);
       await alarmIsAhead(worker, 10, "once the alarm rang by itself");
     } finally {
       await worker.close();
@@ -621,12 +621,12 @@ describe("the object's timed work shares its one alarm", () => {
       await worker.setClock(START);
       await issue(worker);
       // Work that is due now, while a challenge is issued every 300 ms for three seconds: each of them sets the alarm.
-      await worker.roster.setExtraWork(START, DAY);
+      await worker.proofLog.setExtraWork(START, DAY);
       for (let i = 0; i < 10; i++) {
         await issue(worker);
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
-      assert.deepEqual(await worker.roster.extraWorkRuns(), [START]);
+      assert.deepEqual(await worker.proofLog.extraWorkRuns(), [START]);
       // The alarm is then the challenges' own again.
       await alarmIsAhead(worker, 10, "once the other work ran");
     } finally {
@@ -683,22 +683,22 @@ describe("a stored state of a card that the rules cannot have left", () => {
   const ask = (card: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: TEST_SCOPE, scoped_id: card }) });
 
   test("the state every case below starts from is one the rules leave: it is answered", async () => {
-    await worker.roster.writeCard(GOOD);
+    await worker.proofLog.writeCard(GOOD);
     const res = await ask(CARD);
     assert.equal(res.status, 200);
     assert.deepEqual(await jsonOf(res), { last_card_proof: "2026-11-19", proofs_on_last_date: 2, platforms: GOOD.platforms, count: 0 });
   });
 
   for (const [name, card] of Object.entries(BROKEN)) {
-    test(`is not handed on: ${name} is 500, with one line that says the roster's object failed`, async () => {
-      await worker.roster.writeCard(card as never);
+    test(`is not handed on: ${name} is 500, with one line that says the proof log's object failed`, async () => {
+      await worker.proofLog.writeCard(card as never);
       const before = failuresIn(worker).length;
 
       const res = await ask(CARD);
 
       assert.equal(res.status, 500);
       assert.deepEqual(await jsonOf(res), { error: "internal" });
-      assert.deepEqual(failuresIn(worker).slice(before), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/card-state", where: "roster", error: "Error" }]);
+      assert.deepEqual(failuresIn(worker).slice(before), [{ event: "internal_error", id: res.headers.get("X-Request-Id"), endpoint: "/api/v1/card-state", where: "proof_log", error: "Error" }]);
       // Another card is answered as before.
       assert.equal((await ask(OTHER_CARD)).status, 200);
     });
@@ -710,24 +710,24 @@ describe("a stored state of a card that the rules cannot have left", () => {
   });
 });
 
-describe("the setting that says which roster the environment serves", () => {
+describe("the setting that says which proof log the environment serves", () => {
   const cardState = (worker: TestWorker, scope: string): Promise<Response> => worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scope, scoped_id: CARD }) });
 
-  // The name of a test roster's object starts with `test-`, that of the production roster's does not.
+  // The name of a test log's object starts with `test-`, that of the production log's does not.
   const WRONG: [why: string, kind: string, name: string][] = [
-    ["a kind that names no roster", "staging", "test-1"],
+    ["a kind that names no proof log", "staging", "test-1"],
     ["an empty kind", "", "test-1"],
     ["a kind in another case", "Test", "test-1"],
-    ["a kind with a space after it", "production ", "roster-1"],
-    ["the production roster on the test roster's object", "production", "test-1"],
-    ["the production roster on any object named as a test one", "production", "test-"],
-    ["the test roster on an object not named as a test one", "test", "roster-1"],
-    ["the test roster on an object named `test` without the hyphen", "test", "test"],
-    ["the test roster on an object named in another case", "test", "Test-1"],
+    ["a kind with a space after it", "production ", "proof-log-1"],
+    ["the production log on the test log's object", "production", "test-1"],
+    ["the production log on any object named as a test one", "production", "test-"],
+    ["the test log on an object not named as a test one", "test", "proof-log-1"],
+    ["the test log on an object named `test` without the hyphen", "test", "test"],
+    ["the test log on an object named in another case", "test", "Test-1"],
   ];
   for (const [why, kind, name] of WRONG) {
-    test(`${why} (ROSTER_KIND ${JSON.stringify(kind)}, ROSTER_OBJECT_NAME ${JSON.stringify(name)}): every endpoint is 500, the line says it is the settings, and the object is not asked`, async () => {
-      const worker = await startWorker({ settings: { ROSTER_KIND: kind, ROSTER_OBJECT_NAME: name } });
+    test(`${why} (PROOF_LOG_KIND ${JSON.stringify(kind)}, PROOF_LOG_OBJECT_NAME ${JSON.stringify(name)}): every endpoint is 500, the line says it is the settings, and the object is not asked`, async () => {
+      const worker = await startWorker({ settings: { PROOF_LOG_KIND: kind, PROOF_LOG_OBJECT_NAME: name } });
       try {
         await worker.setClock(NOON);
         const answers = [
@@ -754,27 +754,27 @@ describe("the setting that says which roster the environment serves", () => {
         assert.equal((await worker.fetch("/api/v1/config", { method: "POST" })).status, 405);
 
         // With settings that fit the same object, it turns out never to have issued a challenge.
-        await worker.setSettings({ ROSTER_KIND: name.startsWith("test-") ? "test" : "production", ROSTER_OBJECT_NAME: name });
-        assert.deepEqual(await worker.roster.knownChallenges(), []);
+        await worker.setSettings({ PROOF_LOG_KIND: name.startsWith("test-") ? "test" : "production", PROOF_LOG_OBJECT_NAME: name });
+        assert.deepEqual(await worker.proofLog.knownChallenges(), []);
         const first = await issue(worker);
-        assert.deepEqual(await worker.roster.knownChallenges(), [first]);
+        assert.deepEqual(await worker.proofLog.knownChallenges(), [first]);
       } finally {
         await worker.close();
       }
     });
   }
 
-  test("the production roster: its table has threads only, it takes its own scope, and the test roster's scope is malformed", async () => {
-    const worker = await startWorker({ settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "production-of-the-test" } });
+  test("the production log: its table has threads only, it takes its own scope, and the test log's scope is malformed", async () => {
+    const worker = await startWorker({ settings: { PROOF_LOG_KIND: "production", PROOF_LOG_OBJECT_NAME: "production-of-the-test" } });
     try {
       await worker.setClock(NOON);
       const config = await worker.fetch("/api/v1/config");
       assert.equal(config.status, 200);
       const text = await config.text();
       assert.equal(text, '{"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":1,"from":"2026-11-20"},"ios":{"build":1,"from":"2026-11-20"}}}');
-      // The row is the one under "Production roster" in spec/scope.md, and no row is a test platform.
+      // The row is the one under "Production log" in spec/scope.md, and no row is a test platform.
       const spec = repoText("spec/scope.md");
-      assert.ok(spec.slice(spec.indexOf("**Production roster**", spec.indexOf("## Platforms")), spec.indexOf("**Test rosters only**", spec.indexOf("## Platforms"))).includes("| `threads` | Threads | `[a-z0-9._]{1,30}` |"));
+      assert.ok(spec.slice(spec.indexOf("**Production log**", spec.indexOf("## Platforms")), spec.indexOf("**Test logs only**", spec.indexOf("## Platforms"))).includes("| `threads` | Threads | `[a-z0-9._]{1,30}` |"));
       assert.ok(!text.includes("test-"));
       for (const app of ["android", "ios"] as const) assert.notEqual(readMinAppEntry(JSON.parse(text), app), null, app);
 
@@ -788,8 +788,8 @@ describe("the setting that says which roster the environment serves", () => {
 
       assert.equal((await issue(worker)).slice(0, 10), "2026-11-20");
 
-      // A stored slot on a test platform is not a state of this roster.
-      await worker.roster.writeCard({
+      // A stored slot on a test platform is not a state of this proof log.
+      await worker.proofLog.writeCard({
         scope_string: PRODUCTION_SCOPE,
         scoped_id: CARD,
         seq: 1,
@@ -811,8 +811,8 @@ describe("the setting that says which roster the environment serves", () => {
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
 
       // As a deploy of a build with another version would find it: the stored version differs when the object starts.
-      await worker.roster.setStoredSchemaVersion("another");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("another");
+      await worker.proofLog.restart();
 
       const refuse = async (): Promise<Response[]> => {
         const answers = [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, TEST_SCOPE)];
@@ -837,24 +837,24 @@ describe("the setting that says which roster the environment serves", () => {
       assert.equal((await worker.fetch("/nothing")).status, 404);
       // The alarm deletes nothing, however late it is: the challenge is still known once the version is the build's again (below).
       await worker.setClock(new Date(NOON.getTime() + 60 * 60_000));
-      await worker.roster.runAlarm();
+      await worker.proofLog.runAlarm();
       // Starting again does not make the stored version the build's.
-      await worker.roster.restart();
+      await worker.proofLog.restart();
       await refuse();
       assert.deepEqual(failuresIn(worker).map((l) => l.where), ["schema", "schema", "schema", "schema"]);
 
       await worker.setClock(NOON);
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
       const next = await issue(worker);
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge, next].sort());
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge, next].sort());
     } finally {
       await worker.close();
     }
   });
 
-  test("a running test roster whose setting is changed to production: nothing answers, the object keeps what it had, and it goes on once the setting is put back", async () => {
+  test("a running test log whose setting is changed to production: nothing answers, the object keeps what it had, and it goes on once the setting is put back", async () => {
     const worker = await startWorker();
     try {
       await worker.setClock(NOON);
@@ -862,8 +862,8 @@ describe("the setting that says which roster the environment serves", () => {
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
 
       // As a deploy with the wrong setting would: the setting changes and the object starts again.
-      await worker.setSettings({ ROSTER_KIND: "production" });
-      await worker.roster.restart();
+      await worker.setSettings({ PROOF_LOG_KIND: "production" });
+      await worker.proofLog.restart();
       for (const res of [await worker.fetch("/api/v1/challenges", { method: "POST" }), await cardState(worker, PRODUCTION_SCOPE), await cardState(worker, TEST_SCOPE), await worker.fetch("/api/v1/config")]) {
         assert.equal(res.status, 500);
         assert.deepEqual(await jsonOf(res), { error: "internal" });
@@ -872,11 +872,11 @@ describe("the setting that says which roster the environment serves", () => {
 
       // The object was stopped and nothing has started it since: with the setting put back it starts from what it stored.
       await worker.setSettings({});
-      await assert.rejects(worker.roster.restart(), /not currently running/);
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge]);
+      await assert.rejects(worker.proofLog.restart(), /not currently running/);
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge]);
       assert.equal((await cardState(worker, TEST_SCOPE)).status, 200);
       const next = await issue(worker);
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge, next].sort());
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge, next].sort());
     } finally {
       await worker.close();
     }

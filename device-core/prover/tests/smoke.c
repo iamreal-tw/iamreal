@@ -20,7 +20,7 @@ int main(void) {
   if (idc_abi_version() != IDC_ABI_VERSION) return 1;
   if (idc_self_check() != IDC_OK) return 2;
 
-  if (idc_scope_string(IDC_ROSTER_TEST, &out) != IDC_OK) return 3;
+  if (idc_scope_string(IDC_PROOF_LOG_TEST, &out) != IDC_OK) return 3;
   if (!same(&out, "iamreal-test:public:0__________")) return 4;
   idc_buf_free(&out);
   if (out.ptr != NULL || out.len != 0) return 5;
@@ -29,12 +29,12 @@ int main(void) {
   /* The example written out in spec/declaration-code.md. This program reads
    * no file: tests/c_api.rs runs every case of spec/vectors/ through the
    * same functions. */
-  if (idc_declaration_code(IDC_ROSTER_PRODUCTION, (const uint8_t *)accounts, strlen(accounts),
+  if (idc_declaration_code(IDC_PROOF_LOG_PRODUCTION, (const uint8_t *)accounts, strlen(accounts),
                            (const uint8_t *)challenge, strlen(challenge), &out) != IDC_OK) return 6;
   if (!same(&out, "DYR31H79A046QB7TZR3EZ26GGF20ZV9")) return 7;
   idc_buf_free(&out);
 
-  if (idc_declaration_code(IDC_ROSTER_PRODUCTION, (const uint8_t *)"x", 1,
+  if (idc_declaration_code(IDC_PROOF_LOG_PRODUCTION, (const uint8_t *)"x", 1,
                            (const uint8_t *)challenge, strlen(challenge), &out) != IDC_ERR_INPUT) return 8;
   if (out.ptr != NULL || out.len != 0) return 9;
   if (idc_scope_string(2, &out) != IDC_ERR_ARGUMENT) return 10;
@@ -56,7 +56,7 @@ int main(void) {
     idc_buf_free(&out);
   }
 
-  /* A 201 without a body: the record is in the roster, and nothing of the answer is told. */
+  /* A 201 without a body: the record is in the proof log, and nothing of the answer is told. */
   {
     static const char rows[] = "[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\"}]";
     if (idc_records_response(NULL, 0, (const uint8_t *)rows, strlen(rows), &out) != IDC_OK) return 23;
@@ -68,7 +68,7 @@ int main(void) {
   {
     static const uint8_t signature[256] = {1};
     idc_session session = 0;
-    if (idc_session_open(IDC_ROSTER_TEST, &session) != IDC_OK || session == 0) return 13;
+    if (idc_session_open(IDC_PROOF_LOG_TEST, &session) != IDC_OK || session == 0) return 13;
     if (idc_session_card_state_request(session, 1794800000, signature, sizeof signature, &out) != IDC_ERR_REFUSED) return 14;
     if (out.ptr != NULL || out.len != 0) return 15;
     if (idc_session_build_tree(session) != IDC_ERR_REFUSED) return 16;

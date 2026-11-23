@@ -168,8 +168,8 @@ interface Statement {
   scopeString: string;
   accounts: Account[];
 }
-const testRoster: Statement = { scopeString: scopeOf("test"), accounts: [{ platform: "threads", username: "alice" }] };
-const publicRoster: Statement = { scopeString: scopeOf("production"), accounts: [] };
+const testProofLog: Statement = { scopeString: scopeOf("test"), accounts: [{ platform: "threads", username: "alice" }] };
+const publicProofLog: Statement = { scopeString: scopeOf("production"), accounts: [] };
 
 async function circuitCase(label: string, world: World, crlName: string, statement: Statement) {
   const scopeString = statement.scopeString;
@@ -230,10 +230,10 @@ const circuitVectors = {
   issuers,
   generated_by: GENERATED_BY,
   cases: [
-    await circuitCase("G3 certificate (card_proof_rs4096), test roster; the path ends at a leaf of another key", g3, "g3-leaf", testRoster),
-    await circuitCase("G3 certificate (card_proof_rs4096), public roster, no accounts; the path ends in an empty subtree", g3, "g3-empty", publicRoster),
-    await circuitCase("G2 certificate (card_proof_rs2048), test roster; the path ends in an empty subtree", g2, "g2-empty", testRoster),
-    await circuitCase("G2 certificate (card_proof_rs2048), public roster, no accounts; the path ends at a leaf of another key", g2, "g2-leaf", publicRoster),
+    await circuitCase("G3 certificate (card_proof_rs4096), test log; the path ends at a leaf of another key", g3, "g3-leaf", testProofLog),
+    await circuitCase("G3 certificate (card_proof_rs4096), public proof log, no accounts; the path ends in an empty subtree", g3, "g3-empty", publicProofLog),
+    await circuitCase("G2 certificate (card_proof_rs2048), test log; the path ends in an empty subtree", g2, "g2-empty", testProofLog),
+    await circuitCase("G2 certificate (card_proof_rs2048), public proof log, no accounts; the path ends at a leaf of another key", g2, "g2-leaf", publicProofLog),
   ],
 };
 

@@ -4,7 +4,7 @@
 //
 // The Worker, the keys, the card and the CRLs are web/test/app-backend.ts's,
 // which both apps' tests share. It runs this file as its command, and when
-// this file ends well has Go's iamreal-verify re-verify the roster these
+// this file ends well has Go's iamreal-verify re-verify the proof log these
 // card proofs wrote, record by record:
 //
 //   cd ../web && IAMREAL_BB=<bb 6.0.0> node --experimental-strip-types test/app-backend.ts \

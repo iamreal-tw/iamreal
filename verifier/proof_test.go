@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -111,7 +111,7 @@ func testVerifier(t *testing.T, d *proofData, cfg verifier.Config) *verifier.Ver
 	return v
 }
 
-// records returns the test proofs as the records of a test roster.
+// records returns the test proofs as the records of a test log.
 func records(t *testing.T, d *proofData) []*verifier.Record {
 	t.Helper()
 	var out []*verifier.Record
@@ -467,8 +467,8 @@ func TestNewChecksBBAndCRS(t *testing.T) {
 	_ = testVerifier(t, d, verifier.Config{})
 }
 
-// The test proofs as a test roster file, through the roster rules.
-func TestRealProofRoster(t *testing.T) {
+// The test proofs as a test log file, through the record rules.
+func TestRealProofProofLog(t *testing.T) {
 	d := loadProofs(t)
 	v := testVerifier(t, d, verifier.Config{})
 	var file []byte
@@ -477,7 +477,7 @@ func TestRealProofRoster(t *testing.T) {
 	}
 	date := func(s string) verifier.Date { x, _ := verifier.ParseDate(s); return x }
 	archive := fakeArchive{d.SMTRoot: {date("2026-11-16"), date("2027-01-01")}}
-	rep, err := roster.Check(file, verifier.Test, v, archive)
+	rep, err := prooflog.Check(file, verifier.Test, v, archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,14 +501,14 @@ func TestRealProofRoster(t *testing.T) {
 		s[0].Accounts[0].Platform != "threads" || s[0].Accounts[0].Username != "alice" {
 		t.Errorf("state %+v", rep.State.Scopes)
 	}
-	// In a production roster the test scope makes the file broken.
-	if rep, _ := roster.Check(file, verifier.Production, v, archive); rep.Broken == nil || rep.Broken.Code != roster.CodeLine {
-		t.Errorf("production roster: %+v", rep)
+	// In a production log the test scope makes the file broken.
+	if rep, _ := prooflog.Check(file, verifier.Production, v, archive); rep.Broken == nil || rep.Broken.Code != prooflog.CodeLine {
+		t.Errorf("production log: %+v", rep)
 	}
 	// With no CRL behind the root, check 3 fails.
-	rep, _ = roster.Check(file, verifier.Test, v, fakeArchive{})
+	rep, _ = prooflog.Check(file, verifier.Test, v, fakeArchive{})
 	for _, res := range rep.State.Records {
-		if res.Reason != roster.CodeRoot {
+		if res.Reason != prooflog.CodeRoot {
 			t.Errorf("seq %d: %+v, want root", res.Seq, res)
 		}
 	}
@@ -517,9 +517,9 @@ func TestRealProofRoster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rep, _ = roster.Check(file, verifier.Test, prod, archive)
+	rep, _ = prooflog.Check(file, verifier.Test, prod, archive)
 	for _, res := range rep.State.Records {
-		if res.Reason != roster.CodeProof {
+		if res.Reason != prooflog.CodeProof {
 			t.Errorf("seq %d: %+v, want proof", res.Seq, res)
 		}
 	}

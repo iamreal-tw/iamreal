@@ -5,7 +5,7 @@ package main
 // The option -test-issuers exists only in a build with the tag iamrealtest,
 // like verifier.NewWithIssuers, which it uses. The Worker's test with
 // real proofs (worker/test/records-real.test.ts) builds the command with
-// the tag to re-verify a roster whose proofs were made under throwaway
+// the tag to re-verify a proof log whose proofs were made under throwaway
 // issuer keys. A program built without the
 // tag, as README.md says to build it, cannot accept a test key.
 
@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 
 	"github.com/iamreal-tw/iamreal/crl"
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -48,7 +48,7 @@ func init() {
 				keys = append(keys, crl.NamedKey{Name: name, Key: rk})
 				moduli[name] = rk.N
 			}
-			d.verifier = func(cfg verifier.Config) (roster.ProofVerifier, error) { return verifier.NewWithIssuers(cfg, moduli) }
+			d.verifier = func(cfg verifier.Config) (prooflog.ProofVerifier, error) { return verifier.NewWithIssuers(cfg, moduli) }
 			d.archive = openArchive(func() ([]crl.NamedKey, error) { return keys, nil })
 			return nil
 		}

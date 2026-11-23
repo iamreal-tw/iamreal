@@ -1,9 +1,9 @@
 // A slot of a card's state as JSON: the one spelling the back end has for
 // it. `card-state` answers with it (docs/api/card-proof.md, `platforms`) and
 // the card state table stores it (card-table.ts). The names are those of
-// spec/roster-rules.md, "State"; a date is `YYYY-MM-DD`.
+// spec/record-rules.md, "State"; a date is `YYYY-MM-DD`.
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
-import type { SlotState } from "iamreal-protocol/roster-rules.ts";
+import type { SlotState } from "iamreal-protocol/record-rules.ts";
 
 export interface SlotJson {
   current: string | null;

@@ -5,8 +5,8 @@ Status: **Draft**.
 Before the card signs a list of accounts, the device shows the cardholder
 the whole list that will be signed and what it does on every platform
 ([`docs/api/card-proof.md`](../docs/api/card-proof.md), `card-state`, "What
-the device does with it"). The device computes it itself, by the roster
-rules ([`roster-rules.md`](roster-rules.md)), from two answers of the
+the device does with it"). The device computes it itself, by the record
+rules ([`record-rules.md`](record-rules.md)), from two answers of the
 server and today's date. This document defines how the device reads those
 answers and what it computes, so that every client (the web page, the
 Android and iOS apps) shows the same rows for the same answers, list and
@@ -65,7 +65,7 @@ The answer **cannot be read** unless all of the following hold:
 - It is an object with `last_card_proof` (a date `YYYY-MM-DD` that exists,
   from 2000 to 2049, or null), `proofs_on_last_date` (a count), `platforms`
   (an object) and `count` (a count).
-- The card's items are possible ([`roster-rules.md`](roster-rules.md),
+- The card's items are possible ([`record-rules.md`](record-rules.md),
   "State"): `proofs_on_last_date` is 0 when `last_card_proof` is null, and
   1 to 3 otherwise; and `last_card_proof` is at most 3 days after today
   (the bound of check 3).
@@ -101,7 +101,7 @@ without an entry is not offered.
    ascending order.
 3. **The list the card signs** is the cardholder's list with every kept
    account added, in ascending order of platform.
-4. The roster rules' checks 5 and 6 ([`roster-rules.md`](roster-rules.md),
+4. The record rules' checks 5 and 6 ([`record-rules.md`](record-rules.md),
    "Event rules", and check 6) are applied to that list on today's date,
    against a card whose `last_card_proof` and `proofs_on_last_date` are the
    answer's, with one slot for each platform offered (the answer's entry)

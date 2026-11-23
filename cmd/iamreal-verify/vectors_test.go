@@ -1,7 +1,7 @@
 package main
 
-// The published roster of spec/vectors/record.json through the command:
-// the roster directories of "generated_roster", written from the names and
+// The published proof log of spec/vectors/record.json through the command:
+// the log directories of "generated_proof_log", written from the names and
 // lines the vectors give, and the fingerprint files of "fingerprint_files".
 
 import (
@@ -15,26 +15,26 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
 type recordVectors struct {
-	Tokens  map[string]string `json:"tokens"`
-	Rosters []struct {
-		Roster  string `json:"roster"`
-		Records []struct {
+	Tokens    map[string]string `json:"tokens"`
+	ProofLogs []struct {
+		ProofLog string `json:"proof_log"`
+		Records  []struct {
 			Line string `json:"line"`
 		} `json:"records"`
 		HashList string `json:"hash_list"`
-	} `json:"rosters"`
+	} `json:"proof_logs"`
 	Generated struct {
 		LineTemplate string `json:"line_template"`
 		Directories  []struct {
-			Name   string `json:"name"`
-			Roster string `json:"roster"`
-			Count  int    `json:"count"`
-			Files  []struct {
+			Name     string `json:"name"`
+			ProofLog string `json:"proof_log"`
+			Count    int    `json:"count"`
+			Files    []struct {
 				Name     string `json:"name"`
 				FirstSeq int    `json:"first_seq"`
 				Lines    int    `json:"lines"`
@@ -50,7 +50,7 @@ type recordVectors struct {
 				Content string `json:"content"`
 			} `json:"fingerprint_file"`
 		} `json:"directories"`
-	} `json:"generated_roster"`
+	} `json:"generated_proof_log"`
 	FingerprintFiles []struct {
 		Name      string `json:"name"`
 		RecordsOf string `json:"records_of"`
@@ -86,7 +86,7 @@ func sha256Hex(b []byte) string {
 }
 
 // Each directory is written with the names, first seq and number of lines
-// the vectors give, and its record hash lists from the roster package, each
+// the vectors give, and its record hash lists from the proof log package, each
 // checked against its SHA-256; the command reads it as valid and prints its
 // fingerprint.
 func TestVectorsDirectory(t *testing.T) {
@@ -113,7 +113,7 @@ func TestVectorsDirectory(t *testing.T) {
 				}
 				files[f.Name] = b
 			}
-			for i, p := range roster.DirectoryFiles(records) {
+			for i, p := range prooflog.DirectoryFiles(records) {
 				l := p.HashList
 				if want := d.HashLists[i]; l.Name != want.Name || sha256Hex(l.Data) != want.SHA256 {
 					t.Fatalf("list %s, want %s with SHA-256 %s", l.Name, want.Name, want.SHA256)
@@ -137,7 +137,7 @@ func TestVectorsDirectory(t *testing.T) {
 			if !got.Valid || got.Fingerprint != d.Fingerprint || len(got.Results) != d.Count {
 				t.Errorf("exit %d: valid %v, fingerprint %s, %d results; want %s\n%s", code, got.Valid, got.Fingerprint, len(got.Results), d.Fingerprint, errOut)
 			}
-			for _, w := range []string{"every list is the roster's", "every fingerprint is the roster's"} {
+			for _, w := range []string{"every list is the proof log's", "every fingerprint is the proof log's"} {
 				if !strings.Contains(errOut, w) {
 					t.Errorf("stderr does not say %q:\n%s", w, errOut)
 				}
@@ -148,27 +148,27 @@ func TestVectorsDirectory(t *testing.T) {
 
 var problemLine = regexp.MustCompile(`fingerprints\.jsonl line (\d+):`)
 
-// Each fingerprint file is checked against the records of its roster; the
+// Each fingerprint file is checked against the records of its proof log; the
 // first line the command reports is the one the vectors give.
 func TestVectorsFingerprintFiles(t *testing.T) {
 	v := loadVectors(t)
 	dirs := map[string]map[string][]byte{}
-	for _, rs := range v.Rosters {
+	for _, rs := range v.ProofLogs {
 		var b []byte
 		for _, r := range rs.Records {
 			b = append(b, v.sub(r.Line)...)
 		}
-		dirs[rs.Roster] = map[string][]byte{"0000000000000000.jsonl": b, "hashes/0000000000000000.txt": []byte(rs.HashList)}
+		dirs[rs.ProofLog] = map[string][]byte{"0000000000000000.jsonl": b, "hashes/0000000000000000.txt": []byte(rs.HashList)}
 	}
 	for _, f := range v.FingerprintFiles {
 		t.Run(f.Name, func(t *testing.T) {
-			_, out, errOut := runDir(t, writeDir(t, dirs[f.RecordsOf], f.Content), "-roster", f.RecordsOf)
-			if !strings.Contains(out, "roster file: valid") || !strings.Contains(errOut, "every list is the roster's") {
+			_, out, errOut := runDir(t, writeDir(t, dirs[f.RecordsOf], f.Content), "-proof-log", f.RecordsOf)
+			if !strings.Contains(out, "log file: valid") || !strings.Contains(errOut, "every list is the proof log's") {
 				t.Fatalf("%s\n%s", out, errOut)
 			}
 			m := problemLine.FindStringSubmatch(errOut)
 			switch {
-			case f.Valid && (m != nil || !strings.Contains(errOut, "every fingerprint is the roster's")):
+			case f.Valid && (m != nil || !strings.Contains(errOut, "every fingerprint is the proof log's")):
 				t.Errorf("not valid:\n%s", errOut)
 			case !f.Valid && m == nil:
 				t.Errorf("valid, want line %d to fail:\n%s", f.Line, errOut)

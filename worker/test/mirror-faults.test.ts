@@ -49,7 +49,7 @@ const g3 = (number: bigint, serials: bigint[] = []): Uint8Array => makeCrl({ iss
 const slowG3 = (number: bigint): Uint8Array => g3(number, Array.from({ length: 20_000 }, (_, i) => (BigInt(i) << 64n) + 0x1_0000n + BigInt(i * 7919)));
 
 describe("a file that cannot get its line", () => {
-  test("is that file's trouble alone: the others get their lines, the roster's object hears of them, and the file is tried again", () =>
+  test("is that file's trouble alone: the others get their lines, the proof log's object hears of them, and the file is tried again", () =>
     withWorker({}, async (worker) => {
       const A = g3(11n, [4n]);
       const B = g3(12n, [4n, 5n]);
@@ -65,7 +65,7 @@ describe("a file that cannot get its line", () => {
         // The run still shows as failed, after everything else was done.
         assert.equal((await worker.runSchedule()).outcome, "exception", `round ${round}`);
         assert.match((await rootOf(worker, B)) ?? "", /^[0-9a-f]{64}$/, `round ${round}: the index lists the new CRL`);
-        assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.crlNumber), ["12", "11"], `round ${round}: the roster's object knows it`);
+        assert.deepEqual((await worker.newestCrls()).G3.map((c) => c.crlNumber), ["12", "11"], `round ${round}: the proof log's object knows it`);
         assert.deepEqual((await worker.newestCrls()).G3[0]!.root, await rootOf(worker, B));
       }
       const failed = indexedLog(worker).filter((l) => l.result === "failed");
@@ -75,7 +75,7 @@ describe("a file that cannot get its line", () => {
     }));
 });
 
-describe("the roster's object hears of a CRL as soon as the index lists it", () => {
+describe("the proof log's object hears of a CRL as soon as the index lists it", () => {
   test("while the next file's tree is still being built", () =>
     withWorker({}, async (worker) => {
       const quick = g2(21n, [1n]);
@@ -241,7 +241,7 @@ describe("many files an earlier round left without a line, each with a tree that
 });
 
 describe("a round that is stopped while it builds the second file's tree", () => {
-  test("the first file's line is in the index and the roster's object has heard of it; the next round gives the second its line", async () => {
+  test("the first file's line is in the index and the proof log's object has heard of it; the next round gives the second its line", async () => {
     const quick = g2(91n, [1n]);
     // Stopping the Worker takes a moment, in which a small tree could be finished after all. If
     // that happens the tree is made twice as large and the round is run again in a new Worker.
@@ -269,7 +269,7 @@ describe("a round that is stopped while it builds the second file's tree", () =>
           index = await indexText(worker);
           if (!stopped || index.includes(sha256Hex(slow))) return false;
 
-          // What the stopped round left: G2's line and no other, G3's file, and a roster's object that knows of G2's CRL.
+          // What the stopped round left: G2's line and no other, G3's file, and a proof log's object that knows of G2's CRL.
           assert.equal(index.split("\n").length - 1, 1);
           assert.match((await rootOf(worker, quick)) ?? "", /^[0-9a-f]{64}$/);
           assert.ok((await worker.files("crl/")).some((f) => f.key === nameOf(slow)), "G3's file is stored");
@@ -409,18 +409,18 @@ describe("an answer larger than a CRL can be", () => {
     }));
 });
 
-describe("the roster's object and the mirror", () => {
+describe("the proof log's object and the mirror", () => {
   const [A, B] = [g3(81n, [1n]), g3(82n, [1n, 2n])];
   const numbers = async (worker: TestWorker): Promise<string[]> => (await worker.newestCrls()).G3.map((c) => c.crlNumber);
 
   test("an object made before the table of the newest CRLs existed gets it when it starts, and keeps the rest", () =>
     withWorker({}, async (worker) => {
       const challenge = ((await (await worker.fetch("/api/v1/challenges", { method: "POST" })).json()) as { challenge: string }).challenge;
-      await worker.roster.dropNewestCrls();
-      await worker.roster.restart();
+      await worker.proofLog.dropNewestCrls();
+      await worker.proofLog.restart();
 
       assert.deepEqual(await worker.newestCrls(), { G2: [], G3: [] });
-      assert.deepEqual(await worker.roster.knownChallenges(), [challenge]);
+      assert.deepEqual(await worker.proofLog.knownChallenges(), [challenge]);
       worker.moica.serve("G2", g2(81n));
       worker.moica.serve("G3", A);
       assert.equal((await worker.runSchedule()).outcome, "ok");
@@ -433,8 +433,8 @@ describe("the roster's object and the mirror", () => {
       worker.moica.serve("G2", g2(81n));
       worker.moica.serve("G3", A);
       assert.equal((await worker.runSchedule()).outcome, "ok");
-      await worker.roster.setStoredSchemaVersion("another");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("another");
+      await worker.proofLog.restart();
       worker.moica.serve("G3", B);
 
       assert.equal((await worker.runSchedule()).outcome, "exception");
@@ -442,8 +442,8 @@ describe("the roster's object and the mirror", () => {
       await assert.rejects(worker.newestCrls(), /HTTP 500/);
 
       // With the build's version again: what it knew is as it was, and the next round tells it.
-      await worker.roster.setStoredSchemaVersion("the build's");
-      await worker.roster.restart();
+      await worker.proofLog.setStoredSchemaVersion("the build's");
+      await worker.proofLog.restart();
       assert.deepEqual(await numbers(worker), ["81"]);
       assert.equal((await worker.runSchedule()).outcome, "ok");
       assert.deepEqual(await numbers(worker), ["82", "81"]);
@@ -454,8 +454,8 @@ describe("the roster's object and the mirror", () => {
       worker.moica.serve("G2", g2(81n));
       worker.moica.serve("G3", A);
       assert.equal((await worker.runSchedule()).outcome, "ok");
-      // The production roster, with the name of a test roster's object.
-      await worker.setSettings({ ROSTER_KIND: "production" });
+      // The production log, with the name of a test log's object.
+      await worker.setSettings({ PROOF_LOG_KIND: "production" });
       worker.moica.serve("G3", B);
 
       assert.equal((await worker.runSchedule()).outcome, "exception");

@@ -681,7 +681,7 @@ export function startApp(o: AppOptions): void {
       el(
         "section",
         { class: "step", attrs: { "data-step": "done", "data-result": view.withdrawAll ? "withdraw_all" : d.kinds === null ? "recorded_only" : "list" } },
-        // What the roster recorded is not what step 5 said: first of all, above the title.
+        // What the proof log recorded is not what step 5 said: first of all, above the title.
         view.mismatch ? el("p", { class: "stop", attrs: { role: "alert", "data-mismatch-note": "" } }, say(view.mismatch)) : null,
         view.withdrawAll ? null : el("div", { class: "hero" }, logo({ animated: true })),
         el("h1", {}, say(view.title)),
@@ -701,7 +701,7 @@ export function startApp(o: AppOptions): void {
           "ul",
           { class: "three ink" },
           view.withdrawAll ? null : el("li", {}, say(view.advice)),
-          // A list that is not empty: the roster records names, and an old name may be taken by someone else.
+          // A list that is not empty: the proof log records names, and an old name may be taken by someone else.
           view.withdrawAll ? null : el("li", { attrs: { "data-renamed": "" } }, t.renamed),
           el("li", {}, t.trust, " ", helpLink("verify")),
         ),

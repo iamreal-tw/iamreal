@@ -54,7 +54,7 @@
 // the step can be tried again, and the flow keeps what it held before it.
 //
 // Where each value comes from and goes to:
-//   scope string     the public roster's, fixed for the page's roster
+//   scope string     the public proof log's, fixed for the page's proof log
 //                    (protocol/src/scope.ts); never from a server
 //   platform table   the server's config: which platforms are offered,
 //                    their display names, their `username` formats (read by
@@ -86,8 +86,8 @@ import { PROOF_BYTES } from "./prover/prover.ts";
 import { checkChallenge, currentTime } from "iamreal-protocol/challenge.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type Account, declarationCode } from "iamreal-protocol/declaration-code.ts";
-import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/roster-rules.ts";
-import { type Roster, scopeOf } from "iamreal-protocol/scope.ts";
+import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLimitReached } from "iamreal-protocol/record-rules.ts";
+import { type ProofLog, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
 import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
 import type { CrlNumberStore } from "./storage.ts";
@@ -109,7 +109,7 @@ export type Stop =
   /** The challenge is not dated today (Taiwan, by the device's clock). */
   | { code: "challenge_not_today"; challengeDate: string; today: string }
   /**
-   * The list is not possible by the roster rules:
+   * The list is not possible by the record rules:
    *   switch_limit      it switches a slot whose 5 switches are used up (`platform`)
    *   empty             the list is empty and the card declares no account
    *   daily_limit       the card has 3 valid records today
@@ -150,8 +150,8 @@ export class FlowStop extends Error {
 }
 
 export interface FlowDeps {
-  /** Which roster's scope string the card signs. Fixed by the page's build, not by a server. */
-  roster: Roster;
+  /** Which proof log's scope string the card signs. Fixed by the page's build, not by a server. */
+  proofLog: ProofLog;
   /** The issuer keys the page trusts: MOICA_ISSUERS in the page, test keys in tests. */
   issuers: readonly IssuerKey[];
   /**
@@ -237,7 +237,7 @@ export interface SlotStatus {
   /** 0 to 5 (0 for a platform the device does not know). */
   switchCount: number;
   correctionDate: string | null;
-  /** Switches left by the roster rules: 5 minus the count. */
+  /** Switches left by the record rules: 5 minus the count. */
   switchesLeft: number;
   /** `correction_date` is today: changing the account today is a correction, not counted. */
   correctionToday: boolean;
@@ -260,11 +260,11 @@ export interface CardStatus {
   /**
    * The card has 3 valid records dated today (`last_card_proof` is today and
    * `proofs_on_last_date` is 3): no list can be declared today
-   * (spec/roster-rules.md, check 6).
+   * (spec/record-rules.md, check 6).
    */
   dailyLimit: boolean;
   today: string;
-  /** The number of records of the roster the answer was computed at. */
+  /** The number of records of the proof log the answer was computed at. */
   count: number;
 }
 
@@ -275,7 +275,7 @@ export interface ConsequenceRow {
   row: PlatformRow | null;
   /** The account of the list on this platform, or for `withdraw` the account withdrawn. */
   username: string;
-  /** The kind by the roster rules (spec/roster-rules.md, "Event rules"). */
+  /** The kind by the record rules (spec/record-rules.md, "Event rules"). */
   kind: Kind;
   /** The slot's `current` before this card proof. */
   current: string | null;
@@ -307,7 +307,7 @@ export interface Done {
   /**
    * What the server says the record is on each platform (`kinds`); null when
    * the record was found in the card's state, or the answer's `kinds` could
-   * not be read. The record is in the roster either way.
+   * not be read. The record is in the proof log either way.
    */
   kinds: AcceptedKind[] | null;
   /** What the screen said the list would do, before the card signed (Consequence.rows). */
@@ -317,7 +317,7 @@ export interface Done {
    * another account, or one of the two has the platform and the other not),
    * in ascending order. Empty when `kinds` is null: there is nothing to
    * compare. The server's answer cannot be checked here; a difference means
-   * the card's state it sent, or this answer, was not what the roster holds.
+   * the card's state it sent, or this answer, was not what the proof log holds.
    */
   mismatches: string[];
   firstRecord: boolean;
@@ -394,7 +394,7 @@ export class CardProofFlow {
 
   constructor(deps: FlowDeps) {
     this.deps = deps;
-    this.scopeStringValue = scopeOf(deps.roster);
+    this.scopeStringValue = scopeOf(deps.proofLog);
     this.scopeBytes = new TextEncoder().encode(this.scopeStringValue);
     this.idleMs = deps.idleMs ?? IDLE_MS;
   }
@@ -1019,7 +1019,7 @@ export class CardProofFlow {
    * this challenge, which no other card proof has. The earlier submission
    * whose answer was lost (no answer in time, a dropped connection) may have
    * reached the server after all. The card's state, asked again, says
-   * whether this card proof's record is in the roster: the card's list is
+   * whether this card proof's record is in the proof log: the card's list is
    * the list submitted (every platform the device knows has the list's
    * account as `current`, or none where the list has none; every account
    * kept on a platform it does not know is the list's) and
@@ -1064,7 +1064,7 @@ export class CardProofFlow {
 
 /**
  * The list and what it does on each platform, by the event rules of
- * spec/roster-rules.md against the slots the server reported, on `today`,
+ * spec/record-rules.md against the slots the server reported, on `today`,
  * the device's date in Taiwan. Every platform offered (a slot with a row)
  * must be in `entries`, and nothing else: an account on a platform the
  * device does not know is kept as the server reported it, not taken from
@@ -1087,7 +1087,7 @@ export function consequenceOfChoice(status: CardStatus, state: CardStateResponse
 
   const accounts = [...list].map(([platform, username]) => Object.freeze({ platform, username })).sort(byPlatform);
 
-  // The roster rules (checks 5 and 6), on the slots the server reported. A
+  // The record rules (checks 5 and 6), on the slots the server reported. A
   // platform the device does not know has only its account: kept as it is,
   // it is the account declared there, whatever the rest of its slot says.
   const before = new Map<string, { slot: SlotState; row: PlatformRow | null }>(
@@ -1120,7 +1120,7 @@ export function consequenceOfChoice(status: CardStatus, state: CardStateResponse
 }
 
 /**
- * The row the roster rules get for a platform the device does not know: the
+ * The row the record rules get for a platform the device does not know: the
  * server's table has no row the device can read, so it has no format to
  * check. Every username the device kept passed isAnyUsername when the
  * card's state was read (api.ts); the rules are given exactly that check.

@@ -3,7 +3,7 @@
 # operator starts it by hand on main: Actions, upload-android, "Run
 # workflow"; or `gh workflow run upload-android.yml --ref main`. A push or a
 # merge uploads nothing. Until launch the build talks to the test site and
-# signs for the test roster (android/README.md, the section on the two
+# signs for the test log (android/README.md, the section on the two
 # builds); the checks of the bundle in android/app/build.gradle.kts stop it
 # otherwise.
 # .github/README.md has the details; worker/test/workflows.ts holds this

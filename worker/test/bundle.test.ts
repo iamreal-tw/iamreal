@@ -75,10 +75,10 @@ test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the roster's object, the data bucket, the object's name, which roster it is and the date it was last cleared on", () => {
+test("the test environment's only settings are the proof log's object, the data bucket, the object's name, which proof log it is and the date it was last cleared on", () => {
   checkBindings(deploy.output);
   // Not the files of Static Assets: with a binding to them the Worker could read and send them itself.
-  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["DATA", "ROSTER", "ROSTER_KIND", "ROSTER_OBJECT_NAME", "TEST_ROSTER_CLEARED_ON"]);
+  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["DATA", "PROOF_LOG", "PROOF_LOG_KIND", "PROOF_LOG_OBJECT_NAME", "TEST_PROOF_LOG_CLEARED_ON"]);
   assert.throws(() => checkBindings(`${deploy.output}\nenv.ASSETS      Assets\n`));
 });
 

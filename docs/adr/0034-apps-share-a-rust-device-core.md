@@ -29,7 +29,7 @@ Android 和 iOS 的 app 共用一份 Rust 寫的核心，放在 `device-core/`�
 
 ## 和 `spec/` 的關係
 
-`device-core/` 是 `spec/` 的第三份實作，前兩份是 Go 的 `verifier/`、`roster/`、`crl/` 和 TypeScript 的 `protocol/`。每種語言的實作互不引用，只共用 `spec/`：Rust 的測試讀 `spec/vectors/`，不複製，也不從另一種語言產生程式。
+`device-core/` 是 `spec/` 的第三份實作，前兩份是 Go 的 `verifier/`、`prooflog/`、`crl/` 和 TypeScript 的 `protocol/`。每種語言的實作互不引用，只共用 `spec/`：Rust 的測試讀 `spec/vectors/`，不複製，也不從另一種語言產生程式。
 
 裝置上的檢查現在只有網頁版一份，規則寫在程式和測試裡，不在 `spec/`。移植成 Rust 之前先補進 `spec/`（規格和標準答案）：選憑證和檢查憑證、清冊收不收和多舊算過期、電路輸入、建樹的路徑。TypeScript 和 Rust 都讀同一份標準答案。
 

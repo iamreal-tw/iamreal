@@ -11,12 +11,12 @@ mod common;
 
 use common::{cases, hex, repo_file, text, unhex, vectors};
 use iamreal_device_checks::issuers::IssuerName;
-use iamreal_device_checks::scope::Roster;
+use iamreal_device_checks::scope::ProofLog;
 use iamreal_device_core::artifacts::{self, Artifacts};
 use iamreal_device_core::session::{self, Trust};
 use iamreal_device_core::{
-    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_ROSTER_PRODUCTION,
-    IDC_ROSTER_TEST, IdcBuf, idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
+    IDC_ERR_ARGUMENT, IDC_ERR_INPUT, IDC_ERR_REFUSED, IDC_OK, IDC_PROOF_LOG_PRODUCTION,
+    IDC_PROOF_LOG_TEST, IdcBuf, idc_buf_free, idc_session_add_certificate, idc_session_build_tree,
     idc_session_card_state_request, idc_session_check_artifacts, idc_session_check_certificates,
     idc_session_check_challenge, idc_session_check_crl, idc_session_check_date,
     idc_session_choose_crl, idc_session_close, idc_session_open, idc_session_records_request,
@@ -77,12 +77,12 @@ impl Drop for Session {
 impl Session {
     /// A session that trusts `issuers` in place of MOICA's keys.
     fn trusting(
-        roster: Roster,
+        proof_log: ProofLog,
         issuers: &[(IssuerName, Vec<u8>)],
         artifacts: Artifacts,
     ) -> Session {
         Session(session::open(
-            roster,
+            proof_log,
             Trust {
                 issuers: issuers.to_vec(),
                 artifacts,
@@ -219,7 +219,7 @@ fn issuers_of(v: &Value) -> Vec<(IssuerName, Vec<u8>)> {
 
 /// A session for the cases of device-checks.json.
 fn device_checks_session(v: &Value) -> Session {
-    Session::trusting(Roster::Test, &issuers_of(v), artifacts::BUILT_IN)
+    Session::trusting(ProofLog::Test, &issuers_of(v), artifacts::BUILT_IN)
 }
 
 #[test]
@@ -437,7 +437,7 @@ fn the_files_written_into_the_core_are_the_ones_of_this_repository() {
 /// built from, and the card's signature over the scope string.
 struct Card {
     label: String,
-    roster: Roster,
+    proof_log: ProofLog,
     issuers: Vec<(IssuerName, Vec<u8>)>,
     certificate: Vec<u8>,
     crl: Vec<u8>,
@@ -475,9 +475,9 @@ fn cards() -> Vec<Card> {
             let (files, artifacts) = files_of(text(case, "circuit"));
             Card {
                 label: text(case, "label").to_string(),
-                roster: match text(case, "scope_string") {
-                    "iamreal:public:0_______________" => Roster::Production,
-                    _ => Roster::Test,
+                proof_log: match text(case, "scope_string") {
+                    "iamreal:public:0_______________" => ProofLog::Production,
+                    _ => ProofLog::Test,
                 },
                 issuers: issuers_of(&v),
                 certificate: unhex(text(case, "certificate")),
@@ -498,7 +498,7 @@ const CONFIG: &[u8] = br#"{"crl_max_age_days":7,"platforms":[]}"#;
 
 impl Card {
     fn session(&self) -> Session {
-        Session::trusting(self.roster, &self.issuers, self.artifacts)
+        Session::trusting(self.proof_log, &self.issuers, self.artifacts)
     }
 
     /// Step 1.
@@ -535,7 +535,7 @@ impl Card {
 
 /// Which issuer's key signed the certificate, by asking a session.
 fn session_issuer(certificate: &[u8], issuers: &[(IssuerName, Vec<u8>)]) -> String {
-    let session = Session::trusting(Roster::Test, issuers, artifacts::BUILT_IN);
+    let session = Session::trusting(ProofLog::Test, issuers, artifacts::BUILT_IN);
     session.add_certificate(certificate).unwrap();
     let result = session.check_certificates(noon("2026-11-16")).unwrap();
     text(&result, "issuer").to_string()
@@ -685,7 +685,7 @@ fn files_that_are_not_the_ones_written_into_the_core_are_refused() {
 fn the_core_as_an_app_gets_it_expects_the_real_common_reference_string() {
     // With the hashes written into the core, the stand-in files fail.
     let card = &cards()[0];
-    let session = Session::trusting(card.roster, &card.issuers, artifacts::BUILT_IN);
+    let session = Session::trusting(card.proof_log, &card.issuers, artifacts::BUILT_IN);
     card.check_certificate(&session);
     assert_eq!(session.check_artifacts(&card.files), Err(IDC_ERR_INPUT));
 }
@@ -722,12 +722,12 @@ fn a_signature_that_is_not_the_cards_over_the_scope_string_is_refused() {
                 .is_ok()
         );
     }
-    // The same signature under the other roster's scope string.
+    // The same signature under the other proof log's scope string.
     let card = &cards()[0];
     let other = Card {
-        roster: match card.roster {
-            Roster::Test => Roster::Production,
-            Roster::Production => Roster::Test,
+        proof_log: match card.proof_log {
+            ProofLog::Test => ProofLog::Production,
+            ProofLog::Production => ProofLog::Test,
         },
         ..cards().remove(0)
     };
@@ -973,7 +973,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
     let mut out = empty();
     unsafe {
         assert_eq!(
-            idc_session_open(IDC_ROSTER_TEST, std::ptr::null_mut()),
+            idc_session_open(IDC_PROOF_LOG_TEST, std::ptr::null_mut()),
             IDC_ERR_ARGUMENT
         );
         let mut handle = 7u64;
@@ -1002,7 +1002,7 @@ fn what_is_not_a_session_and_what_is_not_an_argument() {
 fn a_session_an_app_opens_trusts_only_the_keys_of_moica() {
     let mut handle = 0u64;
     assert_eq!(
-        unsafe { idc_session_open(IDC_ROSTER_TEST, &mut handle) },
+        unsafe { idc_session_open(IDC_PROOF_LOG_TEST, &mut handle) },
         IDC_OK
     );
     assert_ne!(handle, 0);
@@ -1031,7 +1031,7 @@ fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
         let mut handle = 7u64;
         let code = unsafe {
             idc_testing_session_open(
-                IDC_ROSTER_TEST,
+                IDC_PROOF_LOG_TEST,
                 issuers.as_ptr(),
                 issuers.len(),
                 &mut handle,
@@ -1093,13 +1093,13 @@ fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
         unsafe { idc_testing_session_open(9, b"[]".as_ptr(), 2, &mut handle) },
         IDC_ERR_ARGUMENT
     );
-    // No session of the production roster trusts another key.
+    // No session of the production log trusts another key.
     let issuers = serde_json::to_vec(&keys).unwrap();
     let mut handle = 7u64;
     assert_eq!(
         unsafe {
             idc_testing_session_open(
-                IDC_ROSTER_PRODUCTION,
+                IDC_PROOF_LOG_PRODUCTION,
                 issuers.as_ptr(),
                 issuers.len(),
                 &mut handle,
@@ -1110,7 +1110,7 @@ fn a_session_opened_for_a_test_trusts_the_issuer_keys_it_is_given() {
     assert_eq!(handle, 0);
     assert_eq!(
         unsafe {
-            idc_testing_session_open(IDC_ROSTER_TEST, b"[]".as_ptr(), 2, std::ptr::null_mut())
+            idc_testing_session_open(IDC_PROOF_LOG_TEST, b"[]".as_ptr(), 2, std::ptr::null_mut())
         },
         IDC_ERR_ARGUMENT
     );

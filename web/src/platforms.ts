@@ -15,7 +15,7 @@
 // device does not know: an account on it is kept as it is, shown by its ID,
 // and cannot be changed (src/flow.ts). The server's display name is not
 // shown. The scope string is not a platform's: there is one for the public
-// roster (protocol/src/scope.ts).
+// proof log (protocol/src/scope.ts).
 import { PRESENTATIONS, SITE_DOMAIN } from "./target.ts";
 
 export interface Presentation {
@@ -54,7 +54,7 @@ export function handle(platform: string, username: string): string {
 }
 
 /**
- * The domain of the site of the build's roster, as links on the screen
+ * The domain of the site of the build's proof log, as links on the screen
  * write it: iamreal.tw, and test.iamreal.tw on the test site
  * (src/target.ts). The page itself never connects to it (it is served from
  * its own origin).

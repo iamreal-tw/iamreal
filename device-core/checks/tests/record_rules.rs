@@ -1,9 +1,9 @@
-//! The roster rules (spec/roster-rules.md) against
-//! spec/vectors/roster-rules.json, the file the Go and TypeScript tests
+//! The record rules (spec/record-rules.md) against
+//! spec/vectors/record-rules.json, the file the Go and TypeScript tests
 //! read: every case, record by record, through the state kept in memory.
 
 use iamreal_device_checks::date::Date;
-use iamreal_device_checks::roster_rules::{
+use iamreal_device_checks::record_rules::{
     Account, Card, MemoryRecord, MemoryRules, Platform, RULES_VERSION, RecordResult, possible_card,
     possible_slot,
 };
@@ -35,16 +35,16 @@ fn date_text(d: Option<Date>) -> Value {
     d.map_or(Value::Null, |d| json!(d.to_string()))
 }
 
-/// The platform table of `roster` (spec/scope.md): the rows of
+/// The platform table of `proof_log` (spec/scope.md): the rows of
 /// spec/vectors/scope.json it accepts. The device gets its table from the
-/// server; a recomputation of the roster takes the table of its roster.
-fn table(roster: &str) -> Vec<Platform> {
+/// server; a recomputation of the proof log takes the table of its proof log.
+fn table(proof_log: &str) -> Vec<Platform> {
     let v = vectors("scope.json");
     v["platforms"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|p| text(p, "roster") == roster && p["accepted"].as_bool().unwrap())
+        .filter(|p| text(p, "proof_log") == proof_log && p["accepted"].as_bool().unwrap())
         .map(|p| {
             Platform::new(
                 text(p, "platform"),
@@ -126,7 +126,7 @@ fn state_out(rules: &MemoryRules) -> Value {
 
 #[test]
 fn the_version_is_the_one_the_specification_states_and_the_vectors_carry() {
-    let spec = String::from_utf8(repo_file("spec/roster-rules.md")).unwrap();
+    let spec = String::from_utf8(repo_file("spec/record-rules.md")).unwrap();
     let stated: Vec<&str> = spec
         .lines()
         .filter_map(|l| {
@@ -137,23 +137,23 @@ fn the_version_is_the_one_the_specification_states_and_the_vectors_carry() {
     assert_eq!(
         stated.len(),
         1,
-        "spec/roster-rules.md states the version in one sentence"
+        "spec/record-rules.md states the version in one sentence"
     );
     assert_eq!(stated[0], RULES_VERSION.to_string());
     assert_eq!(
-        vectors("roster-rules.json")["rules_version"],
+        vectors("record-rules.json")["rules_version"],
         json!(RULES_VERSION)
     );
 }
 
 #[test]
 fn every_case_record_by_record() {
-    let v = vectors("roster-rules.json");
+    let v = vectors("record-rules.json");
     let cases = v["cases"].as_array().unwrap();
     assert!(!cases.is_empty());
     for c in cases {
         let name = text(c, "name");
-        let mut rules = MemoryRules::new(table(text(c, "roster")));
+        let mut rules = MemoryRules::new(table(text(c, "proof_log")));
         let events = c["events"].as_array().unwrap();
         let results = c["results"].as_array().unwrap();
         assert_eq!(events.len(), results.len(), "{name}");
@@ -186,7 +186,7 @@ fn every_case_record_by_record() {
                 // "Every valid record": the card's date is the record's.
                 assert_eq!(after.last_card_proof, Some(date(text(e, "date"))), "{name}");
             } else {
-                // "What an invalid record changes": nothing of its card, not the roster's latest valid date.
+                // "What an invalid record changes": nothing of its card, not the proof log's latest valid date.
                 assert_eq!(after, before, "{name}, event {}", i + 1);
                 assert_eq!(rules.latest_valid_date(), latest_before, "{name}");
             }

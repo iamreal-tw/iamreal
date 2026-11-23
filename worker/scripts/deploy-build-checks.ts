@@ -9,7 +9,7 @@
 // And the configuration it is uploaded with gives an invocation the CPU
 // time a round of the CRL mirror counts on (`checkCpuLimit`), and has
 // Cloudflare send the files of site/ itself, with the headers of the
-// environment's kind of roster (`checkSiteFiles`), and a test roster's
+// environment's kind of proof log (`checkSiteFiles`), and a test log's
 // site has a date to say it was last cleared on (`checkClearedOn`).
 //
 // And the card proof page among those files is the test site's build of
@@ -125,7 +125,7 @@ export function engineFiles(): Record<string, string> {
  *
  *   - the repository, linked from every page (design/copy/home.md, 導覽列),
  *     and three of its files: iamreal-verify's README (how to verify, and
- *     its section 下載 from the roster page; the section's name is not
+ *     its section 下載 from the proof log page; the section's name is not
  *     ASCII and is not read here), and the ADR one answer of the FAQ links to;
  *   - Threads: the profile a page of a card or of an account embeds and
  *     links to (design/copy/proof-page.md, section 3; account-page.md), the
@@ -182,8 +182,8 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 }
 
 /**
- * The test environment's only settings are the roster's object, the data
- * bucket, the object's name, which roster it is and the date it was last
+ * The test environment's only settings are the proof log's object, the data
+ * bucket, the object's name, which proof log it is and the date it was last
  * cleared on: so the issuer keys, MOICA's addresses and the clock cannot be
  * read from a setting, and the Worker has no binding to read the files of
  * Static Assets by (`checkSiteFiles`). (A secret set on the Worker with
@@ -192,7 +192,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { ROSTER: "Durable Object", DATA: "R2 Bucket", ROSTER_OBJECT_NAME: "Environment Variable", ROSTER_KIND: "Environment Variable", TEST_ROSTER_CLEARED_ON: "Environment Variable" },
+    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }
@@ -241,7 +241,7 @@ export function checkCpuLimit(cpuMs: Readonly<Record<string, number | undefined>
 }
 
 /**
- * `ROSTER_KIND` and `TEST_ROSTER_CLEARED_ON` of every environment of
+ * `PROOF_LOG_KIND` and `TEST_PROOF_LOG_CLEARED_ON` of every environment of
  * wrangler.jsonc, each read the way wrangler reads it for `--env <name>`
  * (as `configuredCpuMs` reads).
  */
@@ -250,13 +250,13 @@ export function configuredClearedOn(): Record<string, { kind: unknown; clearedOn
   const out: Record<string, { kind: unknown; clearedOn: unknown }> = {};
   for (const env of Object.keys(rawConfig.env ?? {})) {
     const { vars } = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
-    out[env] = { kind: vars.ROSTER_KIND, clearedOn: vars.TEST_ROSTER_CLEARED_ON };
+    out[env] = { kind: vars.PROOF_LOG_KIND, clearedOn: vars.TEST_PROOF_LOG_CLEARED_ON };
   }
   return out;
 }
 
 /**
- * In every environment that serves a test roster, `TEST_ROSTER_CLEARED_ON`
+ * In every environment that serves a test log, `TEST_PROOF_LOG_CLEARED_ON`
  * is a date of the calendar, `YYYY-MM-DD`, read as the Worker reads it
  * (src/settings.ts): with any other value the deployed test site answers
  * nothing but 500, its API included, and that would only be seen after the
@@ -266,13 +266,13 @@ export function checkClearedOn(configured: Readonly<Record<string, { kind: unkno
   assert.ok(Object.keys(configured).length > 0, "wrangler.jsonc has an environment");
   for (const [env, { kind, clearedOn }] of Object.entries(configured)) {
     if (kind !== "test") continue;
-    assert.ok(typeof clearedOn === "string" && parseDay(clearedOn) !== null, `TEST_ROSTER_CLEARED_ON of the ${env} environment is a date, YYYY-MM-DD`);
+    assert.ok(typeof clearedOn === "string" && parseDay(clearedOn) !== null, `TEST_PROOF_LOG_CLEARED_ON of the ${env} environment is a date, YYYY-MM-DD`);
   }
 }
 
 /** How one environment of wrangler.jsonc has Static Assets send the files of its directory. */
 export interface ConfiguredSite {
-  /** `ROSTER_KIND`: which roster the environment serves. */
+  /** `PROOF_LOG_KIND`: which proof log the environment serves. */
   readonly kind: unknown;
   /** `assets.run_worker_first`, `assets.binding`, `assets.html_handling`, `assets.not_found_handling`. */
   readonly runWorkerFirst: unknown;
@@ -315,7 +315,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
     };
     out[env] = {
-      kind: config.vars.ROSTER_KIND,
+      kind: config.vars.PROOF_LOG_KIND,
       runWorkerFirst: config.assets?.run_worker_first,
       binding: config.assets?.binding,
       htmlHandling: config.assets?.html_handling,
@@ -348,11 +348,11 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *   - a path is a file's own or nothing, but for the redirects of
  *     site-files.ts (`SITE_REDIRECTS`);
  *   - their headers are the ones written from src/headers.ts for the
- *     environment's kind of roster (`siteHeaders`): a test roster's site
- *     says noindex and a production roster's does not.
+ *     environment's kind of proof log (`siteHeaders`): a test log's site
+ *     says noindex and a production log's does not.
  *
  * `_headers` is one file of one directory. Two environments that serve
- * different kinds of roster from the same directory do not pass: each then
+ * different kinds of proof log from the same directory do not pass: each then
  * needs a directory of its own, or its files written before the upload.
  */
 export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>): void {
@@ -362,8 +362,8 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.equal(site.binding, undefined, `the ${env} environment gives the Worker no binding to the files of Static Assets`);
     assert.equal(site.htmlHandling, "none", `assets.html_handling of the ${env} environment`);
     assert.equal(site.notFoundHandling, "none", `assets.not_found_handling of the ${env} environment`);
-    assert.ok(site.kind === "test" || site.kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
-    assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} roster's site`);
+    assert.ok(site.kind === "test" || site.kind === "production", `PROOF_LOG_KIND of the ${env} environment is test or production`);
+    assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} log's site`);
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
     assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
@@ -373,7 +373,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
 
 /** The card proof page of one environment of wrangler.jsonc, as an upload of that environment would send it. */
 export interface ConfiguredProofPage {
-  /** `ROSTER_KIND` and `TEST_ROSTER_CLEARED_ON`. */
+  /** `PROOF_LOG_KIND` and `TEST_PROOF_LOG_CLEARED_ON`. */
   readonly kind: unknown;
   readonly clearedOn: unknown;
   /** The build under proof/ of `assets.directory`; null if there is none. */
@@ -383,7 +383,7 @@ export interface ConfiguredProofPage {
 /**
  * The card proof page of every environment of wrangler.jsonc: the build
  * under proof/ of its `assets.directory`, in this checkout, with the kind
- * of roster and the date it is to be checked against. Read as
+ * of proof log and the date it is to be checked against. Read as
  * `configuredSites` reads.
  */
 export function configuredProofPages(): Record<string, ConfiguredProofPage> {
@@ -392,14 +392,14 @@ export function configuredProofPages(): Record<string, ConfiguredProofPage> {
   for (const env of Object.keys(rawConfig.env ?? {})) {
     const config = unstable_readConfig({ config: WRANGLER_CONFIG, env }, { hideWarnings: true });
     const directory = config.assets?.directory === undefined ? undefined : join(dirname(WRANGLER_CONFIG), config.assets.directory);
-    out[env] = { kind: config.vars.ROSTER_KIND, clearedOn: config.vars.TEST_ROSTER_CLEARED_ON, page: directory === undefined ? null : readProofPage(join(directory, "proof")) };
+    out[env] = { kind: config.vars.PROOF_LOG_KIND, clearedOn: config.vars.TEST_PROOF_LOG_CLEARED_ON, page: directory === undefined ? null : readProofPage(join(directory, "proof")) };
   }
   return out;
 }
 
 /**
  * In every environment the card proof page is there and is the build of
- * its kind of roster's site, with the date of its settings beside the mark
+ * its kind of proof log's site, with the date of its settings beside the mark
  * (proof-page.ts, `checkProofPage`): a deploy with no page (where /proof
  * would answer 404), with what a computer happened to have under
  * site/proof/, or with a build of another target does not pass.
@@ -407,8 +407,8 @@ export function configuredProofPages(): Record<string, ConfiguredProofPage> {
 export function checkProofPages(pages: Readonly<Record<string, ConfiguredProofPage>>): void {
   assert.ok(Object.keys(pages).length > 0, "wrangler.jsonc has an environment");
   for (const [env, { kind, clearedOn, page }] of Object.entries(pages)) {
-    assert.ok(kind === "test" || kind === "production", `ROSTER_KIND of the ${env} environment is test or production`);
-    assert.ok(clearedOn === undefined || typeof clearedOn === "string", `TEST_ROSTER_CLEARED_ON of the ${env} environment is text`);
+    assert.ok(kind === "test" || kind === "production", `PROOF_LOG_KIND of the ${env} environment is test or production`);
+    assert.ok(clearedOn === undefined || typeof clearedOn === "string", `TEST_PROOF_LOG_CLEARED_ON of the ${env} environment is text`);
     try {
       checkProofPage(page, kind, clearedOn ?? null);
     } catch (e) {

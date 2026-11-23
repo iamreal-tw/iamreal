@@ -4,7 +4,7 @@ import XCTest
 
 /// The back end and the card of web/test/app-backend.ts, which starts a
 /// local Worker, runs these tests and then has Go's iamreal-verify
-/// re-verify the roster they wrote. It leaves what a test needs in
+/// re-verify the proof log they wrote. It leaves what a test needs in
 /// web/test-output/app/backend.json; without that file the tests that need
 /// a back end are skipped (the other tests of this directory need none).
 struct TestBackend {
@@ -54,7 +54,7 @@ struct TestBackend {
     func openSession() throws -> DeviceCore.Session {
         var handle: idc_session = 0
         let code = issuers.withUnsafeBytes {
-            idc_testing_session_open(UInt32(IDC_ROSTER_TEST), $0.bindMemory(to: UInt8.self).baseAddress, $0.count, &handle)
+            idc_testing_session_open(UInt32(IDC_PROOF_LOG_TEST), $0.bindMemory(to: UInt8.self).baseAddress, $0.count, &handle)
         }
         guard code == IDC_OK else { throw DeviceCore.Failure(code: code) }
         return DeviceCore.Session(handle: handle)

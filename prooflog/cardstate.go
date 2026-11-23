@@ -1,9 +1,9 @@
-package roster
+package prooflog
 
-// The card state file (spec/roster-rules.md, "The card state file"): the
+// The card state file (spec/record-rules.md, "The card state file"): the
 // state the server keeps of every card that has a valid record, one row a
 // card, published once a day so that a re-verifier can compare it with the
-// states it computes from the roster (ADR-0025). Like a roster line, a row
+// states it computes from the proof log (ADR-0025). Like a proof log line, a row
 // has one spelling: it is read by parsing it, checking every value, writing
 // it again from the template and comparing bytes.
 //
@@ -21,8 +21,8 @@ import (
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
-// Codes of a broken card state file (spec/roster-rules.md, "The file").
-// CodeLine, a row that is not in its one spelling, is the roster file's.
+// Codes of a broken card state file (spec/record-rules.md, "The file").
+// CodeLine, a row that is not in its one spelling, is the log file's.
 const (
 	// CodeOrder: the card of the row is not after the card of the row
 	// before it (the same card twice included).
@@ -37,7 +37,7 @@ type CardRow struct {
 	// LastSeq is the seq of the card's last valid record.
 	LastSeq uint64
 	// State is the card's state. It has a slot on every platform of the
-	// roster's table, as a CardState does: a slot the row does not list is
+	// proof log's table, as a CardState does: a slot the row does not list is
 	// in the initial state.
 	State CardState
 }
@@ -122,12 +122,12 @@ func CardStateFile(rows []CardRow) []byte {
 	return out
 }
 
-// ReadCardStateFile checks a card state file of a roster r as a whole.
+// ReadCardStateFile checks a card state file of a proof log r as a whole.
 // Lines are checked one at a time, in order; for each line the checks run
 // in the order line, order, and the first failure ends the check. For a
 // valid file it returns the rows in the order of the file (none for the
 // empty file); for a broken one, where it breaks.
-func ReadCardStateFile(data []byte, r verifier.Roster) ([]CardRow, *Broken) {
+func ReadCardStateFile(data []byte, r verifier.ProofLog) ([]CardRow, *Broken) {
 	var rows []CardRow
 	for i, n := 0, 1; i < len(data); n++ {
 		end := len(data)
@@ -171,7 +171,7 @@ type slotJSON struct {
 // to and including its LF. It parses the line, checks every value, writes
 // the row again and compares bytes. An error means the line is not a
 // well-formed row.
-func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
+func readCardRow(line []byte, r verifier.ProofLog) (CardRow, error) {
 	var row CardRow
 	if len(line) == 0 || line[len(line)-1] != '\n' {
 		return row, errors.New("line does not end with LF")
@@ -181,7 +181,7 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 		return row, fmt.Errorf("not a JSON object of a row: %v", err)
 	}
 	if _, ok := verifier.LookupScope(r, v.ScopeString); !ok {
-		return row, fmt.Errorf("scope_string: not an accepted scope of the %s roster", r)
+		return row, fmt.Errorf("scope_string: not an accepted scope of the %s log", r)
 	}
 	if _, err := verifier.ParseScopedID(v.ScopedID); err != nil {
 		return row, err // it says scoped_id
@@ -209,7 +209,7 @@ func readCardRow(line []byte, r verifier.Roster) (CardRow, error) {
 	for id, s := range v.Slots {
 		p, ok := verifier.LookupPlatform(r, id)
 		if !ok {
-			return row, fmt.Errorf("slots: %q is not a platform of the %s roster", id, r)
+			return row, fmt.Errorf("slots: %q is not a platform of the %s log", id, r)
 		}
 		if s == nil {
 			return row, fmt.Errorf("slots: %s: null", id)
@@ -251,7 +251,7 @@ func boundedInt(n json.Number, least uint64) (uint64, error) {
 	return v, nil
 }
 
-// Outcomes of comparing one card (spec/roster-rules.md, "Comparing").
+// Outcomes of comparing one card (spec/record-rules.md, "Comparing").
 const (
 	OutcomeSame      = "same"
 	OutcomeSkipped   = "skipped"
@@ -287,7 +287,7 @@ func (c CardComparison) Passes() bool {
 }
 
 // CompareCardStates compares the rows of a valid card state file with the
-// rows a re-verifier computes (spec/roster-rules.md, "Comparing"). count is
+// rows a re-verifier computes (spec/record-rules.md, "Comparing"). count is
 // the count of the fingerprint file's line of the file's date; applied, N,
 // the number of records the re-verifier has applied the rules to; computed,
 // its rows after them (Rules.CardRows). Each card gets the outcome of the
@@ -325,10 +325,10 @@ func CompareCardStates(file []CardRow, count, applied uint64, computed []CardRow
 			o.Outcome = OutcomeSkipped
 		case p.computed == nil:
 			o.Outcome = OutcomeDifferent
-			o.Differences = []string{fmt.Sprintf("the file has a row with last_seq %d, the roster gives no valid record up to %d", p.file.LastSeq, applied)}
+			o.Differences = []string{fmt.Sprintf("the file has a row with last_seq %d, the proof log gives no valid record up to %d", p.file.LastSeq, applied)}
 		case p.file == nil:
 			o.Outcome = OutcomeDifferent
-			o.Differences = []string{fmt.Sprintf("the file has no row, the roster gives a valid record at seq %d", p.computed.LastSeq)}
+			o.Differences = []string{fmt.Sprintf("the file has no row, the proof log gives a valid record at seq %d", p.computed.LastSeq)}
 		default:
 			o.Differences = rowDifferences(*p.file, *p.computed)
 			o.Outcome = OutcomeSame
@@ -342,13 +342,13 @@ func CompareCardStates(file []CardRow, count, applied uint64, computed []CardRow
 }
 
 // rowDifferences lists every item on which the row of the file and the
-// computed row differ, as "item: file …, roster …". A platform that one of
+// computed row differ, as "item: file …, proof log …". A platform that one of
 // them has no slot for is a slot in the initial state.
 func rowDifferences(file, computed CardRow) []string {
 	var out []string
 	diff := func(item, f, c string) {
 		if f != c {
-			out = append(out, fmt.Sprintf("%s: file %s, roster %s", item, f, c))
+			out = append(out, fmt.Sprintf("%s: file %s, proof log %s", item, f, c))
 		}
 	}
 	diff("last_seq", strconv.FormatUint(file.LastSeq, 10), strconv.FormatUint(computed.LastSeq, 10))

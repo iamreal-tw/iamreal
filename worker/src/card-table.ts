@@ -1,10 +1,10 @@
-// The card state table of the roster's Durable Object (roster.ts): the
-// roster rules' state of every card that has a valid record, one row a card.
+// The card state table of the proof log's Durable Object (proof-log.ts): the
+// record rules' state of every card that has a valid record, one row a card.
 // Only the rules' state is here, nothing a page shows: it is read before and
-// written after each call of the rules (protocol/src/roster-rules.ts), and a
+// written after each call of the rules (protocol/src/record-rules.ts), and a
 // wrong row would accept records that cannot be taken back.
 //
-// The columns are the items of spec/roster-rules.md, "State", and one more:
+// The columns are the items of spec/record-rules.md, "State", and one more:
 //
 //   last_card_proof, proofs_on_last_date   the card's own items
 //   slots                                  the items of each slot, by platform
@@ -25,7 +25,7 @@ import { byBytes } from "iamreal-protocol/bytes.ts";
 import type { CardRow } from "iamreal-protocol/card-state-file.ts";
 import { type Day, formatDay, parseDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/roster-rules.ts";
+import { type CardState, MAX_PER_DATE, type SlotState, possibleSlot } from "iamreal-protocol/record-rules.ts";
 import { type SlotJson, slotOfJson, slotToJson } from "./slot-json.ts";
 
 /** The columns of the card state table, and of its copy (`copyCards`). */
@@ -43,7 +43,7 @@ export const CARD_TABLE = `CREATE TABLE IF NOT EXISTS cards ${CARD_COLUMNS}`;
 
 /**
  * The copy of the card state table the card state file of a publication is
- * written from (roster.ts, `#publish`): made at the moment the publication
+ * written from (proof-log.ts, `#publish`): made at the moment the publication
  * reads its count, read afterwards while records go on being written to
  * `cards`, and dropped when the publication ends, however it ends. Nothing
  * else reads it, and nothing reads a copy left by an object that stopped
@@ -77,7 +77,7 @@ const COLUMNS = "last_card_proof, proofs_on_last_date, slots, last_seq";
  * of its own type, the slots parsed from their JSON. Throws for a row that
  * cannot be read as a state at all (a date that is not a date, slots that
  * are not JSON of the stored shape); the message names the column, never
- * the card or a value. Whether the state is one the roster rules can have
+ * the card or a value. Whether the state is one the record rules can have
  * left is not asked here: `readCard` asks it, `copiedCards` on purpose
  * does not.
  */
@@ -109,9 +109,9 @@ function stateOf(row: Columns): StoredCard & { card: { lastCardProof: Day } } {
 /**
  * The state of the card, or null if it has no valid record.
  *
- * Throws if the row is not a state the roster rules can have left for a
- * card of this roster (spec/roster-rules.md, "State"; `platforms` is the
- * roster's table):
+ * Throws if the row is not a state the record rules can have left for a
+ * card of this proof log (spec/record-rules.md, "State"; `platforms` is the
+ * proof log's table):
  *
  *   - `last_card_proof` is a date; `proofs_on_last_date` is 1 to 3; `last_seq` is 1 or more;
  *   - every slot is on a platform of the table;
@@ -154,13 +154,13 @@ export function dropCardsCopy(sql: SqlStorage): void {
 
 /**
  * Rows of the copy of the card state table (`copyCards`) as rows of the
- * card state file (spec/roster-rules.md, "The card state file"): at most
+ * card state file (spec/record-rules.md, "The card state file"): at most
  * `limit` of them, those that come after the card of `after` (or from the
  * first, with null), in the order of the file. Each call is a query of its
  * own, read to its end before it returns, so that nothing is held open
  * while the caller waits.
  *
- * Unlike `readCard`, this does not ask whether a row is a state the roster
+ * Unlike `readCard`, this does not ask whether a row is a state the record
  * rules can have left: the card state file is published so that whoever
  * compares it finds a stored state that is wrong, and a reading that
  * refused such a row would hide it. It throws only for a row that cannot be

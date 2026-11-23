@@ -177,7 +177,7 @@ internal class Messages(private val c: Copy) {
     class DoneView(
         /** done.mismatch, above the title: what the server recorded differs from what step 5 said. */
         val mismatch: String?,
-        /** The roster's line; null when the answer's kinds could not be read. */
+        /** The proof log's line; null when the answer's kinds could not be read. */
         val record: String?,
         /**
          * Where the answer's kinds could not be read, the sentence that says so instead of the rows. The app's

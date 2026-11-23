@@ -109,7 +109,7 @@ go build -o iamreal-crl ./cmd/iamreal-crl
 
 ### 讀存檔：`crl.Archive`
 
-`roster/` 的第 3 項檢查（樹根是否被承認）要問：「這把金鑰、這個樹根，有哪些可用清冊的日期？」`crl.Archive` 回答這個問題（`CRLDates(issuer, root)`，日期是 `YYYY-MM-DD` 字串；`crl/` 不引用 `verifier/`，換成 `verifier.Date` 在 `cmd/iamreal-verify` 做）。兩種開法：
+`prooflog/` 的第 3 項檢查（樹根是否被承認）要問：「這把金鑰、這個樹根，有哪些可用清冊的日期？」`crl.Archive` 回答這個問題（`CRLDates(issuer, root)`，日期是 `YYYY-MM-DD` 字串；`crl/` 不引用 `verifier/`，換成 `verifier.Date` 在 `cmd/iamreal-verify` 做）。兩種開法：
 
 - **`crl.RebuildArchive(DIR, 金鑰, …)`：完整重算。** 對目錄裡的每個檔案重新驗章、建樹，重建一份索引，和 `index.jsonl` 逐行比對（比的是整行，所以 `sha256`、`root`、日期都比到）。照規格「Re-verifying with the index」，**重建的索引才算數**：回傳的 `Archive` 是重建的索引的，每一個不同都一起回傳（`[]crl.IndexMismatch`），不會停在第一個。回報這些不同是呼叫的人的事（`cmd/iamreal-verify` 印在標準錯誤）。不同有這幾種：
   - **沒有 `index.jsonl`**，或它**沒辦法切成行**（最後沒有 LF、開頭有 BOM）：只算一個不同，不再逐行比對（不會把每個檔案都再報一次「索引沒列」）。

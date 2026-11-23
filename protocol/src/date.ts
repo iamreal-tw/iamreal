@@ -1,5 +1,5 @@
 // Calendar dates as day numbers (days since 1970-01-01), the way the
-// specification compares them: CRL dates, challenge dates, roster dates.
+// specification compares them: CRL dates, challenge dates, proof log dates.
 // Taiwan is UTC+8 without daylight saving time.
 
 export type Day = number;

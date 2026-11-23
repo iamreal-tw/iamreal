@@ -3,7 +3,7 @@
 // through the Worker's HTTP (test/harness.ts).
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { EMPTY_FINGERPRINT, LINES_PER_FILE, type RosterRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, rosterFileName } from "iamreal-protocol/record.ts";
+import { EMPTY_FINGERPRINT, LINES_PER_FILE, type ProofLogRecord, hashList, hashListName, nextFingerprint, readRecordLine, recordHash, proofLogFileName } from "iamreal-protocol/record.ts";
 import { scopedIdText } from "iamreal-protocol/scoped-id.ts";
 import { CIRCUITS } from "../src/circuits.ts";
 import type { IssuerName } from "../src/issuers.ts";
@@ -43,7 +43,7 @@ export async function submitText(worker: TestWorker, body: string): Promise<Answ
 
 export const submit = (worker: TestWorker, s: Submission): Promise<Answer> => submitText(worker, JSON.stringify(s));
 
-/** The answer of `card-state` for a card of the test roster. */
+/** The answer of `card-state` for a card of the test log. */
 export async function cardState(worker: TestWorker, scopedId: string, scope = TEST_SCOPE): Promise<Record<string, unknown>> {
   const res = await worker.fetch("/api/v1/card-state", { method: "POST", body: JSON.stringify({ scope_string: scope, scoped_id: scopedId }) });
   assert.equal(res.status, 200);
@@ -97,18 +97,18 @@ export const CRL_TIME = new Date("2026-11-19T21:00:00Z");
 export const START = new Date("2026-11-20T12:00:00+08:00");
 export const DAY_MS = 24 * 3600 * 1000;
 
-let rosters = 0;
+let proofLogs = 0;
 
 /**
- * From now on the Worker serves a roster without a record and an archive
- * without a CRL, at noon of 2026-11-20 in Taiwan: a roster's object with a
+ * From now on the Worker serves a proof log without a record and an archive
+ * without a CRL, at noon of 2026-11-20 in Taiwan: a proof log's object with a
  * new name, and an empty bucket. Returns the object's name.
  */
-export async function freshRoster(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
+export async function freshProofLog(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
   for (const file of await worker.files()) await worker.deleteFile(file.key);
-  rosters++;
-  const name = settings.kind === "production" ? `roster-${rosters}` : `test-records-${rosters}`;
-  await worker.setSettings({ ROSTER_KIND: settings.kind ?? "test", ROSTER_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_ROSTER_CLEARED_ON: settings.clearedOn }) });
+  proofLogs++;
+  const name = settings.kind === "production" ? `proof-log-${proofLogs}` : `test-records-${proofLogs}`;
+  await worker.setSettings({ PROOF_LOG_KIND: settings.kind ?? "test", PROOF_LOG_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_PROOF_LOG_CLEARED_ON: settings.clearedOn }) });
   await worker.setClock(START);
   return name;
 }
@@ -164,38 +164,38 @@ export async function wantError(worker: TestWorker, s: Submission, status: numbe
   assert.deepEqual(await submit(worker, s), { status, body: { error: code } }, what);
 }
 
-/** The `Cache-Control` of a full roster file and of its record hash list in the data bucket (ADR-0027). */
+/** The `Cache-Control` of a full log file and of its record hash list in the data bucket (ADR-0027). */
 export const IMMUTABLE = "public, max-age=31536000, immutable";
-/** The `Content-Type` of a roster file in the data bucket, and of a record hash list. */
-export const ROSTER_FILE_TYPE = "application/x-ndjson";
+/** The `Content-Type` of a log file in the data bucket, and of a record hash list. */
+export const PROOF_LOG_FILE_TYPE = "application/x-ndjson";
 export const HASH_LIST_TYPE = "text/plain; charset=utf-8";
 
 /**
- * Checks the whole roster, the full roster files in the data bucket and
- * then what the roster's object stores of its records, against
+ * Checks the whole proof log, the full log files in the data bucket and
+ * then what the proof log's object stores of its records, against
  * spec/record.md, computing everything again from the lines alone, and
  * returns the records:
  *
  *   - the object's stored records begin right after a number of full files
- *     (none, for a roster that has not filled one), and each of those files
+ *     (none, for a proof log that has not filled one), and each of those files
  *     is in the bucket with 1,000 lines, next to its record hash list;
- *   - every line, of a file or stored, is a well-formed line of a roster
+ *   - every line, of a file or stored, is a well-formed line of a log
  *     file of `kind` ("Check a line"), and the `seq`s are 1, 2, 3 and so
  *     on, in the line and in the stored row;
  *   - every record hash, in a list or stored, is the hash of its line's
- *     record, and the first line of a list is the roster fingerprint at the
+ *     record, and the first line of a list is the proof log fingerprint at the
  *     end of the file before;
- *   - every stored `fingerprint` is the roster fingerprint up to its
+ *   - every stored `fingerprint` is the proof log fingerprint up to its
  *     record, each computed from the one before, the first from 64 zeros;
- *   - the row of the roster has the number of records and the last
+ *   - the row of the proof log has the number of records and the last
  *     fingerprint, and `card-state` reports the same number.
  *
- * It is the Go backend's `checkRoster` (e159ab9:server/harness_test.go), which asks
+ * It is the Go backend's check of the proof log (e159ab9:server/harness_test.go), which asks
  * the Go store for the same.
  */
-export async function checkRoster(worker: TestWorker, kind: "test" | "production" = "test"): Promise<RosterRecord[]> {
-  const { records: rows, roster } = await worker.roster.stored();
-  const records: RosterRecord[] = [];
+export async function checkProofLog(worker: TestWorker, kind: "test" | "production" = "test"): Promise<ProofLogRecord[]> {
+  const { records: rows, proofLog } = await worker.proofLog.stored();
+  const records: ProofLogRecord[] = [];
   let fingerprint = EMPTY_FINGERPRINT;
   const read = async (line: string): Promise<string> => {
     const record = readRecordLine(kind, line);
@@ -206,17 +206,17 @@ export async function checkRoster(worker: TestWorker, kind: "test" | "production
   };
 
   // The full files the object no longer keeps the records of.
-  const moved = (rows[0]?.seq ?? roster.count + 1) - 1;
-  assert.equal(moved % LINES_PER_FILE, 0, "the stored records begin at a roster file");
-  const bucket = new Map((await worker.files("roster/")).map((f) => [f.key, f]));
+  const moved = (rows[0]?.seq ?? proofLog.count + 1) - 1;
+  assert.equal(moved % LINES_PER_FILE, 0, "the stored records begin at a log file");
+  const bucket = new Map((await worker.files("proof-log/")).map((f) => [f.key, f]));
   for (let before = 0; before < moved; before += LINES_PER_FILE) {
-    const file = bucket.get(`roster/${rosterFileName(before)}`);
-    const list = bucket.get(`roster/${hashListName(before)}`);
-    assert.ok(file && list, `the roster file after ${before} records and its record hash list are in the bucket`);
+    const file = bucket.get(`proof-log/${proofLogFileName(before)}`);
+    const list = bucket.get(`proof-log/${hashListName(before)}`);
+    assert.ok(file && list, `the log file after ${before} records and its record hash list are in the bucket`);
     assert.deepEqual([file.cacheControl, list.cacheControl], [IMMUTABLE, IMMUTABLE]);
-    assert.deepEqual([file.contentType, list.contentType], [ROSTER_FILE_TYPE, HASH_LIST_TYPE]);
+    assert.deepEqual([file.contentType, list.contentType], [PROOF_LOG_FILE_TYPE, HASH_LIST_TYPE]);
     const lines = new TextDecoder().decode(file.bytes).split("\n");
-    assert.equal(lines.pop(), "", "a roster file ends with LF");
+    assert.equal(lines.pop(), "", "a log file ends with LF");
     assert.equal(lines.length, LINES_PER_FILE, "the lines of a full file");
     const hashes: string[] = [];
     const fingerprintBefore = fingerprint;
@@ -232,9 +232,9 @@ export async function checkRoster(worker: TestWorker, kind: "test" | "production
     assert.equal(row.seq, records.length, "the stored `seq`s");
     assert.equal(row.record_hash, hash, `the stored record hash of record ${row.seq}`);
     fingerprint = await nextFingerprint(fingerprint, hash);
-    assert.equal(row.fingerprint, fingerprint, `the stored roster fingerprint at record ${row.seq}`);
+    assert.equal(row.fingerprint, fingerprint, `the stored proof log fingerprint at record ${row.seq}`);
   }
-  assert.deepEqual(roster, { count: records.length, fingerprint }, "the row of the roster");
+  assert.deepEqual(proofLog, { count: records.length, fingerprint }, "the row of the proof log");
   const scope = kind === "production" ? "iamreal:public:0_______________" : TEST_SCOPE;
   assert.equal((await cardState(worker, newCard(), scope)).count, records.length, "the count `card-state` reports");
   return records;

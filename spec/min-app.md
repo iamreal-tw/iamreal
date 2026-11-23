@@ -11,7 +11,7 @@ web page has no minimum version and does not read the field.
 
 The server does not look at app versions when it accepts a card proof. The
 field only makes the store's app stop by itself; an app changed to ignore it
-makes proofs the roster rules accept or refuse as any other.
+makes proofs the record rules accept or refuse as any other.
 
 ## The field
 

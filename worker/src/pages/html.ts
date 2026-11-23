@@ -1,5 +1,5 @@
 // HTML made of pieces: `html` is a template tag that escapes every value
-// put into it, so that nothing a visitor typed and nothing the roster holds
+// put into it, so that nothing a visitor typed and nothing the proof log holds
 // is ever read as markup. The only way around the escaping is a piece that
 // is already `Html`. This tag makes such pieces; the pages also make them
 // with `new Html(...)`, and only from text written in the code itself (the

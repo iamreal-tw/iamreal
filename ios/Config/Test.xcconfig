@@ -1,4 +1,4 @@
-// The test environment: the test site and the test roster. Both
+// The test environment: the test site and the test log. Both
 // configurations of the project are based on this file, so both builds of
 // the app (ADR-0037) talk to the test site: Debug is the development build,
 // which always does, Release the store's build, which does until launch. On
@@ -7,7 +7,7 @@
 // app switches it.
 //
 // IAMREAL_ENVIRONMENT is a compilation condition: App/AppEnvironment.swift
-// holds the site and the roster that go with it and does not compile
+// holds the site and the proof log that go with it and does not compile
 // without one. check-app.sh has the identifier of each build and the site
 // written in it, and turns away a build that is not that. The name under
 // the icon of each build is in the project file (INFOPLIST_KEY_

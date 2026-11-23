@@ -103,7 +103,7 @@ const DEPLOYED_ENV = "test";
  * Builds the card proof page of the test environment into site/proof/
  * (emptied first: whatever a computer had there is gone) and checks it;
  * throws if a check fails. The date beside the page's mark of a test
- * roster is `TEST_ROSTER_CLEARED_ON` of wrangler.jsonc, checked to be a
+ * log is `TEST_PROOF_LOG_CLEARED_ON` of wrangler.jsonc, checked to be a
  * date before the build is given it. Before the build it has the common
  * reference string checked against its SHA-256, and downloaded if this
  * checkout has none (`fetchCrs`): the same on a computer and in the

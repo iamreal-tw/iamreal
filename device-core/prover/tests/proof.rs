@@ -19,7 +19,7 @@ use std::process::Command;
 use base64::Engine;
 use common::{cases, hex, repo_file, text, unhex, vectors};
 use iamreal_device_checks::issuers::IssuerName;
-use iamreal_device_checks::scope::Roster;
+use iamreal_device_checks::scope::ProofLog;
 use iamreal_device_core::artifacts;
 use iamreal_device_core::session::{self, Trust};
 use iamreal_device_core::{
@@ -175,7 +175,7 @@ impl Session {
 /// its declaration code was computed from (declaration-code.json).
 struct Card {
     label: String,
-    roster: Roster,
+    proof_log: ProofLog,
     issuers: Vec<(IssuerName, Vec<u8>)>,
     issuer: String,
     circuit: String,
@@ -221,9 +221,9 @@ fn cards() -> Vec<Card> {
             let challenge = text(declared, "challenge");
             Card {
                 label: text(case, "label").to_string(),
-                roster: match text(case, "scope_string") {
-                    "iamreal:public:0_______________" => Roster::Production,
-                    _ => Roster::Test,
+                proof_log: match text(case, "scope_string") {
+                    "iamreal:public:0_______________" => ProofLog::Production,
+                    _ => ProofLog::Test,
                 },
                 issuers: issuers.clone(),
                 issuer: text(case, "issuer").to_string(),
@@ -265,7 +265,7 @@ impl Card {
     /// this version of the core, after every step but `skipped`.
     fn session_without(&self, skipped: Option<Step>) -> Session {
         let session = Session(session::open(
-            self.roster,
+            self.proof_log,
             Trust {
                 issuers: self.issuers.clone(),
                 artifacts: artifacts::BUILT_IN,
@@ -549,7 +549,7 @@ fn without_every_check_passed_no_proof_is_made() {
     // A session an app opens knows MOICA's keys only.
     let mut handle = 0;
     assert_eq!(
-        unsafe { iamreal_device_core::idc_session_open(card.roster as u32, &mut handle) },
+        unsafe { iamreal_device_core::idc_session_open(card.proof_log as u32, &mut handle) },
         IDC_OK
     );
     let session = Session(handle);

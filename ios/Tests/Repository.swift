@@ -24,10 +24,10 @@ enum Repository {
         try XCTUnwrap(try JSONSerialization.jsonObject(with: data("spec/vectors/\(name)")) as? [String: Any])
     }
 
-    /// The scope string of the test roster, from spec/vectors/scope.json.
+    /// The scope string of the test log, from spec/vectors/scope.json.
     static func testScopeString() throws -> String {
         let scopes = try XCTUnwrap(try vectors("scope.json")["scopes"] as? [[String: Any]])
-        let test = try XCTUnwrap(scopes.first { $0["roster"] as? String == "test" && $0["accepted"] as? Bool == true })
+        let test = try XCTUnwrap(scopes.first { $0["proof_log"] as? String == "test" && $0["accepted"] as? Bool == true })
         return try XCTUnwrap(test["scope_string"] as? String)
     }
 }

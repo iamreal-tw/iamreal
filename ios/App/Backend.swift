@@ -16,7 +16,7 @@ protocol Backend {
     /// POST /api/v1/challenges: the challenge, as the server issued it.
     func challenge() async throws -> String
     /// POST /api/v1/records with `body`. Returns when the server answered
-    /// 201: the record is in the roster. The answer's body, as it came;
+    /// 201: the record is in the proof log. The answer's body, as it came;
     /// the core reads it (spec/records-response.md).
     func submit(_ body: Data) async throws -> Data
 }
@@ -88,7 +88,7 @@ struct HTTPBackend: Backend {
         request.httpMethod = "POST"
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // The status first, then the body: a 201 is a record in the roster
+        // The status first, then the body: a 201 is a record in the proof log
         // whatever follows it (spec/records-response.md), so a body that
         // does not arrive whole is no bytes, not a failure.
         let bytes: URLSession.AsyncBytes

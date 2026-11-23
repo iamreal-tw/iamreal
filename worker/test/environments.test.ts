@@ -1,20 +1,20 @@
 // The settings of each environment in wrangler.jsonc, read the way wrangler
-// reads them: which roster the environment serves, the name of its roster's
+// reads them: which proof log the environment serves, the name of its proof log's
 // object and its data bucket belong together. A change that makes the test
-// site serve the production roster, or write into another bucket, fails
+// site serve the production log, or write into another bucket, fails
 // here, before it is merged and deployed.
 //
 // It also holds the CPU time the environment gives one invocation
 // (`limits.cpu_ms`) to what a round of the CRL mirror counts on
 // (src/round-budget.ts).
 //
-// And the files of Static Assets are routed and headed as the roster of the
+// And the files of Static Assets are routed and headed as the proof log of the
 // environment needs (`checkSiteFiles`): the card proof page's files never
-// run the Worker, and only a test roster's site says noindex.
+// run the Worker, and only a test log's site says noindex.
 //
 // This is the first of two guards. The second is in the Worker
-// (src/settings.ts): at every request it checks that `ROSTER_KIND` and
-// `ROSTER_OBJECT_NAME` fit each other, which also holds for a deploy from a
+// (src/settings.ts): at every request it checks that `PROOF_LOG_KIND` and
+// `PROOF_LOG_OBJECT_NAME` fit each other, which also holds for a deploy from a
 // computer with a configuration that never went through a pull request.
 //
 // There is one environment so far. **When the production environment is
@@ -32,7 +32,7 @@ import { WORKER_DIR } from "./build.ts";
 /** What an environment's settings must be. */
 interface Expected {
   readonly kind: "test" | "production";
-  /** Whether the name of the roster's object starts with `test-`: a test roster's does, the production roster's does not. */
+  /** Whether the name of the proof log's object starts with `test-`: a test log's does, the production log's does not. */
   readonly objectNamedAsTest: boolean;
   readonly bucket: string;
 }
@@ -50,10 +50,10 @@ interface Settings {
 /** What is wrong with an environment's settings; empty if nothing. */
 function problems(settings: Settings, expected: Expected): string[] {
   const out: string[] = [];
-  const { ROSTER_KIND: kind, ROSTER_OBJECT_NAME: name } = settings.vars;
-  if (kind !== expected.kind) out.push(`ROSTER_KIND is not ${expected.kind}`);
+  const { PROOF_LOG_KIND: kind, PROOF_LOG_OBJECT_NAME: name } = settings.vars;
+  if (kind !== expected.kind) out.push(`PROOF_LOG_KIND is not ${expected.kind}`);
   if (typeof name !== "string" || name.length <= "test-".length || name.startsWith("test-") !== expected.objectNamedAsTest) {
-    out.push(`ROSTER_OBJECT_NAME ${expected.objectNamedAsTest ? "does not start" : "starts"} with test-`);
+    out.push(`PROOF_LOG_OBJECT_NAME ${expected.objectNamedAsTest ? "does not start" : "starts"} with test-`);
   }
   const buckets = settings.r2_buckets.map((b) => `${b.binding}=${b.bucket_name}`);
   if (buckets.length !== 1 || buckets[0] !== `DATA=${expected.bucket}`) out.push(`the only bucket is not DATA=${expected.bucket}`);
@@ -63,7 +63,7 @@ function problems(settings: Settings, expected: Expected): string[] {
 const read = (env: string): Settings => unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env }) as unknown as Settings;
 
 for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
-  test(`the ${env} environment serves the ${expected.kind} roster, on an object named for it, with its own bucket`, () => {
+  test(`the ${env} environment serves the ${expected.kind} log, on an object named for it, with its own bucket`, () => {
     assert.deepEqual(problems(read(env), expected), []);
   });
 }
@@ -71,7 +71,7 @@ for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
 test("the environments of wrangler.jsonc are the ones checked here", () => {
   const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
   assert.deepEqual(Object.keys(rawConfig.env ?? {}).sort(), Object.keys(ENVIRONMENTS).sort());
-  // The top level has no roster of its own: no setting and no bucket (README.md, "設定檔").
+  // The top level has no proof log of its own: no setting and no bucket (README.md, "設定檔").
   assert.equal(rawConfig.vars, undefined);
   assert.equal(rawConfig.r2_buckets, undefined);
 });
@@ -81,14 +81,14 @@ test("altered copies of the test environment's settings are turned away, each fo
   const expected = ENVIRONMENTS.test!;
   const withVars = (vars: Record<string, unknown>): Settings => ({ ...real, vars: { ...real.vars, ...vars } });
   const cases: [string, Settings, string[]][] = [
-    ["the production roster", withVars({ ROSTER_KIND: "production" }), ["ROSTER_KIND is not test"]],
-    ["no kind", { ...real, vars: { ROSTER_OBJECT_NAME: real.vars.ROSTER_OBJECT_NAME } }, ["ROSTER_KIND is not test"]],
-    ["an object not named as a test one", withVars({ ROSTER_OBJECT_NAME: "roster-1" }), ["ROSTER_OBJECT_NAME does not start with test-"]],
-    ["an object named in another case", withVars({ ROSTER_OBJECT_NAME: "Test-1" }), ["ROSTER_OBJECT_NAME does not start with test-"]],
-    ["an object named `test-` and nothing more", withVars({ ROSTER_OBJECT_NAME: "test-" }), ["ROSTER_OBJECT_NAME does not start with test-"]],
+    ["the production log", withVars({ PROOF_LOG_KIND: "production" }), ["PROOF_LOG_KIND is not test"]],
+    ["no kind", { ...real, vars: { PROOF_LOG_OBJECT_NAME: real.vars.PROOF_LOG_OBJECT_NAME } }, ["PROOF_LOG_KIND is not test"]],
+    ["an object not named as a test one", withVars({ PROOF_LOG_OBJECT_NAME: "proof-log-1" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
+    ["an object named in another case", withVars({ PROOF_LOG_OBJECT_NAME: "Test-1" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
+    ["an object named `test-` and nothing more", withVars({ PROOF_LOG_OBJECT_NAME: "test-" }), ["PROOF_LOG_OBJECT_NAME does not start with test-"]],
     ["another bucket", { ...real, r2_buckets: [{ binding: "DATA", bucket_name: "iamreal-data" }] }, ["the only bucket is not DATA=iamreal-test-data"]],
     ["a second bucket", { ...real, r2_buckets: [...real.r2_buckets, { binding: "OTHER", bucket_name: "iamreal-data" }] }, ["the only bucket is not DATA=iamreal-test-data"]],
-    ["the production roster on its own object", withVars({ ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "roster-1" }), ["ROSTER_KIND is not test", "ROSTER_OBJECT_NAME does not start with test-"]],
+    ["the production log on its own object", withVars({ PROOF_LOG_KIND: "production", PROOF_LOG_OBJECT_NAME: "proof-log-1" }), ["PROOF_LOG_KIND is not test", "PROOF_LOG_OBJECT_NAME does not start with test-"]],
   ];
   for (const [name, settings, want] of cases) assert.deepEqual(problems(settings, expected), want, name);
 });
@@ -114,7 +114,7 @@ test("a configuration in which an environment has another CPU time than the mirr
   assert.throws(() => checkCpuLimit({}), /has an environment/);
 });
 
-test("every environment sends the files of site/ past the Worker, with the headers of its kind of roster", () => {
+test("every environment sends the files of site/ past the Worker, with the headers of its kind of proof log", () => {
   const sites = configuredSites();
   assert.deepEqual(Object.keys(sites).sort(), Object.keys(ENVIRONMENTS).sort());
   for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
@@ -143,7 +143,7 @@ test("every environment sends the files of site/ past the Worker, with the heade
   for (const [env, settings] of Object.entries(rawConfig.env ?? {})) assert.equal((settings as { assets?: unknown }).assets, undefined, `env.${env} has no assets of its own`);
 });
 
-test("a configuration that runs the Worker for the card proof page's files, lets it read them, or sends them with another roster's headers is turned away", () => {
+test("a configuration that runs the Worker for the card proof page's files, lets it read them, or sends them with another proof log's headers is turned away", () => {
   const real = configuredSites().test!;
   const cases: [string, Partial<ConfiguredSite>, RegExp][] = [
     ["the Worker first for everything", { runWorkerFirst: true }, /run_worker_first of the test environment/],
@@ -153,12 +153,12 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["a binding to read the files by", { binding: "ASSETS" }, /no binding/],
     ["index.html found for directories", { htmlHandling: "auto-trailing-slash" }, /html_handling/],
     ["a page for what is not there", { notFoundHandling: "single-page-application" }, /not_found_handling/],
-    ["a production roster's headers on the test site: no noindex", { headers: siteHeaders("production") }, /_headers of the test environment/],
+    ["a production log's headers on the test site: no noindex", { headers: siteHeaders("production") }, /_headers of the test environment/],
     ["a header changed by hand", { headers: real.headers!.replace("same-origin-allow-popups", "unsafe-none") }, /_headers of the test environment/],
     ["no _headers", { headers: null }, /_headers of the test environment/],
     ["no _redirects", { redirects: null }, /_redirects of the test environment/],
     ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
-    ["a kind that is none", { kind: "staging" }, /ROSTER_KIND of the test environment/],
+    ["a kind that is none", { kind: "staging" }, /PROOF_LOG_KIND of the test environment/],
     ["another file beside the four", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
     ["no style sheet", { files: ["_headers", "_redirects", "copy.js"], styleSheetSha256: null }, /files of the test environment/],
     ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],
@@ -166,23 +166,23 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["a script that was changed", { scriptSha256: "0".repeat(64) }, /copy\.js of the test environment/],
   ];
   for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
-  // A production roster's site with the test site's files says noindex: turned away too.
+  // A production log's site with the test site's files says noindex: turned away too.
   assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
   checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });
   assert.throws(() => checkSiteFiles({}), /has an environment/);
 });
 
-test("the date the test roster was last cleared on is a date of the calendar; a configuration with another value is turned away before it is deployed", () => {
+test("the date the test log was last cleared on is a date of the calendar; a configuration with another value is turned away before it is deployed", () => {
   const configured = configuredClearedOn();
   assert.deepEqual(Object.keys(configured).sort(), Object.keys(ENVIRONMENTS).sort());
-  assert.deepEqual(configured.test, { kind: "test", clearedOn: read("test").vars.TEST_ROSTER_CLEARED_ON });
+  assert.deepEqual(configured.test, { kind: "test", clearedOn: read("test").vars.TEST_PROOF_LOG_CLEARED_ON });
   assert.match(String(configured.test!.clearedOn), /^\d{4}-\d{2}-\d{2}$/);
   checkClearedOn(configured);
   // Deployed, such a value makes the test site answer nothing but 500 (src/settings.ts).
   for (const other of ["2026-11-31", "2026-02-30", "2026-13-01", "2026-11-00", "2026-1-9", "20261119", "2026/11/19", "2026-11-19 ", "soon", "", undefined, 20261119]) {
-    assert.throws(() => checkClearedOn({ test: { kind: "test", clearedOn: other } }), /TEST_ROSTER_CLEARED_ON of the test environment/, String(other));
+    assert.throws(() => checkClearedOn({ test: { kind: "test", clearedOn: other } }), /TEST_PROOF_LOG_CLEARED_ON of the test environment/, String(other));
   }
-  // A production roster's pages have no mark: the setting is not read, and is not asked for.
+  // A production log's pages have no mark: the setting is not read, and is not asked for.
   checkClearedOn({ test: configured.test!, production: { kind: "production", clearedOn: undefined } });
   assert.throws(() => checkClearedOn({}), /has an environment/);
 });

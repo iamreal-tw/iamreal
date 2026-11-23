@@ -6,7 +6,7 @@ The challenge is the one-time string the server issues for one card proof. It
 goes into the last line of the declaration code
 ([`declaration-code.md`](declaration-code.md)), which the card signs, so the
 proof shows the card signed after the challenge was issued. It also carries
-the date of the card proof: the date that the roster records and that the
+the date of the card proof: the date that the proof log records and that the
 validity check of the certificate uses (ADR-0008).
 
 A challenge is not issued for a platform, an account or a card. What it is
@@ -79,7 +79,7 @@ next day, whatever time of day the card proof is made.
 
 ## Rules
 
-Who checks what. Only the last group can be checked from the public roster.
+Who checks what. Only the last group can be checked from the public proof log.
 
 **The server, when issuing**
 
@@ -128,7 +128,7 @@ helps identify the cardholder.
 - The challenge matches the format above, in its one spelling.
 - `current_time` equals the value derived from the challenge's date.
 - The challenge does not appear in an earlier record, of any card
-  ([`roster-rules.md`](roster-rules.md)).
+  ([`record-rules.md`](record-rules.md)).
 
 ## Test vectors
 

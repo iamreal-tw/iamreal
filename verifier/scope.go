@@ -8,23 +8,23 @@ import (
 // ScopeStringLength is the length of every scope string in bytes.
 const ScopeStringLength = 31
 
-// Roster says which tables apply (spec/scope.md): the accepted scopes and
-// the platforms of the production roster, or of the test rosters.
-type Roster int
+// ProofLog says which tables apply (spec/scope.md): the accepted scopes and
+// the platforms of the production log, or of the test logs.
+type ProofLog int
 
 const (
-	Production Roster = iota
+	Production ProofLog = iota
 	Test
 )
 
-func (r Roster) String() string {
+func (r ProofLog) String() string {
 	switch r {
 	case Production:
 		return "production"
 	case Test:
 		return "test"
 	}
-	return fmt.Sprintf("Roster(%d)", int(r))
+	return fmt.Sprintf("ProofLog(%d)", int(r))
 }
 
 // Scope is one row of an accepted-scopes table.
@@ -59,8 +59,8 @@ var (
 	testScopes = []Scope{
 		{String: "iamreal-test:public:0__________"},
 	}
-	// productionPlatforms are the platforms of the production roster. A test
-	// roster accepts these and testPlatforms. IDs starting with "test-" are
+	// productionPlatforms are the platforms of the production log. A test
+	// log accepts these and testPlatforms. IDs starting with "test-" are
 	// never added here.
 	productionPlatforms = []Platform{
 		{ID: "threads", DisplayName: "Threads", UsernameFormat: "[a-z0-9._]{1,30}", ValidUsername: threadsUsername},
@@ -70,8 +70,8 @@ var (
 	}
 )
 
-// Scopes returns the accepted scopes of roster r.
-func Scopes(r Roster) []Scope {
+// Scopes returns the accepted scopes of proof log r.
+func Scopes(r ProofLog) []Scope {
 	switch r {
 	case Production:
 		return append([]Scope(nil), productionScopes...)
@@ -81,8 +81,8 @@ func Scopes(r Roster) []Scope {
 	return nil
 }
 
-// LookupScope returns the row of scope string s in roster r.
-func LookupScope(r Roster, s string) (Scope, bool) {
+// LookupScope returns the row of scope string s in proof log r.
+func LookupScope(r ProofLog, s string) (Scope, bool) {
 	for _, sc := range Scopes(r) {
 		if sc.String == s {
 			return sc, true
@@ -91,9 +91,9 @@ func LookupScope(r Roster, s string) (Scope, bool) {
 	return Scope{}, false
 }
 
-// Platforms returns the platforms roster r accepts, in ascending order of
+// Platforms returns the platforms proof log r accepts, in ascending order of
 // ID by byte value: the order of a record's account list.
-func Platforms(r Roster) []Platform {
+func Platforms(r ProofLog) []Platform {
 	var out []Platform
 	switch r {
 	case Production:
@@ -105,9 +105,9 @@ func Platforms(r Roster) []Platform {
 	return out
 }
 
-// LookupPlatform returns the platform with ID id in roster r. The ID must
+// LookupPlatform returns the platform with ID id in proof log r. The ID must
 // be exactly as in the table.
-func LookupPlatform(r Roster, id string) (Platform, bool) {
+func LookupPlatform(r ProofLog, id string) (Platform, bool) {
 	for _, p := range Platforms(r) {
 		if p.ID == id {
 			return p, true

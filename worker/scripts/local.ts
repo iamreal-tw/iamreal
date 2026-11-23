@@ -7,12 +7,12 @@
 //    missing or differs is downloaded)
 // 2. the page, built in web/'s mode "localcard" (web/src/target-local.ts:
 //    MOICA's issuer keys, the component at http://localhost:61161, no fake
-//    card and no test key, and the test roster's scope string
+//    card and no test key, and the test log's scope string
 //    `iamreal-test:public:0__________`, so that a real card tried out here
-//    gets no scoped ID of the public roster)
+//    gets no scoped ID of the public proof log)
 // 3. the Worker's build for this computer (local-build/index.ts: the deployed
-//    Worker, and the bucket's files at /crl/… and /roster/…), started with
-//    wrangler.jsonc's test environment (the test roster) and its Durable
+//    Worker, and the bucket's files at /crl/… and /proof-log/…), started with
+//    wrangler.jsonc's test environment (the test log) and its Durable
 //    Object and bucket kept in DIR
 // 4. one round of the CRL mirror, against MOICA's real CRLs
 // 5. the check that needs no card (test/site-check.ts, `local`): every page,
@@ -23,9 +23,9 @@
 // site at http://localhost:PORT/. Ctrl-C stops it. The mirror does not run
 // again by itself: start it again for newer CRLs.
 //
-// DIR (default worker/local/) keeps the roster between runs; delete it to
-// start from an empty roster. It is not web/local/, where the Go back end
-// kept its roster, which this does not read or write. The requests to other
+// DIR (default worker/local/) keeps the proof log between runs; delete it to
+// start from an empty proof log. It is not web/local/, where the Go back end
+// kept its proof log, which this does not read or write. The requests to other
 // hosts are the CRS download (only if web/crs/ lacks a file) and the
 // mirror's download of MOICA's two CRLs.
 import { spawnSync } from "node:child_process";
@@ -45,7 +45,7 @@ const opt = (name: string, def: string): string => {
 };
 const port = Number(opt("--port", "8080"));
 const data = resolve(opt("--data", join(WORKER_DIR, "local")));
-if (data === resolve(WEB_DIR, "local")) throw new Error("web/local/ is the Go back end's roster: give another --data");
+if (data === resolve(WEB_DIR, "local")) throw new Error("web/local/ is the Go back end's proof log: give another --data");
 
 console.log("1/5 the CRS (web/scripts/fetch-crs.mjs)");
 fetchCrs();
@@ -79,7 +79,7 @@ console.log(`the mirror: HTTP ${round.status} ${(await round.text()).trim()}`);
 console.log("5/5 the check that needs no card (test/site-check.ts)");
 await runSiteCheck(`http://localhost:${port}`, `http://localhost:${port}`);
 
-console.log(`serving http://localhost:${port}/proof, and the rest of the site at http://localhost:${port}/ (test roster; Ctrl-C to stop)`);
+console.log(`serving http://localhost:${port}/proof, and the rest of the site at http://localhost:${port}/ (test log; Ctrl-C to stop)`);
 const stop = async (): Promise<void> => {
   await worker.dispose();
   process.exit(0);

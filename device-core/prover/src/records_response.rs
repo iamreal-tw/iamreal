@@ -1,13 +1,13 @@
 //! Reading the answer to a submission, the `201` of `POST /api/v1/records`,
 //! and comparing it with the rows the confirmation screen showed
-//! (spec/records-response.md). The record is in the roster whatever the
+//! (spec/records-response.md). The record is in the proof log whatever the
 //! body is: what cannot be read is not known, never an error.
 
 use iamreal_device_checks::username_format::{is_any_username, is_platform_id};
 
 use crate::json::Json;
 
-/// The kinds of spec/roster-rules.md, as the answer and a row name them.
+/// The kinds of spec/record-rules.md, as the answer and a row name them.
 const KINDS: [&str; 5] = ["first", "refresh", "correction", "switch", "withdraw"];
 
 /// What a record is on one platform: an element of the answer's `kinds`,

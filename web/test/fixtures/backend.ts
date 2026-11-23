@@ -4,18 +4,18 @@
 // carried the reason. Used in Node (as a fetch) and by the headless browser
 // test's HTTP server.
 //
-// It keeps a small roster of its own, for one card: what the default answers
-// to card-state and to a submission say, by the roster rules
-// (spec/roster-rules.md, applyRecord of protocol/src/roster-rules.ts), so
+// It keeps a small proof log of its own, for one card: what the default answers
+// to card-state and to a submission say, by the record rules
+// (spec/record-rules.md, applyRecord of protocol/src/record-rules.ts), so
 // that card proofs one after the other see each other. It verifies nothing:
 // no proof, no challenge, no root. A test that sets `cardState` answers card-state with it
 // as it is, and the default submission's kinds are then computed against it
-// (and the roster of its own is left as it was).
+// (and the proof log of its own is left as it was).
 import { sha256Hex } from "iamreal-protocol/bytes.ts";
 import { encodeBase32 } from "iamreal-protocol/base32.ts";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import type { PlatformRow } from "iamreal-protocol/platforms.ts";
-import { type CardState, type SlotState, applyRecord, newCard } from "iamreal-protocol/roster-rules.ts";
+import { type CardState, type SlotState, applyRecord, newCard } from "iamreal-protocol/record-rules.ts";
 import { isAnyUsername, parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 
 export interface LoggedRequest {
@@ -31,7 +31,7 @@ export interface PlatformTableRow {
   username_format: string;
 }
 
-/** The test roster's table (spec/scope.md), as `config` sends it. */
+/** The test log's table (spec/scope.md), as `config` sends it. */
 export const TEST_PLATFORMS: readonly PlatformTableRow[] = [
   { platform: "test-example", display_name: "Example (no real service)", username_format: "[a-z0-9-]{1,20}" },
   { platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" },
@@ -48,9 +48,9 @@ export interface BackendOptions {
   platforms?: unknown;
   /** The whole body of `config`, as it is; overrides the two above. */
   config?: unknown;
-  /** The answer to card-state, as it is; by default the roster of its own. */
+  /** The answer to card-state, as it is; by default the proof log of its own. */
   cardState?: Record<string, unknown>;
-  /** The answer to a submission; by default 201 with the kinds of the roster of its own. */
+  /** The answer to a submission; by default 201 with the kinds of the proof log of its own. */
   submit?: (body: Record<string, unknown>) => { status: number; body: unknown };
 }
 
@@ -60,7 +60,7 @@ export interface Answer {
   bytes: Uint8Array;
 }
 
-/** A card-state answer, read back into the roster's terms (loosely: it is the test's own). */
+/** A card-state answer, read back into the proof log's terms (loosely: it is the test's own). */
 function cardOf(answer: Record<string, unknown>): CardState {
   const day = (x: unknown): Day | null => (typeof x === "string" ? parseDay(x) : null);
   const slots = new Map<string, SlotState>();
@@ -82,7 +82,7 @@ export class FakeBackend {
   readonly log: LoggedRequest[] = [];
   readonly submissions: Record<string, unknown>[] = [];
   readonly opts: BackendOptions;
-  /** The roster of its own: one card. */
+  /** The proof log of its own: one card. */
   card: CardState;
 
   constructor(opts: BackendOptions) {
@@ -91,7 +91,7 @@ export class FakeBackend {
   }
 
   /**
-   * The platform table of this server's roster, as it sends it: the one of
+   * The platform table of this server's proof log, as it sends it: the one of
    * its `config` (`config` whole, else `platforms`), or TEST_PLATFORMS when
    * the test made that answer something that is not a table.
    */
@@ -103,7 +103,7 @@ export class FakeBackend {
   }
 
   /**
-   * The same table as the rows the roster rules take. A test gives a row a
+   * The same table as the rows the record rules take. A test gives a row a
    * format no device reads to see what the device does; this server then
    * checks the usernames of that platform as any username.
    */
@@ -115,7 +115,7 @@ export class FakeBackend {
     }));
   }
 
-  /** The card-state answer of the roster of its own. */
+  /** The card-state answer of the proof log of its own. */
   stateAnswer(): Record<string, unknown> {
     const c = this.card;
     return {
@@ -139,7 +139,7 @@ export class FakeBackend {
     const accounts = Array.isArray(body.accounts) ? (body.accounts as { platform: string; username: string }[]) : [];
     const list = new Map(accounts.map((a) => [a.platform, a.username]));
     const d = parseDay(String(body.challenge).slice(0, 10)) ?? taiwanDay(this.opts.clock());
-    // The roster rules for a roster of one card, on this server's platform
+    // The record rules for a proof log of one card, on this server's platform
     // table, with the answers this server does not check: the record
     // verifies, its challenge is new, its root is recognized. A list that is
     // not a record's (a platform outside the table, a username outside its

@@ -1,7 +1,7 @@
-package roster_test
+package prooflog_test
 
-// Tests against spec/vectors/record.json (the roster fingerprints, "files"
-// and the published roster) and spec/vectors/roster-rules.json. Every case
+// Tests against spec/vectors/record.json (the proof log fingerprints, "files"
+// and the published proof log) and spec/vectors/record-rules.json. Every case
 // runs as a subtest.
 
 import (
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -33,13 +33,13 @@ func load(t *testing.T, name string, v any) {
 	}
 }
 
-var rosters = map[string]verifier.Roster{"production": verifier.Production, "test": verifier.Test}
+var proofLogs = map[string]verifier.ProofLog{"production": verifier.Production, "test": verifier.Test}
 
-func rosterOf(t *testing.T, name string) verifier.Roster {
+func proofLogOf(t *testing.T, name string) verifier.ProofLog {
 	t.Helper()
-	r, ok := rosters[name]
+	r, ok := proofLogs[name]
 	if !ok {
-		t.Fatalf("roster %q", name)
+		t.Fatalf("proof log %q", name)
 	}
 	return r
 }
@@ -49,7 +49,7 @@ func TestVectorsRecordFiles(t *testing.T) {
 		Tokens map[string]string `json:"tokens"`
 		Files  []struct {
 			Name        string `json:"name"`
-			Roster      string `json:"roster"`
+			ProofLog    string `json:"proof_log"`
 			Content     string `json:"content"`
 			Valid       bool   `json:"valid"`
 			Fingerprint string `json:"fingerprint"`
@@ -64,7 +64,7 @@ func TestVectorsRecordFiles(t *testing.T) {
 			for k, val := range v.Tokens {
 				content = strings.ReplaceAll(content, k, val)
 			}
-			records, fingerprint, broken := roster.ReadFile([]byte(content), rosterOf(t, f.Roster))
+			records, fingerprint, broken := prooflog.ReadFile([]byte(content), proofLogOf(t, f.ProofLog))
 			if !f.Valid {
 				if broken == nil {
 					t.Fatalf("valid, want broken at line %d with %s", f.Line, f.Code)
@@ -150,11 +150,11 @@ type scopeOut struct {
 }
 
 type rulesCase struct {
-	Name    string     `json:"name"`
-	Roster  string     `json:"roster"`
-	Events  []event    `json:"events"`
-	Results []result   `json:"results"`
-	State   []scopeOut `json:"state"`
+	Name     string     `json:"name"`
+	ProofLog string     `json:"proof_log"`
+	Events   []event    `json:"events"`
+	Results  []result   `json:"results"`
+	State    []scopeOut `json:"state"`
 }
 
 // fakeProofs is check 1 from the events' `verifies`.
@@ -194,10 +194,10 @@ func accountsOf(list []account) []verifier.Account {
 
 // casesRecords turns a case's events into records, with the proof verifier
 // and CRL archive that answer checks 1 and 3 as the events say. Each record
-// is checked to be well formed in the case's roster.
+// is checked to be well formed in the case's proof log.
 func caseRecords(t *testing.T, c rulesCase) ([]*verifier.Record, fakeProofs, fakeArchive) {
 	t.Helper()
-	r := rosterOf(t, c.Roster)
+	r := proofLogOf(t, c.ProofLog)
 	proof := base64.StdEncoding.EncodeToString(make([]byte, verifier.ProofLength))
 	proofs := fakeProofs{}
 	archive := fakeArchive{}
@@ -209,7 +209,7 @@ func caseRecords(t *testing.T, c rulesCase) ([]*verifier.Record, fakeProofs, fak
 			SMTRoot: rootOf(e.Seq), Circuit: strings.Repeat("0", 64), Proof: proof,
 		}
 		if err := rec.CheckValues(r); err != nil {
-			t.Fatalf("seq %d is not a well-formed record of the %s roster: %v", e.Seq, r, err)
+			t.Fatalf("seq %d is not a well-formed record of the %s log: %v", e.Seq, r, err)
 		}
 		if d, _ := rec.Date(); d.String() != e.Date {
 			t.Fatalf("seq %d: date %s, the vector says %s", e.Seq, d, e.Date)
@@ -223,7 +223,7 @@ func caseRecords(t *testing.T, c rulesCase) ([]*verifier.Record, fakeProofs, fak
 	return records, proofs, archive
 }
 
-func resultOf(res roster.RecordResult) result {
+func resultOf(res prooflog.RecordResult) result {
 	out := result{Seq: res.Seq, Valid: res.Valid, Reason: res.Reason}
 	for _, k := range res.Kinds {
 		out.Kinds = append(out.Kinds, kind{k.Platform, k.Kind})
@@ -231,15 +231,15 @@ func resultOf(res roster.RecordResult) result {
 	return out
 }
 
-func TestVectorsRosterRules(t *testing.T) {
+func TestVectorsRecordRules(t *testing.T) {
 	var v struct {
 		Cases []rulesCase `json:"cases"`
 	}
-	load(t, "roster-rules.json", &v)
+	load(t, "record-rules.json", &v)
 	for _, c := range v.Cases {
 		t.Run(c.Name, func(t *testing.T) {
 			records, proofs, archive := caseRecords(t, c)
-			st, err := roster.Apply(records, rosterOf(t, c.Roster), proofs, archive)
+			st, err := prooflog.Apply(records, proofLogOf(t, c.ProofLog), proofs, archive)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -266,7 +266,7 @@ func TestVectorsRosterRules(t *testing.T) {
 // stateOut writes the output in the shape of the vectors. x, if not nil,
 // gives each card's proofs_on_last_date and slots; otherwise they are left
 // out (0 and nil).
-func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
+func stateOut(st *prooflog.State, x *prooflog.Rules) []scopeOut {
 	out := []scopeOut{}
 	for _, s := range st.Scopes {
 		so := scopeOut{ScopeString: s.ScopeString, Cards: []cardOut{}, Accounts: []accountOut{}}
@@ -295,7 +295,7 @@ func stateOut(st *roster.State, x *roster.Rules) []scopeOut {
 }
 
 // slotsOut writes a card's slots in the shape of the vectors' `slots`.
-func slotsOut(cs roster.CardState) map[string]slotOut {
+func slotsOut(cs prooflog.CardState) map[string]slotOut {
 	out := map[string]slotOut{}
 	for p, slot := range cs.Slots {
 		so := slotOut{Current: slot.Current, LastDeclared: slot.LastDeclared, SwitchCount: slot.SwitchCount}

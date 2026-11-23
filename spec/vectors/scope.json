@@ -1,76 +1,76 @@
 {
   "spec": "scope",
   "status": "draft",
-  "note": "`platforms`: the platform IDs each roster accepts, each with its display name and its `username` format as the table writes them, and IDs it does not. `usernames`: each against the format of its platform (spec/scope.md, \"The `username` format\"); test-example is a platform of test rosters only.",
+  "note": "`platforms`: the platform IDs each proof log accepts, each with its display name and its `username` format as the table writes them, and IDs it does not. `usernames`: each against the format of its platform (spec/scope.md, \"The `username` format\"); test-example is a platform of test logs only.",
   "scopes": [
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:0_______________",
       "accepted": true,
       "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f5f5f5f5f5f303a63696c6275703a6c6165726d6169"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "scope_string": "iamreal-test:public:0__________",
       "accepted": true,
       "scope_packed": "0x005f5f5f5f5f5f5f5f5f5f303a63696c6275703a747365742d6c6165726d6169"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal-test:public:0__________",
       "accepted": false,
-      "reason": "test scope string in the production roster"
+      "reason": "test scope string in the production log"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "scope_string": "iamreal:public:0_______________",
       "accepted": false,
-      "reason": "production scope string in a test roster"
+      "reason": "production scope string in a test log"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:00______________",
       "accepted": false,
       "reason": "another spelling of the version"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:Public:0_______________",
       "accepted": false,
       "reason": "uppercase range"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:0______________",
       "accepted": false,
       "reason": "30 bytes"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:0________________",
       "accepted": false,
       "reason": "32 bytes"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:1_______________",
       "accepted": false,
       "reason": "not listed"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:public:0 ______________",
       "accepted": false,
       "reason": "space"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "scope_string": "iamreal:threads:0______________",
       "accepted": false,
       "reason": "a scope of one platform, from a draft before ADR-0017"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "scope_string": "iamreal-test:threads:0_________",
       "accepted": false,
       "reason": "a scope of one platform, from a draft before ADR-0017"
@@ -78,70 +78,70 @@
   ],
   "platforms": [
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "threads",
       "accepted": true,
       "display_name": "Threads",
       "username_format": "[a-z0-9._]{1,30}"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "platform": "test-example",
       "accepted": true,
       "display_name": "Example (no real service)",
       "username_format": "[a-z0-9-]{1,20}"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "platform": "threads",
       "accepted": true,
       "display_name": "Threads",
       "username_format": "[a-z0-9._]{1,30}"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "test-example",
       "accepted": false,
-      "reason": "a test platform in the production roster"
+      "reason": "a test platform in the production log"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "Threads",
       "accepted": false,
       "reason": "another spelling: uppercase"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "threads_",
       "accepted": false,
       "reason": "another spelling: trailing `_`"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "threads ",
       "accepted": false,
       "reason": "another spelling: trailing space"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "instagram",
       "accepted": false,
       "reason": "not listed"
     },
     {
-      "roster": "production",
+      "proof_log": "production",
       "platform": "",
       "accepted": false,
       "reason": "empty"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "platform": "Threads",
       "accepted": false,
       "reason": "another spelling: uppercase"
     },
     {
-      "roster": "test",
+      "proof_log": "test",
       "platform": "test-other",
       "accepted": false,
       "reason": "not listed"

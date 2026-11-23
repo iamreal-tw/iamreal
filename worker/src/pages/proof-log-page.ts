@@ -1,16 +1,16 @@
-// The roster page: design/copy/roster-page.md. The markup is the Go
-// backend's (e159ab9:server/pages/templates/roster.html), but for the link of
+// The proof log page: design/copy/proof-log-page.md. The markup is the Go
+// backend's (its proof log page's template at e159ab9), but for the link of
 // 下載整份證明紀錄, which goes to the part of iamreal-verify's README about
-// downloading (roster-page.md, 下載): the roster is on the data domain
-// (ADR-0027), not under /roster/. This file only turns data into HTML; the
-// Worker (src/visitor.ts) reads the address and the roster.
+// downloading (proof-log-page.md, 下載): the proof log is on the data domain
+// (ADR-0027), not under /proof-log/. This file only turns data into HTML; the
+// Worker (src/visitor.ts) reads the address and the proof log.
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
 import type { Counts, LatestPlace, LatestSlot } from "../page-data.ts";
 import { Html, html, thousands } from "./html.ts";
 import type { Document } from "./layout.ts";
 
-/** How many slots the roster page lists at a time (roster-page.md, 清單). */
+/** How many slots the proof log page lists at a time (proof-log-page.md, 清單). */
 export const PAGE_SIZE = 50;
 
 /** Where 下載整份證明紀錄 goes: the section 下載 of iamreal-verify's README. */
@@ -23,7 +23,7 @@ export function formatPlace(p: LatestPlace): string {
 
 /** The largest seq the Go backend reads as a place; above it, its list started from the latest slot. */
 const MAX_INT64 = 2n ** 63n - 1n;
-/** The largest seq that reads as a place here, as a number the roster's SQLite is given: no record has a larger one, so the list after it is the same. */
+/** The largest seq that reads as a place here, as a number the proof log's SQLite is given: no record has a larger one, so the list after it is the same. */
 const MAX_SEQ = BigInt(Number.MAX_SAFE_INTEGER);
 
 /**
@@ -44,8 +44,8 @@ export function readPlace(s: string): { readonly place: LatestPlace | null } | n
   return { place: { since, sinceSeq: Number(seq > MAX_SEQ ? MAX_SEQ : seq) } };
 }
 
-/** What the roster page shows. */
-export interface RosterView {
+/** What the proof log page shows. */
+export interface ProofLogView {
   readonly counts: Counts;
   /** The slots listed: at most PAGE_SIZE. */
   readonly slots: readonly LatestSlot[];
@@ -57,7 +57,7 @@ export interface RosterView {
   readonly badQuery: string | null;
 }
 
-export function rosterPage(v: RosterView): Document {
+export function proofLogPage(v: ProofLogView): Document {
   const empty = v.slots.length === 0 && !v.after;
   const last = v.slots[v.slots.length - 1];
   const list = empty
@@ -74,7 +74,7 @@ ${v.slots.map((s) => html`<li><a href="/p/${shortId(s.scopedId)}"><time>${format
 </ul>${
         v.more && last !== undefined
           ? html`
-<p class="more"><a href="/roster?after=${formatPlace(last)}">更多</a></p>`
+<p class="more"><a href="/proof-log?after=${formatPlace(last)}">更多</a></p>`
           : new Html("")
       }`;
   const content = html`<section class="numbers">
@@ -82,7 +82,7 @@ ${v.slots.map((s) => html`<li><a href="/p/${shortId(s.scopedId)}"><time>${format
 <p>現在有 ${thousands(v.counts.declared)} 張島民證明，其中 ${thousands(v.counts.recent)} 張在過去三個月內過卡。</p>
 </section>
 <section class="query">
-<form method="get" action="/roster">
+<form method="get" action="/proof-log">
 <p><label for="q">查一個 Threads 帳號</label></p>
 <p class="field"><span class="at">@</span><input type="text" id="q" name="q" value="${v.badQuery ?? ""}" autocomplete="off" autocapitalize="none" spellcheck="false"> <button type="submit">查</button></p>${
     v.badQuery === null
@@ -98,5 +98,5 @@ ${v.slots.map((s) => html`<li><a href="/p/${shortId(s.scopedId)}"><time>${format
 <section class="download">
 <p><a href="${DOWNLOAD}">下載整份證明紀錄</a> <a href="/verify">怎麼驗證島民證明</a></p>
 </section>`;
-  return { title: "證明紀錄", kind: "roster", content };
+  return { title: "證明紀錄", kind: "proof_log", content };
 }

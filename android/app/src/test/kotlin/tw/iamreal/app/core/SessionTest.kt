@@ -45,7 +45,7 @@ class SessionTest {
     /** Noon in Taiwan on a date `YYYY-MM-DD`, in seconds since 1970. */
     private fun noon(date: String): Long = java.time.LocalDate.parse(date).toEpochDay() * 86_400 + 4 * 3_600
 
-    /** The first case of circuit-inputs.json in the test roster's scope: what a fake card for the test site would hold. */
+    /** The first case of circuit-inputs.json in the test log's scope: what a fake card for the test site would hold. */
     private val inputs = vectors("circuit-inputs.json")
     private val case = inputs.getJSONArray("cases").objects().first { it.getString("scope_string") == String(DeviceCore.scopeString(), Charsets.US_ASCII) }
     private val issuers = JSONArray(inputs.getJSONArray("issuers").objects().map { JSONObject().put("issuer", it.getString("issuer")).put("modulus", it.getString("modulus").removePrefix("0x")) })

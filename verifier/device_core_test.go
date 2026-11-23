@@ -67,11 +67,11 @@ func TestDeviceCoreRequests(t *testing.T) {
 			Accounts: accountsOf(q.Accounts), Challenge: q.Challenge, Issuer: q.Issuer,
 			SMTRoot: q.SMTRoot, Circuit: q.Circuit, Proof: q.Proof,
 		}
-		roster := verifier.Test
+		proofLog := verifier.Test
 		if _, ok := verifier.LookupScope(verifier.Production, q.ScopeString); ok {
-			roster = verifier.Production
+			proofLog = verifier.Production
 		}
-		if _, err := verifier.ParseLine(r.Line(), roster); err != nil {
+		if _, err := verifier.ParseLine(r.Line(), proofLog); err != nil {
 			t.Fatalf("request %d is not a well-formed record: %v", i, err)
 		}
 		if err := v.VerifyRecord(r); err != nil {

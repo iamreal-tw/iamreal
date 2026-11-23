@@ -1,4 +1,4 @@
-// The minimum app version each roster's site sends in `config` (`min_app`;
+// The minimum app version each proof log's site sends in `config` (`min_app`;
 // spec/min-app.md, ADR-0035): for the Android app and the iOS app, the lowest
 // build that may still do a card proof and the date in Taiwan that bound
 // starts on. An app with a lower build says from that date on that it must
@@ -6,13 +6,13 @@
 // back end never looks at app versions when it accepts a card proof.
 //
 // This file is the one place the numbers are written. Raising one is a pull
-// request that says why; `from` is the date the change of the roster rules
+// request that says why; `from` is the date the change of the record rules
 // or of the circuit takes effect (ADR-0035, "商店的審查和生效日"). The test
-// site and the production site each have their own values, by the roster
-// they serve (ROSTER_KIND, src/settings.ts).
+// site and the production site each have their own values, by the proof log
+// they serve (PROOF_LOG_KIND, src/settings.ts).
 //
 // Build 1 is the lowest build there is: no app stops yet.
-import type { Roster as RosterKind } from "iamreal-protocol/scope.ts";
+import type { ProofLog as ProofLogKind } from "iamreal-protocol/scope.ts";
 
 /** One app's entry of `min_app`, as `config` sends it. */
 export interface MinAppEntryJson {
@@ -27,7 +27,7 @@ export interface MinAppJson {
   readonly ios: MinAppEntryJson;
 }
 
-export const MIN_APP: Readonly<Record<RosterKind, MinAppJson>> = {
+export const MIN_APP: Readonly<Record<ProofLogKind, MinAppJson>> = {
   production: {
     android: { build: 1, from: "2026-11-20" },
     ios: { build: 1, from: "2026-11-20" },

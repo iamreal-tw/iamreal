@@ -1,7 +1,7 @@
 // The page of a card: design/copy/proof-page.md. The markup is the Go
 // backend's (e159ab9:server/pages/templates/proof.html, proof-missing.html,
 // parts.html). This file only turns data into HTML; the Worker
-// (src/visitor.ts) reads the address and the roster.
+// (src/visitor.ts) reads the address and the proof log.
 import { formatDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { SHORT_ID_LENGTH } from "iamreal-protocol/scoped-id.ts";
@@ -9,7 +9,7 @@ import type { CardsOfShortId, HistoryRow, PageCard } from "../page-data.ts";
 import { Html, html } from "./html.ts";
 import { type Document, NEEDS, type Site } from "./layout.ts";
 
-/** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test roster are not shown. */
+/** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test log are not shown. */
 export const PLATFORM = "threads";
 
 /**
@@ -22,7 +22,7 @@ export const LONG_ACCOUNT = 18;
 /**
  * Whether `username` is a Threads username in its one spelling, by the
  * platform table (spec/scope.md), which has the same row for Threads in
- * both rosters. The page links to and embeds an account by its name, so a
+ * both proof logs. The page links to and embeds an account by its name, so a
  * name that is not one stops the page.
  */
 export function isThreadsUsername(username: string): boolean {
@@ -192,7 +192,7 @@ export function proofMissing(site: Site, typed: string): Document {
 <h1 class="title">找不到這張島民證明</h1>
 <p><span class="typed">${site.host}/p/${typed}</span> 沒有對到任何一張自然人憑證。請確認網址有沒有抄錯。</p>
 <p>如果你是從某個帳號的個人檔案點進來的，請留意這張島民證明並不存在。</p>
-<p><a href="/roster#q">查一個 Threads 帳號</a></p>
+<p><a href="/proof-log#q">查一個 Threads 帳號</a></p>
 </section>`;
   return { title: "找不到這張島民證明", kind: "proof-missing", content };
 }

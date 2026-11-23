@@ -14,7 +14,7 @@ import { proofPageHeaders } from "../src/headers.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { checkVisitorHeaders } from "./pages.ts";
-import { freshRoster } from "./records.ts";
+import { freshProofLog } from "./records.ts";
 
 const FILES: Readonly<Record<string, string>> = {
   "index.html": '<!DOCTYPE html><title>the card proof page</title><script type="module" src="/proof/assets/index.js"></script>',
@@ -36,7 +36,7 @@ before(async () => {
     mkdirSync(join(dir, name, ".."), { recursive: true });
     writeFileSync(join(dir, name), text, "latin1");
   }
-  [worker, bare, production] = await Promise.all([startWorker({ proofFiles: dir }), startWorker(), startWorker({ proofFiles: dir, settings: { ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "roster-1" } })]);
+  [worker, bare, production] = await Promise.all([startWorker({ proofFiles: dir }), startWorker(), startWorker({ proofFiles: dir, settings: { PROOF_LOG_KIND: "production", PROOF_LOG_OBJECT_NAME: "proof-log-1" } })]);
 });
 after(async () => {
   await Promise.all([worker.close(), bare.close(), production.close()]);
@@ -44,21 +44,21 @@ after(async () => {
 });
 
 /**
- * The three headers as web/README.md, "頁面需要的標頭", writes them for a site of that kind of roster: the policy in
- * the code blocks of its section (the first the production roster's site's, the second the test roster's, which
+ * The three headers as web/README.md, "頁面需要的標頭", writes them for a site of that kind of proof log: the policy in
+ * the code blocks of its section (the first the production log's site's, the second the test log's, which
  * differ in the data domain alone), the other two in their headings.
  */
 function headersInWebReadme(kind: "test" | "production"): Record<string, string> {
   const readme = readFileSync(join(WORKER_DIR, "..", "web", "README.md"), "utf8");
   const section = readme.slice(readme.indexOf("\n## 頁面需要的標頭"));
   const policies = [...(/### `Content-Security-Policy`\n([\s\S]*?)\n### /.exec(section)?.[1] ?? "").matchAll(/\n```\n([^\n]+)\n```\n/g)].map((m) => m[1]!);
-  assert.equal(policies.length, 2, "web/README.md quotes the policy of the production roster's site, then the test roster's");
+  assert.equal(policies.length, 2, "web/README.md quotes the policy of the production log's site, then the test log's");
   const others = [...section.matchAll(/^### `([A-Za-z-]+): ([^`]+)`$/gm)].map((m) => [m[1]!.toLowerCase(), m[2]!]);
   assert.equal(others.length, 2, "web/README.md has a heading for each of the other two headers");
   return { "content-security-policy": policies[kind === "production" ? 0 : 1]!, ...Object.fromEntries(others) };
 }
 
-/** What a response of the card proof page has for headers: the three of web/README.md, nosniff, and on a test roster noindex; what describes the file aside. */
+/** What a response of the card proof page has for headers: the three of web/README.md, nosniff, and on a test log noindex; what describes the file aside. */
 function checkProofHeaders(what: string, res: Response, expect: { test?: boolean; more?: readonly string[] } = {}): void {
   const want = { ...headersInWebReadme(expect.test === false ? "production" : "test"), "x-content-type-options": "nosniff", ...(expect.test !== false && { "x-robots-tag": "noindex" }) };
   const got: Record<string, string> = {};
@@ -70,7 +70,7 @@ function checkProofHeaders(what: string, res: Response, expect: { test?: boolean
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-test("web/README.md quotes the three headers the page needs for each kind of roster, and they are the ones of src/headers.ts", () => {
+test("web/README.md quotes the three headers the page needs for each kind of proof log, and they are the ones of src/headers.ts", () => {
   for (const kind of ["production", "test"] as const) {
     const quoted = headersInWebReadme(kind);
     assert.deepEqual(Object.keys(quoted).sort(), ["content-security-policy", "cross-origin-opener-policy", "document-isolation-policy"]);
@@ -78,22 +78,22 @@ test("web/README.md quotes the three headers the page needs for each kind of ros
   }
 });
 
-test("the page may connect to its own origin and to the data domain of its roster, and to no other: the two sites' policies differ in that domain alone", () => {
+test("the page may connect to its own origin and to the data domain of its proof log, and to no other: the two sites' policies differ in that domain alone", () => {
   const connect = (kind: "test" | "production"): string | undefined => /(?:^|; )connect-src ([^;]*)/.exec(proofPageHeaders(kind)["Content-Security-Policy"]!)?.[1];
   assert.equal(connect("production"), "'self' https://data.iamreal.tw");
   assert.equal(connect("test"), "'self' https://test-data.iamreal.tw");
   assert.equal(proofPageHeaders("test")["Content-Security-Policy"]!.replace("https://test-data.iamreal.tw", "https://data.iamreal.tw"), proofPageHeaders("production")["Content-Security-Policy"]);
 });
 
-test("site/_headers and site/_redirects in the repository are the ones written from src/headers.ts for a test roster", () => {
+test("site/_headers and site/_redirects in the repository are the ones written from src/headers.ts for a test log", () => {
   assert.equal(readFileSync(join(WORKER_DIR, "site", "_headers"), "utf8"), siteHeaders("test"));
   assert.equal(readFileSync(join(WORKER_DIR, "site", "_redirects"), "utf8"), SITE_REDIRECTS);
-  // A production roster's differ in two things: no noindex, and its own data domain in the card proof page's policy.
+  // A production log's differ in two things: no noindex, and its own data domain in the card proof page's policy.
   assert.equal(
     siteHeaders("production"),
     siteHeaders("test")
       .replace(/^  X-Robots-Tag: noindex\n/gm, "")
-      .replace("a test roster", "a production roster")
+      .replace("a test log", "a production log")
       .replaceAll("https://test-data.iamreal.tw", "https://data.iamreal.tw"),
   );
   assert.ok(!siteHeaders("production").includes("X-Robots-Tag") && siteHeaders("test").includes("X-Robots-Tag: noindex"));
@@ -103,7 +103,7 @@ test("site/_headers and site/_redirects in the repository are the ones written f
 });
 
 test("/proof is the build's index.html, and every file of the build is under /proof/, each with the headers of web/README.md; none of them reaches the Worker's code", async () => {
-  await freshRoster(worker);
+  await freshProofLog(worker);
   await worker.seen();
   const page = await worker.fetch("/proof");
   assert.deepEqual([page.status, page.headers.get("content-type"), await page.text()], [200, "text/html; charset=utf-8", FILES["index.html"]]);
@@ -190,16 +190,16 @@ test("the page and its files take GET and HEAD only, and are asked again by thei
 });
 
 test("the settings do not reach the files: with settings the Worker answers 500 for, the page, the style sheet and the script are sent as before", async () => {
-  await worker.setSettings({ ROSTER_KIND: "production", ROSTER_OBJECT_NAME: "test-1" });
+  await worker.setSettings({ PROOF_LOG_KIND: "production", PROOF_LOG_OBJECT_NAME: "test-1" });
   assert.equal((await worker.fetch("/")).status, 500);
   checkProofHeaders("/proof", await worker.fetch("/proof"));
   checkVisitorHeaders("/pages.css", await worker.fetch("/pages.css"), { cache: "no-cache" });
   checkVisitorHeaders("/copy.js", await worker.fetch("/copy.js"), { cache: "no-cache" });
-  await freshRoster(worker);
+  await freshProofLog(worker);
 });
 
-test("a production roster's site: the same files, the same headers without noindex", async () => {
-  await freshRoster(production, { kind: "production" });
+test("a production log's site: the same files, the same headers without noindex", async () => {
+  await freshProofLog(production, { kind: "production" });
   const res = await production.fetch("/proof");
   assert.deepEqual([res.status, await res.text()], [200, FILES["index.html"]]);
   checkProofHeaders("/proof", res, { test: false });

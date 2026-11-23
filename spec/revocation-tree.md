@@ -129,7 +129,7 @@ CRL date − 1 day  ≤  d  ≤  CRL date + 3 days
 ```
 
 Otherwise the record is invalid with code `root`
-([`roster-rules.md`](roster-rules.md)). When no certificate was revoked
+([`record-rules.md`](record-rules.md)). When no certificate was revoked
 between two CRLs, both have the same tree and the same root; one usable CRL
 whose date fits is enough.
 
@@ -146,7 +146,7 @@ whose date fits is enough.
   appears. The bound may be widened later: records valid under 3 days stay
   valid under a wider bound. Narrowing it can change the result of records
   already written; if it changes any, the narrower bound takes effect from
-  an effective date ([`roster-rules.md`](roster-rules.md), "Changing these
+  an effective date ([`record-rules.md`](record-rules.md), "Changing these
   rules").
 
 ## Who checks what
@@ -198,7 +198,7 @@ archived CRLs.
 ## Archive index
 
 The archive comes with an index: one line per CRL file in the archive, in
-the same one-spelling form as roster lines ([`record.md`](record.md)): a fixed
+the same one-spelling form as proof log lines ([`record.md`](record.md)): a fixed
 template, keys in this order, no whitespace, each line ending in `LF`.
 
 ```
@@ -264,7 +264,7 @@ MOICA's layout, signed by test keys (not MOICA's), with their roots, and the
 proofs of absence of serial numbers in them, in the form of the circuit's
 inputs ([`circuit-inputs.md`](circuit-inputs.md)) that `iamreal-crl prove`
 prints; a serial number in the tree has none.
-[`vectors/roster-rules.json`](vectors/roster-rules.json): records whose root
+[`vectors/record-rules.json`](vectors/record-rules.json): records whose root
 is or is not recognized.
 [`../crl/testdata/`](../crl/testdata): synthetic CRLs, with whether each is
 usable, its reason code and its root (`expected.json`). Its `times/`: CRLs

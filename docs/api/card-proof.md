@@ -72,8 +72,8 @@ otherwise.
 
 ## `POST /api/v1/card-state`
 
-The state of one card, as computed by the roster rules
-([`spec/roster-rules.md`](../../spec/roster-rules.md)): its whole list of
+The state of one card, as computed by the record rules
+([`spec/record-rules.md`](../../spec/record-rules.md)): its whole list of
 accounts, the date of its last card proof, and what the rules count for it.
 One request answers for all platforms, because the card has one scoped ID
 for all of them (ADR-0017).
@@ -87,7 +87,7 @@ for all of them (ADR-0017).
 
   - `last_card_proof` and `proofs_on_last_date` are the card's. A card with
     no valid record has `null` and 0; this is not an error.
-  - `platforms` has one entry for every platform this roster accepts
+  - `platforms` has one entry for every platform this proof log accepts
     ([`spec/scope.md`](../../spec/scope.md)), keyed by the platform ID,
     whether or not the card declares an account there. The order of the
     entries means nothing.
@@ -104,11 +104,11 @@ for all of them (ADR-0017).
   - **The card's list** is the `current` of every entry where it is not
     `null`. It is not sent a second time in another form.
   - The dates of the individual switches are not sent. The rules do not
-    read them; they are in the roster.
+    read them; they are in the proof log.
   - `count` is the number of records the answer was computed at: every
     record stored at that moment, not the count of the last line published
-    in `fingerprints.jsonl`. The answer carries no roster fingerprint.
-- Errors: `400` `malformed`, also for a scope this roster does not accept.
+    in `fingerprints.jsonl`. The answer carries no proof log fingerprint.
+- Errors: `400` `malformed`, also for a scope this proof log does not accept.
 
 The server sends facts, not conclusions. The device computes the rest from
 them and from today's date in Taiwan by its own clock:
@@ -118,7 +118,7 @@ them and from today's date in Taiwan by its own clock:
 | Records of today, out of 3 | `proofs_on_last_date` if `last_card_proof` is today; 0 if it is earlier. If it is later, a card proof dated today is `date_order` (a card's dates do not go back) |
 | Switches left on a platform, out of 5 | 5 minus that entry's `switch_count` |
 | Whether changing the account on a platform today uses a switch | No if that entry's `correction_date` is today (a correction); yes otherwise |
-| What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Event rules") |
+| What a list would do on a platform | Its entry against the slot: `first`, `refresh`, `correction`, `switch`, `withdraw`, or blocked ([`spec/record-rules.md`](../../spec/record-rules.md), "Event rules") |
 | Whether the server may refuse a switch the rules allow | Only by an operating policy of the server; there is none by default (`switch_restricted`, below) |
 
 What the device does with it: shows the card's whole list, and lets the
@@ -127,10 +127,10 @@ that will be signed and what it does on every platform, including the
 accounts it withdraws by leaving them out and the switches it uses up; a
 list that the rules would refuse (`switch_limit`, `empty`, `daily_limit`)
 is not offered. The device cannot check the answer without the whole
-roster. A wrong answer cannot identify the cardholder. It can mislead them:
+proof log. A wrong answer cannot identify the cardholder. It can mislead them:
 a state that hides an account would lead to a list without it, which
 withdraws it; a wrong `correction_date` would present a switch as free. The
-cardholder sees the list before signing, and the roster would show what the
+cardholder sees the list before signing, and the proof log would show what the
 server answered wrongly.
 [`spec/list-consequence.md`](../../spec/list-consequence.md) defines how the
 device reads this answer and the platform table of `config`, and what it
@@ -178,9 +178,9 @@ Submits one card proof: the card's whole list of accounts.
   with the card's current list and does not fill in anything. The list is
   what the card signed; any other list fails verification.
 
-  The request is JSON, not a line of the roster. The order of the keys of
+  The request is JSON, not a line of the proof log. The order of the keys of
   the request and of an account, and whitespace between tokens, are free;
-  the server writes the roster line itself from the template. What is not
+  the server writes the proof log line itself from the template. What is not
   free is the content: the order of the accounts in the list, and one
   account per platform.
 
@@ -189,7 +189,7 @@ Submits one card proof: the card's whole list of accounts.
   ago, not accepted before, at most 5 submissions); verifies the record
   ([`spec/proof-verification.md`](../../spec/proof-verification.md)); checks
   that `smt_root` is the root of one of the two newest CRLs of `issuer` in
-  the mirror and that the newest is at most 3 days old; applies the roster
+  the mirror and that the newest is at most 3 days old; applies the record
   rules; applies its own policy on switches (`switch_restricted`). If
   everything passes it appends the record and marks the challenge as
   accepted, in one transaction.
@@ -200,7 +200,7 @@ Submits one card proof: the card's whole list of accounts.
   ```
 
   `kinds` has one entry for every platform on which the record has a kind
-  ([`spec/roster-rules.md`](../../spec/roster-rules.md)), in ascending order
+  ([`spec/record-rules.md`](../../spec/record-rules.md)), in ascending order
   of `platform`; there is at least one. `kind` is `first`, `refresh`,
   `correction`, `switch` or `withdraw`. `username` is the account: the one
   the list has for that platform, or for `withdraw` the one that was
@@ -216,7 +216,7 @@ Submits one card proof: the card's whole list of accounts.
   same account. A wrong number cannot identify the cardholder. A device
   that cannot read `kinds` or `account_cards`, or gets a `kind` it does not
   know, treats them as unknown and says only that the list was recorded:
-  the record is in the roster by then.
+  the record is in the proof log by then.
   [`spec/records-response.md`](../../spec/records-response.md) defines how
   the device reads this response and how it compares `kinds` with what its
   confirmation screen said, so that every client tells the same.
@@ -225,17 +225,17 @@ Submits one card proof: the card's whole list of accounts.
   | Status | Code | Meaning |
   |---|---|---|
   | `400` | `malformed` | The request cannot be read, or a field is not in its format |
-  | `400` | `scope` | The scope is not accepted by this roster |
-  | `400` | `platform` | An account of the list is on a platform this roster does not accept |
+  | `400` | `scope` | The scope is not accepted by this proof log |
+  | `400` | `platform` | An account of the list is on a platform this proof log does not accept |
   | `503` | `paused` | The server accepts no card proof for now. Nothing is wrong with the request, which was not looked at beyond its format |
   | `400` | `challenge_unknown` | Not issued by this server, or expired |
   | `400` | `challenge_used` | A card proof was already accepted for it |
   | `400` | `challenge_attempts` | Submitted more than 5 times |
   | `400` | `proof` | The record does not verify |
   | `400` | `root` | `smt_root` is not one of the two newest roots of the issuer |
-  | `400` | `date_order` | The roster rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the roster, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
-  | `400` | `empty`, `switch_limit`, `daily_limit` | The roster rule of that name. The whole list is refused; nothing is recorded for any platform |
-  | `403` | `switch_restricted` | The roster rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
+  | `400` | `date_order` | The record rule of that name (check 4): the challenge's date is more than 4 days before the latest date among the valid records of the proof log, or before the card's `last_card_proof`. The second happens to a card that took two challenges around midnight and submitted the later-dated one first; the earlier one cannot be submitted, and the card proof is made again with a new challenge. The whole list is refused; nothing is recorded for any platform |
+  | `400` | `empty`, `switch_limit`, `daily_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
+  | `403` | `switch_restricted` | The record rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
   | `429` | `rate_limited` | |
 
@@ -243,7 +243,7 @@ Submits one card proof: the card's whole list of accounts.
   submissions. The challenge is looked at twice (below), and a submission
   counts once the challenge passed the first look, wherever it fails after
   that: a proof that does not verify, `crl_stale`, a root that is not
-  accepted, a list the roster rules refuse, `switch_restricted`, a
+  accepted, a list the record rules refuse, `switch_restricted`, a
   `challenge_used` or `challenge_unknown` of the second look, and a `500`
   when the server's verifier could not run or the record could not be
   written. One that is `paused`, or `challenge_unknown` or `challenge_used`
@@ -260,10 +260,10 @@ Submits one card proof: the card's whole list of accounts.
      (also `accounts`), an extra key, a key twice, a key in another case, a
      value of another type. This comes first because without it there is
      no scope to look at.
-  2. `scope_string` is not a scope of this roster: `scope`.
+  2. `scope_string` is not a scope of this proof log: `scope`.
   3. `accounts` is a list, every element of it is an object with exactly
      the two keys `platform` and `username`, each once, both strings, and
-     at least one `platform` is not a platform ID of this roster:
+     at least one `platform` is not a platform ID of this proof log:
      `platform`.
   4. Anything else that is not in its format: `malformed`. For the list:
      `accounts` is not a list; an element is not an object of exactly those
@@ -277,7 +277,7 @@ Submits one card proof: the card's whole list of accounts.
 
   When several of the later codes apply, the first in this order: `paused`,
   `challenge_unknown`, `challenge_used`, `challenge_attempts`, `proof`,
-  `crl_stale`, `root`, the roster rules in their own order, then
+  `crl_stale`, `root`, the record rules in their own order, then
   `switch_restricted`. A proof made for one list and submitted with another
   is `proof`: the declaration code does not match.
 
@@ -293,8 +293,8 @@ Submits one card proof: the card's whole list of accounts.
 
   **`paused`**: the server accepts no card proof for now, and issues no
   challenge. There is one cause so far: the state of the cards the server
-  stores was computed by another version of the roster rules than the one
-  it runs ([`spec/roster-rules.md`](../../spec/roster-rules.md), "The
+  stores was computed by another version of the record rules than the one
+  it runs ([`spec/record-rules.md`](../../spec/record-rules.md), "The
   version number"), and writing a record from that state could accept one
   the rules refuse. `card-state` and `config` answer as ever. The device
   treats it as a code it does not know (below); the sentence for the
@@ -307,13 +307,13 @@ Submits one card proof: the card's whole list of accounts.
   from the state it showed; if it is surprised by the code, the state has
   changed, and it asks for it again.
 
-  **`switch_restricted`** is a rule of the server, not of the roster
-  ([`spec/roster-rules.md`](../../spec/roster-rules.md), "Not part of these
-  rules"). The roster rules give a card 5 switches on each platform. The
+  **`switch_restricted`** is a rule of the server, not of the proof log
+  ([`spec/record-rules.md`](../../spec/record-rules.md), "Not part of these
+  rules"). The record rules give a card 5 switches on each platform. The
   server may, by its operating policy, refuse a switch that is within the
   rules' limit. By default it has no such policy. It never refuses on this
   ground a record without a `switch` (a `first`, `refresh`, `correction` or
-  `withdraw` on every platform). Nobody can check from the roster why a
+  `withdraw` on every platform). Nobody can check from the proof log why a
   record was not appended; anybody can check that a record that was
   appended is within the 5. A device that gets this code shows it as it is:
   the server did not accept the switch, and the card proof is not recorded.
@@ -333,7 +333,7 @@ Submits one card proof: the card's whole list of accounts.
   {"crl_max_age_days":3,"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}],"min_app":{"android":{"build":12,"from":"2027-03-01"},"ios":{"build":9,"from":"2027-03-01"}}}
   ```
 
-  - `platforms` is the platform table of this roster
+  - `platforms` is the platform table of this proof log
     ([`spec/scope.md`](../../spec/scope.md)), one element per row, in
     ascending order of `platform`: the platform ID, the display name, and
     the `username` format exactly as written in the table.
@@ -370,15 +370,15 @@ own for is a platform the device does not know (`card-state`, above). A
 `[…]{m,n}` ([`spec/scope.md`](../../spec/scope.md)); the device reads that
 form itself, and a row whose format is not in it is a row it cannot read.
 
-**The table is a convenience for the device.** Which platforms a roster
+**The table is a convenience for the device.** Which platforms a proof log
 accepts, and in which format, is decided by the table of the specification,
 which every re-verifier has; a row the server adds on its own leads to
-records that make the roster file broken. The device does not take from
+records that make the log file broken. The device does not take from
 this response, or from any other, which scope string the card signs
 (ADR-0016). A wrong table cannot identify the cardholder, and it does not
 name the platforms the cardholder sees: the device shows its own names
 (ADR-0019). It can lose them a card proof, with a platform or a format the
-roster does not accept; the cardholder sees the platform ID and the account
+proof log does not accept; the cardholder sees the platform ID and the account
 in the list before signing.
 
 What the device does with what it cannot read:
@@ -398,22 +398,22 @@ What the device does with what it cannot read:
 
 - Response `200`: `{"date":"2026-11-20","count":138,"fingerprint":"…"}`:
   the last line of the fingerprint file the server published
-  ([`spec/record.md`](../../spec/record.md), "The published roster"), with
+  ([`spec/record.md`](../../spec/record.md), "The published proof log"), with
   the fields of that line: the date in Taiwan on which it was written, the
-  number of records at that moment, and their roster fingerprint
+  number of records at that moment, and their proof log fingerprint
   (ADR-0021). It is the last line the server wrote to that file and read
   back, as the server keeps it; the file is not read to answer. A line the
   server has decided on and not yet written to the file is not answered.
-- A roster that was never published:
+- A proof log that was never published:
   `{"date":null,"count":0,"fingerprint":"0000…0000"}`, no date, no record,
-  and the roster fingerprint of the empty roster (64 zeros).
+  and the proof log fingerprint of the empty proof log (64 zeros).
 - It says nothing of the records written since that line: `count` here can
   be less than the `count` of `card-state`.
-- It is answered while the roster is paused.
+- It is answered while the proof log is paused.
 
 ## Public files
 
-The CRL archive and the published roster are not served by the server.
+The CRL archive and the published proof log are not served by the server.
 They are files on their own domain, `https://data.iamreal.tw/`, downloaded
 without going through the server's code (ADR-0027). The test site's are on
 `https://test-data.iamreal.tw/`, in the same layout (ADR-0028).
@@ -422,7 +422,7 @@ without going through the server's code (ADR-0027). The test site's are on
 |---|---|
 | `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
-| `https://data.iamreal.tw/roster/` | The roster directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published roster"), and the card state files of the last days (`card-state/`, [`spec/roster-rules.md`](../../spec/roster-rules.md), "The card state file") |
+| `https://data.iamreal.tw/proof-log/` | The log directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published proof log"), and the card state files of the last days (`card-state/`, [`spec/record-rules.md`](../../spec/record-rules.md), "The card state file") |
 
 Only `GET` from the card proof page's origin is allowed across origins
 (CORS), and the page's `Content-Security-Policy` lets it connect to this

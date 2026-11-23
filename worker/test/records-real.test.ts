@@ -11,7 +11,7 @@ import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
 import { CARD_PROOF_TESTDATA, cardProofIssuers } from "./crls.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { type Submission, cardState, checkRoster, kindsOf, submit } from "./records.ts";
+import { type Submission, cardState, checkProofLog, kindsOf, submit } from "./records.ts";
 
 interface CardProof {
   /** The back end's clock, in Taiwan time. */
@@ -27,7 +27,7 @@ interface CardProof {
 const cardProofs = JSON.parse(readFileSync(join(CARD_PROOF_TESTDATA, "card-proofs.json"), "utf8")) as CardProof[];
 const crl = (name: string): Uint8Array => new Uint8Array(readFileSync(join(CARD_PROOF_TESTDATA, "crl", name)));
 
-describe("fourteen card proofs with real proofs, from the challenge to the roster", () => {
+describe("fourteen card proofs with real proofs, from the challenge to the proof log", () => {
   let worker: TestWorker;
   before(async () => {
     // The policy on late switches is on: card proof 10 is a fourth switch (cmd/iamreal-verify/testdata/card-proofs/README.md).
@@ -75,14 +75,14 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
     assert.equal(seq, 11);
 
     // What is stored, computed again from the stored lines alone (spec/record.md): the testdata has no record hashes
-    // to compare with, so the lines, their hashes and the roster fingerprint are checked as a roster file is. Each
+    // to compare with, so the lines, their hashes and the proof log fingerprint are checked as a log file is. Each
     // line is the accepted submission, and its stored hash the one the `201` gave.
-    const stored = await checkRoster(worker);
+    const stored = await checkProofLog(worker);
     assert.deepEqual(
       stored.map(({ seq: _, ...fields }) => fields),
       written.map(({ body: b }) => ({ scopeString: b.scope_string, scopedId: b.scoped_id, accounts: b.accounts, challenge: b.challenge, issuer: b.issuer, smtRoot: b.smt_root, circuit: b.circuit, proof: b.proof })),
     );
-    assert.deepEqual((await worker.roster.stored()).records.map((r) => r.record_hash), written.map((w) => w.recordHash));
+    assert.deepEqual((await worker.proofLog.stored()).records.map((r) => r.record_hash), written.map((w) => w.recordHash));
 
     // The state the back end answers.
     const never = { current: null, last_declared: null, switch_count: 0, correction_date: null };
@@ -103,21 +103,21 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
     });
   });
 
-  // The roster the test above wrote, published, and re-verified by the command as anyone runs it: built from
+  // The proof log the test above wrote, published, and re-verified by the command as anyone runs it: built from
   // cmd/iamreal-verify, with the native `bb` verifying every proof again. Its one option beyond the default reading is
   // the test build's `-test-issuers`, for the throwaway keys the testdata's cards and CRLs are signed by.
   const bb = process.env.IAMREAL_BB;
   const hasGo = spawnSync("go", ["version"]).status === 0;
-  test("published at the next midnight, the roster passes Go's iamreal-verify with the native bb: every proof, the CRL archive, the card state file", { skip: bb === undefined ? "IAMREAL_BB is not set" : false }, async () => {
+  test("published at the next midnight, the proof log passes Go's iamreal-verify with the native bb: every proof, the CRL archive, the card state file", { skip: bb === undefined ? "IAMREAL_BB is not set" : false }, async () => {
     assert.ok(hasGo, "IAMREAL_BB is set and go is not installed: this must run here");
     await worker.setClock(new Date("2026-11-25T00:00:05+08:00"));
-    await worker.roster.runAlarm();
+    await worker.proofLog.runAlarm();
     const files = await worker.files();
     // The object's own alarm may have published on an earlier date of the test above, when that took long enough for
     // it to ring: there is then a line and a card state file for that date too. The last line is today's either way.
     const names = files.map((f) => f.key);
-    for (const name of ["roster/0000000000000000.jsonl", "roster/card-state/2026-11-25.jsonl", "roster/fingerprints.jsonl", "roster/hashes/0000000000000000.txt"]) assert.ok(names.includes(name), name);
-    assert.match(new TextDecoder().decode(files.find((f) => f.key === "roster/fingerprints.jsonl")!.bytes), /\{"date":"2026-11-25","count":11,"fingerprint":"[0-9a-f]{64}"\}\n$/);
+    for (const name of ["proof-log/0000000000000000.jsonl", "proof-log/card-state/2026-11-25.jsonl", "proof-log/fingerprints.jsonl", "proof-log/hashes/0000000000000000.txt"]) assert.ok(names.includes(name), name);
+    assert.match(new TextDecoder().decode(files.find((f) => f.key === "proof-log/fingerprints.jsonl")!.bytes), /\{"date":"2026-11-25","count":11,"fingerprint":"[0-9a-f]{64}"\}\n$/);
 
     mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
     const out = mkdtempSync(join(WORKER_DIR, "test-output", "published-real-"));
@@ -135,13 +135,13 @@ describe("fourteen card proofs with real proofs, from the challenge to the roste
       const command = join(out, "iamreal-verify");
       const build = spawnSync("go", ["build", "-tags", "iamrealtest", "-o", command, "./cmd/iamreal-verify"], { cwd: join(WORKER_DIR, ".."), encoding: "utf8" });
       assert.equal(build.status, 0, build.stderr);
-      const run = spawnSync(command, ["-bb", bb!, "-crs", join(out, "crs"), "-roster", "test", "-json", "-test-issuers", CARD_PROOF_TESTDATA, "-data", join(out, "data")], { encoding: "utf8" });
+      const run = spawnSync(command, ["-bb", bb!, "-crs", join(out, "crs"), "-proof-log", "test", "-json", "-test-issuers", CARD_PROOF_TESTDATA, "-data", join(out, "data")], { encoding: "utf8" });
       assert.equal(run.status, 0, `${run.stdout.slice(0, 2000)}\n${run.stderr}`);
       const verified = JSON.parse(run.stdout) as { valid: boolean; results: { seq: number; valid: boolean }[] };
       assert.equal(verified.valid, true);
       assert.deepEqual(verified.results.map((r) => [r.seq, r.valid]), Array.from({ length: 11 }, (_, i) => [i + 1, true]));
-      assert.match(run.stderr, /fingerprints\.jsonl: [1-5] line\(s\), every fingerprint is the roster's/);
-      assert.match(run.stderr, /hashes\/: 1 list\(s\), every list is the roster's/);
+      assert.match(run.stderr, /fingerprints\.jsonl: [1-5] line\(s\), every fingerprint is the proof log's/);
+      assert.match(run.stderr, /hashes\/: 1 list\(s\), every list is the proof log's/);
       assert.ok(run.stderr.includes("card-state/2026-11-25.jsonl: count 11 of fingerprints.jsonl, 11 record(s) re-verified: 2 card(s) the same, 0 skipped\n"), run.stderr);
       rmSync(out, { recursive: true, force: true });
     } catch (e) {

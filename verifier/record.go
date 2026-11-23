@@ -24,7 +24,7 @@ const (
 	MaxSeq = 1<<53 - 1
 )
 
-// Record is one record of a roster (spec/record.md, "Fields"), its values
+// Record is one record of a proof log (spec/record.md, "Fields"), its values
 // written exactly as in its line.
 type Record struct {
 	Seq         uint64
@@ -121,15 +121,15 @@ func decodeProof(s string) ([]byte, error) {
 }
 
 // CheckValues checks every value against its format (spec/record.md,
-// "Fields"), in a roster whose accepted scopes and platforms are those of
-// roster.
-func (r *Record) CheckValues(roster Roster) error {
+// "Fields"), in a proof log whose accepted scopes and platforms are those of
+// proof log.
+func (r *Record) CheckValues(proofLog ProofLog) error {
 	if r.Seq < 1 || r.Seq > MaxSeq {
 		return errors.New("seq: not from 1 to 2^53 − 1")
 	}
-	scope, ok := LookupScope(roster, r.ScopeString)
+	scope, ok := LookupScope(proofLog, r.ScopeString)
 	if !ok {
-		return fmt.Errorf("scope_string: not an accepted scope of the %s roster", roster)
+		return fmt.Errorf("scope_string: not an accepted scope of the %s log", proofLog)
 	}
 	if scope.LastSeq != 0 && r.Seq > scope.LastSeq {
 		return fmt.Errorf("scope_string: the scope accepts records up to seq %d", scope.LastSeq)
@@ -137,7 +137,7 @@ func (r *Record) CheckValues(roster Roster) error {
 	if _, err := ParseScopedID(r.ScopedID); err != nil {
 		return err
 	}
-	if err := CheckAccounts(roster, r.Accounts); err != nil {
+	if err := CheckAccounts(proofLog, r.Accounts); err != nil {
 		return err
 	}
 	if _, err := ParseChallenge(r.Challenge); err != nil {
@@ -167,11 +167,11 @@ func knownIssuerName(name string) bool {
 	return false
 }
 
-// ParseLine checks one line of a roster file (spec/record.md, "Lines and
+// ParseLine checks one line of a log file (spec/record.md, "Lines and
 // files"): line is its bytes up to and including its LF. It parses the line,
 // checks every value, writes the line again from the template and compares
 // bytes. An error means the line is malformed.
-func ParseLine(line []byte, roster Roster) (*Record, error) {
+func ParseLine(line []byte, proofLog ProofLog) (*Record, error) {
 	if len(line) == 0 || line[len(line)-1] != '\n' {
 		return nil, errors.New("line does not end with LF")
 	}
@@ -186,7 +186,7 @@ func ParseLine(line []byte, roster Roster) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.CheckValues(roster); err != nil {
+	if err := r.CheckValues(proofLog); err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(r.Line(), line) {

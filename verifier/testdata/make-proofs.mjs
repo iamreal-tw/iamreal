@@ -44,7 +44,7 @@ const VK_SHA256 = {
   card_proof_rs4096: "bed43ed823a5273292150785bce9a24a24162711a25e8c3a4337a61bdc9f38c2",
 };
 const SCOPE = "iamreal-test:public:0__________";
-// One record per circuit; together a test roster in which both are valid.
+// One record per circuit; together a test log in which both are valid.
 // The challenges are those of spec/vectors/challenge.json.
 const RECORDS = [
   { circuit: "card_proof_rs2048", issuer: "G2", bits: 2048,

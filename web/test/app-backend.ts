@@ -1,12 +1,12 @@
 // The back end and the card the apps' card proof tests run against
 // (android/, ios/): the Worker (worker/) in the local workerd, a fake MOICA,
 // a card made of test keys. It runs the command it is given, a platform's
-// tests in a simulator, then has Go's iamreal-verify re-verify the roster
+// tests in a simulator, then has Go's iamreal-verify re-verify the proof log
 // those tests wrote. Nothing real: throwaway issuer keys, a throwaway card.
 //
 //   node --experimental-strip-types test/app-backend.ts <kinds> -- <command> [arguments]
 //
-// <kinds> is what the command's card proofs are to leave in the roster, one
+// <kinds> is what the command's card proofs are to leave in the proof log, one
 // record after the other, each the kind on Threads: for example
 // `first,refresh,switch,withdraw`.
 //
@@ -33,10 +33,10 @@
 //      pin           the card's PIN
 // 5. Runs the command. It must exit 0.
 // 6. Moves the Worker's clock to the midnight after the latest time it was
-//    set to, has it publish the roster, copies the bucket and runs
+//    set to, has it publish the proof log, copies the bucket and runs
 //    cmd/iamreal-verify on it (built with the tag iamrealtest, for the
 //    throwaway issuer keys; the native bb named by IAMREAL_BB verifies
-//    every proof): the roster is valid, every record is, and the kinds are
+//    every proof): the proof log is valid, every record is, and the kinds are
 //    <kinds>.
 //
 // The apps do not import worker/ (CLAUDE.md); what they share with this
@@ -149,7 +149,7 @@ try {
     // 6. Published, and re-verified ---------------------------------------------------
     const midnight = new Date(Math.floor((clock.getTime() + TAIWAN_MS) / DAY_MS + 1) * DAY_MS - TAIWAN_MS + 5_000);
     await worker.setClock(midnight);
-    await worker.roster.runAlarm();
+    await worker.proofLog.runAlarm();
     const data = join(out, "data");
     for (const f of await worker.files()) {
       mkdirSync(dirname(join(data, f.key)), { recursive: true });
@@ -168,13 +168,13 @@ try {
     writeFileSync(join(crs, "bn254_g1.dat"), point);
     const verify = join(out, "iamreal-verify");
     execFileSync("go", ["build", "-tags", "iamrealtest", "-o", verify, "./cmd/iamreal-verify"], { cwd: repo, stdio: "inherit" });
-    const run = spawnSync(verify, ["-bb", BB, "-crs", crs, "-roster", "test", "-json", "-test-issuers", issuersDir, "-data", data], { encoding: "utf8" });
+    const run = spawnSync(verify, ["-bb", BB, "-crs", crs, "-proof-log", "test", "-json", "-test-issuers", issuersDir, "-data", data], { encoding: "utf8" });
     writeFileSync(join(out, "verify.json"), run.stdout);
     writeFileSync(join(out, "verify.txt"), run.stderr);
     if (check(run.status === 0, `iamreal-verify ended with ${run.status}${run.status === 0 ? "" : `: ${run.stderr.slice(-2000)}`}`)) {
       const v = JSON.parse(run.stdout) as { valid: boolean; results?: { valid: boolean; kinds?: { platform: string; kind: string }[] }[] };
       const written = (v.results ?? []).map((r) => (r.valid ? r.kinds!.map((k) => `${k.platform}:${k.kind}`).join("+") : "invalid"));
-      check(v.valid && JSON.stringify(written) === JSON.stringify(kinds.map((k) => `threads:${k}`)), `iamreal-verify: the roster is valid, and its records are ${JSON.stringify(written)}`);
+      check(v.valid && JSON.stringify(written) === JSON.stringify(kinds.map((k) => `threads:${k}`)), `iamreal-verify: the proof log is valid, and its records are ${JSON.stringify(written)}`);
     }
   }
 } catch (e) {

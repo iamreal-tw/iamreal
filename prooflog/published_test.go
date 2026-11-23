@@ -1,9 +1,9 @@
-package roster_test
+package prooflog_test
 
-// Tests against spec/vectors/record.json: the roster fingerprint
+// Tests against spec/vectors/record.json: the proof log fingerprint
 // ("fingerprint_version", "empty_fingerprint", the fingerprint of every
-// record of "rosters"), the record hash list of each of "rosters", and the
-// roster directories of "generated_roster".
+// record of "proof logs"), the record hash list of each of "proof logs", and the
+// log directories of "generated_proof_log".
 
 import (
 	"crypto/sha256"
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamreal-tw/iamreal/roster"
+	"github.com/iamreal-tw/iamreal/prooflog"
 	"github.com/iamreal-tw/iamreal/verifier"
 )
 
@@ -21,28 +21,28 @@ type publishedVectors struct {
 	Tokens             map[string]string `json:"tokens"`
 	FingerprintVersion string            `json:"fingerprint_version"`
 	EmptyFingerprint   string            `json:"empty_fingerprint"`
-	Rosters            []struct {
-		Roster  string `json:"roster"`
-		Records []struct {
+	ProofLogs          []struct {
+		ProofLog string `json:"proof_log"`
+		Records  []struct {
 			Line        string `json:"line"`
 			RecordHash  string `json:"record_hash"`
 			Fingerprint string `json:"fingerprint"`
 		} `json:"records"`
 		Fingerprint string `json:"fingerprint"`
 		HashList    string `json:"hash_list"`
-	} `json:"rosters"`
+	} `json:"proof_logs"`
 	Generated struct {
-		Roster       string `json:"roster"`
+		ProofLog     string `json:"proof_log"`
 		LineTemplate string `json:"line_template"`
 		Fingerprints []struct {
 			Count       int    `json:"count"`
 			Fingerprint string `json:"fingerprint"`
 		} `json:"fingerprints"`
 		Directories []struct {
-			Name   string `json:"name"`
-			Roster string `json:"roster"`
-			Count  int    `json:"count"`
-			Files  []struct {
+			Name     string `json:"name"`
+			ProofLog string `json:"proof_log"`
+			Count    int    `json:"count"`
+			Files    []struct {
 				Name     string `json:"name"`
 				FirstSeq uint64 `json:"first_seq"`
 				Lines    int    `json:"lines"`
@@ -57,7 +57,7 @@ type publishedVectors struct {
 			} `json:"hash_lists"`
 			Fingerprint string `json:"fingerprint"`
 		} `json:"directories"`
-	} `json:"generated_roster"`
+	} `json:"generated_proof_log"`
 }
 
 func loadPublished(t *testing.T) *publishedVectors {
@@ -74,10 +74,10 @@ func (v *publishedVectors) sub(s string) string {
 	return s
 }
 
-// generated returns the first n records of the generated roster.
+// generated returns the first n records of the generated proof log.
 func (v *publishedVectors) generated(t *testing.T, n int) []*verifier.Record {
 	t.Helper()
-	r := rosterOf(t, v.Generated.Roster)
+	r := proofLogOf(t, v.Generated.ProofLog)
 	out := make([]*verifier.Record, 0, n)
 	for seq := 1; seq <= n; seq++ {
 		line := strings.Replace(v.sub(v.Generated.LineTemplate), "@SEQ@", strconv.Itoa(seq), 1)
@@ -97,31 +97,31 @@ func sha256Hex(b []byte) string {
 
 func TestVectorsFingerprint(t *testing.T) {
 	v := loadPublished(t)
-	if v.FingerprintVersion != roster.FingerprintVersion {
-		t.Errorf("version %q, want %q", roster.FingerprintVersion, v.FingerprintVersion)
+	if v.FingerprintVersion != prooflog.FingerprintVersion {
+		t.Errorf("version %q, want %q", prooflog.FingerprintVersion, v.FingerprintVersion)
 	}
-	if v.EmptyFingerprint != roster.EmptyFingerprint {
-		t.Errorf("empty fingerprint %q, want %q", roster.EmptyFingerprint, v.EmptyFingerprint)
+	if v.EmptyFingerprint != prooflog.EmptyFingerprint {
+		t.Errorf("empty fingerprint %q, want %q", prooflog.EmptyFingerprint, v.EmptyFingerprint)
 	}
-	for _, rs := range v.Rosters {
-		t.Run("rosters/"+rs.Roster, func(t *testing.T) {
-			fp := roster.EmptyFingerprint
+	for _, rs := range v.ProofLogs {
+		t.Run("proofLogs/"+rs.ProofLog, func(t *testing.T) {
+			fp := prooflog.EmptyFingerprint
 			var file []byte
 			for _, c := range rs.Records {
-				fp = roster.NextFingerprint(fp, c.RecordHash)
+				fp = prooflog.NextFingerprint(fp, c.RecordHash)
 				if fp != c.Fingerprint {
 					t.Errorf("fingerprint after %s… is %s, want %s", c.RecordHash[:8], fp, c.Fingerprint)
 				}
 				file = append(file, v.sub(c.Line)...)
 			}
-			records, got, broken := roster.ReadFile(file, rosterOf(t, rs.Roster))
+			records, got, broken := prooflog.ReadFile(file, proofLogOf(t, rs.ProofLog))
 			if broken != nil {
 				t.Fatal(broken)
 			}
 			if got != rs.Fingerprint {
 				t.Errorf("ReadFile: fingerprint %s, want %s", got, rs.Fingerprint)
 			}
-			parts := roster.DirectoryFiles(records)
+			parts := prooflog.DirectoryFiles(records)
 			if len(parts) != 1 || parts[0].HashList.Name != "hashes/0000000000000000.txt" {
 				t.Fatalf("files %v", names(parts))
 			}
@@ -133,17 +133,17 @@ func TestVectorsFingerprint(t *testing.T) {
 	all := v.generated(t, 2001)
 	for _, c := range v.Generated.Fingerprints {
 		t.Run(fmt.Sprintf("generated/%d", c.Count), func(t *testing.T) {
-			if got := roster.Fingerprint(all[:c.Count]); got != c.Fingerprint {
+			if got := prooflog.Fingerprint(all[:c.Count]); got != c.Fingerprint {
 				t.Errorf("fingerprint %s, want %s", got, c.Fingerprint)
 			}
 		})
 	}
 }
 
-func names(parts []roster.DirectoryPart) []string {
+func names(parts []prooflog.DirectoryPart) []string {
 	var out []string
 	for _, p := range parts {
-		out = append(out, p.RosterFile.Name, p.HashList.Name)
+		out = append(out, p.ProofLogFile.Name, p.HashList.Name)
 	}
 	return out
 }
@@ -153,7 +153,7 @@ func TestVectorsDirectory(t *testing.T) {
 	all := v.generated(t, 2001)
 	for _, d := range v.Generated.Directories {
 		t.Run(d.Name, func(t *testing.T) {
-			parts := roster.DirectoryFiles(all[:d.Count])
+			parts := prooflog.DirectoryFiles(all[:d.Count])
 			var want []string
 			for i := range d.Files {
 				want = append(want, d.Files[i].Name, d.HashLists[i].Name)
@@ -162,7 +162,7 @@ func TestVectorsDirectory(t *testing.T) {
 				t.Fatalf("files %v, want %v", got, want)
 			}
 			for i, f := range d.Files {
-				got := parts[i].RosterFile
+				got := parts[i].ProofLogFile
 				if n := strings.Count(string(got.Data), "\n"); n != f.Lines {
 					t.Errorf("%s: %d lines, want %d", f.Name, n, f.Lines)
 				}
@@ -183,7 +183,7 @@ func TestVectorsDirectory(t *testing.T) {
 					t.Errorf("%s: SHA-256 %s, want %s", h.Name, s, h.SHA256)
 				}
 			}
-			if got := roster.Fingerprint(all[:d.Count]); got != d.Fingerprint {
+			if got := prooflog.Fingerprint(all[:d.Count]); got != d.Fingerprint {
 				t.Errorf("fingerprint %s, want %s", got, d.Fingerprint)
 			}
 		})

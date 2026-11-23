@@ -62,7 +62,7 @@
 | 識別碼 | `tw.iamreal.app` | `tw.iamreal.app.dev` |
 | 圖示下面的名稱（`design/copy/app.md`） | 島民證明 測試 | 島民證明 dev |
 | 連哪裡 | 上線前：`https://test.iamreal.tw`、`https://test-data.iamreal.tw`（ADR-0028） | 同左，上線後也是 |
-| 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_ROSTER_TEST`） | 同左，上線後也是 |
+| 卡片簽的場合字串 | 上線前：`iamreal-test:public:0`（核心的 `IDC_PROOF_LOG_TEST`） | 同左，上線後也是 |
 | 怎麼裝 | TestFlight、App Store（從 GitHub Actions 上傳：「上傳到 TestFlight」） | 用線裝（「怎麼用線裝到手機」）；給少數測試者用 Ad Hoc，還沒有做 |
 
 兩個組態都以 `Config/Test.xcconfig` 為底：這個檔照組態定識別碼，並定一個編譯條件 `IAMREAL_ENV_TEST`；`App/AppEnvironment.swift` 照編譯條件給網址和哪一份證明紀錄，沒有條件就編不過。名稱照組態寫在專案檔（`INFOPLIST_KEY_CFBundleDisplayName`）。app 裡沒有切換環境的設定，後台也不能叫 app 換環境。上線那天用一個 PR 讓 Release 改用正式網站的設定檔；正式網站的設定現在還沒有。

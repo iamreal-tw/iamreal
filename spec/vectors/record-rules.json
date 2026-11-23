@@ -1,12 +1,12 @@
 {
-  "spec": "roster-rules",
+  "spec": "record-rules",
   "status": "draft",
   "rules_version": 2,
-  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `roster` says whose platform table applies (spec/scope.md): production has threads, a test roster test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none.",
+  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `proof_log` says whose platform table applies (spec/scope.md): production has threads, a test log test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none.",
   "cases": [
     {
       "name": "first declaration, refresh, withdraw by the empty list",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -112,7 +112,7 @@
     },
     {
       "name": "A to B to A on three dates is two switches; a third on a fourth date is a switch too",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -266,7 +266,7 @@
     },
     {
       "name": "withdraw then declare another account counts as a switch",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -388,7 +388,7 @@
     },
     {
       "name": "withdraw then declare the same account is a refresh",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -510,7 +510,7 @@
     },
     {
       "name": "the empty list as a card's first record is empty",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -536,7 +536,7 @@
     },
     {
       "name": "the empty list after everything was withdrawn is empty",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -632,7 +632,7 @@
     },
     {
       "name": "an invalid record does not change the state or the last card proof date",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -862,7 +862,7 @@
     },
     {
       "name": "a blocked switch leaves last_declared; declaring the old account again is a refresh",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1119,7 +1119,7 @@
     },
     {
       "name": "a blocked switch adds nothing to switch_count",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1371,7 +1371,7 @@
     },
     {
       "name": "order is by seq: a record dated before its card's last card proof is date_order; the last card proof stays the latest date",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1466,7 +1466,7 @@
     },
     {
       "name": "two cards on one account; one card per account at a time",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1622,7 +1622,7 @@
     },
     {
       "name": "a record that does not verify changes nothing",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1739,7 +1739,7 @@
     },
     {
       "name": "two cards on one account are listed by scoped_id, not by seq",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -1862,7 +1862,7 @@
     },
     {
       "name": "accounts are sorted by byte value",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2047,7 +2047,7 @@
     },
     {
       "name": "a withdrawn account is not listed; the card is, with no account",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2126,7 +2126,7 @@
     },
     {
       "name": "a challenge used by an earlier record makes the later one invalid",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2221,7 +2221,7 @@
     },
     {
       "name": "a challenge counts as used even in a record that does not verify, and across cards",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2274,7 +2274,7 @@
     },
     {
       "name": "root not recognized",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2303,7 +2303,7 @@
     },
     {
       "name": "root: the date may be 1 day before to 3 days after the CRL date",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2447,7 +2447,7 @@
     },
     {
       "name": "dating into the past: records dated two years back are caught by date_order",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2691,7 +2691,7 @@
     },
     {
       "name": "date_order: 4 days before the latest valid date is allowed, 5 is not",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2842,7 +2842,7 @@
     },
     {
       "name": "a record dated 3 days ahead does not make honest records invalid",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -2971,7 +2971,7 @@
     },
     {
       "name": "one root, several CRLs: the record needs one whose date fits",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3068,7 +3068,7 @@
     },
     {
       "name": "date_order counts only valid records",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3161,7 +3161,7 @@
     },
     {
       "name": "date_order: a record dated a day before its card's last card proof; another card on that date is not affected",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3339,7 +3339,7 @@
     },
     {
       "name": "daily_limit counts the records of the card's last card proof: the fourth that date is daily_limit, an earlier date is date_order, a later date starts again",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3564,7 +3564,7 @@
     },
     {
       "name": "a record dated before its card's last card proof that the event rules would block is date_order: check 4 comes before switch_limit",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3816,7 +3816,7 @@
     },
     {
       "name": "a record that does not verify is `proof` even if its challenge was used before",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -3911,7 +3911,7 @@
     },
     {
       "name": "challenge reuse is checked before the event rules",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -4001,7 +4001,7 @@
     },
     {
       "name": "daily_limit: three valid records of a card on one date; a fourth is invalid, whatever it changes",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -4167,7 +4167,7 @@
     },
     {
       "name": "daily_limit: declare, correct a mistyped account and withdraw fit in one day",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -4295,7 +4295,7 @@
     },
     {
       "name": "daily_limit: the next date allows three more",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -4477,7 +4477,7 @@
     },
     {
       "name": "daily_limit: records invalid under another rule do not count",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -4669,7 +4669,7 @@
     },
     {
       "name": "daily_limit: a record the event rules block is switch_limit or empty, not daily_limit",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -5087,7 +5087,7 @@
     },
     {
       "name": "daily_limit: two cards count separately",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -5368,7 +5368,7 @@
     },
     {
       "name": "around midnight: records dated the day before their card's last card proof are date_order, not daily_limit; the last date still allows three",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -5615,7 +5615,7 @@
     },
     {
       "name": "a record dated a day before its card's last card proof is date_order; proofs_on_last_date stays 1",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -5710,7 +5710,7 @@
     },
     {
       "name": "five switches on five dates, then a sixth blocked; the same sixth still blocked years later",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -5962,7 +5962,7 @@
     },
     {
       "name": "a first followed on its date by a correction and a second correction; switch_count stays 0",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6089,7 +6089,7 @@
     },
     {
       "name": "a switch followed on its date by a correction; switch_count is 1",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6216,7 +6216,7 @@
     },
     {
       "name": "A to B to A on one date is a switch and a correction, count 1; on three dates two switches",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6447,7 +6447,7 @@
     },
     {
       "name": "a first on one date and another account on the next date is a switch",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6547,7 +6547,7 @@
     },
     {
       "name": "a correction after the fifth switch, on its date, is valid; the same change a date later is switch_limit",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6804,7 +6804,7 @@
     },
     {
       "name": "a withdraw and a refresh on one date open nothing: another account that date is a switch",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -6953,7 +6953,7 @@
     },
     {
       "name": "an account withdrawn and another declared on the date of the first is a correction",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -7075,7 +7075,7 @@
     },
     {
       "name": "around midnight: dates must be equal; a record of another card in between changes nothing",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -7363,7 +7363,7 @@
     },
     {
       "name": "a first, two corrections, then a fourth record on that date is daily_limit",
-      "roster": "production",
+      "proof_log": "production",
       "events": [
         {
           "seq": 1,
@@ -7512,7 +7512,7 @@
     },
     {
       "name": "a list of two accounts as a card's first record",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -7613,7 +7613,7 @@
     },
     {
       "name": "one record with a first on one platform and a switch on the other",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -7741,7 +7741,7 @@
     },
     {
       "name": "a withdrawal by leaving an account out, with the other account kept",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -7859,7 +7859,7 @@
     },
     {
       "name": "the empty list withdraws everything; then the same account is a refresh and another a switch",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -8021,7 +8021,7 @@
     },
     {
       "name": "the empty list as a card's first record, and after everything was withdrawn, is empty",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -8140,7 +8140,7 @@
     },
     {
       "name": "switches count per platform; a sixth switch on one platform blocks the record, the other platform unchanged",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -8512,7 +8512,7 @@
     },
     {
       "name": "after the fifth switch: a refresh, a withdraw, a refresh after it and a first on the other platform are valid",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -8851,7 +8851,7 @@
     },
     {
       "name": "a platform left alone never blocks: the same account, or none, on a platform with no switch left",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -9206,7 +9206,7 @@
     },
     {
       "name": "a switch on one platform opens no correction on the other: a change there that date is a switch",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -9377,7 +9377,7 @@
     },
     {
       "name": "a correction on one platform and a blocked switch on the other: switch_limit, the correction not applied",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -9701,7 +9701,7 @@
     },
     {
       "name": "the daily limit counts per card, across changes on different platforms",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -9921,7 +9921,7 @@
     },
     {
       "name": "the same username on two platforms is two accounts",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -10101,7 +10101,7 @@
     },
     {
       "name": "two cards listing the same account",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,
@@ -10291,7 +10291,7 @@
     },
     {
       "name": "an invalid record of each code changes no slot and no last_card_proof; the change after them is still a correction",
-      "roster": "test",
+      "proof_log": "test",
       "events": [
         {
           "seq": 1,

@@ -1,11 +1,11 @@
 // Hanging a proof on a profile: design/copy/hang.md. The markup is the Go
 // backend's (e159ab9:server/pages/templates/hang.html). This file only turns data
-// into HTML; the Worker (src/visitor.ts) reads the address and the roster.
+// into HTML; the Worker (src/visitor.ts) reads the address and the proof log.
 //
 // With a card's account (/hang/<short ID>): part 2 and the two lines of
 // part 3. The link is written out without https://, selectable, as the page
 // of the card writes it (hang.md: 和島民證明頁面上的寫法相同), so on a test
-// roster's site in its own domain (design/copy/test-site.md); the copy
+// log's site in its own domain (design/copy/test-site.md); the copy
 // buttons' script (/copy.js) shows the button that copies it whole, with
 // https://, hidden without the script. Without one (/hang): part 2 as it is
 // 從首頁點進來時, with no script. No pictures yet (hang.md, 還沒定的).

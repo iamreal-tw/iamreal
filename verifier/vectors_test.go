@@ -82,19 +82,19 @@ func TestVectorsChallenge(t *testing.T) {
 	}
 }
 
-var rosters = map[string]verifier.Roster{"production": verifier.Production, "test": verifier.Test}
+var proofLogs = map[string]verifier.ProofLog{"production": verifier.Production, "test": verifier.Test}
 
-func rosterOf(t *testing.T, name string) verifier.Roster {
+func proofLogOf(t *testing.T, name string) verifier.ProofLog {
 	t.Helper()
-	r, ok := rosters[name]
+	r, ok := proofLogs[name]
 	if !ok {
-		t.Fatalf("roster %q", name)
+		t.Fatalf("proof log %q", name)
 	}
 	return r
 }
 
-// scopeOf returns the one accepted scope string of roster r.
-func scopeOf(r verifier.Roster) string { return verifier.Scopes(r)[0].String }
+// scopeOf returns the one accepted scope string of proof log r.
+func scopeOf(r verifier.ProofLog) string { return verifier.Scopes(r)[0].String }
 
 // vectorAccount is an account as the vectors write it.
 type vectorAccount struct {
@@ -113,14 +113,14 @@ func accountsOf(list []vectorAccount) []verifier.Account {
 func TestVectorsScope(t *testing.T) {
 	var v struct {
 		Scopes []struct {
-			Roster      string `json:"roster"`
+			ProofLog    string `json:"proof_log"`
 			ScopeString string `json:"scope_string"`
 			Accepted    bool   `json:"accepted"`
 			ScopePacked string `json:"scope_packed"`
 			Reason      string `json:"reason"`
 		} `json:"scopes"`
 		Platforms []struct {
-			Roster      string `json:"roster"`
+			ProofLog    string `json:"proof_log"`
 			Platform    string `json:"platform"`
 			Accepted    bool   `json:"accepted"`
 			DisplayName string `json:"display_name"`
@@ -139,8 +139,8 @@ func TestVectorsScope(t *testing.T) {
 	}
 	loadVectors(t, "scope.json", &v)
 	for _, c := range v.Scopes {
-		t.Run(fmt.Sprintf("scope/%s/%q", c.Roster, c.ScopeString), func(t *testing.T) {
-			r := rosterOf(t, c.Roster)
+		t.Run(fmt.Sprintf("scope/%s/%q", c.ProofLog, c.ScopeString), func(t *testing.T) {
+			r := proofLogOf(t, c.ProofLog)
 			_, accepted := verifier.LookupScope(r, c.ScopeString)
 			if accepted != c.Accepted {
 				t.Fatalf("accepted %v, want %v (%s)", accepted, c.Accepted, c.Reason)
@@ -163,17 +163,17 @@ func TestVectorsScope(t *testing.T) {
 			}
 		})
 	}
-	// Every platform each roster accepts is in the vectors, and no other.
+	// Every platform each proof log accepts is in the vectors, and no other.
 	listed := map[string]int{}
 	for _, c := range v.Platforms {
-		t.Run(fmt.Sprintf("platform/%s/%q", c.Roster, c.Platform), func(t *testing.T) {
-			r := rosterOf(t, c.Roster)
+		t.Run(fmt.Sprintf("platform/%s/%q", c.ProofLog, c.Platform), func(t *testing.T) {
+			r := proofLogOf(t, c.ProofLog)
 			p, accepted := verifier.LookupPlatform(r, c.Platform)
 			if accepted != c.Accepted {
 				t.Fatalf("accepted %v, want %v (%s)", accepted, c.Accepted, c.Reason)
 			}
 			if accepted {
-				listed[c.Roster]++
+				listed[c.ProofLog]++
 				if p.DisplayName != c.DisplayName {
 					t.Errorf("display name %q, want %q", p.DisplayName, c.DisplayName)
 				}
@@ -192,9 +192,9 @@ func TestVectorsScope(t *testing.T) {
 			}
 		})
 	}
-	for name, r := range rosters {
+	for name, r := range proofLogs {
 		if n := len(verifier.Platforms(r)); n != listed[name] {
-			t.Errorf("the %s roster accepts %d platforms, the vectors list %d", name, n, listed[name])
+			t.Errorf("the %s log accepts %d platforms, the vectors list %d", name, n, listed[name])
 		}
 	}
 	for _, c := range v.Usernames {
@@ -436,27 +436,27 @@ type vectorRecord struct {
 
 // recordVectors is spec/vectors/record.json with its tokens replaced.
 type recordVectors struct {
-	Version string            `json:"version"`
-	Tokens  map[string]string `json:"tokens"`
-	Rosters []struct {
-		Roster  string `json:"roster"`
-		Records []struct {
+	Version   string            `json:"version"`
+	Tokens    map[string]string `json:"tokens"`
+	ProofLogs []struct {
+		ProofLog string `json:"proof_log"`
+		Records  []struct {
 			Record         vectorRecord `json:"record"`
 			AccountsText   string       `json:"accounts_text"`
 			Line           string       `json:"line"`
 			PreimageSHA256 string       `json:"preimage_sha256"`
 			RecordHash     string       `json:"record_hash"`
 		} `json:"records"`
-	} `json:"rosters"`
+	} `json:"proof_logs"`
 	WellFormedLines []struct {
-		Roster string `json:"roster"`
-		Line   string `json:"line"`
-		Note   string `json:"note"`
+		ProofLog string `json:"proof_log"`
+		Line     string `json:"line"`
+		Note     string `json:"note"`
 	} `json:"well_formed_lines"`
 	MalformedLines []struct {
-		Roster string `json:"roster"`
-		Line   string `json:"line"`
-		Reason string `json:"reason"`
+		ProofLog string `json:"proof_log"`
+		Line     string `json:"line"`
+		Reason   string `json:"reason"`
 	} `json:"malformed_lines"`
 }
 
@@ -478,10 +478,10 @@ func loadRecordVectors(t *testing.T, path string) *recordVectors {
 		}
 		return s
 	}
-	for i := range v.Rosters {
-		for j := range v.Rosters[i].Records {
-			v.Rosters[i].Records[j].Line = sub(v.Rosters[i].Records[j].Line)
-			v.Rosters[i].Records[j].Record.Proof = sub(v.Rosters[i].Records[j].Record.Proof)
+	for i := range v.ProofLogs {
+		for j := range v.ProofLogs[i].Records {
+			v.ProofLogs[i].Records[j].Line = sub(v.ProofLogs[i].Records[j].Line)
+			v.ProofLogs[i].Records[j].Record.Proof = sub(v.ProofLogs[i].Records[j].Record.Proof)
 		}
 	}
 	for i := range v.WellFormedLines {
@@ -514,10 +514,10 @@ func TestVectorsRecord(t *testing.T) {
 			}
 		}
 	})
-	for _, rs := range v.Rosters {
-		roster := rosterOf(t, rs.Roster)
+	for _, rs := range v.ProofLogs {
+		proofLog := proofLogOf(t, rs.ProofLog)
 		for _, c := range rs.Records {
-			t.Run(fmt.Sprintf("rosters/%s/seq%d", rs.Roster, c.Record.Seq), func(t *testing.T) {
+			t.Run(fmt.Sprintf("proofLogs/%s/seq%d", rs.ProofLog, c.Record.Seq), func(t *testing.T) {
 				cr := c.Record
 				r := &verifier.Record{Seq: cr.Seq, ScopeString: cr.ScopeString, ScopedID: cr.ScopedID,
 					Accounts: accountsOf(cr.Accounts), Challenge: cr.Challenge, Issuer: cr.Issuer,
@@ -528,7 +528,7 @@ func TestVectorsRecord(t *testing.T) {
 				if got := string(r.Line()); got != c.Line {
 					t.Errorf("line differs from the template")
 				}
-				parsed, err := verifier.ParseLine([]byte(c.Line), roster)
+				parsed, err := verifier.ParseLine([]byte(c.Line), proofLog)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -547,7 +547,7 @@ func TestVectorsRecord(t *testing.T) {
 	}
 	for i, c := range v.WellFormedLines {
 		t.Run(fmt.Sprintf("well_formed/%d", i), func(t *testing.T) {
-			r, err := verifier.ParseLine([]byte(c.Line), rosterOf(t, c.Roster))
+			r, err := verifier.ParseLine([]byte(c.Line), proofLogOf(t, c.ProofLog))
 			if err != nil {
 				t.Fatalf("%v (%s)", err, c.Note)
 			}
@@ -558,13 +558,13 @@ func TestVectorsRecord(t *testing.T) {
 	}
 	for _, c := range v.MalformedLines {
 		t.Run("malformed/"+c.Reason, func(t *testing.T) {
-			if _, err := verifier.ParseLine([]byte(c.Line), rosterOf(t, c.Roster)); err == nil {
+			if _, err := verifier.ParseLine([]byte(c.Line), proofLogOf(t, c.ProofLog)); err == nil {
 				t.Errorf("accepted (%s)", c.Reason)
 			}
 		})
 	}
-	// The roster fingerprints, v.Files and the published roster are run by
-	// the roster package, which reads whole files.
+	// The proof log fingerprints, v.Files and the published proof log are run by
+	// the proof log package, which reads whole files.
 }
 
 // testRecord returns a well-formed production record to change one field of.
