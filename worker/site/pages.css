@@ -334,9 +334,10 @@ h2 {
 
 /* Titles ------------------------------------------------------------------------ */
 
+/* Every page's heading, in the display face (design/DESIGN.md, 字). */
 .title {
-  font-family: var(--font-body);
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
   font-size: 21px;
   line-height: 1.55;
   margin: 28px 0 8px;
