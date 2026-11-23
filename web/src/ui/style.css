@@ -887,11 +887,11 @@ time {
   padding: 22px 0;
 }
 
-.hang-phone {
+.hang > .hang-phone {
   padding-right: 22px;
 }
 
-.hang-computer {
+.hang > .hang-computer {
   border-left: 1px solid var(--line);
   padding-left: 22px;
 }
@@ -1125,11 +1125,11 @@ time {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .hang-phone {
+  .hang > .hang-phone {
     padding-right: 0;
   }
 
-  .hang-computer {
+  .hang > .hang-computer {
     border-left: 0;
     border-top: 1px solid var(--line);
     padding-left: 0;
