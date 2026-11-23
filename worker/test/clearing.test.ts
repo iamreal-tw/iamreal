@@ -47,8 +47,11 @@ async function clearedOn(): Promise<string | undefined> {
 
 test("the steps of README.md: the proof log is empty, takes records, and is published; the cleared proof log's object writes nothing more", async () => {
   // A test log with a record, published once. The dates are this test's own, not wrangler.jsonc's.
-  const replacedLines = (): number => worker.logLines().filter((l) => l.includes('"proof_log_object_replaced"')).length;
+  // The lines from here on: freshProofLog has replaced the proof log's object before, which said so.
   const clearedName = await freshProofLog(worker, { clearedOn: "2026-11-07" });
+  const since = worker.logLines().length;
+  const replaced = (): string[] => worker.logLines().slice(since).filter((l) => l.includes('"proof_log_object_replaced"'));
+  const replacedLines = (): number => replaced().length;
   const root = await publishG3(worker);
   const card = newCard();
   await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
@@ -69,7 +72,7 @@ test("the steps of README.md: the proof log is empty, takes records, and is publ
   await cleared.hasAlarm();
   assert.equal(await cleared.hasAlarm(), false);
   assert.equal(replacedLines(), 1);
-  assert.deepEqual(worker.logLines().filter((l) => l.includes('"proof_log_object_replaced"')).map((l) => l.slice(l.indexOf("{"))), [JSON.stringify({ event: "proof_log_object_replaced", object: clearedName })]);
+  assert.deepEqual(replaced().map((l) => l.slice(l.indexOf("{"))), [JSON.stringify({ event: "proof_log_object_replaced", object: clearedName })]);
   // The proof log is empty at once: no record, nothing published, the card is unknown, the pages say the new date.
   assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
   assert.equal((await cardState(worker, card)).count, 0);
@@ -147,4 +150,30 @@ test("proof-log/ emptied only after the next midnight: nothing is published unti
   const now = await directory();
   assert.deepEqual([...now.keys()], ["card-state/2026-11-22.jsonl", "fingerprints.jsonl"]);
   assert.equal(text(now.get("fingerprints.jsonl")!), fingerprintLine({ date: parseDay("2026-11-22")!, count: 0, fingerprint: EMPTY_FINGERPRINT }));
+});
+
+test("the tests' own new proof log (freshProofLog) replaces the one before as a deploy does: its alarm, about to publish, is gone, and it writes nothing into the bucket the new one uses", async () => {
+  // A proof log whose publication is due: a record, then the next day; the challenge of a submission sets the alarm,
+  // which is then a second ahead.
+  const before = await freshProofLog(worker);
+  const root = await publishG3(worker);
+  await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
+  await worker.setClock(tw("2026-11-21", "12:00:00"));
+  await worker.issueChallenge();
+  const alarm = await worker.proofLog.alarmInMs();
+  assert.ok(alarm !== null && alarm <= 1000, `the alarm is ${alarm} ms ahead`);
+
+  const since = worker.logLines().length;
+  await freshProofLog(worker);
+  const old = worker.clearedProofLog(before);
+  assert.equal(await old.hasAlarm(), false);
+  assert.deepEqual(
+    worker.logLines().slice(since).filter((l) => l.includes('"proof_log_object_replaced"')).map((l) => l.slice(l.indexOf("{"))),
+    [JSON.stringify({ event: "proof_log_object_replaced", object: before })],
+  );
+  // Its alarm, had it still been set: nothing is published, the new proof log's bucket stays empty.
+  await worker.setClock(tw("2026-11-22", "12:00:00"));
+  await old.runAlarm();
+  assert.deepEqual(await worker.files("proof-log/"), []);
+  assert.deepEqual(worker.logLines().slice(since).filter((l) => l.includes("fingerprint_file_differs") || l.includes("proof_log_not_published")), []);
 });

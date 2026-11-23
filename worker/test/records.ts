@@ -102,15 +102,30 @@ let proofLogs = 0;
 /**
  * From now on the Worker serves a proof log without a record and an archive
  * without a CRL, at noon of 2026-11-20 in Taiwan: a proof log's object with a
- * new name, and an empty bucket. Returns the object's name.
+ * new name, and an empty bucket. Returns the object's name. The object of
+ * the proof log before is replaced as a deploy replaces it
+ * (`switchProofLog`), before the bucket is emptied: nothing of it is
+ * written there afterwards.
  */
 export async function freshProofLog(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
-  for (const file of await worker.files()) await worker.deleteFile(file.key);
   proofLogs++;
   const name = settings.kind === "production" ? `proof-log-${proofLogs}` : `test-records-${proofLogs}`;
-  await worker.setSettings({ PROOF_LOG_KIND: settings.kind ?? "test", PROOF_LOG_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_PROOF_LOG_CLEARED_ON: settings.clearedOn }) });
+  await worker.switchProofLog({ PROOF_LOG_KIND: settings.kind ?? "test", PROOF_LOG_OBJECT_NAME: name, ...(settings.restrictLateSwitches && { RESTRICT_LATE_SWITCHES: "true" }), ...(settings.clearedOn !== undefined && { TEST_PROOF_LOG_CLEARED_ON: settings.clearedOn }) });
+  for (const file of await worker.files()) await worker.deleteFile(file.key);
   await worker.setClock(START);
   return name;
+}
+
+/**
+ * For a test about to compare the lines one request writes with every line
+ * written meanwhile (`logLines().slice(…)`): the proof log's object has no
+ * alarm about to ring, which would write its own lines in between. Its
+ * alarm is not set, or set further ahead than such a test takes. Fails at
+ * once when it is not so, rather than now and then on the comparison.
+ */
+export async function alarmNotSoon(worker: TestWorker): Promise<void> {
+  const ms = await worker.proofLog.alarmInMs();
+  assert.ok(ms === null || ms > 30 * 1000, `the proof log's alarm rings in ${ms} ms, while the test compares the lines`);
 }
 
 /** A moment given in Taiwan time. */

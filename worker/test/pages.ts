@@ -36,6 +36,15 @@ export function cardStarting(prefix: string): string {
  * not go back), each at noon of its date with a CRL of that date in the
  * mirror; the clock is left at noon of `today`. Every submission must be
  * written.
+ *
+ * The object's timed work that is due by then is done before this returns:
+ * on Cloudflare its alarm would have rung on each of those days, and
+ * published the proof log and deleted the challenges that expired. Left
+ * undone, all of it would be due at once, and the alarm would be set to
+ * ring a second later, by the runtime's clock and not the test's
+ * (`setAlarmForTimedWork`): at whatever moment of the test that is, with a
+ * line in the log if the publication fails, and with no alarm set while it
+ * runs. What is next due is then the publication of the day after `today`.
  */
 export async function pagesWorld(worker: TestWorker, today: string, recs: readonly Rec[], settings: { kind?: "test" | "production" } = {}): Promise<void> {
   await freshProofLog(worker, { ...settings, clearedOn: CLEARED_ON });
@@ -52,6 +61,7 @@ export async function pagesWorld(worker: TestWorker, today: string, recs: readon
     assert.equal(res.status, 201, `${x.date} ${x.card} ${x.accounts.join(" ")}: ${await res.clone().text()}`);
   }
   await worker.setClock(tw(today, "12:00:00"));
+  await worker.proofLog.runAlarm();
 }
 
 export { mustSubmit };
