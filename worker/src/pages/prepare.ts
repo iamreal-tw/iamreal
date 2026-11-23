@@ -16,7 +16,7 @@ const MOICA_SITE = "https://moica.nat.gov.tw/";
 export function preparePage(): Document {
   const content = html`<section class="intro">
 <h1 class="title">過卡需要什麼</h1>
-<p>用電腦過卡要先準備好讀卡機和內政部的元件。</p>
+<p>用電腦過卡要先準備好讀卡機和內政部的元件。用手機過卡只要手機和卡片，不用看這一頁。</p>
 </section>
 <div class="columns">
 <section class="needs">
@@ -35,7 +35,7 @@ export function preparePage(): Document {
 <li><span class="n">1</span><div><b>下載並安裝內政部的「跨平台網頁元件」</b><p>到<a href="${MOICA_DOWNLOAD}">內政部憑證管理中心的下載頁</a>，選你的作業系統（Windows 或 macOS），照畫面安裝。安裝完成後，關掉所有網頁，再重新打開瀏覽器。</p></div></li>
 <li><span class="n">2</span><div><b>確認元件裝好了</b><p>Windows：「開始」的「所有程式」裡有「跨平台網頁元件」資料夾。macOS：打開「應用程式」裡的 HiPKILocalSignServer，上面寫「目前狀態為：開啟中」；寫「關閉中」的話，按「啟動HiPKILocalSignServer」。</p></div></li>
 <li><span class="n">3</span><div><b>接上讀卡機，插入自然人憑證</b><p>晶片朝讀卡機裡面插到底。</p></div></li>
-<li><span class="n">4</span><div><b>開始過卡</b><p>回到島民證明，按「我要換島民證明」。</p></div></li>
+<li><span class="n">4</span><div><b>開始過卡</b><p>回到島民證明，按「我要換島民證明」，選「我的電腦有讀卡機」。</p></div></li>
 </ol>
 </section>
 </div>
@@ -50,7 +50,7 @@ export function preparePage(): Document {
 <section class="situation"><h3>卡片被鎖住、忘了 PIN</h3>
 <p>PIN 連續輸入錯誤三次，卡片會被鎖住。請到<a href="${MOICA_SITE}">內政部憑證管理中心的網站</a>解鎖或重設 PIN。我們不知道你的 PIN，也沒辦法替你解鎖。</p></section>
 <section class="situation"><h3>沒有讀卡機</h3>
-<p>現在只能用讀卡機過卡。之後會有「島民證明」app，用手機感應卡片，不需要讀卡機和元件。</p></section>
+<p>可以改用手機：下載「島民證明」app，用手機感應卡片，不需要讀卡機和元件。</p></section>
 </section>`;
   return { title: "過卡需要什麼", kind: "prepare", content };
 }

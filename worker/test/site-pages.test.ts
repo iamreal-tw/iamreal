@@ -291,6 +291,8 @@ describe("what a card proof needs", () => {
   });
 
   test("the sentences it shares with the card proof's screens are card-proof.json's", () => {
+    const useReader = (JSON.parse(readCopy("card-proof.json")) as { app: Record<string, string> }).app.use_reader!;
+    assert.ok(block("prepare.md", "3. ").join("\n").includes(`選「${useReader}」`), `prepare.md step 4 says 選「${useReader}」`);
     const situations = block("prepare.md", "4. ").join("\n");
     const s = cardProofSentences();
     const [unreachable] = s.componentUnreachable.split("。");
