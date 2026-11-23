@@ -47,6 +47,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { ISSUER_NAMES } from "../src/issuers.ts";
+import { FONT_FILE } from "../scripts/site-files.ts";
 import { testProofLogLine } from "./copy.ts";
 import { newestCrls, readIndex } from "../src/crl-index.ts";
 import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
@@ -136,7 +137,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
 
   // The files Static Assets sends.
   const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": STYLE_SHEET_CACHE };
-  for (const path of ["/pages.css", "/copy.js"]) {
+  for (const path of ["/pages.css", "/copy.js", `/${FONT_FILE}`]) {
     await check(`GET ${path}`, async () => {
       const res = await file(path);
       await res.arrayBuffer();

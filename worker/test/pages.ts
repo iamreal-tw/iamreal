@@ -112,6 +112,9 @@ const NAV_LINKS = `<a href="/verify">怎麼驗證島民證明</a>
 /** The mark of a test log as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
 export const testProofLogMark = (date: string): string => `<p class="test-proof-log">${testProofLogLine(date).replace(date, `<time>${date}</time>`)}</p>`;
 
+/** Where the style sheet loads the headings' typeface from: a file of Static Assets (scripts/site-files.ts, `FONT_FILE`). */
+export const FONT_PATH = "/fonts/GenRyuMin2TW-B.woff2";
+
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
 
