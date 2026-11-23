@@ -627,6 +627,8 @@ const screens = join(out, "screens");
 mkdirSync(screens);
 /** The whole page, as tall as it is. */
 async function screenshot(name: string, p: Page = page): Promise<void> {
+  // No scroll bar: the page as wide as the window (design/screens/: 1280px on a desktop).
+  await p.send("Emulation.setScrollbarsHidden", { hidden: true });
   const m = await p.send("Page.getLayoutMetrics");
   const h = Math.ceil(m.cssContentSize?.height ?? m.contentSize.height);
   const w = Math.ceil(m.cssLayoutViewport?.clientWidth ?? 1100);
