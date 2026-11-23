@@ -2410,7 +2410,7 @@ await tryStep("a page on another site opens this page (Cross-Origin-Opener-Polic
 await tryStep("the production build's step 1: one platform, named", async () => {
   const prodDist = join(out, "dist-production");
   await build({ root: web, configFile: join(web, "vite.config.ts"), mode: "production", logLevel: "warn", build: { outDir: prodDist, emptyOutDir: true } });
-  const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".json": "application/json", ".svg": "image/svg+xml" };
+  const types: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm", ".json": "application/json", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
   const site = createServer((req, res) => {
     // The page at /proof, its files under /proof/, as the server serves them.
     const path = new URL(req.url ?? "/", "http://x").pathname;

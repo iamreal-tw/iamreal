@@ -107,8 +107,8 @@ const NEEDED: readonly string[] = [
   "crs/bn254_g1_compressed_2p18.dat",
   "crs/bn254_g2.dat",
 ];
-/** What the build writes under assets/: scripts, a style sheet, Noir's WebAssembly. */
-const ASSET = /^assets\/[A-Za-z0-9_.-]+\.(js|css|wasm)$/;
+/** What the build writes under assets/: scripts, a style sheet, Noir's WebAssembly, the headings' typeface (design/fonts/). */
+const ASSET = /^assets\/[A-Za-z0-9_.-]+\.(js|css|wasm|woff2)$/;
 /** MOICA's component on the cardholder's computer (web/src/target.ts). */
 const COMPONENT = "http://localhost:61161";
 /** What only a build with the tests' card, keys or component holds (web/test/build.test.ts has the same list). */
