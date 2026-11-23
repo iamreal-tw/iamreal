@@ -41,17 +41,19 @@
 
 ### 網頁的過卡流程（`/proof/`）
 
+實作版是 `web/` 的無頭瀏覽器測試（`web/test/e2e/ui.ts`）在 1280px 寬拍的，只認得 Threads 的平台表（第 1 步是正式的建置）；帳號、島民編號、日期是測試的假資料。
+
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `card-proof-web-1-before-desktop.png` | 第 1 步：開始之前 | 定稿版 |
-| `card-proof-web-2-read-desktop.png` | 第 2 步：讀取卡片 | 定稿版 |
-| `card-proof-web-2-read-revoked-desktop.png` | 第 2 步：憑證已經被廢止，停在這裡 | 定稿版 |
-| `card-proof-web-3-pin-desktop.png` | 第 3 步：輸入 PIN | 定稿版 |
-| `card-proof-web-4-accounts-first-desktop.png` | 第 4 步：你的帳號，還沒宣告過 | 定稿版 |
-| `card-proof-web-4-accounts-existing-desktop.png` | 第 4 步：你的帳號，已經有宣告 | 定稿版 |
-| `card-proof-web-5-confirm-new-desktop.png` | 第 5 步：確認，新宣告 | 定稿版 |
-| `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，更換 | 定稿版 |
-| `card-proof-web-5-progress-desktop.png` | 第 5 步：進行中 | 定稿版 |
+| `card-proof-web-1-before-desktop.png` | 第 1 步：開始之前（正式的建置，只認得 Threads） | 實作版 |
+| `card-proof-web-2-read-desktop.png` | 第 2 步：讀取卡片 | 實作版 |
+| `card-proof-web-2-read-revoked-desktop.png` | 第 2 步：憑證已經被廢止，停在這裡 | 實作版 |
+| `card-proof-web-3-pin-desktop.png` | 第 3 步：輸入 PIN | 實作版 |
+| `card-proof-web-4-accounts-first-desktop.png` | 第 4 步：你的帳號，還沒宣告過 | 實作版 |
+| `card-proof-web-4-accounts-existing-desktop.png` | 第 4 步：你的帳號，已經有宣告 | 實作版 |
+| `card-proof-web-5-confirm-new-desktop.png` | 第 5 步：確認，新宣告 | 實作版 |
+| `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，改成別的帳號（實作版是當天宣告的帳號再改掉，不算一次更換） | 實作版 |
+| `card-proof-web-5-progress-desktop.png` | 第 5 步：進行中 | 實作版 |
 | `card-proof-web-6-done-desktop.png` | 第 6 步：完成 | 定稿版 |
 
 ### app 的過卡流程

@@ -29,8 +29,8 @@
 // send the cardholder elsewhere. They have no link to another page
 // (docs/design/principles.md, principle 1), but for the one written after
 // a stop that the cardholder cannot get past on this page (links.prepare,
-// after stops.component_unreachable). The new tab gets the account typed and nothing
-// else; this page loads nothing from the platform.
+// after stops.component_unreachable). The new tab gets the account typed
+// and nothing else; this page loads nothing from the platform.
 //
 // Every sentence comes from copy.ts; the platforms, their display names and
 // formats from the server's table (the engine's CardStatus); each
@@ -79,7 +79,6 @@ export interface AppOptions {
 
 /** The six steps (card-proof.md). */
 const STEPS = 6;
-
 
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
   // A new tab: leaving this page would end the card proof.
