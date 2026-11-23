@@ -415,26 +415,17 @@ describe("every page", () => {
     }
   });
 
-  test("the style sheet: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
+  test("the style sheet: site/pages.css, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
     await freshProofLog(worker, { clearedOn: CLEARED_ON });
     await worker.seen();
     const res = await worker.fetch("/pages.css");
     assert.deepEqual([res.status, res.headers.get("content-type")], [200, "text/css; charset=utf-8"]);
     checkVisitorHeaders("/pages.css", res, { cache: "no-cache" });
     const css = await res.text();
-    assert.ok(css.includes(".test-proof-log {") && css.includes(".threads-profile"));
-    // The Go back end's style sheet, byte for byte, but for one rule added after
-    // the mark of a test log: the date in it is not broken at a hyphen on a narrow screen.
-    const added = `
-/* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
-.test-proof-log time {
-  white-space: nowrap;
-}
-`;
-    assert.equal(css.split(added).length, 2, "the style sheet has the added rule once");
-    assert.ok(css.includes(`  letter-spacing: 0.1em;\n}\n${added}\n[hidden] {`), "right after the rule of the mark");
-    // Nothing of another origin, and no script.
-    assert.doesNotMatch(css, /url\(|@import|https?:|expression\(/i);
+    assert.equal(css, readFileSync(join(WORKER_DIR, "site", "pages.css"), "utf8"));
+    // Nothing of another origin, and no script: the one address is the typeface of this site (test/style-sheet.test.ts).
+    assert.doesNotMatch(css, /@import|https?:|expression\(/i);
+    assert.deepEqual([...css.matchAll(/url\(([^)]*)\)/g)].map((m) => m[1]), [`"${FONT_PATH}"`]);
     const etag = res.headers.get("etag");
     assert.match(etag ?? "", /^"[0-9a-f]+"$/);
     const again = await worker.fetch("/pages.css", { headers: { "If-None-Match": etag! } });
