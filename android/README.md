@@ -9,7 +9,7 @@
 - **讀卡**。用 NFC 讀真卡片的程式還沒有搬進這個程式庫（[#163](https://github.com/iamreal-tw/iamreal/issues/163)）。在那之前，發出去的安裝檔和用線裝的建置裡，「卡片」的位置是一個永遠讀不到卡的東西（`app/src/real/…/Target.kt` 的 `NoCardReader`）：按「感應卡片」會停在「沒有感應到卡片」，PIN 送不到任何地方
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
-- 完成畫面最上面的記號動畫；顏色、字級、間距（`design/tokens.json` 還沒有定，現在是墨色和紙色兩個顏色）
+- 完成畫面最上面的記號動畫；顏色、字級、間距（主題還沒照 `design/tokens.json` 改，現在是墨色和紙色兩個顏色）
 
 ## 兩種 build
 
