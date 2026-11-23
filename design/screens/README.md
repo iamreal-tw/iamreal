@@ -52,7 +52,7 @@
 | `card-proof-web-4-accounts-first-desktop.png` | 第 4 步：你的帳號，還沒宣告過 | 實作版 |
 | `card-proof-web-4-accounts-existing-desktop.png` | 第 4 步：你的帳號，已經有宣告 | 實作版 |
 | `card-proof-web-5-confirm-new-desktop.png` | 第 5 步：確認，新宣告 | 實作版 |
-| `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，改成別的帳號（實作版是當天宣告的帳號再改掉，不算一次更換） | 實作版 |
+| `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，更換 | 實作版 |
 | `card-proof-web-5-progress-desktop.png` | 第 5 步：進行中 | 實作版 |
 | `card-proof-web-6-done-desktop.png` | 第 6 步：完成 | 定稿版 |
 

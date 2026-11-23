@@ -41,6 +41,7 @@ import { BASE } from "../base.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
+import { frame } from "./frame.ts";
 import { logo } from "./logo.ts";
 import {
   type HelpTopic,
@@ -174,8 +175,7 @@ export function startApp(o: AppOptions): void {
       el("p", { class: "count" }, fill(COPY.common.step, { step, steps: STEPS })),
       el("span", { class: "bar", attrs: { "aria-hidden": "true" } }, ...Array.from({ length: STEPS }, (_, i) => el("i", { class: i < step ? "on" : "" }))),
     );
-    const header = el("header", { class: "top" }, el("div", { class: "bar" }, logo(), el("b", {}, COPY.common.service_name), el("span", { class: "domain", attrs: { "data-site": "" } }, COPY.common.site_name)));
-    replace(root, header, el("div", { class: "col" }, where, screen));
+    frame(root, where, screen);
     document.title = screen.querySelector("h1")?.textContent ?? "";
     window.scrollTo(0, 0);
   }
@@ -712,7 +712,7 @@ export function startApp(o: AppOptions): void {
         ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
         el(
           "ul",
-          { class: "three ink" },
+          { class: "three" },
           view.withdrawAll ? null : el("li", {}, say(view.advice)),
           // A list that is not empty: the proof log records names, and an old name may be taken by someone else.
           view.withdrawAll ? null : el("li", { attrs: { "data-renamed": "" } }, t.renamed),

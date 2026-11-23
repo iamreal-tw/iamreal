@@ -356,9 +356,11 @@ const step = (name: string) => `document.querySelector('[data-step="${name}"]')`
 const messageText = () => page.text("[data-message]");
 const waitStep = (name: string, what: string, ms = 30_000) => page.waitFor(step(name), what, ms);
 const whereText = () => page.text("[data-where]");
+/** The href of each link on the screen. */
+const linksOnScreen = () => page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`);
 /** Steps 1 to 5 link to no other page (docs/design/principles.md, principle 1): no link, no 了解更多. */
 async function noLinkOut(label: string): Promise<void> {
-  const links = await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`);
+  const links = await linksOnScreen();
   check(links.length === 0 && !(await page.text()).includes(C.links.more), `${label}: no link to another page, no ${C.links.more} ${JSON.stringify(links)}`);
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 6 });
@@ -554,7 +556,7 @@ async function waitAccounts(): Promise<AccountsSeen> {
     rows: await rowsOnScreen(),
     buttons: await buttonTexts(),
     main: await page.text(),
-    links: await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`),
+    links: await linksOnScreen(),
   };
 }
 
@@ -598,7 +600,7 @@ async function waitConfirm(): Promise<ConfirmSeen> {
     listedTogether: await page.eval<boolean>(`!!document.querySelector('[data-step="confirm"] [data-listed-together]')`),
     listedSingle: await page.text(`[data-step="confirm"] [data-listed-single]`),
     withdrawStays: await page.eval<boolean>(`!!document.querySelector('[data-withdraw-stays]')`),
-    links: await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`),
+    links: await linksOnScreen(),
   };
 }
 
@@ -627,8 +629,9 @@ const screens = join(out, "screens");
 mkdirSync(screens);
 /** The whole page, as tall as it is. */
 async function screenshot(name: string, p: Page = page): Promise<void> {
-  // No scroll bar: the page as wide as the window (design/screens/: 1280px on a desktop).
+  // No scroll bar: the page as wide as the window (design/screens/: 1280px on a desktop). The mouse off every button.
   await p.send("Emulation.setScrollbarsHidden", { hidden: true });
+  await p.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 0, y: 0 });
   const m = await p.send("Page.getLayoutMetrics");
   const h = Math.ceil(m.cssContentSize?.height ?? m.contentSize.height);
   const w = Math.ceil(m.cssLayoutViewport?.clientWidth ?? 1100);
@@ -693,7 +696,7 @@ async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   check((await page.text("[data-one-proof]")) === C.before.one_proof, `step 1: the test build knows more than one platform: "${await page.text("[data-one-proof]")}"`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="before"] details [data-listed-together]')`)), "step 1: that the accounts are listed together is not in a question to open");
   check((await whereText()).includes(stepLine(1)), `step 1: "${await whereText()}"`);
-  check((await page.text("header b")) === C.common.service_name && (await page.text("header [data-site]")) === "iamreal.tw", `the header: the mark, "${C.common.service_name}" and the site, as the visitor pages write them`);
+  check((await page.text("header b")) === C.common.service_name && (await page.text("header [data-site]")) === C.common.site_name, `the header: the mark, "${C.common.service_name}" and the site, as the visitor pages write them`);
   check((await page.eval<number>(`document.querySelectorAll("header a").length`)) === 0, "the header links nowhere: the card proof's screens send no one elsewhere");
   check(!s1.includes(C.app.use_reader) && !s1.includes(C.app.use_phone), "step 1: no choice of device before the app is out");
   check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.common.next]), `step 1: no 上一步 (the first screen), only 下一步 ${JSON.stringify(await buttonTexts())}`);
@@ -2210,7 +2213,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   check(st.main.includes("一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。") && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one), "step 4, one platform: 一張卡片只能宣告一個 Threads 帳號……, not the sentences of more than one");
   check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
   check(
-    st.main.includes("系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。") && !st.main.includes(A.not_yours),
+    st.main.includes(fill(A.not_yours_single, { platform: THREADS_NAME })) && !st.main.includes(A.not_yours),
     "step 4, one platform: 系統無法確認這個 Threads 帳號是不是你的……",
   );
   await screenshot("single-4-accounts");
@@ -2238,17 +2241,26 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   check((await page.text()).includes("有一張有效的自然人憑證宣告了這個帳號："), "step 6, one platform: 有一張有效的自然人憑證宣告了這個帳號：");
   check((await page.text()).includes("越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。") && !(await page.text()).includes(C.done.advice), "step 6, one platform: the advice of this account's date");
 
-  // The same card again, with Threads only: step 4 with the account declared, and step 5 changing it (a correction:
-  // it was declared today). For the screenshots of design/screens/; then 取消.
+  // The same card the next day, with Threads only: step 4 with the account declared, and step 5 switching it.
+  // For the screenshots of design/screens/; then 取消, nothing signed a second time.
+  await setDay(day + 1);
   const undoAgain = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)));
   try {
     const again = await toAccounts();
     check(again.state === "declared" && again.title === "你的 Threads 帳號", `one platform, declared: step 4 "${again.state}" "${again.title}"`);
+    check(JSON.stringify(again.lead) === JSON.stringify([A.current + fill(A.last_card_proof, { days_ago: 1 })]), `one platform, declared yesterday: ${JSON.stringify(again.lead)}`);
     check(again.links.length === 0 && !again.main.includes(C.links.more), "one platform, declared: step 4 links to no other page");
+    await page.eval(`document.activeElement?.blur()`);
     await screenshot("single-4-accounts-existing");
     await typeRows({ [THREADS]: "yui.tw" });
     const c2 = await waitConfirm();
-    check(c2.rows.length === 1 && c2.rows[0]!.account === at("yui.tw"), `one platform, a change: step 5 ${JSON.stringify(c2.rows)}`);
+    checkConfirm(
+      "one platform, a switch",
+      c2,
+      [[THREADS, THREADS_NAME, at("yui.tw"), [fill(K.switch, { previous: at("yui") }), fill(C.confirm.uses_switch, { switches_left: 4 })]]],
+      C.confirm.button_declare_single,
+      THREADS_NAME,
+    );
     await screenshot("single-5-confirm-switch");
     await page.clickButton(C.common.cancel);
     await waitStep("before", "step 1, after 取消");

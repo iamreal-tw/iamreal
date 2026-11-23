@@ -70,7 +70,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 
 每個畫面的頁首是記號、服務的名稱「島民證明」和網站的名字 `iamreal.tw`（`card-proof.json` 的 `common.service_name`、`common.site_name`），不是連結。網站的名字在測試網站的建置裡也是 `iamreal.tw`（`design/copy/test-site.md`），`test/build.test.ts` 只容許它用正式網站的網域。
 
-**版面和字體**：第 1 到 5 步照 `design/screens/card-proof-web-*` 和 `design/DESIGN.md`；數值照 `design/tokens.json`（`test/style.test.ts`）。標題用 `design/fonts/` 的源流明體 TW 子集，建置時打包進頁面自己的檔案（後台送的 CSP 有 `font-src 'self'`）；內文和等寬字用系統的字體。
+**版面和字體**：第 1 到 5 步照 `design/screens/card-proof-web-*` 和 `design/DESIGN.md`；寫在 `:root` 的變數，數值照 `design/tokens.json`（`test/style.test.ts`）；畫布上的間距、小字級（13、15、16px）照截圖寫在各條規則裡。標題用 `design/fonts/` 的源流明體 TW 子集，建置時打包進頁面自己的檔案（後台送的 CSP 有 `font-src 'self'`）；內文和等寬字用系統的字體。
 
 ## 網址
 
