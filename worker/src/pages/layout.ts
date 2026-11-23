@@ -84,14 +84,14 @@ ${NAV_BUTTON}
 </div>
 </header>`;
 
-/** The foot (home.md, section 9). 過卡需要什麼 is the card proof's help page. */
+/** The foot (home.md, section 9). */
 const FOOT = html`<footer class="foot">
 <div class="bar">
 <span class="site"><b>島民證明</b><span>iamreal.tw</span></span>
 <a href="/verify">怎麼驗證島民證明</a>
 <a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
-<a href="/proof/help.html?topic=prepare">過卡需要什麼</a>
+<a href="/prepare">過卡需要什麼</a>
 <a href="https://github.com/iamreal-tw/iamreal/discussions">意見回饋</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 </div>

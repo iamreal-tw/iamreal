@@ -1976,7 +1976,7 @@ await tryStep("確認卡片 pressed again while the card is confirmed: one signa
 });
 
 /** A case that stops on step 2, before the PIN is asked: the reason under its item. */
-async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, item: string, o: { setup?: () => Promise<() => Promise<void>>; silent?: boolean; screenshot?: string; requestId?: boolean } = {}): Promise<void> {
+async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected: string, item: string, o: { setup?: () => Promise<() => Promise<void>>; silent?: boolean; screenshot?: string; requestId?: boolean; link?: string } = {}): Promise<void> {
   component.card = card;
   component.silent = o.silent ?? false;
   await open();
@@ -1993,6 +1993,10 @@ async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected
   const list = await items("read");
   const at = READ_KEYS.indexOf(item);
   check(list[at]?.st === C.common.halted && list.slice(at + 1).every((i) => i.state === ""), `${label}: 停在這裡, nothing after it ${JSON.stringify(list.map((i) => i.state))}`);
+  if (o.link) {
+    const links = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.getAttribute("href") + " " + a.target + " " + a.rel)`);
+    check(links.length === 1 && links[0] === `${o.link} _blank noopener noreferrer`, `${label}: the one link goes to ${o.link}, in a new tab ${JSON.stringify(links)}`);
+  }
   if (o.screenshot) await screenshot(o.screenshot);
   await sleep(300);
   check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), `${label}: no PIN field`);
@@ -2005,7 +2009,7 @@ async function stopsBeforePin(label: string, card: FakeCardSpec | null, expected
 
 // Every case that stops before the PIN, each under its item.
 const tests: [string, FakeCardSpec | null, string, string, Parameters<typeof stopsBeforePin>[4]?][] = [
-  ["the component does not answer", main.spec(), C.stops.component_unreachable + " " + C.links.prepare, "component", { silent: true, screenshot: "stop-2-component" }],
+  ["the component does not answer", main.spec(), C.stops.component_unreachable + " " + C.links.prepare, "component", { silent: true, screenshot: "stop-2-component", link: "/prepare" }],
   ["no reader", { ...main.spec(), noReader: true }, C.stops.no_reader, "reader", { screenshot: "stop-2-no-reader" }],
   ["no card", { ...main.spec(), noCard: true }, C.stops.no_card, "reader", { screenshot: "stop-2-no-card" }],
   ["no certificate on the card", { ...main.spec(), certificates: [] }, C.stops.no_certificate, "certificate", { screenshot: "stop-2-no-certificate" }],

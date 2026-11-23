@@ -36,7 +36,7 @@
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 定稿版 |
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 定稿版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq` | 定稿版 |
-| `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼，還沒有這一頁） | 定稿版 |
+| `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
 | `og-image.png` | 每一頁的連結預覽圖（`og:image`） | 定稿版 |
 
 ### 網頁的過卡流程（`/proof/`）

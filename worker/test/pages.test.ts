@@ -345,7 +345,7 @@ describe("the home page", () => {
 describe("every page", () => {
   test("the production log: no mark of a test log and no noindex; the pages are otherwise the same", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:alice")], { kind: "production" });
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/hang", `/hang/${CARD_A}`]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`]) {
       const { page } = await getPage(worker, path, { test: false });
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
@@ -397,7 +397,7 @@ describe("every page", () => {
 
   test("the pages, the style sheet, the script and the typeface take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH]) {
       // The style sheet, the script and the typeface are files of Static Assets.
       const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH;
       const cache = file ? "no-cache" : "public, max-age=60";

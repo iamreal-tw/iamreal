@@ -214,7 +214,7 @@
 ```
 
 - 「怎麼驗證島民證明」「證明紀錄」「常見問題」「GitHub」連到的地方和導覽列相同
-- 「過卡需要什麼」連到過卡的說明頁（`/proof/help.html?topic=prepare`，`card-proof.md` 第 2 步也有同一個連結），那一頁的內容現在是待補
+- 「過卡需要什麼」連到「過卡需要什麼」那一頁（`/prepare`，文字在 `prepare.md`；`card-proof.md` 第 2 步也有同一個連結）
 - 「意見回饋」連到公開的程式庫的 GitHub Discussions（https://github.com/iamreal-tw/iamreal/discussions）
 - 桌機排成一行；手機上「島民證明　iamreal.tw」一行，連結排成兩欄
 
@@ -248,5 +248,4 @@ iamreal.tw
 
 - 第 8 段結尾「還沒有自然人憑證？」那一句，上線前要對過內政部憑證管理中心的申辦說明
 - 縮小的島民證明點進去的範例頁。範例頁做出來之後，縮小的島民證明整張做成連結，最下面加回「點進去看看 →」
-- 「過卡需要什麼」連過去的說明頁的內容：現在只有標題和「待補」
 - 「手機上打開時」那一塊寫的 `iamreal.tw`：過卡搬到 `/proof` 之後，`iamreal.tw` 是首頁，不是過卡的第 1 步（`card-proof.md` 的「請在電腦的瀏覽器自己輸入 iamreal.tw。」也一樣）。下一份改過卡流程時定要寫 `iamreal.tw` 還是 `iamreal.tw/proof`

@@ -29,8 +29,9 @@
 // send the cardholder elsewhere. They have no link to another page
 // (docs/design/principles.md, principle 1), but for the one written after
 // a stop that the cardholder cannot get past on this page (links.prepare,
-// after stops.component_unreachable). The new tab gets the account typed
-// and nothing else; this page loads nothing from the platform.
+// after stops.component_unreachable, to the site's page /prepare). The new
+// tab gets the account typed and nothing else; this page loads nothing from
+// the platform.
 //
 // Every sentence comes from copy.ts; the platforms, their display names and
 // formats from the server's table (the engine's CardStatus); each
@@ -81,9 +82,14 @@ export interface AppOptions {
 /** The six steps (card-proof.md). */
 const STEPS = 6;
 
+/** Where a help link goes: what a card proof needs is a page of the site (/prepare, made by the Worker); the others the help page of this build. */
+function helpHref(topic: HelpTopic): string {
+  return topic === "prepare" ? "/prepare" : `${BASE}help.html?topic=${topic}`;
+}
+
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
   // A new tab: leaving this page would end the card proof.
-  return el("a", { attrs: { href: `${BASE}help.html?topic=${topic}`, target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
+  return el("a", { attrs: { href: helpHref(topic), target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
 }
 
 function say(s: Sentence): DocumentFragment {

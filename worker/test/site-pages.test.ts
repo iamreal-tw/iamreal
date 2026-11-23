@@ -261,17 +261,60 @@ describe("the copy buttons' script", () => {
   });
 });
 
+/** card-proof.json's sentences that prepare.md says again. */
+function cardProofSentences(): { componentUnreachable: string; noReader: string; readAgain: string; popupBlocked: string; pinIncorrect: string } {
+  const c = JSON.parse(readCopy("card-proof.json")) as { stops: Record<string, string>; read: Record<string, string>; common: Record<string, string>; pin: Record<string, string> };
+  return { componentUnreachable: c.stops.component_unreachable!, noReader: c.stops.no_reader!, readAgain: c.read.read_again!, popupBlocked: c.common.popup_blocked!, pinIncorrect: c.pin.pin_incorrect! };
+}
+
+describe("what a card proof needs", () => {
+  test("every sentence of prepare.md, in order, then the foot; its two links to MOICA's site; the preview", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/prepare");
+    assert.equal(status, 200);
+    const want = ["1. ", "2. ", "3. ", "4. "].flatMap((heading) => copyLines(block("prepare.md", heading)));
+    const foot = copyLines(block("home.md", "9. "));
+    wantLines(page, [...want, ...foot]);
+    assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last situation and the foot");
+    // The two links, to the addresses prepare.md gives under their sections.
+    for (const [heading, words, href] of [
+      ["3. ", "內政部憑證管理中心的下載頁", "https://moica.nat.gov.tw/rac_plugin.html"],
+      ["4. ", "內政部憑證管理中心的網站", "https://moica.nat.gov.tw/"],
+    ] as const) {
+      assert.ok(copySection("prepare.md", heading).includes(`「${words}」是連結，連到 \`${href}\``), `prepare.md ${heading} says where ${words} goes`);
+      assert.ok(page.includes(`<a href="${href}">${words}</a>`), `the page links ${words} to ${href}`);
+    }
+    const { title, site, summary } = previewOf("prepare.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+    assert.equal(summary, "");
+    assert.doesNotMatch(page, OG_DESCRIPTION);
+  });
+
+  test("the sentences it shares with the card proof's screens are card-proof.json's", () => {
+    const useReader = (JSON.parse(readCopy("card-proof.json")) as { app: Record<string, string> }).app.use_reader!;
+    assert.ok(block("prepare.md", "3. ").join("\n").includes(`選「${useReader}」`), `prepare.md step 4 says 選「${useReader}」`);
+    const situations = block("prepare.md", "4. ").join("\n");
+    const s = cardProofSentences();
+    const [unreachable] = s.componentUnreachable.split("。");
+    const [noReader, checkReader] = s.noReader.split("。");
+    const [popupHeading, popupBody] = [s.popupBlocked.slice(0, s.popupBlocked.indexOf("。")), s.popupBlocked.slice(s.popupBlocked.indexOf("。") + 1)];
+    for (const shared of [`過卡時說「${unreachable}」`, `按「${s.readAgain}」`, `過卡時說「${noReader}」`, `${checkReader}。`, `${popupHeading}\n${popupBody}`, s.pinIncorrect.slice(s.pinIncorrect.indexOf("。") + 1)]) {
+      assert.ok(situations.includes(shared), `prepare.md section 4 says ${JSON.stringify(shared)}`);
+    }
+  });
+});
+
 describe("the links", () => {
   test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
     const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
-    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
     const links = new Set<string>();
     for (const path of pages) {
       const { page } = await getPage(worker, path);
       for (const m of page.matchAll(/\s(?:href|src|action)="(\/(?!\/)[^"]*)"/g)) links.add(unescapeHtml(m[1]!).replace(/#.*/, ""));
     }
-    for (const want of ["/", "/proof", "/proof/help.html?topic=prepare", "/verify", "/proof-log", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
+    for (const want of ["/", "/proof", "/prepare", "/verify", "/proof-log", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
     assert.ok([...links].some((l) => l.startsWith("/proof-log?after=")), "更多 is among them");
     const failing: string[] = [];
     for (const link of links) {
