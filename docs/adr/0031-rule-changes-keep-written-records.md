@@ -48,6 +48,6 @@ status: accepted
 ## Consequences
 
 - `spec/roster-rules.md` 加一節寫這個承諾、生效日和例外；`spec/scope.md` 寫明表只放寬、只新增。
-- `CONTRIBUTING.md`：改紀錄規則的 PR 附上新舊兩版在最新正式的證明紀錄裡的逐筆比較，和往回套用還是用生效日。
+- `CONTRIBUTING.md`：改紀錄規則的 PR 附上新舊兩版在最新的正式的證明紀錄裡的逐筆比較，和往回套用還是用生效日。
 - 第一次用生效日時，Go 的 `roster/`、TypeScript 的規則、`spec/vectors/` 都要能照日期切換版本，標準答案加跨過 D 的案例。
 - 有人能大量偽造證明時，證明紀錄裡看不出來，要靠別的訊號（例如新卡片的增加數量異常）；要看哪些訊號，在監控的票裡定。

@@ -27,7 +27,7 @@
 - 匿名編號、證明和公開輸入都公開在證明紀錄裡；對外承諾的精確說法在這一份。[ADR-0004](0004-scoped-ids-and-proofs-are-public.md)
 - 匿名編號的算法上線後不動。[ADR-0012](0012-write-circuits-in-noir.md)
 
-## 證明紀錄的規則
+## 紀錄規則
 
 - 證明紀錄只記持卡人的宣告，不確認帳號主人是否承認；承認靠連回，由訪客自己看。[ADR-0003](0003-roster-records-declarations-only.md)
 - 證明紀錄只存事件，現況由公開規則算出；不設到期日、不提供刪除。[ADR-0005](0005-roster-is-an-append-only-event-log.md)

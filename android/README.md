@@ -25,7 +25,7 @@
 | 怎麼裝 | Google Play 的內部測試（營運者手動觸發 [`upload-android.yml`](../.github/workflows/upload-android.yml) 上傳，ADR-0036、ADR-0037；「上傳到 Google Play」） | 用線裝（「怎麼用線裝到手機」） |
 | 版本 | 上傳時給：台灣的日期（`2026.11.5`，同一天相同）；`versionCode` 是工作流程執行的編號 | `1`、`dev` |
 
-環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時傳的證明紀錄永遠是這一個（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
+環境寫死在 `app/src/main/kotlin/tw/iamreal/app/Environment.kt` 一個地方，兩種 build 共用；app 裡沒有切換的設定，後台也不能叫它換。Kotlin 呼叫核心時指定的證明紀錄永遠是這一份（`core/DeviceCore.kt`），所以 app 的程式拿不到正式的證明紀錄的場合字串。上線那天用一個 PR 讓商店的 build 改連正式網站；正式網站的設定現在還沒有。
 
 第三種 build type `fake` 只給模擬器的測試（「模擬器上過一次卡」）：它是開發用 build 換上假卡片和本機的後台，識別碼 `tw.iamreal.app.dev.fake`、名稱和開發用 build 相同，不會上傳到任何地方。
 
@@ -128,7 +128,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 - **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面沒有畫路徑，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
 - **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：debug 和 release 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
-- **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
+- **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
 - **release build 不輸出 log**：R8 拿掉對 `android.util.Log`、`PrintStream` 的 `print`／`println`、`java.util.logging.Logger` 的 `log` 的呼叫（`app/proguard-rules.pro`；後兩種是 Compose 和 `androidx.concurrent` 裡的幾處警告）。之後 `checkApk` 讀 release 的 dex 裡每一個被呼叫的方法：還提到 `android.util.Log`，或還有呼叫 `java.io.PrintStream` 的任何方法、`java.util.logging.Logger` 除了 `getLogger` 以外的方法、任何 `printStackTrace`，就失敗。留下來的是讀了沒用的 `System.out` 和做了沒用的 `Logger`：R8 拿不掉，但沒有東西寫得出去
 - **沒有第三方 SDK**（`checkLibraries`）：app 帶的程式庫只能是 `app/build.gradle.kts` 裡 `allowedLibraries` 逐一列名的：Kotlin 的標準函式庫和它引用的標註，畫面用的 Jetpack Compose（`ui`、`foundation`）和 `androidx.activity`，以及這三個帶進來的（都是 Google 的 AndroidX 和 JetBrains 的 kotlinx，見「工具和套件」）。清單以外的一律不過，以檔案加進來的 jar、aar 也算。沒有 Google Play services，沒有 Material 元件
 
