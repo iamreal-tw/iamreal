@@ -10,7 +10,7 @@ import { after, before, describe, test } from "node:test";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
-import { DAY_MS, START, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
+import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -184,7 +184,8 @@ describe("the page of a card", () => {
     }
 
     // With an object that answers nothing (its tables are of another version), a short ID that reads is 500
-    // and one that does not is still the 404: the Worker did not ask.
+    // and one that does not is still the 404: the Worker did not ask. No alarm rings meanwhile: the lines below are the page's alone.
+    await wantNoAlarmSoon(worker);
     await worker.proofLog.setStoredSchemaVersion("another");
     await worker.proofLog.restart();
     try {
