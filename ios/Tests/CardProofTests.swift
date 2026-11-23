@@ -57,7 +57,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "開始之前",
             "請準備好你的實體自然人憑證。",
-            "我們只收台灣中華民國國民的自然人憑證正卡。外來人口申辦的自然人憑證不能用。",
+            "我們只收台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。",
             "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。",
             "為什麼一定要實體的卡片？",
             "實體卡片的簽章在卡片裡完成，只經過你的裝置。",
@@ -125,7 +125,7 @@ final class CardProofTests: XCTestCase {
             "這張卡片還沒有宣告過帳號。",
             "填上你要宣告的 Threads 帳號。",
             "Threads", "預覽", "還沒有宣告過。",
-            "一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。更換的次數有限，用掉就不會恢復。",
+            "一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
             "了解更多",
             "預覽會在 Threads 或瀏覽器開這個帳號的頁面，讓你確認沒有打錯。",
             "系統不會確認帳號是不是你的：任何持卡人都可以宣告任何帳號。",
@@ -236,7 +236,7 @@ final class CardProofTests: XCTestCase {
         ])
         XCTAssertEqual(typed(in: model), "alice", "the field starts with the account declared")
         XCTAssertTrue(model.screen.texts.contains("什麼都不改，直接按「下一步」，就是再次過卡：把上次過卡的日期更新成今天。"))
-        XCTAssertTrue(model.screen.texts.contains("填上空白的是新宣告，清空是收回，改成別的帳號是更換。更換的次數有限，用掉就不會恢復。"))
+        XCTAssertTrue(model.screen.texts.contains("填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。"))
 
         try await press("下一步", in: model)
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
@@ -294,7 +294,7 @@ final class CardProofTests: XCTestCase {
             "連上島民證明的伺服器", "完成",
             "感應卡片，卡片簽章", "停在這裡",
             "這不是一開始讀到的那張卡片，PIN 沒有送出。請換回那張卡片，再感應一次。",
-            "在這支手機上計算，大約 5 秒",
+            "正在這支手機計算，產生零知識證明，大約 5 秒",
             "送出",
             "再感應一次",
             "取消",
@@ -377,7 +377,7 @@ final class CardProofTests: XCTestCase {
             "連上島民證明的伺服器", "停在這裡",
             "這支手機的日期和伺服器不一致，請檢查手機的時間。",
             "感應卡片，卡片簽章",
-            "在這支手機上計算，大約 5 秒",
+            "正在這支手機計算，產生零知識證明，大約 5 秒",
             "送出",
             "再感應一次卡片",
         ])
