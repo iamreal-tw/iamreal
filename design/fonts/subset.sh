@@ -11,7 +11,8 @@
 #   not written in design/copy/).
 # - It keeps the name table's records 0 to 6 (fonttools' default), 13 (the
 #   licence) and 14 (the licence's URL): the OFL asks that every copy of
-#   the font carries its copyright notice and licence.
+#   the font carries its copyright notice and licence. The source has no
+#   record 0 (the copyright notice); that notice is OFL.txt's first lines.
 # - fonttools writes WOFF2 with brotli; both are pinned to an exact version.
 #
 # Needs curl, shasum and uv (https://docs.astral.sh/uv/).

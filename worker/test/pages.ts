@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
+import { FONT_FILE } from "../scripts/site-files.ts";
 import { block, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
 import type { TestWorker } from "./harness.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
@@ -178,8 +179,8 @@ export function checkNavAndFoot(what: string, page: string): void {
 /** The mark of a test log as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
 export const testProofLogMark = (date: string): string => `<p class="test-proof-log">${testProofLogLine(date).replace(date, `<time>${date}</time>`)}</p>`;
 
-/** Where the style sheet loads the headings' typeface from: a file of Static Assets (scripts/site-files.ts, `FONT_FILE`). */
-export const FONT_PATH = "/fonts/GenRyuMin2TW-B.woff2";
+/** Where the style sheet loads the headings' typeface from: a file of Static Assets. */
+export const FONT_PATH = `/${FONT_FILE}`;
 
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';

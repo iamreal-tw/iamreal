@@ -24,7 +24,7 @@
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EVERY_RESPONSE, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
+import { EVERY_RESPONSE, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
 
 const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
 
@@ -64,7 +64,7 @@ export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js
  * written here: a deploy uploads the style sheet that was reviewed. Change
  * it with the file (`shasum -a 256 site/pages.css`).
  */
-export const PAGES_CSS_SHA256 = "eed8d7e3cf780c025bf800f78750ea3c6d7373220a89a7c34cb9d148c2914861";
+export const PAGES_CSS_SHA256 = "6b6ab80b6c26b98153ee5b1a090d238cb16e30b9219cd0af3cd3e4bfaa82de3a";
 
 /**
  * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
@@ -80,7 +80,7 @@ const block = (path: string, headers: Readonly<Record<string, string>>, more: re
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
 
 /** The headers of the visitors' files, the style sheet, the script and the typeface: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
-const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${STYLE_SHEET_CACHE}`]);
+const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${VISITOR_FILE_CACHE}`]);
 
 /**
  * The text of site/_headers for a site of that kind of proof log.
@@ -91,7 +91,7 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
  * - /pages.css, /copy.js and /fonts/*: the visitors' pages' headers
- *   (`VISITOR_HEADERS`), and `STYLE_SHEET_CACHE` in place of the
+ *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
  *   script-src: it is the page that loads it whose policy says what runs.

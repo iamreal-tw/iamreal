@@ -50,7 +50,7 @@ import { ISSUER_NAMES } from "../src/issuers.ts";
 import { FONT_FILE } from "../scripts/site-files.ts";
 import { testProofLogLine } from "./copy.ts";
 import { newestCrls, readIndex } from "../src/crl-index.ts";
-import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
+import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS } from "../src/headers.ts";
 
 /** Sends a GET for a path of the site or of the data domain, with these request headers if any; redirects are not followed. */
 export type Reader = (path: string, headers?: Readonly<Record<string, string>>) => Promise<Response>;
@@ -136,7 +136,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   }
 
   // The files Static Assets sends.
-  const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": STYLE_SHEET_CACHE };
+  const fileHeaders = { ...EVERY_RESPONSE, ...VISITOR_HEADERS, ...TEST_SITE_HEADERS, "Cache-Control": VISITOR_FILE_CACHE };
   for (const path of ["/pages.css", "/copy.js", `/${FONT_FILE}`]) {
     await check(`GET ${path}`, async () => {
       const res = await file(path);

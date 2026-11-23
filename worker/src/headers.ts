@@ -82,12 +82,12 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The Cache-Control of the style sheet, of the copy buttons' script and of
- * the headings' typeface (site/_headers): asked for again every time they
+ * The Cache-Control of the visitors' files: the style sheet, the copy
+ * buttons' script and the headings' typeface (site/_headers): asked for again every time they
  * are used, by their ETag, so that a page never has a subset older than
  * its words.
  */
-export const STYLE_SHEET_CACHE = "no-cache";
+export const VISITOR_FILE_CACHE = "no-cache";
 
 /**
  * How long a page that shows the proof log may be kept by a cache: 60 seconds,
