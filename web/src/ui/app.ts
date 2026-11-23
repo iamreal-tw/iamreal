@@ -25,8 +25,11 @@
 // button can be pressed again once the cardholder allowed the windows.
 //
 // accounts.preview opens the account's page on the platform in a new tab
-// (window.open with noopener and noreferrer): the only place this page sends
-// the cardholder elsewhere. The new tab gets the account typed and nothing
+// (window.open with noopener and noreferrer): the only place steps 1 to 5
+// send the cardholder elsewhere. They have no link to another page
+// (docs/design/principles.md, principle 1), but for the one written after
+// a stop that the cardholder cannot get past on this page (links.prepare,
+// after stops.component_unreachable). The new tab gets the account typed and nothing
 // else; this page loads nothing from the platform.
 //
 // Every sentence comes from copy.ts; the platforms, their display names and
@@ -77,6 +80,7 @@ export interface AppOptions {
 /** The six steps (card-proof.md). */
 const STEPS = 6;
 
+
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
   // A new tab: leaving this page would end the card proof.
   return el("a", { attrs: { href: `${BASE}help.html?topic=${topic}`, target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
@@ -112,6 +116,8 @@ function stopOf(e: unknown): Stop {
 }
 
 const actions = (...children: (Node | null)[]): HTMLElement => el("div", { class: "actions" }, ...children);
+/** Buttons with no "back" before them: the main one at the end of the row, where it is when there is one. */
+const actionsEnd = (...children: (Node | null)[]): HTMLElement => el("div", { class: "actions end" }, ...children);
 const primary = (label: string | DocumentFragment, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "btn");
 const secondary = (label: string, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "btn ghost");
 const textButton = (label: string, onClick: (ev: MouseEvent) => void): HTMLButtonElement => button(label, onClick, "linkbtn");
@@ -161,15 +167,16 @@ export function startApp(o: AppOptions): void {
   /** A FlowStop that leaves the step to be tried again (the flow did not end). */
   const retryable = (f: CardProofFlow, e: unknown): e is FlowStop => e instanceof FlowStop && f.stop === null;
 
-  /** Puts a screen up: the mark and the service's name, where in the six steps, the screen. */
+  /** Puts a screen up: the mark, the service's name and the site's; where in the six steps; the screen. */
   function show(step: number, screen: HTMLElement): void {
     const where = el(
       "div",
       { class: "where", attrs: { "data-where": String(step) } },
+      el("p", { class: "count" }, fill(COPY.common.step, { step, steps: STEPS })),
       el("span", { class: "bar", attrs: { "aria-hidden": "true" } }, ...Array.from({ length: STEPS }, (_, i) => el("i", { class: i < step ? "on" : "" }))),
-      el("span", {}, fill(COPY.common.step, { step, steps: STEPS })),
     );
-    replace(root, el("header", { class: "top" }, logo(), el("b", {}, COPY.common.service_name)), where, screen);
+    const header = el("header", { class: "top" }, el("div", { class: "bar" }, logo(), el("b", {}, COPY.common.service_name), el("span", { class: "domain", attrs: { "data-site": "" } }, COPY.common.site_name)));
+    replace(root, header, el("div", { class: "col" }, where, screen));
     document.title = screen.querySelector("h1")?.textContent ?? "";
     window.scrollTo(0, 0);
   }
@@ -202,7 +209,7 @@ export function startApp(o: AppOptions): void {
     const view = beforeView();
     const message = messageArea();
     const faq = (q: string, ...answers: (string | Node)[]): HTMLElement =>
-      el("details", { class: "faq" }, el("summary", {}, q), ...answers.map((a) => el("p", {}, a)));
+      el("details", {}, el("summary", {}, q), ...answers.map((a) => el("p", {}, a)));
     show(
       1,
       el(
@@ -210,16 +217,22 @@ export function startApp(o: AppOptions): void {
         { class: "step", attrs: { "data-step": "before" } },
         message.node,
         el("h1", {}, c.title),
-        el("p", { class: "lead" }, c.prepare_card),
-        el("p", {}, c.citizens_only),
+        // How long it takes, once the card and the reader are at hand (on the web only: the app has no reader).
+        el("p", { class: "lead" }, c.duration),
+        el("p", { class: "lead strong" }, c.prepare_card),
+        el("p", { class: "lead" }, c.citizens_only),
         // As plain to see as the two lines above, not in a question to open: it may change whether to go on, and cannot be undone.
         // By the platforms the device knows (there is no platform table yet): one, named; or more than one, and that their accounts are listed together.
         el("p", { class: "lead", attrs: { "data-one-proof": "" } }, say(view.oneProof)),
         view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
-        faq(c.why_physical, c.why_physical_card, c.why_physical_mobile),
-        // The page sends no one elsewhere but to the account's preview: MOICA's page is named, not linked.
-        faq(c.how_to_get, c.how_to_get_counter, c.how_to_get_moica),
-        actions(primary(COPY.common.next, () => read())),
+        actionsEnd(primary(COPY.common.next, () => read())),
+        el(
+          "div",
+          { class: "asks" },
+          faq(c.why_physical, c.why_physical_card, c.why_physical_mobile),
+          // The page sends no one elsewhere but to the account's preview: MOICA's page is named, not linked.
+          faq(c.how_to_get, c.how_to_get_counter, c.how_to_get_moica),
+        ),
       ),
     );
     message.show(why);
@@ -369,16 +382,15 @@ export function startApp(o: AppOptions): void {
         el("div", { class: "cardname", attrs: { "data-card-read": "" } }, el("span", { class: "k" }, c.card_read), el("span", { class: "name" }, name), el("span", { class: "k" }, c.name_note)),
         el("div", { class: "pinfield" }, el("label", { attrs: { for: "pin" } }, c.label), field),
         message.node,
-        el("ul", { class: "three" }, el("li", {}, c.purpose), el("li", {}, c.stays), el("li", {}, c.card_and_pin, " ", helpLink("more"))),
-        actions(back, confirm, working),
+        el("ul", { class: "facts" }, el("li", {}, c.purpose), el("li", {}, c.stays), el("li", {}, c.card_and_pin)),
+        // What the card is doing, beside the button it follows from, at the end of the row.
+        actions(back, el("div", { class: "go" }, working, confirm)),
       ),
     );
     field.focus();
   }
 
   // Step 4: your accounts -----------------------------------------------------------------
-
-  const noCheck = (): HTMLElement => el("p", { class: "note" }, COPY.accounts.no_check, el("br"), COPY.accounts.acknowledged, " ", helpLink("more"));
 
   /** Cancel on steps 4 and 5: the PIN, the certificate and the signature are dropped, and the screen goes back to step 1. */
   const cancel = (): HTMLElement => actions(textButton(COPY.common.cancel, () => before()));
@@ -399,7 +411,7 @@ export function startApp(o: AppOptions): void {
     const fields = new Map<string, { input: HTMLInputElement; why: HTMLElement }>();
 
     const rowNodes = view.rows.map((r) => {
-      const lines = el("div", { class: "row-lines" }, ...r.lines.map((l) => el("p", { class: "small", attrs: { "data-row-line": "" } }, say(l))));
+      const lines = el("div", { class: "row-lines" }, ...r.lines.map((l) => el("p", { attrs: { "data-row-line": "" } }, say(l))));
       const why = el("p", { class: "stop", attrs: { role: "alert", "data-row-message": "" } });
       if (!r.editable) {
         // A platform the device does not know (kept as the server sent it), or a day with 3 records: the row as it is.
@@ -431,7 +443,8 @@ export function startApp(o: AppOptions): void {
         "div",
         { class: "acctrow", attrs: { "data-row": r.platform } },
         el("label", { class: "plat-name", attrs: { for: `account-${r.platform}` } }, r.name),
-        el("div", { class: "field" }, r.prefix ? el("span", { class: "at" }, r.prefix) : null, input, preview),
+        el("div", { class: "field" }, r.prefix ? el("span", { class: "at" }, r.prefix) : null, input),
+        preview,
         lines,
         why,
       );
@@ -482,11 +495,17 @@ export function startApp(o: AppOptions): void {
       confirmScreen(f, cq, () => goBack(f, (st) => accounts(f, st, entries)));
     }
 
-    const notes = view.notes.map((n) => el("p", { class: "small" }, ...n.sentences.map((x) => say(x)), n.more ? " " : null, n.more ? helpLink("more") : null));
+    const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
       ? // 3 records of the card today: the list as it is, then this sentence and "back to the beginning" (which drops the PIN, as cancel does).
         [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(view.dailyLimit)), actions(secondary(a.restart, () => before()))]
-      : [...notes, message.node, actions(primary(COPY.common.next, next)), noCheck(), cancel()];
+      : [
+          notes,
+          message.node,
+          actionsEnd(primary(COPY.common.next, next)),
+          view.notYours ? el("p", { class: "not-yours", attrs: { "data-not-yours": "" } }, say(view.notYours)) : null,
+          cancel(),
+        ];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
     show(
       4,
@@ -531,35 +550,34 @@ export function startApp(o: AppOptions): void {
       }
       progress(f, cq, back, single);
     });
-    // The whole list to be signed, and each row's consequence, withdrawals included; the platform's ID beside its name.
-    const rows = view.rows.flatMap((r) => [
-      el("dt", { attrs: { "data-confirm-row": r.platform } }, r.name, " ", el("code", { class: "plat-id", attrs: { "data-platform-id": "" } }, r.id)),
-      el("dd", { attrs: { "data-confirm-row": r.platform } }, el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-account": "" } }, r.account), ...r.lines.map((l) => el("span", { class: "kind", attrs: { "data-kind": "" } }, say(l)))),
-    ]);
+    // The whole list to be signed, and each row's consequence, withdrawals included; the platform's ID under its name
+    // (README.md, the platform table comes from the server).
+    const pair = (dt: HTMLElement, dd: HTMLElement): HTMLElement => el("div", {}, dt, dd);
+    const rows = view.rows.map((r) =>
+      pair(
+        el("dt", { attrs: { "data-confirm-row": r.platform } }, r.name, " ", el("code", { class: "plat-id", attrs: { "data-platform-id": "" } }, r.id)),
+        el("dd", { attrs: { "data-confirm-row": r.platform } }, el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-account": "" } }, r.account), ...r.lines.map((l) => el("span", { class: "kind", attrs: { "data-kind": "" } }, say(l)))),
+      ),
+    );
     show(
       5,
       el(
         "section",
         { class: "step", attrs: { "data-step": "confirm" } },
         el("h1", {}, c.title),
-        el("p", { attrs: { "data-intro": "" } }, view.intro),
+        el("p", { class: "lead", attrs: { "data-intro": "" } }, view.intro),
         el(
-          "div",
-          { class: "record", attrs: { "data-record": "" } },
-          el(
-            "dl",
-            { class: "list" },
-            ...rows,
-            el("dt", {}, c.date),
-            el("dd", {}, el("time", {}, view.date)),
-            el("dt", {}, c.short_id_label),
-            el("dd", {}, sentence(c.short_id, { short_id: status?.shortId ?? "" })),
-          ),
+          "dl",
+          { class: "sumlist", attrs: { "data-record": "" } },
+          ...rows,
+          pair(el("dt", {}, c.date), el("dd", {}, el("time", {}, view.date))),
+          pair(el("dt", {}, c.short_id_label), el("dd", {}, sentence(c.short_id, { short_id: status?.shortId ?? "" }))),
         ),
         view.withdrawStays ? el("p", { class: "small", attrs: { "data-withdraw-stays": "" } }, c.withdraw_stays) : null,
-        view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
-        view.listedSingle ? el("p", { class: "lead", attrs: { "data-listed-single": "" } }, say(view.listedSingle)) : null,
-        el("ul", { class: "three ink" }, el("li", {}, c.no_identity), el("li", {}, view.later)),
+        // As plain to see as the list, above the buttons, apart from the two points below.
+        view.listedTogether ? el("p", { class: "public", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
+        view.listedSingle ? el("p", { class: "public", attrs: { "data-listed-single": "" } }, say(view.listedSingle)) : null,
+        el("ul", { class: "facts" }, el("li", {}, c.no_identity), el("li", {}, view.later)),
         message.node,
         actions(secondary(COPY.common.back, back), go),
         cancel(),
@@ -572,13 +590,10 @@ export function startApp(o: AppOptions): void {
   function progress(f: CardProofFlow, cq: Consequence, back: () => void, single: string | null): void {
     const c = COPY.progress;
     const list = taskList("progress", PROGRESS_ITEMS);
-    const zk = el("p", { class: "note", attrs: { "data-zk": "" } }, c.zero_knowledge, " ", helpLink("more"));
     const buttons = el("div", { class: "actions", attrs: { "data-progress-actions": "" } });
     const seen = new Set<Progress>();
     const render = (): void => {
-      const states = itemStates(PROGRESS_ITEMS, seen, { running: true, stoppedAt: null });
-      list.render(states);
-      zk.hidden = states[2] !== "now";
+      list.render(itemStates(PROGRESS_ITEMS, seen, { running: true, stoppedAt: null }));
     };
     onProgress = (step) => {
       seen.add(step);
@@ -601,7 +616,6 @@ export function startApp(o: AppOptions): void {
           const at = firstNotDone(states);
           const m = stopMessage(stopOf(e), f.phase === "submit_failed");
           list.render(itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: at }), { at, message: m });
-          zk.hidden = true;
           // The PIN still in the engine (a blocked window: nothing reached the card):
           // back to step 5, the same button again. Otherwise the engine dropped the
           // PIN: the card proof starts again, reading the card in this click.
@@ -627,7 +641,7 @@ export function startApp(o: AppOptions): void {
         },
       );
     };
-    show(5, el("section", { class: "step", attrs: { "data-step": "progress" } }, el("h1", {}, c.title), el("p", { class: "lead" }, c.keep_open), list.node, zk, buttons));
+    show(5, el("section", { class: "step", attrs: { "data-step": "progress" } }, el("h1", {}, c.title), el("p", { class: "lead" }, c.keep_open), list.node, buttons));
     finish(f.proceed(cq.accounts));
   }
 

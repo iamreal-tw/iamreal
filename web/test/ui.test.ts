@@ -162,7 +162,7 @@ describe("the lists of steps 2 and 5", () => {
     );
     assert.deepEqual(
       PROGRESS_ITEMS.map((i) => (COPY.progress as Record<string, string>)[i.key]),
-      ["連上島民證明的伺服器", "卡片簽章", "在這台裝置上計算，大約 10 到 30 秒", "送出"],
+      ["連上島民證明的伺服器", "卡片簽章", "正在這台裝置計算，產生零知識證明，大約 10 到 30 秒", "送出"],
     );
   });
 
@@ -266,13 +266,13 @@ describe("your accounts (step 4)", () => {
         ["threads", "Threads", "@", "", true, true, ["還沒有宣告過。"]],
       ],
     );
+    // No 了解更多 after any of them: the card proof's screens send no one elsewhere.
     assert.deepEqual(
-      v.notes.map((n) => [n.sentences.map(t).join(""), n.more]),
-      [
-        ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。更換的次數有限，用掉就不會恢復。", true],
-        ["預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。", false],
-      ],
+      v.notes.map((n) => n.map(t).join("")),
+      ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
     );
+    // Below the button: that no one checks whose account it is, and what the account's owner does about it.
+    assert.equal(t(v.notYours!), "系統無法確認帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。");
     assert.equal(v.dailyLimit, null);
   });
 
@@ -288,8 +288,8 @@ describe("your accounts (step 4)", () => {
       ],
     );
     assert.deepEqual(
-      v.notes.map((n) => n.sentences.map(t).join("")),
-      ["什麼都不改，直接按「下一步」，就是再次過卡：把上次過卡的日期更新成今天。", "填上空白的是新宣告，清空是收回，改成別的帳號是更換。更換的次數有限，用掉就不會恢復。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      v.notes.map((n) => n.map(t).join("")),
+      ["什麼都不改，直接按「下一步」，就是再次過卡：把上次過卡的日期更新成今天。", "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
     );
   });
 
@@ -302,7 +302,7 @@ describe("your accounts (step 4)", () => {
     const v = accountsView(status([slot(EXAMPLE), slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
     assert.equal(v.state, "nothing");
     assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
-    assert.ok(!v.notes.some((n) => n.sentences.some((x) => x.template === COPY.accounts.how_refresh)));
+    assert.ok(!v.notes.some((n) => n.some((x) => x.template === COPY.accounts.how_refresh)));
     // One platform: the line names it.
     const one = accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
     assert.deepEqual(one.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的 Threads 帳號。"]);
@@ -312,7 +312,8 @@ describe("your accounts (step 4)", () => {
     const v = accountsView(status([slot(THREADS)], { lastCardProof: null }));
     assert.equal(t(v.title), "你的 Threads 帳號");
     assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的 Threads 帳號。"]);
-    assert.deepEqual(v.notes[0]!.sentences.map(t), ["一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。", "更換的次數有限，用掉就不會恢復。"]);
+    assert.deepEqual(v.notes[0]!.map(t), ["一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。", "一張卡終身最多只能更換宣告的帳號 5 次。"]);
+    assert.equal(t(v.notYours!), "系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。");
     // Declared, and on a day with 3 records: the title too.
     assert.equal(t(accountsView(status([declared("alice")])).title), "你的 Threads 帳號");
     assert.equal(t(accountsView(status([declared("alice")], { lastCardProof: TODAY, dailyLimit: true })).title), "你的 Threads 帳號");
@@ -351,6 +352,7 @@ describe("your accounts (step 4)", () => {
     assert.ok(v.rows.every((r) => !r.editable && !r.preview && r.lines.length === 0));
     assert.equal(t(v.dailyLimit!), "這張卡片今天已經過卡 3 次，明天才能再過卡。");
     assert.deepEqual(v.notes, []);
+    assert.equal(v.notYours, null);
   });
 
   test("one platform: one platform of the table the device knows, and no account on a platform it does not know", () => {

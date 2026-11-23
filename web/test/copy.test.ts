@@ -71,6 +71,8 @@ const OVERRIDES: Record<string, Record<string, string>> = {
  * account shown as the server sent them (a platform the device does not
  * know), and the prefix of src/platforms.ts.
  */
+/** The example link of the last screen, a value shown as it is. */
+const LINK = `${SITE_DOMAIN}/${cardPath(EXAMPLES.short_id!)}`;
 const VALUES = new Set([
   EXAMPLES.account!,
   "@alice_tw",
@@ -80,7 +82,7 @@ const VALUES = new Set([
   "test-example",
   EXAMPLES.today!,
   EXAMPLES.name!,
-  `${SITE_DOMAIN}/${cardPath(EXAMPLES.short_id!)}`,
+  LINK,
   "Threads",
   "X",
   presentationOf("threads")!.prefix,
@@ -152,7 +154,8 @@ test("every sentence of the screens in card-proof.md is in card-proof.json", () 
     .sort((a, b) => b.length - a.length);
   for (const line of screenText()) {
     // Notes of the document, not text of the screen: where the QR code goes, a cell that points at another table.
-    let rest = line.replace(/（QR code）|第 2 步那張表裡同一種情況的句子/g, "");
+    // The link first: the site's name in the header (common.site_name) is the start of it.
+    let rest = line.replace(/（QR code）|第 2 步那張表裡同一種情況的句子/g, "").split(LINK).join(" ");
     for (const r of rendered) rest = rest.split(r).join(" ");
     // What may remain: bullets, the input boxes, the buttons' brackets, the arrows of
     // buttons and questions, the circles of list items; and values shown as they are.

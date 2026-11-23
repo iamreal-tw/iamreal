@@ -51,7 +51,7 @@ export class Browser {
       "--no-default-browser-check",
       "--disable-extensions",
       "--disable-sync",
-      "--window-size=1100,900",
+      "--window-size=1280,900",
       ...(o.args ?? []),
       "about:blank",
     ];

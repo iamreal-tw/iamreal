@@ -356,6 +356,11 @@ const step = (name: string) => `document.querySelector('[data-step="${name}"]')`
 const messageText = () => page.text("[data-message]");
 const waitStep = (name: string, what: string, ms = 30_000) => page.waitFor(step(name), what, ms);
 const whereText = () => page.text("[data-where]");
+/** Steps 1 to 5 link to no other page (docs/design/principles.md, principle 1): no link, no 了解更多. */
+async function noLinkOut(label: string): Promise<void> {
+  const links = await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`);
+  check(links.length === 0 && !(await page.text()).includes(C.links.more), `${label}: no link to another page, no ${C.links.more} ${JSON.stringify(links)}`);
+}
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 6 });
 
 /** A new page load: step 1. */
@@ -402,10 +407,11 @@ interface Item {
   state: string;
   st: string;
   why: string;
+  label: string;
 }
 const items = (list: "read" | "progress") =>
   page.eval<Item[]>(
-    `[...document.querySelectorAll('[data-list="${list}"] [data-item]')].map((li) => ({ item: li.dataset.item, state: li.dataset.state, st: li.querySelector(".st").innerText, why: li.querySelector("[data-why]")?.innerText ?? "" }))`,
+    `[...document.querySelectorAll('[data-list="${list}"] [data-item]')].map((li) => ({ item: li.dataset.item, state: li.dataset.state, st: li.querySelector(".st").innerText, label: li.querySelector(".label").innerText, why: li.querySelector("[data-why]")?.innerText ?? "" }))`,
   );
 const READ_KEYS = ["component", "reader", "certificate", "check", "server", "crl"];
 
@@ -523,6 +529,8 @@ interface AccountsSeen {
   rows: RowSeen[];
   buttons: string[];
   main: string;
+  /** The href of each link on the screen. */
+  links: string[];
 }
 
 const rowsOnScreen = () =>
@@ -546,6 +554,7 @@ async function waitAccounts(): Promise<AccountsSeen> {
     rows: await rowsOnScreen(),
     buttons: await buttonTexts(),
     main: await page.text(),
+    links: await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`),
   };
 }
 
@@ -567,6 +576,7 @@ interface ConfirmSeen {
   /** With one platform, the sentence in place of listed together; "" if none. */
   listedSingle: string;
   withdrawStays: boolean;
+  links: string[];
 }
 
 async function waitConfirm(): Promise<ConfirmSeen> {
@@ -588,6 +598,7 @@ async function waitConfirm(): Promise<ConfirmSeen> {
     listedTogether: await page.eval<boolean>(`!!document.querySelector('[data-step="confirm"] [data-listed-together]')`),
     listedSingle: await page.text(`[data-step="confirm"] [data-listed-single]`),
     withdrawStays: await page.eval<boolean>(`!!document.querySelector('[data-withdraw-stays]')`),
+    links: await page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`),
   };
 }
 
@@ -673,12 +684,15 @@ const shown: string[] = [];
 async function toRead(o: { screenshots?: string } = {}): Promise<void> {
   await waitStep("before", "step 1");
   const s1 = await page.text();
-  for (const s of [C.before.title, C.before.prepare_card, C.before.citizens_only, C.before.one_proof, C.before.listed_together, C.before.why_physical, C.before.how_to_get]) check(s1.includes(s), `step 1 says "${s}"`);
+  for (const s of [C.before.title, C.before.duration, C.before.prepare_card, C.before.citizens_only, C.before.one_proof, C.before.listed_together, C.before.why_physical, C.before.how_to_get]) check(s1.includes(s), `step 1 says "${s}"`);
+  check(s1.indexOf(C.before.duration) < s1.indexOf(C.before.prepare_card), "step 1: how long it takes, first");
+  await noLinkOut("step 1");
   // The test build knows two platforms (test-example and threads): step 1 does not speak of one.
   check((await page.text("[data-one-proof]")) === C.before.one_proof, `step 1: the test build knows more than one platform: "${await page.text("[data-one-proof]")}"`);
   check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="before"] details [data-listed-together]')`)), "step 1: that the accounts are listed together is not in a question to open");
   check((await whereText()).includes(stepLine(1)), `step 1: "${await whereText()}"`);
-  check((await page.text("header")) === C.common.service_name, `the header: the mark and "${C.common.service_name}"`);
+  check((await page.text("header b")) === C.common.service_name && (await page.text("header [data-site]")) === "iamreal.tw", `the header: the mark, "${C.common.service_name}" and the site, as the visitor pages write them`);
+  check((await page.eval<number>(`document.querySelectorAll("header a").length`)) === 0, "the header links nowhere: the card proof's screens send no one elsewhere");
   check(!s1.includes(C.app.use_reader) && !s1.includes(C.app.use_phone), "step 1: no choice of device before the app is out");
   check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.common.next]), `step 1: no 上一步 (the first screen), only 下一步 ${JSON.stringify(await buttonTexts())}`);
   check(!(await page.eval<boolean>(`!!document.querySelector('#pin') || !!document.querySelector('[data-account-field]')`)), "step 1: no PIN field, no account field");
@@ -711,6 +725,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   check(seen.length > 2 && listInOrder(seen), `step 2: top to bottom, one at a time ${JSON.stringify(seen)}`);
   check(componentCount("MakeSignature") === signsBefore && cardStateCount() === cardStates, "nothing was signed or asked before the PIN");
   check(!(await page.text()).includes("測試用戶"), "step 2 does not show the name");
+  await noLinkOut("step 2, read");
   if (o.screenshots) await screenshot(`${o.screenshots}-2-read-done`);
   await page.clickButton(C.common.next);
   await waitStep("pin", "step 3");
@@ -718,6 +733,7 @@ async function toAccounts(o: { wrongPinFirst?: boolean; blockClicks?: boolean; s
   const s3 = await page.text();
   check((await page.text("[data-card-read]")) === [C.pin.card_read, "測試用戶", C.pin.name_note].join("\n"), `step 3: the name, and that it stays here: ${JSON.stringify(await page.text("[data-card-read]"))}`);
   for (const s of [C.pin.purpose, C.pin.stays, C.pin.card_and_pin]) check(s3.includes(s), `step 3, next to the PIN field: "${s}"`);
+  await noLinkOut("step 3");
   if (o.screenshots) await screenshot(`${o.screenshots}-3-pin`);
   if (o.wrongPinFirst) {
     await confirmPin("000000");
@@ -792,10 +808,12 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "de
   const a = C.accounts;
   check(st.state === kind, `${label}: step 4 is "${st.state}"`);
   check(st.title === a.title, `${label}: step 4's title "${st.title}"`);
-  check(has(a.no_check) && has(a.acknowledged) && has(a.preview_note) && has(a.switches_limited), `${label}: step 4, that the account is not checked, the preview, that switches are limited`);
+  check(has(a.not_yours) && has(a.preview_note) && has(a.switches_limited), `${label}: step 4, that the account is not checked, the preview, that switches are limited`);
+  check(!has(a.no_check) && !has(a.acknowledged) && !has(C.links.more), `${label}: step 4, not the app's older sentences, no ${C.links.more}`);
   check(has(a.how_refresh) === (kind === "declared"), `${label}: card proof again explained ${kind === "declared" ? "" : "not "}(什麼都不改……)`);
   check(has(a.how_change) === (kind !== "never") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
   check(!has("還有平台沒填"), `${label}: no nudge to fill every platform`);
+  check(st.links.length === 0, `${label}: step 4 links to no other page ${JSON.stringify(st.links)}`);
   check(JSON.stringify(st.buttons.filter((b) => b !== C.accounts.preview)) === JSON.stringify([C.common.next, C.common.cancel]), `${label}: step 4 buttons ${JSON.stringify(st.buttons)}`);
 }
 
@@ -807,6 +825,7 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   const rows = c.rows.map((r) => [r.platform, r.name, r.account, r.kinds]);
   check(JSON.stringify(rows) === JSON.stringify(want), `${label}: step 5's list ${JSON.stringify(rows)}`);
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
+  check(c.links.length === 0 && !c.main.includes(C.links.more), `${label}: step 5 links to no other page ${JSON.stringify(c.links)}`);
   const empty = button === C.confirm.button_withdraw_all;
   check(c.intro === (empty ? C.confirm.intro_withdraw_all : single !== null ? C.confirm.intro_single : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
   check(c.main.includes(today()) && c.main.includes(C.confirm.short_id_label) && c.main.includes(C.confirm.no_identity) && c.main.includes(C.confirm.permanent), `${label}: step 5, the date, the short ID, that the record has no name, that it cannot be deleted`);
@@ -945,6 +964,11 @@ async function finish(o: DoneExpected & { button: string; dropFirstSubmission?: 
     await waitStep("progress", "in progress");
     check((await whereText()).includes(stepLine(5)), "in progress: still 第 5 步，共 6 步");
     check((await page.text()).includes(C.progress.keep_open), "in progress: keep the page open");
+    const labels = (await items("progress")).map((i) => i.label);
+    check(labels[2] === C.progress.compute, `in progress: computing, what it makes and how long "${labels[2]}"`);
+    await page.waitFor<boolean>(`document.querySelector('[data-item="compute"]')?.dataset.state === "now" || !!document.querySelector('[data-step="done"]') || null`, "computing", 120_000);
+    check(!(await page.text()).includes(C.progress.zero_knowledge), "in progress: no second sentence below the list while computing");
+    await noLinkOut("in progress");
     const threadsUsed = Number(await page.waitFor<string>(`document.querySelector('[data-list="progress"]')?.dataset.threads`, "the engine's threads", 30_000).catch(() => "0"));
     check(threadsUsed > 1, `in progress: a multithreaded proof (${threadsUsed} threads)`);
     if (o.screenshots) await screenshot(`${o.screenshots}-5-progress`);
@@ -2171,7 +2195,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   const undoConfig = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)), seenConfig);
   let st: AccountsSeen;
   try {
-    st = await toAccounts();
+    st = await toAccounts({ screenshots: "single" });
   } finally {
     await undoConfig();
   }
@@ -2183,6 +2207,10 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   check(JSON.stringify(st.lead) === JSON.stringify([A.none_yet, "填上你要宣告的 Threads 帳號。"]), `step 4, one platform: ${JSON.stringify(st.lead)}`);
   check(st.main.includes("一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。") && !st.main.includes(A.one_per_platform) && !st.main.includes(A.fill_one), "step 4, one platform: 一張卡片只能宣告一個 Threads 帳號……, not the sentences of more than one");
   check((await page.eval<string>("document.title")) === "你的 Threads 帳號", "step 4, one platform: the page's title");
+  check(
+    st.main.includes("系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。") && !st.main.includes(A.not_yours),
+    "step 4, one platform: 系統無法確認這個 Threads 帳號是不是你的……",
+  );
   await screenshot("single-4-accounts");
   await typeRows({ [THREADS]: "yui" });
   const c = await waitConfirm();
@@ -2207,6 +2235,24 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   );
   check((await page.text()).includes("有一張有效的自然人憑證宣告了這個帳號："), "step 6, one platform: 有一張有效的自然人憑證宣告了這個帳號：");
   check((await page.text()).includes("越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。") && !(await page.text()).includes(C.done.advice), "step 6, one platform: the advice of this account's date");
+
+  // The same card again, with Threads only: step 4 with the account declared, and step 5 changing it (a correction:
+  // it was declared today). For the screenshots of design/screens/; then 取消.
+  const undoAgain = await rewrite("*/api/v1/config", (b) => void (b.platforms = b.platforms.filter((p: { platform: string }) => p.platform === THREADS)));
+  try {
+    const again = await toAccounts();
+    check(again.state === "declared" && again.title === "你的 Threads 帳號", `one platform, declared: step 4 "${again.state}" "${again.title}"`);
+    check(again.links.length === 0 && !again.main.includes(C.links.more), "one platform, declared: step 4 links to no other page");
+    await screenshot("single-4-accounts-existing");
+    await typeRows({ [THREADS]: "yui.tw" });
+    const c2 = await waitConfirm();
+    check(c2.rows.length === 1 && c2.rows[0]!.account === at("yui.tw"), `one platform, a change: step 5 ${JSON.stringify(c2.rows)}`);
+    await screenshot("single-5-confirm-switch");
+    await page.clickButton(C.common.cancel);
+    await waitStep("before", "step 1, after 取消");
+  } finally {
+    await undoAgain();
+  }
 });
 // 6. Storage, connections, policy ---------------------------------------------
 
@@ -2443,8 +2489,9 @@ await tryStep("the production build's step 1: one platform, named", async () => 
     check(oneProof === fill(C.before.one_proof_single, { platform: THREADS_NAME }), `the production build's step 1: "${oneProof}"`);
     check(oneProof === "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。", "the production build's step 1 names Threads");
     check(!(await prod.eval<boolean>(`!!document.querySelector('[data-listed-together]')`)) && !(await prod.text()).includes(C.before.listed_together), "the production build's step 1 does not say the accounts are listed together");
-    await prod.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
     await screenshot("single-1-before", prod);
+    await prod.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
+    await screenshot("single-1-before-open", prod);
     await sleep(1000);
     check(componentRequests.length === 0, `the production build's step 1 asked nothing of the component ${JSON.stringify(componentRequests)}`);
   } finally {
@@ -2495,7 +2542,9 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     // makes only with a real card: read from the scripts the page was sent.
     const sent = [...new Set(browser.responses.filter((r) => r.url.startsWith(`${testSite.origin}/proof/assets/`) && r.url.endsWith(".js")).map((r) => r.url))];
     const scripts = (await Promise.all(sent.map(async (u) => (await fetch(u)).text()))).join("\n");
-    check(sent.length > 0 && /["'`]test\.iamreal\.tw["'`]/.test(scripts) && !/["'`]iamreal\.tw["'`]/.test(scripts), `the scripts the page was sent write links with test.iamreal.tw, not iamreal.tw (${sent.length} scripts)`);
+    // iamreal.tw only as the site's name in the header, which stays on the test site (design/copy/test-site.md).
+    const withoutName = scripts.replace(/site_name:["'`]iamreal\.tw["'`]/, "");
+    check(sent.length > 0 && /["'`]test\.iamreal\.tw["'`]/.test(scripts) && !/["'`]iamreal\.tw["'`]/.test(withoutName), `the scripts the page was sent write links with test.iamreal.tw, not iamreal.tw (${sent.length} scripts)`);
     const doc = browser.responses.filter((r) => r.url === `${testSite.origin}/proof`).at(-1);
     check(
       doc?.headers["content-security-policy"] === TEST_SITE_CONTENT_SECURITY_POLICY &&
