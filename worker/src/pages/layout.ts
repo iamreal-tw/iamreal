@@ -63,14 +63,18 @@ const NAV_BUTTON = html`<a class="button nav-button" href="/proof">我要換島�
  * sheet hides them and shows the menu instead: a <details>, which opens
  * without a script and from the keyboard, with the same links and button.
  * The two are in the document once each, and the style sheet shows one.
+ * The links and the button are one group, so that where they do not fit
+ * beside the name they go to the next row together.
  */
 const NAV = html`<header class="top">
 <div class="bar">
 <a class="home" href="/">${LOGO}<b>島民證明</b><span class="domain">iamreal.tw</span></a>
+<div class="wide">
 <nav class="links">
 ${NAV_LINKS}
 </nav>
 ${NAV_BUTTON}
+</div>
 <details class="menu"><summary>選單</summary>
 <nav>
 ${NAV_LINKS}
