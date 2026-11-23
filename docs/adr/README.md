@@ -73,7 +73,8 @@
 ## 隱私和營運者看得到什麼
 
 - 連線紀錄記 IP，留 31 天；失敗的請求連內文一起記；對外講到個人資料保護法第 8 條要求的程度。[ADR-0022](0022-connection-log-keeps-ip-for-31-days.md)
-- 分析只數事件：不放 cookie、不放識別碼、沒有第三方的程式；計數的欄位只能從寫死的表裡選。[ADR-0032](0032-analytics-counts-events-not-people.md)
+- 分析只數事件：不放 cookie、沒有第三方的程式；計數的欄位只能從寫死的表裡選。[ADR-0032](0032-analytics-counts-events-not-people.md)（部分由 ADR-0039 取代）
+- 計數可以帶活不過一個月的隨機編號：造訪編號（一次造訪）、過卡裝置編號（31 天換）、嘗試編號（一次過卡）；31 天後對不回名冊上的紀錄；永久保存的只有加總。[ADR-0039](0039-counts-carry-ids-that-live-under-a-month.md)
 - 過卡停在哪一步和錯誤代碼當成計數送給後台，裡面沒有匿名編號。[ADR-0032](0032-analytics-counts-events-not-people.md)、[ADR-0016](0016-device-protections-not-set-by-server.md)
 - 平常不放 cookie；唯一的例外是緊急時的挑戰頁。[ADR-0026](0026-rate-limiting-in-three-layers.md)
 
@@ -93,6 +94,7 @@
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
+| 0039 | 計數不帶編號、型號和版本；`worker/` 的常見問題頁還是「計數裡沒有認得出你的東西」和只寫「請經 VPN 過卡」；島民證明的「下載 app」連結沒有商店的參數 | 待開 |
 
 `worker/` 還沒做完：清冊鏡像、過卡的四個介面、每一種訪客頁面、每天公布名冊有了，限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的舊後台 `server/` 在 2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）。
 
