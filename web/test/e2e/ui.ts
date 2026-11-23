@@ -844,35 +844,51 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
 
 interface DoneSeen {
   title: string;
+  /** The small card's rows: [the platform's name, or "" where the screens speak of one platform; the account]. */
   card: [string, string][];
   link: string;
+  /** What the QR code holds; "" if there is none. */
+  qr: string;
+  /** Where 打開你的島民證明 goes; "" if it is not there. */
+  openProof: string;
+  /** Under the heading of the last step: done.anyone or done.anyone_single; "" if none. */
+  anyone: string;
+  /** The links to the accounts' profiles: [text, href]. */
+  profiles: [string, string][];
+  /** The buttons that share the card's page: [text, href]. */
+  shares: [string, string][];
+  /** What else can be done is there. */
+  optional: boolean;
   record: [string, string, string[], boolean, string][];
+  /** The section of what the proof log recorded is there. */
+  recordShown: boolean;
   newCard: boolean;
   withdrawnLink: boolean;
   otherCards: string[];
   kindsUnreadable: boolean;
-  /** Where to put the link (done.put_link or done.put_link_single); "" if none. */
-  putLink: string;
-  /** The points under what the proof log recorded. */
-  points: string[];
   main: string;
 }
 
 const doneSeen = async (): Promise<DoneSeen> => ({
   ...(await page.eval<Omit<DoneSeen, "main">>(`({
     title: document.querySelector('[data-step="done"] h1').innerText,
-    card: [...document.querySelectorAll('[data-proof] dl.list dt')].map((dt) => [dt.innerText, dt.nextElementSibling.innerText]),
+    card: [...document.querySelectorAll('[data-proof] [data-card-row]')].map((r) => [r.querySelector('[data-card-platform]')?.innerText ?? "", r.querySelector('[data-card-account]').innerText]),
     link: document.querySelector('[data-link]')?.innerText ?? "",
+    qr: document.querySelector('[data-qr]')?.dataset.qr ?? "",
+    openProof: document.querySelector('[data-open-proof]')?.getAttribute("href") ?? "",
+    anyone: document.querySelector('[data-anyone]')?.innerText ?? "",
+    profiles: [...document.querySelectorAll('a[data-profile]')].map((a) => [a.innerText, a.getAttribute("href")]),
+    shares: [...document.querySelectorAll('a[data-share]')].map((a) => [a.innerText, a.getAttribute("href")]),
+    optional: !!document.querySelector('[data-optional]'),
     record: [...document.querySelectorAll('dt[data-done-row]')].map((dt) => {
       const dd = dt.nextElementSibling;
       return [dt.innerText, dd.querySelector('.acct').innerText, [...dd.querySelectorAll('[data-kind]')].map((e) => e.innerText), dd.hasAttribute('data-mismatch'), dd.querySelector('[data-code]')?.innerText ?? ""];
     }),
+    recordShown: !!document.querySelector('[data-record]'),
     newCard: !!document.querySelector('[data-new-card]'),
     withdrawnLink: !!document.querySelector('[data-withdrawn-link]'),
     otherCards: [...document.querySelectorAll('[data-other-cards]')].map((e) => e.innerText),
     kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
-    putLink: document.querySelector('[data-put-link]')?.innerText ?? "",
-    points: [...document.querySelectorAll('[data-step="done"] ul.three li')].map((e) => e.innerText),
   })`)),
   main: await page.text(),
 });
@@ -882,7 +898,12 @@ interface DoneExpected {
   title: string;
   /** The card's list after the record: [name, account]; empty when everything was withdrawn. */
   card: [string, string][];
-  /** The record's rows: [name, account, kind sentences]; null when the answer's kinds could not be read. */
+  /**
+   * The record's rows: [name, account, kind sentences]; null when the
+   * answer's kinds could not be read. The screen shows them only where they
+   * differ from what step 5 said (`mismatch`); elsewhere, that they do not
+   * differ is what is checked.
+   */
   record: [string, string, string[]][] | null;
   newCard?: boolean;
   withdrawnLink?: boolean;
@@ -893,34 +914,51 @@ interface DoneExpected {
   single?: string;
 }
 
+/** The sentences of the done screen before this one (#292) that it no longer has. */
+const OLD_DONE = [C.done.put_up, C.done.put_link, C.done.advice, C.done.advice_single, C.done.renamed, C.done.trust, C.done.hand_ai, C.done.hand_profile, C.links.verify, C.links.proof];
+
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   if (!check(d !== null, `${o.label}: done ${message}`)) return;
   const v = d!;
   check(v.title === o.title, `${o.label}: step 6's title "${v.title}"`);
   const withdrawAll = o.card.length === 0;
-  check(JSON.stringify(v.card) === JSON.stringify(o.card), `${o.label}: the card lists ${JSON.stringify(v.card)}`);
-  const sid = /^iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
+  // With one platform, the small card names no platform.
+  const card = o.single ? o.card.map(([, account]) => ["", account]) : o.card;
+  check(JSON.stringify(v.card) === JSON.stringify(card), `${o.label}: the card lists ${JSON.stringify(v.card)}`);
+  const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(v.link)?.[1] ?? (/島民編號開頭是 ([0-9A-Z]{10})。/.exec(v.main)?.[1] ?? "");
   check(withdrawAll ? v.link === "" : v.link === `${SITE_DOMAIN}/${cardPath(sid)}`, `${o.label}: the link is the card's page ${v.link}`);
-  check(v.main.includes(C.done.recorded) && v.main.includes(today()) && v.main.includes(C.done.trust) && v.main.includes(C.done.unplug), `${o.label}: step 6, the proof log's line, its date, that anyone can verify, unplug`);
-  const advice = o.single ? C.done.advice_single : C.done.advice;
-  check(v.main.includes(advice) === !withdrawAll && v.main.includes(C.done.put_up) === !withdrawAll, `${o.label}: the advice to come back and how to put it up ${withdrawAll ? "are not there" : "are there"}`);
-  const putLink = withdrawAll ? "" : o.single ? fill(C.done.put_link_single, { platform: o.single }) : C.done.put_link;
-  check(v.putLink === putLink, `${o.label}: where to put the link "${v.putLink}"`);
-  // The points: the advice and that a renamed account comes back, when the list is not empty; then that anyone can verify.
-  const points = [...(withdrawAll ? [] : [advice, C.done.renamed]), `${C.done.trust} ${C.links.verify}`];
-  check(JSON.stringify(v.points) === JSON.stringify(points), `${o.label}: step 6's points ${JSON.stringify(v.points)}`);
+  check(v.main.includes(fill(C.done.recorded_on, { date: today() }) + C.done.unplug), `${o.label}: step 6, the day it was recorded, unplug`);
+  // Hanging it on the profile, and what else can be done: when the list is not empty.
+  const hangTitle = o.single ? fill(C.done.hang_title_single, { platform: o.single }) : C.done.hang_title;
+  const anyone = withdrawAll ? "" : o.single ? C.done.anyone_single : C.done.anyone;
+  check(v.main.includes(hangTitle) === !withdrawAll && v.anyone === anyone, `${o.label}: the last step ${withdrawAll ? "is not there" : "is there"}: "${v.anyone}"`);
+  check(v.qr === (withdrawAll ? "" : `https://${SITE_DOMAIN}/hang/${sid}`), `${o.label}: the QR code holds the card's page to hang it from ${v.qr}`);
+  check(v.openProof === (withdrawAll ? "" : `/${cardPath(sid)}`), `${o.label}: 打開你的島民證明 goes to the card's page on this site ${v.openProof}`);
+  const profiles = withdrawAll ? [] : o.card.filter(([name]) => name === THREADS_NAME).map(([, account]) => [fill(C.done.open_profile, { account, platform: THREADS_NAME }), `https://www.threads.com/${account}`]);
+  check(JSON.stringify(v.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(v.profiles)}`);
+  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?url=${encodeURIComponent(`https://${SITE_DOMAIN}/${cardPath(sid)}`)}`]];
+  check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the card's page and nothing else ${JSON.stringify(v.shares)}`);
+  check(v.optional === !withdrawAll && v.main.includes(C.done.return_note) === !withdrawAll, `${o.label}: what else can be done ${withdrawAll ? "is not there" : "is there"}`);
+  check(
+    OLD_DONE.every((x) => !v.main.includes(x)),
+    `${o.label}: none of the old done screen's sentences ${JSON.stringify(OLD_DONE.filter((x) => v.main.includes(x)))}`,
+  );
+  const mismatch = o.mismatch ?? [];
+  check(v.main.includes(C.done.mismatch) === mismatch.length > 0 && v.recordShown === mismatch.length > 0, `${o.label}: what the proof log recorded ${mismatch.length ? "is shown, it differs" : "is not shown: it is what step 5 said"}`);
   if (o.record === null) {
-    check(v.kindsUnreadable && v.record.length === 0 && !v.main.includes(C.done.record_list), `${o.label}: the kinds could not be read: the date and that sentence only`);
-  } else {
+    check(v.kindsUnreadable && v.record.length === 0, `${o.label}: the kinds could not be read: that sentence`);
+  } else if (mismatch.length > 0) {
     const rows = v.record.map((r) => [r[0], r[1], r[2]]);
     check(JSON.stringify(rows) === JSON.stringify(o.record), `${o.label}: the record's rows ${JSON.stringify(rows)}`);
     const recordLine = withdrawAll ? C.done.record_withdraw_all : o.single ? C.done.record_single : C.done.record_list;
     check(v.main.includes(recordLine), `${o.label}: the record's line "${recordLine}"`);
-    const mismatch = v.record.filter((r) => r[3]).map((r) => r[0]);
-    const want = (o.mismatch ?? []).map((p) => (p === THREADS ? THREADS_NAME : p === EXAMPLE ? EXAMPLE_NAME : p));
-    check(JSON.stringify(mismatch) === JSON.stringify(want) && v.record.every((r) => r[4] === (r[3] ? "kind_mismatch" : "")), `${o.label}: what the server recorded and what step 5 said ${want.length ? "differ on " + want.join(", ") + " (kind_mismatch)" : "are the same"}`);
+    const differs = v.record.filter((r) => r[3]).map((r) => r[0]);
+    const want = mismatch.map((p) => (p === THREADS ? THREADS_NAME : p === EXAMPLE ? EXAMPLE_NAME : p));
+    check(JSON.stringify(differs) === JSON.stringify(want) && v.record.every((r) => r[4] === (r[3] ? "kind_mismatch" : "")), `${o.label}: what the server recorded and what step 5 said differ on ${want.join(", ")} (kind_mismatch)`);
     const sidLine = fill(C.done.short_id, { short_id: sid });
-    check(withdrawAll || v.main.includes(sidLine), `${o.label}: ${sidLine}`);
+    check(v.main.includes(sidLine), `${o.label}: ${sidLine}`);
+  } else {
+    check(!v.kindsUnreadable, `${o.label}: the kinds were read`);
   }
   check(v.newCard === !!o.newCard, `${o.label}: ${o.newCard ? "says" : "does not say"} a new card has a new link`);
   check(v.withdrawnLink === !!o.withdrawnLink, `${o.label}: ${o.withdrawnLink ? "says" : "does not say"} the withdrawn account's link can go`);
@@ -1081,12 +1119,12 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   const clip = await page.eval<string>(`navigator.clipboard.readText()`).catch((e) => `(${e.message})`);
   check(clip === `https://${SITE_DOMAIN}/${cardPath(shown.at(-1) ?? "")}`, `複製連結 copied ${clip}`);
   check((await buttons()).some((b) => b.text === C.done.copied), "the button says 已複製");
-  const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.getAttribute("href") + " " + a.target + " " + a.rel)`);
-  check(
-    hrefs.includes("/proof/help.html?topic=proof _blank noopener noreferrer") && hrefs.includes("/proof/help.html?topic=verify _blank noopener noreferrer"),
-    `step 6: 打開這張島民證明 and 怎麼驗證島民證明 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
-  );
-  check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero svg.logo-animated')`), "step 6: the mark's animation");
+  // Every link of the screen opens a new tab: leaving the page would end it.
+  const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.target + " " + a.rel)`);
+  check(hrefs.length >= 3 && hrefs.every((h) => h === "_blank noopener noreferrer"), `step 6: every link opens a new tab ${JSON.stringify(hrefs)}`);
+  check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof] svg.logo-animated')`), "step 6: the mark's animation, on the small card");
+  // The QR code is drawn on the page from what it holds, and nothing is asked of another origin for it.
+  check(await page.eval<boolean>(`!!document.querySelector('[data-qr] svg path.qr-dark')?.getAttribute("d")`), "step 6: the QR code is an SVG drawn on the page");
 });
 
 // The page's headers and isolation, read from the first load.
@@ -1321,9 +1359,9 @@ await tryStep("everything withdrawn", async () => {
   await typeRows({ [THREADS]: "" });
   checkConfirm("withdraw all", await waitConfirm(), [[THREADS, THREADS_NAME, at("bob"), [K.withdraw]]], C.confirm.button_withdraw_all);
   await screenshot("withdraw-all-5-confirm");
-  await finish({ label: "withdraw all", button: C.confirm.button_withdraw_all, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("bob"), [K.withdraw]]], screenshots: "withdraw-all" });
+  await finish({ label: "withdraw all", button: C.confirm.button_withdraw_all, title: C.done.withdraw_all, card: [], record: [[THREADS_NAME, at("bob"), [K.withdraw]]], withdrawnLink: true, screenshots: "withdraw-all" });
   const v = await doneSeen();
-  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero, [data-proof]')`)) && v.link === "", "everything withdrawn: no animation, no card, no link");
+  check(!(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] [data-proof], [data-qr]')`)) && v.link === "", "everything withdrawn: no card, no QR code, no link");
 });
 
 await tryStep("no account now: an empty list is refused; both declared again (not switches)", async () => {
@@ -2238,12 +2276,15 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
     single: THREADS_NAME,
     screenshots: "single",
   });
+  // The words of design/copy/card-proof.md, step 6, as written there.
+  const hangTitle = await page.text("[data-step=\"done\"] h2.hang-title");
+  check(hangTitle === "最後一步：掛到你的 Threads 個人檔案", `step 6, one platform: the heading "${hangTitle}"`);
   check(
-    (await page.text("[data-put-link]")) === "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
-    `step 6, one platform: "${await page.text("[data-put-link]")}"`,
+    (await page.text("[data-anyone]")) === "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。",
+    `step 6, one platform: "${await page.text("[data-anyone]")}"`,
   );
-  check((await page.text()).includes("有一張有效的自然人憑證宣告了這個帳號："), "step 6, one platform: 有一張有效的自然人憑證宣告了這個帳號：");
-  check((await page.text()).includes("越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。") && !(await page.text()).includes(C.done.advice), "step 6, one platform: the advice of this account's date");
+  check((await page.text("[data-new-card]")) === "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。", "step 6: a new card's new link");
+  check((await page.text()).includes("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。"), "step 6: why come back");
 
   // The same card the next day, with Threads only: step 4 with the account declared, and step 5 switching it.
   // For the screenshots of design/screens/; then 取消, nothing signed a second time.
@@ -2582,15 +2623,10 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     const requests = browser.requests.filter((r) => r.sessionId === tab.sessionId || browser.sessions.get(r.sessionId)?.url.startsWith(testSite.origin)).map((r) => r.url);
     check(requests.length > 0 && requests.every((u) => u.startsWith("about:") || new URL(u).origin === testSite.origin), `the test site's build's step 1 asked for nothing outside its own origin ${JSON.stringify(requests.filter((u) => !u.startsWith(testSite.origin)).slice(0, 5))}`);
     check(componentRequests.length === 0, `the test site's build's step 1 asked nothing of the component ${JSON.stringify(componentRequests)}`);
-    await tab.goto(`${testSite.origin}/proof/help.html?topic=prepare`);
-    await tab.waitFor(`document.querySelector("[data-help]")`, "the help page");
-    await screenshot("help-test-site", tab);
-    const help = await markOf(tab);
-    check(help !== null && help.first && help.text === mark, `the help page has the mark too: ${JSON.stringify(help)}`);
-    await screenshot("testsite-help", tab);
-    await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
-    await screenshot("testsite-help-phone", tab);
-    await tab.send("Emulation.clearDeviceMetricsOverride");
+    // The help page is gone: its old address, which the apps still link to, is the site's /prepare.
+    await tab.goto(`${testSite.origin}/proof/help.html?topic=more`);
+    const landed = await tab.waitFor<string>(`location.pathname === "/prepare" ? location.pathname : null`, "the old address of the help page, redirected").catch(() => "");
+    check(landed === "/prepare", `/proof/help.html goes to /prepare: ${await tab.eval<string>("location.href")}`);
     const violations = browser.logs.slice(logsBefore).filter((l) => /Content Security Policy/i.test(l.text));
     check(violations.length === 0, `no Content-Security-Policy violation on the test site's build ${JSON.stringify(violations.map((l) => l.text))}`);
   } finally {

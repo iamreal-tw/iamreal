@@ -114,13 +114,14 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
   // The public site's domain nowhere but as the site's name in the header, which stays on the test site (design/copy/test-site.md).
   assert.doesNotMatch(code.replace(/site_name:["'`]iamreal\.tw["'`]/, ""), /["'`]iamreal\.tw["'`]/, "not the public site's domain");
-  // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
+  // The mark: one JSON text among the scripts the page loads (its entry, which this mode adds to the page, is bundled with
+  // the page's own: the page is the build's one HTML), with the sentence, the date and the scope string of the build's target.
   assert.ok(MARK.startsWith("測試的證明紀錄"));
   const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });
-  const script = [...files.keys()].filter((f) => /^assets\/test-proof-log-[\w-]+\.js$/.test(f));
-  assert.equal(script.length, 1, "the mark's script");
-  assert.ok(files.get(script[0]!)!.replaceAll("\\", "").includes(mark), `the mark's script holds ${mark}`);
-  assert.ok(loadedBy(files, "index.html").includes(script[0]!), "the page loads the mark's script");
+  const loaded = loadedBy(files, "index.html").filter((f) => f.endsWith(".js"));
+  const holding = loaded.filter((f) => files.get(f)!.replaceAll("\\", "").includes(mark));
+  assert.equal(holding.length, 1, `one script the page loads holds ${mark}`);
+  assert.equal([...code.replaceAll("\\", "").matchAll(/"clearedOn":/g)].length, 1, "the mark once in the build");
 });
 
 test("the production build has nothing of the mark, and it is the one page: no help page", async () => {

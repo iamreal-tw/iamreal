@@ -20,7 +20,7 @@ export type HelpTopic = "prepare";
 
 export type Message =
   | (Sentence & {
-      /** A link to the help page after the sentence. */
+      /** A link to the site's page after the sentence. */
       link?: HelpTopic;
       /** The server's X-Request-Id, shown on the next line. */
       requestId?: string;
