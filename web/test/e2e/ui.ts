@@ -2580,6 +2580,7 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     check(componentRequests.length === 0, `the test site's build's step 1 asked nothing of the component ${JSON.stringify(componentRequests)}`);
     await tab.goto(`${testSite.origin}/proof/help.html?topic=prepare`);
     await tab.waitFor(`document.querySelector("[data-help]")`, "the help page");
+    await screenshot("help-test-site", tab);
     const help = await markOf(tab);
     check(help !== null && help.first && help.text === mark, `the help page has the mark too: ${JSON.stringify(help)}`);
     await screenshot("testsite-help", tab);

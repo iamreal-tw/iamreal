@@ -471,7 +471,7 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | 檔案 | 內容 |
 |---|---|
 | `index.html`、`help.html` | 過卡的頁面、說明頁 |
-| `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（`card-proof.md` 的六步）、`messages.ts`（停止原因、清單每一項的狀態、第 4 步的清單和每一列的那一行、第 5 步要簽的清單、完成的畫面對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`test-proof-log.ts` 和 `test-proof-log.css`（測試的證明紀錄的標示，只有測試網站的建置有）、`logo.ts`（記號，用 DOM 畫的 SVG；台灣的輪廓取自 Natural Earth 的公有領域地圖資料）、`help.ts`、`style.css`（顏色、版面、清單的勾和轉圈、完成的動畫；不載入字體檔） |
+| `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（`card-proof.md` 的六步）、`messages.ts`（停止原因、清單每一項的狀態、第 4 步的清單和每一列的那一行、第 5 步要簽的清單、完成的畫面對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`frame.ts`（六步和說明頁共用的頁首和欄）、`test-proof-log.ts` 和 `test-proof-log.css`（測試的證明紀錄的標示，只有測試網站的建置有）、`logo.ts`（記號，用 DOM 畫的 SVG；台灣的輪廓取自 Natural Earth 的公有領域地圖資料）、`help.ts`、`style.css`（顏色、版面、清單的勾和轉圈、完成的動畫；不載入字體檔） |
 | `src/platforms.ts`、`src/presentations/` | 寫死在裝置上的每個平台的名稱和寫法（每個平台一份）、卡片頁的路徑（網域在 target）（見「每個平台不同的東西」） |
 | `src/index.ts` | 引擎的入口：`startEngine()`（進頁面呼叫一次）、`createCardProof()`（每次過卡，用同一個引擎）。證明紀錄（`src/target.ts`）、同網域的 fetch、資料網域的 fetch、時鐘、儲存 |
 | `src/base.ts` | 頁面和它的檔案放在哪個路徑底下（建置的 `base`，見「網址」） |
