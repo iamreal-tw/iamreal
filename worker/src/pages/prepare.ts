@@ -8,10 +8,10 @@ import { html } from "./html.ts";
 import type { Document } from "./layout.ts";
 
 /** MOICA's download page of the component (prepare.md, section 3). */
-export const MOICA_DOWNLOAD = "https://moica.nat.gov.tw/rac_plugin.html";
+const MOICA_DOWNLOAD = "https://moica.nat.gov.tw/rac_plugin.html";
 
 /** MOICA's site, where a locked card is unlocked (prepare.md, section 4). */
-export const MOICA_SITE = "https://moica.nat.gov.tw/";
+const MOICA_SITE = "https://moica.nat.gov.tw/";
 
 export function preparePage(): Document {
   const content = html`<section class="intro">

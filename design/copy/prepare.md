@@ -80,7 +80,7 @@ Windows：「開始」的「所有程式」裡有「跨平台網頁元件」資�
 - 選作業系統、Windows 和 macOS 兩種：戶政司的說明「請依作業系統選取安裝」；Mac 說明第 3 頁下載頁的截圖有「下載Windows版」「下載Mac版」（還有 Linux 版，這一頁不寫：過卡沒有在 Linux 上試過）
 - 「安裝完成後，關掉所有網頁，再重新打開瀏覽器」：Mac 說明第 3 頁下載頁的截圖「安裝完成後，請將電腦所有網頁關閉，再重新開啟瀏覽器」
 - Windows 的「所有程式」：戶政司的說明寫，安裝完畢後，點選「開始」再點「所有程式」，「將會出現「HiCOS PKI Smart Card」及「跨平台網頁元件」等資料夾」
-- macOS 的狀態和按鈕：Mac 說明第 5、6 頁，「應用程式」裡的 HipkiLocalSignServer；視窗上寫「HiPKILocalSignServer目前狀態為：關閉中」或「：開啟中」，按鈕「啟動HiPKILocalSignServer」
+- macOS 的狀態和按鈕：Mac 說明第 5、6 頁。「應用程式」裡的那一個，說明的文字寫「HipkiLocalSignServer」，截圖上圖示下面的名稱是「HiPKILocalSignServer」，頁面照畫面上看得到的寫；視窗上寫「HiPKILocalSignServer目前狀態為：關閉中」或「：開啟中」，按鈕「啟動HiPKILocalSignServer」
 - 沒寫的：Windows 上怎麼看元件有沒有在執行、怎麼啟動它，和「安裝完通常會自動啟動」「重新開機後要重新打開」，都查不到內政部的來源。內政部的兩份 PDF 沒有寫，Windows 的那一份只講彈出式視窗
 - 第 3 步、第 4 步不是內政部的說法
 
