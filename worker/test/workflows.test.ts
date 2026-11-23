@@ -1329,12 +1329,21 @@ function goDirectories(packages: readonly string[]): string[] {
   return [...new Set(dirs.split("\n").filter(Boolean).map((d) => relative(REPO, d).split(sep).join("/")))];
 }
 
+/**
+ * `./<dir>/...` for each top-level directory with tracked Go sources, `.` if the root has some. Not `./...`:
+ * that walks every directory, the untracked ones too, and the tests running at once make and delete
+ * directories under worker/test-output/ while go list reads the tree (#304).
+ */
+function goTrees(): string[] {
+  return [...new Set(trackedFiles("*.go").map((f) => (f.includes("/") ? `./${f.split("/")[0]}/...` : ".")))].sort();
+}
+
 const skipWithoutGo = (what: string): { skip: string | false } => ({ skip: !hasGo && !goRequired ? `go is not installed: ${what}` : false });
 
 test("the go check runs when anything it uses changes: every directory with a Go package, and every file their sources name, is in its list", skipWithoutGo("the Go packages are not looked at"), () => {
   assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
   const list = CHECK_PATHS.go!;
-  const dirs = goDirectories(["./..."]);
+  const dirs = goDirectories(goTrees());
   for (const d of ["verifier", "cmd/iamreal-verify", "crl", "prooflog"]) assert.ok(dirs.includes(d), `the check found ${d}`);
   const named = namedByGo(trackedFiles(...new Set(dirs.map((d) => d.split("/")[0]!))));
   for (const p of ["spec/vectors", "design/copy/verify.md", "spec/record-rules.md"]) assert.ok(named.has(p), `the check found ${p}: ${[...named].join(", ")}`);
