@@ -18,7 +18,7 @@ const { vectors } = JSON.parse(readFileSync(new URL("fixtures/qr-vectors.json", 
 const rowsOf = (modules: boolean[][]): string[] => modules.map((r) => r.map((m) => (m ? "1" : "0")).join(""));
 
 test("the vectors cover versions 1 to 10, every mask, and a text that is not ASCII", () => {
-  assert.deepEqual([...new Set(vectors.map((v) => v.version))].sort((a, b) => a - b), [1, 2, 3, 5, 6, 8, 9, 10]);
+  assert.deepEqual([...new Set(vectors.map((v) => v.version))].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.deepEqual([...new Set(vectors.map((v) => v.mask))].sort(), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.ok(vectors.some((v) => /[^\x00-\x7f]/.test(v.text)));
 });

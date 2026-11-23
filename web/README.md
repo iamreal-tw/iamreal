@@ -70,7 +70,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 
 過卡的說明頁 `/proof/help.html` 拿掉了（#292）：建置裡沒有它，舊網址轉（`301`）到 `/prepare`（`worker/site/_redirects`）。Android、iOS 的 app 改版之前還連到那個網址。
 
-**完成畫面的 QR code**（`src/ui/qr.ts`）：內容是這張島民證明掛上去的那一頁 `https://<SITE_DOMAIN>/hang/<島民編號>`（`design/copy/hang.md` 第 2 部分），在頁面上用 DOM 畫成 SVG，不向任何地方發請求。編碼器是這裡自己寫的（位元組模式、錯誤更正等級 M、版本 1 到 10），沒有引用套件；`test/qr.test.ts` 逐格比對另一個編碼器（Project Nayuki 的 qrcodegen 1.8.0）產生的標準答案 `test/fixtures/qr-vectors.json`，產生的指令寫在 `test/generate/qr-vectors.py`。
+**完成畫面的 QR code**（`src/ui/qr.ts`）：內容是這張島民證明掛上去的那一頁 `https://<SITE_DOMAIN>/hang/<島民編號>`（`design/copy/hang.md` 第 2 部分），在頁面上用 DOM 畫成 SVG，不向任何地方發請求。編碼器不是套件：照 Project Nayuki 的 QR Code generator library（MIT 授權，`NOTICE`）的做法，只留這一頁要的（位元組模式、錯誤更正等級 M、版本 1 到 10）。`test/qr.test.ts` 逐格比對那個函式庫（Python 版 qrcodegen 1.8.0）產生的標準答案 `test/fixtures/qr-vectors.json`，產生的指令寫在 `test/generate/qr-vectors.py`；寫的時候另外用讀碼程式（zbarimg）讀過頁面截圖上的 QR code。
 
 每個畫面的頁首是記號、服務的名稱「島民證明」和網站的名字 `iamreal.tw`（`card-proof.json` 的 `common.service_name`、`common.site_name`），不是連結。網站的名字在測試網站的建置裡也是 `iamreal.tw`（`design/copy/test-site.md`），`test/build.test.ts` 只容許它用正式網站的網域。
 

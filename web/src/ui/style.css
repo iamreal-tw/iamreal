@@ -783,7 +783,7 @@ time {
 .cert {
   background: var(--bg);
   border: 1px solid var(--ink);
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   padding: 12px 14px;
 }
 
@@ -874,20 +874,26 @@ time {
   margin-top: 16px;
 }
 
+/* Two columns, no frame (design/DESIGN.md, the lines: frames are for the proof card and a few others). */
 .hang {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--ink);
-  border-radius: 8px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   margin-top: 28px;
 }
 
 .hang > div {
-  padding: 22px;
+  padding: 22px 0;
+}
+
+.hang-phone {
+  padding-right: 22px;
 }
 
 .hang-computer {
   border-left: 1px solid var(--line);
+  padding-left: 22px;
 }
 
 .step h3 {
@@ -931,9 +937,7 @@ time {
 
 .hang-computer .btn {
   width: 100%;
-  min-height: 46px;
   margin-top: 12px;
-  font-size: 16px;
 }
 
 .profile {
@@ -955,7 +959,6 @@ time {
 }
 
 .hung {
-  border-top: 1px dashed var(--line);
   margin-top: 28px;
   padding-top: 24px;
 }
@@ -1021,7 +1024,7 @@ time {
 .optional-items {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px dashed var(--line);
+  border-top: 1px solid var(--line);
   margin-top: 16px;
 }
 
@@ -1032,16 +1035,13 @@ time {
 }
 
 .optional-item + .optional-item {
-  border-left: 1px dashed var(--line);
+  border-left: 1px solid var(--line);
   padding-left: 20px;
   padding-right: 0;
 }
 
 .optional-item .btn {
-  min-height: 46px;
   margin-top: 14px;
-  padding: 0 18px;
-  font-size: 16px;
   text-decoration: none;
 }
 
@@ -1125,9 +1125,14 @@ time {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .hang-phone {
+    padding-right: 0;
+  }
+
   .hang-computer {
     border-left: 0;
     border-top: 1px solid var(--line);
+    padding-left: 0;
   }
 
   .optional-item + .optional-item {

@@ -4,3 +4,11 @@ under the Apache License 2.0.
 
 DIW MY WALLET
 Copyright 2026 LIN, CHE-CHUAN
+
+The QR code of the web card proof page's last screen (web/src/ui/qr.ts)
+follows Project Nayuki's QR Code generator library
+(https://www.nayuki.io/page/qr-code-generator-library), under the MIT
+License; its copyright and permission notice are at the top of that file.
+
+QR Code generator library
+Copyright (c) Project Nayuki

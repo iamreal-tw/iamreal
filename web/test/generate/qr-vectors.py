@@ -12,9 +12,15 @@
 # the code with the mask qrcodegen chooses, and for two of them the code with
 # each of the 8 masks.
 #
+# src/ui/qr.ts follows qrcodegen's steps, so these codes check that it does so
+# without a slip; that a phone reads them was checked with a reader (zbarimg)
+# when the encoder was written (#292).
+#
 # Not segno: segno 1.6.6 adds a whole byte of zeros after the terminator when
-# the bits already end on a byte (encoder.py, write_padding_bits), which a
-# reader skips but ISO/IEC 18004 (7.4.10) does not write.
+# the bits already end on a byte (write_padding_bits in
+# https://github.com/heuer/segno/blob/1.6.6/segno/encoder.py: 8 - (length % 8)
+# zeros, 8 when length is a multiple of 8), which a reader skips but ISO/IEC
+# 18004 (7.4.10) does not write.
 import json
 import pathlib
 
@@ -26,7 +32,9 @@ TEXTS = [
     "A",
     "hello, world",
     "https://iamreal.tw/hang/" + "7K2Q9FM4XD" * 4,
+    "w" * 50,
     "x" * 100,
+    "v" * 115,
     "0123456789abcdef" * 9,
     "y" * 180,
     "z" * 213,

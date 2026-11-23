@@ -2,10 +2,30 @@
 // address of /hang/<short ID>, as a QR code (ISO/IEC 18004), drawn as an
 // SVG. Byte mode (the text as UTF-8), error correction level M, the
 // smallest of versions 1 to 10 that holds it, the mask with the lowest
-// penalty. Written here rather than taken from a package: it is short, and
-// test/qr.test.ts holds it to another encoder's codes, module for module.
+// penalty. Not a package: the steps (Reed-Solomon, the function patterns,
+// the placement, the penalty rules) follow Project Nayuki's QR Code generator
+// library, cut down to what this page needs; test/qr.test.ts holds it to
+// that library's codes, module for module.
 //
 // The code holds the text it is given and nothing else; nothing is sent.
+//
+// QR Code generator library: Copyright (c) Project Nayuki. (MIT License)
+// https://www.nayuki.io/page/qr-code-generator-library
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+// - The above copyright notice and this permission notice shall be included in
+//   all copies or substantial portions of the Software.
+// - The Software is provided "as is", without warranty of any kind, express or
+//   implied, including but not limited to the warranties of merchantability,
+//   fitness for a particular purpose and noninfringement. In no event shall the
+//   authors or copyright holders be liable for any claim, damages or other
+//   liability, whether in an action of contract, tort or otherwise, arising from,
+//   out of or in connection with the Software or the use or other dealings in the
+//   Software.
 
 /** Level M, versions 1 to 10: the error correction codewords per block, and the data codewords of each block. */
 const BLOCKS: readonly (readonly [number, readonly number[]])[] = [
@@ -24,6 +44,9 @@ const BLOCKS: readonly (readonly [number, readonly number[]])[] = [
 const ALIGNMENT: readonly (readonly number[])[] = [[], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
 /** Level M's two bits in the format information. */
 const LEVEL_M = 0b00;
+
+/** The bits of the length of a byte-mode text: 8 up to version 9, 16 from version 10. */
+const lengthBits = (version: number): number => (version < 10 ? 8 : 16);
 
 export interface QrCode {
   version: number;
@@ -75,7 +98,7 @@ function codewords(bytes: Uint8Array, version: number): number[] {
     for (let i = length - 1; i >= 0; i--) bits.push((value >>> i) & 1);
   };
   put(0b0100, 4); // byte mode
-  put(bytes.length, version < 10 ? 8 : 16);
+  put(bytes.length, lengthBits(version));
   for (const b of bytes) put(b, 8);
   put(0, Math.min(4, capacity * 8 - bits.length)); // the terminator
   put(0, (8 - (bits.length % 8)) % 8);
@@ -275,7 +298,7 @@ export function qrCode(text: string, mask?: number): QrCode {
   const bytes = new TextEncoder().encode(text);
   const version = BLOCKS.findIndex(([, blocks], i) => {
     const capacityBits = blocks.reduce((a, b) => a + b, 0) * 8;
-    return 4 + (i + 1 < 10 ? 8 : 16) + bytes.length * 8 <= capacityBits;
+    return 4 + lengthBits(i + 1) + bytes.length * 8 <= capacityBits;
   }) + 1;
   if (version === 0) throw new Error(`a text of ${bytes.length} bytes is too long for a QR code of version 10 at level M`);
   const words = codewords(bytes, version);

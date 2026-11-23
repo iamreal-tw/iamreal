@@ -85,9 +85,13 @@ const STEPS = 6;
 /** Where a help link goes: what a card proof needs, a page of the site (/prepare, made by the Worker). */
 const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
 
+/** A link out of the page: in a new tab, as leaving this page would end the card proof. */
+function newTab(href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement {
+  return el("a", { attrs: { href, target: "_blank", rel: "noopener noreferrer", ...attrs } }, ...children);
+}
+
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
-  // A new tab: leaving this page would end the card proof.
-  return el("a", { attrs: { href: HELP_HREF[topic], target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
+  return newTab(HELP_HREF[topic], { "data-help": topic }, COPY.links[topic]);
 }
 
 function say(s: Sentence): DocumentFragment {
@@ -654,9 +658,6 @@ export function startApp(o: AppOptions): void {
     const t = COPY.done;
     flow = null;
     const view = doneView(d, single);
-    // A link out of the page: a new tab, leaving this page would end it.
-    const out = (href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement =>
-      el("a", { attrs: { href, target: "_blank", rel: "noopener noreferrer", ...attrs } }, ...children);
     const subhead = (text: string): HTMLElement => el("h3", {}, text);
     const card = view.withdrawAll
       ? null
@@ -704,7 +705,7 @@ export function startApp(o: AppOptions): void {
       const qr = qrSvg(view.hangUrl);
       // The link is written beside it, in the other column: the code is not read out.
       qr.setAttribute("aria-hidden", "true");
-      const hung = parts(t.hung, { open_proof: t.open_proof }).map((p) => (p.placeholder === null ? p.text : out(view.proofPath, { "data-open-proof": "" }, p.text)));
+      const hung = parts(t.hung, { open_proof: t.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(view.proofPath, { "data-open-proof": "" }, p.text)));
       hang = [
         el("h2", { class: "hang-title" }, say(view.hangTitle)),
         el("p", { class: "anyone", attrs: { "data-anyone": "" } }, say(view.anyone)),
@@ -718,7 +719,7 @@ export function startApp(o: AppOptions): void {
             subhead(t.on_computer),
             el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link)),
             copy,
-            ...view.profiles.map((pr) => el("p", { class: "profile" }, out(pr.url, { "data-profile": "" }, say(pr.text)))),
+            ...view.profiles.map((pr) => el("p", { class: "profile" }, newTab(pr.url, { "data-profile": "" }, say(pr.text)))),
             el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_save)),
           ),
         ),
@@ -763,7 +764,7 @@ export function startApp(o: AppOptions): void {
             "div",
             { class: "optional-items" },
             ...view.shares.map((sh) =>
-              el("div", { class: "optional-item" }, subhead(t.share_title), el("p", {}, say(sh.note)), out(sh.url, { class: "btn ghost", "data-share": "" }, say(sh.button))),
+              el("div", { class: "optional-item" }, subhead(t.share_title), el("p", {}, say(sh.note)), newTab(sh.url, { class: "btn ghost", "data-share": "" }, say(sh.button))),
             ),
             el("div", { class: "optional-item" }, subhead(t.return_title), el("p", {}, t.return_note)),
           ),
