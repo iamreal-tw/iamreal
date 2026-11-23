@@ -94,7 +94,7 @@
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0035 | `config` 沒有 `min_app`；`docs/api/`、`spec/` 沒有它的讀法；沒有放最低版本的檔案 | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |
 | 0032、0016 | 頁面不送計數；`design/copy/card-proof.md` 和 `web/README.md` 還寫失敗的原因不回報後台 | [#54](https://github.com/iamreal-tw/iamreal/issues/54) |
-| 0039 | 計數不帶編號、型號和版本；`worker/` 的常見問題頁還是「計數裡沒有認得出你的東西」和只寫「請經 VPN 過卡」；島民證明的「下載 app」連結沒有商店的參數 | [#275](https://github.com/iamreal-tw/iamreal/issues/275)、商店的隱私標示 [#274](https://github.com/iamreal-tw/iamreal/issues/274) |
+| 0039 | 計數不帶編號、型號和版本；島民證明的「下載 app」連結沒有商店的參數 | [#275](https://github.com/iamreal-tw/iamreal/issues/275)、商店的隱私標示 [#274](https://github.com/iamreal-tw/iamreal/issues/274) |
 
 `worker/` 還沒做完：清冊鏡像、過卡的四個介面、每一種訪客頁面、每天公布名冊有了，限流還沒有（[`worker/README.md`「現在有什麼」](../../worker/README.md#現在有什麼)）。2026-11-19 第一次部署到測試網站：從 Cloudflare 抓得到內政部的兩個清冊網址，只有 `Editor` 權限的權杖也跑得了 Durable Object 的 migration（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。測試網站跑的是 `worker/`；Go 的舊後台 `server/` 在 2026-11-22 刪掉了（[#74](https://github.com/iamreal-tw/iamreal/issues/74)）。
 
