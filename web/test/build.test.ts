@@ -112,7 +112,8 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   assert.ok(!code.includes("https://data.iamreal.tw"), "not the production log's data domain");
   // The link of the last screen is the card's page on the test site (src/target-test-site.ts, SITE_DOMAIN).
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
-  assert.doesNotMatch(code, /["'`]iamreal\.tw["'`]/, "not the public site's domain");
+  // The public site's domain nowhere but as the site's name in the header, which stays on the test site (design/copy/test-site.md).
+  assert.doesNotMatch(code.replace(/site_name:["'`]iamreal\.tw["'`]/, ""), /["'`]iamreal\.tw["'`]/, "not the public site's domain");
   // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
   assert.ok(MARK.startsWith("測試的證明紀錄"));
   const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });

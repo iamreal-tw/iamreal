@@ -156,8 +156,11 @@ export function checkProofPage(page: ProofPage | null, kind: ProofLogKind, clear
   assert.ok(text.includes(MARK), "the card proof page has the mark of a test log");
   const marks = [...text.matchAll(/"clearedOn":"([^"]*)","scope":"([^"]*)"\}/g)].map((m) => ({ clearedOn: m[1], scope: m[2] }));
   assert.deepEqual(marks, [{ clearedOn, scope: SCOPES[kind] }], `the card proof page's mark has the date ${clearedOn} and says the build signs ${SCOPES[kind]}`);
-  // The link of the last screen: the card's page on this proof log's site, and not on the other's.
-  const quoted = (host: string): boolean => new RegExp(`["'\`]${host.replaceAll(".", "\\.")}["'\`]`).test(code);
+  // The link of the last screen: the card's page on this proof log's site, and not on the other's. The site's name
+  // in the header (design/copy/card-proof.json, common.site_name) is iamreal.tw on every site
+  // (design/copy/test-site.md): that one entry is not a link.
+  const links = code.replace(/site_name:["'`]iamreal\.tw["'`]/, "");
+  const quoted = (host: string): boolean => new RegExp(`["'\`]${host.replaceAll(".", "\\.")}["'\`]`).test(links);
   assert.ok(quoted(SITE_HOSTS[kind]), `the card proof page writes its links with ${SITE_HOSTS[kind]}`);
   for (const other of Object.values(SITE_HOSTS)) if (other !== SITE_HOSTS[kind]) assert.ok(!quoted(other), `the card proof page writes links with ${other}`);
 }

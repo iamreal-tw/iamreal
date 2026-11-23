@@ -346,8 +346,10 @@ export interface AccountsView {
   /** The lines above the list. */
   lead: Message[][];
   rows: AccountRowView[];
-  /** The lines below the list, before the button; each a sentence, and whether links.more follows it. */
-  notes: { sentences: Sentence[]; more: boolean }[];
+  /** The lines below the list, before the button; each line one or two sentences. Nothing follows them: the card proof's screens link to no other page. */
+  notes: Sentence[][];
+  /** Below the button: accounts.not_yours, or with one platform accounts.not_yours_single; null on a day with 3 records. */
+  notYours: Sentence | null;
   /** 3 records of the card today: the list as it is, this sentence, and accounts.restart only. */
   dailyLimit: Sentence | null;
 }
@@ -397,7 +399,8 @@ export function accountsView(st: CardStatus): AccountsView {
     lines: daily ? [] : rowLines(slot),
   }));
   const anyPreview = rows.some((r) => r.preview);
-  const preview = anyPreview ? [{ sentences: [say(a.preview_note)], more: false }] : [];
+  const preview = anyPreview ? [[say(a.preview_note)]] : [];
+  const notYours = daily ? null : single !== null ? say(a.not_yours_single, { platform: single }) : say(a.not_yours);
   const last: Message =
     st.lastCardProof === null ? { code: "no_last_card_proof" } : st.lastCardProof === st.today ? say(a.last_card_proof_today) : say(a.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
   const dailyLimit = daily ? say(s.daily_limit) : null;
@@ -407,7 +410,8 @@ export function accountsView(st: CardStatus): AccountsView {
       title,
       lead: [[say(a.current), last]],
       rows,
-      notes: daily ? [] : [{ sentences: [say(a.how_refresh)], more: false }, { sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
+      notes: daily ? [] : [[say(a.how_refresh)], [say(a.how_change), say(a.switches_limited)], ...preview],
+      notYours,
       dailyLimit,
     };
   }
@@ -417,7 +421,8 @@ export function accountsView(st: CardStatus): AccountsView {
       title,
       lead: [[say(a.nothing_now)], [fillOne]],
       rows,
-      notes: daily ? [] : [{ sentences: [say(a.how_change), say(a.switches_limited)], more: true }, ...preview],
+      notes: daily ? [] : [[say(a.how_change), say(a.switches_limited)], ...preview],
+      notYours,
       dailyLimit,
     };
   }
@@ -426,7 +431,8 @@ export function accountsView(st: CardStatus): AccountsView {
     title,
     lead: [[say(a.none_yet)], [fillOne]],
     rows,
-    notes: daily ? [] : [{ sentences: [onePer, say(a.switches_limited)], more: true }, ...preview],
+    notes: daily ? [] : [[onePer, say(a.switches_limited)], ...preview],
+    notYours,
     dailyLimit,
   };
 }

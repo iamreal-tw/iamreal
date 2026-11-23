@@ -8,9 +8,8 @@
  *
  * Type: headings are in GenRyuMin2 TW, the subset of design/fonts/, which
  * the build bundles into the page's own files (font-src 'self', README.md);
- * the body and the monospace are the system's. Each screen is still the one
- * column it was, until the card proof's own screens are laid out after
- * design/DESIGN.md.
+ * the body and the monospace are the system's. Steps 1 to 5 are laid out
+ * after design/screens/card-proof-web-*; step 6 keeps its own until #292.
  */
 @font-face {
   font-family: "GenRyuMin2 TW";
@@ -32,6 +31,11 @@
   --font-display: "GenRyuMin2 TW", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
   --font-body: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --size-h2: 40px;
+  --size-h2-phone: 28px;
+  --size-h3: 26px;
+  --size-lead: 22px;
+  --size-lead-phone: 19px;
   --size-body: 18px;
   --size-body-phone: 16px;
   --size-kicker: 15px;
@@ -39,11 +43,18 @@
   --weight-heading: 700;
   --weight-account: 800;
   --weight-body: 400;
+  --leading-h2: 1.34;
+  --leading-h3: 1.5;
   --leading-body: 1.85;
+  --leading-kicker: 1.6;
+  --leading-small: 1.7;
+  --gutter: 40px;
   --gutter-phone: 20px;
+  --max-width: 1200px;
   --button-height: 56px;
   --radius: 4px;
   --radius-panel: 12px;
+  --min-target: 44px;
   --focus-ring: 3px;
 }
 
@@ -65,10 +76,17 @@ body {
   line-height: var(--leading-body);
 }
 
+/* The header is as wide as the site (--max-width, --gutter inside it), as the visitor pages' bar;
+   each screen is one column of 520px under it. */
 main {
-  max-width: calc(560px + 2 * var(--gutter-phone));
+  margin: 0;
+  padding: 0 0 72px;
+}
+
+.col {
+  max-width: calc(520px + 2 * var(--gutter));
   margin: 0 auto;
-  padding: 0 var(--gutter-phone) 64px;
+  padding: 48px var(--gutter) 0;
 }
 
 a {
@@ -86,6 +104,10 @@ input:focus-visible,
 summary:focus-visible {
   outline: var(--focus-ring) solid var(--ink);
   outline-offset: 3px;
+}
+
+p {
+  margin: 0;
 }
 
 h1,
@@ -111,23 +133,24 @@ code,
 
 .small {
   font-size: var(--size-small);
+  line-height: var(--leading-small);
   color: var(--mute);
-  margin: 0 0 10px;
+  margin: 10px 0 0;
 }
 
-.note {
-  font-size: var(--size-small);
-  color: var(--mute);
-  margin: 18px 0 0;
-}
-
-/* The mark at the top --------------------------------------------------------------- */
-
+/* The mark at the top: the mark, the service's name and the site's, set off by a rule (design/DESIGN.md, the components). Not a link. */
 .top {
+  padding: 0 var(--gutter);
+}
+
+.top .bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 14px 0 12px;
+  gap: 10px;
+  max-width: var(--max-width);
+  min-height: 72px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
   border-bottom: 1px solid var(--line);
 }
 
@@ -141,8 +164,23 @@ code,
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
   color: var(--ink);
-  font-size: 18px;
-  letter-spacing: 0.06em;
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.top .domain {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: var(--size-kicker);
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: var(--mute);
 }
 
 .logo-card-body {
@@ -158,26 +196,22 @@ code,
   stroke: var(--bg);
 }
 
-/* Where in the six steps -------------------------------------------------------------- */
-
-.where {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 18px 0 0;
-  font-size: 13px;
+/* Where in the six steps: the line, then six bars, the steps done in ink. */
+.where .count {
+  font-size: var(--size-kicker);
+  line-height: var(--leading-kicker);
   color: var(--mute);
 }
 
 .where .bar {
-  display: flex;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 10px;
 }
 
 .where .bar i {
-  width: 28px;
-  height: 5px;
-  border-radius: 3px;
+  height: 4px;
   background: var(--line);
 }
 
@@ -189,63 +223,98 @@ code,
 
 .step h1 {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 26px;
-  line-height: 1.4;
-  margin: 10px 0 18px;
-  letter-spacing: 0.02em;
-}
-
-.step h1.long {
-  font-family: var(--font-body);
-  font-weight: 500;
-  font-size: 23px;
-  letter-spacing: 0;
-  margin-top: 26px;
+  font-weight: var(--weight-heading);
+  font-size: var(--size-h2);
+  line-height: var(--leading-h2);
+  margin: 28px 0 0;
 }
 
 .step h2 {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: var(--weight-heading);
   font-size: 18px;
   margin: 40px 0 8px;
   letter-spacing: 0.02em;
 }
 
-.lead {
-  font-size: 17px;
+/* The lines under a screen's title. */
+.lead,
+.status,
+[data-fact] {
+  margin-top: 16px;
 }
 
-/* A stop, an error or a fact to heed: ink, a thick frame; never red or green. */
+.lead + .lead,
+.status + [data-fact] {
+  margin-top: 6px;
+}
+
+.strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* A stop, an error or a fact to heed: ink words on the soft grey; never red or green, no thick frame (design/DESIGN.md, the lines). */
 .stop {
-  border: 1.5px solid var(--ink);
-  border-left-width: 6px;
-  border-radius: var(--radius-panel);
+  margin: 16px 0 0;
   padding: 10px 14px;
-  background: var(--bg);
-  font-weight: 500;
-  margin: 18px 0;
+  background: var(--soft);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.7;
 }
 
 .stop:empty {
   display: none;
 }
 
-/* Buttons ----------------------------------------------------------------------------- */
+/* The steps' points: a dot in ink before each. */
+.facts {
+  list-style: none;
+  display: grid;
+  gap: 14px;
+  margin: 28px 0 0;
+  padding: 0;
+}
+
+.facts li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.facts li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-top: 11px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+/* Buttons: "back" at the start of the row, the main button at its end. --------------- */
 
 .actions {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
   align-items: center;
-  margin: 26px 0 12px;
   flex-wrap: wrap;
+  gap: 12px;
+  margin: 36px 0 0;
+}
+
+.actions.end {
+  justify-content: flex-end;
 }
 
 .actions:empty {
   display: none;
 }
 
-/* A main button (design/DESIGN.md, the components): raspberry red, white words, square corners, --button-height high. */
+/* A main button (design/DESIGN.md, the components): raspberry red, white words, --radius, --button-height high. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -254,13 +323,13 @@ code,
   font: inherit;
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 17px;
+  font-size: var(--size-body);
   line-height: 1.3;
   background: var(--you);
   color: var(--bg);
   border: 1.5px solid var(--you);
   border-radius: var(--radius);
-  padding: 0 24px;
+  padding: 0 30px;
   margin: 0;
   cursor: pointer;
 }
@@ -287,89 +356,137 @@ code,
   cursor: default;
 }
 
+/* Cancel: a quiet word under the buttons. */
 .linkbtn {
+  min-height: var(--min-target);
   background: none;
   border: 0;
   padding: 0;
   font: inherit;
+  font-size: 15px;
   color: var(--mute);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
 }
 
+.actions:has(> .linkbtn:only-child) {
+  margin-top: 12px;
+}
+
+.go {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .busy {
-  font-weight: 500;
-}
-
-/* Step 1: the questions that open ----------------------------------------------------- */
-
-.faq {
-  border-top: 1px solid var(--line);
   font-size: 15px;
+  color: var(--ink);
 }
 
-.faq:last-of-type {
+.busy:empty {
+  display: none;
+}
+
+/* Step 1: the questions that open, a rule between them, an arrow at the right (design/DESIGN.md, the questions). */
+.asks {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.asks details {
   border-bottom: 1px solid var(--line);
 }
 
-.faq summary {
-  cursor: pointer;
-  padding: 10px 0;
+.asks summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--ink);
-  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
 }
 
-.faq p {
-  margin: 0 0 10px;
+.asks summary::-webkit-details-marker {
+  display: none;
+}
+
+.asks summary::after {
+  content: "";
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin: -4px 4px 0 0;
+  border: solid var(--ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.asks details[open] summary::after {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+
+.asks details p {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.75;
 }
 
 /* The lists of steps 2 and 5: each item, its state in words ---------------------------- */
 
 .tasks {
   list-style: none;
-  margin: 22px 0 0;
+  margin: 28px 0 0;
   padding: 0;
   border-top: 1px solid var(--line);
 }
 
 .task {
   display: grid;
-  grid-template-columns: 22px 1fr auto;
-  gap: 10px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 4px 12px;
   align-items: center;
-  padding: 9px 0;
+  padding: 13px 0;
   border-bottom: 1px solid var(--line);
+  font-size: 16px;
   color: var(--mute);
 }
 
 .task .mark {
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 2px solid var(--line);
-  margin-left: 2px;
+  border: 1.5px solid var(--line);
 }
 
 .task .st {
-  font-size: 13px;
+  font-size: var(--size-small);
+  color: var(--mute);
 }
 
 .task[data-state="now"],
-.task[data-state="done"] {
+.task[data-state="done"],
+.task[data-state="halt"] {
   color: var(--ink);
 }
 
 .task[data-state="now"] .mark {
-  border-color: var(--line);
+  border: 2px solid var(--line);
   border-top-color: var(--ink);
   animation: spin 0.9s linear infinite;
 }
 
-.task[data-state="now"] .st {
+.task[data-state="now"] .st,
+.task[data-state="halt"] .st {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Done: a check mark in ink. */
@@ -381,36 +498,29 @@ code,
 .task[data-state="done"] .mark::after {
   content: "";
   position: absolute;
-  left: 4px;
-  top: 0;
+  left: 5px;
+  top: 1px;
   width: 6px;
   height: 11px;
   border: solid var(--ink);
-  border-width: 0 2.5px 2.5px 0;
+  border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
 
-/* Stopped here: no check mark; a square in ink. */
-.task[data-state="halt"] {
-  color: var(--ink);
-  font-weight: 600;
-}
-
+/* Stopped here: no check mark; a ring in ink. */
 .task[data-state="halt"] .mark {
-  border-radius: 3px;
-  border-color: var(--ink);
-  background: var(--bg);
+  border: 2.5px solid var(--ink);
 }
 
 .task .why {
   grid-column: 2 / -1;
-  border: 1.5px solid var(--ink);
-  border-left-width: 6px;
-  border-radius: var(--radius-panel);
-  padding: 9px 14px;
-  background: var(--bg);
-  font-weight: 500;
-  margin: 2px 0 4px;
+  margin-top: 6px;
+  padding: 10px 14px;
+  background: var(--soft);
+  border-radius: var(--radius);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink);
 }
 
 @keyframes spin {
@@ -422,175 +532,236 @@ code,
 /* Step 3: the name, the PIN ------------------------------------------------------------ */
 
 .cardname {
+  margin: 28px 0 0;
+  padding: 18px 20px;
   background: var(--soft);
-  border: 1px solid var(--line);
   border-radius: var(--radius-panel);
-  padding: 14px 20px;
-  margin: 0 0 22px;
 }
 
 .cardname .k {
-  font-size: 13px;
-  color: var(--mute);
   display: block;
+  font-size: var(--size-small);
+  line-height: var(--leading-small);
+  color: var(--mute);
 }
 
-/* The name read from the card: the system's face, as the subset holds only the words of design/copy/. */
+/* The name read from the card: a sub-heading's size, in the system's face, as the subset holds only the words of design/copy/. */
 .cardname .name {
+  display: block;
   font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 28px;
-  letter-spacing: 0.04em;
-  line-height: 1.4;
+  font-weight: var(--weight-heading);
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  color: var(--ink);
+}
+
+.pinfield {
+  display: grid;
+  gap: 8px;
+  margin: 28px 0 0;
 }
 
 .pinfield label {
-  display: block;
-  font-size: 14px;
-  color: var(--mute);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 #pin {
-  font: inherit;
-  font-size: 22px;
-  letter-spacing: 0.3em;
   width: 240px;
   max-width: 100%;
-  border: 2px solid var(--ink);
-  border-radius: var(--radius-panel);
-  padding: 8px 12px;
+  height: var(--button-height);
+  padding: 0 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
   background: var(--bg);
-  margin-top: 4px;
-}
-
-#pin:focus,
-.field input:focus {
-  outline: none;
-  border-color: var(--ink);
+  font: 500 22px/1 var(--font-mono);
+  letter-spacing: 0.3em;
+  color: var(--ink);
 }
 
 #pin:disabled {
   opacity: 0.6;
 }
 
+/* Step 4: the card's list, one row per platform: its name, the field, the preview; the lines under it. */
+.acctlist {
+  margin: 28px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.acctrow {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.acctrow .plat-name {
+  font-weight: 700;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.acctrow .field {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.acctrow .field:focus-within {
+  outline: var(--focus-ring) solid var(--ink);
+  outline-offset: 3px;
+}
+
+.acctrow .field .at {
+  color: var(--mute);
+  margin-right: 2px;
+}
+
+.acctrow .field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-body);
+  color: var(--ink);
+}
+
+.acctrow .pv {
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.acctrow .row-lines,
+.acctrow .stop {
+  grid-column: 2 / -1;
+}
+
+.acctrow .row-lines {
+  font-size: var(--size-small);
+  line-height: 1.6;
+  color: var(--mute);
+}
+
+.acctrow .row-lines:empty {
+  display: none;
+}
+
+.acctrow .stop {
+  margin: 0;
+}
+
+/* A platform the device does not know: its ID and the account as the server sent them. */
+.acctrow.fixed .acct {
+  grid-column: 2 / -1;
+  word-break: break-all;
+}
+
+.tips {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.not-yours {
+  margin: 36px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+/* Step 5: what the proof log will record, a rule in ink above it ------------------------- */
+
+.sumlist {
+  margin: 24px 0 0;
+  border-top: 1.5px solid var(--ink);
+}
+
+.sumlist > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 2px 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sumlist dt {
+  padding-top: 2px;
+  font-size: 15px;
+  color: var(--mute);
+  word-break: break-all;
+}
+
+/* The platform's ID, under its name: what the card signs (README.md). */
+.sumlist .plat-id {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--mute);
+}
+
+.sumlist dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+.sumlist dd .acct {
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.sumlist dd .kind {
+  display: block;
+  margin-top: 2px;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.sumlist dd code {
+  font-size: 16px;
+  letter-spacing: 0.06em;
+}
+
+/* That the accounts will be public: as plain to see as the list (card-proof.md, step 5); an emphasised sentence (design/DESIGN.md, the type). */
+.public {
+  margin: 28px 0 0;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: var(--size-lead);
+  line-height: var(--leading-h3);
+  color: var(--ink);
+}
+
+time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Step 6's lists, until its own screen is laid out (#292). */
 .three {
   margin: 16px 0 0;
   padding-left: 1.2em;
-  font-size: 14px;
-  color: var(--mute);
+  font-size: 15px;
+  color: var(--ink);
 }
 
 .three li {
   margin-bottom: 6px;
 }
 
-.three.ink {
-  font-size: 15px;
-  color: var(--ink);
-}
-
-/* Step 4: the card's list, one row per platform ------------------------------------------ */
-
-.acctlist {
-  margin: 18px 0 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.acctrow {
-  border-top: 1px solid var(--line);
-  padding: 10px 0 6px;
-}
-
-.acctrow .plat-name {
-  display: block;
-  font-size: 14px;
-  color: var(--mute);
-}
-
-.acctrow .field {
-  margin: 4px 0;
-}
-
-.acctrow.fixed .acct {
-  display: block;
-  font-size: 20px;
-  margin: 4px 0;
-  word-break: break-all;
-}
-
-.acctrow .small {
-  margin: 2px 0;
-}
-
-.acctrow .stop {
-  margin: 6px 0 4px;
-}
-
-.status {
-  font-size: 17px;
-  margin: 0 0 4px;
-}
-
-.status .acct {
-  font-size: 22px;
-}
-
-.field {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 18px 0 6px;
-}
-
-.field label {
-  font-size: 14px;
-  color: var(--mute);
-  margin-right: 8px;
-}
-
-.field .at {
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 22px;
-}
-
-.field input {
-  font: inherit;
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 20px;
-  width: 260px;
-  max-width: 100%;
-  border: 2px solid var(--ink);
-  border-radius: var(--radius-panel);
-  padding: 6px 12px;
-  background: var(--bg);
-}
-
-.field .pv {
-  font-size: 14px;
-  padding: 7px 14px;
-  margin-left: 8px;
-}
-
-/* Step 5: what the proof log will record ---------------------------------------------------- */
-
-.record {
-  background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  padding: 16px 20px;
-  margin: 0 0 18px;
-  font-size: 17px;
-  line-height: 1.8;
-}
-
-.record p {
-  margin: 0;
-}
-
-.record dl,
 .cert dl,
 .rec6 dl {
   display: grid;
@@ -602,20 +773,14 @@ code,
   font-size: 15px;
 }
 
-.record dt,
 .cert dt,
 .rec6 dt {
   color: var(--mute);
 }
 
-.record dd,
 .cert dd,
 .rec6 dd {
   margin: 0;
-}
-
-time {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Step 6: done. No check mark, no green. ------------------------------------------------- */
@@ -727,26 +892,9 @@ time {
 }
 
 /* Each row of a list: what it does, under the account. */
-.record dd .kind,
 .rec6 dd .kind {
   display: block;
   font-size: 14px;
-  color: var(--mute);
-}
-
-.record dd .acct {
-  font-size: 20px;
-  word-break: break-all;
-}
-
-/* Step 5's list is the box's first thing: no rule above it. */
-.record dl.list {
-  border-top: none;
-  padding-top: 0;
-}
-
-.plat-id {
-  font-size: 13px;
   color: var(--mute);
 }
 
@@ -767,9 +915,74 @@ time {
   color: var(--mute);
 }
 
+/* Narrower than --breakpoint: the phone's layout. The card proof on the web is for a computer (#135); a narrow window still reads. */
 @media (width < 760px) {
   body {
     font-size: var(--size-body-phone);
+  }
+
+  .top,
+  .top .bar,
+  .col {
+    padding-left: var(--gutter-phone);
+    padding-right: var(--gutter-phone);
+  }
+
+  .top {
+    padding: 0;
+  }
+
+  .top .bar {
+    min-height: 64px;
+  }
+
+  .col {
+    padding-top: 28px;
+  }
+
+  .step h1 {
+    font-size: var(--size-h2-phone);
+  }
+
+  .public {
+    font-size: var(--size-lead-phone);
+  }
+
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .go {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  #pin {
+    width: 100%;
+  }
+
+  .acctrow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .acctrow .plat-name,
+  .acctrow .row-lines,
+  .acctrow .stop,
+  .acctrow.fixed .acct {
+    grid-column: 1 / -1;
+  }
+
+  .acctrow .pv {
+    width: auto;
+  }
+
+  .sumlist > div {
+    grid-template-columns: 80px minmax(0, 1fr);
   }
 
   .cert-note {
