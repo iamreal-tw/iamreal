@@ -18,8 +18,8 @@ export const EVERY_RESPONSE: Readonly<Record<string, string>> = {
  * Sent with the visitors' pages and their style sheet, besides
  * EVERY_RESPONSE (the style sheet's by site/_headers).
  *
- *   - Content-Security-Policy: no script at all; the style sheet and images
- *     of this origin; frames from https://www.threads.com only (the profile
+ *   - Content-Security-Policy: no script at all; the style sheet, the
+ *     headings' typeface and images of this origin; frames from https://www.threads.com only (the profile
  *     on the page of a card); forms sent to this origin only (the lookup box
  *     of the proof log page); the page cannot be framed.
  *   - Referrer-Policy: a link on a page tells the site it leads to nothing
@@ -30,7 +30,7 @@ export const EVERY_RESPONSE: Readonly<Record<string, string>> = {
  *     Threads frame would be blocked.
  */
 export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
-  "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  "Content-Security-Policy": "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "Referrer-Policy": "no-referrer",
   "Cross-Origin-Opener-Policy": "same-origin",
 };
@@ -66,7 +66,7 @@ export const DATA_ORIGINS: Readonly<Record<ProofLogKind, string>> = { production
  */
 export function proofPageHeaders(kind: ProofLogKind): Readonly<Record<string, string>> {
   return {
-    "Content-Security-Policy": `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ${DATA_ORIGINS[kind]}; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+    "Content-Security-Policy": `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ${DATA_ORIGINS[kind]}; img-src 'self'; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
     "Document-Isolation-Policy": "isolate-and-credentialless",
     "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   };
@@ -82,10 +82,12 @@ export const TEST_SITE_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The Cache-Control of the style sheet and of the copy buttons' script
- * (site/_headers): asked for again every time they are used, by their ETag.
+ * The Cache-Control of the visitors' files: the style sheet, the copy
+ * buttons' script and the headings' typeface (site/_headers): asked for again every time they
+ * are used, by their ETag, so that a page never has a subset older than
+ * its words.
  */
-export const STYLE_SHEET_CACHE = "no-cache";
+export const VISITOR_FILE_CACHE = "no-cache";
 
 /**
  * How long a page that shows the proof log may be kept by a cache: 60 seconds,

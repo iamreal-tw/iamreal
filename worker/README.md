@@ -492,7 +492,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 **`/copy.js` 是檔案，和樣式表一樣由 Static Assets 送**：`site/copy.js` 是從舊後台逐位元組搬過來的，帶訪客頁面的標頭、`Cache-Control: no-cache` 和 `ETag`，帶著 `If-None-Match` 再要一次時回 `304`。和舊後台不同的地方：`ETag` 的值是 Static Assets 給的（舊後台是 SHA-256 的前 8 個位元組）；其他方法的 `405` 沒有 `Allow`；設定讀不出來時照常送。`Content-Type` 本機是 `text/javascript; charset=utf-8`，和舊後台相同；Cloudflare 上是 `text/javascript`，不帶 `charset`（樣式表線上也是 `text/css`，不帶；見 [Static Assets](#static-assets)「Cloudflare 上看過的」）。這對 `copy.js` 沒有影響：檔裡 ASCII 以外的字只在開頭的註解（兩行，`LC_ALL=C grep -n '[^ -~]' site/copy.js`），程式本身全是 ASCII，照哪一種編碼讀都一樣。之後要在這個檔的程式裡寫 ASCII 以外的字時再看：沒有 `charset` 時瀏覽器用載入它的頁面的編碼來讀（HTML 標準的 [fetch a classic script](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-classic-script) 把頁面的編碼當成後備），而這裡的頁面都是 `text/html; charset=utf-8`。
 
-- **樣板、樣式表、複製按鈕的程式是舊後台的。** `src/pages/` 的 HTML 照舊後台的樣板逐段搬過來，`site/copy.js` 就是舊後台的那一支，`site/pages.css` 是舊後台的樣式表加一條規則（測試的證明紀錄標示裡的日期不折行，見[測試的證明紀錄的標示](#測試的證明紀錄的標示)）；舊後台刪掉之前，測試核對過這兩個檔和舊後台的逐位元組相同（那一條除外）。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
+- **樣板和複製按鈕的程式是舊後台的，樣式表照新的設計。** `src/pages/` 的 HTML 照舊後台的樣板逐段搬過來，`site/copy.js` 就是舊後台的那一支；舊後台刪掉之前，測試核對過 `copy.js` 和當時的 `site/pages.css` 和舊後台的逐位元組相同。之後導覽列、頁尾和整站的外觀換成 `design/DESIGN.md` 的（[#283](https://github.com/iamreal-tw/iamreal/issues/283)）：`site/pages.css` 的 `:root` 每一個值和 `design/tokens.json` 同名的相同，顏色只從那裡來，`760px` 以下換成手機的排法（`test/style-sheet.test.ts`）；各頁自己的排法等各頁的票，現在仍是一欄。畫面上的每一句寫在樣板裡，逐字照 `design/copy/`；測試（[`test/pages.test.ts`](test/pages.test.ts)、[`test/copy.ts`](test/copy.ts)）直接讀 `design/copy/` 的每一段，確認那一種情況的每一句都在頁面上、順序相同。
 - **放進 HTML 的值一律跳脫。** 樣板是 `src/pages/html.ts` 的 `html` 標籤：放進去的字串全部跳脫，只有這個標籤自己產生的片段不跳脫。訪客打的網址、證明紀錄裡的帳號都走這一條。
 - **頁面預設沒有程式**：沒有 `<script>`、沒有行內樣式、沒有事件屬性，不設 cookie。例外只有怎麼驗證島民證明和帶著島民證明的掛上去：各載入一支自己網域的程式 `/copy.js`（`<script src="/copy.js" defer>`），沒有行內的程式；這兩頁的 CSP 多一項 `script-src 'self'`（[頁面送的標頭](#頁面送的標頭)）。程式只讓「複製」的按鈕出現、按了複製；沒有程式時按鈕藏著，要複製的字照樣在頁面上選得起來。只收 `GET` 和 `HEAD`，其他方法回 `405`。產生頁面時只讀請求的方法和路徑，證明紀錄頁另外讀網址的查詢（`q`、`after`）。
 - **後台不存連線紀錄。** 頁面的請求也一樣，回答了就不寫任何東西。後台自己出錯時回 `500`（純文字），寫一行：`{event: "internal_error", page, where, error}`，`page` 是哪一種頁面（`home`、`card`、`account`、`proof_log`、`hang`、`faq`、`verify`、`none`），不含短編號、帳號和網址的任何部分。檔案的請求不跑 Worker，後台的程式對它們什麼都不寫。
@@ -541,7 +541,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 - **檔案的 `X-Robots-Tag` 不是 Worker 加的**，是 `site/_headers` 寫的，上傳時就定了，不跟著 `PROOF_LOG_KIND` 變。所以 `_headers` 照證明紀錄的種類各有一份（[`scripts/site-files.ts`](scripts/site-files.ts) 的 `siteHeaders`），版控裡的是測試的證明紀錄的；部署前的檢查核對每個環境的 `_headers` 是它那一種證明紀錄的那一份（[Static Assets](#static-assets)）。
 - `TEST_PROOF_LOG_CLEARED_ON` 不是日期時，測試環境的介面和 Worker 產生的頁面都回 `500`（設定在同一處讀，`src/settings.ts`）：寧可不出頁面，也不出一行沒有日期的標示。樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，照常送。`wrangler.jsonc` 裡的這個值在部署前就核對過是日曆上有的日期（`checkClearedOn`，`2026-11-31` 過不了），所以這種情況只會出在沒經過檢查的設定。
-- **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試的證明紀錄寫 `test.iamreal.tw/p/<短編號>`，正式的證明紀錄寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結和「複製連結」複製的也是同一個網域：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `PROOF_LOG_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
+- **島民證明上寫的網址用測試網站的網域。** 個人檔案上要有的連結那一行、和短編號對不到時的那一句，測試的證明紀錄寫 `test.iamreal.tw/p/<短編號>`，正式的證明紀錄寫 `iamreal.tw/p/<短編號>`（`design/copy/test-site.md`「寫出島民證明網址的地方」）。掛上去的 `/hang/<短編號>` 寫的連結和「複製連結」複製的也是同一個網域：`design/copy/hang.md` 第 2 部分說那一行「和島民證明頁面上的寫法相同」。舊後台沒有測試網站，那裡一律寫 `iamreal.tw`。網域跟著 `PROOF_LOG_KIND` 走，寫在 `src/settings.ts` 的 `SITE_HOSTS`（ADR-0028 定的兩個網域），不是另一個設定值，也不從請求的 `Host` 取：`Host` 是訪客的瀏覽器送的。導覽列、頁尾、分頁標題、連結預覽裡的 `iamreal.tw` 不變。
 - **過卡的頁面上的這一行不是 Worker 加的。** `/proof` 是 `web/` 建置出來的檔案，原樣送出，只有標頭是另外加的；標示由 `web/` 測試網站的建置自己寫在頁面最上面（`web/README.md`「三種用真元件的建置」），句子同樣來自 `design/copy/test-site.md`，日期是建置時從 `wrangler.jsonc` 的 `TEST_PROOF_LOG_CLEARED_ON` 帶進去的。所以改這個日期要重新部署才會兩邊一致；部署前的檢查核對頁面裡的日期就是設定裡的那一個（`scripts/proof-page.ts`）。`web/test/e2e/ui.ts` 在本機的 workerd 上比過：過卡頁面上的那一行和 Worker 產生的首頁上的相同。
 - **清空測試的證明紀錄時**一起改 `PROOF_LOG_OBJECT_NAME` 和 `TEST_PROOF_LOG_CLEARED_ON`，部署之後營運者刪掉測試的儲存桶裡的 `proof-log/`。順序和每一步之後怎麼確認在[清空測試的證明紀錄](#清空測試的證明紀錄)。過卡的頁面上的日期是建置時從 `wrangler.jsonc` 讀的，所以同一次部署就跟著變。
 
@@ -552,7 +552,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 送出去的地方有兩個，值都從那一處來：
 
 - Worker 產生的頁面，由 `src/visitor.ts` 加上。
-- 樣式表、`/copy.js` 和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
+- 樣式表、`/copy.js`、字型（`/fonts/…`）和 `/proof` 的檔案不跑 Worker，標頭寫在 [`site/_headers`](site/_headers)，由 Static Assets 加上。這個檔是 [`scripts/site-files.ts`](scripts/site-files.ts) 從 `src/headers.ts` 的值寫出來的，不手改；`src/headers.ts` 改了之後在這個目錄跑 `node --experimental-strip-types scripts/site-files.ts` 重寫。測試和部署前的檢查都核對版控裡的 `_headers` 和重寫出來的逐字相同。
 
 每個回應：
 
@@ -560,16 +560,16 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|---|
 | `X-Content-Type-Options` | `nosniff` | 瀏覽器照 `Content-Type` 處理內容，不自己猜 |
 
-訪客的頁面、樣式表和 `/copy.js`（程式自己的 CSP 不決定什麼能執行，決定的是載入它的頁面的 CSP）：
+訪客的頁面、樣式表、`/copy.js` 和字型（程式自己的 CSP 不決定什麼能執行，決定的是載入它的頁面的 CSP）：
 
 | 標頭 | 值 | 理由 |
 |---|---|---|
-| `Content-Security-Policy` | `default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` | 頁面上任何程式都不執行（沒有 `script-src`）；樣式表和圖片只收自己網域的；只能嵌 Threads 的框（島民證明上的個人檔案）；表單只能送回自己的網域（證明紀錄頁的查詢欄）；頁面不能被別的網站嵌進框裡 |
+| `Content-Security-Policy` | `default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` | 頁面上任何程式都不執行（沒有 `script-src`）；樣式表、字型和圖片只收自己網域的（字型是 `site/fonts/` 那一份，不經過第三方，`design/fonts/README.md`）；只能嵌 Threads 的框（島民證明上的個人檔案）；表單只能送回自己的網域（證明紀錄頁的查詢欄）；頁面不能被別的網站嵌進框裡 |
 | `Referrer-Policy` | `no-referrer` | 從頁面點出去的連結、嵌進來的 Threads 個人檔案，都拿不到這一頁的網址（網址裡有短編號） |
 | `Cross-Origin-Opener-Policy` | `same-origin` | 開啟這一頁的別的網站，和這一頁開出去的視窗，彼此拿不到對方 |
 | （沒有 `Cross-Origin-Embedder-Policy`、`Document-Isolation-Policy`） | | 送了的話 Threads 的框會被擋 |
 
-載入 `/copy.js` 的兩頁（怎麼驗證島民證明、帶著島民證明的掛上去）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，這兩個網址的每一種回應都帶 `script-src 'self'`。
+載入 `/copy.js` 的兩頁（怎麼驗證島民證明、帶著島民證明的掛上去）的 `200`：上面那一組，`Content-Security-Policy` 換成多一項 `script-src 'self'` 的 `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`，和舊後台的 `scriptPageHeaders` 相同：只跑自己網域的程式，沒有行內的程式、沒有別的網站的。同一個網址的轉址、`405`、`500` 不載入程式，用上面那一組；舊後台是照路徑給，這兩個網址的每一種回應都帶 `script-src 'self'`。
 
 過卡的頁面和它的每個檔案（`/proof`、`/proof/…`）：`Content-Security-Policy`、`Document-Isolation-Policy: isolate-and-credentialless`、`Cross-Origin-Opener-Policy: same-origin-allow-popups` 三個，值和每一項的理由寫在 [`web/README.md`](../web/README.md)「頁面需要的標頭」。[`test/proof-files.test.ts`](test/proof-files.test.ts) 從那份 README 讀出這三個值，確認它們和 `src/headers.ts` 的相同，本機的 workerd 對 `/proof` 的每一種回應（檔案、`301`、`404`、`405`、`304`）送的也一字不差。`connect-src` 裡的資料網域照證明紀錄的種類（`src/headers.ts` 的 `DATA_ORIGINS`、`proofPageHeaders`）：測試的證明紀錄的網站是 `https://test-data.iamreal.tw`，正式的證明紀錄的是 `https://data.iamreal.tw`（舊後台只有後面這一份）。兩份 `web/README.md` 都引用了，測試各比一次。
 
@@ -583,6 +583,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 |---|---|
 | `pages.css` | 訪客頁面的樣式表，在版控裡 |
 | `copy.js` | 複製按鈕的程式，在版控裡 |
+| `fonts/GenRyuMin2TW-B.woff2` | 標題的字型：`design/fonts/` 那份子集的拷貝，在版控裡，由 `scripts/site-files.ts` 拷過來；`test/font.test.ts` 檢查兩份逐位元組相同 |
 | `proof/` | 過卡的頁面：`web/` 測試網站的建置（`web/README.md`「三種用真元件的建置」），部署時才建置出來，不進版控 |
 | `_headers` | 這些檔案的標頭，在版控裡，由 `scripts/site-files.ts` 寫出來（[頁面送的標頭](#頁面送的標頭)） |
 | `_redirects` | `/proof` 的三條規則，在版控裡，內容是 `scripts/site-files.ts` 的 `SITE_REDIRECTS` |
@@ -594,7 +595,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 1. **通用參數**（[`scripts/proof-page.ts`](scripts/proof-page.ts) 的 `fetchCrs`）：跑 `web/scripts/fetch-crs.mjs`，核對 `web/crs/` 兩個檔的 SHA-256，沒有或不符就從 Aztec 的 CDN 下載再核對（`web/README.md`）。本機和 GitHub Actions 都走這一步；已經有而且相符時不送任何請求。
 2. **建置**（`buildProofPage`）：在 `web/` 跑它自己的建置 `vite build --mode testsite`，輸出到 `site/proof/`（先清空，電腦上原本留在那裡的東西不會被帶上去）。標示旁的日期是 `wrangler.jsonc` 的 `TEST_PROOF_LOG_CLEARED_ON`，用環境變數交給建置。`web/` 的建置自己會擋一件事：`web/src/target-test-site.ts` 讓卡片簽的不是測試的證明紀錄的場合字串，就不建置。`worker/` 沒有引用 `web/` 的程式，只是執行它的建置指令。
 3. **檢查**（`checkProofPage`）：
-   - 檔案恰好是頁面的那些：`index.html`、`help.html`、`bb/` 的兩個 WASM、`circuits/` 的兩個電路檔、`crs/` 的兩個通用參數檔（都不是空的），和 `assets/` 底下的 `.js`、`.css`、`.wasm`；多一個別的檔（例如 `_headers`、別的目錄）不過，少一個也不過
+   - 檔案恰好是頁面的那些：`index.html`、`help.html`、`bb/` 的兩個 WASM、`circuits/` 的兩個電路檔、`crs/` 的兩個通用參數檔（都不是空的），和 `assets/` 底下的 `.js`、`.css`、`.wasm`、`.woff2`（標題的字型，`design/fonts/` 的子集）；多一個別的檔（例如 `_headers`、別的目錄）不過，少一個也不過
    - 程式裡有內政部元件的網址 `http://localhost:61161` 和 `spec/vectors/issuers.json` 的兩把發證金鑰
    - 沒有假卡片、測試的發證金鑰、假元件的痕跡（和 `web/test/build.test.ts` 同一份清單）
    - 寫到這台電腦或這個專案的網址只有元件的和 `https://test-data.iamreal.tw`：正式的建置（寫的是 `data.iamreal.tw`）、本機真卡片的建置（沒有資料網域）、測試的建置（假元件在別的埠）都不過
@@ -604,19 +605,19 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
    這些檢查找的是「放錯了哪一種建置」的幾種已知情況，不是頁面的程式做了什麼；兩種證明紀錄的場合字串都在 `protocol/` 的表裡、每一種建置都有，光找字串分不出簽的是哪一個，所以看的是標示裡那段 JSON 寫的場合字串；它是建置時寫的，不是從打包好的過卡流程讀出來的（`web/test/e2e/ui.ts` 在瀏覽器裡另外看頁面自己說的場合字串）。檔案沒有逐檔的清單和雜湊：`assets/` 多一支或少一支程式、某一支被改過，這裡看不出來。兩個入口每次都清空重建，所以那要建置本身出錯才會發生，結果是測試網站壞掉。電路檔和通用參數的內容這裡不比：頁面自己在用之前核對它們的 SHA-256（`web/README.md`「從伺服器拿到的值」）。正式的證明紀錄的環境這裡一律不過：它要另一種建置和自己的檢查，等有正式環境時再加。
 
-`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那四個，`pages.css` 和 `copy.js` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`、`COPY_JS_SHA256`。改這兩個檔時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css site/copy.js`）。
+`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那五個，`pages.css` 和 `copy.js` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`、`COPY_JS_SHA256`。改這兩個檔時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css site/copy.js`）。
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
-- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的四個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
+- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的五個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
 - 帶著這份建置的第一次部署是 2026-11-21（`main` 的 `1400e11`，GitHub Actions）。線上看到的在下面「Cloudflare 上看過的」。
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/copy.js", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表和 `/copy.js` 也確認一次。
+- **`run_worker_first` 是 `["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表、`/copy.js` 和字型也確認一次。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。說明頁留在 `/proof/help.html`。
-- **`_headers`**：`/proof`、`/proof/*`、`/pages.css`、`/copy.js` 四條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶；`405` 線上有了（`POST /copy.js`），它帶不帶這一組標頭還沒看。樣式表和程式的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）。
+- **`_headers`**：`/proof`、`/proof/*`、`/pages.css`、`/copy.js`、`/fonts/*` 五條規則。本機的 workerd 上規則照路徑套用，不看檔案在不在，所以 `/proof` 底下的 `301`、`404`、`405` 也帶同一組標頭；Cloudflare 的文件只說規則套在靜態檔的回應上；線上 `301` 和 `404` 都帶；`405` 線上有了（`POST /copy.js`），它帶不帶這一組標頭還沒看。樣式表、程式和字型的規則先拿掉 Static Assets 預設的 `Cache-Control` 再設 `no-cache`（同一個標頭設兩次會被接成一個值）：每次用都憑 ETag 再問一次，改了字重新產生子集之後，頁面不會拿到舊的字型。
 
 沒有用 `html_handling: "drop-trailing-slash"`（它也能讓 `/proof` 送 `index.html`）：它會把每個 `.html` 的網址轉走，`/proof/help.html` 變成 `307` 到 `/proof/help`，首頁和過卡頁面連到說明頁的每個連結都多轉一次。
 
@@ -755,7 +756,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
   - `wrangler.jsonc` 裡用測試的證明紀錄的環境，`TEST_PROOF_LOG_CLEARED_ON` 是日曆上有的日期，讀法和 Worker 執行時相同（`checkClearedOn`）。寫錯的話部署出去的測試網站全部回 `500`，這一項讓它在部署前就被擋下
-  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 的 SHA-256 是 `scripts/site-files.ts` 寫的那兩個。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、或 `site/` 多了別的檔，都過不了
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/fonts/*`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`fonts/GenRyuMin2TW-B.woff2`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 的 SHA-256 是 `scripts/site-files.ts` 寫的那兩個，字型和 `design/fonts/` 的子集逐位元組相同。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、或 `site/` 多了別的檔，都過不了
   - `site/proof/` 裡的過卡頁面另外檢查（`checkProofPages`，[Static Assets](#static-assets) 列了每一項）。它不在 `checkDeployBuild` 裡，因為要先建置頁面；兩種部署的入口（`scripts/build-deploy.ts`、`scripts/deploy-test.ts`）都先呼叫 `buildSite`，建置完就檢查。`test/deploy.test.ts` 讀這兩支腳本，釘住 `buildSite` 在打包、讀權杖、上傳之前
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
@@ -1138,7 +1139,7 @@ pnpm run deploy:test
 1. **過卡的頁面**（`buildSite`）：核對通用參數（沒有就下載），把 `web/` 測試網站的建置做到 `site/proof/`，檢查它（[Static Assets](#static-assets)）。不帶權杖；下載通用參數是唯一可能送出的請求。
 2. **打包**（`buildDeploy`）：先核對 WASM 檔和驗證金鑰的 SHA-256（[WASM 檔和驗證金鑰從哪裡來](#wasm-檔和驗證金鑰從哪裡來)），不對就停；再用 `wrangler deploy --dry-run --outdir <目錄>` 打包，不帶權杖；最後跑部署那一包的檢查（[三樣不是設定值的東西](#三樣不是設定值的東西)）；其中核對 `limits.cpu_ms` 的那一項不是起 wrangler 的指令，是在跑檢查的這個程序裡用 wrangler 的函式庫讀 `wrangler.jsonc`。打包唯一的入口是 `bundleWorker`，測試專用的建置也經過它：打包之前要做的事只寫在那裡。
 3. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
-   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 的 SHA-256 也核對過。
+   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`fonts/`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 的 SHA-256、字型和 `design/fonts/` 相同，也核對過。
 
 打包和上傳這兩段的 wrangler 指令共用的參數：
 
@@ -1164,7 +1165,7 @@ pnpm run deploy:test
 - npm 上的 pnpm 10.16.1：沒有核對雜湊
 - `pnpm-lock.yaml` 裡的套件，包括 wrangler：pnpm 核對 lockfile 記的雜湊，所以換來源換不了內容，但 lockfile 本身就是提交的一部分
 - `pnpm-workspace.yaml`：安裝時一定會讀，設定能改裝進來的套件（例如 `patchedDependencies` 加一個 `patches/` 的修補，在 `--ignore-scripts --ignore-pnpmfile` 之下照樣套到 wrangler 上，試過）。`test/workflows.test.ts` 確認它只有現在的三個鍵、lockfile 沒有 `patchedDependencies` 這類段落、程式庫沒有追蹤 `.npmrc`、`.pnpmfile.cjs`、`patches/`、`worker/` 底下的 `.env*`
-- `worker/site/`：Static Assets 的檔案。`pages.css`、`copy.js`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這四個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
+- `worker/site/`：Static Assets 的檔案。`pages.css`、`copy.js`、`fonts/`、`_headers`、`_redirects` 不在 `build` 工作交出來的東西裡，是 `deploy` 工作從自己的 checkout 上傳的；`_headers` 和 `_redirects` 決定這些檔案帶什麼標頭、哪些網址轉到哪裡。`build` 工作的檢查核對過同一個 commit 的這五個檔（`checkSiteFiles`）。`proof/` 底下的過卡頁面是 `build` 工作建置、檢查過再交過來的（`checkProofPages`）
 - `build` 工作建置過卡頁面時用到的東西，它們決定持卡人在測試網站拿到的頁面：`web/` 和 `protocol/` 的程式、`design/copy/`、lockfile 裡 `web/` 的套件（Vite、bb.js、noir_js），和 `web/scripts/fetch-crs.mjs` 從 Aztec 的 CDN 下載的通用參數（核對 SHA-256）。`build` 工作沒有權杖；它交出去的頁面由部署前的檢查看過幾種已知的錯法，看不到頁面的程式做了什麼
 - `wrangler.jsonc`：上傳時 wrangler 讀它。它不能有 `build.command`：wrangler 在上傳之前會執行它，加了 `--no-bundle` 也一樣（Cloudflare 的文件寫它「will be run as part of `wrangler dev` and `npx wrangler deploy`」，[custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/)；wrangler 4.160.1 的 `getEntry`（`src/deployment-bundle/entry.ts`）不看 `--no-bundle` 就呼叫 `runCustomBuild`；用 `--no-bundle --dry-run` 試過，指令跑了）。`test/workflows.test.ts` 檢查設定檔沒有它
 
@@ -1343,7 +1344,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 - Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、怎麼驗證島民證明、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
 - 沒有一頁有不是自己網站的 script：Worker 產生的頁面、`/proof`、`/proof/help.html` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
 - 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
-- 樣式表、複製按鈕的程式、過卡的頁面 `/proof` 和 `/proof/help.html` 在不在，和它們帶的 `noindex`、`nosniff`
+- 樣式表、複製按鈕的程式、字型、過卡的頁面 `/proof` 和 `/proof/help.html` 在不在，和它們帶的 `noindex`、`nosniff`
 - `GET /api/v1/config`、`GET /api/v1/fingerprint` 的狀態碼和標頭；`config` 是測試的證明紀錄的平台表，`crl_max_age_days` 是 3
 - 資料網域的 `crl/index.jsonl`：兩把發證金鑰各有一份可用的清冊，清冊日期不早於今天（台灣日期）往前 3 天
 - 資料網域的 `proof-log/fingerprints.jsonl` 最後一行就是 `GET /api/v1/fingerprint` 回的那一行；證明紀錄還沒公布過時（沒有檔），介面回的日期要是 `null`
@@ -1409,7 +1410,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/page-data.ts` | 頁面讀證明紀錄的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、清空和照一串紀錄重寫、頁面的查詢、數有幾張卡片宣告同一個帳號 |
 | `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的寫法）、`faq.ts`（常見問題，首頁的七題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
-| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
+| `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`fonts/`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、五個介面、後台自己出錯時的那一行 |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |
 | `src/record-proof.ts` | 從一筆紀錄的欄位重建公開輸入、交給驗證器 |

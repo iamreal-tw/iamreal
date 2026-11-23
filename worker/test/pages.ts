@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
-import { testProofLogLine } from "./copy.ts";
+import { FONT_FILE } from "../scripts/site-files.ts";
+import { block, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
 import type { TestWorker } from "./harness.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
 
@@ -69,10 +70,10 @@ export async function pagesWorld(worker: TestWorker, today: string, recs: readon
 export { mustSubmit };
 
 /** The policy of the visitors' pages (README.md, "頁面送的標頭"). */
-export const VISITOR_CSP = "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+export const VISITOR_CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 /** The policy of the two pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
-export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 /** Whether the page at a path loads the copy buttons' script when it is found: /verify and /hang/<short ID>, nothing else. */
 export function withScript(path: string): boolean {
@@ -104,13 +105,82 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-const NAV_LINKS = `<a href="/verify">怎麼驗證島民證明</a>
-<a href="/proof-log">證明紀錄</a>
-<a href="/faq">常見問題</a>
-<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
+/** Where each link of the navigation bar and the foot goes, by its words in home.md (導覽列, section 9), as home.md says. */
+const LINK_HREFS: Readonly<Record<string, string>> = {
+  怎麼驗證島民證明: "/verify",
+  證明紀錄: "/proof-log",
+  常見問題: "/faq",
+  GitHub: "https://github.com/iamreal-tw/iamreal",
+  我要換島民證明: "/proof",
+  過卡需要什麼: "/proof/help.html?topic=prepare",
+  意見回饋: "https://github.com/iamreal-tw/iamreal/discussions",
+};
+
+/** The items of a one-line code block of home.md, apart where two or more ideographic spaces are; a button's [ ] taken off. */
+function items(file: string, heading: string, n: number): string[] {
+  const lines = block(file, heading, n);
+  assert.equal(lines.length, 1, `${file} ${heading} block ${n} is one line`);
+  return lines[0]!.trim().split(/\u3000{2,}/).map((item) => item.replace(/^\[\s*(.*?)\s*\]$/, "$1"));
+}
+
+/** The links of a piece of a page, in order: where each goes and its words, tags taken off. */
+function links(piece: string): [string, string][] {
+  return [...piece.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gs)].map((m) => [unescapeHtml(m[1]!), squash(visibleText(m[2]!))]);
+}
+
+/** The element of the page that starts with `start`, up to its first `end`. */
+function piece(what: string, page: string, start: string, end: string): string {
+  const at = page.indexOf(start);
+  assert.ok(at >= 0, `${what}: the page has ${start}`);
+  const stop = page.indexOf(end, at);
+  assert.ok(stop >= 0, `${what}: ${start} ends`);
+  return page.slice(at, stop + end.length);
+}
+
+/**
+ * Checks the navigation bar and the foot of a page against home.md (導覽列
+ * and section 9): their words and links in order; on a narrow screen the
+ * links and the button in a <details> that opens without a script and from
+ * the keyboard; the bar first in the body (after the mark of a test log), the
+ * page's own content in <main>, the foot after it.
+ */
+export function checkNavAndFoot(what: string, page: string): void {
+  const [brand, ...desktop] = items("home.md", "導覽列", 0);
+  const phone = items("home.md", "導覽列", 1);
+  assert.deepEqual([brand, phone.length, phone[0]], ["島民證明\u3000iamreal.tw", 2, brand], "home.md 導覽列: the name, then the links and the button; on a phone the name and the menu");
+  const button = desktop[desktop.length - 1]!;
+  const navLinks = desktop.slice(0, -1).map((words): [string, string] => [LINK_HREFS[words]!, words]);
+  const buttonLink: [string, string] = [LINK_HREFS[button]!, button];
+  assert.equal(navLinks.length, 4, "home.md 導覽列 has four links and the button");
+
+  const bar = piece(what, page, '<header class="top">', "</header>");
+  // The mark, the name and the domain: one link, to the home page.
+  const home = links(bar)[0]!;
+  assert.deepEqual(home, ["/", squash(brand!)], `${what}: the name in the bar links to the home page`);
+  assert.match(bar, /<a class="home" href="\/"><svg class="logo"/, `${what}: the mark before the name`);
+  const wide = piece(what, bar, '<nav class="links">', "</nav>");
+  assert.deepEqual(links(wide), navLinks, `${what}: the bar's links`);
+  assert.ok(bar.includes(`<a class="button nav-button" href="${buttonLink[0]}">${button}</a>`), `${what}: the bar's button`);
+  const menu = piece(what, bar, '<details class="menu">', "</details>");
+  assert.ok(menu.startsWith(`<details class="menu"><summary>${phone[1]}</summary>`), `${what}: the menu is a <details> whose <summary> says ${phone[1]}`);
+  assert.deepEqual(links(menu), [...navLinks, buttonLink], `${what}: the menu has the four links and the button`);
+  // Nothing takes the menu, or anything of the bar, away from the keyboard.
+  assert.doesNotMatch(bar, /\stabindex=|\sinert\b|\sdisabled\b/, `${what}: the bar is reached from the keyboard`);
+
+  const [footName, ...footWords] = items("home.md", "9. ", 0);
+  const foot = piece(what, page, '<footer class="foot">', "</footer>");
+  assert.ok(squash(visibleText(foot)).startsWith(squash(footName!)), `${what}: the foot starts with ${footName}`);
+  assert.deepEqual(links(foot), footWords.map((words) => [LINK_HREFS[words], words]), `${what}: the foot's links`);
+
+  const body = page.indexOf("<body");
+  assert.ok(body < page.indexOf(bar) && page.indexOf(bar) < page.indexOf("<main>") && page.indexOf("</main>") < page.indexOf(foot), `${what}: the bar, then <main>, then the foot`);
+}
 
 /** The mark of a test log as the pages write it: the sentence of design/copy/test-site.md, its date in an element of its own, which the style sheet keeps on one line. */
 export const testProofLogMark = (date: string): string => `<p class="test-proof-log">${testProofLogLine(date).replace(date, `<time>${date}</time>`)}</p>`;
+
+/** Where the style sheet loads the headings' typeface from: a file of Static Assets. */
+export const FONT_PATH = `/${FONT_FILE}`;
 
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
@@ -138,9 +208,8 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
   assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"|og:image/i : /name="description"|og:description|og:image/i, `${path}: no description`);
-  for (const part of ['<link rel="stylesheet" href="/pages.css">', NAV_LINKS, '<a class="button nav-button" href="/proof">我要換島民證明</a>', '<a href="/proof/help.html?topic=prepare">過卡需要什麼</a>']) {
-    assert.ok(page.includes(part), `${path}: the page has ${part}`);
-  }
+  assert.ok(page.includes('<link rel="stylesheet" href="/pages.css">'), `${path}: the page has the style sheet`);
+  checkNavAndFoot(path, page);
   const mark = testProofLogMark(CLEARED_ON);
   assert.equal(page.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄`);
   assert.equal(page.includes('<meta name="robots" content="noindex">'), test, `${path}: noindex in the page`);

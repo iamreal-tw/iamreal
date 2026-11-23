@@ -21,6 +21,7 @@ const good: ProofPage = {
     "assets/index-COXnmzfW.js": 234_741,
     "assets/test-proof-log-BGxzo_9J.css": 8364,
     "assets/acvm_js_bg-D_Jg3KxI.wasm": 3_050_251,
+    "assets/GenRyuMin2TW-B-BGxSzql1.woff2": 177_340,
     "bb/barretenberg.wasm.gz": 4_067_387,
     "bb/barretenberg-threads.wasm.gz": 4_071_596,
     "circuits/card_proof_rs2048.json": 628_260,
@@ -57,6 +58,7 @@ test("a build with a file missing or empty, or a file that is no part of the pag
     ["a file beside the page's", withFiles((f) => (f["notes.txt"] = 10)), /notes\.txt/],
     ["a directory that is not the build's", withFiles((f) => (f["local/proof-log.db"] = 10)), /local\/proof-log\.db/],
     ["a page under assets/", withFiles((f) => (f["assets/other.html"] = 10)), /assets\/other\.html/],
+    ["another kind of font under assets/", withFiles((f) => (f["assets/other.ttf"] = 10)), /assets\/other\.ttf/],
     ["an empty file where the CRS is", withFiles((f) => (f["crs/bn254_g2.dat"] = 0)), /crs\/bn254_g2\.dat of the card proof page is not empty/],
   ];
   for (const [name, page, message] of cases) assert.throws(() => checkProofPage(page, "test", CLEARED_ON), message, name);

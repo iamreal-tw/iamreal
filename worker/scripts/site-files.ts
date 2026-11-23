@@ -8,6 +8,8 @@
 //                    in the data domain the card proof page may connect to,
 //                    so the file is written for one kind of proof log.
 //   site/_redirects  the one address of the card proof page.
+//   site/fonts/      a copy of the headings' typeface, the subset of
+//                    design/fonts/ (design/fonts/README.md), byte for byte.
 //
 // Both are in the repository as a test log's site needs them, the only
 // environment there is: the job that uploads checks the repository out and
@@ -17,12 +19,12 @@
 // `checkSiteFiles`), and test/proof-files.test.ts that the local workerd
 // sends what they say.
 //
-// `node --experimental-strip-types scripts/site-files.ts` writes both again,
-// after a change of src/headers.ts.
-import { writeFileSync } from "node:fs";
+// `node --experimental-strip-types scripts/site-files.ts` writes all three again,
+// after a change of src/headers.ts or of the subset.
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EVERY_RESPONSE, STYLE_SHEET_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
+import { EVERY_RESPONSE, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
 
 const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
 
@@ -35,24 +37,34 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"];
+
+/**
+ * The headings' typeface under site/, where the style sheet loads it from
+ * (`/fonts/…`): a copy of design/fonts/GenRyuMin2TW-B.woff2, which this
+ * script writes and test/font.test.ts checks byte for byte.
+ */
+export const FONT_FILE = "fonts/GenRyuMin2TW-B.woff2";
+
+/** The subset FONT_FILE is a copy of: the one in design/fonts/ (design/fonts/README.md). */
+export const FONT_SOURCE = join(SITE_DIR, "..", "..", "design", "fonts", "GenRyuMin2TW-B.woff2");
 
 /**
  * Every file of site/ a deploy uploads besides the card proof page's, by
- * its path under site/, sorted: the copy buttons' script, the style sheet
- * and the two files of rules. The page's files are under site/proof/, which
+ * its path under site/, sorted: the copy buttons' script, the typeface, the
+ * style sheet and the two files of rules. The page's files are under site/proof/, which
  * is not in the repository (.gitignore): a deploy builds them there
  * (deploy.ts, `buildSite`) and checks what the directory then holds
  * (proof-page.ts).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", FONT_FILE, "pages.css"];
 
 /**
  * The SHA-256 of site/pages.css, one of the two files of site/ that are not
  * written here: a deploy uploads the style sheet that was reviewed. Change
  * it with the file (`shasum -a 256 site/pages.css`).
  */
-export const PAGES_CSS_SHA256 = "dec0f3d69d88421d73aa5e895caa1d362b55319fe47b73a6650aff9a359902da";
+export const PAGES_CSS_SHA256 = "03143c29ca6de3c0f96b2a446f02fd711e2816a6f86800357e51f1e9baec12d6";
 
 /**
  * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
@@ -67,8 +79,8 @@ export type ProofLogKind = "test" | "production";
 const block = (path: string, headers: Readonly<Record<string, string>>, more: readonly string[] = []): string =>
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
 
-/** The headers of the visitors' files, the style sheet and the script: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
-const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${STYLE_SHEET_CACHE}`]);
+/** The headers of the visitors' files, the style sheet, the script and the typeface: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
+const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${VISITOR_FILE_CACHE}`]);
 
 /**
  * The text of site/_headers for a site of that kind of proof log.
@@ -78,8 +90,8 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css and /copy.js: the visitors' pages' headers
- *   (`VISITOR_HEADERS`), and `STYLE_SHEET_CACHE` in place of the
+ * - /pages.css, /copy.js and /fonts/*: the visitors' pages' headers
+ *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
  *   script-src: it is the page that loads it whose policy says what runs.
@@ -99,6 +111,8 @@ export function siteHeaders(kind: ProofLogKind): string {
     visitorFile("/pages.css", every),
     "",
     visitorFile("/copy.js", every),
+    "",
+    visitorFile("/fonts/*", every),
   ].join("\n")}\n`;
 }
 
@@ -117,5 +131,7 @@ export const SITE_REDIRECTS = `# The card proof page is at /proof and nowhere el
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(join(SITE_DIR, "_headers"), siteHeaders("test"));
   writeFileSync(join(SITE_DIR, "_redirects"), SITE_REDIRECTS);
-  console.log(`Wrote _headers and _redirects in ${SITE_DIR}, for a test log's site.`);
+  mkdirSync(join(SITE_DIR, "fonts"), { recursive: true });
+  copyFileSync(FONT_SOURCE, join(SITE_DIR, FONT_FILE));
+  console.log(`Wrote _headers, _redirects and ${FONT_FILE} in ${SITE_DIR}, for a test log's site.`);
 }

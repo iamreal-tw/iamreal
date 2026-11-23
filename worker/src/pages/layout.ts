@@ -1,9 +1,7 @@
 // What every page of the visitors has: the document around its content, the
-// navigation bar and the foot (design/copy/home.md, 導覽列 and section 9),
-// and on a test log the mark above everything else
-// (design/copy/test-site.md). The markup is the Go backend's
-// (e159ab9:server/pages/templates/layout.html, parts.html), so that the one style
-// sheet fits both.
+// navigation bar and the foot (design/copy/home.md, 導覽列 and section 9;
+// design/DESIGN.md, 元件), and on a test log the mark above everything else
+// (design/copy/test-site.md).
 import { Html, html } from "./html.ts";
 
 /** Where the style sheet is served, and what the pages link to. */
@@ -52,25 +50,51 @@ const LOGO = new Html(
 /** home.md's 〈需要什麼〉: the one place it is written. The home page shows it twice (sections 1 and 8), the page of a card once (section 5a). */
 export const NEEDS = "需要實體的自然人憑證、讀卡機和電腦。";
 
-/** The navigation bar. The links come first in the document; on a narrow screen the style sheet puts them on a second row. */
+/** The four links of the navigation bar (home.md, 導覽列), and its one button. */
+const NAV_LINKS = html`<a href="/verify">怎麼驗證島民證明</a>
+<a href="/proof-log">證明紀錄</a>
+<a href="/faq">常見問題</a>
+<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
+const NAV_BUTTON = html`<a class="button nav-button" href="/proof">我要換島民證明</a>`;
+
+/**
+ * The navigation bar (home.md, 導覽列; design/DESIGN.md, 元件). On a wide
+ * screen the links and the button are in the bar; on a narrow one the style
+ * sheet hides them and shows the menu instead: a <details>, which opens
+ * without a script and from the keyboard, with the same links and button.
+ * The two are in the document once each, and the style sheet shows one.
+ * The links and the button are one group, so that where they do not fit
+ * beside the name they go to the next row together.
+ */
 const NAV = html`<header class="top">
-<a class="home" href="/">${LOGO}<b>島民證明</b></a>
+<div class="bar">
+<a class="home" href="/">${LOGO}<b>島民證明</b><span class="domain">iamreal.tw</span></a>
+<div class="wide">
 <nav class="links">
+${NAV_LINKS}
+</nav>
+${NAV_BUTTON}
+</div>
+<details class="menu"><summary>選單</summary>
+<nav>
+${NAV_LINKS}
+${NAV_BUTTON}
+</nav>
+</details>
+</div>
+</header>`;
+
+/** The foot (home.md, section 9). 過卡需要什麼 is the card proof's help page. */
+const FOOT = html`<footer class="foot">
+<div class="bar">
+<span class="site"><b>島民證明</b><span>iamreal.tw</span></span>
 <a href="/verify">怎麼驗證島民證明</a>
 <a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
-<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
-</nav>
-<a class="button nav-button" href="/proof">我要換島民證明</a>
-</header>`;
-
-/** The foot. 過卡需要什麼 is the card proof's help page. */
-const FOOT = html`<footer class="foot">
-<span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
-<a href="/proof-log">證明紀錄</a>
-<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 <a href="/proof/help.html?topic=prepare">過卡需要什麼</a>
-<a href="/faq">常見問題</a>
+<a href="https://github.com/iamreal-tw/iamreal/discussions">意見回饋</a>
+<a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
+</div>
 </footer>`;
 
 /** The whole document of a page. */
@@ -90,11 +114,11 @@ ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">
 ${test === null ? new Html("") : html`<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>
-`}<main>
-${NAV}
+`}${NAV}
+<main>
 ${d.content}
-${FOOT}
 </main>
+${FOOT}
 </body>
 </html>
 `.text;

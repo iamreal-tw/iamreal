@@ -22,3 +22,9 @@
 ## 授權
 
 Apache License 2.0，見 `LICENSE`。
+
+`design/fonts/` 裡的字型不在這個授權裡，照它自己的授權（見下面的致謝）。
+
+## 致謝
+
+- 標題用的字型是[源流明體 TW](https://github.com/ButTaiwan/genryu-font)（GenRyuMin2 TW），柯志杰（ButTaiwan）製作，以 SIL Open Font License 1.1 授權。這裡用的是粗（B）一個字重的子集，授權和來源寫在 `design/fonts/`。

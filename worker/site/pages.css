@@ -1,31 +1,60 @@
 /*
  * The pages visitors read: the home page, the FAQ, how to verify, hanging
  * a proof on a profile, the page of a card, the page of an account and the
- * proof log page (server/pages). One column, at most 560 wide, 20 on each
- * side on a phone.
+ * proof log page (src/pages/). The navigation bar and the foot are as wide
+ * as the site (--max-width); the content of each page is still one column,
+ * at most 560 wide, until that page is laid out after design/DESIGN.md.
  *
- * Nothing here means a conclusion (docs/design/principles.md, principle 4):
- * no green, no check mark, no lock or shield, nothing that looks like a
- * platform's verified badge. The raspberry red is for links and the one
- * button. The last card proof looks the same whatever the number of days.
+ * The values of :root are design/tokens.json's, each the one of the same
+ * name (test/style-sheet.test.ts): what each colour means, and where it is
+ * not to be used, is design/DESIGN.md's. Nothing here means a conclusion
+ * (docs/design/principles.md, principle 4): no green, no check mark, no
+ * lock or shield, nothing that looks like a platform's verified badge. The
+ * raspberry red is for links, buttons and "you".
  *
- * The colours and type stacks are those of web/src/ui/style.css. The pages
- * load no font file: the stacks name the visual identity's typefaces first
- * and fall back to the system's. The Content-Security-Policy of these pages
- * allows this file and nothing inline (server/README.md).
+ * Headings are in GenRyuMin2 TW, the subset of design/fonts/, which the
+ * site sends itself (/fonts/, a copy: scripts/site-files.ts); the body and
+ * the monospace are the system's. The Content-Security-Policy of these
+ * pages allows this file, that font and nothing inline (README.md, "頁面送的標頭").
  */
+@font-face {
+  font-family: "GenRyuMin2 TW";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/GenRyuMin2TW-B.woff2") format("woff2");
+}
+
 :root {
-  --ink: #1b1b1f;
-  --paper: #f4f1ea;
-  --line: #d8d3c7;
-  --mute: #6b6860;
-  --white: #fffdf9;
-  --red: #bf2150;
-  --teal: #226977;
-  --teal-bg: #d9eef2;
-  --round: "GenSenRounded2 TW", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-  --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --bg: #FFFFFF;
+  --ink: #141414;
+  --text: #2E3135;
+  --mute: #5A5F64;
+  --line: #E3E5E7;
+  --soft: #F6F7F7;
+  --you: #BF2150;
+  --you-hover: #A51A44;
+  --font-display: "GenRyuMin2 TW", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --font-body: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --size-body: 18px;
+  --size-body-phone: 16px;
+  --size-kicker: 15px;
+  --size-kicker-phone: 14px;
+  --size-small: 14px;
+  --weight-heading: 700;
+  --weight-account: 800;
+  --weight-body: 400;
+  --leading-body: 1.85;
+  --gutter: 40px;
+  --gutter-phone: 20px;
+  --max-width: 1200px;
+  --measure: 32em;
+  --button-height: 56px;
+  --radius: 4px;
+  --radius-panel: 12px;
+  --min-target: 44px;
+  --focus-ring: 3px;
 }
 
 * {
@@ -38,22 +67,42 @@ html {
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.7;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: var(--weight-body);
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
 }
 
+/* Each page's own content: one column of at most --measure, until the page is laid out after design/DESIGN.md. */
 main {
-  max-width: 560px;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
   margin: 0 auto;
-  padding: 0 20px 48px;
+  padding: 0 var(--gutter) 72px;
 }
 
 a {
-  color: var(--red);
-  text-underline-offset: 3px;
+  color: var(--you);
+  text-underline-offset: 4px;
+}
+
+a:hover {
+  color: var(--you-hover);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: var(--focus-ring) solid var(--ink);
+  outline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--ink);
 }
 
 p {
@@ -66,25 +115,26 @@ h2 {
 }
 
 .small {
-  font-size: 14px;
+  font-size: var(--size-small);
   color: var(--mute);
 }
 
 .id {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
 
-/* A test log says so above everything else. */
+/* A test log says so above everything else: a band of ink, which means nothing else on the site. */
 .test-proof-log {
   margin: 0;
-  padding: 6px 20px;
-  background: var(--teal-bg);
-  color: var(--teal);
+  padding: 8px var(--gutter);
+  background: var(--ink);
+  color: var(--bg);
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--size-kicker);
+  line-height: 1.6;
   text-align: center;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
 }
 
 /* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */
@@ -96,27 +146,59 @@ h2 {
   display: none !important;
 }
 
-/* The navigation bar at the top (home.md, 導覽列) ------------------------------
-   One row: the mark, the four links, the button. On a narrow screen the
-   links move to a second row under the mark and the button; nothing is
-   hidden and no script is needed. */
+/* The navigation bar and the foot (home.md, 導覽列 and section 9; design/DESIGN.md, 元件) ---------
+   Both as wide as the site: --max-width, with --gutter inside the line
+   that sets them off. On a narrow screen the bar shows the name and the
+   menu, a <details> with the same links and the button. */
 
-.top {
+.top,
+.foot {
+  padding: 0 var(--gutter);
+}
+
+.top .bar,
+.foot .bar {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* Where the links and the button do not fit beside the name (a window just wider than --breakpoint), they
+   go to a second row together; no word of the bar is broken. */
+.top .bar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 16px;
-  padding: 12px 0;
+  gap: 8px 32px;
+  min-height: 84px;
+  padding-top: 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
-  font-size: 14px;
 }
 
-.top .home {
-  display: inline-flex;
+.top .wide {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 8px 32px;
+}
+
+.top .home b,
+.top .domain,
+.top .wide a {
+  white-space: nowrap;
+}
+
+/* On a phone narrower than the name, the domain goes under it rather than past the edge. */
+.top .home {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 4px 10px;
   margin-right: auto;
-  color: inherit;
+  color: var(--ink);
   text-decoration: none;
 }
 
@@ -126,61 +208,170 @@ h2 {
   flex: none;
 }
 
+/* The name and the domain: both in the display face, centred on each other (design/DESIGN.md, 元件). */
 .top .home b {
-  font-family: var(--round);
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.06em;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.top .domain {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: var(--size-kicker);
+  line-height: 1;
+  letter-spacing: 0.03em;
+  color: var(--mute);
 }
 
 .top .links {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: 0 28px;
+  font-size: var(--size-kicker);
 }
 
-.top .links a {
+/* Each link at least --min-target high (design/DESIGN.md, 無障礙). */
+.top .links a,
+.foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-target);
+}
+
+.top nav a:not(.button),
+.foot a {
   color: var(--ink);
   text-decoration: none;
 }
 
-.top .links a:hover {
+.top nav a:not(.button):hover,
+.foot a:hover {
+  color: var(--ink);
   text-decoration: underline;
 }
 
 .top .nav-button {
   margin: 0;
-  padding: 5px 16px;
-  font-size: 14px;
+  min-height: var(--min-target);
+  padding: 0 18px;
+  font-size: var(--size-kicker);
 }
 
-@media (max-width: 600px) {
-  .top .links {
-    order: 3;
-    flex-basis: 100%;
-    justify-content: space-between;
-    padding-top: 4px;
-  }
+/* The menu: only on a narrow screen. It keeps its size; the name gives way. */
+.menu {
+  display: none;
+  flex: none;
+  white-space: nowrap;
+}
+
+.menu summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--min-target);
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: var(--size-kicker);
+  list-style: none;
+  cursor: pointer;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu[open] summary {
+  background: var(--soft);
+}
+
+/* Open, it hangs below the bar, over the page, as wide as the bar. */
+.menu nav {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: grid;
+  padding: 4px 0 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.menu nav a:not(.button) {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  border-top: 1px solid var(--line);
+}
+
+.menu nav a:not(.button):first-child {
+  border-top: 0;
+}
+
+.menu .nav-button {
+  justify-content: center;
+  margin-top: 12px;
+  min-height: var(--button-height);
+}
+
+.foot {
+  margin-top: 48px;
+}
+
+.foot .bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 28px;
+  padding-top: 32px;
+  padding-bottom: 48px;
+  border-top: 1px solid var(--line);
+  font-size: var(--size-kicker);
+}
+
+.foot .site {
+  margin-right: 12px;
+}
+
+.foot .site b {
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  color: var(--ink);
+}
+
+.foot .site span {
+  margin-left: 6px;
+  color: var(--mute);
 }
 
 .logo-card-body {
-  fill: var(--red);
+  fill: var(--you);
 }
 
 .logo-chip {
-  fill: var(--paper);
+  fill: var(--bg);
 }
 
 .logo-island-body {
   fill: var(--ink);
-  stroke: var(--paper);
+  stroke: var(--bg);
 }
 
 /* Titles ------------------------------------------------------------------------ */
 
+/* Every page's heading, in the display face (design/DESIGN.md, 字). */
 .title {
-  font-family: var(--sans);
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
   font-size: 21px;
   line-height: 1.55;
   margin: 28px 0 8px;
@@ -194,8 +385,8 @@ h2 {
 .title .account {
   display: block;
   margin-top: 8px;
-  font-family: var(--round);
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-weight: var(--weight-account);
   font-size: 36px;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -239,7 +430,7 @@ h2 {
 /* Does the account owner acknowledge it ---------------------------------------- */
 
 h2 {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 18px;
   letter-spacing: 0.02em;
@@ -247,14 +438,14 @@ h2 {
 }
 
 .backlink {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 15px;
   letter-spacing: 0.02em;
   margin: 0 0 14px;
   padding: 6px 12px;
-  background: var(--white);
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   overflow-wrap: anywhere;
 }
 
@@ -269,8 +460,8 @@ iframe.threads-profile {
   height: 360px;
   margin: 0 0 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fff;
+  border-radius: var(--radius-panel);
+  background: var(--bg);
 }
 
 /* The record ------------------------------------------------------------------------ */
@@ -283,7 +474,7 @@ iframe.threads-profile {
 
 .history summary {
   cursor: pointer;
-  color: var(--teal);
+  color: var(--ink);
   font-weight: 500;
   padding: 6px 0;
 }
@@ -342,22 +533,32 @@ section.verify {
 .mine {
   margin-top: 40px;
   padding: 18px 18px 8px;
-  background: var(--white);
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
 }
 
+/* A main button (design/DESIGN.md, 元件): raspberry red, white words, square corners, --button-height high. */
 .button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--button-height);
   margin: 4px 0 2px;
-  padding: 10px 24px;
-  border-radius: 99px;
-  background: var(--red);
-  color: var(--white);
-  font-family: var(--round);
+  padding: 0 24px;
+  border-radius: var(--radius);
+  background: var(--you);
+  color: var(--bg);
+  font-family: var(--font-body);
   font-weight: 700;
   font-size: 17px;
+  line-height: 1.3;
   text-decoration: none;
+}
+
+.button:hover {
+  background: var(--you-hover);
+  color: var(--bg);
 }
 
 /* The page of an account ----------------------------------------------------------- */
@@ -399,7 +600,7 @@ section.verify {
 }
 
 .field .at {
-  font-family: var(--round);
+  font-family: var(--font-body);
   font-weight: 700;
   font-size: 18px;
 }
@@ -409,19 +610,20 @@ section.verify {
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--white);
+  border-radius: var(--radius);
+  background: var(--bg);
   color: var(--ink);
-  font: 16px var(--sans);
+  font: 16px var(--font-body);
 }
 
 .field button {
-  padding: 8px 20px;
+  min-height: var(--min-target);
+  padding: 0 20px;
   border: 0;
-  border-radius: 99px;
-  background: var(--red);
-  color: var(--white);
-  font: 700 16px var(--round);
+  border-radius: var(--radius);
+  background: var(--you);
+  color: var(--bg);
+  font: 700 16px var(--font-body);
   cursor: pointer;
 }
 
@@ -448,7 +650,7 @@ section.verify {
 }
 
 .rows .who {
-  color: var(--red);
+  color: var(--you);
   text-decoration: underline;
   text-underline-offset: 3px;
   overflow-wrap: anywhere;
@@ -469,7 +671,7 @@ section.verify {
 /* The page of a short ID that resolves to nothing */
 
 .typed {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -490,7 +692,7 @@ body.home section + section {
 }
 
 .hero .brand b {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 22px;
   letter-spacing: 0.08em;
@@ -498,14 +700,14 @@ body.home section + section {
 
 .hero .brand span {
   margin-left: 6px;
-  font: 14px var(--mono);
+  font: 14px var(--font-mono);
   color: var(--mute);
 }
 
 /* The first screen's two lines: the largest words of the home page. */
 .headline {
   margin: 0 0 22px;
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 30px;
   line-height: 1.45;
@@ -529,7 +731,8 @@ body.home section + section {
 }
 
 .button.big {
-  padding: 12px 30px;
+  min-height: var(--button-height);
+  padding: 0 30px;
   font-size: 18px;
 }
 
@@ -538,10 +741,9 @@ body.home section + section {
   max-width: 340px;
   margin: 30px 0 18px;
   padding: 14px 20px 12px;
-  background: var(--white);
+  background: var(--bg);
   border: 1.5px solid var(--ink);
-  border-radius: 16px;
-  box-shadow: 6px 6px 0 var(--teal-bg);
+  border-radius: var(--radius-panel);
 }
 
 .mini-proof p {
@@ -559,16 +761,16 @@ body.home section + section {
 .mini-top .platform {
   padding: 1px 10px;
   border-radius: 99px;
-  background: var(--teal-bg);
-  color: var(--teal);
+  background: var(--soft);
+  color: var(--ink);
   font-weight: 600;
   font-size: 12px;
 }
 
 .mini-account {
   margin: 4px 0 8px !important;
-  font-family: var(--round);
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-weight: var(--weight-account);
   font-size: 26px;
   line-height: 1.3;
 }
@@ -607,7 +809,7 @@ body.home section + section {
 }
 
 .numbers .count b {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 26px;
   font-variant-numeric: tabular-nums;
@@ -636,22 +838,22 @@ body.home section + section {
   gap: 4px 12px;
   align-items: start;
   padding: 14px 18px;
-  background: var(--white);
+  background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
 }
 
 .steps .n {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 26px;
   line-height: 1.2;
-  color: var(--teal);
+  color: var(--ink);
 }
 
 .steps b {
   display: block;
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-size: 18px;
 }
 
@@ -661,9 +863,9 @@ body.home section + section {
 
 .halves {
   margin: 14px 0 18px;
-  background: var(--white);
+  background: var(--bg);
   border: 1.5px solid var(--ink);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   overflow: hidden;
 }
 
@@ -676,14 +878,14 @@ body.home section + section {
 }
 
 .half .tag {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
-  color: var(--teal);
+  color: var(--mute);
 }
 
 .both {
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 20px;
   line-height: 1.5;
@@ -744,7 +946,7 @@ body.home section + section {
 
 .uses b {
   display: block;
-  font-family: var(--round);
+  font-family: var(--font-display);
   font-size: 18px;
   line-height: 1.5;
 }
@@ -759,9 +961,9 @@ body.home section + section {
 body.home section.end {
   margin-top: 56px;
   padding: 30px 22px 20px;
-  background: var(--white);
+  background: var(--bg);
   border: 1.5px solid var(--ink);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   text-align: center;
 }
 
@@ -808,22 +1010,23 @@ ul.dots li {
 .prompt {
   margin: 0 0 10px;
   padding: 14px 16px;
-  background: var(--white);
+  background: var(--soft);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  font: 14px/1.7 var(--mono);
+  border-radius: var(--radius-panel);
+  font: 14px/1.7 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 /* A copy button (/copy.js shows it): outlined, the raspberry red. */
 button.copy {
-  padding: 6px 20px;
-  border: 1.5px solid var(--red);
-  border-radius: 99px;
-  background: var(--white);
-  color: var(--red);
-  font: 700 15px var(--round);
+  min-height: var(--min-target);
+  padding: 0 20px;
+  border: 1.5px solid var(--you);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--you);
+  font: 700 15px var(--font-body);
   cursor: pointer;
 }
 
@@ -833,8 +1036,8 @@ button.copy {
   display: inline;
   margin: 0;
   font-size: inherit;
-  font-family: var(--round);
-  font-weight: 700;
+  font-family: var(--font-body);
+  font-weight: var(--weight-account);
   overflow-wrap: anywhere;
 }
 
@@ -845,8 +1048,8 @@ button.copy {
 .hang button.copy.button {
   margin: 0;
   border: 0;
-  background: var(--red);
-  color: var(--white);
+  background: var(--you);
+  color: var(--bg);
   font-size: 17px;
   padding: 10px 24px;
 }
@@ -854,8 +1057,8 @@ button.copy {
 .button.quiet {
   margin: 0;
   background: transparent;
-  color: var(--red);
-  box-shadow: inset 0 0 0 1.5px var(--red);
+  color: var(--you);
+  box-shadow: inset 0 0 0 1.5px var(--you);
 }
 
 .hang .steps li {
@@ -874,31 +1077,70 @@ button.copy {
   margin-top: 28px;
 }
 
-/* The foot of every page (home.md, section 9) -------------------------------------------- */
+/* A narrow screen (design/DESIGN.md, 版面): below --breakpoint, which a media query cannot read, so it is written here. */
+@media (width < 760px) {
+  body {
+    font-size: var(--size-body-phone);
+  }
 
-.foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 20px;
-  margin-top: 48px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  font-size: 14px;
-}
+  main {
+    padding: 0 var(--gutter-phone) 56px;
+    max-width: none;
+  }
 
-.foot .site b {
-  font-family: var(--round);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
+  .test-proof-log {
+    padding: 8px var(--gutter-phone);
+    font-size: var(--size-kicker-phone);
+  }
 
-.foot .site span {
-  font: 12px var(--mono);
-  color: var(--mute);
-}
+  .top,
+  .foot {
+    padding: 0 var(--gutter-phone);
+  }
 
-@media (max-width: 480px) {
+  .top .bar,
+  .foot .bar {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .top .bar {
+    flex-wrap: nowrap;
+    min-height: 64px;
+    gap: 16px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-bottom: 0;
+  }
+
+  .top .wide {
+    display: none;
+  }
+
+  .menu {
+    display: block;
+  }
+
+  .foot .bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 24px;
+    padding-top: 28px;
+    padding-bottom: 40px;
+  }
+
+  .foot .site {
+    grid-column: 1 / -1;
+    margin: 0 0 10px;
+  }
+
+  .foot a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    border-top: 1px solid var(--line);
+  }
+
   .title .account {
     font-size: 32px;
   }

@@ -1,14 +1,15 @@
 /* A test site says so above everything else (design/copy/test-site.md); as on the site's other pages
-   (worker/site/pages.css). The colours are the page's own (style.css). */
+   (worker/site/pages.css): a band of ink, which means nothing else on the site. The values are style.css's. */
 .test-proof-log {
   margin: 0;
-  padding: 6px 20px;
-  background: var(--teal-bg);
-  color: var(--teal);
+  padding: 8px var(--gutter-phone);
+  background: var(--ink);
+  color: var(--bg);
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--size-kicker);
+  line-height: 1.6;
   text-align: center;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
 }
 
 /* The date beside it stays on one line: on a narrow screen the line breaks before the date, not at a hyphen in it. */

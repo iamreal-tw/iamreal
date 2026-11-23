@@ -304,13 +304,13 @@ bb.js 平常會把通用參數存在 IndexedDB；這裡不用 bb.js 自己的下
 **它擋不住的**（2026-11-16 在 Chrome 157 實測，正式的建置、這份標頭，在頁面裡執行指令碼把字串送到另一個來源）：整頁的導覽（`location.assign("http://別處/?d=…")`）、點擊裡的 `window.open`、WebRTC（`RTCPeerConnection` 的 `iceServers` 指到別處，加上 `webrtc 'block'` 也一樣）都送得出去；`<link rel=preconnect>` 會對別處開連線（沒有資料，但用網域名稱帶資料出去沒有測）。CSP 不管頂層的導覽和 `window.open`，頁面自己就是靠這一點開元件的視窗。所以**這份政策不是「套件被動了手腳也送不出去」的保證**：bb.js、noir_js 和它們的依賴打包在頁面的主執行緒，和 PIN、憑證、簽章在同一個執行環境，見證也在主執行緒算。對「套件被動手腳」這件事，靠的是：執行時的套件釘死版本、鎖檔有完整性雜湊（`pnpm-lock.yaml`）、安裝時不執行套件的指令碼（pnpm 預設）、不安裝發布未滿 7 天的版本；之後再加上可重現的建置。worker 裡沒有導覽和 `RTCPeerConnection`，所以 worker 裡的程式確實只連得到自己的網域。
 
 ```
-default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://data.iamreal.tw; img-src 'self'; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 ```
 
 測試網站（`test.iamreal.tw`）送的只差資料網域，是測試的證明紀錄的那一個：
 
 ```
-default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://test-data.iamreal.tw; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://test-data.iamreal.tw; img-src 'self'; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 ```
 
 - `'wasm-unsafe-eval'`：bb.js 和 Noir 要編譯 WebAssembly。
@@ -318,6 +318,7 @@ default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; con
 - bb.js 原本把 WebAssembly 包成 `data:` 網址、把通用參數從 Aztec 的 CDN 下載。建置時把 WebAssembly 寫成檔案（`vite.config.ts`），通用參數改從自己的網域拿，所以 `connect-src` 只要 `'self'`，加上資料網域。
 - `connect-src` 的 `https://data.iamreal.tw`（測試網站是 `https://test-data.iamreal.tw`）：頁面從自己那份證明紀錄的資料網域下載清冊存檔（ADR-0027，見「資料網域」）。只多這一個網域；頁面對它只送 `GET`，網址是清冊存檔的索引和那一份清冊檔，不帶 cookie、`Referer` 或別的東西（`src/api.ts` 的 `dataOriginFetch`）。
 - 畫面的樣式是同一個網域的 CSS 檔（`style-src 'self'`）；畫面不用 `style` 屬性，也沒有內嵌的 `<script>`。
+- 標題的字型是建置打包進來的檔案，從同一個網域載入（`font-src 'self'`）：`design/fonts/` 的源流明體 TW 子集，`src/ui/style.css` 引用它（`design/fonts/README.md`）。不用 Google Fonts 這類第三方的字型。
 - **元件的視窗不需要多開任何東西。** `window.open` 開 `http://localhost:61161/popupForm`（頂層的導覽）和 `postMessage` 都不受 CSP 管；頁面本身不對 `localhost:61161` 發任何請求，那些請求是元件的頁面自己發的。`test/e2e/ui.ts` 在這份標頭之下跑完整條流程，沒有任何違反。
 
 無頭瀏覽器的測試在這兩份標頭之下跑完整條流程，並檢查沒有任何違反，頁面和它的 worker 沒有連到自己的網域以外的地方。`test/e2e/run.ts` 自己送正式的那一份，並檢查這份 README 引用的和測試用的一字不差（`test/e2e/headers.ts`）；`test/e2e/ui.ts` 的頁面由本機的 Worker 送出，它是測試網站的設定，測試檢查它實際送的就是這份 README 引用的測試網站那一份。

@@ -39,7 +39,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { COPY_JS_SHA256, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { COPY_JS_SHA256, FONT_FILE, FONT_SOURCE, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -288,6 +288,8 @@ export interface ConfiguredSite {
   readonly styleSheetSha256: string | null;
   /** The SHA-256 of `copy.js` there; null if the file is not there. */
   readonly scriptSha256: string | null;
+  /** The SHA-256 of the typeface there (`FONT_FILE`); null if the file is not there. */
+  readonly fontSha256: string | null;
 }
 
 /**
@@ -325,6 +327,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
       styleSheetSha256: sha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
+      fontSha256: sha256Of(FONT_FILE),
     };
   }
   return out;
@@ -342,7 +345,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *   - the files of the directory outside proof/ are the ones listed
  *     (`SITE_FILES`) and no other, and the style sheet and the script are
  *     the ones with the SHA-256 written down (`PAGES_CSS_SHA256`,
- *     `COPY_JS_SHA256`). What is under proof/, which is not in the
+ *     `COPY_JS_SHA256`), and the typeface is the subset of design/fonts/
+ *     (`FONT_SOURCE`), byte for byte. What is under proof/, which is not in the
  *     repository, is the card proof page's build: `checkProofPages` looks
  *     at it;
  *   - a path is a file's own or nothing, but for the redirects of
@@ -368,6 +372,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
     assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
+    assert.equal(site.fontSha256, createHash("sha256").update(readFileSync(FONT_SOURCE)).digest("hex"), `${FONT_FILE} of the ${env} environment is the subset of design/fonts/`);
   }
 }
 
