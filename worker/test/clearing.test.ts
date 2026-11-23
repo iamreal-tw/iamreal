@@ -1,5 +1,5 @@
 // Clearing the test roster (ADR-0028), done on the local Worker the way
-// README.md, "清空測試名冊", tells the operator to: the settings get a new
+// README.md, "清空測試的證明紀錄", tells the operator to: the settings get a new
 // name for the roster's object and a new date, the Worker is deployed, and
 // roster/ of the data bucket is emptied. Seen through the Worker's HTTP and
 // the files of the simulated R2 bucket (test/harness.ts).

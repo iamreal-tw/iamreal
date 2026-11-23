@@ -128,7 +128,7 @@ ${when}${withdrawn === null ? new Html("") : html`
   const switches = card.slots.find((s) => s.platform === PLATFORM)?.switchCount ?? 0;
   return html`${top}
 <section class="record">
-<h2>這張自然人憑證在名冊上的紀錄</h2>
+<h2>這張自然人憑證在證明紀錄裡的紀錄</h2>
 <ul class="facts">
 <li>第一次過卡：${formatDay(card.firstCardProof)}</li>
 <li>過卡 ${card.cardProofs} 次</li>
@@ -145,8 +145,8 @@ ${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${eventOf
 
 /** proof-page.md, section 5. */
 const VERIFY = html`<section class="verify">
-<p>這份證明是在持卡人的裝置上算出來的，永久公布在名冊上。任何人都可以驗證名冊上的每一份證明，都來自一張有效的自然人憑證。</p>
-<p><a href="/verify">怎麼驗證</a></p>
+<p>這份證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。任何人都可以驗證證明紀錄裡的每一份證明，都來自一張有效的自然人憑證。</p>
+<p><a href="/verify">怎麼驗證島民證明</a></p>
 </section>`;
 
 /** proof-page.md, section 5a; the last line is home.md's 〈需要什麼〉. */

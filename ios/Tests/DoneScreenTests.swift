@@ -65,7 +65,7 @@ final class DoneScreenTests: XCTestCase {
         Flow.Recorded(platform: platform, kind: kind, username: username, accountCards: cards)
     }
 
-    /// The blocks from "名冊記下了這一筆" to the points, as their texts.
+    /// The blocks from "證明紀錄記下了這一筆" to the points, as their texts.
     private func record(of screen: Screen) throws -> [[String]] {
         let from = try XCTUnwrap(screen.blocks.firstIndex(of: .heading(copy("done.recorded"))))
         return screen.blocks[(from + 1)...].prefix { if case .points = $0 { return false } else { return true } }.map(\.texts)

@@ -2,7 +2,7 @@
 
 驗證一筆紀錄：檢查一行紀錄的寫法、算紀錄的雜湊、從紀錄的欄位重建證明的公開輸入，再用 `bb verify` 驗證明。
 
-**這個目錄讓人檢查的事：任何人都能重驗一筆紀錄。** 照 `spec/` 實作，不需要後台。整份名冊的規則在 `roster/`，把兩者接起來的指令在 `cmd/iamreal-verify/`。
+**這個目錄讓人檢查的事：任何人都能重驗一筆紀錄。** 照 `spec/` 實作，不需要後台。整份證明紀錄的規則在 `roster/`，把兩者接起來的指令在 `cmd/iamreal-verify/`。
 
 ## 內容
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | `base32.go` | `spec/README.md` | Crockford base32，只有一種寫法的解碼 |
 | `challenge.go` | `spec/challenge.md` | 題目的格式、日期、`current_time` |
-| `scope.go` | `spec/scope.md` | 正式名冊和測試名冊各自接受的場合字串和平台（平台表、每個平台的帳號名稱格式）、打包 |
+| `scope.go` | `spec/scope.md` | 正式的證明紀錄和測試的證明紀錄各自接受的場合字串和平台（平台表、每個平台的帳號名稱格式）、打包 |
 | `accounts.go` | `spec/record.md`「The account list」 | 帳號清單：照樣板寫出、對平台表檢查（平台在表裡、照平台代號嚴格遞增、帳號名稱合它自己平台的格式），不排序、不修補 |
 | `declcode.go` | `spec/declaration-code.md` | 宣告碼（標籤、場合字串、每個帳號一行 `platform:username`、題目）和它的打包值 |
 | `scopedid.go` | `spec/scoped-id.md` | 匿名編號的文字形式、短編號、網址裡的短編號 |
@@ -27,7 +27,7 @@ Poseidon2 和廢止清冊的樹不在這裡：驗證一筆紀錄不需要算它�
 
 `ParseLine` 照 `spec/record.md`「Check a line」做：用一個寬鬆的 JSON 讀法拿出各個值，逐一檢查格式，照樣板重寫，再和原本的位元組（含結尾的 `LF`）逐位元組比對。決定合不合格的是最後的比對，所以 JSON 讀法本身可以寬鬆。沒有用 `encoding/json` 解到結構體當作檢查：它不分鍵的大小寫、收重複的鍵。
 
-`accounts` 也一樣：寬鬆的讀法照寫的順序讀出每個帳號（同一個鍵出現兩次時取第一個），`CheckAccounts` 檢查平台在這份名冊的表裡、照平台代號嚴格遞增（所以不會重複）、每個帳號名稱合它自己平台的格式，再照樣板整行重寫比對。順序不對、平台重複、多一個鍵、鍵的順序不同、清單裡有空白，都讓這一行寫法錯；不排序、不挑第一個或最後一個。
+`accounts` 也一樣：寬鬆的讀法照寫的順序讀出每個帳號（同一個鍵出現兩次時取第一個），`CheckAccounts` 檢查平台在這份證明紀錄的表裡、照平台代號嚴格遞增（所以不會重複）、每個帳號名稱合它自己平台的格式，再照樣板整行重寫比對。順序不對、平台重複、多一個鍵、鍵的順序不同、清單裡有空白，都讓這一行寫法錯；不排序、不挑第一個或最後一個。
 
 ### 發證金鑰和測試金鑰
 
@@ -95,13 +95,13 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 
 沒給 `IAMREAL_CRS` 時，測試自己寫出 `bn254_g1.dat`（上面那 64 個位元組），`New` 照樣檢查 SHA-256。
 
-**標準答案**（`vectors_test.go`）：`spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`、`record.json` 每一個案例各是一個子測試。`scope.json` 的場合、平台、帳號名稱各自也經過一行紀錄的檢查；`declaration-code.json` 比對原文、雜湊、宣告碼、打包值，以及從紀錄重建的最後一個公開輸入；`record.json` 的 `rosters`（正式名冊、測試名冊）比對清單的寫法、整行和紀錄的雜湊，每一行寫法錯的行都要被拒絕。`record.json` 的名冊指紋、`files` 和公布的名冊由 `roster/` 跑。
+**標準答案**（`vectors_test.go`）：`spec/vectors/` 的 `challenge.json`、`scope.json`、`declaration-code.json`、`scoped-id.json`、`issuers.json`、`record.json` 每一個案例各是一個子測試。`scope.json` 的場合、平台、帳號名稱各自也經過一行紀錄的檢查；`declaration-code.json` 比對原文、雜湊、宣告碼、打包值，以及從紀錄重建的最後一個公開輸入；`record.json` 的 `rosters`（正式的證明紀錄、測試的證明紀錄）比對清單的寫法、整行和紀錄的雜湊，每一行寫法錯的行都要被拒絕。`record.json` 的指紋、`files` 和公布的證明紀錄由 `roster/` 跑。
 
-`internal_test.go` 另外測：平台表（代號的格式、不重複、正式名冊沒有 `test-` 開頭的、`Platforms` 照代號排序）；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
+`internal_test.go` 另外測：平台表（代號的格式、不重複、正式的證明紀錄沒有 `test-` 開頭的、`Platforms` 照代號排序）；兩個帳號的一行，清單裡每一個位元組換成別的字元，要不是被拒絕，就是另一行照樣板寫出的紀錄。
 
-`platforms_test.go`：兩份名冊每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同。
+`platforms_test.go`：兩份證明紀錄每個平台的格式字串，照裝置的讀法（不用正規表示式）讀出來，和檢查函式對每一個單一位元組、字母前後的每一個位元組、長度上限前後的字串答案相同。
 
-**真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕，以及兩筆紀錄組成的測試名冊經過 `roster/` 的規則。
+**真的證明**（`proof_test.go`）：正確的證明通過、每一個公開輸入改一個值被拒絕、紀錄的每個欄位改掉被拒絕（帳號清單：改一個帳號名稱、帳號換平台、少一個、多一個、順序對調、空的清單）、證明少一個位元組、多一個位元組、改一個位元組被拒絕、非零知識的證明被拒絕、亂數的證明被拒絕、`bb` 當掉或逾時算拒絕，以及兩筆紀錄組成的測試的證明紀錄經過 `roster/` 的規則。
 
 ## 對外的函式
 
@@ -111,7 +111,7 @@ IAMREAL_BB=/path/to/bb IAMREAL_CRS=/path/to/crs go test ./verifier   # 用指定
 | `(*Record).Line()`、`Hash()`、`HashPreimage()`、`Date()`、`CheckValues(roster)`、`ProofBytes()`、`Equal(o)` | 照樣板寫回、紀錄雜湊、日期、逐欄檢查、解出證明、比較兩筆（`nil` 和空的清單相同） |
 | `Account`、`AccountsText`、`CheckAccounts(roster, accounts)`、`ReadAccountsText`、`AccountOn` | 帳號清單：照樣板寫出、對平台表檢查、讀回只有一種寫法的清單（後台的資料庫用）、某個平台的帳號 |
 | `New(Config)` | 用編進程式的發證金鑰建驗證器；檢查 `bb` 的版本和通用參數 |
-| `(*Verifier).VerifyRecord(r)` | 驗證一筆格式正確的紀錄：`nil` 是通過，`*Rejection` 是不通過（名冊規則的 `proof`），其他錯誤是驗證器自己跑不起來 |
+| `(*Verifier).VerifyRecord(r)` | 驗證一筆格式正確的紀錄：`nil` 是通過，`*Rejection` 是不通過（紀錄規則的 `proof`），其他錯誤是驗證器自己跑不起來 |
 | `PublicInputs(r)`、`EncodePublicInputs` | 從紀錄重建公開輸入、寫成 `bb` 讀的二進位格式 |
 | `ParseChallenge`、`CurrentTime`、`ParseDate` | 題目和日期 |
 | `LookupScope`、`Scopes`、`ScopePacked` | 場合 |

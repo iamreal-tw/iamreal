@@ -18,7 +18,7 @@ export const ROSTER_DIRECTORY = "roster/";
  * The `Cache-Control` of a full roster file and of its record hash list:
  * neither ever changes again (spec/record.md, "The published roster"). The
  * data domain caches by the header the object carries and by nothing else
- * (README.md, "寫滿的名冊檔搬到 R2").
+ * (README.md, "寫滿的紀錄檔搬到 R2").
  */
 export const CACHE_FULL_FILE = "public, max-age=31536000, immutable";
 
@@ -68,7 +68,7 @@ export type FileBucket = Pick<R2Bucket, "put" | "get">;
  * nothing of the content.
  *
  * The bucket is given the SHA-256 with the bytes, to check what it
- * received by (README.md, "寫滿的名冊檔搬到 R2", says what is known of
+ * received by (README.md, "寫滿的紀錄檔搬到 R2", says what is known of
  * that): bytes that changed on the way are then not stored at all, where
  * the reading back alone would find them only once they are under the
  * object's public name.

@@ -521,7 +521,7 @@ export default {
     }
     const env = testEnv(deployedEnv);
     if (route === "POST /__test/roster/alarm") {
-      // `?object=` names another object than the settings': the one of a roster that was cleared (README.md, "清空測試名冊").
+      // `?object=` names another object than the settings': the one of a roster that was cleared (README.md, "清空測試的證明紀錄").
       const named = new URL(request.url).searchParams.get("object");
       await testRosterOf(named === null ? env : { ...env, ROSTER_OBJECT_NAME: named }).testRunAlarm();
       return done();

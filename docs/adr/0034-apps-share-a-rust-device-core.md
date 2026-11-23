@@ -8,7 +8,7 @@ Android 和 iOS 的 app 共用一份 Rust 寫的核心，放在 `device-core/`�
 
 核心放三類：
 
-- `spec/` 的算法：場合字串、宣告碼、匿名編號、題目、名冊規則、帳號格式。
+- `spec/` 的算法：場合字串、宣告碼、匿名編號、題目、紀錄規則、帳號格式。
 - 裝置上的檢查：選憑證和檢查憑證、廢止清冊的解析和驗章、清冊多舊算過期、建樹（ADR-0015）、電路輸入和預期的公開輸入、檢查後台的回應。
 - 算見證、算證明、Poseidon2。
 
@@ -61,7 +61,7 @@ Android 和 iOS 的 app 共用一份 Rust 寫的核心，放在 `device-core/`�
 ## Consequences
 
 - **多一種語言。** 這個程式庫有 Go、TypeScript、Noir，加上 Rust、Kotlin、Swift。Rust 的套件照 `CONTRIBUTING.md` 的套件規則；Barretenberg 和 Noir 的版本和 `web/` 釘的相同。
-- **改 `spec/` 的算法時多改一份。** 名冊規則現在是規格、標準答案、Go、TypeScript 一起改（ADR-0030）；`device-core/` 建好後加上 Rust，`CONTRIBUTING.md` 那時一起改。裝了舊版 app 的手機照舊的規則算後果，要怎麼處理在 app 的更新那張票定。
+- **改 `spec/` 的算法時多改一份。** 紀錄規則現在是規格、標準答案、Go、TypeScript 一起改（ADR-0030）；`device-core/` 建好後加上 Rust，`CONTRIBUTING.md` 那時一起改。裝了舊版 app 的手機照舊的規則算後果，要怎麼處理在 app 的更新那張票定。
 - **裝置上的檢查在網頁版和 app 是兩份**，靠 `spec/vectors/` 對齊，直到實測後決定網頁版換不換。
 - **「先檢查再簽章」寫兩次。** Kotlin、Swift 的流程照 `web/src/flow.ts` 的順序；核心只保證匿名編號不會在檢查通過前出現。
 - **簽章和憑證會進核心。** 它們沒有離開手機，不違反 `CLAUDE.md` 的硬限制；核心用完要清掉。

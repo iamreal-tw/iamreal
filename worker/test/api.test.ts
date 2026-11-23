@@ -507,7 +507,7 @@ describe("the challenges the roster's object keeps", () => {
   test("the object wakes itself to delete: until a challenge is issued its alarm is the daily publication's, at midnight in Taiwan; then it is 10 minutes ahead", async () => {
     const worker = await startWorker();
     try {
-      // Noon in Taiwan: an object that has only started has its alarm 12 hours ahead (README.md, "每天換日公布名冊").
+      // Noon in Taiwan: an object that has only started has its alarm 12 hours ahead (README.md, "每天換日公布證明紀錄").
       await worker.setClock(tw("2026-11-20T12:00:00"));
       const midnight = await worker.roster.alarmInMs();
       assert.ok(midnight !== null && midnight > 11.9 * 3600_000 && midnight <= 12 * 3600_000, `the alarm is ${midnight} ms ahead`);

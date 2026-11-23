@@ -56,20 +56,20 @@ export const NEEDS = "需要實體的自然人憑證、讀卡機和電腦。";
 const NAV = html`<header class="top">
 <a class="home" href="/">${LOGO}<b>島民證明</b></a>
 <nav class="links">
-<a href="/verify">怎麼驗證</a>
-<a href="/roster">名冊</a>
+<a href="/verify">怎麼驗證島民證明</a>
+<a href="/roster">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
 </nav>
 <a class="button nav-button" href="/proof">我要換島民證明</a>
 </header>`;
 
-/** The foot. 怎麼準備 is the card proof's help page. */
+/** The foot. 過卡需要什麼 is the card proof's help page. */
 const FOOT = html`<footer class="foot">
 <span class="site"><b>島民證明</b> <span>iamreal.tw</span></span>
-<a href="/roster">名冊</a>
+<a href="/roster">證明紀錄</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>
-<a href="/proof/help.html?topic=prepare">怎麼準備</a>
+<a href="/proof/help.html?topic=prepare">過卡需要什麼</a>
 <a href="/faq">常見問題</a>
 </footer>`;
 
@@ -89,7 +89,7 @@ ${d.preview === false ? new Html("") : html`<meta property="og:title" content="$
 ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">
-${test === null ? new Html("") : html`<p class="test-roster">測試名冊　不定期清空，上次清空：<time>${test}</time></p>
+${test === null ? new Html("") : html`<p class="test-roster">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>
 `}<main>
 ${NAV}
 ${d.content}

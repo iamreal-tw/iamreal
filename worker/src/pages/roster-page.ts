@@ -1,6 +1,6 @@
 // The roster page: design/copy/roster-page.md. The markup is the Go
 // backend's (e159ab9:server/pages/templates/roster.html), but for the link of
-// 下載整份名冊, which goes to the part of iamreal-verify's README about
+// 下載整份證明紀錄, which goes to the part of iamreal-verify's README about
 // downloading (roster-page.md, 下載): the roster is on the data domain
 // (ADR-0027), not under /roster/. This file only turns data into HTML; the
 // Worker (src/visitor.ts) reads the address and the roster.
@@ -13,7 +13,7 @@ import type { Document } from "./layout.ts";
 /** How many slots the roster page lists at a time (roster-page.md, 清單). */
 export const PAGE_SIZE = 50;
 
-/** Where 下載整份名冊 goes: the section 下載 of iamreal-verify's README. */
+/** Where 下載整份證明紀錄 goes: the section 下載 of iamreal-verify's README. */
 const DOWNLOAD = "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載";
 
 /** A place in the list as ?after= carries it: the date and the seq, `2026-11-17.123`. */
@@ -62,7 +62,7 @@ export function rosterPage(v: RosterView): Document {
   const last = v.slots[v.slots.length - 1];
   const list = empty
     ? html`
-<p>名冊上還沒有島民證明。</p>`
+<p>證明紀錄裡還沒有島民證明。</p>`
     : html`
 <p class="small">列在這裡，只代表有一張自然人憑證把名額給了這個帳號。帳號主人承不承認，要點進那一張看。</p>
 <ul class="rows">${
@@ -78,7 +78,7 @@ ${v.slots.map((s) => html`<li><a href="/p/${shortId(s.scopedId)}"><time>${format
           : new Html("")
       }`;
   const content = html`<section class="numbers">
-<h1 class="title">名冊</h1>
+<h1 class="title">證明紀錄</h1>
 <p>現在有 ${thousands(v.counts.declared)} 張島民證明，其中 ${thousands(v.counts.recent)} 張在過去三個月內過卡。</p>
 </section>
 <section class="query">
@@ -96,7 +96,7 @@ ${v.slots.map((s) => html`<li><a href="/p/${shortId(s.scopedId)}"><time>${format
 <h2>最近換出的島民證明</h2>${list}
 </section>
 <section class="download">
-<p><a href="${DOWNLOAD}">下載整份名冊</a> <a href="/verify">怎麼驗證</a></p>
+<p><a href="${DOWNLOAD}">下載整份證明紀錄</a> <a href="/verify">怎麼驗證島民證明</a></p>
 </section>`;
-  return { title: "名冊", kind: "roster", content };
+  return { title: "證明紀錄", kind: "roster", content };
 }

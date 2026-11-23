@@ -101,16 +101,16 @@ describe("stops", () => {
     [{ code: "challenge_not_today", challengeDate: "2026-11-15", today: "2026-11-16" }, COPY.stops.date_mismatch, null],
     [{ code: "proof_check" }, COPY.stops.proof_check, null],
     [{ code: "server", server: "challenge_unknown", status: 400 }, COPY.stops.challenge_expired, 4],
-    [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），名冊沒有變動。", 4],
-    [{ code: "server", server: "challenge_used", status: 400 }, "這次過卡沒有被接受（代碼 challenge_used），名冊沒有變動。", 4],
-    [{ code: "server", server: "platform", status: 400 }, "這次過卡沒有被接受（代碼 platform），名冊沒有變動。", 4],
+    [{ code: "server", server: "root", status: 400 }, "這次過卡沒有被接受（代碼 root），證明紀錄沒有變動。", 4],
+    [{ code: "server", server: "challenge_used", status: 400 }, "這次過卡沒有被接受（代碼 challenge_used），證明紀錄沒有變動。", 4],
+    [{ code: "server", server: "platform", status: 400 }, "這次過卡沒有被接受（代碼 platform），證明紀錄沒有變動。", 4],
     // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
     [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
     // The roster rules, when the card's state changed after it was asked.
     [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", 4],
-    [{ code: "server", server: "switch_limit", status: 400 }, "清單裡有一個平台不能再更換，整份清單都沒有記下，名冊沒有變動。請再讀一次卡片。", 4],
-    [{ code: "server", server: "empty", status: 400 }, "這張卡片現在沒有宣告任何帳號，沒有可以收回的，名冊沒有變動。請再讀一次卡片。", 4],
+    [{ code: "server", server: "switch_limit", status: 400 }, "清單裡有一個平台不能再更換，整份清單都沒有記下，證明紀錄沒有變動。請再讀一次卡片。", 4],
+    [{ code: "server", server: "empty", status: 400 }, "這張卡片現在沒有宣告任何帳號，沒有可以收回的，證明紀錄沒有變動。請再讀一次卡片。", 4],
     [{ code: "card", card: "card_error", detail: "pin_characters" }, "這一頁不支援含有 +、% 或非英數符號的 PIN。請先到內政部憑證管理中心的網站變更 PIN。", 2],
     [{ code: "card", card: "card_error", detail: "no_pin" }, "讀卡時發生錯誤（代碼 no_pin）。請重新插卡再試一次。", 2],
     [{ code: "username", platform: "threads" }, "帳號只能用英文小寫、數字、句點和底線，最多 30 個字。", null],
@@ -123,7 +123,7 @@ describe("stops", () => {
     // A switch the row says cannot be made: no sentence in the copy for typing one anyway.
     [{ code: "blocked", reason: "switch_limit", platform: "threads" }, "這一列不能改成別的帳號。請填回原本的帳號，或清空。", null],
     // The date changed since step 5 (midnight): nothing signed, back to the beginning.
-    [{ code: "date_changed" }, "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，名冊也沒有記下任何東西。請回到開頭重新過卡。", null],
+    [{ code: "date_changed" }, "日期換了一天，這次改動的結果會和剛才畫面說的不同，所以卡片沒有簽，證明紀錄也沒有記下任何東西。請回到開頭重新過卡。", null],
   ];
   for (const [stop, want, item] of cases) {
     test(JSON.stringify(stop, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), () => {
@@ -403,7 +403,7 @@ describe("confirm (step 5)", () => {
       ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]],
     ]);
     const v = confirmView(cq);
-    assert.equal(v.intro, "按下後，名冊會公開記下這張卡片的帳號清單：");
+    assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片的帳號清單：");
     assert.equal(v.listedTogether, true);
     assert.equal(v.withdrawStays, false);
     assert.equal(v.later, "之後可以用同一張卡片收回或更換帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。");
@@ -447,26 +447,26 @@ describe("confirm (step 5)", () => {
     assert.equal(one.listedTogether, false);
     assert.equal(t(one.listedSingle!), "這個 Threads 帳號會公開列在島民證明上。");
     // The first sentence and the button speak of the account.
-    assert.equal(one.intro, "按下後，名冊會公開記下這張卡片宣告的帳號：");
+    assert.equal(one.intro, "按下後，證明紀錄會公開記下這張卡片宣告的帳號：");
     assert.equal(one.button, "宣告這個帳號");
     const more = confirmView(consequence([crow({ kind: "first", username: "alice" })]), null);
     assert.deepEqual([more.listedTogether, more.listedSingle], [true, null]);
-    assert.deepEqual([more.intro, more.button], ["按下後，名冊會公開記下這張卡片的帳號清單：", "宣告這份清單"]);
+    assert.deepEqual([more.intro, more.button], ["按下後，證明紀錄會公開記下這張卡片的帳號清單：", "宣告這份清單"]);
     // Card proof again with one platform: the first sentence of one platform, the button as it is.
     const again = confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads");
-    assert.deepEqual([again.intro, again.button], ["按下後，名冊會公開記下這張卡片宣告的帳號：", "再次過卡"]);
+    assert.deepEqual([again.intro, again.button], ["按下後，證明紀錄會公開記下這張卡片宣告的帳號：", "再次過卡"]);
     // A switch or declared again: 宣告這個帳號.
     assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4 })]), "Threads").button, "宣告這個帳號");
     assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
     // Everything withdrawn: neither, and the sentence and button of a withdrawal.
     const none = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
     assert.deepEqual([none.listedTogether, none.listedSingle], [false, null]);
-    assert.deepEqual([none.intro, none.button], ["按下後，名冊會公開記下這張卡片不再宣告任何帳號：", "收回所有帳號"]);
+    assert.deepEqual([none.intro, none.button], ["按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：", "收回所有帳號"]);
   });
 
   test("everything withdrawn: the other first sentence, no listed together, the other second point, the button", () => {
     const v = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]));
-    assert.equal(v.intro, "按下後，名冊會公開記下這張卡片不再宣告任何帳號：");
+    assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：");
     assert.equal(v.listedTogether, false);
     assert.equal(v.listedSingle, null);
     assert.equal(v.withdrawStays, true);
@@ -507,7 +507,7 @@ describe("done (step 6)", () => {
     assert.equal(t(doneView(done(sw, [k("threads", "switch", "carol")])).title), "島民證明已更新");
     const all = [crow({ kind: "withdraw", username: "alice", current: "alice" })];
     assert.equal(t(doneView(done(all, [k("threads", "withdraw", "alice", 0)])).title), "已全部收回");
-    assert.equal(t(doneView(done(same, null)).title), "名冊已經記下這次過卡");
+    assert.equal(t(doneView(done(same, null)).title), "證明紀錄已經記下這次過卡");
   });
 
   test("the card's page is the link; the card lists the list after the record; the rows of the record", () => {
@@ -600,7 +600,7 @@ describe("done (step 6)", () => {
     const v = doneView(done(expected, [k("threads", "switch", "bob")], { mismatches: ["threads"] }));
     assert.deepEqual(v.rows.map((r) => [r.account, t(r.kind!), r.mismatch]), [["@bob", "更換，原本是 @alice。", true]]);
     // On top, before the title; under the row what step 5 said, and that a switch was used.
-    assert.equal(t(v.mismatch!), "名冊記下的，和你確認時畫面說的不同。請看下面標出來的地方。");
+    assert.equal(t(v.mismatch!), "證明紀錄記下的，和你確認時畫面說的不同。請看下面標出來的地方。");
     assert.deepEqual(
       v.rows.map((r) => [t(r.expected!), r.switchUsed]),
       [["確認時畫面說的是：更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。", true]],
@@ -629,7 +629,7 @@ describe("done (step 6)", () => {
 
   test("an answer the device could not read at all (a 201): the title of a record made, no rows", () => {
     const v = doneView(done([crow({ kind: "first", username: "alice" })], null, { seq: null, recordHash: null }));
-    assert.equal(t(v.title), "名冊已經記下這次過卡");
+    assert.equal(t(v.title), "證明紀錄已經記下這次過卡");
     assert.equal(v.kindsUnreadable, true);
   });
 

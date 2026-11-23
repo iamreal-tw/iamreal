@@ -45,7 +45,7 @@ describe("the page of a card", () => {
     assert.equal(status, 200);
     wantLines(page, ["1. ", "2. ", "3. ", "4. ", "5. ", "5a. "].flatMap((s) => copyLines(block("proof-page.md", s))));
 
-    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', '<a href="/verify">怎麼驗證</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
+    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
     // The address to look for on the profile is written, not a link. A test roster's site writes its own domain
@@ -363,8 +363,8 @@ describe("every page", () => {
     await freshRoster(worker, { clearedOn: "2026-12-31" });
     const page = await (await worker.fetch("/")).text();
     assert.ok(page.includes(testRosterMark("2026-12-31")));
-    assert.equal(testRosterMark("2026-12-31"), '<p class="test-roster">測試名冊　不定期清空，上次清空：<time>2026-12-31</time></p>');
-    assert.equal(testRosterLine("2026-12-31"), "測試名冊　不定期清空，上次清空：2026-12-31");
+    assert.equal(testRosterMark("2026-12-31"), '<p class="test-roster">測試的證明紀錄　不定期清空，上次清空：<time>2026-12-31</time></p>');
+    assert.equal(testRosterLine("2026-12-31"), "測試的證明紀錄　不定期清空，上次清空：2026-12-31");
     // A date that is not one: the test site serves no page rather than a mark without its date.
     await freshRoster(worker, { clearedOn: "soon" });
     assert.equal((await worker.fetch("/")).status, 500);

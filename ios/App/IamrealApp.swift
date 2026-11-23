@@ -44,5 +44,5 @@ extension CardProofModel {
 /// design/copy/ writes it (Tests/BuildTests.swift reads them there).
 enum ScreenCopy {
     /// design/copy/test-site.md: the mark of the test roster.
-    static let testRoster = "測試名冊"
+    static let testRoster = "測試的證明紀錄"
 }

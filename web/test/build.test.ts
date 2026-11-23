@@ -114,7 +114,7 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
   assert.doesNotMatch(code, /["'`]iamreal\.tw["'`]/, "not the public site's domain");
   // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
-  assert.ok(MARK.startsWith("測試名冊"));
+  assert.ok(MARK.startsWith("測試的證明紀錄"));
   const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });
   const script = [...files.keys()].filter((f) => /^assets\/test-roster-[\w-]+\.js$/.test(f));
   assert.equal(script.length, 1, "the mark's script");
@@ -125,7 +125,7 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
 
 test("the production build has nothing of the mark, and its help page loads nothing of the target: no issuer key, no address of the component, no scope string", async () => {
   const { files, code } = await buildOf("production");
-  assert.ok(![...files.keys()].some((f) => f.includes("test-roster")) && !code.includes("測試名冊") && !code.includes("test-roster"), "no file and no word of the mark");
+  assert.ok(![...files.keys()].some((f) => f.includes("test-roster")) && !code.includes("測試的證明紀錄") && !code.includes("test-roster"), "no file and no word of the mark");
   assert.match(code, /["'`]iamreal\.tw["'`]/, "the public site's domain, for the link of the last screen");
   assert.ok(!code.includes("test.iamreal.tw") && !code.includes("test-data.iamreal.tw"), "nothing of the test site");
   // The help page is a title and a sentence: the scripts it loads are the copy, the logo and the style sheet.
@@ -141,7 +141,7 @@ test("the production build has nothing of the mark, and its help page loads noth
 test("no other build has the mark of a test roster", async () => {
   for (const mode of ["production", "localcard"] as const) {
     const code = await codeOf(mode);
-    assert.ok(!code.includes("測試名冊") && !code.includes("test-roster") && !code.includes("test.iamreal.tw"), mode);
+    assert.ok(!code.includes("測試的證明紀錄") && !code.includes("test-roster") && !code.includes("test.iamreal.tw"), mode);
   }
 });
 

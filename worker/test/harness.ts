@@ -201,7 +201,7 @@ export interface TestWorker {
   verify(circuit: string, proof: Uint8Array, publicInputs: readonly Uint8Array[]): Promise<boolean>;
   /**
    * The object of a roster that was cleared: one the settings named before
-   * they were given another name (README.md, "清空測試名冊"). No request
+   * they were given another name (README.md, "清空測試的證明紀錄"). No request
    * reaches it any more; it is still there, with what it stored.
    */
   clearedRoster(name: string): {
@@ -370,7 +370,7 @@ export type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer,
 /**
  * The name of the roster's object in the test environment (wrangler.jsonc,
  * `ROSTER_OBJECT_NAME`), read from the file: clearing the test roster
- * changes it there (README.md, "清空測試名冊"), and nothing here.
+ * changes it there (README.md, "清空測試的證明紀錄"), and nothing here.
  */
 const DEPLOYED_ROSTER_OBJECT = String(unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env: "test" }, { hideWarnings: true }).vars.ROSTER_OBJECT_NAME);
 

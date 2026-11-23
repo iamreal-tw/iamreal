@@ -52,7 +52,7 @@ const LIST = `roster/${hashListName(0)}`;
 /**
  * Waits until the full roster files and their record hash lists in the
  * bucket are exactly these, for at most ten seconds. What the daily
- * publication writes (README.md, "每天換日公布名冊") is not among them: a
+ * publication writes (README.md, "每天換日公布證明紀錄") is not among them: a
  * roster whose date changes during a test is published by its own alarm,
  * and those files do not carry the full files' `Cache-Control`.
  */

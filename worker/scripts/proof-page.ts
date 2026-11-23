@@ -114,7 +114,7 @@ const COMPONENT = "http://localhost:61161";
 /** What only a build with the tests' card, keys or component holds (web/test/build.test.ts has the same list). */
 const TEST_ONLY: readonly string[] = ["the card signs 31 bytes", "__IAMREAL_TEST", "FakeCard", "fake-component", "testIssuer", "PRIVATE KEY", "pkcs8"];
 /** The first word of the sentence beside the mark of a test roster (design/copy/test-site.md). */
-const MARK = "測試名冊";
+const MARK = "測試的證明紀錄";
 /** The scope string of each kind of roster (spec/scope.md). */
 const SCOPES: Readonly<Record<RosterKind, string>> = { production: "iamreal:public:0_______________", test: "iamreal-test:public:0__________" };
 /** The domain of each kind of roster's site (ADR-0028; src/settings.ts, `SITE_HOSTS`, which a script of Node cannot import). */
