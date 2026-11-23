@@ -69,10 +69,10 @@ export async function pagesWorld(worker: TestWorker, today: string, recs: readon
 export { mustSubmit };
 
 /** The policy of the visitors' pages (README.md, "頁面送的標頭"). */
-export const VISITOR_CSP = "default-src 'none'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+export const VISITOR_CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 /** The policy of the two pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
-export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 /** Whether the page at a path loads the copy buttons' script when it is found: /verify and /hang/<short ID>, nothing else. */
 export function withScript(path: string): boolean {

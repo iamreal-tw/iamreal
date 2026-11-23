@@ -25,11 +25,12 @@
   // compute for that long only if the code lets it: README.md, "設定檔", says why it cannot now.
   "limits": { "cpu_ms": 300000 },
   // Static Assets: the files of site/, which Cloudflare sends itself (README.md, "Static Assets").
-  // site/pages.css, the visitors' style sheet, and site/copy.js, the copy buttons' script, are in the
-  // repository; site/proof/ is where the card proof page goes, the test site's build of web/: every
+  // site/pages.css, the visitors' style sheet, site/copy.js, the copy buttons' script, and
+  // site/fonts/, the headings' typeface (a copy of design/fonts/), are in the repository;
+  // site/proof/ is where the card proof page goes, the test site's build of web/: every
   // deploy builds it there first and checks what the directory then holds (scripts/deploy.ts,
   // `buildSite`; scripts/deploy-build-checks.ts, `checkProofPages`). It is not in the repository.
-  // - "run_worker_first": the Worker runs first for every path but the files' own: /copy.js, /pages.css, /proof
+  // - "run_worker_first": the Worker runs first for every path but the files' own: /copy.js, /fonts/*, /pages.css, /proof
   //   and everything under /proof/ (a "!" pattern wins over "/*"). There Static Assets looks for a file
   //   first, and a file that is there is sent without running the Worker. In the local workerd a request
   //   for one of those paths never runs the Worker, whether the file is there or not. On Cloudflare
@@ -40,7 +41,7 @@
   // - Their headers are site/_headers and the one address of /proof is site/_redirects, both written
   //   by scripts/site-files.ts; a path is otherwise a file's own or 404 ("html_handling",
   //   "not_found_handling": no index.html found for a directory, no page for what is not there).
-  "assets": { "directory": "./site", "run_worker_first": ["/*", "!/copy.js", "!/pages.css", "!/proof", "!/proof/*"], "html_handling": "none", "not_found_handling": "none" },
+  "assets": { "directory": "./site", "run_worker_first": ["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"], "html_handling": "none", "not_found_handling": "none" },
   "env": {
     // The test site (ADR-0028).
     "test": {

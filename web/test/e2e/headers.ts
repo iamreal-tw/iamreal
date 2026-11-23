@@ -7,7 +7,7 @@
 
 const policy = (dataOrigin: string): string =>
   `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' ${dataOrigin}; ` +
-  "img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+  "img-src 'self'; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 /** The production log's site (iamreal.tw). */
 export const CONTENT_SECURITY_POLICY = policy("https://data.iamreal.tw");
