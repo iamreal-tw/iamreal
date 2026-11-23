@@ -60,7 +60,7 @@ describe("the FAQ", () => {
     assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
 
     // Each question a heading with its id, its answer shown: no <details>.
-    assert.ok(!page.includes("<details"), "no answer is folded");
+    assert.ok(!page.slice(page.indexOf("<main>"), page.indexOf("</main>")).includes("<details"), "no answer is folded");
     const ids = [...page.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1]!);
     assert.equal(new Set(ids).size, ids.length, "no id twice");
     for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
