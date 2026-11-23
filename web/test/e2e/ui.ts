@@ -684,6 +684,8 @@ const tryStep = async (label: string, f: () => Promise<void>) => {
 
 /** The short IDs step 6 showed (from its link), each card proof done. */
 const shown: string[] = [];
+/** How many times step 6 was checked: one for each card proof done. */
+let doneScreens = 0;
 
 /** From step 1 (after a page load, 取消, 回到開頭 or the wait running out) to step 2. */
 async function toRead(o: { screenshots?: string } = {}): Promise<void> {
@@ -914,8 +916,11 @@ interface DoneExpected {
   single?: string;
 }
 
-/** The sentences of the done screen before this one (#292) that it no longer has. */
-const OLD_DONE = [C.done.put_up, C.done.put_link, C.done.advice, C.done.advice_single, C.done.renamed, C.done.trust, C.done.hand_ai, C.done.hand_profile, C.links.verify, C.links.proof];
+/**
+ * The sentences of the done screen before this one (#292) that it no longer has. Not links.proof: done.kinds_unreadable
+ * says those words; where 打開你的島民證明 goes is checked instead.
+ */
+const OLD_DONE = [C.done.put_up, C.done.put_link, C.done.advice, C.done.advice_single, C.done.renamed, C.done.trust, C.done.hand_ai, C.done.hand_profile, C.links.verify];
 
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   if (!check(d !== null, `${o.label}: done ${message}`)) return;
@@ -967,6 +972,8 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(!/[✓✔]/.test(v.main), `${o.label}: step 6, no check mark`);
   const lines = v.main.split("\n").filter(Boolean);
   check(lines.at(-1) === C.done.restart, `${o.label}: step 6 ends with the button "${lines.at(-1)}"`);
+  doneScreens++;
+  // Everything withdrawn: no link, and no short ID on the screen unless what was recorded differs.
   if (sid) shown.push(sid);
 }
 
@@ -1828,7 +1835,7 @@ await tryStep("the proof log published, and iamreal-verify", async () => {
   writeFileSync(join(out, "verify.json"), JSON.stringify(v, null, 2));
   const kinds = v.results.map((r: { valid: boolean; kinds?: { platform: string; kind: string }[] }) => (r.valid ? r.kinds!.map((k) => [k.platform, k.kind]) : null));
   check(v.valid === true && v.results.every((r: { valid: boolean }) => r.valid) && JSON.stringify(kinds) === JSON.stringify(KINDS), `iamreal-verify: valid, every record valid, the kinds the screens showed: ${JSON.stringify(kinds)}`);
-  check(shown.length === KINDS.length, `the screens showed ${shown.length} card proofs done`);
+  check(doneScreens === KINDS.length, `the screens showed ${doneScreens} card proofs done`);
   const scope = v.state.find((s: { scope_string: string }) => s.scope_string === SCOPE);
   const cards = scope?.cards ?? [];
   check(
