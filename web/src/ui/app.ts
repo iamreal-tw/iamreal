@@ -38,12 +38,12 @@
 // platform's prefix, hint and address from src/platforms.ts. ids and data-*
 // attributes are for the headless browser test and hold no value.
 import { type CardProofFlow, type CardStatus, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, createCardProof, presentationOf } from "../index.ts";
-import { BASE } from "../base.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
 import { frame } from "./frame.ts";
 import { logo } from "./logo.ts";
+import { qrSvg } from "./qr.ts";
 import {
   type HelpTopic,
   type ItemState,
@@ -82,14 +82,12 @@ export interface AppOptions {
 /** The six steps (card-proof.md). */
 const STEPS = 6;
 
-/** Where a help link goes: what a card proof needs is a page of the site (/prepare, made by the Worker); the others the help page of this build. */
-function helpHref(topic: HelpTopic): string {
-  return topic === "prepare" ? "/prepare" : `${BASE}help.html?topic=${topic}`;
-}
+/** Where a help link goes: what a card proof needs, a page of the site (/prepare, made by the Worker). */
+const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
 
 function helpLink(topic: HelpTopic): HTMLAnchorElement {
   // A new tab: leaving this page would end the card proof.
-  return el("a", { attrs: { href: helpHref(topic), target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
+  return el("a", { attrs: { href: HELP_HREF[topic], target: "_blank", rel: "noopener noreferrer", "data-help": topic } }, COPY.links[topic]);
 }
 
 function say(s: Sentence): DocumentFragment {
@@ -656,7 +654,45 @@ export function startApp(o: AppOptions): void {
     const t = COPY.done;
     flow = null;
     const view = doneView(d, single);
-    const mine: (HTMLElement | null)[] = [];
+    // A link out of the page: a new tab, leaving this page would end it.
+    const out = (href: string, attrs: Record<string, string>, ...children: (Node | string)[]): HTMLAnchorElement =>
+      el("a", { attrs: { href, target: "_blank", rel: "noopener noreferrer", ...attrs } }, ...children);
+    const subhead = (text: string): HTMLElement => el("h3", {}, text);
+    const card = view.withdrawAll
+      ? null
+      : el(
+          "div",
+          { class: "cert", attrs: { "data-proof": "" } },
+          el("div", { class: "cert-top" }, logo({ animated: true }), el("span", {}, t.proof)),
+          ...view.card.map((r) =>
+            el(
+              "p",
+              { class: "cert-row", attrs: { "data-card-row": "" } },
+              r.name === null ? null : el("span", { class: "cert-platform", attrs: { "data-card-platform": "" } }, r.name),
+              el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-card-account": "" } }, r.account),
+            ),
+          ),
+          el("p", { class: "cert-id" }, COPY.confirm.short_id_label, " ", sentence(COPY.confirm.short_id, { short_id: view.shortId })),
+        );
+    const head = el(
+      "div",
+      { class: card ? "done-head" : "done-head bare" },
+      card,
+      el(
+        "div",
+        { class: "done-title" },
+        el("h1", {}, say(view.title)),
+        el("p", { attrs: { "data-recorded-on": "" } }, say(view.recordedOn), t.unplug),
+        view.kindsUnreadable ? el("p", { attrs: { "data-kinds-unreadable": "" } }, t.kinds_unreadable) : null,
+      ),
+    );
+    // Under the link: a new card's new link, a withdrawn account's link, the other cards that declare an account.
+    const notes = [
+      view.newCard && !view.withdrawAll ? el("p", { class: "small", attrs: { "data-new-card": "" } }, t.new_card) : null,
+      view.withdrawnLink ? el("p", { class: "small", attrs: { "data-withdrawn-link": "" } }, t.withdrawn_link) : null,
+      ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
+    ];
+    let hang: HTMLElement[] = [];
     if (!view.withdrawAll) {
       const copy = primary(t.copy, () => {
         // The whole https:// address, so that a profile turns it into a link.
@@ -665,23 +701,32 @@ export function startApp(o: AppOptions): void {
           () => undefined,
         );
       });
-      mine.push(
+      const qr = qrSvg(view.hangUrl);
+      // The link is written beside it, in the other column: the code is not read out.
+      qr.setAttribute("aria-hidden", "true");
+      const hung = parts(t.hung, { open_proof: t.open_proof }).map((p) => (p.placeholder === null ? p.text : out(view.proofPath, { "data-open-proof": "" }, p.text)));
+      hang = [
+        el("h2", { class: "hang-title" }, say(view.hangTitle)),
+        el("p", { class: "anyone", attrs: { "data-anyone": "" } }, say(view.anyone)),
         el(
           "div",
-          { class: "cert", attrs: { "data-proof": "" } },
-          el("div", { class: "cert-top" }, el("span", {}, t.proof)),
-          el("dl", { class: "list" }, ...view.card.flatMap((r) => [el("dt", {}, r.name), el("dd", { class: r.raw ? "acct raw" : "acct", attrs: { "data-card-account": "" } }, r.account)])),
-          el("dl", {}, el("dt", {}, COPY.confirm.date), el("dd", {}, el("time", {}, view.date)), el("dt", {}, COPY.confirm.short_id_label), el("dd", {}, sentence(COPY.confirm.short_id, { short_id: view.shortId }))),
-          el("p", { class: "hand cert-note" }, t.hand_ai, el("br"), t.hand_profile),
+          { class: "hang" },
+          el("div", { class: "hang-phone" }, subhead(t.by_phone), el("div", { class: "qr", attrs: { "data-qr": view.hangUrl } }, qr), el("p", { class: "small" }, t.by_phone_scan)),
+          el(
+            "div",
+            { class: "hang-computer" },
+            subhead(t.on_computer),
+            el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link)),
+            copy,
+            ...view.profiles.map((pr) => el("p", { class: "profile" }, out(pr.url, { "data-profile": "" }, say(pr.text)))),
+            el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_save)),
+          ),
         ),
-        el("h2", { class: "put-up" }, t.put_up),
-        el("p", { attrs: { "data-put-link": "" } }, say(view.putLink)),
-        el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link), copy),
-        view.newCard ? el("p", { class: "small", attrs: { "data-new-card": "" } }, t.new_card) : null,
-        view.withdrawnLink ? el("p", { class: "small", attrs: { "data-withdrawn-link": "" } }, t.withdrawn_link) : null,
-        el("p", { class: "small" }, helpLink("proof")),
-      );
+        ...notes.filter((n): n is HTMLParagraphElement => n !== null),
+        el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...hung), el("p", {}, t.hung_done)),
+      ];
     }
+    // What the proof log recorded: only where it is not what step 5 said.
     const recordRows = view.rows.flatMap((r) => [
       el("dt", { attrs: { "data-done-row": r.platform } }, r.name),
       el(
@@ -689,42 +734,52 @@ export function startApp(o: AppOptions): void {
         { attrs: { "data-done-row": r.platform, ...(r.mismatch ? { "data-mismatch": "" } : {}) } },
         el("span", { class: r.raw ? "acct raw" : "acct" }, r.account),
         r.kind ? el("span", { class: "kind", attrs: { "data-kind": "" } }, say(r.kind)) : null,
-        // What the server recorded is not what step 5 said: no sentence in the copy, the code.
         r.expected ? el("span", { class: "kind", attrs: { "data-expected": "" } }, say(r.expected)) : null,
         r.switchUsed ? el("span", { class: "kind", attrs: { "data-switch-used": "" } }, COPY.done.mismatch_switch_used) : null,
+        // What the server recorded is not what step 5 said: no sentence in the copy, the code.
         r.mismatch ? el("code", { class: "kind", attrs: { "data-code": "" } }, "kind_mismatch") : null,
       ),
     ]);
+    const record = view.showRecord
+      ? [
+          el("h2", { class: "record-title" }, t.recorded),
+          el(
+            "div",
+            { class: "rec6", attrs: { "data-record": "" } },
+            el("p", {}, el("time", {}, view.date)),
+            view.record ? el("p", {}, say(view.record)) : null,
+            recordRows.length ? el("dl", { class: "list" }, ...recordRows) : null,
+            el("p", {}, say(view.shortIdLine)),
+          ),
+        ]
+      : [];
+    const optional = view.withdrawAll
+      ? null
+      : el(
+          "div",
+          { class: "optional", attrs: { "data-optional": "" } },
+          el("p", { class: "optional-title" }, t.optional),
+          el(
+            "div",
+            { class: "optional-items" },
+            ...view.shares.map((sh) =>
+              el("div", { class: "optional-item" }, subhead(t.share_title), el("p", {}, say(sh.note)), out(sh.url, { class: "btn ghost", "data-share": "" }, say(sh.button))),
+            ),
+            el("div", { class: "optional-item" }, subhead(t.return_title), el("p", {}, t.return_note)),
+          ),
+        );
     show(
       6,
       el(
         "section",
         { class: "step", attrs: { "data-step": "done", "data-result": view.withdrawAll ? "withdraw_all" : d.kinds === null ? "recorded_only" : "list" } },
-        // What the proof log recorded is not what step 5 said: first of all, above the title.
+        // What the proof log recorded is not what step 5 said: first of all.
         view.mismatch ? el("p", { class: "stop", attrs: { role: "alert", "data-mismatch-note": "" } }, say(view.mismatch)) : null,
-        view.withdrawAll ? null : el("div", { class: "hero" }, logo({ animated: true })),
-        el("h1", {}, say(view.title)),
-        ...mine,
-        el("h2", {}, t.recorded),
-        el(
-          "div",
-          { class: "rec6", attrs: { "data-record": "" } },
-          el("p", {}, el("time", {}, view.date)),
-          view.record ? el("p", {}, say(view.record)) : null,
-          view.kindsUnreadable ? el("p", { attrs: { "data-kinds-unreadable": "" } }, t.kinds_unreadable) : null,
-          recordRows.length ? el("dl", { class: "list" }, ...recordRows) : null,
-          view.kindsUnreadable ? null : el("p", {}, say(view.shortIdLine)),
-        ),
-        ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
-        el(
-          "ul",
-          { class: "three" },
-          view.withdrawAll ? null : el("li", {}, say(view.advice)),
-          // A list that is not empty: the proof log records names, and an old name may be taken by someone else.
-          view.withdrawAll ? null : el("li", { attrs: { "data-renamed": "" } }, t.renamed),
-          el("li", {}, t.trust, " ", helpLink("verify")),
-        ),
-        el("p", {}, t.unplug),
+        head,
+        ...hang,
+        ...(view.withdrawAll ? notes : []),
+        ...record,
+        optional,
         // Another card proof, with the same engine (ADR-0013).
         actions(secondary(t.restart, () => before())),
       ),

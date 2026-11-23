@@ -17,7 +17,6 @@ const [G2, G3] = moduliInSpec();
 const good: ProofPage = {
   files: {
     "index.html": 495,
-    "help.html": 494,
     "assets/index-COXnmzfW.js": 234_741,
     "assets/test-proof-log-BGxzo_9J.css": 8364,
     "assets/acvm_js_bg-D_Jg3KxI.wasm": 3_050_251,
@@ -49,7 +48,7 @@ test("a build with a file missing or empty, or a file that is no part of the pag
   const cases: [string, ProofPage | null, RegExp][] = [
     ["no build at all: /proof would be 404", null, /no build of web\//],
     ["no index.html", withFiles((f) => delete f["index.html"]), /index\.html/],
-    ["no help page", withFiles((f) => delete f["help.html"]), /help\.html/],
+    ["the help page, which the page no longer has (its address goes to /prepare)", withFiles((f) => (f["help.html"] = 494)), /help\.html is not a file/],
     ["no CRS: the build was made before `pnpm fetch-crs`", withFiles((f) => (delete f["crs/bn254_g1_compressed_2p18.dat"], delete f["crs/bn254_g2.dat"])), /crs\/bn254_g1_compressed_2p18\.dat/],
     ["a circuit missing", withFiles((f) => delete f["circuits/card_proof_rs4096.json"]), /circuits\/card_proof_rs4096\.json/],
     ["no single-thread module", withFiles((f) => delete f["bb/barretenberg.wasm.gz"]), /bb\/barretenberg\.wasm\.gz/],

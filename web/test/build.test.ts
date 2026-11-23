@@ -120,21 +120,16 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   const script = [...files.keys()].filter((f) => /^assets\/test-proof-log-[\w-]+\.js$/.test(f));
   assert.equal(script.length, 1, "the mark's script");
   assert.ok(files.get(script[0]!)!.replaceAll("\\", "").includes(mark), `the mark's script holds ${mark}`);
-  // Both pages load it.
-  for (const page of ["index.html", "help.html"]) assert.ok(loadedBy(files, page).includes(script[0]!), `${page} loads the mark's script`);
+  assert.ok(loadedBy(files, "index.html").includes(script[0]!), "the page loads the mark's script");
 });
 
-test("the production build has nothing of the mark, and its help page loads nothing of the target: no issuer key, no address of the component, no scope string", async () => {
+test("the production build has nothing of the mark, and it is the one page: no help page", async () => {
   const { files, code } = await buildOf("production");
   assert.ok(![...files.keys()].some((f) => f.includes("test-proof-log")) && !code.includes("測試的證明紀錄") && !code.includes("test-proof-log"), "no file and no word of the mark");
   assert.match(code, /["'`]iamreal\.tw["'`]/, "the public site's domain, for the link of the last screen");
   assert.ok(!code.includes("test.iamreal.tw") && !code.includes("test-data.iamreal.tw"), "nothing of the test site");
-  // The help page is a title and a sentence: the scripts it loads are the copy, the logo and the style sheet.
-  const help = loadedBy(files, "help.html");
-  assert.ok(help.length >= 2 && help.some((f) => f.endsWith(".js")), `the help page's files: ${help.join(", ")}`);
-  const loaded = help.map((f) => files.get(f)!).join("\n");
-  for (const s of [...MOICA_KEYS, "localhost:61161", "data.iamreal.tw", "iamreal:public:0", "iamreal-test:public:0"]) assert.ok(!loaded.includes(s), `the help page loads ${JSON.stringify(s)}`);
-  // The card proof page does load them: the check above can tell.
+  // The help page is gone (its old address goes to /prepare, worker/site/_redirects).
+  assert.deepEqual([...files.keys()].filter((f) => f.endsWith(".html")), ["index.html"]);
   const page = loadedBy(files, "index.html").map((f) => files.get(f)!).join("\n");
   for (const s of [...MOICA_KEYS, "localhost:61161", "iamreal:public:0"]) assert.ok(page.includes(s), `the card proof page loads ${JSON.stringify(s)}`);
 });

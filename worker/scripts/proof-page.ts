@@ -100,7 +100,6 @@ export function readProofPage(dir: string): ProofPage | null {
 /** The files the page cannot do without, besides its scripts under assets/ (web/vite.config.ts). */
 const NEEDED: readonly string[] = [
   "index.html",
-  "help.html",
   "bb/barretenberg.wasm.gz",
   "bb/barretenberg-threads.wasm.gz",
   ...CIRCUIT_NAMES.map((circuit) => `circuits/${circuit}.json`),

@@ -19,9 +19,9 @@ let worker: TestWorker;
 let proofFiles: string;
 before(async () => {
   // A card proof page of made-up files, with a script of the site's own as the built page has: the check asks
-  // whether the page and its help page are there, and what scripts they have.
+  // whether the page is there, and what scripts it has.
   proofFiles = mkdtempSync(join(tmpdir(), "site-check-"));
-  for (const name of ["index.html", "help.html"]) writeFileSync(join(proofFiles, name), '<!DOCTYPE html><title>proof</title><script type="module" crossorigin src="/proof/assets/index.js"></script><body></body>');
+  writeFileSync(join(proofFiles, "index.html"), '<!DOCTYPE html><title>proof</title><script type="module" crossorigin src="/proof/assets/index.js"></script><body></body>');
   worker = await startWorker({ proofFiles });
   await freshProofLog(worker, { clearedOn: CLEARED_ON });
   // A usable CRL of each issuer key, dated 2026-11-20 in Taiwan.
@@ -120,16 +120,14 @@ test("a script added to a page on its way to a browser fails: one of another ori
   await failsOnly({ site: adding('<script type="module" src="https://example.com/beacon.js"></script>') }, line, /\/faq has <script type="module" src="https:\/\/example\.com/);
   await failsOnly({ site: adding('<script src="//example.com/a.js"></script>') }, line, /\/faq/);
   await failsOnly({ site: adding("<script>1</script>") }, line, /\/faq has <script>/);
-  // The card proof page and its help page are read for the same.
-  for (const path of ["/proof", "/proof/help.html"]) {
-    const added = siteWith(path, (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", '<script type="module" src="https://example.com/beacon.js"></script></body>') : body, { status: res.status, headers: res.headers }));
-    await failsOnly({ site: added }, line, new RegExp(`${path.replace(/[/.]/g, "\\$&")} has <script type="module" src="https://example\\.com`));
-  }
+  // The card proof page is read for the same.
+  const added = siteWith("/proof", (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", '<script type="module" src="https://example.com/beacon.js"></script></body>') : body, { status: res.status, headers: res.headers }));
+  await failsOnly({ site: added }, line, /\/proof has <script type="module" src="https:\/\/example\.com/);
 });
 
-test("a site without the card proof page, a style sheet kept by caches: each fails", async () => {
+test("a site without the card proof page, one that still has its help page, a style sheet kept by caches: each fails", async () => {
   await failsOnly({ site: siteWith("/proof", () => new Response(null, { status: 404 })) }, "GET /proof", /404/);
-  await failsOnly({ site: siteWith("/proof/help.html", () => new Response(null, { status: 404 })) }, "GET /proof/help.html", /404/);
+  await failsOnly({ site: siteWith("/proof/help.html", () => new Response("<p>help</p>", { status: 200 })) }, "GET /proof/help.html", /200/);
   await failsOnly({ site: siteWith("/pages.css", (res, body) => new Response(body, { headers: { ...Object.fromEntries(res.headers), "cache-control": "public, max-age=60" } })) }, "GET /pages.css", /Cache-Control/);
 });
 

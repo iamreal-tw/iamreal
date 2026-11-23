@@ -12,9 +12,10 @@
 // - no page has a script that is not a file of the site itself. The pages
 //   are asked for as a browser asks (`Accept: text/html`): what stands
 //   between the Worker and the visitor may add to a page only then;
-// - the style sheet, the copy buttons' script, the card proof page and its
-//   help page are there (the page in a browser, up to its first screen, is another check:
-//   web/test/e2e/smoke.ts);
+// - the style sheet, the copy buttons' script and the card proof page are
+//   there (the page in a browser, up to its first screen, is another check:
+//   web/test/e2e/smoke.ts), and the old address of its help page goes to
+//   /prepare;
 // - `config` and `fingerprint` answer, uncached;
 // - the archive index of the data domain has, for each issuer key, a usable
 //   CRL that is at most 3 days old, the age `config` gives devices;
@@ -145,16 +146,21 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
       return res.status === 200 ? headersProblem(res, fileHeaders) : `the status is ${res.status}, not 200`;
     });
   }
-  // The card proof page and its help page: that they are there. Their policy and what the page does in a browser are web/test/e2e/smoke.ts's to check.
-  for (const path of ["/proof", "/proof/help.html"]) {
-    await check(`GET ${path}`, async () => {
-      const res = await html(path);
-      const page = await res.text();
-      if (res.status !== 200) return `the status is ${res.status}, not 200`;
-      noteScripts(path, page);
-      return headersProblem(res, { ...EVERY_RESPONSE, ...TEST_SITE_HEADERS });
-    });
-  }
+  // The card proof page: that it is there. Its policy and what the page does in a browser are web/test/e2e/smoke.ts's to check.
+  await check("GET /proof", async () => {
+    const res = await html("/proof");
+    const page = await res.text();
+    if (res.status !== 200) return `the status is ${res.status}, not 200`;
+    noteScripts("/proof", page);
+    return headersProblem(res, { ...EVERY_RESPONSE, ...TEST_SITE_HEADERS });
+  });
+  // Its help page is gone; the old address, which the apps still link to, goes to /prepare.
+  await check("GET /proof/help.html", async () => {
+    const res = await html("/proof/help.html");
+    await res.arrayBuffer();
+    const to = res.headers.get("location");
+    return res.status === 301 && to === "/prepare" ? null : `the status is ${res.status} to ${JSON.stringify(to)}, not 301 to "/prepare"`;
+  });
   await check("no page has a script that is not a file of this site", async () => (foreignScripts.length === 0 ? null : foreignScripts.join("; ")));
 
   // The API, as far as a GET goes.

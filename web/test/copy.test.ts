@@ -42,6 +42,10 @@ const EXAMPLES: Record<string, string> = {
   switches_used: "1",
   switches_left: "4",
   today: "2026-11-16",
+  // done.recorded_on: the date of the record.
+  date: "2026-11-16",
+  // done.hung: the link in the sentence.
+  open_proof: "打開你的島民證明",
   short_id: "7K2Q9FM4XD",
   request_id: "3f9c2a7e5b1d4c80",
   step: "2",
@@ -88,7 +92,7 @@ const VALUES = new Set([
   presentationOf("threads")!.prefix,
 ]);
 /** Entries that are not in card-proof.md on purpose. */
-const NOT_IN_MD = new Set(["not_in_card_proof_md.help_pending"]);
+const NOT_IN_MD = new Set<string>();
 
 // The Markdown writes codes in backticks; the screen shows them without.
 const mdText = md.replace(/`/g, "");
@@ -158,8 +162,10 @@ test("every sentence of the screens in card-proof.md is in card-proof.json", () 
     let rest = line.replace(/（QR code）|第 2 步那張表裡同一種情況的句子/g, "").split(LINK).join(" ");
     for (const r of rendered) rest = rest.split(r).join(" ");
     // What may remain: bullets, the input boxes, the buttons' brackets, the arrows of
-    // buttons and questions, the circles of list items; and values shown as they are.
+    // buttons and questions, the circles of list items, the numbers of numbered steps;
+    // and values shown as they are.
     const left = rest
+      .replace(/^[1-9]　/, " ")
       .replace(/[·[\]›▸○]/g, " ")
       .split(/\s+/)
       .filter((t) => t !== "" && !VALUES.has(t));
