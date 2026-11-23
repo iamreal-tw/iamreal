@@ -9,7 +9,7 @@ import { after, before, describe, test } from "node:test";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, pagesWorld, r } from "./pages.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import { alarmNotSoon, cardState, checkProofLog, day, freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
+import { wantNoAlarmSoon, cardState, checkProofLog, day, freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -184,7 +184,7 @@ describe("the views written again from the records", () => {
       const submission = await sub(worker, newCard(), root, "threads:alice");
       assert.deepEqual(await cardState(worker, card), state);
       // A submission is the back end's own failure, as docs/api/card-proof.md writes it; nothing is written and the challenge is not used up.
-      await alarmNotSoon(worker);
+      await wantNoAlarmSoon(worker);
       const logged = worker.logLines().length;
       const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(submission) });
       assert.deepEqual([res.status, res.headers.get("cache-control"), JSON.parse(await res.text())], [500, "no-store", { error: "internal" }]);
@@ -254,7 +254,7 @@ describe("the number of cards that declare an account", () => {
       assert.deepEqual(other.kinds, [{ platform: "threads", kind: "first", username: "alice", account_cards: 2 }]);
       // The record rules are never run on a state that cannot be read: the broken card's own card proof is refused whole.
       const own = await sub(worker, broken, root, "threads:bob");
-      await alarmNotSoon(worker);
+      await wantNoAlarmSoon(worker);
       const logged = worker.logLines().length;
       const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(own) });
       assert.deepEqual([res.status, JSON.parse(await res.text())], [500, { error: "internal" }]);

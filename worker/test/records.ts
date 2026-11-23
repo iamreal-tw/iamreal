@@ -104,8 +104,8 @@ let proofLogs = 0;
  * without a CRL, at noon of 2026-11-20 in Taiwan: a proof log's object with a
  * new name, and an empty bucket. Returns the object's name. The object of
  * the proof log before is replaced as a deploy replaces it
- * (`switchProofLog`), before the bucket is emptied: nothing of it is
- * written there afterwards.
+ * (`switchProofLog`), as is every object the settings named before, before
+ * the bucket is emptied: none of them writes there afterwards.
  */
 export async function freshProofLog(worker: TestWorker, settings: { kind?: "test" | "production"; restrictLateSwitches?: boolean; clearedOn?: string } = {}): Promise<string> {
   proofLogs++;
@@ -123,7 +123,7 @@ export async function freshProofLog(worker: TestWorker, settings: { kind?: "test
  * alarm is not set, or set further ahead than such a test takes. Fails at
  * once when it is not so, rather than now and then on the comparison.
  */
-export async function alarmNotSoon(worker: TestWorker): Promise<void> {
+export async function wantNoAlarmSoon(worker: TestWorker): Promise<void> {
   const ms = await worker.proofLog.alarmInMs();
   assert.ok(ms === null || ms > 30 * 1000, `the proof log's alarm rings in ${ms} ms, while the test compares the lines`);
 }

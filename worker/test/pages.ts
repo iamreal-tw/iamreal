@@ -44,7 +44,9 @@ export function cardStarting(prefix: string): string {
  * ring a second later, by the runtime's clock and not the test's
  * (`setAlarmForTimedWork`): at whatever moment of the test that is, with a
  * line in the log if the publication fails, and with no alarm set while it
- * runs. What is next due is then the publication of the day after `today`.
+ * runs. What is next due is then at least 10 minutes away on the object's
+ * clock, which stands still: deleting the challenges of a card proof dated
+ * `today`, or else the publication of the day after.
  */
 export async function pagesWorld(worker: TestWorker, today: string, recs: readonly Rec[], settings: { kind?: "test" | "production" } = {}): Promise<void> {
   await freshProofLog(worker, { ...settings, clearedOn: CLEARED_ON });

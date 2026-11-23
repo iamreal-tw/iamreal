@@ -26,6 +26,10 @@ before(async () => {
 after(() => worker.close());
 
 const text = (file: StoredFile): string => new TextDecoder().decode(file.bytes);
+
+/** The `proof_log_object_replaced` lines written after the first `since` lines of the log, each from its `{`. */
+const replacedSince = (since: number): string[] =>
+  worker.logLines().slice(since).filter((l) => l.includes('"proof_log_object_replaced"')).map((l) => l.slice(l.indexOf("{")));
 const FIRST_FILE = ["0000000000000000.jsonl", "card-state/2026-11-21.jsonl", "fingerprints.jsonl", "hashes/0000000000000000.txt"];
 
 /** The files of the log directory in the bucket, by their path in the directory. */
@@ -50,8 +54,7 @@ test("the steps of README.md: the proof log is empty, takes records, and is publ
   // The lines from here on: freshProofLog has replaced the proof log's object before, which said so.
   const clearedName = await freshProofLog(worker, { clearedOn: "2026-11-07" });
   const since = worker.logLines().length;
-  const replaced = (): string[] => worker.logLines().slice(since).filter((l) => l.includes('"proof_log_object_replaced"'));
-  const replacedLines = (): number => replaced().length;
+  const replacedLines = (): number => replacedSince(since).length;
   const root = await publishG3(worker);
   const card = newCard();
   await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
@@ -72,7 +75,7 @@ test("the steps of README.md: the proof log is empty, takes records, and is publ
   await cleared.hasAlarm();
   assert.equal(await cleared.hasAlarm(), false);
   assert.equal(replacedLines(), 1);
-  assert.deepEqual(replaced().map((l) => l.slice(l.indexOf("{"))), [JSON.stringify({ event: "proof_log_object_replaced", object: clearedName })]);
+  assert.deepEqual(replacedSince(since), [JSON.stringify({ event: "proof_log_object_replaced", object: clearedName })]);
   // The proof log is empty at once: no record, nothing published, the card is unknown, the pages say the new date.
   assert.deepEqual(await published(), { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT });
   assert.equal((await cardState(worker, card)).count, 0);
@@ -167,10 +170,7 @@ test("the tests' own new proof log (freshProofLog) replaces the one before as a 
   await freshProofLog(worker);
   const old = worker.clearedProofLog(before);
   assert.equal(await old.hasAlarm(), false);
-  assert.deepEqual(
-    worker.logLines().slice(since).filter((l) => l.includes('"proof_log_object_replaced"')).map((l) => l.slice(l.indexOf("{"))),
-    [JSON.stringify({ event: "proof_log_object_replaced", object: before })],
-  );
+  assert.deepEqual(replacedSince(since), [JSON.stringify({ event: "proof_log_object_replaced", object: before })]);
   // Its alarm, had it still been set: nothing is published, the new proof log's bucket stays empty.
   await worker.setClock(tw("2026-11-22", "12:00:00"));
   await old.runAlarm();

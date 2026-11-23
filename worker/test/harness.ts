@@ -166,7 +166,8 @@ export interface TestWorker {
   /**
    * From now on the environment has these settings in place of
    * wrangler.jsonc's (test build, `PUT /__test/settings`). A proof log's object
-   * that is running keeps the ones it started with until `proofLog.restart()`.
+   * that is running keeps the ones it started with until `proofLog.restart()`;
+   * one they no longer name is started anew at the next `switchProofLog`.
    */
   setSettings(settings: TestSettings): Promise<void>;
   /**
@@ -179,9 +180,10 @@ export interface TestWorker {
    * settings it started with (the local workerd never lets an object
    * hibernate), still taking itself for the proof log's object, and its
    * alarm would publish its proof log into the bucket the next one uses, at
-   * whatever moment it rings, in any later test. With settings no object
-   * starts with (the Worker answers 500), it is only stopped, and started
-   * at the next of these whose settings it starts with.
+   * whatever moment it rings, in any later test. So is every object that
+   * an earlier `setSettings` stopped naming. With settings no object starts
+   * with (the Worker answers 500), they are only stopped, and started at the
+   * next of these whose settings they start with.
    */
   switchProofLog(settings: TestSettings): Promise<void>;
   /** What the Worker has written to its log since it started. */
@@ -442,12 +444,16 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   }
   const worker = server.getWorker<{ DATA: Bucket }>();
   let settings: TestSettings = {};
+  const proofLogObject = (): { name: string } => ({ name: settings.PROOF_LOG_OBJECT_NAME ?? DEPLOYED_PROOF_LOG_OBJECT });
+  /** The objects the settings named before and no longer do, that `switchProofLog` has yet to start with settings that make them replaced ones. */
+  const replaced = new Set<string>();
   const setSettings = async (next: TestSettings): Promise<void> => {
     const res = await server.fetch("/__test/settings", { method: "PUT", body: JSON.stringify(next) });
     if (res.status !== 204) throw new Error(`replacing the settings: HTTP ${res.status}`);
+    replaced.add(proofLogObject().name);
     settings = next;
+    replaced.delete(proofLogObject().name);
   };
-  const proofLogObject = (): { name: string } => ({ name: settings.PROOF_LOG_OBJECT_NAME ?? DEPLOYED_PROOF_LOG_OBJECT });
   /** Every challenge `POST /api/v1/challenges` has given out through this object. */
   const issued: string[] = [];
   const fetch = async (input: string, init?: RequestInit): Promise<Response> => {
@@ -460,19 +466,18 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
   };
   if (options.settings !== undefined) await setSettings(options.settings);
 
-  /** The objects `switchProofLog` has yet to start with settings that make them replaced ones. */
-  const replaced = new Set<string>();
+  /** Runs the alarm of the object the settings name, or of the one named `name`; answers the HTTP status. */
+  const alarmStatus = async (name: string | null): Promise<number> =>
+    (await server.fetch(`/__test/proof-log/alarm${name === null ? "" : `?object=${encodeURIComponent(name)}`}`, { method: "POST" })).status;
   const runAlarmOf = async (name: string | null): Promise<void> => {
-    const res = await server.fetch(`/__test/proof-log/alarm${name === null ? "" : `?object=${encodeURIComponent(name)}`}`, { method: "POST" });
-    if (res.status !== 204) throw new Error(`running the alarm${name === null ? "" : ` of ${name}`}: HTTP ${res.status}`);
+    const status = await alarmStatus(name);
+    if (status !== 204) throw new Error(`running the alarm${name === null ? "" : ` of ${name}`}: HTTP ${status}`);
   };
 
   return {
     setSettings,
     async switchProofLog(next) {
-      replaced.add(proofLogObject().name);
       await setSettings(next);
-      replaced.delete(proofLogObject().name);
       for (const name of [...replaced]) {
         try {
           await worker.evictDurableObject("PROOF_LOG" as never, { name });
@@ -481,9 +486,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         }
         // Its alarm, which then finds the object replaced and sets none: started now, not when the alarm would ring.
         // Also an object that was not running: it may still have an alarm set.
-        const res = await server.fetch(`/__test/proof-log/alarm?object=${encodeURIComponent(name)}`, { method: "POST" });
-        if (res.status === 204) replaced.delete(name);
-        else if (res.status !== 500) throw new Error(`running the alarm of ${name}: HTTP ${res.status}`);
+        // 500: the settings are ones no object starts with; it is started at the next switch.
+        const status = await alarmStatus(name);
+        if (status === 204) replaced.delete(name);
+        else if (status !== 500) throw new Error(`running the alarm of ${name}: HTTP ${status}`);
       }
     },
     url,
