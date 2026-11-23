@@ -28,7 +28,7 @@ const good: ProofPage = {
     "crs/bn254_g1_compressed_2p18.dat": 8_388_608,
     "crs/bn254_g2.dat": 128,
   },
-  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const site="test.iamreal.tw";const mark=JSON.parse('{"sentence":"測試名冊　不定期清空，上次清空：","clearedOn":"${CLEARED_ON}","scope":"iamreal-test:public:0__________"}');// see https://www.w3.org/TR/wasm/`,
+  code: `const component="http://localhost:61161";const data="https://test-data.iamreal.tw";const keys=["${G2}","${G3}"];const scopes=["iamreal:public:0_______________","iamreal-test:public:0__________"];const site="test.iamreal.tw";const mark=JSON.parse('{"sentence":"測試的證明紀錄　不定期清空，上次清空：","clearedOn":"${CLEARED_ON}","scope":"iamreal-test:public:0__________"}');// see https://www.w3.org/TR/wasm/`,
 };
 const withFiles = (change: (files: Record<string, number>) => void): ProofPage => {
   const files = { ...good.files };
@@ -74,7 +74,7 @@ test("a build of another target is turned away: the tests', the production roste
     ["both data domains", { ...good, code: `${good.code}"https://data.iamreal.tw"` }, /https:\/\/data\.iamreal\.tw/],
     ["no data domain: the build for a real card on this computer", withCode('"https://test-data.iamreal.tw"', '""'), /test-data\.iamreal\.tw/],
     ["another address of the project", { ...good, code: `${good.code}"https://iamreal.tw/api"` }, /https:\/\/iamreal\.tw/],
-    ["no mark of a test roster", withCode("測試名冊", ""), /mark of a test roster/],
+    ["no mark of a test roster", withCode("測試的證明紀錄", ""), /mark of a test roster/],
     ["the mark with another date than the Worker's setting", withCode(CLEARED_ON, "2026-11-18"), /2026-11-19/],
     ["a build whose target signs the public roster's scope string", withCode('"scope":"iamreal-test:public:0__________"', '"scope":"iamreal:public:0_______________"'), /says the build signs iamreal-test:public:0__________/],
     ["a mark that does not say which scope string", withCode(',"scope":"iamreal-test:public:0__________"', ""), /says the build signs/],

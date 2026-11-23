@@ -207,7 +207,7 @@ const skip = !hasGo && !goRequired ? "go is not installed: no answers from Go's 
 // The run on the Durable Object's storage takes about 107 s, nearly all the
 // time of this file, so it runs only when asked for: IAMREAL_SEQUENCE_STORAGE=1.
 // The run in memory (under a second) runs with every `pnpm test`. When to ask
-// for it is in README.md, "名冊規則和 Go 的 roster/ 逐筆比對".
+// for it is in README.md, "紀錄規則和 Go 的 roster/ 逐筆比對".
 const storageSkip = process.env.IAMREAL_SEQUENCE_STORAGE === "1" ? false : "IAMREAL_SEQUENCE_STORAGE is not 1: the run on the Durable Object's storage (about 107 s) is not asked for";
 
 /** protocol/'s result without the explanation for people (`blockedPlatform`): the reason code is the whole result of an invalid record. */

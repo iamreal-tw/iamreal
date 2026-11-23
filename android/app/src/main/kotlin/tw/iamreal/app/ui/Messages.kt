@@ -159,7 +159,7 @@ internal class Messages(private val c: Copy) {
         }
     }
 
-    /** A row of "名冊記下了這一筆": one platform of the record, as the server says it recorded it. */
+    /** A row of "證明紀錄記下了這一筆": one platform of the record, as the server says it recorded it. */
     class DoneRow(
         val platform: String,
         /** False for a platform the app does not know: its account is shown as it is. */

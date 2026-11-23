@@ -114,7 +114,7 @@ test("every entry of card-proof.json is in card-proof.md, word for word", () => 
 });
 
 /** The columns of the Markdown's tables that hold what the screen writes; the others describe the case. */
-const SCREEN_COLUMNS = new Set(["畫面寫", "標題", "名冊會公開記下", "按鈕"]);
+const SCREEN_COLUMNS = new Set(["畫面寫", "標題", "證明紀錄會公開記下", "按鈕"]);
 
 /** The text the screens show: the lines of the code blocks, and the table cells of the screen's columns. */
 function screenText(): string[] {

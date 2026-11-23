@@ -150,7 +150,7 @@ describe("the roster page", () => {
     wantLines(page, wholePage("1,284", "3", "1,031", "3").filter((l) => l !== "更多"));
     wantLines(page, ["2026-11-17 Threads 的 @bob", "2026-08-01 Threads 的 @carol"]);
     notOnPage(page, "@dave", "更多", block("roster-page.md", "清單")[0]!);
-    for (const want of [`<a href="/p/${CARD_A}"><time>2026-11-18</time>`, '<form method="get" action="/roster">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">怎麼驗證</a>']) {
+    for (const want of [`<a href="/p/${CARD_A}"><time>2026-11-18</time>`, '<form method="get" action="/roster">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">怎麼驗證島民證明</a>']) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     assert.ok(!page.includes("<iframe"), "no profile on the roster page");
@@ -158,12 +158,12 @@ describe("the roster page", () => {
     wantPreview(page, title, site);
   });
 
-  test("下載整份名冊 links to the part of iamreal-verify's README about downloading", async () => {
+  test("下載整份證明紀錄 links to the part of iamreal-verify's README about downloading", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { page } = await getPage(worker, "/roster");
-    assert.ok(copySection("roster-page.md", "下載").includes("「下載整份名冊」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
+    assert.ok(copySection("roster-page.md", "下載").includes("「下載整份證明紀錄」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
     assert.ok(readFileSync(join(WORKER_DIR, "..", "cmd", "iamreal-verify", "README.md"), "utf8").includes("\n## 下載\n"), "the README has a section 下載");
-    assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">下載整份名冊</a> <a href="/verify">怎麼驗證</a>'));
+    assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">下載整份證明紀錄</a> <a href="/verify">怎麼驗證島民證明</a>'));
     assert.ok(!page.includes('href="/roster/"'));
   });
 

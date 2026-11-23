@@ -14,7 +14,7 @@ ADR-0023 讓讀取和寫入擠在同一個 Durable Object：題目、卡片現�
 
 用量估計定的是：訪客看島民證明、查詢頁一個月停不超過 1 小時；過卡可以停，最長 24 小時。所以**頁面優先，過卡先讓路**。已經接受的紀錄不受影響：Durable Object 寫完才回應（ADR-0023）。
 
-這裡的頁面優先，指的是過卡的負擔不拖垮頁面。攻擊者輪著打每一張真的島民證明時，頁面和過卡會一起倒：短編號從公開的名冊就拿得到，每一頁都是一次快取沒命中，照 IP 的上限也擋不住很多 IP。那時的做法在下面「緊急時的挑戰頁」和 Consequences。
+這裡的頁面優先，指的是過卡的負擔不拖垮頁面。攻擊者輪著打每一張真的島民證明時，頁面和過卡會一起倒：短編號從公開的證明紀錄就拿得到，每一頁都是一次快取沒命中，照 IP 的上限也擋不住很多 IP。那時的做法在下面「緊急時的挑戰頁」和 Consequences。
 
 ## 三層
 
@@ -60,8 +60,8 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 限流和總量上限都開著，頁面還是撐不住時，營運者手動打開 Cloudflare 的挑戰頁，事後關掉，並公告開了多久。
 
 - **事先做好**：一條 WAF 的自訂規則，動作是 Managed Challenge，平時關著。不用整站的 I'm Under Attack 模式。
-- **只套在訪客的頁面**（首頁、島民證明、查詢頁、名冊頁）。不套在 `/api/`、`/proof` 的檔案、名冊和清冊的下載：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗（[challenge pages](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/)），過卡、重驗的工具和之後的擴充功能都會壞。
-- **對外照實寫**：通過檢查後 Cloudflare 放一個 `cf_clearance` cookie，預設 30 分鐘後失效，只用來記得通過了檢查（[challenge passage](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/challenge-passage/)、[Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/)）；這段時間用程式讀頁面會被擋，請改下載名冊檔案。平常不放任何 cookie 的說法不變。
+- **只套在訪客的頁面**（首頁、島民證明、查詢頁、證明紀錄頁）。不套在 `/api/`、`/proof` 的檔案、證明紀錄和清冊的下載：挑戰頁回的是一整頁 HTML，頁面裡的 `fetch()` 會直接失敗（[challenge pages](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/)），過卡、重驗的工具和之後的擴充功能都會壞。
+- **對外照實寫**：通過檢查後 Cloudflare 放一個 `cf_clearance` cookie，預設 30 分鐘後失效，只用來記得通過了檢查（[challenge passage](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/challenge-passage/)、[Cloudflare cookies](https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/)）；這段時間用程式讀頁面會被擋，請改下載紀錄檔案。平常不放任何 cookie 的說法不變。
 
 ## 連線紀錄
 

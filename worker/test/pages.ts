@@ -92,8 +92,8 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-const NAV_LINKS = `<a href="/verify">怎麼驗證</a>
-<a href="/roster">名冊</a>
+const NAV_LINKS = `<a href="/verify">怎麼驗證島民證明</a>
+<a href="/roster">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
 
@@ -126,11 +126,11 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
   assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"|og:image/i : /name="description"|og:description|og:image/i, `${path}: no description`);
-  for (const part of ['<link rel="stylesheet" href="/pages.css">', NAV_LINKS, '<a class="button nav-button" href="/proof">我要換島民證明</a>', '<a href="/proof/help.html?topic=prepare">怎麼準備</a>']) {
+  for (const part of ['<link rel="stylesheet" href="/pages.css">', NAV_LINKS, '<a class="button nav-button" href="/proof">我要換島民證明</a>', '<a href="/proof/help.html?topic=prepare">過卡需要什麼</a>']) {
     assert.ok(page.includes(part), `${path}: the page has ${part}`);
   }
   const mark = testRosterMark(CLEARED_ON);
-  assert.equal(page.includes("測試名冊"), test, `${path}: says 測試名冊`);
+  assert.equal(page.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄`);
   assert.equal(page.includes('<meta name="robots" content="noindex">'), test, `${path}: noindex in the page`);
   if (test) {
     assert.ok(page.includes(mark), `${path}: the mark of the test roster, with the date`);

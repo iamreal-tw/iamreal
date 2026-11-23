@@ -155,7 +155,7 @@ final class CardProofTests: XCTestCase {
         let today = CardProofFlow.dateInTaiwan(now)
         XCTAssertEqual(model.screen.texts, [
             "確認",
-            "按下後，名冊會公開記下這張卡片宣告的帳號：",
+            "按下後，證明紀錄會公開記下這張卡片宣告的帳號：",
             "Threads", "@alice", "新宣告",
             "日期", today,
             "島民編號", "\(shortID) 開頭",
@@ -188,15 +188,15 @@ final class CardProofTests: XCTestCase {
             "複製連結之後，在 Threads 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。",
             "如果你是換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。個人檔案上放的是舊連結的話，請換成這一個。",
             "打開這張島民證明",
-            "名冊記下了這一筆",
+            "證明紀錄記下了這一筆",
             today,
             "有一張有效的自然人憑證宣告了這個帳號：",
             "Threads", "@alice", "新宣告",
             "這張卡片的島民編號開頭是 \(shortID)。",
             "越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。",
-            "之後如果改了帳號的名稱，請回來過卡更換，這會用掉一次更換。名冊記的是名稱，舊的名稱之後可能被別人註冊。",
+            "之後如果改了帳號的名稱，請回來過卡更換，這會用掉一次更換。證明紀錄記的是名稱，舊的名稱之後可能被別人註冊。",
             "你不需要相信我們。任何人都可以驗證這筆紀錄來自一張有效的自然人憑證。",
-            "怎麼驗證",
+            "怎麼驗證島民證明",
             "回到開頭",
         ])
         await Snapshot.save(model, as: "6-done")
@@ -325,11 +325,11 @@ final class CardProofTests: XCTestCase {
         let shortID = try shortID(on: model.screen)
         XCTAssertEqual(model.screen.texts, [
             "確認",
-            "按下後，名冊會公開記下這張卡片不再宣告任何帳號：",
+            "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：",
             "Threads", "@bob", "收回",
             "日期", CardProofFlow.dateInTaiwan(now),
             "島民編號", "\(shortID) 開頭",
-            "收回之後，名冊上原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
+            "收回之後，證明紀錄裡原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
             "紀錄裡沒有姓名、身分證字號和憑證序號。平台、營運者、政府都查不出這是誰的卡片；但拿到你的卡片和 PIN 的人，查得出你宣告過的帳號。",
             "之後可以用同一張卡片再宣告。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
             "上一步",
@@ -342,13 +342,13 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertEqual(model.screen.texts, [
             "已全部收回",
-            "名冊記下了這一筆",
+            "證明紀錄記下了這一筆",
             CardProofFlow.dateInTaiwan(now),
             "有一張有效的自然人憑證收回了所有帳號的宣告：",
             "Threads", "@bob", "收回",
             "這張卡片的島民編號開頭是 \(shortID)。",
             "你不需要相信我們。任何人都可以驗證這筆紀錄來自一張有效的自然人憑證。",
-            "怎麼驗證",
+            "怎麼驗證島民證明",
             "回到開頭",
         ])
         await Snapshot.save(model, as: "6-withdrawn")

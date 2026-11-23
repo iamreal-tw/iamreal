@@ -12,13 +12,13 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 
 各部分放在哪裡：
 
-- **寫入**：一份名冊一個 Durable Object，是這份名冊唯一的寫入者。一個交易裡寫入整筆紀錄、給序號、更新這張卡片的狀態和頁面用的衍生表、把題目標成已接受，寫完才回應。
-- **紀錄的正本**：R2 上的名冊目錄。Durable Object 只留還沒寫滿一檔的紀錄；寫滿 1,000 筆，把那一檔寫到 R2，讀回來核對後才刪掉自己的那 1,000 筆。檔名和內容都從紀錄算得出來，重做的結果相同。
-- **驗證證明**：在 Worker 裡驗，不在 Durable Object 裡。送出一筆時，Worker 先請 Durable Object 檢查題目並算一次送出，自己驗證明，再請 Durable Object 檢查清冊樹根和名冊規則後寫入。檢查的順序和 `docs/api/card-proof.md` 相同。
+- **寫入**：一份證明紀錄一個 Durable Object，是這份證明紀錄唯一的寫入者。一個交易裡寫入整筆紀錄、給序號、更新這張卡片的狀態和頁面用的衍生表、把題目標成已接受，寫完才回應。
+- **紀錄的正本**：R2 上的紀錄目錄。Durable Object 只留還沒寫滿一檔的紀錄；寫滿 1,000 筆，把那一檔寫到 R2，讀回來核對後才刪掉自己的那 1,000 筆。檔名和內容都從紀錄算得出來，重做的結果相同。
+- **驗證證明**：在 Worker 裡驗，不在 Durable Object 裡。送出一筆時，Worker 先請 Durable Object 檢查題目並算一次送出，自己驗證明，再請 Durable Object 檢查清冊樹根和紀錄規則後寫入。檢查的順序和 `docs/api/card-proof.md` 相同。
 - **訪客的頁面**：衍生表在同一個 Durable Object，和紀錄在同一個交易裡更新。Worker 產生 HTML，產生好的頁面在 Cloudflare 的快取最多放 60 秒。題目、卡片現況、送出不快取。
 - **清冊鏡像**：Cron Trigger 每小時抓內政部的清冊，原始檔存 R2；檔案和上一次相同就停，不同才驗章、建樹、算樹根。
-- **名冊指紋**：Durable Object 每寫入一筆就更新滾動的雜湊（ADR-0021），每天台灣時間換日時在指紋檔加一行。
-- **靜態檔**：過卡的頁面（`web/` 建置出來的檔案、電路檔、通用參數）用 Workers Static Assets；清冊、名冊目錄、雜湊清單、指紋檔放 R2。這些下載不經過後台的程式。
+- **指紋**：Durable Object 每寫入一筆就更新滾動的雜湊（ADR-0021），每天台灣時間換日時在指紋檔加一行。
+- **靜態檔**：過卡的頁面（`web/` 建置出來的檔案、電路檔、通用參數）用 Workers Static Assets；清冊、紀錄目錄、雜湊清單、指紋檔放 R2。這些下載不經過後台的程式。
 - **部署**：一個 Worker 專案，過卡的頁面和後台同一個提交、同一次部署。
 
 理由：
@@ -28,7 +28,7 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 - **驗證在 Workers 上做得到。** 用 Workers 允許的載入方式，WASM 的驗證和原生的 `bb verify` 在 1,123 個案例上通過或拒絕全部相同（[實測](https://github.com/iamreal-tw/iamreal/issues/16)）。
 - **Durable Object 和 R2 之間沒有共同的交易，設計成不需要。** 紀錄先完整落在 Durable Object，才算接受；搬到 R2 是之後的事，失敗就重做。
 - **資料庫的大小跟卡片數走，不跟紀錄數走。** 一個 Durable Object 的 SQLite 上限 10 GB（[limits](https://developers.cloudflare.com/durable-objects/platform/limits/)），一筆紀錄約 20 KB，帶證明的紀錄不能長期留在裡面。
-- **留著 Go 的重驗工具，是要有兩份獨立的實作。** 後台收錯一筆時，拿名冊用另一份實作重算會發現。這幾個目錄照的是協定規格，上線後很少改。重寫後台時，Go 版也是逐案比對的對照。
+- **留著 Go 的重驗工具，是要有兩份獨立的實作。** 後台收錯一筆時，拿證明紀錄用另一份實作重算會發現。這幾個目錄照的是協定規格，上線後很少改。重寫後台時，Go 版也是逐案比對的對照。
 
 ## Considered Options
 
@@ -45,9 +45,9 @@ status: accepted（部分由 ADR-0025、ADR-0026 取代）
 - **驗證和清冊鏡像各放在換得掉的介面後面。** 超過 Workers 的限制時，改成在 Cloudflare Containers 跑原生的 `bb` 和 Go 的 `crl/`，其他部分不動。
 - **清冊鏡像在 Worker 裡做得完，但讀清冊時不能每一筆建一個物件。** 本機的 workerd 裡，一次排程抓兩份清冊、存 R2、驗章、建樹共 35 秒，樹根和 Go 的 `crl/` 相同（[實測](https://github.com/iamreal-tw/iamreal/issues/26)）。排程一次的牆上時間上限是 15 分鐘；一次呼叫的 CPU 時間預設 30 秒，用 `limits.cpu_ms` 最多調到 5 分鐘（[limits](https://developers.cloudflare.com/workers/platform/limits/)）。同一頁另有一列寫每小時以上的排程有 15 分鐘的 CPU 時間，和實測對不上：沒有設 `limits.cpu_ms` 時約 30 秒就被停（[`worker/README.md`「Cloudflare 上第一次建樹」](../../worker/README.md#cloudflare-上第一次建樹)）。照 `web/src/crl/crl.ts` 的寫法讀 G2 要 132 MB，超過 Worker 的 128 MB；鍵直接寫進 `Uint32Array` 時全程約 35 MB。Poseidon2 用驗證證明的同一份 WASM。建樹時分組做、組和組之間讓出執行緒，免得擋住同一個實例裡的請求。Cloudflare 上真的 CPU 時間、抓不抓得到內政部的 `http://` 網址，部署到測試網站時確認。2026-11-19 第一次部署：兩個網址都抓得到（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）；那時的排程只抓和存，一次的 CPU 時間 72 毫秒。2026-11-20 第一次在 Cloudflare 上驗章和建樹：那時沒有設 `limits.cpu_ms`，排程用了約 32 秒的 CPU 時間就被停掉，第一棵樹沒有建完。之後 `limits.cpu_ms` 設成 300,000 毫秒，一輪補之前留下的檔時留 2.5 分鐘給最大的一份（[#128](https://github.com/iamreal-tw/iamreal/issues/128)、[`worker/README.md`「Cloudflare 上第一次建樹」](../../worker/README.md#cloudflare-上第一次建樹)）；設了之後一次排程實際用多少 CPU 時間還沒量到。
 - **WASM 的驗證要照實測的兩條做**：任何例外都算拒絕，並丟掉那個實例；呼叫之前先做 `verifier/verify.go` 在呼叫 `bb` 之前做的檢查。
-- **名冊規則有兩份實作**，Go 的在 `roster/`，TypeScript 的給後台和裝置用，兩份讀 `spec/vectors/` 同一份標準答案。規則要改時兩邊一起改。
-- **名冊檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改。完整重驗在哪裡跑、多久一次，已經定在 ADR-0025（討論在[名冊變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)）。
-- **現況不放記憶體。** Durable Object 閒置時會被移出記憶體，名冊規則要的每張卡片的狀態存在它的 SQLite，寫入時只讀寫那一張卡片。存法已經定了：狀態自己一張表、一張卡片一列、和紀錄同一個交易寫入，結論在[名冊規則要的每張卡片狀態怎麼存](https://github.com/iamreal-tw/iamreal/issues/9)；順帶改的規則是 ADR-0024。
+- **紀錄規則有兩份實作**，Go 的在 `roster/`，TypeScript 的給後台和裝置用，兩份讀 `spec/vectors/` 同一份標準答案。規則要改時兩邊一起改。
+- **紀錄檔寫滿就公開，不等每天。** 每天公布的是指紋檔的一行。ADR-0014 寫的「後台每次發布快照前自己完整重算」跟著改。完整重驗在哪裡跑、多久一次，已經定在 ADR-0025（討論在[證明紀錄變大之後，每日快照怎麼重驗](https://github.com/iamreal-tw/iamreal/issues/22)）。
+- **現況不放記憶體。** Durable Object 閒置時會被移出記憶體，紀錄規則要的每張卡片的狀態存在它的 SQLite，寫入時只讀寫那一張卡片。存法已經定了：狀態自己一張表、一張卡片一列、和紀錄同一個交易寫入，結論在[紀錄規則要的每張卡片狀態怎麼存](https://github.com/iamreal-tw/iamreal/issues/9)；順帶改的規則是 ADR-0024。
 - **讀取和寫入擠在同一個 Durable Object。** 大量請求打不同的網址時快取幫不上，Durable Object 忙不過來，頁面和過卡會一起失敗；已經寫入的紀錄不會掉。靠限流和查不到的結果也快取來擋；讀取量量出來撐不到尖峰，或真的被這樣打過，就把衍生表複製到 D1（ADR-0026 改成搬到 KV 還是 D1 到時候再定）。
 - **儲存的位置不能固定在台灣。** 亞洲只有盡量的提示（[data location](https://developers.cloudflare.com/durable-objects/reference/data-location/)）。放在上面的資料大多本來就公開；不公開的是還沒用掉的題目和連線紀錄（ADR-0022）。隱私權說明照實寫。
-- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** 目錄 2026-11-19 定了，寫在 `CLAUDE.md` 的目錄表：TypeScript 的後台放 `worker/`，比對期間不和 Go 的 `server/` 同名；後台和裝置共用的 TypeScript（名冊規則和其他照 `spec/` 寫的算法）放 `protocol/`，`worker/` 和 `web/` 都引用它、互不引用。`server/` 刪掉時，從目錄表拿掉那一列。
+- **Go 的 `server/` 在 TypeScript 的後台逐案比對通過後刪掉。** 目錄 2026-11-19 定了，寫在 `CLAUDE.md` 的目錄表：TypeScript 的後台放 `worker/`，比對期間不和 Go 的 `server/` 同名；後台和裝置共用的 TypeScript（紀錄規則和其他照 `spec/` 寫的算法）放 `protocol/`，`worker/` 和 `web/` 都引用它、互不引用。`server/` 刪掉時，從目錄表拿掉那一列。

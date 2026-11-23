@@ -52,7 +52,7 @@
 //    every record valid, the kinds those the screens showed, the card's list
 //    the one step 6 showed last. Then other cards: two cards declaring the
 //    same account (還有別的卡片也宣告了), an answer whose kinds cannot be read
-//    (名冊已經記下這次過卡), and an answer lost after the server appended the
+//    (證明紀錄已經記下這次過卡), and an answer lost after the server appended the
 //    record (challenge_used, then the card's state shows the list); a
 //    platform table with Threads only (steps 5 and 6 name the one platform).
 // 6. Checks the response headers, that the page is cross-origin isolated,
@@ -1055,7 +1055,7 @@ await tryStep("a first declaration of one platform (a wrong PIN first; a blocked
   const hrefs = await page.eval<string[]>(`[...document.querySelectorAll('main a')].map((a) => a.getAttribute("href") + " " + a.target + " " + a.rel)`);
   check(
     hrefs.includes("/proof/help.html?topic=proof _blank noopener noreferrer") && hrefs.includes("/proof/help.html?topic=verify _blank noopener noreferrer"),
-    `step 6: 打開這張島民證明 and 怎麼驗證 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
+    `step 6: 打開這張島民證明 and 怎麼驗證島民證明 lead to the help page, in a new tab ${JSON.stringify(hrefs)}`,
   );
   check(await page.eval<boolean>(`!!document.querySelector('[data-step="done"] .hero svg.logo-animated')`), "step 6: the mark's animation");
 });
@@ -2073,7 +2073,7 @@ await tryStep("a second card declares @zoe (account_cards 2): the sentence about
     screenshots: "other-cards",
   });
 });
-await tryStep("the answer's kinds the page cannot read: 名冊已經記下這次過卡", async () => {
+await tryStep("the answer's kinds the page cannot read: 證明紀錄已經記下這次過卡", async () => {
   component.card = other.spec();
   await toAccounts();
   await page.clickButton(C.common.next);
@@ -2098,7 +2098,7 @@ await tryStep("the answer's kinds the page cannot read: 名冊已經記下這次
   check(seen.length === 1 && Array.isArray(seen[0].kinds), "the server's answer had kinds; the page got a kind it does not know");
 });
 
-await tryStep("a 201 whose body the page cannot read: 名冊已經記下這次過卡, not a failure", async () => {
+await tryStep("a 201 whose body the page cannot read: 證明紀錄已經記下這次過卡, not a failure", async () => {
   component.card = other.spec();
   await toAccounts();
   await page.clickButton(C.common.next);
@@ -2188,7 +2188,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
   const c = await waitConfirm();
   checkConfirm("one platform", c, [[THREADS, THREADS_NAME, at("yui"), [K.first]]], C.confirm.button_declare_single, THREADS_NAME);
   check(c.listedSingle === "這個 Threads 帳號會公開列在島民證明上。", `step 5, one platform: "${c.listedSingle}"`);
-  check(c.intro === "按下後，名冊會公開記下這張卡片宣告的帳號：", `step 5, one platform: "${c.intro}"`);
+  check(c.intro === "按下後，證明紀錄會公開記下這張卡片宣告的帳號：", `step 5, one platform: "${c.intro}"`);
   check(c.buttons.includes("宣告這個帳號"), `step 5, one platform: the button ${JSON.stringify(c.buttons)}`);
   await screenshot("single-5-confirm");
   await finish({

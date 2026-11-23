@@ -35,7 +35,7 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 - **營運者的電腦上不用 `wrangler login`。** 它的授權不能只給一個 Worker（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）；電腦上跑的程式和 coding agent 就碰得到正式網站。
 - **營運者電腦上的 coding agent 不推版本標籤、不核准正式部署。** 電腦上的 `gh` 登入的是營運者，GitHub 分不出核准的是人還是 agent，所以靠營運者本機的設定擋。
 - **部署的權杖做不到的事，營運者在 Cloudflare 的儀表板手動做**：建立 Worker、自訂網域、R2 儲存桶和它的 CORS、WAF 和限流的規則。只給一個 Worker 的權杖建立不了新的 Worker，也改不了自訂網域（[Workers authorization](https://developers.cloudflare.com/workers/authorization/workers/)）。這些事一年做不到幾次，步驟寫在營運者的說明裡。要比 `Editor` 大的權限時，臨時做一把權杖，用完刪掉。
-- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。例外有兩個：從副本換回一個檔，營運者臨時做一把只能寫這個儲存桶的權杖，換完刪掉（ADR-0033）；清空測試名冊時，營運者在儀表板刪掉測試的儲存桶裡名冊的目錄（ADR-0028）。
+- **R2 只有 Worker 透過 binding 寫**，沒有 R2 的 API 權杖。部署本來就不需要 R2 的權限（[Workers authorization](https://developers.cloudflare.com/workers/authorization/)）。例外有兩個：從副本換回一個檔，營運者臨時做一把只能寫這個儲存桶的權杖，換完刪掉（ADR-0033）；清空測試的證明紀錄時，營運者在儀表板刪掉測試的儲存桶裡證明紀錄的目錄（ADR-0028）。
 - **`iamreal-tw/fingerprints` 只有它自己的排程用自己的 `GITHUB_TOKEN` 提交。** 外人對它開的 PR 不合併：那份檔案只該由排程寫。
 - **GitHub 組織和 Cloudflare 帳號的 admin 只有營運者一個人。** 營運者自己進不去時，靠備用碼和實體安全金鑰。
 
@@ -54,14 +54,14 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 
 - **退回舊版。** 儀表板可以退回最近 100 個版本之一，不用重新上傳，Cloudflare 記下是誰退的（[rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)）。
 - **停止收過卡**（ADR-0025）。
-- **從副本換回一個名冊檔或清冊檔**（ADR-0033）。
+- **從副本換回一個紀錄檔或清冊檔**（ADR-0033）。
 
 做完之後開一張公開的 issue，寫明做了什麼、為什麼。其他任何變更都經過 Actions。
 
 ## 理由
 
 - **正式網站只從 Actions 部署，是為了不讓能部署它的金鑰放在跑 coding agent 的電腦上。** 營運者的電腦上，每個 agent、每次安裝套件時跑的腳本，都和那把金鑰在同一台機器上。放在 GitHub 上，只有部署的那一個工作拿得到，而且要營運者核准。
-- **公開的部署紀錄不是用來讓人信任的。** 營運者是 Cloudflare 帳號的 admin，能從儀表板部署別的版本，Actions 的紀錄看不到；網頁也可能只對特定的人送改過的版本。後台的信任來自公開的名冊，收錯一筆，用另一份實作重驗會發現（ADR-0025）。過卡的頁面要能檢查，靠的是任何人能拿一個提交自己建置、和網站送出的檔案比對。Actions 的紀錄是順手得到的時間表。
+- **公開的部署紀錄不是用來讓人信任的。** 營運者是 Cloudflare 帳號的 admin，能從儀表板部署別的版本，Actions 的紀錄看不到；網頁也可能只對特定的人送改過的版本。後台的信任來自公開的證明紀錄，收錯一筆，用另一份實作重驗會發現（ADR-0025）。過卡的頁面要能檢查，靠的是任何人能拿一個提交自己建置、和網站送出的檔案比對。Actions 的紀錄是順手得到的時間表。
 - **測試網站要能從營運者的電腦部署**，開發時才能直接部署、直接看結果，不必每次都等合併。測試的權杖碰不到正式的 Worker，所以這樣做不會擴大正式網站的風險。
 - **營運者只有一個人**，所以 admin 也只有一個人。多一個 admin 是多一個可以被攻破的帳號，對外也要說明這個人是誰。
 
@@ -77,7 +77,7 @@ Cloudflare 的 API 權杖可以只給一個 Worker 的 `Editor`，能部署那�
 
 ## Consequences
 
-- **程式庫公開之前，GitHub 的幾項設定還不能用。** 免費方案的私有程式庫沒有 environment 的 secrets、部署前要人核准、只允許標籤部署的規則（[deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)）。公開之前只有測試網站，測試的權杖先放在程式庫的 secrets；正式名冊開張當天建立兩個 environment、把測試的權杖搬進去、做正式的權杖。
+- **程式庫公開之前，GitHub 的幾項設定還不能用。** 免費方案的私有程式庫沒有 environment 的 secrets、部署前要人核准、只允許標籤部署的規則（[deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)）。公開之前只有測試網站，測試的權杖先放在程式庫的 secrets；正式的證明紀錄開張當天建立兩個 environment、把測試的權杖搬進去、做正式的權杖。
 - **Durable Object 的遷移要什麼權限，文件沒有寫。** 施工時實測；`Editor` 做不到時，用上面「臨時做一把」的做法。2026-11-19 實測：只有 `Editor` 權限的權杖跑得了建立類別的 migration，改名和刪除類別的沒有試過（[`worker/README.md`「第一次部署量到的」](../../worker/README.md#第一次部署量到的)）。
 - **外人的 PR 在合併之前跑不到部署；合併之後才部署。** 有問題要等合併到 `main`、部署到測試網站才看得到。
 - **可重現的建置和檔案雜湊**要做到「任何人能拿一個提交自己建置、和網站送出的檔案比對」，不靠部署紀錄。

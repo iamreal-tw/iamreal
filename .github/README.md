@@ -15,7 +15,7 @@
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。只動文件、app 或 `server/` 的 PR 和它們無關，不必多等這 16 分鐘（那時這兩套測試配的是 Go 的舊後台，只動 `worker/` 的 PR 也不跑；#69 之後它們對 Worker 跑，`worker/` 有改就跑）。分開的時候程式庫還沒公開，Actions 的用量算在組織免費方案每月含的額度裡，用完就不能再跑；2026-11-21 公開之後，標準的 GitHub-hosted runner 在公開的程式庫不算用量（「The following usage remains free independently and does not reduce the included compute usage: Standard GitHub-hosted runners in public repositories」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)），所以現在分開是為了時間，不是額度。`checks.yml` 的四個必要檢查在 PR 階段也照路徑跳過（#206），但做法不同、在合併佇列裡四項全跑：見下面「必要檢查在 PR 階段照路徑跳過」。
 
-`checks-browser.yml` 的 `paths` 列出這三套測試用到的東西：頁面（`web/`、`protocol/`）、畫面上的字（`design/`）、規格和標準答案（`spec/`）、它們對著跑的後台（`worker/`，#69）、`pnpm test:ui` 建置來重驗名冊的 Go 程式 `iamreal-verify` 和它引用的套件（`cmd/`、`verifier/`、`roster/`、`crl/`、`go.mod`、`go.sum`）、套件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`，和 `circuits/package.json`：它是 workspace 的套件，`pnpm install` 拿 lockfile 和它比對）、根目錄那七個現在不存在、加了就改變每個檢查怎麼安裝、建置或取出檔案的檔（`ROOT_FILES_PATHS`，下面「每一份清單都有的」那一點；這個工作也跑 `pnpm install` 和 `go build`）和這個工作流程檔自己。照 GitHub 的文件（[workflow syntax 的 `on.<event>.paths`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)）：
+`checks-browser.yml` 的 `paths` 列出這三套測試用到的東西：頁面（`web/`、`protocol/`）、畫面上的字（`design/`）、規格和標準答案（`spec/`）、它們對著跑的後台（`worker/`，#69）、`pnpm test:ui` 建置來重驗證明紀錄的 Go 程式 `iamreal-verify` 和它引用的套件（`cmd/`、`verifier/`、`roster/`、`crl/`、`go.mod`、`go.sum`）、套件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`，和 `circuits/package.json`：它是 workspace 的套件，`pnpm install` 拿 lockfile 和它比對）、根目錄那七個現在不存在、加了就改變每個檢查怎麼安裝、建置或取出檔案的檔（`ROOT_FILES_PATHS`，下面「每一份清單都有的」那一點；這個工作也跑 `pnpm install` 和 `go build`）和這個工作流程檔自己。照 GitHub 的文件（[workflow syntax 的 `on.<event>.paths`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)）：
 
 - PR 改到的檔只要有一個符合其中一項，工作流程就跑。樣式要從根目錄比對整個路徑，`**` 包括 `/`；沒有 `/` 的樣式（例如 `go.mod`）只比對根目錄的那個檔。
 - 改到哪些檔，看的是整個 PR 對基底分支的差異（「three-dot diffs for pull requests」），不是這一次推送改的。
@@ -196,7 +196,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 ## 上傳 Android 的 app（#175）
 
-[`workflows/upload-android.yml`](workflows/upload-android.yml) 把 Android 的商店 build（`tw.iamreal.app`，ADR-0037）傳到 Google Play 的內部測試軌道。上線前它連測試網站、簽測試名冊的場合字串（`android/README.md`「兩種 build」）。
+[`workflows/upload-android.yml`](workflows/upload-android.yml) 把 Android 的商店 build（`tw.iamreal.app`，ADR-0037）傳到 Google Play 的內部測試軌道。上線前它連測試網站、簽測試的證明紀錄的場合字串（`android/README.md`「兩種 build」）。
 
 **怎麼觸發。** 只能手動：GitHub 的 Actions 頁面選 `upload-android`、「Run workflow」，分支選 `main`；或在營運者的電腦上 `gh workflow run upload-android.yml --ref main`（coding agent 也可以，ADR-0036）。推送、合併、別的工作流程都不會觸發它；它不收任何輸入。一次只跑一個，不取消正在跑的（`concurrency`）；在它跑的時候再觸發，新的那次等著，但同時只能有一次在等：再觸發一次，等著的那次會被取消（「By default, any existing pending job or workflow in the same concurrency group will be canceled and the new queued job or workflow will take its place」，[workflow syntax 的 `concurrency`](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)，2026-11-21 讀）。
 
@@ -204,7 +204,7 @@ gh cache list --repo iamreal-tw/iamreal --ref refs/heads/main --limit 100 --sort
 
 | 工作 | 拿得到什麼 | 做什麼 |
 |---|---|---|
-| `build` | 沒有 secret；權杖只能讀程式 | 不在 `main` 上就停。用 [`android-version.sh`](workflows/android-version.sh) 算版本。和 `checks.yml` 的 `android` 一樣裝 libc++、Rust、SDK、參數檔，再跑 `./gradlew bundleRelease`，帶上版本。`bundleRelease` 會接著跑 bundle 的檢查（`checkBundle`、`checkManifest`、`checkLibraries`，`android/README.md`「建置時的檢查」）：識別碼、連測試網站、沒有正式網站和正式名冊的場合字串、沒有假卡片和測試的發證金鑰。檢查不過就停，不會上傳。簽哪一份名冊的場合字串由 Kotlin 傳給核心的名冊編號決定（`Environment.kt` 的 `ROSTER`），編進 dex 時只是一個數字，bundle 的檢查找不到它；它由 `DeviceCoreTest` 的「the scope string is the one of the test roster」看著，那是 `checks.yml` 的 `android` 每次都跑的單元測試，`main` 上的每個提交都在合併佇列裡跑過（「合併佇列」），所以這裡不再跑一次。沒有簽章的 `.aab` 留成 artifact `android-bundle` |
+| `build` | 沒有 secret；權杖只能讀程式 | 不在 `main` 上就停。用 [`android-version.sh`](workflows/android-version.sh) 算版本。和 `checks.yml` 的 `android` 一樣裝 libc++、Rust、SDK、參數檔，再跑 `./gradlew bundleRelease`，帶上版本。`bundleRelease` 會接著跑 bundle 的檢查（`checkBundle`、`checkManifest`、`checkLibraries`，`android/README.md`「建置時的檢查」）：識別碼、連測試網站、沒有正式網站和正式的證明紀錄的場合字串、沒有假卡片和測試的發證金鑰。檢查不過就停，不會上傳。簽哪一份證明紀錄的場合字串由 Kotlin 傳給核心的證明紀錄編號決定（`Environment.kt` 的 `ROSTER`），編進 dex 時只是一個數字，bundle 的檢查找不到它；它由 `DeviceCoreTest` 的「the scope string is the one of the test roster」看著，那是 `checks.yml` 的 `android` 每次都跑的單元測試，`main` 上的每個提交都在合併佇列裡跑過（「合併佇列」），所以這裡不再跑一次。沒有簽章的 `.aab` 留成 artifact `android-bundle` |
 | `upload` | environment `app-test` 的三個 secret | 不建置、不跑 Gradle。拿 `build` 留下的 `.aab`，用 [`android-sign.sh`](workflows/android-sign.sh) 以上傳金鑰簽章，簽好的留成 artifact `android-bundle-signed`，再用 [`play-upload.sh`](workflows/play-upload.sh) 傳到內部測試 |
 
 - **金鑰只在 `upload`。** secret 名稱照 #162：`ANDROID_UPLOAD_KEYSTORE_BASE64`、`ANDROID_UPLOAD_KEYSTORE_PASSWORD` 只在簽章那一步的 `env`，`PLAY_SERVICE_ACCOUNT_JSON` 只在上傳那一步的 `env`。`app-test` 只把 secret 給 `main` 上的工作（#162 的設定），所以在別的分支上觸發時，`build` 先停下來；就算它沒停，`upload` 也拿不到金鑰。

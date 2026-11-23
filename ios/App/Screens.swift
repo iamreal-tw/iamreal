@@ -314,7 +314,7 @@ struct Screens {
         return unchanged ? copy("done.refresh") : copy("done.changed")
     }
 
-    /// The rows of "名冊記下了這一筆": one for every platform the server
+    /// The rows of "證明紀錄記下了這一筆": one for every platform the server
     /// says the record has a kind on, and one for every platform step 5
     /// showed that the answer does not have, in ascending order of
     /// platform. Under a row: what was recorded; where it differs from

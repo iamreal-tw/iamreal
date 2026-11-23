@@ -410,7 +410,7 @@ export class Roster extends DurableObject<Env> {
   readonly #paused: boolean;
   /**
    * Whether the settings name another object than this one: the object of a
-   * test roster that was cleared (README.md, "清空測試名冊"). No request
+   * test roster that was cleared (README.md, "清空測試的證明紀錄"). No request
    * reaches it any more, but it is not deleted, and its alarm was set when
    * it still was the roster's. It shares the data bucket with the object
    * that took its place, so it does no timed work and asks for no further
@@ -1060,7 +1060,7 @@ export class Roster extends DurableObject<Env> {
    *
    * Nothing here keeps two publications, or a publication and a move of a
    * full file, from running at once: an object has one alarm, whose
-   * handler does not run twice at once (README.md, "每天換日公布名冊",
+   * handler does not run twice at once (README.md, "每天換日公布證明紀錄",
    * has the sentence of Cloudflare's documentation), and the handler runs
    * the pieces of `timedWork()` one after the other. Both write the roster file of the
    * same name at different times, so this is what the order of their

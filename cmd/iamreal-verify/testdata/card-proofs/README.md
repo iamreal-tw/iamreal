@@ -24,7 +24,7 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 
 題目由後台發：測試把後台的亂數來源換成 `card-proofs.json` 裡的 16 個位元組，後台發出的題目就是證明當初用的那一個。
 
-場合是測試名冊的 `iamreal-test:public:0__________`，平台有 `test-example` 和 `threads`。
+場合是測試的證明紀錄的 `iamreal-test:public:0__________`，平台有 `test-example` 和 `threads`。
 
 | | 時間 | 卡片 | 帳號清單 | 回應 |
 |---|---|---|---|---|
@@ -37,7 +37,7 @@ B 和 C 廢止的序號相同，所以樹根相同。兩張卡片的序號都不
 | 7 | 2026-11-23 09:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads switch`（第 3 次） |
 | 8 | 2026-11-23 10:00 | G2 的卡 | （空的清單） | `201` `threads withdraw` |
 | 9 | 2026-11-23 10:30 | G2 的卡 | （空的清單） | `400` `empty`（這張卡片已經沒有帳號） |
-| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、名冊規則接受；`threads` 第 4 次更換，測試開了限制晚的更換的政策（`RESTRICT_LATE_SWITCHES`），所以拒絕） |
+| 10 | 2026-11-24 09:00 | G3 的卡 | `test-example:c-d`、`threads:erin` | `403` `switch_restricted`（證明驗得過、紀錄規則接受；`threads` 第 4 次更換，測試開了限制晚的更換的政策（`RESTRICT_LATE_SWITCHES`），所以拒絕） |
 | 11 | 2026-11-24 09:30 | G3 的卡 | `test-example:c-d` | `201` `test-example refresh, threads withdraw` |
 | 12 | 2026-11-24 11:00 | G3 的卡 | `test-example:c-d`、`threads:dave` | `201` `test-example refresh, threads refresh` |
 | 13 | 2026-11-24 11:30 | G3 的卡 | （空的清單） | `201` `test-example withdraw, threads withdraw` |
@@ -57,7 +57,7 @@ bb=$(circuits/find-bb.sh)
 go run ./cmd/iamreal-verify/testdata/card-proofs/generate.go -bb "$bb" -crs <通用參數目錄>
 ```
 
-證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `circuits/`、`web/circuits/` 裡。`generate.go` 確認 `circuits/` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試名冊裡格式正確的紀錄。全部約 25 秒（十四份證明）。
+證明由 `cmd/iamreal-verify/testdata/make-proofs.mjs` 做（同一支程式，見那裡的 `README.md`；宣告碼由它照 `spec/declaration-code.md` 算），不寫任何東西到 `circuits/`、`web/circuits/` 裡。`generate.go` 確認 `circuits/` 的參考樹和 `crl/` 算出的樹根相同、`make-proofs.mjs` 的宣告碼和 `verifier.DeclarationCode` 相同，每一次過卡都是測試的證明紀錄裡格式正確的紀錄。全部約 25 秒（十四份證明）。
 
 提交的這一份是電路的原始碼搬進 `circuits/` 之前做的，`circuits-commit` 寫的是先前的私有程式庫的 `497b610c64a3e598ccc769f39e886d1d5ca889ed`。搬進 `circuits/` 時原始碼相同（ADR-0038），電路檔和驗證金鑰都沒變，所以沒有重新產生。
 
