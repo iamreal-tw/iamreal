@@ -402,7 +402,8 @@ item of the state ("State"): no check reads it, and the card state file
 does not carry it ("The card state file"). The device has no use for it:
 Rust's `device-core/` (ADR-0034), which judges a list before the card signs,
 gives the rest of this output and not the ordinal. Go's `prooflog/` and
-TypeScript's `protocol/` give it.
+TypeScript's `protocol/` give it, and the server keeps it with the tables
+its pages read (`worker/`), whose ordinals its tests compare with Go's.
 
 ## Not part of these rules
 

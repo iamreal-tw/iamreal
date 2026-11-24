@@ -40,7 +40,9 @@ declaration code, not in the scope string.
 `list-consequence.md` ("The card's state, as shown"). Every implementation (Go,
 TypeScript, and Rust in `device-core/`) runs its tests against these same
 files, so an implementation that drifts from the specification fails its
-tests. `card-channel.json` is read by the tests of `android/` and `ios/`.
+tests. Of `record-rules.json`, Rust reads every case's `state` and not its
+`ordinals`: the device does not compute the ordinal (`record-rules.md`, "The
+ordinal"). `card-channel.json` is read by the tests of `android/` and `ios/`.
 
 ## Shared conventions
 
