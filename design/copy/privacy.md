@@ -1,6 +1,6 @@
 # 隱私權說明
 
-「隱私權說明」那一頁，網址 `iamreal.tw/privacy`。頁尾要連到這裡（`home.md` 第 9 段加上「隱私權說明」，和這一頁一起做）。原則在 `docs/design/principles.md`，尤其是第 3 條「不說得比實際多」：只寫做得到的事，做不到的照實寫。
+「隱私權說明」那一頁，網址 `iamreal.tw/privacy`。頁尾要連到這裡（`home.md`「頁尾」加上「隱私權說明」，和這一頁一起做）。原則在 `docs/design/principles.md`，尤其是第 3 條「不說得比實際多」：只寫做得到的事，做不到的照實寫。
 
 - 這一份是對外的承諾。後台記什麼、留多久、用到哪些業者改了，這一份在同一個 PR 裡改
 - 稱呼用「你」；經營網站的人寫「營運者」，不寫「我們」
@@ -250,4 +250,4 @@ iamreal.tw 整個放在 Cloudflare 上：頁面、後台、證明紀錄和連線
 這份說明放在公開的程式庫裡，每一次修改都有紀錄，任何人都看得到改了什麼、什麼時候改的。　修改紀錄
 ```
 
-「修改紀錄」連到 https://github.com/iamreal-tw/iamreal/commits/main/design/copy/privacy.md 。這一段下面直接接頁尾（`home.md` 第 9 段）。
+「修改紀錄」連到 https://github.com/iamreal-tw/iamreal/commits/main/design/copy/privacy.md 。這一段下面直接接頁尾（`home.md`「頁尾」）。
