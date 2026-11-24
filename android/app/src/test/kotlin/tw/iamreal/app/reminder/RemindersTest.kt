@@ -127,6 +127,42 @@ class RemindersTest {
     }
 
     @Test
+    fun `a reminder that came while the phone was off is notified once it is on again, within a day`() {
+        val storage = MemoryStorage()
+        Reminders(storage, FakeAlarm()).turnOn(Interval.WEEKS_12, nine, null, monday)
+        val reminders = Reminders(storage, FakeAlarm())
+        assertTrue(reminders.missed(LocalDateTime.parse("2027-02-08T23:30")))
+        assertTrue(reminders.missed(LocalDateTime.parse("2027-02-09T20:59")))
+        // More than a day late: the next card proof sets it again.
+        assertFalse(reminders.missed(LocalDateTime.parse("2027-02-09T21:01")))
+        // Not come yet: the alarm does it.
+        assertFalse(reminders.missed(LocalDateTime.parse("2027-02-08T20:59")))
+        assertFalse(Reminders(MemoryStorage(), FakeAlarm()).missed(LocalDateTime.parse("2027-02-08T23:30")))
+    }
+
+    @Test
+    fun `changing only the time keeps the day, changing the interval counts from today`() {
+        val storage = MemoryStorage()
+        val alarm = FakeAlarm()
+        val reminders = Reminders(storage, alarm)
+        reminders.turnOn(Interval.WEEKS_12, nine, null, monday)
+        val later = LocalDate.parse("2026-12-01")
+        val atNoon = later.atTime(12, 0)
+        assertEquals(Plan(Interval.WEEKS_12, LocalTime.of(19, 0), LocalDate.parse("2027-02-08")), reminders.change(Interval.WEEKS_12, LocalTime.of(19, 0), null, atNoon))
+        assertEquals(LocalDateTime.parse("2027-02-08T19:00"), alarm.at)
+        assertEquals(LocalDate.parse("2026-12-29"), reminders.change(Interval.WEEKS_4, LocalTime.of(19, 0), null, atNoon).day)
+        assertEquals(LocalDate.parse("2027-01-05"), reminders.change(Interval.WEEKS_4, LocalTime.of(19, 0), LocalDate.parse("2027-01-05"), atNoon).day)
+    }
+
+    @Test
+    fun `changing only the time of a reminder that came already counts from today`() {
+        val storage = MemoryStorage()
+        val reminders = Reminders(storage, FakeAlarm())
+        reminders.turnOn(Interval.WEEKS_4, nine, null, monday)
+        assertEquals(LocalDate.parse("2027-01-11"), reminders.change(Interval.WEEKS_4, LocalTime.of(8, 0), null, LocalDateTime.parse("2026-12-14T21:30")).day)
+    }
+
+    @Test
     fun `the alarm is set again (the phone restarted) only for a reminder still to come`() {
         val storage = MemoryStorage()
         Reminders(storage, FakeAlarm()).turnOn(Interval.WEEKS_12, nine, null, monday)

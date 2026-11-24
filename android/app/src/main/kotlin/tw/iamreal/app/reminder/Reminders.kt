@@ -59,6 +59,23 @@ class Reminders(private val storage: Storage, private val alarm: Alarm) {
         return set(Plan(interval, time, picked ?: next(today, interval)))
     }
 
+    /**
+     * The day a change on the screen of the interval and the time would set ([change]): [picked] if a day was
+     * picked; the day already set if only the time changed and it is still to come; else [interval] from today.
+     */
+    fun dayFor(interval: Interval, time: LocalTime, picked: LocalDate?, now: LocalDateTime): LocalDate {
+        if (picked != null) return picked
+        val p = plan
+        if (p != null && interval == p.interval && !passed(now) && p.day.atTime(time).isAfter(now)) return p.day
+        return next(now.toLocalDate(), interval)
+    }
+
+    /** Turns the reminder on, or changes it, as the screen of the interval and the time shows it ([dayFor]). */
+    fun change(interval: Interval, time: LocalTime, picked: LocalDate?, now: LocalDateTime): Plan {
+        if (picked != null) return turnOn(interval, time, picked, now.toLocalDate())
+        return set(Plan(interval, time, dayFor(interval, time, null, now)))
+    }
+
     /** Turns the reminder off: the alarm is cancelled and nothing of it is left on the phone. */
     fun turnOff() {
         alarm.cancel()
@@ -76,6 +93,13 @@ class Reminders(private val storage: Storage, private val alarm: Alarm) {
         val p = plan ?: return
         if (!passed(now)) alarm.set(p.at)
     }
+
+    /**
+     * The reminder came while the phone was off (the system forgets alarms then): within the last day it is
+     * notified once the phone is on again. The phone does not store whether it was notified, so a phone that
+     * restarts on the evening it was notified is notified again.
+     */
+    fun missed(now: LocalDateTime): Boolean = plan?.let { passed(now) && it.at.isAfter(now.minusDays(1)) } ?: false
 
     /** The reminder that is on came already, or comes at [now]: nothing more until the next card proof or snooze. */
     fun passed(now: LocalDateTime): Boolean = plan?.let { !it.at.isAfter(now) } ?: false

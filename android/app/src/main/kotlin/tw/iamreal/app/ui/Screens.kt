@@ -79,7 +79,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     StepBar(m.copy, m.step.number)
                     Spacer(Modifier.height(6.dp))
                     when (m.step) {
-                        Step.BEFORE -> Before(m, r)
+                        Step.BEFORE -> Before(m)
                         Step.READ -> Read(m)
                         Step.PIN -> Pin(m)
                         Step.ACCOUNTS -> Accounts(m, outside)
@@ -95,7 +95,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
 }
 
 @Composable
-private fun Before(m: Model, r: ReminderModel) {
+private fun Before(m: Model) {
     val c = m.copy
     m.notice?.let { Problem(it) }
     Title(c.say("before.title"))

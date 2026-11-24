@@ -114,8 +114,8 @@ internal class ReminderModel(
 
     fun today(): LocalDate = today.invoke()
 
-    /** The day the screen of the interval and the time would set. */
-    val draftDay: LocalDate get() = draftPicked ?: Reminders.next(today(), draftInterval)
+    /** The day the screen of the interval and the time would set: changing only the time keeps the day already set. */
+    val draftDay: LocalDate get() = reminders.dayFor(draftInterval, draftTime, draftPicked, now())
 
     /** The reminder that is on has come already: nothing until the next card proof. */
     val passed: Boolean get() = plan != null && reminders.passed(now())
@@ -178,8 +178,9 @@ internal class ReminderModel(
     /** "開啟提醒" or "儲存" of the screen of the interval and the time. */
     fun saveSchedule() {
         val save = {
-            plan = reminders.turnOn(draftInterval, draftTime, draftPicked?.takeIf { it in Reminders.pickable(today()) }, today())
-            picked = draftPicked != null
+            val day = draftPicked?.takeIf { it in Reminders.pickable(today()) }
+            plan = reminders.change(draftInterval, draftTime, day, now())
+            picked = day != null
             doneDenied = false
             screen = scheduleFrom
         }
@@ -224,7 +225,16 @@ internal class ReminderModel(
 }
 
 /** What step 6 says of the reminder: its heading, its sentence, the line under it, and the certificate's sentence. */
-internal class DoneReminder(val kind: Kind, val title: String, val text: String, val local: String, val expires: String?, val at: String?) {
+internal class DoneReminder(
+    val kind: Kind,
+    val title: String,
+    val text: String,
+    /** The line under it: where the reminder is kept, or, when the system did not let the app notify, why there is none. */
+    val note: String,
+    val expires: String?,
+    /** The day and time in [text], set in bold. */
+    val at: String?,
+) {
     enum class Kind { ASK, ON, DENIED }
 }
 
@@ -233,7 +243,7 @@ internal class DoneReminder(val kind: Kind, val title: String, val text: String,
  * nothing is stored, the day it was set again for when it is on, the web's two sentences and why when
  * the system did not let the app notify. [validUntil] is the certificate's last day, from memory.
  */
-internal fun doneReminder(card: Copy, words: When, plan: Plan?, picked: Boolean, denied: Boolean, validUntil: String?, today: LocalDate): DoneReminder {
+internal fun doneReminder(card: Copy, words: When, plan: Plan?, picked: Boolean, denied: Boolean, validUntil: LocalDate?, today: LocalDate): DoneReminder {
     if (plan == null && denied) return DoneReminder(DoneReminder.Kind.DENIED, card.say("done.return_title"), card.say("done.return_note"), card.say("app_done.reminder_denied"), null, null)
     val shown = plan ?: Plan(Reminders.DEFAULT_INTERVAL, Reminders.DEFAULT_TIME, Reminders.next(today, Reminders.DEFAULT_INTERVAL))
     val day = words.day(shown.day)
@@ -243,8 +253,7 @@ internal fun doneReminder(card: Copy, words: When, plan: Plan?, picked: Boolean,
     } else {
         card.say("app_done.reminder_next_about", "day" to day, "time" to time, "interval" to words.interval(shown.interval))
     }
-    val until = validUntil?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    val expires = if (until != null && until.isBefore(shown.day)) card.say("app_done.reminder_expires", "valid_until" to validUntil) else null
+    val expires = if (validUntil != null && validUntil.isBefore(shown.day)) card.say("app_done.reminder_expires", "valid_until" to validUntil) else null
     return DoneReminder(
         if (plan == null) DoneReminder.Kind.ASK else DoneReminder.Kind.ON,
         card.say("app_done.reminder_title"),
@@ -273,31 +282,23 @@ private fun WithDay(text: String, at: String?, modifier: Modifier = Modifier) {
 
 /** The last of what can be done besides on step 6: the reminder (design/screens/app-reminder-1-done-phone.png). */
 @Composable
-internal fun DoneReminderSection(r: ReminderModel, card: Copy, validUntil: String?) {
+internal fun DoneReminderSection(r: ReminderModel, card: Copy, validUntil: LocalDate?) {
     val say = doneReminder(card, r.words, r.plan, r.picked, r.doneDenied, validUntil, r.today())
     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp).testTag("done-reminder")) {
         Subhead(say.title)
         WithDay(say.text, say.at)
-        BasicText(say.local, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.75.em))
+        BasicText(say.note, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.75.em))
         say.expires?.let { BasicText(it, Modifier.padding(top = 6.dp), style = TextStyle(color = Colours.ink, fontSize = 15.sp, lineHeight = 1.75.em)) }
         when (say.kind) {
             DoneReminder.Kind.ASK -> {
                 Button(card.say("app_done.reminder_turn_on"), Modifier.fillMaxWidth().padding(top = 12.dp), primary = true, height = 46.dp) { r.turnOnFromDone() }
-                SmallLink(card.say("app_done.reminder_adjust")) { r.openSchedule() }
+                Change(card.say("app_done.reminder_adjust"), "reminder-adjust") { r.openSchedule() }
             }
-            DoneReminder.Kind.ON -> SmallLink(card.say("app_done.reminder_change")) { r.openSchedule() }
+            DoneReminder.Kind.ON -> Change(card.say("app_done.reminder_change"), "reminder-change") { r.openSchedule() }
             DoneReminder.Kind.DENIED -> {}
         }
     }
 }
-
-/** A link that changes something in the app: the red of what you do, underlined, the size of the notes. */
-@Composable
-private fun SmallLink(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
-    text,
-    modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 10.dp),
-    style = TextStyle(color = Colours.you, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
-)
 
 /** Above step 1, opened from the notification (design/screens/app-reminder-4-from-notification-phone.png). */
 @Composable
@@ -350,7 +351,7 @@ private fun SettingRow(label: String, modifier: Modifier = Modifier, right: @Com
 @Composable
 private fun Value(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = TextStyle(color = Colours.text, fontSize = 15.sp))
 
-/** "更改" at the end of a row. */
+/** A link that changes something in the app ("更改", "改間隔或時刻"): the red of what you do, underlined, the size of the notes. */
 @Composable
 private fun Change(text: String, tag: String, onClick: () -> Unit) = BasicText(
     text,

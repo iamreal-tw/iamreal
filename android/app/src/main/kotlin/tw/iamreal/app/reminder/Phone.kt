@@ -94,6 +94,8 @@ private class SystemAlarm(private val context: Context) : Alarm {
         PendingIntent.getBroadcast(context, 0, Intent(context, ReminderReceiver::class.java).setAction(ReminderReceiver.FIRE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
     override fun set(at: LocalDateTime) {
+        // A notification still up is of the reminder this one replaces: its 一週後再提醒我 would undo the new day.
+        Phone.dismiss(context)
         manager.setWindow(AlarmManager.RTC_WAKEUP, at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(), WINDOW_MS, intent())
     }
 
@@ -123,7 +125,9 @@ class ReminderReceiver : BroadcastReceiver() {
                 reminders.snooze(Phone.today())
                 Phone.dismiss(context)
             }
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED -> reminders.rearm(Phone.now())
+            // The alarm was forgotten with the phone switched off: one that came meanwhile, within a day, is notified now.
+            Intent.ACTION_BOOT_COMPLETED -> if (reminders.missed(Phone.now())) Phone.notify(context) else reminders.rearm(Phone.now())
+            Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED -> reminders.rearm(Phone.now())
         }
     }
 

@@ -19,7 +19,7 @@ class DoneReminderTest {
     private val nine = LocalTime.of(21, 0)
 
     private fun say(plan: Plan?, picked: Boolean = false, denied: Boolean = false, validUntil: String? = null) =
-        doneReminder(card, words, plan, picked, denied, validUntil, today)
+        doneReminder(card, words, plan, picked, denied, validUntil?.let(LocalDate::parse), today)
 
     @Test
     fun `nothing stored, the reminder is offered, 12 weeks on at 9 in the evening`() {
@@ -27,7 +27,7 @@ class DoneReminderTest {
         assertEquals(DoneReminder.Kind.ASK, r.kind)
         assertEquals("提醒我回來過卡", r.title)
         assertEquals("越久沒過卡，說服力越低。這支手機會在 2027-02-08（星期一）晚上 9:00 提醒你，大約三個月後。", r.text)
-        assertEquals("提醒由手機自己排，不經過我們的伺服器。", r.local)
+        assertEquals("提醒由手機自己排，不經過我們的伺服器。", r.note)
         assertNull(r.expires)
     }
 
@@ -50,7 +50,7 @@ class DoneReminderTest {
         assertEquals(DoneReminder.Kind.DENIED, r.kind)
         assertEquals("記得每三個月回來過卡一次", r.title)
         assertEquals("越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。", r.text)
-        assertEquals("沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。", r.local)
+        assertEquals("沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。", r.note)
         assertNull(r.expires)
     }
 

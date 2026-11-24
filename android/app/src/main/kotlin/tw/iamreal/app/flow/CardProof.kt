@@ -215,7 +215,7 @@ class CardProof(private val deps: Deps) {
          * memory only, for the reminder's sentence of a card that expires before it (design/copy/card-proof.md,
          * "6. 完成", app); never stored.
          */
-        val validUntil: String?,
+        val validUntil: java.time.LocalDate?,
     )
 
     private var config: ByteArray? = null
@@ -224,7 +224,7 @@ class CardProof(private val deps: Deps) {
     private var certificate: ByteArray? = null
     private var certificateIndex = -1
     private var issuer = ""
-    private var validUntil: String? = null
+    private var validUntil: java.time.LocalDate? = null
     private var background: FutureTask<Unit>? = null
     private var pin: ByteArray? = null
     private var scopeSignature: ByteArray? = null
@@ -304,7 +304,7 @@ class CardProof(private val deps: Deps) {
             if (!checked.getBoolean("ok")) fail(Stop.certificate(checked))
             name = checked.getString("name")
             issuer = checked.getString("issuer")
-            validUntil = Stop.certificateDay(checked.optString("not_after"))
+            validUntil = Stop.certificateDay(checked.optString("not_after"))?.let(java.time.LocalDate::parse)
             certificateIndex = checked.getInt("chosen")
             // Only the chosen certificate is kept, to compare at the next taps.
             keep { certificate = certificates[certificateIndex].copyOf() }

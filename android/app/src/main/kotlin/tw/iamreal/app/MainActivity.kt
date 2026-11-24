@@ -53,8 +53,9 @@ import java.time.LocalTime
  * open in the browser.
  *
  * Besides it, the settings and the reminder's interval and time
- * ([ReminderModel]): the reminder is the one thing of the app's own that is
- * stored, its four things (reminder/), and it is the phone's, not a card's.
+ * ([ReminderModel]). What the app stores is the highest CRL numbers it used
+ * ([StoredCrlNumbers]) and the reminder's four things (reminder/), which are
+ * the phone's, not a card's.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -177,6 +178,8 @@ class MainActivity : ComponentActivity() {
      */
     private fun handle(intent: Intent?) {
         if (intent?.getBooleanExtra(Phone.FROM_REMINDER, false) != true) return
+        // Opened again from the list of recent apps: the system hands back the intent the task began with.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
         intent.removeExtra(Phone.FROM_REMINDER)
         val model = model(applicationContext)
         reminder(applicationContext).openedFromNotification()
