@@ -1,5 +1,8 @@
 package tw.iamreal.app.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -10,36 +13,49 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
@@ -50,149 +66,223 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-// What the screens are drawn with. A first version: the colours, sizes and
-// spacing are not decided yet (design/README.md, tokens.json), so there are
-// two colours, ink on paper, and the system's own type.
+// What the screens are drawn with, after design/DESIGN.md and
+// design/screens/card-proof-app-*: the values are Theme.kt's, which are
+// design/tokens.json's. Headings in GenRyuMin2 TW, the body in the system's
+// sans-serif. Nothing here means a conclusion: no green, no lock or shield;
+// a check mark only in the two lists of what the app is doing (steps 2 and
+// 5), in ink (docs/design/principles.md).
 
-internal class Colours(val ink: Color, val paper: Color, val faint: Color)
+private fun style(size: TextUnit, leading: TextUnit, colour: Color = Colours.text, weight: FontWeight = Type.body, display: Boolean = false, mono: Boolean = false) = TextStyle(
+    color = colour,
+    fontSize = size,
+    lineHeight = leading,
+    fontWeight = weight,
+    fontFamily = if (display) Type.display else if (mono) Type.mono else null,
+)
 
-internal val LocalColours = staticCompositionLocalOf { Colours(Color(0xFF1A1A1A), Color(0xFFFAF8F3), Color(0xFF6B6B6B)) }
-
+/** The heading of a step: the largest words on the screen. */
 @Composable
-internal fun WithColours(content: @Composable () -> Unit) {
-    val colours = if (isSystemInDarkTheme()) Colours(Color(0xFFF2EFE8), Color(0xFF161616), Color(0xFFA8A8A8)) else Colours(Color(0xFF1A1A1A), Color(0xFFFAF8F3), Color(0xFF6B6B6B))
-    CompositionLocalProvider(LocalColours provides colours, content = content)
-}
+internal fun Title(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.h2, Type.leadingH2, Colours.ink, Type.heading, display = true))
 
+/** A heading in the type of the headings, smaller: a stress, the title next to the small card. */
 @Composable
-internal fun Title(text: String) = BasicText(text, style = TextStyle(color = LocalColours.current.ink, fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold))
+internal fun Stress(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.lead, Type.leadingH3, Colours.ink, Type.heading, display = true))
 
+/** The heading of a part of a step, in the body's type. */
 @Composable
-internal fun Heading(text: String) = BasicText(text, style = TextStyle(color = LocalColours.current.ink, fontSize = 19.sp, lineHeight = 27.sp, fontWeight = FontWeight.Bold))
+internal fun Subhead(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.bodySize, Type.leadingH3, Colours.ink, Type.heading))
 
-/** A sentence as plain to see as any other on the screen. */
+/** A sentence of the body. `strong`: in ink and bold, as plain to see as the title's first lines. */
 @Composable
-internal fun Lead(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = TextStyle(color = LocalColours.current.ink, fontSize = 17.sp, lineHeight = 27.sp))
+internal fun Body(text: String, modifier: Modifier = Modifier, strong: Boolean = false) =
+    BasicText(text, modifier, style = if (strong) style(Type.bodySize, Type.leadingBody, Colours.ink, Type.heading) else style(Type.bodySize, Type.leadingBody))
 
+/** Small print: a note, what is under a row. */
 @Composable
-internal fun Body(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = TextStyle(color = LocalColours.current.ink, fontSize = 15.sp, lineHeight = 24.sp))
-
-@Composable
-internal fun Small(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = TextStyle(color = LocalColours.current.faint, fontSize = 13.sp, lineHeight = 20.sp))
+internal fun Small(text: String, modifier: Modifier = Modifier, colour: Color = Colours.mute) = BasicText(text, modifier, style = style(Type.small, Type.leadingSmall, colour))
 
 /** A sentence that says something went wrong: where it stopped and why. */
 @Composable
-internal fun Problem(text: String, modifier: Modifier = Modifier) =
-    BasicText(text, modifier.fillMaxWidth().border(1.dp, LocalColours.current.ink, RoundedCornerShape(6.dp)).padding(12.dp), style = TextStyle(color = LocalColours.current.ink, fontSize = 15.sp, lineHeight = 24.sp))
+internal fun Problem(text: String, modifier: Modifier = Modifier) = BasicText(
+    text,
+    modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(6.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+    style = style(Type.bodySize, Type.leadingSmall, Colours.ink),
+)
 
+/** A line across, between the parts of a screen. */
 @Composable
-internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val c = LocalColours.current
+internal fun Rule(modifier: Modifier = Modifier, colour: Color = Colours.line, thickness: Dp = 1.dp) = Box(modifier.fillMaxWidth().height(thickness).background(colour))
+
+/**
+ * A button as wide as the screen: the step's one primary button is filled
+ * with the red of what you do, the others are framed in ink.
+ */
+@Composable
+internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, height: Dp = Type.buttonHeight, onClick: () -> Unit) {
+    val press = remember { MutableInteractionSource() }
+    val pressed by press.collectIsPressedAsState()
+    val shape = RoundedCornerShape(Type.radius)
     Box(
         modifier
             .alpha(if (enabled) 1f else 0.4f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (primary) c.ink else Color.Transparent)
-            .border(1.dp, c.ink, RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .defaultMinSize(minWidth = 96.dp, minHeight = 48.dp)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
+            .clip(shape)
+            .background(if (!primary) Colours.bg else if (pressed) Colours.youPressed else Colours.you)
+            .then(if (primary) Modifier else Modifier.border(1.5.dp, Colours.ink, shape))
+            .clickable(interactionSource = press, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+            .heightIn(min = height)
+            .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = TextStyle(color = if (primary) c.paper else c.ink, fontSize = 16.sp, fontWeight = FontWeight.Medium))
+        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.bodySize, fontWeight = Type.heading))
     }
 }
 
-/** A line of text that is pressed: a link, or "取消". */
+/** A line of text that is pressed: "取消". */
 @Composable
 internal fun TextButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
     label,
-    modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = 40.dp).padding(vertical = 8.dp),
-    style = TextStyle(color = LocalColours.current.ink, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
+    modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 10.dp),
+    style = TextStyle(color = Colours.mute, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
 )
 
-/** The buttons of a step, side by side. */
+/** A link inside the body: the red of what you do, underlined, bold. Opens a page outside the app. */
 @Composable
-internal fun Actions(content: @Composable () -> Unit) = Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) { content() }
+internal fun Link(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
+    text,
+    modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp),
+    style = TextStyle(color = Colours.you, fontSize = 17.sp, lineHeight = Type.leadingSmall, fontWeight = Type.heading, textDecoration = TextDecoration.Underline),
+)
+
+/** The buttons of a step, one under another, as wide as the screen: the primary one first. */
+@Composable
+internal fun Actions(content: @Composable () -> Unit) = Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
+
+/** One of the points under a screen's main part: a dot in ink before it. */
+@Composable
+internal fun Point(text: String) = Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Box(Modifier.width(18.dp).padding(top = 11.dp)) { Box(Modifier.size(6.dp).background(Colours.ink, RoundedCornerShape(3.dp))) }
+    BasicText(text, Modifier.weight(1f), style = style(Type.bodySize, 1.75.em))
+}
+
+/** The questions that open to their answers, between lines. */
+@Composable
+internal fun Questions(content: @Composable () -> Unit) = Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    Rule()
+    content()
+}
 
 /** A question that opens to its answer. */
 @Composable
 internal fun Question(question: String, vararg answers: String) {
     var open by remember { mutableStateOf(false) }
     Column {
-        BasicText(
-            (if (open) "▾ " else "▸ ") + question,
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { open = !open }.defaultMinSize(minHeight = 40.dp).padding(vertical = 8.dp),
-            style = TextStyle(color = LocalColours.current.ink, fontSize = 15.sp, lineHeight = 24.sp),
-        )
-        if (open) for (a in answers) Body(a, Modifier.padding(start = 18.dp, bottom = 6.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable(role = Role.Button) { open = !open }.heightIn(min = 48.dp).padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The mark is not part of the question's text.
+            BasicText(if (open) "▾" else "▸", style = TextStyle(color = Colours.mute, fontSize = 13.sp))
+            BasicText(question, style = style(Type.bodySize, Type.leadingH3, Colours.ink))
+        }
+        if (open) for (a in answers) BasicText(a, Modifier.padding(start = 23.dp, bottom = 12.dp), style = style(15.sp, 1.75.em))
+        Rule()
     }
 }
 
-/** The mark before an item of a list: nothing yet, turning, a check in ink; none for an item that stopped. */
+/** The mark before an item of a list: an empty ring, turning, a check in ink; a thick ring for the item that stopped. */
 @Composable
 internal fun Mark(state: ItemState) {
-    val ink = LocalColours.current.ink
     val turn = if (state == ItemState.NOW) {
         val transition = rememberInfiniteTransition(label = "turning")
         transition.animateFloat(0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart), label = "angle").value
     } else {
         0f
     }
-    Canvas(Modifier.padding(top = 4.dp).size(16.dp)) {
-        val stroke = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round)
+    Canvas(Modifier.size(18.dp)) {
+        fun ring(colour: Color, width: Float) = drawCircle(colour, radius = (size.minDimension - width) / 2, style = Stroke(width))
         when (state) {
-            ItemState.NONE -> drawCircle(ink, radius = size.minDimension / 2 - stroke.width, style = stroke, alpha = 0.4f)
-            ItemState.NOW -> drawArc(ink, turn, 270f, false, Offset(stroke.width, stroke.width), Size(size.width - 2 * stroke.width, size.height - 2 * stroke.width), style = stroke)
-            ItemState.DONE -> {
-                drawLine(ink, Offset(size.width * 0.15f, size.height * 0.55f), Offset(size.width * 0.4f, size.height * 0.8f), stroke.width, StrokeCap.Round)
-                drawLine(ink, Offset(size.width * 0.4f, size.height * 0.8f), Offset(size.width * 0.88f, size.height * 0.22f), stroke.width, StrokeCap.Round)
+            ItemState.NONE -> ring(Colours.dot, 1.5.dp.toPx())
+            ItemState.NOW -> {
+                val w = 2.dp.toPx()
+                ring(Colours.line, w)
+                drawArc(Colours.ink, turn - 90f, 90f, false, Offset(w / 2, w / 2), Size(size.width - w, size.height - w), style = Stroke(w))
             }
-            ItemState.HALT -> {}
+            ItemState.DONE -> {
+                // The check of design/screens/card-proof-app-5-progress-phone.png: 3.5,9.5 → 7,13 → 14.5,5 of 18.
+                val u = size.width / 18f
+                val tick = Path().apply {
+                    moveTo(3.5f * u, 9.5f * u)
+                    lineTo(7f * u, 13f * u)
+                    lineTo(14.5f * u, 5f * u)
+                }
+                drawPath(tick, Colours.ink, style = Stroke(2.2f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            ItemState.HALT -> ring(Colours.ink, 2.5.dp.toPx())
         }
     }
 }
 
 /** A list of what the app is doing: each item, its state after it, and under the one that stopped, why. */
 @Composable
-internal fun TaskList(copy: Copy, labels: List<String>, states: List<ItemState>, message: String?, tag: String) = Column(Modifier.testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+internal fun TaskList(copy: Copy, labels: List<String>, states: List<ItemState>, message: String?, tag: String) = Column(Modifier.fillMaxWidth().padding(top = 12.dp).testTag(tag)) {
+    Rule()
     for ((i, label) in labels.withIndex()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Mark(states[i])
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Body(label)
-                when (states[i]) {
-                    ItemState.NOW -> Small(copy.say("common.working"))
-                    ItemState.DONE -> Small(copy.say("common.done"))
-                    ItemState.HALT -> {
-                        Small(copy.say("common.halted"))
-                        if (message != null) Problem(message)
-                    }
-                    ItemState.NONE -> {}
+        val state = states[i]
+        Column(Modifier.fillMaxWidth().padding(vertical = 13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.width(26.dp)) { Mark(state) }
+                BasicText(label, Modifier.weight(1f), style = style(Type.bodySize, 1.7.em, if (state == ItemState.NONE) Colours.mute else Colours.text))
+                val status = when (state) {
+                    ItemState.NOW -> copy.say("common.working")
+                    ItemState.DONE -> copy.say("common.done")
+                    ItemState.HALT -> copy.say("common.halted")
+                    ItemState.NONE -> null
+                }
+                if (status != null) {
+                    val strong = state == ItemState.NOW || state == ItemState.HALT
+                    BasicText(status, style = style(Type.small, Type.leadingSmall, if (strong) Colours.ink else Colours.mute, if (strong) Type.heading else Type.body))
                 }
             }
+            if (state == ItemState.HALT && message != null) Row {
+                Spacer(Modifier.width(38.dp))
+                Problem(message)
+            }
         }
+        Rule()
     }
 }
 
 @Composable
-private fun fieldStyle() = TextStyle(color = LocalColours.current.ink, fontSize = 17.sp)
+private fun Field(enabled: Boolean, modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) = Row(
+    modifier
+        .alpha(if (enabled) 1f else 0.5f)
+        .border(1.5.dp, Colours.ink, RoundedCornerShape(Type.radius))
+        .heightIn(min = 52.dp)
+        .padding(horizontal = 14.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    content = content,
+)
 
-/** A field for an account name. */
+/** A field for an account name, with the platform's prefix (`@`) in it, before what is typed. */
 @Composable
-internal fun AccountField(value: String, enabled: Boolean, tag: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
-    val c = LocalColours.current
+internal fun AccountField(value: String, prefix: String, enabled: Boolean, tag: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) = Field(enabled, modifier) {
+    BasicText(prefix, Modifier.padding(end = 2.dp), style = TextStyle(color = Colours.mute, fontSize = 18.sp))
     BasicTextField(
         value,
         { typed -> onChange(typed.filter { it != '\n' }) },
-        modifier.alpha(if (enabled) 1f else 0.5f).border(1.dp, c.ink, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 12.dp).testTag(tag),
+        Modifier.weight(1f).testTag(tag),
         enabled = enabled,
         singleLine = true,
-        textStyle = fieldStyle(),
-        cursorBrush = SolidColor(c.ink),
+        textStyle = TextStyle(color = Colours.ink, fontSize = 18.sp),
+        cursorBrush = SolidColor(Colours.ink),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
     )
 }
@@ -203,8 +293,7 @@ internal fun AccountField(value: String, enabled: Boolean, tag: String, modifier
  * text. Typing adds at the end and deleting takes from the end.
  */
 @Composable
-internal fun PinInput(pin: PinField, enabled: Boolean, tag: String, modifier: Modifier = Modifier) {
-    val c = LocalColours.current
+internal fun PinInput(pin: PinField, enabled: Boolean, tag: String, modifier: Modifier = Modifier) = Field(enabled, modifier.heightIn(min = Type.buttonHeight)) {
     val dots = DOT.toString().repeat(pin.length)
     BasicTextField(
         TextFieldValue(dots, TextRange(dots.length)),
@@ -216,13 +305,97 @@ internal fun PinInput(pin: PinField, enabled: Boolean, tag: String, modifier: Mo
                 for (i in pin.length until typed.text.length) if (typed.text[i] != DOT) pin.append(typed.text[i])
             }
         },
-        modifier.alpha(if (enabled) 1f else 0.5f).border(1.dp, c.ink, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 12.dp).testTag(tag),
+        Modifier.weight(1f).testTag(tag),
         enabled = enabled,
         singleLine = true,
-        textStyle = fieldStyle(),
-        cursorBrush = SolidColor(c.ink),
+        textStyle = TextStyle(color = Colours.ink, fontSize = 22.sp, fontFamily = Type.mono, letterSpacing = 0.3.em),
+        cursorBrush = SolidColor(Colours.ink),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
     )
 }
 
 private const val DOT = '•'
+
+/** Where in the six steps: "第 2 步，共 6 步", then six bars, the steps up to this one in ink. */
+@Composable
+internal fun StepBar(copy: Copy, step: Int) = Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    BasicText(copy.say("common.step", "step" to step, "steps" to 6), style = style(Type.kicker, Type.leadingKicker, Colours.mute))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (i in 1..6) Box(Modifier.weight(1f).height(4.dp).background(if (i <= step) Colours.ink else Colours.line))
+    }
+}
+
+/** The app's header: the mark and the service's name (design/copy/card-proof.md, "每一步都有的"). */
+@Composable
+internal fun Header(name: String) = Column(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = Type.gutter), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Logo(Modifier.size(24.dp))
+        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.heading, fontFamily = Type.display))
+    }
+    Rule()
+}
+
+/**
+ * The mark: a card set at a slant, the island standing up from behind it
+ * (web/src/ui/logo.ts, the same drawing in its 64 × 64 units). `animated`:
+ * the card slides in and the island stands up, once, as on the web's step 6;
+ * with the system's animations off it is drawn still.
+ */
+@Composable
+internal fun Logo(modifier: Modifier = Modifier, animated: Boolean = false) {
+    val card = remember { Animatable(if (animated) 0f else 1f) }
+    val island = remember { Animatable(if (animated) 0f else 1f) }
+    if (animated) {
+        LaunchedEffect(Unit) { card.animateTo(1f, tween(500, easing = FastOutSlowInEasing)) }
+        LaunchedEffect(Unit) { island.animateTo(1f, tween(700, delayMillis = 350, easing = CubicBezierEasing(0.2f, 1.5f, 0.4f, 1f))) }
+    }
+    Canvas(modifier) {
+        scale(size.minDimension / 64f, pivot = Offset.Zero) {
+            drawMark(card.value, island.value)
+        }
+    }
+}
+
+/** The mark in its 64 × 64 units, the card and the island each `t` of the way in (0 to 1). */
+private fun DrawScope.drawMark(cardT: Float, islandT: Float) {
+    // The card: from 14° turned and 10 lower, about (27, 54), faded in.
+    withTransform({
+        rotate((1 - cardT) * 14f, Offset(27f, 54f))
+        translate(0f, (1 - cardT) * 10f)
+    }) {
+        rotate(-9f, Offset(27f, 39f)) {
+            drawRoundRect(Colours.you, Offset(3f, 24f), Size(46f, 30f), CornerRadius(5.5f), alpha = cardT.coerceIn(0f, 1f))
+            drawRoundRect(Colours.bg, Offset(9.5f, 31f), Size(10f, 8f), CornerRadius(2f), alpha = cardT.coerceIn(0f, 1f))
+        }
+    }
+    // The island: from 26 lower and 0.7 of its size, about (44, 60); the outline in the colour of the ground first, as paint-order: stroke.
+    withTransform({
+        translate(0f, (1 - islandT) * 26f)
+        scale(0.7f + 0.3f * islandT, 0.7f + 0.3f * islandT, Offset(44f, 60f))
+        translate(31.5f, 3f)
+        scale(0.97f, 0.97f, Offset.Zero)
+    }) {
+        val alpha = islandT.coerceIn(0f, 1f)
+        drawPath(TAIWAN, Colours.bg, alpha = alpha, style = Stroke(2.6f, join = StrokeJoin.Round))
+        drawPath(TAIWAN, Colours.ink, alpha = alpha)
+    }
+}
+
+/**
+ * The outline of the main island, web/src/ui/logo.ts's: from Natural Earth's
+ * public-domain map data (1:50m).
+ */
+private val TAIWAN: Path = Path().apply {
+    val points = (
+        "14.84 45.97 13.85 48.00 13.07 50.14 12.75 52.17 12.77 54.25 12.55 56.14 12.16 58.00 10.62 57.46 9.79 56.13 9.59 53.94 " +
+            "8.48 51.29 8.06 50.54 6.45 49.06 4.99 48.32 3.86 47.23 4.01 47.32 3.18 45.85 2.54 44.28 1.23 39.83 0.78 38.76 0.17 37.78 " +
+            "0.00 36.81 0.21 35.73 0.77 34.12 1.12 32.49 0.84 30.29 0.95 28.10 1.37 27.13 8.83 13.81 10.85 10.98 12.10 9.59 13.14 8.02 " +
+            "14.13 6.04 15.34 4.22 16.21 3.67 20.49 2.04 21.82 0.48 22.89 0.00 24.10 0.03 24.89 0.77 25.58 1.65 26.31 2.12 28.21 2.98 " +
+            "29.04 3.81 29.42 5.25 28.26 6.60 27.69 7.83 27.58 9.18 27.79 11.01 27.82 12.85 26.37 17.16 24.83 19.84 24.41 21.18 " +
+            "23.94 24.50 23.03 27.84 22.26 32.06 20.99 36.41 20.28 38.23 19.38 39.98 17.25 43.27"
+        ).split(" ").map { it.toFloat() }.chunked(2)
+    moveTo(points[0][0], points[0][1])
+    for (p in points.drop(1)) lineTo(p[0], p[1])
+    close()
+}
+

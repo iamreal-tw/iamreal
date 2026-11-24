@@ -286,7 +286,8 @@ interface Proof {
   /** The account the row holds before. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
-  done: { title: string; record: string; shows: string[]; absent: string[]; card: boolean };
+  /** `card`: the card's proof, the hanging and what can be done besides are shown (all but a withdrawal of every account). */
+  done: { title: string; shows: string[]; absent: string[]; card: boolean };
   date: string;
 }
 
@@ -300,8 +301,9 @@ async function cardProof(p: Proof): Promise<string> {
   if (p.thorough) {
     shot("step-1");
     const s = wholeScreen();
-    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), `▸ ${say("before.why_physical")}`, `▸ ${say("before.how_to_get")}`, say("common.next")]);
+    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), say("before.why_physical"), say("before.how_to_get"), say("common.next")]);
     check(!s.includes(say("before.listed_together")) && !s.includes(say("common.back")), "step 1 has no 上一步, and with one platform not the sentence about several");
+    check(!s.includes(say("before.duration")), "step 1 does not say the web's sentence of a card reader and 3 minutes");
   }
   press(say("common.next"));
 
@@ -333,8 +335,9 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 3", [NAME, say("pin.name_note")]);
     if (p.thorough) {
-      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("links.more"), say("common.back"), say("pin.confirm_card")]);
+      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
+      check(!s.includes(say("links.more")), "step 3 links to no other page");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -356,8 +359,9 @@ async function cardProof(p: Proof): Promise<string> {
     shows(s, "step 4", [say("accounts.title_single", { platform: THREADS }), ...p.accounts.lead, ...p.accounts.rowLines, ...p.accounts.notes]);
     for (const a of p.accounts.absent) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}…"`);
     if (p.thorough) {
-      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("links.more"), say("common.next"), say("accounts.no_check"), say("accounts.acknowledged"), say("common.cancel")]);
-      check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")), "step 4 is the one-platform screen, with 預覽");
+      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.not_yours_single", { platform: THREADS }), say("common.cancel")]);
+      check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")) && !s.includes(say("accounts.not_yours")), "step 4 is the one-platform screen, with 預覽");
+      check(![say("links.more"), say("accounts.no_check"), say("accounts.acknowledged")].some((x) => s.includes(x)), "step 4 links to no other page, and has not the two lines of before the redesign");
     }
     check(field("account-threads").text === p.current, `step 4: the Threads row holds "${p.current}"`);
   }
@@ -398,8 +402,9 @@ async function cardProof(p: Proof): Promise<string> {
     shows(textsOf(visible()), "step 5, in progress,", [step(5), say("app_progress.keep_open"), ...PROGRESS_ITEMS]);
     await tapWithPanel({ signs: true });
     await waitText(say("app_read.lift"), "step 5: the card can be taken away", 20_000);
-    await waitText(say("progress.zero_knowledge"), "step 5: the sentence while the proof is computed", 20_000);
     shot("step-5-in-progress");
+    const s = textsOf(visible());
+    check(!s.includes(say("progress.zero_knowledge")) && !s.includes(say("links.more")), "step 5 in progress: no sentence under the list, and no link to another page");
   } else await tap();
 
   // Step 6
@@ -409,12 +414,56 @@ async function cardProof(p: Proof): Promise<string> {
     shot(`step-6-${p.name}`);
     const s = wholeScreen();
     const link = `${SITE}/p/${shortId}`;
-    shows(s, "step 6", [p.done.title, say("done.recorded"), p.date, p.done.record, p.confirm.account, say("done.short_id", { short_id: shortId }), say("done.trust"), say("links.verify"), say("done.restart"), ...p.done.shows]);
+    shows(s, "step 6", [step(6), p.done.title, say("done.recorded_on", { date: p.date }), say("done.restart"), ...p.done.shows]);
+    const hanging = [
+      say("done.proof"),
+      `${say("confirm.short_id_label")} ${say("confirm.short_id", { short_id: shortId })}`,
+      say("done.hang_title_single", { platform: THREADS }),
+      say("done.anyone_single"),
+      link,
+      say("done.copy"),
+      say("done.open_profile", { account: p.confirm.account, platform: THREADS }),
+      say("done.step_edit"),
+      say("done.step_link"),
+      say("done.step_save"),
+      say("done.hung", { open_proof: say("done.open_proof") }),
+      say("done.hung_done"),
+      say("done.optional"),
+      say("done.share_title"),
+      say("done.share_note", { platform: THREADS }),
+      say("app_done.share"),
+      say("done.return_title"),
+      say("done.return_note"),
+    ];
     if (p.done.card) {
-      shows(s, "step 6", [say("links.proof"), say("done.proof"), say("confirm.short_id", { short_id: shortId }), say("done.hand_ai"), say("done.hand_profile"), say("done.put_up"), say("done.put_link_single", { platform: THREADS }), link, say("done.copy"), say("app_done.open_platform", { platform: THREADS }), say("app_done.how_to_put", { platform: THREADS }), say("done.advice_single"), say("done.renamed")]);
+      shows(s, "step 6", [p.confirm.account, ...hanging]);
+    } else {
+      for (const a of hanging) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
     }
-    // The server's answer was read (the title and the rows are by its kinds) and is what step 5 said.
-    for (const a of [say("done.unplug"), say("done.mismatch"), say("done.kinds_unreadable"), say("done.recorded_only"), say("done.other_cards", { account: p.confirm.account }), ...p.done.absent]) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+    // The server's answer was read (the title is by its kinds) and is what step 5 said: no record of it shown, nothing of the web's QR code or its
+    // computer, nothing of the screen of before the redesign.
+    for (const a of [
+      say("done.unplug"),
+      say("done.mismatch"),
+      say("done.recorded"),
+      say("done.kinds_unreadable"),
+      say("done.recorded_only"),
+      say("done.other_cards", { account: p.confirm.account }),
+      say("done.by_phone"),
+      say("done.by_phone_scan"),
+      say("done.on_computer"),
+      say("done.hand_ai"),
+      say("done.put_up"),
+      say("done.advice_single"),
+      say("done.renamed"),
+      say("done.trust"),
+      say("links.verify"),
+      say("links.proof"),
+      say("app_done.open_platform", { platform: THREADS }),
+      ...p.done.absent,
+    ]) {
+      check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+    }
   }
   return shortId;
 }
@@ -457,12 +506,15 @@ async function anotherCardThenCancel(): Promise<void> {
   taps = 0;
 }
 
+/** The sentence of step 6 that is a link to the card's page. */
+const HUNG = say("done.hung", { open_proof: say("done.open_proof") });
+
 /** The activity on top of the screen, and the address it was opened with, as the system reports them. */
 const onTop = (): string => emulator.shell("dumpsys activity activities").split("\n").filter((l) => /mResumedActivity|^\s*Intent \{ act=android.intent.action.VIEW/.test(l)).join("\n");
 const backToApp = async (): Promise<void> => {
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
-  // Where it was left: somewhere down step 6, whose last button is on no other step with that link above it.
-  await waitText(say("links.proof"), "the app again, still at step 6", 20_000);
+  // Where it was left: step 6.
+  find((n) => n.text === step(6) || n.text === HUNG, "the app again, still at step 6");
 };
 
 /** The emulator's setting for the keyboard on the screen, before the test changed it. */
@@ -512,7 +564,7 @@ try {
     type: "alice",
     current: "",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.first"), button: say("confirm.button_declare_single"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.listed_together"), say("confirm.withdraw_stays")] },
-    done: { title: say("done.first"), record: say("done.record_single"), shows: [say("kinds.first"), say("done.new_card")], absent: [say("done.withdrawn_link")], card: true },
+    done: { title: say("done.first"), shows: [say("done.new_card")], absent: [say("done.withdrawn_link")], card: true },
     date: today,
   });
 
@@ -520,16 +572,23 @@ try {
   press(say("done.copy"));
   await waitText(say("done.copied"), "the button after the link was copied", 10_000);
   check(true, "step 6: 複製連結 turns into 已複製");
-  press(say("app_done.open_platform", { platform: THREADS }));
+  press(say("done.open_profile", { account: HANDLE.alice, platform: THREADS }));
   await sleep(2_000);
-  check(/dat=https:\/\/www\.threads\.com\//.test(onTop()), "step 6: 打開 Threads opens https://www.threads.com/ outside the app");
+  check(/dat=https:\/\/www\.threads\.com\/@alice/.test(onTop()), "step 6: 打開 @alice 的 Threads 個人檔案 opens https://www.threads.com/@alice outside the app");
   await backToApp();
-  press(say("links.proof"));
+  press(HUNG);
   await sleep(4_000);
   const browser = onTop();
-  check(browser.includes(`dat=http://${SITE}/p/${shortId}`) && !new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(browser), "step 6: 打開這張島民證明 opens the card's page in the browser");
+  check(browser.includes(`dat=http://${SITE}/p/${shortId}`) && !new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(browser), "step 6: 打開你的島民證明 opens the card's page in the browser");
   const page = await fetch(`${backend.origin}/p/${shortId}`);
   check(page.status === 200 && (await page.text()).includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
+  await backToApp();
+  // The system's share sheet, with the address of the card's page and nothing else (Android 10 shows the text it is given at its top).
+  press(say("app_done.share"));
+  const shared = await waitText(`http://${SITE}/p/${shortId}`, "the share sheet with the card's address", 20_000);
+  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 6: 分享 opens the system's share sheet");
+  check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === `http://${SITE}/p/${shortId}`, "step 6: what is shared is the card's address, with no text of its own");
+  emulator.shell("input keyevent KEYCODE_BACK");
   await backToApp();
   press(say("done.restart"));
 
@@ -548,7 +607,7 @@ try {
     type: null,
     current: "alice",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.withdraw_stays")] },
-    done: { title: say("done.refresh"), record: say("done.record_single"), shows: [say("kinds.unchanged")], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.refresh"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
     date: today,
   });
   check(again === shortId, "the same card has the same short ID");
@@ -578,7 +637,7 @@ try {
       shows: [say("confirm.listed_single", { platform: THREADS }), later],
       absent: [say("confirm.withdraw_stays")],
     },
-    done: { title: say("done.changed"), record: say("done.record_single"), shows: [say("kinds.switch", { previous: HANDLE.alice })], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.changed"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
     date: tomorrow,
   });
   press(say("done.restart"));
@@ -604,7 +663,7 @@ try {
       shows: [say("confirm.withdraw_stays"), say("confirm.later_withdraw") + say("confirm.permanent")],
       absent: [say("confirm.listed_single", { platform: THREADS }), later],
     },
-    done: { title: say("done.withdraw_all"), record: say("done.record_withdraw_all"), shows: [say("kinds.withdraw")], absent: [say("done.hand_ai"), say("done.put_up"), say("done.copy"), say("links.proof"), say("done.advice_single"), say("done.renamed"), say("done.new_card")], card: false },
+    done: { title: say("done.withdraw_all"), shows: [say("done.withdrawn_link")], absent: [say("done.new_card")], card: false },
     date: tomorrow,
   });
 

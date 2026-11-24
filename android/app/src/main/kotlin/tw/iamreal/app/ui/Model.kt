@@ -148,9 +148,6 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** The address of a card's page on the site. */
     fun proofUrl(shortId: String): String = "${wiring.site}/p/$shortId"
 
-    /** The address of the help page for a "了解更多". */
-    fun helpUrl(topic: String): String = "${wiring.site}/proof/help.html?topic=$topic"
-
     // The server's config: asked for when the app opens --------------------------------
 
     private var config: FutureTask<ByteArray> = askConfig()
