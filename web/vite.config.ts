@@ -12,13 +12,14 @@
 //
 // Modes (the pages' four are built for the path /proof/, `base`; engine for /):
 //
-// - production (`pnpm build`): the page (index.html) and the help page
-//   (help.html), with MOICA's issuer keys and component (src/target.ts).
-// - test: the same pages, with test/e2e/target.ts in place of src/target.ts:
+// - production (`pnpm build`): the page (index.html), with MOICA's issuer
+//   keys and component (src/target.ts). It is the one page: the help page
+//   is gone, and its old address goes to /prepare (worker/site/_redirects).
+// - test: the same page, with test/e2e/target.ts in place of src/target.ts:
 //   the test's issuer keys and fake component, which the caller passes as
 //   `define` (test/e2e/ui.ts). test/build.test.ts checks that a production
 //   build holds nothing of it.
-// - localcard (`pnpm local`): the same pages, with src/target-local.ts in place
+// - localcard (`pnpm local`): the same page, with src/target-local.ts in place
 //   of src/target.ts: MOICA's issuer keys and component like production, but
 //   the test log's scope string (a real card tried out on this computer
 //   gets no scoped ID of the public proof log). Threads only, as production
@@ -27,9 +28,9 @@
 //   src/target-test-site.ts in place of src/target.ts: what test.iamreal.tw
 //   serves. Like localcard, but the CRL archive comes from the test log's
 //   data domain, the link of the last screen is the test site's, and the
-//   pages carry the mark of a test log (design/copy/test-site.md) with
+//   page carries the mark of a test log (design/copy/test-site.md) with
 //   the date the proof log was last cleared on: src/ui/test-proof-log.ts, an
-//   entry this mode adds to the pages and no other mode has.
+//   entry this mode adds to the page and no other mode has.
 //   The date is the environment variable IAMREAL_TEST_PROOF_LOG_CLEARED_ON,
 //   YYYY-MM-DD: who builds for a deploy passes the one of the Worker's
 //   settings (worker/wrangler.jsonc). Without it this mode is not built.
@@ -134,7 +135,7 @@ function testProofLogMark(): string {
   return JSON.stringify({ sentence, clearedOn, scope });
 }
 
-/** Adds the mark's script (src/ui/test-proof-log.ts) to both pages, before Vite reads their scripts: an entry only this mode's build has. */
+/** Adds the mark's script (src/ui/test-proof-log.ts) to the page, before Vite reads their scripts: an entry only this mode's build has. */
 function testProofLogEntry(): Plugin {
   return {
     name: "iamreal-test-proof-log-mark",
@@ -168,7 +169,7 @@ export default defineConfig(({ mode }) => {
       target: "es2022",
       assetsInlineLimit: 0,
       sourcemap: false,
-      ...(pages && { rollupOptions: { input: { index: join(here, "index.html"), help: join(here, "help.html") } } }),
+      ...(pages && { rollupOptions: { input: { index: join(here, "index.html") } } }),
     },
     // Worker bundles are built separately and need the plugin too.
     worker: { format: "es" as const, plugins: () => [noDataUrlWasm()] },

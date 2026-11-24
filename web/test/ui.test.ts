@@ -535,20 +535,33 @@ describe("done (step 6)", () => {
     assert.deepEqual(v.otherCards, []);
   });
 
-  test("where to put the link: every account's profile, or with one platform this account's", () => {
+  test("the last step's heading and what it says: every account's profile, or with one platform this platform's; the card names the platforms only with more than one", () => {
     const expected = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")])).putLink), COPY.done.put_link);
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), null).putLink), COPY.done.put_link);
-    assert.equal(
-      t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").putLink),
-      "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
+    const several = doneView(done(expected, [k("threads", "first", "alice")]), null);
+    assert.deepEqual([t(several.hangTitle), t(several.anyone)], [COPY.done.hang_title, COPY.done.anyone]);
+    assert.deepEqual(several.card, [{ name: "Threads", account: "@alice", raw: false }]);
+    const one = doneView(done(expected, [k("threads", "first", "alice")]), "Threads");
+    assert.deepEqual(
+      [t(one.hangTitle), t(one.anyone)],
+      ["最後一步：掛到你的 Threads 個人檔案", "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。"],
     );
+    assert.deepEqual(one.card, [{ name: null, account: "@alice", raw: false }]);
+    assert.equal(t(one.recordedOn), "2026-11-16 記進了證明紀錄。");
   });
 
-  test("the advice: the list's dates, or with one platform this account's", () => {
-    const expected = [crow({ kind: "first", username: "alice" })];
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), null).advice), COPY.done.advice);
-    assert.equal(t(doneView(done(expected, [k("threads", "first", "alice")]), "Threads").advice), "越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。");
+  test("where the links go: the QR code to /hang/ on the build's site, 打開你的島民證明 to the card's page on this one, each account's profile, Threads' page to post the link from", () => {
+    const expected = [crow({ platform: "test-example", row: EXAMPLE, kind: "first", username: "a-b" }), crow({ kind: "first", username: "alice" })];
+    const v = doneView(done(expected, [k("test-example", "first", "a-b"), k("threads", "first", "alice")]));
+    assert.equal(v.hangUrl, "https://iamreal.tw/hang/7K2Q9FM4XD");
+    assert.equal(v.proofPath, "/p/7K2Q9FM4XD");
+    // test-example has no public page.
+    assert.deepEqual(v.profiles.map((p) => [t(p.text), p.url]), [["打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice"]]);
+    // The card's page and nothing else.
+    assert.deepEqual(
+      v.shares.map((sh) => [t(sh.note), t(sh.button), sh.url]),
+      [["把你的島民證明分享到 Threads。", "分享到 Threads", "https://www.threads.com/intent/post?url=https%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD"]],
+    );
+    assert.equal(v.showRecord, false);
   });
 
   test("the record's line: the list, or with one platform the account", () => {
@@ -572,10 +585,10 @@ describe("done (step 6)", () => {
     assert.deepEqual(v.rows.map((r) => [r.account, t(r.kind!)]), [["a-b", "收回"], ["@alice", "不變"]]);
   });
 
-  test("everything withdrawn: no card, no link; the record line of a withdrawal", () => {
+  test("everything withdrawn: no card, no link, the links can be taken down; the record line of a withdrawal", () => {
     const v = doneView(done([crow({ kind: "withdraw", username: "alice", current: "alice" })], [k("threads", "withdraw", "alice", 0)]));
     assert.equal(v.withdrawAll, true);
-    assert.equal(v.withdrawnLink, false);
+    assert.equal(v.withdrawnLink, true);
     assert.equal(t(v.record!), "有一張有效的自然人憑證收回了所有帳號的宣告：");
   });
 
@@ -601,6 +614,8 @@ describe("done (step 6)", () => {
     const expected = [crow({ kind: "correction", username: "bob", current: "alice", previous: "alice" })];
     const v = doneView(done(expected, [k("threads", "switch", "bob")], { mismatches: ["threads"] }));
     assert.deepEqual(v.rows.map((r) => [r.account, t(r.kind!), r.mismatch]), [["@bob", "更換，原本是 @alice。", true]]);
+    // Only now is what the proof log recorded shown.
+    assert.equal(v.showRecord, true);
     // On top, before the title; under the row what step 5 said, and that a switch was used.
     assert.equal(t(v.mismatch!), "證明紀錄記下的，和你確認時畫面說的不同。請看下面標出來的地方。");
     assert.deepEqual(
@@ -620,6 +635,7 @@ describe("done (step 6)", () => {
     // No difference: nothing of it.
     const same = doneView(done(expected, [k("threads", "correction", "bob")]));
     assert.equal(same.mismatch, null);
+    assert.equal(same.showRecord, false);
     assert.ok(same.rows.every((r) => r.expected === null && !r.switchUsed));
   });
 

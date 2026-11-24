@@ -186,7 +186,7 @@ final class CardProofTests: XCTestCase {
             "複製連結",
             "打開 Threads",
             "複製連結之後，在 Threads 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。",
-            "如果你是換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。個人檔案上放的是舊連結的話，請換成這一個。",
+            "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。",
             "打開這張島民證明",
             "證明紀錄記下了這一筆",
             today,
@@ -246,7 +246,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertEqual(model.screen.texts.first, "島民證明已更新")
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice"], ["Threads", "@alice", "不變"]])
-        XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你是換了新的自然人憑證") })
+        XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         XCTAssertFalse(model.holdsPIN)
     }
 

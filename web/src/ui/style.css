@@ -9,7 +9,7 @@
  * Type: headings are in GenRyuMin2 TW, the subset of design/fonts/, which
  * the build bundles into the page's own files (font-src 'self', README.md);
  * the body and the monospace are the system's. Steps 1 to 5 are laid out
- * after design/screens/card-proof-web-*; step 6 keeps its own until #292.
+ * after design/screens/card-proof-web-*.
  */
 @font-face {
   font-family: "GenRyuMin2 TW";
@@ -750,49 +750,84 @@ time {
   font-variant-numeric: tabular-nums;
 }
 
-/* Step 6's lists, until its own screen is laid out (#292). */
-.three {
-  margin: 16px 0 0;
-  padding-left: 1.2em;
+/* Step 6: done, after design/screens/card-proof-web-6-done-desktop.png. No check mark, no green. -- */
+
+/* The box on top: the small card on the left, the title and the day it was recorded on the right. */
+.done-head {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  background: var(--soft);
+  border-radius: var(--radius-panel);
+  padding: 18px;
+  margin-top: 28px;
+}
+
+.done-head.bare {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-step="done"] .done-title h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: var(--leading-h3);
+}
+
+.done-title p {
+  margin-top: 8px;
   font-size: 15px;
+  line-height: var(--leading-small);
+}
+
+.cert {
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-panel);
+  padding: 12px 14px;
+}
+
+.cert-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--ink);
 }
 
-.three li {
-  margin-bottom: 6px;
+.cert-top .logo {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
 }
 
-.cert dl,
-.rec6 dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 18px;
-  margin: 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  font-size: 15px;
+.cert-row {
+  margin-top: 8px;
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--ink);
+  word-break: break-all;
 }
 
-.cert dt,
-.rec6 dt {
+.cert-row + .cert-row {
+  margin-top: 2px;
+}
+
+.cert-platform {
+  display: block;
+  font-size: 12px;
   color: var(--mute);
 }
 
-.cert dd,
-.rec6 dd {
-  margin: 0;
+.cert-id {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--mute);
 }
 
-/* Step 6: done. No check mark, no green. ------------------------------------------------- */
-
-.hero {
-  margin: 22px 0 0;
-}
-
-.hero .logo {
-  width: 104px;
-  height: 104px;
-  overflow: visible;
+.cert-id code {
+  font-size: 12px;
 }
 
 .logo-animated .logo-card {
@@ -827,68 +862,138 @@ time {
   }
 }
 
-[data-step="done"] h1 {
-  margin-top: 6px;
-  font-size: 30px;
+/* The body: hang the link on the profile (design/copy/hang.md, part 1). */
+.step h2.hang-title {
+  font-size: var(--size-h2);
+  line-height: var(--leading-h2);
+  letter-spacing: 0;
+  margin: 44px 0 0;
 }
 
-.cert {
-  position: relative;
-  background: var(--bg);
-  border: 1.5px solid var(--ink);
-  border-radius: var(--radius-panel);
-  padding: 16px 22px 18px;
-  margin: 8px 0 6px;
-  max-width: 440px;
+.anyone {
+  margin-top: 16px;
 }
 
-.cert-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--mute);
+/* Two columns, no frame (design/DESIGN.md, the lines: frames are for the proof card and a few others). */
+.hang {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin-top: 28px;
 }
 
-.hand {
-  font-family: "Iansui", var(--font-body);
+.hang > div {
+  padding: 22px 0;
 }
 
-.cert-note {
-  position: absolute;
-  right: -28px;
-  bottom: -46px;
-  margin: 0;
-  font-size: 19px;
-  line-height: 1.45;
+.hang > .hang-phone {
+  padding-right: 22px;
+}
+
+.hang > .hang-computer {
+  border-left: 1px solid var(--line);
+  padding-left: 22px;
+}
+
+.step h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  line-height: var(--leading-small);
   color: var(--ink);
-  transform: rotate(-4deg);
-  background: var(--bg);
-  padding: 0 8px;
 }
 
-[data-step="done"] h2.put-up {
-  margin-top: 72px;
+.qr svg {
+  display: block;
+  width: 148px;
+  height: 148px;
+}
+
+.qr-light {
+  fill: var(--bg);
+}
+
+.qr-dark {
+  fill: var(--ink);
+}
+
+.hang-phone .small {
+  font-size: 15px;
+  color: var(--text);
 }
 
 .linkbox {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
   background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  padding: 10px 10px 10px 16px;
-  margin-top: 10px;
+  padding: 8px 12px;
 }
 
 .linkbox .id {
-  flex: 1;
-  font-size: 16px;
+  display: block;
+  font-size: 13px;
   letter-spacing: 0;
   word-break: break-all;
   user-select: all;
+}
+
+.hang-computer .btn {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.profile {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: var(--leading-small);
+  word-break: break-all;
+}
+
+.hang-steps {
+  margin: 14px 0 0;
+  padding-left: 1.4em;
+  font-size: 14px;
+  line-height: var(--leading-small);
+}
+
+.hang-steps li + li {
+  margin-top: 6px;
+}
+
+.hung {
+  margin-top: 28px;
+  padding-top: 24px;
+}
+
+.hung-ask {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.hung p + p {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+/* What the proof log recorded, where it is not what step 5 said. */
+.step h2.record-title {
+  margin-top: 36px;
+}
+
+.rec6 dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 18px;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.rec6 dt {
+  color: var(--mute);
+}
+
+.rec6 dd {
+  margin: 0;
 }
 
 /* Each row of a list: what it does, under the account. */
@@ -898,21 +1003,50 @@ time {
   color: var(--mute);
 }
 
-.cert dl.list {
-  border-top: none;
-  padding-top: 4px;
-  font-size: 22px;
-}
-
-.cert dl.list dt {
-  font-size: 14px;
-  align-self: center;
-}
-
 .rec6 time {
   display: block;
   font-size: 14px;
   color: var(--mute);
+}
+
+/* What else can be done, none of it needed. */
+.optional {
+  border-top: 1px solid var(--line);
+  margin-top: 32px;
+  padding-top: 24px;
+}
+
+.optional-title {
+  font-size: 15px;
+  color: var(--mute);
+}
+
+.optional-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+
+.optional-item {
+  padding: 20px 20px 0 0;
+  font-size: 15px;
+  line-height: var(--leading-small);
+}
+
+.optional-item + .optional-item {
+  border-left: 1px solid var(--line);
+  padding-left: 20px;
+  padding-right: 0;
+}
+
+.optional-item .btn {
+  margin-top: 14px;
+  text-decoration: none;
+}
+
+[data-step="done"] .actions {
+  margin-top: 40px;
 }
 
 /* Narrower than --breakpoint: the phone's layout. The card proof on the web is for a computer (#135); a narrow window still reads. */
@@ -985,12 +1119,33 @@ time {
     grid-template-columns: 80px minmax(0, 1fr);
   }
 
-  .cert-note {
-    right: -8px;
+  .done-head,
+  .hang,
+  .optional-items {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hang > .hang-phone {
+    padding-right: 0;
+  }
+
+  .hang > .hang-computer {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+  }
+
+  .optional-item + .optional-item {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .step h2.hang-title {
+    font-size: var(--size-h2-phone);
   }
 }
 
-/* No motion for those who ask for none: the done animation and the spinning item stay still. */
+/* No motion for those who ask for none: the mark's animation on the done screen and the spinning item stay still. */
 @media (prefers-reduced-motion: reduce) {
   .logo-animated .logo-card,
   .logo-animated .logo-island,

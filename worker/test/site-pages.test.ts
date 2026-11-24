@@ -20,10 +20,9 @@ const COPY_DIR = join(REPO_DIR, "design", "copy");
 let worker: TestWorker;
 let proofDir: string;
 before(async () => {
-  // A stand-in for the build of web/ (#69): the two files of it the pages link to.
+  // A stand-in for the build of web/ (#69): the one file of it the pages link to.
   proofDir = mkdtempSync(join(tmpdir(), "proof-"));
   writeFileSync(join(proofDir, "index.html"), "<p>card proof</p>");
-  writeFileSync(join(proofDir, "help.html"), "<p>help</p>");
   worker = await startWorker({ proofFiles: proofDir });
   await worker.setVerifier("stand-in");
 });
