@@ -14,10 +14,17 @@ export const PLATFORM = "threads";
 
 /**
  * The longest account, in characters, written at the full size on the first
- * screen; a longer one is written one size smaller, so that on a phone it
- * stays on one line where it can.
+ * screen of the page of a card and of an account (design/DESIGN.md, 字: 76
+ * and 48 pixels, about as many characters as fill the column on a desktop
+ * and the width of a phone); a longer one is written one size smaller, so
+ * that it stays on one line where it can.
  */
-export const LONG_ACCOUNT = 18;
+const LONG_ACCOUNT = 12;
+
+/** The account as the first screen of the page of a card and of an account writes it: the largest words, one size smaller when it is long. */
+export function accountName(account: string): Html {
+  return html`<span class="${account.length > LONG_ACCOUNT ? "account long" : "account"}">@${account}</span>`;
+}
 
 /**
  * Whether `username` is a Threads username in its one spelling, by the
@@ -86,54 +93,68 @@ function eventOf(row: HistoryRow): string {
   throw new Error("pages: no words for a row of the history");
 }
 
-/** Sections 1 to 4, or 6 and 4, of one card. `nested` is one of several cards: its title is not the page's. */
-function cardSections(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
+/**
+ * The first screen of one card: sections 1 and 2 (or 6) in one column, and
+ * section 3 in the other. `nested` is one of several cards: its title is
+ * not the page's.
+ */
+function firstScreen(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
-  const rows = card.history.filter((row) => row.platform === PLATFORM);
   const heading = (inside: Html): Html => (nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`);
-  const when = html`<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}（${formatDay(card.lastCardProof)}）</p>`;
-  let top: Html;
-  if (account !== null) {
-    top = html`<section class="claim">
-${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
-<span class="line">把它在 Threads 唯一的名額給了</span>
-<span class="${account.length > LONG_ACCOUNT ? "account long" : "account"}">@${account}</span>`)}
-<p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都不在這張證明裡。</p>
-</section>
-<section class="last">
-${when}
-<p class="small">那一天檢查過：這張自然人憑證在效期內，不在廢止清冊上。之後有沒有被廢止，要等下一次過卡才知道。</p>
-<p class="small">建議持卡人每季過卡一次。隔得越久，這張證明的說服力越低。 <a href="/proof">我要更新這張證明</a></p>
-</section>
-<section class="owner">
-<h2 class="ask">帳號主人承認嗎？你需要自己看。</h2>
-<p>@${account} 的個人檔案上有這個連結，才代表帳號主人承認：</p>
-<p class="backlink">${site.host}/p/${shortId}</p>
-${embed(account)}
-<p class="small">@${account} 的個人檔案上沒有 ${shortId}，代表帳號主人可能沒有承認這張證明。</p>
-<p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@${account}">Threads 的 @${account}</a></p>
-</section>`;
-  } else {
+  const when = html`<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>`;
+  if (account === null) {
     // The account of the latest withdrawal on Threads, if there is one.
-    const withdrawn = rows.find((row) => row.kind === "withdraw")?.before ?? null;
-    top = html`<section class="claim withdrawn">
+    const withdrawn = card.history.find((row) => row.platform === PLATFORM && row.kind === "withdraw")?.before ?? null;
+    return html`<div class="first">
+<div class="column">
+<section class="claim withdrawn">
 ${heading(html`這張自然人憑證現在沒有把名額給任何帳號`)}
 </section>
 <section class="last">
 ${when}${withdrawn === null ? new Html("") : html`
 <p class="small">那一天收回了 Threads 的 @${withdrawn}。</p>`}
-</section>`;
+</section>
+</div>
+</div>`;
   }
+  return html`<div class="first">
+<div class="column">
+<section class="claim">
+${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
+<span class="line">把它在 Threads 唯一的名額給了</span>
+${accountName(account)}`)}
+<p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都和這張證明無關。</p>
+</section>
+<section class="last">
+${when}
+<p class="small">過卡日當天，這張自然人憑證在效期內，不在廢止清冊上。無法判斷卡片是否依然有效，要等下一次過卡才知道。因此越久沒過卡，這張證明的說服力越低，建議持卡人每三個月過卡一次。</p>
+<p class="small"><a href="/proof">我要更新這張證明</a></p>
+</section>
+</div>
+<section class="owner">
+<h2 class="ask">帳號主人承認這張證明嗎？</h2>
+<p>@${account} 的個人檔案上有這個連結，才代表帳號主人承認這張證明：</p>
+<p class="backlink">${site.host}/p/${shortId}</p>
+${embed(account)}
+<p class="small">@${account} 的個人檔案上沒有 ${shortId}，代表帳號主人可能沒有承認這張證明。</p>
+<p class="small">個人檔案顯示不出來時，請到 Threads 上看：<a href="https://www.threads.com/@${account}">Threads 的 @${account}</a></p>
+<p class="small yours">這是你的帳號？<a href="/hang/${shortId}">把它掛到個人檔案上</a></p>
+</section>
+</div>`;
+}
+
+/** Section 4 of one card. */
+function record(card: PageCard): Html {
+  const rows = card.history.filter((row) => row.platform === PLATFORM);
   const switches = card.slots.find((s) => s.platform === PLATFORM)?.switchCount ?? 0;
-  return html`${top}
-<section class="record">
-<h2>這張自然人憑證在證明紀錄裡的紀錄</h2>
-<ul class="facts">
-<li>第一次過卡：${formatDay(card.firstCardProof)}</li>
-<li>過卡 ${card.cardProofs} 次</li>
-<li>在 Threads 更換過 ${switches} 次帳號（一張自然人憑證最多 5 次）</li>
-</ul>
+  return html`<section class="record">
+<h2>這張自然人憑證的證明紀錄</h2>
+<dl class="facts">
+<div><dt>第一次過卡</dt><dd>${formatDay(card.firstCardProof)}</dd></div>
+<div><dt>過卡次數</dt><dd>${card.cardProofs} 次</dd></div>
+<div><dt>更換帳號</dt><dd>在 Threads 更換過 ${switches} 次帳號（一張自然人憑證最多 5 次）</dd></div>
+</dl>
 <details class="history">
 <summary>全部紀錄</summary>
 <ol class="log">
@@ -145,7 +166,8 @@ ${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${eventOf
 
 /** proof-page.md, section 5. */
 const VERIFY = html`<section class="verify">
-<p>這份證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。任何人都可以驗證證明紀錄裡的每一份證明，都來自一張有效的自然人憑證。</p>
+<h2>驗證</h2>
+<p>這張證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。任何人都可以驗證證明紀錄裡的每一份證明，都來自一張有效的自然人憑證。</p>
 <p><a href="/verify">怎麼驗證島民證明</a></p>
 </section>`;
 
@@ -165,8 +187,14 @@ const MINE = html`<section class="mine">
 export function proofPage(site: Site, shortId: string, { today, cards }: CardsOfShortId): Document {
   if (cards.length === 0) throw new Error("pages: no card for the short ID");
   let content: Html;
-  if (cards.length === 1) content = cardSections(site, cards[0]!, shortId, today, false);
-  else {
+  // Section 4 beside section 5 (one card), or each card's section 4 under its first screen and section 5 once, after the last (several).
+  if (cards.length === 1) {
+    content = html`${firstScreen(site, cards[0]!, shortId, today, false)}
+<div class="second">
+${record(cards[0]!)}
+${VERIFY}
+</div>`;
+  } else {
     const starts = prefixes(cards.map((c) => c.scopedId));
     content = html`<section class="many">
 <h1 class="title">這個網址對到 ${cards.length} 張自然人憑證</h1>
@@ -175,11 +203,17 @@ export function proofPage(site: Site, shortId: string, { today, cards }: CardsOf
 ${cards.map(
   (card, i) => html`<article class="one-of-many">
 <p class="prefix">島民編號 <span class="id">${starts[i]!}</span> 開頭</p>
-${cardSections(site, card, shortId, today, true)}
+${firstScreen(site, card, shortId, today, true)}
+<div class="second">
+${record(card)}
+</div>
 </article>`,
-)}`;
+)}
+<div class="second">
+${VERIFY}
+</div>`;
   }
-  return { title: titleOf(cards), kind: "proof", content: html`${content}\n${VERIFY}\n${MINE}` };
+  return { title: titleOf(cards), kind: "proof", content: html`${content}\n${MINE}` };
 }
 
 /**

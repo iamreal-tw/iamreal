@@ -4,7 +4,8 @@
  * page of an account and the proof log page (src/pages/). The navigation
  * bar and the foot are as wide as the site (--max-width); the content of
  * each page is still one column, at most 560 wide, until that page is laid
- * out after design/DESIGN.md (so far: what a card proof needs and the FAQ).
+ * out after design/DESIGN.md (so far: what a card proof needs, the FAQ,
+ * the page of a card and the page of an account).
  *
  * The values of :root are design/tokens.json's, each the one of the same
  * name (test/style-sheet.test.ts): what each colour means, and where it is
@@ -46,6 +47,8 @@
   --size-h3-phone: 21px;
   --size-lead: 22px;
   --size-lead-phone: 19px;
+  --size-account: 76px;
+  --size-account-phone: 48px;
   --size-kicker: 15px;
   --size-kicker-phone: 14px;
   --size-small: 14px;
@@ -54,8 +57,13 @@
   --weight-body: 400;
   --leading-h3: 1.5;
   --leading-body: 1.85;
+  --leading-account: 1.1;
+  --leading-kicker: 1.6;
+  --leading-small: 1.7;
   --gutter: 40px;
   --gutter-phone: 20px;
+  --section: 120px;
+  --section-phone: 72px;
   --column-gap: 80px;
   --max-width: 1200px;
   --measure: 32em;
@@ -390,52 +398,6 @@ h2 {
   display: block;
 }
 
-/* The account: the largest words of the first screen. */
-.title .account {
-  display: block;
-  margin-top: 8px;
-  font-family: var(--font-body);
-  font-weight: var(--weight-account);
-  font-size: 36px;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-/* An account longer than 18 characters: one size smaller, and broken
-   anywhere only when even that does not fit. */
-.title .account.long {
-  font-size: 28px;
-}
-
-.lookup .title .account {
-  display: inline;
-  font-size: inherit;
-}
-
-.scope {
-  margin-bottom: 0;
-}
-
-/* The last card proof: as prominent as the title, the same for any number
-   of days. */
-.last {
-  margin: 20px 0 0;
-  padding: 14px 0 4px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.last .when {
-  font-weight: 500;
-  font-size: 21px;
-  line-height: 1.55;
-  margin-bottom: 6px;
-}
-
-.last .small a {
-  white-space: nowrap;
-}
-
 /* Does the account owner acknowledge it ---------------------------------------- */
 
 h2 {
@@ -473,80 +435,6 @@ iframe.threads-profile {
   background: var(--bg);
 }
 
-/* The record ------------------------------------------------------------------------ */
-
-.facts {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-}
-
-.history summary {
-  cursor: pointer;
-  color: var(--ink);
-  font-weight: 500;
-  padding: 6px 0;
-}
-
-.log {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--line);
-  font-size: 15px;
-}
-
-.log li {
-  display: flex;
-  gap: 14px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.log time,
-.rows time {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Several cards behind one short ID */
-
-.many {
-  margin-bottom: 8px;
-}
-
-.one-of-many {
-  margin-top: 36px;
-  padding-top: 4px;
-  border-top: 2px solid var(--ink);
-}
-
-.one-of-many .prefix {
-  margin: 10px 0 0;
-  font-size: 15px;
-}
-
-.one-of-many .title {
-  margin-top: 12px;
-}
-
-/* How to verify, and getting one's own -------------------------------------------- */
-
-section.verify {
-  margin-top: 40px;
-  padding: 14px 0 4px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.mine {
-  margin-top: 40px;
-  padding: 18px 18px 8px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-}
-
 /* A main button (design/DESIGN.md, 元件): raspberry red, white words, square corners, --button-height high. */
 .button {
   display: inline-flex;
@@ -568,28 +456,6 @@ section.verify {
 .button:hover {
   background: var(--you-hover);
   color: var(--bg);
-}
-
-/* The page of an account ----------------------------------------------------------- */
-
-.cards {
-  list-style: none;
-  margin: 14px 0 18px;
-  padding: 0;
-  border-top: 1px solid var(--line);
-}
-
-.cards li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 18px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 15px;
-}
-
-.cards a {
-  margin-left: auto;
 }
 
 /* The proof log page ---------------------------------------------------------------- */
@@ -1167,7 +1033,11 @@ button.copy {
 /* What a card proof needs (/prepare) ------------------------------------------- */
 
 /* Laid out after design/DESIGN.md: as wide as the site, its edges the navigation bar's (.top .bar); what to have and the four steps side by side, the usual troubles under them. */
-body.prepare main {
+body.prepare main,
+body.proof main,
+body.account main,
+body.proof-missing main,
+body.account-not-a-name main {
   max-width: calc(var(--max-width) + 2 * var(--gutter));
   padding: 0 calc(2 * var(--gutter)) 72px;
 }
@@ -1263,6 +1133,315 @@ body.prepare .situation p {
   margin: 0;
 }
 
+/* The page of a card (proof-page.md) and the page of an account (account-page.md) ---------------------- */
+
+/* The first screen: sections 1 and 2 (or the list of an account) on the left, the account owner's question and the profile on the right. */
+body.proof .first,
+body.account .first,
+body.proof .second {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--column-gap);
+  align-items: start;
+}
+
+body.proof .first,
+body.account .first {
+  margin-top: 56px;
+}
+
+body.proof .title,
+body.account .title {
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  margin: 0;
+}
+
+/* The account: the largest words of the first screen (design/DESIGN.md, 字), on both pages. */
+body.proof .title .account,
+body.account .title .account {
+  display: block;
+  margin-top: 20px;
+  font-family: var(--font-body);
+  font-weight: var(--weight-account);
+  font-size: var(--size-account);
+  line-height: var(--leading-account);
+  overflow-wrap: anywhere;
+}
+
+/* An account longer than 12 characters (src/pages/proof.ts, LONG_ACCOUNT): one size smaller, and broken anywhere only when even that does not fit. */
+body.proof .title .account.long,
+body.account .title .account.long {
+  font-size: var(--size-h2);
+}
+
+body.proof .scope {
+  max-width: var(--measure);
+  margin: 24px 0 0;
+  line-height: var(--leading-small);
+}
+
+/* The last card proof: as prominent as the title, the same for any number of days; the date one size smaller. */
+body.proof .last {
+  margin-top: 44px;
+  padding-top: 36px;
+  border-top: 1px solid var(--line);
+}
+
+body.proof .last .when {
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+body.proof .last .when .date {
+  margin-left: 8px;
+  font-family: var(--font-body);
+  font-weight: var(--weight-body);
+  font-size: var(--size-body);
+  color: var(--mute);
+}
+
+body.proof .last .small {
+  max-width: var(--measure);
+  line-height: var(--leading-small);
+}
+
+/* The question of the account owner: a heading, the sentence, the address right above the profile. */
+body.proof .ask,
+body.account .ask {
+  font-size: var(--size-lead);
+  line-height: var(--leading-h3);
+  margin: 0 0 6px;
+}
+
+body.proof .owner > p:not(.small, .backlink),
+body.account .owner > p {
+  font-size: var(--size-kicker);
+  line-height: var(--leading-kicker);
+  margin-bottom: 16px;
+}
+
+body.proof .backlink {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius);
+}
+
+body.proof iframe.threads-profile,
+body.account iframe.threads-profile {
+  max-width: none;
+  margin-bottom: 16px;
+}
+
+body.proof .owner .small {
+  line-height: var(--leading-small);
+  margin-bottom: 8px;
+}
+
+body.proof .owner .yours {
+  margin-top: 20px;
+}
+
+/* Sections 4 and 5 side by side, under a line across the page. */
+/* Sections apart by --section each side of a line (design/DESIGN.md, 版面). */
+body.proof .second,
+body.proof .mine {
+  margin-top: var(--section);
+  padding-top: var(--section);
+  border-top: 1px solid var(--line);
+}
+
+body.proof .second .record {
+  grid-column: 1;
+}
+
+body.proof .second .verify {
+  grid-column: 2;
+}
+
+/* After several cards, section 5 alone: on the left, as the sections above it. */
+body.proof .second .verify:only-child {
+  grid-column: 1;
+}
+
+body.proof .record h2,
+body.proof .verify h2 {
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  margin: 0 0 20px;
+}
+
+body.proof .record h2 {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 0;
+}
+
+/* The three facts: a label on the left, the value on the right. */
+body.proof .facts {
+  margin: 0;
+}
+
+body.proof .facts > div {
+  display: grid;
+  grid-template-columns: 9.5em minmax(0, 1fr);
+  gap: 0 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+body.proof .facts dt {
+  color: var(--mute);
+}
+
+body.proof .facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+body.proof .history summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
+  padding: 20px 0 8px;
+  min-height: var(--min-target);
+}
+
+body.proof .log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--size-kicker);
+}
+
+body.proof .log li {
+  display: flex;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+body.proof .log time,
+.rows time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Several cards behind one short ID: each its own first screen and record, under its longer beginning of the scoped ID. */
+body.proof .many {
+  margin-top: 56px;
+}
+
+body.proof .many .title {
+  margin-bottom: 8px;
+}
+
+body.proof .one-of-many {
+  margin-top: 72px;
+  padding-top: 24px;
+  border-top: 2px solid var(--ink);
+}
+
+body.proof .one-of-many .prefix {
+  margin: 0;
+  font-size: var(--size-kicker);
+  color: var(--mute);
+}
+
+body.proof .one-of-many .first {
+  margin-top: 24px;
+}
+
+/* Getting one's own: under a line across the page, no box. */
+body.proof .mine p:first-child {
+  max-width: var(--measure);
+}
+
+/* The page of an account: the count not enlarged; each card a row, the link right after its beginning of the scoped ID. */
+body.account .title .line {
+  display: block;
+}
+
+body.account .count {
+  margin: 28px 0 0;
+  color: var(--ink);
+}
+
+body.account .cards {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--ink);
+}
+
+body.account .cards li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+body.account .cards p {
+  margin: 0;
+}
+
+body.account .id-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  color: var(--ink);
+}
+
+body.account .id-line a {
+  margin-left: auto;
+}
+
+body.account .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  margin-top: 4px;
+  color: var(--mute);
+  font-size: var(--size-kicker);
+  font-variant-numeric: tabular-nums;
+}
+
+body.account .cards + .small {
+  margin-top: 16px;
+  line-height: var(--leading-small);
+}
+
+/* No card: the left column only. */
+body.account main > .lookup {
+  margin-top: 56px;
+}
+
+body.account .lookup > p,
+body.proof-missing .missing p,
+body.account-not-a-name .missing p {
+  max-width: var(--measure);
+}
+
+/* A short ID that resolves to no card, a name that cannot be a Threads username: the heading and margins of the two pages they stand in for. */
+body.proof-missing .missing,
+body.account-not-a-name .missing {
+  margin-top: 56px;
+}
+
+body.proof-missing .title,
+body.account-not-a-name .title {
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  margin: 0 0 16px;
+}
+
 /* A narrow screen (design/DESIGN.md, 版面): below --breakpoint, which a media query cannot read, so it is written here. */
 @media (width < 760px) {
   body {
@@ -1327,20 +1506,8 @@ body.prepare .situation p {
     border-top: 1px solid var(--line);
   }
 
-  .title .account {
-    font-size: 32px;
-  }
-
-  .title .account.long {
-    font-size: 22px;
-  }
-
   iframe.threads-profile {
     height: 380px;
-  }
-
-  .cards a {
-    margin-left: 0;
   }
 
   .headline {
@@ -1356,7 +1523,11 @@ body.prepare .situation p {
     font-size: 24px;
   }
 
-  body.prepare main {
+  body.prepare main,
+  body.proof main,
+  body.account main,
+  body.proof-missing main,
+  body.account-not-a-name main {
     padding: 0 var(--gutter-phone) 56px;
   }
 
@@ -1432,5 +1603,93 @@ body.prepare .situation p {
 
   body.faq .question h3 {
     font-size: var(--size-lead-phone);
+  }
+
+  body.proof .first,
+  body.account .first,
+  body.proof .second {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 56px;
+  }
+
+  body.proof .first,
+  body.account .first,
+  body.proof .many,
+  body.account main > .lookup {
+    margin-top: 28px;
+  }
+
+  body.proof .second .record,
+  body.proof .second .verify {
+    grid-column: 1;
+  }
+
+  body.proof .second,
+  body.proof .mine {
+    margin-top: var(--section-phone);
+    padding-top: var(--section-phone);
+  }
+
+  body.proof .title,
+  body.account .title,
+  body.proof .last .when,
+  body.proof .record h2,
+  body.proof .verify h2 {
+    font-size: var(--size-h3-phone);
+  }
+
+  body.proof .title .account,
+  body.account .title .account {
+    margin-top: 12px;
+    font-size: var(--size-account-phone);
+  }
+
+  body.proof .title .account.long,
+  body.account .title .account.long {
+    font-size: var(--size-h2-phone);
+  }
+
+  body.proof .last .when .date {
+    font-size: var(--size-body-phone);
+  }
+
+  body.proof .ask,
+  body.account .ask {
+    font-size: var(--size-lead-phone);
+  }
+
+  body.proof .facts > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.proof .owner > p:not(.small, .backlink),
+  body.account .owner > p,
+  body.account .meta,
+  body.proof .log,
+  body.proof .one-of-many .prefix {
+    font-size: var(--size-kicker-phone);
+  }
+
+  body.proof-missing .missing,
+  body.account-not-a-name .missing {
+    margin-top: 28px;
+  }
+
+  body.proof-missing .title,
+  body.account-not-a-name .title {
+    font-size: var(--size-h3-phone);
+  }
+
+  body.account .id-line a {
+    margin-left: 0;
+  }
+
+  body.proof .one-of-many {
+    margin-top: 56px;
+  }
+
+  body.proof .mine .button {
+    display: flex;
+    width: 100%;
   }
 }
