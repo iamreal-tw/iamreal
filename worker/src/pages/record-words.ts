@@ -41,5 +41,5 @@ export function recordWords(row: HistoryRow, a: RowStyle): Html {
   if (kind === "switch" && before !== null && after !== null) return html`更換：${a.account(before)} 改成 ${a.changedTo(after)}`;
   if (kind === "correction" && before !== null && after !== null) return html`更正：${a.account(before)} 改成 ${a.changedTo(after)}`;
   if (kind === "withdraw" && before !== null) return html`收回：${a.account(before)}`;
-  throw new Error("pages: no words for a record");
+  throw new Error("pages: no words for a row of the history");
 }

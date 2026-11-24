@@ -1,7 +1,8 @@
 // What the code of the pages (src/pages/) refuses to write, called directly in
 // Node with the data a page is given: an account that is not a Threads
-// username, a row of the history the page has no words for, the page of a
-// short ID with no card. Each stops the page with an error rather than put
+// username, a row of the history the page has no words for (on the page of
+// a card, and in the proof log page's list), the page of a short ID with no
+// card. Each stops the page with an error rather than put
 // the account in a link or an embed, leave a row blank, or write a page of
 // nothing; the Worker answers 500 (README.md, 頁面和檔案). The Worker
 // never gives a page such data (it reads the account in the address, and
@@ -48,6 +49,9 @@ const load = async <T>(file: string): Promise<T> => (await import(new URL(`../sr
 const { accountPage } = await load<{ accountPage(username: string, data: { today: number; cards: readonly unknown[] }): Document }>("account.ts");
 const { hangPage } = await load<{ hangPage(site: Site, short: string, account: string): Document }>("hang.ts");
 const { proofPage } = await load<{ proofPage(site: Site, shortId: string, data: { today: number; cards: readonly PageCard[] }): Document }>("proof.ts");
+const { proofLogPage } = await load<{
+  proofLogPage(v: { counts: { declared: number; recent: number }; rows: readonly (HistoryRow & { seq: number; scopedId: string })[]; more: boolean; after: boolean; badQuery: string | null }): Document;
+}>("proof-log-page.ts");
 
 const site: Site = { testProofLogClearedOn: "2026-11-07", host: "test.iamreal.tw" };
 const today = parseDay("2026-11-18")!;
@@ -123,6 +127,30 @@ describe("the page of a card", () => {
     test(`is not written with a row of the history that is ${what}`, () => {
       const first = cardOf("alice").history[0]!;
       assert.throws(() => proofPage(site, SHORT, { today, cards: [cardOf("alice", [row, first])] }), /^Error: pages: no words for a row of the history$/);
+    });
+  }
+});
+
+describe("the proof log page", () => {
+  const logOf = (...rows: HistoryRow[]): Document =>
+    proofLogPage({ counts: { declared: 1, recent: 1 }, rows: rows.map((row, i) => ({ ...row, seq: rows.length - i, scopedId: SCOPED_ID })), more: false, after: false, badQuery: null });
+  const first: HistoryRow = { date: today, platform: "threads", kind: "first", afterWithdrawal: false, before: null, after: "alice" };
+
+  test("is written with rows the page has words for", () => {
+    assert.ok(logOf(first).content.toString().includes("新宣告：Threads 的 <b>@alice</b>"));
+  });
+
+  /** Rows the list has no words for: those of the page of a card, and a card proof again with no account, which the list names. */
+  const NO_WORDS: [string, HistoryRow][] = [
+    ["a kind it does not know", { ...first, kind: "something new" }],
+    ["a first declaration of no account", { ...first, after: null }],
+    ["a switch from no account", { ...first, kind: "switch" }],
+    ["a withdrawal of no account", { ...first, kind: "withdraw", after: null }],
+    ["a card proof again with no account", { ...first, kind: "refresh", before: "alice", after: null }],
+  ];
+  for (const [what, row] of NO_WORDS) {
+    test(`is not written with a row that is ${what}`, () => {
+      assert.throws(() => logOf(row, first), /^Error: pages: no words for a row of the history$/);
     });
   }
 });
