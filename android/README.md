@@ -2,14 +2,14 @@
 
 **這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開手機；手機上做的檢查和算法是 `device-core/` 那一份；發出去的安裝檔裡有什麼。** app 引用 `device-core/`（ADR-0034），不引用 `protocol/`、`worker/`。
 
-現在有過卡能通的路：照網頁版的六步（開始之前、讀取卡片、輸入 PIN、你的帳號、確認、完成），卡片感應三次，PIN 輸入一次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)、[#134](https://github.com/iamreal-tw/iamreal/issues/134)）。畫面用 Jetpack Compose，文字逐字來自 `design/copy/card-proof.json`。在模擬器上用假卡片對著本機的 Worker 過得完（「模擬器上過一次卡」）。
+現在有過卡能通的路：照網頁版的六步（開始之前、讀取卡片、輸入 PIN、你的帳號、確認、完成），卡片感應三次，PIN 輸入一次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)、[#134](https://github.com/iamreal-tw/iamreal/issues/134)）。畫面照 `design/screens/card-proof-app-*` 和 `design/DESIGN.md`（[#295](https://github.com/iamreal-tw/iamreal/issues/295)），用 Jetpack Compose，文字逐字來自 `design/copy/card-proof.json`；打開 app 先是啟動畫面（`app-splash-phone.png`，字來自 `design/copy/app.json`）。顏色、字級、間距照 `design/tokens.json`，寫在 `app/src/main/kotlin/tw/iamreal/app/ui/Theme.kt`；標題用包進安裝檔的源流明體 TW（「內建的檔案」），內文和等寬字用系統的。只有亮色，和網頁一樣。在模擬器上用假卡片對著本機的 Worker 過得完（「模擬器上過一次卡」）。
 
 還沒有的：
 
 - **讀卡**。用 NFC 讀真卡片的程式還沒有搬進這個程式庫（[#163](https://github.com/iamreal-tw/iamreal/issues/163)）。在那之前，發出去的安裝檔和用線裝的建置裡，「卡片」的位置是一個永遠讀不到卡的東西（`app/src/real/…/Target.kt` 的 `NoCardReader`）：按「感應卡片」會停在「沒有感應到卡片」，PIN 送不到任何地方
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
-- 完成畫面最上面的記號動畫；顏色、字級、間距（主題還沒照 `design/tokens.json` 改，現在是墨色和紙色兩個顏色）
+- 第 2 步感應位置的示意圖（[#173](https://github.com/iamreal-tw/iamreal/issues/173)）；過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)）
 
 ## 兩種 build
 
@@ -50,7 +50,7 @@
 - **唯一存下來的**是每把發證金鑰用過的最高清冊編號（`MainActivity.kt` 的 `StoredCrlNumbers`，app 自己的偏好設定檔）。清冊編號是公開的數字
 - **連網路的只有 `backend/Backend.kt`**：後台的四個介面和清冊鏡像的兩種檔案，位置是建置時寫死的。請求不帶 cookie、不帶手機或 app 的任何識別、不回報 app 自己檢查的結果（ADR-0016）。送出去的內容由核心組；核心在檢查都通過之前不算匿名編號（`device-core/README.md`「檢查都通過了」），所以這裡的程式順序寫錯時，帶著匿名編號的請求送不出去
 - **碰卡片的只有 `card/Card.kt` 這一層介面**：一次感應是一次 `tap`，裡面先 `readCertificates`（不用 PIN），再 `sign`（帶 PIN）
-- 看島民證明、說明、Threads 都是開瀏覽器，app 裡不載入任何網頁
+- 看島民證明、Threads 的個人檔案都是開瀏覽器（或 Threads 的 app），app 裡不載入任何網頁。完成畫面的「分享」交給系統的分享面板，只帶這張島民證明的網址
 
 ## 目錄
 
@@ -60,7 +60,7 @@
 | `app/src/main/kotlin/tw/iamreal/app/flow/` | `CardProof`：一次過卡，沒有畫面，順序照 `web/src/flow.ts`；每一項檢查和計算都交給核心。`Platforms`：app 自己認得的平台（只有 Threads） |
 | `app/src/main/kotlin/tw/iamreal/app/card/` | 「卡片」這一層介面 |
 | `app/src/main/kotlin/tw/iamreal/app/backend/` | 送給後台和清冊鏡像的請求 |
-| `app/src/main/kotlin/tw/iamreal/app/ui/` | 六步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句 |
+| `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和六步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`） |
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：測試網站、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
@@ -134,7 +134,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 `./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看 `.aab` 裡的 manifest、函式庫、內建的檔案和 dex，項目相同）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
 - **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
-- **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面沒有畫路徑，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
+- **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面畫的路徑（記號、打勾）只交給系統去畫，不走訪它的線段，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
 - **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：debug 和 release 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
 - **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
 - **release build 不輸出 log**：R8 拿掉對 `android.util.Log`、`PrintStream` 的 `print`／`println`、`java.util.logging.Logger` 的 `log` 的呼叫（`app/proguard-rules.pro`；後兩種是 Compose 和 `androidx.concurrent` 裡的幾處警告）。之後 `checkApk` 讀 release 的 dex 裡每一個被呼叫的方法：還提到 `android.util.Log`，或還有呼叫 `java.io.PrintStream` 的任何方法、`java.util.logging.Logger` 除了 `getLogger` 以外的方法、任何 `printStackTrace`，就失敗。留下來的是讀了沒用的 `System.out` 和做了沒用的 `Logger`：R8 拿不掉，但沒有東西寫得出去
@@ -192,9 +192,9 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對兩種 build 圖示下面的名稱各自和它寫的相同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對兩種 build 圖示下面的名稱各自和它寫的相同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。`ThemeTest` 讀 `design/tokens.json`，核對 `ui/Theme.kt` 和 `res/values/colors.xml`（視窗和 Android 12 起系統的啟動畫面用的顏色）寫的每一個數值和同名的那一個相同。
 
-這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼（標題「證明紀錄已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
+這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：小卡、掛到個人檔案、還可以做的那幾句，第一筆紀錄、全部收回、超過一個平台時各不同的地方；以及對後台的回應：和確認時相同、讀不出每個平台記成什麼（標題「證明紀錄已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 
 測到的：Kotlin 到 JNI 到核心這條路的每一個函式、代碼變成例外、傳進去的位元組呼叫後沒有被改、app 自己開的 session 不認測試金鑰。測不到的：Android 上的 `.so`（Zig 連結的那一個）和畫面。那兩樣由下面模擬器的測試看。
 
@@ -205,7 +205,8 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 - **後台和卡片的金鑰是 `web/test/app-backend.ts` 的**（Android 和 iOS 的測試共用）：它起本機的 Worker（`worker/test/harness.ts` 的測試建置：測試的發證金鑰、假的內政部、可調的時鐘），用 `web/test/fixtures` 當場產生卡片的金鑰和憑證，寫成 `web/test-output/app/backend.json`，再把這裡的測試當成它的指令跑起來。這裡的測試只讀那個檔、講 HTTP，不引用 `web/`、`worker/` 的程式
 - **卡片是假的**：`app/src/fake/…/FakeCard.kt`，用那把測試金鑰簽章。每一次感應向測試問「現在貼上來的是哪一張卡」，所以測試決定什麼時候貼卡、貼哪一張
 - **app 是 build type `fake`**：`src/fake/` 換掉 `src/real/`（假卡片、連 `127.0.0.1:18169`、認測試金鑰的 session），原生函式庫是測試用的那一種。其他的程式和發出去的 app 是同一份
-- 測試關掉模擬器的網路，只把模擬器的 18169 埠轉到本機的伺服器（`adb reverse`）：app 連得到的只有它。「打開 Threads」開的瀏覽器因此不會真的連出去
+- 測試關掉模擬器的網路，只把模擬器的 18169 埠轉到本機的伺服器（`adb reverse`）：app 連得到的只有它。完成畫面打開 Threads 個人檔案的瀏覽器因此不會真的連出去
+- 完成畫面的按鈕：複製連結、打開 Threads 的個人檔案和這張島民證明（看系統打開的網址），「分享」叫出系統的分享面板，面板上顯示的分享內容只有這張島民證明的網址
 - 畫面用 `uiautomator dump` 讀，預期的每一句從 `design/copy/card-proof.json` 讀，逐字比對
 - 第二、第三次感應各貼一次「該放簽章憑證的位置是另一張憑證」的卡：畫面說不是同一張卡，假卡片沒有被交到 PIN
 - 隔天的兩次：把後台的時鐘和模擬器的時鐘都調到明天（測試結束時把模擬器的調回來）
