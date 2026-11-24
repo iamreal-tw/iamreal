@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The one permission asked for is the network: the server and the CRL
-     archive. A library that brings the advertising ID's permission has it
+<!-- The permissions asked for: the network (the server and the CRL
+     archive); the reminder's notification (asked for when "開啟提醒" is
+     pressed, Android 13 on); and being told the phone restarted, which
+     forgets the reminder's alarm (reminder/Phone.kt). A library that brings the advertising ID's permission has it
      taken out here, and the build fails if the merged manifest still names
      it, or asks for anything not listed in app/build.gradle.kts
      (checkManifest). -->
@@ -8,6 +10,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-permission
         android:name="com.google.android.gms.permission.AD_ID"
@@ -28,12 +32,27 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation|fontScale|locale|layoutDirection"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The reminder's alarm, its "一週後再提醒我", and the system's word
+             that the alarm needs setting again (reminder/Phone.kt). No other
+             app can call it: the system can, and the app's own pending
+             intents. -->
+        <receiver
+            android:name=".reminder.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- What the libraries of the screens would start by themselves when
              the app opens, taken out: a look for an emoji font, which on a

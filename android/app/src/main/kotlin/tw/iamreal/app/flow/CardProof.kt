@@ -210,6 +210,12 @@ class CardProof(private val deps: Deps) {
         val date: String,
         val shortId: String,
         val accounts: List<Pair<String, String>>,
+        /**
+         * The last day the card's certificate is valid, its date in Taiwan; null if it could not be read. In
+         * memory only, for the reminder's sentence of a card that expires before it (design/copy/card-proof.md,
+         * "6. 完成", app); never stored.
+         */
+        val validUntil: String?,
     )
 
     private var config: ByteArray? = null
@@ -218,6 +224,7 @@ class CardProof(private val deps: Deps) {
     private var certificate: ByteArray? = null
     private var certificateIndex = -1
     private var issuer = ""
+    private var validUntil: String? = null
     private var background: FutureTask<Unit>? = null
     private var pin: ByteArray? = null
     private var scopeSignature: ByteArray? = null
@@ -297,6 +304,7 @@ class CardProof(private val deps: Deps) {
             if (!checked.getBoolean("ok")) fail(Stop.certificate(checked))
             name = checked.getString("name")
             issuer = checked.getString("issuer")
+            validUntil = Stop.certificateDay(checked.optString("not_after"))
             certificateIndex = checked.getInt("chosen")
             // Only the chosen certificate is kept, to compare at the next taps.
             keep { certificate = certificates[certificateIndex].copyOf() }
@@ -648,7 +656,7 @@ class CardProof(private val deps: Deps) {
             fail(Stop("server", mapOf("code" to e.code, "submitting" to "true"), e.requestId))
         }
         ended = true
-        return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts)
+        return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts, validUntil)
     }
 
     // The end --------------------------------------------------------------------------
@@ -674,6 +682,7 @@ class CardProof(private val deps: Deps) {
         chosen = null
         entries = null
         chosenAccountsJson = null
+        validUntil = null
     }
 
     private fun dropPin() {
@@ -755,7 +764,7 @@ class Stop(val code: String, val values: Map<String, String> = emptyMap(), val r
         fun date(answer: JSONObject): Stop = if (answer.getString("problem") == "crl_stale") crl(answer) else certificate(answer)
 
         /** A certificate's time, `YYMMDDHHMMSS` in UTC, as its date in Taiwan. */
-        private fun certificateDay(t: String): String? {
+        internal fun certificateDay(t: String): String? {
             if (t.length != 12 || !t.all { it in '0'..'9' }) return null
             val n = { from: Int -> t.substring(from, from + 2).toInt() }
             return try {

@@ -339,10 +339,18 @@ internal fun StepBar(copy: Copy, step: Int) = Column(Modifier.fillMaxWidth(), ve
 
 /** The app's header: the mark and the service's name (design/copy/card-proof.md, "每一步都有的"). */
 @Composable
-internal fun Header(name: String) = Column(Modifier.fillMaxWidth()) {
+internal fun Header(name: String, action: String? = null, onAction: () -> Unit = {}) = Column(Modifier.fillMaxWidth()) {
     Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = Type.gutter), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Logo(Modifier.size(24.dp))
-        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
+        BasicText(name, Modifier.weight(1f), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
+        // On the right, where there is one: "設定".
+        if (action != null) {
+            BasicText(
+                action,
+                Modifier.clickable(role = Role.Button, onClick = onAction).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 14.dp).testTag("header-action"),
+                style = TextStyle(color = Colours.ink, fontSize = 15.sp),
+            )
+        }
     }
     Rule()
 }

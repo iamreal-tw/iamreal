@@ -26,6 +26,7 @@ class DoneViewTest {
             CardProof.Answer(seq, if (seq == null) null else "3f".repeat(32), kinds, mismatches),
             firstRecord, "2026-11-16", "7K2Q9FM4XD",
             expected.filter { it.kind != "withdraw" }.map { it.platform to it.username },
+            "2031-05-01",
         )
 
     private fun lines(row: Messages.DoneRow) = listOf(row.platform, row.username, row.kind, row.expected, row.switchUsed)
