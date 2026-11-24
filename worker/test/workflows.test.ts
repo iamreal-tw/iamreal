@@ -1241,21 +1241,22 @@ function trackedFiles(...dirs: string[]): string[] {
   return found;
 }
 
-/** The tracked files of the repository and every directory they are in, from the root; the root itself left out. */
-const TRACKED = ((): Set<string> => {
-  const found = new Set<string>();
-  for (const f of trackedFiles()) for (let p = f; p !== "."; p = dirname(p)) found.add(p);
-  return found;
-})();
+let tracked: Set<string> | undefined;
 
 /**
- * `path` from the repository's root, if it is a tracked file or a directory with a tracked file under it, other
- * than the root; else nothing. Only what is tracked: a file that is on disk but not (.env.local, an output
- * directory) is not one a check of CI can use, and counting it would make the checks fail where it is (#314).
+ * `path` from the repository's root, if it is a tracked file or a directory
+ * with a tracked file under it, other than the root; else nothing. Every
+ * check below finds its paths with this. Only what is tracked: a path that
+ * is on disk but not tracked (.env.local, an output directory) is not one
+ * CI has, and counting it would make the checks fail where it is (#314).
  */
 function inRepo(path: string): string | undefined {
+  if (tracked === undefined) {
+    tracked = new Set();
+    for (const f of trackedFiles()) for (let p = f; p !== "."; p = dirname(p)) tracked.add(p);
+  }
   const r = relative(REPO, path).split(sep).join("/");
-  return TRACKED.has(r) ? r : undefined;
+  return tracked.has(r) ? r : undefined;
 }
 
 /** Whether `list` holds `path`: a file, or a directory, every file of which it must then hold. */
@@ -1276,8 +1277,9 @@ const holds = (list: readonly string[], path: string): boolean => matchesPaths(l
  * - `new URL("../...", import.meta.url)`, up to the first `${`;
  * - `"go", [... "./<package>"`.
  * A path that names no tracked file or directory of the repository (an
- * output directory, .env.local, the root itself) is left out. Not seen: what the check of the
- * browser tests' paths does not see either (.github/README.md).
+ * output directory, .env.local, the root itself) is left out. Not seen:
+ * what the check of the browser tests' paths does not see either
+ * (.github/README.md).
  */
 function namedByTypeScript(files: readonly string[]): { paths: Set<string>; goPackages: Set<string> } {
   const packages = workspacePackages();
@@ -1390,7 +1392,7 @@ test("the typescript check runs when anything it uses changes: every file and di
   );
 });
 
-test("a path the sources name that is on disk but not tracked (.env.local, an output directory) is not counted as one the checks use (#314)", () => {
+test("a path the sources name that is on disk but not tracked (.env.local, an output directory) is not counted as one the checks use", () => {
   mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
   const dir = mkdtempSync(join(WORKER_DIR, "test-output", "untracked-"));
   try {
@@ -1405,7 +1407,7 @@ test("a path the sources name that is on disk but not tracked (.env.local, an ou
 });
 
 test(
-  "the typescript check runs when the Go programs its tests build, test and run change:their packages' directories, and what those sources name, are in its list",
+  "the typescript check runs when the Go programs its tests build, test and run change: their packages' directories, and what those sources name, are in its list",
   skipWithoutGo("the Go packages the tests of worker/ and web/ use are not looked at"),
   () => {
     assert.ok(hasGo, "go is not installed, and CI or IAMREAL_BB is set: this check must run here");
