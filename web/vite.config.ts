@@ -24,7 +24,7 @@
 //   the test log's scope string (a real card tried out on this computer
 //   gets no scoped ID of the public proof log). Threads only, as production
 //   (#309).
-// - testsite (`pnpm build:test-site`): the same pages, with
+// - testsite (`pnpm build:test-site`): the same page, with
 //   src/target-test-site.ts in place of src/target.ts: what test.iamreal.tw
 //   serves. Like localcard, but the CRL archive comes from the test log's
 //   data domain, the link of the last screen is the test site's, and the
