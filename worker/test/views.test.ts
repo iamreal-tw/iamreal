@@ -15,6 +15,7 @@ import { after, before, describe, test } from "node:test";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { type CardState, EMPTY_SLOT, type PlatformKind } from "iamreal-protocol/record-rules.ts";
 import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
+import { shortId } from "iamreal-protocol/scoped-id.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, pagesWorld, r } from "./pages.ts";
@@ -308,6 +309,8 @@ describe("every row of the views", () => {
 
   /** A row of a view, as `worker.proofLog.views()` gives it. */
   type Row = Record<string, string | number | null>;
+  /** An event of spec/vectors/record-rules.json: what the object's door takes, and the record's date. */
+  type VectorEvent = RuleEvent & { readonly date: string };
 
   /**
    * The views as the record rules' states say they should be, kept here
@@ -326,14 +329,14 @@ describe("every row of the views", () => {
     readonly #slots = new Map<string, Row>();
     readonly #history: Row[] = [];
 
-    add(e: RuleEvent, kinds: readonly PlatformKind[], before: CardState, after: CardState): void {
-      const date = parseDay(e.challenge.slice(0, 10))!;
+    add(e: VectorEvent, kinds: readonly PlatformKind[], before: CardState, after: CardState): void {
+      const date = parseDay(e.date)!;
       const key = { scope_string: e.scope_string, scoped_id: e.scoped_id };
       const cardKey = `${e.scope_string}\n${e.scoped_id}`;
       const card = this.#cards.get(cardKey);
       this.#cards.set(cardKey, {
         ...key,
-        short_id: e.scoped_id.slice(0, 10),
+        short_id: shortId(e.scoped_id),
         first_date: card === undefined ? date : Math.min(card.first_date as number, date),
         last_card_proof: after.lastCardProof,
         card_proofs: card === undefined ? 1 : (card.card_proofs as number) + 1,
@@ -378,10 +381,11 @@ describe("every row of the views", () => {
     interface Case {
       readonly name: string;
       readonly proof_log: "production" | "test";
-      readonly events: readonly RuleEvent[];
+      readonly events: readonly VectorEvent[];
       readonly results: readonly { seq: number; valid: boolean; reason?: string; kinds?: readonly PlatformKind[] }[];
     }
     const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
+    // Floors from the vectors as they are now (61 cases, 224 valid records): a file read short, or a loop cut short, fails.
     assert.ok(cases.length >= 61);
     let written = 0;
     for (const c of cases) {
@@ -393,7 +397,8 @@ describe("every row of the views", () => {
         const before = memory.card(e.scope_string, e.scoped_id);
         const outcome = memory.apply({ scopeString: e.scope_string, scopedId: e.scoped_id, challenge: e.challenge, accounts: e.accounts, verifies: e.verifies, crlDates: e.crl_dates.map((d) => parseDay(d)!) });
         // The object writes the views of a valid record as a submission does (src/views.ts, `viewOf`, `writeView`); the result is the vectors'.
-        const result = await worker.proofLog.applyRuleEvent(e);
+        const { date: _date, ...event } = e;
+        const result = await worker.proofLog.applyRuleEvent(event);
         const { seq: _, ...vector } = c.results[i]!;
         assert.deepEqual(result.valid ? { valid: true, kinds: result.kinds } : { valid: false, reason: result.reason }, vector, what);
         assert.equal(outcome.result.valid, result.valid, what);
@@ -410,7 +415,7 @@ describe("every row of the views", () => {
 });
 
 describe("the pages' reads", () => {
-  test("every statement reads one stretch of one index, or of a table's primary key, and sorts nothing: the indexes README.md names", async () => {
+  test("every statement reads one stretch of one index, or of a table's primary key, and sorts nothing: the ones src/views.ts names for each read", async () => {
     // Two cards of one short ID that give their place to one account, so that the reads of a card run once for each.
     await pagesWorld(worker, "2026-11-18", [r("2026-11-10", cardStarting(CARD_A), "threads:alice"), r("2026-11-11", cardStarting(CARD_A), "threads:alice")]);
     const plans = await worker.proofLog.pagePlans({ platform: "threads", short_id: CARD_A, username: "alice", after: { since: "2026-11-11", since_seq: 2 } });

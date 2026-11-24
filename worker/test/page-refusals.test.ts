@@ -98,7 +98,7 @@ describe("the page of a card", () => {
     assert.ok(page.includes("新宣告：@alice"));
   });
 
-  for (const name of NOT_NAMES.filter((n) => n !== "")) {
+  for (const name of NOT_NAMES) {
     test(`is not written for a card whose account is ${JSON.stringify(name)}`, () => {
       assert.throws(() => proofPage(site, SHORT, { today, cards: [cardOf(name)] }), /^Error: pages: a card has an account that is not a Threads username$/);
     });

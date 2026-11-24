@@ -55,7 +55,7 @@ import type { FileBucket } from "../src/proof-log-files.ts";
 import { ProofLog as DeployedProofLog, SCHEMA_VERSION, type TimedWork, proofLogOf } from "../src/proof-log.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import { VIEW_TABLE_KEYS, clearViews, viewOf, writeView } from "../src/views.ts";
-import type { BucketFault, CardToWrite, KeptRecords, PagePlanQuestion, PagePlans, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "./card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, PagePlan, PagePlanQuestion, PagePlans, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -439,7 +439,7 @@ export class ProofLog extends DeployedProofLog {
   testPagePlans(q: PagePlanQuestion): PagePlans {
     const storage = this.ctx.storage;
     const sql = storage.sql;
-    const plans: { read: string; statement: string; plan: string[] }[] = [];
+    const plans: PagePlan[] = [];
     let read = "";
     const explaining = {
       exec: (statement: string, ...values: SqlStorageValue[]) => {

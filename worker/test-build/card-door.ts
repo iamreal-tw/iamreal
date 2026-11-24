@@ -123,9 +123,12 @@ export interface PagePlanQuestion {
   readonly after: { readonly since: string; readonly since_seq: number };
 }
 
-/**
- * What it answers: every statement the reads ran, in the order they ran
- * them, with the read that ran it and the plan SQLite made for it, one
- * line for each row of `EXPLAIN QUERY PLAN` (its `detail`).
- */
-export type PagePlans = readonly { readonly read: string; readonly statement: string; readonly plan: readonly string[] }[];
+/** A statement one of the reads ran: the read, the statement, and the plan SQLite made for it, one line for each row of `EXPLAIN QUERY PLAN` (its `detail`). */
+export interface PagePlan {
+  readonly read: string;
+  readonly statement: string;
+  readonly plan: readonly string[];
+}
+
+/** What it answers: every statement the reads ran, in the order they ran them. */
+export type PagePlans = readonly PagePlan[];
