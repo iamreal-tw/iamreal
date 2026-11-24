@@ -6,7 +6,7 @@
 
 ## 現在有什麼
 
-過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。讀卡還沒有：這個 build 的「卡片」每一次感應都回「沒有感應到卡片」，NFC 在 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 接上。畫面和啟動畫面照 `design/screens/` 的定稿（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；感應位置的示意圖在 #174，提醒和設定在 [#298](https://github.com/iamreal-tw/iamreal/issues/298)。
+過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。讀卡還沒有：這個 build 的「卡片」每一次感應都回「沒有感應到卡片」，NFC 在 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 接上。畫面和啟動畫面照 `design/screens/` 的 `card-proof-app-*`、`app-splash-phone.png`（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；感應位置的示意圖在 #174，提醒和設定在 [#298](https://github.com/iamreal-tw/iamreal/issues/298)。
 
 | 檔案 | 內容 |
 |---|---|
@@ -15,7 +15,7 @@
 | `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀 |
 | `App/CardProofFlow.swift` | 一次過卡，沒有畫面的狀態機。每一步呼叫核心的哪個函式、PIN 和憑證和簽章各留到什麼時候，寫在檔頭 |
 | `App/CardProofModel.swift`、`App/Screen.swift`、`App/Screens.swift` | 畫面看到的過卡：`Screen` 是一個畫面上從上到下的每一句話和每一個按鈕，`Screens` 決定 `design/copy/card-proof.md` 的哪一句放在哪裡，`CardProofModel` 做按鈕要做的事 |
-| `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），照 `design/screens/` 的 `card-proof-app-*`。它自己沒有任何句子，也不做任何判斷 |
+| `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），長得和 `design/screens/` 的 `card-proof-app-*` 一樣。它自己沒有任何句子，也不做任何判斷 |
 | `App/Theme.swift` | 畫面用的數值：`design/tokens.json` 裡 app 用到的那幾個，有 `-phone` 的用 `-phone` 的值。標題用包進 app 的源流明體 TW（執行時向系統登記，`Info.plist` 是產生的，不在那裡列）；其他的字用系統的字型 |
 | `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
 | `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
