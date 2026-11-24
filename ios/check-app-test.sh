@@ -79,6 +79,14 @@ copy
 printf x >> "$tmp/app/IamrealApp.app/bn254_g2.dat"
 expect "another CRS" "bn254_g2.dat"
 
+copy
+printf x >> "$tmp/app/IamrealApp.app/GenRyuMin2TW-B.otf"
+expect "another typeface" "GenRyuMin2TW-B.otf in the app is not design/fonts/GenRyuMin2TW-B.otf"
+
+copy
+rm "$tmp/app/IamrealApp.app/app.json"
+expect "the app's sentences left out" "app.json in the app is not design/copy/app.json"
+
 # A library that links AdSupport, put in the app.
 copy
 : > "$tmp/empty.c"

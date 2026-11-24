@@ -119,7 +119,15 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `bundled.sha256` 和 `device-core/crs.sha256` 列出每一個的 SHA-256，數字和 `web/circuits/README.md`、`web/src/prover/artifacts.ts` 相同。建置時每個檔案先核對再複製（`bundleFiles`），做出安裝檔後再核對一次裡面的檔案（`checkApk`）。app 用它們之前，核心還會照寫死在 `device-core/` 的 SHA-256 再核對一次（ADR-0035）：讀完卡之後一次，算證明之前再一次。
 
-畫面的文字 `design/copy/card-proof.json` 建置時原樣複製進安裝檔的資源（`res/raw/card_proof_copy.json`，`copySentences`），app 的程式裡沒有給人看的句子。
+`design/` 的三個檔建置時原樣複製進安裝檔的資源（`copyDesign`，清單是 `app/build.gradle.kts` 的 `designResources`），app 的程式裡沒有給人看的句子：
+
+| 資源 | 來源 |
+|---|---|
+| `raw/card_proof_copy.json` | `design/copy/card-proof.json`：過卡畫面上的每一句話 |
+| `raw/app_copy.json` | `design/copy/app.json`：只在 app 上、不屬於過卡的字 |
+| `font/genryumin2tw_b.otf` | `design/fonts/GenRyuMin2TW-B.otf`：標題用的源流明體 TW 的子集 |
+
+做出安裝檔後 `checkApk`、`checkBundle` 確認每一個都在 `res/` 裡，而且和程式庫裡的逐位元組相同。release 的 APK 把資源換成短的名稱（例如 `res/c7.otf`），所以照內容找，不照路徑。
 
 ## 建置時的檢查
 
@@ -184,7 +192,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 
 ### 測試
 
-`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對兩種 build 圖示下面的名稱各自和它寫的相同。
+`./gradlew test`。測試在這台機器的 JVM 上跑，不需要模擬器：`build-native.sh host` 把同一份 Rust 和同一份 JNI 的程式編成這台機器的函式庫，Kotlin 的 `DeviceCore` 載入它。測試讀 `spec/vectors/` 的標準答案，不複製。`AppNameTest` 讀 `design/copy/app.md`，核對兩種 build 圖示下面的名稱各自和它寫的相同。`AppCopyTest` 核對 `design/copy/app.md` 和 `app.json` 雙向逐字相同：JSON 的每一個值是 Markdown 某個程式碼區塊的一行，那些區塊的每一行也都是 JSON 的一個值。
 
 這台機器的函式庫是測試用的那一種（`build-native.sh` 的 `test-issuers`：`device-core/` 開 cargo feature `test-issuers`，多一個收測試發證金鑰開 session 的函式 `idc_testing_session_open`，其餘和 app 連結的相同）：標準答案裡的憑證是測試金鑰簽的，不是內政部簽的。`SessionTest` 用它拿 `circuit-inputs.json` 的一張卡片從 Kotlin 走完一次過卡在核心裡的每一步：檢查憑證、選清冊和檢查清冊、建樹、核對內建的檔案、查現況的請求和短編號、算證明和送出的請求，並跑 `list-consequence.json`、`card-status.json` 的每一案。`AnswerTest` 跑 `records-response.json` 的每一案：送出後後台的回應由核心讀（`idc_records_response`），app 拿到的 `seq`、雜湊、每個平台記成什麼、和確認畫面不同的平台，和標準答案相同。`DoneViewTest` 檢查完成畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼（標題「證明紀錄已經記下這次過卡」、日期和說明原因的那一句；那一句 `design/copy/card-proof.md` 寫了 app 的寫法還沒有定，先用網頁的，和 iOS 相同）、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候模擬器上遇不到最後一種，所以在這裡測。
 

@@ -4,9 +4,10 @@
 
 | 檔 | 內容 |
 |---|---|
-| `GenRyuMin2TW-B.woff2` | 子集，正本 |
+| `GenRyuMin2TW-B.woff2` | 子集，正本。網頁用 |
+| `GenRyuMin2TW-B.otf` | 同一個子集，和來源一樣是 OpenType（CFF）。兩個 app 用：Android 的系統讀不了 WOFF2（AOSP 的 FreeType 建置時沒有開 Brotli） |
 | `OFL.txt` | 授權（SIL Open Font License 1.1），源流明體的程式庫附的那一份 |
-| `subset.sh` | 重新產生子集的腳本 |
+| `subset.sh` | 重新產生兩個子集的腳本 |
 
 ## 從哪裡來
 
@@ -21,12 +22,12 @@ design/fonts/subset.sh                                       # 要 curl、shasum
 cd worker && node --experimental-strip-types scripts/site-files.ts   # 拷一份到 worker/site/fonts/
 ```
 
-腳本用 `fonttools` 4.68.0 和 `brotli` 1.2.1（`uv run --with`，釘精確的版本），不動程式庫的 `package.json` 和 lockfile。同一份 `design/copy/` 跑兩次，寫出來的檔逐位元組相同。部署和建置都不跑它：子集是提交進版控的這一份。
+腳本用 `fonttools` 4.68.0 和 `brotli` 1.2.1（`uv run --with`，釘精確的版本），不動程式庫的 `package.json` 和 lockfile。同一份 `design/copy/` 跑兩次，寫出來的兩個檔都逐位元組相同。兩個檔要一起提交，併 main 撞到時不挑一邊，併完重跑腳本。部署和建置都不跑它：子集是提交進版控的這一份。
 
-`worker/` 的 `pnpm test`（`test/font.test.ts`）檢查：`design/copy/` 的每一個字都在子集裡、子集帶著 name 表的 13 和 14、訪客頁面的那一份和這裡的逐位元組相同。`design/copy/` 加了新的字而沒重跑腳本，那個測試會列出缺的字。
+`worker/` 的 `pnpm test`（`test/font.test.ts`）檢查：`design/copy/` 的每一個字都在兩個子集裡、兩個子集帶著 name 表的 13 和 14、兩個子集收的字相同、訪客頁面的那一份和這裡的逐位元組相同。`design/copy/` 加了新的字而沒重跑腳本，那個測試會列出缺的字。
 
 ## 誰用它
 
 - 訪客的頁面：`worker/site/fonts/` 的拷貝，從網站自己的網域載入（`worker/README.md`「Static Assets」）
 - 過卡的網頁：`web/src/ui/style.css` 從這裡引用，建置時打包進自己的檔案
-- Android、iOS：建置時包進去（之後的票）
+- Android、iOS：`GenRyuMin2TW-B.otf` 建置時原樣包進安裝檔（`android/README.md`、`ios/README.md`「包進 app 的檔案」），兩邊的檢查核對包進去的和這裡的逐位元組相同

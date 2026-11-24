@@ -1,6 +1,7 @@
 #!/bin/sh
-# Writes GenRyuMin2TW-B.woff2 again: the subset of GenRyuMin2 TW Bold (源流明體 TW,
-# ButTaiwan, SIL OFL 1.1) the pages use. Run it by hand after a change of
+# Writes GenRyuMin2TW-B.woff2 and GenRyuMin2TW-B.otf again: the subset of
+# GenRyuMin2 TW Bold (源流明體 TW, ButTaiwan, SIL OFL 1.1) the pages and the
+# apps use. Run it by hand after a change of
 # design/copy/; nothing of a deploy or a build runs it (README.md).
 #
 # - The font is the B weight of the release v2.100 of
@@ -13,6 +14,8 @@
 #   licence) and 14 (the licence's URL): the OFL asks that every copy of
 #   the font carries its copyright notice and licence. The source has no
 #   record 0 (the copyright notice); that notice is OFL.txt's first lines.
+# - The same subset is written twice: WOFF2 for the pages, and OpenType as
+#   the source is for the apps (Android's text stack reads no WOFF2).
 # - fonttools writes WOFF2 with brotli; both are pinned to an exact version.
 #
 # Needs curl, shasum and uv (https://docs.astral.sh/uv/).
@@ -33,13 +36,16 @@ echo "$SHA256  $tmp/GenRyuMin2TW-B.otf" | shasum -a 256 -c -
 # Every file of design/copy/, as one text: fonttools takes each character of it once.
 cat "$copy"/* > "$tmp/text.txt"
 
-uv run --no-project --isolated --with fonttools==4.68.0 --with brotli==1.2.1 \
-  pyftsubset "$tmp/GenRyuMin2TW-B.otf" \
-  --text-file="$tmp/text.txt" \
-  --unicodes=U+0020-007E \
-  --name-IDs=0,1,2,3,4,5,6,13,14 \
-  --flavor=woff2 \
-  --output-file="$here/GenRyuMin2TW-B.woff2"
+subset() {
+  uv run --no-project --isolated --with fonttools==4.68.0 --with brotli==1.2.1 \
+    pyftsubset "$tmp/GenRyuMin2TW-B.otf" \
+    --text-file="$tmp/text.txt" \
+    --unicodes=U+0020-007E \
+    --name-IDs=0,1,2,3,4,5,6,13,14 \
+    "$@"
+}
+subset --flavor=woff2 --output-file="$here/GenRyuMin2TW-B.woff2"
+subset --output-file="$here/GenRyuMin2TW-B.otf"
 
-shasum -a 256 "$here/GenRyuMin2TW-B.woff2"
+shasum -a 256 "$here/GenRyuMin2TW-B.woff2" "$here/GenRyuMin2TW-B.otf"
 echo "Copy it to worker/site/fonts/ too: cd worker && node --experimental-strip-types scripts/site-files.ts"
