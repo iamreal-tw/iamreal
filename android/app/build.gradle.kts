@@ -106,8 +106,13 @@ val allowedLibraries = listOf(
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm",
     "org.jspecify:jspecify",
 )
-// The permissions the merged manifest may ask for: the network, for the server and the CRL archive.
-val allowedPermissions = listOf("android.permission.INTERNET")
+// The permissions the merged manifest may ask for: the network, for the server and the CRL archive; the
+// reminder's notification, and being told the phone restarted, which forgets its alarm (issue #297).
+val allowedPermissions = listOf(
+    "android.permission.INTERNET",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+)
 
 android {
     namespace = "tw.iamreal.app"

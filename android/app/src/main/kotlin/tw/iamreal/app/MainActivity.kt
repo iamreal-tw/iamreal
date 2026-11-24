@@ -1,17 +1,23 @@
 package tw.iamreal.app
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,12 +27,20 @@ import androidx.compose.ui.platform.ComposeView
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.reminder.Phone
 import tw.iamreal.app.ui.CardProofScreens
 import tw.iamreal.app.ui.Copy
 import tw.iamreal.app.ui.Model
 import tw.iamreal.app.ui.Outside
+import tw.iamreal.app.ui.Pickers
+import tw.iamreal.app.ui.ReminderModel
+import tw.iamreal.app.ui.Screen
+import tw.iamreal.app.ui.ScheduleScreen
+import tw.iamreal.app.ui.SettingsScreen
 import tw.iamreal.app.ui.Splash
 import tw.iamreal.app.ui.Step
+import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * The app's one screen: the card proof, step by step (ui/), after the splash
@@ -37,6 +51,11 @@ import tw.iamreal.app.ui.Step
  *
  * The island proof, the proof log and the help pages are not in the app: they
  * open in the browser.
+ *
+ * Besides it, the settings and the reminder's interval and time
+ * ([ReminderModel]). What the app stores is the highest CRL numbers it used
+ * ([StoredCrlNumbers]) and the reminder's four things (reminder/), which are
+ * the phone's, not a card's.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,6 +64,38 @@ class MainActivity : ComponentActivity() {
         // The screens draw under the system's bars, white as the pages, with dark icons whatever the system's own look.
         enableEdgeToEdge(SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT), SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT))
         val model = model(applicationContext)
+        val reminder = reminder(applicationContext)
+        // A card proof completed: the reminder that is on comes again from today.
+        model.onDone = { reminder.cardProofDone() }
+        // The system forgets alarms when the app is stopped by force: set again whenever the app opens.
+        Phone.reminders(applicationContext).rearm(Phone.now())
+        val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val told = asked
+            asked = null
+            told?.invoke(granted && Phone.notificationsAllowed(this))
+        }
+        // Android 13 on asks the cardholder; before it the app may notify unless notifications were turned off for it.
+        reminder.askPermission = { told ->
+            if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                told(Phone.notificationsAllowed(this))
+            } else {
+                asked = told
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        val pickers = Pickers(
+            day = { initial, range, picked ->
+                DatePickerDialog(this, { _, y, m, d -> picked(LocalDate.of(y, m + 1, d)) }, initial.year, initial.monthValue - 1, initial.dayOfMonth).apply {
+                    val zone = java.time.ZoneId.systemDefault()
+                    datePicker.minDate = range.start.atStartOfDay(zone).toInstant().toEpochMilli()
+                    datePicker.maxDate = range.endInclusive.atStartOfDay(zone).toInstant().toEpochMilli()
+                }.show()
+            },
+            time = { initial, picked -> TimePickerDialog(this, { _, h, m -> picked(LocalTime.of(h, m)) }, initial.hour, initial.minute, false).show() },
+        )
+        val version = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        // Not when the system makes the activity again (its process was ended in the background): the intent is the one it was first opened with.
+        if (savedInstanceState == null) handle(intent)
         val outside = Outside(
             open = { address ->
                 try {
@@ -66,6 +117,7 @@ class MainActivity : ComponentActivity() {
             },
         )
         val words = JSONObject(resources.openRawResource(R.raw.app_copy).use { String(it.readBytes(), Charsets.UTF_8) }).getJSONObject("splash")
+        val serviceName = model.copy.say("common.service_name")
         setContentView(
             ComposeView(this).apply {
                 setContent {
@@ -79,7 +131,11 @@ class MainActivity : ComponentActivity() {
                             splash = false
                         }
                     } else {
-                        CardProofScreens(model, outside)
+                        when (reminder.screen) {
+                            Screen.CARD_PROOF -> CardProofScreens(model, reminder, outside)
+                            Screen.SETTINGS -> SettingsScreen(reminder, outside, version, model.site)
+                            Screen.SCHEDULE -> ScheduleScreen(reminder, pickers, serviceName)
+                        }
                     }
                 }
             },
@@ -89,6 +145,7 @@ class MainActivity : ComponentActivity() {
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    if (reminder.back()) return
                     if (model.panel != null) return model.cancelTap()
                     when (model.step) {
                         Step.BEFORE, Step.DONE -> finish()
@@ -107,7 +164,31 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The timer of the PIN's 5 minutes may not have run while the app was away.
         model(applicationContext).checkIdle()
+        // "一週後再提醒我" on the notification may have changed the reminder meanwhile.
+        reminder(applicationContext).refresh()
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    /**
+     * Opened from the reminder's notification: step 1 says so. A card proof under way is left as it is; from
+     * step 6, back to step 1. Another app could open the app the same way: all it gets is that sentence.
+     */
+    private fun handle(intent: Intent?) {
+        if (intent?.getBooleanExtra(Phone.FROM_REMINDER, false) != true) return
+        // Opened again from the list of recent apps: the system hands back the intent the task began with.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        intent.removeExtra(Phone.FROM_REMINDER)
+        val model = model(applicationContext)
+        reminder(applicationContext).openedFromNotification()
+        if (model.step == Step.DONE) model.cancel()
+    }
+
+    /** Told whether the app may notify, once the system has asked: the one waiting for it. */
+    private var asked: ((Boolean) -> Unit)? = null
 
     override fun onSaveInstanceState(outState: Bundle) {
         // Nothing of a card proof goes into the system's saved state.
@@ -116,6 +197,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private var model: Model? = null
+        private var reminder: ReminderModel? = null
 
         /** The splash was shown in this process. */
         private var splashShown = false
@@ -130,6 +212,14 @@ class MainActivity : ComponentActivity() {
             crlNumbers = StoredCrlNumbers(context),
             copy = Copy(context.resources.openRawResource(R.raw.card_proof_copy).use { String(it.readBytes(), Charsets.UTF_8) }),
         ).also { model = it }
+
+        /** The reminder as the screens show it, for this process. */
+        private fun reminder(context: Context): ReminderModel = reminder ?: ReminderModel(
+            Phone.reminders(context),
+            Phone.words(context),
+            today = Phone::today,
+            now = Phone::now,
+        ).also { reminder = it }
     }
 }
 

@@ -60,17 +60,22 @@ internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, v
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun CardProofScreens(m: Model, outside: Outside) {
+internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
     // The tags below are the names a test finds the fields by.
     Box(Modifier.fillMaxSize().background(Colours.bg).safeDrawingPadding().imePadding().semantics { testTagsAsResourceId = true }) {
         Column(Modifier.fillMaxSize()) {
-            Header(m.copy.say("common.service_name"))
+            // The settings from the first and the last step: not while a card proof is under way.
+            val settings = m.step == Step.BEFORE || m.step == Step.DONE
+            Header(m.copy.say("common.service_name"), if (settings) r.app.say("settings.open") else null) { r.openSettings() }
             // Each step starts at its top.
             key(m.step) {
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Type.gutter).padding(top = 28.dp, bottom = 48.dp).testTag("step-${m.step.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    // Opened from the reminder's notification: above everything of step 1 (design/screens/app-reminder-4-from-notification-phone.png).
+                    // The minimum version's sentence, when the app has it (issue #171), goes above it.
+                    if (m.step == Step.BEFORE) FromReminder(r)
                     StepBar(m.copy, m.step.number)
                     Spacer(Modifier.height(6.dp))
                     when (m.step) {
@@ -80,7 +85,7 @@ internal fun CardProofScreens(m: Model, outside: Outside) {
                         Step.ACCOUNTS -> Accounts(m, outside)
                         Step.CONFIRM -> Confirm(m)
                         Step.PROGRESS -> Progress(m)
-                        Step.DONE -> Done(m, outside)
+                        Step.DONE -> Done(m, r, outside)
                     }
                 }
             }
@@ -324,7 +329,7 @@ private fun SmallCard(c: Copy, accounts: List<Pair<String?, String>>, shortId: S
 }
 
 @Composable
-private fun Done(m: Model, outside: Outside) {
+private fun Done(m: Model, r: ReminderModel, outside: Outside) {
     val c = m.copy
     val d = m.done ?: return
     val url = m.proofUrl(d.shortId)
@@ -413,7 +418,8 @@ private fun Done(m: Model, outside: Outside) {
                 Optional(c.say("done.share_title"), note) { Button(button, Modifier.fillMaxWidth().padding(top = 12.dp), height = 46.dp) { outside.share(url) } }
             }
             DashedRule()
-            Optional(c.say("done.return_title"), c.say("done.return_note"))
+            // The reminder, in the place of the web's "記得每三個月回來過卡一次" (design/copy/card-proof.md, "6. 完成", app, "提醒").
+            DoneReminderSection(r, c, d.validUntil)
         }
     }
     // Another card proof.

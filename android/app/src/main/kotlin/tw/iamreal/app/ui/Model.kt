@@ -148,6 +148,12 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     val domain: String get() = wiring.domain
 
+    /** The site the app talks to, without a slash at the end: the settings' links open its pages. */
+    val site: String get() = wiring.site
+
+    /** Told of every card proof that is completed: the reminder comes again from today. */
+    var onDone: (CardProof.Done) -> Unit = {}
+
     /** The address of a card's page on the site. */
     fun proofUrl(shortId: String): String = "${wiring.site}/p/$shortId"
 
@@ -443,6 +449,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 progressItems = items(4, 4, false)
                 this.done = done
                 dropAll(keepDone = true)
+                onDone(done)
                 step = Step.DONE
             },
             { stop ->

@@ -7,8 +7,8 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The app's Kotlin sources take every sentence from design/copy/card-proof.json: each key they name
- * (`say("group.key"`, `has("group.key"`) is in it, and outside comments they write no character of
+ * The app's Kotlin sources take every sentence from design/copy/card-proof.json and app.json: each key
+ * they name (`say("group.key"`, `has("group.key"`) is in one of them, and outside comments they write no character of
  * Chinese of their own. So a sentence taken out of the copy cannot stay on a screen. The same check as
  * ios/Tests/BuildTests.swift and web/test/copy.test.ts.
  */
@@ -19,14 +19,14 @@ class SourcesCopyTest {
     private fun files(): List<File> = sources.walk().filter { it.isFile && it.extension == "kt" }.toList()
 
     @Test
-    fun `every key the sources name is in card-proof json`() {
-        val groups = JSONObject(File(copy, "card-proof.json").readText())
+    fun `every key the sources name is in card-proof json or app json`() {
+        val files = listOf(JSONObject(File(copy, "card-proof.json").readText()), JSONObject(File(copy, "app.json").readText()))
         val key = Regex("""\b(?:say|has)\("([a-z_]+)\.([a-z_]+)"""")
         var named = 0
         for (file in files()) {
             for (match in key.findAll(file.readText())) {
                 val (group, name) = match.destructured
-                assertTrue("${file.name} names $group.$name, which design/copy/card-proof.json does not have", groups.optJSONObject(group)?.has(name) == true)
+                assertTrue("${file.name} names $group.$name, which neither design/copy/card-proof.json nor app.json has", files.any { it.optJSONObject(group)?.has(name) == true })
                 named++
             }
         }
