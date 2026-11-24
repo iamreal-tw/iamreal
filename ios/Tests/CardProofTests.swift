@@ -23,6 +23,9 @@ final class CardProofTests: XCTestCase {
     private var document: CopyDocument!
     /// The values of this run that stand where the document has an example.
     private var values: [String: String] = [:]
+    /// The system's notifications and what the phone keeps of the reminder, for the model made last.
+    private var notifier: FakeNotifier!
+    private var reminderStore: MemoryReminderStore!
 
     override func setUp() async throws {
         backend = try TestBackend.load()
@@ -184,7 +187,11 @@ final class CardProofTests: XCTestCase {
             "頁面上的個人檔案裡看得到這個連結，就成功了。",
             "還可以做的，不做也不影響這張證明",
             "讓朋友也知道", "把你的島民證明分享到 Threads。", "分享",
-            "記得每三個月回來過卡一次", "越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。",
+            // The reminder, offered: three months from today, 9:00 in the evening.
+            "提醒我回來過卡",
+            "越久沒過卡，說服力越低。這支手機會在 \(When(appCopy: Copy.bundled("app")).day(Day(now).adding(days: 84)))晚上 9:00 提醒你，大約三個月後。",
+            "提醒由手機自己排，不經過我們的伺服器。",
+            "開啟提醒", "改間隔或時刻",
             "回到開頭",
         ])
         await Snapshot.save(model, as: "6-done")
@@ -209,6 +216,20 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
         try await press("分享", in: model)
         XCTAssertEqual(shared, [address])
+
+        // The system does not let the app notify: nothing is set, the card proof is done all the same.
+        notifier.allows = false
+        try await press("開啟提醒", in: model)
+        XCTAssertEqual(model.screen.step, 6)
+        XCTAssertEqual(Array(model.screen.texts.suffix(4)), [
+            "記得每三個月回來過卡一次",
+            "越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。",
+            "沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。",
+            "回到開頭",
+        ])
+        XCTAssertTrue(model.screen.texts.contains("@alice"))
+        XCTAssertNil(reminderStore.kept)
+        XCTAssertEqual(notifier.scheduled, [])
 
         try await press("回到開頭", in: model)
         XCTAssertEqual(model.screen.step, 1)
@@ -421,6 +442,8 @@ final class CardProofTests: XCTestCase {
         let backend = self.backend!
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
         self.asked = asked
+        notifier = FakeNotifier()
+        reminderStore = MemoryReminderStore()
         let flow = CardProofFlow.Dependencies(
             proofLog: .test,
             backend: asked,
@@ -432,6 +455,10 @@ final class CardProofTests: XCTestCase {
         let model = CardProofModel(CardProofModel.Dependencies(
             flow: flow,
             copy: Copy.bundled(),
+            appCopy: Copy.bundled("app"),
+            reminders: Reminders(store: reminderStore, notifier: notifier, clock: { [unowned self] in self.now }),
+            openSchedule: {},
+            openSettings: {},
             site: backend.origin,
             open: { [unowned self] in self.opened.append($0) },
             copyText: { [unowned self] in self.copied.append($0) },
@@ -455,7 +482,7 @@ final class CardProofTests: XCTestCase {
     private func press(_ label: String, in model: CardProofModel, file: StaticString = #filePath, line: UInt = #line) async throws {
         let inline = model.screen.blocks.flatMap { block -> [Button] in
             switch block {
-            case .button(let button, _), .linked(_, let button, _): return [button]
+            case .button(let button, _), .linked(_, let button, _), .action(let button): return [button]
             case .account(let row): return row.preview.map { [$0] } ?? []
             default: return []
             }

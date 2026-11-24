@@ -2,11 +2,49 @@ import SwiftUI
 import UIKit
 
 /// The iOS app: the splash screen (SplashView), then the card proof, six
-/// screens (CardProofView).
+/// screens (CardProofView); over it the settings and the screen to choose
+/// the reminder's interval and time (ReminderViews).
 @main
 struct IamrealApp: App {
-    @StateObject private var model = CardProofModel.ofThisBuild()
+    @StateObject private var model: CardProofModel
+    @StateObject private var pages: ReminderPages
     @State private var opening = true
+    /// The system's notifications. Made as the app starts, before the
+    /// system hands it what was pressed on a notification.
+    private let notifier: SystemNotifier
+
+    init() {
+        let appCopy = Copy.bundled("app")
+        let copy = Copy.bundled()
+        let notifier = SystemNotifier(appCopy: appCopy)
+        let reminders = Reminders(store: StoredReminder(), notifier: notifier)
+        let pages = ReminderPages(ReminderPages.Dependencies(
+            reminders: reminders,
+            appCopy: appCopy,
+            serviceName: copy("common.service_name"),
+            site: AppEnvironment.site,
+            version: Self.version,
+            open: { UIApplication.shared.open($0) }))
+        let model = CardProofModel.ofThisBuild(copy: copy, appCopy: appCopy, reminders: reminders, pages: pages)
+        notifier.snoozed = { [weak model] in await model?.snoozeReminder() }
+        notifier.opened = { [weak model, weak pages] in
+            pages?.close()
+            model?.openedFromReminder()
+        }
+        self.notifier = notifier
+        _model = StateObject(wrappedValue: model)
+        _pages = StateObject(wrappedValue: pages)
+    }
+
+    /// The version the settings write: the store's date version; `dev` for
+    /// the development build (design/copy/app.md, the settings).
+    private static var version: String {
+        #if DEBUG
+        return "dev"
+        #else
+        return Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -18,7 +56,11 @@ struct IamrealApp: App {
                     if opening {
                         SplashView(appCopy: Copy.bundled("app"))
                     } else {
-                        CardProofView(model: model)
+                        switch pages.pages.last {
+                        case .schedule: ScheduleView(pages: pages)
+                        case .settings: SettingsView(pages: pages)
+                        case nil: CardProofView(model: model)
+                        }
                     }
                 }
                 // The colors are design/tokens.json's, whatever the phone's appearance.
@@ -38,7 +80,7 @@ extension CardProofModel {
     /// The card proof of this build: the site and the proof log of
     /// AppEnvironment, the core's own session (MOICA's keys), the files
     /// the app carries.
-    static func ofThisBuild() -> CardProofModel {
+    static func ofThisBuild(copy: Copy, appCopy: Copy, reminders: Reminders, pages: ReminderPages) -> CardProofModel {
         let flow = CardProofFlow.Dependencies(
             proofLog: AppEnvironment.proofLog,
             backend: HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles),
@@ -49,7 +91,11 @@ extension CardProofModel {
             proofFiles: BundledFile.proofFiles(for:))
         return CardProofModel(CardProofModel.Dependencies(
             flow: flow,
-            copy: Copy.bundled(),
+            copy: copy,
+            appCopy: appCopy,
+            reminders: reminders,
+            openSchedule: { [weak pages] in pages?.openSchedule() },
+            openSettings: { [weak pages] in pages?.openSettings() },
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
             copyText: { UIPasteboard.general.string = $0 },
