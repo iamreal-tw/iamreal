@@ -32,7 +32,7 @@ describe("each platform's presentation", () => {
     assert.equal(normalize("@Alice"), "alice");
     assert.equal(normalize("Kelvin"), "Kelvin"); // KELVIN SIGN stays, and fails the format
     assert.equal(format.accepts(normalize("Kelvin")), false);
-    // test-example (test builds only): the name as typed, no prefix.
+    // test-example (the headless tests' build only): the name as typed, no prefix.
     assert.equal(TEST_EXAMPLE.normalize("@A-b"), "@A-b");
     assert.equal(TEST_EXAMPLE.prefix, "");
   });

@@ -13,6 +13,12 @@
 // The same trade as the build for a real card on this computer
 // (target-local.ts), but for the data domain and the site.
 //
+// It knows Threads only, as the production build does (#309): the test
+// log's table has test-example too, but the screens speak of one platform
+// as they will on the public site. A test-example account on the test log
+// is a platform this page does not know (kept as it is, ADR-0019). The
+// headless tests' build (test/e2e/target.ts) still knows both.
+//
 // Only this build's pages carry the mark of a test log: vite.config.ts
 // adds src/ui/test-proof-log.ts to them in this mode and in no other.
 // test/build.test.ts checks that this build holds no fake card and no test
@@ -20,15 +26,14 @@
 import { IDLE_MS } from "./flow.ts";
 import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
 import type { Presentation } from "./platforms.ts";
-import { TEST_EXAMPLE } from "./presentations/test-example.ts";
 import { THREADS } from "./presentations/threads.ts";
 import type { ProofLog } from "iamreal-protocol/scope.ts";
 
 /** The test log: never the public proof log's scope string. vite.config.ts does not build this mode with another value. */
 export const PROOF_LOG: ProofLog = "test";
 
-/** The platforms of the test log's table. */
-export const PRESENTATIONS: readonly Presentation[] = Object.freeze([TEST_EXAMPLE, THREADS]);
+/** Threads only, as the production build (#309). */
+export const PRESENTATIONS: readonly Presentation[] = Object.freeze([THREADS]);
 
 export const ISSUERS: readonly IssuerKey[] = MOICA_ISSUERS;
 
