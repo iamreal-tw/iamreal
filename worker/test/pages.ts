@@ -105,7 +105,7 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
   assert.equal(res.headers.get("set-cookie"), null, `${what}: no cookie`);
 }
 
-/** Where each link of the navigation bar and the foot goes, by its words in home.md (導覽列, section 9), as home.md says. */
+/** Where each link of the navigation bar and the foot goes, by its words in home.md (導覽列, 頁尾), as home.md says. */
 const LINK_HREFS: Readonly<Record<string, string>> = {
   怎麼驗證島民證明: "/verify",
   證明紀錄: "/proof-log",
@@ -139,7 +139,7 @@ function piece(what: string, page: string, start: string, end: string): string {
 
 /**
  * Checks the navigation bar and the foot of a page against home.md (導覽列
- * and section 9): their words and links in order; on a narrow screen the
+ * and 頁尾): their words and links in order; on a narrow screen the
  * links and the button in a <details> that opens without a script and from
  * the keyboard; the bar first in the body (after the mark of a test log), the
  * page's own content in <main>, the foot after it.
@@ -167,7 +167,7 @@ export function checkNavAndFoot(what: string, page: string): void {
   // Nothing takes the menu, or anything of the bar, away from the keyboard.
   assert.doesNotMatch(bar, /\stabindex=|\sinert\b|\sdisabled\b/, `${what}: the bar is reached from the keyboard`);
 
-  const [footName, ...footWords] = items("home.md", "9. ", 0);
+  const [footName, ...footWords] = items("home.md", "頁尾", 0);
   const foot = piece(what, page, '<footer class="foot">', "</footer>");
   assert.ok(squash(visibleText(foot)).startsWith(squash(footName!)), `${what}: the foot starts with ${footName}`);
   assert.deepEqual(links(foot), footWords.map((words) => [LINK_HREFS[words], words]), `${what}: the foot's links`);

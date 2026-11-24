@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
-import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, codeBlocks, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, FONT_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
 import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
@@ -245,6 +245,16 @@ describe("the page of a card", () => {
   });
 });
 
+/** The sections of home.md the home page shows, in its order: the navigation bar and the foot are every page's. */
+const HOME_SECTIONS = ["導覽列", "第一屏", "為什麼", "不必公開你是誰", "一起能改變什麼", "常見問題", "結尾", "頁尾"];
+
+/** The question of faq.md with this id and its answer, as lines of the page. */
+function homeQuestion(faq: ReturnType<typeof faqQuestions>, id: string): string[] {
+  const q = faq.find((f) => f.id === id);
+  assert.ok(q !== undefined, `faq.md has a question with the id ${id}`);
+  return [q.question, ...copyLines(q.answer)];
+}
+
 describe("the home page", () => {
   /** Three cards with an account now, two of them with a card proof in the last 90 days; one that withdrew. */
   async function homeWorld(): Promise<void> {
@@ -258,55 +268,69 @@ describe("the home page", () => {
     ]);
   }
 
-  test("every sentence of home.md, in order, with the seven answers of faq.md; its links, the preview", async () => {
+  test("every sentence of home.md, in order, with the eight answers of faq.md; its links, its figures, the preview", async () => {
     await homeWorld();
     const { status, page } = await getPage(worker, "/");
     assert.equal(status, 200);
-    const six = copyLines(block("home.md", "6. "));
-    assert.deepEqual([six.length, six[0], six[8]], [9, "常見問題", "更多常見問題"], "home.md section 6");
-    const questions = faqQuestions();
-    const answers = six.slice(1, 8).flatMap((q) => {
-      const found = questions.find((f) => f.question === q);
-      assert.ok(found !== undefined, `faq.md has the question ${q}`);
-      return [q, ...copyLines(found.answer)];
-    });
-    wantLines(page, [
-      ...copyLines(block("home.md", "導覽列")),
-      ...copyLines(block("home.md", "1. ", 0)),
-      ...copyLines(block("home.md", "1. ", 1)),
-      ...copyLines(block("home.md", "2. "), "1,284", "3", "1,031", "2"),
-      ...copyLines(block("home.md", "3. ")),
-      ...copyLines(block("home.md", "4. ")),
-      ...copyLines(block("home.md", "5. ", 0)),
-      ...copyLines(block("home.md", "5. ", 1)),
-      six[0]!,
-      ...answers,
-      six[8]!,
-      ...copyLines(block("home.md", "7. ")),
-      ...copyLines(block("home.md", "8. ")),
-      ...copyLines(block("home.md", "9. ")),
-    ]);
-
-    for (const link of ['<a href="/proof-log">看已經換出的島民證明</a>', '<a href="/hang">掛到 Threads 的個人檔案上</a>', '<a href="/verify">零知識證明</a>', '<a href="/faq">更多常見問題</a>']) {
-      assert.ok(page.includes(link), `the page has ${link}`);
+    const faq = faqQuestions();
+    const want: string[] = [];
+    for (const section of HOME_SECTIONS) {
+      const blocks = codeBlocks(copySection("home.md", section));
+      if (section === "常見問題") {
+        // The heading and the link to the FAQ around the eight questions, each with its answer in faq.md.
+        const [around, ids] = blocks;
+        const [heading, more] = copyLines(around!);
+        assert.equal(ids!.length, 8, "home.md 常見問題 lists eight questions");
+        want.push(heading!, ...ids!.flatMap((id) => homeQuestion(faq, id)), more!);
+        continue;
+      }
+      // The navigation bar and the foot as on a wide screen (the narrow one: test/pages.ts, checkNavAndFoot).
+      if (section === "導覽列" || section === "頁尾") {
+        want.push(...copyLines(blocks[0]!));
+        continue;
+      }
+      // The example numbers of 一起能改變什麼 are this proof log's.
+      for (const b of blocks) want.push(...copyLines(b, ...(section === "一起能改變什麼" ? ["1,284", "3", "1,031", "2"] : [])));
     }
-    // The one main action, in section 1 and section 8.
+    wantLines(page, want);
+
+    for (const [href, words] of [
+      ["/proof-log", "看其他人的島民證明"],
+      ["/proof", "更新我的島民證明"],
+      ["/proof-log", "看一張島民證明的樣子"],
+      ["/faq", "更多常見問題"],
+      ["/hang", "用你的帳號承認這張證明"],
+    ]) {
+      assert.match(page, new RegExp(`<a (class="[^"]*" )?href="${href}">${words}</a>`), `the page links ${words} to ${href}`);
+    }
+    // The one main action, on the first screen and at the end.
     assert.equal(page.split('<a class="button big" href="/proof">我要換島民證明</a>').length - 1, 2);
-    // The seven questions fold, each its own <details>.
-    for (const q of six.slice(1, 8)) assert.ok(page.includes(`<details><summary>${q}</summary>`), `${q} is a <details>`);
-    assert.equal(page.split("<details>").length - 1, 7);
-    // The small proof is not a link yet.
-    const mini = /<div class="mini-proof">.*?<\/div>/s.exec(page)?.[0] ?? "";
-    assert.ok(mini !== "" && !mini.includes("<a ") && !mini.includes("點進去看看"), "the small proof");
-    // 〈需要什麼〉 twice: sections 1 and 8.
-    assert.equal(squash(visibleText(page)).split(squash(needs())).length - 1, 2);
+    // The eight questions fold, each its own <details>, in home.md's order.
+    const ids = codeBlocks(copySection("home.md", "常見問題"))[1]!;
+    const summaries = [...page.matchAll(/<details><summary>([^<]*)<\/summary>/g)].map((m) => m[1]);
+    assert.deepEqual(summaries, ids.map((id) => faq.find((q) => q.id === id)!.question));
+    // The ratio bar: two of the three cards with an account had a card proof in the last three months.
+    assert.match(page, /<rect class="part" width="66.7%"/);
+    // 〈需要什麼〉 once, on the first screen.
+    assert.equal(squash(visibleText(page)).split(squash(needs())).length - 1, 1);
+    assert.ok(block("home.md", "第一屏").includes("〈需要什麼〉"));
+
+    // Each figure: one sentence for a screen reader, its dots hidden from it.
+    for (const [section, n] of [["第一屏", 1], ["不必公開你是誰", 1], ["一起能改變什麼", 2]] as const) {
+      const said = block("home.md", section, n);
+      assert.equal(said.length, 1, `home.md ${section}: a figure's one sentence`);
+      assert.ok(page.includes(`<figcaption class="sr">${said[0]}</figcaption>`), `${section}: the figure says ${said[0]}`);
+    }
+    const svgs = [...page.slice(page.indexOf("<main>")).matchAll(/<svg\b[^>]*>/g)].map((m) => m[0]);
+    assert.ok(svgs.length >= 3, "the dots are drawn");
+    for (const svg of svgs) assert.match(svg, /aria-hidden="true"/, "a screen reader does not read the dots");
 
     const { title, site, summary } = previewOf("home.md", "連結被貼出去時的預覽");
     assert.equal(firstMatch(TITLE_TAG, page), "島民證明｜iamreal.tw");
     assert.ok(copySection("home.md", "連結被貼出去時的預覽").includes("`島民證明｜iamreal.tw`"), "home.md gives the <title>");
     assert.deepEqual([firstMatch(OG_TITLE, page), firstMatch(OG_SITE, page), firstMatch(OG_DESCRIPTION, page)], [title, site, summary]);
-    const first = copyLines(block("home.md", "1. ", 0));
-    assert.equal(summary, first[1]! + first[2]!, "the summary is the first screen's two lines");
+    const first = copyLines(block("home.md", "第一屏"));
+    assert.equal(summary, first[1]! + first[2]! + first[3]!, "the summary is the headline and the first line under it");
   });
 
   test("the two numbers follow the proof log: a declaration, a withdrawal, and a last card proof 90 and 91 days ago", async () => {
@@ -315,30 +339,34 @@ describe("the home page", () => {
     const numbers = async (): Promise<string[]> => {
       const { page } = await getPage(worker, "/");
       const text = visibleText(page).replace(/\s+/g, " ");
-      return [/現在有 ([\d,]+) 張島民證明/.exec(text)?.[1] ?? "", /其中 ([\d,]+) 張在過去三個月內過卡/.exec(text)?.[1] ?? ""];
+      // The ratio bar: as long as the first number, its filled part the second (home.md, 一起能改變什麼).
+      const filled = /<svg class="ratio"[^>]*>.*?<rect class="part" width="([^"]*)"/s.exec(page)?.[1] ?? "";
+      return [/現在有 ([\d,]+) 張島民證明/.exec(text)?.[1] ?? "", /其中 ([\d,]+) 張在過去三個月內過卡/.exec(text)?.[1] ?? "", filled];
     };
     wantLines((await getPage(worker, "/")).page, ["現在有 0 張島民證明", "其中 0 張在過去三個月內過卡"]);
+    // No card yet: the bar is all track.
+    assert.deepEqual(await numbers(), ["0", "0", "0%"]);
     const a = newCard();
     await mustSubmit(worker, await sub(worker, a, root, "threads:alice"), "threads first");
-    assert.deepEqual(await numbers(), ["1", "1"]);
+    assert.deepEqual(await numbers(), ["1", "1", "100%"]);
     await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
     // A card with an account on another platform only is not one of them.
     await mustSubmit(worker, await sub(worker, newCard(), root, "test-example:a-b"), "test-example first");
-    assert.deepEqual(await numbers(), ["2", "2"]);
+    assert.deepEqual(await numbers(), ["2", "2", "100%"]);
     await mustSubmit(worker, await sub(worker, a, root), "threads withdraw");
-    assert.deepEqual(await numbers(), ["1", "1"]);
+    assert.deepEqual(await numbers(), ["1", "1", "100%"]);
     // 90 days after that card proof it still counts as recent; 91 days after, it does not. "Today" is Taiwan's date.
     await worker.setClock(new Date(START.getTime() + 90 * DAY_MS + 11 * 3600 * 1000));
-    assert.deepEqual(await numbers(), ["1", "1"]);
+    assert.deepEqual(await numbers(), ["1", "1", "100%"]);
     await worker.setClock(new Date(START.getTime() + 90 * DAY_MS + 12 * 3600 * 1000));
-    assert.deepEqual(await numbers(), ["1", "0"]);
+    assert.deepEqual(await numbers(), ["1", "0", "0%"]);
   });
 
   test("a number above 999 is written with a comma", async () => {
     // What the page does with a number is the page's, whatever the proof log has: a proof log of a thousand cards is not built here.
     const { thousands } = await import("../src/pages/html.ts");
     assert.deepEqual([0, 7, 999, 1000, 1284, 1234567].map(thousands), ["0", "7", "999", "1,000", "1,284", "1,234,567"]);
-    assert.ok(block("home.md", "2. ").join("\n").includes("1,284"));
+    assert.ok(block("home.md", "一起能改變什麼", 1).join("\n").includes("1,284"));
   });
 });
 

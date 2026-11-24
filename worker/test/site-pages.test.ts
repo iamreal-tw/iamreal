@@ -54,7 +54,7 @@ describe("the FAQ", () => {
       want.push(q.question, ...copyLines(q.answer));
     }
     const last = want[want.length - 1]!;
-    const foot = copyLines(block("home.md", "9. "));
+    const foot = copyLines(block("home.md", "頁尾"));
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
 
@@ -88,12 +88,23 @@ describe("the FAQ", () => {
     assert.doesNotMatch(page, OG_DESCRIPTION);
   });
 
-  test("the home page's seven answers are the FAQ's, the same HTML", async () => {
+  test("the home page's eight questions are the FAQ's, the same HTML, the ones faq.md marks, in home.md's order", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const home = (await getPage(worker, "/")).page;
     const faq = (await getPage(worker, "/faq")).page;
+    const ids = codeBlocks(copySection("home.md", "常見問題"))[1]!;
+    // faq.md says, under each question, whether the home page has it.
+    const marked = readCopy("faq.md")
+      .split("\n### ")
+      .slice(1)
+      .filter((q) => q.includes("首頁的常見問題有這一題"))
+      .map((q) => /這一題在頁面上的 `id`：`([a-z0-9-]+)`/.exec(q)![1]!);
+    assert.deepEqual([...ids].sort(), [...marked].sort(), "home.md lists the questions faq.md marks");
     const folded = [...home.matchAll(/<details><summary>([^<]*)<\/summary>\n(.*?)<\/details>/gs)];
-    assert.equal(folded.length, 7);
+    assert.deepEqual(
+      folded.map((f) => f[1]),
+      ids.map((id) => faqQuestions().find((q) => q.id === id)!.question),
+    );
     for (const [, question, answer] of folded) {
       const q = faqByQuestion(question!);
       const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(faq);
@@ -272,7 +283,7 @@ describe("what a card proof needs", () => {
     const { status, page } = await getPage(worker, "/prepare");
     assert.equal(status, 200);
     const want = ["1. ", "2. ", "3. ", "4. "].flatMap((heading) => copyLines(block("prepare.md", heading)));
-    const foot = copyLines(block("home.md", "9. "));
+    const foot = copyLines(block("home.md", "頁尾"));
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last situation and the foot");
     // The two links, to the addresses prepare.md gives under their sections.
