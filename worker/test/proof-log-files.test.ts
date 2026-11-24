@@ -222,7 +222,13 @@ describe("the 1,000th record fills a log file", () => {
       const run = spawnSync("go", ["test", "-count=1", "-tags", "iamrealtest", "-run", "^TestWorkerDirectory$", "./cmd/iamreal-verify"], { cwd: join(WORKER_DIR, ".."), env: { ...process.env, IAMREAL_WORKER_DIRECTORY: join(out, "proof-log") }, encoding: "utf8" });
       assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
       const said = readFileSync(join(out, "verify.txt"), "utf8");
-      const verified = JSON.parse(readFileSync(join(out, "verify.json"), "utf8")) as { valid: boolean; fingerprint: string; results: { seq: number; valid: boolean }[]; state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; accounts: unknown }[] }[] };
+      const verified = JSON.parse(readFileSync(join(out, "verify.json"), "utf8")) as {
+        valid: boolean;
+        fingerprint: string;
+        results: { seq: number; valid: boolean }[];
+        state: { scope_string: string; cards: { scoped_id: string; last_card_proof: string; accounts: unknown }[] }[];
+        ordinals: { scope_string: string; scoped_id: string; ordinal: number }[];
+      };
 
       // The directory is a valid proof log of the records of its two files, each one valid, with the fingerprint they give.
       let fingerprint = EMPTY_FINGERPRINT;
@@ -239,6 +245,14 @@ describe("the 1,000th record fills a log file", () => {
       assert.equal(cards.length, 2 * LINES_PER_FILE - 6);
       const state = await cardState(worker, card);
       assert.deepEqual(cards.find((c) => c.scoped_id === card), { scoped_id: card, last_card_proof: state.last_card_proof, accounts: [{ platform: "threads", username: "alice" }] });
+      // Every card's ordinal Go computes is the one the pages read (src/views.ts, view_ordinals); the record after the
+      // two files, not in the directory, is no card's first. And the page of the card writes Go's number.
+      const views = (await worker.proofLog.views()).view_ordinals!.map((row) => ({ scope_string: row.scope_string, scoped_id: row.scoped_id, ordinal: row.ordinal }));
+      assert.equal(verified.ordinals.length, cards.length);
+      assert.deepEqual(verified.ordinals, views.slice(0, verified.ordinals.length));
+      const ordinal = verified.ordinals.find((o) => o.scoped_id === card)!.ordinal;
+      const page = await (await worker.fetch(`/p/${card.slice(0, 10)}`)).text();
+      assert.ok(page.includes(`<p class="ordinal">第 ${ordinal.toLocaleString("en-US")} 張島民證明</p>`), `the page of ${card} writes 第 ${ordinal} 張`);
       rmSync(out, { recursive: true, force: true });
     } catch (e) {
       throw new Error(`${e instanceof Error ? e.message : String(e)}\nThe directory and what Go printed are kept in ${out}`, { cause: e });

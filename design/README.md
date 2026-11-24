@@ -14,7 +14,7 @@
 | `DESIGN.md` | 看起來怎麼樣，以及為什麼：兩層的視覺、顏色、字、點、線、版面、元件、動態、無障礙、不做的 |
 | `tokens.json` | 顏色、字級、間距的數值；key 是 CSS 變數的名稱 |
 | `screens/` | 每一頁、每一個畫面定稿的截圖，施工後換成實際的截圖 |
-| `fonts/` | 標題用的源流明體 TW 的子集、授權（`OFL.txt`）、重新產生子集的腳本（`fonts/README.md`） |
+| `fonts/` | 標題用的源流明體 TW 的子集（網頁用 WOFF2、app 用 OpenType）、授權（`OFL.txt`）、重新產生子集的腳本（`fonts/README.md`） |
 
 原則在 `docs/design/principles.md`，用詞以根目錄的 `GLOSSARY.md` 為準。改這裡的文字或視覺之前先讀那兩份。三樣對不上時，文字以 `copy/` 為準，數值以 `tokens.json` 為準，截圖只是樣子。
 

@@ -7,11 +7,12 @@
 // `writeViewsOf`; proof-log.ts, `#fillViews`, which reads the records where
 // they are); they reflect exactly the records 1 to `viewSeq`.
 //
-// The four tables are the ones of the Go backend (e159ab9:server/store/sqlite_view.go).
+// The first four tables are the ones of the Go backend (e159ab9:server/store/sqlite_view.go).
 // A date is a day number (protocol/, `Day`: days since 1970-01-01), so that
-// dates compare as numbers; an account that is none is NULL. Every table is
-// keyed by the scope string, since a proof log can hold two scopes while one is
-// retired.
+// dates compare as numbers; an account that is none is NULL. Every table of
+// cards is keyed by the scope string, since a proof log can hold two scopes
+// while one is retired; `view_ordinals` is keyed by the ordinal, which counts
+// the cards of every scope together.
 //
 //   view_state    one row, the `seq` of the last record the views reflect
 //   view_cards    one row per card with a valid record
@@ -24,6 +25,13 @@
 //                 switch, correction or withdraw), so every valid record of
 //                 the card writes it.
 //   view_history  one row per valid record and platform on which it has a kind
+//   view_ordinals one row per card with a valid record: its ordinal
+//                 (spec/record-rules.md, "The ordinal"), given by the card's
+//                 first valid record, of whatever scope, and never changed.
+//                 The table came after the other four: an object whose views
+//                 were filled before it has the views at the last record
+//                 and no ordinal, and fills them again when it starts
+//                 (`ordinalsOwed`).
 //
 // The rules' own state of a card is not here (card-table.ts): that one
 // cannot be thrown away, and a page never reads it.
@@ -84,12 +92,20 @@ export const VIEW_TABLES: readonly string[] = [
      PRIMARY KEY (seq, platform)
    ) WITHOUT ROWID`,
   "CREATE INDEX IF NOT EXISTS view_history_card ON view_history (scope_string, scoped_id, date, seq, platform)",
+  `CREATE TABLE IF NOT EXISTS view_ordinals (
+     ordinal      INTEGER PRIMARY KEY,
+     scope_string TEXT    NOT NULL,
+     scoped_id    TEXT    NOT NULL
+   )`,
+  // One ordinal a card: the write of a later record of the card is ignored (`writeView`).
+  "CREATE UNIQUE INDEX IF NOT EXISTS view_ordinals_card ON view_ordinals (scope_string, scoped_id)",
 ];
 
-/** The four tables, each with the columns of its primary key. */
+/** The five tables, each with the columns of its primary key. */
 export const VIEW_TABLE_KEYS = {
   view_state: "id",
   view_cards: "scope_string, scoped_id",
+  view_ordinals: "ordinal",
   view_slots: "scope_string, scoped_id, platform",
   view_history: "seq, platform",
 } as const;
@@ -97,7 +113,7 @@ export const VIEW_TABLE_KEYS = {
 /**
  * How far back the counts look for a recent card proof: a last card proof
  * on the given date or up to 90 days before it, both included
- * (design/copy/home.md, section 2).
+ * (design/copy/home.md, 一起能改變什麼).
  */
 export const RECENT_DAYS = 90;
 
@@ -164,6 +180,17 @@ export function viewSeq(sql: SqlStorage): number {
 }
 
 /**
+ * Whether the views have cards and no ordinal: they were filled before
+ * `view_ordinals` was a table, and must be filled again from the records
+ * although `viewSeq` is at the last record. Views written since have an
+ * ordinal for every card, in the transaction of its first valid record. It
+ * reads at most one row of each table.
+ */
+export function ordinalsOwed(sql: SqlStorage): boolean {
+  return sql.exec<{ owed: number }>("SELECT EXISTS (SELECT 1 FROM view_cards) AND NOT EXISTS (SELECT 1 FROM view_ordinals) AS owed").one().owed === 1;
+}
+
+/**
  * Writes what one valid record changes and moves `view_state` to its `seq`.
  * The views must be at the record before it: otherwise this throws, and the
  * transaction it is in writes nothing.
@@ -180,6 +207,12 @@ export function writeView(sql: SqlStorage, v: View): void {
     shortId(v.scopedId),
     v.date,
     v.lastCardProof,
+  );
+  // The card's first valid record gives it the next ordinal; a card that has one keeps it.
+  sql.exec(
+    "INSERT OR IGNORE INTO view_ordinals (ordinal, scope_string, scoped_id) SELECT COALESCE(MAX(ordinal), 0) + 1, ?, ? FROM view_ordinals",
+    v.scopeString,
+    v.scopedId,
   );
   for (const c of v.changes) {
     // A change that does not start the slot's giving (a refresh of the current account) keeps `since`; a withdrawal
@@ -220,7 +253,7 @@ export function writeView(sql: SqlStorage, v: View): void {
 
 /** Clears the views: they then reflect no record. The caller runs it in a transaction. */
 export function clearViews(sql: SqlStorage): void {
-  for (const table of ["view_cards", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
+  for (const table of Object.keys(VIEW_TABLE_KEYS)) if (table !== "view_state") sql.exec(`DELETE FROM ${table}`);
   sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
 }
 
@@ -316,7 +349,7 @@ export function latestSlots(sql: SqlStorage, scopeString: string, platform: stri
 }
 
 /**
- * The home page's two numbers (design/copy/home.md, section 2): the cards
+ * The home page's two numbers (design/copy/home.md, 一起能改變什麼): the cards
  * that give their place on the platform to an account now, and those among
  * them whose last card proof is `today` or up to 90 days before it. It
  * reads the index `view_slots_recency`.
@@ -335,9 +368,10 @@ export function counts(sql: SqlStorage, scopeString: string, platform: string, t
 
 /**
  * The cards of a short ID, in ascending order of scoped ID, each with its
- * slots (in ascending order of platform) and its valid records, the newest
- * first. It reads the index `view_cards_short_id`, then for each card the
- * primary key of `view_slots` and the index `view_history_card`.
+ * ordinal, its slots (in ascending order of platform) and its valid
+ * records, the newest first. It reads the index `view_cards_short_id`, then
+ * for each card the index `view_ordinals_card`, the primary key of
+ * `view_slots` and the index `view_history_card`.
  */
 export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: string): PageCard[] {
   const cards = sql
@@ -348,6 +382,8 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
     )
     .toArray();
   return cards.map((card): PageCard => {
+    const ordinal = sql.exec<{ ordinal: number }>("SELECT ordinal FROM view_ordinals INDEXED BY view_ordinals_card WHERE scope_string = ? AND scoped_id = ?", scopeString, card.scoped_id).toArray()[0]?.ordinal;
+    if (ordinal === undefined) throw new Error("views: a card without an ordinal");
     const slots = sql
       .exec<{ platform: string; current: string | null; switch_count: number }>("SELECT platform, current, switch_count FROM view_slots WHERE scope_string = ? AND scoped_id = ? ORDER BY platform", scopeString, card.scoped_id)
       .toArray();
@@ -361,6 +397,7 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
       .toArray();
     return {
       scopedId: card.scoped_id,
+      ordinal,
       firstCardProof: card.first_date,
       lastCardProof: card.last_card_proof,
       cardProofs: card.card_proofs,

@@ -1,15 +1,26 @@
 // The views the proof log's object keeps for the pages (src/views.ts), through
 // the Worker's HTTP (test/harness.ts): they are written in the transaction
 // of a record, so a write that fails leaves neither; cleared, they are
-// written again from the records, row for row what they were; and the
+// written again from the records, row for row what they were; the
 // number of cards that declare an account, which the answer of a record
-// gives, comes from them and not from every card's stored state.
+// gives, comes from them and not from every card's stored state; every
+// row is the one the record rules' states before and after each record
+// give, for one record on two platforms and for every case of
+// spec/vectors/record-rules.json; and every statement the pages' reads
+// run reads one stretch of one index and sorts nothing.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { type TestWorker, startWorker } from "./harness.ts";
+import { platformsOf } from "iamreal-protocol/platforms.ts";
+import { type CardState, EMPTY_SLOT, type PlatformKind } from "iamreal-protocol/record-rules.ts";
+import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
+import { shortId } from "iamreal-protocol/scoped-id.ts";
+import { WORKER_DIR } from "./build.ts";
+import { type RuleEvent, type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, pagesWorld, r } from "./pages.ts";
 import { parseDay } from "iamreal-protocol/date.ts";
-import { wantNoAlarmSoon, cardState, checkProofLog, day, freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
+import { TEST_SCOPE, wantNoAlarmSoon, cardState, checkProofLog, day, freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, submit, tw, wantError } from "./records.ts";
 
 let worker: TestWorker;
 before(async () => {
@@ -24,8 +35,8 @@ const pageOf = async (path: string): Promise<[number, string]> => {
 };
 
 describe("the views and the record are one transaction", () => {
-  // The four tables of the views, in the order a record writes them.
-  for (const table of ["view_cards", "view_slots", "view_history", "view_state"] as const) {
+  // The five tables of the views, in the order a record writes them.
+  for (const table of ["view_cards", "view_ordinals", "view_slots", "view_history", "view_state"] as const) {
     test(`a write that fails at \`${table}\`: 500, and the record, the card's state, the views and the pages are as before`, async () => {
       await freshProofLog(worker);
       const root = await publishG3(worker);
@@ -128,6 +139,25 @@ describe("the views written again from the records", () => {
     assert.deepEqual([answer.seq, answer.kinds[0].account_cards], [17, 3]);
   });
 
+  test("the ordinals: one per card, by its first valid record, whatever its records after; views filled before they had them are filled again when the object starts", async () => {
+    await everyKind();
+    const views = await worker.proofLog.views();
+    // E000000000… and 7K2Q9FM4XD3A… on 2026-10-01, in that order; 7K2Q9FM4XD3B… on 2026-10-03.
+    const rows = views.view_ordinals!.map((row) => [row.ordinal, String(row.scoped_id).slice(0, 12)]);
+    assert.deepEqual(rows.map(([n, id]) => [n, String(id).slice(0, 10)]), [
+      [1, "E000000000"],
+      [2, "7K2Q9FM4XD"],
+      [3, "7K2Q9FM4XD"],
+    ]);
+    assert.deepEqual([rows[1]![1], rows[2]![1]], ["7K2Q9FM4XD3A", "7K2Q9FM4XD3B"]);
+    const pages = await Promise.all(["/p/E000000000", `/p/${CARD_A}`].map(pageOf));
+
+    await worker.proofLog.forgetOrdinals();
+    await worker.proofLog.restart();
+    assert.deepEqual(await worker.proofLog.views(), views);
+    assert.deepEqual(await Promise.all(["/p/E000000000", `/p/${CARD_A}`].map(pageOf)), pages);
+  });
+
   /** What a page answers when the back end itself fails: 500, plain text, never kept by a cache. */
   const wantUnavailable = async (path: string): Promise<void> => {
     const res = await worker.fetch(path);
@@ -145,6 +175,12 @@ describe("the views written again from the records", () => {
     await worker.proofLog.restart();
     try {
       assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
+      // Paused with views from before they had the ordinals: not filled; only the page of a card, which writes one, is 500.
+      await worker.proofLog.forgetOrdinals();
+      await worker.proofLog.restart();
+      assert.deepEqual((await worker.proofLog.views()).view_ordinals, []);
+      assert.deepEqual(await pageOf("/"), pages[0]);
+      await wantUnavailable(`/p/${CARD_A}`);
       // Paused with views that were cleared: its records were taken by other rules than this build's, so they are not filled.
       await worker.proofLog.clearViews();
       await worker.proofLog.restart();
@@ -270,5 +306,169 @@ describe("the number of cards that declare an account", () => {
     } finally {
       await worker.proofLog.mendCard(broken).catch(() => undefined);
     }
+  });
+});
+
+describe("every row of the views", () => {
+  test("one record that withdraws on test-example and switches on threads: the history of both platforms and both slots, row for row", async () => {
+    const card = cardStarting(CARD_A);
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-10", card, "test-example:a-b", "threads:alice"), r("2026-11-11", card, "threads:bob")]);
+    const [d10, d11] = [parseDay("2026-11-10")!, parseDay("2026-11-11")!];
+    const key = { scope_string: TEST_SCOPE, scoped_id: card };
+    assert.deepEqual(await worker.proofLog.views(), {
+      view_state: [{ id: 1, seq: 2 }],
+      view_cards: [{ ...key, short_id: CARD_A, first_date: d10, last_card_proof: d11, card_proofs: 2 }],
+      // The first card with a valid record (spec/record-rules.md, "The ordinal").
+      view_ordinals: [{ ordinal: 1, ...key }],
+      // test-example has no account and so no date from which; threads gives its place to bob from the second record.
+      view_slots: [
+        { ...key, platform: "test-example", current: null, since_date: null, since_seq: null, switch_count: 0, last_card_proof: d11 },
+        { ...key, platform: "threads", current: "bob", since_date: d11, since_seq: 2, switch_count: 1, last_card_proof: d11 },
+      ],
+      view_history: [
+        { seq: 1, platform: "test-example", ...key, date: d10, kind: "first", after_withdrawal: 0, before_username: null, after_username: "a-b" },
+        { seq: 1, platform: "threads", ...key, date: d10, kind: "first", after_withdrawal: 0, before_username: null, after_username: "alice" },
+        { seq: 2, platform: "test-example", ...key, date: d11, kind: "withdraw", after_withdrawal: 0, before_username: "a-b", after_username: null },
+        { seq: 2, platform: "threads", ...key, date: d11, kind: "switch", after_withdrawal: 0, before_username: "alice", after_username: "bob" },
+      ],
+    });
+  });
+
+  /** A row of a view, as `worker.proofLog.views()` gives it. */
+  type Row = Record<string, string | number | null>;
+  /** An event of spec/vectors/record-rules.json: what the object's door takes, and the record's date. */
+  type VectorEvent = RuleEvent & { readonly date: string };
+
+  /**
+   * The views as the record rules' states say they should be, kept here
+   * from the state of each card just before and just after each valid
+   * record, and from nothing src/views.ts computes: a card's first date is
+   * the earliest of its records' and its number of card proofs counts
+   * them; a slot gives its place to its current account from the record
+   * that made it its current account, and keeps that date and `seq` while
+   * the account stays; a slot's last card proof is its card's as of the
+   * last record with a kind on it; a row of the history has the slot's last
+   * declared account before the record and its current account after it.
+   * The Go backend's fixture kept the same (e159ab9:server/store/views_fixture_test.go, `keep`).
+   */
+  class WantedViews {
+    readonly #cards = new Map<string, Row>();
+    readonly #slots = new Map<string, Row>();
+    readonly #history: Row[] = [];
+
+    add(e: VectorEvent, kinds: readonly PlatformKind[], before: CardState, after: CardState): void {
+      const date = parseDay(e.date)!;
+      const key = { scope_string: e.scope_string, scoped_id: e.scoped_id };
+      const cardKey = `${e.scope_string}\n${e.scoped_id}`;
+      const card = this.#cards.get(cardKey);
+      this.#cards.set(cardKey, {
+        ...key,
+        short_id: shortId(e.scoped_id),
+        first_date: card === undefined ? date : Math.min(card.first_date as number, date),
+        last_card_proof: after.lastCardProof,
+        card_proofs: card === undefined ? 1 : (card.card_proofs as number) + 1,
+      });
+      for (const { platform, kind } of kinds) {
+        const b = before.slots.get(platform) ?? EMPTY_SLOT;
+        const a = after.slots.get(platform)!;
+        const slotKey = `${cardKey}\n${platform}`;
+        const slot = this.#slots.get(slotKey);
+        const since = a.current === null ? { since_date: null, since_seq: null } : a.current !== b.current ? { since_date: date, since_seq: e.seq } : { since_date: slot!.since_date!, since_seq: slot!.since_seq! };
+        this.#slots.set(slotKey, { ...key, platform, current: a.current, ...since, switch_count: a.switchCount, last_card_proof: after.lastCardProof });
+        this.#history.push({
+          seq: e.seq,
+          platform,
+          ...key,
+          date,
+          kind,
+          after_withdrawal: b.current === null && b.lastDeclared !== null ? 1 : 0,
+          before_username: b.lastDeclared,
+          after_username: a.current,
+        });
+      }
+    }
+
+    /** The rows of each view, in the order of its primary key, as `worker.proofLog.views()` gives them. */
+    rows(): Record<string, Row[]> {
+      const by =
+        (...columns: string[]) =>
+        (x: Row, y: Row): number => {
+          for (const c of columns) if (x[c] !== y[c]) return x[c]! < y[c]! ? -1 : 1;
+          return 0;
+        };
+      return {
+        view_cards: [...this.#cards.values()].sort(by("scope_string", "scoped_id")),
+        view_slots: [...this.#slots.values()].sort(by("scope_string", "scoped_id", "platform")),
+        view_history: [...this.#history].sort(by("seq", "platform")),
+      };
+    }
+  }
+
+  test("every case of spec/vectors/record-rules.json: what each valid record writes is the rows the record rules' states give", async () => {
+    interface Case {
+      readonly name: string;
+      readonly proof_log: "production" | "test";
+      readonly events: readonly VectorEvent[];
+      readonly results: readonly { seq: number; valid: boolean; reason?: string; kinds?: readonly PlatformKind[] }[];
+      readonly ordinals: readonly Row[];
+    }
+    const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
+    // Floors from the vectors as they are now (61 cases, 224 valid records): a file read short, or a loop cut short, fails.
+    assert.ok(cases.length >= 61);
+    let written = 0;
+    for (const c of cases) {
+      await freshProofLog(worker, { kind: c.proof_log });
+      const memory = new MemoryRules(platformsOf(c.proof_log));
+      const want = new WantedViews();
+      for (const [i, e] of c.events.entries()) {
+        const what = `${c.name}, event ${e.seq}`;
+        const before = memory.card(e.scope_string, e.scoped_id);
+        const outcome = memory.apply({ scopeString: e.scope_string, scopedId: e.scoped_id, challenge: e.challenge, accounts: e.accounts, verifies: e.verifies, crlDates: e.crl_dates.map((d) => parseDay(d)!) });
+        // The object writes the views of a valid record as a submission does (src/views.ts, `viewOf`, `writeView`); the result is the vectors'.
+        const { date: _date, ...event } = e;
+        const result = await worker.proofLog.applyRuleEvent(event);
+        const { seq: _, ...vector } = c.results[i]!;
+        assert.deepEqual(result.valid ? { valid: true, kinds: result.kinds } : { valid: false, reason: result.reason }, vector, what);
+        assert.equal(outcome.result.valid, result.valid, what);
+        if (outcome.result.valid) {
+          want.add(e, outcome.result.kinds, before, outcome.card);
+          written++;
+        }
+      }
+      // No record is stored for an event, so the views say they reflect none (test-build/index.ts, `testApplyRuleEvent`).
+      // The ordinals are the vectors' own, in the order of the table's primary key, the ordinal.
+      assert.deepEqual(await worker.proofLog.views(), { view_state: [{ id: 1, seq: 0 }], ...want.rows(), view_ordinals: c.ordinals }, c.name);
+    }
+    assert.ok(written >= 224, `${written} valid records`);
+  });
+});
+
+describe("the pages' reads", () => {
+  test("every statement reads one stretch of one index, or of a table's primary key, and sorts nothing: the ones src/views.ts names for each read", async () => {
+    // Two cards of one short ID that give their place to one account, so that the reads of a card run once for each.
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-10", cardStarting(CARD_A), "threads:alice"), r("2026-11-11", cardStarting(CARD_A), "threads:alice")]);
+    const plans = await worker.proofLog.pagePlans({ platform: "threads", short_id: CARD_A, username: "alice", after: { since: "2026-11-11", since_seq: 2 } });
+    for (const { read, statement, plan } of plans) {
+      // One step, which looks up a range of the index by its first columns: no SCAN, no other table, no USE TEMP B-TREE for an ORDER BY.
+      assert.equal(plan.length, 1, `${read}: ${statement}\n${plan.join("\n")}`);
+      assert.match(plan[0]!, /^SEARCH view_[a-z]+ USING (?:(?:COVERING )?INDEX [a-z_]+|PRIMARY KEY) \(scope_string=\? AND .+\)$/, `${read}: ${statement}`);
+    }
+    const used = plans.map(({ read, plan }) => [read, /USING (?:COVERING )?INDEX ([a-z_]+)/.exec(plan[0]!)?.[1] ?? /^SEARCH (view_[a-z]+) USING PRIMARY KEY/.exec(plan[0]!)![1] + " primary key"]);
+    assert.deepEqual(used, [
+      ["counts", "view_slots_recency"],
+      ["cards", "view_cards_short_id"],
+      ["cards", "view_ordinals_card"],
+      ["cards", "view_slots primary key"],
+      ["cards", "view_history_card"],
+      ["cards", "view_ordinals_card"],
+      ["cards", "view_slots primary key"],
+      ["cards", "view_history_card"],
+      ["account", "view_slots_account"],
+      ["latest", "view_slots_recency"],
+      ["latest", "view_slots_latest"],
+      ["latest after", "view_slots_recency"],
+      ["latest after", "view_slots_latest"],
+      ["account cards", "view_slots_account"],
+    ]);
   });
 });

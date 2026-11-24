@@ -91,6 +91,18 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/copy/card-proof.json"))
     }
 
+    /// The app's own sentences are design/copy/app.json, as it is in the repository.
+    func testTheBundledAppCopyIsTheOneOfTheRepository() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "app", withExtension: "json"))
+        XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/copy/app.json"))
+    }
+
+    /// The headings' typeface is the subset of design/fonts/, as it is in the repository.
+    func testTheBundledTypefaceIsTheOneOfTheRepository() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "GenRyuMin2TW-B", withExtension: "otf"))
+        XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/fonts/GenRyuMin2TW-B.otf"))
+    }
+
     /// Every sentence the sources name is in that file, and the sources
     /// write none of their own: no character of Chinese outside the mark of
     /// the test log.

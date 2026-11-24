@@ -8,7 +8,7 @@ import type { Day } from "iamreal-protocol/date.ts";
 import type { Kind } from "iamreal-protocol/record-rules.ts";
 import { proofLogOf } from "./proof-log.ts";
 
-/** The home page's two numbers (design/copy/home.md, section 2). */
+/** The home page's two numbers (design/copy/home.md, 一起能改變什麼). */
 export interface Counts {
   /** The cards that give their place on the platform to an account now. */
   readonly declared: number;
@@ -34,6 +34,12 @@ export interface HistoryRow {
 /** One card, as a page shows it. */
 export interface PageCard {
   readonly scopedId: string;
+  /**
+   * Its ordinal: the place of its first valid record among the first valid
+   * records of every card of the proof log, from 1 (spec/record-rules.md,
+   * "The ordinal").
+   */
+  readonly ordinal: number;
   /** The earliest date among the card's valid records. */
   readonly firstCardProof: Day;
   /** The latest date among them. */

@@ -348,10 +348,11 @@ locale's collation.
   retired ([`scope.md`](scope.md)); only then does it hold records of two
   scope strings, and a card of the old one and a card of the new one are two
   cards.
-- **Per card**, sorted by `scoped_id`: `scoped_id`, `last_card_proof`, and
-  its current list, in ascending order of `platform` (the order of a
-  record's list). A card with no valid record is not listed. A card with
-  valid records and an empty current list is listed with no account.
+- **Per card**, sorted by `scoped_id`: `scoped_id`, `last_card_proof`, its
+  `ordinal` (below), and its current list, in ascending order of `platform`
+  (the order of a record's list). A card with no valid record is not
+  listed. A card with valid records and an empty current list is listed
+  with no account.
 - **Per account**, sorted by `platform`, then by `username`: the cards whose
   `current` on that platform is this `username`, sorted by `scoped_id`, each
   with its `last_card_proof`. An account with no such card is not listed.
@@ -368,6 +369,41 @@ any account (ADR-0003, ADR-0017).
 There is no expiry. The rules report facts and dates. How recent a card
 proof must be to count is up to whoever uses the answer, so answers always
 carry the date.
+
+### The ordinal
+
+**The `ordinal` of a card** is the place of its first valid record among
+the first valid records of every card of the proof log, in `seq` order,
+counting from 1. The card that has the first valid record of the proof log
+is 1; the next card to have a valid record is 2; and so on. The cards of
+every scope string of the proof log are counted together.
+
+- **Only valid records count.** A card whose first records are invalid gets
+  its ordinal from its first valid record. A card with no valid record has
+  no ordinal and takes none from the others.
+- **Nothing after the card's first valid record changes it**: not another
+  account, a withdrawal, declaring an account again, or later card proofs.
+  A card that has withdrawn everything keeps its ordinal.
+- **Another card is another ordinal**: another physical card, and also the
+  same physical card under a new scope string ([`scope.md`](scope.md)),
+  since a card is one (`scope_string`, `scoped_id`).
+- The ordinals of a proof log are 1 to the number of listed cards, each
+  once. Each proof log counts its own cards: the ordinals of the test proof
+  log say nothing about those of the production proof log.
+- It counts cards, not people. Nothing says two cards are not held by one
+  person over the years.
+
+A card keeps its ordinal for good: the records before its first valid
+record keep their results ("Changing these rules"). Only voiding records
+("When proofs can no longer be trusted") could change it.
+
+The ordinal is computed from the results of the records alone. It is not an
+item of the state ("State"): no check reads it, and the card state file
+does not carry it ("The card state file"). The device has no use for it:
+Rust's `device-core/` (ADR-0034), which judges a list before the card signs,
+gives the rest of this output and not the ordinal. Go's `prooflog/` and
+TypeScript's `protocol/` give it, and the server keeps it with the tables
+its pages read (`worker/`), whose ordinals its tests compare with Go's.
 
 ## Not part of these rules
 
@@ -416,6 +452,11 @@ then the fingerprint line from them.
 one row, and no other card has one, as in the output ("Output"). A card
 that has withdrawn everything has a row. A proof log without a valid record
 gives the empty file.
+
+A row holds the items of the state, not the card's `ordinal` ("The
+ordinal"): the file shows the state the server judges records by, and the
+ordinal judges no record. A re-verifier computes the ordinal from the
+records.
 
 ### A row
 
@@ -736,6 +777,9 @@ changed:
   state that has no slot for it reads as the empty slot;
 - the rules of the server that are not these rules ("Not part of these
   rules");
+- an item of the output computed from the results of the records alone,
+  such as the `ordinal` ("The ordinal"): it gives no record another result,
+  and it is not an item of the state;
 - an implementation rewritten without changing any result or any state.
   The pull request says why the stored states are not affected
   ([`CONTRIBUTING.md`](../CONTRIBUTING.md)).
@@ -782,6 +826,10 @@ sequence of events with the outcome of each and the final state.
   and `slots`, one per platform of the table with the items of the slot.
   They are there so that a case can show that an invalid record left every
   slot as it was.
+- `ordinals`: every card of the output with its `ordinal` ("The ordinal"),
+  in ascending order of ordinal. They are beside `state`, not in its cards,
+  so that `device-core/`, which does not give the ordinal, compares `state`
+  alone.
 - Every case has one scope string. Cases with two scope strings in one
   proof log belong to retiring a scope and will be added with it.
 

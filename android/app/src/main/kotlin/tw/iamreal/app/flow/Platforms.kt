@@ -16,9 +16,7 @@ class Presentation(
     val prefix: String,
     /** The key of the format hint in design/copy/card-proof.json's `formats`. */
     val formatHint: String,
-    /** The platform's own address, which "打開 Threads" opens. */
-    val home: String,
-    /** The address of an account's public page, which "預覽" opens. */
+    /** The address of an account's public page, which "預覽" and step 6's "打開 @alice 的 Threads 個人檔案" open. */
     val profileUrl: (String) -> String,
 ) {
     /** What was typed, tidied before its format is checked: one leading prefix dropped, `A` to `Z` in lower case (Threads does not distinguish case). */
@@ -31,17 +29,17 @@ object Platforms {
         name = "Threads",
         prefix = "@",
         formatHint = "threads",
-        home = "https://www.threads.com/",
         profileUrl = { "https://www.threads.com/@$it" },
     )
 
-    private val all = listOf(THREADS)
+    /** The platforms the app knows. */
+    val known: List<Presentation> = listOf(THREADS)
 
     /** The app's own definition of a platform; null for one it does not know. */
-    fun of(platform: String): Presentation? = all.firstOrNull { it.platform == platform }
+    fun of(platform: String): Presentation? = known.firstOrNull { it.platform == platform }
 
     /** The IDs of the platforms the app knows, as the core takes them: a JSON array. */
-    val knownJson: ByteArray = all.joinToString(",", "[", "]") { "\"${it.platform}\"" }.toByteArray()
+    val knownJson: ByteArray = known.joinToString(",", "[", "]") { "\"${it.platform}\"" }.toByteArray()
 
     /** An account as the screen writes it: `@alice`; as it is for a platform the app does not know. */
     fun handle(platform: String, username: String): String = (of(platform)?.prefix ?: "") + username

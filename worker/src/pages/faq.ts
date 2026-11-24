@@ -1,6 +1,6 @@
 // The questions and answers of design/copy/faq.md, each written once: the
-// FAQ page (/faq) shows every one, under its category, the home page seven
-// (design/copy/home.md, section 6). The markup is the Go backend's
+// FAQ page (/faq) shows every one, under its category, the home page eight
+// (design/copy/home.md, 常見問題). The markup is the Go backend's
 // (e159ab9:server/pages/templates/faq.html, faq-answers.html). A blank line in
 // faq.md is a new paragraph; its lines that start with · are a list.
 import { Html, html } from "./html.ts";
@@ -103,6 +103,11 @@ export const CATEGORIES: readonly Category[] = [
         answer: new Html(`<p>先去掛失。掛失之後那張卡片就不能再過卡。</p>
 <p>舊的那一張島民證明還會留在證明紀錄裡，沒有人能把它拿掉，但它的上次過卡會停住，越來越舊。</p>
 <p>補辦的新卡片是新的名額，可以重新換一張島民證明。新的這一張網址不同，記得把個人檔案上的連結換掉。</p>`),
+      },
+      {
+        id: "ordinal",
+        question: "島民證明上的「第 N 張」是什麼？",
+        answer: new Html(`<p>這張自然人憑證第一次留下有效的紀錄時，它是證明紀錄裡的第幾張卡片。數的是卡片，不是人：之後換帳號、收回再宣告、再次過卡，號碼都不變；換了新的自然人憑證，就是新的號碼。號碼從公開的證明紀錄就算得出來，任何人都能自己重算。</p>`),
       },
       {
         id: "profile-not-shown",

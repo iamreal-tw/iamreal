@@ -45,12 +45,12 @@ describe("the FAQ", () => {
     const categories = faqCategories();
     assert.deepEqual(categories.map((c) => c.name), ["關於隱私", "它能證明什麼", "怎麼用", "誰在做"], "faq.md's four categories, in order");
     const questions = faqQuestions();
-    assert.equal(questions.length, 22, "faq.md has the 22 questions the page writes");
+    assert.equal(questions.length, 23, "faq.md has the 23 questions the page writes");
     // The title, the categories' names (the list of them), then each category: its name, its questions and their answers.
     const want = [...copyLines(codeBlocks(readCopy("faq.md"))[0]!), ...categories.map((c) => c.name)];
     for (const c of categories) want.push(c.name, ...c.questions.flatMap((q) => [q.question, ...copyLines(q.answer)]));
     const last = want[want.length - 1]!;
-    const foot = copyLines(block("home.md", "9. "));
+    const foot = copyLines(block("home.md", "頁尾"));
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
 
@@ -98,18 +98,36 @@ describe("the FAQ", () => {
     assert.ok(faqByQuestion("政府會知道我是哪個帳號嗎？").answer[2]!.includes("了解更多"));
     assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「島民證明服務安全嗎？」"), "faq.md says where 了解更多 goes");
 
+    // The question of the ordinal (#299): in 它能證明什麼, right after the lost card; not on the home page.
+    const what = categories.find((c) => c.id === "cat-what")!;
+    const ordinal = faqByQuestion("島民證明上的「第 N 張」是什麼？");
+    assert.equal(ordinal.id, "ordinal");
+    assert.equal(what.questions.findIndex((q) => q.id === "ordinal"), what.questions.findIndex((q) => q.id === "lost-card") + 1);
+    notOnPage((await getPage(worker, "/")).page, ordinal.question);
+
     const { title, site, summary } = previewOf("faq.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
     assert.equal(summary, "");
     assert.doesNotMatch(page, OG_DESCRIPTION);
   });
 
-  test("the home page's seven answers are the FAQ's, the same HTML", async () => {
+  test("the home page's eight questions are the FAQ's, the same HTML, the ones faq.md marks, in home.md's order", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const home = (await getPage(worker, "/")).page;
     const faq = (await getPage(worker, "/faq")).page;
+    const ids = codeBlocks(copySection("home.md", "常見問題"))[1]!;
+    // faq.md says, under each question, whether the home page has it.
+    const marked = readCopy("faq.md")
+      .split("\n### ")
+      .slice(1)
+      .filter((q) => q.includes("首頁的常見問題有這一題"))
+      .map((q) => /這一題在頁面上的 `id`：`([a-z0-9-]+)`/.exec(q)![1]!);
+    assert.deepEqual([...ids].sort(), [...marked].sort(), "home.md lists the questions faq.md marks");
     const folded = [...home.matchAll(/<details><summary>([^<]*)<\/summary>\n(.*?)<\/details>/gs)];
-    assert.equal(folded.length, 7);
+    assert.deepEqual(
+      folded.map((f) => f[1]),
+      ids.map((id) => faqQuestions().find((q) => q.id === id)!.question),
+    );
     for (const [, question, answer] of folded) {
       const q = faqByQuestion(question!);
       const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(faq);
@@ -288,7 +306,7 @@ describe("what a card proof needs", () => {
     const { status, page } = await getPage(worker, "/prepare");
     assert.equal(status, 200);
     const want = ["1. ", "2. ", "3. ", "4. "].flatMap((heading) => copyLines(block("prepare.md", heading)));
-    const foot = copyLines(block("home.md", "9. "));
+    const foot = copyLines(block("home.md", "頁尾"));
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last situation and the foot");
     // The two links, to the addresses prepare.md gives under their sections.

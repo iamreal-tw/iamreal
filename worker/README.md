@@ -135,7 +135,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `proof_log` | 整份證明紀錄，只有一列 | `count`（筆數）、`fingerprint`（指紋）、`latest_valid_date`（證明紀錄裡最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
-- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的四張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
+- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的五張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。
@@ -230,7 +230,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 4. 頁面用的衍生表（[頁面用的衍生表](#頁面用的衍生表)）
 5. 題目標成已接受
 
-任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的四張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
+任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的五張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
 
 **交易提交之後沒有會丟例外的程式。** `201` 的回答（每個平台是哪個帳號、有幾張卡片宣告它）在交易結束前就做好：帳號在交易之前取，數卡片在交易裡、寫完衍生表之後做。所以不會出現「紀錄寫進去了、題目標成用過了，裝置卻拿到 `500`」。
 
@@ -514,7 +514,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 頁面用的衍生表
 
-證明紀錄的 Durable Object 裡 `view_` 開頭的四張表（[`src/views.ts`](src/views.ts)），內容和舊後台的四張相同：
+證明紀錄的 Durable Object 裡 `view_` 開頭的五張表（[`src/views.ts`](src/views.ts)）。前四張的內容和舊後台的四張相同，`view_ordinals` 是順序號碼（[#299](https://github.com/iamreal-tw/iamreal/issues/299)）加的：
 
 | 表 | 一列是什麼 |
 |---|---|
@@ -522,9 +522,10 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `view_cards` | 一張有過有效紀錄的卡片：短編號、第一次過卡日、上次過卡日、過卡幾次 |
 | `view_slots` | 一張卡片在一個平台的名額：現在的帳號、從哪一天哪一筆開始、更換過幾次、上次過卡日 |
 | `view_history` | 一筆有效紀錄在一個平台做了什麼：種類、是不是收回之後、之前和之後的帳號 |
+| `view_ordinals` | 一張有過有效紀錄的卡片的順序號碼（`spec/record-rules.md`「The ordinal」）：卡片第一筆有效紀錄寫入時給下一個號碼，之後不變（`view_ordinals_card` 是一張卡片一列的唯一索引）。`test/views.test.ts` 拿標準答案的 `ordinals` 逐案比對。不分場合字串，整份證明紀錄一起數；每個網站照自己的證明紀錄數，測試網站的號碼和正式網站的無關。島民證明頁「第 N 張島民證明」讀它 |
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是紀錄規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
-- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
+- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在三種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），衍生表被清掉，或衍生表是 `view_ordinals` 出現之前填好的：`view_cards` 有卡片、`view_ordinals` 是空的（`ordinalsOwed`），反映到的筆數雖然對，物件啟動時也整份重建；`paused` 時不重建，其他頁面照常，只有島民證明回 `500`（它要寫號碼）。順序號碼只在衍生表裡，不在卡片狀態表、不進卡片狀態檔：它不影響任何一筆紀錄有效或無效，重算得出來；`test/sequence.test.ts`、`test/proof-log-files.test.ts` 確認和 Go 算的相同。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有紀錄檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨證明紀錄的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
@@ -536,7 +537,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 重建失敗時寫一行 `{event: "views_not_filled", error}`。之後照上一條再試，物件啟動時等的時間已經到了也試；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個紀錄檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的紀錄檔，不受影響；但已經過卡的人查得到現況，證明紀錄本身（紀錄、卡片狀態、指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是紀錄規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。證明紀錄長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同：島民證明 `view_cards_short_id`，每張卡片的順序號碼另一個查詢走 `view_ordinals_card`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
 - **`?after=` 照舊後台的讀法**：日期、一個點、不是 0、沒有正負號和開頭的 0 的序號，最大 2⁶⁴ − 1；讀不成的從最新的開始列。序號大於 2⁶³ − 1 的讀得成，但也從最新的開始列（舊後台是這樣）。
 
 ### 測試的證明紀錄的標示
@@ -610,7 +611,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
    這些檢查找的是「放錯了哪一種建置」的幾種已知情況，不是頁面的程式做了什麼；兩種證明紀錄的場合字串都在 `protocol/` 的表裡、每一種建置都有，光找字串分不出簽的是哪一個，所以看的是標示裡那段 JSON 寫的場合字串；它是建置時寫的，不是從打包好的過卡流程讀出來的（`web/test/e2e/ui.ts` 在瀏覽器裡另外看頁面自己說的場合字串）。檔案沒有逐檔的清單和雜湊：`assets/` 多一支或少一支程式、某一支被改過，這裡看不出來。兩個入口每次都清空重建，所以那要建置本身出錯才會發生，結果是測試網站壞掉。電路檔和通用參數的內容這裡不比：頁面自己在用之前核對它們的 SHA-256（`web/README.md`「從伺服器拿到的值」）。正式的證明紀錄的環境這裡一律不過：它要另一種建置和自己的檢查，等有正式環境時再加。
 
-`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那六個，`pages.css` 和 `copy.js` 的 SHA-256 是那裡寫的 `PAGES_CSS_SHA256`、`COPY_JS_SHA256`。改這兩個檔時連同那個 SHA-256 一起改（`shasum -a 256 site/pages.css site/copy.js`）。
+`site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那六個；`pages.css` 和 `copy.js` 要和目前 checkout 的 commit（`HEAD`）裡的那一份逐位元組相同（`git show HEAD:./pages.css`，`deploy-build-checks.ts` 的 `sha256InHead`）。所以部署上傳的是提交過的那一份（GitHub Actions 上就是 `main` 審查過的那一份）：本機 `pnpm run deploy:test` 時這兩個檔有還沒提交的改動、或建置過程改到它們，都過不了；`HEAD` 裡讀不到那一份（不在 git 的 checkout 裡、檔案沒進版控）也不過，不會跳過。改這兩個檔時不用改別的檔；`test/environments.test.ts` 也拿真的設定跑這項檢查，所以改了之前先提交，再跑測試、再部署。
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
 - GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的六個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
@@ -761,7 +762,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 不是 JavaScript 的模組恰好是 WASM 檔和兩把驗證金鑰，SHA-256 是核對過的那三個
   - `wrangler.jsonc` 每一個環境的 `limits.cpu_ms` 都是鏡像一輪假設自己拿得到的 CPU 時間（`src/round-budget.ts` 的 `ROUND_CPU_MS`，300,000 毫秒）。設定檔裡有幾個環境就讀幾次，每個照 wrangler 讀 `--env <名稱>` 的方式讀；有一個環境沒有設、或是別的數字就不過。這一項用 wrangler 的函式庫在跑檢查的那個程序裡讀設定檔，不另外起指令，也不送請求
   - `wrangler.jsonc` 裡用測試的證明紀錄的環境，`TEST_PROOF_LOG_CLEARED_ON` 是日曆上有的日期，讀法和 Worker 執行時相同（`checkClearedOn`）。寫錯的話部署出去的測試網站全部回 `500`，這一項讓它在部署前就被擋下
-  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/fonts/*`、`/og-image.png`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`fonts/GenRyuMin2TW-B.woff2`、`og-image.png`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 的 SHA-256 是 `scripts/site-files.ts` 寫的那兩個，字型和 `design/fonts/` 的子集、連結預覽圖和 `design/screens/og-image.png` 逐位元組相同。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、或 `site/` 多了別的檔，都過不了
+  - `wrangler.jsonc` 每一個環境的 Static Assets（`checkSiteFiles`，讀法同上一項）：`run_worker_first` 是把 `/copy.js`、`/fonts/*`、`/og-image.png`、`/pages.css`、`/proof`、`/proof/*` 排除在外的那一份，沒有 `binding`，`html_handling` 和 `not_found_handling` 是 `none`；那個環境的 `site/_headers` 和 `scripts/site-files.ts` 照它的 `PROOF_LOG_KIND` 寫出來的逐字相同，`site/_redirects` 也是；`site/` 裡 `proof/` 以外的檔案恰好是 `pages.css`、`copy.js`、`fonts/GenRyuMin2TW-B.woff2`、`og-image.png`、`_headers`、`_redirects`，`pages.css` 和 `copy.js` 和 `HEAD` 裡的那一份逐位元組相同，字型和 `design/fonts/` 的子集逐位元組相同。所以把設定改回「每個請求先跑 Worker」、手改一個標頭、測試網站的 `_headers` 少了 `noindex`、`site/` 多了別的檔、或 `pages.css`、`copy.js` 有還沒提交的改動，都過不了
   - `site/proof/` 裡的過卡頁面另外檢查（`checkProofPages`，[Static Assets](#static-assets) 列了每一項）。它不在 `checkDeployBuild` 裡，因為要先建置頁面；兩種部署的入口（`scripts/build-deploy.ts`、`scripts/deploy-test.ts`）都先呼叫 `buildSite`，建置完就檢查。`test/deploy.test.ts` 讀這兩支腳本，釘住 `buildSite` 在打包、讀權杖、上傳之前
 - [`test/bundle.test.ts`](test/bundle.test.ts) 對新打的部署那一包逐項跑這些檢查，也把測試專用的建置打出來，確認同樣的檢查在那一包會失敗（找得到測試的金鑰、假的內政部和時鐘的開關）。
 
@@ -1110,6 +1111,7 @@ Durable Object 用 `newestCrls()` 讀出來。送出一筆時的兩個檢查（�
 | 讓搬紀錄檔的某一步出錯 | `worker.proofLog.setBucketFault({ key, how })`，`(null)` 恢復；`how` 是 `put fails`、`put sends other bytes`（送給儲存桶的位元組少一個，SHA-256 照原樣帶）、`put writes other bytes`（儲存桶存下的位元組少一個）、`put writes another Cache-Control`、`put writes another Content-Type`、`put loses its answer`、`put takes a while`（等 600 毫秒才寫，這段時間物件照常收別的請求）、`get fails`。記在記憶體裡，物件重啟就沒有了 |
 | 物件裡還留著幾筆紀錄、從哪一筆到哪一筆 | `worker.proofLog.kept()`。`stored()` 把每一行都傳回來，一行約 20 KB，留著約 1,600 筆以上時拿不到。Cloudflare 的文件寫呼叫物件方法的上限是「The maximum serialized RPC limit is 32 MiB.」（[Workers RPC](https://developers.cloudflare.com/workers/runtime-apis/rpc/)「Limitations」，2026-11-20 讀的），沒有寫算的是送過去的、回傳的，還是兩者；回傳的超過就回 `500` 是在本機的 workerd 上看到的（1,500 筆、30 MB 回得來，1,700 筆是 `500`），Cloudflare 上沒有確認。物件裡卡著兩檔以上時用 `kept()` |
 | 等衍生表從 R2 重建完 | `worker.proofLog.viewsFilled()` |
+| 頁面的每個讀取跑的每一句 SQL 和它的查詢計畫 | `worker.proofLog.pagePlans({ platform, short_id, username, after })`：照頁面和送出一筆那樣呼叫部署的物件的讀取（首頁的兩個數字、島民證明、查詢頁、證明紀錄頁從最新的和 `after` 之後、數一個帳號底下的卡片），每一句先問 `EXPLAIN QUERY PLAN`，回傳哪個讀取、那一句、計畫的每一行 |
 | 讓同時送出的請求真的交錯 | `worker.proofLog.setHashDelay(毫秒)`：算紀錄雜湊之前先等；`worker.proofLog.hashes()` 是算過幾次 |
 | 驗證花了時間的證明 | `test/records.ts` 的 `SLOW_PROOF`（替身驗證器）：通過，但時鐘往後 1 毫秒 |
 | 把存著的表的版本改成另一個數字、改回來 | `worker.proofLog.setStoredSchemaVersion("another")`、`("the build's")`，之後 `worker.proofLog.restart()` |
@@ -1144,7 +1146,7 @@ pnpm run deploy:test
 1. **過卡的頁面**（`buildSite`）：核對通用參數（沒有就下載），把 `web/` 測試網站的建置做到 `site/proof/`，檢查它（[Static Assets](#static-assets)）。不帶權杖；下載通用參數是唯一可能送出的請求。
 2. **打包**（`buildDeploy`）：先核對 WASM 檔和驗證金鑰的 SHA-256（[WASM 檔和驗證金鑰從哪裡來](#wasm-檔和驗證金鑰從哪裡來)），不對就停；再用 `wrangler deploy --dry-run --outdir <目錄>` 打包，不帶權杖；最後跑部署那一包的檢查（[三樣不是設定值的東西](#三樣不是設定值的東西)）；其中核對 `limits.cpu_ms` 的那一項不是起 wrangler 的指令，是在跑檢查的這個程序裡用 wrangler 的函式庫讀 `wrangler.jsonc`。打包唯一的入口是 `bundleWorker`，測試專用的建置也經過它：打包之前要做的事只寫在那裡。
 3. **上傳**（`uploadArgs`）：`wrangler deploy <目錄>/index.js --no-bundle`，把那一包程式原樣上傳，旁邊的 WASM 檔和驗證金鑰照 wrangler 的副檔名規則一起帶上（`test/bundle.test.ts` 用 `--dry-run` 確認），binding 照 `wrangler.jsonc`。只有這一段的 wrangler 指令帶權杖。
-   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`fonts/`、`og-image.png`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 的 SHA-256、字型和 `design/fonts/` 相同、連結預覽圖和 `design/screens/og-image.png` 相同，也核對過。
+   **Static Assets 的檔案不在那一包裡**：wrangler 上傳時照 `wrangler.jsonc` 的 `assets.directory` 讀工作目錄裡的 `site/`，一起上傳。在 GitHub Actions 上，那是 `deploy` 工作自己 checkout 出來的 `worker/site/`（版控裡的 `pages.css`、`copy.js`、`fonts/`、`og-image.png`、`_headers`、`_redirects`），加上 `build` 工作交出來的過卡頁面（artifact `proof-page`，下載到 `worker/site/proof/`）。兩個工作 checkout 的是同一個 commit；`build` 工作的檢查核對過那個 commit 的 `_headers`、`_redirects` 和設定（`checkSiteFiles`）、它交出去的頁面（`checkProofPages`），`pages.css` 和 `copy.js` 是那個 commit 裡的那一份、字型和 `design/fonts/` 相同，也核對過。
 
 打包和上傳這兩段的 wrangler 指令共用的參數：
 
@@ -1453,7 +1455,8 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `test/lookup-pages.test.ts` | 查詢頁和證明紀錄頁的每一種情況：`design/copy/` 的每一句和順序、轉址、`404`、查詢框的每一種輸入、證明紀錄頁一頁一頁接著拿、寫入後下一頁就跟上（Go 的舊後台的 `visitor_test.go` 的案例） |
 | `test/site-pages.test.ts` | 常見問題、怎麼驗證島民證明、掛上去的每一種情況、`/copy.js`（Static Assets 送、不跑 Worker）（Go 的舊後台的 `site_test.go` 的案例）；每一頁上連到這個網站的連結都回 `200` |
 | `test/proof-files.test.ts` | `/proof` 和它的檔案：標頭和 `web/README.md` 引用的一字不差、`/proof/` 的轉址、沒有建置時是 `404` |
-| `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響 |
+| `test/views.test.ts` | 衍生表和紀錄同一個交易、從紀錄重建逐列相同、數卡片不受壞掉的卡片狀態影響；一筆在 `test-example` 收回、在 `threads` 更換的紀錄，四張表逐列和預期的相同；`spec/vectors/record-rules.json` 的每一案，有效的每一筆寫進衍生表的列和從紀錄規則前後的狀態算出來的相同；頁面的每個讀取跑的每一句只讀一個索引（或主鍵）的一段、不排序，用的是 `src/views.ts` 給每個讀取寫的那幾個索引（Go 的舊後台的 `sqlite_view_test.go` 的 `TestViewsTwoPlatforms`、`TestViewsMatchVectors`、`TestViewQueriesUseIndexes`） |
+| `test/page-refusals.test.ts` | 頁面的程式拒絕畫出的：不合 Threads 格式的帳號（查詢頁、掛上去、島民證明的每一張卡片）、全部紀錄裡沒有寫法的一列（不認得的種類，或少了要寫的帳號）、沒有卡片的島民證明；在 Node 裡直接呼叫 `src/pages/`，因為 Worker 不會交給頁面這樣的資料（Go 的舊後台的 `pages_test.go` 的 `TestRenderAlone` 後半） |
 | `test/publication.test.ts` | 每天換日公布：空的證明紀錄、每一天的四個物件和標頭、沒有新紀錄的一天、沒響的那一天不補、同一刻、每一步失敗和重做、連續失敗時等 1、2、4 … 分鐘到每次一小時、成功之後又從一分鐘算起、兩次嘗試之間物件重啟也照樣等、時鐘跑快時存下的時間最多等一小時、`paused` 之前的失敗不接著算、那一行寫了就不變、儲存桶的指紋檔少了行會補回來、有物件沒有的行就不公布（開始前和寫之前各看一次；自己寫了但沒收到回應的那一行不算別人的）、寫的時候跨過午夜、`paused` 不公布、`GET /api/v1/fingerprint`、Worker 沒有送這些檔的網址 |
 | `test/publication-verify.test.ts` | 整條路的比對：假卡片寫三天 2,005 筆，Go 的 `iamreal-verify` 用預設的讀法重驗後台寫出來的整個資料網域（要有 `go`） |
 | `test/proof-log-files.test.ts` | 寫滿 1,000 筆的紀錄檔和雜湊清單搬到 R2：位元組、標頭、物件裡不再留那 1,000 筆、卡片現況和頁面不變；每一步失敗時紀錄不刪、重做的位元組相同；第一檔搬不成時第二檔寫滿；題目發得密時照樣搬；衍生表從 R2 重建（每一種紀錄跨過檔的邊界）、連續失敗時等 1、2、4 分鐘然後每次 5 分鐘、物件重啟時還沒到時間不重建、到時間由 alarm 叫醒時只有一次重建、成功之後又從一分鐘算起；搬不成時連續失敗的間隔加倍到一小時、重啟之後照樣等、由每天公布搬成也算成功（下一檔寫滿就馬上搬）；Worker 沒有送紀錄檔的網址；Go 的 `iamreal-verify` 讀得懂寫出來的目錄（最後一項要有 `go`） |

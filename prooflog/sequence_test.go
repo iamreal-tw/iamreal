@@ -65,7 +65,8 @@ type checkpoint struct {
 // sequenceAnswers is answers.json: the case with its answers (`results`,
 // the final `state`); for each event `cards`, the state of its card after
 // it, and `latest_valid_dates`, the latest date among the valid records up
-// to it (null before the first); and the accounts at each checkpoint.
+// to it (null before the first); the accounts at each checkpoint; and the
+// final `ordinals`.
 //
 // prooflog.Rules keeps the latest valid date but does not export it; this
 // file takes it from the dates of the records Rules found valid, which is
@@ -80,6 +81,7 @@ type sequenceAnswers struct {
 	LatestValidDates []*string    `json:"latest_valid_dates"`
 	Checkpoints      []checkpoint `json:"checkpoints"`
 	State            []scopeOut   `json:"state"`
+	Ordinals         []ordinalOut `json:"ordinals"`
 }
 
 // answersOf applies the rules to the events of c one record at a time,
@@ -130,6 +132,7 @@ func answersOf(t *testing.T, c rulesCase, checkpointEvery int) sequenceAnswers {
 		}
 	}
 	out.State = stateOut(rules.State(), rules)
+	out.Ordinals = ordinalsOut(rules.State())
 	return out
 }
 
@@ -151,6 +154,9 @@ func TestSequenceAnswersOfVectors(t *testing.T) {
 				g, _ := json.Marshal(a.State)
 				w, _ := json.Marshal(c.State)
 				t.Errorf("state\n got %s\nwant %s", g, w)
+			}
+			if !reflect.DeepEqual(a.Ordinals, c.Ordinals) {
+				t.Errorf("ordinals\n got %+v\nwant %+v", a.Ordinals, c.Ordinals)
 			}
 			last := map[string]cardAfter{}
 			for _, card := range a.Cards {

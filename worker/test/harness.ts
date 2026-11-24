@@ -13,7 +13,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "../test-build/card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, PagePlanQuestion, PagePlans, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -268,7 +268,7 @@ export interface TestWorker {
      * `challenges.accepted`, only marking a challenge as accepted), or, with
      * null, none does (test build, `PUT /__test/proof-log/fail-writes`).
      */
-    failWritesTo(what: "records" | "cards" | "proof_log" | "challenges" | "challenges.accepted" | "view_cards" | "view_slots" | "view_history" | "view_state" | null): Promise<void>;
+    failWritesTo(what: "records" | "cards" | "proof_log" | "challenges" | "challenges.accepted" | "view_cards" | "view_ordinals" | "view_slots" | "view_history" | "view_state" | null): Promise<void>;
     /**
      * Every row of the views the object keeps for the pages (src/views.ts),
      * table by table (test build, `GET /__test/proof-log/views`): for the one
@@ -277,11 +277,24 @@ export interface TestWorker {
      */
     views(): Promise<StoredViews>;
     /**
+     * The plan SQLite makes for each statement the pages' reads run, and the
+     * count of the cards of an account a submission's answer reads, each
+     * asked for what the question gives (test build, `POST
+     * /__test/proof-log/page-plans`).
+     */
+    pagePlans(question: PagePlanQuestion): Promise<PagePlans>;
+    /**
      * Clears the views (test build, `DELETE /__test/proof-log/views`): the
      * object is then as one that has records from before it had the views.
      * It fills them from its records when it starts: `restart()` after this.
      */
     clearViews(): Promise<void>;
+    /**
+     * Empties `view_ordinals` alone (test build, `DELETE
+     * /__test/proof-log/view-ordinals`): the object is then as one whose
+     * views were filled before that table was one. `restart()` after this.
+     */
+    forgetOrdinals(): Promise<void>;
     /**
      * Waits until the object that is running has filled its views, or has
      * given up filling them (test build, `POST /__test/proof-log/views-filled`):
@@ -648,6 +661,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         if (res.status !== 200) throw new Error(`reading the views: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredViews;
       },
+      async pagePlans(question) {
+        const res = await server.fetch("/__test/proof-log/page-plans", { method: "POST", body: JSON.stringify(question) });
+        if (res.status !== 200) throw new Error(`reading the plans of the pages' reads: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as PagePlans;
+      },
       async viewsFilled() {
         const res = await server.fetch("/__test/proof-log/views-filled", { method: "POST" });
         if (res.status !== 204) throw new Error(`waiting for the views: HTTP ${res.status}`);
@@ -655,6 +673,10 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
       async clearViews() {
         const res = await server.fetch("/__test/proof-log/views", { method: "DELETE" });
         if (res.status !== 204) throw new Error(`clearing the views: HTTP ${res.status}`);
+      },
+      async forgetOrdinals() {
+        const res = await server.fetch("/__test/proof-log/view-ordinals", { method: "DELETE" });
+        if (res.status !== 204) throw new Error(`emptying view_ordinals: HTTP ${res.status}`);
       },
       async stored() {
         const res = await server.fetch("/__test/proof-log/stored");

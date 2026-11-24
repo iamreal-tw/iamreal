@@ -109,6 +109,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     var pinMessage by mutableStateOf<String?>(null)
         private set
 
+    /** What step 3 says under the PIN's field: "請輸入 PIN。" only while the field is empty (design/copy/card-proof.md, "3. 輸入 PIN", app). */
+    val pinNote: String? get() = pinMessage?.takeUnless { it == copy.say("app_pin.need_pin") && pin.length > 0 }
+
     /** The card proof ended while the PIN was asked for: the only way on is to read the card again. */
     var pinEnded by mutableStateOf(false)
         private set
@@ -147,9 +150,6 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     /** The address of a card's page on the site. */
     fun proofUrl(shortId: String): String = "${wiring.site}/p/$shortId"
-
-    /** The address of the help page for a "了解更多". */
-    fun helpUrl(topic: String): String = "${wiring.site}/proof/help.html?topic=$topic"
 
     // The server's config: asked for when the app opens --------------------------------
 

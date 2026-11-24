@@ -2,6 +2,8 @@
 
 只在手機 app 上出現、不屬於任何一個流程的文字。過卡的畫面在 `card-proof.md`。原則在 `docs/design/principles.md`。
 
+`app.json` 是這一份給程式讀的形式，兩個 app 建置時原樣包進去。這裡每一個程式碼區塊的每一行是它的一個值，它的每一個值也都是這裡的一行，Android 的測試雙向核對（`AppCopyTest`），也核對每一種 build 的名稱在它自己的鍵底下（`AppNameTest`）。
+
 ## 主畫面上的名稱
 
 手機主畫面上，app 圖示底下的名稱。同一個 app 有兩種 build（ADR-0037），兩個可以同時裝在一支手機上，各有一個名稱。
@@ -31,3 +33,12 @@
 - 「島民證明」和後面的字之間是一個半形空格
 - 這是第一版。正式的名稱在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定；定了之後改這裡，Android 和 iOS 一起改
 - Android 和 iOS 的測試讀這一段，確認每一種 build 安裝檔裡的名稱和它相同
+
+## 啟動畫面
+
+打開 app 時，第 1 步之前的畫面（`design/screens/app-splash-phone.png`）：記號在中間，底下一行是名稱和網址，中間用一條細的豎線隔開，和網頁頁首的名稱旁邊一樣（`design/DESIGN.md`「元件」的導覽列）。兩種 build 都寫這一行，不畫測試的標示。
+
+```
+島民證明
+iamreal.tw
+```

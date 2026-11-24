@@ -26,6 +26,7 @@ on:
       - device-core/**
       - spec/vectors/**
       - design/copy/**
+      - design/fonts/**
       - web/circuits/**
       - verifier/vk/**
       - web/scripts/fetch-crs.mjs

@@ -218,7 +218,7 @@ export interface AccountCount {
  * `cards`, the state of its card after it, and `latest_valid_dates`, the
  * latest date among the valid records up to it; and `checkpoints`, every
  * declared account with its number of cards, after every
- * `checkpoint_every` records and after the last.
+ * `checkpoint_every` records and after the last; and the final `ordinals`.
  */
 export interface GoAnswers {
   rules_version: number;
@@ -230,6 +230,7 @@ export interface GoAnswers {
   latest_valid_dates: (string | null)[];
   checkpoints: { after: number; accounts: AccountCount[] }[];
   state: unknown[];
+  ordinals: { scope_string: string; scoped_id: string; ordinal: number }[];
 }
 
 /**
