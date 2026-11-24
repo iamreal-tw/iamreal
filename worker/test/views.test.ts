@@ -418,7 +418,7 @@ describe("the pages' reads", () => {
   test("every statement reads one stretch of one index, or of a table's primary key, and sorts nothing: the ones src/views.ts names for each read", async () => {
     // Two cards of one short ID that give their place to one account, so that the reads of a card run once for each.
     await pagesWorld(worker, "2026-11-18", [r("2026-11-10", cardStarting(CARD_A), "threads:alice"), r("2026-11-11", cardStarting(CARD_A), "threads:alice")]);
-    const plans = await worker.proofLog.pagePlans({ platform: "threads", short_id: CARD_A, username: "alice", after: { since: "2026-11-11", since_seq: 2 } });
+    const plans = await worker.proofLog.pagePlans({ platform: "threads", short_id: CARD_A, username: "alice", before: 2 });
     for (const { read, statement, plan } of plans) {
       // One step, which looks up a range of the index by its first columns: no SCAN, no other table, no USE TEMP B-TREE for an ORDER BY.
       assert.equal(plan.length, 1, `${read}: ${statement}\n${plan.join("\n")}`);
@@ -433,10 +433,10 @@ describe("the pages' reads", () => {
       ["cards", "view_slots primary key"],
       ["cards", "view_history_card"],
       ["account", "view_slots_account"],
-      ["latest", "view_slots_recency"],
-      ["latest", "view_slots_latest"],
-      ["latest after", "view_slots_recency"],
-      ["latest after", "view_slots_latest"],
+      ["log", "view_slots_recency"],
+      ["log", "view_history_log"],
+      ["log before", "view_slots_recency"],
+      ["log before", "view_history_log"],
       ["account cards", "view_slots_account"],
     ]);
   });

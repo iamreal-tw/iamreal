@@ -500,7 +500,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 讀證明紀錄經過一個介面
 
-頁面要的資料只從 [`src/page-data.ts`](src/page-data.ts) 的 `PageData` 拿（ADR-0026）：首頁的兩個數字、一個短編號對到的卡片、把名額給了一個帳號的卡片、證明紀錄頁的兩個數字和一段清單（同一次讀）。現在的實作 `pageDataOfProofLog` 問證明紀錄的 Durable Object；用哪一個實作只寫在 `src/index.ts` 一處。之後讀取要搬出 Durable Object（ADR-0026 的 Consequences），換的是這一塊，頁面的程式不動。
+頁面要的資料只從 [`src/page-data.ts`](src/page-data.ts) 的 `PageData` 拿（ADR-0026）：首頁的兩個數字、一個短編號對到的卡片、把名額給了一個帳號的卡片、證明紀錄頁的兩個數字和一段紀錄（同一次讀）。現在的實作 `pageDataOfProofLog` 問證明紀錄的 Durable Object；用哪一個實作只寫在 `src/index.ts` 一處。之後讀取要搬出 Durable Object（ADR-0026 的 Consequences），換的是這一塊，頁面的程式不動。
 
 - **格式不對的短編號不問 Durable Object**：照 `spec/scoped-id.md` 的寬鬆讀法（`protocol/` 的 `readShortIdInUrl`，讀 `spec/vectors/scoped-id.json`）讀不成 10 個字元的，直接回「找不到這張島民證明」那一頁，`404`。讀得成、但寫法不是標準的那一種（小寫、`O`、`I`、`L`），`301` 轉到標準寫法，也不問。掛上去的 `/hang/<短編號>` 讀法相同，讀不成的 `302` 到 `/hang`，也不問。
 - **格式不對的帳號不問 Durable Object**：查詢頁的名稱先把 A–Z 轉成小寫，不合平台表裡 Threads 的格式就直接回「Threads 沒有這樣的帳號名稱」那一頁，`404`；有大寫的 `301` 轉到小寫。證明紀錄頁的查詢框是 Threads 的名稱時 `303` 轉到查詢頁，也不問。測試把 Durable Object 弄成什麼都不答來確認這幾種照樣回答。
@@ -533,8 +533,9 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 重建失敗時寫一行 `{event: "views_not_filled", error}`。之後照上一條再試，物件啟動時等的時間已經到了也試；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個紀錄檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的紀錄檔，不受影響；但已經過卡的人查得到現況，證明紀錄本身（紀錄、卡片狀態、指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是紀錄規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。證明紀錄長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引，和舊後台的查詢相同：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_slots_latest`（`latestSlots`，倒著讀，`?after=` 是「從哪一天起」和那一筆的序號，`2026-10-01.3`）；兩個數字 `view_slots_recency`。
-- **`?after=` 照舊後台的讀法**：日期、一個點、不是 0、沒有正負號和開頭的 0 的序號，最大 2⁶⁴ − 1；讀不成的從最新的開始列。序號大於 2⁶³ − 1 的讀得成，但也從最新的開始列（舊後台是這樣）。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_history_log`（`logRows`，照序號倒著讀 `view_history` 裡 Threads 的列，一筆有效的紀錄一列，再次過卡、收回都在裡面）；兩個數字 `view_slots_recency`。`test/views.test.ts` 確認每個查詢都只讀一個索引的一段、不另外排序。
+- **證明紀錄頁的「更多」是序號**：`?after=53` 列序號小於 53 的紀錄。序號是紀錄在證明紀錄裡的位置，寫入之後不變，所以上一頁打開之後才寫進來的紀錄排在最上面，不會讓下一頁重複或漏掉。寫法是不是 0、沒有正負號和開頭的 0 的十進位，最大 2⁵³ − 1；讀不成的從最新的開始列。舊的清單照「從哪一天起」排、寫成 `2026-10-01.3`（[#287](https://github.com/iamreal-tw/iamreal/issues/287) 之前），這種網址現在讀不成，從最新的開始列。
+- 舊的清單用的索引 `view_slots_latest` 由建表的程式拿掉（`DROP INDEX IF EXISTS`），新的索引補上；表沒有改，`SCHEMA_VERSION` 不變（[兩個版本號](#兩個版本號)）。
 
 ### 測試的證明紀錄的標示
 
@@ -1411,7 +1412,7 @@ wrangler 執行時對外送的東西：使用統計關掉了（設定檔的 `sen
 | `src/headers.ts` | 頁面和檔案送的標頭，只定義在這裡 |
 | `src/page-data.ts` | 頁面讀證明紀錄的介面 `PageData`，和問 Durable Object 的那一個實作 |
 | `src/views.ts` | 頁面用的衍生表：建表、一筆紀錄寫什麼、清空和照一串紀錄重寫、頁面的查詢、數有幾張卡片宣告同一個帳號 |
-| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的寫法）、`faq.ts`（常見問題，首頁的七題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
+| `src/pages/` | 把資料變成 HTML：`html.ts`（跳脫）、`layout.ts`（每一頁的外框、導覽列、頁尾、測試的證明紀錄的標示、程式的 `<script>`）、`home.ts`、`proof.ts`（島民證明）、`account.ts`（查詢頁）、`proof-log-page.ts`（證明紀錄頁和 `?after=` 的讀法）、`record-words.ts`（一筆紀錄做了什麼的寫法，島民證明頁的「全部紀錄」和證明紀錄頁共用）、`faq.ts`（常見問題，首頁的七題也讀它）、`verify.ts`、`hang.ts`、`not-found.ts`（找不到這一頁） |
 | `site/` | Static Assets 的檔案，Cloudflare 直接送：`pages.css`、`copy.js`、`fonts/`、`_headers`、`_redirects` 在版控裡，`proof/` 放 `web/` 的建置 |
 | `src/api.ts` | `/api/` 底下的介面：路徑和方法、每個回應的標頭、五個介面、後台自己出錯時的那一行 |
 | `src/submission.ts` | 讀 `records` 的請求：`malformed`、`scope`、`platform` 各是哪一種 |

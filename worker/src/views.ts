@@ -23,7 +23,8 @@
 //                 on every slot that has an account before it (refresh,
 //                 switch, correction or withdraw), so every valid record of
 //                 the card writes it.
-//   view_history  one row per valid record and platform on which it has a kind
+//   view_history  one row per valid record and platform on which it has a kind;
+//                 the proof log page lists it by `seq` (view_history_log)
 //
 // The rules' own state of a card is not here (card-table.ts): that one
 // cannot be thrown away, and a page never reads it.
@@ -33,7 +34,7 @@ import type { PlatformRow } from "iamreal-protocol/platforms.ts";
 import { type ProofLogRecord, readRecordLine } from "iamreal-protocol/record.ts";
 import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, applyList, newCard } from "iamreal-protocol/record-rules.ts";
 import { SHORT_ID_LENGTH, shortId } from "iamreal-protocol/scoped-id.ts";
-import type { AccountCard, Counts, HistoryRow, LatestPlace, LatestSlot, PageCard } from "./page-data.ts";
+import type { AccountCard, Counts, HistoryRow, LogRow, PageCard } from "./page-data.ts";
 import type { ProofLogKind } from "./settings.ts";
 
 /** The tables and their indexes. Every statement can run again on an object that has them. */
@@ -67,8 +68,8 @@ export const VIEW_TABLES: readonly string[] = [
    ) WITHOUT ROWID`,
   `CREATE INDEX IF NOT EXISTS view_slots_account ON view_slots
      (scope_string, platform, current, since_date, since_seq, last_card_proof) WHERE current IS NOT NULL`,
-  `CREATE INDEX IF NOT EXISTS view_slots_latest ON view_slots
-     (scope_string, platform, since_date, since_seq, current) WHERE current IS NOT NULL`,
+  // The proof log page's list used to be of the slots by the date from which; it is of the records now (view_history_log).
+  "DROP INDEX IF EXISTS view_slots_latest",
   `CREATE INDEX IF NOT EXISTS view_slots_recency ON view_slots
      (scope_string, platform, last_card_proof, current) WHERE current IS NOT NULL`,
   `CREATE TABLE IF NOT EXISTS view_history (
@@ -84,6 +85,8 @@ export const VIEW_TABLES: readonly string[] = [
      PRIMARY KEY (seq, platform)
    ) WITHOUT ROWID`,
   "CREATE INDEX IF NOT EXISTS view_history_card ON view_history (scope_string, scoped_id, date, seq, platform)",
+  `CREATE INDEX IF NOT EXISTS view_history_log ON view_history
+     (scope_string, platform, seq, scoped_id, date, kind, after_withdrawal, before_username, after_username)`,
 ];
 
 /** The four tables, each with the columns of its primary key. */
@@ -297,22 +300,21 @@ export function cardsOfAccount(sql: SqlStorage, scopeString: string, platform: s
 }
 
 /**
- * At most `n` slots of a scope on a platform that have an account now, the
- * latest first by the date from which each gives its place to it, and
- * slots of the same date by the `seq` of that record, the latest first.
- * With `after`, only the slots after that place: passing the place of the
- * last slot returned gives the next ones. It reads the index
- * `view_slots_latest` backwards, which covers it. The Go backend's
- * `Recent` (e159ab9:server/store/sqlite_view.go).
+ * At most `n` of the valid records of a scope that have a kind on a
+ * platform, with what each did there, the latest first by `seq`. With
+ * `before`, only the records before that `seq`: passing the `seq` of the
+ * last record returned gives the next ones, whatever was written since. It
+ * reads the index `view_history_log` backwards, which covers it.
  */
-export function latestSlots(sql: SqlStorage, scopeString: string, platform: string, after: LatestPlace | null, n: number): LatestSlot[] {
-  const select = "SELECT since_seq, since_date, current, scoped_id FROM view_slots INDEXED BY view_slots_latest WHERE scope_string = ? AND platform = ? AND current IS NOT NULL";
-  const order = "ORDER BY since_date DESC, since_seq DESC LIMIT ?";
-  const rows =
-    after === null
-      ? sql.exec<{ since_seq: number; since_date: number; current: string; scoped_id: string }>(`${select} ${order}`, scopeString, platform, n)
-      : sql.exec<{ since_seq: number; since_date: number; current: string; scoped_id: string }>(`${select} AND (since_date, since_seq) < (?, ?) ${order}`, scopeString, platform, after.since, after.sinceSeq, n);
-  return rows.toArray().map((row) => ({ scopedId: row.scoped_id, username: row.current, since: row.since_date, sinceSeq: row.since_seq }));
+export function logRows(sql: SqlStorage, scopeString: string, platform: string, before: number | null, n: number): LogRow[] {
+  type Row = { seq: number; scoped_id: string; date: number; kind: string; after_withdrawal: number; before_username: string | null; after_username: string | null };
+  const select = `SELECT seq, scoped_id, date, kind, after_withdrawal, before_username, after_username FROM view_history INDEXED BY view_history_log
+     WHERE scope_string = ? AND platform = ?`;
+  const order = "ORDER BY seq DESC LIMIT ?";
+  const rows = before === null ? sql.exec<Row>(`${select} ${order}`, scopeString, platform, n) : sql.exec<Row>(`${select} AND seq < ? ${order}`, scopeString, platform, before, n);
+  return rows
+    .toArray()
+    .map((h): LogRow => ({ seq: h.seq, scopedId: h.scoped_id, date: h.date, platform, kind: h.kind as Kind, afterWithdrawal: h.after_withdrawal !== 0, before: h.before_username, after: h.after_username }));
 }
 
 /**
