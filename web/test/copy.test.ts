@@ -60,6 +60,11 @@ const EXAMPLES: Record<string, string> = {
   seconds: "5",
   // done.mismatch_expected: the sentences of step 5's row (a switch, and that it is a correction).
   expected: "更換，原本是 @alice。今天才宣告的帳號，這次改掉不另外算一次更換。",
+  // The app's reminder (step 6): the day and the time it is set for, about how far off, the day the certificate expires.
+  day: "2027-02-08（星期一）",
+  time: "晚上 9:00",
+  interval: "三個月",
+  valid_until: "2027-01-15",
 };
 /** Entries whose example in the Markdown differs from EXAMPLES. */
 const OVERRIDES: Record<string, Record<string, string>> = {
