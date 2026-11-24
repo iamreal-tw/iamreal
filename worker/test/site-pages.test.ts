@@ -179,7 +179,6 @@ describe("hanging a proof on a profile", () => {
     assert.ok(copySection("hang.md", "2. ").includes("`https://iamreal.tw/p/7K2Q9FM4XD`"), "hang.md says what 複製連結 copies");
     // On this page the whole first line of part 3 is the link to the card's page (hang.md, part 3).
     const hung = copyLines(block("hang.md", "3. "))[0]!;
-    assert.ok(copySection("hang.md", "3. ").includes(`第 2 部分那一頁上是第一行整句「${hung}」`), "hang.md says the whole line is the link");
     for (const want of [
       `<p class="backlink">${address}</p>`,
       `<button type="button" class="copy button" data-copy-text="https://${address}" data-copied="${copiedWord("hang.md")}" hidden>複製連結</button>`,

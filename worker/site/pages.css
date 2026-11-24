@@ -564,7 +564,7 @@ iframe.threads-profile {
   overflow-wrap: anywhere;
 }
 
-/* Steps and a row of actions: the page of hanging a proof (hang.md) uses them as they are; the home page sets its own below. */
+/* Steps and a row of actions; the home page and the page of hanging a proof (hang.md) each set their own below. */
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -2075,8 +2075,8 @@ ul.dots li {
   overflow-wrap: anywhere;
 }
 
-/* A copy button (/copy.js shows it): outlined, the raspberry red. */
-button.copy {
+/* A copy button (/copy.js shows it): outlined, the raspberry red; one that is also a .button (hang.md) is that. */
+button.copy:not(.button) {
   min-height: var(--min-target);
   padding: 0 20px;
   border: 1.5px solid var(--you);
@@ -2088,9 +2088,9 @@ button.copy {
 }
 
 /* Hanging a proof on a profile (hang.md; design/screens/hang-proof-*.png, hang-*.png) ------------
-   One column, as the other pages before theirs were laid out: the title, the link and its two buttons,
-   the three steps under a line of ink, apart by thin lines; then the two lines of part 3, or the button
-   of the page without a proof. No pictures yet (hang.md, 還沒定的). */
+   Laid out after design/DESIGN.md in the one narrow column (--measure): the title, the link and its two
+   buttons, the three steps under a line of ink, apart by thin lines; then the two lines of part 3, or the
+   button of the page without a proof. No pictures yet (hang.md, 還沒定的). */
 
 body.hang .title {
   font-size: var(--size-h2);
@@ -2121,18 +2121,10 @@ body.hang .actions .button {
   margin: 0;
 }
 
-/* 複製連結 is the page's one main button (design/DESIGN.md, 元件): a .button, not the outlined one of /verify. */
+/* 複製連結 is the page's one main button (design/DESIGN.md, 元件): a .button, with a <button>'s own frame taken off. */
 body.hang button.copy.button {
-  min-height: var(--button-height);
-  padding: 0 24px;
   border: 0;
-  background: var(--you);
-  color: var(--bg);
-  font-size: 17px;
-}
-
-body.hang button.copy.button:hover {
-  background: var(--you-hover);
+  cursor: pointer;
 }
 
 /* A second button (design/DESIGN.md, 元件): a frame of ink on white. */
@@ -2153,7 +2145,7 @@ body.hang .steps {
 }
 
 body.hang .steps li {
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 24px 1fr;
   align-items: baseline;
   padding: 24px 0;
   background: none;
@@ -2163,7 +2155,7 @@ body.hang .steps li {
 }
 
 body.hang .steps .n {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 body.hang .steps li > div {
@@ -2718,11 +2710,11 @@ body.account-not-a-name .title {
   }
 
   body.hang .steps li {
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 24px minmax(0, 1fr);
   }
 
   body.hang .steps li > div {
-    font-size: 16px;
+    font-size: var(--size-body-phone);
   }
 
   body.hang .none-yet {
