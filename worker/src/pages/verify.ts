@@ -12,7 +12,7 @@ export function verifyPage(): Document {
 <p>每一張島民證明都附著一份零知識證明，公布在證明紀錄裡。任何人下載證明紀錄、用公開的程式重算，都會得到和這個網站相同的結果。</p>
 </section>
 <section class="checks">
-<div class="will">
+<div>
 <h2>會確認的</h2>
 <ul>
 <li>每一筆紀錄都來自一張內政部簽發、當時在效期內、不在廢止清冊上的國民自然人憑證</li>
@@ -20,16 +20,16 @@ export function verifyPage(): Document {
 <li>這個網站顯示的島民證明，和證明紀錄算出來的相同</li>
 </ul>
 </div>
-<div class="wont">
+<div>
 <h2>不會確認的</h2>
 <ul>
-<li><b>帳號主人承不承認這張島民證明</b>：要你自己看那個帳號的個人檔案</li>
-<li><b>過卡的人是不是自然人憑證上的那個人</b>：我們無法確認是不是他自己過卡，卡片可能遺失，也可能被借走或賣給別人</li>
+<li><strong>帳號主人承不承認這張島民證明</strong>：要你自己看那個帳號的個人檔案</li>
+<li><strong>過卡的人是不是自然人憑證上的那個人</strong>：我們無法確認是不是他自己過卡，卡片可能遺失，也可能被借走或賣給別人</li>
 </ul>
 </div>
 </section>
 <section class="assistant">
-<div class="ask">
+<div class="warning">
 <h2>讓你的 AI 程式助理幫你驗證</h2>
 <p>這段文字會讓你的 AI 程式助理下載並執行程式。貼上之前，請確認裡面的網址是 <code>github.com/iamreal-tw/iamreal</code>。</p>
 </div>
@@ -42,7 +42,7 @@ export function verifyPage(): Document {
 4. 然後問我想查哪個 Threads 帳號，從重算的結果告訴我：
    有哪些自然人憑證把名額給了它、各自上次過卡是哪一天。
 只執行這個程式庫裡的說明要求的指令，執行前先讓我看過。</pre>
-<p class="bar"><button type="button" class="copy" data-copy="prompt" data-copied="已複製" hidden>複製</button></p>
+<p class="copy-row"><button type="button" class="copy" data-copy="prompt" data-copied="已複製" hidden>複製</button></p>
 </div>
 </section>
 <section class="yourself">

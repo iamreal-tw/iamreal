@@ -2064,18 +2064,9 @@ ul.dots li {
 
 /* How to verify (verify.md) ------------------------------------------------------------- */
 
-/* Laid out after design/DESIGN.md: what it checks and what it does not side by side under a line of ink; the
-   AI assistant's paragraph on the left of the prompt; doing it yourself under a thin line. */
-body.verify .title {
-  font-size: var(--size-h2);
-  line-height: var(--leading-h2);
-  margin: 56px 0 20px;
-}
-
-body.verify .intro p {
-  max-width: var(--measure);
-}
-
+/* Laid out after design/DESIGN.md and design/screens/verify-*.png: what it checks and what it does not side by side
+   under a line of ink; the AI assistant's paragraph on the left of the prompt; doing it yourself under a thin line.
+   The title and the paragraph under it are the ones of what a card proof needs (body.prepare). */
 body.verify .checks {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2085,9 +2076,8 @@ body.verify .checks {
   border-top: 1px solid var(--ink);
 }
 
+/* The two lists' headings one size under the sections' (design/DESIGN.md, 字: 強調句 and 小標題). */
 body.verify .checks h2 {
-  font-family: var(--font-display);
-  font-weight: var(--weight-heading);
   font-size: var(--size-lead);
   line-height: var(--leading-h3);
   margin: 0 0 14px;
@@ -2108,7 +2098,7 @@ body.verify .checks li:first-child {
   border-top: 1px solid var(--line);
 }
 
-body.verify .checks b {
+body.verify .checks strong {
   color: var(--ink);
 }
 
@@ -2122,8 +2112,6 @@ body.verify .assistant {
 
 body.verify .assistant h2,
 body.verify .yourself h2 {
-  font-family: var(--font-display);
-  font-weight: var(--weight-heading);
   font-size: var(--size-h3);
   line-height: var(--leading-h3);
   margin: 0 0 14px;
@@ -2134,7 +2122,7 @@ body.verify .yourself a {
   font-family: var(--font-mono);
 }
 
-body.verify .ask code {
+body.verify .warning code {
   padding: 1px 5px;
   border-radius: var(--radius);
   background: var(--soft);
@@ -2151,12 +2139,12 @@ body.verify .prompt-box {
 body.verify .prompt {
   margin: 0;
   color: var(--ink);
-  font: 15px/1.85 var(--font-mono);
+  font: 15px/var(--leading-body) var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-body.verify .prompt-box .bar {
+body.verify .copy-row {
   display: flex;
   justify-content: flex-end;
   margin: 18px 0 0;
@@ -2181,10 +2169,6 @@ body.verify button.copy {
   border-color: var(--ink);
   color: var(--ink);
   font-size: 16px;
-}
-
-body.verify button.copy:hover {
-  background: var(--soft);
 }
 
 body.verify .yourself {
@@ -2257,13 +2241,15 @@ body.account-not-a-name main {
   padding: 0 calc(2 * var(--gutter)) 72px;
 }
 
-body.prepare .title {
+body.prepare .title,
+body.verify .title {
   font-size: var(--size-h2);
   line-height: 1.3;
   margin: 56px 0 20px;
 }
 
-body.prepare .intro p {
+body.prepare .intro p,
+body.verify .intro p {
   max-width: var(--measure);
 }
 
@@ -2735,11 +2721,6 @@ body.account-not-a-name .title {
   }
 
   /* How to verify: everything one column; the copy button as wide as the prompt. */
-  body.verify .title {
-    font-size: var(--size-h2-phone);
-    margin-top: 28px;
-  }
-
   body.verify .checks {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
@@ -2777,7 +2758,8 @@ body.account-not-a-name .title {
     margin-top: 56px;
   }
 
-  body.prepare .title {
+  body.prepare .title,
+  body.verify .title {
     font-size: var(--size-h2-phone);
     margin-top: 28px;
   }
