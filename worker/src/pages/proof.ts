@@ -5,9 +5,10 @@
 import { formatDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { SHORT_ID_LENGTH } from "iamreal-protocol/scoped-id.ts";
-import type { CardsOfShortId, HistoryRow, PageCard } from "../page-data.ts";
+import type { CardsOfShortId, PageCard } from "../page-data.ts";
 import { Html, html, thousands } from "./html.ts";
 import { type Document, NEEDS, type Site } from "./layout.ts";
+import { ON_A_CARD, recordWords } from "./record-words.ts";
 
 /** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test log are not shown. */
 export const PLATFORM = "threads";
@@ -78,25 +79,6 @@ function titleOf(cards: readonly PageCard[]): string {
 }
 
 /**
- * One row of 全部紀錄 (proof-page.md, section 4). After a withdrawal,
- * declaring the account withdrawn is 再次宣告, and declaring another one is
- * written as a switch or a correction from the account withdrawn. A row the
- * page has no words for stops the page, rather than leave the row blank.
- */
-function eventOf(row: HistoryRow): string {
-  const { kind, before, after } = row;
-  if (kind === "first" && after !== null) return `新宣告：@${after}`;
-  if (kind === "refresh") {
-    if (!row.afterWithdrawal) return "再次過卡";
-    if (after !== null) return `再次宣告：@${after}`;
-  }
-  if (kind === "switch" && before !== null && after !== null) return `更換：@${before} 改成 @${after}`;
-  if (kind === "correction" && before !== null && after !== null) return `更正：@${before} 改成 @${after}`;
-  if (kind === "withdraw" && before !== null) return `收回：@${before}`;
-  throw new Error("pages: no words for a row of the history");
-}
-
-/**
  * The first screen of one card: sections 1 and 2 (or 6) in one column, and
  * section 3 in the other. `nested` is one of several cards: its title is
  * not the page's.
@@ -164,7 +146,7 @@ function record(card: PageCard): Html {
 <details class="history">
 <summary>全部紀錄</summary>
 <ol class="log">
-${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${eventOf(row)}</span></li>`)}
+${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordWords(row, ON_A_CARD)}</span></li>`)}
 </ol>
 </details>
 </section>`;

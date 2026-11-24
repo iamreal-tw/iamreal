@@ -75,23 +75,18 @@ export interface CardsOfAccount {
   readonly cards: readonly AccountCard[];
 }
 
-/** A place in the list of the latest slots: the date from which a slot gives its place to its account, and the `seq` of that record. */
-export interface LatestPlace {
-  readonly since: Day;
-  readonly sinceSeq: number;
-}
-
-/** One slot that gives its place to an account now, as the proof log page lists it. */
-export interface LatestSlot extends LatestPlace {
+/** One valid record of a card, and what it did on one platform, as the proof log page lists it. */
+export interface LogRow extends HistoryRow {
+  /** The record's place in the proof log. */
+  readonly seq: number;
   readonly scopedId: string;
-  readonly username: string;
 }
 
 /** The proof log page's numbers and a part of its list, read together. */
-export interface Latest {
+export interface LogPart {
   readonly counts: Counts;
-  /** The latest first by the date from which, and slots of the same date by the `seq` of that record. */
-  readonly slots: readonly LatestSlot[];
+  /** The latest first, by `seq`. */
+  readonly rows: readonly LogRow[];
 }
 
 export interface PageData {
@@ -102,11 +97,11 @@ export interface PageData {
   /** The cards whose account on a platform is this username now (in its one spelling); none is an empty list. */
   account(platform: string, username: string): Promise<CardsOfAccount>;
   /**
-   * The numbers of the home page for a platform, and at most `n` of its
-   * slots that have an account now, the latest first; with `after`, those
-   * after that place only.
+   * The numbers of the home page for a platform, and at most `n` of the
+   * valid records that have a kind on it, the latest first; with `before`,
+   * those before that `seq` only.
    */
-  latest(platform: string, after: LatestPlace | null, n: number): Promise<Latest>;
+  logPart(platform: string, before: number | null, n: number): Promise<LogPart>;
 }
 
 /** The page data that asks the proof log's Durable Object. */
@@ -115,6 +110,6 @@ export function pageDataOfProofLog(env: Env): PageData {
     counts: (platform) => proofLogOf(env).pageCounts(platform),
     cards: (shortId) => proofLogOf(env).pageCards(shortId),
     account: (platform, username) => proofLogOf(env).pageAccount(platform, username),
-    latest: (platform, after, n) => proofLogOf(env).pageLatest(platform, after, n),
+    logPart: (platform, before, n) => proofLogOf(env).pageLogPart(platform, before, n),
   };
 }

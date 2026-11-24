@@ -472,89 +472,225 @@ iframe.threads-profile {
   color: var(--bg);
 }
 
-/* The proof log page ---------------------------------------------------------------- */
+/* The proof log page (proof-log-page.md) --------------------------------------------- */
 
-.query {
-  margin-top: 28px;
+/* As wide as the site, its edges the navigation bar's (.top .bar). On a desktop the title, the numbers and the sentence above the list on the left, the lookup box at the right of the title; on a phone everything in the page's order, the lookup box right after the title. */
+body.proof_log main {
+  max-width: calc(var(--max-width) + 2 * var(--gutter));
+  padding: 0 calc(2 * var(--gutter)) 72px;
 }
 
-.query label {
-  font-weight: 500;
+body.proof_log .head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  grid-template-areas: "title query" "numbers query";
+  grid-template-rows: auto 1fr;
+  column-gap: var(--column-gap);
+  align-items: start;
+  margin-top: 56px;
 }
 
-.field {
+/* The title starts a label's height lower than the lookup box, so that it is level with the box and not with the label; the line under the box for a name not in the format then grows downwards only. */
+body.proof_log .title {
+  grid-area: title;
+  font-size: var(--size-h2);
+  line-height: var(--leading-h2);
+  margin: 30px 0 20px;
+}
+
+body.proof_log .query {
+  grid-area: query;
+  margin-bottom: 20px;
+}
+
+body.proof_log .query p {
+  margin: 0 0 10px;
+}
+
+body.proof_log .query label {
+  font-size: var(--size-kicker);
+  color: var(--mute);
+}
+
+body.proof_log .field {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+/* The box: @ and the input inside one frame; the frame shows the focus. */
+body.proof_log .field .box {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.field .at {
-  font-family: var(--font-body);
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.field input {
-  flex: 1;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
   border-radius: var(--radius);
   background: var(--bg);
+}
+
+body.proof_log .field .box:focus-within {
+  outline: var(--focus-ring) solid var(--ink);
+  outline-offset: 3px;
+}
+
+body.proof_log .field .at {
+  color: var(--mute);
+  font: 16px var(--font-body);
+}
+
+body.proof_log .field input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
   color: var(--ink);
   font: 16px var(--font-body);
 }
 
-.field button {
-  min-height: var(--min-target);
-  padding: 0 20px;
-  border: 0;
+body.proof_log .field input:focus-visible {
+  outline: none;
+}
+
+/* 查 and 更多: secondary buttons (design/DESIGN.md, 元件), a frame of ink on white. */
+body.proof_log .field button,
+body.proof_log .more a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 26px;
+  border: 2px solid var(--ink);
   border-radius: var(--radius);
-  background: var(--you);
-  color: var(--bg);
+  background: var(--bg);
+  color: var(--ink);
   font: 700 16px var(--font-body);
+  text-decoration: none;
   cursor: pointer;
 }
 
-.bad {
-  margin-top: 6px;
+body.proof_log .field button:hover,
+body.proof_log .more a:hover {
+  background: var(--soft);
+  color: var(--ink);
 }
 
-.rows {
+body.proof_log .bad {
+  margin-top: 8px;
+}
+
+body.proof_log .numbers {
+  grid-area: numbers;
+}
+
+body.proof_log .numbers p {
+  margin: 0 0 8px;
+}
+
+body.proof_log .numbers .small {
+  max-width: none;
+  line-height: var(--leading-small);
+}
+
+body.proof_log .log {
+  margin-top: 36px;
+}
+
+/* One row a record: the date, the short ID, what the record did; the whole row is the link to the card. */
+body.proof_log .rows {
   list-style: none;
-  margin: 10px 0 10px;
+  margin: 0;
   padding: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--ink);
 }
 
-.rows a {
-  display: flex;
-  flex-wrap: wrap;
+body.proof_log .rows a {
+  display: grid;
+  grid-template-columns: 8.5em 20em minmax(0, 1fr);
   gap: 0 16px;
-  padding: 8px 0;
+  align-items: baseline;
+  padding: 16px 6px;
   border-bottom: 1px solid var(--line);
-  color: inherit;
+  color: var(--text);
   text-decoration: none;
-  font-size: 15px;
+  font-size: 16px;
 }
 
-.rows .who {
-  color: var(--you);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  overflow-wrap: anywhere;
+body.proof_log .rows a:hover {
+  background: var(--soft);
 }
 
-.rows .id-line {
+body.proof_log .rows time {
   color: var(--mute);
 }
 
-.download {
-  margin-top: 28px;
+body.proof_log .rows .id {
+  color: var(--you);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
-.download a + a {
-  margin-left: 24px;
+body.proof_log .rows .what {
+  overflow-wrap: anywhere;
+}
+
+body.proof_log .rows .what b {
+  color: var(--ink);
+}
+
+body.proof_log .none {
+  margin: 0;
+  padding: 24px 0;
+  border-top: 1px solid var(--ink);
+}
+
+body.proof_log .more {
+  margin: 20px 0 0;
+}
+
+body.proof_log .download {
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+body.proof_log .download a + a {
+  margin-left: 32px;
+}
+
+@media (width < 760px) {
+  body.proof_log main {
+    padding: 0 var(--gutter-phone) 56px;
+  }
+
+  body.proof_log .head {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "query" "numbers";
+    grid-template-rows: auto;
+    margin-top: 28px;
+  }
+
+  body.proof_log .title {
+    font-size: var(--size-h2-phone);
+    margin-top: 0;
+  }
+
+  body.proof_log .rows a {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 16px 0;
+  }
+
+  body.proof_log .more a {
+    display: flex;
+  }
+
+  body.proof_log .download {
+    margin-top: 40px;
+  }
 }
 
 /* The page of a short ID that resolves to nothing */

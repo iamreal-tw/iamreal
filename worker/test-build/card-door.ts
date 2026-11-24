@@ -112,15 +112,14 @@ export interface KeptRecords {
 
 /**
  * What `POST /__test/proof-log/page-plans` takes: what each read of the
- * pages is asked for. `after` is a place in the list of the proof log page
- * as `?after=` gives it: the date from which a slot gives its place, and
- * the `seq` of that record.
+ * pages is asked for. `before` is a `seq` as the proof log page's `?after=`
+ * gives it: the list is of the records before it.
  */
 export interface PagePlanQuestion {
   readonly platform: string;
   readonly short_id: string;
   readonly username: string;
-  readonly after: { readonly since: string; readonly since_seq: number };
+  readonly before: number;
 }
 
 /** A statement one of the reads ran: the read, the statement, and the plan SQLite made for it, one line for each row of `EXPLAIN QUERY PLAN` (its `detail`). */

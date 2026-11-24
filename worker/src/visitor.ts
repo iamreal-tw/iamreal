@@ -35,7 +35,7 @@ import { type Document, type Site, layout } from "./pages/layout.ts";
 import { notFoundPage } from "./pages/not-found.ts";
 import { preparePage } from "./pages/prepare.ts";
 import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/proof.ts";
-import { PAGE_SIZE, readPlace, proofLogPage } from "./pages/proof-log-page.ts";
+import { PAGE_SIZE, proofLogPage, readAfter } from "./pages/proof-log-page.ts";
 import { verifyPage } from "./pages/verify.ts";
 import { OTHER_SCHEMA } from "./proof-log.ts";
 import { proofLogSettingsOf } from "./settings.ts";
@@ -176,13 +176,13 @@ async function threadsAccount(site: Site, parts: VisitorParts, pathname: string)
 const trimSpace = (s: string): string => s.replace(/^[\t\n\v\f\r \u0085\p{Z}]+|[\t\n\v\f\r \u0085\p{Z}]+$/gu, "");
 
 /**
- * `GET /proof-log`: the proof log page. `?after=` lists the slots after a place
- * in the list (the link 更多); one that does not read lists from the
- * latest. `?q=` is the lookup box (proof-log-page.md, 查詢): with the spaces
+ * `GET /proof-log`: the proof log page. `?after=` lists the records before a
+ * `seq` (the link 更多); one that does not read lists from the latest.
+ * `?q=` is the lookup box (proof-log-page.md, 查詢): with the spaces
  * around it and a leading @ taken off, a Threads name in any case is
  * redirected (303) to its page, without asking the proof log; nothing left
  * shows the page as it is; anything else shows the page with what was
- * typed in the box and a line under it, from the latest slot.
+ * typed in the box and a line under it, from the latest record.
  */
 async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams): Promise<Answer> {
   const typed = trimSpace(query.get("q") ?? "").replace(/^@/, "");
@@ -192,9 +192,9 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
     if (isThreadsUsername(name)) return redirect(303, `/threads/@${name}`);
     badQuery = typed;
   }
-  const after = badQuery === null && query.has("after") ? readPlace(query.get("after")!) : null;
-  const { counts, slots } = await ask(() => parts.pageData.latest(PLATFORM, after?.place ?? null, PAGE_SIZE + 1));
-  return page(site, 200, proofLogPage({ counts, slots: slots.slice(0, PAGE_SIZE), more: slots.length > PAGE_SIZE, after: after !== null, badQuery }));
+  const after = badQuery === null && query.has("after") ? readAfter(query.get("after")!) : null;
+  const { counts, rows } = await ask(() => parts.pageData.logPart(PLATFORM, after, PAGE_SIZE + 1));
+  return page(site, 200, proofLogPage({ counts, rows: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE, after: after !== null, badQuery }));
 }
 
 /**
