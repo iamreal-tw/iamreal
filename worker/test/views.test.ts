@@ -318,6 +318,8 @@ describe("every row of the views", () => {
     assert.deepEqual(await worker.proofLog.views(), {
       view_state: [{ id: 1, seq: 2 }],
       view_cards: [{ ...key, short_id: CARD_A, first_date: d10, last_card_proof: d11, card_proofs: 2 }],
+      // The first card with a valid record (spec/record-rules.md, "The ordinal").
+      view_ordinals: [{ ordinal: 1, ...key }],
       // test-example has no account and so no date from which; threads gives its place to bob from the second record.
       view_slots: [
         { ...key, platform: "test-example", current: null, since_date: null, since_seq: null, switch_count: 0, last_card_proof: d11 },
@@ -408,6 +410,7 @@ describe("every row of the views", () => {
       readonly proof_log: "production" | "test";
       readonly events: readonly VectorEvent[];
       readonly results: readonly { seq: number; valid: boolean; reason?: string; kinds?: readonly PlatformKind[] }[];
+      readonly ordinals: readonly Row[];
     }
     const { cases } = JSON.parse(readFileSync(join(WORKER_DIR, "..", "spec", "vectors", "record-rules.json"), "utf8")) as { cases: Case[] };
     // Floors from the vectors as they are now (61 cases, 224 valid records): a file read short, or a loop cut short, fails.
@@ -433,7 +436,8 @@ describe("every row of the views", () => {
         }
       }
       // No record is stored for an event, so the views say they reflect none (test-build/index.ts, `testApplyRuleEvent`).
-      assert.deepEqual(await worker.proofLog.views(), { view_state: [{ id: 1, seq: 0 }], ...want.rows() }, c.name);
+      // The ordinals are the vectors' own, in the order of the table's primary key, the ordinal.
+      assert.deepEqual(await worker.proofLog.views(), { view_state: [{ id: 1, seq: 0 }], ...want.rows(), view_ordinals: c.ordinals }, c.name);
     }
     assert.ok(written >= 224, `${written} valid records`);
   });
@@ -453,8 +457,10 @@ describe("the pages' reads", () => {
     assert.deepEqual(used, [
       ["counts", "view_slots_recency"],
       ["cards", "view_cards_short_id"],
+      ["cards", "view_ordinals_card"],
       ["cards", "view_slots primary key"],
       ["cards", "view_history_card"],
+      ["cards", "view_ordinals_card"],
       ["cards", "view_slots primary key"],
       ["cards", "view_history_card"],
       ["account", "view_slots_account"],

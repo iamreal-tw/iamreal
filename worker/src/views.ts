@@ -95,9 +95,10 @@ export const VIEW_TABLES: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS view_ordinals (
      ordinal      INTEGER PRIMARY KEY,
      scope_string TEXT    NOT NULL,
-     scoped_id    TEXT    NOT NULL,
-     UNIQUE (scope_string, scoped_id)
+     scoped_id    TEXT    NOT NULL
    )`,
+  // One ordinal a card: the write of a later record of the card is ignored (`writeView`).
+  "CREATE UNIQUE INDEX IF NOT EXISTS view_ordinals_card ON view_ordinals (scope_string, scoped_id)",
 ];
 
 /** The five tables, each with the columns of its primary key. */
@@ -368,22 +369,21 @@ export function counts(sql: SqlStorage, scopeString: string, platform: string, t
 /**
  * The cards of a short ID, in ascending order of scoped ID, each with its
  * ordinal, its slots (in ascending order of platform) and its valid
- * records, the newest first. It reads the index `view_cards_short_id` and
- * the index of `view_ordinals` by card, then for each card the primary key
- * of `view_slots` and the index `view_history_card`.
+ * records, the newest first. It reads the index `view_cards_short_id`, then
+ * for each card the index `view_ordinals_card`, the primary key of
+ * `view_slots` and the index `view_history_card`.
  */
 export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: string): PageCard[] {
   const cards = sql
-    .exec<{ scoped_id: string; first_date: number; last_card_proof: number; card_proofs: number; ordinal: number | null }>(
-      `SELECT c.scoped_id, c.first_date, c.last_card_proof, c.card_proofs, o.ordinal FROM view_cards AS c INDEXED BY view_cards_short_id
-       LEFT JOIN view_ordinals AS o ON o.scope_string = c.scope_string AND o.scoped_id = c.scoped_id
-       WHERE c.scope_string = ? AND c.short_id = ? ORDER BY c.scoped_id`,
+    .exec<{ scoped_id: string; first_date: number; last_card_proof: number; card_proofs: number }>(
+      "SELECT scoped_id, first_date, last_card_proof, card_proofs FROM view_cards INDEXED BY view_cards_short_id WHERE scope_string = ? AND short_id = ? ORDER BY scoped_id",
       scopeString,
       short,
     )
     .toArray();
   return cards.map((card): PageCard => {
-    if (card.ordinal === null) throw new Error("views: a card without an ordinal");
+    const ordinal = sql.exec<{ ordinal: number }>("SELECT ordinal FROM view_ordinals INDEXED BY view_ordinals_card WHERE scope_string = ? AND scoped_id = ?", scopeString, card.scoped_id).toArray()[0]?.ordinal;
+    if (ordinal === undefined) throw new Error("views: a card without an ordinal");
     const slots = sql
       .exec<{ platform: string; current: string | null; switch_count: number }>("SELECT platform, current, switch_count FROM view_slots WHERE scope_string = ? AND scoped_id = ? ORDER BY platform", scopeString, card.scoped_id)
       .toArray();
@@ -397,7 +397,7 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
       .toArray();
     return {
       scopedId: card.scoped_id,
-      ordinal: card.ordinal,
+      ordinal,
       firstCardProof: card.first_date,
       lastCardProof: card.last_card_proof,
       cardProofs: card.card_proofs,
