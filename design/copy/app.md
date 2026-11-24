@@ -2,6 +2,8 @@
 
 只在手機 app 上出現、不屬於任何一個流程的文字。過卡的畫面在 `card-proof.md`。原則在 `docs/design/principles.md`。
 
+`app.json` 是這一份給程式讀的形式，兩個 app 建置時原樣包進去。這裡每一個程式碼區塊的每一行是它的一個值，它的每一個值也都是這裡的一行，Android 的測試雙向核對（`AppCopyTest`），也核對每一種 build 的名稱在它自己的鍵底下（`AppNameTest`）。
+
 ## 主畫面上的名稱
 
 手機主畫面上，app 圖示底下的名稱。同一個 app 有兩種 build（ADR-0037），兩個可以同時裝在一支手機上，各有一個名稱。

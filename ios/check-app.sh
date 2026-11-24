@@ -13,8 +13,9 @@
 #   of the test site in its executable and not the ones of the production
 #   site;
 # - iPhone only;
-# - the two circuits and the two verification keys in the app are the files
-#   of this repository, and the CRS has the SHA-256 of device-core/crs.sha256;
+# - the two circuits, the two verification keys, the two files of sentences
+#   and the typeface in the app are the files of this repository, and the
+#   CRS has the SHA-256 of device-core/crs.sha256;
 # - nothing in the app links AdSupport or AppTrackingTransparency, the app
 #   embeds no framework and the project names no Swift package;
 # - the sources (App/) do not read identifierForVendor and write nothing to
@@ -145,6 +146,9 @@ card_proof_rs2048.json web/circuits/card_proof_rs2048.json
 card_proof_rs4096.json web/circuits/card_proof_rs4096.json
 card_proof_rs2048.vk verifier/vk/card_proof_rs2048.vk
 card_proof_rs4096.vk verifier/vk/card_proof_rs4096.vk
+card-proof.json design/copy/card-proof.json
+app.json design/copy/app.json
+GenRyuMin2TW-B.otf design/fonts/GenRyuMin2TW-B.otf
 LIST
 while read -r want name; do
   got=$( (shasum -a 256 "$app/$name" 2>/dev/null || true) | cut -d ' ' -f 1)
