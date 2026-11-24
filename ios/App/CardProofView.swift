@@ -1,244 +1,468 @@
 import SwiftUI
 
-/// Draws a Screen: the mark of the test log and the name of the
-/// service, which step it is, the blocks from top to bottom, the buttons.
-/// It has no sentence and no decision of its own; what a button does is
-/// CardProofModel.perform.
-///
-/// Ink on paper, one accent for the way on; no green, no tick outside the
-/// two progress lists (docs/design/principles.md).
+/// The card proof as the app shows it: the model's screen, drawn by
+/// ScreenView, with what its buttons and fields do.
 struct CardProofView: View {
     @ObservedObject var model: CardProofModel
 
     var body: some View {
-        let screen = model.screen
+        ScreenView(
+            screen: model.screen,
+            copy: model.copy,
+            pinText: $model.pinText,
+            perform: model.perform,
+            type: model.type)
+            .task { model.open() }
+    }
+}
+
+/// Draws a Screen after design/screens/card-proof-app-*: the mark of the
+/// test log, the mark and the name of the service, which step it is, the
+/// blocks from top to bottom, the buttons. It has no sentence and no
+/// decision of its own; what a button does is `perform`'s.
+///
+/// The values are design/tokens.json's (Theme); white, ink, and the
+/// cardholder's red for the way on. No green, no tick outside the two
+/// progress lists, no illustration (design/DESIGN.md).
+struct ScreenView: View {
+    let screen: Screen
+    let copy: Copy
+    @Binding var pinText: String
+    var perform: (Action) -> Void
+    /// What the cardholder typed in the field of a platform.
+    var type: (String, String) -> Void
+    /// The whole screen, not scrolled: for pictures of it.
+    var unscrolled = false
+    /// Drawn again when the phone's text size changes (Theme's sizes follow it).
+    @Environment(\.sizeCategory) private var sizeCategory
+
+    var body: some View {
         VStack(spacing: 0) {
-            header(screen)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(Array(screen.blocks.enumerated()), id: \.offset) { _, block in
-                        self.block(block)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
+            header
+            if unscrolled {
+                content
+                Spacer(minLength: 0)
+            } else {
+                ScrollView { content }
             }
-            footer(screen)
         }
-        .background(Palette.paper.ignoresSafeArea())
-        .foregroundColor(Palette.ink)
-        .task { model.open() }
+        .background(Theme.bg.color.ignoresSafeArea())
+        .foregroundColor(Theme.text.color)
+        .environment(\.colorScheme, .light)
     }
 
-    private func header(_ screen: Screen) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(ScreenCopy.testProofLog)
-                .font(.caption.weight(.semibold))
+                .font(Theme.body(Theme.sizeSmall, Theme.weightHeading))
+                .foregroundColor(Theme.ink.color)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Palette.ink, lineWidth: 1))
-            HStack {
-                Text(model.copy("common.service_name")).font(.headline)
-                Spacer()
-                Text(model.copy("common.step", ["step": String(screen.step), "steps": "6"]))
-                    .font(.subheadline)
-                    .foregroundColor(Palette.quiet)
+                .padding(.vertical, 2)
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(Theme.ink.color, lineWidth: 1))
+            HStack(spacing: 8) {
+                Mark().frame(width: 26, height: 26)
+                Text(copy("common.service_name"))
+                    .font(Theme.display(Theme.sizeBody))
+                    .foregroundColor(Theme.ink.color)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, Theme.gutter.value)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(Rectangle().frame(height: 1).foregroundColor(Palette.rule), alignment: .bottom)
+        .overlay(Rectangle().frame(height: 1).foregroundColor(Theme.line.color), alignment: .bottom)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            stepBars
+            ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
+                self.block(block, first: index == 0)
+            }
+            if !screen.buttons.isEmpty {
+                VStack(spacing: 12) {
+                    // The way on, the last of them, on top.
+                    ForEach(Array(screen.buttons.enumerated().reversed()), id: \.offset) { index, button in
+                        self.button(button, main: screen.mainButton && index == screen.buttons.count - 1)
+                    }
+                }
+                .padding(.top, 36)
+            }
+            ForEach(Array(screen.below.enumerated()), id: \.offset) { _, block in
+                VStack(alignment: .leading, spacing: 0) {
+                    Divider().overlay(Theme.line.color)
+                    self.block(block, first: true).padding(.top, 20)
+                }
+                .padding(.top, 32)
+            }
+            if let cancel = screen.cancel {
+                SwiftUI.Button { perform(cancel.action) } label: {
+                    Text(cancel.label)
+                        .font(Theme.body(Theme.sizeKicker))
+                        .underline()
+                        .foregroundColor(Theme.text.color)
+                        .frame(minHeight: Theme.minTarget.value)
+                }
+                .padding(.top, 16)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.gutter.value)
+        .padding(.top, 24)
+        .padding(.bottom, 48)
+    }
+
+    /// Which of the six steps: the line, then six bars, those done in ink.
+    private var stepBars: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(copy("common.step", ["step": String(screen.step), "steps": "6"]))
+                .font(Theme.body(Theme.sizeKicker))
+                .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
+                .foregroundColor(Theme.mute.color)
+            HStack(spacing: 6) {
+                ForEach(1...6, id: \.self) { step in
+                    Rectangle()
+                        .fill(step <= screen.step ? Theme.ink.color : Theme.line.color)
+                        .frame(height: 4)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    // The words ------------------------------------------------------------------------
+
+    private func paragraph(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.body(Theme.sizeBody))
+            .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func small(_ text: String, color: RGB = Theme.mute) -> some View {
+        Text(text)
+            .font(Theme.body(Theme.sizeSmall))
+            .lineSpacing(Theme.spacing(Theme.leadingSmall, Theme.sizeSmall))
+            .foregroundColor(color.color)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func display(_ text: String, _ size: Length, _ leading: Number) -> some View {
+        Text(text)
+            .font(Theme.display(size))
+            .lineSpacing(Theme.spacing(leading, size))
+            .foregroundColor(Theme.ink.color)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
-    private func footer(_ screen: Screen) -> some View {
-        if !screen.buttons.isEmpty || screen.cancel != nil {
-            VStack(spacing: 10) {
-                HStack(spacing: 12) {
-                    ForEach(Array(screen.buttons.enumerated()), id: \.offset) { index, button in
-                        self.button(button, primary: index == screen.buttons.count - 1)
+    private func block(_ block: Block, first: Bool) -> some View {
+        switch block {
+        case .title(let text):
+            display(text, Theme.sizeTitle, Theme.leadingTitle).padding(.top, first ? 28 : 20)
+        case .heading(let text):
+            display(text, Theme.sizeTitle, Theme.leadingTitle).padding(.top, 40)
+        case .subheading(let text):
+            Text(text).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 20)
+        case .text(let text):
+            paragraph(text).padding(.top, 12)
+        case .strong(let text):
+            Text(text).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
+        case .lead(let text):
+            display(text, Theme.sizeLead, Theme.leadingHeading).padding(.top, 28)
+        case .small(let text):
+            small(text).padding(.top, 12)
+        case .kicker(let text):
+            VStack(alignment: .leading, spacing: 16) {
+                Divider().overlay(Theme.line.color)
+                Text(text).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.mute.color)
+                    .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
+            }
+            .padding(.top, 40)
+        case .doneHead(let card, let title, let lines):
+            doneHead(card, title: title, lines: lines).padding(.top, 28)
+        case .steps(let steps):
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 14) {
+                        Text(verbatim: String(index + 1)).font(Theme.display(Theme.sizeHeading)).foregroundColor(Theme.ink.color)
+                        Text(step).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                if let cancel = screen.cancel {
-                    SwiftUI.Button(cancel.label) { model.perform(cancel.action) }
-                        .font(.subheadline)
-                        .foregroundColor(Palette.quiet)
+            }
+            .padding(.top, 20)
+        case .linked(let before, let link, let after):
+            SwiftUI.Button { perform(link.action) } label: {
+                (Text(before) + Text(link.label).underline() + Text(after))
+                    .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
+                    .foregroundColor(Theme.you.color)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: Theme.minTarget.value, alignment: .leading)
+            }
+            .padding(.top, 28)
+        case .points(let points):
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                    HStack(alignment: .firstTextBaseline, spacing: 14) {
+                        Circle().fill(Theme.ink.color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
+                        Text(point).font(Theme.body(Theme.sizeBody))
+                            .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody) * 0.8)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .overlay(Rectangle().frame(height: 1).foregroundColor(Palette.rule), alignment: .top)
+            .padding(.top, 28)
+        case .question(let question, let answer):
+            VStack(spacing: 0) {
+                Divider().overlay(Theme.line.color)
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(answer.enumerated()), id: \.offset) { _, line in paragraph(line) }
+                    }
+                    .padding(.bottom, 12)
+                } label: {
+                    Text(question).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                        .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value, alignment: .leading)
+                }
+                .accentColor(Theme.ink.color)
+                Divider().overlay(Theme.line.color)
+            }
+            .padding(.top, 8)
+        case .items(let items):
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Divider().overlay(Theme.line.color)
+                    self.item(item)
+                }
+                Divider().overlay(Theme.line.color)
+            }
+            .padding(.top, 24)
+        case .cardName(let label, let name, let note):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(label).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
+                Text(name).font(Theme.display(Theme.sizeHeading)).foregroundColor(Theme.ink.color)
+                Text(note).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.soft.color)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusPanel.value))
+            .padding(.top, 24)
+        case .pinField(let label):
+            VStack(alignment: .leading, spacing: 10) {
+                Text(label).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                // No content type: the system is not to offer to fill the PIN in, or to save it.
+                SecureField("", text: $pinText)
+                    .keyboardType(.asciiCapable)
+                    .font(Theme.body(Theme.sizeBody))
+                    .padding(.horizontal, 16)
+                    .frame(height: Theme.buttonHeight.value)
+                    .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(Theme.ink.color, lineWidth: 1))
+                    .accessibilityLabel(label)
+            }
+            .padding(.top, 28)
+        case .message(let text):
+            Text(text).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.ink.color)
+                .lineSpacing(Theme.spacing(Theme.leadingSmall, Theme.sizeKicker))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft.color)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius.value))
+                .padding(.top, 16)
+        case .account(let row):
+            account(row).padding(.top, 24)
+        case .row(let name, let account, let lines):
+            VStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(name).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.mute.color).frame(width: 80, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(account).font(Theme.body(Theme.sizeBody, Theme.weightAccount)).foregroundColor(Theme.ink.color)
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in small(line, color: Theme.text) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 14)
+                Divider().overlay(Theme.line.color)
+            }
+            .padding(.top, first ? 0 : 4)
+        case .pair(let label, let value):
+            VStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(label).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.mute.color).frame(width: 80, alignment: .leading)
+                    Text(value).font(Theme.mono(Theme.sizeBody)).foregroundColor(Theme.ink.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 14)
+                Divider().overlay(Theme.line.color)
+            }
+        case .link(let text):
+            Text(text).font(Theme.mono(Theme.sizeKicker)).foregroundColor(Theme.ink.color).textSelection(.enabled)
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.soft.color)
+                .padding(.top, 20)
+        case .button(let button, let main):
+            self.button(button, main: main).padding(.top, 12)
+        case .busy(let text):
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(text).font(Theme.body(Theme.sizeKicker))
+            }
+            .padding(.top, 16)
         }
     }
 
-    private func button(_ button: Button, primary: Bool) -> some View {
-        SwiftUI.Button { model.perform(button.action) } label: {
+    // The parts -----------------------------------------------------------------------
+
+    /// A button as wide as the screen (design/DESIGN.md, the components):
+    /// the main one red with white words, the others framed in ink.
+    private func button(_ button: Button, main: Bool) -> some View {
+        SwiftUI.Button { perform(button.action) } label: {
             Text(button.label)
-                .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .foregroundColor(primary ? Palette.paper : Palette.ink)
-                .background(primary ? Palette.accent : Palette.paper)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(primary ? Palette.accent : Palette.ink, lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value)
+                .padding(.horizontal, 12)
         }
+        .buttonStyle(Framed(main: main))
         .disabled(!button.enabled)
         .opacity(button.enabled ? 1 : 0.45)
     }
 
-    @ViewBuilder
-    private func block(_ block: Block) -> some View {
-        switch block {
-        case .title(let text):
-            Text(text).font(.title2.weight(.bold)).padding(.bottom, 2)
-        case .heading(let text):
-            Text(text).font(.headline).padding(.top, 10)
-        case .text(let text):
-            Text(text).font(.body)
-        case .strong(let text):
-            Text(text).font(.body.weight(.semibold))
-        case .hand(let text):
-            Text(text).font(.callout.italic()).foregroundColor(Palette.accent)
-        case .points(let points):
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: "·")
-                        Text(point)
-                    }
-                    .font(.subheadline)
-                }
-            }
-        case .question(let question, let answer):
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(answer.enumerated()), id: \.offset) { _, line in
-                        Text(line).font(.subheadline).frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(.top, 6)
-            } label: {
-                Text(question).font(.subheadline.weight(.semibold))
-            }
-            .accentColor(Palette.ink)
-        case .items(let items):
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    self.item(item)
-                }
-            }
-            .padding(.vertical, 4)
-        case .cardName(let label, let name, let note):
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label).font(.subheadline).foregroundColor(Palette.quiet)
-                Text(name).font(.title3.weight(.semibold))
-                Text(note).font(.footnote).foregroundColor(Palette.quiet)
-            }
-        case .pinField(let label):
-            HStack(spacing: 12) {
-                Text(label).font(.body.weight(.semibold))
-                // No content type: the system is not to offer to fill the PIN in, or to save it.
-                SecureField("", text: $model.pinText)
-                    .keyboardType(.asciiCapable)
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.ink, lineWidth: 1))
-                    .accessibilityLabel(label)
-            }
-        case .message(let text):
-            Text(text).font(.subheadline.weight(.semibold))
-                .padding(.leading, 10)
-                .overlay(Rectangle().frame(width: 3).foregroundColor(Palette.ink), alignment: .leading)
-        case .account(let row):
-            self.account(row)
-        case .row(let name, let account, let lines):
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(name).font(.subheadline).foregroundColor(Palette.quiet).frame(width: 84, alignment: .leading)
-                    Text(account).font(.body.monospaced())
-                }
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    Text(line).font(.footnote).padding(.leading, 96)
-                }
-            }
-        case .pair(let label, let value):
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(label).font(.subheadline).foregroundColor(Palette.quiet).frame(width: 84, alignment: .leading)
-                Text(value).font(.body.monospaced())
-            }
-        case .link(let text):
-            Text(text).font(.body.monospaced()).textSelection(.enabled)
-                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.rule, lineWidth: 1))
-        case .button(let button):
-            SwiftUI.Button(button.label) { model.perform(button.action) }
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(Palette.accent)
-        case .busy(let text):
-            HStack(spacing: 10) {
-                ProgressView()
-                Text(text).font(.subheadline)
-            }
+    /// The main button red with white words, darker while pressed; the
+    /// others framed in ink.
+    private struct Framed: ButtonStyle {
+        let main: Bool
+
+        func makeBody(configuration: Configuration) -> some View {
+            let fill = main ? (configuration.isPressed ? Theme.youHover : Theme.you) : Theme.bg
+            return configuration.label
+                .foregroundColor(main ? Theme.bg.color : Theme.ink.color)
+                .background(fill.color)
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(main ? fill.color : Theme.ink.color, lineWidth: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius.value))
         }
     }
 
+    /// One item of a progress list: done in ink with a tick, in progress
+    /// with a spinner, the rest an empty circle; its status at the end.
     private func item(_ item: Item) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .center, spacing: 14) {
             Group {
                 switch item.state {
-                case .done: Image(systemName: "checkmark")
-                case .working: ProgressView().scaleEffect(0.7)
-                case .pending, .halted: Image(systemName: "circle").foregroundColor(Palette.quiet)
+                case .done: Image(systemName: "checkmark").font(.system(size: 15, weight: .bold)).foregroundColor(Theme.ink.color)
+                case .working: ProgressView().scaleEffect(0.8)
+                case .pending, .halted: Circle().stroke(Theme.line.color, lineWidth: 1.5).frame(width: 18, height: 18)
                 }
             }
-            .frame(width: 18)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.label).font(.body)
-                if !item.status.isEmpty {
-                    Text(item.status).font(.footnote.weight(item.state == .halted ? .semibold : .regular)).foregroundColor(item.state == .halted ? Palette.ink : Palette.quiet)
-                }
+            .frame(width: 22)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.label).font(Theme.body(Theme.sizeBody))
+                    .foregroundColor(item.state == .pending ? Theme.mute.color : Theme.text.color)
+                    .fixedSize(horizontal: false, vertical: true)
                 ForEach(Array(item.why.enumerated()), id: \.offset) { _, line in
-                    Text(line).font(.subheadline.weight(.semibold))
+                    Text(line).font(Theme.body(Theme.sizeKicker, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !item.status.isEmpty {
+                Text(item.status)
+                    .font(Theme.body(Theme.sizeKicker, item.state == .done ? Theme.weightBody : Theme.weightHeading))
+                    .foregroundColor(item.state == .done ? Theme.mute.color : Theme.ink.color)
             }
         }
+        .padding(.vertical, 14)
     }
 
     private func account(_ row: AccountRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Text(row.name).font(.subheadline).foregroundColor(Palette.quiet).frame(width: 64, alignment: .leading)
-                Text(row.prefix).font(.body.monospaced())
-                TextField("", text: Binding(get: { row.text }, set: { model.type($0, on: row.platform) }))
-                    .font(.body.monospaced())
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-                    .keyboardType(.asciiCapable)
-                    .padding(8)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.ink, lineWidth: 1))
-                    .accessibilityLabel(row.name)
+        VStack(alignment: .leading, spacing: 10) {
+            Divider().overlay(Theme.line.color)
+            Text(row.name).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                .padding(.top, 10)
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Text(row.prefix).font(Theme.body(Theme.sizeBody)).foregroundColor(Theme.mute.color)
+                    TextField("", text: Binding(get: { row.text }, set: { type($0, row.platform) }))
+                        .font(Theme.body(Theme.sizeBody))
+                        .foregroundColor(Theme.ink.color)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .keyboardType(.asciiCapable)
+                        .accessibilityLabel(row.name)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: Theme.buttonHeight.value)
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(Theme.ink.color, lineWidth: 1))
                 if let preview = row.preview {
-                    SwiftUI.Button(preview.label) { model.perform(preview.action) }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(Palette.accent)
+                    SwiftUI.Button { perform(preview.action) } label: {
+                        Text(preview.label)
+                            .font(Theme.body(Theme.sizeKicker, Theme.weightHeading))
+                            .foregroundColor(Theme.ink.color)
+                            .padding(.horizontal, 14)
+                            .frame(height: Theme.buttonHeight.value)
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(Theme.ink.color, lineWidth: 1.5))
+                    }
                 }
             }
-            ForEach(Array(row.lines.enumerated()), id: \.offset) { _, line in
-                Text(line).font(.footnote).foregroundColor(Palette.quiet)
-            }
+            ForEach(Array(row.lines.enumerated()), id: \.offset) { _, line in small(line) }
             if let error = row.error {
-                Text(error).font(.footnote.weight(.semibold))
+                Text(error).font(Theme.body(Theme.sizeKicker, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
-}
 
-/// The colors of the screens, those of the web page (web/src/ui/style.css):
-/// ink on paper, and one accent.
-private enum Palette {
-    static let paper = Color(red: 0xf4 / 255, green: 0xf1 / 255, blue: 0xea / 255)
-    static let ink = Color(red: 0x1b / 255, green: 0x1b / 255, blue: 0x1f / 255)
-    static let quiet = Color(red: 0x6b / 255, green: 0x68 / 255, blue: 0x60 / 255)
-    static let rule = Color(red: 0xd8 / 255, green: 0xd3 / 255, blue: 0xc7 / 255)
-    static let accent = Color(red: 0x22 / 255, green: 0x69 / 255, blue: 0x77 / 255)
+    /// The box on top of the done screen: the small card on the left (none
+    /// when every account was withdrawn), the title and its lines beside it.
+    private func doneHead(_ card: ProofCard?, title: String, lines: [String]) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            if let card { proofCard(card).frame(width: 128) }
+            VStack(alignment: .leading, spacing: 8) {
+                display(title, Theme.sizeLead, Theme.leadingHeading)
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in small(line, color: Theme.text) }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.soft.color)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusPanel.value))
+    }
+
+    /// The small card (design/DESIGN.md, the components: the proof card):
+    /// white, framed in ink, the account the largest, never red but for the mark.
+    private func proofCard(_ card: ProofCard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                Mark(animated: true).frame(width: 18, height: 18)
+                Text(card.label).font(Theme.body(Theme.sizeSmall, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+            }
+            ForEach(Array(card.rows.enumerated()), id: \.offset) { _, row in
+                VStack(alignment: .leading, spacing: 0) {
+                    if let name = row.name { Text(name).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color) }
+                    Text(row.account).font(Theme.body(Theme.sizeBody, Theme.weightAccount)).foregroundColor(Theme.ink.color)
+                        .lineLimit(2).minimumScaleFactor(0.6)
+                }
+            }
+            // Narrower than its line at the small size: shrunk to fit, as the card on the page is.
+            Text(card.shortID).font(Theme.mono(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
+                .lineLimit(1).minimumScaleFactor(0.5)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.bg.color)
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel.value).stroke(Theme.ink.color, lineWidth: 1))
+    }
 }

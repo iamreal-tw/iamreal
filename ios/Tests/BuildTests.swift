@@ -103,24 +103,31 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/fonts/GenRyuMin2TW-B.otf"))
     }
 
-    /// Every sentence the sources name is in that file, and the sources
-    /// write none of their own: no character of Chinese outside the mark of
-    /// the test log.
+    /// Every sentence the sources name is in that file (`copy("…")`), or
+    /// for what is not the card proof's in design/copy/app.json
+    /// (`appCopy("…")`), and the sources write none of their own: no
+    /// character of Chinese outside the mark of the test log.
     func testTheSourcesTakeEverySentenceFromTheCopy() throws {
-        let copy = Copy(json: try Repository.data("design/copy/card-proof.json"))
-        let key = try NSRegularExpression(pattern: #"copy\("([a-z_]+\.[a-z_]+)""#)
-        var keys = 0
+        let files = [
+            "copy": ("design/copy/card-proof.json", Copy(json: try Repository.data("design/copy/card-proof.json"))),
+            "appCopy": ("design/copy/app.json", Copy(json: try Repository.data("design/copy/app.json"))),
+        ]
+        let key = try NSRegularExpression(pattern: #"\b(copy|appCopy)\("([a-z_]+\.[a-z_]+)""#)
+        var keys: [String: Int] = [:]
         for (name, source) in try appSources() {
             for match in key.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
-                let named = String(source[try XCTUnwrap(Range(match.range(at: 1), in: source))])
-                XCTAssertNotEqual(copy(named), named, "\(name) names \(named), which design/copy/card-proof.json does not have")
-                keys += 1
+                let call = String(source[try XCTUnwrap(Range(match.range(at: 1), in: source))])
+                let named = String(source[try XCTUnwrap(Range(match.range(at: 2), in: source))])
+                let (path, copy) = try XCTUnwrap(files[call])
+                XCTAssertNotEqual(copy(named), named, "\(name) names \(named), which \(path) does not have")
+                keys[call, default: 0] += 1
             }
             for line in source.split(separator: "\n") where !line.contains("static let testProofLog") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
                 XCTAssertNil(line.unicodeScalars.first { (0x2E80...0x9FFF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }, "\(name): \(line)")
             }
         }
-        XCTAssertGreaterThan(keys, 100)
+        XCTAssertGreaterThan(keys["copy", default: 0], 100)
+        XCTAssertEqual(keys["appCopy"], 2, "the splash screen's two")
     }
 
     /// The PIN and a card proof under way are in memory only: the sources

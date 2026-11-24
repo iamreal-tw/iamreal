@@ -387,7 +387,6 @@ async function cardProof(p: Proof): Promise<string> {
     if (p.thorough) {
       shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
-      check(!s.includes(say("links.more")), "step 3 links to no other page");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -419,7 +418,6 @@ async function cardProof(p: Proof): Promise<string> {
     if (p.thorough) {
       shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.not_yours_single", { platform: THREADS }), say("common.cancel")]);
       check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")) && !s.includes(say("accounts.not_yours")), "step 4 is the one-platform screen, with 預覽");
-      check(![say("links.more"), say("accounts.no_check"), say("accounts.acknowledged")].some((x) => s.includes(x)), "step 4 links to no other page, and has not the two lines of before the redesign");
     }
     check(field("account-threads").text === p.current, `step 4: the Threads row holds "${p.current}"`);
   }
@@ -466,7 +464,6 @@ async function cardProof(p: Proof): Promise<string> {
     shot("step-5-in-progress");
     await designShot("card-proof-app-5-progress-phone.png");
     const s = textsOf(visible());
-    check(!s.includes(say("progress.zero_knowledge")) && !s.includes(say("links.more")), "step 5 in progress: no sentence under the list, and no link to another page");
   } else await tap();
 
   // Step 6
@@ -505,7 +502,7 @@ async function cardProof(p: Proof): Promise<string> {
       for (const a of hanging.filter((x) => x !== say("done.proof"))) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
     }
     // The server's answer was read (the title is by its kinds) and is what step 5 said: no record of it shown, nothing of the web's QR code or its
-    // computer, nothing of the screen of before the redesign.
+    // computer.
     for (const a of [
       say("done.unplug"),
       say("done.mismatch"),
@@ -516,14 +513,6 @@ async function cardProof(p: Proof): Promise<string> {
       say("done.by_phone"),
       say("done.by_phone_scan"),
       say("done.on_computer"),
-      say("done.hand_ai"),
-      say("done.put_up"),
-      say("done.advice_single"),
-      say("done.renamed"),
-      say("done.trust"),
-      say("links.verify"),
-      say("links.proof"),
-      say("app_done.open_platform", { platform: THREADS }),
       ...p.done.absent,
     ]) {
       check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);

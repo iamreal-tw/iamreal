@@ -27,6 +27,7 @@ on:
       - spec/vectors/**
       - design/copy/**
       - design/fonts/**
+      - design/tokens.json
       - web/circuits/**
       - verifier/vk/**
       - web/scripts/fetch-crs.mjs

@@ -1,16 +1,18 @@
 import Foundation
 
 /// Every sentence the screens show comes from design/copy/card-proof.json,
-/// the form of design/copy/card-proof.md a program can read; the file is
-/// carried in the app as it is in the repository. No Swift file writes a
+/// the form of design/copy/card-proof.md a program can read, or, for what is
+/// not the card proof's, design/copy/app.json (app.md); the files are
+/// carried in the app as they are in the repository. No Swift file writes a
 /// sentence of its own. Placeholders are written {name}.
 struct Copy {
     private let entries: [String: [String: String]]
 
-    /// The copy carried in the app. Without the file every sentence is
-    /// its key; Tests/BuildTests.swift checks that the file is there.
-    static func bundled() -> Copy {
-        guard let url = Bundle.main.url(forResource: "card-proof", withExtension: "json"), let json = try? Data(contentsOf: url) else {
+    /// The copy carried in the app: card-proof.json, or `name`.json. Without
+    /// the file every sentence is its key; Tests/BuildTests.swift checks
+    /// that the files are there.
+    static func bundled(_ name: String = "card-proof") -> Copy {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json"), let json = try? Data(contentsOf: url) else {
             return Copy(json: Data())
         }
         return Copy(json: json)

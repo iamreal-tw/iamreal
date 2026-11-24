@@ -1,10 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// The iOS app: the card proof, six screens (CardProofView).
+/// The iOS app: the splash screen (SplashView), then the card proof, six
+/// screens (CardProofView).
 @main
 struct IamrealApp: App {
     @StateObject private var model = CardProofModel.ofThisBuild()
+    @State private var opening = true
 
     var body: some Scene {
         WindowGroup {
@@ -12,7 +14,21 @@ struct IamrealApp: App {
             // itself shows nothing and asks the test site for nothing: each
             // test makes its own model, against a back end of its own.
             if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-                CardProofView(model: model)
+                Group {
+                    if opening {
+                        SplashView(appCopy: Copy.bundled("app"))
+                    } else {
+                        CardProofView(model: model)
+                    }
+                }
+                // The colors are design/tokens.json's, whatever the phone's appearance.
+                .preferredColorScheme(.light)
+                .task {
+                    // The server is asked for its config while the splash screen is up.
+                    model.open()
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    withAnimation(.easeOut(duration: 0.2)) { opening = false }
+                }
             }
         }
     }
@@ -36,7 +52,16 @@ extension CardProofModel {
             copy: Copy.bundled(),
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
-            copyText: { UIPasteboard.general.string = $0 }))
+            copyText: { UIPasteboard.general.string = $0 },
+            share: share))
+    }
+
+    /// The system's share sheet with `address`, over what the app shows.
+    private static func share(_ address: URL) {
+        let sheet = UIActivityViewController(activityItems: [address], applicationActivities: nil)
+        var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.present(sheet, animated: true)
     }
 }
 
