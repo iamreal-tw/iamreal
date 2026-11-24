@@ -286,6 +286,16 @@
     "compute": "正在這支手機計算，產生零知識證明，大約 {seconds} 秒"
   },
   "app_done": {
-    "share": "分享"
+    "share": "分享",
+    "reminder_title": "提醒我回來過卡",
+    "reminder_why": "越久沒過卡，說服力越低。",
+    "reminder_next_about": "這支手機會在 {day}{time} 提醒你，大約{interval}後。",
+    "reminder_next": "這支手機會在 {day}{time} 提醒你。",
+    "reminder_local": "提醒由手機自己排，不經過我們的伺服器。",
+    "reminder_turn_on": "開啟提醒",
+    "reminder_adjust": "改間隔或時刻",
+    "reminder_change": "更改",
+    "reminder_denied": "沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。",
+    "reminder_expires": "這張自然人憑證在 {valid_until} 到期，比下次提醒早。到期之後要展期或換新卡，才能再過卡。"
   }
 }
