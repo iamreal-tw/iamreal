@@ -60,7 +60,7 @@ int main(void) {
   {
     static const char rows[] = "[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\"}]";
     if (idc_records_response(NULL, 0, (const uint8_t *)rows, strlen(rows), &out) != IDC_OK) return 23;
-    if (!same(&out, "{\"kinds\":null,\"mismatches\":[],\"record_hash\":null,\"seq\":null}")) return 24;
+    if (!same(&out, "{\"kinds\":null,\"mismatches\":[],\"ordinal\":null,\"record_hash\":null,\"seq\":null}")) return 24;
     idc_buf_free(&out);
   }
 

@@ -102,9 +102,9 @@ extension CardProofModel {
             share: share))
     }
 
-    /// The system's share sheet with `address`, over what the app shows.
-    private static func share(_ address: URL) {
-        let sheet = UIActivityViewController(activityItems: [address], applicationActivities: nil)
+    /// The system's share sheet with `text`, over what the app shows.
+    private static func share(_ text: String) {
+        let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
         var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         top?.present(sheet, animated: true)

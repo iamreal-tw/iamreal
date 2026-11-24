@@ -26,6 +26,8 @@ pub struct PlatformKind {
 pub struct Answer {
     pub seq: u64,
     pub record_hash: String,
+    /// The card's ordinal; `None` when it is not a count of at least 1.
+    pub ordinal: Option<u64>,
     /// `None`: the kinds are unknown.
     pub kinds: Option<Vec<PlatformKind>>,
 }
@@ -71,6 +73,10 @@ pub fn read_answer(body: &[u8]) -> Option<Answer> {
     if !is_record_hash(record_hash) {
         return None;
     }
+    let ordinal = body
+        .get("ordinal")
+        .and_then(Json::as_count)
+        .filter(|ordinal| *ordinal >= 1);
     let kinds = body
         .get("kinds")
         .and_then(Json::as_array)
@@ -79,6 +85,7 @@ pub fn read_answer(body: &[u8]) -> Option<Answer> {
     Some(Answer {
         seq,
         record_hash: record_hash.to_owned(),
+        ordinal,
         kinds,
     })
 }

@@ -570,7 +570,7 @@ export interface DoneView {
   proofPath: string;
   /** done.open_profile and the profile it opens, for each account of the card whose platform has a public page. */
   profiles: { text: Sentence; url: string }[];
-  /** done.share_note, done.share and the page they open, for each platform of the build with a page to share from. */
+  /** done.share_note, done.share and the page they open, with the text suggested (`shareText`) and the card's link, for each platform of the build with a page to share from. */
   shares: { note: Sentence; button: Sentence; url: string }[];
   /** The card's first record: the sentence about a new card. */
   newCard: boolean;
@@ -597,6 +597,19 @@ export function doneTitle(d: Done): Sentence {
   const current = new Map(d.expected.map((r) => [r.platform, r.current]));
   return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
 }
+
+/**
+ * The text suggested for sharing the card's page, on the line above its link: with the
+ * card's ordinal, written as the card's page writes it (a comma every three
+ * digits), or without a number when the answer had none
+ * (design/copy/card-proof.md, step 6).
+ */
+export function shareText(ordinal: number | null): string {
+  return ordinal === null ? COPY.done.share_text_unnumbered : fill(COPY.done.share_text, { ordinal: thousands(ordinal) });
+}
+
+/** A whole number with a comma between groups of three digits. */
+const thousands = (n: number): string => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 
 /** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
 export function doneView(d: Done, single: string | null = null): DoneView {
@@ -641,9 +654,10 @@ export function doneView(d: Done, single: string | null = null): DoneView {
   }
   const withdrawAll = d.accounts.length === 0;
   const withdrew = (d.kinds ?? d.expected).some((k) => k.kind === "withdraw");
+  const text = `${shareText(d.ordinal)}\nhttps://${link}`;
   const shares = [...KNOWN_PLATFORMS].flatMap((id) => {
     const p = presentationOf(id)!;
-    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(`https://${link}`) }] : [];
+    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(text) }] : [];
   });
   return {
     title: doneTitle(d),

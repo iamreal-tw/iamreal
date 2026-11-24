@@ -8,6 +8,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, describe, test } from "node:test";
+import { parseChallenge } from "iamreal-protocol/challenge.ts";
+import { platformsOf } from "iamreal-protocol/platforms.ts";
+import { MemoryRules } from "iamreal-protocol/rules-memory.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import {
   BAD_PROOF,
@@ -384,21 +387,26 @@ describe("the record rules", () => {
     assert.equal((await state(card)).last_card_proof, "2026-11-26");
   });
 
-  test("what a 201 says: the fields in the document's order, the hash of the record, each platform's kind, account and how many cards declare it", async () => {
+  test("what a 201 says: the fields in the document's order, the hash of the record, the card's ordinal, each platform's kind, account and how many cards declare it", async () => {
     await fresh();
     const root = await publishG3(worker);
-    const [a, b] = [newCard(), newCard()];
-    const steps: [number, string, string[], [string, string, string, number][]][] = [
-      [0, a, ["threads:alice"], [["threads", "first", "alice", 1]]],
-      [0, b, ["test-example:alice", "threads:alice"], [["test-example", "first", "alice", 1], ["threads", "first", "alice", 2]]],
-      [1, a, ["threads:bob"], [["threads", "switch", "bob", 1]]],
-      [1, b, ["test-example:alice"], [["test-example", "refresh", "alice", 1], ["threads", "withdraw", "alice", 0]]],
-      [1, a, ["threads:carol"], [["threads", "correction", "carol", 1]]],
-      [1, b, [], [["test-example", "withdraw", "alice", 0]]],
-      [2, a, ["test-example:alice", "threads:alice"], [["test-example", "first", "alice", 1], ["threads", "switch", "alice", 1]]],
+    const [a, b, c] = [newCard(), newCard(), newCard()];
+    // The ordinal, by hand: a's first card proof is the proof log's first, b's the second, c's the third; later card
+    // proofs, another account, a withdrawal of everything and declaring again keep each card's.
+    const steps: [number, string, string[], number, [string, string, string, number][]][] = [
+      [0, a, ["threads:alice"], 1, [["threads", "first", "alice", 1]]],
+      [0, b, ["test-example:alice", "threads:alice"], 2, [["test-example", "first", "alice", 1], ["threads", "first", "alice", 2]]],
+      [1, a, ["threads:bob"], 1, [["threads", "switch", "bob", 1]]],
+      [1, b, ["test-example:alice"], 2, [["test-example", "refresh", "alice", 1], ["threads", "withdraw", "alice", 0]]],
+      [1, a, ["threads:carol"], 1, [["threads", "correction", "carol", 1]]],
+      [1, c, ["threads:dave"], 3, [["threads", "first", "dave", 1]]],
+      [1, b, [], 2, [["test-example", "withdraw", "alice", 0]]],
+      [2, a, ["test-example:alice", "threads:alice"], 1, [["test-example", "first", "alice", 1], ["threads", "switch", "alice", 1]]],
+      [2, b, ["threads:bob"], 2, [["threads", "switch", "bob", 1]]],
     ];
     let today = 0;
-    for (const [i, [onDay, card, accounts, want]] of steps.entries()) {
+    const ordinals: number[] = [];
+    for (const [i, [onDay, card, accounts, ordinal, want]] of steps.entries()) {
       if (onDay > today) await day(worker, (today = onDay));
       const s = await sub(worker, card, root, ...accounts);
       const answer = await submit(worker, s);
@@ -409,13 +417,26 @@ describe("the record rules", () => {
       assert.deepEqual(answer.body, {
         seq: i + 1,
         record_hash: createHash("sha256").update(preimage).digest("hex"),
+        ordinal,
         kinds: want.map(([platform, kind, username, account_cards]) => ({ platform, kind, username, account_cards })),
       });
+      ordinals.push(answer.body.ordinal as number);
     }
+    // The same ordinals computed from the proof log by protocol/'s rules, which test/sequence.test.ts compares with Go's
+    // prooflog/: every record of it is valid, and each answer's ordinal is that of the record's card.
+    const memory = new MemoryRules(platformsOf("test"));
+    const records = await checkProofLog(worker);
+    for (const r of records) {
+      const date = parseChallenge(r.challenge)!;
+      assert.equal(memory.apply({ scopeString: r.scopeString, scopedId: r.scopedId, challenge: r.challenge, accounts: r.accounts, verifies: true, crlDates: [date] }).result.valid, true);
+    }
+    const ordinalOf = new Map(memory.output().flatMap((scope) => scope.cards.map((card) => [card.scopedId, card.ordinal] as const)));
+    assert.deepEqual(ordinals, records.map((r) => ordinalOf.get(r.scopedId)));
+
     const refused = await submit(worker, await sub(worker, newCard(), root));
     assert.deepEqual(refused, { status: 400, body: { error: "empty" } });
     const res = await worker.fetch("/api/v1/records", { method: "POST", body: JSON.stringify(await sub(worker, a, root, "test-example:alice", "threads:alice")) });
-    assert.match(await res.text(), /^\{"seq":8,"record_hash":"[0-9a-f]{64}","kinds":\[\{"platform":"test-example","kind":"refresh","username":"alice","account_cards":1\},\{"platform":"threads","kind":"refresh","username":"alice","account_cards":1\}\]\}$/);
+    assert.match(await res.text(), /^\{"seq":10,"record_hash":"[0-9a-f]{64}","ordinal":1,"kinds":\[\{"platform":"test-example","kind":"refresh","username":"alice","account_cards":1\},\{"platform":"threads","kind":"refresh","username":"alice","account_cards":1\}\]\}$/);
   });
 
   test("empty and switch_limit: the whole list is refused, nothing is recorded for any platform, and the state does not change", async () => {

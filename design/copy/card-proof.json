@@ -202,6 +202,8 @@
     "share_title": "讓朋友也知道",
     "share_note": "把你的島民證明分享到 {platform}。",
     "share": "分享到 {platform}",
+    "share_text": "我剛剛換了第 {ordinal} 張島民證明，宣告本帳號背後是一名台灣人。",
+    "share_text_unnumbered": "我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。",
     "return_title": "記得每三個月回來過卡一次",
     "return_note": "越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。",
     "proof": "島民證明",

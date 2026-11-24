@@ -156,6 +156,8 @@ class CardProof(private val deps: Deps) {
         /** The record's `seq` and hash; both null when nothing of the answer is told. */
         val seq: Long?,
         val recordHash: String?,
+        /** The card's ordinal, for the text suggested for sharing; null when it cannot be read, or nothing of the answer is told. */
+        val ordinal: Long?,
         /** What the server says the record is on each platform, in ascending order; null when it cannot be read. */
         val kinds: List<Recorded>?,
         /** The platforms on which [kinds] differs from the confirmation screen's rows, in ascending order; empty when [kinds] is null. */
@@ -163,7 +165,7 @@ class CardProof(private val deps: Deps) {
     ) {
         companion object {
             /** An answer of which nothing is told. */
-            val NOTHING = Answer(null, null, null, emptyList())
+            val NOTHING = Answer(null, null, null, null, emptyList())
 
             /**
              * Reads [response], the body of the `201`, against [rowsJson], the rows the confirmation screen
@@ -187,6 +189,7 @@ class CardProof(private val deps: Deps) {
                 return Answer(
                     if (read.isNull("seq")) null else read.getLong("seq"),
                     if (read.isNull("record_hash")) null else read.getString("record_hash"),
+                    if (read.isNull("ordinal")) null else read.getLong("ordinal"),
                     kinds?.let {
                         (0 until it.length()).map { i ->
                             val k = it.getJSONObject(i)

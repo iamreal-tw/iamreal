@@ -20,10 +20,10 @@ class DoneViewTest {
     private fun row(platform: String, kind: String, username: String, current: String? = null, previous: String? = null, switchesLeft: Int? = null, known: Boolean = true) =
         Row(platform, known, kind, username, current, previous, switchesLeft)
 
-    private fun done(expected: List<Row>, kinds: List<Recorded>?, mismatches: List<String> = emptyList(), firstRecord: Boolean = false, seq: Long? = 138): CardProof.Done =
+    private fun done(expected: List<Row>, kinds: List<Recorded>?, mismatches: List<String> = emptyList(), firstRecord: Boolean = false, seq: Long? = 138, ordinal: Long? = if (seq == null) null else 128): CardProof.Done =
         CardProof.Done(
             expected,
-            CardProof.Answer(seq, if (seq == null) null else "3f".repeat(32), kinds, mismatches),
+            CardProof.Answer(seq, if (seq == null) null else "3f".repeat(32), ordinal, kinds, mismatches),
             firstRecord, "2026-11-16", "7K2Q9FM4XD",
             expected.filter { it.kind != "withdraw" }.map { it.platform to it.username },
             java.time.LocalDate.parse("2031-05-01"),
@@ -56,8 +56,22 @@ class DoneViewTest {
         assertEquals("任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。", view.anyone)
         assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
         assertEquals(listOf("把你的島民證明分享到 Threads。" to "分享"), view.shares)
+        assertEquals("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。", view.shareText)
         assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
         assertEquals(listOf(false, true, false, false), listOf(view.withdrawAll, view.newCard, view.withdrawnLink, view.showRecord))
+    }
+
+    @Test
+    fun `the text suggested for sharing, the card's ordinal with a comma every three digits, or the sentence without a number`() {
+        val expected = listOf(row("threads", "refresh", "alice", current = "alice"))
+        val text = { ordinal: Long? -> messages.done(done(expected, listOf(Recorded("threads", "refresh", "alice", 1)), ordinal = ordinal), "Threads").shareText }
+        assertEquals("我剛剛換了第 1 張島民證明，宣告本帳號背後是一名台灣人。", text(1))
+        assertEquals("我剛剛換了第 999 張島民證明，宣告本帳號背後是一名台灣人。", text(999))
+        assertEquals("我剛剛換了第 1,284 張島民證明，宣告本帳號背後是一名台灣人。", text(1284))
+        assertEquals("我剛剛換了第 1,234,567 張島民證明，宣告本帳號背後是一名台灣人。", text(1234567))
+        assertEquals("我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。", text(null))
+        // Nothing of the answer told: no ordinal either.
+        assertEquals("我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。", messages.done(done(expected, null, seq = null), "Threads").shareText)
     }
 
     @Test

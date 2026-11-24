@@ -19,6 +19,7 @@ export interface RecordsResponseCase {
 export interface RecordsResponseResult {
   seq: number | null;
   record_hash: string | null;
+  ordinal: number | null;
   kinds: { platform: string; kind: string; username: string; account_cards: number | null }[] | null;
   mismatches: string[];
 }
@@ -31,6 +32,7 @@ export async function recordsResponseResult(c: RecordsResponseCase): Promise<Rec
   return {
     seq: accepted.seq,
     record_hash: accepted.recordHash,
+    ordinal: accepted.ordinal,
     kinds: accepted.kinds === null ? null : accepted.kinds.map((k) => ({ platform: k.platform, kind: k.kind, username: k.username, account_cards: k.accountCards })),
     mismatches: mismatchesOf(c.rows, accepted.kinds),
   };

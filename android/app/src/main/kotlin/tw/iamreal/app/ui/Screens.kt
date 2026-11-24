@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
 
-/** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, an address handed to the system's share sheet. */
+/** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, a text handed to the system's share sheet. */
 internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, val share: (String) -> Unit)
 
 /**
@@ -415,7 +415,7 @@ private fun Done(m: Model, r: ReminderModel, outside: Outside) {
             BasicText(c.say("done.optional"), Modifier.padding(bottom = 14.dp), style = TextStyle(color = Colours.mute, fontSize = 15.sp))
             for ((note, button) in view.shares) {
                 DashedRule()
-                Optional(c.say("done.share_title"), note) { Button(button, Modifier.fillMaxWidth().padding(top = 12.dp), height = 46.dp) { outside.share(url) } }
+                Optional(c.say("done.share_title"), note) { Button(button, Modifier.fillMaxWidth().padding(top = 12.dp), height = 46.dp) { outside.share("${view.shareText}\n$url") } }
             }
             DashedRule()
             // The reminder, in the place of the web's "記得每三個月回來過卡一次" (design/copy/card-proof.md, "6. 完成", app, "提醒").

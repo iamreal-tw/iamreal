@@ -593,12 +593,15 @@ pub unsafe extern "C" fn idc_short_id(
 ///   [`idc_list_consequence`]'s output for the list the card signed. Of a
 ///   row, `platform`, `kind` and `username` are read.
 ///
-/// `*out` is `{"seq":138,"record_hash":"…","kinds":[{"platform":"threads",
-/// "kind":"first","username":"alice","account_cards":1}],"mismatches":[]}`:
+/// `*out` is `{"seq":138,"record_hash":"…","ordinal":42,"kinds":[{"platform":
+/// "threads","kind":"first","username":"alice","account_cards":1}],
+/// "mismatches":[]}`:
 ///
 /// - `seq`, `record_hash`: the record's, or both null when nothing of the
 ///   answer is told (the body is not an answer with the two in their
-///   form). `kinds` is null then too.
+///   form). `ordinal` and `kinds` are null then too.
+/// - `ordinal`: the card's ordinal, for the text the app suggests for
+///   sharing; null when it is not a count of at least 1.
 /// - `kinds`: what the server says the record is on each platform, in
 ///   ascending order of platform; null when they cannot be read.
 ///   `account_cards` is null when it is not a count.
@@ -636,6 +639,7 @@ pub unsafe extern "C" fn idc_records_response(
         let value = json!({
             "seq": answer.as_ref().map(|answer| answer.seq),
             "record_hash": answer.as_ref().map(|answer| answer.record_hash.as_str()),
+            "ordinal": answer.as_ref().and_then(|answer| answer.ordinal),
             "kinds": kinds.map(|kinds| {
                 kinds
                     .iter()

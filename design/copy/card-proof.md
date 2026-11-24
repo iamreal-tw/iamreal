@@ -833,7 +833,20 @@ iamreal.tw/p/7K2Q9FM4XD
 - 連結是這張卡片的島民證明的網址（`iamreal.tw/p/` 加 10 個字元的島民編號），所有平台用同一個；帳號改了，連結不變。「複製連結」複製的是帶 `https://` 的完整網址，按了之後按鈕寫「已複製」
 - 「打開 @alice 的 Threads 個人檔案」連到帳號的公開頁面（`https://www.threads.com/@alice`），小卡上每個有公開頁面的帳號一行
 - 「打開你的島民證明」是連結，連到這張島民證明（`hang.md` 第 3 部分）
-- 「分享到 Threads」打開 Threads 的發文畫面，只帶入這張島民證明的網址，不帶任何文字（Threads 的 web intent，`https://www.threads.com/intent/post?url=`，見 Meta 的 [Web intents](https://developers.facebook.com/docs/threads/threads-web-intents) 說明）
+- 「分享到 Threads」打開 Threads 的發文畫面，預先填好下面這段文字（Threads 的 web intent，`https://www.threads.com/intent/post?text=…`，見 Meta 的 [Web intents](https://developers.facebook.com/docs/threads/threads-web-intents) 說明）：
+
+  ```
+  我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。
+  iamreal.tw/p/7K2Q9FM4XD
+  ```
+
+  `128` 是這張卡片的順序號碼，後台在送出的回應裡給（`ordinal`，`spec/records-response.md`），寫法和島民證明頁相同：超過三位數時每三位加一個逗號（`第 1,284 張`）。回應裡讀不到或讀不懂號碼時（包括再送一次才從現況找到這一筆的時候），第一行換成：
+
+  ```
+  我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。
+  ```
+
+  第二行是這張島民證明的網址，帶 `https://`，網域是這個網站的（測試網站是 `test.iamreal.tw`）。兩行都放在 `text` 裡，不用 `url`（那是連結的附件，網址不一定出現在貼文的文字裡）
 - 連到別的頁面的連結都在新分頁開：離開這一頁，過卡就結束了
 
 平台表上裝置認得的平台不只一個時（「只有一個平台時」的相反），標題和下面那一句換成：
@@ -931,7 +944,7 @@ iamreal.tw/p/7K2Q9FM4XD
 - 沒有 QR code，沒有「用手機掛，最快」「或在這台電腦上做」：連結、「複製連結」、打開個人檔案和三步直接接在「任何人都能宣告任何帳號……」下面。三步不放示意圖
 - 日期那一行不接「現在可以拔出卡片。」：感應的面板已經說了可以拿開卡片
 - 「打開 @alice 的 Threads 個人檔案」開 Threads 的 app 或瀏覽器；「打開你的島民證明」開瀏覽器。離開 app 不會結束過卡，回來還是這個畫面
-- 分享的按鈕寫「分享」，打開系統的分享面板，分享的只有這張島民證明的網址（帶 `https://`），不帶任何文字
+- 分享的按鈕寫「分享」，打開系統的分享面板，分享的是一段文字：第一行和網頁預填的那一行相同（有號碼或沒有號碼的那一句），第二行是這張島民證明的網址（帶 `https://`）
 
 ```
   島民證明

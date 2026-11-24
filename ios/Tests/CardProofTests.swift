@@ -17,7 +17,7 @@ final class CardProofTests: XCTestCase {
     /// What the app opened outside itself, and what it put on the clipboard.
     private var opened: [URL] = []
     private var copied: [String] = []
-    private var shared: [URL] = []
+    private var shared: [String] = []
     /// The back end of the model made last, which counts what it is asked.
     private var asked: CountingBackend!
     private var document: CopyDocument!
@@ -202,7 +202,8 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(card.signatures, 2)
         XCTAssertFalse(model.holdsPIN)
 
-        // The link, copied whole; the card's page, in the browser; the account on Threads; the share sheet, with the card's page only.
+        // The link, copied whole; the card's page, in the browser; the account on Threads; the share sheet, with the
+        // sentence and the card's page.
         let address = backend.origin.appendingPathComponent("p").appendingPathComponent(shortID)
         try await press("複製連結", in: model)
         XCTAssertEqual(copied, [address.absoluteString])
@@ -211,11 +212,17 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(opened.last, address)
         let (page, response) = try await URLSession.shared.data(from: address)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-        XCTAssertTrue(String(decoding: page, as: UTF8.self).contains("@alice"), "the card's page lists the account")
+        let html = String(decoding: page, as: UTF8.self)
+        XCTAssertTrue(html.contains("@alice"), "the card's page lists the account")
+        // The card's ordinal as its page writes it: the proof log's, which the answer to the submission gave the app.
+        let ordinal = try XCTUnwrap(
+            html.range(of: #"(?<=<p class="ordinal">第 )[0-9,]+(?= 張島民證明</p>)"#, options: .regularExpression).map { String(html[$0]) },
+            "the card's page writes its ordinal")
         try await press("打開 @alice 的 Threads 個人檔案", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
         try await press("分享", in: model)
-        XCTAssertEqual(shared, [address])
+        let words = Copy(json: try Repository.data("design/copy/card-proof.json"))
+        XCTAssertEqual(shared, ["\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"])
 
         // The system does not let the app notify: nothing is set, the card proof is done all the same.
         notifier.allows = false

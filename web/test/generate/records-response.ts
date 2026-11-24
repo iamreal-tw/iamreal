@@ -27,12 +27,14 @@ const shown = (platform: string, k: ShownRow["kind"], username: string): ShownRo
 
 const FIRST = [kind("threads", "first", "alice")];
 const SHOWN_FIRST = [shown("threads", "first", "alice")];
-const answer = (kinds: unknown, more: Record<string, unknown> = {}) => ({ seq: 138, record_hash: HASH, kinds, ...more });
+const answer = (kinds: unknown, more: Record<string, unknown> = {}) => ({ seq: 138, record_hash: HASH, ordinal: 42, kinds, ...more });
 
-/** The answer is read: `seq`, `record_hash` and these kinds. */
-const read = (kinds: Kind[] | null, mismatches: string[] = [], seq = 138): RecordsResponseResult => ({ seq, record_hash: HASH, kinds, mismatches });
+/** The answer is read: `seq`, `record_hash`, the ordinal 42 and these kinds. */
+const read = (kinds: Kind[] | null, mismatches: string[] = [], seq = 138, ordinal: number | null = 42): RecordsResponseResult => ({ seq, record_hash: HASH, ordinal, kinds, mismatches });
+/** The answer is read, the ordinal not. */
+const noOrdinal = (kinds: Kind[] | null = FIRST): RecordsResponseResult => read(kinds, [], 138, null);
 /** Nothing of the answer is told. */
-const NOTHING: RecordsResponseResult = { seq: null, record_hash: null, kinds: null, mismatches: [] };
+const NOTHING: RecordsResponseResult = { seq: null, record_hash: null, ordinal: null, kinds: null, mismatches: [] };
 
 // The card's state said threads' account was put there today (a change is a
 // correction) and test-example's was not touched.
@@ -67,10 +69,12 @@ const CASES: Case[] = [
     body: answer([{ ...kind("threads", "first", "alice"), note: "x" }], { more: [1, 2] }),
     result: read(FIRST),
   },
-  { name: "the keys in another order, whitespace between the tokens", body: ` {\n "kinds" : [ { "username" : "alice", "account_cards" : 1, "kind" : "first", "platform" : "threads" } ],\n "record_hash" : "${HASH}", "seq" : 138 }\n`, result: read(FIRST) },
-  { name: "numbers are read by their value: 138.0 and 1e0", body: `{"seq":138.0,"record_hash":"${HASH}","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1e0}]}`, result: read(FIRST) },
-  { name: "the first record of a proof log", body: answer(FIRST, { seq: 1 }), result: read(FIRST, [], 1) },
+  { name: "the keys in another order, whitespace between the tokens", body: ` {\n "kinds" : [ { "username" : "alice", "account_cards" : 1, "kind" : "first", "platform" : "threads" } ],\n "ordinal" : 42 , "record_hash" : "${HASH}", "seq" : 138 }\n`, result: read(FIRST) },
+  { name: "numbers are read by their value: 138.0, 4.2e1 and 1e0", body: `{"seq":138.0,"record_hash":"${HASH}","ordinal":4.2e1,"kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1e0}]}`, result: read(FIRST) },
+  { name: "the first record of a proof log: seq 1, ordinal 1", body: answer(FIRST, { seq: 1, ordinal: 1 }), result: read(FIRST, [], 1, 1) },
   { name: "the largest seq read", body: answer(FIRST, { seq: 9007199254740991 }), result: read(FIRST, [], 9007199254740991) },
+  { name: "the largest ordinal read", body: answer(FIRST, { ordinal: 9007199254740991 }), result: read(FIRST, [], 138, 9007199254740991) },
+  { name: "an ordinal above seq is read as it is: the device does not check it", body: answer(FIRST, { ordinal: 139 }), result: read(FIRST, [], 138, 139) },
   {
     name: "an account on a platform the device does not know: any username every format allows",
     body: answer([kind("example", "refresh", "Bob Example!")]),
@@ -106,10 +110,11 @@ const CASES: Case[] = [
   { name: "nothing told: a record_hash not in hex", body: answer(FIRST, { record_hash: "g".repeat(64) }), result: NOTHING },
   { name: "nothing told: a record_hash with 0x", body: answer(FIRST, { record_hash: "0x" + HASH.slice(2) }), result: NOTHING },
   { name: "nothing told: a record_hash that is a number", body: answer(FIRST, { record_hash: 3 }), result: NOTHING },
-  { name: "nothing told, and nothing compared: the screen's rows would differ from these kinds", body: { record_hash: HASH, kinds: [kind("threads", "switch", "bob")] }, result: NOTHING },
+  { name: "nothing told, and nothing compared: the screen's rows would differ from these kinds", body: { record_hash: HASH, ordinal: 42, kinds: [kind("threads", "switch", "bob")] }, result: NOTHING },
+  { name: "nothing told, not even an ordinal that could be read", body: answer(FIRST, { seq: 0 }), result: NOTHING },
 
   // --- seq and record_hash read, the kinds not ----------------------------
-  { name: "kinds not read: none", body: { seq: 138, record_hash: HASH }, result: read(null) },
+  { name: "kinds not read: none", body: { seq: 138, record_hash: HASH, ordinal: 42 }, result: read(null) },
   { name: "kinds not read: null", body: answer(null), result: read(null) },
   { name: "kinds not read: an empty list", body: answer([]), result: read(null) },
   { name: "kinds not read: an object", body: answer({ threads: "first" }), result: read(null) },
@@ -135,6 +140,24 @@ const CASES: Case[] = [
   { name: "kinds not read: a platform twice", body: answer([kind("threads", "first", "alice"), kind("threads", "first", "alice")]), result: read(null) },
   { name: "kinds not read, and nothing compared: the screen's rows would differ from these kinds", body: answer([kind("threads", "switch", "bob"), "x"]), result: read(null) },
 
+  // --- An ordinal that is not a count of at least 1: that number alone is not known ---
+  { name: "ordinal not known: none", body: { seq: 138, record_hash: HASH, kinds: FIRST }, result: noOrdinal() },
+  { name: "ordinal not known: null", body: answer(FIRST, { ordinal: null }), result: noOrdinal() },
+  { name: "ordinal not known: 0", body: answer(FIRST, { ordinal: 0 }), result: noOrdinal() },
+  { name: "ordinal not known: negative", body: answer(FIRST, { ordinal: -42 }), result: noOrdinal() },
+  { name: "ordinal not known: with a fraction", body: answer(FIRST, { ordinal: 42.5 }), result: noOrdinal() },
+  { name: "ordinal not known: in a string", body: answer(FIRST, { ordinal: "42" }), result: noOrdinal() },
+  { name: "ordinal not known: true", body: answer(FIRST, { ordinal: true }), result: noOrdinal() },
+  { name: "ordinal not known: an array", body: answer(FIRST, { ordinal: [42] }), result: noOrdinal() },
+  { name: "ordinal not known: 2^53", body: `{"seq":138,"record_hash":"${HASH}","ordinal":9007199254740992,"kinds":${JSON.stringify(FIRST)}}`, result: noOrdinal() },
+  { name: "ordinal not known, and the kinds not read: seq and record_hash still told", body: answer([], { ordinal: "42" }), result: noOrdinal(null) },
+  {
+    name: "ordinal not known: what the screen said is still compared",
+    body: answer([TWO[0], kind("threads", "switch", "bob")], { ordinal: -1 }),
+    rows: SHOWN_TWO,
+    result: { ...read([TWO[0]!, kind("threads", "switch", "bob")], ["threads"]), ordinal: null },
+  },
+
   // --- account_cards that is not a count: that number alone is not known ---
   { name: "account_cards not known: none", body: answer([{ platform: "threads", kind: "first", username: "alice" }]), result: read([kind("threads", "first", "alice", null)]) },
   { name: "account_cards not known: null", body: answer([kind("threads", "first", "alice", null)]), result: read([kind("threads", "first", "alice", null)]) },
@@ -142,7 +165,7 @@ const CASES: Case[] = [
   { name: "account_cards not known: negative", body: answer([kind("threads", "first", "alice", -1)]), result: read([kind("threads", "first", "alice", null)]) },
   { name: "account_cards not known: with a fraction", body: answer([kind("threads", "first", "alice", 1.5)]), result: read([kind("threads", "first", "alice", null)]) },
   { name: "account_cards not known: true", body: answer([{ ...FIRST[0], account_cards: true }]), result: read([kind("threads", "first", "alice", null)]) },
-  { name: "account_cards not known: 2^53", body: `{"seq":138,"record_hash":"${HASH}","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":9007199254740992}]}`, result: read([kind("threads", "first", "alice", null)]) },
+  { name: "account_cards not known: 2^53", body: `{"seq":138,"record_hash":"${HASH}","ordinal":42,"kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":9007199254740992}]}`, result: read([kind("threads", "first", "alice", null)]) },
   {
     name: "account_cards not known on one platform: the other's is read",
     body: answer([kind("test-example", "refresh", "a-b", 2), { platform: "threads", kind: "correction", username: "bob" }]),
@@ -214,7 +237,7 @@ writeFileSync(
     {
       spec: "records-response",
       status: "draft",
-      note: "The answer to a submission (the 201 of POST /api/v1/records) as the device reads it, and where it differs from what the confirmation screen said. Each case has the body's text as the server sent it (body), the rows the confirmation screen showed (rows) and the result: seq, record_hash, kinds and mismatches.",
+      note: "The answer to a submission (the 201 of POST /api/v1/records) as the device reads it, and where it differs from what the confirmation screen said. Each case has the body's text as the server sent it (body), the rows the confirmation screen showed (rows) and the result: seq, record_hash, ordinal, kinds and mismatches.",
       generated_by: "web/test/generate/records-response.ts",
       cases,
     },

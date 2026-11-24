@@ -27,8 +27,8 @@ final class CardProofModel: ObservableObject {
         var open: (URL) -> Void
         /// Puts text on the clipboard.
         var copyText: (String) -> Void
-        /// The system's share sheet, with an address.
-        var share: (URL) -> Void
+        /// The system's share sheet, with a text.
+        var share: (String) -> Void
     }
 
     @Published private(set) var screen: Screen
@@ -134,8 +134,8 @@ final class CardProofModel: ObservableObject {
             if let account = finished?.done.accounts.first(where: { $0.platform == platform }),
                let address = Platform.of(platform)?.profile(account.username) { deps.open(address) }
         case .share:
-            // The card's page only: no words of the app's own.
-            if let finished { deps.share(proofAddress(finished.done)) }
+            // The sentence, and on the line under it the card's page (design/copy/card-proof.md, "6. 完成", app).
+            if let finished { deps.share("\(screens.shareText(finished.done))\n\(proofAddress(finished.done).absoluteString)") }
         case .preview(let platform): preview(platform)
         case .openSettings: deps.openSettings()
         case .adjustReminder: deps.openSchedule()
