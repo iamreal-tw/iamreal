@@ -211,7 +211,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 - 第二、第三次感應各貼一次「該放簽章憑證的位置是另一張憑證」的卡：畫面說不是同一張卡，假卡片沒有被交到 PIN
 - 隔天的兩次：把後台的時鐘和模擬器的時鐘都調到明天（測試結束時把模擬器的調回來）
 - 這裡的測試全過之後，`app-backend.ts` 讓 Worker 在下一個午夜公布證明紀錄，抄下資料桶，用 Go 的 `iamreal-verify`（帶 `iamrealtest` 標籤建置，才收測試的發證金鑰）和原生的 `bb` 重驗：四筆紀錄都有效，每一筆的種類是新宣告、再次過卡、更換、收回
-- 截圖留在 `test-output/screens/`
+- 截圖留在 `test-output/screens/`。加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 時，另外在那個目錄拍 `design/screens/` 的那幾張（`app-splash-phone.png`、`card-proof-app-*`），大小照 `design/screens/README.md`：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，拍完換回來
 
 ```
 (cd ../worker && pnpm install)                                                  # app-backend.ts 要它們的套件

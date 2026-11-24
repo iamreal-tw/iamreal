@@ -217,8 +217,8 @@ function designCapture(file: string, height: number): void {
 async function designShot(file: string): Promise<void> {
   if (DESIGN_SCREENS === undefined) return;
   await designSize(4_000);
-  // The end of the step: its last text, the bottom half of a button around it and the step's space under it.
-  const bottom = Math.max(...visible().map((n) => n.bottom));
+  // The end of the step: its last text (not the step's own node, as tall as the screen), the bottom half of a button around it and the step's space under it.
+  const bottom = Math.max(...visible().filter((n) => n.text !== "").map((n) => n.bottom));
   designCapture(file, Math.max(844, bottom + 72 - STATUS_BAR));
   await testSize();
 }
