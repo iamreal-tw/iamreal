@@ -133,6 +133,8 @@ export function engineFiles(): Record<string, string> {
  *     allows a frame from (src/headers.ts);
  *   - the page of a card on this site, as 複製連結 of /hang/<short ID>
  *     copies it (hang.md, part 2), in the site's own domain;
+ *   - the image of every page's link preview, site/og-image.png, in the
+ *     site's own domain (proof-page.md, section 8, 預覽圖);
  *   - MOICA's site, which /prepare links to: its download page of the
  *     component and its home page (design/copy/prepare.md, sections 3 and
  *     4). Links only: the CRLs, the one thing fetched from MOICA, are on
@@ -153,6 +155,7 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://www.threads.com/@${account}/embed/",
   "https://www.threads.com;",
   "https://${site.host}/p/${short}",
+  "https://${site.host}/og-image.png",
   "https://moica.nat.gov.tw/",
   "https://moica.nat.gov.tw/rac_plugin.html",
 ];
