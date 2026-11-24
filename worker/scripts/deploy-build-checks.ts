@@ -307,12 +307,16 @@ export interface ConfiguredSite {
  * The SHA-256 of a file as the commit checked out (HEAD) holds it, at the
  * same path: what git has for it, not what the working tree has. Null if
  * there is none to read: the file is not in HEAD, or its directory is not
- * in a git checkout, or there is no git to ask.
+ * in a git checkout, or there is no git to ask. A file git keeps as other
+ * bytes than the working tree's (a symbolic link, a filter of
+ * .gitattributes; there is none) is not the same either: the check fails.
  */
 export function sha256InHead(path: string): string | null {
+  // git finds the repository from the file's directory, not from a GIT_DIR or GIT_WORK_TREE this process was started with (in a hook, say).
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
   try {
     // `HEAD:./<name>` is the path from the directory git runs in, wherever that is in the repository.
-    const held = execFileSync("git", ["show", `HEAD:./${basename(path)}`], { cwd: dirname(path), stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+    const held = execFileSync("git", ["show", `HEAD:./${basename(path)}`], { cwd: dirname(path), env, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
     return createHash("sha256").update(held).digest("hex");
   } catch {
     return null;
@@ -343,6 +347,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       const path = join(directory, name);
       return existsSync(path) ? createHash("sha256").update(readFileSync(path)).digest("hex") : null;
     };
+    const committedSha256Of = (name: string): string | null => (directory === undefined ? null : sha256InHead(join(directory, name)));
     out[env] = {
       kind: config.vars.PROOF_LOG_KIND,
       runWorkerFirst: config.assets?.run_worker_first,
@@ -353,9 +358,9 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       redirects: textOf("_redirects"),
       files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
       styleSheetSha256: sha256Of("pages.css"),
-      committedStyleSheetSha256: directory === undefined ? null : sha256InHead(join(directory, "pages.css")),
+      committedStyleSheetSha256: committedSha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
-      committedScriptSha256: directory === undefined ? null : sha256InHead(join(directory, "copy.js")),
+      committedScriptSha256: committedSha256Of("copy.js"),
       fontSha256: sha256Of(FONT_FILE),
     };
   }

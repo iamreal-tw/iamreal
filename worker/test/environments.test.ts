@@ -65,7 +65,10 @@ function problems(settings: Settings, expected: Expected): string[] {
 }
 
 /** The SHA-256 of a file as this commit holds it, by its path from the repository's root, read with git itself. */
-const inHead = (path: string): string => createHash("sha256").update(execFileSync("git", ["show", `HEAD:${path}`], { cwd: WORKER_DIR })).digest("hex");
+const inHead = (path: string): string => {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
+  return createHash("sha256").update(execFileSync("git", ["show", `HEAD:${path}`], { cwd: WORKER_DIR, env })).digest("hex");
+};
 
 const read = (env: string): Settings => unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env }) as unknown as Settings;
 
@@ -198,7 +201,18 @@ test("the style sheet and the script are checked against the ones this commit ho
     writeFileSync(join(dir, "pages.css"), "body {}\n");
     assert.equal(sha256InHead(join(dir, "pages.css")), null);
     // In one, the file as HEAD holds it, whatever the working tree has; one HEAD does not hold is not there.
-    const git = (...args: string[]): void => void execFileSync("git", ["-c", "user.name=alice", "-c", "user.email=alice@example.org", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], { cwd: dir, stdio: "ignore" });
+    // Nothing of this computer's git settings, nor a GIT_DIR this process was started with: the repository is the one made here.
+    const gitEnv = {
+      PATH: process.env.PATH ?? "",
+      HOME: dir,
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_AUTHOR_NAME: "alice",
+      GIT_AUTHOR_EMAIL: "alice@example.invalid",
+      GIT_COMMITTER_NAME: "alice",
+      GIT_COMMITTER_EMAIL: "alice@example.invalid",
+    };
+    const git = (...args: string[]): void => void execFileSync("git", args, { cwd: dir, env: gitEnv, stdio: "ignore" });
     git("init", "--quiet");
     assert.equal(sha256InHead(join(dir, "pages.css")), null, "a repository with no commit");
     git("add", "pages.css");
