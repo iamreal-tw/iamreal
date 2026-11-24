@@ -12,7 +12,7 @@
 |---|---|---|
 | `record-rules.ts` | `spec/record-rules.md` | 紀錄規則，一個不保管任何東西的函式 `applyRecord`：給它一筆紀錄、這張卡片之前的狀態、證明紀錄裡最晚的有效日期、這個題目有沒有用過、這筆紀錄的樹根對到的清冊日期，它回結果（有效或無效、代碼、每個平台的種類）和這張卡片之後的狀態。它不知道狀態存在哪裡。裝置在簽章之前只算檢查 5、6（`applyList`，`applyRecord` 的後半段）。另有規則的版本號（`RULES_VERSION`）、當天是否已經 3 筆（`dailyLimitReached`）、規則產生不出來的狀態（`possibleSlot`、`possibleCard`）、更換的次數上限 |
 | `platforms.ts` | `spec/scope.md`「Platforms」 | 每份證明紀錄的平台表（`platformsOf`）：平台代號、顯示名稱、帳號名稱的格式，和 Go 的 `verifier/scope.go` 的 `Platforms` 相同。紀錄規則收的平台表就是這種列（`PlatformRow`）；後台和從第 1 筆重算的人傳這裡的表，裝置傳後台 `config` 給它的表 |
-| `rules-memory.ts` | `spec/record-rules.md` | `MemoryRules`：把狀態放在記憶體裡、照順序一筆一筆呼叫 `applyRecord`，就是從第 1 筆重算整份證明紀錄的寫法。它只保管每張卡片的狀態、證明紀錄裡最晚的有效日期、用過的題目；判斷全部在 `applyRecord` |
+| `rules-memory.ts` | `spec/record-rules.md` | `MemoryRules`：把狀態放在記憶體裡、照順序一筆一筆呼叫 `applyRecord`，就是從第 1 筆重算整份證明紀錄的寫法。它只保管每張卡片的狀態、每張卡片的順序號碼（第一筆有效紀錄時給，之後不變；不是卡片的狀態）、證明紀錄裡最晚的有效日期、用過的題目；判斷全部在 `applyRecord` |
 | `scope.ts` | `spec/scope.md` | 每份證明紀錄的場合字串（公開的證明紀錄、測試的證明紀錄），寫死在這裡，不從後台或網址來（ADR-0016） |
 | `username-format.ts` | `spec/scope.md`「Platforms」 | 帳號名稱的格式 `[…]{m,n}`，自己逐字解析，不交給正規表示式引擎；平台代號；裝置不認得的平台上帳號最低限度的檢查 |
 | `declaration-code.ts` | `spec/declaration-code.md` | 整份帳號清單的原文和宣告碼 |
@@ -57,7 +57,7 @@ pnpm test
 
 `test/record-rules.test.ts`：
 
-- `record-rules.json`：每個案例的事件照順序餵給 `MemoryRules`，每一筆的結果（有效時每個平台的種類，無效時的代碼）和標準答案相同；無效的紀錄之後，那張卡片的狀態和證明紀錄裡最晚的有效日期都沒變；最後的現況（每張卡片的清單、`last_card_proof`、`proofs_on_last_date`、每個名額的四個項目，和每個帳號底下的卡片）和標準答案的 `state` 完全相同；規則產生得出來的每個狀態，裝置都讀得懂
+- `record-rules.json`：每個案例的事件照順序餵給 `MemoryRules`，每一筆的結果（有效時每個平台的種類，無效時的代碼）和標準答案相同；無效的紀錄之後，那張卡片的狀態和證明紀錄裡最晚的有效日期都沒變；最後的現況（每張卡片的清單、`last_card_proof`、`proofs_on_last_date`、每個名額的四個項目，和每個帳號底下的卡片）和標準答案的 `state` 完全相同，每張卡片的順序號碼和 `ordinals` 相同；規則產生得出來的每個狀態，裝置都讀得懂
 - 規則的版本號：`RULES_VERSION` 等於 `spec/record-rules.md` 寫的那一版，也等於 `record-rules.json` 的 `rules_version`。Go 的 `prooflog/version_test.go` 拿 `prooflog.RulesVersion` 比同樣兩個地方
 - `applyRecord` 本身：六個檢查的先後、檢查 3 和檢查 4 的邊界、無效的紀錄原樣交回收到的狀態、同樣的輸入算兩次結果相同而且輸入沒被改、狀態裡沒有的平台當成空的名額；清單裡有平台表以外的平台、同一個平台兩次、沒照平台排序、帳號不合它那個平台的格式，都在檢查 1 之前就是錯誤，不給代碼；一份清單錯了好幾處時，丟的是和 Go 的 `prooflog/` 相同的那一種
 - `applyList`：事件規則在一個名額上的每一種情況和之後的名額、被擋的平台、一天 3 筆

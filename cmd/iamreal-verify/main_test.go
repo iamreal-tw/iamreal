@@ -94,7 +94,7 @@ records:
 
 scope iamreal:public:0_______________
   cards:
-    QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880  last card proof 2027-01-01
+    QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880  last card proof 2027-01-01  ordinal 1
       no account
   accounts:
 `
@@ -240,5 +240,48 @@ func TestUsage(t *testing.T) {
 	}
 	if code := run([]string{"-bb", "x", "-crs", "y", "-crl-trust-index", "f"}, &out, &errOut, d); code != exitError {
 		t.Errorf("-crl-trust-index without -crl-archive: exit %d", code)
+	}
+}
+
+// Each card's ordinal, in both outputs: card B's first record is invalid
+// (the empty list as a card's first record), so card A, the first with a
+// valid record, is 1 and B is 2; B's withdrawing everything changes
+// nothing.
+func TestOrdinals(t *testing.T) {
+	records, _, broken := prooflog.ReadFile(threeRecords(t), verifier.Production)
+	if broken != nil {
+		t.Fatal(broken)
+	}
+	const (
+		a = "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880"
+		b = "0400000000000000000000000000000000000000000000000000"
+	)
+	var file []byte
+	for i, step := range []struct{ card, username string }{{b, ""}, {a, "alice"}, {b, "bob"}, {b, ""}} {
+		r := *records[0]
+		r.Seq, r.ScopedID = uint64(i+1), step.card
+		r.Accounts = []verifier.Account{}
+		if step.username != "" {
+			r.Accounts = []verifier.Account{{Platform: "threads", Username: step.username}}
+		}
+		r.Challenge = "2026-11-16." + verifier.EncodeBase32(bytes.Repeat([]byte{byte(i + 1)}, 16))
+		file = append(file, r.Line()...)
+	}
+	_, out, _ := runWith(t, file, allVerify{}, everyRoot{})
+	for _, line := range []string{"  1 invalid empty\n", b + "  last card proof 2026-11-16  ordinal 2\n      no account\n", a + "  last card proof 2026-11-16  ordinal 1\n"} {
+		if !strings.Contains(out, line) {
+			t.Errorf("no %q in\n%s", line, out)
+		}
+	}
+	_, out, _ = runWith(t, file, allVerify{}, everyRoot{}, "-json")
+	var got struct {
+		Ordinals []jsonOrdinal `json:"ordinals"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	scope := records[0].ScopeString
+	if want := []jsonOrdinal{{scope, a, 1}, {scope, b, 2}}; !reflect.DeepEqual(got.Ordinals, want) {
+		t.Errorf("ordinals %+v, want %+v", got.Ordinals, want)
 	}
 }
