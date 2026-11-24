@@ -25,12 +25,14 @@
 
 ### 訪客的頁面
 
+實作版由 `worker/` 測試用的 Worker 產生：證明紀錄是正式的那種（頁面上沒有測試網站的標示），內容是 `design/copy/` 例子的假資料。島民證明頁和查詢頁拍照前把嵌入框換成空白頁，所以框裡是空的：拍照時不向 Threads 送請求，截圖上也不會出現真的帳號。
+
 | 截圖 | 網址 | 版本 |
 |---|---|---|
 | `home-desktop.png`、`home-phone.png` | `/` | 定稿版 |
-| `proof-desktop.png`、`proof-phone.png` | `/p/7K2Q9FM4XD`（島民證明頁） | 定稿版 |
-| `account-desktop.png`、`account-phone.png` | `/threads/@alice`（查詢頁，有卡片宣告這個帳號） | 定稿版 |
-| `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 定稿版 |
+| `proof-desktop.png`、`proof-phone.png` | `/p/7K2Q9FM4XD`（島民證明頁） | 實作版 |
+| `account-desktop.png`、`account-phone.png` | `/threads/@alice`（查詢頁，有卡片宣告這個帳號） | 實作版 |
+| `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 實作版 |
 | `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來） | 定稿版 |
 | `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 定稿版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 定稿版 |
