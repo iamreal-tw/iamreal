@@ -59,20 +59,6 @@ export const FONT_SOURCE = join(SITE_DIR, "..", "..", "design", "fonts", "GenRyu
  */
 export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", FONT_FILE, "pages.css"];
 
-/**
- * The SHA-256 of site/pages.css, one of the two files of site/ that are not
- * written here: a deploy uploads the style sheet that was reviewed. Change
- * it with the file (`shasum -a 256 site/pages.css`).
- */
-export const PAGES_CSS_SHA256 = "76869443178fd626ca71ae300280ccaafc960d22af4a8af2365297c39486ef19";
-
-/**
- * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
- * site/ that is not written here: a deploy uploads the script that was
- * reviewed. Change it with the file (`shasum -a 256 site/copy.js`).
- */
-export const COPY_JS_SHA256 = "d8ecddb598222cea65e621ae5033b916daec9aafacb87a8f650455bdbd2a3e5d";
-
 /** Which proof log a site is of (wrangler.jsonc, `PROOF_LOG_KIND`). */
 export type ProofLogKind = "test" | "production";
 
