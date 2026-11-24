@@ -8,7 +8,7 @@ import type { Day } from "iamreal-protocol/date.ts";
 import type { Kind } from "iamreal-protocol/record-rules.ts";
 import { proofLogOf } from "./proof-log.ts";
 
-/** The home page's two numbers (design/copy/home.md, section 2). */
+/** The home page's two numbers (design/copy/home.md, 一起能改變什麼). */
 export interface Counts {
   /** The cards that give their place on the platform to an account now. */
   readonly declared: number;
