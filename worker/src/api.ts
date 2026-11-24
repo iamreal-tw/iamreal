@@ -182,10 +182,10 @@ async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<
   // The type is named: left to itself it is inferred from the first member of the union alone.
   const answer = await askProofLog<AcceptAnswer>(() => proofLog.accept(fields));
   if (answer.outcome === "refused") return refuse(answer.code);
-  const { seq, recordHash, kinds } = answer.record;
+  const { seq, recordHash, ordinal, kinds } = answer.record;
   return {
     status: 201,
-    body: { seq, record_hash: recordHash, kinds: kinds.map((k) => ({ platform: k.platform, kind: k.kind, username: k.username, account_cards: k.accountCards })) },
+    body: { seq, record_hash: recordHash, ordinal, kinds: kinds.map((k) => ({ platform: k.platform, kind: k.kind, username: k.username, account_cards: k.accountCards })) },
   };
 }
 

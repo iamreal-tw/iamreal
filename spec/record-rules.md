@@ -399,9 +399,11 @@ record keep their results ("Changing these rules"). Only voiding records
 
 The ordinal is computed from the results of the records alone. It is not an
 item of the state ("State"): no check reads it, and the card state file
-does not carry it ("The card state file"). The device has no use for it:
+does not carry it ("The card state file"). The device does not compute it:
 Rust's `device-core/` (ADR-0034), which judges a list before the card signs,
-gives the rest of this output and not the ordinal. Go's `prooflog/` and
+gives the rest of this output and not the ordinal. It only reads the one the
+server answers a submission with, for the text it suggests for sharing
+([`records-response.md`](records-response.md)). Go's `prooflog/` and
 TypeScript's `protocol/` give it, and the server keeps it with the tables
 its pages read (`worker/`), whose ordinals its tests compare with Go's.
 

@@ -43,7 +43,7 @@ import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
 import { type ProofLogSettings, proofLogSettingsOf } from "./settings.ts";
-import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, logRows, ordinalsOwed, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
+import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, logRows, ordinalOf, ordinalsOwed, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
 /**
  * A challenge can be used for less than this long after it is issued
@@ -248,6 +248,8 @@ export interface AcceptedKind {
 export interface Accepted {
   readonly seq: number;
   readonly recordHash: string;
+  /** The card's ordinal, once the record is applied (spec/record-rules.md, "The ordinal"). */
+  readonly ordinal: number;
   /** In ascending order of platform; at least one. */
   readonly kinds: readonly AcceptedKind[];
 }
@@ -755,15 +757,20 @@ export class ProofLog extends DurableObject<Env> {
     const view = viewOf(record, date, kinds, before, outcome.card);
 
     // One transaction: the record with its `seq`, the card's state, the proof log's row, the views, the challenge. The
-    // answer counts the cards of each account in the views the record leaves, so it is made in the transaction too:
-    // if anything fails, nothing of the record is written.
+    // answer counts the cards of each account, and reads the card's ordinal, in the views the record leaves, so it is
+    // made in the transaction too: if anything fails, nothing of the record is written.
     const written = this.ctx.storage.transactionSync((): Accepted => {
       sql.exec("INSERT INTO records (seq, line, record_hash, fingerprint) VALUES (?, ?, ?, ?)", record.seq, line, hash, fingerprint);
       this.keepRuleState(record.scopeString, record.scopedId, outcome.card, record.seq, outcome.latestValidDate);
       sql.exec("UPDATE proof_log SET count = ?, fingerprint = ? WHERE id = 1", record.seq, fingerprint);
       writeView(sql, view);
       sql.exec("UPDATE challenges SET accepted = 1 WHERE challenge = ?", record.challenge);
-      return { seq: record.seq, recordHash: hash, kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })) };
+      return {
+        seq: record.seq,
+        recordHash: hash,
+        ordinal: ordinalOf(sql, record.scopeString, record.scopedId),
+        kinds: accounts.map((a) => ({ ...a, accountCards: this.accountCards(record.scopeString, a.platform, a.username) })),
+      };
     });
     return { outcome: "written", record: written };
   }

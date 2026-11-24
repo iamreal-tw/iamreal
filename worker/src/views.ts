@@ -374,6 +374,17 @@ export function counts(sql: SqlStorage, scopeString: string, platform: string, t
 }
 
 /**
+ * The ordinal of a card with a valid record (spec/record-rules.md, "The
+ * ordinal"), by the index `view_ordinals_card`. A card the views list has
+ * one; this throws for one they do not.
+ */
+export function ordinalOf(sql: SqlStorage, scopeString: string, scopedId: string): number {
+  const ordinal = sql.exec<{ ordinal: number }>("SELECT ordinal FROM view_ordinals INDEXED BY view_ordinals_card WHERE scope_string = ? AND scoped_id = ?", scopeString, scopedId).toArray()[0]?.ordinal;
+  if (ordinal === undefined) throw new Error("views: a card without an ordinal");
+  return ordinal;
+}
+
+/**
  * The cards of a short ID, in ascending order of scoped ID, each with its
  * ordinal, its slots (in ascending order of platform) and its valid
  * records, the newest first. It reads the index `view_cards_short_id`, then
@@ -389,8 +400,7 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
     )
     .toArray();
   return cards.map((card): PageCard => {
-    const ordinal = sql.exec<{ ordinal: number }>("SELECT ordinal FROM view_ordinals INDEXED BY view_ordinals_card WHERE scope_string = ? AND scoped_id = ?", scopeString, card.scoped_id).toArray()[0]?.ordinal;
-    if (ordinal === undefined) throw new Error("views: a card without an ordinal");
+    const ordinal = ordinalOf(sql, scopeString, card.scoped_id);
     const slots = sql
       .exec<{ platform: string; current: string | null; switch_count: number }>("SELECT platform, current, switch_count FROM view_slots WHERE scope_string = ? AND scoped_id = ? ORDER BY platform", scopeString, card.scoped_id)
       .toArray();

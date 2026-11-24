@@ -196,8 +196,15 @@ Submits one card proof: the card's whole list of accounts.
 - Response `201`:
 
   ```
-  {"seq":138,"record_hash":"…","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}]}
+  {"seq":138,"record_hash":"…","ordinal":42,"kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}]}
   ```
+
+  `ordinal` is the card's ordinal once the record is applied: the place of
+  its first valid record among the first valid records of every card of the
+  proof log ([`spec/record-rules.md`](../../spec/record-rules.md), "The
+  ordinal"). It is the same for every record of the card: this record gives
+  it only when it is the card's first. Anyone computes it again from the
+  proof log.
 
   `kinds` has one entry for every platform on which the record has a kind
   ([`spec/record-rules.md`](../../spec/record-rules.md)), in ascending order
@@ -212,11 +219,13 @@ Submits one card proof: the card's whole list of accounts.
   The link the device suggests is the page of the card, by its short ID
   ([`spec/scoped-id.md`](../../spec/scoped-id.md)); it does not depend on
   this response. The device uses `kinds` to tell the cardholder what was
-  recorded, and `account_cards` only to say whether other cards declare the
-  same account. A wrong number cannot identify the cardholder. A device
+  recorded, `account_cards` only to say whether other cards declare the
+  same account, and `ordinal` only in the text it suggests for sharing the
+  link. A wrong number cannot identify the cardholder. A device
   that cannot read `kinds` or `account_cards`, or gets a `kind` it does not
   know, treats them as unknown and says only that the list was recorded:
-  the record is in the proof log by then.
+  the record is in the proof log by then. A device that cannot read
+  `ordinal` suggests the text without a number.
   [`spec/records-response.md`](../../spec/records-response.md) defines how
   the device reads this response and how it compares `kinds` with what its
   confirmation screen said, so that every client tells the same.
