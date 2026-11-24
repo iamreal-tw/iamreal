@@ -51,6 +51,8 @@ const EXAMPLES: Record<string, string> = {
   step: "2",
   steps: "6",
   domain: SITE_DOMAIN,
+  // done.share_text: the card's ordinal.
+  ordinal: "128",
   // The one platform's name, where the screens speak of one platform.
   platform: "Threads",
   // The app's: the start date of the minimum version, the store, where the card goes, the seconds of computing.

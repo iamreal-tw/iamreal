@@ -598,12 +598,11 @@ export function doneTitle(d: Done): Sentence {
   return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
 }
 
-/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
 /**
  * The text suggested for sharing the card's page, on the line above its link: with the
  * card's ordinal, written as the card's page writes it (a comma every three
  * digits), or without a number when the answer had none
- * (design/copy/card-proof.md, "6. 完成").
+ * (design/copy/card-proof.md, step 6).
  */
 export function shareText(ordinal: number | null): string {
   return ordinal === null ? COPY.done.share_text_unnumbered : fill(COPY.done.share_text, { ordinal: thousands(ordinal) });
@@ -612,6 +611,7 @@ export function shareText(ordinal: number | null): string {
 /** A whole number with a comma between groups of three digits. */
 const thousands = (n: number): string => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 
+/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
 export function doneView(d: Done, single: string | null = null): DoneView {
   const t = COPY.done;
   const expected = new Map(d.expected.map((r) => [r.platform, r]));

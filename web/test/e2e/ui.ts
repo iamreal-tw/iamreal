@@ -949,7 +949,7 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const profiles = withdrawAll ? [] : o.card.filter(([name]) => name === THREADS_NAME).map(([, account]) => [fill(C.done.open_profile, { account, platform: THREADS_NAME }), `https://www.threads.com/${account}`]);
   check(JSON.stringify(v.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(v.profiles)}`);
   // The text suggested: the card's ordinal, the one its page writes; without one, the sentence without a number.
-  check(o.unnumbered === true || /^[1-9][0-9,]*$/.test(v.pageOrdinal), `${o.label}: the card's page writes its ordinal "${v.pageOrdinal}"`);
+  if (!withdrawAll && !o.unnumbered) check(/^[1-9][0-9,]*$/.test(v.pageOrdinal), `${o.label}: the card's page writes its ordinal "${v.pageOrdinal}"`);
   const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: v.pageOrdinal });
   const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
   const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`]];
