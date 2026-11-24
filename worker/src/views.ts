@@ -68,7 +68,7 @@ export const VIEW_TABLES: readonly string[] = [
    ) WITHOUT ROWID`,
   `CREATE INDEX IF NOT EXISTS view_slots_account ON view_slots
      (scope_string, platform, current, since_date, since_seq, last_card_proof) WHERE current IS NOT NULL`,
-  // The proof log page's list used to be of the slots by the date from which; it is of the records now (view_history_log).
+  // An index no read uses any more, taken off the objects that have it (README.md, 衍生表).
   "DROP INDEX IF EXISTS view_slots_latest",
   `CREATE INDEX IF NOT EXISTS view_slots_recency ON view_slots
      (scope_string, platform, last_card_proof, current) WHERE current IS NOT NULL`,
@@ -159,6 +159,11 @@ export function viewOf(record: { seq: number; scopeString: string; scopedId: str
     };
   });
   return { seq: record.seq, scopeString: record.scopeString, scopedId: record.scopedId, date, lastCardProof: after.lastCardProof, changes };
+}
+
+/** A row of `view_history` as the pages take it. */
+function historyRowOf(h: { date: number; platform: string; kind: string; after_withdrawal: number; before_username: string | null; after_username: string | null }): HistoryRow {
+  return { date: h.date, platform: h.platform, kind: h.kind as Kind, afterWithdrawal: h.after_withdrawal !== 0, before: h.before_username, after: h.after_username };
 }
 
 /** The `seq` of the last record the views reflect. */
@@ -314,7 +319,7 @@ export function logRows(sql: SqlStorage, scopeString: string, platform: string, 
   const rows = before === null ? sql.exec<Row>(`${select} ${order}`, scopeString, platform, n) : sql.exec<Row>(`${select} AND seq < ? ${order}`, scopeString, platform, before, n);
   return rows
     .toArray()
-    .map((h): LogRow => ({ seq: h.seq, scopedId: h.scoped_id, date: h.date, platform, kind: h.kind as Kind, afterWithdrawal: h.after_withdrawal !== 0, before: h.before_username, after: h.after_username }));
+    .map((h): LogRow => ({ seq: h.seq, scopedId: h.scoped_id, ...historyRowOf({ ...h, platform }) }));
 }
 
 /**
@@ -367,7 +372,7 @@ export function cardsOfShortId(sql: SqlStorage, scopeString: string, short: stri
       lastCardProof: card.last_card_proof,
       cardProofs: card.card_proofs,
       slots: slots.map((s) => ({ platform: s.platform, current: s.current, switchCount: s.switch_count })),
-      history: history.map((h): HistoryRow => ({ date: h.date, platform: h.platform, kind: h.kind as Kind, afterWithdrawal: h.after_withdrawal !== 0, before: h.before_username, after: h.after_username })),
+      history: history.map(historyRowOf),
     };
   });
 }

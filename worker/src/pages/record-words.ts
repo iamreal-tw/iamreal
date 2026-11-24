@@ -6,22 +6,22 @@
 import type { HistoryRow } from "../page-data.ts";
 import { Html, html } from "./html.ts";
 
-/** How the accounts of a row are written. */
-export interface Accounts {
+/** How a page writes the accounts of a row. */
+export interface RowStyle {
   /** The first account of the row. */
-  first(name: string): Html;
+  account(name: string): Html;
   /** The account after 改成. */
-  then(name: string): Html;
+  changedTo(name: string): Html;
   /** Whether 再次過卡 names the account. */
   readonly refreshNamesAccount: boolean;
 }
 
 /** The page of a card's: `@name`, and 再次過卡 alone. */
-export const ON_A_CARD: Accounts = { first: (name) => html`@${name}`, then: (name) => html`@${name}`, refreshNamesAccount: false };
+export const ON_A_CARD: RowStyle = { account: (name) => html`@${name}`, changedTo: (name) => html`@${name}`, refreshNamesAccount: false };
 
 /** The proof log page's: the first account with its platform, the accounts in bold, and 再次過卡 with its account. */
-export function onTheProofLog(platformName: string): Accounts {
-  return { first: (name) => html`${platformName} 的 <b>@${name}</b>`, then: (name) => html`<b>@${name}</b>`, refreshNamesAccount: true };
+export function onTheProofLog(platformName: string): RowStyle {
+  return { account: (name) => html`${platformName} 的 <b>@${name}</b>`, changedTo: (name) => html`<b>@${name}</b>`, refreshNamesAccount: true };
 }
 
 /**
@@ -30,16 +30,16 @@ export function onTheProofLog(platformName: string): Accounts {
  * the account withdrawn. A row there are no words for stops the page,
  * rather than leave the row blank.
  */
-export function recordWords(row: HistoryRow, a: Accounts): Html {
+export function recordWords(row: HistoryRow, a: RowStyle): Html {
   const { kind, before, after } = row;
-  if (kind === "first" && after !== null) return html`新宣告：${a.first(after)}`;
+  if (kind === "first" && after !== null) return html`新宣告：${a.account(after)}`;
   if (kind === "refresh" && !row.afterWithdrawal) {
     if (!a.refreshNamesAccount) return html`再次過卡`;
-    if (after !== null) return html`再次過卡：${a.first(after)}`;
+    if (after !== null) return html`再次過卡：${a.account(after)}`;
   }
-  if (kind === "refresh" && row.afterWithdrawal && after !== null) return html`再次宣告：${a.first(after)}`;
-  if (kind === "switch" && before !== null && after !== null) return html`更換：${a.first(before)} 改成 ${a.then(after)}`;
-  if (kind === "correction" && before !== null && after !== null) return html`更正：${a.first(before)} 改成 ${a.then(after)}`;
-  if (kind === "withdraw" && before !== null) return html`收回：${a.first(before)}`;
+  if (kind === "refresh" && row.afterWithdrawal && after !== null) return html`再次宣告：${a.account(after)}`;
+  if (kind === "switch" && before !== null && after !== null) return html`更換：${a.account(before)} 改成 ${a.changedTo(after)}`;
+  if (kind === "correction" && before !== null && after !== null) return html`更正：${a.account(before)} 改成 ${a.changedTo(after)}`;
+  if (kind === "withdraw" && before !== null) return html`收回：${a.account(before)}`;
   throw new Error("pages: no words for a record");
 }

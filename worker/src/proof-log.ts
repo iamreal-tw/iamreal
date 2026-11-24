@@ -40,7 +40,7 @@ import { type CardState, EMPTY_SLOT, type Kind, type PlatformKind, RULES_VERSION
 import { CARD_TABLE, copiedCards, copyCards, dropCardsCopy, readCard, writeCard } from "./card-table.ts";
 import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
-import type { CardsOfAccount, CardsOfShortId, Counts, Log } from "./page-data.ts";
+import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
 import { type ProofLogSettings, proofLogSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, logRows, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
@@ -812,7 +812,7 @@ export class ProofLog extends DurableObject<Env> {
   }
 
   /** The home page's two numbers and at most `n` of the latest valid records on a platform, before the `seq` `before`, read at once, in the proof log's open scope (page-data.ts, `PageData`). */
-  pageLog(platform: string, before: number | null, n: number): Log {
+  pageLogPart(platform: string, before: number | null, n: number): LogPart {
     this.#checkViews();
     const scope = scopeOf(this.settings.kind);
     return { counts: counts(this.ctx.storage.sql, scope, platform, taiwanDay(now().getTime())), rows: logRows(this.ctx.storage.sql, scope, platform, before, n) };

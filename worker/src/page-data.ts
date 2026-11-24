@@ -77,7 +77,7 @@ export interface LogRow extends HistoryRow {
 }
 
 /** The proof log page's numbers and a part of its list, read together. */
-export interface Log {
+export interface LogPart {
   readonly counts: Counts;
   /** The latest first, by `seq`. */
   readonly rows: readonly LogRow[];
@@ -95,7 +95,7 @@ export interface PageData {
    * valid records that have a kind on it, the latest first; with `before`,
    * those before that `seq` only.
    */
-  log(platform: string, before: number | null, n: number): Promise<Log>;
+  logPart(platform: string, before: number | null, n: number): Promise<LogPart>;
 }
 
 /** The page data that asks the proof log's Durable Object. */
@@ -104,6 +104,6 @@ export function pageDataOfProofLog(env: Env): PageData {
     counts: (platform) => proofLogOf(env).pageCounts(platform),
     cards: (shortId) => proofLogOf(env).pageCards(shortId),
     account: (platform, username) => proofLogOf(env).pageAccount(platform, username),
-    log: (platform, before, n) => proofLogOf(env).pageLog(platform, before, n),
+    logPart: (platform, before, n) => proofLogOf(env).pageLogPart(platform, before, n),
   };
 }

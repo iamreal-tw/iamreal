@@ -428,7 +428,7 @@ export class ProofLog extends DeployedProofLog {
   /**
    * The plan SQLite makes for every statement the pages' reads run
    * (src/proof-log.ts, `pageCounts`, `pageCards`, `pageAccount`, and
-   * `pageLog` from the latest record and before a `seq`), and the count of
+   * `pageLogPart` from the latest record and before a `seq`), and the count of
    * the cards of an account that a submission's answer reads
    * (`accountCards`). The reads are the deployed object's, called as the
    * pages and a submission call them; only the object's SQLite is put
@@ -451,8 +451,8 @@ export class ProofLog extends DeployedProofLog {
       ["counts", () => this.pageCounts(q.platform)],
       ["cards", () => this.pageCards(q.short_id)],
       ["account", () => this.pageAccount(q.platform, q.username)],
-      ["log", () => this.pageLog(q.platform, null, 50)],
-      ["log before", () => this.pageLog(q.platform, q.before, 50)],
+      ["log", () => this.pageLogPart(q.platform, null, 50)],
+      ["log before", () => this.pageLogPart(q.platform, q.before, 50)],
       ["account cards", () => this.accountCards(scopeOf(this.settings.kind), q.platform, q.username)],
     ];
     Object.defineProperty(storage, "sql", { value: explaining, configurable: true });

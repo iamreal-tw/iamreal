@@ -177,7 +177,8 @@ const trimSpace = (s: string): string => s.replace(/^[\t\n\v\f\r \u0085\p{Z}]+|[
 
 /**
  * `GET /proof-log`: the proof log page. `?after=` lists the records before a
- * `seq` (the link 更多); one that does not read lists from the latest. `?q=` is the lookup box (proof-log-page.md, 查詢): with the spaces
+ * `seq` (the link 更多); one that does not read lists from the latest.
+ * `?q=` is the lookup box (proof-log-page.md, 查詢): with the spaces
  * around it and a leading @ taken off, a Threads name in any case is
  * redirected (303) to its page, without asking the proof log; nothing left
  * shows the page as it is; anything else shows the page with what was
@@ -192,7 +193,7 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
     badQuery = typed;
   }
   const after = badQuery === null && query.has("after") ? readAfter(query.get("after")!) : null;
-  const { counts, rows } = await ask(() => parts.pageData.log(PLATFORM, after, PAGE_SIZE + 1));
+  const { counts, rows } = await ask(() => parts.pageData.logPart(PLATFORM, after, PAGE_SIZE + 1));
   return page(site, 200, proofLogPage({ counts, rows: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE, after: after !== null, badQuery }));
 }
 
