@@ -706,9 +706,13 @@ async function notification(what: string): Promise<string> {
   throw new Error(`${what}: no notification of the app`);
 }
 
-/** Moves the emulator's clock (not the back end's) to `date` at 9 in the evening in Taiwan, and a few seconds. */
+/**
+ * Moves the emulator's clock (not the back end's) past `date` at 9 in the evening in Taiwan: past the end of the
+ * alarm's window (10 minutes, src/main/…/reminder/Phone.kt), so that the system must deliver it now, whatever
+ * other alarms it batches it with.
+ */
 function eveningOf(date: string): void {
-  emulator.shell(`date @${Math.floor(Date.parse(`${date}T21:00:05+08:00`) / 1000)}`);
+  emulator.shell(`date @${Math.floor(Date.parse(`${date}T21:10:05+08:00`) / 1000)}`);
 }
 
 /** The day of the reminder `day`: the notification, 一週後再提醒我 on it, then the notification opening step 1; then turned off. */
