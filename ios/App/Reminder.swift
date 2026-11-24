@@ -68,6 +68,11 @@ struct TimeOfDay: Equatable {
 struct Moment: Equatable {
     let day: Day
     let time: TimeOfDay
+
+    /// The moment on the phone's calendar, in its time zone on that day.
+    var components: DateComponents {
+        DateComponents(year: day.year, month: day.month, day: day.day, hour: time.hour, minute: time.minute)
+    }
 }
 
 /// How often the reminder comes, from the day of a card proof (#93).
@@ -158,10 +163,14 @@ final class Reminders {
 
     /// The reminder was notified: its day and time have come.
     var notified: Bool {
-        guard let settings else { return false }
-        let moment = DateComponents(year: settings.next.year, month: settings.next.month, day: settings.next.day, hour: settings.time.hour, minute: settings.time.minute)
-        guard let date = calendar.date(from: moment) else { return false }
+        guard let settings, let date = calendar.date(from: Moment(day: settings.next, time: settings.time).components) else { return false }
         return date <= clock()
+    }
+
+    /// What "開啟提醒" sets when nothing is chosen: three months from today,
+    /// 9:00 in the evening (#93).
+    var offered: ReminderSettings {
+        ReminderSettings(interval: .suggested, time: .evening, next: Interval.suggested.after(today))
     }
 
     /// Turns the reminder on, or changes it: every `interval` from today,

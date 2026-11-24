@@ -22,7 +22,7 @@
 | `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀，不屬於過卡的從 `design/copy/app.json` 讀（兩個檔都原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
 | `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣 |
 | `App/Reminder.swift` | 過卡提醒：下次提醒的日子怎麼算（間隔是整數週，落在同一個星期幾；選日期；一週後再提醒；每次過卡完成重排），和手機上存的四樣（開關、間隔、時刻、下次提醒的日子，存在偏好設定，關掉就一起刪掉；ADR-0016「app 在手機上留下什麼」） |
-| `App/ReminderScreens.swift`、`App/ReminderPages.swift`、`App/ReminderViews.swift` | 提醒的畫面：日子和時刻的寫法、完成畫面上的那一段、選間隔和時刻、設定（句子從 `design/copy/app.json` 讀）；兩個畫面的按鈕要做的事；系統的通知（`UNUserNotificationCenter`，通知上有「一週後再提醒我」，點通知打開第 1 步）。通知的權限在持卡人按「開啟提醒」時才要；系統不允許時什麼都不存，過卡照常完成 |
+| `App/ReminderScreens.swift`、`App/ReminderPages.swift`、`App/ReminderViews.swift` | 提醒的畫面：日子和時刻的寫法、選間隔和時刻、設定、從通知點進來的第 1 步上面那一段（句子從 `design/copy/app.json` 讀；完成畫面上的那一段在 `Screens.swift`，句子在 `card-proof.json`）；兩個畫面的按鈕要做的事；系統的通知（`UNUserNotificationCenter`，通知上有「一週後再提醒我」）。通知的權限在持卡人按「開啟提醒」時才要；系統不允許時什麼都不存，過卡照常完成。點通知打開第 1 步；正在過卡（第 2 到 5 步，可能有 PIN 在記憶體裡）時不丟掉，第 1 步上面那一段等回到第 1 步才出現，過完卡就不再出現。app 開著的時候通知照樣跳出來 |
 | `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串。建置時寫死 |
 | `App/BundledFile.swift` | 包進 app 的檔案 |
 | `App/IamrealApp.swift` | app 的進入點：用上面那些組出這個 build 的過卡 |

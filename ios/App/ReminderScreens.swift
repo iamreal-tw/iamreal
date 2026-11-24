@@ -135,8 +135,9 @@ struct ReminderScreens {
     let appCopy: Copy
     var when: When { When(appCopy: appCopy) }
 
-    /// `choice`, `picked`, `time`: what the screen has chosen; `next`: the
-    /// day that makes; `on`: the reminder is on already.
+    /// `choice`, `time`: what the screen has chosen; `next`: the day that
+    /// makes; `pickable`: the days a picked one may be; `on`: the reminder
+    /// is on already; `refused`: the system did not let the app notify.
     func schedule(choice: ScheduleScreen.Choice, time: TimeOfDay, next: Day, pickable: ClosedRange<Day>, on: Bool, refused: Bool) -> ScheduleScreen {
         let intervals: [(Interval, String)] = [
             (.weeks4, appCopy("reminder.weeks_4")),

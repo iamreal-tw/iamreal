@@ -96,6 +96,8 @@ extension Day {
 /// (design/screens/app-reminder-2-schedule-phone.png).
 struct ScheduleView: View {
     @ObservedObject var pages: ReminderPages
+    /// The system's pickers, over the screen.
+    @State private var pickingDay = false
     @State private var changingTime = false
     /// The whole screen, not scrolled: for pictures of it.
     var unscrolled = false
@@ -114,6 +116,20 @@ struct ScheduleView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        .sheet(isPresented: $pickingDay) {
+            let range = pages.pickable
+            DatePicker("", selection: Binding(get: { pages.next.date }, set: { pages.pick(Day($0)); pickingDay = false }), in: range.lowerBound.date...range.upperBound.date, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .labelsHidden()
+                .accentColor(Theme.ink.color)
+                .padding(Theme.gutter.value)
+        }
+        .sheet(isPresented: $changingTime) {
+            DatePicker("", selection: Binding(get: { time(pages.chosenTime) }, set: { pages.setTime(timeOfDay($0)) }), displayedComponents: .hourAndMinute)
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .padding(Theme.gutter.value)
+        }
     }
 
     private func content(_ screen: ScheduleScreen) -> some View {
@@ -130,7 +146,10 @@ struct ScheduleView: View {
             Divider().overlay(Theme.line.color)
             ForEach(Array(screen.options.enumerated()), id: \.offset) { _, option in
                 Parts.row {
-                    SwiftUI.Button { pages.choose(option.choice) } label: {
+                    SwiftUI.Button {
+                        pages.choose(option.choice)
+                        if option.choice == .pick { pickingDay = true }
+                    } label: {
                         HStack(spacing: 14) {
                             ZStack {
                                 Circle().stroke(option.selected ? Theme.ink.color : Theme.mute.color, lineWidth: 1.5).frame(width: 20, height: 20)
@@ -147,12 +166,6 @@ struct ScheduleView: View {
                     .accessibilityAddTraits(option.selected ? .isSelected : [])
                 }
             }
-            if let range = screen.pickable {
-                DatePicker("", selection: Binding(get: { pages.next.date }, set: { pages.pick(Day($0)) }), in: range.lowerBound.date...range.upperBound.date, displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .accentColor(Theme.ink.color)
-            }
 
             Parts.label(screen.when).padding(.top, 32)
             Divider().overlay(Theme.line.color)
@@ -161,14 +174,8 @@ struct ScheduleView: View {
                     Text(screen.timeLabel).font(Theme.body(Theme.sizeBody)).foregroundColor(Theme.ink.color)
                     Spacer()
                     Text(screen.time).font(Theme.body(Theme.sizeBody))
-                    Parts.link(screen.change) { changingTime.toggle() }
+                    Parts.link(screen.change) { changingTime = true }
                 }
-            }
-            if changingTime {
-                DatePicker("", selection: Binding(get: { time(pages.chosenTime) }, set: { pages.setTime(timeOfDay($0)) }), displayedComponents: .hourAndMinute)
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity)
             }
 
             Text(screen.next).font(Theme.body(Theme.sizeLead, Theme.weightHeading)).foregroundColor(Theme.ink.color)
@@ -228,6 +235,7 @@ struct SettingsView: View {
         .background(Theme.bg.color.ignoresSafeArea())
         .foregroundColor(Theme.text.color)
         .environment(\.colorScheme, .light)
+        .onAppear { pages.refreshSettings() }
     }
 
     private func content(_ screen: SettingsScreen) -> some View {

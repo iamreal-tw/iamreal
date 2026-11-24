@@ -75,7 +75,9 @@ final class CardProofModel: ObservableObject {
         deps.reminders.observe { [weak self] in self?.redraw() }
     }
 
-    /// The app was opened from the reminder's notification: step 1, with its note on top.
+    /// The app was opened from the reminder's notification: step 1, with
+    /// its note on top until a card proof is done. A card proof under way
+    /// is not dropped (a PIN may be in it): the note waits for step 1.
     func openedFromReminder() {
         fromReminder = .asked
         if flow == nil || finished != nil {
@@ -107,7 +109,6 @@ final class CardProofModel: ObservableObject {
     func perform(_ action: Action) {
         switch action {
         case .start, .readAgain:
-            fromReminder = nil
             reset()
             screen = screens.read(reached: 0, running: false, stop: nil)
         case .back: back()
@@ -140,20 +141,27 @@ final class CardProofModel: ObservableObject {
         case .adjustReminder: deps.openSchedule()
         case .turnOnReminder:
             run {
-                // The default the screen showed, from today.
-                self.reminderRefused = !(await self.deps.reminders.turnOn(interval: .suggested, time: .evening))
+                // What the screen offered, from today.
+                let offered = self.deps.reminders.offered
+                self.reminderRefused = !(await self.deps.reminders.turnOn(interval: offered.interval, time: offered.time))
                 self.redraw()
             }
         case .snoozeReminder:
-            run {
-                await self.deps.reminders.snooze()
-                self.fromReminder = self.deps.reminders.settings.map(FromReminder.snoozed)
-                self.redraw()
-            }
+            run { await self.snoozeReminder() }
         }
     }
 
     // The screens that show the reminder ---------------------------------------------
+
+    /// "一週後再提醒我", on step 1 or on the notification: step 1's note,
+    /// if it is up, says when the reminder comes now.
+    func snoozeReminder() async {
+        await deps.reminders.snooze()
+        if fromReminder != nil {
+            fromReminder = deps.reminders.settings.map(FromReminder.snoozed)
+        }
+        redraw()
+    }
 
     private func before() -> Screen {
         let reminderScreens = ReminderScreens(appCopy: deps.appCopy)
@@ -172,7 +180,7 @@ final class CardProofModel: ObservableObject {
         } else if reminderRefused {
             reminder = .refused
         } else {
-            reminder = .ask(ReminderSettings(interval: .suggested, time: .evening, next: Interval.suggested.after(reminders.today)))
+            reminder = .ask(reminders.offered)
         }
         return screens.done(finished.done, single: finished.single, copied: copied, reminder: reminder)
     }

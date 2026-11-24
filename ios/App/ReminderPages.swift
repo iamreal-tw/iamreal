@@ -40,12 +40,15 @@ final class ReminderPages: ObservableObject {
     private var picked: Day
     private var time = TimeOfDay.evening
     private var refused = false
+    /// "開啟提醒" or "儲存" was pressed and the system is being asked.
+    private var confirming = false
 
     init(_ deps: Dependencies) {
         self.deps = deps
         screens = ReminderScreens(appCopy: deps.appCopy)
         picked = deps.reminders.pickable.lowerBound
-        schedule = screens.schedule(choice: .interval(.suggested), time: .evening, next: Interval.suggested.after(deps.reminders.today), pickable: deps.reminders.pickable, on: false, refused: false)
+        let offered = deps.reminders.offered
+        schedule = screens.schedule(choice: .interval(offered.interval), time: offered.time, next: offered.next, pickable: deps.reminders.pickable, on: false, refused: false)
         settings = screens.settings(nil, notified: false, version: deps.version)
         drawSettings()
         deps.reminders.observe { [weak self] in self?.drawSettings() }
@@ -67,6 +70,11 @@ final class ReminderPages: ObservableObject {
 
     func openSettings() {
         pages = [.settings]
+        drawSettings()
+    }
+
+    /// Draws the settings again: shown again, the reminder may have come since.
+    func refreshSettings() {
         drawSettings()
     }
 
@@ -93,13 +101,16 @@ final class ReminderPages: ObservableObject {
 
     // The schedule screen -----------------------------------------------------------------
 
-    /// From what the phone keeps, or the default: three months, 9:00 in the evening.
+    /// From what the phone keeps, or the default: three months, 9:00 in
+    /// the evening. A day kept that is not its interval from today was
+    /// picked, or put off a week: it is shown picked, so that "儲存" keeps it.
     func openSchedule() {
-        let kept = deps.reminders.settings
-        interval = kept?.interval ?? .suggested
-        time = kept?.time ?? .evening
-        choice = .interval(interval)
-        picked = interval.after(deps.reminders.today)
+        let reminders = deps.reminders
+        let kept = reminders.settings ?? reminders.offered
+        interval = kept.interval
+        time = kept.time
+        picked = kept.next
+        choice = reminders.settings != nil && !reminders.countedFromToday && pickable.contains(kept.next) ? .pick : .interval(interval)
         refused = false
         pages.append(.schedule)
         drawSchedule()
@@ -126,6 +137,9 @@ final class ReminderPages: ObservableObject {
     /// the system does not let the app notify, nothing is kept and the
     /// screen says so.
     func confirm() async {
+        guard !confirming else { return }
+        confirming = true
+        defer { confirming = false }
         let picked = choice == .pick ? self.picked : nil
         if await deps.reminders.turnOn(interval: interval, time: time, picked: picked) {
             back()
@@ -183,8 +197,7 @@ final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate
         content.categoryIdentifier = Self.category
         content.sound = .default
         // The phone's own time zone, whatever it is on that day.
-        let when = DateComponents(year: moment.day.year, month: moment.day.month, day: moment.day.day, hour: moment.time.hour, minute: moment.time.minute)
-        let request = UNNotificationRequest(identifier: Self.identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: when, repeats: false))
+        let request = UNNotificationRequest(identifier: Self.identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: moment.components, repeats: false))
         try? await center.add(request)
     }
 

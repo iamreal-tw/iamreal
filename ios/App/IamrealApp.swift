@@ -26,7 +26,7 @@ struct IamrealApp: App {
             version: Self.version,
             open: { UIApplication.shared.open($0) }))
         let model = CardProofModel.ofThisBuild(copy: copy, appCopy: appCopy, reminders: reminders, pages: pages)
-        notifier.snoozed = { await reminders.snooze() }
+        notifier.snoozed = { [weak model] in await model?.snoozeReminder() }
         notifier.opened = { [weak model, weak pages] in
             pages?.close()
             model?.openedFromReminder()

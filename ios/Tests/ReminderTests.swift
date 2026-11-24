@@ -169,6 +169,60 @@ final class ReminderTests: XCTestCase {
         XCTAssertEqual(told, 2)
     }
 
+    // The screens ----------------------------------------------------------------------
+
+    private func pages(_ reminders: Reminders) -> ReminderPages {
+        ReminderPages(ReminderPages.Dependencies(
+            reminders: reminders, appCopy: Copy.bundled("app"), serviceName: "", site: URL(string: "https://iamreal.tw")!,
+            version: "dev", open: { _ in }))
+    }
+
+    /// A day picked, or put off a week, is kept when the schedule is opened
+    /// again and saved as it is.
+    func testAPickedDayStaysPickedWhenTheScheduleIsSavedAgain() async {
+        let reminders = reminders()
+        await reminders.turnOn(interval: .weeks26, time: .evening, picked: Day(2027, 1, 1))
+        let pages = pages(reminders)
+        pages.openSchedule()
+        XCTAssertEqual(pages.schedule.options.map(\.selected), [false, false, false, true])
+        await pages.confirm()
+        XCTAssertEqual(store.kept, ReminderSettings(interval: .weeks26, time: .evening, next: Day(2027, 1, 1)))
+        // Counted from today: the interval is shown chosen.
+        await reminders.turnOn(interval: .weeks4, time: .evening)
+        pages.openSchedule()
+        XCTAssertEqual(pages.schedule.options.map(\.selected), [true, false, false, false])
+    }
+
+    /// Opened from the notification, step 1 says so until a card proof is
+    /// done; "一週後再提醒我", there or on the notification, says when it comes now.
+    func testStepOneFromTheReminderUntilACardProofIsDone() async {
+        let reminders = reminders()
+        await reminders.turnOn(interval: .weeks12, time: .evening)
+        let model = CardProofModel(CardProofModel.Dependencies(
+            flow: CardProofFlow.Dependencies(
+                proofLog: .test,
+                backend: HTTPBackend(site: URL(string: "https://test.invalid")!, publicFiles: URL(string: "https://test.invalid")!),
+                card: NoCardReader(), clock: Date.init, crlNumbers: MemoryCRLNumbers(),
+                openSession: { try DeviceCore.Session(.test) }, proofFiles: BundledFile.proofFiles(for:)),
+            copy: Copy.bundled(), appCopy: Copy.bundled("app"), reminders: reminders,
+            openSchedule: {}, openSettings: {}, site: URL(string: "https://test.invalid")!,
+            open: { _ in }, copyText: { _ in }, share: { _ in }))
+        XCTAssertNil(model.screen.notice)
+        model.openedFromReminder()
+        XCTAssertEqual(model.screen.notice?.button?.label, "一週後再提醒我")
+        // Step 2 and back: still there.
+        model.perform(.start)
+        XCTAssertEqual(model.screen.step, 2)
+        model.perform(.back)
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertNotNil(model.screen.notice?.button)
+        // Pressed on the notification while step 1 is up.
+        now = Self.at(2026, 11, 20)
+        await model.snoozeReminder()
+        XCTAssertEqual(model.screen.notice, Notice(text: "會在 2026-11-27（星期五）晚上 9:00 再提醒你。", button: nil))
+        XCTAssertEqual(store.kept?.next, Day(2026, 11, 27))
+    }
+
     /// The settings as the phone keeps them: turned off, none of them is left.
     func testThePhoneKeepsNoSettingOnceTheReminderIsOff() async throws {
         let name = "reminder-tests"
