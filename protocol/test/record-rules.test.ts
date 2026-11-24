@@ -31,6 +31,13 @@ const stateOut = (proofLog: MemoryRules) =>
     accounts: scope.accounts.map((a) => ({ platform: a.platform, username: a.username, cards: a.cards.map((c) => ({ scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof) })) })),
   }));
 
+/** Every card of the output with its ordinal, in ascending order of ordinal: the vectors' `ordinals`. */
+const ordinalsOut = (proofLog: MemoryRules) =>
+  proofLog
+    .output()
+    .flatMap((scope) => scope.cards.map((c) => ({ scope_string: scope.scopeString, scoped_id: c.scopedId, ordinal: c.ordinal })))
+    .sort((a, b) => a.ordinal - b.ordinal);
+
 describe("the version number of the rules", () => {
   // The Go tests check prooflog.RulesVersion against the same two places (prooflog/version_test.go).
   test("the constant is the number spec/record-rules.md states and the vectors carry", () => {
@@ -79,6 +86,7 @@ describe("record-rules.json: every case, record by record, through the state in 
         for (const [p, slot] of after.slots) assert.ok(possibleSlot(slot, after.lastCardProof), `event ${e.seq}: the slot ${p}`);
       });
       assert.deepEqual(stateOut(proofLog), c.state);
+      assert.deepEqual(ordinalsOut(proofLog), c.ordinals);
     });
   }
 });
