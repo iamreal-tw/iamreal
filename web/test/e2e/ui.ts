@@ -2573,7 +2573,9 @@ await tryStep("the test site's build: the mark of a test log, the test site's he
     );
     check(await tab.eval<boolean>("crossOriginIsolated"), "the test site's build is cross-origin isolated");
     const oneProof = await tab.text("[data-one-proof]");
-    check(oneProof === C.before.one_proof, `the test site's build's step 1 is the one of more than one platform (test-example and Threads): "${oneProof}"`);
+    // Threads only, as the production build (#309): step 1 names the one platform.
+    check(oneProof === fill(C.before.one_proof_single, { platform: THREADS_NAME }), `the test site's build's step 1 is the one of one platform, Threads: "${oneProof}"`);
+    check(!(await tab.text()).includes(C.before.listed_together), "the test site's build's step 1 does not say the accounts are listed together");
     await screenshot("testsite-1-before", tab);
     await tab.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
     await screenshot("testsite-1-before-phone", tab);

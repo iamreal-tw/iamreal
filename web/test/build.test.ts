@@ -89,13 +89,14 @@ test("a production build holds nothing of the tests, and signs the public proof 
   assert.ok(!code.includes("Example (no real service)"), "the production build has test-example's definition");
 });
 
-test("the local build (pnpm local): MOICA's keys and component, nothing of the tests, the test log's scope string and platforms", async () => {
+test("the local build (pnpm local): MOICA's keys and component, nothing of the tests, the test log's scope string, Threads only", async () => {
   const code = await codeOf("localcard");
   realCardOnly(code, "localcard", null);
   // The proof log of src/target-local.ts: the test one. Both scope strings are in the table of
   // protocol/src/scope.ts; the target picks the test one (checked in Node below).
   assert.ok(code.includes("iamreal-test:public:0__________"), "the test log's scope string");
-  assert.ok(code.includes("Example (no real service)"), "the local build knows test-example");
+  // Threads only, as the production build (#309): the test log's second platform is not in it.
+  assert.ok(!code.includes("Example (no real service)"), "the local build has test-example's definition");
 });
 
 /** The date a test site's build is given: when its proof log was last cleared (worker/wrangler.jsonc has the deployed one). */
@@ -108,7 +109,7 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   const { files, code } = await buildOf("testsite").finally(() => delete process.env.IAMREAL_TEST_PROOF_LOG_CLEARED_ON);
   realCardOnly(code, "testsite", "https://test-data.iamreal.tw");
   assert.ok(code.includes("iamreal-test:public:0__________"), "the test log's scope string");
-  assert.ok(code.includes("Example (no real service)"), "the test site's build knows test-example");
+  assert.ok(!code.includes("Example (no real service)"), "the test site's build has test-example's definition (#309: Threads only)");
   assert.ok(!code.includes("https://data.iamreal.tw"), "not the production log's data domain");
   // The link of the last screen is the card's page on the test site (src/target-test-site.ts, SITE_DOMAIN).
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
@@ -166,7 +167,8 @@ test("the local target signs the test log's scope string; the production target 
   // The CRL archive: on the data domain (ADR-0027); the local build's on the local server, its own origin.
   assert.equal(production.DATA_ORIGIN, "https://data.iamreal.tw");
   assert.equal(local.DATA_ORIGIN, "");
-  assert.deepEqual(local.PRESENTATIONS.map((p) => p.platform), ["test-example", "threads"]);
+  // Threads only in every build of a real card (#309); test-example is the headless tests' (test/e2e/target.ts).
+  assert.deepEqual(local.PRESENTATIONS.map((p) => p.platform), ["threads"]);
   assert.deepEqual(production.PRESENTATIONS.map((p) => p.platform), ["threads"]);
 });
 

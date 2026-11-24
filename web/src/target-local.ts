@@ -7,21 +7,22 @@
 // so that a card proof made while trying the page out gives the card a
 // scoped ID unrelated to the one it has in the public proof log
 // (spec/scope.md: a test scope string produces unrelated scoped IDs). The
-// server runs the test log, whose table has test-example too.
+// server runs the test log, whose table has test-example too; this page
+// knows Threads only, as the production build and the test site's do
+// (#309), so the screens speak of one platform.
 // test/build.test.ts checks that this build holds no fake card and no test
 // key.
 import { IDLE_MS } from "./flow.ts";
 import { type IssuerKey, MOICA_ISSUERS } from "./issuers.ts";
 import type { Presentation } from "./platforms.ts";
-import { TEST_EXAMPLE } from "./presentations/test-example.ts";
 import { THREADS } from "./presentations/threads.ts";
 import type { ProofLog } from "iamreal-protocol/scope.ts";
 
 /** The test log: never the public proof log's scope string. */
 export const PROOF_LOG: ProofLog = "test";
 
-/** The platforms of the test log's table. */
-export const PRESENTATIONS: readonly Presentation[] = Object.freeze([TEST_EXAMPLE, THREADS]);
+/** Threads only, as the production build (#309). */
+export const PRESENTATIONS: readonly Presentation[] = Object.freeze([THREADS]);
 
 export const ISSUERS: readonly IssuerKey[] = MOICA_ISSUERS;
 
