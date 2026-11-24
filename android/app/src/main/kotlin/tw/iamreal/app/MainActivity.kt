@@ -94,7 +94,8 @@ class MainActivity : ComponentActivity() {
             time = { initial, picked -> TimePickerDialog(this, { _, h, m -> picked(LocalTime.of(h, m)) }, initial.hour, initial.minute, false).show() },
         )
         val version = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
-        handle(intent)
+        // Not when the system makes the activity again (its process was ended in the background): the intent is the one it was first opened with.
+        if (savedInstanceState == null) handle(intent)
         val outside = Outside(
             open = { address ->
                 try {

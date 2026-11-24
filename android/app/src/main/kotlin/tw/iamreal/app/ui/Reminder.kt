@@ -157,7 +157,8 @@ internal class ReminderModel(
         scheduleFrom = screen
         draftInterval = plan?.interval ?: Reminders.DEFAULT_INTERVAL
         draftTime = plan?.time ?: Reminders.DEFAULT_TIME
-        draftPicked = null
+        // A day picked before is still the one chosen: changing only the time keeps it, and keeps it a picked day.
+        draftPicked = plan?.day?.takeIf { picked && it in Reminders.pickable(today()) }
         scheduleDenied = false
         screen = Screen.SCHEDULE
     }
