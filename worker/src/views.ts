@@ -97,7 +97,7 @@ export const VIEW_TABLE_KEYS = {
 /**
  * How far back the counts look for a recent card proof: a last card proof
  * on the given date or up to 90 days before it, both included
- * (design/copy/home.md, section 2).
+ * (design/copy/home.md, 一起能改變什麼).
  */
 export const RECENT_DAYS = 90;
 
@@ -316,7 +316,7 @@ export function latestSlots(sql: SqlStorage, scopeString: string, platform: stri
 }
 
 /**
- * The home page's two numbers (design/copy/home.md, section 2): the cards
+ * The home page's two numbers (design/copy/home.md, 一起能改變什麼): the cards
  * that give their place on the platform to an account now, and those among
  * them whose last card proof is `today` or up to 90 days before it. It
  * reads the index `view_slots_recency`.

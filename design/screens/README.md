@@ -29,7 +29,7 @@
 
 | 截圖 | 網址 | 版本 |
 |---|---|---|
-| `home-desktop.png`、`home-phone.png` | `/` | 定稿版 |
+| `home-desktop.png`、`home-phone.png` | `/` | 實作版 |
 | `proof-desktop.png`、`proof-phone.png` | `/p/7K2Q9FM4XD`（島民證明頁） | 實作版 |
 | `account-desktop.png`、`account-phone.png` | `/threads/@alice`（查詢頁，有卡片宣告這個帳號） | 實作版 |
 | `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 實作版 |
