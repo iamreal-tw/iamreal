@@ -5,7 +5,7 @@
 | 檔 | 內容 |
 |---|---|
 | `GenRyuMin2TW-B.woff2` | 子集，正本。網頁用 |
-| `GenRyuMin2TW-B.otf` | 同一個子集，和來源一樣是 OpenType（CFF）。兩個 app 用：Android 的系統讀不了 WOFF2（AOSP 的 FreeType 建置時沒有開 Brotli） |
+| `GenRyuMin2TW-B.otf` | 同一個子集，和來源一樣是 OpenType（CFF）。兩個 app 用：Android 的系統讀不了 WOFF2：AOSP 的 FreeType 建置時沒有開 Brotli，也沒有編解 WOFF2 的 `sfwoff2.c`（[`external/freetype/Android.bp`](https://android.googlesource.com/platform/external/freetype/+/refs/heads/main/Android.bp)） |
 | `OFL.txt` | 授權（SIL Open Font License 1.1），源流明體的程式庫附的那一份 |
 | `subset.sh` | 重新產生兩個子集的腳本 |
 
