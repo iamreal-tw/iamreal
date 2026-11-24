@@ -318,6 +318,11 @@ function press(label: string): void {
   emulator.tap(find((n) => n.text === label, `the button ${label}`));
 }
 
+/** Presses a button of the bar at the top of the screen (設定, 返回): it does not scroll, and is always within the top of the screen. */
+async function pressBar(label: string): Promise<void> {
+  emulator.tap(await waitText(label, `the button ${label} at the top`, 10_000));
+}
+
 /** The field a test finds by its name (the app's test tag). */
 const field = (id: string): Node => find((n) => n.id === id, `the field ${id}`);
 
@@ -658,7 +663,7 @@ async function reminderTurnedOn(shortId: string): Promise<void> {
   check(!reminderStored().includes(shortId) && !reminderStored().includes("alice"), "the reminder's file has no short ID and no account");
 
   // The settings.
-  press(app("settings.open"));
+  await pressBar(app("settings.open"));
   await waitText(app("settings.back"), "the settings");
   {
     shot("settings");
@@ -675,16 +680,27 @@ async function reminderTurnedOn(shortId: string): Promise<void> {
   await sleep(2_000);
   check(onTop().includes(`dat=http://${SITE}/faq`), "the settings: 常見問題 opens the site's /faq in the browser");
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
-  press(app("settings.back"));
+  await pressBar(app("settings.back"));
   await waitText(step(6), "step 6 again, from the settings", 10_000);
   check(true, "the settings: 返回 goes back to step 6");
+}
+
+/**
+ * The app's notification that is up, as the system describes it, or undefined: its record in the list of
+ * notifications posted, up to the next record or the end of that list (not the archive of the ones taken away).
+ */
+function posted(): string | undefined {
+  const lines = emulator.shell("dumpsys notification --noredact").split("\n");
+  const at = lines.findIndex((l) => /NotificationRecord\(.*pkg=/.test(l) && l.includes(`pkg=${APP} `));
+  if (at < 0) return undefined;
+  const end = lines.findIndex((l, i) => i > at && (/NotificationRecord\(/.test(l) || /^ {2}m[A-Z]/.test(l)));
+  return lines.slice(at, end < 0 ? undefined : end).join("\n");
 }
 
 /** Waits for the reminder's notification; returns what the system says of it. */
 async function notification(what: string): Promise<string> {
   for (const until = Date.now() + 60_000; Date.now() < until; await sleep(500)) {
-    const all = emulator.shell("dumpsys notification --noredact");
-    const ours = all.split(/\n(?=\s*NotificationRecord\()/).find((r) => r.includes(`pkg=${APP}`));
+    const ours = posted();
     if (ours !== undefined) return ours;
   }
   throw new Error(`${what}: no notification of the app`);
@@ -706,21 +722,13 @@ async function reminderComes(day: string): Promise<void> {
     check(n.includes(app("notification.snooze")), "the notification has 一週後再提醒我");
     check(!n.includes("alice") && !n.includes("bob"), "the notification names no account");
   }
+  // The system's own panel: design/screens/ keeps its sketch of it (design/screens/README.md).
   emulator.shell("cmd statusbar expand-notifications");
-  if (DESIGN_SCREENS !== undefined) {
-    await designSize(STATUS_BAR + 844 + 48);
-    emulator.shell("cmd statusbar expand-notifications");
-    await waitText(app("notification.title"), "the notification, on a screen of design/screens/'s size", 10_000);
-    await sleep(1_000);
-    designCapture("app-reminder-3-notification-phone.png", 844, 0);
-    await testSize();
-    emulator.shell("cmd statusbar expand-notifications");
-  }
   emulator.tap(await waitText(app("notification.snooze"), "一週後再提醒我 on the notification", 10_000));
   await sleep(2_000);
   emulator.shell("cmd statusbar collapse");
   check(storedDay() === weeksAfter(day, 1), `一週後再提醒我 on the notification: the reminder is 7 days on (${storedDay()})`);
-  check(!emulator.shell("dumpsys notification --noredact").includes(`pkg=${APP}`), "一週後再提醒我 takes the notification away");
+  check(posted() === undefined, "一週後再提醒我 takes the notification away");
 
   // A week on: the notification opens step 1, which says it is the reminder.
   const later = weeksAfter(day, 1);
@@ -740,7 +748,7 @@ async function reminderComes(day: string): Promise<void> {
   check(storedDay() === weeksAfter(later, 1), `一週後再提醒我 on step 1: the reminder is 7 days on (${storedDay()})`);
 
   // Turned off in the settings: nothing of it is left.
-  press(app("settings.open"));
+  await pressBar(app("settings.open"));
   await waitText(app("settings.back"), "the settings");
   check(field("settings-next").text === dayText(weeksAfter(later, 1)), `the settings show the next reminder: ${field("settings-next").text}`);
   emulator.tap(field("reminder-switch"));
@@ -750,7 +758,7 @@ async function reminderComes(day: string): Promise<void> {
     check(!s.includes(app("settings.interval")) && !s.includes(app("settings.next")), "the settings, the reminder off, show no interval, time or day");
   }
   check(!/<string/.test(reminderStored()), `turned off, the phone stores nothing of the reminder: ${reminderStored()}`);
-  press(app("settings.back"));
+  await pressBar(app("settings.back"));
 }
 
 /** The emulator's setting for the keyboard on the screen, before the test changed it. */

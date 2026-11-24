@@ -73,6 +73,9 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Type.gutter).padding(top = 28.dp, bottom = 48.dp).testTag("step-${m.step.name.lowercase()}"),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    // Opened from the reminder's notification: above everything of step 1 (design/screens/app-reminder-4-from-notification-phone.png).
+                    // The minimum version's sentence, when the app has it (issue #171), goes above it.
+                    if (m.step == Step.BEFORE) FromReminder(r)
                     StepBar(m.copy, m.step.number)
                     Spacer(Modifier.height(6.dp))
                     when (m.step) {
@@ -94,8 +97,6 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
 @Composable
 private fun Before(m: Model, r: ReminderModel) {
     val c = m.copy
-    // Opened from the reminder's notification: first of all. The minimum version's sentence, when the app has it (issue #171), goes above it.
-    FromReminder(r)
     m.notice?.let { Problem(it) }
     Title(c.say("before.title"))
     Body(c.say("before.prepare_card"), strong = true)
