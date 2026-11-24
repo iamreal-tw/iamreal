@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
-import { OG_DESCRIPTION, block, codeBlocks, copyLines, copySection, faqQuestions, notOnPage, previewOf, readCopy, squash, testSiteCardAddress, unescapeHtml, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { OG_DESCRIPTION, block, codeBlocks, copyLines, copySection, faqCategories, faqQuestions, notOnPage, previewOf, readCopy, squash, testSiteCardAddress, unescapeHtml, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
 import { newCard } from "./records.ts";
@@ -42,17 +42,13 @@ describe("the FAQ", () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/faq");
     assert.equal(status, 200);
+    const categories = faqCategories();
+    assert.deepEqual(categories.map((c) => c.name), ["關於隱私", "它能證明什麼", "怎麼用", "誰在做"], "faq.md's four categories, in order");
     const questions = faqQuestions();
     assert.equal(questions.length, 22, "faq.md has the 22 questions the page writes");
-    const want = copyLines(codeBlocks(readCopy("faq.md"))[0]!);
-    let category = "";
-    for (const q of questions) {
-      if (q.category !== category) {
-        category = q.category;
-        want.push(category);
-      }
-      want.push(q.question, ...copyLines(q.answer));
-    }
+    // The title, the categories' names (the list of them), then each category: its name, its questions and their answers.
+    const want = [...copyLines(codeBlocks(readCopy("faq.md"))[0]!), ...categories.map((c) => c.name)];
+    for (const c of categories) want.push(c.name, ...c.questions.flatMap((q) => [q.question, ...copyLines(q.answer)]));
     const last = want[want.length - 1]!;
     const foot = copyLines(block("home.md", "9. "));
     wantLines(page, [...want, ...foot]);
@@ -63,15 +59,35 @@ describe("the FAQ", () => {
     const ids = [...page.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1]!);
     assert.equal(new Set(ids).size, ids.length, "no id twice");
     for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
+
+    // The list of the categories: each name a link to its category, in faq.md's order, under the title and above the first question.
+    const listName = /螢幕閱讀器唸的名稱是「([^」]*)」/.exec(readCopy("faq.md"))?.[1];
+    assert.ok(listName !== undefined, "faq.md names the list of the categories");
+    const list = new RegExp(`<nav class="categories" aria-label="${listName}">(.*?)</nav>`, "s").exec(page);
+    assert.ok(list !== null, `the page has the list of the categories, named ${listName}`);
+    assert.deepEqual(
+      [...list[1]!.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((m) => [m[1], m[2]]),
+      categories.map((c) => [`#${c.id}`, c.name]),
+      "each category's name, a link to it",
+    );
+    assert.ok(page.indexOf(list[0]) > page.indexOf('<h1 class="title">常見問題</h1>') && page.indexOf(list[0]) < page.indexOf(`id="${questions[0]!.id}"`), "the list is under the title, above the first question");
+    // Each link lands on its category, and each question is in its own category, in order.
+    const sections = page.split(/(?=<section class="category")/).slice(1);
+    assert.equal(sections.length, categories.length, "one section a category");
+    categories.forEach((c, i) => {
+      assert.ok(sections[i]!.startsWith(`<section class="category" id="${c.id}">\n<h2>${c.name}</h2>`), `${c.name}: the section #${c.id}, its name the heading`);
+      assert.deepEqual([...sections[i]!.matchAll(/<section class="question" id="([^"]*)">/g)].map((m) => m[1]), c.questions.map((q) => q.id), `${c.name}: its questions, in order`);
+    });
     // Every link to a question that a copy file writes goes to one.
     for (const file of readdirSync(COPY_DIR).filter((f) => f.endsWith(".md"))) {
       for (const m of readFileSync(join(COPY_DIR, file), "utf8").matchAll(/\/faq#([A-Za-z0-9_-]+)/g)) assert.ok(ids.includes(m[1]!), `${file} links to /faq#${m[1]}, which is on the page`);
     }
 
     // The links of the answers.
-    const security = faqByQuestion("這個技術安全嗎？");
+    const security = faqByQuestion("島民證明服務安全嗎？");
     for (const link of [
       `<a href="/faq#${security.id}">了解更多</a>`,
+      '公開在 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>，',
       '<a href="https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md">完整的說明</a>',
       '<a href="https://github.com/iamreal-tw/iamreal/discussions">GitHub 的討論區</a>留言',
       "<strong>注意：</strong>",
@@ -80,7 +96,7 @@ describe("the FAQ", () => {
     }
     assert.ok(existsSync(join(REPO_DIR, "docs", "adr", "0004-scoped-ids-and-proofs-are-public.md")), "the ADR the answer links to is there");
     assert.ok(faqByQuestion("政府會知道我是哪個帳號嗎？").answer[2]!.includes("了解更多"));
-    assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「這個技術安全嗎？」"), "faq.md says where 了解更多 goes");
+    assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「島民證明服務安全嗎？」"), "faq.md says where 了解更多 goes");
 
     const { title, site, summary } = previewOf("faq.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
