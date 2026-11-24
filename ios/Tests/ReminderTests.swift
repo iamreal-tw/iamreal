@@ -163,7 +163,7 @@ final class ReminderTests: XCTestCase {
     func testTheScreensAreToldOfEveryChange() async {
         let reminders = reminders()
         var told = 0
-        reminders.changed = { told += 1 }
+        reminders.observe { told += 1 }
         await reminders.turnOn(interval: .weeks12, time: .evening)
         reminders.turnOff()
         XCTAssertEqual(told, 2)

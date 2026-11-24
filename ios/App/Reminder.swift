@@ -118,10 +118,15 @@ protocol Notifier {
 final class Reminders {
     /// The settings kept, nil while the reminder is off.
     private(set) var settings: ReminderSettings? {
-        didSet { if settings != oldValue { changed?() } }
+        didSet { if settings != oldValue { observers.forEach { $0() } } }
     }
-    /// Called when `settings` changed: the screens that show them are drawn again.
-    var changed: (() -> Void)?
+    private var observers: [() -> Void] = []
+
+    /// `changed` is called whenever the settings change: the screens that
+    /// show them are drawn again.
+    func observe(_ changed: @escaping () -> Void) {
+        observers.append(changed)
+    }
 
     private let store: ReminderStore
     private let notifier: Notifier

@@ -219,6 +219,9 @@ final class CardProofFlow {
         /// What the server says it recorded.
         let answer: Answer
         let firstRecord: Bool
+        /// When the card's certificate ends, YYMMDDHHMMSS (UTC): the done
+        /// screen compares it with the reminder's day. Kept nowhere else.
+        var notAfter: String? = nil
     }
 
     /// Bytes to overwrite when they are no longer needed: a certificate, a
@@ -260,6 +263,8 @@ final class CardProofFlow {
     private var session: DeviceCore.Session?
     private var certificate: Secret?
     private var issuer = ""
+    /// When the chosen certificate ends, for the done screen.
+    private var notAfter: String?
     /// The CRL downloaded and checked; then that, the tree and the files.
     private var revocation: Task<Void, Error>?
     private var checks: Task<Void, Error>?
@@ -326,6 +331,7 @@ final class CardProofFlow {
             else { throw Stop.core(IDC_ERR_INTERNAL) }
             self.session = session
             self.issuer = issuer
+            notAfter = result["not_after"] as? String
             certificate = Secret(certificates[chosen])
             progress(.certificateChecked)
             phase = .checking
@@ -682,7 +688,8 @@ final class CardProofFlow {
             accounts: chosen.consequence.accounts,
             expected: chosen.consequence.rows,
             answer: Answer.read(response, rows: chosen.rows),
-            firstRecord: chosen.consequence.firstRecord)
+            firstRecord: chosen.consequence.firstRecord,
+            notAfter: notAfter)
     }
 
     /// Drops everything. The flow cannot continue.
@@ -750,6 +757,7 @@ final class CardProofFlow {
         challenge = nil
         code = nil
         submission = nil
+        notAfter = nil
     }
 
     /// The PIN, the certificate, the signatures, and the core's session

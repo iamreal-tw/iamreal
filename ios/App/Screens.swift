@@ -9,6 +9,9 @@ import Foundation
 /// same screens for the web page.
 struct Screens {
     let copy: Copy
+    /// The app's own sentences (design/copy/app.json): the header's
+    /// settings, and how a reminder's day and time are written.
+    let appCopy: Copy
     /// The site of this build, as a link on the screen writes it: its host.
     let host: String
 
@@ -25,7 +28,8 @@ struct Screens {
 
     // Step 1: before starting ------------------------------------------------------------------
 
-    func before() -> Screen {
+    /// `notice`: on top, when the app was opened from the reminder.
+    func before(notice: Notice? = nil) -> Screen {
         // No platform table yet: by the platforms the app has its own definition of.
         let only = Platform.known.count == 1 ? Platform.known[0] : nil
         var blocks: [Block] = [
@@ -42,8 +46,10 @@ struct Screens {
             .question(copy("before.why_physical"), [copy("before.why_physical_card"), copy("before.why_physical_mobile")]),
             .question(copy("before.how_to_get"), [copy("before.how_to_get_counter"), copy("before.how_to_get_moica")]),
         ]
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)])
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
     }
+
+    private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }
 
     // The two lists ----------------------------------------------------------------
 
@@ -358,8 +364,9 @@ struct Screens {
     /// what only the page has: the QR code to hang it from a phone, "現在
     /// 可以拔出卡片。" (the app said "可以把卡片拿開了。" when the card
     /// signed), and the share link, which here is the system's share sheet
-    /// (design/copy/card-proof.md, step 6, "app").
-    func done(_ done: Flow.Done, single: String?, copied: Bool) -> Screen {
+    /// (design/copy/card-proof.md, step 6, "app"). `reminder`: the
+    /// reminder's part, in the place of the page's "記得每三個月回來過卡一次".
+    func done(_ done: Flow.Done, single: String?, copied: Bool, reminder: DoneReminder) -> Screen {
         let withdrawAll = done.accounts.isEmpty
         let kinds = done.answer.kinds
         var blocks: [Block] = []
@@ -433,9 +440,47 @@ struct Screens {
                     .button(Button(label: copy("app_done.share"), action: .share), main: false),
                 ]
             }
-            blocks += [.subheading(copy("done.return_title")), .text(copy("done.return_note"))]
+            blocks += reminderPart(reminder, notAfter: done.notAfter)
         }
-        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("done.restart"), action: .restart)], mainButton: false)
+        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("done.restart"), action: .restart)], mainButton: false, settings: settingsButton)
+    }
+
+    /// The reminder's part of the done screen (card-proof.md, step 6, the
+    /// app's reminder). `notAfter`: the end of the card's certificate,
+    /// YYMMDDHHMMSS, compared in memory with the reminder's day.
+    private func reminderPart(_ reminder: DoneReminder, notAfter: String?) -> [Block] {
+        let settings: ReminderSettings
+        let counted: Bool
+        switch reminder {
+        case .refused:
+            return [.subheading(copy("done.return_title")), .text(copy("done.return_note")), .text(copy("app_done.reminder_denied"))]
+        case .ask(let asked):
+            settings = asked
+            counted = true
+        case .on(let kept, let fromToday):
+            settings = kept
+            counted = fromToday
+        }
+        let when = When(appCopy: appCopy)
+        let values = ["day": when.day(settings.next), "time": when.time(settings.time), "interval": when.interval(settings.interval)]
+        var blocks: [Block] = [
+            .subheading(copy("app_done.reminder_title")),
+            .text(copy("app_done.reminder_why") + (counted ? copy("app_done.reminder_next_about", values) : copy("app_done.reminder_next", values))),
+            .text(copy("app_done.reminder_local")),
+        ]
+        if case .ask = reminder {
+            blocks += [
+                .button(Button(label: copy("app_done.reminder_turn_on"), action: .turnOnReminder), main: true),
+                .action(Button(label: copy("app_done.reminder_adjust"), action: .adjustReminder)),
+            ]
+        } else {
+            blocks.append(.action(Button(label: copy("app_done.reminder_change"), action: .adjustReminder)))
+        }
+        // The certificate ends before the reminder comes.
+        if let validUntil = notAfter.flatMap(Self.dateOfCertificateTime), validUntil < settings.next.iso {
+            blocks.append(.text(copy("app_done.reminder_expires", ["valid_until": validUntil])))
+        }
+        return blocks
     }
 
     // Why a step stopped -------------------------------------------------------------
