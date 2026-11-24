@@ -79,7 +79,7 @@ import androidx.compose.ui.unit.sp
 // a check mark only in the two lists of what the app is doing (steps 2 and
 // 5), in ink (docs/design/principles.md).
 
-private fun style(size: TextUnit, leading: TextUnit, colour: Color = Colours.text, weight: FontWeight = Type.body, display: Boolean = false, mono: Boolean = false) = TextStyle(
+private fun style(size: TextUnit, leading: TextUnit, colour: Color = Colours.text, weight: FontWeight = Type.weightBody, display: Boolean = false, mono: Boolean = false) = TextStyle(
     color = colour,
     fontSize = size,
     lineHeight = leading,
@@ -89,31 +89,31 @@ private fun style(size: TextUnit, leading: TextUnit, colour: Color = Colours.tex
 
 /** The heading of a step: the largest words on the screen. */
 @Composable
-internal fun Title(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.h2, Type.leadingH2, Colours.ink, Type.heading, display = true))
+internal fun Title(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.sizeH2, Type.leadingH2, Colours.ink, Type.weightHeading, display = true))
 
 /** A heading in the type of the headings, smaller: a stress, the title next to the small card. */
 @Composable
-internal fun Stress(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.lead, Type.leadingH3, Colours.ink, Type.heading, display = true))
+internal fun Stress(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.sizeLead, Type.leadingH3, Colours.ink, Type.weightHeading, display = true))
 
 /** The heading of a part of a step, in the body's type. */
 @Composable
-internal fun Subhead(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.bodySize, Type.leadingH3, Colours.ink, Type.heading))
+internal fun Subhead(text: String, modifier: Modifier = Modifier) = BasicText(text, modifier, style = style(Type.sizeBody, Type.leadingH3, Colours.ink, Type.weightHeading))
 
 /** A sentence of the body. `strong`: in ink and bold, as plain to see as the title's first lines. */
 @Composable
 internal fun Body(text: String, modifier: Modifier = Modifier, strong: Boolean = false) =
-    BasicText(text, modifier, style = if (strong) style(Type.bodySize, Type.leadingBody, Colours.ink, Type.heading) else style(Type.bodySize, Type.leadingBody))
+    BasicText(text, modifier, style = if (strong) style(Type.sizeBody, Type.leadingBody, Colours.ink, Type.weightHeading) else style(Type.sizeBody, Type.leadingBody))
 
 /** Small print: a note, what is under a row. */
 @Composable
-internal fun Small(text: String, modifier: Modifier = Modifier, colour: Color = Colours.mute) = BasicText(text, modifier, style = style(Type.small, Type.leadingSmall, colour))
+internal fun Small(text: String, modifier: Modifier = Modifier, colour: Color = Colours.mute) = BasicText(text, modifier, style = style(Type.sizeSmall, Type.leadingSmall, colour))
 
 /** A sentence that says something went wrong: where it stopped and why. */
 @Composable
 internal fun Problem(text: String, modifier: Modifier = Modifier) = BasicText(
     text,
     modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(6.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
-    style = style(Type.bodySize, Type.leadingSmall, Colours.ink),
+    style = style(Type.sizeBody, Type.leadingSmall, Colours.ink),
 )
 
 /** A line across, between the parts of a screen. */
@@ -140,7 +140,7 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.bodySize, fontWeight = Type.heading))
+        BasicText(label, style = TextStyle(color = if (primary) Colours.bg else Colours.ink, fontSize = Type.sizeBody, fontWeight = Type.weightHeading))
     }
 }
 
@@ -157,7 +157,7 @@ internal fun TextButton(label: String, modifier: Modifier = Modifier, onClick: (
 internal fun Link(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
     text,
     modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp),
-    style = TextStyle(color = Colours.you, fontSize = 17.sp, lineHeight = Type.leadingSmall, fontWeight = Type.heading, textDecoration = TextDecoration.Underline),
+    style = TextStyle(color = Colours.you, fontSize = 17.sp, lineHeight = Type.leadingSmall, fontWeight = Type.weightHeading, textDecoration = TextDecoration.Underline),
 )
 
 /** The buttons of a step, one under another, as wide as the screen: the primary one first. */
@@ -168,7 +168,7 @@ internal fun Actions(content: @Composable () -> Unit) = Column(Modifier.fillMaxW
 @Composable
 internal fun Point(text: String) = Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
     Box(Modifier.width(18.dp).padding(top = 11.dp)) { Box(Modifier.size(6.dp).background(Colours.ink, RoundedCornerShape(3.dp))) }
-    BasicText(text, Modifier.weight(1f), style = style(Type.bodySize, 1.75.em))
+    BasicText(text, Modifier.weight(1f), style = style(Type.sizeBody, 1.75.em))
 }
 
 /** The questions that open to their answers, between lines. */
@@ -178,7 +178,7 @@ internal fun Questions(content: @Composable () -> Unit) = Column(Modifier.fillMa
     content()
 }
 
-/** A question that opens to its answer. */
+/** A question that opens to its answer (design/DESIGN.md, "元件", 常見問題): between lines, an arrow on the right. */
 @Composable
 internal fun Question(question: String, vararg answers: String) {
     var open by remember { mutableStateOf(false) }
@@ -188,13 +188,25 @@ internal fun Question(question: String, vararg answers: String) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // The mark is not part of the question's text.
-            BasicText(if (open) "▾" else "▸", style = TextStyle(color = Colours.mute, fontSize = 13.sp))
-            BasicText(question, style = style(Type.bodySize, Type.leadingH3, Colours.ink))
+            BasicText(question, Modifier.weight(1f), style = style(Type.sizeBody, Type.leadingH3, Colours.ink, Type.weightHeading))
+            Chevron(open)
         }
-        if (open) for (a in answers) BasicText(a, Modifier.padding(start = 23.dp, bottom = 12.dp), style = style(15.sp, 1.75.em))
+        if (open) for (a in answers) BasicText(a, Modifier.padding(bottom = 12.dp), style = style(15.sp, 1.75.em))
         Rule()
     }
+}
+
+/** The arrow of a question: down while it is closed, up while it is open. Not part of the question's text. */
+@Composable
+private fun Chevron(open: Boolean) = Canvas(Modifier.size(16.dp)) {
+    val w = size.width
+    val (from, to) = if (open) 0.65f to 0.35f else 0.35f to 0.65f
+    val arrow = Path().apply {
+        moveTo(0.15f * w, from * w)
+        lineTo(0.5f * w, to * w)
+        lineTo(0.85f * w, from * w)
+    }
+    drawPath(arrow, Colours.ink, style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 /** The mark before an item of a list: an empty ring, turning, a check in ink; a thick ring for the item that stopped. */
@@ -239,7 +251,7 @@ internal fun TaskList(copy: Copy, labels: List<String>, states: List<ItemState>,
         Column(Modifier.fillMaxWidth().padding(vertical = 13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.width(26.dp)) { Mark(state) }
-                BasicText(label, Modifier.weight(1f), style = style(Type.bodySize, 1.7.em, if (state == ItemState.NONE) Colours.mute else Colours.text))
+                BasicText(label, Modifier.weight(1f), style = style(Type.sizeBody, Type.leadingSmall, if (state == ItemState.NONE) Colours.mute else Colours.text))
                 val status = when (state) {
                     ItemState.NOW -> copy.say("common.working")
                     ItemState.DONE -> copy.say("common.done")
@@ -248,7 +260,7 @@ internal fun TaskList(copy: Copy, labels: List<String>, states: List<ItemState>,
                 }
                 if (status != null) {
                     val strong = state == ItemState.NOW || state == ItemState.HALT
-                    BasicText(status, style = style(Type.small, Type.leadingSmall, if (strong) Colours.ink else Colours.mute, if (strong) Type.heading else Type.body))
+                    BasicText(status, style = style(Type.sizeSmall, Type.leadingSmall, if (strong) Colours.ink else Colours.mute, if (strong) Type.weightHeading else Type.weightBody))
                 }
             }
             if (state == ItemState.HALT && message != null) Row {
@@ -319,7 +331,7 @@ private const val DOT = '•'
 /** Where in the six steps: "第 2 步，共 6 步", then six bars, the steps up to this one in ink. */
 @Composable
 internal fun StepBar(copy: Copy, step: Int) = Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    BasicText(copy.say("common.step", "step" to step, "steps" to 6), style = style(Type.kicker, Type.leadingKicker, Colours.mute))
+    BasicText(copy.say("common.step", "step" to step, "steps" to 6), style = style(Type.sizeKicker, Type.leadingKicker, Colours.mute))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         for (i in 1..6) Box(Modifier.weight(1f).height(4.dp).background(if (i <= step) Colours.ink else Colours.line))
     }
@@ -330,7 +342,7 @@ internal fun StepBar(copy: Copy, step: Int) = Column(Modifier.fillMaxWidth(), ve
 internal fun Header(name: String) = Column(Modifier.fillMaxWidth()) {
     Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = Type.gutter), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Logo(Modifier.size(24.dp))
-        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.heading, fontFamily = Type.display))
+        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
     }
     Rule()
 }
@@ -382,20 +394,22 @@ private fun DrawScope.drawMark(cardT: Float, islandT: Float) {
 }
 
 /**
- * The outline of the main island, web/src/ui/logo.ts's: from Natural Earth's
- * public-domain map data (1:50m).
+ * The outline of the main island, as web/src/ui/logo.ts writes it: from
+ * Natural Earth's public-domain map data (1:50m). The system's splash draws
+ * the same (res/drawable/splash_mark.xml; ThemeTest compares them).
  */
+internal const val TAIWAN_OUTLINE =
+    "M14.84 45.97 L13.85 48.00 L13.07 50.14 L12.75 52.17 L12.77 54.25 L12.55 56.14 L12.16 58.00 L10.62 57.46 L9.79 56.13 L9.59 53.94 " +
+        "L8.48 51.29 L8.06 50.54 L6.45 49.06 L4.99 48.32 L3.86 47.23 L4.01 47.32 L3.18 45.85 L2.54 44.28 L1.23 39.83 L0.78 38.76 L0.17 37.78 " +
+        "L0.00 36.81 L0.21 35.73 L0.77 34.12 L1.12 32.49 L0.84 30.29 L0.95 28.10 L1.37 27.13 L8.83 13.81 L10.85 10.98 L12.10 9.59 L13.14 8.02 " +
+        "L14.13 6.04 L15.34 4.22 L16.21 3.67 L20.49 2.04 L21.82 0.48 L22.89 0.00 L24.10 0.03 L24.89 0.77 L25.58 1.65 L26.31 2.12 L28.21 2.98 " +
+        "L29.04 3.81 L29.42 5.25 L28.26 6.60 L27.69 7.83 L27.58 9.18 L27.79 11.01 L27.82 12.85 L26.37 17.16 L24.83 19.84 L24.41 21.18 " +
+        "L23.94 24.50 L23.03 27.84 L22.26 32.06 L20.99 36.41 L20.28 38.23 L19.38 39.98 L17.25 43.27 Z"
+
+/** [TAIWAN_OUTLINE] as a path: its points, joined by straight lines and closed. */
 private val TAIWAN: Path = Path().apply {
-    val points = (
-        "14.84 45.97 13.85 48.00 13.07 50.14 12.75 52.17 12.77 54.25 12.55 56.14 12.16 58.00 10.62 57.46 9.79 56.13 9.59 53.94 " +
-            "8.48 51.29 8.06 50.54 6.45 49.06 4.99 48.32 3.86 47.23 4.01 47.32 3.18 45.85 2.54 44.28 1.23 39.83 0.78 38.76 0.17 37.78 " +
-            "0.00 36.81 0.21 35.73 0.77 34.12 1.12 32.49 0.84 30.29 0.95 28.10 1.37 27.13 8.83 13.81 10.85 10.98 12.10 9.59 13.14 8.02 " +
-            "14.13 6.04 15.34 4.22 16.21 3.67 20.49 2.04 21.82 0.48 22.89 0.00 24.10 0.03 24.89 0.77 25.58 1.65 26.31 2.12 28.21 2.98 " +
-            "29.04 3.81 29.42 5.25 28.26 6.60 27.69 7.83 27.58 9.18 27.79 11.01 27.82 12.85 26.37 17.16 24.83 19.84 24.41 21.18 " +
-            "23.94 24.50 23.03 27.84 22.26 32.06 20.99 36.41 20.28 38.23 19.38 39.98 17.25 43.27"
-        ).split(" ").map { it.toFloat() }.chunked(2)
+    val points = TAIWAN_OUTLINE.removeSuffix(" Z").split(" ").map { it.trimStart('M', 'L').toFloat() }.chunked(2)
     moveTo(points[0][0], points[0][1])
     for (p in points.drop(1)) lineTo(p[0], p[1])
     close()
 }
-

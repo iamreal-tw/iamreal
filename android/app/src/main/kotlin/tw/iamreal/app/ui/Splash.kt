@@ -34,9 +34,10 @@ internal fun Splash(name: String, site: String) = Box(Modifier.fillMaxSize().bac
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.heading, fontFamily = Type.display, letterSpacing = 0.08.em))
+        BasicText(name, style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.em, fontWeight = Type.weightHeading, fontFamily = Type.display, letterSpacing = 0.08.em))
         Box(Modifier.width(1.dp).height(16.dp).background(Colours.line))
-        BasicText(site, style = TextStyle(color = Colours.mute, fontSize = 15.sp, lineHeight = 1.em, fontFamily = Type.display))
+        // As the site beside the name in the pages' header (design/DESIGN.md, "元件", 導覽列).
+        BasicText(site, style = TextStyle(color = Colours.mute, fontSize = Type.sizeKicker, lineHeight = 1.em, fontFamily = Type.display))
     }
 }
 

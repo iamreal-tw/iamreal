@@ -193,6 +193,8 @@ function shot(name: string): void {
 const DESIGN_SCREENS = process.env.IAMREAL_DESIGN_SCREENS;
 /** The system's bar at the top, in dp, on the emulator's Android 10: left out of those screens. */
 const STATUS_BAR = 24;
+/** A phone's density, which the test gives the emulator's screen. */
+const DENSITY = 420;
 
 /** Makes the emulator's screen one of design/screens/'s (390 dp wide, a pixel a dp) for a moment: `height` tall with the system's bars. */
 async function designSize(height: number): Promise<void> {
@@ -202,11 +204,11 @@ async function designSize(height: number): Promise<void> {
 
 /** Puts the emulator's screen back as the test has it. */
 async function testSize(): Promise<void> {
-  emulator.shell("wm size reset; wm density 420");
+  emulator.shell(`wm size reset; wm density ${DENSITY}`);
   await sleep(1_500);
 }
 
-/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from under the system's bar. */
+/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from under the system's bar. Cropped with macOS's sips: the option is for a Mac. */
 function designCapture(file: string, height: number): void {
   const png = join(DESIGN_SCREENS!, file);
   writeFileSync(png, emulator.screenshot());
@@ -591,7 +593,7 @@ try {
   emulator.adb("install", "-r", join(android, "app", "build", "outputs", "apk", "fake", "app-fake.apk"));
   // A phone's density, no keyboard drawn over the screen, the clock left alone.
   imeBefore = emulator.shell("settings get secure show_ime_with_hard_keyboard").trim();
-  emulator.shell("wm density 420; settings put secure show_ime_with_hard_keyboard 0; settings put global auto_time 0");
+  emulator.shell(`wm density ${DENSITY}; settings put secure show_ime_with_hard_keyboard 0; settings put global auto_time 0`);
   // No network but the port forwarded below: what the app opens in a browser (Threads) is asked of no one.
   emulator.shell("svc wifi disable; svc data disable");
   // The emulator's clock is the back end's.

@@ -134,16 +134,16 @@ private fun Pin(m: Model) {
     val busy = m.pinBusy != null
     Title(c.say("pin.title"))
     // What was read from the card, shown only here: a box of its own.
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp).background(Colours.soft, RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 18.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp).background(Colours.soft, RoundedCornerShape(Type.radiusPanel)).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Small(c.say("pin.card_read"))
-        BasicText(m.name, Modifier.testTag("card-name"), style = TextStyle(color = Colours.ink, fontSize = Type.h3, lineHeight = Type.leadingH3, fontWeight = Type.heading, fontFamily = Type.display))
+        BasicText(m.name, Modifier.testTag("card-name"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeH3, lineHeight = Type.leadingH3, fontWeight = Type.weightHeading, fontFamily = Type.display))
         Small(c.say("pin.name_note"))
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Subhead(c.say("pin.label"))
         PinInput(m.pin, enabled = !busy && !m.pinEnded, tag = "pin", modifier = Modifier.fillMaxWidth())
     }
-    m.pinMessage?.let { Problem(it) }
+    m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Point(c.say("pin.purpose"))
         Point(c.say("app_pin.stays"))
@@ -226,7 +226,7 @@ private fun SummaryRow(label: String, value: @Composable () -> Unit, under: List
 
 @Composable
 private fun SummaryValue(text: String, strong: Boolean = false) =
-    BasicText(text, style = TextStyle(color = Colours.ink, fontSize = 18.sp, lineHeight = 1.5.em, fontWeight = if (strong) Type.heading else Type.body))
+    BasicText(text, style = TextStyle(color = Colours.ink, fontSize = 18.sp, lineHeight = 1.5.em, fontWeight = if (strong) Type.weightHeading else Type.weightBody))
 
 /** "7K2Q9FM4XD 開頭": the short ID in the system's monospace, in one sentence of the copy. */
 @Composable
@@ -308,17 +308,17 @@ private fun DashedRule() = Canvas(Modifier.fillMaxWidth().height(1.dp)) {
 /** The card's proof in small (design/DESIGN.md, "證明卡"): the mark, its accounts, how its short ID begins. No red: it is not the card. */
 @Composable
 private fun SmallCard(c: Copy, accounts: List<Pair<String?, String>>, shortId: String, modifier: Modifier = Modifier) = Column(
-    modifier.background(Colours.bg, RoundedCornerShape(10.dp)).border(1.5.dp, Colours.ink, RoundedCornerShape(10.dp)).padding(10.dp),
+    modifier.background(Colours.bg, RoundedCornerShape(Type.radiusPanel)).border(1.5.dp, Colours.ink, RoundedCornerShape(Type.radiusPanel)).padding(10.dp),
     verticalArrangement = Arrangement.spacedBy(4.dp),
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Logo(Modifier.size(18.dp), animated = true)
-        BasicText(c.say("done.proof"), style = TextStyle(color = Colours.ink, fontSize = 12.sp, fontWeight = Type.heading))
+        BasicText(c.say("done.proof"), style = TextStyle(color = Colours.ink, fontSize = 12.sp, fontWeight = Type.weightHeading))
     }
     Spacer(Modifier.height(4.dp))
     for ((name, account) in accounts) {
         if (name != null) BasicText(name, style = TextStyle(color = Colours.mute, fontSize = 11.sp))
-        BasicText(account, Modifier.testTag("proof-account"), style = TextStyle(color = Colours.ink, fontSize = Type.bodySize, lineHeight = 1.2.em, fontWeight = Type.account))
+        BasicText(account, Modifier.testTag("proof-account"), style = TextStyle(color = Colours.ink, fontSize = Type.sizeBody, lineHeight = 1.2.em, fontWeight = Type.weightAccount))
     }
     ShortId(c.say("confirm.short_id_label") + " " + c.say("confirm.short_id", "short_id" to shortId), shortId, size = 10.sp, colour = Colours.text)
 }
@@ -339,7 +339,7 @@ private fun Done(m: Model, outside: Outside) {
         Body(view.recordedOn)
     } else {
         Row(
-            Modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(10.dp)).padding(14.dp),
+            Modifier.fillMaxWidth().background(Colours.soft, RoundedCornerShape(Type.radiusPanel)).padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -370,8 +370,8 @@ private fun Done(m: Model, outside: Outside) {
             Rule(colour = Colours.ink)
             for ((n, step) in listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_save")).withIndex()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
-                    BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.heading, fontFamily = Type.display))
-                    BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.heading))
+                    BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
+                    BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.weightHeading))
                 }
                 Rule()
             }

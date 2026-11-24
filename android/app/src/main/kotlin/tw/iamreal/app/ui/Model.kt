@@ -109,6 +109,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     var pinMessage by mutableStateOf<String?>(null)
         private set
 
+    /** What step 3 says under the PIN's field: "請輸入 PIN。" only while the field is empty (design/copy/card-proof.md, "3. 輸入 PIN", app). */
+    val pinNote: String? get() = pinMessage?.takeUnless { it == copy.say("app_pin.need_pin") && pin.length > 0 }
+
     /** The card proof ended while the PIN was asked for: the only way on is to read the card again. */
     var pinEnded by mutableStateOf(false)
         private set

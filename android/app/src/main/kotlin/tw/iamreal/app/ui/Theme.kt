@@ -81,16 +81,16 @@ internal object Type {
     /** The body is the system's sans-serif; numbers and addresses the system's monospace. */
     val mono = FontFamily.Monospace
 
-    val heading = FontWeight(Tokens.number("--weight-heading").toInt())
-    val account = FontWeight(Tokens.number("--weight-account").toInt())
-    val body = FontWeight(Tokens.number("--weight-body").toInt())
+    val weightHeading = FontWeight(Tokens.number("--weight-heading").toInt())
+    val weightAccount = FontWeight(Tokens.number("--weight-account").toInt())
+    val weightBody = FontWeight(Tokens.number("--weight-body").toInt())
 
-    val h2 = Tokens.px("--size-h2-phone").sp
-    val h3 = Tokens.px("--size-h3-phone").sp
-    val lead = Tokens.px("--size-lead-phone").sp
-    val bodySize = Tokens.px("--size-body-phone").sp
-    val kicker = Tokens.px("--size-kicker-phone").sp
-    val small = Tokens.px("--size-small").sp
+    val sizeH2 = Tokens.px("--size-h2-phone").sp
+    val sizeH3 = Tokens.px("--size-h3-phone").sp
+    val sizeLead = Tokens.px("--size-lead-phone").sp
+    val sizeBody = Tokens.px("--size-body-phone").sp
+    val sizeKicker = Tokens.px("--size-kicker-phone").sp
+    val sizeSmall = Tokens.px("--size-small").sp
 
     val leadingH2 = Tokens.number("--leading-h2").em
     val leadingH3 = Tokens.number("--leading-h3").em
