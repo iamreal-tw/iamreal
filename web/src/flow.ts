@@ -305,6 +305,12 @@ export interface Done {
   seq: number | null;
   recordHash: string | null;
   /**
+   * The card's ordinal, as the server answered (Accepted.ordinal), for the
+   * text suggested for sharing; null when the answer had none that could be
+   * read, or the record was found in the card's state (which has no ordinal).
+   */
+  ordinal: number | null;
+  /**
    * What the server says the record is on each platform (`kinds`); null when
    * the record was found in the card's state, or the answer's `kinds` could
    * not be read. The record is in the proof log either way.
@@ -973,7 +979,7 @@ export class CardProofFlow {
     try {
       const accepted = await this.timed("submit", submitRecord(this.deps.fetch, s));
       this.live();
-      return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, kinds: accepted.kinds });
+      return this.done(s, { seq: accepted.seq, recordHash: accepted.recordHash, ordinal: accepted.ordinal, kinds: accepted.kinds });
     } catch (e) {
       this.live();
       // Transient: no answer, rate limited, or a server failure. `crl_stale`
@@ -997,7 +1003,7 @@ export class CardProofFlow {
    * cannot be checked by the device; a server that reported a wrong state, for
    * example a `correction_date` that made a switch look free, shows here).
    */
-  private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "kinds">): Done {
+  private done(s: Submission, r: Pick<Done, "seq" | "recordHash" | "ordinal" | "kinds">): Done {
     this.phaseValue = "done";
     this.submission = null;
     const expected = this.chosen!.rows;
@@ -1041,7 +1047,7 @@ export class CardProofFlow {
     const recordDay = parseDay(s.challenge.slice(0, 10));
     const now: Account[] = [...[...state.slots].flatMap(([platform, slot]) => (slot.current === null ? [] : [{ platform, username: slot.current }])), ...state.kept].sort(byPlatform);
     if (state.lastCardProof !== recordDay || !sameList(now, s.accounts)) this.fail(toStop(used));
-    return this.done(s, { seq: null, recordHash: null, kinds: null });
+    return this.done(s, { seq: null, recordHash: null, ordinal: null, kinds: null });
   }
 
   /**

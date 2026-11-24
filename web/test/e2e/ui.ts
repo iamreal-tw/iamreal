@@ -868,6 +868,8 @@ interface DoneSeen {
   otherCards: string[];
   kindsUnreadable: boolean;
   main: string;
+  /** The card's ordinal as its page on the server writes it (the number of 第 N 張島民證明); "" when the link names no card. */
+  pageOrdinal: string;
 }
 
 const doneSeen = async (): Promise<DoneSeen> => ({
@@ -892,7 +894,17 @@ const doneSeen = async (): Promise<DoneSeen> => ({
     kindsUnreadable: !!document.querySelector('[data-kinds-unreadable]'),
   })`)),
   main: await page.text(),
+  pageOrdinal: await pageOrdinal(),
 });
+
+/** The ordinal the card's page on the server writes, for the card whose link step 6 shows: the proof log's, not the answer's. */
+async function pageOrdinal(): Promise<string> {
+  const link = await page.eval<string>(`document.querySelector('[data-link]')?.innerText ?? ""`);
+  const sid = /^(?:test\.)?iamreal\.tw\/p\/([0-9A-Z]{10})$/.exec(link)?.[1];
+  if (sid === undefined) return "";
+  const html = await (await worker.fetch(`/${cardPath(sid)}`)).text();
+  return /<p class="ordinal">第 ([0-9,]+) 張島民證明<\/p>/.exec(html)?.[1] ?? "";
+}
 
 interface DoneExpected {
   label: string;
@@ -913,6 +925,8 @@ interface DoneExpected {
   mismatch?: string[];
   /** The one platform's name, when the screens speak of one platform. */
   single?: string;
+  /** The page has no ordinal to share: the answer was not read, or the record was found in the card's state. */
+  unnumbered?: boolean;
 }
 
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
@@ -934,8 +948,11 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(v.openProof === (withdrawAll ? "" : `/${cardPath(sid)}`), `${o.label}: 打開你的島民證明 goes to the card's page on this site ${v.openProof}`);
   const profiles = withdrawAll ? [] : o.card.filter(([name]) => name === THREADS_NAME).map(([, account]) => [fill(C.done.open_profile, { account, platform: THREADS_NAME }), `https://www.threads.com/${account}`]);
   check(JSON.stringify(v.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(v.profiles)}`);
-  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?url=${encodeURIComponent(`https://${SITE_DOMAIN}/${cardPath(sid)}`)}`]];
-  check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the card's page and nothing else ${JSON.stringify(v.shares)}`);
+  // The text suggested: the card's ordinal, the one its page writes; without one, the sentence without a number.
+  check(o.unnumbered === true || /^[1-9][0-9,]*$/.test(v.pageOrdinal), `${o.label}: the card's page writes its ordinal "${v.pageOrdinal}"`);
+  const text = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: v.pageOrdinal });
+  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(`https://${SITE_DOMAIN}/${cardPath(sid)}`)}`]];
+  check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the text${o.unnumbered ? " without a number" : " with the card's ordinal"} and the card's page ${JSON.stringify(v.shares)}`);
   check(v.optional === !withdrawAll && v.main.includes(C.done.return_note) === !withdrawAll, `${o.label}: what else can be done ${withdrawAll ? "is not there" : "is there"}`);
   const mismatch = o.mismatch ?? [];
   check(v.main.includes(C.done.mismatch) === mismatch.length > 0 && v.recordShown === mismatch.length > 0, `${o.label}: what the proof log recorded ${mismatch.length ? "is shown, it differs" : "is not shown: it is what step 5 said"}`);
@@ -2180,6 +2197,7 @@ await tryStep("a 201 whose body the page cannot read: 證明紀錄已經記下�
         [THREADS_NAME, at("zoe")],
       ],
       record: null,
+      unnumbered: true,
       screenshots: "unreadable-201",
     });
   } finally {
@@ -2217,7 +2235,7 @@ await tryStep("the answer to the submission lost, the record appended: 再試一
     check(challengeUsed, "the resubmission was answered challenge_used");
     check(cardStateCount() === states + 1, "the card's state asked again");
     // What the server recorded on each platform is not known on this path: the title of an answer not read.
-    checkDone({ label: "found in the card's state", title: C.done.recorded_only, card: [[THREADS_NAME, at("zoe")]], record: null }, d.done ? await doneSeen() : null, d.message);
+    checkDone({ label: "found in the card's state", title: C.done.recorded_only, card: [[THREADS_NAME, at("zoe")]], record: null, unnumbered: true }, d.done ? await doneSeen() : null, d.message);
     check((await recordCount()) === before + 1, "one record, not two");
     await sleep(1500);
     await screenshot("challenge-used-6-done");

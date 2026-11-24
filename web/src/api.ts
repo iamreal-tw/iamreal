@@ -336,13 +336,19 @@ export interface AcceptedKind {
 /**
  * The answer to a submission with status 201: the record is in the proof log.
  * An answer whose body the device cannot read (no `seq` or `record_hash` in
- * their form) is still a 201: `seq`, `recordHash` and `kinds` are then null,
+ * their form) is still a 201: `seq`, `recordHash`, `ordinal` and `kinds` are then null,
  * and the screen says only that the record was made
  * (docs/api/card-proof.md: "says only that the list was recorded").
  */
 export interface Accepted {
   seq: number | null;
   recordHash: string | null;
+  /**
+   * `ordinal`: the card's ordinal (spec/record-rules.md, "The ordinal"), only
+   * for the text suggested for sharing. null if it is not a count of at
+   * least 1: that text then has no number (spec/records-response.md).
+   */
+  ordinal: number | null;
   /**
    * `kinds`, in ascending order of platform; null if the device cannot read
    * it (not a non-empty list of readable elements in that order, or a kind it
@@ -384,15 +390,16 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
     b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
   } catch (e) {
     // A 201 is a record in the proof log, whatever its body: not a failure (Accepted).
-    if (e instanceof ServerError && e.status === 201) return { seq: null, recordHash: null, kinds: null };
+    if (e instanceof ServerError && e.status === 201) return { seq: null, recordHash: null, ordinal: null, kinds: null };
     throw e;
   }
   const seq = Number.isSafeInteger(b.seq) && (b.seq as number) >= 1 ? (b.seq as number) : null;
   const recordHash = typeof b.record_hash === "string" && /^[0-9a-f]{64}$/.test(b.record_hash) ? b.record_hash : null;
   // An answer of which seq or record_hash cannot be read is one the device cannot read: nothing of it is told.
-  if (seq === null || recordHash === null) return { seq: null, recordHash: null, kinds: null };
+  if (seq === null || recordHash === null) return { seq: null, recordHash: null, ordinal: null, kinds: null };
+  const ordinal = Number.isSafeInteger(b.ordinal) && (b.ordinal as number) >= 1 ? (b.ordinal as number) : null;
   // kinds and account_cards are only told to the cardholder (Accepted.kinds).
-  return { seq, recordHash, kinds: readKinds(b.kinds) };
+  return { seq, recordHash, ordinal, kinds: readKinds(b.kinds) };
 }
 
 /** A static file of the mirror, as bytes. */

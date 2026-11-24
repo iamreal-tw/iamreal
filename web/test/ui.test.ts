@@ -484,6 +484,7 @@ describe("done (step 6)", () => {
     return {
       seq: 2,
       recordHash: "0".repeat(64),
+      ordinal: 128,
       kinds,
       expected,
       mismatches: [],
@@ -556,12 +557,27 @@ describe("done (step 6)", () => {
     assert.equal(v.proofPath, "/p/7K2Q9FM4XD");
     // test-example has no public page.
     assert.deepEqual(v.profiles.map((p) => [t(p.text), p.url]), [["打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice"]]);
-    // The card's page and nothing else.
+    // The sentence with the card's ordinal, and the card's page.
+    const sentence = encodeURIComponent("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。");
     assert.deepEqual(
       v.shares.map((sh) => [t(sh.note), t(sh.button), sh.url]),
-      [["把你的島民證明分享到 Threads。", "分享到 Threads", "https://www.threads.com/intent/post?url=https%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD"]],
+      [["把你的島民證明分享到 Threads。", "分享到 Threads", `https://www.threads.com/intent/post?text=${sentence}&url=https%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD`]],
     );
     assert.equal(v.showRecord, false);
+  });
+
+  test("the text suggested for sharing: the card's ordinal, with a comma every three digits; without an ordinal, the sentence without a number", () => {
+    const expected = [crow({ kind: "first", username: "alice" })];
+    const shared = (ordinal: number | null): string => {
+      const url = new URL(doneView(done(expected, [k("threads", "first", "alice")], { ordinal })).shares[0]!.url);
+      assert.equal(url.searchParams.get("url"), "https://iamreal.tw/p/7K2Q9FM4XD");
+      return url.searchParams.get("text")!;
+    };
+    assert.equal(shared(1), "我剛剛換了第 1 張島民證明，宣告本帳號背後是一名台灣人。");
+    assert.equal(shared(999), "我剛剛換了第 999 張島民證明，宣告本帳號背後是一名台灣人。");
+    assert.equal(shared(1284), "我剛剛換了第 1,284 張島民證明，宣告本帳號背後是一名台灣人。");
+    assert.equal(shared(1234567), "我剛剛換了第 1,234,567 張島民證明，宣告本帳號背後是一名台灣人。");
+    assert.equal(shared(null), "我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。");
   });
 
   test("the record's line: the list, or with one platform the account", () => {

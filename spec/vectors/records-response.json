@@ -1,12 +1,12 @@
 {
   "spec": "records-response",
   "status": "draft",
-  "note": "The answer to a submission (the 201 of POST /api/v1/records) as the device reads it, and where it differs from what the confirmation screen said. Each case has the body's text as the server sent it (body), the rows the confirmation screen showed (rows) and the result: seq, record_hash, kinds and mismatches.",
+  "note": "The answer to a submission (the 201 of POST /api/v1/records) as the device reads it, and where it differs from what the confirmation screen said. Each case has the body's text as the server sent it (body), the rows the confirmation screen showed (rows) and the result: seq, record_hash, ordinal, kinds and mismatches.",
   "generated_by": "web/test/generate/records-response.ts",
   "cases": [
     {
       "name": "the example of docs/api/card-proof.md: a first declaration",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -17,6 +17,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -30,7 +31,7 @@
     },
     {
       "name": "two platforms, in ascending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -46,6 +47,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -65,7 +67,7 @@
     },
     {
       "name": "every kind",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"a\",\"kind\":\"first\",\"username\":\"u1\",\"account_cards\":1},{\"platform\":\"b\",\"kind\":\"refresh\",\"username\":\"u2\",\"account_cards\":1},{\"platform\":\"c\",\"kind\":\"correction\",\"username\":\"u3\",\"account_cards\":1},{\"platform\":\"d\",\"kind\":\"switch\",\"username\":\"u4\",\"account_cards\":1},{\"platform\":\"e\",\"kind\":\"withdraw\",\"username\":\"u5\",\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"a\",\"kind\":\"first\",\"username\":\"u1\",\"account_cards\":1},{\"platform\":\"b\",\"kind\":\"refresh\",\"username\":\"u2\",\"account_cards\":1},{\"platform\":\"c\",\"kind\":\"correction\",\"username\":\"u3\",\"account_cards\":1},{\"platform\":\"d\",\"kind\":\"switch\",\"username\":\"u4\",\"account_cards\":1},{\"platform\":\"e\",\"kind\":\"withdraw\",\"username\":\"u5\",\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "a",
@@ -96,6 +98,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "a",
@@ -133,7 +136,7 @@
     },
     {
       "name": "a withdrawal: the account withdrawn, which no card declares after it",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"withdraw\",\"username\":\"alice\",\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"withdraw\",\"username\":\"alice\",\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "threads",
@@ -144,6 +147,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -157,7 +161,7 @@
     },
     {
       "name": "other cards declare the account too",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":3}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":3}]}",
       "rows": [
         {
           "platform": "threads",
@@ -168,6 +172,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -181,7 +186,7 @@
     },
     {
       "name": "the rows as the confirmation screen had them: their other fields are not compared",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"carol\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"carol\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -196,6 +201,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -209,7 +215,7 @@
     },
     {
       "name": "fields the device does not know are ignored, in the answer and in an element",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1,\"note\":\"x\"}],\"more\":[1,2]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1,\"note\":\"x\"}],\"more\":[1,2]}",
       "rows": [
         {
           "platform": "threads",
@@ -220,6 +226,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -233,7 +240,7 @@
     },
     {
       "name": "the keys in another order, whitespace between the tokens",
-      "body": " {\n \"kinds\" : [ { \"username\" : \"alice\", \"account_cards\" : 1, \"kind\" : \"first\", \"platform\" : \"threads\" } ],\n \"record_hash\" : \"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\", \"seq\" : 138 }\n",
+      "body": " {\n \"kinds\" : [ { \"username\" : \"alice\", \"account_cards\" : 1, \"kind\" : \"first\", \"platform\" : \"threads\" } ],\n \"ordinal\" : 42 , \"record_hash\" : \"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\", \"seq\" : 138 }\n",
       "rows": [
         {
           "platform": "threads",
@@ -244,6 +251,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -256,8 +264,8 @@
       }
     },
     {
-      "name": "numbers are read by their value: 138.0 and 1e0",
-      "body": "{\"seq\":138.0,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1e0}]}",
+      "name": "numbers are read by their value: 138.0, 4.2e1 and 1e0",
+      "body": "{\"seq\":138.0,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":4.2e1,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1e0}]}",
       "rows": [
         {
           "platform": "threads",
@@ -268,6 +276,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -280,8 +289,8 @@
       }
     },
     {
-      "name": "the first record of a proof log",
-      "body": "{\"seq\":1,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "name": "the first record of a proof log: seq 1, ordinal 1",
+      "body": "{\"seq\":1,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":1,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -292,6 +301,7 @@
       "result": {
         "seq": 1,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 1,
         "kinds": [
           {
             "platform": "threads",
@@ -305,7 +315,7 @@
     },
     {
       "name": "the largest seq read",
-      "body": "{\"seq\":9007199254740991,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":9007199254740991,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -316,6 +326,57 @@
       "result": {
         "seq": 9007199254740991,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "the largest ordinal read",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":9007199254740991,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 9007199254740991,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "an ordinal above seq is read as it is: the device does not check it",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":139,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 139,
         "kinds": [
           {
             "platform": "threads",
@@ -329,7 +390,7 @@
     },
     {
       "name": "an account on a platform the device does not know: any username every format allows",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"example\",\"kind\":\"refresh\",\"username\":\"Bob Example!\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"example\",\"kind\":\"refresh\",\"username\":\"Bob Example!\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "example",
@@ -340,6 +401,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "example",
@@ -353,7 +415,7 @@
     },
     {
       "name": "a platform ID of 21 characters, and a username with the last printable character",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"aaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"first\",\"username\":\"~alice~\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"aaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"first\",\"username\":\"~alice~\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "aaaaaaaaaaaaaaaaaaaaa",
@@ -364,6 +426,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "aaaaaaaaaaaaaaaaaaaaa",
@@ -388,6 +451,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -405,6 +469,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -422,13 +487,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: something after the value",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}{}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}{}",
       "rows": [
         {
           "platform": "threads",
@@ -439,13 +505,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: an array",
-      "body": "[{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}]",
+      "body": "[{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}]",
       "rows": [
         {
           "platform": "threads",
@@ -456,6 +523,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -473,6 +541,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -490,6 +559,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -507,13 +577,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: seq 0",
-      "body": "{\"seq\":0,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":0,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -524,13 +595,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a negative seq",
-      "body": "{\"seq\":-1,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":-1,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -541,13 +613,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a seq with a fraction",
-      "body": "{\"seq\":138.5,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138.5,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -558,13 +631,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a seq in a string",
-      "body": "{\"seq\":\"138\",\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":\"138\",\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -575,13 +649,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: seq null",
-      "body": "{\"seq\":null,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":null,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -592,6 +667,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -609,6 +685,7 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
@@ -626,13 +703,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash in capitals",
-      "body": "{\"seq\":138,\"record_hash\":\"3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F3F\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -643,13 +721,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash of 63 characters",
-      "body": "{\"seq\":138,\"record_hash\":\"f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -660,13 +739,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash of 65 characters",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -677,13 +757,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash not in hex",
-      "body": "{\"seq\":138,\"record_hash\":\"gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -694,13 +775,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash with 0x",
-      "body": "{\"seq\":138,\"record_hash\":\"0x3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"0x3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -711,13 +793,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told: a record_hash that is a number",
-      "body": "{\"seq\":138,\"record_hash\":3,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":3,\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -728,13 +811,14 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "nothing told, and nothing compared: the screen's rows would differ from these kinds",
-      "body": "{\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -745,13 +829,32 @@
       "result": {
         "seq": null,
         "record_hash": null,
+        "ordinal": null,
+        "kinds": null,
+        "mismatches": []
+      }
+    },
+    {
+      "name": "nothing told, not even an ordinal that could be read",
+      "body": "{\"seq\":0,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": null,
+        "record_hash": null,
+        "ordinal": null,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: none",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\"}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42}",
       "rows": [
         {
           "platform": "threads",
@@ -762,13 +865,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: null",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":null}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":null}",
       "rows": [
         {
           "platform": "threads",
@@ -779,13 +883,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an empty list",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[]}",
       "rows": [
         {
           "platform": "threads",
@@ -796,13 +901,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an object",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":{\"threads\":\"first\"}}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":{\"threads\":\"first\"}}",
       "rows": [
         {
           "platform": "threads",
@@ -813,13 +919,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an element that is not an object",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[\"first\"]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[\"first\"]}",
       "rows": [
         {
           "platform": "threads",
@@ -830,13 +937,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an element that is null, after one that is read",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},null]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},null]}",
       "rows": [
         {
           "platform": "test-example",
@@ -852,13 +960,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: no platform",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -869,13 +978,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a platform that is not an ID (a capital)",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"Threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"Threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -886,13 +996,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a platform of 22 characters",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"aaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"aaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -903,13 +1014,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an empty platform",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -920,13 +1032,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a kind the device does not know",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"declare\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"declare\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -937,13 +1050,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a kind in capitals",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"First\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"First\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -954,13 +1068,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a kind that is not a string",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":1,\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":1,\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -971,13 +1086,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: no kind",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -988,13 +1104,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: no username",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1005,13 +1122,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: an empty username",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1022,13 +1140,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username with a quotation mark",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"al\\\"ice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"al\\\"ice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1039,13 +1158,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username with a backslash",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"al\\\\ice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"al\\\\ice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1056,13 +1176,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username with a line break",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\\n\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\\n\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1073,13 +1194,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username with U+007F",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1090,13 +1212,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username beyond ASCII",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alicé\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alicé\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1107,13 +1230,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a username that is null",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"withdraw\",\"username\":null,\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"withdraw\",\"username\":null,\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1124,13 +1248,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: the platforms in descending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1146,13 +1271,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read: a platform twice",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1163,13 +1289,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
       "name": "kinds not read, and nothing compared: the screen's rows would differ from these kinds",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1},\"x\"]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1},\"x\"]}",
       "rows": [
         {
           "platform": "threads",
@@ -1180,13 +1307,14 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": null,
         "mismatches": []
       }
     },
     {
-      "name": "account_cards not known: none",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\"}]}",
+      "name": "ordinal not known: none",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1197,6 +1325,288 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: null",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":null,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: 0",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":0,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: negative",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":-42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: with a fraction",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42.5,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: in a string",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":\"42\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: true",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":true,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: an array",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":[42],\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: 2^53",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":9007199254740992,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "threads",
+            "kind": "first",
+            "username": "alice",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known, and the kinds not read: seq and record_hash still told",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":\"42\",\"kinds\":[]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": null,
+        "mismatches": []
+      }
+    },
+    {
+      "name": "ordinal not known: what the screen said is still compared",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":-1,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "rows": [
+        {
+          "platform": "test-example",
+          "kind": "refresh",
+          "username": "a-b"
+        },
+        {
+          "platform": "threads",
+          "kind": "correction",
+          "username": "bob"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": null,
+        "kinds": [
+          {
+            "platform": "test-example",
+            "kind": "refresh",
+            "username": "a-b",
+            "account_cards": 1
+          },
+          {
+            "platform": "threads",
+            "kind": "switch",
+            "username": "bob",
+            "account_cards": 1
+          }
+        ],
+        "mismatches": [
+          "threads"
+        ]
+      }
+    },
+    {
+      "name": "account_cards not known: none",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\"}]}",
+      "rows": [
+        {
+          "platform": "threads",
+          "kind": "first",
+          "username": "alice"
+        }
+      ],
+      "result": {
+        "seq": 138,
+        "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1210,7 +1620,7 @@
     },
     {
       "name": "account_cards not known: null",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":null}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":null}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1221,6 +1631,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1234,7 +1645,7 @@
     },
     {
       "name": "account_cards not known: in a string",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":\"2\"}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":\"2\"}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1245,6 +1656,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1258,7 +1670,7 @@
     },
     {
       "name": "account_cards not known: negative",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":-1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":-1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1269,6 +1681,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1282,7 +1695,7 @@
     },
     {
       "name": "account_cards not known: with a fraction",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1.5}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1.5}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1293,6 +1706,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1306,7 +1720,7 @@
     },
     {
       "name": "account_cards not known: true",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":true}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":true}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1317,6 +1731,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1330,7 +1745,7 @@
     },
     {
       "name": "account_cards not known: 2^53",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":9007199254740992}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":9007199254740992}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1341,6 +1756,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1354,7 +1770,7 @@
     },
     {
       "name": "account_cards not known on one platform: the other's is read",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":2},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\"}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":2},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\"}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1370,6 +1786,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1389,7 +1806,7 @@
     },
     {
       "name": "differs: a switch, where the screen said a correction",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1405,6 +1822,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1426,7 +1844,7 @@
     },
     {
       "name": "differs: another account",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"carol\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"carol\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1442,6 +1860,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1463,7 +1882,7 @@
     },
     {
       "name": "differs: the account in another case",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"example\",\"kind\":\"refresh\",\"username\":\"bob example\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"example\",\"kind\":\"refresh\",\"username\":\"bob example\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "example",
@@ -1474,6 +1893,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "example",
@@ -1489,7 +1909,7 @@
     },
     {
       "name": "differs: a platform the screen showed is not in the answer",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1505,6 +1925,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
@@ -1520,7 +1941,7 @@
     },
     {
       "name": "differs: a platform the screen did not show",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"x-new\",\"kind\":\"withdraw\",\"username\":\"zed\",\"account_cards\":0}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"refresh\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1},{\"platform\":\"x-new\",\"kind\":\"withdraw\",\"username\":\"zed\",\"account_cards\":0}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1536,6 +1957,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1563,7 +1985,7 @@
     },
     {
       "name": "differs: a withdrawal, where the screen said the account stays",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"withdraw\",\"username\":\"a-b\",\"account_cards\":0},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"withdraw\",\"username\":\"a-b\",\"account_cards\":0},{\"platform\":\"threads\",\"kind\":\"correction\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1579,6 +2001,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1600,7 +2023,7 @@
     },
     {
       "name": "differs on two platforms: both, in ascending order",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"a-b\",\"account_cards\":1},{\"platform\":\"threads\",\"kind\":\"switch\",\"username\":\"bob\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "test-example",
@@ -1616,6 +2039,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1638,7 +2062,7 @@
     },
     {
       "name": "differs: another platform altogether, each on one side only",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"test-example\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":1}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1649,6 +2073,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "test-example",
@@ -1665,7 +2090,7 @@
     },
     {
       "name": "account_cards is not compared: only the kind and the account",
-      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":7}]}",
+      "body": "{\"seq\":138,\"record_hash\":\"3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f\",\"ordinal\":42,\"kinds\":[{\"platform\":\"threads\",\"kind\":\"first\",\"username\":\"alice\",\"account_cards\":7}]}",
       "rows": [
         {
           "platform": "threads",
@@ -1676,6 +2101,7 @@
       "result": {
         "seq": 138,
         "record_hash": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "ordinal": 42,
         "kinds": [
           {
             "platform": "threads",
