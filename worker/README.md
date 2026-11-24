@@ -618,7 +618,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 設定的每一項：
 
-- **`run_worker_first` 是 `["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表、`/copy.js`、字型和連結預覽圖也確認一次。
+- **`run_worker_first` 是 `["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]`**：這幾個路徑以外的請求先跑 Worker。`!` 開頭的是排除，排除優先；排除的路徑先找檔案，檔案在就直接送。本機的 workerd 上，排除的路徑不論檔案在不在都不跑 Worker：不在就由 Static Assets 自己回 `404`（空的內容）。Cloudflare 上檔案不在時也是這樣；檔案在的時候還沒看過（線上還沒有 `/proof` 的檔）。測試專用的建置記下每一個跑到 Worker 的請求（`GET /__test/seen`），`test/proof-files.test.ts` 用它確認 `/proof` 的檔案、轉址、`404`、`405` 沒有一個跑到 Worker；`test/pages.test.ts`、`test/site-pages.test.ts` 對樣式表、`/copy.js` 和字型也確認一次，`test/pages.test.ts` 對連結預覽圖也是。
 - **沒有 `binding`**：Worker 沒有 `ASSETS`，讀不到這些檔，也就沒辦法自己送。部署前的檢查核對 wrangler 列出的 binding 裡沒有它。
 - **`html_handling` 和 `not_found_handling` 都是 `none`**：一個路徑要嘛就是那個檔案，要嘛 `404`；不替目錄找 `index.html`、不把 `.html` 拿掉、沒有替代的頁面。
 - **`_redirects`**：`/proof` 送 `proof/index.html` 的內容（`200`，網址不變）；`/proof/` 和 `/proof/index.html` 轉（`301`）到 `/proof`，和舊後台相同。過卡的說明頁拿掉了（#292），它的網址 `/proof/help.html` 轉（`301`）到 `/prepare`：Android、iOS 的 app 改版之前還連到那裡（「了解更多」「怎麼驗證島民證明」）。查詢字串照樣帶過去（`/proof/help.html?topic=more` 到 `/prepare?topic=more`），`/prepare` 不看它。
@@ -1349,7 +1349,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 - Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、怎麼驗證島民證明、過卡需要什麼、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
 - 沒有一頁有不是自己網站的 script：Worker 產生的頁面和 `/proof` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
 - 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
-- 樣式表、複製按鈕的程式、字型、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`；說明頁的舊網址 `/proof/help.html` 是 `301` 到 `/prepare`
+- 樣式表、複製按鈕的程式、字型、連結預覽圖、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`；說明頁的舊網址 `/proof/help.html` 是 `301` 到 `/prepare`
 - `GET /api/v1/config`、`GET /api/v1/fingerprint` 的狀態碼和標頭；`config` 是測試的證明紀錄的平台表，`crl_max_age_days` 是 3
 - 資料網域的 `crl/index.jsonl`：兩把發證金鑰各有一份可用的清冊，清冊日期不早於今天（台灣日期）往前 3 天
 - 資料網域的 `proof-log/fingerprints.jsonl` 最後一行就是 `GET /api/v1/fingerprint` 回的那一行；證明紀錄還沒公布過時（沒有檔），介面回的日期要是 `null`

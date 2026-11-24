@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { FONT_FILE } from "../scripts/site-files.ts";
-import { block, previewImage, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
+import { block, previewImageAlt, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
 import type { TestWorker } from "./harness.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
 
@@ -196,7 +196,7 @@ export const previewImageMeta = (host: string): string =>
     '<meta property="og:image:type" content="image/png">',
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    `<meta property="og:image:alt" content="${previewImage().alt}">`,
+    `<meta property="og:image:alt" content="${previewImageAlt()}">`,
   ].join("\n");
 
 /** The one script a page may load, as the page writes it. */

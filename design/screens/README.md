@@ -39,7 +39,7 @@
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 定稿版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq` | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
-| `og-image.png` | 每一頁的連結預覽圖（`og:image`）：網站送的就是這一張，`worker/site/og-image.png` 是它逐位元組的拷貝（`worker/scripts/site-files.ts`）；改這張圖時重跑那支腳本 | 實作版 |
+| `og-image.png` | 每一頁的連結預覽圖（`og:image`）。網站送的就是這一張：`worker/site/og-image.png` 是它逐位元組的拷貝（`worker/scripts/site-files.ts`），改這張圖時重跑那支腳本 | 定稿版 |
 
 ### 網頁的過卡流程（`/proof/`）
 
