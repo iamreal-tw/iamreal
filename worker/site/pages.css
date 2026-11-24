@@ -5,7 +5,8 @@
  * bar and the foot are as wide as the site (--max-width); the content of
  * each page is still one column, at most 560 wide, until that page is laid
  * out after design/DESIGN.md (so far: the home page, what a card proof
- * needs, the FAQ, the page of a card and the page of an account).
+ * needs, the FAQ, hanging a proof, the page of a card and the page of an
+ * account).
  *
  * The values of :root are design/tokens.json's, each the one of the same
  * name (test/style-sheet.test.ts): what each colour means, and where it is
@@ -2086,51 +2087,111 @@ button.copy {
   cursor: pointer;
 }
 
-/* Hanging a proof on a profile (hang.md) ------------------------------------------------- */
+/* Hanging a proof on a profile (hang.md; design/screens/hang-proof-*.png, hang-*.png) ------------
+   One column, as the other pages before theirs were laid out: the title, the link and its two buttons,
+   the three steps under a line of ink, apart by thin lines; then the two lines of part 3, or the button
+   of the page without a proof. No pictures yet (hang.md, 還沒定的). */
 
-.hang .title .account {
-  display: inline;
-  margin: 0;
-  font-size: inherit;
-  font-family: var(--font-body);
-  font-weight: var(--weight-account);
+body.hang .title {
+  font-size: var(--size-h2);
+  line-height: var(--leading-h2);
+  margin: 56px 0 24px;
+}
+
+/* The account is a part of the title, in its face (design/screens/hang-proof-*.png). */
+body.hang .title .account {
   overflow-wrap: anywhere;
 }
 
-.hang .actions {
-  margin: 4px 0 22px;
+body.hang .backlink {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius);
 }
 
-.hang button.copy.button {
+body.hang .actions {
+  gap: 12px;
+  margin: 0 0 44px;
+}
+
+body.hang .actions .button {
   margin: 0;
+}
+
+/* 複製連結 is the page's one main button (design/DESIGN.md, 元件): a .button, not the outlined one of /verify. */
+body.hang button.copy.button {
+  min-height: var(--button-height);
+  padding: 0 24px;
   border: 0;
   background: var(--you);
   color: var(--bg);
   font-size: 17px;
-  padding: 10px 24px;
 }
 
+body.hang button.copy.button:hover {
+  background: var(--you-hover);
+}
+
+/* A second button (design/DESIGN.md, 元件): a frame of ink on white. */
 .button.quiet {
-  margin: 0;
-  background: transparent;
-  color: var(--you);
-  box-shadow: inset 0 0 0 1.5px var(--you);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
-.hang .steps li {
-  grid-template-columns: 30px 1fr;
+.button.quiet:hover {
+  background: var(--soft);
+  color: var(--ink);
 }
 
-.hang .done {
-  margin-top: 24px;
+body.hang .steps {
+  gap: 0;
+  border-top: 1px solid var(--ink);
 }
 
-.none-yet {
+body.hang .steps li {
+  grid-template-columns: 36px 1fr;
+  align-items: baseline;
+  padding: 24px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+body.hang .steps .n {
+  font-size: 24px;
+}
+
+body.hang .steps li > div {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+body.hang .done {
+  margin: 32px 0 4px;
+  line-height: 1.6;
+}
+
+body.hang .done + .small {
+  line-height: var(--leading-small);
+}
+
+body.hang .none-yet {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 16px;
-  margin-top: 28px;
+  gap: 12px 20px;
+  margin: 32px 0 0;
+}
+
+body.hang .none-yet .button {
+  margin: 0;
 }
 
 /* What a card proof needs (/prepare) ------------------------------------------- */
@@ -2638,6 +2699,35 @@ body.account-not-a-name .title {
 
   body.prepare .situation h3 {
     font-size: 19px;
+  }
+
+  /* Hanging a proof: the two buttons share the row; the button of the page without a proof is as wide as the screen, under its question. */
+  body.hang .title {
+    font-size: var(--size-h2-phone);
+    margin: 28px 0 20px;
+  }
+
+  body.hang .actions {
+    flex-wrap: nowrap;
+    margin-bottom: 40px;
+  }
+
+  body.hang .actions .button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  body.hang .steps li {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  body.hang .steps li > div {
+    font-size: 16px;
+  }
+
+  body.hang .none-yet {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   /* The FAQ: the list of the categories above the questions, two to a row. */
