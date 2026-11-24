@@ -112,8 +112,9 @@ final class BuildTests: XCTestCase {
             "copy": ("design/copy/card-proof.json", Copy(json: try Repository.data("design/copy/card-proof.json"))),
             "appCopy": ("design/copy/app.json", Copy(json: try Repository.data("design/copy/app.json"))),
         ]
-        let key = try NSRegularExpression(pattern: #"\b(copy|appCopy)\("([a-z_]+\.[a-z_]+)""#)
+        let key = try NSRegularExpression(pattern: #"\b(copy|appCopy)\("([a-z_]+\.[a-z_0-9]+)""#)
         var keys: [String: Int] = [:]
+        var appKeys: Set<String> = []
         for (name, source) in try appSources() {
             for match in key.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
                 let call = String(source[try XCTUnwrap(Range(match.range(at: 1), in: source))])
@@ -121,20 +122,26 @@ final class BuildTests: XCTestCase {
                 let (path, copy) = try XCTUnwrap(files[call])
                 XCTAssertNotEqual(copy(named), named, "\(name) names \(named), which \(path) does not have")
                 keys[call, default: 0] += 1
+                if call == "appCopy" { appKeys.insert(named) }
             }
             for line in source.split(separator: "\n") where !line.contains("static let testProofLog") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") {
                 XCTAssertNil(line.unicodeScalars.first { (0x2E80...0x9FFF).contains($0.value) || (0xFF00...0xFFEF).contains($0.value) }, "\(name): \(line)")
             }
         }
         XCTAssertGreaterThan(keys["copy", default: 0], 100)
-        XCTAssertEqual(keys["appCopy"], 2, "the splash screen's two")
+        // Every sentence of app.json but the names under the icon, which
+        // the project file holds, and Android's category of notifications.
+        let app = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("design/copy/app.json")) as? [String: [String: String]])
+        let all = Set(app.flatMap { group, entries in entries.keys.map { "\(group).\($0)" } })
+        XCTAssertEqual(appKeys, all.subtracting(["name.store", "name.dev", "notification.channel"]))
     }
 
     /// The PIN and a card proof under way are in memory only: the sources
     /// use nothing that writes a file, nothing the system saves and
     /// restores a scene with, and no content type on a field, by which the
-    /// system would offer to save what is typed. The one thing kept is the highest CRL number
-    /// of each issuer, in App/CRLNumbers.swift.
+    /// system would offer to save what is typed. What is kept: the highest
+    /// CRL number of each issuer, in App/CRLNumbers.swift, and the four
+    /// settings of the reminder, in App/Reminder.swift (ADR-0016).
     func testNothingOfACardProofIsWrittenToDisk() throws {
         let forbidden = try NSRegularExpression(pattern: #"SceneStorage|AppStorage|NSUserActivity|restorationIdentifier|encodeRestorableState|UserDefaults|FileManager|NSKeyedArchiver|\.write\(|Keychain|SecItem|NSUbiquitous|CoreData|UIPasteboard|textContentType"#)
         var allowed = 0
@@ -142,7 +149,7 @@ final class BuildTests: XCTestCase {
             for match in forbidden.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
                 let word = String(source[try XCTUnwrap(Range(match.range, in: source))])
                 // The CRL numbers, and the link the cardholder asks to copy.
-                if (name == "CRLNumbers.swift" && word == "UserDefaults") || (name == "IamrealApp.swift" && word == "UIPasteboard") {
+                if (["CRLNumbers.swift", "Reminder.swift"].contains(name) && word == "UserDefaults") || (name == "IamrealApp.swift" && word == "UIPasteboard") {
                     allowed += 1
                     continue
                 }

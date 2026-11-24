@@ -17,11 +17,24 @@ struct Screen: Equatable {
     var below: [Block] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
+    /// Above the step: the note of a reminder the app was opened from.
+    var notice: Notice?
+    /// On the right of the header: the settings (steps 1 and 6).
+    var settings: Button?
 
-    /// Every sentence on the screen, in its order: for tests.
+    /// Every sentence on the screen, in its order: for tests. The
+    /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        blocks.flatMap(\.texts) + buttons.map(\.label) + below.flatMap(\.texts) + (cancel.map { [$0.label] } ?? [])
+        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + below.flatMap(\.texts) + (cancel.map { [$0.label] } ?? [])
     }
+}
+
+/// A box above the step: a sentence and a button under it, or the sentence alone.
+struct Notice: Equatable {
+    var text: String
+    var button: Button?
+
+    var texts: [String] { [text] + (button.map { [$0.label] } ?? []) }
 }
 
 enum Block: Equatable {
@@ -68,6 +81,8 @@ enum Block: Equatable {
     case link(String)
     /// A button among the text; `main`: the screen's main button.
     case button(Button, main: Bool)
+    /// A button that looks like a link, on its own line.
+    case action(Button)
     /// What the app is doing, beside a spinner.
     case busy(String)
 
@@ -87,7 +102,7 @@ enum Block: Equatable {
         case .account(let row): return [row.name] + (row.preview.map { [$0.label] } ?? []) + row.lines + (row.error.map { [$0] } ?? [])
         case .row(let name, let account, let lines): return [name, account] + lines
         case .pair(let label, let value): return [label, value]
-        case .button(let button, _): return [button.label]
+        case .button(let button, _), .action(let button): return [button.label]
         }
     }
 }
@@ -175,4 +190,11 @@ enum Action: Equatable {
     case share
     /// The page of the account typed on a platform.
     case preview(String)
+    case openSettings
+    /// The reminder, as the done screen offers it.
+    case turnOnReminder
+    /// The screen to choose the reminder's interval and time.
+    case adjustReminder
+    /// "一週後再提醒我", on step 1 opened from the notification.
+    case snoozeReminder
 }

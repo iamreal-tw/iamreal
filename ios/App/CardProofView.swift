@@ -52,28 +52,12 @@ struct ScreenView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(ScreenCopy.testProofLog)
-                .font(Theme.body(Theme.sizeSmall, Theme.weightHeading))
-                .foregroundColor(Theme.ink.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(Theme.ink.color, lineWidth: 1))
-            HStack(spacing: 8) {
-                Mark().frame(width: 26, height: 26)
-                Text(copy("common.service_name"))
-                    .font(Theme.display(Theme.sizeBody))
-                    .foregroundColor(Theme.ink.color)
-            }
-        }
-        .padding(.horizontal, Theme.gutter.value)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(Rectangle().frame(height: 1).foregroundColor(Theme.line.color), alignment: .bottom)
+        AppHeader(name: copy("common.service_name"), link: screen.settings.map { button in (button.label, { perform(button.action) }) })
     }
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let notice = screen.notice { self.notice(notice) }
             stepBars
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
@@ -109,6 +93,21 @@ struct ScreenView: View {
         .padding(.horizontal, Theme.gutter.value)
         .padding(.top, 24)
         .padding(.bottom, 48)
+    }
+
+    /// The box above the step: the note of the reminder the app was opened from.
+    private func notice(_ notice: Notice) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(notice.text).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.ink.color)
+                .lineSpacing(Theme.spacing(Theme.leadingSmall, Theme.sizeKicker))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let button = notice.button { self.button(button, main: false) }
+        }
+        .padding(16)
+        .background(Theme.soft.color)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusPanel.value))
+        .padding(.bottom, 24)
     }
 
     /// Which of the six steps: the line, then six bars, those done in ink.
@@ -315,6 +314,12 @@ struct ScreenView: View {
                 .padding(.top, 20)
         case .button(let button, let main):
             self.button(button, main: main).padding(.top, 12)
+        case .action(let button):
+            SwiftUI.Button { perform(button.action) } label: {
+                Text(button.label).font(Theme.body(Theme.sizeBody)).underline().foregroundColor(Theme.you.color)
+                    .frame(minHeight: Theme.minTarget.value, alignment: .leading)
+            }
+            .padding(.top, 4)
         case .busy(let text):
             HStack(spacing: 10) {
                 ProgressView()

@@ -22,11 +22,18 @@ struct CopyDocument {
     func contains(_ text: String, values: [String: String] = [:]) -> Bool {
         var sentence = text
         for (value, example) in values where !value.isEmpty { sentence = sentence.replacingOccurrences(of: value, with: example) }
-        // A date and a short ID are the document's examples.
-        sentence = sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}"#, with: "2026-11-16", options: .regularExpression)
+        // A short ID is the document's example.
         sentence = sentence.replacingOccurrences(of: #"(?<![0-9A-Za-z])[0-9A-HJKMNP-TV-Z]{10}(?![0-9A-Za-z])"#, with: "7K2Q9FM4XD", options: .regularExpression)
+        // A date: the document's example of a record, or of the reminder's
+        // day with its weekday (2027-02-08（星期一）, step 6, the app's
+        // reminder), whose weekday is a word.
+        let dated = [
+            sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}"#, with: "2026-11-16", options: .regularExpression),
+            sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}（星期.）"#, with: "2027-02-08（星期一）", options: .regularExpression),
+        ]
         // An account: the document's own example in that sentence, or `@alice`.
-        return [sentence, sentence.replacingOccurrences(of: #"@[a-z0-9._]+"#, with: "@alice", options: .regularExpression)].contains { candidate in
+        let candidates = dated.flatMap { [$0, $0.replacingOccurrences(of: #"@[a-z0-9._]+"#, with: "@alice", options: .regularExpression)] }
+        return candidates.contains { candidate in
             let pattern = NSRegularExpression.escapedPattern(for: candidate).replacingOccurrences(of: #"\d+"#, with: #"\\d+"#, options: .regularExpression)
             return self.text.range(of: pattern, options: .regularExpression) != nil
         }

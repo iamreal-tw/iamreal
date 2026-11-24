@@ -14,14 +14,31 @@ final class ScreensTests: XCTestCase {
     typealias Flow = CardProofFlow
 
     private var copy: Copy!
+    private var appCopy: Copy!
     private var screens: Screens!
     private var document: CopyDocument!
 
     override func setUpWithError() throws {
         copy = Copy(json: try Repository.data("design/copy/card-proof.json"))
-        screens = Screens(copy: copy, host: "iamreal.tw")
+        appCopy = Copy(json: try Repository.data("design/copy/app.json"))
+        screens = Screens(copy: copy, appCopy: appCopy, host: "iamreal.tw")
         document = try CopyDocument.load()
     }
+
+    /// The reminder's screens on 2026-11-16 (a Monday), at noon in Taiwan,
+    /// with nothing kept yet: three months from it is 2027-02-08.
+    private func reminderPages() -> (Reminders, ReminderPages) {
+        var taipei = Calendar(identifier: .gregorian)
+        taipei.timeZone = TimeZone(identifier: "Asia/Taipei")!
+        let noon = taipei.date(from: DateComponents(year: 2026, month: 11, day: 16, hour: 12))!
+        let reminders = Reminders(store: MemoryReminderStore(), notifier: FakeNotifier(), clock: { noon }, calendar: taipei)
+        let pages = ReminderPages(ReminderPages.Dependencies(
+            reminders: reminders, appCopy: appCopy, serviceName: copy("common.service_name"),
+            site: URL(string: "https://iamreal.tw")!, version: "dev", open: { _ in }))
+        return (reminders, pages)
+    }
+
+    private let threeMonths = ReminderSettings(interval: .weeks12, time: .evening, next: Day(2027, 2, 8))
 
     /// A card that has declared nothing, on the one platform the app knows.
     private let newCard = Flow.CardStatus(
@@ -49,7 +66,7 @@ final class ScreensTests: XCTestCase {
             ("card-proof-app-4-accounts-phone", screens.accounts(newCard, typed: ["threads": "alice"], errors: [:], message: nil)),
             ("card-proof-app-5-confirm-phone", screens.confirm(newCard, consequence)),
             ("card-proof-app-5-progress-phone", screens.progress(reached: 2, stop: nil)),
-            ("card-proof-app-6-done-phone", screens.done(done, single: "Threads", copied: false)),
+            ("card-proof-app-6-done-phone", screens.done(done, single: "Threads", copied: false, reminder: .ask(threeMonths))),
         ]
     }
 
@@ -67,6 +84,95 @@ final class ScreensTests: XCTestCase {
         let block = try XCTUnwrap(section.components(separatedBy: "```\n").dropFirst().first)
         let appCopy = Copy(json: try Repository.data("design/copy/app.json"))
         XCTAssertEqual(block.split(separator: "\n").map(String.init), [appCopy("splash.name"), appCopy("splash.site")])
+    }
+
+    /// The screen to choose the interval and time, as design/copy/app.md
+    /// writes it: nothing kept, so three months, 9:00 in the evening.
+    func testTheScheduleScreenSaysWhatAppMDWrites() async throws {
+        let (reminders, pages) = reminderPages()
+        pages.openSchedule()
+        XCTAssertEqual(pages.schedule.texts, [
+            "提醒我回來過卡", "從今天起算，落在同一個星期幾。",
+            "多久提醒一次", "一個月（4 週）", "三個月（12 週）", "建議", "六個月（26 週）", "選日期",
+            "什麼時候提醒", "時刻", "晚上 9:00", "更改",
+            "下次提醒：2027-02-08（星期一）晚上 9:00", "自然人憑證多半放在家裡，所以預設在晚上。",
+            "開啟提醒", "取消",
+        ])
+        XCTAssertEqual(pages.schedule.options.map(\.selected), [false, true, false, false])
+        // The day follows what is chosen.
+        pages.choose(.interval(.weeks4))
+        pages.setTime(TimeOfDay(hour: 20, minute: 30))
+        XCTAssertEqual(pages.schedule.next, "下次提醒：2026-12-14（星期一）晚上 8:30")
+        pages.choose(.pick)
+        XCTAssertEqual(pages.schedule.pickable, Day(2026, 11, 17)...Day(2027, 11, 16))
+        pages.pick(Day(2027, 1, 1))
+        XCTAssertEqual(pages.schedule.next, "下次提醒：2027-01-01（星期五）晚上 8:30")
+        await pages.confirm()
+        XCTAssertEqual(reminders.settings, ReminderSettings(interval: .weeks4, time: TimeOfDay(hour: 20, minute: 30), next: Day(2027, 1, 1)))
+        // Opened again with the reminder on: it is saved.
+        pages.openSchedule()
+        XCTAssertEqual(pages.schedule.confirm, "儲存")
+    }
+
+    func testTheScheduleScreenSaysWhyNothingWasSet() async throws {
+        let notifier = FakeNotifier()
+        notifier.allows = false
+        let reminders = Reminders(store: MemoryReminderStore(), notifier: notifier)
+        let pages = ReminderPages(ReminderPages.Dependencies(
+            reminders: reminders, appCopy: appCopy, serviceName: "", site: URL(string: "https://iamreal.tw")!, version: "dev", open: { _ in }))
+        pages.openSchedule()
+        await pages.confirm()
+        XCTAssertNil(reminders.settings)
+        XCTAssertEqual(pages.pages, [.schedule], "it stays")
+        XCTAssertEqual(pages.schedule.message, "沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。")
+    }
+
+    func testTheSettingsSayWhatAppMDWrites() async throws {
+        let (reminders, pages) = reminderPages()
+        XCTAssertEqual(pages.settings.texts, [
+            "返回", "設定", "過卡提醒", "提醒我回來過卡", appCopy("settings.stored"),
+            "關於", "版本", "dev", "常見問題", "隱私權說明", "原始碼（GitHub）",
+        ])
+        XCTAssertTrue(try Repository.text("design/copy/app.md").contains("\n" + appCopy("settings.stored") + "\n"))
+        await reminders.turnOn(interval: .weeks12, time: .evening)
+        XCTAssertEqual(pages.settings.rows, [
+            SettingsScreen.Row(label: "多久一次", value: "三個月", change: "更改"),
+            SettingsScreen.Row(label: "時刻", value: "晚上 9:00", change: "更改"),
+            SettingsScreen.Row(label: "下次提醒", value: "2027-02-08（星期一）", change: nil),
+        ])
+        // Its day came: the next is set by the next card proof.
+        XCTAssertEqual(ReminderScreens(appCopy: appCopy).settings(threeMonths, notified: true, version: "dev").rows.last?.value, "下次過卡完成後排")
+        // Off: the three rows go, and nothing is kept.
+        pages.setOn(false)
+        XCTAssertEqual(pages.settings.rows, [])
+        XCTAssertNil(reminders.settings)
+        // On: the schedule screen, where it is turned on.
+        pages.setOn(true)
+        XCTAssertEqual(pages.pages.last, .schedule)
+    }
+
+    func testTheSettingsOpenTheSitesPagesAndTheSource() {
+        var opened: [String] = []
+        let pages = ReminderPages(ReminderPages.Dependencies(
+            reminders: Reminders(store: MemoryReminderStore(), notifier: FakeNotifier()), appCopy: appCopy, serviceName: "",
+            site: URL(string: "https://test.iamreal.tw")!, version: "dev", open: { opened.append($0.absoluteString) }))
+        pages.openFAQ()
+        pages.openPrivacy()
+        pages.openSource()
+        XCTAssertEqual(opened, ["https://test.iamreal.tw/faq", "https://test.iamreal.tw/privacy", "https://github.com/iamreal-tw/iamreal"])
+    }
+
+    /// Step 1 opened from the notification: the note on top, as app.md writes it.
+    func testStepOneFromTheNotification() {
+        let reminderScreens = ReminderScreens(appCopy: appCopy)
+        let asked = screens.before(notice: reminderScreens.fromNotification(snoozed: nil))
+        XCTAssertEqual(asked.notice, Notice(text: "這是過卡的提醒。現在不方便的話，可以晚點再做。", button: Button(label: "一週後再提醒我", action: .snoozeReminder)))
+        XCTAssertEqual(Array(asked.texts.dropFirst(2)), screens.before().texts)
+        let snoozed = reminderScreens.fromNotification(snoozed: ReminderSettings(interval: .weeks12, time: .evening, next: Day(2027, 2, 15)))
+        XCTAssertEqual(snoozed, Notice(text: "會在 2027-02-15（星期一）晚上 9:00 再提醒你。", button: nil))
+        // The settings are on steps 1 and 6 only.
+        XCTAssertEqual(screens.before().settings, Button(label: "設定", action: .openSettings))
+        XCTAssertNil(screens.read(reached: 0, running: false, stop: nil).settings)
     }
 
     /// No screen links out (docs/design/principles.md, principle 1): what a
@@ -87,6 +193,25 @@ final class ScreensTests: XCTestCase {
             XCTAssertEqual(image.size.width, 390)
             try Self.save(image, as: name)
         }
+        // The reminder's: the done screen asking, step 1 from the
+        // notification, the schedule screen, the settings with the reminder on.
+        let (_, done) = declaration()
+        let reminderScreens: [(String, Screen)] = [
+            ("app-reminder-1-done-phone", screens.done(done, single: "Threads", copied: false, reminder: .ask(threeMonths))),
+            ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
+        ]
+        for (name, screen) in reminderScreens {
+            let drawn = await Self.draw(ScreenView(screen: screen, copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true), height: nil)
+            try Self.save(try XCTUnwrap(drawn), as: name)
+        }
+        let (reminders, pages) = reminderPages()
+        pages.openSchedule()
+        let schedule = await Self.draw(ScheduleView(pages: pages, unscrolled: true), height: nil)
+        try Self.save(try XCTUnwrap(schedule), as: "app-reminder-2-schedule-phone")
+        await reminders.turnOn(interval: .weeks12, time: .evening)
+        let settings = await Self.draw(SettingsView(pages: pages, unscrolled: true), height: nil)
+        try Self.save(try XCTUnwrap(settings), as: "app-settings-phone")
+
         let splashView = SplashView(appCopy: Copy(json: try Repository.data("design/copy/app.json")))
         let drawnSplash = await Self.draw(splashView, height: 844)
         let splash = try XCTUnwrap(drawnSplash)
