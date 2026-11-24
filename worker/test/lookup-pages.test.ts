@@ -16,6 +16,9 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, CLEARED_ON, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, publishG3, sub, tw, wantError } from "./records.ts";
 
+/** What a page's copy file says of its preview's image: the one image of every page (proof-page.md, section 8, 預覽圖). */
+const SAME_IMAGE_NOTE = "圖是每一頁同一張（`proof-page.md`「預覽圖」）";
+
 let worker: TestWorker;
 before(async () => {
   worker = await startWorker();
@@ -54,6 +57,8 @@ describe("the page of an account", () => {
     assert.ok(page.includes('<span class="account">@alice</span>'), "@alice is at the full size");
     const { title, site } = previewOf("account-page.md", "5. ");
     wantPreview(page, title, site);
+    // getPage (pages.ts) checks the image on every page with a preview; the copy file points at the same image.
+    assert.ok(copySection("account-page.md", "5. ").includes(SAME_IMAGE_NOTE), "account-page.md section 5: the image of every page");
   });
 
   test("two cards: section 2, by the date from which, not by the last card proof", async () => {
@@ -195,6 +200,8 @@ describe("the proof log page", () => {
     assert.ok(!page.includes("<iframe"), "no profile on the proof log page");
     const { title, site } = previewOf("proof-log-page.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
+    // getPage (pages.ts) checks the image on every page with a preview; the copy file points at the same image.
+    assert.ok(copySection("proof-log-page.md", "連結被貼出去時的預覽").includes(SAME_IMAGE_NOTE), "proof-log-page.md's preview: the image of every page");
   });
 
   test("every kind of record as the table of 清單 writes it; a card's 3 valid records of one day, all of them; a record refused is not listed", async () => {
