@@ -57,7 +57,8 @@ export class MemoryRules {
    * state: no check reads it.
    */
   private readonly ordinals = new Map<string, Map<string, number>>();
-  private given = 0;
+  /** The number of ordinals given: the cards with a valid record, of every scope. */
+  private ordinalsGiven = 0;
   private readonly used = new Set<string>();
   private latest: Day | null = null;
   private applied = 0;
@@ -93,7 +94,7 @@ export class MemoryRules {
       scope.set(r.scopedId, outcome.card);
       let ordinals = this.ordinals.get(r.scopeString);
       if (!ordinals) this.ordinals.set(r.scopeString, (ordinals = new Map()));
-      if (!ordinals.has(r.scopedId)) ordinals.set(r.scopedId, ++this.given);
+      if (!ordinals.has(r.scopedId)) ordinals.set(r.scopedId, ++this.ordinalsGiven);
     }
     this.latest = outcome.latestValidDate;
     this.used.add(r.challenge);

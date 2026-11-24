@@ -230,7 +230,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 4. 頁面用的衍生表（[頁面用的衍生表](#頁面用的衍生表)）
 5. 題目標成已接受
 
-任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的四張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
+任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的五張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
 
 **交易提交之後沒有會丟例外的程式。** `201` 的回答（每個平台是哪個帳號、有幾張卡片宣告它）在交易結束前就做好：帳號在交易之前取，數卡片在交易裡、寫完衍生表之後做。所以不會出現「紀錄寫進去了、題目標成用過了，裝置卻拿到 `500`」。
 
@@ -522,7 +522,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `view_ordinals` | 一張有過有效紀錄的卡片的順序號碼（`spec/record-rules.md`「The ordinal」）：卡片第一筆有效紀錄寫入時給下一個號碼，之後不變。不分場合字串，整份證明紀錄一起數；每個網站照自己的證明紀錄數，測試網站的號碼和正式網站的無關。島民證明頁「第 N 張島民證明」讀它 |
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是紀錄規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
-- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在三種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），衍生表被清掉，或衍生表是 `view_ordinals` 出現之前填好的：`view_cards` 有卡片、`view_ordinals` 是空的（`ordinalsOwed`），反映到的筆數雖然對，物件啟動時也整份重建。順序號碼只在衍生表裡，不在卡片狀態表、不進卡片狀態檔：它不影響任何一筆紀錄有效或無效，重算得出來；`test/sequence.test.ts`、`test/proof-log-files.test.ts` 確認和 Go 算的相同。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
+- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在三種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），衍生表被清掉，或衍生表是 `view_ordinals` 出現之前填好的：`view_cards` 有卡片、`view_ordinals` 是空的（`ordinalsOwed`），反映到的筆數雖然對，物件啟動時也整份重建；`paused` 時不重建，其他頁面照常，只有島民證明回 `500`（它要寫號碼）。順序號碼只在衍生表裡，不在卡片狀態表、不進卡片狀態檔：它不影響任何一筆紀錄有效或無效，重算得出來；`test/sequence.test.ts`、`test/proof-log-files.test.ts` 確認和 Go 算的相同。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有紀錄檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨證明紀錄的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。

@@ -399,7 +399,10 @@ record keep their results ("Changing these rules"). Only voiding records
 
 The ordinal is computed from the results of the records alone. It is not an
 item of the state ("State"): no check reads it, and the card state file
-does not carry it ("The card state file").
+does not carry it ("The card state file"). The device has no use for it:
+Rust's `device-core/` (ADR-0034), which judges a list before the card signs,
+gives the rest of this output and not the ordinal. Go's `prooflog/` and
+TypeScript's `protocol/` give it.
 
 ## Not part of these rules
 
@@ -824,8 +827,8 @@ sequence of events with the outcome of each and the final state.
   slot as it was.
 - `ordinals`: every card of the output with its `ordinal` ("The ordinal"),
   in ascending order of ordinal. They are beside `state`, not in its cards,
-  so that an implementation of the rules that only judges records, and
-  needs no ordinal, compares `state` alone.
+  so that `device-core/`, which does not give the ordinal, compares `state`
+  alone.
 - Every case has one scope string. Cases with two scope strings in one
   proof log belong to retiring a scope and will be added with it.
 

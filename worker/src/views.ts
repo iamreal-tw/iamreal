@@ -9,9 +9,10 @@
 //
 // The first four tables are the ones of the Go backend (e159ab9:server/store/sqlite_view.go).
 // A date is a day number (protocol/, `Day`: days since 1970-01-01), so that
-// dates compare as numbers; an account that is none is NULL. Every table is
-// keyed by the scope string, since a proof log can hold two scopes while one is
-// retired.
+// dates compare as numbers; an account that is none is NULL. Every table of
+// cards is keyed by the scope string, since a proof log can hold two scopes
+// while one is retired; `view_ordinals` is keyed by the ordinal, which counts
+// the cards of every scope together.
 //
 //   view_state    one row, the `seq` of the last record the views reflect
 //   view_cards    one row per card with a valid record
@@ -251,7 +252,7 @@ export function writeView(sql: SqlStorage, v: View): void {
 
 /** Clears the views: they then reflect no record. The caller runs it in a transaction. */
 export function clearViews(sql: SqlStorage): void {
-  for (const table of ["view_cards", "view_ordinals", "view_slots", "view_history"]) sql.exec(`DELETE FROM ${table}`);
+  for (const table of Object.keys(VIEW_TABLE_KEYS)) if (table !== "view_state") sql.exec(`DELETE FROM ${table}`);
   sql.exec("UPDATE view_state SET seq = 0 WHERE id = 1");
 }
 

@@ -342,6 +342,22 @@ describe("the state in memory", () => {
   const first = "2026-01-01.GQ6BW1FY2H0WBP91MMG57JWPF0";
   const second = "2026-01-01.6X8F69SF344E6ZS8XB8ADN57VG";
 
+  test("the ordinal: the cards of every scope string counted together; the same scoped ID under a second scope string is another card", () => {
+    // The vectors have one scope string a case until retiring a scope is specified (spec/record-rules.md, "Test vectors").
+    const rules = new MemoryRules(PRODUCTION);
+    const other = "iamreal:public:1_______________";
+    rules.apply({ ...r, challenge: first });
+    rules.apply({ ...r, scopeString: other, challenge: second });
+    rules.apply({ ...r, challenge: "2026-01-01.02E058ED885S348NX4FD8T4VAR" });
+    assert.deepEqual(
+      rules.output().map((scope) => [scope.scopeString, scope.cards.map((c) => c.ordinal)]),
+      [
+        [r.scopeString, [1]],
+        [other, [2]],
+      ],
+    );
+  });
+
   test("not a well-formed record: an error, and nothing changes", () => {
     const rules = new MemoryRules(PRODUCTION);
     assert.equal(rules.apply({ ...r, challenge: first }).result.valid, true);

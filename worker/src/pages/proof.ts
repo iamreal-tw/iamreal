@@ -104,8 +104,8 @@ function eventOf(row: HistoryRow): string {
 function firstScreen(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
-  // The ordinal right above the title, a small line in the secondary colour; never beside the account.
-  const heading = (inside: Html): Html => html`<p class="ordinal">${ordinalOf(card)}</p>
+  // The title, with the ordinal right above it: a small line in the secondary colour, never beside the account.
+  const titled = (inside: Html): Html => html`<p class="ordinal">${ordinalOf(card)}</p>
 ${nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`}`;
   const when = html`<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>`;
   if (account === null) {
@@ -114,7 +114,7 @@ ${nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${ins
     return html`<div class="first">
 <div class="column">
 <section class="claim withdrawn">
-${heading(html`這張自然人憑證現在沒有把名額給任何帳號`)}
+${titled(html`這張自然人憑證現在沒有把名額給任何帳號`)}
 </section>
 <section class="last">
 ${when}${withdrawn === null ? new Html("") : html`
@@ -126,7 +126,7 @@ ${when}${withdrawn === null ? new Html("") : html`
   return html`<div class="first">
 <div class="column">
 <section class="claim">
-${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
+${titled(html`<span class="line">一張台灣國民的自然人憑證，</span>
 <span class="line">把它在 Threads 唯一的名額給了</span>
 ${accountName(account)}`)}
 <p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都和這張證明無關。</p>

@@ -14,7 +14,7 @@ there are the names used here.
 | [`declaration-code.md`](declaration-code.md) | How the declaration code is computed from a card's list of accounts | Draft |
 | [`scoped-id.md`](scoped-id.md) | The scoped ID: computation, Poseidon2, text form, short ID | Draft |
 | [`record.md`](record.md) | One record: fields, the account list, the one spelling of a line, log files, record hash, the proof log fingerprint, the published proof log, how to verify it | Draft |
-| [`record-rules.md`](record-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot and 5 switches per card and platform. The card state file: the one spelling of a row, the file, how a re-verifier compares it with its own states | Draft |
+| [`record-rules.md`](record-rules.md) | How the state is computed from the records: one date and one daily count per card, one slot and 5 switches per card and platform; the ordinal of each card. The card state file: the one spelling of a row, the file, how a re-verifier compares it with its own states | Draft |
 | [`list-consequence.md`](list-consequence.md) | What a cardholder's list does, as the device shows it before the card signs: reading the platform table of `config` and the card's state, the card's state as the screen shows it, the list the card signs, one row per platform | Draft |
 | [`records-response.md`](records-response.md) | The answer to a submission, as the device reads it after the card proof: `seq`, `record_hash`, the kinds of the record on each platform, and where they differ from the rows the confirmation screen showed | Draft |
 | [`revocation-tree.md`](revocation-tree.md) | The revocation tree: which CRLs, the tree, which roots a record may use, the mirror | Draft |

@@ -473,8 +473,9 @@ export class ProofLog extends DurableObject<Env> {
     // A filling that failed is not begun again before its wait is over (`Retries`), also when the object started
     // again in between: on Cloudflare that is every time the object has had nothing to do for some seconds. The alarm
     // begins it then (`#viewsBehind`).
-    // Views filled before they had the ordinals (views.ts, `view_ordinals`) are filled again too.
-    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#proofLogRow().count && !ordinalsOwed(sql);
+    // Views filled before they had the ordinals (views.ts, `view_ordinals`) are filled again too, unless the proof
+    // log is paused: it fills nothing then, and every page but that of a card reads no ordinal, so they go on.
+    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#proofLogRow().count && (this.#paused || !ordinalsOwed(sql));
     const fillOwed = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused;
     const fillAgainAt = fillOwed ? this.#fillRetries.againAt() : null;
     this.viewsFilling = fillOwed && (fillAgainAt === null || fillAgainAt <= now().getTime()) ? this.#fillViews() : Promise.resolve();

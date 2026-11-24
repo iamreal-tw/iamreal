@@ -164,6 +164,12 @@ describe("the views written again from the records", () => {
     await worker.proofLog.restart();
     try {
       assert.deepEqual(await Promise.all(["/", `/p/${CARD_A}`].map(pageOf)), pages);
+      // Paused with views from before they had the ordinals: not filled; only the page of a card, which writes one, is 500.
+      await worker.proofLog.forgetOrdinals();
+      await worker.proofLog.restart();
+      assert.deepEqual((await worker.proofLog.views()).view_ordinals, []);
+      assert.deepEqual(await pageOf("/"), pages[0]);
+      await wantUnavailable(`/p/${CARD_A}`);
       // Paused with views that were cleared: its records were taken by other rules than this build's, so they are not filled.
       await worker.proofLog.clearViews();
       await worker.proofLog.restart();

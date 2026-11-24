@@ -12,7 +12,6 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { dirname, join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { EMPTY_FINGERPRINT, LINES_PER_FILE, hashList, hashListName, nextFingerprint, recordHash, proofLogFileName } from "iamreal-protocol/record.ts";
-import { thousands } from "../src/pages/html.ts";
 import { WORKER_DIR } from "./build.ts";
 import { type StoredFile, type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, cardStarting } from "./pages.ts";
@@ -253,7 +252,7 @@ describe("the 1,000th record fills a log file", () => {
       assert.deepEqual(verified.ordinals, views.slice(0, verified.ordinals.length));
       const ordinal = verified.ordinals.find((o) => o.scoped_id === card)!.ordinal;
       const page = await (await worker.fetch(`/p/${card.slice(0, 10)}`)).text();
-      assert.ok(page.includes(`<p class="ordinal">第 ${thousands(ordinal)} 張島民證明</p>`), `the page of ${card} writes 第 ${ordinal} 張`);
+      assert.ok(page.includes(`<p class="ordinal">第 ${ordinal.toLocaleString("en-US")} 張島民證明</p>`), `the page of ${card} writes 第 ${ordinal} 張`);
       rmSync(out, { recursive: true, force: true });
     } catch (e) {
       throw new Error(`${e instanceof Error ? e.message : String(e)}\nThe directory and what Go printed are kept in ${out}`, { cause: e });

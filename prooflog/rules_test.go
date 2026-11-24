@@ -2,6 +2,7 @@ package prooflog_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/iamreal-tw/iamreal/prooflog"
@@ -79,5 +80,38 @@ func TestCannotCheckStops(t *testing.T) {
 	st, err := prooflog.Apply(recs, verifier.Production, fakeProofs{}, brokenArchive{})
 	if err != nil || st.Records[0].Reason != prooflog.CodeProof {
 		t.Errorf("%v %+v", err, st)
+	}
+}
+
+// The cards of every scope string of a proof log are counted together
+// (spec/record-rules.md, "The ordinal"): the same scoped ID under a second
+// scope string is another card, with the next ordinal. The vectors have one
+// scope string a case until retiring a scope is specified.
+func TestOrdinalAcrossScopes(t *testing.T) {
+	const id = "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880"
+	var recs []*verifier.Record
+	archive := fakeArchive{}
+	proofs := fakeProofs{}
+	for i, scope := range []string{"iamreal:public:0_______________", "iamreal:public:1_______________", "iamreal:public:0_______________"} {
+		r := oneRecord("2026-03-10." + verifier.EncodeBase32([]byte{byte(i + 1), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))[0]
+		r.Seq, r.ScopeString, r.SMTRoot = uint64(i+1), scope, rootOf(uint64(i+1))
+		archive[r.SMTRoot] = []verifier.Date{date(t, "2026-03-10")}
+		proofs[r.Seq] = true
+		recs = append(recs, r)
+	}
+	st, err := prooflog.Apply(recs, verifier.Production, proofs, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int{}
+	for _, s := range st.Scopes {
+		for _, c := range s.Cards {
+			if c.ScopedID == id {
+				got[s.ScopeString] = c.Ordinal
+			}
+		}
+	}
+	if want := map[string]int{"iamreal:public:0_______________": 1, "iamreal:public:1_______________": 2}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ordinals %v, want %v", got, want)
 	}
 }
