@@ -5,37 +5,47 @@
 import { formatDay } from "iamreal-protocol/date.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfAccount } from "../page-data.ts";
-import { Html, html } from "./html.ts";
+import { html } from "./html.ts";
 import type { Document } from "./layout.ts";
-import { daysAgo, embed, isThreadsUsername, prefixes } from "./proof.ts";
+import { LONG_ACCOUNT, daysAgo, embed, isThreadsUsername, prefixes } from "./proof.ts";
 
 /**
  * The page of the account `username` on Threads (in its one spelling): the
- * cards that give their place to it now (sections 1 to 3). The profile is
- * embedded once, under the list, and only when there is a card to compare
- * it with.
+ * cards that give their place to it now (sections 1 to 3). The list in one
+ * column and, beside it, the profile, embedded once and only when there is
+ * a card to compare it with.
  */
 export function accountPage(username: string, { today, cards }: CardsOfAccount): Document {
   if (!isThreadsUsername(username)) throw new Error("pages: the account is not in the Threads format");
-  let inside: Html;
-  if (cards.length === 0) inside = html`<p>沒有自然人憑證把名額給這個帳號。<br>名稱要和 Threads 上的完全相同。</p>`;
-  else {
-    const starts = prefixes(cards.map((c) => c.scopedId));
-    inside = html`<p>有 ${cards.length} 張自然人憑證把它在 Threads 的名額給了這個帳號。</p>
+  const title = html`<h1 class="title"><span class="line">Threads 的</span>
+<span class="${username.length > LONG_ACCOUNT ? "account long" : "account"}">@${username}</span></h1>`;
+  if (cards.length === 0) {
+    const content = html`<section class="lookup">
+${title}
+<p class="count">沒有自然人憑證把名額給這個帳號。</p>
+<p class="small">名稱要和 Threads 上的完全相同。</p>
+</section>`;
+    return { title: `Threads 的 @${username}`, kind: "account", content };
+  }
+  const starts = prefixes(cards.map((c) => c.scopedId));
+  const content = html`<div class="first">
+<section class="lookup">
+${title}
+<p class="count">有 ${cards.length} 張自然人憑證把它在 Threads 的名額給了這個帳號。</p>
 <ul class="cards">
 ${cards.map(
   (c, i) =>
-    html`<li><span class="id-line">島民編號 <span class="id">${starts[i]!}</span> 開頭</span> <span>${formatDay(c.since)} 起</span> <span>上次過卡 ${daysAgo(c.lastCardProof, today)}</span> <a href="/p/${shortId(c.scopedId)}">看這張島民證明</a></li>`,
+    html`<li><p class="id-line"><span>島民編號 <span class="id">${starts[i]!}</span> 開頭</span> <a href="/p/${shortId(c.scopedId)}">看這張島民證明</a></p><p class="meta"><span>${formatDay(c.since)} 起</span> <span>上次過卡 ${daysAgo(c.lastCardProof, today)}</span></p></li>`,
 )}
 </ul>
-<p>帳號主人承認的是哪一張，看 @${username} 的個人檔案上放的是哪一張的連結：</p>
+<p class="small">每張自然人憑證對應到唯一的島民編號。任何持卡人都可以把名額給任何帳號，張數不代表支持或連署。</p>
+</section>
+<section class="owner">
+<h2 class="ask">帳號主人承認的是哪一張？</h2>
+<p>看 @${username} 的個人檔案上放的是哪一張的連結：</p>
 ${embed(username)}
-<p class="small">任何持卡人都可以把名額給任何帳號，張數不代表支持或連署。</p>`;
-  }
-  const content = html`<section class="lookup">
-<h1 class="title">Threads 的 <span class="account">@${username}</span></h1>
-${inside}
-</section>`;
+</section>
+</div>`;
   return { title: `Threads 的 @${username}`, kind: "account", content };
 }
 
