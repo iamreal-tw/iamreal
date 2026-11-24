@@ -33,3 +33,12 @@
 - 「島民證明」和後面的字之間是一個半形空格
 - 這是第一版。正式的名稱在「[app 的名稱、商店頁和上架的地區](https://github.com/iamreal-tw/iamreal/issues/154)」定；定了之後改這裡，Android 和 iOS 一起改
 - Android 和 iOS 的測試讀這一段，確認每一種 build 安裝檔裡的名稱和它相同
+
+## 啟動畫面
+
+打開 app 時，第 1 步之前的畫面（`design/screens/app-splash-phone.png`）：記號在中間，底下一行是名稱和網址，中間用一條細的豎線隔開，和網頁頁首的名稱旁邊一樣（`design/DESIGN.md`「元件」的導覽列）。兩種 build 都寫這一行，不畫測試的標示。
+
+```
+島民證明
+iamreal.tw
+```

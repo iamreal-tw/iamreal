@@ -302,6 +302,7 @@
   },
   "app_done": {
     "open_platform": "打開 {platform}",
-    "how_to_put": "複製連結之後，在 {platform} 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。"
+    "how_to_put": "複製連結之後，在 {platform} 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。",
+    "share": "分享"
   }
 }

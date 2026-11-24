@@ -44,6 +44,52 @@ class DoneViewTest {
     }
 
     @Test
+    fun `a first declaration, the small card, the hanging on the profile and what can be done besides`() {
+        val d = done(listOf(row("threads", "first", "alice")), listOf(Recorded("threads", "first", "alice", 1)), firstRecord = true)
+        val view = messages.done(d, "Threads")
+        // The sentences as design/copy/card-proof.md's example of step 6 writes them.
+        assertEquals("你拿到島民證明了", view.title)
+        assertEquals(listOf<Pair<String?, String>>(null to "@alice"), view.card)
+        assertEquals("2026-11-16 記進了證明紀錄。", view.recordedOn)
+        assertEquals("最後一步：掛到你的 Threads 個人檔案", view.hangTitle)
+        assertEquals("任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。", view.anyone)
+        assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
+        assertEquals(listOf("把你的島民證明分享到 Threads。" to "分享"), view.shares)
+        assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
+        assertEquals(listOf(false, true, false, false), listOf(view.withdrawAll, view.newCard, view.withdrawnLink, view.showRecord))
+    }
+
+    @Test
+    fun `a card that declares on a platform the app does not know too, the names in the small card, and the sentences of several`() {
+        val expected = listOf(row("test-example", "refresh", "a-b", current = "a-b", known = false), row("threads", "refresh", "alice", current = "alice"))
+        val view = messages.done(done(expected, listOf(Recorded("test-example", "refresh", "a-b", 1), Recorded("threads", "refresh", "alice", 1))), null)
+        assertEquals("島民證明已更新", view.title)
+        assertEquals(listOf<Pair<String?, String>>("test-example" to "a-b", "Threads" to "@alice"), view.card)
+        assertEquals("最後一步：掛到你的個人檔案", view.hangTitle)
+        assertEquals(copy.say("done.anyone"), view.anyone)
+        // No page of an account on a platform the app does not know.
+        assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
+        assertEquals(false, view.newCard)
+    }
+
+    @Test
+    fun `every account withdrawn, no card and no hanging, only that the links can be taken down`() {
+        val view = messages.done(done(listOf(row("threads", "withdraw", "alice", current = "alice")), listOf(Recorded("threads", "withdraw", "alice", 0))), "Threads")
+        assertEquals("已全部收回", view.title)
+        assertEquals(listOf(true, true), listOf(view.withdrawAll, view.withdrawnLink))
+        assertEquals(emptyList<Pair<String?, String>>(), view.card)
+        assertEquals(emptyList<Pair<String, String>>(), view.profiles)
+        assertEquals(false, view.showRecord)
+    }
+
+    @Test
+    fun `the record is shown only where it is not what step 5 said`() {
+        val shown = row("threads", "first", "alice")
+        assertEquals(false, messages.done(done(listOf(shown), listOf(Recorded("threads", "first", "alice", 1))), "Threads").showRecord)
+        assertEquals(true, messages.done(done(listOf(shown), listOf(Recorded("threads", "first", "bob", 1)), listOf("threads")), "Threads").showRecord)
+    }
+
+    @Test
     fun `the titles, by what the server recorded`() {
         val unchanged = listOf(row("threads", "refresh", "alice", current = "alice"))
         assertEquals(copy.say("done.refresh"), messages.doneTitle(done(unchanged, listOf(Recorded("threads", "refresh", "alice", 1)))))
