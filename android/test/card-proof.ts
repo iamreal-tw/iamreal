@@ -400,7 +400,11 @@ async function cardProof(p: Proof): Promise<string> {
     hideKeyboard();
     await designShot("card-proof-app-3-pin-phone.png");
   }
-  check(!wholeScreen().some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
+  {
+    const s = wholeScreen();
+    check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
+    check(!s.includes(say("app_pin.need_pin")), "step 3: with a PIN typed, no 請輸入 PIN。");
+  }
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
   else await tap();
