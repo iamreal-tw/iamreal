@@ -31,6 +31,13 @@ const stateOut = (proofLog: MemoryRules) =>
     accounts: scope.accounts.map((a) => ({ platform: a.platform, username: a.username, cards: a.cards.map((c) => ({ scoped_id: c.scopedId, last_card_proof: formatDay(c.lastCardProof) })) })),
   }));
 
+/** Every card of the output with its ordinal, in ascending order of ordinal: the vectors' `ordinals`. */
+const ordinalsOut = (proofLog: MemoryRules) =>
+  proofLog
+    .output()
+    .flatMap((scope) => scope.cards.map((c) => ({ scope_string: scope.scopeString, scoped_id: c.scopedId, ordinal: c.ordinal })))
+    .sort((a, b) => a.ordinal - b.ordinal);
+
 describe("the version number of the rules", () => {
   // The Go tests check prooflog.RulesVersion against the same two places (prooflog/version_test.go).
   test("the constant is the number spec/record-rules.md states and the vectors carry", () => {
@@ -79,6 +86,7 @@ describe("record-rules.json: every case, record by record, through the state in 
         for (const [p, slot] of after.slots) assert.ok(possibleSlot(slot, after.lastCardProof), `event ${e.seq}: the slot ${p}`);
       });
       assert.deepEqual(stateOut(proofLog), c.state);
+      assert.deepEqual(ordinalsOut(proofLog), c.ordinals);
     });
   }
 });
@@ -333,6 +341,22 @@ describe("the state in memory", () => {
   const r = { scopeString: "iamreal:public:0_______________", scopedId: "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880", accounts: [{ platform: "threads", username: "alice" }], verifies: true, crlDates: [day("2026-01-01")] };
   const first = "2026-01-01.GQ6BW1FY2H0WBP91MMG57JWPF0";
   const second = "2026-01-01.6X8F69SF344E6ZS8XB8ADN57VG";
+
+  test("the ordinal: the cards of every scope string counted together; the same scoped ID under a second scope string is another card", () => {
+    // The vectors have one scope string a case until retiring a scope is specified (spec/record-rules.md, "Test vectors").
+    const rules = new MemoryRules(PRODUCTION);
+    const other = "iamreal:public:1_______________";
+    rules.apply({ ...r, challenge: first });
+    rules.apply({ ...r, scopeString: other, challenge: second });
+    rules.apply({ ...r, challenge: "2026-01-01.02E058ED885S348NX4FD8T4VAR" });
+    assert.deepEqual(
+      rules.output().map((scope) => [scope.scopeString, scope.cards.map((c) => c.ordinal)]),
+      [
+        [r.scopeString, [1]],
+        [other, [2]],
+      ],
+    );
+  });
 
   test("not a well-formed record: an error, and nothing changes", () => {
     const rules = new MemoryRules(PRODUCTION);

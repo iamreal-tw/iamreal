@@ -2376,6 +2376,13 @@ body.account .title .account.long {
   font-size: var(--size-h2);
 }
 
+/* The ordinal (proof-page.md, section 1): a small line in the secondary colour right above the title, never beside the account. */
+body.proof .ordinal {
+  margin: 0 0 12px;
+  font-size: var(--size-kicker);
+  color: var(--mute);
+}
+
 body.proof .scope {
   max-width: var(--measure);
   margin: 24px 0 0;
@@ -2894,6 +2901,7 @@ body.account-not-a-name .title {
   body.account .owner > p,
   body.account .meta,
   body.proof .log,
+  body.proof .ordinal,
   body.proof .one-of-many .prefix {
     font-size: var(--size-kicker-phone);
   }

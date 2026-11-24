@@ -34,6 +34,12 @@ export interface HistoryRow {
 /** One card, as a page shows it. */
 export interface PageCard {
   readonly scopedId: string;
+  /**
+   * Its ordinal: the place of its first valid record among the first valid
+   * records of every card of the proof log, from 1 (spec/record-rules.md,
+   * "The ordinal").
+   */
+  readonly ordinal: number;
   /** The earliest date among the card's valid records. */
   readonly firstCardProof: Day;
   /** The latest date among them. */

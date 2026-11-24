@@ -147,9 +147,9 @@ records:
 
 scope iamreal-test:public:0__________
   cards:
-    FEYB7PB5GX6DR23VAG6TGWHGFWP99M4XR8KP0RTC3P7Q6DY488AG  last card proof 2026-11-16
+    FEYB7PB5GX6DR23VAG6TGWHGFWP99M4XR8KP0RTC3P7Q6DY488AG  last card proof 2026-11-16  ordinal 1
       threads alice
-    SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24
+    SA5G3V8XXE61EHNEJ8MACZF729GEJPPM2BMJV26N687TB9WPT000  last card proof 2026-11-24  ordinal 2
       threads alice
   accounts:
     threads alice
@@ -158,12 +158,12 @@ scope iamreal-test:public:0__________
 ```
 
 - 每一筆有效的紀錄列出它在每個平台的種類（`first`、`refresh`、`correction`、`switch`、`withdraw`），照平台代號排；無效的列出代碼，有說明時加在括號裡（例如 `switch_limit (platform threads)`、`daily_limit (3 valid records dated 2026-11-16)`；說明不是規則的輸出）。
-- 每張卡片列出上次過卡日和現在的清單（每個平台一行，照平台排）；收回了全部帳號的卡片仍然列出，寫 `no account`。
+- 每張卡片列出上次過卡日、順序號碼（`ordinal`：這張卡片第一筆有效的紀錄，在證明紀錄裡是第幾張卡片的第一筆有效紀錄，`spec/record-rules.md`「The ordinal」；島民證明的頁面上「第 N 張島民證明」就是這個數字）和現在的清單（每個平台一行，照平台排）；收回了全部帳號的卡片仍然列出，寫 `no account`。
 - 每個帳號是（平台、帳號名稱），照平台再照帳號名稱排，底下是現在在那個平台宣告它的卡片。同一個帳號名稱在兩個平台是兩個帳號。
 
 壞掉的檔案只印一行：`log file: broken at line 3: line (…)`，不算現況。
 
-`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "fingerprint": …, "results": [...], "state": [...]}`，`results` 和 `state` 同 `record-rules.json`（有效的結果是 `kinds`，每一項 `platform`、`kind`；每張卡片是 `scoped_id`、`last_card_proof`、`accounts`；每個帳號是 `platform`、`username`、`cards`），只是卡片沒有 `proofs_on_last_date` 和 `slots`：那兩項是卡片的狀態，不是規則的輸出；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
+`-json` 的形狀和 `spec/vectors/` 相同：有效的檔案是 `{"valid": true, "fingerprint": …, "results": [...], "state": [...], "ordinals": [...]}`，`results`、`state` 和 `ordinals` 同 `record-rules.json`（有效的結果是 `kinds`，每一項 `platform`、`kind`；每張卡片是 `scoped_id`、`last_card_proof`、`accounts`；每個帳號是 `platform`、`username`、`cards`；`ordinals` 每一項是 `scope_string`、`scoped_id`、`ordinal`，照順序號碼排），只是卡片沒有 `proofs_on_last_date` 和 `slots`：那兩項是卡片的狀態，不是規則的輸出；壞掉的是 `{"valid": false, "line": 3, "code": "line"}`，同 `record.json` 的 `files`。
 
 ## 結束碼
 

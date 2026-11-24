@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -358,7 +359,7 @@ func writeText(w io.Writer, rep *prooflog.Report) error {
 	for _, s := range rep.State.Scopes {
 		p.f("\nscope %s\n  cards:\n", s.ScopeString)
 		for _, c := range s.Cards {
-			p.f("    %s  last card proof %s\n", c.ScopedID, c.LastCardProof)
+			p.f("    %s  last card proof %s  ordinal %d\n", c.ScopedID, c.LastCardProof, c.Ordinal)
 			if len(c.Accounts) == 0 {
 				p.f("      no account\n")
 			}
@@ -389,15 +390,25 @@ func (p *printer) f(format string, args ...any) {
 }
 
 // The JSON output has the shape of spec/vectors/record.json ("files") and
-// spec/vectors/record-rules.json ("results", "state"), without the items of
-// a card's state that the output does not list (proofs_on_last_date, slots).
+// spec/vectors/record-rules.json ("results", "state", "ordinals"), without
+// the items of a card's state that the output does not list
+// (proofs_on_last_date, slots).
 type jsonReport struct {
-	Valid       bool         `json:"valid"`
-	Line        int          `json:"line,omitempty"`
-	Code        string       `json:"code,omitempty"`
-	Fingerprint string       `json:"fingerprint,omitempty"`
-	Results     []jsonResult `json:"results,omitempty"`
-	State       *[]jsonScope `json:"state,omitempty"`
+	Valid       bool           `json:"valid"`
+	Line        int            `json:"line,omitempty"`
+	Code        string         `json:"code,omitempty"`
+	Fingerprint string         `json:"fingerprint,omitempty"`
+	Results     []jsonResult   `json:"results,omitempty"`
+	State       *[]jsonScope   `json:"state,omitempty"`
+	Ordinals    *[]jsonOrdinal `json:"ordinals,omitempty"`
+}
+
+// jsonOrdinal is a card of the output with its ordinal; the list is in
+// ascending order of ordinal.
+type jsonOrdinal struct {
+	ScopeString string `json:"scope_string"`
+	ScopedID    string `json:"scoped_id"`
+	Ordinal     int    `json:"ordinal"`
 }
 
 type jsonResult struct {
@@ -455,6 +466,7 @@ func writeJSON(w io.Writer, rep *prooflog.Report) error {
 			out.Results = append(out.Results, jr)
 		}
 		scopes := []jsonScope{}
+		ordinals := []jsonOrdinal{}
 		for _, s := range rep.State.Scopes {
 			js := jsonScope{ScopeString: s.ScopeString, Cards: []jsonCard{}, Accounts: []jsonAccount{}}
 			for _, c := range s.Cards {
@@ -463,6 +475,7 @@ func writeJSON(w io.Writer, rep *prooflog.Report) error {
 					jc.Accounts = append(jc.Accounts, jsonListAccount{a.Platform, a.Username})
 				}
 				js.Cards = append(js.Cards, jc)
+				ordinals = append(ordinals, jsonOrdinal{s.ScopeString, c.ScopedID, c.Ordinal})
 			}
 			for _, a := range s.Accounts {
 				ja := jsonAccount{Platform: a.Platform, Username: a.Username, Cards: []jsonAccountCard{}}
@@ -474,6 +487,8 @@ func writeJSON(w io.Writer, rep *prooflog.Report) error {
 			scopes = append(scopes, js)
 		}
 		out.State = &scopes
+		sort.Slice(ordinals, func(i, j int) bool { return ordinals[i].Ordinal < ordinals[j].Ordinal })
+		out.Ordinals = &ordinals
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

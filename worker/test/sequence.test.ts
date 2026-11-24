@@ -302,7 +302,7 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
     for (const [k, n] of Object.entries(found)) assert.ok(n >= SCENARIO_FLOORS[k as Scenario], `${k}: ${n}`);
   });
 
-  check("with the state in memory (MemoryRules): every record's result, its card and the latest valid date after it, the cards of each account at every checkpoint, and the final state are Go's", (t) => {
+  check("with the state in memory (MemoryRules): every record's result, its card and the latest valid date after it, the cards of each account at every checkpoint, the final state and the ordinals are Go's", (t) => {
     const started = performance.now();
     const memory = new MemoryRules(platformsOf("test"));
     sequence.events.forEach((e, i) => {
@@ -325,10 +325,16 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
     }));
     const d = difference("state", go.state, state);
     if (d) assert.fail(`the final state, ${d.field}: Go ${JSON.stringify(d.want)}, memory ${JSON.stringify(d.got)}. ${kept()}`);
+    const ordinals = memory
+      .output()
+      .flatMap((scope) => scope.cards.map((c) => ({ scope_string: scope.scopeString, scoped_id: c.scopedId, ordinal: c.ordinal })))
+      .sort((a, b) => a.ordinal - b.ordinal);
+    const o = difference("ordinals", go.ordinals, ordinals);
+    if (o) assert.fail(`the ordinals, ${o.field}: Go ${JSON.stringify(o.want)}, memory ${JSON.stringify(o.got)}. ${kept()}`);
     t.diagnostic(`${LENGTH} records in memory: ${Math.round(performance.now() - started)} ms`);
   });
 
-  check("with the state the Durable Object stores, the object stopped between every two records: every record's result and its card after it, and at every checkpoint the latest valid date and the cards of each account, are Go's", async (t) => {
+  check("with the state the Durable Object stores, the object stopped between every two records: every record's result and its card after it, and at every checkpoint the latest valid date and the cards of each account, and the ordinals of the views at the end, are Go's", async (t) => {
     const started = performance.now();
     worker = await startWorker();
     await freshProofLog(worker, { kind: "test" });
@@ -357,6 +363,10 @@ describe(`a sequence of ${LENGTH} records of seed ${SEED}: Go's prooflog/ gives 
       if (atCheckpoint) checkpoints++;
     }
     assert.equal(checkpoints, LENGTH / CHECKPOINT_EVERY);
+    // The ordinals the pages read (src/views.ts, view_ordinals), written with each valid record: Go's.
+    const ordinals = (await worker.proofLog.views()).view_ordinals!.map((row) => ({ scope_string: row.scope_string, scoped_id: row.scoped_id, ordinal: row.ordinal }));
+    const o = difference("ordinals", go.ordinals, ordinals);
+    if (o) assert.fail(`the ordinals of the views, ${o.field}: Go ${JSON.stringify(o.want)}, Durable Object ${JSON.stringify(o.got)}. ${kept()}`);
     t.diagnostic(`${LENGTH} records and ${checkpoints} checkpoints on the Durable Object, the Worker's start included: ${Math.round((performance.now() - started) / 1000)} s`);
   }, { skip: storageSkip });
 });

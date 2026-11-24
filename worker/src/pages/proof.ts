@@ -6,7 +6,7 @@ import { formatDay } from "iamreal-protocol/date.ts";
 import { platformsOf } from "iamreal-protocol/platforms.ts";
 import { SHORT_ID_LENGTH } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfShortId, HistoryRow, PageCard } from "../page-data.ts";
-import { Html, html } from "./html.ts";
+import { Html, html, thousands } from "./html.ts";
 import { type Document, NEEDS, type Site } from "./layout.ts";
 
 /** The one platform the pages show: the first version lists Threads only (proof-page.md). The other platforms of a test log are not shown. */
@@ -67,6 +67,9 @@ export function daysAgo(day: number, today: number): string {
 
 const currentOf = (card: PageCard): string | null => card.slots.find((s) => s.platform === PLATFORM)?.current ?? null;
 
+/** The card's ordinal as the page writes it, above the title and in section 4 (proof-page.md, sections 1 and 4). */
+const ordinalOf = (card: PageCard): string => `第 ${thousands(card.ordinal)} 張島民證明`;
+
 /** The title of the link preview (proof-page.md, section 8). */
 function titleOf(cards: readonly PageCard[]): string {
   if (cards.length > 1) return `這個網址對到 ${cards.length} 張自然人憑證`;
@@ -101,7 +104,9 @@ function eventOf(row: HistoryRow): string {
 function firstScreen(site: Site, card: PageCard, shortId: string, today: number, nested: boolean): Html {
   const account = currentOf(card);
   if (account !== null && !isThreadsUsername(account)) throw new Error("pages: a card has an account that is not a Threads username");
-  const heading = (inside: Html): Html => (nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`);
+  // The title, with the ordinal right above it: a small line in the secondary colour, never beside the account.
+  const titled = (inside: Html): Html => html`<p class="ordinal">${ordinalOf(card)}</p>
+${nested ? html`<h2 class="title">${inside}</h2>` : html`<h1 class="title">${inside}</h1>`}`;
   const when = html`<p class="when">上次過卡：${daysAgo(card.lastCardProof, today)}<span class="date">（${formatDay(card.lastCardProof)}）</span></p>`;
   if (account === null) {
     // The account of the latest withdrawal on Threads, if there is one.
@@ -109,7 +114,7 @@ function firstScreen(site: Site, card: PageCard, shortId: string, today: number,
     return html`<div class="first">
 <div class="column">
 <section class="claim withdrawn">
-${heading(html`這張自然人憑證現在沒有把名額給任何帳號`)}
+${titled(html`這張自然人憑證現在沒有把名額給任何帳號`)}
 </section>
 <section class="last">
 ${when}${withdrawn === null ? new Html("") : html`
@@ -121,7 +126,7 @@ ${when}${withdrawn === null ? new Html("") : html`
   return html`<div class="first">
 <div class="column">
 <section class="claim">
-${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
+${titled(html`<span class="line">一張台灣國民的自然人憑證，</span>
 <span class="line">把它在 Threads 唯一的名額給了</span>
 ${accountName(account)}`)}
 <p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都和這張證明無關。</p>
@@ -151,6 +156,7 @@ function record(card: PageCard): Html {
   return html`<section class="record">
 <h2>這張自然人憑證的證明紀錄</h2>
 <dl class="facts">
+<div><dt>順序</dt><dd>${ordinalOf(card)}</dd></div>
 <div><dt>第一次過卡</dt><dd>${formatDay(card.firstCardProof)}</dd></div>
 <div><dt>過卡次數</dt><dd>${card.cardProofs} 次</dd></div>
 <div><dt>更換帳號</dt><dd>在 Threads 更換過 ${switches} 次帳號（一張自然人憑證最多 5 次）</dd></div>

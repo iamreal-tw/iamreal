@@ -34,6 +34,9 @@ async function exampleCards(withB: boolean): Promise<void> {
   await pagesWorld(worker, "2026-11-18", withB ? recs : recs.filter((x) => x.card === a));
 }
 
+/** The replacements of the example ordinal of proof-page.md (128) by `n`. */
+const ordinal = (n: number): string[] => ["第 128 張", `第 ${n} 張`];
+
 /** The titles of proof-page.md section 8's three other cases: withdrawn, two cards, no card. */
 function specialTitles(): string[] {
   const titles = [...copySection("proof-page.md", "8. ").matchAll(/標題是「([^」]+)」/g)].map((m) => m[1]!);
@@ -46,7 +49,11 @@ describe("the page of a card", () => {
     await exampleCards(true);
     const { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, ["1. ", "2. ", "3. ", "4. ", "5. ", "5a. "].flatMap((s) => copyLines(block("proof-page.md", s))));
+    wantLines(page, ["1. ", "2. ", "3. ", "4. ", "5. ", "5a. "].flatMap((s) => copyLines(block("proof-page.md", s), ...ordinal(1))));
+    // The ordinal above the title, in the secondary colour's small line; not beside the account (proof-page.md section 1).
+    assert.ok(page.includes('<p class="ordinal">第 1 張島民證明</p>\n<h1 class="title">'), "the ordinal, right above the title");
+    assert.ok(page.includes("<div><dt>順序</dt><dd>第 1 張島民證明</dd></div>"), "順序, the first row of section 4");
+    assert.equal(page.split("第 1 張島民證明").length - 1, 2, "the ordinal twice, nowhere else");
 
     for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
@@ -121,7 +128,7 @@ describe("the page of a card", () => {
       row("再次過卡", "2026-10-02"),
       row("新宣告", "2026-10-01", "bob"),
     ]);
-    wantLines(page, copyLines(block("proof-page.md", "4. ").slice(0, 4), "2026-03-02", "2026-10-01", "4 次", "11 次", "1 次", "3 次"));
+    wantLines(page, copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-10-01", "4 次", "11 次", "1 次", "3 次"));
   });
 
   test("no switch is written as 0 switches; a last card proof today is written 今天", async () => {
@@ -143,8 +150,8 @@ describe("the page of a card", () => {
     const { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
     wantLines(page, [
-      ...copyLines(block("proof-page.md", "6. "), "@alice", "@bob"),
-      ...copyLines(block("proof-page.md", "4. ").slice(0, 4), "2026-03-02", "2026-11-01", "4 次", "4 次"),
+      ...copyLines(block("proof-page.md", "6. "), ...ordinal(1), "@alice", "@bob"),
+      ...copyLines(block("proof-page.md", "4. ").slice(0, 5), ...ordinal(1), "2026-03-02", "2026-11-01", "4 次", "4 次"),
       ...copyLines(block("proof-page.md", "5. ")),
       ...copyLines(block("proof-page.md", "5a. ")),
     ]);
@@ -152,7 +159,7 @@ describe("the page of a card", () => {
     const one = block("proof-page.md", "1. ");
     const two = block("proof-page.md", "2. ");
     const three = block("proof-page.md", "3. ");
-    notOnPage(page, one[0]!, one[1]!, [...one[5]!].slice(0, 10).join(""), two[1]!, "我要更新這張證明", three[0]!, three.at(-1)!);
+    notOnPage(page, one[2]!, one[3]!, [...one[7]!].slice(0, 10).join(""), two[1]!, "我要更新這張證明", three[0]!, three.at(-1)!);
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
     wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
   });
@@ -167,11 +174,11 @@ describe("the page of a card", () => {
     wantLines(page, [
       ...copyLines(block("proof-page.md", "7. ", 0)),
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3A"),
-      ...copyLines(block("proof-page.md", "1. ")),
+      ...copyLines(block("proof-page.md", "1. "), ...ordinal(2)),
       ...copyLines(block("proof-page.md", "2. ")),
       ...copyLines(block("proof-page.md", "3. ")),
       ...copyLines(each, "7K2Q9FM4XD3A", "7K2Q9FM4XD3B"),
-      ...copyLines(block("proof-page.md", "6. "), "@alice", "@bob"),
+      ...copyLines(block("proof-page.md", "6. "), ...ordinal(1), "@alice", "@bob"),
       ...copyLines(block("proof-page.md", "5. ")),
       ...copyLines(block("proof-page.md", "5a. ")),
     ]);
@@ -386,7 +393,7 @@ describe("every page", () => {
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
     const card = (await getPage(worker, `/p/${CARD_A}`, { test: false })).page;
-    wantLines(card, copyLines(block("proof-page.md", "1. ")));
+    wantLines(card, copyLines(block("proof-page.md", "1. "), ...ordinal(1)));
     // The production site's domain, as proof-page.md writes it, in both places that write the page's address.
     assert.ok(card.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>') && !card.includes("test.iamreal.tw"));
     const missing = (await getPage(worker, "/p/7K2Q9FM4XE", { test: false })).page;

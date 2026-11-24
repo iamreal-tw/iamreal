@@ -45,7 +45,7 @@ describe("the FAQ", () => {
     const categories = faqCategories();
     assert.deepEqual(categories.map((c) => c.name), ["關於隱私", "它能證明什麼", "怎麼用", "誰在做"], "faq.md's four categories, in order");
     const questions = faqQuestions();
-    assert.equal(questions.length, 22, "faq.md has the 22 questions the page writes");
+    assert.equal(questions.length, 23, "faq.md has the 23 questions the page writes");
     // The title, the categories' names (the list of them), then each category: its name, its questions and their answers.
     const want = [...copyLines(codeBlocks(readCopy("faq.md"))[0]!), ...categories.map((c) => c.name)];
     for (const c of categories) want.push(c.name, ...c.questions.flatMap((q) => [q.question, ...copyLines(q.answer)]));
@@ -97,6 +97,13 @@ describe("the FAQ", () => {
     assert.ok(existsSync(join(REPO_DIR, "docs", "adr", "0004-scoped-ids-and-proofs-are-public.md")), "the ADR the answer links to is there");
     assert.ok(faqByQuestion("政府會知道我是哪個帳號嗎？").answer[2]!.includes("了解更多"));
     assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「島民證明服務安全嗎？」"), "faq.md says where 了解更多 goes");
+
+    // The question of the ordinal (#299): in 它能證明什麼, right after the lost card; not on the home page.
+    const what = categories.find((c) => c.id === "cat-what")!;
+    const ordinal = faqByQuestion("島民證明上的「第 N 張」是什麼？");
+    assert.equal(ordinal.id, "ordinal");
+    assert.equal(what.questions.findIndex((q) => q.id === "ordinal"), what.questions.findIndex((q) => q.id === "lost-card") + 1);
+    notOnPage((await getPage(worker, "/")).page, ordinal.question);
 
     const { title, site, summary } = previewOf("faq.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
