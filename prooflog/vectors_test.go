@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -149,12 +150,19 @@ type scopeOut struct {
 	Accounts    []accountOut `json:"accounts"`
 }
 
+type ordinalOut struct {
+	ScopeString string `json:"scope_string"`
+	ScopedID    string `json:"scoped_id"`
+	Ordinal     int    `json:"ordinal"`
+}
+
 type rulesCase struct {
-	Name     string     `json:"name"`
-	ProofLog string     `json:"proof_log"`
-	Events   []event    `json:"events"`
-	Results  []result   `json:"results"`
-	State    []scopeOut `json:"state"`
+	Name     string       `json:"name"`
+	ProofLog string       `json:"proof_log"`
+	Events   []event      `json:"events"`
+	Results  []result     `json:"results"`
+	State    []scopeOut   `json:"state"`
+	Ordinals []ordinalOut `json:"ordinals"`
 }
 
 // fakeProofs is check 1 from the events' `verifies`.
@@ -259,8 +267,26 @@ func TestVectorsRecordRules(t *testing.T) {
 				w, _ := json.Marshal(want)
 				t.Errorf("state\n got %s\nwant %s", g, w)
 			}
+			if got := ordinalsOut(st); !reflect.DeepEqual(got, c.Ordinals) {
+				g, _ := json.Marshal(got)
+				w, _ := json.Marshal(c.Ordinals)
+				t.Errorf("ordinals\n got %s\nwant %s", g, w)
+			}
 		})
 	}
+}
+
+// ordinalsOut writes every card of the output with its ordinal, in
+// ascending order of ordinal: the vectors' `ordinals`.
+func ordinalsOut(st *prooflog.State) []ordinalOut {
+	out := []ordinalOut{}
+	for _, s := range st.Scopes {
+		for _, c := range s.Cards {
+			out = append(out, ordinalOut{s.ScopeString, c.ScopedID, c.Ordinal})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Ordinal < out[j].Ordinal })
+	return out
 }
 
 // stateOut writes the output in the shape of the vectors. x, if not nil,

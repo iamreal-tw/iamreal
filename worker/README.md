@@ -135,7 +135,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `proof_log` | 整份證明紀錄，只有一列 | `count`（筆數）、`fingerprint`（指紋）、`latest_valid_date`（證明紀錄裡最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
-- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的四張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
+- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的五張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。
@@ -230,7 +230,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
 4. 頁面用的衍生表（[頁面用的衍生表](#頁面用的衍生表)）
 5. 題目標成已接受
 
-任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的四張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
+任何一步丟例外，五樣都不留下，回 `500`；[`test/records-storage.test.ts`](test/records-storage.test.ts) 和 [`test/views.test.ts`](test/views.test.ts) 讓每一步各失敗一次來確認（衍生表的五張各一次），後者另外確認衍生表的每一列和頁面都沒變。寫入之前，那一行先照 `spec/record.md`「Check a line」讀一次（`readRecordLine`），讀不過就不寫。
 
 **交易提交之後沒有會丟例外的程式。** `201` 的回答（每個平台是哪個帳號、有幾張卡片宣告它）在交易結束前就做好：帳號在交易之前取，數卡片在交易裡、寫完衍生表之後做。所以不會出現「紀錄寫進去了、題目標成用過了，裝置卻拿到 `500`」。
 
@@ -511,7 +511,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 頁面用的衍生表
 
-證明紀錄的 Durable Object 裡 `view_` 開頭的四張表（[`src/views.ts`](src/views.ts)），內容和舊後台的四張相同：
+證明紀錄的 Durable Object 裡 `view_` 開頭的五張表（[`src/views.ts`](src/views.ts)）。前四張的內容和舊後台的四張相同，`view_ordinals` 是順序號碼（[#299](https://github.com/iamreal-tw/iamreal/issues/299)）加的：
 
 | 表 | 一列是什麼 |
 |---|---|
@@ -519,9 +519,10 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `view_cards` | 一張有過有效紀錄的卡片：短編號、第一次過卡日、上次過卡日、過卡幾次 |
 | `view_slots` | 一張卡片在一個平台的名額：現在的帳號、從哪一天哪一筆開始、更換過幾次、上次過卡日 |
 | `view_history` | 一筆有效紀錄在一個平台做了什麼：種類、是不是收回之後、之前和之後的帳號 |
+| `view_ordinals` | 一張有過有效紀錄的卡片的順序號碼（`spec/record-rules.md`「The ordinal」）：卡片第一筆有效紀錄寫入時給下一個號碼，之後不變（`view_ordinals_card` 是一張卡片一列的唯一索引）。`test/views.test.ts` 拿標準答案的 `ordinals` 逐案比對。不分場合字串，整份證明紀錄一起數；每個網站照自己的證明紀錄數，測試網站的號碼和正式網站的無關。島民證明頁「第 N 張島民證明」讀它 |
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是紀錄規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
-- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
+- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在三種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），衍生表被清掉，或衍生表是 `view_ordinals` 出現之前填好的：`view_cards` 有卡片、`view_ordinals` 是空的（`ordinalsOwed`），反映到的筆數雖然對，物件啟動時也整份重建；`paused` 時不重建，其他頁面照常，只有島民證明回 `500`（它要寫號碼）。順序號碼只在衍生表裡，不在卡片狀態表、不進卡片狀態檔：它不影響任何一筆紀錄有效或無效，重算得出來；`test/sequence.test.ts`、`test/proof-log-files.test.ts` 確認和 Go 算的相同。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有紀錄檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨證明紀錄的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
@@ -533,7 +534,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - 重建失敗時寫一行 `{event: "views_not_filled", error}`。之後照上一條再試，物件啟動時等的時間已經到了也試；原因排除後（例如把 R2 的那一檔放回去、部署了讀得懂那一筆的程式），下一次嘗試就補上。
   - **營運上的後果**：一筆這一版程式讀不懂、或規則不接受的紀錄，或 R2 裡少了一個紀錄檔、內容和寫入時不同，會讓頁面和送出都停在 `500`，直到換上處理得了它的程式、或把那一檔放回去（ADR-0033 的副本）；衍生表本來就跟上的物件不讀 R2 的紀錄檔，不受影響；但已經過卡的人查得到現況，證明紀錄本身（紀錄、卡片狀態、指紋）沒有被動到。後台自己不會寫出這樣的列；會碰到的情況是紀錄規則改了、舊的紀錄照新規則不接受，那照 ADR-0030、ADR-0031 本來就要先處理。
 - **重建多久沒有量過。** 一檔要讀 20 MB、讀 1,000 行、套 1,000 次規則。證明紀錄長到幾十檔時，重建的那段時間頁面和送出都是 `500`。頁面的讀取之後要搬出 Durable Object（ADR-0026），到時候這個重建也要跟著重想。
-- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引：島民證明 `view_cards_short_id`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_history_log`（`logRows`，照序號倒著讀 `view_history` 裡 Threads 的列，一筆有效的紀錄一列，再次過卡、收回都在裡面）；兩個數字 `view_slots_recency`。`test/views.test.ts` 確認每個查詢都只讀一個索引的一段、不另外排序。
+- 日期存成天數（`protocol/` 的 `Day`），頁面的每個查詢各走一個索引：島民證明 `view_cards_short_id`，每張卡片的順序號碼另一個查詢走 `view_ordinals_card`；查詢頁 `view_slots_account`（`cardsOfAccount`，照「從哪一天起」、同一天照那一筆的序號；送出一筆時數卡片也用這個索引，`accountCards`，[寫入是一個交易](#寫入是一個交易)）；證明紀錄頁的清單 `view_history_log`（`logRows`，照序號倒著讀 `view_history` 裡 Threads 的列，一筆有效的紀錄一列，再次過卡、收回都在裡面）；兩個數字 `view_slots_recency`。`test/views.test.ts` 確認每個查詢都只讀一個索引的一段、不另外排序。
 - **證明紀錄頁的「更多」是序號**：`?after=53` 列序號小於 53 的紀錄。序號是紀錄在證明紀錄裡的位置，寫入之後不變，所以上一頁打開之後才寫進來的紀錄排在最上面，不會讓下一頁重複或漏掉。寫法是不是 0、沒有正負號和開頭的 0 的十進位，最大 2⁵³ − 1；讀不成的從最新的開始列。舊的清單照「從哪一天起」排、寫成 `2026-10-01.3`（[#287](https://github.com/iamreal-tw/iamreal/issues/287) 之前），這種網址現在讀不成，從最新的開始列。
 - 舊的清單用的索引 `view_slots_latest` 由建表的程式拿掉（`DROP INDEX IF EXISTS`），新的索引補上；表沒有改，`SCHEMA_VERSION` 不變（[兩個版本號](#兩個版本號)）。
 

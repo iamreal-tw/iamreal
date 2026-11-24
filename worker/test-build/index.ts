@@ -97,6 +97,7 @@ const FAILING_WRITES = {
   challenges: "ON challenges",
   "challenges.accepted": "OF accepted ON challenges",
   view_cards: "ON view_cards",
+  view_ordinals: "ON view_ordinals",
   view_slots: "ON view_slots",
   view_history: "ON view_history",
   view_state: "ON view_state",
@@ -341,6 +342,15 @@ export class ProofLog extends DeployedProofLog {
     this.ctx.storage.transactionSync(() => clearViews(this.ctx.storage.sql));
   }
 
+  /**
+   * Empties `view_ordinals` and leaves the other views as they are: an
+   * object whose views were filled before that table was one. It fills its
+   * views again when it starts.
+   */
+  testForgetOrdinals(): void {
+    this.ctx.storage.sql.exec("DELETE FROM view_ordinals");
+  }
+
   /** How many records the object keeps, and the first and the last `seq` among them. */
   testKept(): KeptRecords {
     return this.ctx.storage.sql.exec<{ count: number; first: number | null; last: number | null }>("SELECT COUNT(*) AS count, MIN(seq) AS first, MAX(seq) AS last FROM records").one();
@@ -517,7 +527,8 @@ export default {
    *   that card, and the cards of every declared account of the scope.
    * - `GET /__test/proof-log/views` answers a StoredViews: every row of the
    *   views; `DELETE` clears them, and the object fills them from its
-   *   records when it starts again. `POST /__test/proof-log/views-filled`
+   *   records when it starts again; `DELETE /__test/proof-log/view-ordinals`
+   *   empties `view_ordinals` alone. `POST /__test/proof-log/views-filled`
    *   answers once the running object has filled them or given up.
    * - `POST /__test/proof-log/page-plans` with a PagePlanQuestion answers
    *   PagePlans: the plan SQLite makes for each statement the pages' reads
@@ -654,6 +665,10 @@ export default {
     if (route === "GET /__test/proof-log/views") return json(await testProofLogOf(env).testViews());
     if (route === "DELETE /__test/proof-log/views") {
       await testProofLogOf(env).testClearViews();
+      return done();
+    }
+    if (route === "DELETE /__test/proof-log/view-ordinals") {
+      await testProofLogOf(env).testForgetOrdinals();
       return done();
     }
     if (route === "POST /__test/proof-log/views-filled") {

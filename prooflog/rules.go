@@ -114,13 +114,17 @@ func (a RecordResult) Equal(b RecordResult) bool {
 	return true
 }
 
-// Card is one card of the output: the date of its last card proof and its
-// current list, in ascending order of platform. A card that withdrew
-// everything has an empty list.
+// Card is one card of the output: the date of its last card proof, its
+// ordinal and its current list, in ascending order of platform. A card that
+// withdrew everything has an empty list.
 type Card struct {
 	ScopedID      string
 	LastCardProof verifier.Date
-	Accounts      []verifier.Account
+	// Ordinal is the place of the card's first valid record among the first
+	// valid records of every card of the proof log, every scope counted
+	// together, from 1 (spec/record-rules.md, "The ordinal").
+	Ordinal  int
+	Accounts []verifier.Account
 }
 
 // AccountCard is a card whose current account on the platform is the
@@ -211,11 +215,15 @@ func (cs *cardState) onDate(d verifier.Date) int {
 // Rules does not check the file as a whole (well-formed lines, seq);
 // ReadFile and ReadLine do.
 type Rules struct {
-	proofLog    verifier.ProofLog
-	platforms   []verifier.Platform // the proof log's table, in ascending order of ID
-	proofs      ProofVerifier
-	crls        CRLArchive
-	cards       map[cardKey]*cardState
+	proofLog  verifier.ProofLog
+	platforms []verifier.Platform // the proof log's table, in ascending order of ID
+	proofs    ProofVerifier
+	crls      CRLArchive
+	cards     map[cardKey]*cardState
+	// ordinals has every card with a valid record: its ordinal, given by
+	// its first valid record and never changed. It is not part of a card's
+	// state: no check reads it.
+	ordinals    map[cardKey]int
 	accounts    map[accountKey]int // the number of cards whose current account it is
 	used        map[string]bool    // challenges of earlier records, valid or invalid
 	latestValid *verifier.Date
@@ -227,7 +235,7 @@ type Rules struct {
 func NewRules(r verifier.ProofLog, proofs ProofVerifier, crls CRLArchive) *Rules {
 	return &Rules{
 		proofLog: r, platforms: verifier.Platforms(r), proofs: proofs, crls: crls,
-		cards: map[cardKey]*cardState{}, accounts: map[accountKey]int{}, used: map[string]bool{},
+		cards: map[cardKey]*cardState{}, ordinals: map[cardKey]int{}, accounts: map[accountKey]int{}, used: map[string]bool{},
 	}
 }
 
@@ -269,6 +277,9 @@ func (x *Rules) Apply(r *verifier.Record) (RecordResult, error) {
 	}
 	if res.Valid {
 		key := cardKey{r.ScopeString, r.ScopedID}
+		if _, ok := x.ordinals[key]; !ok {
+			x.ordinals[key] = len(x.ordinals) + 1
+		}
 		x.countAccounts(key, x.cards[key], -1)
 		x.cards[key] = next
 		x.countAccounts(key, next, +1)
@@ -563,7 +574,7 @@ func (x *Rules) output() []ScopeState {
 			byScope[k.scope] = s
 			accounts[k.scope] = map[acct][]AccountCard{}
 		}
-		card := Card{ScopedID: k.scopedID, LastCardProof: *cs.lastCardProof, Accounts: []verifier.Account{}}
+		card := Card{ScopedID: k.scopedID, LastCardProof: *cs.lastCardProof, Ordinal: x.ordinals[k], Accounts: []verifier.Account{}}
 		for _, p := range x.platforms {
 			if cur := cs.slots[p.ID].current; cur != nil {
 				card.Accounts = append(card.Accounts, verifier.Account{Platform: p.ID, Username: *cur})

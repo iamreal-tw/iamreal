@@ -26,6 +26,12 @@ export interface MemoryRulesRecord {
 export interface OutputCard {
   scopedId: string;
   lastCardProof: Day;
+  /**
+   * The place of the card's first valid record among the first valid
+   * records of every card of the proof log, every scope counted together,
+   * from 1 (spec/record-rules.md, "The ordinal").
+   */
+  ordinal: number;
   /** Its current list, in ascending order of platform. */
   accounts: Account[];
 }
@@ -45,6 +51,14 @@ export class MemoryRules {
   private readonly platforms: readonly PlatformRow[];
   /** Scope string, then scoped ID. */
   private readonly cards = new Map<string, Map<string, CardState>>();
+  /**
+   * Scope string, then scoped ID: the ordinal of every card with a valid
+   * record, given by its first and never changed. Not part of a card's
+   * state: no check reads it.
+   */
+  private readonly ordinals = new Map<string, Map<string, number>>();
+  /** The number of ordinals given: the cards with a valid record, of every scope. */
+  private ordinalsGiven = 0;
   private readonly used = new Set<string>();
   private latest: Day | null = null;
   private applied = 0;
@@ -78,6 +92,9 @@ export class MemoryRules {
       let scope = this.cards.get(r.scopeString);
       if (!scope) this.cards.set(r.scopeString, (scope = new Map()));
       scope.set(r.scopedId, outcome.card);
+      let ordinals = this.ordinals.get(r.scopeString);
+      if (!ordinals) this.ordinals.set(r.scopeString, (ordinals = new Map()));
+      if (!ordinals.has(r.scopedId)) ordinals.set(r.scopedId, ++this.ordinalsGiven);
     }
     this.latest = outcome.latestValidDate;
     this.used.add(r.challenge);
@@ -124,7 +141,7 @@ export class MemoryRules {
           if (!account) accounts.push((account = { platform, username, cards: [] }));
           account.cards.push({ scopedId, lastCardProof });
         }
-        cards.push({ scopedId, lastCardProof, accounts: list });
+        cards.push({ scopedId, lastCardProof, ordinal: this.ordinals.get(scopeString)!.get(scopedId)!, accounts: list });
       }
       accounts.sort((a, b) => byBytes(a.platform, b.platform) || byBytes(a.username, b.username));
       out.push({ scopeString, cards, accounts });

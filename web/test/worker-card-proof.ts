@@ -185,10 +185,16 @@ try {
     writeFileSync(join(screens, file), Buffer.from(data, "base64"));
   };
   const proofCopy = readFileSync(join(repo, "design", "copy", "proof-page.md"), "utf8");
-  /** The lines of the first code block of a section of proof-page.md, the example account kept (this card proof declared @alice too). */
+  /**
+   * The lines of the first code block of a section of proof-page.md, the example account kept (this card proof
+   * declared @alice too), the example ordinal (第 128 張) replaced: this card is the first of a proof log that was empty.
+   */
   const section = (heading: string): string[] => {
     const text = proofCopy.slice(proofCopy.indexOf(`\n## ${heading}`));
-    return /```\n([\s\S]*?)\n```/.exec(text)![1]!.split("\n").map((l) => l.trim()).filter((l) => l !== "" && !/^（[^）]*）$/.test(l));
+    return /```\n([\s\S]*?)\n```/.exec(text)![1]!
+      .split("\n")
+      .map((l) => l.trim().replace("第 128 張", "第 1 張"))
+      .filter((l) => l !== "" && !/^（[^）]*）$/.test(l));
   };
   const squash = (s: string): string => s.replace(/\s/gu, "");
 
@@ -204,9 +210,9 @@ try {
   await visitor.eval(`document.querySelectorAll('details').forEach((d) => (d.open = true))`);
   const card = squash(await visitor.text("body"));
   for (const line of section("1. ")) check(card.includes(squash(line)), `the page of the card says "${line}"`);
-  // Section 4: its heading and the three rows of labels and values, for the first card proof of a card that never switched.
+  // Section 4: its heading and the four rows of labels and values, for the first card proof of a card that never switched.
   const facts = section("4. ")
-    .slice(0, 4)
+    .slice(0, 5)
     .map((l) => l.replace("2026-03-02", today).replace("4 次", "1 次").replace("更換過 1 次", "更換過 0 次"));
   for (const line of [`上次過卡：今天（${today}）`, ...section("2. ").slice(1), `iamreal.tw/p/${short}`, ...facts, `${today}　新宣告：@alice`]) {
     check(card.includes(squash(line)), `the page of the card says "${line}"`);

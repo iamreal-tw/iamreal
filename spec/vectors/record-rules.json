@@ -2,7 +2,7 @@
   "spec": "record-rules",
   "status": "draft",
   "rules_version": 2,
-  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `proof_log` says whose platform table applies (spec/scope.md): production has threads, a test log test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none.",
+  "note": "Events stand for well-formed records; `verifies` says whether the record passes check 1; `crl_dates` are the CRL dates of the usable CRLs whose tree has the record's root (one root can belong to several CRLs; empty means none). `date` repeats the date in `challenge`. `proof_log` says whose platform table applies (spec/scope.md): production has threads, a test log test-example and threads. A valid result's `kinds` are the (platform, kind) pairs of the platforms that have a kind, in ascending order of platform. In `state`, a card's `accounts` is its current list and `accounts` of the scope is the output per account; `proofs_on_last_date` and `slots` (one per platform of the table: `current`, `last_declared`, `switch_count`, `correction_date`) are items of the state (\"State\"), not of the output. null means none. `ordinals` lists every card of the output with its ordinal (\"The ordinal\"), in ascending order of ordinal; it is beside `state`, not in its cards.",
   "cases": [
     {
       "name": "first declaration, refresh, withdraw by the empty list",
@@ -107,6 +107,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -262,6 +269,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -383,6 +397,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -506,6 +527,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -532,7 +560,8 @@
           "reason": "empty"
         }
       ],
-      "state": []
+      "state": [],
+      "ordinals": []
     },
     {
       "name": "the empty list after everything was withdrawn is empty",
@@ -627,6 +656,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -857,6 +893,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -1115,6 +1158,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -1367,6 +1417,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -1461,6 +1518,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -1618,6 +1682,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -1734,6 +1810,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -1857,6 +1940,18 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
         }
       ]
     },
@@ -2043,6 +2138,23 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "ordinal": 3
+        }
       ]
     },
     {
@@ -2121,6 +2233,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -2217,6 +2336,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -2270,7 +2396,8 @@
           "reason": "challenge_reused"
         }
       ],
-      "state": []
+      "state": [],
+      "ordinals": []
     },
     {
       "name": "root not recognized",
@@ -2299,7 +2426,8 @@
           "reason": "root"
         }
       ],
-      "state": []
+      "state": [],
+      "ordinals": []
     },
     {
       "name": "root: the date may be 1 day before to 3 days after the CRL date",
@@ -2442,6 +2570,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -2687,6 +2822,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -2838,6 +2985,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -2967,6 +3126,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -3064,6 +3235,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -3156,6 +3334,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 1
         }
       ]
     },
@@ -3334,6 +3519,18 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
         }
       ]
     },
@@ -3559,6 +3756,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -3812,6 +4016,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -3907,6 +4118,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -3996,6 +4214,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -4163,6 +4388,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -4290,6 +4522,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -4472,6 +4711,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -4664,6 +4910,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -5083,6 +5336,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -5364,6 +5629,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -5611,6 +5888,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -5705,6 +5989,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -5958,6 +6249,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -6085,6 +6383,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -6211,6 +6516,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -6443,6 +6755,18 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        }
       ]
     },
     {
@@ -6542,6 +6866,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -6800,6 +7131,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -6949,6 +7287,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -7070,6 +7415,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -7359,6 +7711,23 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "ordinal": 3
+        }
       ]
     },
     {
@@ -7508,6 +7877,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -7608,6 +7984,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -7737,6 +8120,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -7854,6 +8244,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -8017,6 +8414,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -8135,6 +8539,13 @@
             }
           ],
           "accounts": []
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -8508,6 +8919,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -8846,6 +9264,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -9202,6 +9627,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -9372,6 +9804,13 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
         }
       ]
     },
@@ -9697,6 +10136,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -9917,6 +10363,13 @@
             }
           ]
         }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        }
       ]
     },
     {
@@ -10096,6 +10549,18 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
         }
       ]
     },
@@ -10286,6 +10751,18 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
         }
       ]
     },
@@ -10849,6 +11326,320 @@
               ]
             }
           ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal-test:public:0__________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "ordinal": 2
+        }
+      ]
+    },
+    {
+      "name": "ordinal: each card by its first valid record, in seq order; invalid records are not counted; later records, a switch and withdrawing everything change nothing",
+      "proof_log": "production",
+      "events": [
+        {
+          "seq": 1,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-02-01.G04Y7M99MGE1R9KCWVE830RFVR",
+          "date": "2026-02-01",
+          "verifies": false,
+          "crl_dates": [
+            "2026-02-01"
+          ]
+        },
+        {
+          "seq": 2,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-02-01.SEVP9J2AD2NW4XV0ASHJNJ2XR0",
+          "date": "2026-02-01",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-01"
+          ]
+        },
+        {
+          "seq": 3,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "accounts": [],
+          "challenge": "2026-02-02.7RQ8T3A55T34H0PREM19QD59QM",
+          "date": "2026-02-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-02"
+          ]
+        },
+        {
+          "seq": 4,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "bob"
+            }
+          ],
+          "challenge": "2026-02-02.Y4QPAYN577J61SXC49N3H7XPJM",
+          "date": "2026-02-02",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-02"
+          ]
+        },
+        {
+          "seq": 5,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "alice"
+            }
+          ],
+          "challenge": "2026-02-03.6CP8JN6G3GP8PYT540CJ0NMAFR",
+          "date": "2026-02-03",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-03"
+          ]
+        },
+        {
+          "seq": 6,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "carol.tw"
+            }
+          ],
+          "challenge": "2026-02-03.ARNKQX99RRMDG10FTBZ057FAPW",
+          "date": "2026-02-03",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-03"
+          ]
+        },
+        {
+          "seq": 7,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "dave"
+            }
+          ],
+          "challenge": "2026-02-04.TENYYZJCHAKXDSWJJF87R663QW",
+          "date": "2026-02-04",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-04"
+          ]
+        },
+        {
+          "seq": 8,
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "accounts": [],
+          "challenge": "2026-02-05.2JTDJ1MZTNC167AFCV16MRKE4C",
+          "date": "2026-02-05",
+          "verifies": true,
+          "crl_dates": [
+            "2026-02-05"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "seq": 1,
+          "valid": false,
+          "reason": "proof"
+        },
+        {
+          "seq": 2,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 3,
+          "valid": false,
+          "reason": "empty"
+        },
+        {
+          "seq": 4,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 5,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "refresh"
+            }
+          ]
+        },
+        {
+          "seq": 6,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "first"
+            }
+          ]
+        },
+        {
+          "seq": 7,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "switch"
+            }
+          ]
+        },
+        {
+          "seq": 8,
+          "valid": true,
+          "kinds": [
+            {
+              "platform": "threads",
+              "kind": "withdraw"
+            }
+          ]
+        }
+      ],
+      "state": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "cards": [
+            {
+              "scoped_id": "0400000000000000000000000000000000000000000000000000",
+              "last_card_proof": "2026-02-02",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "bob"
+                }
+              ],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": "bob",
+                  "last_declared": "bob",
+                  "switch_count": 0,
+                  "correction_date": "2026-02-02"
+                }
+              }
+            },
+            {
+              "scoped_id": "040000000000000000000000000000000000000000000000000G",
+              "last_card_proof": "2026-02-05",
+              "accounts": [],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": null,
+                  "last_declared": "carol.tw",
+                  "switch_count": 0,
+                  "correction_date": "2026-02-03"
+                }
+              }
+            },
+            {
+              "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+              "last_card_proof": "2026-02-04",
+              "accounts": [
+                {
+                  "platform": "threads",
+                  "username": "dave"
+                }
+              ],
+              "proofs_on_last_date": 1,
+              "slots": {
+                "threads": {
+                  "current": "dave",
+                  "last_declared": "dave",
+                  "switch_count": 1,
+                  "correction_date": "2026-02-04"
+                }
+              }
+            }
+          ],
+          "accounts": [
+            {
+              "platform": "threads",
+              "username": "bob",
+              "cards": [
+                {
+                  "scoped_id": "0400000000000000000000000000000000000000000000000000",
+                  "last_card_proof": "2026-02-02"
+                }
+              ]
+            },
+            {
+              "platform": "threads",
+              "username": "dave",
+              "cards": [
+                {
+                  "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+                  "last_card_proof": "2026-02-04"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "ordinals": [
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "QSP7N676SNSV57YS61FXVMVQDD9ETF5SGJ2N0CNGFF2EN8D0V880",
+          "ordinal": 1
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "0400000000000000000000000000000000000000000000000000",
+          "ordinal": 2
+        },
+        {
+          "scope_string": "iamreal:public:0_______________",
+          "scoped_id": "040000000000000000000000000000000000000000000000000G",
+          "ordinal": 3
         }
       ]
     }
