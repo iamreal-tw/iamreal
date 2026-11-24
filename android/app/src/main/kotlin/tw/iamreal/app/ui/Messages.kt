@@ -85,20 +85,23 @@ internal class Messages(private val c: Copy) {
         }
     }
 
-    /** The notes below the list of step 4, before the button; each with whether links.more follows it. */
-    fun accountsNotes(status: CardProof.Status, single: String?): List<Pair<String, Boolean>> {
+    /** The notes below the list of step 4, before the button. */
+    fun accountsNotes(status: CardProof.Status, single: String?): List<String> {
         if (status.dailyLimit) return emptyList()
-        val change = c.say("accounts.how_change") + c.say("accounts.switches_limited") to true
-        val preview = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name)) to false
+        val change = c.say("accounts.how_change") + c.say("accounts.switches_limited")
+        val preview = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name))
         return when {
-            status.slots.any { it.current != null } -> listOf(c.say("accounts.how_refresh") to false, change, preview)
+            status.slots.any { it.current != null } -> listOf(c.say("accounts.how_refresh"), change, preview)
             status.lastCardProof != null -> listOf(change, preview)
             else -> listOf(
-                (if (single != null) c.say("accounts.one_per_platform_single", "platform" to single) else c.say("accounts.one_per_platform")) + c.say("accounts.switches_limited") to true,
+                (if (single != null) c.say("accounts.one_per_platform_single", "platform" to single) else c.say("accounts.one_per_platform")) + c.say("accounts.switches_limited"),
                 preview,
             )
         }
     }
+
+    /** The sentence under step 4's button: the system cannot tell whose an account is. */
+    fun notYours(single: String?): String = if (single != null) c.say("accounts.not_yours_single", "platform" to single) else c.say("accounts.not_yours")
 
     /** The lines under one row of step 4 (card-proof.md, "每一列下面的那一行"). None for a platform the app does not know: that sentence is not written yet. */
     fun rowLines(slot: CardProof.Slot): List<String> {
@@ -173,10 +176,29 @@ internal class Messages(private val c: Copy) {
         val switchUsed: String?,
     )
 
-    /** What step 6 says of the server's answer. The same choices as doneView of web/src/ui/messages.ts. */
+    /** What step 6 says (design/copy/card-proof.md, "6. 完成"). The same choices as doneView of web/src/ui/messages.ts. */
     class DoneView(
+        val title: String,
+        /** The list is empty: no small card, no hanging, nothing to do besides. */
+        val withdrawAll: Boolean,
+        /** The small card's accounts, as they are after this card proof: each with its platform's name, or none where the screens speak of one platform. */
+        val card: List<Pair<String?, String>>,
+        /** The date the proof log recorded it. */
+        val recordedOn: String,
+        val hangTitle: String,
+        val anyone: String,
+        /** "打開 @alice 的 Threads 個人檔案" and the address it opens: one per account on a platform the app knows. */
+        val profiles: List<Pair<String, String>>,
+        /** What can be done besides: share the card's page, the sentence that names a platform and the button. One per platform the app knows. */
+        val shares: List<Pair<String, String>>,
+        /** "掛好了嗎？打開你的島民證明看看。", the line that opens the card's page. */
+        val hung: String,
+        /** The card's first record: a new card has a new link (done.new_card). */
+        val newCard: Boolean,
         /** done.mismatch, above the title: what the server recorded differs from what step 5 said. */
         val mismatch: String?,
+        /** The record as the server says it recorded it: only where that differs from what step 5 said. */
+        val showRecord: Boolean,
         /** The proof log's line; null when the answer's kinds could not be read. */
         val record: String?,
         /**
@@ -187,7 +209,7 @@ internal class Messages(private val c: Copy) {
         val rows: List<DoneRow>,
         /** One per account of the list that other cards declare too (`account_cards` above 1). */
         val otherCards: List<String>,
-        /** An account was withdrawn and the list is not empty: its link can be taken down. */
+        /** An account was withdrawn: its link can be taken down. */
         val withdrawnLink: Boolean,
     )
 
@@ -221,12 +243,27 @@ internal class Messages(private val c: Copy) {
             rows.sortBy { it.platform }
         }
         return DoneView(
+            title = doneTitle(d),
+            withdrawAll = withdrawAll,
+            card = d.accounts.map { (platform, username) -> (if (single != null) null else if (knownOf(platform)) Platforms.of(platform)?.name ?: platform else platform) to account(platform, username) },
+            recordedOn = c.say("done.recorded_on", "date" to d.date),
+            hangTitle = if (single != null) c.say("done.hang_title_single", "platform" to single) else c.say("done.hang_title"),
+            anyone = if (single != null) c.say("done.anyone_single") else c.say("done.anyone"),
+            profiles = d.accounts.mapNotNull { (platform, username) ->
+                val p = if (knownOf(platform)) Platforms.of(platform) else null
+                p?.let { c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name) to it.profileUrl(username) }
+            },
+            // The button opens the system's share sheet, not the platform: it says only 分享 (design/copy/card-proof.md, "6. 完成", app).
+            shares = Platforms.known.map { c.say("done.share_note", "platform" to it.name) to c.say("app_done.share") },
+            hung = c.say("done.hung", "open_proof" to c.say("done.open_proof")),
+            newCard = d.firstRecord,
             mismatch = if (d.answer.mismatches.isNotEmpty()) c.say("done.mismatch") else null,
+            showRecord = d.answer.mismatches.isNotEmpty(),
             record = if (kinds == null) null else if (withdrawAll) c.say("done.record_withdraw_all") else if (single != null) c.say("done.record_single") else c.say("done.record_list"),
             kindsUnreadable = if (kinds == null) c.say("done.kinds_unreadable") else null,
             rows = rows,
             otherCards = (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
-            withdrawnLink = !withdrawAll && (kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" }),
+            withdrawnLink = kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" },
         )
     }
 
