@@ -186,7 +186,7 @@ enum Action: Equatable {
     case openProof
     /// The platform's app or the browser, at the account the card declares there.
     case openProfile(String)
-    /// The system's share sheet, with the card's page.
+    /// The system's share sheet, with the sentence and the card's page.
     case share
     /// The page of the account typed on a platform.
     case preview(String)

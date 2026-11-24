@@ -950,8 +950,9 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   check(JSON.stringify(v.profiles) === JSON.stringify(profiles), `${o.label}: the links to the profiles ${JSON.stringify(v.profiles)}`);
   // The text suggested: the card's ordinal, the one its page writes; without one, the sentence without a number.
   check(o.unnumbered === true || /^[1-9][0-9,]*$/.test(v.pageOrdinal), `${o.label}: the card's page writes its ordinal "${v.pageOrdinal}"`);
-  const text = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: v.pageOrdinal });
-  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(`https://${SITE_DOMAIN}/${cardPath(sid)}`)}`]];
+  const sentence = o.unnumbered ? C.done.share_text_unnumbered : fill(C.done.share_text, { ordinal: v.pageOrdinal });
+  const text = `${sentence}\nhttps://${SITE_DOMAIN}/${cardPath(sid)}`;
+  const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?text=${encodeURIComponent(text)}`]];
   check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the text${o.unnumbered ? " without a number" : " with the card's ordinal"} and the card's page ${JSON.stringify(v.shares)}`);
   check(v.optional === !withdrawAll && v.main.includes(C.done.return_note) === !withdrawAll, `${o.label}: what else can be done ${withdrawAll ? "is not there" : "is there"}`);
   const mismatch = o.mismatch ?? [];

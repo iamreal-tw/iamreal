@@ -221,7 +221,8 @@ final class CardProofTests: XCTestCase {
         try await press("打開 @alice 的 Threads 個人檔案", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
         try await press("分享", in: model)
-        XCTAssertEqual(shared, ["我剛剛換了第 \(ordinal) 張島民證明，宣告本帳號背後是一名台灣人。\n\(address.absoluteString)"])
+        let words = Copy(json: try Repository.data("design/copy/card-proof.json"))
+        XCTAssertEqual(shared, ["\(words("done.share_text", ["ordinal": ordinal]))\n\(address.absoluteString)"])
 
         // The system does not let the app notify: nothing is set, the card proof is done all the same.
         notifier.allows = false

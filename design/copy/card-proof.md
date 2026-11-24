@@ -833,7 +833,7 @@ iamreal.tw/p/7K2Q9FM4XD
 - 連結是這張卡片的島民證明的網址（`iamreal.tw/p/` 加 10 個字元的島民編號），所有平台用同一個；帳號改了，連結不變。「複製連結」複製的是帶 `https://` 的完整網址，按了之後按鈕寫「已複製」
 - 「打開 @alice 的 Threads 個人檔案」連到帳號的公開頁面（`https://www.threads.com/@alice`），小卡上每個有公開頁面的帳號一行
 - 「打開你的島民證明」是連結，連到這張島民證明（`hang.md` 第 3 部分）
-- 「分享到 Threads」打開 Threads 的發文畫面，預先填好下面這段文字和這張島民證明的網址（Threads 的 web intent，`https://www.threads.com/intent/post?text=…&url=…`，見 Meta 的 [Web intents](https://developers.facebook.com/docs/threads/threads-web-intents) 說明）：
+- 「分享到 Threads」打開 Threads 的發文畫面，預先填好下面這段文字（Threads 的 web intent，`https://www.threads.com/intent/post?text=…`，見 Meta 的 [Web intents](https://developers.facebook.com/docs/threads/threads-web-intents) 說明）：
 
   ```
   我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。
@@ -846,7 +846,7 @@ iamreal.tw/p/7K2Q9FM4XD
   我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。
   ```
 
-  網址帶 `https://`，網域是這個網站的（測試網站是 `test.iamreal.tw`）。文字放 `text`，網址放 `url`
+  第二行是這張島民證明的網址，帶 `https://`，網域是這個網站的（測試網站是 `test.iamreal.tw`）。兩行都放在 `text` 裡，不用 `url`（那是連結的附件，網址不一定出現在貼文的文字裡）
 - 連到別的頁面的連結都在新分頁開：離開這一頁，過卡就結束了
 
 平台表上裝置認得的平台不只一個時（「只有一個平台時」的相反），標題和下面那一句換成：

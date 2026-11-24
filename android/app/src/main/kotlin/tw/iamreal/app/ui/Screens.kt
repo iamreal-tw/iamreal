@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
 
-/** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, an address handed to the system's share sheet. */
+/** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, a text handed to the system's share sheet. */
 internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, val share: (String) -> Unit)
 
 /**

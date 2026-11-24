@@ -72,7 +72,7 @@
 //                    signature is made, the flow stops, or IDLE_MS pass
 //                    after the first; never stored
 //   failures         returned to the caller only; no request carries them
-import { type AcceptedKind, type CardStateResponse, type Fetch, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
+import { type AcceptedKind, type CardStateResponse, type Fetch, NOTHING_TOLD, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
 import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
 import type { TreeBuilder } from "./crl/build.ts";
@@ -1047,7 +1047,8 @@ export class CardProofFlow {
     const recordDay = parseDay(s.challenge.slice(0, 10));
     const now: Account[] = [...[...state.slots].flatMap(([platform, slot]) => (slot.current === null ? [] : [{ platform, username: slot.current }])), ...state.kept].sort(byPlatform);
     if (state.lastCardProof !== recordDay || !sameList(now, s.accounts)) this.fail(toStop(used));
-    return this.done(s, { seq: null, recordHash: null, ordinal: null, kinds: null });
+    // Not the answer's: what the server recorded on each platform, and the card's ordinal, are not known here.
+    return this.done(s, NOTHING_TOLD);
   }
 
   /**

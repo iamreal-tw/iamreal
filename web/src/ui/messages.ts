@@ -600,14 +600,17 @@ export function doneTitle(d: Done): Sentence {
 
 /** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status before this card proof); null otherwise. */
 /**
- * The text suggested for sharing the card's page, before its link: with the
+ * The text suggested for sharing the card's page, on the line above its link: with the
  * card's ordinal, written as the card's page writes it (a comma every three
  * digits), or without a number when the answer had none
  * (design/copy/card-proof.md, "6. 完成").
  */
 export function shareText(ordinal: number | null): string {
-  return ordinal === null ? COPY.done.share_text_unnumbered : fill(COPY.done.share_text, { ordinal: String(ordinal).replace(/\B(?=(\d{3})+$)/g, ",") });
+  return ordinal === null ? COPY.done.share_text_unnumbered : fill(COPY.done.share_text, { ordinal: thousands(ordinal) });
 }
+
+/** A whole number with a comma between groups of three digits. */
+const thousands = (n: number): string => String(n).replace(/\B(?=(\d{3})+$)/g, ",");
 
 export function doneView(d: Done, single: string | null = null): DoneView {
   const t = COPY.done;
@@ -651,10 +654,10 @@ export function doneView(d: Done, single: string | null = null): DoneView {
   }
   const withdrawAll = d.accounts.length === 0;
   const withdrew = (d.kinds ?? d.expected).some((k) => k.kind === "withdraw");
-  const text = shareText(d.ordinal);
+  const text = `${shareText(d.ordinal)}\nhttps://${link}`;
   const shares = [...KNOWN_PLATFORMS].flatMap((id) => {
     const p = presentationOf(id)!;
-    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(`https://${link}`, text) }] : [];
+    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(text) }] : [];
   });
   return {
     title: doneTitle(d),

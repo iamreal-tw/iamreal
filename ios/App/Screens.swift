@@ -358,6 +358,21 @@ struct Screens {
         return rows.sorted { $0.platform < $1.platform }.map(\.block)
     }
 
+    /// What the share sheet gets before the card's address, on the line
+    /// above it: the sentence with the card's ordinal, written as the
+    /// card's page writes it, or without a number when the answer had none
+    /// (design/copy/card-proof.md, "6. 完成").
+    func shareText(_ done: Flow.Done) -> String {
+        guard let ordinal = done.answer.ordinal else { return copy("done.share_text_unnumbered") }
+        return copy("done.share_text", ["ordinal": Self.thousands(ordinal)])
+    }
+
+    /// A whole number with a comma between groups of three digits.
+    private static func thousands(_ n: Int) -> String {
+        let digits = String(n)
+        return digits.enumerated().map { i, c in (i > 0 && (digits.count - i) % 3 == 0 ? "," : "") + String(c) }.joined()
+    }
+
     /// `single`: the one platform's name, as step 5 decided it. `copied`:
     /// the link was copied. The same parts, in the same order, as the web
     /// page's done screen (doneView of web/src/ui/messages.ts), but for
@@ -366,17 +381,6 @@ struct Screens {
     /// signed), and the share link, which here is the system's share sheet
     /// (design/copy/card-proof.md, step 6, "app"). `reminder`: the
     /// reminder's part, in the place of the page's "記得每三個月回來過卡一次".
-    /// What the share sheet gets before the card's address, on the line
-    /// above it: the sentence with the card's ordinal, written as the
-    /// card's page writes it (a comma every three digits), or without a
-    /// number when the answer had none (design/copy/card-proof.md, "6. 完成").
-    func shareText(_ done: Flow.Done) -> String {
-        guard let ordinal = done.answer.ordinal else { return copy("done.share_text_unnumbered") }
-        let digits = String(ordinal)
-        let grouped = digits.enumerated().map { i, c in (i > 0 && (digits.count - i) % 3 == 0 ? "," : "") + String(c) }.joined()
-        return copy("done.share_text", ["ordinal": grouped])
-    }
-
     func done(_ done: Flow.Done, single: String?, copied: Bool, reminder: DoneReminder) -> Screen {
         let withdrawAll = done.accounts.isEmpty
         let kinds = done.answer.kinds

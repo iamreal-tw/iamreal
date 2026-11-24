@@ -37,8 +37,8 @@ export interface Presentation {
   readonly formatHint: string | null;
   /** The account's public page on the platform, opened by "預覽個人檔案" and the last screen's link to the profile; null if the platform has none. */
   readonly profileUrl: ((username: string) => string) | null;
-  /** The platform's page to post a link from (the last screen's "分享到"), with `text` and `url` filled in; null if the platform has none. */
-  readonly shareUrl: ((url: string, text: string) => string) | null;
+  /** The platform's page to post from (the last screen's "分享到"), with `text` prefilled; null if the platform has none. */
+  readonly shareUrl: ((text: string) => string) | null;
 }
 
 const BY_ID: ReadonlyMap<string, Presentation> = new Map(PRESENTATIONS.map((p) => [p.platform, p]));

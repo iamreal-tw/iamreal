@@ -557,11 +557,11 @@ describe("done (step 6)", () => {
     assert.equal(v.proofPath, "/p/7K2Q9FM4XD");
     // test-example has no public page.
     assert.deepEqual(v.profiles.map((p) => [t(p.text), p.url]), [["打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice"]]);
-    // The sentence with the card's ordinal, and the card's page.
-    const sentence = encodeURIComponent("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。");
+    // The sentence with the card's ordinal, and on the line under it the card's page.
+    const text = encodeURIComponent("我剛剛換了第 128 張島民證明，宣告本帳號背後是一名台灣人。\nhttps://iamreal.tw/p/7K2Q9FM4XD");
     assert.deepEqual(
       v.shares.map((sh) => [t(sh.note), t(sh.button), sh.url]),
-      [["把你的島民證明分享到 Threads。", "分享到 Threads", `https://www.threads.com/intent/post?text=${sentence}&url=https%3A%2F%2Fiamreal.tw%2Fp%2F7K2Q9FM4XD`]],
+      [["把你的島民證明分享到 Threads。", "分享到 Threads", `https://www.threads.com/intent/post?text=${text}`]],
     );
     assert.equal(v.showRecord, false);
   });
@@ -570,8 +570,10 @@ describe("done (step 6)", () => {
     const expected = [crow({ kind: "first", username: "alice" })];
     const shared = (ordinal: number | null): string => {
       const url = new URL(doneView(done(expected, [k("threads", "first", "alice")], { ordinal })).shares[0]!.url);
-      assert.equal(url.searchParams.get("url"), "https://iamreal.tw/p/7K2Q9FM4XD");
-      return url.searchParams.get("text")!;
+      assert.deepEqual([...url.searchParams.keys()], ["text"]);
+      const [sentence, link] = url.searchParams.get("text")!.split("\n");
+      assert.equal(link, "https://iamreal.tw/p/7K2Q9FM4XD");
+      return sentence!;
     };
     assert.equal(shared(1), "我剛剛換了第 1 張島民證明，宣告本帳號背後是一名台灣人。");
     assert.equal(shared(999), "我剛剛換了第 999 張島民證明，宣告本帳號背後是一名台灣人。");

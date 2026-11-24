@@ -358,6 +358,9 @@ export interface Accepted {
   kinds: AcceptedKind[] | null;
 }
 
+/** An answer of which nothing is told: a 201 all the same (Accepted). */
+export const NOTHING_TOLD: Readonly<Accepted> = Object.freeze({ seq: null, recordHash: null, ordinal: null, kinds: null });
+
 const KINDS: readonly string[] = ["first", "refresh", "correction", "switch", "withdraw"];
 
 function readKinds(x: unknown): AcceptedKind[] | null {
@@ -390,13 +393,13 @@ export async function submitRecord(fetchFn: Fetch, s: Submission): Promise<Accep
     b = await request(fetchFn, "/api/v1/records", { method: "POST", body }, 201);
   } catch (e) {
     // A 201 is a record in the proof log, whatever its body: not a failure (Accepted).
-    if (e instanceof ServerError && e.status === 201) return { seq: null, recordHash: null, ordinal: null, kinds: null };
+    if (e instanceof ServerError && e.status === 201) return { ...NOTHING_TOLD };
     throw e;
   }
   const seq = Number.isSafeInteger(b.seq) && (b.seq as number) >= 1 ? (b.seq as number) : null;
   const recordHash = typeof b.record_hash === "string" && /^[0-9a-f]{64}$/.test(b.record_hash) ? b.record_hash : null;
   // An answer of which seq or record_hash cannot be read is one the device cannot read: nothing of it is told.
-  if (seq === null || recordHash === null) return { seq: null, recordHash: null, ordinal: null, kinds: null };
+  if (seq === null || recordHash === null) return { ...NOTHING_TOLD };
   const ordinal = Number.isSafeInteger(b.ordinal) && (b.ordinal as number) >= 1 ? (b.ordinal as number) : null;
   // kinds and account_cards are only told to the cardholder (Accepted.kinds).
   return { seq, recordHash, ordinal, kinds: readKinds(b.kinds) };
