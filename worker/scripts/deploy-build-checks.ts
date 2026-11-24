@@ -28,6 +28,7 @@
 // way (an array of numbers, pieces put together when the Worker runs) is
 // not.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -39,7 +40,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { COPY_JS_SHA256, FONT_FILE, FONT_SOURCE, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { FONT_FILE, FONT_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -292,10 +293,30 @@ export interface ConfiguredSite {
   readonly files: readonly string[];
   /** The SHA-256 of `pages.css` there; null if the file is not there. */
   readonly styleSheetSha256: string | null;
+  /** The SHA-256 of `pages.css` there as the commit checked out holds it (`sha256InHead`); null if there is none to read. */
+  readonly committedStyleSheetSha256: string | null;
   /** The SHA-256 of `copy.js` there; null if the file is not there. */
   readonly scriptSha256: string | null;
+  /** The SHA-256 of `copy.js` there as the commit checked out holds it; null if there is none to read. */
+  readonly committedScriptSha256: string | null;
   /** The SHA-256 of the typeface there (`FONT_FILE`); null if the file is not there. */
   readonly fontSha256: string | null;
+}
+
+/**
+ * The SHA-256 of a file as the commit checked out (HEAD) holds it, at the
+ * same path: what git has for it, not what the working tree has. Null if
+ * there is none to read: the file is not in HEAD, or its directory is not
+ * in a git checkout, or there is no git to ask.
+ */
+export function sha256InHead(path: string): string | null {
+  try {
+    // `HEAD:./<name>` is the path from the directory git runs in, wherever that is in the repository.
+    const held = execFileSync("git", ["show", `HEAD:./${basename(path)}`], { cwd: dirname(path), stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 });
+    return createHash("sha256").update(held).digest("hex");
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -332,7 +353,9 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       redirects: textOf("_redirects"),
       files: directory === undefined || !existsSync(directory) ? [] : filesUnder(directory).map((f) => relative(directory, f).split(sep).join("/")).filter((f) => !f.startsWith("proof/")).sort(),
       styleSheetSha256: sha256Of("pages.css"),
+      committedStyleSheetSha256: directory === undefined ? null : sha256InHead(join(directory, "pages.css")),
       scriptSha256: sha256Of("copy.js"),
+      committedScriptSha256: directory === undefined ? null : sha256InHead(join(directory, "copy.js")),
       fontSha256: sha256Of(FONT_FILE),
     };
   }
@@ -349,9 +372,11 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
  *   - the files of the directory outside proof/ are the ones listed
- *     (`SITE_FILES`) and no other, and the style sheet and the script are
- *     the ones with the SHA-256 written down (`PAGES_CSS_SHA256`,
- *     `COPY_JS_SHA256`), and the typeface is the subset of design/fonts/
+ *     (`SITE_FILES`) and no other; the style sheet and the script are the
+ *     ones the commit checked out holds (`sha256InHead`), so a deploy
+ *     uploads the ones that were reviewed, not a change that was not
+ *     committed or one a build made, and one git cannot read from HEAD does
+ *     not pass; and the typeface is the subset of design/fonts/
  *     (`FONT_SOURCE`), byte for byte. What is under proof/, which is not in the
  *     repository, is the card proof page's build: `checkProofPages` looks
  *     at it;
@@ -376,8 +401,14 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.equal(site.headers, siteHeaders(site.kind), `_headers of the ${env} environment is the one scripts/site-files.ts writes for a ${site.kind} log's site`);
     assert.equal(site.redirects, SITE_REDIRECTS, `_redirects of the ${env} environment is the one of scripts/site-files.ts`);
     assert.deepEqual(site.files, SITE_FILES, `the files of the ${env} environment's Static Assets outside proof/ are the ones scripts/site-files.ts lists, no more and no fewer`);
-    assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
-    assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
+    for (const [name, there, committed] of [
+      ["pages.css", site.styleSheetSha256, site.committedStyleSheetSha256],
+      ["copy.js", site.scriptSha256, site.committedScriptSha256],
+    ] as const) {
+      const message = `${name} of the ${env} environment is the one of HEAD, byte for byte: commit it before a deploy, and have nothing change it after`;
+      assert.notEqual(committed, null, message);
+      assert.equal(there, committed, message);
+    }
     assert.equal(site.fontSha256, createHash("sha256").update(readFileSync(FONT_SOURCE)).digest("hex"), `${FONT_FILE} of the ${env} environment is the subset of design/fonts/`);
   }
 }

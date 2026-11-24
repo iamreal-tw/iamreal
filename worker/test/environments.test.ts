@@ -21,13 +21,15 @@
 // added, it gets its own entry in ENVIRONMENTS below**: kind "production",
 // an object name that does not start with `test-`, and its own bucket.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { experimental_readRawConfig, unstable_readConfig } from "wrangler";
-import { type ConfiguredSite, checkClearedOn, checkCpuLimit, checkSiteFiles, configuredClearedOn, configuredCpuMs, configuredSites } from "../scripts/deploy-build-checks.ts";
-import { COPY_JS_SHA256, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
+import { type ConfiguredSite, checkClearedOn, checkCpuLimit, checkSiteFiles, configuredClearedOn, configuredCpuMs, configuredSites, sha256InHead } from "../scripts/deploy-build-checks.ts";
+import { RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "../scripts/site-files.ts";
 import { CRL_CATCH_UP_MS, RESERVED_FOR_LARGEST_CRL_MS, ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WORKER_DIR } from "./build.ts";
 
@@ -61,6 +63,9 @@ function problems(settings: Settings, expected: Expected): string[] {
   if (buckets.length !== 1 || buckets[0] !== `DATA=${expected.bucket}`) out.push(`the only bucket is not DATA=${expected.bucket}`);
   return out;
 }
+
+/** The SHA-256 of a file as this commit holds it, by its path from the repository's root, read with git itself. */
+const inHead = (path: string): string => createHash("sha256").update(execFileSync("git", ["show", `HEAD:${path}`], { cwd: WORKER_DIR })).digest("hex");
 
 const read = (env: string): Settings => unstable_readConfig({ config: join(WORKER_DIR, "wrangler.jsonc"), env }) as unknown as Settings;
 
@@ -131,15 +136,16 @@ test("every environment sends the files of site/ past the Worker, with the heade
       // Without site/proof/, where a deploy builds the card proof page: that build is `configuredProofPages`'s to read
       // (test/proof-page.test.ts), and one left there by a deploy build made on this computer changes nothing here.
       files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "pages.css"],
-      styleSheetSha256: PAGES_CSS_SHA256,
-      scriptSha256: COPY_JS_SHA256,
+      // What it uploads is what this commit holds: the two files as they are in HEAD, byte for byte.
+      styleSheetSha256: inHead("worker/site/pages.css"),
+      committedStyleSheetSha256: inHead("worker/site/pages.css"),
+      scriptSha256: inHead("worker/site/copy.js"),
+      committedScriptSha256: inHead("worker/site/copy.js"),
       fontSha256: createHash("sha256").update(readFileSync(join(WORKER_DIR, "..", "design", "fonts", "GenRyuMin2TW-B.woff2"))).digest("hex"),
     });
   }
   assert.deepEqual(RUN_WORKER_FIRST, ["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"]);
   assert.deepEqual(SITE_FILES, ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "pages.css"]);
-  assert.match(PAGES_CSS_SHA256, /^[0-9a-f]{64}$/);
-  assert.match(COPY_JS_SHA256, /^[0-9a-f]{64}$/);
   checkSiteFiles(sites);
   // Set once, at the top level, which every environment shares.
   const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
@@ -165,9 +171,13 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["a kind that is none", { kind: "staging" }, /PROOF_LOG_KIND of the test environment/],
     ["another file beside the five", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
     ["no style sheet", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2"], styleSheetSha256: null }, /files of the test environment/],
-    ["a style sheet that was changed", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment/],
+    ["a style sheet that is not the one of HEAD: changed and not committed, or changed by the build", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment is the one of HEAD/],
+    ["a style sheet that is not in HEAD, or a checkout that is not git's", { committedStyleSheetSha256: null }, /pages\.css of the test environment is the one of HEAD/],
+    ["neither there nor in HEAD: null is not taken for the same", { styleSheetSha256: null, committedStyleSheetSha256: null }, /pages\.css of the test environment is the one of HEAD/],
     ["no script", { files: ["_headers", "_redirects", "fonts/GenRyuMin2TW-B.woff2", "pages.css"], scriptSha256: null }, /files of the test environment/],
-    ["a script that was changed", { scriptSha256: "0".repeat(64) }, /copy\.js of the test environment/],
+    ["a script that is not the one of HEAD", { scriptSha256: "0".repeat(64) }, /copy\.js of the test environment is the one of HEAD/],
+    ["a script that is not in HEAD, or a checkout that is not git's", { committedScriptSha256: null }, /copy\.js of the test environment is the one of HEAD/],
+    ["neither there nor in HEAD", { scriptSha256: null, committedScriptSha256: null }, /copy\.js of the test environment is the one of HEAD/],
     ["no typeface", { files: ["_headers", "_redirects", "copy.js", "pages.css"], fontSha256: null }, /files of the test environment/],
     ["a typeface that is not the subset of design/fonts/", { fontSha256: "0".repeat(64) }, /GenRyuMin2TW-B\.woff2 of the test environment is the subset of design\/fonts\//],
   ];
@@ -176,6 +186,32 @@ test("a configuration that runs the Worker for the card proof page's files, lets
   assert.throws(() => checkSiteFiles({ test: real, production: { ...real, kind: "production" } }), /_headers of the production environment/);
   checkSiteFiles({ test: real, production: { ...real, kind: "production", headers: siteHeaders("production") } });
   assert.throws(() => checkSiteFiles({}), /has an environment/);
+});
+
+test("the style sheet and the script are checked against the ones this commit holds, read with git; with no such file to read, there is nothing they are the same as", () => {
+  assert.equal(sha256InHead(join(WORKER_DIR, "site", "pages.css")), inHead("worker/site/pages.css"));
+  assert.equal(sha256InHead(join(WORKER_DIR, "site", "copy.js")), inHead("worker/site/copy.js"));
+  const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+  const dir = mkdtempSync(join(tmpdir(), "iamreal-head-"));
+  try {
+    // Not in a git checkout: no HEAD to read.
+    writeFileSync(join(dir, "pages.css"), "body {}\n");
+    assert.equal(sha256InHead(join(dir, "pages.css")), null);
+    // In one, the file as HEAD holds it, whatever the working tree has; one HEAD does not hold is not there.
+    const git = (...args: string[]): void => void execFileSync("git", ["-c", "user.name=alice", "-c", "user.email=alice@example.org", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args], { cwd: dir, stdio: "ignore" });
+    git("init", "--quiet");
+    assert.equal(sha256InHead(join(dir, "pages.css")), null, "a repository with no commit");
+    git("add", "pages.css");
+    git("commit", "--quiet", "-m", "pages.css");
+    assert.equal(sha256InHead(join(dir, "pages.css")), sha256("body {}\n"));
+    writeFileSync(join(dir, "pages.css"), "body { color: red }\n");
+    assert.equal(sha256InHead(join(dir, "pages.css")), sha256("body {}\n"), "changed and not committed");
+    writeFileSync(join(dir, "copy.js"), "\n");
+    assert.equal(sha256InHead(join(dir, "copy.js")), null, "not committed");
+    assert.equal(sha256InHead(join(dir, "none.js")), null, "not there at all");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the date the test log was last cleared on is a date of the calendar; a configuration with another value is turned away before it is deployed", () => {
