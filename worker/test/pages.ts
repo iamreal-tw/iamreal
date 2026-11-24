@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
 import { FONT_FILE } from "../scripts/site-files.ts";
-import { block, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
+import { block, previewImage, squash, testProofLogLine, unescapeHtml, visibleText } from "./copy.ts";
 import type { TestWorker } from "./harness.ts";
 import { freshProofLog, mustSubmit, newCard, publishCrl, sub, tw } from "./records.ts";
 
@@ -182,6 +182,23 @@ export const testProofLogMark = (date: string): string => `<p class="test-proof-
 /** Where the style sheet loads the headings' typeface from: a file of Static Assets. */
 export const FONT_PATH = `/${FONT_FILE}`;
 
+/** Where the link preview's image is: a file of Static Assets, a copy of design/screens/og-image.png. */
+export const OG_IMAGE_PATH = "/og-image.png";
+
+/**
+ * The link preview's image as every page that has a link preview writes it
+ * (proof-page.md, section 8, 預覽圖): the same image on each, at the address
+ * of the site's own domain, with its size and the alt text of the copy.
+ */
+export const previewImageMeta = (host: string): string =>
+  [
+    `<meta property="og:image" content="https://${host}${OG_IMAGE_PATH}">`,
+    '<meta property="og:image:type" content="image/png">',
+    '<meta property="og:image:width" content="1200">',
+    '<meta property="og:image:height" content="630">',
+    `<meta property="og:image:alt" content="${previewImage().alt}">`,
+  ].join("\n");
+
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
 
@@ -189,8 +206,9 @@ export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
  * Requests a page and checks what every page of the visitors must be: the
  * headers; HTML with no script (but the copy buttons' script on /verify and
  * /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
- * event attribute and no description (but the home page's); the navigation
- * bar and the foot; and, on a test log, the mark with the date it was
+ * event attribute and no description (but the home page's); the link
+ * preview's one image if the page has a link preview (`previewImageMeta`);
+ * the navigation bar and the foot; and, on a test log, the mark with the date it was
  * last cleared on, above everything else, and `noindex`. Returns the status
  * and the body.
  */
@@ -207,7 +225,11 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   } else assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
-  assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"|og:image/i : /name="description"|og:description|og:image/i, `${path}: no description`);
+  assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"/i : /name="description"|og:description/i, `${path}: no description`);
+  // Every page with a link preview has the same image, at its own site's address; a page with no link preview has none.
+  const preview = page.includes('<meta property="og:title" ');
+  assert.equal(page.includes(previewImageMeta(test ? "test.iamreal.tw" : "iamreal.tw")), preview, `${path}: the link preview's image`);
+  assert.equal(page.split("og:image").length - 1, preview ? 5 : 0, `${path}: the image once, and no other`);
   assert.ok(page.includes('<link rel="stylesheet" href="/pages.css">'), `${path}: the page has the style sheet`);
   checkNavAndFoot(path, page);
   const mark = testProofLogMark(CLEARED_ON);

@@ -12,7 +12,7 @@ import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, FONT_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
 import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -403,11 +403,11 @@ describe("every page", () => {
     assert.ok(!none.includes("<b>x") && !none.includes("&lt;b&gt;") && !none.includes("<i>") && !none.includes("&lt;i&gt;"));
   });
 
-  test("the pages, the style sheet, the script and the typeface take GET and HEAD only; HEAD has the headers of GET", async () => {
+  test("the pages, the style sheet, the script, the typeface and the link preview's image take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH]) {
-      // The style sheet, the script and the typeface are files of Static Assets.
-      const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH;
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH]) {
+      // The style sheet, the script, the typeface and the image are files of Static Assets.
+      const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH || path === OG_IMAGE_PATH;
       const cache = file ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
       assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
@@ -415,7 +415,7 @@ describe("every page", () => {
       checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
-        // The pages are the Worker's; the style sheet, the script and the typeface are sent by Static Assets, whose 405 has no
+        // The pages are the Worker's; the style sheet, the script, the typeface and the image are sent by Static Assets, whose 405 has no
         // Allow. A 405 runs no script: its policy is the pages' without one.
         assert.deepEqual([res.status, res.headers.get("allow")], [405, file ? null : "GET, HEAD"], `${method} ${path}`);
         checkVisitorHeaders(`${method} ${path}`, res, { cache: file ? "no-cache" : "no-store", more: ["allow"] });
@@ -458,6 +458,25 @@ describe("every page", () => {
     // Nothing else under /fonts/ is a file, and the Worker does not answer for it either.
     assert.equal((await worker.fetch("/fonts/GenRyuMin2TW-R.woff2")).status, 404);
     assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of the requests");
+  });
+
+  test("the link preview's image: design/screens/og-image.png, 1200 by 630, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
+    await worker.seen();
+    const res = await worker.fetch(OG_IMAGE_PATH);
+    assert.deepEqual([res.status, res.headers.get("content-type")], [200, "image/png"]);
+    checkVisitorHeaders(OG_IMAGE_PATH, res, { cache: "no-cache" });
+    const png = Buffer.from(await res.arrayBuffer());
+    assert.ok(png.equals(readFileSync(join(WORKER_DIR, "..", "design", "screens", "og-image.png"))), "design/screens/og-image.png, byte for byte");
+    // The PNG signature, then the IHDR chunk: its width and height (https://www.w3.org/TR/png-3/#11IHDR). The pages say the same.
+    assert.ok(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && png.toString("latin1", 12, 16) === "IHDR", "a PNG");
+    assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1200, 630]);
+    const etag = res.headers.get("etag");
+    assert.match(etag ?? "", /^"[0-9a-f]+"$/);
+    const again = await worker.fetch(OG_IMAGE_PATH, { headers: { "If-None-Match": etag! } });
+    assert.equal(again.status, 304);
+    checkVisitorHeaders(`${OG_IMAGE_PATH} again`, again, { cache: "no-cache" });
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for neither request");
   });
 
   test("what is not a page is the 404 page of design/copy/not-found.md, with what every page has; under /api/ it stays the API's answer", async () => {

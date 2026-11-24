@@ -10,6 +10,16 @@ export const CSS_PATH = "/pages.css";
 /** Where the copy buttons' script is (site/copy.js, sent by Static Assets): the one script of the pages, loaded by /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
+/**
+ * The image of every page's link preview (design/copy/proof-page.md,
+ * section 8, 預覽圖): site/og-image.png, sent by Static Assets, the same
+ * on every page, with nothing of the page on it.
+ */
+export const OG_IMAGE_PATH = "/og-image.png";
+
+/** The image's alt text, as proof-page.md section 8 writes it. */
+export const OG_IMAGE_ALT = "島民證明：即便是小國小民，也能一起讓網路的聲量更真實。iamreal.tw";
+
 /** What every page says about the site that makes it. */
 export interface Site {
   /**
@@ -21,7 +31,8 @@ export interface Site {
   /**
    * The site's domain, as a page writes it where it writes its own address
    * (`iamreal.tw/p/…`; on a test log's site its own,
-   * design/copy/test-site.md).
+   * design/copy/test-site.md), and the domain of the link preview's image
+   * (`OG_IMAGE_PATH`): each site's own.
    */
   readonly host: string;
 }
@@ -31,7 +42,7 @@ export interface Document {
   /** The title of the link preview (og:title); the <title> is it followed by ｜島民證明, or `tabTitle` if there is one. */
   readonly title: string;
   readonly tabTitle?: string;
-  /** False for a page with no link preview at all (no og:title, no og:site_name). */
+  /** False for a page with no link preview at all (no og:title, no og:site_name, no image). */
   readonly preview?: boolean;
   /** True for a page that loads the copy buttons' script (`COPY_JS_PATH`). */
   readonly script?: boolean;
@@ -108,6 +119,11 @@ export function layout(site: Site, d: Document): string {
 ${test === null ? new Html("") : new Html('<meta name="robots" content="noindex">\n')}<title>${d.tabTitle ?? `${d.title}｜島民證明`}</title>
 ${d.preview === false ? new Html("") : html`<meta property="og:title" content="${d.title}">
 <meta property="og:site_name" content="島民證明 iamreal.tw">
+<meta property="og:image" content="https://${site.host}${OG_IMAGE_PATH}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${OG_IMAGE_ALT}">
 `}${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
 ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>

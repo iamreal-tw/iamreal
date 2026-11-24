@@ -10,6 +10,10 @@
 //   site/_redirects  the one address of the card proof page.
 //   site/fonts/      a copy of the headings' typeface, the subset of
 //                    design/fonts/ (design/fonts/README.md), byte for byte.
+//   site/og-image.png
+//                    a copy of the image of every page's link preview,
+//                    design/screens/og-image.png (design/copy/proof-page.md,
+//                    section 8), byte for byte.
 //
 // Both are in the repository as a test log's site needs them, the only
 // environment there is: the job that uploads checks the repository out and
@@ -19,8 +23,8 @@
 // `checkSiteFiles`), and test/proof-files.test.ts that the local workerd
 // sends what they say.
 //
-// `node --experimental-strip-types scripts/site-files.ts` writes all three again,
-// after a change of src/headers.ts or of the subset.
+// `node --experimental-strip-types scripts/site-files.ts` writes all four again,
+// after a change of src/headers.ts, of the subset or of the image.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +41,7 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
  * The headings' typeface under site/, where the style sheet loads it from
@@ -50,14 +54,25 @@ export const FONT_FILE = "fonts/GenRyuMin2TW-B.woff2";
 export const FONT_SOURCE = join(SITE_DIR, "..", "..", "design", "fonts", "GenRyuMin2TW-B.woff2");
 
 /**
+ * The image of every page's link preview under site/, where the pages'
+ * og:image points to (src/pages/layout.ts): a copy of
+ * design/screens/og-image.png, which this script writes and a deploy build
+ * checks byte for byte (deploy-build-checks.ts, `checkSiteFiles`).
+ */
+export const OG_IMAGE_FILE = "og-image.png";
+
+/** The image OG_IMAGE_FILE is a copy of (design/screens/README.md). */
+export const OG_IMAGE_SOURCE = join(SITE_DIR, "..", "..", "design", "screens", "og-image.png");
+
+/**
  * Every file of site/ a deploy uploads besides the card proof page's, by
  * its path under site/, sorted: the copy buttons' script, the typeface, the
- * style sheet and the two files of rules. The page's files are under site/proof/, which
+ * link preview's image, the style sheet and the two files of rules. The page's files are under site/proof/, which
  * is not in the repository (.gitignore): a deploy builds them there
  * (deploy.ts, `buildSite`) and checks what the directory then holds
  * (proof-page.ts).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", FONT_FILE, "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", FONT_FILE, OG_IMAGE_FILE, "pages.css"];
 
 /**
  * The SHA-256 of site/pages.css, one of the two files of site/ that are not
@@ -79,7 +94,7 @@ export type ProofLogKind = "test" | "production";
 const block = (path: string, headers: Readonly<Record<string, string>>, more: readonly string[] = []): string =>
   [path, ...Object.entries(headers).map(([name, value]) => `  ${name}: ${value}`), ...more.map((line) => `  ${line}`)].join("\n");
 
-/** The headers of the visitors' files, the style sheet, the script and the typeface: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
+/** The headers of the visitors' files, the style sheet, the script, the typeface and the image: the pages' (`VISITOR_HEADERS`), asked for again by their ETag each time. */
 const visitorFile = (path: string, every: Readonly<Record<string, string>>): string => block(path, { ...VISITOR_HEADERS, ...every }, ["! Cache-Control", `Cache-Control: ${VISITOR_FILE_CACHE}`]);
 
 /**
@@ -90,7 +105,7 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css, /copy.js and /fonts/*: the visitors' pages' headers
+ * - /pages.css, /copy.js, /fonts/* and /og-image.png: the visitors' pages' headers
  *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
@@ -113,6 +128,8 @@ export function siteHeaders(kind: ProofLogKind): string {
     visitorFile("/copy.js", every),
     "",
     visitorFile("/fonts/*", every),
+    "",
+    visitorFile(`/${OG_IMAGE_FILE}`, every),
   ].join("\n")}\n`;
 }
 
@@ -137,5 +154,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(join(SITE_DIR, "_redirects"), SITE_REDIRECTS);
   mkdirSync(join(SITE_DIR, "fonts"), { recursive: true });
   copyFileSync(FONT_SOURCE, join(SITE_DIR, FONT_FILE));
-  console.log(`Wrote _headers, _redirects and ${FONT_FILE} in ${SITE_DIR}, for a test log's site.`);
+  copyFileSync(OG_IMAGE_SOURCE, join(SITE_DIR, OG_IMAGE_FILE));
+  console.log(`Wrote _headers, _redirects, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site.`);
 }

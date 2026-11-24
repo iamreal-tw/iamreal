@@ -39,7 +39,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { COPY_JS_SHA256, FONT_FILE, FONT_SOURCE, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { COPY_JS_SHA256, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, PAGES_CSS_SHA256, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -296,6 +296,8 @@ export interface ConfiguredSite {
   readonly scriptSha256: string | null;
   /** The SHA-256 of the typeface there (`FONT_FILE`); null if the file is not there. */
   readonly fontSha256: string | null;
+  /** The SHA-256 of the link preview's image there (`OG_IMAGE_FILE`); null if the file is not there. */
+  readonly ogImageSha256: string | null;
 }
 
 /**
@@ -334,6 +336,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       styleSheetSha256: sha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
       fontSha256: sha256Of(FONT_FILE),
+      ogImageSha256: sha256Of(OG_IMAGE_FILE),
     };
   }
   return out;
@@ -341,7 +344,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
 
 /**
  * In every environment, Cloudflare sends the card proof page's files, the
- * style sheet and the copy buttons' script itself, and the Worker's code has no part in what a file
+ * style sheet, the copy buttons' script, the typeface and the link preview's image itself, and the Worker's code has no part in what a file
  * is sent as (README.md, "Static Assets"):
  *
  *   - their paths are kept out of the Worker's (`RUN_WORKER_FIRST`), and
@@ -351,8 +354,9 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *   - the files of the directory outside proof/ are the ones listed
  *     (`SITE_FILES`) and no other, and the style sheet and the script are
  *     the ones with the SHA-256 written down (`PAGES_CSS_SHA256`,
- *     `COPY_JS_SHA256`), and the typeface is the subset of design/fonts/
- *     (`FONT_SOURCE`), byte for byte. What is under proof/, which is not in the
+ *     `COPY_JS_SHA256`), the typeface is the subset of design/fonts/
+ *     (`FONT_SOURCE`) and the image is design/screens/og-image.png
+ *     (`OG_IMAGE_SOURCE`), byte for byte. What is under proof/, which is not in the
  *     repository, is the card proof page's build: `checkProofPages` looks
  *     at it;
  *   - a path is a file's own or nothing, but for the redirects of
@@ -379,6 +383,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     assert.equal(site.styleSheetSha256, PAGES_CSS_SHA256, `pages.css of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
     assert.equal(site.scriptSha256, COPY_JS_SHA256, `copy.js of the ${env} environment has the SHA-256 of scripts/site-files.ts`);
     assert.equal(site.fontSha256, createHash("sha256").update(readFileSync(FONT_SOURCE)).digest("hex"), `${FONT_FILE} of the ${env} environment is the subset of design/fonts/`);
+    assert.equal(site.ogImageSha256, createHash("sha256").update(readFileSync(OG_IMAGE_SOURCE)).digest("hex"), `${OG_IMAGE_FILE} of the ${env} environment is design/screens/og-image.png`);
   }
 }
 
