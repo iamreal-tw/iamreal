@@ -135,7 +135,7 @@ test("/proof/ and /proof/index.html are redirected (301) to /proof, the one addr
     checkProofHeaders(path, res, { more: ["location"] });
   }
   assert.deepEqual(await worker.seen(), []);
-  // Where the apps' links to the help page land (design/copy/card-proof.md, 「了解更多」用的文字): the Worker's page, with the query.
+  // Where the apps' links to the help page land (design/copy/card-proof.md, app 改版之前還在用的句子): the Worker's page, with the query.
   const prepare = await worker.fetch("/prepare?topic=more");
   assert.deepEqual([prepare.status, (await prepare.text()).includes(">過卡需要什麼</h1>")], [200, true]);
 });

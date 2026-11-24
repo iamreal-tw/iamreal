@@ -64,7 +64,7 @@ export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js
  * written here: a deploy uploads the style sheet that was reviewed. Change
  * it with the file (`shasum -a 256 site/pages.css`).
  */
-export const PAGES_CSS_SHA256 = "91068e32d5e71cd178b4ae0ea6e072b5aaeaf2dabe6815f21b43b6f8f3b4918b";
+export const PAGES_CSS_SHA256 = "7bdc87a60139cce1a13c6afddbb411fa38727381a39a5eaed3c80c6c140b43b1";
 
 /**
  * The SHA-256 of site/copy.js, the copy buttons' script, the other file of
