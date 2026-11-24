@@ -36,6 +36,14 @@
 //    held to the phone at a tap that would hand over the PIN (the second,
 //    the third): it gets none. At the end the app's storage holds nothing
 //    of a card proof.
+// 5. The reminder (issue #297): step 6 offers it, the screen of its interval
+//    and time turns it on, the card proofs after it set it again, the
+//    settings show it. The emulator's clock is moved to the day and the time
+//    of the reminder: the notification's words, "一週後再提醒我" on it, the
+//    notification opening step 1 with the reminder's sentence, and the
+//    reminder turned off in the settings, after which the app's storage
+//    holds nothing of it. Every sentence is read from design/copy/app.json
+//    and card-proof.json.
 //
 // What stops a card proof (a card that left, a wrong PIN, the 5 minutes, an
 // old version) is not here: issue #171.
@@ -66,8 +74,30 @@ const say = (key: string, values: Record<string, string | number> = {}): string 
   return s;
 };
 
-/** The words only the app has (design/copy/app.json): the splash's. */
-const APP_COPY = JSON.parse(readFileSync(join(repo, "design", "copy", "app.json"), "utf8")) as { splash: { name: string; site: string } };
+/** The words only the app has (design/copy/app.json). */
+const A = JSON.parse(readFileSync(join(repo, "design", "copy", "app.json"), "utf8")) as Record<string, Record<string, string>>;
+const APP_COPY = A as unknown as { splash: { name: string; site: string } };
+const app = (key: string, values: Record<string, string | number> = {}): string => {
+  const [group, item] = key.split(".") as [string, string];
+  let s = A[group]?.[item];
+  if (s === undefined) throw new Error(`design/copy/app.json has no ${key}`);
+  for (const [k, v] of Object.entries(values)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+};
+
+/** The day `weeks` weeks after `date` (YYYY-MM-DD). */
+const weeksAfter = (date: string, weeks: number): string => new Date(Date.parse(`${date}T00:00:00Z`) + weeks * 7 * 86_400_000).toISOString().slice(0, 10);
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+/** A day as the app writes it (design/copy/app.md, "日子和時刻"): 2027-02-08（星期一）. */
+const dayText = (date: string): string => app("when.day", { date, weekday: app(`when.${WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()]}`) });
+/** The reminder's time unless another is chosen. */
+const NINE = `${app("when.evening")} 9:00`;
+/** What step 6 says of a reminder that is offered, or on, for the day 12 weeks after `date` (design/copy/card-proof.md, "6. 完成", app, "提醒"). */
+const reminderSays = (date: string): string[] => [
+  say("app_done.reminder_title"),
+  say("app_done.reminder_why") + say("app_done.reminder_next_about", { day: dayText(weeksAfter(date, 12)), time: NINE, interval: app("interval.weeks_12") }),
+  say("app_done.reminder_local"),
+];
 
 let failures = 0;
 const check = (ok: boolean, what: string): boolean => {
@@ -208,11 +238,20 @@ async function testSize(): Promise<void> {
   await sleep(1_500);
 }
 
-/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from under the system's bar. Cropped with macOS's sips: the option is for a Mac. */
-function designCapture(file: string, height: number): void {
+/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from `top` (under the system's bar). Cropped with macOS's sips: the option is for a Mac. */
+function designCapture(file: string, height: number, top = STATUS_BAR): void {
   const png = join(DESIGN_SCREENS!, file);
   writeFileSync(png, emulator.screenshot());
-  execFileSync("sips", ["--cropOffset", String(STATUS_BAR), "0", "-c", String(height), "390", png], { stdio: "ignore" });
+  execFileSync("sips", ["--cropOffset", String(top), "0", "-c", String(height), "390", png], { stdio: "ignore" });
+}
+
+/** The end of the step on the screen as `file` of DESIGN_SCREENS, if it is set: the last 844 of it, as a phone shows it scrolled to the bottom. */
+async function designShotEnd(file: string): Promise<void> {
+  if (DESIGN_SCREENS === undefined) return;
+  await designSize(4_000);
+  const bottom = Math.max(...visible().filter((n) => n.text !== "").map((n) => n.bottom)) + 72;
+  designCapture(file, 844, Math.max(STATUS_BAR, bottom - 844));
+  await testSize();
 }
 
 /** The step on the screen as `file` of DESIGN_SCREENS, if it is set: the whole step, on a screen tall enough for it. */
@@ -334,8 +373,8 @@ interface Proof {
   /** The account the row holds before. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
-  /** `card`: the card's proof, the hanging and what can be done besides are shown (all but a withdrawal of every account). */
-  done: { title: string; shows: string[]; absent: string[]; card: boolean };
+  /** `card`: the card's proof, the hanging and what can be done besides are shown (all but a withdrawal of every account). `reminder`: what the reminder's part says. */
+  done: { title: string; shows: string[]; absent: string[]; card: boolean; reminder: string[] };
   date: string;
 }
 
@@ -492,12 +531,13 @@ async function cardProof(p: Proof): Promise<string> {
       say("done.share_title"),
       say("done.share_note", { platform: THREADS }),
       say("app_done.share"),
-      say("done.return_title"),
-      say("done.return_note"),
     ];
     if (p.done.card) {
-      shows(s, "step 6", [p.confirm.account, ...hanging]);
+      shows(s, "step 6", [p.confirm.account, ...hanging, ...p.done.reminder]);
+      // The reminder in the place of the web's sentences: they are only for a phone that does not let the app notify.
+      check(!s.includes(say("done.return_title")) && !s.includes(say("done.return_note")), "step 6: the reminder, not 記得每三個月回來過卡一次");
     } else {
+      check(!s.includes(say("app_done.reminder_title")), "step 6 with every account withdrawn has no reminder");
       // Not done.proof: 島民證明 is the service's name in the header too.
       for (const a of hanging.filter((x) => x !== say("done.proof"))) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
     }
@@ -570,6 +610,149 @@ const backToApp = async (): Promise<void> => {
   find((n) => n.text === step(6) || n.text === HUNG, "the app again, still at step 6");
 };
 
+// 5. The reminder ---------------------------------------------------------------------
+
+/** Where the app keeps the reminder (src/main/…/reminder/Phone.kt), and what is in it. */
+const REMINDER_FILE = `/data/data/${APP}/shared_prefs/reminder.xml`;
+const reminderStored = (): string => emulator.shell(`cat ${REMINDER_FILE} 2>/dev/null; true`);
+const storedDay = (): string | undefined => /<string name="day">([0-9-]+)<\/string>/.exec(reminderStored())?.[1];
+
+/**
+ * Step 6 of the first card proof, which offered the reminder: its interval and time, turned on, the
+ * settings. Back at step 6.
+ */
+async function reminderTurnedOn(shortId: string): Promise<void> {
+  console.log("\nthe reminder, turned on from step 6");
+  await designShotEnd("app-reminder-1-done-phone.png");
+  check(reminderStored().indexOf("<string") < 0, "before 開啟提醒 the phone stores nothing of the reminder");
+  press(say("app_done.reminder_adjust"));
+  await waitText(app("reminder.from_today"), "the screen of the interval and the time");
+  const next = (weeks: number): string => app("reminder.next", { day: dayText(weeksAfter(today, weeks)), time: NINE });
+  {
+    shot("reminder-schedule");
+    await designShot("app-reminder-2-schedule-phone.png");
+    const s = wholeScreen();
+    shows(s, "the screen of the interval and the time", [
+      app("reminder.title"), app("reminder.from_today"), app("reminder.how_often"), app("reminder.weeks_4"), app("reminder.weeks_12"), app("reminder.suggested"),
+      app("reminder.weeks_26"), app("reminder.pick_date"), app("reminder.when"), app("reminder.time"), NINE, app("reminder.change"), next(12), app("reminder.evening"),
+      app("reminder.turn_on"), app("reminder.cancel"),
+    ]);
+    check(!s.includes(app("reminder.save")), "the screen of the interval and the time, with the reminder off, says 開啟提醒, not 儲存");
+  }
+  // The next reminder follows the interval chosen, from today, on the same day of the week.
+  press(app("reminder.weeks_4"));
+  await waitText(next(4), "the next reminder, a month on", 10_000);
+  press(app("reminder.weeks_12"));
+  await waitText(next(12), "the next reminder, three months on", 10_000);
+  check(true, "the next reminder follows the interval chosen");
+  press(app("reminder.turn_on"));
+  await waitText(step(6), "step 6 again, the reminder on", 10_000);
+  {
+    const s = wholeScreen();
+    shows(s, "step 6, the reminder on,", [...reminderSays(today), say("app_done.reminder_change")]);
+    check(!s.includes(say("app_done.reminder_turn_on")), "step 6, the reminder on: no 開啟提醒");
+  }
+  check(storedDay() === weeksAfter(today, 12), `the phone stores the day of the next reminder: ${storedDay()}`);
+  const kept = [...reminderStored().matchAll(/name="([a-z]+)"/g)].map((m) => m[1]).sort();
+  check(JSON.stringify(kept) === JSON.stringify(["day", "interval", "on", "time"]), `the phone stores the reminder's four things and nothing else: ${JSON.stringify(kept)}`);
+  check(!reminderStored().includes(shortId) && !reminderStored().includes("alice"), "the reminder's file has no short ID and no account");
+
+  // The settings.
+  press(app("settings.open"));
+  await waitText(app("settings.back"), "the settings");
+  {
+    shot("settings");
+    await designShot("app-settings-phone.png");
+    const s = wholeScreen();
+    shows(s, "the settings", [
+      app("settings.title"), app("settings.reminder"), app("settings.switch"), app("settings.interval"), app("interval.weeks_12"), app("settings.time"), NINE,
+      app("settings.next"), dayText(weeksAfter(today, 12)), app("settings.stored"), app("settings.about"), app("settings.version"), app("settings.faq"),
+      app("settings.privacy"), app("settings.source"),
+    ]);
+    check(field("version").text === "dev", `the settings show the build's version: ${field("version").text}`);
+  }
+  press(app("settings.faq"));
+  await sleep(2_000);
+  check(onTop().includes(`dat=http://${SITE}/faq`), "the settings: 常見問題 opens the site's /faq in the browser");
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  press(app("settings.back"));
+  await waitText(step(6), "step 6 again, from the settings", 10_000);
+  check(true, "the settings: 返回 goes back to step 6");
+}
+
+/** Waits for the reminder's notification; returns what the system says of it. */
+async function notification(what: string): Promise<string> {
+  for (const until = Date.now() + 60_000; Date.now() < until; await sleep(500)) {
+    const all = emulator.shell("dumpsys notification --noredact");
+    const ours = all.split(/\n(?=\s*NotificationRecord\()/).find((r) => r.includes(`pkg=${APP}`));
+    if (ours !== undefined) return ours;
+  }
+  throw new Error(`${what}: no notification of the app`);
+}
+
+/** Moves the emulator's clock (not the back end's) to `date` at 9 in the evening in Taiwan, and a few seconds. */
+function eveningOf(date: string): void {
+  emulator.shell(`date @${Math.floor(Date.parse(`${date}T21:00:05+08:00`) / 1000)}`);
+}
+
+/** The day of the reminder `day`: the notification, 一週後再提醒我 on it, then the notification opening step 1; then turned off. */
+async function reminderComes(day: string): Promise<void> {
+  console.log("\nthe reminder's notification");
+  check(storedDay() === day, `after the last card proof the reminder is 12 weeks on: ${storedDay()}`);
+  eveningOf(day);
+  {
+    const n = await notification("the reminder's day");
+    check(n.includes(`android.title=String (${app("notification.title")})`) && n.includes(`android.text=String (${app("notification.body")})`), "the notification says 該回來過卡了 and 拿出自然人憑證，花 3 分鐘更新島民證明。");
+    check(n.includes(app("notification.snooze")), "the notification has 一週後再提醒我");
+    check(!n.includes("alice") && !n.includes("bob"), "the notification names no account");
+  }
+  emulator.shell("cmd statusbar expand-notifications");
+  if (DESIGN_SCREENS !== undefined) {
+    await designSize(STATUS_BAR + 844 + 48);
+    emulator.shell("cmd statusbar expand-notifications");
+    await waitText(app("notification.title"), "the notification, on a screen of design/screens/'s size", 10_000);
+    await sleep(1_000);
+    designCapture("app-reminder-3-notification-phone.png", 844, 0);
+    await testSize();
+    emulator.shell("cmd statusbar expand-notifications");
+  }
+  emulator.tap(await waitText(app("notification.snooze"), "一週後再提醒我 on the notification", 10_000));
+  await sleep(2_000);
+  emulator.shell("cmd statusbar collapse");
+  check(storedDay() === weeksAfter(day, 1), `一週後再提醒我 on the notification: the reminder is 7 days on (${storedDay()})`);
+  check(!emulator.shell("dumpsys notification --noredact").includes(`pkg=${APP}`), "一週後再提醒我 takes the notification away");
+
+  // A week on: the notification opens step 1, which says it is the reminder.
+  const later = weeksAfter(day, 1);
+  eveningOf(later);
+  await notification("a week on");
+  emulator.shell("cmd statusbar expand-notifications");
+  emulator.tap(await waitText(app("notification.title"), "the notification a week on", 10_000));
+  await waitText(app("from_notification.note"), "step 1, opened from the notification", 20_000);
+  {
+    shot("from-notification");
+    await designShot("app-reminder-4-from-notification-phone.png");
+    shows(wholeScreen(), "step 1, opened from the notification,", [app("from_notification.note"), app("notification.snooze"), step(1), say("before.title")]);
+  }
+  press(app("notification.snooze"));
+  const snoozed = app("from_notification.snoozed", { day: dayText(weeksAfter(later, 1)), time: NINE });
+  await waitText(snoozed, "step 1 after 一週後再提醒我", 10_000);
+  check(storedDay() === weeksAfter(later, 1), `一週後再提醒我 on step 1: the reminder is 7 days on (${storedDay()})`);
+
+  // Turned off in the settings: nothing of it is left.
+  press(app("settings.open"));
+  await waitText(app("settings.back"), "the settings");
+  check(field("settings-next").text === dayText(weeksAfter(later, 1)), `the settings show the next reminder: ${field("settings-next").text}`);
+  emulator.tap(field("reminder-switch"));
+  await sleep(1_000);
+  {
+    const s = wholeScreen();
+    check(!s.includes(app("settings.interval")) && !s.includes(app("settings.next")), "the settings, the reminder off, show no interval, time or day");
+  }
+  check(!/<string/.test(reminderStored()), `turned off, the phone stores nothing of the reminder: ${reminderStored()}`);
+  press(app("settings.back"));
+}
+
 /** The emulator's setting for the keyboard on the screen, before the test changed it. */
 let imeBefore = "";
 try {
@@ -594,6 +777,8 @@ try {
   emulator.shell(`pm clear ${APP}`);
   emulator.adb("reverse", `tcp:${DEVICE_PORT}`, `tcp:${port}`);
   emulator.shell("input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard");
+  // The reminder's days are the phone's: the test's are Taiwan's.
+  if (emulator.shell("getprop persist.sys.timezone").trim() !== "Asia/Taipei") throw new Error("the emulator's time zone is not Asia/Taipei (android/README.md, \"模擬器\")");
   // The splash on a screen of design/screens/'s size: 844 between the system's bars (Android 10's navigation bar is 48 dp).
   if (DESIGN_SCREENS !== undefined) await designSize(STATUS_BAR + 844 + 48);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
@@ -627,9 +812,11 @@ try {
     type: "alice",
     current: "",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.first"), button: say("confirm.button_declare_single"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.listed_together"), say("confirm.withdraw_stays")] },
-    done: { title: say("done.first"), shows: [say("done.new_card")], absent: [say("done.withdrawn_link")], card: true },
+    done: { title: say("done.first"), shows: [say("done.new_card")], absent: [say("done.withdrawn_link")], card: true, reminder: [...reminderSays(today), say("app_done.reminder_turn_on"), say("app_done.reminder_adjust")] },
     date: today,
   });
+
+  await reminderTurnedOn(shortId);
 
   // The buttons of step 6.
   press(say("done.copy"));
@@ -670,7 +857,7 @@ try {
     type: null,
     current: "alice",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.withdraw_stays")] },
-    done: { title: say("done.refresh"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.refresh"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true, reminder: [...reminderSays(today), say("app_done.reminder_change")] },
     date: today,
   });
   check(again === shortId, "the same card has the same short ID");
@@ -700,7 +887,7 @@ try {
       shows: [say("confirm.listed_single", { platform: THREADS }), later],
       absent: [say("confirm.withdraw_stays")],
     },
-    done: { title: say("done.changed"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.changed"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true, reminder: [...reminderSays(tomorrow), say("app_done.reminder_change")] },
     date: tomorrow,
   });
   press(say("done.restart"));
@@ -726,16 +913,19 @@ try {
       shows: [say("confirm.withdraw_stays"), say("confirm.later_withdraw") + say("confirm.permanent")],
       absent: [say("confirm.listed_single", { platform: THREADS }), later],
     },
-    done: { title: say("done.withdraw_all"), shows: [say("done.withdrawn_link")], absent: [say("done.new_card")], card: false },
+    done: { title: say("done.withdraw_all"), shows: [say("done.withdrawn_link")], absent: [say("done.new_card")], card: false, reminder: [] },
     date: tomorrow,
   });
+
+  await reminderComes(weeksAfter(tomorrow, 12));
 
   // What the app's requests say of the phone: nothing. Not Android's own User-Agent, which names the model and the version.
   check(JSON.stringify([...userAgents]) === JSON.stringify(["iamreal"]), `every request of the app to the API and the CRL archive calls itself "iamreal" and nothing more: ${JSON.stringify([...userAgents])}`);
 
-  // What the app left on the emulator: the highest CRL number it used, and nothing else. No PIN, no file of a card proof.
-  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean);
+  // What the app left on the emulator: the highest CRL number it used, and nothing else; the reminder's file, turned off, is empty. No PIN, no file of a card proof.
+  const stored = emulator.shell(`find /data/data/${APP} -type f`).split("\n").map((l) => l.trim()).filter(Boolean).filter((f) => f !== REMINDER_FILE);
   check(JSON.stringify(stored) === JSON.stringify([`/data/data/${APP}/shared_prefs/highest_crl_number.xml`]), `the app's storage holds the CRL numbers it used and nothing else: ${JSON.stringify(stored)}`);
+  check(!/<string|<int|<long|<boolean/.test(reminderStored()), `the reminder's file, turned off, holds nothing: ${reminderStored()}`);
   check(emulator.shell(`grep -r -l ${PIN} /data/data/${APP} /sdcard 2>/dev/null; true`).trim() === "", "the PIN is in no file of the app's or of the shared storage");
 } catch (e) {
   check(false, e instanceof Error ? (e.stack ?? e.message) : String(e));

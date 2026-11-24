@@ -4,12 +4,24 @@
 
 現在有過卡能通的路：照網頁版的六步（開始之前、讀取卡片、輸入 PIN、你的帳號、確認、完成），卡片感應三次，PIN 輸入一次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)、[#134](https://github.com/iamreal-tw/iamreal/issues/134)）。畫面照 `design/screens/card-proof-app-*` 和 `design/DESIGN.md`（[#295](https://github.com/iamreal-tw/iamreal/issues/295)），用 Jetpack Compose，文字逐字來自 `design/copy/card-proof.json`；打開 app 先是啟動畫面（`app-splash-phone.png`，字來自 `design/copy/app.json`）。顏色、字級、間距照 `design/tokens.json`，寫在 `app/src/main/kotlin/tw/iamreal/app/ui/Theme.kt`；標題用包進安裝檔的源流明體 TW（「內建的檔案」），內文和等寬字用系統的。只有亮色，和網頁一樣。在模擬器上用假卡片對著本機的 Worker 過得完（「模擬器上過一次卡」）。
 
+過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)，「過卡提醒」）：完成畫面問要不要提醒，手機自己排本機通知；第 1 步和第 6 步的頁首有「設定」。字來自 `design/copy/app.json` 和 `card-proof.json`。
+
 還沒有的：
 
 - **讀卡**。用 NFC 讀真卡片的程式還沒有搬進這個程式庫（[#163](https://github.com/iamreal-tw/iamreal/issues/163)）。在那之前，發出去的安裝檔和用線裝的建置裡，「卡片」的位置是一個永遠讀不到卡的東西（`app/src/real/…/Target.kt` 的 `NoCardReader`）：按「感應卡片」會停在「沒有感應到卡片」，PIN 送不到任何地方
 - **中斷和錯誤**（[#171](https://github.com/iamreal-tw/iamreal/issues/171)）：掉線重來、送 PIN 時掉線、換了卡、PIN 不正確、5 分鐘的各種回來的路、最低版本（`min_app`）和沒有 NFC 的畫面。現在遇到這些會停下來並寫出 `design/copy/` 已經有的那一句；app 的句子還沒寫的情況只寫「停在這裡」。`config` 的 `min_app` 現在還沒有讀
 - 正式的圖示（[#154](https://github.com/iamreal-tw/iamreal/issues/154)）。現在是暫時的：一整片網站的青色（`#226977`，`web/src/ui/style.css` 的 `--teal`），沒有字、沒有圖案，和 iOS 的暫時圖示相同（`app/src/main/res/mipmap-anydpi/ic_launcher.xml`）
-- 第 2 步感應位置的示意圖（[#173](https://github.com/iamreal-tw/iamreal/issues/173)）；過卡的提醒和設定頁（[#297](https://github.com/iamreal-tw/iamreal/issues/297)）
+- 第 2 步感應位置的示意圖（[#173](https://github.com/iamreal-tw/iamreal/issues/173)）
+
+## 過卡提醒
+
+照 [#93](https://github.com/iamreal-tw/iamreal/issues/93) 和 `design/copy/app.md`「過卡提醒」「設定」：
+
+- **手機自己排，不經過伺服器。** 用系統的鬧鐘（`AlarmManager.setWindow`），到了就發一則本機通知。不是精確的鬧鐘：精確的鬧鐘從 Android 12 起要另一個權限（Android 14 起預設不給），提醒不需要準到分鐘。系統最多晚 10 分鐘送出；手機很久沒動、進了省電的休眠（Doze）時會更晚
+- **存的只有四樣**：開著、間隔、時刻、下次提醒的日子（`shared_prefs/reminder.xml`）。關掉提醒就整個清空，所以關掉之後和從來沒開過一樣，完成畫面會再問一次。不存帳號、短編號、連結、上次過卡日。過卡完成時，完成畫面拿記憶體裡這張卡片的憑證到期日和提醒的日子比，到期日不存
+- **權限**：按「開啟提醒」才向系統要通知的權限（`POST_NOTIFICATIONS`，Android 13 起要問；之前的版本只看使用者有沒有關掉這個 app 的通知）。不允許的話什麼都不存，過卡照常完成。手機重開會忘掉鬧鐘，所以要被告知手機重開了（`RECEIVE_BOOT_COMPLETED`）；app 更新、換時區、每次打開 app 也重設一次
+- **接收器不讓別的 app 叫**（`exported="false"`）：鬧鐘到了、通知上的「一週後再提醒我」、系統的三種廣播。打開 app 的畫面是對外開放的（主畫面要叫得到它），所以別的 app 也能用通知的那個方式打開它：得到的只有第 1 步上方那一段字
+- **測試**：日子怎麼算、存什麼、關掉後留下什麼，是單元測試（`app/src/test/…/reminder/`，假的鬧鐘和記憶體裡的儲存）；完成畫面那一段說哪幾句是 `DoneReminderTest`。模擬器上的過卡測試走過完成畫面的問句、選間隔和時刻、設定頁，把模擬器的時鐘撥到提醒的時刻，看通知的字、按「一週後再提醒我」、點通知進第 1 步，最後關掉提醒，確認 app 的儲存裡不剩提醒的東西
 
 ## 兩種 build
 
@@ -47,7 +59,7 @@
 | 兩個簽章 | `CardProof`，到算完證明為止 | 算完證明、取消、停下來 |
 
 - **不寫磁碟。** 做到一半的過卡只在行程的記憶體裡（`MainActivity` 的 `model`）：不放進系統的狀態保存（`onSaveInstanceState` 交出去的是空的），不寫檔案。app 被系統結束就從第 1 步來
-- **唯一存下來的**是每把發證金鑰用過的最高清冊編號（`MainActivity.kt` 的 `StoredCrlNumbers`，app 自己的偏好設定檔）。清冊編號是公開的數字
+- **存下來的只有兩樣**，都在 app 自己的偏好設定檔：每把發證金鑰用過的最高清冊編號（`MainActivity.kt` 的 `StoredCrlNumbers`，清冊編號是公開的數字），和提醒開著時的四樣東西（`reminder/Phone.kt` 的 `PreferencesStorage`，「過卡提醒」）
 - **連網路的只有 `backend/Backend.kt`**：後台的四個介面和清冊鏡像的兩種檔案，位置是建置時寫死的。請求不帶 cookie、不帶手機或 app 的任何識別、不回報 app 自己檢查的結果（ADR-0016）。送出去的內容由核心組；核心在檢查都通過之前不算匿名編號（`device-core/README.md`「檢查都通過了」），所以這裡的程式順序寫錯時，帶著匿名編號的請求送不出去
 - **碰卡片的只有 `card/Card.kt` 這一層介面**：一次感應是一次 `tap`，裡面先 `readCertificates`（不用 PIN），再 `sign`（帶 PIN）
 - 看島民證明、Threads 的個人檔案都是開瀏覽器（或 Threads 的 app），app 裡不載入任何網頁。完成畫面的「分享」交給系統的分享面板，只帶這張島民證明的網址
@@ -60,7 +72,8 @@
 | `app/src/main/kotlin/tw/iamreal/app/flow/` | `CardProof`：一次過卡，沒有畫面，順序照 `web/src/flow.ts`；每一項檢查和計算都交給核心。`Platforms`：app 自己認得的平台（只有 Threads） |
 | `app/src/main/kotlin/tw/iamreal/app/card/` | 「卡片」這一層介面 |
 | `app/src/main/kotlin/tw/iamreal/app/backend/` | 送給後台和清冊鏡像的請求 |
-| `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和六步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`） |
+| `app/src/main/kotlin/tw/iamreal/app/reminder/` | 過卡提醒：下次提醒的日子怎麼算、存什麼（`Reminders.kt`），日子和時刻的寫法（`When.kt`），系統的鬧鐘、通知和接收器（`Phone.kt`） |
+| `app/src/main/kotlin/tw/iamreal/app/ui/` | 啟動畫面和六步的畫面（Compose）、感應的面板、哪個情況顯示 `design/copy/` 的哪一句、主題的數值（`Theme.kt`）；提醒的畫面和設定頁（`Reminder.kt`） |
 | `app/src/real/` | 發出去的安裝檔和用線裝的建置接到什麼（`Target.kt`）：測試網站、核心自己的 session |
 | `app/src/fake/` | 只給模擬器測試的建置（build type `fake`）：假卡片、本機的後台、認測試金鑰的 session |
 | `app/src/testing/` | `TestingCore`：測試用的函式庫才有的那一個函式。只編進 `fake` 和單元測試 |
@@ -133,7 +146,7 @@ $NDK/llvm-readelf -lW app/build/intermediates/merged_native_libs/release/mergeRe
 
 `./gradlew build` 會跑；只做安裝檔時也會跑，不管做的是 APK（`assemble*`、`package*`）還是上傳到 Google Play 用的 bundle（`bundle*`，由 `checkBundle` 看 `.aab` 裡的 manifest、函式庫、內建的檔案和 dex，項目相同）。任何一項不過就失敗（`app/build.gradle.kts`）：
 
-- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
+- **合併後的 manifest**（`checkManifest`）：識別碼不是這個 build type 該有的就失敗（`release` 是 `tw.iamreal.app`、`debug` 是 `tw.iamreal.app.dev`、`fake` 是 `tw.iamreal.app.dev.fake`，逐字寫在 `app/build.gradle.kts` 的 `ids`）；任何地方出現 `AD_ID` 就失敗；要的權限只能是 `app/build.gradle.kts` 裡 `allowedPermissions` 列的：網路（`INTERNET`）、提醒的通知（`POST_NOTIFICATIONS`）、手機重開時被告知（`RECEIVE_BOOT_COMPLETED`，「過卡提醒」），加上 `androidx.core` 替 app 自己宣告、只有這個 app 拿得到的那一個（`<識別碼>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`）；別的 app 叫得到的元件只能是 app 的那一個畫面。`AndroidManifest.xml` 另外寫了移除 `AD_ID`，之後有程式庫帶進來也會被拿掉；畫面的程式庫帶進來、app 一打開就會自己做的兩件事也在那裡拿掉：找 emoji 字型（手機上有 Google Play services 時會去問它）、安裝啟動用的 profile 和讓開發工具觸發它的接收器
 - **安裝檔**（`checkApk`）：原生的函式庫只有我們的那一個，release 只有 `arm64-v8a`；`assets/` 裡的檔案和兩份清單完全相同，不多不少；`.so` 沒有連結 `liblog`。Compose 帶進來的 `androidx.graphics:graphics-path` 有自己的一個原生函式庫（Android 13 以前走訪路徑的線段用的），打包時排除掉；畫面畫的路徑（記號、打勾）只交給系統去畫，不走訪它的線段，模擬器的測試走過每一個畫面。程式庫帶的啟動用 profile 也不放進去
 - **沒有假卡片、不認測試的發證金鑰**（`checkApk`）：debug 和 release 的 dex 裡出現 `tw/iamreal/app/fake/` 或 `TestingCore`，或 `.so` 裡有測試用函式庫的記號（`device-core/prover/src/lib.rs` 的 `IDC_TESTING_MARK`），就失敗。這兩樣只在 build type `fake` 裡
 - **上線前只連測試網站**（`checkApk`）：`debug` 和 `release` 的 dex 裡沒有測試網站的網址（`https://test.iamreal.tw`）就失敗；任何一種 build 的 dex 裡出現正式網站的網址（`//iamreal.tw`、`//data.iamreal.tw`）或正式的證明紀錄的場合字串（`iamreal:public:`）就失敗。場合字串本身不在 Kotlin 裡，由核心照代表哪一份證明紀錄的數字給；單元測試核對核心給這個 app 的是 `spec/vectors/scope.json` 裡測試的證明紀錄的那一條。`.so` 裡兩份證明紀錄的場合字串都有（核心是同一份），Kotlin 只傳得出測試的證明紀錄的數字
