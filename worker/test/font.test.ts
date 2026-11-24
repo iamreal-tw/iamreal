@@ -1,7 +1,8 @@
-// The subset of the headings' typeface (design/fonts/README.md): that it has
-// every character of design/copy/ and of printable ASCII, that it carries its
-// licence, and that the visitors' pages are sent the same file. Read with
-// Node's own Brotli: no package.
+// The subset of the headings' typeface (design/fonts/README.md), as WOFF2 for
+// the pages and as OpenType for the apps: that each has every character of
+// design/copy/ and of printable ASCII, that each carries its licence, and that
+// the visitors' pages are sent the same file. Read with Node's own Brotli: no
+// package.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +14,8 @@ import { WORKER_DIR } from "./build.ts";
 const DESIGN_DIR = join(WORKER_DIR, "..", "design");
 /** The subset as design/fonts/ has it, the one copy that is reviewed. */
 const ORIGINAL = join(DESIGN_DIR, "fonts", "GenRyuMin2TW-B.woff2");
+/** The same subset as OpenType, which the apps carry (android/, ios/). */
+const ORIGINAL_OTF = join(DESIGN_DIR, "fonts", "GenRyuMin2TW-B.otf");
 
 /**
  * Characters of design/copy/ that GenRyuMin2 TW itself does not have, so its
@@ -62,6 +65,18 @@ function woff2Tables(file: Buffer): Map<string, Buffer> {
     offset += e.length;
   }
   assert.equal(offset, data.length, "the tables fill the compressed stream");
+  return tables;
+}
+
+/** The tables of an OpenType file, by tag. */
+function sfntTables(file: Buffer): Map<string, Buffer> {
+  assert.equal(file.toString("latin1", 0, 4), "OTTO", "an OpenType file with CFF outlines, as the source is");
+  const tables = new Map<string, Buffer>();
+  for (let i = 0; i < file.readUInt16BE(4); i++) {
+    const r = 12 + i * 16;
+    const offset = file.readUInt32BE(r + 8);
+    tables.set(file.toString("latin1", r, r + 4), file.subarray(offset, offset + file.readUInt32BE(r + 12)));
+  }
   return tables;
 }
 
@@ -120,35 +135,46 @@ function nameIds(name: Buffer): Set<number> {
   return out;
 }
 
-const tables = woff2Tables(readFileSync(ORIGINAL));
+const subsets = [
+  { file: "GenRyuMin2TW-B.woff2", tables: woff2Tables(readFileSync(ORIGINAL)) },
+  { file: "GenRyuMin2TW-B.otf", tables: sfntTables(readFileSync(ORIGINAL_OTF)) },
+];
 
-test("the subset has every character of design/copy/ and the printable ASCII", () => {
-  const have = codePoints(tables.get("cmap")!);
-  const files = readdirSync(join(DESIGN_DIR, "copy")).sort();
-  assert.ok(files.includes("home.md") && files.includes("card-proof.json"), "the check read design/copy/");
-  const missing = new Map<string, string[]>();
-  const want = new Set<string>();
-  for (let c = 0x20; c <= 0x7e; c++) want.add(String.fromCodePoint(c));
-  for (const file of files) {
-    for (const ch of readFileSync(join(DESIGN_DIR, "copy", file), "utf8")) {
-      if (/\p{Cc}/u.test(ch)) continue;
-      want.add(ch);
-      if (!have.has(ch.codePointAt(0)!) && !(ch in NOT_IN_TYPEFACE)) missing.set(ch, [...new Set([...(missing.get(ch) ?? []), file])]);
+for (const { file: subset, tables } of subsets) {
+  test(`${subset} has every character of design/copy/ and the printable ASCII`, () => {
+    const have = codePoints(tables.get("cmap")!);
+    const files = readdirSync(join(DESIGN_DIR, "copy")).sort();
+    assert.ok(files.includes("home.md") && files.includes("card-proof.json") && files.includes("app.json"), "the check read design/copy/");
+    const missing = new Map<string, string[]>();
+    const want = new Set<string>();
+    for (let c = 0x20; c <= 0x7e; c++) want.add(String.fromCodePoint(c));
+    for (const file of files) {
+      for (const ch of readFileSync(join(DESIGN_DIR, "copy", file), "utf8")) {
+        if (/\p{Cc}/u.test(ch)) continue;
+        want.add(ch);
+        if (!have.has(ch.codePointAt(0)!) && !(ch in NOT_IN_TYPEFACE)) missing.set(ch, [...new Set([...(missing.get(ch) ?? []), file])]);
+      }
     }
-  }
-  for (const ch of want) if (!have.has(ch.codePointAt(0)!) && !(ch in NOT_IN_TYPEFACE) && !missing.has(ch)) missing.set(ch, ["printable ASCII"]);
-  assert.deepEqual(Object.fromEntries(missing), {}, "characters not in the subset, by where they are written: run design/fonts/subset.sh (design/fonts/README.md)");
-  for (const ch of Object.keys(NOT_IN_TYPEFACE)) {
-    assert.ok(want.has(ch), `${ch} is still written in design/copy/: take it off NOT_IN_TYPEFACE`);
-    assert.ok(!have.has(ch.codePointAt(0)!), `the subset has ${ch} now: take it off NOT_IN_TYPEFACE`);
-  }
-});
+    for (const ch of want) if (!have.has(ch.codePointAt(0)!) && !(ch in NOT_IN_TYPEFACE) && !missing.has(ch)) missing.set(ch, ["printable ASCII"]);
+    assert.deepEqual(Object.fromEntries(missing), {}, "characters not in the subset, by where they are written: run design/fonts/subset.sh (design/fonts/README.md)");
+    for (const ch of Object.keys(NOT_IN_TYPEFACE)) {
+      assert.ok(want.has(ch), `${ch} is still written in design/copy/: take it off NOT_IN_TYPEFACE`);
+      assert.ok(!have.has(ch.codePointAt(0)!), `the subset has ${ch} now: take it off NOT_IN_TYPEFACE`);
+    }
+  });
 
-test("the subset carries the licence: records 13 and 14 of its name table", () => {
-  const ids = nameIds(tables.get("name")!);
-  assert.ok(ids.has(13), "the licence");
-  assert.ok(ids.has(14), "the licence's URL");
-  assert.ok(ids.has(1), "the check read the name table");
+  test(`${subset} carries the licence: records 13 and 14 of its name table`, () => {
+    const ids = nameIds(tables.get("name")!);
+    assert.ok(ids.has(13), "the licence");
+    assert.ok(ids.has(14), "the licence's URL");
+    assert.ok(ids.has(1), "the check read the name table");
+  });
+}
+
+test("the two subsets map the same characters", () => {
+  const [woff2, otf] = subsets.map((s) => [...codePoints(s.tables.get("cmap")!)].sort((a, b) => a - b));
+  assert.ok(woff2!.length > 95, "the check read the cmap tables");
+  assert.deepEqual(otf, woff2);
 });
 
 test("the visitors' pages are sent the subset of design/fonts/, byte for byte", () => {

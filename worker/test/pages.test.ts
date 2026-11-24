@@ -48,17 +48,19 @@ describe("the page of a card", () => {
     assert.equal(status, 200);
     wantLines(page, ["1. ", "2. ", "3. ", "4. ", "5. ", "5a. "].flatMap((s) => copyLines(block("proof-page.md", s))));
 
-    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
+    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
     // The address to look for on the profile is written, not a link. A test log's site writes its own domain
     // (design/copy/test-site.md): that is where this card's page is.
     assert.equal(testSiteCardAddress(CARD_A), "test.iamreal.tw/p/7K2Q9FM4XD");
-    assert.ok(page.includes(`<p class="backlink">${testSiteCardAddress(CARD_A)}</p>`));
-    // The profile, embedded with no script of Threads and nothing sent with the request.
+    // The profile, embedded with no script of Threads and nothing sent with the request, right under the address to compare
+    // with it (proof-page.md section 3): nothing comes between the two.
     assert.ok(
-      page.includes('<iframe class="threads-profile" src="https://www.threads.com/@alice/embed/" title="Threads 個人檔案：@alice" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>'),
-      "the embedded profile",
+      page.includes(
+        `<p class="backlink">${testSiteCardAddress(CARD_A)}</p>\n<iframe class="threads-profile" src="https://www.threads.com/@alice/embed/" title="Threads 個人檔案：@alice" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" credentialless></iframe>`,
+      ),
+      "the address, and right under it the embedded profile",
     );
     assert.match(page, /<details class="history">\s*<summary>全部紀錄<\/summary>/, "全部紀錄 is folded");
     const { title, site } = previewOf("proof-page.md", "8. ");
@@ -66,12 +68,15 @@ describe("the page of a card", () => {
     assert.ok(page.includes('<span class="account">@alice</span>'), "@alice is at the full size");
   });
 
-  test("an account longer than 18 characters is written one size smaller", async () => {
-    const c18 = cardStarting(CARD_A);
-    const c19 = cardStarting(CARD_B);
-    await pagesWorld(worker, "2026-11-18", [r("2026-11-01", c18, `threads:${"a".repeat(18)}`), r("2026-11-01", c19, `threads:${"a".repeat(19)}`)]);
-    assert.ok((await getPage(worker, `/p/${CARD_A}`)).page.includes(`<span class="account">@${"a".repeat(18)}</span>`));
-    assert.ok((await getPage(worker, `/p/${CARD_B}`)).page.includes(`<span class="account long">@${"a".repeat(19)}</span>`));
+  test("an account longer than 12 characters is written one size smaller, on the page of a card and that of the account", async () => {
+    const c12 = cardStarting(CARD_A);
+    const c13 = cardStarting(CARD_B);
+    await pagesWorld(worker, "2026-11-18", [r("2026-11-01", c12, `threads:${"a".repeat(12)}`), r("2026-11-01", c13, `threads:${"a".repeat(13)}`)]);
+    assert.ok((await getPage(worker, `/p/${CARD_A}`)).page.includes(`<span class="account">@${"a".repeat(12)}</span>`));
+    assert.ok((await getPage(worker, `/p/${CARD_B}`)).page.includes(`<span class="account long">@${"a".repeat(13)}</span>`));
+    // The page of an account writes it at the same size (account-page.md).
+    assert.ok((await getPage(worker, `/threads/@${"a".repeat(12)}`)).page.includes(`<span class="account">@${"a".repeat(12)}</span>`));
+    assert.ok((await getPage(worker, `/threads/@${"a".repeat(13)}`)).page.includes(`<span class="account long">@${"a".repeat(13)}</span>`));
   });
 
   test("全部紀錄: every row of the table of section 4, the newest first", async () => {
@@ -146,7 +151,8 @@ describe("the page of a card", () => {
     // No account and scope of section 1, no section 3, no small lines of section 2 and no link to update.
     const one = block("proof-page.md", "1. ");
     const two = block("proof-page.md", "2. ");
-    notOnPage(page, one[0]!, one[1]!, [...one[5]!].slice(0, 10).join(""), two[1]!, two[2]!, "我要更新這張證明", block("proof-page.md", "3. ")[0]!);
+    const three = block("proof-page.md", "3. ");
+    notOnPage(page, one[0]!, one[1]!, [...one[5]!].slice(0, 10).join(""), two[1]!, "我要更新這張證明", three[0]!, three.at(-1)!);
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
     wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
   });
@@ -170,7 +176,9 @@ describe("the page of a card", () => {
       ...copyLines(block("proof-page.md", "5a. ")),
     ]);
     const text = squash(visibleText(page));
-    for (const section of ["5. ", "5a. "]) assert.equal(text.split(squash(copyLines(block("proof-page.md", section))[0]!)).length - 1, 1, `section ${section}once`);
+    // Each section by its longest line: its heading 驗證 is also in the navigation bar's 怎麼驗證島民證明.
+    const longest = (lines: string[]): string => lines.reduce((a, b) => (b.length > a.length ? b : a));
+    for (const section of ["5. ", "5a. "]) assert.equal(text.split(squash(longest(copyLines(block("proof-page.md", section))))).length - 1, 1, `section ${section}once`);
     wantPreview(page, specialTitles()[1]!, "島民證明 iamreal.tw");
   });
 
@@ -233,14 +241,14 @@ describe("the page of a card", () => {
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
     let { status, page } = await getPage(worker, `/p/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "過卡 1 次", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@alice", "上次過卡：今天（2026-11-20）", "過卡次數 1 次", "2026-11-20　新宣告：@alice"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
     ({ status, page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["@bob", "過卡 2 次", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
+    wantLines(page, ["@bob", "過卡次數 2 次", "2026-11-20　更正：@alice 改成 @bob", "2026-11-20　新宣告：@alice"]);
     // An account on another platform of the test log is not shown: the pages list Threads only.
     await mustSubmit(worker, await sub(worker, card, root, "test-example:a-b", "threads:bob"), "test-example first, threads refresh");
     ({ page } = await getPage(worker, `/p/${CARD_A}`));
-    wantLines(page, ["過卡 3 次", "2026-11-20　再次過卡", "2026-11-20　更正：@alice 改成 @bob"]);
+    wantLines(page, ["過卡次數 3 次", "2026-11-20　再次過卡", "2026-11-20　更正：@alice 改成 @bob"]);
     notOnPage(page, "a-b");
   });
 });

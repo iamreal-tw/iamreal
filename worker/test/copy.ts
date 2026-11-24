@@ -157,22 +157,41 @@ export interface FaqQuestion {
   readonly answer: string[];
 }
 
-/** Every question of faq.md, in order. */
-export function faqQuestions(): FaqQuestion[] {
-  const out: FaqQuestion[] = [];
+/** One category of faq.md: its name (the "## " heading), its id on the page and its questions, in order. */
+export interface FaqCategory {
+  readonly name: string;
+  readonly id: string;
+  readonly questions: FaqQuestion[];
+}
+
+/** Every category of faq.md, in order, each with its questions in order. */
+export function faqCategories(): FaqCategory[] {
+  const out: FaqCategory[] = [];
+  // The parts after the last category ("連結被貼出去時的預覽", "還沒定的") have no id and no questions.
   for (const part of readCopy("faq.md").split("\n## ").slice(1)) {
-    const category = part.slice(0, part.indexOf("\n"));
-    for (const q of part.split("\n### ").slice(1)) {
+    const name = part.slice(0, part.indexOf("\n"));
+    const [head, ...rest] = part.split("\n### ");
+    const ids = [...head!.matchAll(/這一類在頁面上的 `id`：`([a-z0-9-]+)`/g)];
+    if (ids.length === 0 && rest.length === 0) continue;
+    assert.equal(ids.length, 1, `faq.md category ${JSON.stringify(name)} has one id`);
+    const questions = rest.map((q) => {
       const question = q.slice(0, q.indexOf("\n"));
       const body = q.slice(q.indexOf("\n") + 1);
       const blocks = codeBlocks(body);
-      const ids = [...body.matchAll(/這一題在頁面上的 `id`：`([a-z0-9-]+)`/g)];
-      assert.deepEqual([blocks.length, ids.length], [1, 1], `faq.md ${JSON.stringify(question)} has one answer and one id`);
-      out.push({ category, question, id: ids[0]![1]!, answer: blocks[0]! });
-    }
+      const qids = [...body.matchAll(/這一題在頁面上的 `id`：`([a-z0-9-]+)`/g)];
+      assert.deepEqual([blocks.length, qids.length], [1, 1], `faq.md ${JSON.stringify(question)} has one answer and one id`);
+      return { category: name, question, id: qids[0]![1]!, answer: blocks[0]! };
+    });
+    assert.ok(questions.length > 0, `faq.md category ${JSON.stringify(name)} has questions`);
+    out.push({ name, id: ids[0]![1]!, questions });
   }
-  assert.ok(out.length > 0, "faq.md has questions");
+  assert.ok(out.length > 0, "faq.md has categories");
   return out;
+}
+
+/** Every question of faq.md, in order. */
+export function faqQuestions(): FaqQuestion[] {
+  return faqCategories().flatMap((c) => c.questions);
 }
 
 /** The address of a page of a card as a test log's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */

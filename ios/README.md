@@ -94,6 +94,8 @@ app 算證明要的檔案都在安裝檔裡，執行時不下載（ADR-0035）�
 | `card_proof_rs2048.vk`、`card_proof_rs4096.vk` | `verifier/vk/`（後台和重驗的人用的那兩把） |
 | `bn254_g1_compressed_2p18.dat`、`bn254_g2.dat` | 參數檔。`device-core/fetch-crs.sh` 下載，核對 `device-core/crs.sha256`，和網頁版的 `web/scripts/fetch-crs.mjs` 是同樣的兩個檔 |
 | `card-proof.json` | `design/copy/card-proof.json`：畫面上的每一句話 |
+| `app.json` | `design/copy/app.json`：只在 app 上、不屬於過卡的字 |
+| `GenRyuMin2TW-B.otf` | `design/fonts/GenRyuMin2TW-B.otf`：標題用的源流明體 TW 的子集 |
 
 Xcode 專案直接引用這些位置，不另存一份。核心在用之前還會自己核對電路檔、驗證金鑰、參數檔的 SHA-256（`idc_session_check_artifacts`，算證明時再核對一次）。
 
@@ -155,7 +157,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 測試在模擬器裡跑，直接讀這個程式庫在 Mac 上的檔案（模擬器看得到 Mac 的磁碟），不複製。
 
 - `Tests/DeviceCoreTests.swift`：從 Swift 呼叫核心，對 `spec/vectors/scope.json`（兩份證明紀錄的場合字串）；連結進來的函式庫的版本等於標頭檔的；Barretenberg 有回應
-- `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
+- `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
 - `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
@@ -217,7 +219,7 @@ gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main
 | 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
 
 - **`archive.sh`** 做 Release 的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
-- **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那七個，沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
+- **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那九個，沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
 - **簽章用 Apple 代管的發布憑證。** `ExportOptions.plist` 寫 `method` `app-store-connect`、`destination` `upload`、`signingStyle` `automatic`：Xcode 用 API 金鑰向 Apple 拿描述檔和代管的憑證，簽好直接上傳。發布憑證的私鑰不放在任何地方。開發者角色的金鑰能不能這樣做，是 [#143](https://github.com/iamreal-tw/iamreal/issues/143) 要實測的；做不到時，第一次執行的錯誤訊息記到 #143，再照 ADR-0036 把私鑰放進 `app-test`。
 - **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。

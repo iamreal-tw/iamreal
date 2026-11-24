@@ -215,7 +215,7 @@ const CHANGES: Record<string, Change[]> = {
   "102 cargo of the device-core job run from the root, where .cargo/config.toml is not read": [replace(C, "        working-directory: device-core\n        run: BB_LIB_DIR=\"$(./fetch-barretenberg.sh)\" && export BB_LIB_DIR && IAMREAL_BB= cargo test --locked --release", "        run: cargo test --locked --release --manifest-path device-core/Cargo.toml")],
   "103 a second BB_LIB_DIR after the script": [replace(C, "export BB_LIB_DIR && IAMREAL_BB= cargo test", "export BB_LIB_DIR && BB_LIB_DIR=/x IAMREAL_BB= cargo test")],
   "104 one more step in the device-core job": [replace(C, "      - name: cargo fmt --check\n", "      - run: rm .cargo/config.toml\n        working-directory: device-core\n      - name: cargo fmt --check\n")],
-  "105 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - spec/vectors/**\n      - design/copy/**\n      - web/circuits/**\n      - verifier/vk/**\n      - web/scripts/fetch-crs.mjs\n      - .github/workflows/checks-ios.yml\n", "")],
+  "105 the iOS check on every pull request": [replace(I, "    paths:\n      - ios/**\n      - device-core/**\n      - spec/vectors/**\n      - design/copy/**\n      - design/fonts/**\n      - web/circuits/**\n      - verifier/vk/**\n      - web/scripts/fetch-crs.mjs\n      - .github/workflows/checks-ios.yml\n", "")],
   "106 a path less in checks-ios.yml": [replace(I, "      - device-core/**\n", "")],
   "107 checks-ios.yml on pull_request_target": [replace(I, "  pull_request:\n", "  pull_request_target:\n")],
   "108 checks-ios.yml on another runner": [replace(I, "    runs-on: xcode-27\n", "    runs-on: macos-latest\n")],
@@ -931,9 +931,9 @@ test("the paths of checks-ios.yml hold every file of the repository the iOS test
     for (const m of text.matchAll(/: "((?:web|verifier|spec|design|device-core)\/[^"]+)"/g)) read.add(m[1]!);
   }
   const check = readFileSync(join(REPO, "ios", "check-app.sh"), "utf8");
-  for (const m of check.matchAll(/^\S+ ((?:web|verifier)\/\S+)$/gm)) read.add(m[1]!);
+  for (const m of check.matchAll(/^\S+ ((?:web|verifier|design)\/\S+)$/gm)) read.add(m[1]!);
   for (const m of check.matchAll(/\$repo\/([A-Za-z0-9_.\/-]+)/g)) read.add(m[1]!);
-  assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md"), `the check read the sources: ${[...read].join(", ")}`);
+  assert.ok(read.has("spec/vectors/scope.json") && read.has("web/circuits/card_proof_rs2048.json") && read.has("design/copy/app.md") && read.has("design/fonts/GenRyuMin2TW-B.otf"), `the check read the sources: ${[...read].join(", ")}`);
   assert.deepEqual([...read].filter((p) => !matchesPaths(IOS_PATHS, p)), []);
 });
 
@@ -1241,10 +1241,22 @@ function trackedFiles(...dirs: string[]): string[] {
   return found;
 }
 
-/** `path` from the repository's root, if it is a file or directory of the repository other than the root; else nothing. */
+let tracked: Set<string> | undefined;
+
+/**
+ * `path` from the repository's root, if it is a tracked file or a directory
+ * with a tracked file under it, other than the root; else nothing. Every
+ * check below finds its paths with this. Only what is tracked: a path that
+ * is on disk but not tracked (.env.local, an output directory) is not one
+ * CI has, and counting it would make the checks fail where it is (#314).
+ */
 function inRepo(path: string): string | undefined {
-  const r = relative(REPO, path);
-  return r !== "" && !r.startsWith("..") && existsSync(path) ? r.split(sep).join("/") : undefined;
+  if (tracked === undefined) {
+    tracked = new Set();
+    for (const f of trackedFiles()) for (let p = f; p !== "."; p = dirname(p)) tracked.add(p);
+  }
+  const r = relative(REPO, path).split(sep).join("/");
+  return tracked.has(r) ? r : undefined;
 }
 
 /** Whether `list` holds `path`: a file, or a directory, every file of which it must then hold. */
@@ -1264,9 +1276,10 @@ const holds = (list: readonly string[], path: string): boolean => matchesPaths(l
  *   strings;
  * - `new URL("../...", import.meta.url)`, up to the first `${`;
  * - `"go", [... "./<package>"`.
- * A path that names no file or directory of the repository (an output
- * directory, the root itself) is left out. Not seen: what the check of the
- * browser tests' paths does not see either (.github/README.md).
+ * A path that names no tracked file or directory of the repository (an
+ * output directory, .env.local, the root itself) is left out. Not seen:
+ * what the check of the browser tests' paths does not see either
+ * (.github/README.md).
  */
 function namedByTypeScript(files: readonly string[]): { paths: Set<string>; goPackages: Set<string> } {
   const packages = workspacePackages();
@@ -1377,6 +1390,20 @@ test("the typescript check runs when anything it uses changes: every file and di
     [...paths].filter((p) => !holds(list, p)),
     [],
   );
+});
+
+test("a path the sources name that is on disk but not tracked (.env.local, an output directory) is not counted as one the checks use", () => {
+  mkdirSync(join(WORKER_DIR, "test-output"), { recursive: true });
+  const dir = mkdtempSync(join(WORKER_DIR, "test-output", "untracked-"));
+  try {
+    const name = relative(REPO, dir).split(sep).join("/");
+    writeFileSync(join(dir, "secret.txt"), "not tracked\n");
+    writeFileSync(join(dir, "names.ts"), `join(REPO, "${name}", "secret.txt");\njoin(REPO, "${name}");\njoin(REPO, "worker", "package.json");\n`);
+    const { paths } = namedByTypeScript([`${name}/names.ts`]);
+    assert.deepEqual([...paths], ["worker/package.json"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test(

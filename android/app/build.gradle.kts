@@ -308,17 +308,19 @@ abstract class BundleFiles : DefaultTask() {
     }
 }
 
-/** Copies the sentences of the card proof (design/copy/card-proof.json) into the app's resources, as they are: `raw/card_proof_copy.json`. */
-abstract class CopySentences : DefaultTask() {
-    @get:InputFile abstract val from: RegularFileProperty
+/** Copies design/'s files into the app's resources (res/), as they are: designResources. */
+abstract class CopyDesign : DefaultTask() {
+    /** Each file, by where it goes in res/. */
+    @get:Internal abstract val resources: MapProperty<String, File>
+    @get:InputFiles val sources get() = resources.get().values
+    @get:Input val names get() = resources.get().keys.toList()
     @get:OutputDirectory abstract val out: DirectoryProperty
 
     @TaskAction
     fun copy() {
-        val dir = out.get().asFile.resolve("raw")
+        val dir = out.get().asFile
         dir.deleteRecursively()
-        dir.mkdirs()
-        from.get().asFile.copyTo(dir.resolve("card_proof_copy.json"))
+        for ((resource, source) in resources.get()) source.copyTo(dir.resolve(resource))
     }
 }
 
@@ -386,6 +388,8 @@ abstract class CheckApk : DefaultTask() {
     @get:Input abstract val id: Property<String>
     @get:Input abstract val allowed: ListProperty<String>
     @get:Input abstract val testing: Property<Boolean>
+    /** design/'s files the installer carries as they are (designResources). */
+    @get:InputFiles abstract val design: ConfigurableFileCollection
 
     @TaskAction
     fun check() {
@@ -428,6 +432,15 @@ abstract class CheckApk : DefaultTask() {
                 if (bundled[name] != null && Hashes.sha256(read("assets/$name")) != bundled[name]) problems += "the SHA-256 of assets/$name is not the listed one"
             }
 
+            // design/'s files are in the resources as they are in the repository, byte for byte. Found by their
+            // bytes: a release APK has its resources under shortened names (res/c7.otf), a bundle under their own.
+            val resources = names.filter { it.startsWith("res/") }
+            for (source in design.files) {
+                val want = source.readBytes()
+                val sameSize = resources.filter { zip.getEntry(top + it).size == want.size.toLong() }
+                if (sameSize.none { read(it).contentEquals(want) }) problems += "no file in res/ is $source as it is"
+            }
+
             // Every library the native library asks the system for is named in it as text.
             for (lib in libs) {
                 val text = String(read(lib), Charsets.ISO_8859_1)
@@ -466,6 +479,16 @@ abstract class CheckApk : DefaultTask() {
         if (problems.isNotEmpty()) throw GradleException("$file:\n" + problems.joinToString("\n"))
     }
 }
+
+/**
+ * design/'s files the app carries as they are, by where they go in its resources (res/): the sentences of the
+ * card proof and of the app, and the subset of the headings' typeface. Each is design/'s own file, not a copy kept here.
+ */
+val designResources = mapOf(
+    "raw/card_proof_copy.json" to rootProject.file("../design/copy/card-proof.json"),
+    "raw/app_copy.json" to rootProject.file("../design/copy/app.json"),
+    "font/genryumin2tw_b.otf" to rootProject.file("../design/fonts/GenRyuMin2TW-B.otf"),
+)
 
 val core = rootProject.file("../device-core")
 val nativeSources = files(
@@ -523,11 +546,10 @@ androidComponents {
         }
         variant.sources.assets!!.addGeneratedSourceDirectory(bundle, BundleFiles::out)
 
-        // The screens' sentences are design/copy/'s own file, not a copy kept here.
-        val sentences = tasks.register<CopySentences>("copySentences$name") {
-            from = rootProject.file("../design/copy/card-proof.json")
+        val copyDesign = tasks.register<CopyDesign>("copyDesign$name") {
+            resources = designResources
         }
-        variant.sources.res!!.addGeneratedSourceDirectory(sentences, CopySentences::out)
+        variant.sources.res!!.addGeneratedSourceDirectory(copyDesign, CopyDesign::out)
 
         val checkManifest = tasks.register<CheckManifest>("checkManifest$name") {
             manifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
@@ -535,6 +557,7 @@ androidComponents {
             id = variantId
         }
         val checkApk = tasks.register<CheckApk>("checkApk$name") {
+            design.from(designResources.values)
             apks = variant.artifacts.get(SingleArtifact.APK)
             lists.from(bundledLists)
             abis = variantAbis
@@ -555,6 +578,7 @@ androidComponents {
         }
         tasks.named("check") { dependsOn(checkManifest, checkApk, checkLibraries) }
         val checkBundle = tasks.register<CheckApk>("checkBundle$name") {
+            design.from(designResources.values)
             aab = variant.artifacts.get(SingleArtifact.BUNDLE)
             lists.from(bundledLists)
             abis = variantAbis
@@ -590,5 +614,5 @@ tasks.withType<Test>().configureEach {
     systemProperty("iamreal.strings.dev", file("src/debug/res/values/strings.xml").path)
     inputs.files("src/main/res/values/strings.xml", "src/debug/res/values/strings.xml")
     inputs.dir(rootProject.file("../spec/vectors"))
-    inputs.file(rootProject.file("../design/copy/app.md"))
+    inputs.files(rootProject.file("../design/copy/app.md"), rootProject.file("../design/copy/app.json"))
 }
