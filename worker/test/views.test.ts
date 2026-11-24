@@ -24,8 +24,8 @@ const pageOf = async (path: string): Promise<[number, string]> => {
 };
 
 describe("the views and the record are one transaction", () => {
-  // The four tables of the views, in the order a record writes them.
-  for (const table of ["view_cards", "view_slots", "view_history", "view_state"] as const) {
+  // The five tables of the views, in the order a record writes them.
+  for (const table of ["view_cards", "view_ordinals", "view_slots", "view_history", "view_state"] as const) {
     test(`a write that fails at \`${table}\`: 500, and the record, the card's state, the views and the pages are as before`, async () => {
       await freshProofLog(worker);
       const root = await publishG3(worker);
@@ -126,6 +126,25 @@ describe("the views written again from the records", () => {
     const root = await publishCrl(worker, { issuer: "G3", number: parseDay("2026-11-18")!, thisUpdate: tw("2026-11-18", "05:00:00"), serials: [11, 12] });
     const answer = await mustSubmit(worker, await sub(worker, newCard(), root, "threads:alice"), "threads first");
     assert.deepEqual([answer.seq, answer.kinds[0].account_cards], [17, 3]);
+  });
+
+  test("the ordinals: one per card, by its first valid record, whatever its records after; views filled before they had them are filled again when the object starts", async () => {
+    await everyKind();
+    const views = await worker.proofLog.views();
+    // E000000000… and 7K2Q9FM4XD3A… on 2026-10-01, in that order; 7K2Q9FM4XD3B… on 2026-10-03.
+    const rows = views.view_ordinals!.map((row) => [row.ordinal, String(row.scoped_id).slice(0, 12)]);
+    assert.deepEqual(rows.map(([n, id]) => [n, String(id).slice(0, 10)]), [
+      [1, "E000000000"],
+      [2, "7K2Q9FM4XD"],
+      [3, "7K2Q9FM4XD"],
+    ]);
+    assert.deepEqual([rows[1]![1], rows[2]![1]], ["7K2Q9FM4XD3A", "7K2Q9FM4XD3B"]);
+    const pages = await Promise.all(["/p/E000000000", `/p/${CARD_A}`].map(pageOf));
+
+    await worker.proofLog.forgetOrdinals();
+    await worker.proofLog.restart();
+    assert.deepEqual(await worker.proofLog.views(), views);
+    assert.deepEqual(await Promise.all(["/p/E000000000", `/p/${CARD_A}`].map(pageOf)), pages);
   });
 
   /** What a page answers when the back end itself fails: 500, plain text, never kept by a cache. */

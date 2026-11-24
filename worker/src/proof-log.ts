@@ -43,7 +43,7 @@ import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, Latest, LatestPlace } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
 import { type ProofLogSettings, proofLogSettingsOf } from "./settings.ts";
-import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, latestSlots, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
+import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, latestSlots, ordinalsOwed, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
 /**
  * A challenge can be used for less than this long after it is issued
@@ -473,7 +473,8 @@ export class ProofLog extends DurableObject<Env> {
     // A filling that failed is not begun again before its wait is over (`Retries`), also when the object started
     // again in between: on Cloudflare that is every time the object has had nothing to do for some seconds. The alarm
     // begins it then (`#viewsBehind`).
-    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#proofLogRow().count;
+    // Views filled before they had the ordinals (views.ts, `view_ordinals`) are filled again too.
+    this.#viewsAtLastRecord = this.#tablesAreThisVersion && viewSeq(sql) === this.#proofLogRow().count && !ordinalsOwed(sql);
     const fillOwed = this.#tablesAreThisVersion && !this.#viewsAtLastRecord && !this.#paused;
     const fillAgainAt = fillOwed ? this.#fillRetries.againAt() : null;
     this.viewsFilling = fillOwed && (fillAgainAt === null || fillAgainAt <= now().getTime()) ? this.#fillViews() : Promise.resolve();
