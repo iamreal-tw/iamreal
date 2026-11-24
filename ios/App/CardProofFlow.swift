@@ -175,6 +175,9 @@ final class CardProofFlow {
         /// answer is told.
         let seq: Int?
         let recordHash: String?
+        /// The card's ordinal, for the text suggested for sharing; nil
+        /// when it cannot be read, or nothing of the answer is told.
+        let ordinal: Int?
         /// What the server says the record is on each platform, in
         /// ascending order; nil when it cannot be read.
         let kinds: [Recorded]?
@@ -183,7 +186,7 @@ final class CardProofFlow {
         let mismatches: [String]
 
         /// An answer of which nothing is told.
-        static let nothing = Answer(seq: nil, recordHash: nil, kinds: nil, mismatches: [])
+        static let nothing = Answer(seq: nil, recordHash: nil, ordinal: nil, kinds: nil, mismatches: [])
 
         /// Reads `response`, the body of the 201, against `rows`, the
         /// rows the confirmation screen showed as the core takes them.
@@ -203,6 +206,7 @@ final class CardProofFlow {
             return Answer(
                 seq: read["seq"] as? Int,
                 recordHash: read["record_hash"] as? String,
+                ordinal: read["ordinal"] as? Int,
                 kinds: kinds,
                 mismatches: read["mismatches"] as? [String] ?? [])
         }

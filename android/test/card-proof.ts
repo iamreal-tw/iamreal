@@ -843,13 +843,19 @@ try {
   const browser = onTop();
   check(browser.includes(`dat=http://${SITE}/p/${shortId}`) && !new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(browser), "step 6: 打開你的島民證明 opens the card's page in the browser");
   const page = await fetch(`${backend.origin}/p/${shortId}`);
-  check(page.status === 200 && (await page.text()).includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
+  const html = await page.text();
+  check(page.status === 200 && html.includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
+  // The card's ordinal as its page writes it: the proof log's, which the answer to the submission gave the app.
+  const ordinal = /<p class="ordinal">第 ([0-9,]+) 張島民證明<\/p>/.exec(html)?.[1] ?? "";
+  check(ordinal !== "", `the card's page writes its ordinal "${ordinal}"`);
   await backToApp();
-  // The system's share sheet, with the address of the card's page and nothing else (Android 10 shows the text it is given at its top).
+  // The system's share sheet, with the sentence and, on the line under it, the address of the card's page (Android 10
+  // shows the text it is given at its top).
   press(say("app_done.share"));
-  const shared = await waitText(`http://${SITE}/p/${shortId}`, "the share sheet with the card's address", 20_000);
+  const text = `${say("done.share_text", { ordinal })}\nhttp://${SITE}/p/${shortId}`;
+  const shared = await waitText(text, "the share sheet with the sentence and the card's address", 20_000);
   check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 6: 分享 opens the system's share sheet");
-  check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === `http://${SITE}/p/${shortId}`, "step 6: what is shared is the card's address, with no text of its own");
+  check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === text, "step 6: what is shared is the sentence with the card's ordinal and the card's address");
   emulator.shell("input keyevent KEYCODE_BACK");
   await backToApp();
   press(say("done.restart"));

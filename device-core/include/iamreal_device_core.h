@@ -174,10 +174,12 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  * platform, kind and username are read.
  *
  * *out is:
- *   {"seq":138,"record_hash":"...","kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}],"mismatches":[]}
+ *   {"seq":138,"record_hash":"...","ordinal":42,"kinds":[{"platform":"threads","kind":"first","username":"alice","account_cards":1}],"mismatches":[]}
  * seq and record_hash are the record's, or both null when nothing of the
  * answer is told (the body is not an answer with the two in their form);
- * kinds is null then too. kinds is what the server says the record is on
+ * ordinal and kinds are null then too. ordinal is the card's ordinal, for
+ * the text the app suggests for sharing, or null when it is not a count of
+ * at least 1. kinds is what the server says the record is on
  * each platform, in ascending order of platform, or null when they cannot
  * be read; account_cards is null when it is not a count. mismatches is the
  * platforms on which kinds differs from the rows (another kind, another

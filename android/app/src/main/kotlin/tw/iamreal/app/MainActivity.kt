@@ -106,9 +106,9 @@ class MainActivity : ComponentActivity() {
                 }
             },
             copy = { text -> (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("", text)) },
-            share = { address ->
-                // The system's share sheet: the address and nothing else; which app it goes to is the cardholder's to pick.
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, address)
+            share = { text ->
+                // The system's share sheet with the text the screen gives; which app it goes to is the cardholder's to pick.
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
                 try {
                     startActivity(Intent.createChooser(send, null))
                 } catch (e: ActivityNotFoundException) {

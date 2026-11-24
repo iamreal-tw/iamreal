@@ -21,13 +21,14 @@ class AnswerTest {
 
     @Test
     fun `the answer is what the vectors say, case by case`() {
-        assertTrue(cases.size >= 77)
+        assertTrue(cases.size >= 91)
         for (case in cases) {
             val name = case.getString("name")
             val expected = case.getJSONObject("result")
             val answer = CardProof.Answer.of(case.getString("body").toByteArray(), case.getJSONArray("rows").toString().toByteArray())
             assertEquals(name, if (expected.isNull("seq")) null else expected.getLong("seq"), answer.seq)
             assertEquals(name, if (expected.isNull("record_hash")) null else expected.getString("record_hash"), answer.recordHash)
+            assertEquals(name, if (expected.isNull("ordinal")) null else expected.getLong("ordinal"), answer.ordinal)
             assertEquals(name, strings(expected.getJSONArray("mismatches")), answer.mismatches)
             if (expected.isNull("kinds")) {
                 assertNull(name, answer.kinds)
@@ -45,6 +46,6 @@ class AnswerTest {
     fun `rows the core does not take are an answer with nothing told, not a failure`() {
         val body = cases.first { !it.getJSONObject("result").isNull("kinds") }.getString("body").toByteArray()
         val answer = CardProof.Answer.of(body, "not rows".toByteArray())
-        assertEquals(listOf(null, null, null, emptyList<String>()), listOf(answer.seq, answer.recordHash, answer.kinds, answer.mismatches))
+        assertEquals(listOf(null, null, null, null, emptyList<String>()), listOf(answer.seq, answer.recordHash, answer.ordinal, answer.kinds, answer.mismatches))
     }
 }

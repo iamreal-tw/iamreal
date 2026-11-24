@@ -145,7 +145,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - 完成、取消、PIN 不正確之後，記憶體裡沒有 PIN
 - app 一打開（畫面第一次畫出來）就向後台拿 `config`，過卡用的是那一份
 - 手機的日期和後台差一天時，停在第三次感應之前，卡片沒有被要求簽第二次
-- 完成的畫面複製的連結、「打開你的島民證明」開的網址（Worker 上那一頁真的列出帳號）、「打開 @alice 的 Threads 個人檔案」開的網址、「分享」交給分享面板的網址（只有這張島民證明的網址）
+- 完成的畫面複製的連結、「打開你的島民證明」開的網址（Worker 上那一頁真的列出帳號）、「打開 @alice 的 Threads 個人檔案」開的網址、「分享」交給分享面板的文字（帶順序號碼的那一句，號碼和 Worker 上那一頁寫的相同，下一行是這張島民證明的網址）
 - 每個畫面的截圖寫到 `web/test-output/app/screens-ios/`
 
 `ios/` 不引用 `worker/`：和那個腳本之間只有 `backend.json` 和 HTTP。拉取請求的檢查（`.github/workflows/checks-ios.yml`）沒有跑這一段。

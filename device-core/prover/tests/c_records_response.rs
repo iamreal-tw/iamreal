@@ -37,11 +37,11 @@ fn response(body: &[u8], rows: &[u8]) -> Result<Value, i32> {
 const HASH: &str = "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f";
 
 fn first() -> String {
-    json!({"seq": 138, "record_hash": HASH, "kinds": [{"platform": "threads", "kind": "first", "username": "alice", "account_cards": 1}]}).to_string()
+    json!({"seq": 138, "record_hash": HASH, "ordinal": 42, "kinds": [{"platform": "threads", "kind": "first", "username": "alice", "account_cards": 1}]}).to_string()
 }
 
 fn nothing() -> Value {
-    json!({"seq": null, "record_hash": null, "kinds": null, "mismatches": []})
+    json!({"seq": null, "record_hash": null, "ordinal": null, "kinds": null, "mismatches": []})
 }
 
 /// Every case of spec/vectors/records-response.json.
@@ -49,8 +49,8 @@ fn nothing() -> Value {
 fn every_case_of_the_vectors() {
     let v = vectors("records-response.json");
     let cases = v["cases"].as_array().unwrap();
-    assert!(cases.len() >= 77);
-    let (mut nothing_told, mut kinds_unknown, mut differ) = (0, 0, 0);
+    assert!(cases.len() >= 91);
+    let (mut nothing_told, mut kinds_unknown, mut differ, mut no_ordinal) = (0, 0, 0, 0);
     for c in cases {
         let name = text(c, "name");
         let got = response(text(c, "body").as_bytes(), c["rows"].to_string().as_bytes());
@@ -58,15 +58,20 @@ fn every_case_of_the_vectors() {
         let result = &c["result"];
         if result["seq"].is_null() {
             nothing_told += 1;
-        } else if result["kinds"].is_null() {
+            continue;
+        }
+        if result["ordinal"].is_null() {
+            no_ordinal += 1;
+        }
+        if result["kinds"].is_null() {
             kinds_unknown += 1;
         } else if !result["mismatches"].as_array().unwrap().is_empty() {
             differ += 1;
         }
     }
     assert!(
-        nothing_told >= 20 && kinds_unknown >= 20 && differ >= 8,
-        "{nothing_told} with nothing told, {kinds_unknown} with the kinds unknown, {differ} that differ"
+        nothing_told >= 20 && kinds_unknown >= 20 && differ >= 8 && no_ordinal >= 10,
+        "{nothing_told} with nothing told, {kinds_unknown} with the kinds unknown, {differ} that differ, {no_ordinal} without an ordinal"
     );
 }
 

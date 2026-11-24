@@ -22,7 +22,7 @@ final class DoneScreenTests: XCTestCase {
 
     func testTheAnswerIsWhatTheVectorsSayCaseByCase() throws {
         let cases = try XCTUnwrap(try Repository.vectors("records-response.json")["cases"] as? [[String: Any]])
-        XCTAssertGreaterThanOrEqual(cases.count, 77)
+        XCTAssertGreaterThanOrEqual(cases.count, 91)
         for item in cases {
             let name = try XCTUnwrap(item["name"] as? String)
             let body = Data(try XCTUnwrap(item["body"] as? String).utf8)
@@ -34,7 +34,7 @@ final class DoneScreenTests: XCTestCase {
                     username: $0["username"] as? String ?? "", accountCards: $0["account_cards"] as? Int)
             }
             let expected = Flow.Answer(
-                seq: result["seq"] as? Int, recordHash: result["record_hash"] as? String,
+                seq: result["seq"] as? Int, recordHash: result["record_hash"] as? String, ordinal: result["ordinal"] as? Int,
                 kinds: kinds, mismatches: try XCTUnwrap(result["mismatches"] as? [String]))
             XCTAssertEqual(Flow.Answer.read(body, rows: rows), expected, name)
         }
@@ -52,12 +52,12 @@ final class DoneScreenTests: XCTestCase {
         Flow.ConsequenceRow(platform: platform, known: known, kind: kind, username: username, current: current, previous: previous, switchesLeft: nil)
     }
 
-    private func done(_ expected: [Flow.ConsequenceRow], _ kinds: [Flow.Recorded]?, mismatches: [String] = [], firstRecord: Bool = false, seq: Int? = 138) -> Flow.Done {
+    private func done(_ expected: [Flow.ConsequenceRow], _ kinds: [Flow.Recorded]?, mismatches: [String] = [], firstRecord: Bool = false, seq: Int? = 138, ordinal: Int? = 128) -> Flow.Done {
         Flow.Done(
             date: "2026-11-16", shortID: "7K2Q9FM4XD",
             accounts: expected.filter { $0.kind != "withdraw" }.map { Flow.Account(platform: $0.platform, username: $0.username) },
             expected: expected,
-            answer: Flow.Answer(seq: seq, recordHash: seq == nil ? nil : String(repeating: "3f", count: 32), kinds: kinds, mismatches: mismatches),
+            answer: Flow.Answer(seq: seq, recordHash: seq == nil ? nil : String(repeating: "3f", count: 32), ordinal: seq == nil ? nil : ordinal, kinds: kinds, mismatches: mismatches),
             firstRecord: firstRecord)
     }
 
@@ -117,6 +117,18 @@ final class DoneScreenTests: XCTestCase {
         // As step 5 said: the record is not shown again.
         XCTAssertNil(screen.blocks.firstIndex(of: .heading(copy("done.recorded"))))
         try CopyDocument.load().check(screen)
+    }
+
+    func testTheTextSuggestedForSharingTheOrdinalWithACommaEveryThreeDigitsOrTheSentenceWithoutANumber() {
+        let expected = [row("threads", "refresh", "alice", current: "alice")]
+        let text = { (ordinal: Int?) in self.screens.shareText(self.done(expected, [self.recorded("threads", "refresh", "alice")], ordinal: ordinal)) }
+        XCTAssertEqual(text(1), "我剛剛換了第 1 張島民證明，宣告本帳號背後是一名台灣人。")
+        XCTAssertEqual(text(999), "我剛剛換了第 999 張島民證明，宣告本帳號背後是一名台灣人。")
+        XCTAssertEqual(text(1284), "我剛剛換了第 1,284 張島民證明，宣告本帳號背後是一名台灣人。")
+        XCTAssertEqual(text(1_234_567), "我剛剛換了第 1,234,567 張島民證明，宣告本帳號背後是一名台灣人。")
+        XCTAssertEqual(text(nil), "我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。")
+        // Nothing of the answer told: no ordinal either.
+        XCTAssertEqual(screens.shareText(done(expected, nil, seq: nil)), "我剛剛換了一張島民證明，宣告本帳號背後是一名台灣人。")
     }
 
     func testEveryAccountWithdrawnNoCardNoHangingNothingMoreToDo() throws {

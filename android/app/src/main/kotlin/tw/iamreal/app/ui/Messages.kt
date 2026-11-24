@@ -191,6 +191,11 @@ internal class Messages(private val c: Copy) {
         val profiles: List<Pair<String, String>>,
         /** What can be done besides: share the card's page, the sentence that names a platform and the button. One per platform the app knows. */
         val shares: List<Pair<String, String>>,
+        /**
+         * What the share sheet gets before the card's address, on the line above it: the sentence with the card's
+         * ordinal, or without a number when the answer had none (design/copy/card-proof.md, "6. 完成").
+         */
+        val shareText: String,
         /** "掛好了嗎？打開你的島民證明看看。", the line that opens the card's page. */
         val hung: String,
         /** The card's first record: a new card has a new link (done.new_card). */
@@ -255,6 +260,7 @@ internal class Messages(private val c: Copy) {
             },
             // The button opens the system's share sheet, not the platform: it says only 分享 (design/copy/card-proof.md, "6. 完成", app).
             shares = Platforms.known.map { c.say("done.share_note", "platform" to it.name) to c.say("app_done.share") },
+            shareText = d.answer.ordinal?.let { c.say("done.share_text", "ordinal" to thousands(it)) } ?: c.say("done.share_text_unnumbered"),
             hung = c.say("done.hung", "open_proof" to c.say("done.open_proof")),
             newCard = d.firstRecord,
             mismatch = if (d.answer.mismatches.isNotEmpty()) c.say("done.mismatch") else null,
@@ -268,6 +274,9 @@ internal class Messages(private val c: Copy) {
     }
 
     private companion object {
+        /** A whole number with a comma between groups of three digits, as the card's page writes the ordinal. */
+        fun thousands(n: Long): String = n.toString().reversed().chunked(3).joinToString(",").reversed()
+
         /** Codes of a submission the server did not accept that have no sentence of their own (card-proof.md, step 5). */
         val REJECTED = setOf("scope", "platform", "malformed", "challenge_used", "challenge_attempts", "proof", "root", "date_order")
     }

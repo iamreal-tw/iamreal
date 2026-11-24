@@ -51,7 +51,7 @@ final class ScreensTests: XCTestCase {
         let consequence = Flow.Consequence(accounts: accounts, rows: [row], firstRecord: true, today: "2026-11-16")
         let done = Flow.Done(
             date: "2026-11-16", shortID: "7K2Q9FM4XD", accounts: accounts, expected: [row],
-            answer: Flow.Answer(seq: 138, recordHash: String(repeating: "3f", count: 32), kinds: [Flow.Recorded(platform: "threads", kind: "first", username: "alice", accountCards: 1)], mismatches: []),
+            answer: Flow.Answer(seq: 138, recordHash: String(repeating: "3f", count: 32), ordinal: 128, kinds: [Flow.Recorded(platform: "threads", kind: "first", username: "alice", accountCards: 1)], mismatches: []),
             firstRecord: true)
         return (consequence, done)
     }
