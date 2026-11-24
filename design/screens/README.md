@@ -36,7 +36,7 @@
 | `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來） | 實作版 |
 | `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 實作版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 定稿版 |
-| `verify-desktop.png`、`verify-phone.png` | `/verify` | 定稿版 |
+| `verify-desktop.png`、`verify-phone.png` | `/verify` | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq` | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
 | `og-image.png` | 每一頁的連結預覽圖（`og:image`） | 定稿版 |
