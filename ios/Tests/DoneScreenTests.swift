@@ -111,9 +111,10 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(inline.map(\.1), [true, false, false, false])
         // As step 5 said: the record is not shown again.
         XCTAssertNil(screen.blocks.firstIndex(of: .heading(copy("done.recorded"))))
+        try CopyDocument.load().check(screen)
     }
 
-    func testEveryAccountWithdrawnNoCardNoHangingNothingMoreToDo() {
+    func testEveryAccountWithdrawnNoCardNoHangingNothingMoreToDo() throws {
         let screen = screens.done(done([row("threads", "withdraw", "alice", current: "alice")], [recorded("threads", "withdraw", "alice", 0)]), single: "Threads", copied: false)
         XCTAssertEqual(screen.texts, [
             "已全部收回",
@@ -121,6 +122,7 @@ final class DoneScreenTests: XCTestCase {
             "已經收回的帳號，個人檔案上的連結可以拿掉。",
             "回到開頭",
         ])
+        try CopyDocument.load().check(screen)
     }
 
     func testTheCopiedLinkSaysSo() {

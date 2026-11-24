@@ -33,6 +33,8 @@ struct ScreenView: View {
     var type: (String, String) -> Void
     /// The whole screen, not scrolled: for pictures of it.
     var unscrolled = false
+    /// Drawn again when the phone's text size changes (Theme's sizes follow it).
+    @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
         VStack(spacing: 0) {
@@ -72,7 +74,7 @@ struct ScreenView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
-            where_
+            stepBars
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
@@ -110,10 +112,11 @@ struct ScreenView: View {
     }
 
     /// Which of the six steps: the line, then six bars, those done in ink.
-    private var where_: some View {
+    private var stepBars: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(copy("common.step", ["step": String(screen.step), "steps": "6"]))
                 .font(Theme.body(Theme.sizeKicker))
+                .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
                 .foregroundColor(Theme.mute.color)
             HStack(spacing: 6) {
                 ForEach(1...6, id: \.self) { step in
@@ -128,7 +131,7 @@ struct ScreenView: View {
 
     // The words ------------------------------------------------------------------------
 
-    private func body(_ text: String) -> some View {
+    private func paragraph(_ text: String) -> some View {
         Text(text)
             .font(Theme.body(Theme.sizeBody))
             .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody))
@@ -167,7 +170,7 @@ struct ScreenView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 20)
         case .text(let text):
-            body(text).padding(.top, 12)
+            paragraph(text).padding(.top, 12)
         case .strong(let text):
             Text(text).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
                 .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody))
@@ -182,6 +185,7 @@ struct ScreenView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Divider().overlay(Theme.line.color)
                 Text(text).font(Theme.body(Theme.sizeKicker)).foregroundColor(Theme.mute.color)
+                    .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
             }
             .padding(.top, 40)
         case .doneHead(let card, let title, let lines):
@@ -224,7 +228,7 @@ struct ScreenView: View {
                 Divider().overlay(Theme.line.color)
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(answer.enumerated()), id: \.offset) { _, line in body(line) }
+                        ForEach(Array(answer.enumerated()), id: \.offset) { _, line in paragraph(line) }
                     }
                     .padding(.bottom, 12)
                 } label: {
@@ -331,13 +335,25 @@ struct ScreenView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value)
                 .padding(.horizontal, 12)
-                .foregroundColor(main ? Theme.bg.color : Theme.ink.color)
-                .background(main ? Theme.you.color : Theme.bg.color)
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(main ? Theme.you.color : Theme.ink.color, lineWidth: 1.5))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radius.value))
         }
+        .buttonStyle(Framed(main: main))
         .disabled(!button.enabled)
         .opacity(button.enabled ? 1 : 0.45)
+    }
+
+    /// The main button red with white words, darker while pressed; the
+    /// others framed in ink.
+    private struct Framed: ButtonStyle {
+        let main: Bool
+
+        func makeBody(configuration: Configuration) -> some View {
+            let fill = main ? (configuration.isPressed ? Theme.youHover : Theme.you) : Theme.bg
+            return configuration.label
+                .foregroundColor(main ? Theme.bg.color : Theme.ink.color)
+                .background(fill.color)
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius.value).stroke(main ? fill.color : Theme.ink.color, lineWidth: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radius.value))
+        }
     }
 
     /// One item of a progress list: done in ink with a tick, in progress
@@ -431,32 +447,22 @@ struct ScreenView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 Mark(animated: true).frame(width: 18, height: 18)
-                Text(card.label).font(Theme.body(12, Theme.weightHeading)).foregroundColor(Theme.ink.color)
+                Text(card.label).font(Theme.body(Theme.sizeSmall, Theme.weightHeading)).foregroundColor(Theme.ink.color)
             }
             ForEach(Array(card.rows.enumerated()), id: \.offset) { _, row in
                 VStack(alignment: .leading, spacing: 0) {
-                    if let name = row.name { Text(name).font(Theme.body(12)).foregroundColor(Theme.mute.color) }
+                    if let name = row.name { Text(name).font(Theme.body(Theme.sizeSmall)).foregroundColor(Theme.mute.color) }
                     Text(row.account).font(Theme.body(Theme.sizeBody, Theme.weightAccount)).foregroundColor(Theme.ink.color)
                         .lineLimit(2).minimumScaleFactor(0.6)
                 }
             }
-            Text(card.shortID).font(Theme.mono(10)).foregroundColor(Theme.mute.color)
-                .lineLimit(1).minimumScaleFactor(0.6)
+            // Narrower than its line at the small size: shrunk to fit, as the card on the page is.
+            Text(card.shortID).font(Theme.mono(Theme.sizeSmall)).foregroundColor(Theme.mute.color)
+                .lineLimit(1).minimumScaleFactor(0.5)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.bg.color)
         .overlay(RoundedRectangle(cornerRadius: Theme.radiusPanel.value).stroke(Theme.ink.color, lineWidth: 1))
-    }
-}
-
-extension Theme {
-    /// The system's typeface at a size the card alone uses.
-    static func body(_ size: CGFloat, _ weight: Number = weightBody) -> Font {
-        .system(size: size, weight: Font.Weight(css: weight.value))
-    }
-
-    static func mono(_ size: CGFloat) -> Font {
-        .system(size: size, design: .monospaced)
     }
 }

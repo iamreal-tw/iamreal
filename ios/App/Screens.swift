@@ -425,7 +425,8 @@ struct Screens {
 
         if !withdrawAll {
             blocks.append(.kicker(copy("done.optional")))
-            for platform in Platform.known {
+            // One share sheet, whichever platform: the note names the one the app knows.
+            if let platform = Platform.known.first {
                 blocks += [
                     .subheading(copy("done.share_title")),
                     .text(copy("done.share_note", ["platform": platform.name])),

@@ -6,7 +6,8 @@ import UIKit
 /// (design/DESIGN.md), each under its name there. The app is a phone's: where
 /// a token has a `-phone` value, that is the one it uses. Only the tokens the
 /// app draws with are here; Tests/ThemeTests.swift checks each against the
-/// file.
+/// file. Sizes of type follow the phone's text size (Dynamic Type): at the
+/// default size they are the tokens' own.
 enum Theme {
     // Colors (design/DESIGN.md, the colors): each means one thing.
     static let bg = RGB("--bg", 0xFFFFFF)
@@ -17,6 +18,7 @@ enum Theme {
     static let soft = RGB("--soft", 0xF6F7F7)
     /// The cardholder, the buttons and links, the cardholder's card.
     static let you = RGB("--you", 0xBF2150)
+    /// A main button while it is pressed.
     static let youHover = RGB("--you-hover", 0xA51A44)
 
     // Sizes, in points.
@@ -78,17 +80,22 @@ enum Theme {
     /// The headings' typeface, at `size`; all of it is the one weight, 700.
     static func display(_ size: Length) -> Font {
         registerDisplayFont()
-        return .custom(displayFontName, fixedSize: size.value)
+        return .custom(displayFontName, size: size.value, relativeTo: .body)
     }
 
     /// The system's typeface at `size` and `weight`.
     static func body(_ size: Length, _ weight: Number = weightBody) -> Font {
-        .system(size: size.value, weight: Font.Weight(css: weight.value))
+        .system(size: scaled(size), weight: Font.Weight(css: weight.value))
     }
 
     /// The system's fixed-width typeface: short IDs and links.
     static func mono(_ size: Length) -> Font {
-        .system(size: size.value, design: .monospaced)
+        .system(size: scaled(size), design: .monospaced)
+    }
+
+    /// `size` at the phone's text size.
+    private static func scaled(_ size: Length) -> CGFloat {
+        UIFontMetrics(forTextStyle: .body).scaledValue(for: size.value)
     }
 
     /// The space between lines for a line height of `leading` at `size`.

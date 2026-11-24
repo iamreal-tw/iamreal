@@ -59,6 +59,16 @@ final class ScreensTests: XCTestCase {
         }
     }
 
+    /// The splash screen's words are design/copy/app.md's: the lines of the
+    /// code block of its section, in their order.
+    func testTheSplashScreenSaysWhatAppMDWrites() throws {
+        let document = try Repository.text("design/copy/app.md")
+        let section = try XCTUnwrap(document.components(separatedBy: "\n## 啟動畫面\n").dropFirst().first)
+        let block = try XCTUnwrap(section.components(separatedBy: "```\n").dropFirst().first)
+        let appCopy = Copy(json: try Repository.data("design/copy/app.json"))
+        XCTAssertEqual(block.split(separator: "\n").map(String.init), [appCopy("splash.name"), appCopy("splash.site")])
+    }
+
     /// No screen links out (docs/design/principles.md, principle 1): what a
     /// button opens is the card's page, the account's, the share sheet.
     func testNoScreenOpensAHelpPage() {
