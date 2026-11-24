@@ -170,7 +170,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 ### 截圖
 
-`design/screens/` 裡 app 的截圖（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`）是 `Tests/ScreensTests.swift` 拍的：跑過 `xcodebuild test` 之後，從 `web/test-output/app/screens-ios/` 把同名的檔複製過去。畫面改了，就重拍、重新複製。讀取卡片的那一張（`card-proof-app-2-read-phone.png`）不複製：`design/screens/` 的 `card-proof-app-2-read-iphone-phone.png` 是感應位置的示意圖的定稿，等 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 畫了示意圖再換。
+`Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`）。現在 `design/screens/` 放的是 Android 的（那裡的 README「版本」寫哪一個 app）；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。讀取卡片的那一張（`card-proof-app-2-read-phone.png`）不複製：`design/screens/` 的 `card-proof-app-2-read-iphone-phone.png` 是感應位置的示意圖的定稿，等 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 畫了示意圖再換。
 
 ## 建置時的檢查（`check-app.sh`）
 

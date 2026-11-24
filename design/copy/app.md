@@ -36,11 +36,9 @@
 
 ## 啟動畫面
 
-打開 app 時，畫面中間是記號，下面是服務的名稱和網站的名字，中間用一條線隔開（`design/DESIGN.md` 的導覽列）：
+打開 app 時，第 1 步之前的畫面（`design/screens/app-splash-phone.png`）：記號在中間，底下一行是名稱和網址，中間用一條細的豎線隔開，和網頁頁首的名稱旁邊一樣（`design/DESIGN.md`「元件」的導覽列）。兩種 build 都寫這一行，不畫測試的標示。
 
 ```
 島民證明
 iamreal.tw
 ```
-
-- 測試網站的 build 也寫 `iamreal.tw`，和網頁的頁首相同（`test-site.md`）

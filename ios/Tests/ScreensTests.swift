@@ -8,7 +8,7 @@ import XCTest
 /// 2026-11-16, 王小明) without a back end: every sentence on them is in the
 /// document, and each is drawn as the app draws it, the whole screen 390
 /// points wide, to web/test-output/app/screens-ios/ under the name of the
-/// picture it stands for. Those pictures are what design/screens/ has.
+/// picture it stands for (ios/README.md, the screenshots).
 @MainActor
 final class ScreensTests: XCTestCase {
     typealias Flow = CardProofFlow

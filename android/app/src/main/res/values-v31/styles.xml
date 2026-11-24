@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 on draws its own splash before the app's: the mark on
+         white, as the app's splash that follows (ui/Splash.kt), not the
+         launcher's icon. -->
+    <style name="App" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/token_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/token_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
+</resources>
