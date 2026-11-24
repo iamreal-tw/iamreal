@@ -7,7 +7,7 @@
 // code alone: `{ code }`.
 import type { AcceptedKind } from "../api.ts";
 import type { CardStatus, Consequence, ConsequenceRow, Done, Progress, SlotStatus, Stop } from "../flow.ts";
-import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "../platforms.ts";
+import { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, hangPath, presentationOf } from "../platforms.ts";
 import { COPY, type Values, fill } from "./copy.ts";
 
 export interface Sentence {
@@ -15,11 +15,12 @@ export interface Sentence {
   values: Values;
 }
 
-export type HelpTopic = keyof typeof COPY.links;
+/** The one link of steps 1 to 5 (links.prepare, after stops.component_unreachable): to the site's page /prepare. */
+export type HelpTopic = "prepare";
 
 export type Message =
   | (Sentence & {
-      /** A link to the help page after the sentence. */
+      /** A link to the site's page after the sentence. */
       link?: HelpTopic;
       /** The server's X-Request-Id, shown on the next line. */
       requestId?: string;
@@ -545,26 +546,38 @@ export interface DoneRecordRow {
 
 export interface DoneView {
   title: Sentence;
-  /** done.advice, or with one platform done.advice_single. */
-  advice: Sentence;
-  /** The list is empty: no animation, no card, no link, no advice. */
+  /** The list is empty: no card, no hanging it, nothing more to do. */
   withdrawAll: boolean;
-  /** The card's list after this record: what the card shows. */
-  card: { name: string; account: string; raw: boolean }[];
-  /** What the server recorded differs from what step 5 said: done.mismatch, above the title. */
+  /** The card's list after this record: what the small card shows; `name` is null when the screens speak of one platform. */
+  card: { name: string | null; account: string; raw: boolean }[];
+  /** What the server recorded differs from what step 5 said: done.mismatch, above everything. */
   mismatch: Sentence | null;
   date: string;
   shortId: string;
-  /** Where to put the link: done.put_link, or with one platform done.put_link_single. */
-  putLink: Sentence;
+  /** done.recorded_on: the day the proof log recorded it. */
+  recordedOn: Sentence;
+  /** done.hang_title, or with one platform done.hang_title_single. */
+  hangTitle: Sentence;
+  /** done.anyone, or with one platform done.anyone_single. */
+  anyone: Sentence;
   /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
   link: string;
   /** The link as it is copied: a whole https:// URL. */
   url: string;
+  /** What the QR code holds: the page to hang the card's page from, on this build's site (hang.md, part 2). */
+  hangUrl: string;
+  /** The card's page, for done.open_proof: a path on the site this page is on. */
+  proofPath: string;
+  /** done.open_profile and the profile it opens, for each account of the card whose platform has a public page. */
+  profiles: { text: Sentence; url: string }[];
+  /** done.share_note, done.share and the page they open, for each platform of the build with a page to share from. */
+  shares: { note: Sentence; button: Sentence; url: string }[];
   /** The card's first record: the sentence about a new card. */
   newCard: boolean;
-  /** An account was withdrawn and the list is not empty: its link can be taken down. */
+  /** An account was withdrawn: its link can be taken down. */
   withdrawnLink: boolean;
+  /** The proof log's record is shown only when what it recorded differs from what step 5 said. */
+  showRecord: boolean;
   /** The proof log's line (record_list, with one platform record_single, record_withdraw_all), or null when the answer's kinds could not be read. */
   record: Sentence | null;
   rows: DoneRecordRow[];
@@ -628,19 +641,32 @@ export function doneView(d: Done, single: string | null = null): DoneView {
   }
   const withdrawAll = d.accounts.length === 0;
   const withdrew = (d.kinds ?? d.expected).some((k) => k.kind === "withdraw");
+  const shares = [...KNOWN_PLATFORMS].flatMap((id) => {
+    const p = presentationOf(id)!;
+    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(`https://${link}`) }] : [];
+  });
   return {
     title: doneTitle(d),
-    advice: single !== null ? say(t.advice_single) : say(t.advice),
     withdrawAll,
-    card: d.accounts.map((a) => ({ name: nameOf(a.platform), account: accountOf(a.platform, a.username), raw: rawOf(a.platform) })),
+    card: d.accounts.map((a) => ({ name: single !== null ? null : nameOf(a.platform), account: accountOf(a.platform, a.username), raw: rawOf(a.platform) })),
     mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,
     date: d.date,
     shortId: d.shortId,
-    putLink: single !== null ? say(t.put_link_single, { platform: single }) : say(t.put_link),
+    recordedOn: say(t.recorded_on, { date: d.date }),
+    hangTitle: single !== null ? say(t.hang_title_single, { platform: single }) : say(t.hang_title),
+    anyone: single !== null ? say(t.anyone_single) : say(t.anyone),
     link,
     url: `https://${link}`,
+    hangUrl: `https://${SITE_DOMAIN}/${hangPath(d.shortId)}`,
+    proofPath: `/${cardPath(d.shortId)}`,
+    profiles: d.accounts.flatMap((a) => {
+      const p = rawOf(a.platform) ? null : presentationOf(a.platform);
+      return p?.profileUrl ? [{ text: say(t.open_profile, { account: accountOf(a.platform, a.username), platform: p.name }), url: p.profileUrl(a.username) }] : [];
+    }),
+    shares,
     newCard: d.firstRecord,
-    withdrawnLink: withdrew && !withdrawAll,
+    withdrawnLink: withdrew,
+    showRecord: d.mismatches.length > 0,
     record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : single !== null ? t.record_single : t.record_list),
     rows,
     kindsUnreadable: d.kinds === null,

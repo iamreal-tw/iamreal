@@ -3,7 +3,8 @@
 // how an account is written (Threads: `@` before the name), how a typed
 // account is tidied before its format is checked, the key of the format
 // hint in design/copy/card-proof.json, and the account's public page that
-// "預覽個人檔案" opens. Keyed by the platform ID. Each platform's definition
+// "預覽個人檔案" opens, and the page the last screen shares a card's page
+// from. Keyed by the platform ID. Each platform's definition
 // is its own module (src/presentations/); the build's target
 // (src/target.ts) says which ones the page has, so that a test platform is
 // in no production build.
@@ -34,8 +35,10 @@ export interface Presentation {
   readonly normalize: (typed: string) => string;
   /** The key of the format hint in design/copy/card-proof.json's `formats`; null if it has none. */
   readonly formatHint: string | null;
-  /** The account's public page on the platform, opened by "預覽個人檔案"; null if the platform has none. */
+  /** The account's public page on the platform, opened by "預覽個人檔案" and the last screen's link to the profile; null if the platform has none. */
   readonly profileUrl: ((username: string) => string) | null;
+  /** The platform's page to post a link from (the last screen's "分享到"), with `url` and nothing else; null if the platform has none. */
+  readonly shareUrl: ((url: string) => string) | null;
 }
 
 const BY_ID: ReadonlyMap<string, Presentation> = new Map(PRESENTATIONS.map((p) => [p.platform, p]));
@@ -64,4 +67,9 @@ export { SITE_DOMAIN };
 /** The path of a card's page (its proof page) on iamreal's site, after the domain: `p/` and the 10 characters of the short ID. */
 export function cardPath(shortId: string): string {
   return `p/${shortId}`;
+}
+
+/** The path of the page to hang a card's page on a profile from (design/copy/hang.md, part 2), after the domain: `hang/` and the short ID. */
+export function hangPath(shortId: string): string {
+  return `hang/${shortId}`;
 }

@@ -114,27 +114,23 @@ test("the test site's build: MOICA's keys and component, nothing of the tests, t
   assert.match(code, /["'`]test\.iamreal\.tw["'`]/, "the test site's domain, for the link of the last screen");
   // The public site's domain nowhere but as the site's name in the header, which stays on the test site (design/copy/test-site.md).
   assert.doesNotMatch(code.replace(/site_name:["'`]iamreal\.tw["'`]/, ""), /["'`]iamreal\.tw["'`]/, "not the public site's domain");
-  // The mark: one JSON text in the script of its own entry, with the sentence, the date and the scope string of the build's target.
+  // The mark: one JSON text among the scripts the page loads (its entry, which this mode adds to the page, is bundled with
+  // the page's own: the page is the build's one HTML), with the sentence, the date and the scope string of the build's target.
   assert.ok(MARK.startsWith("測試的證明紀錄"));
   const mark = JSON.stringify({ sentence: MARK, clearedOn: CLEARED_ON, scope: "iamreal-test:public:0__________" });
-  const script = [...files.keys()].filter((f) => /^assets\/test-proof-log-[\w-]+\.js$/.test(f));
-  assert.equal(script.length, 1, "the mark's script");
-  assert.ok(files.get(script[0]!)!.replaceAll("\\", "").includes(mark), `the mark's script holds ${mark}`);
-  // Both pages load it.
-  for (const page of ["index.html", "help.html"]) assert.ok(loadedBy(files, page).includes(script[0]!), `${page} loads the mark's script`);
+  const loaded = loadedBy(files, "index.html").filter((f) => f.endsWith(".js"));
+  const holding = loaded.filter((f) => files.get(f)!.replaceAll("\\", "").includes(mark));
+  assert.equal(holding.length, 1, `one script the page loads holds ${mark}`);
+  assert.equal([...code.replaceAll("\\", "").matchAll(/"clearedOn":/g)].length, 1, "the mark once in the build");
 });
 
-test("the production build has nothing of the mark, and its help page loads nothing of the target: no issuer key, no address of the component, no scope string", async () => {
+test("the production build has nothing of the mark, and it is the one page: no help page", async () => {
   const { files, code } = await buildOf("production");
   assert.ok(![...files.keys()].some((f) => f.includes("test-proof-log")) && !code.includes("測試的證明紀錄") && !code.includes("test-proof-log"), "no file and no word of the mark");
   assert.match(code, /["'`]iamreal\.tw["'`]/, "the public site's domain, for the link of the last screen");
   assert.ok(!code.includes("test.iamreal.tw") && !code.includes("test-data.iamreal.tw"), "nothing of the test site");
-  // The help page is a title and a sentence: the scripts it loads are the copy, the logo and the style sheet.
-  const help = loadedBy(files, "help.html");
-  assert.ok(help.length >= 2 && help.some((f) => f.endsWith(".js")), `the help page's files: ${help.join(", ")}`);
-  const loaded = help.map((f) => files.get(f)!).join("\n");
-  for (const s of [...MOICA_KEYS, "localhost:61161", "data.iamreal.tw", "iamreal:public:0", "iamreal-test:public:0"]) assert.ok(!loaded.includes(s), `the help page loads ${JSON.stringify(s)}`);
-  // The card proof page does load them: the check above can tell.
+  // The help page is gone (its old address goes to /prepare, worker/site/_redirects).
+  assert.deepEqual([...files.keys()].filter((f) => f.endsWith(".html")), ["index.html"]);
   const page = loadedBy(files, "index.html").map((f) => files.get(f)!).join("\n");
   for (const s of [...MOICA_KEYS, "localhost:61161", "iamreal:public:0"]) assert.ok(page.includes(s), `the card proof page loads ${JSON.stringify(s)}`);
 });

@@ -18,7 +18,6 @@ import { freshProofLog } from "./records.ts";
 
 const FILES: Readonly<Record<string, string>> = {
   "index.html": '<!DOCTYPE html><title>the card proof page</title><script type="module" src="/proof/assets/index.js"></script>',
-  "help.html": "<!DOCTYPE html><title>help</title>",
   "assets/index.js": "console.log('the page');",
   "circuits/card_proof_rs2048.json": "{}",
   "crs/bn254_g2.dat": "\u0000\u0001",
@@ -115,9 +114,6 @@ test("/proof is the build's index.html, and every file of the build is under /pr
     checkProofHeaders(`/proof/${name}`, res);
   }
   assert.equal((await worker.fetch("/proof/assets/index.js")).headers.get("content-type"), "text/javascript; charset=utf-8");
-  // The help page is linked with a query (design/copy/home.md, section 9).
-  const help = await worker.fetch("/proof/help.html?topic=prepare");
-  assert.deepEqual([help.status, await help.text()], [200, FILES["help.html"]]);
   assert.deepEqual(await worker.seen(), [], "the Worker's code ran for none of these requests");
   // The same door does see what the Worker answers.
   await worker.fetch("/");
@@ -125,14 +121,23 @@ test("/proof is the build's index.html, and every file of the build is under /pr
   assert.deepEqual(await worker.seen(), ["GET /", "GET /api/v1/config"]);
 });
 
-test("/proof/ and /proof/index.html are redirected (301) to /proof, the one address of the page", async () => {
+test("/proof/ and /proof/index.html are redirected (301) to /proof, the one address of the page; the help page's old address to /prepare", async () => {
   await worker.seen();
-  for (const [path, to] of [["/proof/", "/proof"], ["/proof/index.html", "/proof"], ["/proof/?topic=prepare", "/proof?topic=prepare"]] as const) {
+  for (const [path, to] of [
+    ["/proof/", "/proof"],
+    ["/proof/index.html", "/proof"],
+    ["/proof/?topic=prepare", "/proof?topic=prepare"],
+    ["/proof/help.html", "/prepare"],
+    ["/proof/help.html?topic=more", "/prepare?topic=more"],
+  ] as const) {
     const res = await worker.fetch(path, { redirect: "manual" });
     assert.deepEqual([res.status, res.headers.get("location")], [301, to], path);
     checkProofHeaders(path, res, { more: ["location"] });
   }
   assert.deepEqual(await worker.seen(), []);
+  // Where the apps' links to the help page land (design/copy/card-proof.md, 「了解更多」用的文字): the Worker's page, with the query.
+  const prepare = await worker.fetch("/prepare?topic=more");
+  assert.deepEqual([prepare.status, (await prepare.text()).includes(">過卡需要什麼</h1>")], [200, true]);
 });
 
 test("what is not a file of the build is 404, a directory too, without the Worker; nothing outside the build is served under /proof", async () => {
@@ -211,7 +216,7 @@ test("a production log's site: the same files, the same headers without noindex"
 
 test("a Worker without a build of web/ among its files: /proof and everything under it is 404, with the same headers and without the Worker", async () => {
   await bare.seen();
-  for (const path of ["/proof", "/proof/index.html", "/proof/help.html", "/proof/"]) {
+  for (const path of ["/proof", "/proof/index.html", "/proof/"]) {
     const res = await bare.fetch(path);
     assert.equal(res.status, 404, path);
     checkProofHeaders(path, res);

@@ -54,7 +54,7 @@
 | `card-proof-web-5-confirm-new-desktop.png` | 第 5 步：確認，新宣告 | 實作版 |
 | `card-proof-web-5-confirm-switch-desktop.png` | 第 5 步：確認，更換 | 實作版 |
 | `card-proof-web-5-progress-desktop.png` | 第 5 步：進行中 | 實作版 |
-| `card-proof-web-6-done-desktop.png` | 第 6 步：完成 | 定稿版 |
+| `card-proof-web-6-done-desktop.png` | 第 6 步：完成，這張卡片的第一筆紀錄 | 實作版 |
 
 ### app 的過卡流程
 

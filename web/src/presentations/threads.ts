@@ -9,4 +9,7 @@ export const THREADS: Presentation = Object.freeze({
   normalize: (typed: string): string => (typed.startsWith("@") ? typed.slice(1) : typed).replace(/[A-Z]/g, (c) => c.toLowerCase()),
   formatHint: "threads",
   profileUrl: (u: string): string => `https://www.threads.com/@${u}`,
+  // Threads' web intent for a post, with a link attachment and no text:
+  // https://developers.facebook.com/docs/threads/threads-web-intents
+  shareUrl: (url: string): string => `https://www.threads.com/intent/post?url=${encodeURIComponent(url)}`,
 });

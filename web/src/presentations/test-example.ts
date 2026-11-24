@@ -2,7 +2,7 @@
 // stands for no real service. Only in the builds that run against a test
 // log (test/e2e/target.ts, src/target-local.ts), never in the production
 // build (test/build.test.ts). The copy has no format hint for it, and it has
-// no public page.
+// no public page and no page to share from.
 import type { Presentation } from "../platforms.ts";
 
 export const TEST_EXAMPLE: Presentation = Object.freeze({
@@ -12,4 +12,5 @@ export const TEST_EXAMPLE: Presentation = Object.freeze({
   normalize: (typed: string): string => typed,
   formatHint: null,
   profileUrl: null,
+  shareUrl: null,
 });

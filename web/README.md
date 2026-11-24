@@ -45,9 +45,9 @@ pnpm local                                 # 可加 --port 8080、--data <目錄
 IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 ```
 
-**標示只在測試網站的建置裡。** 它是一支自己的進入點 `src/ui/test-proof-log.ts`（和它的樣式 `test-proof-log.css`），`vite.config.ts` 只在 `testsite` 模式把它加進兩個頁面的 HTML，其他建置的模組圖裡沒有它：`src/target.ts`、`main.ts`、`help.ts`、`style.css` 都不知道有標示。句子在建置時從 `design/copy/test-site.md` 讀進來（`src/ui/` 沒有自己的句子），和日期、這份建置的 target 讓卡片簽的場合字串寫成一段 JSON 放在那支程式裡；頁面最上面的那一行由它畫，過卡的頁面和說明頁都有，樣式和後台產生的頁面相同。`vite.config.ts` 建置前讀 `src/target-test-site.ts`：它簽的不是測試的證明紀錄的場合字串就不建置。部署前的檢查再從建置出來的程式讀那段 JSON，核對日期和場合字串（`worker/scripts/proof-page.ts`）。
+**標示只在測試網站的建置裡。** 它是一支自己的進入點 `src/ui/test-proof-log.ts`（和它的樣式 `test-proof-log.css`），`vite.config.ts` 只在 `testsite` 模式把它加進頁面的 HTML，其他建置的模組圖裡沒有它：`src/target.ts`、`main.ts`、`style.css` 都不知道有標示。句子在建置時從 `design/copy/test-site.md` 讀進來（`src/ui/` 沒有自己的句子），和日期、這份建置的 target 讓卡片簽的場合字串寫成一段 JSON 放在那支程式裡；頁面最上面的那一行由它畫，樣式和後台產生的頁面相同。`vite.config.ts` 建置前讀 `src/target-test-site.ts`：它簽的不是測試的證明紀錄的場合字串就不建置。部署前的檢查再從建置出來的程式讀那段 JSON，核對日期和場合字串（`worker/scripts/proof-page.ts`）。
 
-`test/build.test.ts` 釘住正式的建置沒有標示的任何檔案和字，而且說明頁載入的檔裡沒有發證金鑰、元件的網址、資料網域、場合字串（那些只在過卡頁面載入的那一包）。
+`test/build.test.ts` 釘住正式的建置沒有標示的任何檔案和字，而且只有過卡的頁面一個 HTML。
 
 **完成畫面的連結跟著建置的網站。** `SITE_DOMAIN` 在 target 裡：測試網站的建置寫 `test.iamreal.tw/p/<短編號>`，「複製連結」複製的是 `https://test.iamreal.tw/p/<短編號>`，就是測試的證明紀錄裡這張島民證明的網址（後台在測試網站的島民證明和掛上去那一頁寫的也是這個網域，`design/copy/test-site.md`「寫出島民證明網址的地方」）。
 
@@ -62,11 +62,15 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 | 引擎 | `src/flow.ts`、`src/index.ts` 和其他 | 全部的檢查、何時讓卡片簽、何時查現況、讀後台的平台表、建清單、每個平台會是哪一種、拒絕不能做的清單、PIN 留多久、算證明、送出、比對後台記下的和畫面說的；做完一件事就告訴畫面（`onProgress`） | 不知道有畫面 |
 | 卡片 | `src/card/card.ts` 的介面；`hipki.ts`（元件）、`fake.ts`（測試金鑰） | 讀憑證（不用 PIN，元件有回應時先說一聲）、簽 31 個位元組（要 PIN），簽章附上實際簽章的憑證 | 不判斷憑證能不能用 |
 
-畫面的文字在 `design/copy/card-proof.json`，是 `design/copy/card-proof.md` 的句子照畫面分組、例子換成 `{名稱}`（`{account}` 是帶前綴的帳號，例如 `@alice`）。`test/copy.test.ts` 兩個方向都比：JSON 的每一句代入 Markdown 的例子後，在 Markdown 裡一字不差；Markdown 的每個畫面（程式碼區塊）和表格裡「畫面寫」「標題」「證明紀錄會公開記下」「按鈕」那幾欄的每一格，都由 JSON 的句子組成，剩下的只能是照原樣顯示的值（例子的帳號、日期、姓名、完成畫面的連結、平台的顯示名稱和代號，`src/platforms.ts` 的前綴）和 Markdown 畫按鈕、清單、可展開問題的符號（`[ ]`、`›`、`▸`、`○`、`·`）。「（QR code）」和「第 2 步那張表裡同一種情況的句子」是文件的註，不比。文件裡沒有的句子，畫面只顯示代碼（見「停止的原因」和「文件沒有句子、畫面顯示代碼的地方」）。唯一不在那份 Markdown 裡的是說明頁的「待補」。
+畫面的文字在 `design/copy/card-proof.json`，是 `design/copy/card-proof.md` 的句子照畫面分組、例子換成 `{名稱}`（`{account}` 是帶前綴的帳號，例如 `@alice`）。`test/copy.test.ts` 兩個方向都比：JSON 的每一句代入 Markdown 的例子後，在 Markdown 裡一字不差；Markdown 的每個畫面（程式碼區塊）和表格裡「畫面寫」「標題」「證明紀錄會公開記下」「按鈕」那幾欄的每一格，都由 JSON 的句子組成，剩下的只能是照原樣顯示的值（例子的帳號、日期、姓名、完成畫面的連結、平台的顯示名稱和代號，`src/platforms.ts` 的前綴）和 Markdown 畫按鈕、清單、可展開問題的符號（`[ ]`、`›`、`▸`、`○`、`·`）。「（QR code）」和「第 2 步那張表裡同一種情況的句子」是文件的註，不比。文件裡沒有的句子，畫面只顯示代碼（見「停止的原因」和「文件沒有句子、畫面顯示代碼的地方」）。JSON 的每一句都在那份 Markdown 裡。
 
 `card-proof.json` 的 `app` 那一組（選裝置、用手機過卡）是 app 推出之後用的：畫面現在不顯示它們（`card-proof.md`「app 推出之前」），文字測試照樣比對它們在 Markdown 裡。`app_` 開頭的那幾組是 Android、iOS 的 app 自己的句子（`card-proof.md` 標「app」的段落），網頁不顯示；文字測試照樣兩個方向比對，並檢查它們沒有「這台裝置」「這台電腦」。
 
-第 1 到 5 步不連到別的頁面（`docs/design/principles.md` 原則 1：點出去會打斷過卡），也沒有「了解更多」。例外是第 2 步停在「連不上內政部的元件」時那一句後面的「過卡需要什麼」：在這一頁排除不了。它連到網站的「過卡需要什麼」`/prepare`（後台產生的頁面，`design/copy/prepare.md`）；完成畫面的「怎麼驗證島民證明」「打開這張島民證明」連到說明頁 `/proof/help.html?topic=…`，只有標題和「待補」。兩種都在新分頁開：離開這一頁，過卡就中斷了。
+第 1 到 5 步不連到別的頁面（`docs/design/principles.md` 原則 1：點出去會打斷過卡），也沒有「了解更多」。例外是第 2 步停在「連不上內政部的元件」時那一句後面的「過卡需要什麼」：在這一頁排除不了。它連到網站的「過卡需要什麼」`/prepare`（後台產生的頁面，`design/copy/prepare.md`）。完成畫面（第 6 步，過卡已經結束）的連結：帳號的個人檔案、「打開你的島民證明」（這個網站的 `/p/<島民編號>`）、「分享到 Threads」（Threads 的發文畫面，只帶入這張島民證明的網址）。全部在新分頁開：離開這一頁，過卡就中斷了。
+
+過卡的說明頁 `/proof/help.html` 拿掉了（#292）：建置裡沒有它，舊網址轉（`301`）到 `/prepare`（`worker/site/_redirects`）。Android、iOS 的 app 改版之前還連到那個網址。
+
+**完成畫面的 QR code**（`src/ui/qr.ts`）：內容是這張島民證明掛上去的那一頁 `https://<SITE_DOMAIN>/hang/<島民編號>`（`design/copy/hang.md` 第 2 部分），在頁面上用 DOM 畫成 SVG，不向任何地方發請求。編碼器不是套件：照 Project Nayuki 的 QR Code generator library（MIT 授權，`NOTICE`）的做法，只留這一頁要的（位元組模式、錯誤更正等級 M、版本 1 到 10）。`test/qr.test.ts` 逐格比對那個函式庫（Python 版 qrcodegen 1.8.0）產生的標準答案 `test/fixtures/qr-vectors.json`，產生的指令寫在 `test/generate/qr-vectors.py`；寫的時候另外用讀碼程式（zbarimg）讀過頁面截圖上的 QR code。
 
 每個畫面的頁首是記號、服務的名稱「島民證明」和網站的名字 `iamreal.tw`（`card-proof.json` 的 `common.service_name`、`common.site_name`），不是連結。網站的名字在測試網站的建置裡也是 `iamreal.tw`（`design/copy/test-site.md`），`test/build.test.ts` 只容許它用正式網站的網域。
 
@@ -74,7 +78,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 
 ## 網址
 
-過卡的頁面在 `/proof`，它的每個檔案在 `/proof/` 底下：程式和 worker（`/proof/assets/…`）、bb.js 的 WebAssembly（`/proof/bb/…`）、電路（`/proof/circuits/…`）、通用參數（`/proof/crs/…`）、說明頁（`/proof/help.html`）。網站的 `/` 是首頁，由後台產生（`worker/README.md`「頁面和檔案」）。四種頁面的建置（production、testsite、localcard、test）的 `base` 是 `/proof/`（`vite.config.ts`）；頁面自己寫的路徑從 `src/base.ts` 的 `BASE` 接上去（`import.meta.env.BASE_URL`，建置時寫死；Node 裡的測試沒有建置，是 `/`）。引擎自己的測試頁（mode engine，`pnpm test:e2e`）照舊在 `/`。API（`/api/v1/…`）的路徑不變。
+過卡的頁面在 `/proof`，它的每個檔案在 `/proof/` 底下：程式和 worker（`/proof/assets/…`）、bb.js 的 WebAssembly（`/proof/bb/…`）、電路（`/proof/circuits/…`）、通用參數（`/proof/crs/…`）。網站的 `/` 是首頁，由後台產生（`worker/README.md`「頁面和檔案」）。四種頁面的建置（production、testsite、localcard、test）的 `base` 是 `/proof/`（`vite.config.ts`）；頁面自己寫的路徑從 `src/base.ts` 的 `BASE` 接上去（`import.meta.env.BASE_URL`，建置時寫死；Node 裡的測試沒有建置，是 `/`）。引擎自己的測試頁（mode engine，`pnpm test:e2e`）照舊在 `/`。API（`/api/v1/…`）的路徑不變。
 
 ### 資料網域
 
@@ -91,7 +95,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site
 
 CSP 是送標頭的那一邊定的，不是建置定的：`worker/` 照證明紀錄的種類送各自的資料網域（`worker/src/headers.ts` 的 `proofPageHeaders`，寫進 `worker/site/_headers`），測試網站是 `https://test-data.iamreal.tw`，正式網站是 `https://data.iamreal.tw`（見「`Content-Security-Policy`」）；`pnpm local` 送的是測試網站的那一份。部署前的檢查核對放上測試網站的建置寫的資料網域就是標頭允許的那一個（`worker/scripts/proof-page.ts`）。
 
-完成畫面的「打開這張島民證明」「怎麼驗證島民證明」現在連到說明頁（`/proof/help.html?topic=…`），不是 `/p/…`；寫在畫面上的連結 `iamreal.tw/p/<島民編號>` 和複製的 `https://iamreal.tw/p/<島民編號>` 是完整的網址，不受搬家影響。
+完成畫面的「打開你的島民證明」連到 `/p/<島民編號>`：路徑，不寫網域，過卡的頁面和島民證明在同一個網站。寫在畫面上的連結 `iamreal.tw/p/<島民編號>`、複製的 `https://iamreal.tw/p/<島民編號>` 和 QR code 的 `https://iamreal.tw/hang/<島民編號>` 是完整的網址，網域是建置的 `SITE_DOMAIN`。
 
 ## 每個平台不同的東西
 
@@ -371,7 +375,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site   # 測試網�
 | `test/ui.test.ts` | 每個平台的寫法（Threads 的前綴、格式的提示、帳號的網址；沒有寫法的平台沒有前綴、提示、預覽）、場合字串；每一種停止原因的句子和它寫在讀取卡片清單的哪一項下面（包括 `no_reader`、兩張憑證都通過、後台的 `daily_limit`、`switch_limit`、`empty`、`switch_restricted`、`platform`，沒有提示的平台的格式）；清單每一項的狀態（由上到下、同時做完的照順序顯示、停住的那項、上面沒完成的不顯示）；進行中停住後的按鈕（PIN 還在是「回到上一步」，丟掉了是「再讀一次卡片」，送不出去多「再試一次」）；第 4 步（還沒宣告過、宣告過、全部收回過的上方幾行和下方的說明；上次過卡是今天；每一列下面的那一行的每一種：沒宣告過、更換 0 到 5 次、今天才宣告的、收回過、不能再更換時可以清空或只能填回、次數用完但今天才宣告的；裝置不認得的平台那一列；今天已經 3 筆）；第 5 步（每一列的名稱、代號、帳號、會發生什麼和更換後的那一句的每一種；三種按鈕；有收回時；全部收回時；只有一個平台時那一句）；只有一個平台的條件（後台的表上裝置認得的平台數、不認得的平台上有帳號時當成超過一個）和第 1 步看建置認得幾個平台；第 6 步（五種標題、只有一個平台時放連結的那一句、島民證明的清單、卡片頁的連結、第一筆紀錄的換卡提醒、收回後連結可以拿掉、別的卡片也宣告了、`kinds` 讀不懂、後台記下的和第 5 步說的不同時那一列加代碼）（`src/ui/messages.ts`）；後台的錯誤帶請求編號；畫面用頁面自己的平台名稱，不用後台的；後台記下的和第 5 步說的不同時最上面那一句、那一列下面的「確認時畫面說的是：……」和「這次用掉了一次更換。」；`201` 讀不懂的標題；不認得的平台上的帳號照原樣（含空白）；日期換了一天時只有「回到開頭」 |
 | `test/hipki.test.ts` | 元件的回應怎麼讀：沒有讀卡機（`no_reader`）、讀卡機沒有卡片（`no_card`）、憑證、簽章和附的憑證；PIN 錯、鎖卡、其他代碼（照讀程式得知的格式，見「元件的橋接信任什麼」）。元件的視窗每次一個新的亂數名稱，上一個關了才開下一個；第一次關不掉的視窗，再看一次時關掉，關掉了就不再關 |
 | `test/api.test.ts` | 請求的時間上限（換掉 `setTimeout`）：現況不回答，30 秒到時當成沒有回應、請求被中斷；`fetch` 不理會中斷也一樣；回應的標頭來了、內容不來，當成沒有回應而不是讀不懂；靜態檔 30 秒時還在等、5 分鐘到時停；`requestConfig` 讀得懂哪幾列、整張表讀不懂的 9 種 |
-| `test/build.test.ts` | 正式的建置有內政部的發證金鑰、`http://localhost:61161`、公開的證明紀錄的場合字串，沒有假卡片、測試的發證金鑰、假元件、`test-example` 的那一份，`localhost` 以外的本機網址一個都沒有；本機用真卡片的建置（`localcard`）一樣有內政部的金鑰和元件、沒有任何測試的東西，但簽的是測試的證明紀錄的場合字串、認得 `test-example`；測試網站的建置（`testsite`）和本機用真卡片的相同，另外只寫了 `https://test-data.iamreal.tw` 這一個資料網域（沒有正式的那一個，也沒有這個專案的其他網址），連結的網域是 `test.iamreal.tw`，有測試的證明紀錄的標示（一段 JSON：句子、建置時給的日期、測試的證明紀錄的場合字串），兩個頁面都載入它；正式的建置沒有標示的檔和字，說明頁載入的檔裡沒有 target 的東西；其他建置沒有標示；沒給日期、或日期不在日曆上，測試網站的建置做不出來 |
+| `test/build.test.ts` | 正式的建置有內政部的發證金鑰、`http://localhost:61161`、公開的證明紀錄的場合字串，沒有假卡片、測試的發證金鑰、假元件、`test-example` 的那一份，`localhost` 以外的本機網址一個都沒有；本機用真卡片的建置（`localcard`）一樣有內政部的金鑰和元件、沒有任何測試的東西，但簽的是測試的證明紀錄的場合字串、認得 `test-example`；測試網站的建置（`testsite`）和本機用真卡片的相同，另外只寫了 `https://test-data.iamreal.tw` 這一個資料網域（沒有正式的那一個，也沒有這個專案的其他網址），連結的網域是 `test.iamreal.tw`，有測試的證明紀錄的標示（一段 JSON：句子、建置時給的日期、測試的證明紀錄的場合字串），頁面載入它；正式的建置沒有標示的檔和字，只有一個 HTML（沒有說明頁）；其他建置沒有標示；沒給日期、或日期不在日曆上，測試網站的建置做不出來 |
 | `test/flow.test.ts` | 伺服器或鏡像給了不該接受的值，每一個都停下來，之後沒有請求，沒有請求帶著原因：日期不是今天的題目、寫法不唯一的題目（6 種）、章不對的清冊、舊於 `L` 天的清冊、`/api/v1/config` 回 365、編號比記住的低的清冊、分段的清冊、索引指到不存在的檔案、內容和檔名的雜湊不符的清冊、雜湊不對的電路檔、序號在清冊上。平台表讀不懂（8 種：不是清單、一列都讀不懂、代號重複或沒照順序等）時停在讀卡，不簽章、沒有 `card-state`；格式不是 `[…]{m,n}`、顯示名稱有控制字元的那一列是裝置不認得的平台。現況讀不懂（45 種：結構不對、紀錄規則產生不出來的名額和卡片、裝置不認得的平台上不合最低限度檢查的帳號）停在 `malformed_response`，規則產生得出來的照常。卡片簽的場合字串只有公開的證明紀錄的那一個；裝置不認得的平台上的帳號原樣保留、照位元組順序排進清單、簽進宣告碼、送出；平台表上有、現況裡沒有那一項的平台不提供。每個平台的種類（`first`、`refresh`、收回後的 `refresh`、`correction`、`switch`、`withdraw`）；當天更正在更換 0、3、5 次時都可以；第 4、第 5 次照常是更換，5 次之後是 `switch_limit`，流程不結束，清空或不改那一列照常；空清單是 `empty`；今天 3 筆是 `daily_limit`，在更換的原因之後。帳號用了別的平台的格式、帳號沒有剛好涵蓋提供的平台，引擎拒絕；`proceed` 傳的清單不是引擎算的那一份（4 種）時不簽第二次；更正跨過午夜變成更換時停在 `state`、不要題目。送出的內容（鍵的順序、`accounts`）。回應的 `kinds` 讀不懂（9 種）時是 `null`、照樣完成；`account_cards` 讀不懂只有那一項是 `null`；`seq`、`record_hash` 不對照舊是 `malformed_response`。送出後比對：畫面說更正、記下的是更換（漏洞 M9）、別的帳號、少一個平台、多一個平台、收回而不是不變。再送得到 `challenge_used`（假的後台）：整份清單和 `last_card_proof` 相符時完成（`kinds` 是 `null`）；不相符（7 種，含多一個帳號、少一項）停在 `challenge_used`；現況讀不懂時停在那個原因；第一次送出就得到 `challenge_used` 時不查現況。另外，和改之前相同的：過期的憑證在任何請求之前停下；PIN 錯可以重試、PIN 不留；第 4、5 步來回不簽章、不發請求；PIN 最多等 5 分鐘（換掉時鐘和計時器）；`cancel()` 在每一種等待中；三次點擊各被擋一次；序號在清冊上、清冊不可用、電路檔或通用參數雜湊不對時卡片沒有被要求簽章、沒有 `card-state`；`crl_stale` 結束流程、`internal` 可以原封不動再送；讀卡機說簽章的憑證不是選出的那一張；伺服器拖住回答；過卡跨過午夜；清掉的憑證、簽章和電路的輸入；一步進行中又被呼叫；給畫面的事件；沒有讀卡機、兩張都通過的憑證；確認之後過了午夜（按下之前、題目在路上時）：每一列的結果和畫面說的不同就停在 `date_changed`、不簽第二次、不送出，相同就照常；`201` 的內容讀不懂（`seq`、`record_hash` 讀不懂、不是 JSON、是清單、空的）：完成，`kinds` 是 `null`；後台的表有、頁面沒有自己那一份的平台：有帳號就原樣保留、不能改，沒有就不顯示；PIN 在算證明時已經不在（第二次簽章後就丟），送不出去時也不在。`src/flow.ts` 清 PIN 的每一處，拿掉任何一處都有測試變紅 |
 
 ### 標準答案的產生器
@@ -414,7 +418,7 @@ node --experimental-strip-types test/generate/records-response.ts
 2. 在本機的 workerd 啟動 Worker 測試專用的建置（`test/e2e/worker-site.ts`，用 `worker/test/harness.ts`）：這兩把金鑰、一個假的內政部（給鏡像抓清冊）、測試的證明紀錄（平台表是 `test-example` 和 `threads`）、可以調的時鐘；頁面用 `vite build --mode test` 建置（`test/e2e/target.ts` 換掉 `src/target.ts`：測試的證明紀錄、測試的發證金鑰、假元件在 `http://localhost:61171`、PIN 等第二次簽章的上限 25 秒），放進 Worker 的 Static Assets，在 `/proof`，帶測試網站的標頭。Worker 前面的小服務扮演資料網域（`/crl/…` 從 R2 的模擬讀，只讀）。不建置也不啟動 Go 的舊後台；唯一建置的 Go 程式是 `iamreal-verify`（第 5 項）。
 3. 假元件（`test/e2e/fake-component.ts`）照真元件的訊息來回，用測試金鑰的卡片回答 `GetUserCert` 和 `MakeSignature`，PIN 錯、鎖卡回中華電信程式庫寫的代碼，並記下每一個請求。
 4. 用無頭 Chrome（`test/e2e/cdp.ts`，Chrome DevTools Protocol，不用套件）從畫面上點，滑鼠事件是真的（瀏覽器當成持卡人的點擊）。瀏覽器不解析 `localhost`、`127.0.0.1` 以外的名稱（`--host-resolver-rules`），預覽開的平台分頁連不出去。一張卡片一天最多 3 筆有效紀錄、更換一天算一次（同一天再改是更正），所以同一張卡片的紀錄分在九天：後台的時鐘（Worker 測試專用建置的時鐘，小服務在每個請求之前把它設成這台電腦的時間加上撥的天數）和頁面的時鐘（測試把頁面的 `Date.now` 換掉）一起往後撥整天，假的內政部每天發一份當天的清冊，測試讓 Worker 的排程跑一次把它鏡像進來。每次過卡都從第 1 步開始：第 1 步（兩段和上面兩行一樣顯眼的提醒、兩個問題、只有「下一步」）、第 2 步的六項由上到下一項一項完成（記下清單的每一個樣子：完成的在上、最多一項進行中、下面的沒有狀態）、不顯示姓名、第 3 步的姓名和三件事、「卡片簽章中……」、第一次簽章簽的是測試的證明紀錄的公開場合字串、每一步上方的「第 n 步，共 6 步」。每一次都檢查第 4 步每一列（名稱、欄位裡的帳號、下面的那一行、有沒有預覽）和上下的句子、第 5 步要簽的整份清單（每一列的名稱、平台代號、帳號、會發生什麼）、按鈕、清單下面的句子、第 6 步的標題、島民證明的清單、卡片頁的連結、證明紀錄記下的每一列、換卡的提醒、收回的連結、別的卡片也宣告了。
-   - 第 0 天：第一次宣告一個平台（先輸入一次錯的 PIN；三次點擊各先被瀏覽器擋一次；什麼都沒填按「下一步」是「請至少填一個帳號。」；格式不對的帳號按「預覽個人檔案」：那一列下面是格式的提示、沒有開分頁；`@Alice` 按預覽：頁面呼叫 `window.open("https://www.threads.com/@alice", "_blank", "noopener,noreferrer")`，開出一個拿不到這一頁的新分頁，這一頁自己沒有對別處發請求；`test-example` 格式不對時那一列下面是「帳號的格式不對。請照平台上顯示的帳號填。」；「複製連結」把 `https://iamreal.tw/p/<島民編號>` 寫進剪貼簿；「打開這張島民證明」「怎麼驗證島民證明」指到說明頁；記號的動畫）、再次過卡什麼都不改（後台的表把顯示名稱都改掉，畫面照樣寫頁面自己的名稱；第一次送出被丟掉，「再試一次」完成）、當天更正（「今天才宣告的帳號，這次改掉不另外算一次更換。」，證明紀錄記下 `correction`）、今天已經 3 筆（清單照樣顯示、不能改，只有「回到開頭」，沒有第二次簽章）。
+   - 第 0 天：第一次宣告一個平台（先輸入一次錯的 PIN；三次點擊各先被瀏覽器擋一次；什麼都沒填按「下一步」是「請至少填一個帳號。」；格式不對的帳號按「預覽個人檔案」：那一列下面是格式的提示、沒有開分頁；`@Alice` 按預覽：頁面呼叫 `window.open("https://www.threads.com/@alice", "_blank", "noopener,noreferrer")`，開出一個拿不到這一頁的新分頁，這一頁自己沒有對別處發請求；`test-example` 格式不對時那一列下面是「帳號的格式不對。請照平台上顯示的帳號填。」；「複製連結」把 `https://iamreal.tw/p/<島民編號>` 寫進剪貼簿；完成畫面的每個連結都在新分頁開；小卡上記號的動畫；QR code 是頁面上畫的 SVG，內容是 `https://iamreal.tw/hang/<島民編號>`）、再次過卡什麼都不改（後台的表把顯示名稱都改掉，畫面照樣寫頁面自己的名稱；第一次送出被丟掉，「再試一次」完成）、當天更正（「今天才宣告的帳號，這次改掉不另外算一次更換。」，證明紀錄記下 `correction`）、今天已經 3 筆（清單照樣顯示、不能改，只有「回到開頭」，沒有第二次簽章）。
    - 第 1 天：加第二個平台（中間「上一步」來回：輸入的照樣留著，沒有簽章、沒有查現況、沒有要題目）、更換、清空一列（收回，「收回之後……」、完成時「已經收回的帳號……」）、把現況的回答改成今天 2 筆再送（同一天的第 4 筆，後台回 `daily_limit`：句子和請求編號在「送出」下面，畫面上的請求編號就是 Worker 回 `daily_limit` 的那個回應的，證明紀錄沒有多一筆；「再讀一次卡片」在同一次點擊裡讀卡，上一次的 PIN、姓名、憑證、簽章都不在頁面上）。
    - 第 2 天：全部收回（「按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：」、「收回所有帳號」、完成時沒有動畫、島民證明、連結）、沒有帳號時送空清單是「請至少填一個帳號。」、兩個平台都宣告回去（「再次宣告，不算更換」）。
    - 第 3 天：把現況的 `correction_date` 改成今天：畫面說是更正、不算更換，證明紀錄記下的是更換，完成的那一列下面是代碼 `kind_mismatch`（送出後比對）；完成畫面最上面是「證明紀錄記下的，和你確認時畫面說的不同。……」，那一列下面是「確認時畫面說的是：……」和「這次用掉了一次更換。」。
@@ -425,7 +429,7 @@ node --experimental-strip-types test/generate/records-response.ts
    - 證明紀錄公布、重驗之後，另外兩張卡片：一張宣告 `@zoe`、另一張也宣告 `@zoe`（`account_cards` 2：「還有別的卡片也宣告了 @zoe。……」）；第二張再次過卡時把回應的 `kinds` 換成一個不認得的種類（「證明紀錄已經記下這次過卡」和「這一頁讀不出伺服器回報每個帳號記成什麼。……」，島民證明照樣顯示）；第二張再過一次卡時把回應換成讀不懂的 `201`（同樣是「證明紀錄已經記下這次過卡」，不是失敗）；第一張再次過卡時讓第一次送出到達後台、把回答丟掉，按「再試一次」：後台回 `challenge_used`，頁面再查一次現況、清單相符，到完成的畫面（「證明紀錄已經記下這次過卡」），證明紀錄只多一筆。
    - 再一張新的卡片，後台的平台表只留 Threads：第 4 步只有 Threads 一列，標題是「你的 Threads 帳號」、上方是「填上你要宣告的 Threads 帳號。」、下方是「一張卡片只能宣告一個 Threads 帳號，……」，第 5 步是「按下後，證明紀錄會公開記下這張卡片宣告的帳號：」、「這個 Threads 帳號會公開列在島民證明上。」（沒有「這些帳號會公開列在……」）、按鈕「宣告這個帳號」，第 6 步是「把下面的連結放在這個 Threads 帳號的個人檔案上。……」、「有一張有效的自然人憑證宣告了這個帳號：」和「……更新這個帳號的日期。」。（後台的表少了 `test-example`、卡片在那裡有帳號的那一案，照超過一個平台的寫法。）每一次完成都檢查第 6 步下面的三點（清單變成空的時只有「你不需要相信我們……」）。
    - 正式的建置（`vite build --mode production`）用一個本機的小伺服器帶著頁面的標頭在 `/proof` 提供，只開到第 1 步、什麼都不按：寫出 Threads 的那一句，沒有「你宣告的帳號會公開列在……」；對元件的網址（`localhost:61161`）的請求一律擋下並計數，應該是 0。
-   - 最後，測試網站的建置（`vite build --mode testsite`）放進另一個 Worker 的 Static Assets，和部署出去的一樣由它送出，只開到第 1 步、什麼都不按：頁面最上面是測試的證明紀錄的標示，句子和日期跟 Worker 自己產生的首頁上的那一行相同，日期在自己的 `<time>` 裡；頁面說它讓卡片簽的是測試的證明紀錄的場合字串；送給頁面的程式寫連結用的是 `test.iamreal.tw`、不是 `iamreal.tw`（`iamreal.tw` 只出現在頁首網站的名字 `common.site_name`）（完成畫面要過卡才到得了，這份建置只認真卡片，所以是讀程式）；說明頁也有標示；標頭是測試網站的那一組（CSP 的資料網域是 `test-data.iamreal.tw`、`X-Robots-Tag: noindex`）；頁面是跨來源隔離的、只連自己的網域、沒有違反 CSP；對元件的請求是 0。截圖是 `testsite-1-before.png`、`testsite-help.png` 和手機寬度的 `testsite-1-before-phone.png`、`testsite-help-phone.png`。
+   - 最後，測試網站的建置（`vite build --mode testsite`）放進另一個 Worker 的 Static Assets，和部署出去的一樣由它送出，只開到第 1 步、什麼都不按：頁面最上面是測試的證明紀錄的標示，句子和日期跟 Worker 自己產生的首頁上的那一行相同，日期在自己的 `<time>` 裡；頁面說它讓卡片簽的是測試的證明紀錄的場合字串；送給頁面的程式寫連結用的是 `test.iamreal.tw`、不是 `iamreal.tw`（`iamreal.tw` 只出現在頁首網站的名字 `common.site_name`）（完成畫面要過卡才到得了，這份建置只認真卡片，所以是讀程式）；說明頁的舊網址 `/proof/help.html` 轉到 `/prepare`；標頭是測試網站的那一組（CSP 的資料網域是 `test-data.iamreal.tw`、`X-Robots-Tag: noindex`）；頁面是跨來源隔離的、只連自己的網域、沒有違反 CSP；對元件的請求是 0。截圖是 `testsite-1-before.png` 和手機寬度的 `testsite-1-before-phone.png`。
 5. Worker 照換日時的做法公布證明紀錄（最後一檔和雜湊清單、卡片狀態檔、指紋檔的一行），測試把它寫進 R2 的模擬的每個檔複製出來，用 `iamreal-verify` 照預設的讀法（`-data`）重驗，證明是真的：證明紀錄成立，每一筆有效，十四筆每個平台的種類和畫面第 6 步顯示的相同，最後的現況（這張卡片的清單 `test-example:a-b`、`threads:frank`，上次過卡是第 7 天）和畫面最後顯示的相同，畫面上的島民編號是這張卡片的。
 
 6. 頁面的標頭（含 `Cross-Origin-Opener-Policy`）、跨來源隔離、多執行緒；沒有違反 CSP；頁面和它的 worker 只連到自己的網域、元件的視窗只連到元件；在自己的網域上只拿 `/proof`、`/proof/` 底下的檔案（程式、電路、通用參數、WebAssembly 都在那裡）、`/api/` 和 `/crl/`；一次元件的請求一個視窗（被擋的點擊沒有開出視窗；PIN 不送時，點擊開的視窗沒用就關掉），上一個視窗關了才開下一個；沒有不帶 PIN 的簽章請求；用過 PIN 之後、PIN 等太久之後頁面上找不到它；姓名在第 3 步之後不在頁面上；瀏覽器的儲存空間只有清冊編號。
@@ -470,8 +474,8 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 
 | 檔案 | 內容 |
 |---|---|
-| `index.html`、`help.html` | 過卡的頁面、說明頁 |
-| `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（`card-proof.md` 的六步）、`messages.ts`（停止原因、清單每一項的狀態、第 4 步的清單和每一列的那一行、第 5 步要簽的清單、完成的畫面對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`frame.ts`（六步和說明頁共用的頁首和欄）、`test-proof-log.ts` 和 `test-proof-log.css`（測試的證明紀錄的標示，只有測試網站的建置有）、`logo.ts`（記號，用 DOM 畫的 SVG；台灣的輪廓取自 Natural Earth 的公有領域地圖資料）、`help.ts`、`style.css`（顏色、版面、清單的勾和轉圈、完成的動畫；不載入字體檔） |
+| `index.html` | 過卡的頁面 |
+| `src/ui/` | 畫面：`main.ts`（進頁面就啟動引擎）、`app.ts`（`card-proof.md` 的六步）、`messages.ts`（停止原因、清單每一項的狀態、第 4 步的清單和每一列的那一行、第 5 步要簽的清單、完成的畫面對到哪一句）、`copy.ts`（讀 `design/copy/card-proof.json`）、`dom.ts`、`frame.ts`（六步共用的頁首和欄）、`qr.ts`（完成畫面的 QR code）、`test-proof-log.ts` 和 `test-proof-log.css`（測試的證明紀錄的標示，只有測試網站的建置有）、`logo.ts`（記號，用 DOM 畫的 SVG；台灣的輪廓取自 Natural Earth 的公有領域地圖資料）、`style.css`（顏色、版面、清單的勾和轉圈、完成的動畫；不載入字體檔） |
 | `src/platforms.ts`、`src/presentations/` | 寫死在裝置上的每個平台的名稱和寫法（每個平台一份）、卡片頁的路徑（網域在 target）（見「每個平台不同的東西」） |
 | `src/index.ts` | 引擎的入口：`startEngine()`（進頁面呼叫一次）、`createCardProof()`（每次過卡，用同一個引擎）。證明紀錄（`src/target.ts`）、同網域的 fetch、資料網域的 fetch、時鐘、儲存 |
 | `src/base.ts` | 頁面和它的檔案放在哪個路徑底下（建置的 `base`，見「網址」） |

@@ -119,13 +119,17 @@ export function siteHeaders(kind: ProofLogKind): string {
 /**
  * The text of site/_redirects: /proof is the build's index.html, sent at
  * that address (200); the two other addresses it could have are redirected
- * to it, as the Go backend did. Every other file is at its own path and
- * nowhere else ("html_handling": "none").
+ * to it, as the Go backend did. The help page the card proof page had is
+ * gone (#292): its address goes to the site's page of what a card proof
+ * needs, /prepare, where the Android and iOS apps' links to it land until
+ * they change. Every other file is at its own path and nowhere else
+ * ("html_handling": "none").
  */
 export const SITE_REDIRECTS = `# The card proof page is at /proof and nowhere else (scripts/site-files.ts).
 /proof /proof/index.html 200
 /proof/ /proof 301
 /proof/index.html /proof 301
+/proof/help.html /prepare 301
 `;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -161,7 +161,7 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["a header changed by hand", { headers: real.headers!.replace("same-origin-allow-popups", "unsafe-none") }, /_headers of the test environment/],
     ["no _headers", { headers: null }, /_headers of the test environment/],
     ["no _redirects", { redirects: null }, /_redirects of the test environment/],
-    ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/help.html https://example.org/ 302\n` }, /_redirects of the test environment/],
+    ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/other.html https://example.org/ 302\n` }, /_redirects of the test environment/],
     ["a kind that is none", { kind: "staging" }, /PROOF_LOG_KIND of the test environment/],
     ["another file beside the five", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
     ["no style sheet", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2"], styleSheetSha256: null }, /files of the test environment/],
