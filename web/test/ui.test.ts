@@ -50,7 +50,7 @@ describe("what the page writes per platform, and the scope string", () => {
     assert.equal(COPY.formats[p.formatHint as "threads"], "帳號只能用英文小寫、數字、句點和底線，最多 30 個字。");
     assert.equal(p.profileUrl!("alice"), "https://www.threads.com/@alice");
   });
-  test("the production build knows Threads only; test-example is in the test builds", () => {
+  test("the production build knows Threads only; test-example is in the headless tests' build", () => {
     assert.deepEqual([...KNOWN_PLATFORMS], ["threads"]);
     assert.equal(presentationOf("test-example"), null);
     // A platform the page does not know: the account as it is.
