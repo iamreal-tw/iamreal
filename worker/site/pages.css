@@ -4,7 +4,7 @@
  * page of an account and the proof log page (src/pages/). The navigation
  * bar and the foot are as wide as the site (--max-width); the content of
  * each page is still one column, at most 560 wide, until that page is laid
- * out after design/DESIGN.md (so far: what a card proof needs).
+ * out after design/DESIGN.md (so far: what a card proof needs and the FAQ).
  *
  * The values of :root are design/tokens.json's, each the one of the same
  * name (test/style-sheet.test.ts): what each colour means, and where it is
@@ -981,22 +981,100 @@ body.home section.end {
   margin-bottom: 18px;
 }
 
-/* The FAQ (faq.md): every answer shown under its question ----------------------------- */
+/* The FAQ (faq.md): the list of the categories, then every answer shown under its question -- */
 
-.category h2 {
-  margin: 40px 0 4px;
-  font-size: 20px;
+/* Laid out after design/DESIGN.md: as wide as the site, its edges the navigation bar's (.top .bar); the list of the
+   categories a narrow column at the left that stays on the screen, the questions beside it. */
+body.faq main {
+  max-width: calc(var(--max-width) + 2 * var(--gutter));
+  padding: 0 calc(2 * var(--gutter)) 96px;
 }
 
-.question h3 {
-  margin: 22px 0 8px;
-  font-size: 17px;
-  font-weight: 600;
+body.faq .title {
+  font-size: var(--size-h2);
+  line-height: 1.3;
+  margin: 56px 0 0;
+}
+
+body.faq .faq-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+  gap: 64px;
+  align-items: start;
+  margin-top: 56px;
+}
+
+body.faq .categories {
+  position: sticky;
+  top: 24px;
+  padding-top: 6px;
+}
+
+body.faq .categories ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--line);
+}
+
+body.faq .categories a {
+  display: block;
+  padding: 10px 0 10px 18px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 16px;
+}
+
+body.faq .categories a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+body.faq .category {
+  scroll-margin-top: 16px;
+}
+
+body.faq .category + .category {
+  margin-top: 80px;
+}
+
+body.faq .category h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: 30px;
+  line-height: 1.4;
+  letter-spacing: normal;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ink);
+}
+
+body.faq .question {
+  max-width: 40em;
+  padding: 30px 0 32px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 16px;
+}
+
+body.faq .question h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: 22px;
   line-height: 1.5;
 }
 
-.question {
-  scroll-margin-top: 16px;
+body.faq .question p,
+body.faq .question ul.dots {
+  margin: 12px 0 0;
+}
+
+body.faq .question strong {
+  color: var(--ink);
+}
+
+body.faq .question ul.dots li {
+  margin: 12px 0 0;
 }
 
 ul.dots {
@@ -1293,6 +1371,61 @@ body.prepare .situation p {
   }
 
   body.prepare .situation h3 {
+    font-size: 19px;
+  }
+
+  /* The FAQ: the list of the categories above the questions, two to a row. */
+  body.faq main {
+    padding: 0 var(--gutter-phone) 56px;
+  }
+
+  body.faq .title {
+    font-size: var(--size-h2-phone);
+    margin-top: 28px;
+  }
+
+  body.faq .faq-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+    margin-top: 28px;
+  }
+
+  body.faq .categories {
+    position: static;
+    padding-top: 0;
+  }
+
+  body.faq .categories ol {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  body.faq .categories li {
+    border-bottom: 1px solid var(--line);
+  }
+
+  body.faq .categories a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0;
+  }
+
+  body.faq .category + .category {
+    margin-top: 56px;
+  }
+
+  body.faq .category h2 {
+    font-size: 24px;
+  }
+
+  body.faq .question {
+    padding: 24px 0 26px;
+  }
+
+  body.faq .question h3 {
     font-size: 19px;
   }
 }

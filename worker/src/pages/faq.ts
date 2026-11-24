@@ -13,10 +13,11 @@ export interface Question {
   readonly answer: Html;
 }
 
-/** The four categories of faq.md, in its order, each with its questions in its order. */
-export const CATEGORIES: readonly { readonly name: string; readonly questions: readonly Question[] }[] = [
+/** The four categories of faq.md, in its order, each with its id on the FAQ page (faq.md, under each category) and its questions in its order. */
+export const CATEGORIES: readonly { readonly name: string; readonly id: string; readonly questions: readonly Question[] }[] = [
   {
     name: "關於隱私",
+    id: "cat-privacy",
     questions: [
       {
         id: "personal-data",
@@ -32,8 +33,10 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
       },
       {
         id: "security",
-        question: "這個技術安全嗎？",
-        answer: new Html(`<p>沒有哪一種技術可以保證絕對安全，所以我們把能檢查的都公開：程式碼全部公開，證明紀錄也公開，每一筆都可以自己驗證。你的 PIN、姓名和自然人憑證只在你的裝置上處理，這一點可以從程式碼確認。</p>
+        question: "島民證明服務安全嗎？",
+        answer: new Html(`<p>島民證明的程式碼全部公開在 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>，任何人都能檢查：你的卡片資料是不是真的只留在你的裝置上、伺服器收到了什麼、證明是怎麼算出來的。</p>
+<p>證明紀錄也是公開的。任何人都能用公開的程式，自己重新驗證每一張島民證明，不用相信我們。</p>
+<p>公開程式碼不代表沒有漏洞。發現問題，歡迎到 GitHub 回報。</p>
 <p>有三件事要照實告訴你：</p>
 <ul class="dots">
 <li>匿名靠的是現在的加密技術。沒有人查得出一張島民證明是哪一張卡片換的，靠的是卡片上的 RSA 2048 位元金鑰，也就是你用自然人憑證報稅時靠的同一把金鑰。它目前沒有已知的破解方法，但沒有人能保證永遠如此。很多年後如果它被破解，會被知道的是：某一張自然人憑證換過哪個 Threads 帳號的島民證明。</li>
@@ -60,6 +63,7 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
   },
   {
     name: "它能證明什麼",
+    id: "cat-what",
     questions: [
       {
         id: "not-a-troll",
@@ -69,14 +73,14 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
       {
         id: "someone-else",
         question: "別人可以換一張寫著我帳號的島民證明嗎？",
-        answer: new Html(`<p>可以，這擋不了。但這對對方幾乎沒有好處：他用掉的是自己唯一的名額。你還是可以用自己的卡片，替自己的帳號換一張島民證明。你沒有把那一張的連結掛上個人檔案，別人就看得出你沒有承認。</p>`),
+        answer: new Html(`<p>可以，這擋不了。但這對對方幾乎沒有好處：他用掉的是自己唯一的名額。你還是可以用自己的卡片，替自己的帳號換一張島民證明。你沒有把那一張的連結掛上個人檔案，別人就看不出你承認。</p>`),
       },
       {
         id: "lent-or-sold",
         question: "卡片借人或賣給別人怎麼辦？",
-        answer: new Html(`<p>擋不了，拿到卡片和 PIN 的人就能替它換。</p>
+        answer: new Html(`<p>擋不了，拿到卡片和 PIN 的人就能產生一筆新的證明紀錄。</p>
 <p>但把自然人憑證交給別人，代價遠遠大過一張島民證明。它加上 PIN，就是你在網路上的身分證和印鑑：對方可以用你的名義報稅、查你的財產和所得資料、向政府申辦各種業務，簽出來的文件有法律效力。</p>
-<p>別人看島民證明時，看的也不只是有沒有，還有上次過卡是幾天前。卡片掛失之後，那張卡就不能再更新。</p>`),
+<p>別人看島民證明時，還會注意到上次過卡是幾天前。卡片掛失之後，那張卡就不能再更新。</p>`),
       },
       {
         id: "why-refresh",
@@ -109,6 +113,7 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
   },
   {
     name: "怎麼用",
+    id: "cat-use",
     questions: [
       {
         id: "free",
@@ -124,12 +129,14 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
         id: "mobile-certificate",
         question: "為什麼不能用行動自然人憑證？",
         answer: new Html(`<p>實體卡片的簽章在卡片裡完成，只經過你的裝置。</p>
-<p>行動自然人憑證的簽章要經過內政部的伺服器，內政部查得出是誰在使用；流程還要你輸入身分證字號，我們就得經手不必要的個資。所以只收實體的卡片。</p>`),
+<p>行動自然人憑證的簽章要經過內政部的伺服器，內政部查得出是誰在使用；流程還要你輸入身分證字號，我們就得經手不必要的個資。</p>
+<p>而且行動自然人憑證的金鑰每年換一次，換手機也會換。島民編號是從金鑰算出來的，金鑰一換就是新的編號，一個人就能換好幾張島民證明。</p>
+<p>所以只收實體的卡片。</p>`),
       },
       {
         id: "not-a-citizen",
         question: "我不是中華民國國民，可以用嗎？",
-        answer: new Html(`<p>不行。我們只收台灣中華民國國民的自然人憑證正卡，外來人口申辦的自然人憑證不能用。</p>`),
+        answer: new Html(`<p>不行。我們只收台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。</p>`),
       },
       {
         id: "under-18",
@@ -140,8 +147,8 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
         id: "change-or-remove",
         question: "換錯帳號、想改、想拿掉怎麼辦？",
         answer: new Html(`<p>當天就發現換錯了：當天回來過卡改掉。這叫更正，不算更換。</p>
-<p>之後想換成別的帳號：可以，這叫更換。一張自然人憑證在 Threads 一共可以更換 5 次，用掉就不會恢復。</p>
-<p>想拿掉：可以收回。收回之後再換回同一個帳號，不算更換。</p>
+<p>之後想換成別的帳號：可以，這叫更換。一張自然人憑證在 Threads 一共可以更換 5 次，用掉就不會恢復。所有的紀錄都會留在證明紀錄裡，讓大家查閱。</p>
+<p>想拿掉：可以收回。收回之後再換回同一個帳號，不算更換；換成別的帳號，算一次更換。</p>
 <p>一張卡片一天最多過卡 3 次。</p>
 <p>所有紀錄公開後無法刪除，這樣任何人才能驗證。證明紀錄裡會留著你換過、收回過的紀錄。</p>`),
       },
@@ -155,6 +162,7 @@ export const CATEGORIES: readonly { readonly name: string; readonly questions: r
   },
   {
     name: "誰在做",
+    id: "cat-who",
     questions: [
       {
         id: "who",
@@ -184,15 +192,26 @@ export function question(id: string): Question {
   throw new Error(`faq: no question ${id}`);
 }
 
-/** The FAQ page: every question a heading with its id, its answer shown under it. Nothing after the last question but the foot (faq.md, 還沒定的). */
+/**
+ * The FAQ page: under the title the list of the categories, each a link to
+ * its category; every question a heading with its id, its answer shown under
+ * it. Nothing after the last question but the foot (faq.md, 還沒定的).
+ */
 export function faqPage(): Document {
   const content = html`<h1 class="title">常見問題</h1>
+<div class="faq-body">
+<nav class="categories" aria-label="分類"><ol>
+${CATEGORIES.map((c) => html`<li><a href="#${c.id}">${c.name}</a></li>`)}
+</ol></nav>
+<div>
 ${CATEGORIES.map(
-  (c) => html`<section class="category">
+  (c) => html`<section class="category" id="${c.id}">
 <h2>${c.name}</h2>
 ${c.questions.map((q) => html`<section class="question" id="${q.id}"><h3>${q.question}</h3>
 ${q.answer}</section>`)}
 </section>`,
-)}`;
+)}
+</div>
+</div>`;
   return { title: "常見問題", kind: "faq", content };
 }
