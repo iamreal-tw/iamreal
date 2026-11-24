@@ -2,5 +2,9 @@
   "name": {
     "store": "島民證明 測試",
     "dev": "島民證明 dev"
+  },
+  "splash": {
+    "name": "島民證明",
+    "site": "iamreal.tw"
   }
 }

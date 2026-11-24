@@ -60,17 +60,19 @@
 
 ### app 的過卡流程
 
+Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts`，指令見 `android/README.md`「模擬器上過一次卡」）加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 拍：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，從系統的狀態列下面拍到這一步的最後，至少 844 高。帳號、島民編號、日期是測試的假資料，連結的網址是測試連的本機伺服器。iPhone 和 Android 共用名稱的那幾張，換成哪一個 app 的寫在「版本」。
+
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 定稿版 |
+| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 的感應位置 | 定稿版 |
-| `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android 的感應位置 | 定稿版 |
+| `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android（感應位置的示意圖由 #173 加） | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |
-| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 定稿版 |
-| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 定稿版 |
-| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 定稿版 |
-| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 定稿版 |
-| `card-proof-app-6-done-phone.png` | 第 6 步：完成 | 定稿版 |
+| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（Android） |
+| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
+| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
+| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
+| `card-proof-app-6-done-phone.png` | 第 6 步：完成，這張卡片的第一筆紀錄 | 實作版（Android） |
 
 ### app 的其他畫面
 
@@ -81,7 +83,7 @@
 | `app-reminder-3-notification-phone.png` | 提醒的通知（示意，不是系統的實際畫面） | 定稿版 |
 | `app-reminder-4-from-notification-phone.png` | 從通知點進來的第 1 步 | 定稿版 |
 | `app-settings-phone.png` | 設定 | 定稿版 |
-| `app-splash-phone.png` | 啟動畫面 | 定稿版 |
+| `app-splash-phone.png` | 啟動畫面（Android 的實作版由模擬器上的過卡測試拍，同上） | 實作版（Android） |
 | `app-update-soon-phone.png` | 這一版快不能過卡了 | 定稿版 |
 | `app-update-required-phone.png` | 這一版不能過卡了 | 定稿版 |
 | `app-no-nfc-phone.png` | 這支手機沒有 NFC | 定稿版 |

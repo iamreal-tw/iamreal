@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The system's own look, light or dark, without the bar that repeats the app's name. -->
-    <style name="App" parent="android:Theme.DeviceDefault.DayNight">
-        <item name="android:windowActionBar">false</item>
-        <item name="android:windowNoTitle">true</item>
+    <!-- Light, as the pages: white under the screens, without the bar that
+         repeats the app's name. The screens draw under the system's bars,
+         whose icons are dark (MainActivity, enableEdgeToEdge). -->
+    <style name="App" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/token_bg</item>
     </style>
 </resources>

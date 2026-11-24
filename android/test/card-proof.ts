@@ -66,6 +66,9 @@ const say = (key: string, values: Record<string, string | number> = {}): string 
   return s;
 };
 
+/** The words only the app has (design/copy/app.json): the splash's. */
+const APP_COPY = JSON.parse(readFileSync(join(repo, "design", "copy", "app.json"), "utf8")) as { splash: { name: string; site: string } };
+
 let failures = 0;
 const check = (ok: boolean, what: string): boolean => {
   console.log(`${ok ? "ok    " : "FAIL  "} ${what}`);
@@ -183,6 +186,45 @@ function shot(name: string): void {
   writeFileSync(join(out, "screens", `${String(++shots).padStart(2, "0")}-${name}.png`), emulator.screenshot());
 }
 
+/**
+ * Where to save the screens design/screens/ has of the app, when IAMREAL_DESIGN_SCREENS names a directory (design/screens/README.md):
+ * each as a phone's screen there is, 390 wide, a pixel a dp, from under the system's bar to the end of the step, at least 844 tall.
+ */
+const DESIGN_SCREENS = process.env.IAMREAL_DESIGN_SCREENS;
+/** The system's bar at the top, in dp, on the emulator's Android 10: left out of those screens. */
+const STATUS_BAR = 24;
+/** A phone's density, which the test gives the emulator's screen. */
+const DENSITY = 420;
+
+/** Makes the emulator's screen one of design/screens/'s (390 dp wide, a pixel a dp) for a moment: `height` tall with the system's bars. */
+async function designSize(height: number): Promise<void> {
+  emulator.shell(`wm size 390x${height}; wm density 160`);
+  await sleep(1_500);
+}
+
+/** Puts the emulator's screen back as the test has it. */
+async function testSize(): Promise<void> {
+  emulator.shell(`wm size reset; wm density ${DENSITY}`);
+  await sleep(1_500);
+}
+
+/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from under the system's bar. Cropped with macOS's sips: the option is for a Mac. */
+function designCapture(file: string, height: number): void {
+  const png = join(DESIGN_SCREENS!, file);
+  writeFileSync(png, emulator.screenshot());
+  execFileSync("sips", ["--cropOffset", String(STATUS_BAR), "0", "-c", String(height), "390", png], { stdio: "ignore" });
+}
+
+/** The step on the screen as `file` of DESIGN_SCREENS, if it is set: the whole step, on a screen tall enough for it. */
+async function designShot(file: string): Promise<void> {
+  if (DESIGN_SCREENS === undefined) return;
+  await designSize(4_000);
+  // The end of the step: its last text (not the step's own node, as tall as the screen), the bottom half of a button around it and the step's space under it.
+  const bottom = Math.max(...visible().filter((n) => n.text !== "").map((n) => n.bottom));
+  designCapture(file, Math.max(844, bottom + 72 - STATUS_BAR));
+  await testSize();
+}
+
 /** What is on the screen now. */
 const visible = (): Node[] => emulator.dump();
 const textsOf = (nodes: Node[]): string[] => nodes.map((n) => n.text).filter((t) => t !== "");
@@ -228,6 +270,7 @@ function find(match: (n: Node) => boolean, what: string): Node {
       scroll();
     }
   }
+  shot("not-found");
   throw new Error(`${what} is not on the screen. It shows: ${JSON.stringify(textsOf(last))}`);
 }
 
@@ -238,6 +281,11 @@ function press(label: string): void {
 
 /** The field a test finds by its name (the app's test tag). */
 const field = (id: string): Node => find((n) => n.id === id, `the field ${id}`);
+
+/** Puts the keyboard on the screen away, if it is up: it covers the lower part of the step, where a swipe would scroll. */
+function hideKeyboard(): void {
+  if (/mInputShown=true/.test(emulator.shell("dumpsys input_method"))) emulator.shell("input keyevent KEYCODE_BACK");
+}
 
 /** Checks that each sentence is on the screen, word for word. */
 function shows(screen: string[], where: string, sentences: string[]): void {
@@ -286,7 +334,8 @@ interface Proof {
   /** The account the row holds before. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
-  done: { title: string; record: string; shows: string[]; absent: string[]; card: boolean };
+  /** `card`: the card's proof, the hanging and what can be done besides are shown (all but a withdrawal of every account). */
+  done: { title: string; shows: string[]; absent: string[]; card: boolean };
   date: string;
 }
 
@@ -299,9 +348,11 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(1), "step 1");
   if (p.thorough) {
     shot("step-1");
+    await designShot("card-proof-app-1-before-phone.png");
     const s = wholeScreen();
-    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), `▸ ${say("before.why_physical")}`, `▸ ${say("before.how_to_get")}`, say("common.next")]);
+    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), say("before.why_physical"), say("before.how_to_get"), say("common.next")]);
     check(!s.includes(say("before.listed_together")) && !s.includes(say("common.back")), "step 1 has no 上一步, and with one platform not the sentence about several");
+    check(!s.includes(say("before.duration")), "step 1 does not say the web's sentence of a card reader and 3 minutes");
   }
   press(say("common.next"));
 
@@ -309,6 +360,7 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(2), "step 2");
   if (p.thorough) {
     shot("step-2");
+    await designShot("card-proof-app-2-read-android-phone.png");
     const s = wholeScreen();
     shows(s, "step 2", [say("read.title"), say("app_read.how", { spot: SPOT }), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
@@ -333,8 +385,9 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 3", [NAME, say("pin.name_note")]);
     if (p.thorough) {
-      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("links.more"), say("common.back"), say("pin.confirm_card")]);
+      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
+      check(!s.includes(say("links.more")), "step 3 links to no other page");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -343,7 +396,15 @@ async function cardProof(p: Proof): Promise<string> {
   }
   emulator.tap(field("pin"));
   emulator.type(PIN);
-  check(!wholeScreen().some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
+  if (p.thorough && DESIGN_SCREENS !== undefined) {
+    hideKeyboard();
+    await designShot("card-proof-app-3-pin-phone.png");
+  }
+  {
+    const s = wholeScreen();
+    check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
+    check(!s.includes(say("app_pin.need_pin")), "step 3: with a PIN typed, no 請輸入 PIN。");
+  }
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
   else await tap();
@@ -356,8 +417,9 @@ async function cardProof(p: Proof): Promise<string> {
     shows(s, "step 4", [say("accounts.title_single", { platform: THREADS }), ...p.accounts.lead, ...p.accounts.rowLines, ...p.accounts.notes]);
     for (const a of p.accounts.absent) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}…"`);
     if (p.thorough) {
-      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("links.more"), say("common.next"), say("accounts.no_check"), say("accounts.acknowledged"), say("common.cancel")]);
-      check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")), "step 4 is the one-platform screen, with 預覽");
+      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.not_yours_single", { platform: THREADS }), say("common.cancel")]);
+      check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")) && !s.includes(say("accounts.not_yours")), "step 4 is the one-platform screen, with 預覽");
+      check(![say("links.more"), say("accounts.no_check"), say("accounts.acknowledged")].some((x) => s.includes(x)), "step 4 links to no other page, and has not the two lines of before the redesign");
     }
     check(field("account-threads").text === p.current, `step 4: the Threads row holds "${p.current}"`);
   }
@@ -365,7 +427,9 @@ async function cardProof(p: Proof): Promise<string> {
     emulator.tap(field("account-threads"));
     emulator.erase(p.current.length);
     if (p.type !== "") emulator.type(p.type);
+    hideKeyboard();
     check(field("account-threads").text === p.type, `step 4: the Threads row now holds "${p.type}"`);
+    if (p.thorough) await designShot("card-proof-app-4-accounts-phone.png");
   }
   press(say("common.next"));
 
@@ -374,6 +438,7 @@ async function cardProof(p: Proof): Promise<string> {
   let shortId = "";
   {
     shot(`step-5-${p.name}`);
+    if (p.thorough) await designShot("card-proof-app-5-confirm-phone.png");
     const s = wholeScreen();
     shows(s, "step 5", [step(5), p.confirm.intro, THREADS, p.confirm.account, p.confirm.under, say("confirm.date"), p.date, say("confirm.short_id_label"), say("confirm.no_identity"), ...p.confirm.shows, say("common.back"), p.confirm.button, say("common.cancel")]);
     for (const a of p.confirm.absent) check(!s.includes(a), `step 5 does not say "${a.slice(0, 40)}…"`);
@@ -398,8 +463,10 @@ async function cardProof(p: Proof): Promise<string> {
     shows(textsOf(visible()), "step 5, in progress,", [step(5), say("app_progress.keep_open"), ...PROGRESS_ITEMS]);
     await tapWithPanel({ signs: true });
     await waitText(say("app_read.lift"), "step 5: the card can be taken away", 20_000);
-    await waitText(say("progress.zero_knowledge"), "step 5: the sentence while the proof is computed", 20_000);
     shot("step-5-in-progress");
+    await designShot("card-proof-app-5-progress-phone.png");
+    const s = textsOf(visible());
+    check(!s.includes(say("progress.zero_knowledge")) && !s.includes(say("links.more")), "step 5 in progress: no sentence under the list, and no link to another page");
   } else await tap();
 
   // Step 6
@@ -407,14 +474,60 @@ async function cardProof(p: Proof): Promise<string> {
   check(taps - tapsBefore === 3, `the card was held to the phone three times (${taps - tapsBefore})`);
   {
     shot(`step-6-${p.name}`);
+    if (p.thorough) await designShot("card-proof-app-6-done-phone.png");
     const s = wholeScreen();
     const link = `${SITE}/p/${shortId}`;
-    shows(s, "step 6", [p.done.title, say("done.recorded"), p.date, p.done.record, p.confirm.account, say("done.short_id", { short_id: shortId }), say("done.trust"), say("links.verify"), say("done.restart"), ...p.done.shows]);
+    shows(s, "step 6", [step(6), p.done.title, say("done.recorded_on", { date: p.date }), say("done.restart"), ...p.done.shows]);
+    const hanging = [
+      say("done.proof"),
+      `${say("confirm.short_id_label")} ${say("confirm.short_id", { short_id: shortId })}`,
+      say("done.hang_title_single", { platform: THREADS }),
+      say("done.anyone_single"),
+      link,
+      say("done.copy"),
+      say("done.open_profile", { account: p.confirm.account, platform: THREADS }),
+      say("done.step_edit"),
+      say("done.step_link"),
+      say("done.step_save"),
+      say("done.hung", { open_proof: say("done.open_proof") }),
+      say("done.hung_done"),
+      say("done.optional"),
+      say("done.share_title"),
+      say("done.share_note", { platform: THREADS }),
+      say("app_done.share"),
+      say("done.return_title"),
+      say("done.return_note"),
+    ];
     if (p.done.card) {
-      shows(s, "step 6", [say("links.proof"), say("done.proof"), say("confirm.short_id", { short_id: shortId }), say("done.hand_ai"), say("done.hand_profile"), say("done.put_up"), say("done.put_link_single", { platform: THREADS }), link, say("done.copy"), say("app_done.open_platform", { platform: THREADS }), say("app_done.how_to_put", { platform: THREADS }), say("done.advice_single"), say("done.renamed")]);
+      shows(s, "step 6", [p.confirm.account, ...hanging]);
+    } else {
+      // Not done.proof: 島民證明 is the service's name in the header too.
+      for (const a of hanging.filter((x) => x !== say("done.proof"))) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
     }
-    // The server's answer was read (the title and the rows are by its kinds) and is what step 5 said.
-    for (const a of [say("done.unplug"), say("done.mismatch"), say("done.kinds_unreadable"), say("done.recorded_only"), say("done.other_cards", { account: p.confirm.account }), ...p.done.absent]) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+    // The server's answer was read (the title is by its kinds) and is what step 5 said: no record of it shown, nothing of the web's QR code or its
+    // computer, nothing of the screen of before the redesign.
+    for (const a of [
+      say("done.unplug"),
+      say("done.mismatch"),
+      say("done.recorded"),
+      say("done.kinds_unreadable"),
+      say("done.recorded_only"),
+      say("done.other_cards", { account: p.confirm.account }),
+      say("done.by_phone"),
+      say("done.by_phone_scan"),
+      say("done.on_computer"),
+      say("done.hand_ai"),
+      say("done.put_up"),
+      say("done.advice_single"),
+      say("done.renamed"),
+      say("done.trust"),
+      say("links.verify"),
+      say("links.proof"),
+      say("app_done.open_platform", { platform: THREADS }),
+      ...p.done.absent,
+    ]) {
+      check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+    }
   }
   return shortId;
 }
@@ -457,12 +570,15 @@ async function anotherCardThenCancel(): Promise<void> {
   taps = 0;
 }
 
+/** The sentence of step 6 that is a link to the card's page. */
+const HUNG = say("done.hung", { open_proof: say("done.open_proof") });
+
 /** The activity on top of the screen, and the address it was opened with, as the system reports them. */
 const onTop = (): string => emulator.shell("dumpsys activity activities").split("\n").filter((l) => /mResumedActivity|^\s*Intent \{ act=android.intent.action.VIEW/.test(l)).join("\n");
 const backToApp = async (): Promise<void> => {
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
-  // Where it was left: somewhere down step 6, whose last button is on no other step with that link above it.
-  await waitText(say("links.proof"), "the app again, still at step 6", 20_000);
+  // Where it was left: step 6.
+  find((n) => n.text === step(6) || n.text === HUNG, "the app again, still at step 6");
 };
 
 /** The emulator's setting for the keyboard on the screen, before the test changed it. */
@@ -481,7 +597,7 @@ try {
   emulator.adb("install", "-r", join(android, "app", "build", "outputs", "apk", "fake", "app-fake.apk"));
   // A phone's density, no keyboard drawn over the screen, the clock left alone.
   imeBefore = emulator.shell("settings get secure show_ime_with_hard_keyboard").trim();
-  emulator.shell("wm density 420; settings put secure show_ime_with_hard_keyboard 0; settings put global auto_time 0");
+  emulator.shell(`wm density ${DENSITY}; settings put secure show_ime_with_hard_keyboard 0; settings put global auto_time 0`);
   // No network but the port forwarded below: what the app opens in a browser (Threads) is asked of no one.
   emulator.shell("svc wifi disable; svc data disable");
   // The emulator's clock is the back end's.
@@ -489,7 +605,17 @@ try {
   emulator.shell(`pm clear ${APP}`);
   emulator.adb("reverse", `tcp:${DEVICE_PORT}`, `tcp:${port}`);
   emulator.shell("input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard");
+  // The splash on a screen of design/screens/'s size: 844 between the system's bars (Android 10's navigation bar is 48 dp).
+  if (DESIGN_SCREENS !== undefined) await designSize(STATUS_BAR + 844 + 48);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  // The splash first: the name and the site of app.json, for a moment.
+  {
+    let seen: string[] = [];
+    for (const until = Date.now() + 5_000; Date.now() < until && !seen.includes(APP_COPY.splash.site); ) seen = textsOf(visible());
+    if (DESIGN_SCREENS !== undefined && seen.includes(APP_COPY.splash.site)) designCapture("app-splash-phone.png", 844);
+    check(seen.includes(APP_COPY.splash.site) && seen.includes(APP_COPY.splash.name), `the app opens on the splash: ${APP_COPY.splash.name} │ ${APP_COPY.splash.site} (${JSON.stringify(seen)})`);
+    if (DESIGN_SCREENS !== undefined) await testSize();
+  }
 
   // 4. Four card proofs --------------------------------------------------------------
   const HANDLE = { alice: "@alice", bob: "@bob" };
@@ -512,7 +638,7 @@ try {
     type: "alice",
     current: "",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.first"), button: say("confirm.button_declare_single"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.listed_together"), say("confirm.withdraw_stays")] },
-    done: { title: say("done.first"), record: say("done.record_single"), shows: [say("kinds.first"), say("done.new_card")], absent: [say("done.withdrawn_link")], card: true },
+    done: { title: say("done.first"), shows: [say("done.new_card")], absent: [say("done.withdrawn_link")], card: true },
     date: today,
   });
 
@@ -520,16 +646,23 @@ try {
   press(say("done.copy"));
   await waitText(say("done.copied"), "the button after the link was copied", 10_000);
   check(true, "step 6: 複製連結 turns into 已複製");
-  press(say("app_done.open_platform", { platform: THREADS }));
+  press(say("done.open_profile", { account: HANDLE.alice, platform: THREADS }));
   await sleep(2_000);
-  check(/dat=https:\/\/www\.threads\.com\//.test(onTop()), "step 6: 打開 Threads opens https://www.threads.com/ outside the app");
+  check(/dat=https:\/\/www\.threads\.com\/@alice/.test(onTop()), "step 6: 打開 @alice 的 Threads 個人檔案 opens https://www.threads.com/@alice outside the app");
   await backToApp();
-  press(say("links.proof"));
+  press(HUNG);
   await sleep(4_000);
   const browser = onTop();
-  check(browser.includes(`dat=http://${SITE}/p/${shortId}`) && !new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(browser), "step 6: 打開這張島民證明 opens the card's page in the browser");
+  check(browser.includes(`dat=http://${SITE}/p/${shortId}`) && !new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(browser), "step 6: 打開你的島民證明 opens the card's page in the browser");
   const page = await fetch(`${backend.origin}/p/${shortId}`);
   check(page.status === 200 && (await page.text()).includes("@alice"), `the Worker's page of the card, /p/${shortId}, lists @alice`);
+  await backToApp();
+  // The system's share sheet, with the address of the card's page and nothing else (Android 10 shows the text it is given at its top).
+  press(say("app_done.share"));
+  const shared = await waitText(`http://${SITE}/p/${shortId}`, "the share sheet with the card's address", 20_000);
+  check(/act=android\.intent\.action\.CHOOSER/.test(emulator.shell("dumpsys activity activities")), "step 6: 分享 opens the system's share sheet");
+  check(textsOf(visible()).filter((t) => t.includes(SITE)).length === 1 && shared.text === `http://${SITE}/p/${shortId}`, "step 6: what is shared is the card's address, with no text of its own");
+  emulator.shell("input keyevent KEYCODE_BACK");
   await backToApp();
   press(say("done.restart"));
 
@@ -548,7 +681,7 @@ try {
     type: null,
     current: "alice",
     confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.withdraw_stays")] },
-    done: { title: say("done.refresh"), record: say("done.record_single"), shows: [say("kinds.unchanged")], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.refresh"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
     date: today,
   });
   check(again === shortId, "the same card has the same short ID");
@@ -578,7 +711,7 @@ try {
       shows: [say("confirm.listed_single", { platform: THREADS }), later],
       absent: [say("confirm.withdraw_stays")],
     },
-    done: { title: say("done.changed"), record: say("done.record_single"), shows: [say("kinds.switch", { previous: HANDLE.alice })], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
+    done: { title: say("done.changed"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true },
     date: tomorrow,
   });
   press(say("done.restart"));
@@ -604,7 +737,7 @@ try {
       shows: [say("confirm.withdraw_stays"), say("confirm.later_withdraw") + say("confirm.permanent")],
       absent: [say("confirm.listed_single", { platform: THREADS }), later],
     },
-    done: { title: say("done.withdraw_all"), record: say("done.record_withdraw_all"), shows: [say("kinds.withdraw")], absent: [say("done.hand_ai"), say("done.put_up"), say("done.copy"), say("links.proof"), say("done.advice_single"), say("done.renamed"), say("done.new_card")], card: false },
+    done: { title: say("done.withdraw_all"), shows: [say("done.withdrawn_link")], absent: [say("done.new_card")], card: false },
     date: tomorrow,
   });
 
@@ -621,7 +754,7 @@ try {
   // The emulator as it was: its own clock, network, density and keyboard setting, the port no longer forwarded, adb not root.
   try {
     emulator.shell(`date @${Math.floor(Date.now() / 1000)}; settings put global auto_time 1; svc wifi enable; svc data enable`);
-    emulator.shell(`wm density reset; am force-stop ${APP}`);
+    emulator.shell(`wm size reset; wm density reset; am force-stop ${APP}`);
     if (/^[01]$/.test(imeBefore)) emulator.shell(`settings put secure show_ime_with_hard_keyboard ${imeBefore}`);
     emulator.adb("reverse", "--remove", `tcp:${DEVICE_PORT}`);
     emulator.adb("unroot");
