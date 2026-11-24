@@ -13,8 +13,15 @@ export interface Question {
   readonly answer: Html;
 }
 
-/** The four categories of faq.md, in its order, each with its id on the FAQ page (faq.md, under each category) and its questions in its order. */
-export const CATEGORIES: readonly { readonly name: string; readonly id: string; readonly questions: readonly Question[] }[] = [
+/** One category: its name, its id on the FAQ page (faq.md, under each category) and its questions, in faq.md's order. */
+export interface Category {
+  readonly name: string;
+  readonly id: string;
+  readonly questions: readonly Question[];
+}
+
+/** The four categories of faq.md, in its order. */
+export const CATEGORIES: readonly Category[] = [
   {
     name: "關於隱私",
     id: "cat-privacy",
@@ -148,7 +155,7 @@ export const CATEGORIES: readonly { readonly name: string; readonly id: string; 
         question: "換錯帳號、想改、想拿掉怎麼辦？",
         answer: new Html(`<p>當天就發現換錯了：當天回來過卡改掉。這叫更正，不算更換。</p>
 <p>之後想換成別的帳號：可以，這叫更換。一張自然人憑證在 Threads 一共可以更換 5 次，用掉就不會恢復。所有的紀錄都會留在證明紀錄裡，讓大家查閱。</p>
-<p>想拿掉：可以收回。收回之後再換回同一個帳號，不算更換；換成別的帳號，算一次更換。</p>
+<p>想拿掉：可以收回，收回不算更換。收回之後再換回同一個帳號，不算更換；換成別的帳號，算一次更換。</p>
 <p>一張卡片一天最多過卡 3 次。</p>
 <p>所有紀錄公開後無法刪除，這樣任何人才能驗證。證明紀錄裡會留著你換過、收回過的紀錄。</p>`),
       },
@@ -203,7 +210,7 @@ export function faqPage(): Document {
 <nav class="categories" aria-label="分類"><ol>
 ${CATEGORIES.map((c) => html`<li><a href="#${c.id}">${c.name}</a></li>`)}
 </ol></nav>
-<div>
+<div class="faq-questions">
 ${CATEGORIES.map(
   (c) => html`<section class="category" id="${c.id}">
 <h2>${c.name}</h2>

@@ -42,12 +42,17 @@
   --size-body-phone: 16px;
   --size-h2: 40px;
   --size-h2-phone: 28px;
+  --size-h3: 26px;
+  --size-h3-phone: 21px;
+  --size-lead: 22px;
+  --size-lead-phone: 19px;
   --size-kicker: 15px;
   --size-kicker-phone: 14px;
   --size-small: 14px;
   --weight-heading: 700;
   --weight-account: 800;
   --weight-body: 400;
+  --leading-h3: 1.5;
   --leading-body: 1.85;
   --gutter: 40px;
   --gutter-phone: 20px;
@@ -999,7 +1004,7 @@ body.faq .title {
 body.faq .faq-body {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
-  gap: 64px;
+  gap: var(--column-gap);
   align-items: start;
   margin-top: 56px;
 }
@@ -1042,15 +1047,15 @@ body.faq .category h2 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
-  font-size: 30px;
-  line-height: 1.4;
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
   letter-spacing: normal;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--ink);
 }
 
 body.faq .question {
-  max-width: 40em;
+  max-width: var(--measure);
   padding: 30px 0 32px;
   border-bottom: 1px solid var(--line);
   scroll-margin-top: 16px;
@@ -1060,8 +1065,8 @@ body.faq .question h3 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
-  font-size: 22px;
-  line-height: 1.5;
+  font-size: var(--size-lead);
+  line-height: var(--leading-h3);
 }
 
 body.faq .question p,
@@ -1418,7 +1423,7 @@ body.prepare .situation p {
   }
 
   body.faq .category h2 {
-    font-size: 24px;
+    font-size: var(--size-h3-phone);
   }
 
   body.faq .question {
@@ -1426,6 +1431,6 @@ body.prepare .situation p {
   }
 
   body.faq .question h3 {
-    font-size: 19px;
+    font-size: var(--size-lead-phone);
   }
 }

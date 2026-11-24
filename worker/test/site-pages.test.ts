@@ -61,8 +61,10 @@ describe("the FAQ", () => {
     for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
 
     // The list of the categories: each name a link to its category, in faq.md's order, under the title and above the first question.
-    const list = /<nav class="categories" aria-label="分類">(.*?)<\/nav>/s.exec(page);
-    assert.ok(list !== null, "the page has the list of the categories, named 分類");
+    const listName = /螢幕閱讀器唸的名稱是「([^」]*)」/.exec(readCopy("faq.md"))?.[1];
+    assert.ok(listName !== undefined, "faq.md names the list of the categories");
+    const list = new RegExp(`<nav class="categories" aria-label="${listName}">(.*?)</nav>`, "s").exec(page);
+    assert.ok(list !== null, `the page has the list of the categories, named ${listName}`);
     assert.deepEqual(
       [...list[1]!.matchAll(/<a href="([^"]*)">([^<]*)<\/a>/g)].map((m) => [m[1], m[2]]),
       categories.map((c) => [`#${c.id}`, c.name]),
