@@ -184,15 +184,18 @@ describe("hanging a proof on a profile", () => {
     // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
     assert.ok(copySection("hang.md", "2. ").includes("`https://iamreal.tw/p/7K2Q9FM4XD`"), "hang.md says what 複製連結 copies");
+    // On this page the whole first line of part 3 is the link to the card's page (hang.md, part 3).
+    const hung = copyLines(block("hang.md", "3. "))[0]!;
     for (const want of [
       `<p class="backlink">${address}</p>`,
       `<button type="button" class="copy button" data-copy-text="https://${address}" data-copied="${copiedWord("hang.md")}" hidden>複製連結</button>`,
       '<a class="button quiet" href="https://www.threads.com/@carol.tw" target="_blank" rel="noopener noreferrer">打開 Threads</a>',
-      `<a href="/p/${CARD_A}">打開你的島民證明</a>`,
+      `<a href="/p/${CARD_A}">${hung}</a>`,
       '<span class="account">@carol.tw</span>',
     ]) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
+    assert.equal(page.split(`href="/p/${CARD_A}"`).length, 2, "one link to the card's page");
     notOnPage(page, "還沒有島民證明？", "https://");
     const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
