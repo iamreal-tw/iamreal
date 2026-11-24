@@ -255,7 +255,7 @@ export const BROWSER_PATHS: readonly string[] = [
  * test/workflows.test.ts checks that every path the tests of ios/Tests/ and
  * ios/check-app.sh name is under one of them.
  */
-export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
+export const IOS_PATHS: readonly string[] = ["ios/**", "device-core/**", "spec/vectors/**", "design/copy/**", "design/fonts/**", "web/circuits/**", "verifier/vk/**", "web/scripts/fetch-crs.mjs", ".github/workflows/checks-ios.yml"];
 /**
  * The paths whose change runs the circuits' check (checks-circuits.yml),
  * exactly (#247): the circuits' source, scripts and tests (circuits/, its
@@ -994,7 +994,7 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
  */
 export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**", ".github/workflows/cache.yml"];
 /** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, and cache.yml, hashed into the keys of its caches like device-core's. */
-export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/copy/**", ".github/workflows/cache.yml"];
+export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/fonts/**", "design/copy/**", ".github/workflows/cache.yml"];
 /** A list of patterns for each required check, by the check's name. */
 export type CheckLists = Readonly<Record<string, readonly string[]>>;
 /** Each required check's list. */

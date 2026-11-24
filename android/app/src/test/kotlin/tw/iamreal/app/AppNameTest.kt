@@ -1,12 +1,16 @@
 package tw.iamreal.app
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 import java.io.File
 
-/** The name under the icon of each build (ADR-0037) against design/copy/app.md: the two are the same text. */
+/**
+ * The name under the icon of each build (ADR-0037) against design/copy/app.md: the two are the same text.
+ * And app.json gives each build's name under that build's key (AppCopyTest checks the two files hold the same lines).
+ */
 class AppNameTest {
     @Test
     fun `the name under the icon of the store's build is the one design copy gives it`() {
@@ -16,6 +20,13 @@ class AppNameTest {
     @Test
     fun `the name under the icon of the development build is the one design copy gives it`() {
         assertEquals(written("開發用 build"), nameIn("iamreal.strings.dev"))
+    }
+
+    @Test
+    fun `app json gives each build the name app md gives it`() {
+        val names = JSONObject(File(System.getProperty("iamreal.copy"), "app.json").readText()).getJSONObject("name")
+        assertEquals(written("商店的 build"), names.getString("store"))
+        assertEquals(written("開發用 build"), names.getString("dev"))
     }
 
     @Test
