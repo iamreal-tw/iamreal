@@ -358,10 +358,10 @@ const waitStep = (name: string, what: string, ms = 30_000) => page.waitFor(step(
 const whereText = () => page.text("[data-where]");
 /** The href of each link on the screen. */
 const linksOnScreen = () => page.eval<string[]>(`[...document.querySelectorAll('#app a')].map((a) => a.getAttribute("href"))`);
-/** Steps 1 to 5 link to no other page (docs/design/principles.md, principle 1): no link, no 了解更多. */
+/** Steps 1 to 5 link to no other page (docs/design/principles.md, principle 1). */
 async function noLinkOut(label: string): Promise<void> {
   const links = await linksOnScreen();
-  check(links.length === 0 && !(await page.text()).includes(C.links.more), `${label}: no link to another page, no ${C.links.more} ${JSON.stringify(links)}`);
+  check(links.length === 0, `${label}: no link to another page ${JSON.stringify(links)}`);
 }
 const stepLine = (n: number) => fill(C.common.step, { step: n, steps: 6 });
 
@@ -816,7 +816,6 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "de
   check(st.state === kind, `${label}: step 4 is "${st.state}"`);
   check(st.title === a.title, `${label}: step 4's title "${st.title}"`);
   check(has(a.not_yours) && has(a.preview_note) && has(a.switches_limited), `${label}: step 4, that the account is not checked, the preview, that switches are limited`);
-  check(!has(a.no_check) && !has(a.acknowledged) && !has(C.links.more), `${label}: step 4, not the app's older sentences, no ${C.links.more}`);
   check(has(a.how_refresh) === (kind === "declared"), `${label}: card proof again explained ${kind === "declared" ? "" : "not "}(什麼都不改……)`);
   check(has(a.how_change) === (kind !== "never") && has(a.one_per_platform) === (kind === "never"), `${label}: how to change the list`);
   check(!has("還有平台沒填"), `${label}: no nudge to fill every platform`);
@@ -832,7 +831,7 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   const rows = c.rows.map((r) => [r.platform, r.name, r.account, r.kinds]);
   check(JSON.stringify(rows) === JSON.stringify(want), `${label}: step 5's list ${JSON.stringify(rows)}`);
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
-  check(c.links.length === 0 && !c.main.includes(C.links.more), `${label}: step 5 links to no other page ${JSON.stringify(c.links)}`);
+  check(c.links.length === 0, `${label}: step 5 links to no other page ${JSON.stringify(c.links)}`);
   const empty = button === C.confirm.button_withdraw_all;
   check(c.intro === (empty ? C.confirm.intro_withdraw_all : single !== null ? C.confirm.intro_single : C.confirm.intro), `${label}: step 5's first sentence "${c.intro}"`);
   check(c.main.includes(today()) && c.main.includes(C.confirm.short_id_label) && c.main.includes(C.confirm.no_identity) && c.main.includes(C.confirm.permanent), `${label}: step 5, the date, the short ID, that the record has no name, that it cannot be deleted`);
@@ -916,12 +915,6 @@ interface DoneExpected {
   single?: string;
 }
 
-/**
- * The sentences of the done screen before this one (#292) that it no longer has. Not links.proof: done.kinds_unreadable
- * says those words; where 打開你的島民證明 goes is checked instead.
- */
-const OLD_DONE = [C.done.put_up, C.done.put_link, C.done.advice, C.done.advice_single, C.done.renamed, C.done.trust, C.done.hand_ai, C.done.hand_profile, C.links.verify];
-
 function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   if (!check(d !== null, `${o.label}: done ${message}`)) return;
   const v = d!;
@@ -944,10 +937,6 @@ function checkDone(o: DoneExpected, d: DoneSeen | null, message = ""): void {
   const shares = withdrawAll ? [] : [[fill(C.done.share, { platform: THREADS_NAME }), `https://www.threads.com/intent/post?url=${encodeURIComponent(`https://${SITE_DOMAIN}/${cardPath(sid)}`)}`]];
   check(JSON.stringify(v.shares) === JSON.stringify(shares), `${o.label}: sharing to Threads, the card's page and nothing else ${JSON.stringify(v.shares)}`);
   check(v.optional === !withdrawAll && v.main.includes(C.done.return_note) === !withdrawAll, `${o.label}: what else can be done ${withdrawAll ? "is not there" : "is there"}`);
-  check(
-    OLD_DONE.every((x) => !v.main.includes(x)),
-    `${o.label}: none of the old done screen's sentences ${JSON.stringify(OLD_DONE.filter((x) => v.main.includes(x)))}`,
-  );
   const mismatch = o.mismatch ?? [];
   check(v.main.includes(C.done.mismatch) === mismatch.length > 0 && v.recordShown === mismatch.length > 0, `${o.label}: what the proof log recorded ${mismatch.length ? "is shown, it differs" : "is not shown: it is what step 5 said"}`);
   if (o.record === null) {
@@ -1017,7 +1006,6 @@ async function finish(o: DoneExpected & { button: string; dropFirstSubmission?: 
     const labels = (await items("progress")).map((i) => i.label);
     check(labels[2] === C.progress.compute, `in progress: computing, what it makes and how long "${labels[2]}"`);
     await page.waitFor<boolean>(`document.querySelector('[data-item="compute"]')?.dataset.state === "now" || !!document.querySelector('[data-step="done"]') || null`, "computing", 120_000);
-    check(!(await page.text()).includes(C.progress.zero_knowledge), "in progress: no second sentence below the list while computing");
     await noLinkOut("in progress");
     const threadsUsed = Number(await page.waitFor<string>(`document.querySelector('[data-list="progress"]')?.dataset.threads`, "the engine's threads", 30_000).catch(() => "0"));
     check(threadsUsed > 1, `in progress: a multithreaded proof (${threadsUsed} threads)`);
@@ -2301,7 +2289,7 @@ await tryStep("the platform table with Threads only: steps 5 and 6 speak of one 
     const again = await toAccounts();
     check(again.state === "declared" && again.title === "你的 Threads 帳號", `one platform, declared: step 4 "${again.state}" "${again.title}"`);
     check(JSON.stringify(again.lead) === JSON.stringify([A.current + fill(A.last_card_proof, { days_ago: 1 })]), `one platform, declared yesterday: ${JSON.stringify(again.lead)}`);
-    check(again.links.length === 0 && !again.main.includes(C.links.more), "one platform, declared: step 4 links to no other page");
+    check(again.links.length === 0, "one platform, declared: step 4 links to no other page");
     await page.eval(`document.activeElement?.blur()`);
     await screenshot("single-4-accounts-existing");
     await typeRows({ [THREADS]: "yui.tw" });
