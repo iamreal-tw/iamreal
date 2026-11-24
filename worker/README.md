@@ -135,7 +135,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 | `proof_log` | 整份證明紀錄，只有一列 | `count`（筆數）、`fingerprint`（指紋）、`latest_valid_date`（證明紀錄裡最晚的有效日期）、`rules_version`（卡片狀態是照哪一版規則算的）、`schema_version`（這些表是照哪一版建的） |
 
 - `cards` 的欄位就是 `spec/record-rules.md`「State」的項目，加上 `last_seq`。`slots` 是一個 JSON 物件，鍵是平台代號，每個值恰好是 `current`、`last_declared`、`switch_count`、`correction_date`，名稱和寫法跟 `card-state` 回應的 `platforms` 相同。只存事實（更換過幾次），不存結論（還能不能換）。沒有有效紀錄的卡片沒有列。
-- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的四張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
+- 這張表只放紀錄規則的狀態，和頁面用的衍生表（`view_` 開頭的五張，見[頁面用的衍生表](#頁面用的衍生表)）分開：衍生表可以整份重建，規則的狀態錯了會收下拿不掉的紀錄。
 - `records` 是送出一筆（[#67](https://github.com/iamreal-tw/iamreal/issues/67)）加的新表，表的版本沒有變；在它之前建的物件下一次啟動時補上這張表。`fingerprint` 每一筆都存，切檔時最後一筆的那個值記進 `full_files`，下一檔的雜湊清單第一行就是它（`spec/record.md`「Record hash lists」），不必從頭重算。
 - `full_files` 是搬檔（[#149](https://github.com/iamreal-tw/iamreal/issues/149)）加的新表，表的版本也沒有變。一檔的 1,000 筆從 `records` 刪掉和這張表多一列是同一個交易，所以每一筆紀錄不是還在 `records`，就是它那一檔列在這裡（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。列是連續的：`records_before` 是 0、1000、2000……，`records` 的第一筆緊接在最後一列那一檔之後。
 - `published` 和 `first_day` 是每天公布（[#70](https://github.com/iamreal-tw/iamreal/issues/70)）加的新表，表的版本沒有變。`published` 的列寫了就不改、不刪：一個日期的那一行不會變。它是指紋檔的正本，儲存桶裡的檔每次整個從它寫出來，寫之前先看儲存桶現有的是不是它的開頭（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。
@@ -511,7 +511,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 
 ### 頁面用的衍生表
 
-證明紀錄的 Durable Object 裡 `view_` 開頭的四張表（[`src/views.ts`](src/views.ts)），內容和舊後台的四張相同：
+證明紀錄的 Durable Object 裡 `view_` 開頭的五張表（[`src/views.ts`](src/views.ts)）。前四張的內容和舊後台的四張相同，`view_ordinals` 是順序號碼（[#299](https://github.com/iamreal-tw/iamreal/issues/299)）加的：
 
 | 表 | 一列是什麼 |
 |---|---|
@@ -519,9 +519,10 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 | `view_cards` | 一張有過有效紀錄的卡片：短編號、第一次過卡日、上次過卡日、過卡幾次 |
 | `view_slots` | 一張卡片在一個平台的名額：現在的帳號、從哪一天哪一筆開始、更換過幾次、上次過卡日 |
 | `view_history` | 一筆有效紀錄在一個平台做了什麼：種類、是不是收回之後、之前和之後的帳號 |
+| `view_ordinals` | 一張有過有效紀錄的卡片的順序號碼（`spec/record-rules.md`「The ordinal」）：卡片第一筆有效紀錄寫入時給下一個號碼，之後不變。不分場合字串，整份證明紀錄一起數；每個網站照自己的證明紀錄數，測試網站的號碼和正式網站的無關。島民證明頁「第 N 張島民證明」讀它 |
 
 - **和紀錄在同一個交易寫**（[寫入是一個交易](#寫入是一個交易)）。寫進去的是紀錄規則算出來的種類和前後的狀態，這裡不判斷任何一筆是哪一種。
-- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在兩種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），或衍生表被清掉。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
+- **可以整份重建。** 物件啟動時，衍生表反映到的筆數和證明紀錄的筆數不同就清掉重寫（`src/proof-log.ts` 的 `#fillViews`；上一次重建失敗、等的時間還沒到時例外，見下面「重建失敗會自己再試」）：照序號讀每一行，用 `protocol/` 的 `applyList`（紀錄規則的檢查 5、6 和之後的狀態）從空的狀態一筆一筆重算。紀錄都是寫入時過了檢查 1 到 4 的，所以只重算後半。重建會發生在三種時候：物件是這幾張表出現之前建的（表的版本沒有變，`CREATE TABLE IF NOT EXISTS` 補上空表），衍生表被清掉，或衍生表是 `view_ordinals` 出現之前填好的：`view_cards` 有卡片、`view_ordinals` 是空的（`ordinalsOwed`），反映到的筆數雖然對，物件啟動時也整份重建。順序號碼只在衍生表裡，不在卡片狀態表、不進卡片狀態檔：它不影響任何一筆紀錄有效或無效，重算得出來；`test/sequence.test.ts`、`test/proof-log-files.test.ts` 確認和 Go 算的相同。測試確認重建的結果逐列和一筆一筆寫的相同，頁面也相同。重建讀紀錄的地方有兩個，做法因此分兩種：
   - **紀錄都還在物件裡**（還沒有任何一檔搬到 R2）：一個交易做完，在物件啟動的當下，第一個請求之前。哪一筆讀不懂或規則不接受，整個重建就不算數，衍生表維持原樣。「失敗就維持原樣」只在這一種成立。
   - **有紀錄檔已經搬到 R2**：先清空，再一檔一檔從 R2 讀（每一檔核對 SHA-256 是 `full_files` 記的那一個、剛好 1,000 行），一檔一個交易寫進衍生表，最後寫物件裡還留著的紀錄。讀 R2 是非同步的，所以這一種不在啟動的當下做完：物件先啟動、照常回答，重建在背景進行，做完之前衍生表算沒跟上（見下面）。中途失敗時衍生表停在做到的那一檔（不是維持原樣：開頭就清空了），仍然算沒跟上，之後從頭再來。沒有用 `blockConcurrencyWhile` 把請求擋到重建做完：它有 30 秒的上限，超過物件會被重設（[Durable Object State](https://developers.cloudflare.com/durable-objects/api/state/)：「there is a 30 second timeout applied when executing the callback. If this timeout is exceeded, the Durable Object will be reset」，2026-11-20 讀的），而重建的時間隨證明紀錄的檔數變長。重建進行中不搬檔。
 - **`paused` 時不重建**：存著的規則版本和程式的不同時，那些紀錄不是這一版規則收下的，不拿這一版去重算種類。衍生表本來就跟到最後一筆的話，頁面照常。
