@@ -23,10 +23,6 @@ struct Screens {
         return Platform.of(status.knownPlatforms[0])?.name
     }
 
-    private func more(_ topic: String = "more") -> Block {
-        .button(Button(label: copy("links.\(topic)"), action: .help(topic)))
-    }
-
     // Step 1: before starting ------------------------------------------------------------------
 
     func before() -> Screen {
@@ -125,7 +121,7 @@ struct Screens {
             blocks += why.map(Block.message)
             buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
         }
-        blocks += [.points([copy("pin.purpose"), copy("app_pin.stays"), copy("pin.card_and_pin")]), more()]
+        blocks.append(.points([copy("pin.purpose"), copy("app_pin.stays"), copy("pin.card_and_pin")]))
         return Screen(step: 3, blocks: blocks, buttons: buttons)
     }
 
@@ -197,20 +193,22 @@ struct Screens {
         }
         let limited = copy("accounts.switches_limited")
         if declared {
-            blocks += [.text(copy("accounts.how_refresh")), .text(copy("accounts.how_change") + limited), more()]
+            blocks += [.text(copy("accounts.how_refresh")), .text(copy("accounts.how_change") + limited)]
         } else if status.lastCardProof != nil {
-            blocks += [.text(copy("accounts.how_change") + limited), more()]
+            blocks.append(.text(copy("accounts.how_change") + limited))
         } else {
             let onePer = single.map { copy("accounts.one_per_platform_single", ["platform": $0]) } ?? copy("accounts.one_per_platform")
-            blocks += [.text(onePer + limited), more()]
+            blocks.append(.text(onePer + limited))
         }
         if previews, let name = single ?? Platform.known.first?.name {
             blocks.append(.text(copy("app_accounts.preview_note", ["platform": name])))
         }
-        blocks += [.text(copy("accounts.no_check")), .text(copy("accounts.acknowledged")), more()]
+        // Under the button: the system cannot tell whose an account is.
+        let notYours = single.map { copy("accounts.not_yours_single", ["platform": $0]) } ?? copy("accounts.not_yours")
         return Screen(
             step: 4, blocks: blocks,
             buttons: [Button(label: copy("common.next"), action: .toConfirm)],
+            below: [.small(notYours)],
             cancel: Button(label: copy("common.cancel"), action: .restart))
     }
 
@@ -259,7 +257,7 @@ struct Screens {
         ]
         if consequence.rows.contains(where: { $0.kind == "withdraw" }) { blocks.append(.text(copy("confirm.withdraw_stays"))) }
         if !empty {
-            blocks.append(.strong(single.map { copy("confirm.listed_single", ["platform": $0]) } ?? copy("confirm.listed_together")))
+            blocks.append(.lead(single.map { copy("confirm.listed_single", ["platform": $0]) } ?? copy("confirm.listed_together")))
         }
         blocks.append(.points([copy("confirm.no_identity"), (empty ? copy("confirm.later_withdraw") : copy("confirm.later")) + copy("confirm.permanent")]))
         let button = empty
@@ -281,10 +279,9 @@ struct Screens {
         let labels = [copy("progress.server"), copy("app_progress.sign"), copy("app_progress.compute", ["seconds": "5"]), copy("progress.submit")]
         var blocks: [Block] = [.title(copy("progress.title")), .text(copy("app_progress.keep_open"))]
         // The card signed: it can be taken away.
-        if reached >= 2 { blocks.append(.text(copy("app_read.lift"))) }
+        if reached >= 2 { blocks.append(.strong(copy("app_read.lift"))) }
         let why = stop.map { submitFailed ? [copy("stops.submit_failed")] : message($0, tap: 3) }
         blocks.append(.items(items(labels, reached: reached, running: stop == nil, why: why)))
-        if reached == 2, stop == nil { blocks += [.text(copy("progress.zero_knowledge")), more()] }
         guard let stop else { return Screen(step: 5, blocks: blocks) }
         if stop == .card(.otherCard) {
             // The PIN is still there: only this tap again.
@@ -356,65 +353,88 @@ struct Screens {
     }
 
     /// `single`: the one platform's name, as step 5 decided it. `copied`:
-    /// the link was copied.
+    /// the link was copied. The same parts, in the same order, as the web
+    /// page's done screen (doneView of web/src/ui/messages.ts), but for
+    /// what only the page has: the QR code to hang it from a phone, "現在
+    /// 可以拔出卡片。" (the app said "可以把卡片拿開了。" when the card
+    /// signed), and the share link, which here is the system's share sheet
+    /// (design/copy/card-proof.md, step 6, "app").
     func done(_ done: Flow.Done, single: String?, copied: Bool) -> Screen {
         let withdrawAll = done.accounts.isEmpty
         let kinds = done.answer.kinds
         var blocks: [Block] = []
         // What the proof log recorded is not what step 5 said: first of all, above the title.
         if !done.answer.mismatches.isEmpty { blocks.append(.message(copy("done.mismatch"))) }
-        blocks.append(.title(doneTitle(done)))
-        let shortID = copy("confirm.short_id", ["short_id": done.shortID])
-        if !withdrawAll {
-            blocks.append(.heading(copy("done.proof")))
-            blocks += done.accounts.map { account in
-                Block.row(
-                    name: Platform.of(account.platform)?.name ?? account.platform,
-                    account: Platform.handle(account.platform, account.username),
-                    lines: [])
-            }
-            blocks += [
-                .pair(copy("confirm.date"), done.date),
-                .pair(copy("confirm.short_id_label"), shortID),
-                .hand(copy("done.hand_ai")),
-                .hand(copy("done.hand_profile")),
-                .heading(copy("done.put_up")),
-                .text(single.map { copy("done.put_link_single", ["platform": $0]) } ?? copy("done.put_link")),
-                .link("\(host)/p/\(done.shortID)"),
-                .button(Button(label: copied ? copy("done.copied") : copy("done.copy"), action: .copyLink)),
-            ]
-            // The account on a platform the app can open.
-            if let platform = done.accounts.compactMap({ Platform.of($0.platform) }).first {
-                blocks += [
-                    .button(Button(label: copy("app_done.open_platform", ["platform": platform.name]), action: .openPlatform)),
-                    .text(copy("app_done.how_to_put", ["platform": platform.name])),
-                ]
-            }
-            if done.firstRecord { blocks.append(.text(copy("done.new_card"))) }
-            let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
-            if withdrew { blocks.append(.text(copy("done.withdrawn_link"))) }
-            blocks.append(.button(Button(label: copy("links.proof"), action: .openProof)))
+        let card = withdrawAll ? nil : ProofCard(
+            label: copy("done.proof"),
+            rows: done.accounts.map { account in
+                ProofCard.Row(name: single != nil ? nil : Platform.of(account.platform)?.name ?? account.platform, account: Platform.handle(account.platform, account.username))
+            },
+            shortID: copy("confirm.short_id_label") + " " + copy("confirm.short_id", ["short_id": done.shortID]))
+        var lines = [copy("done.recorded_on", ["date": done.date])]
+        if kinds == nil { lines.append(copy("done.kinds_unreadable")) }
+        blocks.append(.doneHead(card, title: doneTitle(done), lines: lines))
+
+        // Under the link: a new card's new link, a withdrawn account's link, the other cards that declare an account.
+        var notes: [Block] = []
+        if done.firstRecord, !withdrawAll { notes.append(.small(copy("done.new_card"))) }
+        let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
+        if withdrew { notes.append(.small(copy("done.withdrawn_link"))) }
+        notes += (kinds ?? []).filter { $0.kind != "withdraw" && ($0.accountCards ?? 0) > 1 }.map { kind in
+            let account = (done.expected.first { $0.platform == kind.platform }?.known ?? (Platform.of(kind.platform) != nil))
+                ? Platform.handle(kind.platform, kind.username) : kind.username
+            return .small(copy("done.other_cards", ["account": account]))
         }
-        blocks += [.heading(copy("done.recorded")), .text(done.date)]
-        if let kinds {
-            blocks.append(.text(withdrawAll ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")))
+
+        if withdrawAll {
+            blocks += notes
+        } else {
+            blocks += [
+                .heading(single.map { copy("done.hang_title_single", ["platform": $0]) } ?? copy("done.hang_title")),
+                .text(single != nil ? copy("done.anyone_single") : copy("done.anyone")),
+                .link("\(host)/p/\(done.shortID)"),
+                .button(Button(label: copied ? copy("done.copied") : copy("done.copy"), action: .copyLink), main: true),
+            ]
+            // The public page of each account of the card, on a platform the app knows.
+            blocks += done.accounts.compactMap { account in
+                Platform.of(account.platform).map { platform in
+                    .button(Button(
+                        label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
+                        action: .openProfile(account.platform)), main: false)
+                }
+            }
+            blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_save")]))
+            blocks += notes
+            let hung = copy("done.hung").components(separatedBy: "{open_proof}")
+            blocks += [
+                .linked(hung.first ?? "", Button(label: copy("done.open_proof"), action: .openProof), hung.dropFirst().first ?? ""),
+                .text(copy("done.hung_done")),
+            ]
+        }
+
+        // What the proof log recorded: only where it is not what step 5 said.
+        if let kinds, !done.answer.mismatches.isEmpty {
+            blocks += [
+                .heading(copy("done.recorded")),
+                .text(done.date),
+                .text(withdrawAll ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")),
+            ]
             blocks += recordedRows(done, kinds: kinds)
             blocks.append(.text(copy("done.short_id", ["short_id": done.shortID])))
-            // An account of the list that other cards declare too.
-            blocks += kinds.filter { $0.kind != "withdraw" && ($0.accountCards ?? 0) > 1 }.map { kind in
-                let account = (done.expected.first { $0.platform == kind.platform }?.known ?? (Platform.of(kind.platform) != nil))
-                    ? Platform.handle(kind.platform, kind.username) : kind.username
-                return .text(copy("done.other_cards", ["account": account]))
-            }
-        } else {
-            // The record is in the proof log; what it is on each platform the app could not read.
-            blocks.append(.text(copy("done.kinds_unreadable")))
         }
-        var points: [String] = []
-        if !withdrawAll { points += [single != nil ? copy("done.advice_single") : copy("done.advice"), copy("done.renamed")] }
-        points.append(copy("done.trust"))
-        blocks += [.points(points), more("verify")]
-        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("done.restart"), action: .restart)])
+
+        if !withdrawAll {
+            blocks.append(.kicker(copy("done.optional")))
+            for platform in Platform.known {
+                blocks += [
+                    .subheading(copy("done.share_title")),
+                    .text(copy("done.share_note", ["platform": platform.name])),
+                    .button(Button(label: copy("app_done.share"), action: .share), main: false),
+                ]
+            }
+            blocks += [.subheading(copy("done.return_title")), .text(copy("done.return_note"))]
+        }
+        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("done.restart"), action: .restart)], mainButton: false)
     }
 
     // Why a step stopped -------------------------------------------------------------

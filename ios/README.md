@@ -6,7 +6,7 @@
 
 ## 現在有什麼
 
-過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。讀卡還沒有：這個 build 的「卡片」每一次感應都回「沒有感應到卡片」，NFC 在 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 接上。
+過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。讀卡還沒有：這個 build 的「卡片」每一次感應都回「沒有感應到卡片」，NFC 在 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 接上。畫面和啟動畫面照 `design/screens/` 的定稿（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；感應位置的示意圖在 #174，提醒和設定在 [#298](https://github.com/iamreal-tw/iamreal/issues/298)。
 
 | 檔案 | 內容 |
 |---|---|
@@ -15,8 +15,11 @@
 | `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀 |
 | `App/CardProofFlow.swift` | 一次過卡，沒有畫面的狀態機。每一步呼叫核心的哪個函式、PIN 和憑證和簽章各留到什麼時候，寫在檔頭 |
 | `App/CardProofModel.swift`、`App/Screen.swift`、`App/Screens.swift` | 畫面看到的過卡：`Screen` 是一個畫面上從上到下的每一句話和每一個按鈕，`Screens` 決定 `design/copy/card-proof.md` 的哪一句放在哪裡，`CardProofModel` 做按鈕要做的事 |
-| `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI）。它自己沒有任何句子，也不做任何判斷 |
-| `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀（那個檔原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
+| `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），照 `design/screens/` 的 `card-proof-app-*`。它自己沒有任何句子，也不做任何判斷 |
+| `App/Theme.swift` | 畫面用的數值：`design/tokens.json` 裡 app 用到的那幾個，有 `-phone` 的用 `-phone` 的值。標題用包進 app 的源流明體 TW（執行時向系統登記，`Info.plist` 是產生的，不在那裡列）；其他的字用系統的字型 |
+| `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
+| `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
+| `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀，不屬於過卡的從 `design/copy/app.json` 讀（兩個檔都原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
 | `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。過卡之後 app 唯一留下來的東西，是公開的數字 |
 | `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串。建置時寫死 |
 | `App/BundledFile.swift` | 包進 app 的檔案 |
@@ -139,7 +142,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - 完成、取消、PIN 不正確之後，記憶體裡沒有 PIN
 - app 一打開（畫面第一次畫出來）就向後台拿 `config`，過卡用的是那一份
 - 手機的日期和後台差一天時，停在第三次感應之前，卡片沒有被要求簽第二次
-- 完成的畫面複製的連結、「打開這張島民證明」開的網址（Worker 上那一頁真的列出帳號）、「打開 Threads」開的網址
+- 完成的畫面複製的連結、「打開你的島民證明」開的網址（Worker 上那一頁真的列出帳號）、「打開 @alice 的 Threads 個人檔案」開的網址、「分享」交給分享面板的網址（只有這張島民證明的網址）
 - 每個畫面的截圖寫到 `web/test-output/app/screens-ios/`
 
 `ios/` 不引用 `worker/`：和那個腳本之間只有 `backend.json` 和 HTTP。拉取請求的檢查（`.github/workflows/checks-ios.yml`）沒有跑這一段。
@@ -157,11 +160,17 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 測試在模擬器裡跑，直接讀這個程式庫在 Mac 上的檔案（模擬器看得到 Mac 的磁碟），不複製。
 
 - `Tests/DeviceCoreTests.swift`：從 Swift 呼叫核心，對 `spec/vectors/scope.json`（兩份證明紀錄的場合字串）；連結進來的函式庫的版本等於標頭檔的；Barretenberg 有回應
-- `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
+- `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json`（啟動畫面的在 `app.json`）、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
-- `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面對那個回應說哪幾句（`design/copy/card-proof.json` 的哪幾個鍵）：和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
+- `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
+- `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面：每一句都在文字檔裡、沒有「了解更多」；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
+- `Tests/DoneScreenTests.swift`：送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面說哪幾句：第一次宣告逐字照 `design/copy/card-proof.md` 第 6 步（含「app」那一節）、全部收回、已複製、和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
 - `check-archive-test.sh`：`check-archive.sh` 讓 `archive.sh` 做的 archive 通過，並擋下每一份改過的副本（「上傳到 TestFlight」）
+
+### 截圖
+
+`design/screens/` 裡 app 的截圖（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`）是 `Tests/ScreensTests.swift` 拍的：跑過 `xcodebuild test` 之後，從 `web/test-output/app/screens-ios/` 把同名的檔複製過去。畫面改了，就重拍、重新複製。讀取卡片的那一張（`card-proof-app-2-read-phone.png`）不複製：`design/screens/` 的 `card-proof-app-2-read-iphone-phone.png` 是感應位置的示意圖的定稿，等 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 畫了示意圖再換。
 
 ## 建置時的檢查（`check-app.sh`）
 

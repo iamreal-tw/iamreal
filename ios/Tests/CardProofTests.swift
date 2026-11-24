@@ -17,9 +17,10 @@ final class CardProofTests: XCTestCase {
     /// What the app opened outside itself, and what it put on the clipboard.
     private var opened: [URL] = []
     private var copied: [String] = []
+    private var shared: [URL] = []
     /// The back end of the model made last, which counts what it is asked.
     private var asked: CountingBackend!
-    private var document = ""
+    private var document: CopyDocument!
     /// The values of this run that stand where the document has an example.
     private var values: [String: String] = [:]
 
@@ -27,7 +28,7 @@ final class CardProofTests: XCTestCase {
         backend = try TestBackend.load()
         card = FakeCard(certificates: backend.certificates, privateKey: backend.privateKey, pin: backend.pin)
         now = backend.start
-        document = try Repository.text("design/copy/card-proof.md")
+        document = try CopyDocument.load()
         values = ["測試用戶": "王小明", backend.origin.host ?? "": "iamreal.tw"]
     }
 
@@ -104,7 +105,6 @@ final class CardProofTests: XCTestCase {
             "卡片會簽章一次，用來查這張卡片目前宣告的帳號。這一步還不會宣告，在你確認之前，不會公開任何東西。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "拿到你的卡片和 PIN 的人，查得出這張卡片宣告過的帳號。卡片請自行保管、請勿出借給他人。",
-            "了解更多",
             "上一步",
             "確認卡片",
         ])
@@ -126,12 +126,9 @@ final class CardProofTests: XCTestCase {
             "填上你要宣告的 Threads 帳號。",
             "Threads", "預覽", "還沒有宣告過。",
             "一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
-            "了解更多",
             "預覽會在 Threads 或瀏覽器開這個帳號的頁面，讓你確認沒有打錯。",
-            "系統不會確認帳號是不是你的：任何持卡人都可以宣告任何帳號。",
-            "帳號主人把這張島民證明的連結放在自己的個人檔案上，才表示承認。",
-            "了解更多",
             "下一步",
+            "系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。",
             "取消",
         ])
         await Snapshot.save(model, as: "4-accounts")
@@ -173,30 +170,21 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 6)
         let link = "\(try XCTUnwrap(backend.origin.host))/p/\(shortID)"
         XCTAssertEqual(model.screen.texts, [
+            "島民證明", "@alice", "島民編號 \(shortID) 開頭",
             "你拿到島民證明了",
-            "島民證明",
-            "Threads", "@alice",
-            "日期", today,
-            "島民編號", "\(shortID) 開頭",
-            "AI 辦不了自然人憑證。",
-            "掛到個人檔案上，讓大家看到你是島民！",
-            "接下來：把它掛出來",
-            "把下面的連結放在這個 Threads 帳號的個人檔案上。別人從帳號的個人檔案點進來，才知道帳號主人承認這張島民證明。",
+            "\(today) 記進了證明紀錄。",
+            "最後一步：掛到你的 Threads 個人檔案",
+            "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。",
             link,
             "複製連結",
-            "打開 Threads",
-            "複製連結之後，在 Threads 打開你的個人檔案，按「編輯個人檔案」，貼在「連結」。",
+            "打開 @alice 的 Threads 個人檔案",
+            "按「編輯個人檔案」", "按「連結」，貼上剛才複製的連結", "存檔",
             "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。",
-            "打開這張島民證明",
-            "證明紀錄記下了這一筆",
-            today,
-            "有一張有效的自然人憑證宣告了這個帳號：",
-            "Threads", "@alice", "新宣告",
-            "這張卡片的島民編號開頭是 \(shortID)。",
-            "越久沒過卡，說服力越低。建議每季回來過卡一次，更新這個帳號的日期。",
-            "之後如果改了帳號的名稱，請回來過卡更換，這會用掉一次更換。證明紀錄記的是名稱，舊的名稱之後可能被別人註冊。",
-            "你不需要相信我們。任何人都可以驗證這筆紀錄來自一張有效的自然人憑證。",
-            "怎麼驗證島民證明",
+            "掛好了嗎？打開你的島民證明看看。",
+            "頁面上的個人檔案裡看得到這個連結，就成功了。",
+            "還可以做的，不做也不影響這張證明",
+            "讓朋友也知道", "把你的島民證明分享到 Threads。", "分享",
+            "記得每三個月回來過卡一次", "越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。",
             "回到開頭",
         ])
         await Snapshot.save(model, as: "6-done")
@@ -207,18 +195,20 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(card.signatures, 2)
         XCTAssertFalse(model.holdsPIN)
 
-        // The link, copied whole; the card's page, in the browser; Threads.
+        // The link, copied whole; the card's page, in the browser; the account on Threads; the share sheet, with the card's page only.
         let address = backend.origin.appendingPathComponent("p").appendingPathComponent(shortID)
         try await press("複製連結", in: model)
         XCTAssertEqual(copied, [address.absoluteString])
         XCTAssertTrue(model.screen.texts.contains("已複製"))
-        try await press("打開這張島民證明", in: model)
+        try await press("打開你的島民證明", in: model)
         XCTAssertEqual(opened.last, address)
         let (page, response) = try await URLSession.shared.data(from: address)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertTrue(String(decoding: page, as: UTF8.self).contains("@alice"), "the card's page lists the account")
-        try await press("打開 Threads", in: model)
+        try await press("打開 @alice 的 Threads 個人檔案", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
+        try await press("分享", in: model)
+        XCTAssertEqual(shared, [address])
 
         try await press("回到開頭", in: model)
         XCTAssertEqual(model.screen.step, 1)
@@ -244,8 +234,8 @@ final class CardProofTests: XCTestCase {
 
         try await press("再次過卡", in: model)
         XCTAssertEqual(model.screen.step, 6)
-        XCTAssertEqual(model.screen.texts.first, "島民證明已更新")
-        XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice"], ["Threads", "@alice", "不變"]])
+        XCTAssertEqual(head(of: model.screen)?.title, "島民證明已更新")
+        XCTAssertEqual(head(of: model.screen)?.card?.rows, [ProofCard.Row(name: nil, account: "@alice")])
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         XCTAssertFalse(model.holdsPIN)
     }
@@ -304,8 +294,8 @@ final class CardProofTests: XCTestCase {
 
         try await press("再感應一次", in: model)
         XCTAssertEqual(model.screen.step, 6)
-        XCTAssertEqual(model.screen.texts.first, "島民證明已更新")
-        XCTAssertEqual(rows(on: model.screen), [["Threads", "@bob"], ["Threads", "@bob", "更換，原本是 @alice。"]])
+        XCTAssertEqual(head(of: model.screen)?.title, "島民證明已更新")
+        XCTAssertEqual(head(of: model.screen)?.card?.rows, [ProofCard.Row(name: nil, account: "@bob")])
         XCTAssertEqual(card.signatures, 6, "two signatures for each of the three card proofs so far")
         XCTAssertFalse(model.holdsPIN)
     }
@@ -342,13 +332,8 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertEqual(model.screen.texts, [
             "已全部收回",
-            "證明紀錄記下了這一筆",
-            CardProofFlow.dateInTaiwan(now),
-            "有一張有效的自然人憑證收回了所有帳號的宣告：",
-            "Threads", "@bob", "收回",
-            "這張卡片的島民編號開頭是 \(shortID)。",
-            "你不需要相信我們。任何人都可以驗證這筆紀錄來自一張有效的自然人憑證。",
-            "怎麼驗證島民證明",
+            "\(CardProofFlow.dateInTaiwan(now)) 記進了證明紀錄。",
+            "已經收回的帳號，個人檔案上的連結可以拿掉。",
             "回到開頭",
         ])
         await Snapshot.save(model, as: "6-withdrawn")
@@ -449,7 +434,8 @@ final class CardProofTests: XCTestCase {
             copy: Copy.bundled(),
             site: backend.origin,
             open: { [unowned self] in self.opened.append($0) },
-            copyText: { [unowned self] in self.copied.append($0) }))
+            copyText: { [unowned self] in self.copied.append($0) },
+            share: { [unowned self] in self.shared.append($0) }))
         if opened { model.open() }
         return model
     }
@@ -469,7 +455,7 @@ final class CardProofTests: XCTestCase {
     private func press(_ label: String, in model: CardProofModel, file: StaticString = #filePath, line: UInt = #line) async throws {
         let inline = model.screen.blocks.flatMap { block -> [Button] in
             switch block {
-            case .button(let button): return [button]
+            case .button(let button, _), .linked(_, let button, _): return [button]
             case .account(let row): return row.preview.map { [$0] } ?? []
             default: return []
             }
@@ -482,19 +468,9 @@ final class CardProofTests: XCTestCase {
         checkAgainstTheCopy(model.screen, file: file, line: line)
     }
 
-    /// Every sentence on the screen is one of design/copy/card-proof.md:
-    /// with the document's example in the place of each value of this run
-    /// and any number for a number, it is in the document word for word.
+    /// Every sentence on the screen is one of design/copy/card-proof.md.
     private func checkAgainstTheCopy(_ screen: Screen, file: StaticString, line: UInt) {
-        for text in screen.texts where !text.isEmpty {
-            var sentence = text
-            for (value, example) in values where !value.isEmpty { sentence = sentence.replacingOccurrences(of: value, with: example) }
-            // A date and a short ID are the document's examples.
-            sentence = sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}"#, with: "2026-11-16", options: .regularExpression)
-            sentence = sentence.replacingOccurrences(of: #"(?<![0-9A-Za-z])[0-9A-HJKMNP-TV-Z]{10}(?![0-9A-Za-z])"#, with: "7K2Q9FM4XD", options: .regularExpression)
-            let pattern = NSRegularExpression.escapedPattern(for: sentence).replacingOccurrences(of: #"\d+"#, with: #"\\d+"#, options: .regularExpression)
-            XCTAssertNotNil(document.range(of: pattern, options: .regularExpression), "not in design/copy/card-proof.md: \(text)", file: file, line: line)
-        }
+        document.check(screen, values: values, file: file, line: line)
     }
 
     /// The short ID the confirm screen shows.
@@ -516,6 +492,12 @@ final class CardProofTests: XCTestCase {
             if case .row(let name, let account, let lines) = block { return [name, account] + lines }
             return nil
         }
+    }
+
+    /// The box on top of the done screen: its small card and its title.
+    private func head(of screen: Screen) -> (card: ProofCard?, title: String)? {
+        for case .doneHead(let card, let title, _) in screen.blocks { return (card, title) }
+        return nil
     }
 
     /// What the field of Threads holds.

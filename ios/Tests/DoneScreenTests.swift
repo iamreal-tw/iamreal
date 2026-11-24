@@ -65,27 +65,68 @@ final class DoneScreenTests: XCTestCase {
         Flow.Recorded(platform: platform, kind: kind, username: username, accountCards: cards)
     }
 
-    /// The blocks from "證明紀錄記下了這一筆" to the points, as their texts.
+    /// The blocks from "證明紀錄記下了這一筆" to what can also be done, as their texts.
     private func record(of screen: Screen) throws -> [[String]] {
         let from = try XCTUnwrap(screen.blocks.firstIndex(of: .heading(copy("done.recorded"))))
-        return screen.blocks[(from + 1)...].prefix { if case .points = $0 { return false } else { return true } }.map(\.texts)
+        return screen.blocks[(from + 1)...].prefix { if case .kicker = $0 { return false } else { return true } }.map(\.texts)
     }
 
     private func title(of screen: Screen) -> String? {
-        for case .title(let text) in screen.blocks { return text }
+        for case .doneHead(_, let title, _) in screen.blocks { return title }
         return nil
     }
 
+    /// The screen of a first declaration, word for word as
+    /// design/copy/card-proof.md writes step 6 and its "app".
     func testAFirstDeclarationRecordedAsTheScreenSaid() throws {
         let screen = screens.done(done([row("threads", "first", "alice")], [recorded("threads", "first", "alice")], firstRecord: true), single: "Threads", copied: false)
-        XCTAssertEqual(screen.blocks.first, .title(copy("done.first")))
-        XCTAssertEqual(try record(of: screen), [
-            ["2026-11-16"],
-            [copy("done.record_single")],
-            ["Threads", "@alice", copy("kinds.first")],
-            [copy("done.short_id", ["short_id": "7K2Q9FM4XD"])],
+        XCTAssertEqual(screen.texts, [
+            "島民證明", "@alice", "島民編號 7K2Q9FM4XD 開頭",
+            "你拿到島民證明了",
+            "2026-11-16 記進了證明紀錄。",
+            "最後一步：掛到你的 Threads 個人檔案",
+            "任何人都能宣告任何帳號。你把連結掛上個人檔案，別人才知道這個帳號承認這張證明。",
+            "iamreal.tw/p/7K2Q9FM4XD",
+            "複製連結",
+            "打開 @alice 的 Threads 個人檔案",
+            "按「編輯個人檔案」", "按「連結」，貼上剛才複製的連結", "存檔",
+            "如果你換了新的自然人憑證：新卡片的島民編號和連結都和舊的不同。請把個人檔案的連結換成這一個。",
+            "掛好了嗎？打開你的島民證明看看。",
+            "頁面上的個人檔案裡看得到這個連結，就成功了。",
+            "還可以做的，不做也不影響這張證明",
+            "讓朋友也知道", "把你的島民證明分享到 Threads。", "分享",
+            "記得每三個月回來過卡一次", "越久沒過卡，說服力越低。每次過卡，島民證明上的日期就會更新成今天。",
+            "回到開頭",
         ])
-        XCTAssertFalse(screen.texts.contains(copy("done.mismatch")))
+        // One main button: copying the link. The way back to the start is not it.
+        XCTAssertFalse(screen.mainButton)
+        let inline = screen.blocks.compactMap { block -> (Action, Bool)? in
+            switch block {
+            case .button(let button, let main): return (button.action, main)
+            case .linked(_, let link, _): return (link.action, false)
+            default: return nil
+            }
+        }
+        XCTAssertEqual(inline.map(\.0), [.copyLink, .openProfile("threads"), .openProof, .share])
+        XCTAssertEqual(inline.map(\.1), [true, false, false, false])
+        // As step 5 said: the record is not shown again.
+        XCTAssertNil(screen.blocks.firstIndex(of: .heading(copy("done.recorded"))))
+    }
+
+    func testEveryAccountWithdrawnNoCardNoHangingNothingMoreToDo() {
+        let screen = screens.done(done([row("threads", "withdraw", "alice", current: "alice")], [recorded("threads", "withdraw", "alice", 0)]), single: "Threads", copied: false)
+        XCTAssertEqual(screen.texts, [
+            "已全部收回",
+            "2026-11-16 記進了證明紀錄。",
+            "已經收回的帳號，個人檔案上的連結可以拿掉。",
+            "回到開頭",
+        ])
+    }
+
+    func testTheCopiedLinkSaysSo() {
+        let screen = screens.done(done([row("threads", "refresh", "alice", current: "alice")], [recorded("threads", "refresh", "alice")]), single: "Threads", copied: true)
+        XCTAssertTrue(screen.texts.contains("已複製"))
+        XCTAssertFalse(screen.texts.contains("複製連結"))
     }
 
     func testTheTitlesByWhatTheServerRecorded() {
@@ -101,24 +142,22 @@ final class DoneScreenTests: XCTestCase {
 
     func testKindsTheAppCannotReadOnlyThatTheListWasRecorded() throws {
         let screen = screens.done(done([row("threads", "first", "alice")], nil), single: "Threads", copied: false)
-        XCTAssertEqual(try record(of: screen), [["2026-11-16"], [copy("done.kinds_unreadable")]])
-        // The proof and the link are shown all the same: the list that was sent.
+        let card = ProofCard(label: copy("done.proof"), rows: [ProofCard.Row(name: nil, account: "@alice")], shortID: "島民編號 7K2Q9FM4XD 開頭")
+        XCTAssertEqual(screen.blocks.first, .doneHead(card, title: copy("done.recorded_only"), lines: [copy("done.recorded_on", ["date": "2026-11-16"]), copy("done.kinds_unreadable")]))
+        // The link is shown all the same: the list that was sent is on the card.
         XCTAssertTrue(screen.blocks.contains(.link("iamreal.tw/p/7K2Q9FM4XD")))
-        XCTAssertTrue(screen.blocks.contains(.row(name: "Threads", account: "@alice", lines: [])))
     }
 
     func testOtherCardsDeclareTheAccountTooSaidOncePerSuchAccountAndNotOfOneWithdrawn() throws {
         let expected = [row("test-example", "withdraw", "a-b", current: "a-b", known: false), row("threads", "refresh", "alice", current: "alice")]
         let screen = screens.done(done(expected, [recorded("test-example", "withdraw", "a-b", 4), recorded("threads", "refresh", "alice", 2)]), single: nil, copied: false)
-        XCTAssertEqual(try record(of: screen), [
-            ["2026-11-16"],
-            [copy("done.record_list")],
-            ["test-example", "a-b", copy("kinds.withdraw")],
-            ["Threads", "@alice", copy("kinds.unchanged")],
-            [copy("done.short_id", ["short_id": "7K2Q9FM4XD"])],
-            [copy("done.other_cards", ["account": "@alice"])],
-        ])
-        XCTAssertTrue(screen.texts.contains(copy("done.withdrawn_link")))
+        let notes = screen.blocks.compactMap { block -> String? in if case .small(let text) = block { return text } else { return nil } }
+        XCTAssertEqual(notes, [copy("done.withdrawn_link"), copy("done.other_cards", ["account": "@alice"])])
+        // More than one platform: the card names each account's platform, and the title is the general one.
+        guard case .doneHead(let card?, _, _) = screen.blocks.first else { return XCTFail("no small card") }
+        XCTAssertEqual(card.rows, [ProofCard.Row(name: "Threads", account: "@alice")])
+        XCTAssertTrue(screen.texts.contains(copy("done.hang_title")))
+        XCTAssertTrue(screen.texts.contains(copy("done.anyone")))
         // One card, or a number the answer does not have: nothing said.
         for cards in [1, 0, nil] {
             let alone = screens.done(done([expected[1]], [recorded("threads", "refresh", "alice", cards)]), single: "Threads", copied: false)
@@ -130,11 +169,17 @@ final class DoneScreenTests: XCTestCase {
         let shown = row("threads", "correction", "bob", current: "alice", previous: "alice")
         let screen = screens.done(done([shown], [recorded("threads", "switch", "bob")], mismatches: ["threads"]), single: "Threads", copied: false)
         // First of all, above the title.
-        XCTAssertEqual(Array(screen.blocks.prefix(2)), [.message(copy("done.mismatch")), .title(copy("done.changed"))])
-        XCTAssertEqual(try record(of: screen)[2], [
-            "Threads", "@bob", copy("kinds.switch", ["previous": "@alice"]),
-            copy("done.mismatch_expected", ["expected": copy("kinds.switch", ["previous": "@alice"]) + copy("confirm.switch_not_counted")]),
-            copy("done.mismatch_switch_used"),
+        XCTAssertEqual(screen.blocks.first, .message(copy("done.mismatch")))
+        XCTAssertEqual(title(of: screen), copy("done.changed"))
+        XCTAssertEqual(try record(of: screen), [
+            ["2026-11-16"],
+            [copy("done.record_single")],
+            [
+                "Threads", "@bob", copy("kinds.switch", ["previous": "@alice"]),
+                copy("done.mismatch_expected", ["expected": copy("kinds.switch", ["previous": "@alice"]) + copy("confirm.switch_not_counted")]),
+                copy("done.mismatch_switch_used"),
+            ],
+            [copy("done.short_id", ["short_id": "7K2Q9FM4XD"])],
         ])
     }
 

@@ -19,6 +19,8 @@ final class CardProofModel: ObservableObject {
         var open: (URL) -> Void
         /// Puts text on the clipboard.
         var copyText: (String) -> Void
+        /// The system's share sheet, with an address.
+        var share: (URL) -> Void
     }
 
     @Published private(set) var screen: Screen
@@ -96,14 +98,13 @@ final class CardProofModel: ObservableObject {
             screen = screens.done(finished.done, single: finished.single, copied: true)
         case .openProof:
             if let finished { deps.open(proofAddress(finished.done)) }
-        case .openPlatform:
-            if let account = finished?.done.accounts.first(where: { Platform.of($0.platform) != nil }),
-               let address = Platform.of(account.platform)?.profile(account.username) { deps.open(address) }
+        case .openProfile(let platform):
+            if let account = finished?.done.accounts.first(where: { $0.platform == platform }),
+               let address = Platform.of(platform)?.profile(account.username) { deps.open(address) }
+        case .share:
+            // The card's page only: no words of the app's own.
+            if let finished { deps.share(proofAddress(finished.done)) }
         case .preview(let platform): preview(platform)
-        case .help(let topic):
-            var address = URLComponents(url: deps.site.appendingPathComponent("proof/help.html"), resolvingAgainstBaseURL: false)
-            address?.queryItems = [URLQueryItem(name: "topic", value: topic)]
-            if let address = address?.url { deps.open(address) }
         }
     }
 

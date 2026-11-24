@@ -7,26 +7,45 @@ struct Screen: Equatable {
     /// 1 to 6: which of the six steps (design/copy/card-proof.md).
     var step: Int
     var blocks: [Block]
-    /// The buttons at the bottom, in their order; the last is the way on.
+    /// The buttons under the blocks, in their order; the last is the way
+    /// on, and the main button of the screen unless `mainButton` is false.
     var buttons: [Button] = []
-    /// The way out under the buttons: drops the PIN and goes back to step 1.
+    /// The last of `buttons` is the screen's main button (design/DESIGN.md,
+    /// the components: one main button on a screen).
+    var mainButton = true
+    /// What stands under the buttons: what to know after the way on.
+    var below: [Block] = []
+    /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
 
     /// Every sentence on the screen, in its order: for tests.
     var texts: [String] {
-        blocks.flatMap(\.texts) + buttons.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        blocks.flatMap(\.texts) + buttons.map(\.label) + below.flatMap(\.texts) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
 enum Block: Equatable {
     case title(String)
     case heading(String)
+    /// A heading of one item among others, smaller than `heading`.
+    case subheading(String)
     case text(String)
     /// A paragraph as conspicuous as the title's lead: what may change
     /// whether to go on.
     case strong(String)
-    /// A sentence written by hand on the proof.
-    case hand(String)
+    /// An emphasised sentence in the headings' typeface.
+    case lead(String)
+    /// A note in small words.
+    case small(String)
+    /// The words above a part of the screen that is not needed.
+    case kicker(String)
+    /// The box on top of the done screen: the small card (none when every
+    /// account was withdrawn), the title, and the lines beside it.
+    case doneHead(ProofCard?, title: String, lines: [String])
+    /// Steps to follow, numbered from 1.
+    case steps([String])
+    /// A sentence with a link in it: the words before, the link, the words after.
+    case linked(String, Button, String)
     /// Points, each with a dot before it.
     case points([String])
     /// A question that opens to its answer.
@@ -47,16 +66,19 @@ enum Block: Equatable {
     case pair(String, String)
     /// The address of the card's page, as the screen writes it.
     case link(String)
-    /// A button among the text.
-    case button(Button)
+    /// A button among the text; `main`: the screen's main button.
+    case button(Button, main: Bool)
     /// What the app is doing, beside a spinner.
     case busy(String)
 
     var texts: [String] {
         switch self {
-        case .title(let text), .heading(let text), .text(let text), .strong(let text),
-             .hand(let text), .message(let text), .link(let text), .busy(let text):
+        case .title(let text), .heading(let text), .subheading(let text), .text(let text), .strong(let text),
+             .lead(let text), .small(let text), .kicker(let text), .message(let text), .link(let text), .busy(let text):
             return [text]
+        case .doneHead(let card, let title, let lines): return (card?.texts ?? []) + [title] + lines
+        case .steps(let steps): return steps
+        case .linked(let before, let link, let after): return [before + link.label + after]
         case .points(let points): return points
         case .question(let question, let answer): return [question] + answer
         case .items(let items): return items.flatMap { [$0.label] + ($0.status.isEmpty ? [] : [$0.status]) + $0.why }
@@ -65,8 +87,27 @@ enum Block: Equatable {
         case .account(let row): return [row.name] + (row.preview.map { [$0.label] } ?? []) + row.lines + (row.error.map { [$0] } ?? [])
         case .row(let name, let account, let lines): return [name, account] + lines
         case .pair(let label, let value): return [label, value]
-        case .button(let button): return [button.label]
+        case .button(let button, _): return [button.label]
         }
+    }
+}
+
+/// The small card of the done screen (design/DESIGN.md, the components:
+/// the proof card): the service's name, the card's accounts, its short ID.
+struct ProofCard: Equatable {
+    struct Row: Equatable {
+        /// The platform's name; none when the screens speak of one platform.
+        var name: String?
+        var account: String
+    }
+
+    var label: String
+    var rows: [Row]
+    /// The short ID, as the card writes it.
+    var shortID: String
+
+    var texts: [String] {
+        [label] + rows.flatMap { ($0.name.map { [$0] } ?? []) + [$0.account] } + [shortID]
     }
 }
 
@@ -128,10 +169,10 @@ enum Action: Equatable {
     case copyLink
     /// The card's page, in the browser.
     case openProof
-    /// The platform's app or the browser, at the account declared.
-    case openPlatform
+    /// The platform's app or the browser, at the account the card declares there.
+    case openProfile(String)
+    /// The system's share sheet, with the card's page.
+    case share
     /// The page of the account typed on a platform.
     case preview(String)
-    /// A help page of the site, in the browser.
-    case help(String)
 }
