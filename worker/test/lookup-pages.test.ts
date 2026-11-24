@@ -48,6 +48,8 @@ describe("the page of an account", () => {
     wantLines(page, copyLines(block("account-page.md", "1. ", 0)));
     wantEmbed(page, "alice");
     assert.ok(page.includes(`<a href="/p/${CARD_A}">看這張島民證明</a>`), "the link to the card");
+    // The account at the size of the page of a card's (account-page.md): the same class, one size smaller past 12 characters.
+    assert.ok(page.includes('<span class="account">@alice</span>'), "@alice is at the full size");
     const { title, site } = previewOf("account-page.md", "5. ");
     wantPreview(page, title, site);
   });
@@ -63,7 +65,7 @@ describe("the page of an account", () => {
   test("a last card proof today is written 今天", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-18", cardStarting(CARD_A), "threads:alice")]);
     const { page } = await getPage(worker, "/threads/@alice");
-    wantLines(page, ["島民編號 7K2Q9FM4XD 開頭 2026-11-18 起", ...copyLines(block("account-page.md", "1. ", 1))]);
+    wantLines(page, ["島民編號 7K2Q9FM4XD 開頭 看這張島民證明", "2026-11-18 起", ...copyLines(block("account-page.md", "1. ", 1))]);
     notOnPage(page, "0 天前");
   });
 
@@ -82,7 +84,7 @@ describe("the page of an account", () => {
     const m2 = cardStarting("7K2Q9FM4XD3B");
     await pagesWorld(worker, "2026-11-18", [r("2026-11-01", m2, "threads:alice"), r("2026-11-06", m1, "threads:alice")]);
     const { page } = await getPage(worker, "/threads/@alice");
-    wantLines(page, ["島民編號 7K2Q9FM4XD3B 開頭 2026-11-01 起", "島民編號 7K2Q9FM4XD3A 開頭 2026-11-06 起"]);
+    wantLines(page, ["島民編號 7K2Q9FM4XD3B 開頭 看這張島民證明 2026-11-01 起", "島民編號 7K2Q9FM4XD3A 開頭 看這張島民證明 2026-11-06 起"]);
   });
 
   test("an account on another platform of the test log is not one on Threads", async () => {
@@ -248,7 +250,7 @@ describe("the proof log page", () => {
     wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
     wantLines((await getPage(worker, "/proof-log")).page, ["現在有 0 張島民證明"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:alice"), "threads first");
-    wantLines((await getPage(worker, "/threads/@alice")).page, ["有 1 張自然人憑證", "島民編號 7K2Q9FM4XD 開頭 2026-11-20 起 上次過卡 今天"]);
+    wantLines((await getPage(worker, "/threads/@alice")).page, ["有 1 張自然人憑證", "島民編號 7K2Q9FM4XD 開頭 看這張島民證明 2026-11-20 起 上次過卡 今天"]);
     wantLines((await getPage(worker, "/proof-log")).page, ["現在有 1 張島民證明，其中 1 張在過去三個月內過卡。", "2026-11-20 Threads 的 @alice"]);
     await mustSubmit(worker, await sub(worker, card, root, "threads:bob"), "threads correction");
     wantLines((await getPage(worker, "/threads/@alice")).page, ["沒有自然人憑證把名額給這個帳號。"]);
