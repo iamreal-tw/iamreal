@@ -13,7 +13,7 @@ import { CIRCUITS } from "../src/circuits.ts";
 import type { NewestCrls } from "../src/crl-index.ts";
 import type { IssuerKey, IssuerName } from "../src/issuers.ts";
 import { CRL_CATCH_UP_MS } from "../src/round-budget.ts";
-import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "../test-build/card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, PagePlanQuestion, PagePlans, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "../test-build/card-door.ts";
 import { TEST_CRL_PATHS } from "../test-build/crl-paths.ts";
 import { WORKER_DIR, buildWorker } from "./build.ts";
 import { testIssuers } from "./crls.ts";
@@ -276,6 +276,13 @@ export interface TestWorker {
      * are row for row the views written record by record.
      */
     views(): Promise<StoredViews>;
+    /**
+     * The plan SQLite makes for each statement the pages' reads run, and the
+     * count of the cards of an account a submission's answer reads, each
+     * asked for what the question gives (test build, `POST
+     * /__test/proof-log/page-plans`).
+     */
+    pagePlans(question: PagePlanQuestion): Promise<PagePlans>;
     /**
      * Clears the views (test build, `DELETE /__test/proof-log/views`): the
      * object is then as one that has records from before it had the views.
@@ -647,6 +654,11 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         const res = await server.fetch("/__test/proof-log/views");
         if (res.status !== 200) throw new Error(`reading the views: HTTP ${res.status} ${await res.text()}`);
         return (await res.json()) as StoredViews;
+      },
+      async pagePlans(question) {
+        const res = await server.fetch("/__test/proof-log/page-plans", { method: "POST", body: JSON.stringify(question) });
+        if (res.status !== 200) throw new Error(`reading the plans of the pages' reads: HTTP ${res.status} ${await res.text()}`);
+        return (await res.json()) as PagePlans;
       },
       async viewsFilled() {
         const res = await server.fetch("/__test/proof-log/views-filled", { method: "POST" });

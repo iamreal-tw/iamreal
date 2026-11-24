@@ -109,3 +109,26 @@ export interface KeptRecords {
   readonly first: number | null;
   readonly last: number | null;
 }
+
+/**
+ * What `POST /__test/proof-log/page-plans` takes: what each read of the
+ * pages is asked for. `after` is a place in the list of the proof log page
+ * as `?after=` gives it: the date from which a slot gives its place, and
+ * the `seq` of that record.
+ */
+export interface PagePlanQuestion {
+  readonly platform: string;
+  readonly short_id: string;
+  readonly username: string;
+  readonly after: { readonly since: string; readonly since_seq: number };
+}
+
+/** A statement one of the reads ran: the read, the statement, and the plan SQLite made for it, one line for each row of `EXPLAIN QUERY PLAN` (its `detail`). */
+export interface PagePlan {
+  readonly read: string;
+  readonly statement: string;
+  readonly plan: readonly string[];
+}
+
+/** What it answers: every statement the reads ran, in the order they ran them. */
+export type PagePlans = readonly PagePlan[];

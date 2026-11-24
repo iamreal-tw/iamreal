@@ -34,7 +34,8 @@
 //   and read the latest valid date and the cards of each account as the
 //   object reads and counts them;
 //   read the rows it keeps of its records and of the proof log as a whole,
-//   which no endpoint shows yet; and wait before it hashes a record, so
+//   which no endpoint shows yet; read the plan SQLite makes for each
+//   statement the pages' reads run; and wait before it hashes a record, so
 //   that requests sent at once do cross where the deployed object lets
 //   them (in the local workerd the hash alone does not let another in);
 //   and make a write or a read of the data bucket go wrong, to see what
@@ -42,6 +43,7 @@
 import { byBytes, bytesOfHex } from "iamreal-protocol/bytes.ts";
 import { parseChallenge } from "iamreal-protocol/challenge.ts";
 import { formatDay, parseDay } from "iamreal-protocol/date.ts";
+import { scopeOf } from "iamreal-protocol/scope.ts";
 import type { ProofLogRecord } from "iamreal-protocol/record.ts";
 import { type CardState, type RecordResult, RULES_VERSION, type SlotState, applyRecord } from "iamreal-protocol/record-rules.ts";
 import { type ApiParts, api, isApiPath } from "../src/api.ts";
@@ -53,7 +55,7 @@ import type { FileBucket } from "../src/proof-log-files.ts";
 import { ProofLog as DeployedProofLog, SCHEMA_VERSION, type TimedWork, proofLogOf } from "../src/proof-log.ts";
 import { slotOfJson } from "../src/slot-json.ts";
 import { VIEW_TABLE_KEYS, clearViews, viewOf, writeView } from "../src/views.ts";
-import type { BucketFault, CardToWrite, KeptRecords, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "./card-door.ts";
+import type { BucketFault, CardToWrite, KeptRecords, PagePlan, PagePlanQuestion, PagePlans, RuleEvent, RuleStateAnswer, StoredProofLog, StoredViews, TestSettings } from "./card-door.ts";
 import { now, setTestClock } from "./target.ts";
 
 let testSettings: TestSettings = {};
@@ -422,6 +424,50 @@ export class ProofLog extends DeployedProofLog {
     });
     return outcome.result;
   }
+
+  /**
+   * The plan SQLite makes for every statement the pages' reads run
+   * (src/proof-log.ts, `pageCounts`, `pageCards`, `pageAccount`, and
+   * `pageLatest` from the latest slot and after a place), and the count of
+   * the cards of an account that a submission's answer reads
+   * (`accountCards`). The reads are the deployed object's, called as the
+   * pages and a submission call them; only the object's SQLite is put
+   * behind one that asks `EXPLAIN QUERY PLAN` of each statement, with the
+   * same values, before it runs it. The object's own SQLite is back in
+   * place when this returns.
+   */
+  testPagePlans(q: PagePlanQuestion): PagePlans {
+    const storage = this.ctx.storage;
+    const sql = storage.sql;
+    const plans: PagePlan[] = [];
+    let read = "";
+    const explaining = {
+      exec: (statement: string, ...values: SqlStorageValue[]) => {
+        plans.push({ read, statement, plan: sql.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${statement}`, ...values).toArray().map((row) => row.detail) });
+        return sql.exec(statement, ...values);
+      },
+    };
+    const after = { since: parseDay(q.after.since)!, sinceSeq: q.after.since_seq };
+    const reads: [string, () => unknown][] = [
+      ["counts", () => this.pageCounts(q.platform)],
+      ["cards", () => this.pageCards(q.short_id)],
+      ["account", () => this.pageAccount(q.platform, q.username)],
+      ["latest", () => this.pageLatest(q.platform, null, 50)],
+      ["latest after", () => this.pageLatest(q.platform, after, 50)],
+      ["account cards", () => this.accountCards(scopeOf(this.settings.kind), q.platform, q.username)],
+    ];
+    Object.defineProperty(storage, "sql", { value: explaining, configurable: true });
+    try {
+      for (const [name, run] of reads) {
+        read = name;
+        run();
+      }
+    } finally {
+      delete (storage as { sql?: unknown }).sql;
+    }
+    if ((storage.sql as unknown) === explaining) throw new Error("the object's own SQLite is not back in place");
+    return plans;
+  }
 }
 
 /** The proof log's object (src/proof-log.ts, proofLogOf), as the class of the test build. */
@@ -474,6 +520,9 @@ export default {
    *   views; `DELETE` clears them, and the object fills them from its
    *   records when it starts again. `POST /__test/proof-log/views-filled`
    *   answers once the running object has filled them or given up.
+   * - `POST /__test/proof-log/page-plans` with a PagePlanQuestion answers
+   *   PagePlans: the plan SQLite makes for each statement the pages' reads
+   *   run.
    * - `GET /__test/proof-log/stored` answers a StoredProofLog: the rows the
    *   object keeps of its records, and the count and the proof log
    *   fingerprint of its row of the proof log. `GET /__test/proof-log/kept`
@@ -599,6 +648,7 @@ export default {
       const { scope_string, scoped_id } = (await request.json()) as { scope_string: string; scoped_id: string };
       return json(await testProofLogOf(env).testRuleState(scope_string, scoped_id));
     }
+    if (route === "POST /__test/proof-log/page-plans") return json(await testProofLogOf(env).testPagePlans((await request.json()) as PagePlanQuestion));
     if (route === "GET /__test/proof-log/stored") return json(await testProofLogOf(env).testStored());
     if (route === "GET /__test/proof-log/kept") return json(await testProofLogOf(env).testKept());
     if (route === "GET /__test/proof-log/tables") return json(await testProofLogOf(env).testTables());
