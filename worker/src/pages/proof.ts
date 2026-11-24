@@ -19,7 +19,12 @@ export const PLATFORM = "threads";
  * and the width of a phone); a longer one is written one size smaller, so
  * that it stays on one line where it can.
  */
-export const LONG_ACCOUNT = 12;
+const LONG_ACCOUNT = 12;
+
+/** The account as the first screen of the page of a card and of an account writes it: the largest words, one size smaller when it is long. */
+export function accountName(account: string): Html {
+  return html`<span class="${account.length > LONG_ACCOUNT ? "account long" : "account"}">@${account}</span>`;
+}
 
 /**
  * Whether `username` is a Threads username in its one spelling, by the
@@ -118,7 +123,7 @@ ${when}${withdrawn === null ? new Html("") : html`
 <section class="claim">
 ${heading(html`<span class="line">一張台灣國民的自然人憑證，</span>
 <span class="line">把它在 Threads 唯一的名額給了</span>
-<span class="${account.length > LONG_ACCOUNT ? "account long" : "account"}">@${account}</span>`)}
+${accountName(account)}`)}
 <p class="small scope">這張證明只涵蓋 Threads 上的 @${account}。名稱不同的帳號、Instagram 或其他平台上同名的帳號，都和這張證明無關。</p>
 </section>
 <section class="last">

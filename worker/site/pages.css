@@ -62,6 +62,8 @@
   --leading-small: 1.7;
   --gutter: 40px;
   --gutter-phone: 20px;
+  --section: 120px;
+  --section-phone: 72px;
   --column-gap: 80px;
   --max-width: 1200px;
   --measure: 32em;
@@ -431,11 +433,6 @@ iframe.threads-profile {
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--bg);
-}
-
-.rows time {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* A main button (design/DESIGN.md, 元件): raspberry red, white words, square corners, --button-height high. */
@@ -958,7 +955,11 @@ button.copy {
 /* What a card proof needs (/prepare) ------------------------------------------- */
 
 /* Laid out after design/DESIGN.md: as wide as the site, its edges the navigation bar's (.top .bar); what to have and the four steps side by side, the usual troubles under them. */
-body.prepare main {
+body.prepare main,
+body.proof main,
+body.account main,
+body.proof-missing main,
+body.account-not-a-name main {
   max-width: calc(var(--max-width) + 2 * var(--gutter));
   padding: 0 calc(2 * var(--gutter)) 72px;
 }
@@ -1056,20 +1057,18 @@ body.prepare .situation p {
 
 /* The page of a card (proof-page.md) and the page of an account (account-page.md) ---------------------- */
 
-/* Both as wide as the site: two columns side by side, which a narrow screen puts one under the other. */
-body.proof main,
-body.account main {
-  max-width: calc(var(--max-width) + 2 * var(--gutter));
-  padding: 0 calc(2 * var(--gutter)) 72px;
-}
-
 /* The first screen: sections 1 and 2 (or the list of an account) on the left, the account owner's question and the profile on the right. */
 body.proof .first,
-body.account .first {
+body.account .first,
+body.proof .second {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: var(--column-gap);
   align-items: start;
+}
+
+body.proof .first,
+body.account .first {
   margin-top: 56px;
 }
 
@@ -1099,7 +1098,7 @@ body.account .title .account.long {
 }
 
 body.proof .scope {
-  max-width: 30em;
+  max-width: var(--measure);
   margin: 24px 0 0;
   line-height: var(--leading-small);
 }
@@ -1129,7 +1128,7 @@ body.proof .last .when .date {
 }
 
 body.proof .last .small {
-  max-width: 34em;
+  max-width: var(--measure);
   line-height: var(--leading-small);
 }
 
@@ -1172,13 +1171,11 @@ body.proof .owner .yours {
 }
 
 /* Sections 4 and 5 side by side, under a line across the page. */
-body.proof .second {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: var(--column-gap);
-  align-items: start;
-  margin-top: 72px;
-  padding-top: 72px;
+/* Sections apart by --section each side of a line (design/DESIGN.md, 版面). */
+body.proof .second,
+body.proof .mine {
+  margin-top: var(--section);
+  padding-top: var(--section);
   border-top: 1px solid var(--line);
 }
 
@@ -1254,7 +1251,8 @@ body.proof .log li {
   border-bottom: 1px solid var(--line);
 }
 
-body.proof .log time {
+body.proof .log time,
+.rows time {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1285,12 +1283,6 @@ body.proof .one-of-many .first {
 }
 
 /* Getting one's own: under a line across the page, no box. */
-body.proof .mine {
-  margin-top: 72px;
-  padding-top: 72px;
-  border-top: 1px solid var(--line);
-}
-
 body.proof .mine p:first-child {
   max-width: var(--measure);
 }
@@ -1350,8 +1342,26 @@ body.account .cards + .small {
 
 /* No card: the left column only. */
 body.account main > .lookup {
-  max-width: 40em;
   margin-top: 56px;
+}
+
+body.account .lookup > p,
+body.proof-missing .missing p,
+body.account-not-a-name .missing p {
+  max-width: var(--measure);
+}
+
+/* A short ID that resolves to no card, a name that cannot be a Threads username: the heading and margins of the two pages they stand in for. */
+body.proof-missing .missing,
+body.account-not-a-name .missing {
+  margin-top: 56px;
+}
+
+body.proof-missing .title,
+body.account-not-a-name .title {
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
+  margin: 0 0 16px;
 }
 
 /* A narrow screen (design/DESIGN.md, 版面): below --breakpoint, which a media query cannot read, so it is written here. */
@@ -1435,7 +1445,11 @@ body.account main > .lookup {
     font-size: 24px;
   }
 
-  body.prepare main {
+  body.prepare main,
+  body.proof main,
+  body.account main,
+  body.proof-missing main,
+  body.account-not-a-name main {
     padding: 0 var(--gutter-phone) 56px;
   }
 
@@ -1456,11 +1470,6 @@ body.account main > .lookup {
 
   body.prepare .situation h3 {
     font-size: 19px;
-  }
-
-  body.proof main,
-  body.account main {
-    padding: 0 var(--gutter-phone) 56px;
   }
 
   body.proof .first,
@@ -1484,8 +1493,8 @@ body.account main > .lookup {
 
   body.proof .second,
   body.proof .mine {
-    margin-top: 56px;
-    padding-top: 56px;
+    margin-top: var(--section-phone);
+    padding-top: var(--section-phone);
   }
 
   body.proof .title,
@@ -1518,6 +1527,24 @@ body.account main > .lookup {
 
   body.proof .facts > div {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.proof .owner > p:not(.small, .backlink),
+  body.account .owner > p,
+  body.account .meta,
+  body.proof .log,
+  body.proof .one-of-many .prefix {
+    font-size: var(--size-kicker-phone);
+  }
+
+  body.proof-missing .missing,
+  body.account-not-a-name .missing {
+    margin-top: 28px;
+  }
+
+  body.proof-missing .title,
+  body.account-not-a-name .title {
+    font-size: var(--size-h3-phone);
   }
 
   body.account .id-line a {

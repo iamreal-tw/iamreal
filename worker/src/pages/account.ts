@@ -5,9 +5,9 @@
 import { formatDay } from "iamreal-protocol/date.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
 import type { CardsOfAccount } from "../page-data.ts";
-import { html } from "./html.ts";
+import { Html, html } from "./html.ts";
 import type { Document } from "./layout.ts";
-import { LONG_ACCOUNT, daysAgo, embed, isThreadsUsername, prefixes } from "./proof.ts";
+import { accountName, daysAgo, embed, isThreadsUsername, prefixes } from "./proof.ts";
 
 /**
  * The page of the account `username` on Threads (in its one spelling): the
@@ -17,20 +17,20 @@ import { LONG_ACCOUNT, daysAgo, embed, isThreadsUsername, prefixes } from "./pro
  */
 export function accountPage(username: string, { today, cards }: CardsOfAccount): Document {
   if (!isThreadsUsername(username)) throw new Error("pages: the account is not in the Threads format");
-  const title = html`<h1 class="title"><span class="line">Threads 的</span>
-<span class="${username.length > LONG_ACCOUNT ? "account long" : "account"}">@${username}</span></h1>`;
+  const heading = html`<h1 class="title"><span class="line">Threads 的</span>
+${accountName(username)}</h1>`;
+  let content: Html;
   if (cards.length === 0) {
-    const content = html`<section class="lookup">
-${title}
+    content = html`<section class="lookup">
+${heading}
 <p class="count">沒有自然人憑證把名額給這個帳號。</p>
 <p class="small">名稱要和 Threads 上的完全相同。</p>
 </section>`;
-    return { title: `Threads 的 @${username}`, kind: "account", content };
-  }
-  const starts = prefixes(cards.map((c) => c.scopedId));
-  const content = html`<div class="first">
+  } else {
+    const starts = prefixes(cards.map((c) => c.scopedId));
+    content = html`<div class="first">
 <section class="lookup">
-${title}
+${heading}
 <p class="count">有 ${cards.length} 張自然人憑證把它在 Threads 的名額給了這個帳號。</p>
 <ul class="cards">
 ${cards.map(
@@ -46,6 +46,7 @@ ${cards.map(
 ${embed(username)}
 </section>
 </div>`;
+  }
   return { title: `Threads 的 @${username}`, kind: "account", content };
 }
 
