@@ -45,7 +45,7 @@ test("every colour is a token: no colour is written outside :root", () => {
   assert.deepEqual([...outside.matchAll(/#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|\b(white|black|red|green|blue|teal)\b(?![-\w])/g)].map((m) => m[0]), []);
 });
 
-/** The media queries of the sheet but the one for reduced motion (the test below). */
+/** The one media query that is not about the width: reduced motion (the next test but one). */
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 test("the narrow layout starts below --breakpoint", () => {

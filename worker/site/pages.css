@@ -749,20 +749,20 @@ section.verify {
 
 /* The home page (home.md; design/DESIGN.md; design/screens/home-desktop.png, home-phone.png) ---------- */
 
-/* As wide as the site: each section runs edge to edge, its content within the navigation bar's edges. */
+/* As wide as the site: each section runs edge to edge, its content within the navigation bar's edges (.top .bar). */
 body.home main {
   max-width: none;
   padding: 0;
 }
 
 body.home .in {
-  max-width: calc(var(--max-width) + 2 * var(--gutter));
+  max-width: var(--max-width);
   margin: 0 auto;
   padding: 0 var(--gutter);
 }
 
 body.home main > section {
-  padding: var(--section) 0;
+  padding: var(--section) var(--gutter);
 }
 
 body.home main > section + section {
@@ -933,7 +933,8 @@ body.home .hero-field .pulse {
 /* 第一屏 */
 body.home .hero {
   position: relative;
-  padding: 64px 0 88px;
+  padding-top: 64px;
+  padding-bottom: 88px;
 }
 
 body.home .hero .copy {
@@ -957,10 +958,6 @@ body.home .hero .rally {
 body.home .hero .actions {
   gap: 12px 26px;
   margin: 16px 0 0;
-}
-
-body.home .quiet {
-  color: var(--ink);
 }
 
 body.home .again {
@@ -1865,11 +1862,11 @@ body.home .after {
 /* The home page on a phone (design/DESIGN.md, 版面): one column; the first screen's dots under the headline. */
 @media (width < 760px) {
   body.home .in {
-    padding: 0 var(--gutter-phone);
+    padding: 0;
   }
 
   body.home main > section {
-    padding: var(--section-phone) 0;
+    padding: var(--section-phone) var(--gutter-phone);
   }
 
   body.home .headline {
@@ -1901,7 +1898,8 @@ body.home .after {
   }
 
   body.home .hero {
-    padding: 20px 0 48px;
+    padding-top: 20px;
+    padding-bottom: 48px;
   }
 
   body.home .hero .in {
