@@ -66,6 +66,9 @@ const say = (key: string, values: Record<string, string | number> = {}): string 
   return s;
 };
 
+/** The words only the app has (design/copy/app.json): the splash's. */
+const APP_COPY = JSON.parse(readFileSync(join(repo, "design", "copy", "app.json"), "utf8")) as { splash: { name: string; site: string } };
+
 let failures = 0;
 const check = (ok: boolean, what: string): boolean => {
   console.log(`${ok ? "ok    " : "FAIL  "} ${what}`);
@@ -183,6 +186,43 @@ function shot(name: string): void {
   writeFileSync(join(out, "screens", `${String(++shots).padStart(2, "0")}-${name}.png`), emulator.screenshot());
 }
 
+/**
+ * Where to save the screens design/screens/ has of the app, when IAMREAL_DESIGN_SCREENS names a directory (design/screens/README.md):
+ * each as a phone's screen there is, 390 wide, a pixel a dp, from under the system's bar to the end of the step, at least 844 tall.
+ */
+const DESIGN_SCREENS = process.env.IAMREAL_DESIGN_SCREENS;
+/** The system's bar at the top, in dp, on the emulator's Android 10: left out of those screens. */
+const STATUS_BAR = 24;
+
+/** Makes the emulator's screen one of design/screens/'s (390 dp wide, a pixel a dp) for a moment: `height` tall with the system's bars. */
+async function designSize(height: number): Promise<void> {
+  emulator.shell(`wm size 390x${height}; wm density 160`);
+  await sleep(1_500);
+}
+
+/** Puts the emulator's screen back as the test has it. */
+async function testSize(): Promise<void> {
+  emulator.shell("wm size reset; wm density 420");
+  await sleep(1_500);
+}
+
+/** Saves the screen as `file` of DESIGN_SCREENS, `height` tall from under the system's bar. */
+function designCapture(file: string, height: number): void {
+  const png = join(DESIGN_SCREENS!, file);
+  writeFileSync(png, emulator.screenshot());
+  execFileSync("sips", ["--cropOffset", String(STATUS_BAR), "0", "-c", String(height), "390", png], { stdio: "ignore" });
+}
+
+/** The step on the screen as `file` of DESIGN_SCREENS, if it is set: the whole step, on a screen tall enough for it. */
+async function designShot(file: string): Promise<void> {
+  if (DESIGN_SCREENS === undefined) return;
+  await designSize(4_000);
+  // The end of the step: its last text, the bottom half of a button around it and the step's space under it.
+  const bottom = Math.max(...visible().map((n) => n.bottom));
+  designCapture(file, Math.max(844, bottom + 72 - STATUS_BAR));
+  await testSize();
+}
+
 /** What is on the screen now. */
 const visible = (): Node[] => emulator.dump();
 const textsOf = (nodes: Node[]): string[] => nodes.map((n) => n.text).filter((t) => t !== "");
@@ -228,6 +268,7 @@ function find(match: (n: Node) => boolean, what: string): Node {
       scroll();
     }
   }
+  shot("not-found");
   throw new Error(`${what} is not on the screen. It shows: ${JSON.stringify(textsOf(last))}`);
 }
 
@@ -238,6 +279,11 @@ function press(label: string): void {
 
 /** The field a test finds by its name (the app's test tag). */
 const field = (id: string): Node => find((n) => n.id === id, `the field ${id}`);
+
+/** Puts the keyboard on the screen away, if it is up: it covers the lower part of the step, where a swipe would scroll. */
+function hideKeyboard(): void {
+  if (/mInputShown=true/.test(emulator.shell("dumpsys input_method"))) emulator.shell("input keyevent KEYCODE_BACK");
+}
 
 /** Checks that each sentence is on the screen, word for word. */
 function shows(screen: string[], where: string, sentences: string[]): void {
@@ -300,6 +346,7 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(1), "step 1");
   if (p.thorough) {
     shot("step-1");
+    await designShot("card-proof-app-1-before-phone.png");
     const s = wholeScreen();
     shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), say("before.why_physical"), say("before.how_to_get"), say("common.next")]);
     check(!s.includes(say("before.listed_together")) && !s.includes(say("common.back")), "step 1 has no 上一步, and with one platform not the sentence about several");
@@ -311,6 +358,7 @@ async function cardProof(p: Proof): Promise<string> {
   await waitText(step(2), "step 2");
   if (p.thorough) {
     shot("step-2");
+    await designShot("card-proof-app-2-read-android-phone.png");
     const s = wholeScreen();
     shows(s, "step 2", [say("read.title"), say("app_read.how", { spot: SPOT }), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
@@ -346,6 +394,10 @@ async function cardProof(p: Proof): Promise<string> {
   }
   emulator.tap(field("pin"));
   emulator.type(PIN);
+  if (p.thorough && DESIGN_SCREENS !== undefined) {
+    hideKeyboard();
+    await designShot("card-proof-app-3-pin-phone.png");
+  }
   check(!wholeScreen().some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
@@ -369,7 +421,9 @@ async function cardProof(p: Proof): Promise<string> {
     emulator.tap(field("account-threads"));
     emulator.erase(p.current.length);
     if (p.type !== "") emulator.type(p.type);
+    hideKeyboard();
     check(field("account-threads").text === p.type, `step 4: the Threads row now holds "${p.type}"`);
+    if (p.thorough) await designShot("card-proof-app-4-accounts-phone.png");
   }
   press(say("common.next"));
 
@@ -378,6 +432,7 @@ async function cardProof(p: Proof): Promise<string> {
   let shortId = "";
   {
     shot(`step-5-${p.name}`);
+    if (p.thorough) await designShot("card-proof-app-5-confirm-phone.png");
     const s = wholeScreen();
     shows(s, "step 5", [step(5), p.confirm.intro, THREADS, p.confirm.account, p.confirm.under, say("confirm.date"), p.date, say("confirm.short_id_label"), say("confirm.no_identity"), ...p.confirm.shows, say("common.back"), p.confirm.button, say("common.cancel")]);
     for (const a of p.confirm.absent) check(!s.includes(a), `step 5 does not say "${a.slice(0, 40)}…"`);
@@ -403,6 +458,7 @@ async function cardProof(p: Proof): Promise<string> {
     await tapWithPanel({ signs: true });
     await waitText(say("app_read.lift"), "step 5: the card can be taken away", 20_000);
     shot("step-5-in-progress");
+    await designShot("card-proof-app-5-progress-phone.png");
     const s = textsOf(visible());
     check(!s.includes(say("progress.zero_knowledge")) && !s.includes(say("links.more")), "step 5 in progress: no sentence under the list, and no link to another page");
   } else await tap();
@@ -412,6 +468,7 @@ async function cardProof(p: Proof): Promise<string> {
   check(taps - tapsBefore === 3, `the card was held to the phone three times (${taps - tapsBefore})`);
   {
     shot(`step-6-${p.name}`);
+    if (p.thorough) await designShot("card-proof-app-6-done-phone.png");
     const s = wholeScreen();
     const link = `${SITE}/p/${shortId}`;
     shows(s, "step 6", [step(6), p.done.title, say("done.recorded_on", { date: p.date }), say("done.restart"), ...p.done.shows]);
@@ -438,7 +495,8 @@ async function cardProof(p: Proof): Promise<string> {
     if (p.done.card) {
       shows(s, "step 6", [p.confirm.account, ...hanging]);
     } else {
-      for (const a of hanging) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
+      // Not done.proof: 島民證明 is the service's name in the header too.
+      for (const a of hanging.filter((x) => x !== say("done.proof"))) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
     }
     // The server's answer was read (the title is by its kinds) and is what step 5 said: no record of it shown, nothing of the web's QR code or its
     // computer, nothing of the screen of before the redesign.
@@ -541,7 +599,17 @@ try {
   emulator.shell(`pm clear ${APP}`);
   emulator.adb("reverse", `tcp:${DEVICE_PORT}`, `tcp:${port}`);
   emulator.shell("input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard");
+  // The splash on a screen of design/screens/'s size: 844 between the system's bars (Android 10's navigation bar is 48 dp).
+  if (DESIGN_SCREENS !== undefined) await designSize(STATUS_BAR + 844 + 48);
   emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  // The splash first: the name and the site of app.json, for a moment.
+  {
+    let seen: string[] = [];
+    for (const until = Date.now() + 5_000; Date.now() < until && !seen.includes(APP_COPY.splash.site); ) seen = textsOf(visible());
+    if (DESIGN_SCREENS !== undefined && seen.includes(APP_COPY.splash.site)) designCapture("app-splash-phone.png", 844);
+    check(seen.includes(APP_COPY.splash.site) && seen.includes(APP_COPY.splash.name), `the app opens on the splash: ${APP_COPY.splash.name} │ ${APP_COPY.splash.site} (${JSON.stringify(seen)})`);
+    if (DESIGN_SCREENS !== undefined) await testSize();
+  }
 
   // 4. Four card proofs --------------------------------------------------------------
   const HANDLE = { alice: "@alice", bob: "@bob" };
@@ -680,7 +748,7 @@ try {
   // The emulator as it was: its own clock, network, density and keyboard setting, the port no longer forwarded, adb not root.
   try {
     emulator.shell(`date @${Math.floor(Date.now() / 1000)}; settings put global auto_time 1; svc wifi enable; svc data enable`);
-    emulator.shell(`wm density reset; am force-stop ${APP}`);
+    emulator.shell(`wm size reset; wm density reset; am force-stop ${APP}`);
     if (/^[01]$/.test(imeBefore)) emulator.shell(`settings put secure show_ime_with_hard_keyboard ${imeBefore}`);
     emulator.adb("reverse", "--remove", `tcp:${DEVICE_PORT}`);
     emulator.adb("unroot");

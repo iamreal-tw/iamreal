@@ -215,8 +215,8 @@ private fun Summary(content: @Composable ColumnScope.() -> Unit) = Column(Modifi
 @Composable
 private fun SummaryRow(label: String, value: @Composable () -> Unit, under: List<String> = emptyList(), tag: String? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        BasicText(label, Modifier.width(80.dp).padding(top = 2.dp), style = TextStyle(color = Colours.mute, fontSize = 15.sp, lineHeight = 1.6.em))
-        Column(if (tag != null) Modifier.weight(1f).testTag(tag) else Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        BasicText(label, Modifier.width(80.dp).alignByBaseline(), style = TextStyle(color = Colours.mute, fontSize = 15.sp, lineHeight = 1.6.em))
+        Column(Modifier.weight(1f).alignByBaseline().then(if (tag != null) Modifier.testTag(tag) else Modifier), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             value()
             for (line in under) BasicText(line, style = TextStyle(color = Colours.text, fontSize = 15.sp, lineHeight = 1.6.em))
         }
@@ -370,8 +370,8 @@ private fun Done(m: Model, outside: Outside) {
             Rule(colour = Colours.ink)
             for ((n, step) in listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_save")).withIndex()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
-                    BasicText("${n + 1}", Modifier.width(36.dp), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.heading, fontFamily = Type.display))
-                    BasicText(step, Modifier.weight(1f).padding(top = 3.dp), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.heading))
+                    BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.heading, fontFamily = Type.display))
+                    BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.heading))
                 }
                 Rule()
             }
