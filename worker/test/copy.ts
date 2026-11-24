@@ -143,6 +143,14 @@ export function wantPreview(page: string, title: string, site: string | null): v
   assert.equal(firstMatch(OG_SITE, page), site, "og:site_name");
 }
 
+/** The alt text of the image of every page's link preview (proof-page.md, section 8, 預覽圖; its code block 1 is the words on the image). */
+export function previewImageAlt(): string {
+  assert.ok(copySection("proof-page.md", "8. ").includes("\n### 預覽圖\n"), "proof-page.md section 8 has 預覽圖");
+  const alt = block("proof-page.md", "8. ", 2);
+  assert.equal(alt.length, 1, "the alt text is one line");
+  return alt[0]!;
+}
+
 /** The 標題, 網站 and, if there is one, 摘要 lines of a copy file's preview block. */
 export function previewOf(file: string, heading: string): { title: string; site: string; summary: string } {
   const value = (label: string): string => (block(file, heading).find((l) => l.startsWith(`${label}：`)) ?? "").slice(label.length + 1);
