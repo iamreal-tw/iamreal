@@ -1148,7 +1148,6 @@ test("changed-paths.sh, with the lists the changes job is given: a check runs wh
     ["the Worker", ["worker/src/x.ts"], ["typescript"]],
     ["the page", ["web/src/x.ts"], ["typescript"]],
     ["the page's README, whose headers worker/'s tests read", ["web/README.md"], ["typescript"]],
-    ["the ADR the site links to", ["docs/adr/0004-scoped-ids-and-proofs-are-public.md"], ["typescript"]],
     ["the app for Android", ["android/app/x.kt"], ["typescript", "android"]],
     ["the app for iOS", ["ios/x.swift"], ["typescript"]],
     ["the Rust core", ["device-core/checks/src/x.rs"], ["typescript", "device-core", "android"]],

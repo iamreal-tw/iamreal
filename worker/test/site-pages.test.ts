@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
-import { OG_DESCRIPTION, block, codeBlocks, copyLines, copySection, faqCategories, faqQuestions, notOnPage, previewOf, readCopy, squash, testSiteCardAddress, unescapeHtml, visibleText, wantLines, wantPreview } from "./copy.ts";
+import { OG_DESCRIPTION, block, codeBlocks, copyLines, copySection, faqAnswerHtml, faqCategories, faqLinks, faqQuestions, notOnPage, previewOf, readCopy, squash, testSiteCardAddress, unescapeHtml, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { CARD_A, CARD_B, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r } from "./pages.ts";
 import { newCard } from "./records.ts";
@@ -85,20 +85,18 @@ describe("the FAQ", () => {
       for (const m of readFileSync(join(COPY_DIR, file), "utf8").matchAll(/\/faq#([A-Za-z0-9_-]+)/g)) assert.ok(ids.includes(m[1]!), `${file} links to /faq#${m[1]}, which is on the page`);
     }
 
-    // The links of the answers.
-    const security = faqByQuestion("島民證明服務安全嗎？");
-    for (const link of [
-      `<a href="/faq#${security.id}">了解更多</a>`,
-      '公開在 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>，',
-      '<a href="https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md">完整的說明</a>',
-      '<a href="https://github.com/iamreal-tw/iamreal/discussions">GitHub 的討論區</a>留言',
-      "<strong>注意：</strong>",
-    ]) {
-      assert.ok(page.includes(link), `the page has ${link}`);
+    // Each answer exactly as faq.md writes it: its paragraphs, its list, its bold and its links.
+    for (const q of questions) {
+      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(page);
+      assert.equal(shown?.[1], faqAnswerHtml(q.answer), `${q.question}: the answer is faq.md's`);
     }
-    assert.ok(existsSync(join(REPO_DIR, "docs", "adr", "0004-scoped-ids-and-proofs-are-public.md")), "the ADR the answer links to is there");
-    assert.ok(faqByQuestion("政府會知道我是哪個帳號嗎？").answer[2]!.includes("了解更多"));
-    assert.ok(readCopy("faq.md").includes("「了解更多」連到下一題「島民證明服務安全嗎？」"), "faq.md says where 了解更多 goes");
+    // An answer answers the question: it sends no one to another page of the site or another question to read on (faq.md, at the top).
+    for (const q of questions) {
+      for (const { words, href } of faqLinks(q.answer)) {
+        assert.ok(!/^(\/faq|#|\/privacy)/.test(href), `${q.question}: ${words} goes to ${href}, an explanation on the site`);
+      }
+      notOnPage(faqAnswerHtml(q.answer).replace(/<[^>]*>/g, " "), "了解更多", "完整的說明");
+    }
 
     // The question of the ordinal (#299): in 它能證明什麼, right after the lost card; not on the home page.
     const what = categories.find((c) => c.id === "cat-what")!;
@@ -428,7 +426,6 @@ describe("the links", () => {
       const res = await worker.fetch(link, { redirect: "manual" });
       if (res.status !== 200) failing.push(`${link}: ${res.status}`);
     }
-    // /privacy is the FAQ's link to the full privacy notice (design/copy/privacy.md), a page neither back end makes yet.
-    assert.deepEqual(failing, ["/privacy: 404"]);
+    assert.deepEqual(failing, []);
   });
 });
