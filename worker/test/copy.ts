@@ -55,15 +55,20 @@ export function needs(): string {
  * The lines a page must show, from a code block: the example values
  * replaced (pairs of old and new, applied in the order given, so the longer
  * of two overlapping values comes first), placeholders dropped (a line that
- * is all in （）), a button's [ ] and a list item's · taken off, 〈需要什麼〉
- * put in.
+ * is all in （）), a link's [ ](網址) and bold's ** **, a button's [ ] and a
+ * list item's · taken off, 〈需要什麼〉 put in.
  */
 export function copyLines(lines: readonly string[], ...replace: string[]): string[] {
   const out: string[] = [];
   for (let l of lines) {
     l = l.trim();
     if (l === "" || l === "……" || /^（[^）]*）$/.test(l)) continue;
-    l = l.replace(/^· /, "").replace(/\[\s*([^\]]*?)\s*\]/g, "$1").replaceAll("〈需要什麼〉", needs());
+    l = l
+      .replace(/^· /, "")
+      .replace(LINK, "$1")
+      .replace(BOLD, "$1")
+      .replace(/\[\s*([^\]]*?)\s*\]/g, "$1")
+      .replaceAll("〈需要什麼〉", needs());
     out.push(replaceEach(l, replace));
   }
   return out;
@@ -200,6 +205,47 @@ export function faqCategories(): FaqCategory[] {
 /** Every question of faq.md, in order. */
 export function faqQuestions(): FaqQuestion[] {
   return faqCategories().flatMap((c) => c.questions);
+}
+
+/** A link in a copy file's code block: [字](網址). */
+const LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/[^)\s]*)\)/g;
+/** Bold in a copy file's code block: **字**. */
+const BOLD = /\*\*([^*]+)\*\*/g;
+
+/** The links of an answer of faq.md: the words and where they go, in order. */
+export function faqLinks(answer: readonly string[]): { words: string; href: string }[] {
+  return answer.flatMap((l) => [...l.matchAll(LINK)].map((m) => ({ words: m[1]!, href: m[2]! })));
+}
+
+/**
+ * An answer of faq.md as the page writes it (faq.md, at the top): a blank
+ * line a new paragraph, the paragraphs that start with · one list, **字**
+ * bold, [字](網址) a link.
+ */
+export function faqAnswerHtml(answer: readonly string[]): string {
+  const inline = (s: string): string =>
+    s
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replace(LINK, '<a href="$2">$1</a>')
+      .replace(BOLD, "<strong>$1</strong>");
+  const paragraphs = answer.join("\n").split(/\n\s*\n/).map((p) => p.trim()).filter((p) => p !== "");
+  const out: string[] = [];
+  let items: string[] = [];
+  const endList = (): void => {
+    if (items.length > 0) out.push('<ul class="dots">', ...items, "</ul>");
+    items = [];
+  };
+  for (const p of paragraphs) {
+    if (p.startsWith("· ")) items.push(`<li>${inline(p.slice(2))}</li>`);
+    else {
+      endList();
+      out.push(`<p>${inline(p)}</p>`);
+    }
+  }
+  endList();
+  return out.join("\n");
 }
 
 /** The address of a page of a card as a test log's site writes it (design/copy/test-site.md), for this short ID or whatever was typed in its place. */
