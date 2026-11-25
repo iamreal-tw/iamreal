@@ -408,6 +408,8 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 2", [say("read.title"), say("app_read.how", { spot: SPOT }), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
+    const figure = find((n) => n.id === "tap-place", "step 2's figure of where the card goes");
+    check(figure.description === say("app_read.figure_android"), "step 2's figure reads as its one sentence of the copy");
   }
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false });
@@ -435,6 +437,12 @@ async function cardProof(p: Proof): Promise<string> {
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
       check(waitingTaps.length === 0 && !textsOf(visible()).includes(say("app_panel.android_wait_title")), "step 3: with no PIN typed, no panel and no tap");
+      // A PIN no card takes: not sent, no panel, and gone (the right PIN typed next into an empty field signs below).
+      emulator.tap(field("pin"));
+      emulator.type("12345");
+      press(say("pin.confirm_card"));
+      await waitText(say("app_pin.pin_format"), "the sentence for a PIN no card takes", 10_000);
+      check(waitingTaps.length === 0 && !textsOf(visible()).includes(say("app_panel.android_wait_title")), "step 3: a PIN of 5 characters brings no panel and no tap");
     }
   }
   emulator.tap(field("pin"));
@@ -446,7 +454,7 @@ async function cardProof(p: Proof): Promise<string> {
   {
     const s = wholeScreen();
     check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
-    check(!s.includes(say("app_pin.need_pin")), "step 3: with a PIN typed, no 請輸入 PIN。");
+    check(!s.includes(say("app_pin.need_pin")) && !s.includes(say("app_pin.pin_format")), "step 3: with a PIN typed, no 請輸入 PIN。 and no sentence of the PIN's form");
   }
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
