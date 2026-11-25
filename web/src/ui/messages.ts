@@ -361,7 +361,7 @@ export interface DeclaredView {
   title: Sentence;
   /** The accounts declared now, under accounts.declared_now: `name` null with one platform; `line` for a platform the device does not know. */
   current: { platform: string; name: string | null; account: string; raw: boolean; line: Sentence | null }[];
-  /** accounts.last_card_proof, or accounts.last_card_proof_today. */
+  /** accounts.last_proof, or accounts.last_proof_today. */
   last: Message;
   /** Under accounts.refresh: accounts.refresh_note. */
   refreshNote: Sentence;
@@ -442,7 +442,7 @@ function previewNotes(rows: readonly AccountRowView[]): Sentence[][] {
 function lastCardProof(st: CardStatus): Message {
   const a = COPY.accounts;
   if (st.lastCardProof === null) return { code: "no_last_card_proof" };
-  return st.lastCardProof === st.today ? say(a.last_card_proof_today) : say(a.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
+  return st.lastCardProof === st.today ? say(a.last_proof_today) : say(a.last_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
 }
 
 /**
@@ -615,7 +615,7 @@ export function confirmView(cq: Consequence, single: string | null = null, platf
         ? c.button_declare_single
         : c.button_declare;
   return {
-    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_single : c.intro,
+    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_public : c.intro,
     rows,
     date: cq.today,
     withdrawStays: !empty && single === null && cq.rows.some((r) => r.kind === "withdraw"),

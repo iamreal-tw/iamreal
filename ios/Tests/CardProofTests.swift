@@ -155,7 +155,7 @@ final class CardProofTests: XCTestCase {
         let today = CardProofFlow.dateInTaiwan(now)
         XCTAssertEqual(model.screen.texts, [
             "確認",
-            "按下後，證明紀錄會記下新的證明並公開給所有人：",
+            "按下後，證明紀錄會公開記下這張卡片宣告的帳號：",
             "Threads", "@alice", "新宣告",
             "日期", today,
             "島民編號", "\(shortID) 開頭",
@@ -247,7 +247,7 @@ final class CardProofTests: XCTestCase {
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天",
+            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
             "Threads", "預覽",
             "還沒有更換過，還可以更換 5 次。",
             "今天才宣告的帳號，今天改掉不另外算一次更換。",
@@ -293,7 +293,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 4)
         XCTAssertEqual(Array(model.screen.texts.prefix(5)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是 1 天前",
+            "這是這張卡片目前宣告的帳號。上次過卡是 1 天前。",
             "Threads", "預覽",
             "還沒有更換過，還可以更換 5 次。",
         ])
@@ -333,7 +333,7 @@ final class CardProofTests: XCTestCase {
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天",
+            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
             "Threads", "預覽",
             "更換過 1 次，還可以更換 4 次。",
             "今天才宣告的帳號，今天改掉不另外算一次更換。",

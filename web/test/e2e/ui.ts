@@ -859,7 +859,7 @@ function checkAccountsNotes(label: string, st: AccountsSeen, kind: "never" | "no
 }
 
 /** The line of the last card proof on step 4. */
-const lastLine = (daysAgo: number) => (daysAgo === 0 ? C.accounts.last_card_proof_today : fill(C.accounts.last_card_proof, { days_ago: daysAgo }));
+const lastLine = (daysAgo: number) => (daysAgo === 0 ? C.accounts.last_proof_today : fill(C.accounts.last_proof, { days_ago: daysAgo }));
 
 /**
  * Step 4 with the card declaring accounts: what it declares ([name, account]; the name "" with one
@@ -893,7 +893,7 @@ function checkConfirm(label: string, c: ConfirmSeen, want: [platform: string, na
   check(c.rows.every((r) => r.id === r.platform), `${label}: step 5 shows each platform's ID beside its name`);
   check(c.links.length === 0, `${label}: step 5 links to no other page ${JSON.stringify(c.links)}`);
   const empty = want.every((r) => r[3].includes(C.kinds.withdraw));
-  check(c.intro === (empty ? f.intro_withdraw_all : single !== null ? f.intro_single : f.intro), `${label}: step 5's first sentence "${c.intro}"`);
+  check(c.intro === (empty ? f.intro_withdraw_all : single !== null ? f.intro_public : f.intro), `${label}: step 5's first sentence "${c.intro}"`);
   check(c.main.includes(today()) && c.main.includes(f.short_id_label), `${label}: step 5, the date, the short ID`);
   const named = platforms.join(f.platform_separator);
   const notIdentifiable = fill(f.not_identifiable, { platform: named });
