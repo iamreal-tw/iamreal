@@ -37,7 +37,7 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 
 /**
  * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
- * two pages that load the copy buttons' script, /verify and
+ * pages that load the copy buttons' script, /faq, /verify and
  * /hang/<short ID>. Only scripts of this origin, which is that one file: no
  * inline script, no other site's. The Go backend's `scriptPageHeaders`.
  */

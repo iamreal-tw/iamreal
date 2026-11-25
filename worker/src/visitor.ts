@@ -14,8 +14,8 @@
 //                     (design/copy/not-found.md), with 404
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
-// Their style sheet (/pages.css), the copy buttons' script that /verify and
-// /hang/… load (/copy.js) and the card proof page (/proof and everything
+// Their style sheet (/pages.css), the copy buttons' script that /faq, /verify
+// and /hang/… load (/copy.js) and the card proof page (/proof and everything
 // under it) are not: they are files of Static Assets, which
 // sends them itself, and a request for one of those paths does not run the
 // Worker at all (wrangler.jsonc, "assets"; README.md, "Static Assets"). The

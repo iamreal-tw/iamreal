@@ -40,7 +40,7 @@ function faqByQuestion(question: string): ReturnType<typeof faqQuestions>[number
 }
 
 describe("the FAQ", () => {
-  test("every question of faq.md under its category, in order, each a heading with its id and its answer shown; nothing after the last but the foot", async () => {
+  test("every question of faq.md under its category, in order, each folded with its id, its answer under it; nothing after the last but the foot", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/faq");
     assert.equal(status, 200);
@@ -56,11 +56,18 @@ describe("the FAQ", () => {
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
 
-    // Each question a heading with its id, its answer shown: no <details>.
-    assert.ok(!page.slice(page.indexOf("<main>"), page.indexOf("</main>")).includes("<details"), "no answer is folded");
+    // Each question folded, as the home page's are (faq.md, at the top; home.md, 常見問題): a <details> with its id, the
+    // question its <summary>, which opens and closes it without a script and from the keyboard. None is open when the page
+    // opens; the copy buttons' script (copy.js) opens the one the address names (/faq#<id>), web/test/worker-card-proof.ts
+    // in a browser.
     const ids = [...page.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1]!);
     assert.equal(new Set(ids).size, ids.length, "no id twice");
-    for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
+    for (const q of questions) assert.ok(page.includes(`<details class="question" id="${q.id}"><summary>${q.question}</summary>\n`), `${q.question} is folded, with the id ${q.id}`);
+    const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
+    assert.equal(main.match(/<details\b/g)?.length, questions.length, "a <details> a question, and no other");
+    assert.doesNotMatch(main, /<details\b[^>]*\sopen\b/, "every question folded when the page opens");
+    assert.ok(/每一題可以展開，一開始收起來/.test(readCopy("faq.md")) && /每一題可以展開，一開始收起來/.test(readCopy("home.md")), "faq.md folds its questions the way home.md does");
+    assert.match(readCopy("faq.md"), /連到某一題時，那一題展開/, "faq.md says a link to a question opens it");
 
     // The list of the categories: each name a link to its category, in faq.md's order, under the title and above the first question.
     const listName = /螢幕閱讀器唸的名稱是「([^」]*)」/.exec(readCopy("faq.md"))?.[1];
@@ -78,7 +85,7 @@ describe("the FAQ", () => {
     assert.equal(sections.length, categories.length, "one section a category");
     categories.forEach((c, i) => {
       assert.ok(sections[i]!.startsWith(`<section class="category" id="${c.id}">\n<h2>${c.name}</h2>`), `${c.name}: the section #${c.id}, its name the heading`);
-      assert.deepEqual([...sections[i]!.matchAll(/<section class="question" id="([^"]*)">/g)].map((m) => m[1]), c.questions.map((q) => q.id), `${c.name}: its questions, in order`);
+      assert.deepEqual([...sections[i]!.matchAll(/<details class="question" id="([^"]*)">/g)].map((m) => m[1]), c.questions.map((q) => q.id), `${c.name}: its questions, in order`);
     });
     // Every link to a question that a copy file writes goes to one.
     for (const file of readdirSync(COPY_DIR).filter((f) => f.endsWith(".md"))) {
@@ -87,7 +94,7 @@ describe("the FAQ", () => {
 
     // Each answer exactly as faq.md writes it: its paragraphs, its list, its bold and its links.
     for (const q of questions) {
-      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(page);
+      const shown = new RegExp(`<details class="question" id="${q.id}"><summary>[^<]*</summary>\\n(.*?)</details>`, "s").exec(page);
       assert.equal(shown?.[1], faqAnswerHtml(q.answer), `${q.question}: the answer is faq.md's`);
     }
     // An answer answers the question: it sends no one to another page of the site or another question to read on (faq.md, at the top).
@@ -128,7 +135,7 @@ describe("the FAQ", () => {
     );
     for (const [, question, answer] of folded) {
       const q = faqByQuestion(question!);
-      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(faq);
+      const shown = new RegExp(`<details class="question" id="${q.id}"><summary>[^<]*</summary>\\n(.*?)</details>`, "s").exec(faq);
       assert.equal(shown?.[1], answer, `${question}: the home page's answer is the FAQ's`);
     }
   });
@@ -267,7 +274,7 @@ describe("hanging a proof on a profile", () => {
 });
 
 describe("the copy buttons' script", () => {
-  test("/copy.js: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
+  test("/copy.js: the old back end's and the FAQ's lines, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     await worker.seen();
     const res = await worker.fetch("/copy.js");
@@ -276,6 +283,8 @@ describe("the copy buttons' script", () => {
     const script = await res.text();
     assert.equal(script, readFileSync(join(WORKER_DIR, "site", "copy.js"), "utf8"));
     assert.ok(script.includes('document.querySelectorAll("button[data-copy], button[data-copy-text]")'));
+    // On the FAQ it opens the question the address names, when the page opens and when the part after # changes.
+    assert.ok(script.includes("document.getElementById(address.slice(hash + 1))") && script.includes('addEventListener("hashchange"'));
     for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "import", "eval", "innerHTML", "location"]) assert.ok(!script.includes(s), `copy.js has ${s}`);
     const etag = res.headers.get("etag");
     assert.match(etag ?? "", /^"[0-9a-f]+"$/);

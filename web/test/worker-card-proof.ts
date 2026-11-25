@@ -21,6 +21,12 @@
 // 6. Opens the home page and /p/<short ID>: the page of the card lists the
 //    account just declared, by the sentences of design/copy/proof-page.md.
 //    Takes screenshots of both at a desktop's and a phone's width.
+// 7. Opens the FAQ (/faq, design/copy/faq.md): every question folded; a
+//    click, or Enter, opens one and closes it again; a link to a category
+//    opens none; a link to a question, on the page or from another, opens
+//    that one, on the screen; without the script (/copy.js, blocked) a
+//    question is still opened by a click. Screenshots of the page folded
+//    and with one question opened by its address.
 //
 // The screens' own sentences, every way a card proof stops and every kind
 // of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
@@ -228,6 +234,59 @@ try {
   await shot(visitor, "home-desktop.png", 1100);
   await shot(visitor, "home-phone.png", 390);
   check(await visitor.eval<boolean>("document.cookie === ''"), "the pages set no cookie");
+
+  // 7. The FAQ: every question folded; a link to one opens it (design/copy/faq.md, at the top) --------------
+  /** The ids of the questions that are open. */
+  const openIds = (p: Page): Promise<string[]> => p.eval<string[]>(`[...document.querySelectorAll("details.question[open]")].map((d) => d.id)`);
+  /** Whether the top of the element with this id is on the screen. */
+  const onScreen = (p: Page, id: string): Promise<boolean> =>
+    p.eval<boolean>(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()`);
+  await visitor.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  await visitor.goto(`${ORIGIN}/faq`);
+  const questions = await visitor.eval<number>(`document.querySelectorAll("details.question").length`);
+  check(questions > 20 && (await openIds(visitor)).length === 0, `/faq: all ${questions} questions folded`);
+  await shot(visitor, "faq-desktop.png", 1100);
+  await shot(visitor, "faq-phone.png", 390);
+  await visitor.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  // A click on a question opens it, another closes it; from the keyboard too.
+  await visitor.click("#personal-data > summary");
+  check((await openIds(visitor)).join() === "personal-data", "/faq: a click on a question opens it");
+  await visitor.click("#personal-data > summary");
+  check((await openIds(visitor)).length === 0, "/faq: a second click closes it");
+  await visitor.eval(`document.querySelector("#government > summary").focus()`);
+  for (const type of ["keyDown", "keyUp"]) await visitor.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, ...(type === "keyDown" && { text: "\r" }) });
+  check((await visitor.waitFor<string>(`document.querySelector("#government").open ? "open" : null`, "the question to open from the keyboard", 5_000).catch(() => "")) === "open", "/faq: Enter on a question opens it");
+  // A link to a category scrolls to it and opens nothing.
+  await visitor.goto(`${ORIGIN}/faq`);
+  await visitor.click('.categories a[href="#cat-use"]');
+  check((await visitor.waitFor<boolean>(`location.hash === "#cat-use"`, "the link to a category", 5_000)) && (await onScreen(visitor, "cat-use")) && (await openIds(visitor)).length === 0, "/faq#cat-use from the list of the categories: the category on the screen, no question opened");
+  // A link on the same page to a question opens it.
+  await visitor.eval(`(() => { const a = document.createElement("a"); a.href = "#lost-card"; a.id = "to-lost-card"; a.textContent = "lost-card"; document.querySelector(".categories").append(a); })()`);
+  await visitor.click("#to-lost-card");
+  await visitor.waitFor<boolean>(`document.querySelector("#lost-card").open`, "the question a link on the page goes to, to open", 5_000).catch(() => false);
+  check((await openIds(visitor)).join() === "lost-card" && (await onScreen(visitor, "lost-card")), "/faq: a link on the page to #lost-card opens that question, on the screen");
+  // An address that names a question, from another page: that question open, on the screen; no other.
+  await visitor.goto(`${ORIGIN}/`);
+  await visitor.goto(`${ORIGIN}/faq#threads-knows`);
+  check((await openIds(visitor)).join() === "threads-knows" && (await onScreen(visitor, "threads-knows")), "/faq#threads-knows: that question open, on the screen, no other");
+  await shot(visitor, "faq-question-desktop.png", 1100);
+  await shot(visitor, "faq-question-phone.png", 390);
+  // (From another page: Page.navigate from /faq#… to /faq#… is a navigation in the page, with no load event to wait for.)
+  await visitor.goto(`${ORIGIN}/`);
+  await visitor.goto(`${ORIGIN}/faq#cat-privacy`);
+  check((await openIds(visitor)).length === 0 && (await onScreen(visitor, "cat-privacy")), "/faq#cat-privacy: the category on the screen, no question opened");
+  // Without the script: the browser scrolls to the question but does not open it; a click does.
+  const noScript = await browser.newPage();
+  await noScript.send("Page.enable");
+  await noScript.send("Runtime.enable");
+  await noScript.send("Network.enable");
+  await noScript.send("Network.setBlockedURLs", { urls: ["*/copy.js"] });
+  await noScript.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  await noScript.goto(`${ORIGIN}/faq#threads-knows`);
+  check((await openIds(noScript)).length === 0 && (await onScreen(noScript, "threads-knows")), "/faq#threads-knows without the script: the question on the screen, folded (the script is what opens it)");
+  await noScript.click("#threads-knows > summary");
+  check((await openIds(noScript)).join() === "threads-knows", "/faq without the script: a click on a question opens it");
+
   const violations = browser.logs.filter((l) => /Content Security Policy/i.test(l.text) && !/threads\.com/.test(l.text));
   check(violations.length === 0, `no Content-Security-Policy violation on the card proof page or the visitors' pages ${JSON.stringify(violations.map((l) => l.text))}`);
 } catch (e) {
