@@ -786,8 +786,9 @@ body.home main ol {
   list-style: none;
 }
 
-/* Read by a screen reader, not shown: each figure's one sentence. */
-body.home .sr {
+/* Read by a screen reader, not shown: each figure's one sentence; on how to check an account's proof, what each picture shows. */
+body.home .sr,
+body.check .sr {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1773,7 +1774,8 @@ body.home .questions summary::-webkit-details-marker {
   display: none;
 }
 
-body.home .questions summary::after {
+body.home .questions summary::after,
+body.check .trick summary::after {
   content: "";
   position: absolute;
   right: 6px;
@@ -1786,7 +1788,8 @@ body.home .questions summary::after {
   transform: rotate(45deg);
 }
 
-body.home .questions details[open] summary::after {
+body.home .questions details[open] summary::after,
+body.check .trick[open] summary::after {
   margin-top: -2px;
   transform: rotate(-135deg);
 }
@@ -2567,8 +2570,8 @@ body.check .step .n {
 body.check .step h3 {
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
-  font-size: 22px;
-  line-height: 1.5;
+  font-size: var(--size-h3);
+  line-height: var(--leading-h3);
   margin: 16px 0 12px;
 }
 
@@ -2596,24 +2599,6 @@ body.check .trick summary {
 
 body.check .trick summary::-webkit-details-marker {
   display: none;
-}
-
-body.check .trick summary::after {
-  content: "";
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  margin-top: -8px;
-  border-right: 1.5px solid var(--ink);
-  border-bottom: 1.5px solid var(--ink);
-  transform: rotate(45deg);
-}
-
-body.check .trick[open] summary::after {
-  margin-top: -2px;
-  transform: rotate(-135deg);
 }
 
 body.check .trick p {
@@ -2645,19 +2630,6 @@ body.check .sketch .sketch-note {
   margin-top: 16px;
   font-size: 16px;
   line-height: var(--leading-small);
-}
-
-/* What a screen reader is told of a picture: read, not shown. */
-body.check .sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* The example profile (steps 1 and 3): a white card with a thin frame, nothing of Threads' own look. */
@@ -2952,7 +2924,7 @@ body.check .three {
 body.check .three h3 {
   font-family: var(--font-display);
   font-weight: var(--weight-heading);
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1.5;
   margin: 8px 0 10px;
 }
@@ -3433,7 +3405,7 @@ body.account-not-a-name .title {
   }
 
   body.check .step h3 {
-    font-size: 19px;
+    font-size: var(--size-h3-phone);
     margin-top: 12px;
   }
 
@@ -3475,6 +3447,10 @@ body.account-not-a-name .title {
   body.check .three {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
+  }
+
+  body.check .three h3 {
+    font-size: 19px;
   }
 
   /* Hanging a proof: the two buttons share the row; the button of the page without a proof is as wide as the screen, under its question. */

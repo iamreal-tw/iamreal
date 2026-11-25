@@ -342,18 +342,24 @@ describe("what a card proof needs", () => {
   });
 });
 
-/** check.md's four steps, each its three code blocks: the words on the left, the words of the picture (its title first), and what a screen reader is told of the picture. */
-function checkSteps(): { text: string[]; picture: string[]; told: string[] }[] {
-  const blocks = codeBlocks(copySection("check.md", "2. "));
-  assert.equal(blocks.length, 1 + 4 * 3, "check.md section 2: its heading, then three blocks for each of the four steps");
-  return [0, 1, 2, 3].map((i) => ({ text: blocks[1 + 3 * i]!, picture: blocks[2 + 3 * i]!, told: blocks[3 + 3 * i]! }));
+/**
+ * check.md's four steps (its "### 第 n 步"), each its three code blocks: the words on the left, the words of the picture (its
+ * title first), and what a screen reader is told of the picture; and whether the picture's last line is the sentence under it
+ * rather than a piece of it (check.md says 最後一句在圖的下面).
+ */
+function checkSteps(): { text: string[]; picture: string[]; told: string[]; note: boolean }[] {
+  const steps = copySection("check.md", "2. ").split("\n### 第 ").slice(1);
+  assert.equal(steps.length, 4, "check.md section 2 has four steps");
+  return steps.map((step, i) => {
+    assert.ok(step.startsWith(`${i + 1} 步\n`), `check.md step ${i + 1}`);
+    const blocks = codeBlocks(step);
+    assert.equal(blocks.length, 3, `check.md step ${i + 1}: three code blocks`);
+    return { text: blocks[0]!, picture: blocks[1]!, told: blocks[2]!, note: step.includes("最後一句在圖的下面") };
+  });
 }
 
 /** The lines of check.md's pictures and steps 1 and 2, as a site with this domain writes them (check.md, 測試網站). */
 const onSite = (lines: readonly string[], host: string): string[] => copyLines(lines, "iamreal.tw", host);
-
-/** The last line of a picture that is a sentence under it rather than a piece of it (check.md, steps 3 and 4). */
-const NOTE_OF_STEP = [false, false, true, true];
 
 describe("how to check an account's proof", () => {
   test("every sentence of check.md, in order, then the foot; each step's picture after its words, the picture's pieces hidden from a screen reader, which is told it in words; the preview", async () => {
@@ -384,7 +390,7 @@ describe("how to check an account's proof", () => {
     for (const [i, s] of steps.entries()) {
       const figure = figures[i]!;
       const picture = onSite(s.picture, host);
-      const note = NOTE_OF_STEP[i] ? picture[picture.length - 1]! : null;
+      const note = s.note ? picture[picture.length - 1]! : null;
       const pieces = picture.slice(1, note === null ? undefined : -1);
       const m = /^\s*<figcaption>([^<]*)<\/figcaption>\s*<p class="sr">([^<]*)<\/p>\s*<div class="sketch-body" aria-hidden="true">([\s\S]*)<\/div>\s*(?:<p class="sketch-note">([^<]*)<\/p>\s*)?$/.exec(figure);
       assert.ok(m !== null, `step ${i + 1}: the picture is its title, what a screen reader is told, its hidden pieces and its sentence:\n${figure}`);
