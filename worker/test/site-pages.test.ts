@@ -172,12 +172,61 @@ describe("how to verify the proof log", () => {
   });
 });
 
+/** hang.md's pictures (part 2, 示意圖): the four steps' and the one of the result, each its words (its title first) and what a screen reader is told. */
+function hangPictures(): { picture: string[]; told: string[] }[] {
+  const section = copySection("hang.md", "2. ");
+  const pictures = section.slice(section.indexOf("\n### 示意圖\n")).split("\n#### ").slice(1);
+  assert.deepEqual(pictures.map((p) => p.slice(0, p.indexOf("\n"))), ["圖 1", "圖 2", "圖 3", "圖 4", "結果圖"], "hang.md has four pictures of the steps and one of the result");
+  return pictures.map((p) => {
+    const blocks = codeBlocks(p);
+    assert.equal(blocks.length, 2, `hang.md, ${p.slice(0, p.indexOf("\n"))}: two code blocks`);
+    return { picture: blocks[0]!, told: blocks[1]! };
+  });
+}
+
+/**
+ * Checks the page of hanging a proof against hang.md: every line of `lines` (part 2, then part 3 if it is
+ * there) in order, each step's picture after its words and the picture of the result after the two lines of
+ * part 3, as hang.md writes them with the examples replaced; each picture its title, what a screen reader is
+ * told and its pieces hidden from a screen reader; no inline style.
+ */
+function wantHangPage(page: string, lines: readonly string[], withResult: boolean, ...replace: string[]): void {
+  const pictures = hangPictures().map((p) => ({ picture: copyLines(p.picture, ...replace), told: copyLines(p.told, ...replace).join("") }));
+  const shown = withResult ? pictures : pictures.slice(0, 4);
+  const told = (p: (typeof pictures)[number]): string[] => [p.picture[0]!, p.told, ...p.picture.slice(1)];
+  const want: string[] = [];
+  const steps: number[] = [];
+  for (const line of lines) {
+    want.push(line);
+    const n = /^([1-4])\u3000/.exec(line)?.[1];
+    if (n === undefined) continue;
+    steps.push(Number(n));
+    want.push(...told(pictures[Number(n) - 1]!));
+  }
+  assert.deepEqual(steps, [1, 2, 3, 4], "hang.md has four steps, a picture after each");
+  if (withResult) want.push(...told(pictures[4]!));
+  wantLines(page, want);
+  const figures = [...page.matchAll(/<figure class="sketch[^"]*">([\s\S]*?)<\/figure>/g)].map((m) => m[1]!);
+  assert.equal(figures.length, shown.length, `${shown.length} pictures`);
+  for (const [i, p] of shown.entries()) {
+    const m = /^\s*<figcaption>([^<]*)<\/figcaption>\s*<p class="sr">([^<]*)<\/p>\s*<div class="sketch-body" aria-hidden="true">([\s\S]*)<\/div>\s*$/.exec(figures[i]!);
+    assert.ok(m !== null, `picture ${i + 1}: its title, what a screen reader is told and its hidden pieces:\n${figures[i]}`);
+    assert.deepEqual([unescapeHtml(m[1]!), unescapeHtml(m[2]!), squash(visibleText(m[3]!))], [p.picture[0], p.told, squash(p.picture.slice(1).join(""))], `picture ${i + 1}: its words`);
+    assert.match(p.picture[0]!, /（示意）$/, `picture ${i + 1}: its title says it is an illustration`);
+  }
+  assert.doesNotMatch(page, /\sstyle=/, "no inline style");
+}
+
 describe("hanging a proof on a profile", () => {
-  test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
+  test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, a picture under each step and one of the result, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
     const { status, page } = await getPage(worker, `/hang/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, [...copyLines(block("hang.md", "2. ", 0), "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"), ...copyLines(block("hang.md", "3. "))]);
+    const onTestSite = ["@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"];
+    wantHangPage(page, [...copyLines(block("hang.md", "2. ", 0), ...onTestSite), ...copyLines(block("hang.md", "3. "))], true, ...onTestSite);
+    // The pictures write the card's account, not the example's.
+    assert.ok(!page.includes("alice"), "no @alice on the page of @carol.tw");
+    assert.equal([...page.matchAll(/<script\b/g)].length, 1, "one script: the copy buttons'");
     // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
     // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
@@ -194,16 +243,18 @@ describe("hanging a proof on a profile", () => {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     assert.equal(page.split(`href="/p/${CARD_A}"`).length, 2, "one link to the card's page");
-    notOnPage(page, "還沒有島民證明？", "https://");
+    // The link is written without https://; only picture 4 writes it whole, as 複製連結 copied it into 網址.
+    notOnPage(page.replace(/<figure class="sketch press">[\s\S]*?<\/figure>/g, ""), "還沒有島民證明？", "https://");
     const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
   });
 
-  test("/hang without a proof: the page from the home page, with no script and no button", async () => {
+  test("/hang without a proof: the page from the home page, a picture under each step, with no script and no button", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/hang");
     assert.equal(status, 200);
-    wantLines(page, copyLines(block("hang.md", "2. ", 1)));
+    // The pictures write hang.md's examples, in the site's own domain.
+    wantHangPage(page, copyLines(block("hang.md", "2. ", 1)), false, "iamreal.tw/p/", "test.iamreal.tw/p/");
     for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof">我要換島民證明</a>']) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
