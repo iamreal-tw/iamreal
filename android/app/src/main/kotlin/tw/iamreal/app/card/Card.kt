@@ -49,6 +49,16 @@ class TapCancel {
     }
 }
 
+/**
+ * A card that reads only while the app's screen is in front: told when the screen comes to the front and
+ * when it leaves (MainActivity).
+ */
+interface ReadsInFront {
+    fun resumed(activity: android.app.Activity)
+
+    fun paused(activity: android.app.Activity)
+}
+
 /** A card held to the phone, for the length of one tap. */
 interface CardConnection {
     /** The certificates on the card (DER), in the card's order. No PIN. */
@@ -56,7 +66,8 @@ interface CardConnection {
 
     /**
      * Verifies [pin] with the card, then has the card's signing key sign [message] (RSASSA-PKCS1-v1_5 with
-     * SHA-256): 256 bytes. [pin] stays the caller's, who overwrites it; an implementation keeps no copy.
+     * SHA-256): 256 bytes. [pin] stays the caller's, who overwrites it; an implementation keeps no copy. Only
+     * after [readCertificates] on this connection, whose certificates the caller compares first.
      */
     fun sign(message: ByteArray, pin: ByteArray): ByteArray
 }
@@ -73,8 +84,29 @@ class CardException(val reason: Reason) : Exception(reason.name) {
         /** The card left the phone before the tap was done. */
         DROPPED,
 
+        /**
+         * The card left the phone while the PIN was on its way to it: whether the card took it, and counted a
+         * wrong one, is not known. The PIN is not sent again by itself.
+         */
+        PIN_MAYBE_SENT,
+
         /** The card says the PIN is not its PIN. */
         PIN_INCORRECT,
+
+        /** The card's PIN is locked. */
+        LOCKED,
+
+        /** The phone has no NFC. */
+        NO_NFC,
+
+        /** The phone's NFC is turned off. */
+        NFC_OFF,
+
+        /** The secure channel the card requires could not be made. No PIN was sent. */
+        CHANNEL,
+
+        /** A first-generation card, which the app does not read. Nothing was sent to it but the commands that tell. */
+        FIRST_GENERATION,
 
         /** Anything else the card answered. */
         OTHER,

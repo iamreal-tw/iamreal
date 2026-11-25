@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -115,6 +116,17 @@ class MainActivity : ComponentActivity() {
                     // Nothing on the phone to share with: nothing to do here.
                 }
             },
+            nfcSettings = {
+                // The system's page with the NFC switch; a phone without it, the page of the connections.
+                for (page in listOf(Settings.ACTION_NFC_SETTINGS, Settings.ACTION_WIRELESS_SETTINGS)) {
+                    try {
+                        startActivity(Intent(page))
+                        break
+                    } catch (e: ActivityNotFoundException) {
+                        // The next one.
+                    }
+                }
+            },
         )
         val words = JSONObject(resources.openRawResource(R.raw.app_copy).use { String(it.readBytes(), Charsets.UTF_8) }).getJSONObject("splash")
         val serviceName = model.copy.say("common.service_name")
@@ -162,10 +174,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // A card is read only while the app is in front.
+        wiring(applicationContext).front?.resumed(this)
         // The timer of the PIN's 5 minutes may not have run while the app was away.
         model(applicationContext).checkIdle()
         // "一週後再提醒我" on the notification may have changed the reminder meanwhile.
         reminder(applicationContext).refresh()
+    }
+
+    override fun onPause() {
+        wiring(applicationContext).front?.paused(this)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -196,6 +215,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private var wiring: Wiring? = null
         private var model: Model? = null
         private var reminder: ReminderModel? = null
 
@@ -205,9 +225,12 @@ class MainActivity : ComponentActivity() {
         /** How long the splash stays: long enough to read the name and the site. */
         private const val SPLASH_MS = 1_200L
 
+        /** What this process's card proof is wired to (Target.kt of the build). */
+        private fun wiring(context: Context): Wiring = wiring ?: Target.wiring(context).also { wiring = it }
+
         /** The one card proof of this process. */
         private fun model(context: Context): Model = model ?: Model(
-            Target.wiring(context),
+            wiring(context),
             bundled = { name -> context.assets.open(name).use { it.readBytes() } },
             crlNumbers = StoredCrlNumbers(context),
             copy = Copy(context.resources.openRawResource(R.raw.card_proof_copy).use { String(it.readBytes(), Charsets.UTF_8) }),

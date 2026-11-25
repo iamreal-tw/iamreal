@@ -263,7 +263,10 @@
     "figure_flip_emphasis": "有相機",
     "figure_top": "② 卡片貼住上方",
     "figure_top_emphasis": "上方",
-    "figure_iphone": "把手機翻到有相機的那一面，卡片貼住上方"
+    "figure_iphone": "把手機翻到有相機的那一面，卡片貼住上方",
+    "figure_middle": "② 貼在中間，沒反應就上下慢慢移動",
+    "figure_middle_emphasis": "中間",
+    "figure_android": "把手機翻到有相機的那一面，卡片貼在中間，沒反應就上下慢慢移動"
   },
   "app_stops": {
     "nfc_off": "手機的 NFC 關著。請打開 NFC，再按一次「感應卡片」。",
