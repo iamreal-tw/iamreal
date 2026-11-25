@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NFCReaderUsageDescription</key>
+	<string>感應自然人憑證，讀取卡片上的憑證、讓卡片簽章。</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>A0000002830000062201696400010101</string>
+		<string>A000000283FF088692535389C00014</string>
+		<string>A0000001510000</string>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>nfc</string>
+	</array>
+</dict>
+</plist>

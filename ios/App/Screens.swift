@@ -510,6 +510,9 @@ struct Screens {
         case .card(.noTap): return [copy("app_stops.no_tap", ["spot": copy("app_read.spot_iphone")])]
         case .card(.pinIncorrect): return [copy("pin.pin_incorrect")]
         case .card(.otherCard): return [tap == 3 ? copy("app_stops.other_card_declare") : copy("app_stops.other_card")]
+        case .card(.locked): return [copy("stops.card_locked")]
+        case .card(.channel): return [copy("app_stops.channel")]
+        case .card(.firstGeneration): return [copy("app_stops.first_generation")]
         case .card(.failed(let code)): return [copy("stops.card_error", ["code": code])]
         case .certificate(let problem, let date):
             let day = date.flatMap(Self.dateOfCertificateTime)

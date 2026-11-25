@@ -53,3 +53,11 @@ final class FakeCard: Card {
         }
     }
 }
+
+/// A card that never comes: every tap ends as if no card was there. For
+/// tests that tap no card.
+struct NoCardReader: Card {
+    func tap<T>(_ purpose: TapPurpose, _ body: (CardConnection) async throws -> T) async throws -> T {
+        throw CardFailure.noTap
+    }
+}

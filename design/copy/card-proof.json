@@ -257,7 +257,12 @@
     "tap_again": "再感應一次",
     "restart": "再感應一次卡片",
     "nfc_retry": "再按一次「感應卡片」",
-    "nfc_settings": "打開 NFC 設定"
+    "nfc_settings": "打開 NFC 設定",
+    "figure_flip": "① 翻到有相機的那面",
+    "figure_flip_emphasis": "有相機",
+    "figure_top": "② 卡片貼住上方",
+    "figure_top_emphasis": "上方",
+    "figure_iphone": "把手機翻到有相機的那一面，卡片貼住上方"
   },
   "app_stops": {
     "nfc_off": "手機的 NFC 關著。請打開 NFC，再按一次「感應卡片」。",
@@ -271,7 +276,9 @@
     "dropped_pin_kept": "卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。",
     "other_card_declare": "這不是一開始讀到的那張卡片，PIN 沒有送出。請換回那張卡片，再感應一次。",
     "dropped": "卡片在感應途中離開了手機。請再感應一次。",
-    "tap_cancelled": "感應取消了，卡片沒有簽。"
+    "tap_cancelled": "感應取消了，卡片沒有簽。",
+    "channel": "卡片和這支手機建立不起加密的連線，PIN 沒有送出。請改用電腦和讀卡機過卡。",
+    "first_generation": "這是第一代的自然人憑證，app 不能用它過卡。請換發新卡後再過卡。"
   },
   "app_pin": {
     "stays": "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",

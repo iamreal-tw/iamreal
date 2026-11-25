@@ -2,8 +2,8 @@ import Foundation
 
 /// The card, as the card proof uses it: read its certificates, and with
 /// the PIN have it sign. The flow (CardProofFlow) knows nothing else about
-/// a card; reading one over NFC is one implementation of this (issue
-/// #174), a card made of test keys is another (Tests/).
+/// a card; reading one over NFC is one implementation of this
+/// (NFCCard.swift), a card made of test keys is another (Tests/).
 ///
 /// A card proof holds the card three times, each a tap:
 ///
@@ -43,6 +43,14 @@ enum CardFailure: Error, Equatable {
     case noTap
     /// The card answered that the PIN is not the one it has.
     case pinIncorrect
+    /// The card is locked: it answered that no try of the PIN is left.
+    case locked
+    /// The secure channel a second-generation card requires could not be
+    /// set up. The PIN was not sent.
+    case channel
+    /// A first-generation card, which the app does not read. Nothing was
+    /// read and the PIN was not sent.
+    case firstGeneration
     /// The card is not the one read in the first tap. The PIN was not sent.
     case otherCard
     /// Anything else the card or the connection did. `code` is a short
@@ -79,13 +87,5 @@ final class PIN {
 
     deinit {
         clear()
-    }
-}
-
-/// The card of a build that cannot read one yet: reading over NFC is
-/// issue #174. Every tap ends as if no card came.
-struct NoCardReader: Card {
-    func tap<T>(_ purpose: TapPurpose, _ body: (CardConnection) async throws -> T) async throws -> T {
-        throw CardFailure.noTap
     }
 }
