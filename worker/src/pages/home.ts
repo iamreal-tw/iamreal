@@ -71,21 +71,26 @@ const HERO_YOU = [14, 11] as const;
 
 /**
  * Right of the dots placed by hand, as far as a 4K window shows (#335):
- * columns 32 to 119 and the 35 rows of the first screen on a wide screen,
- * in blocks of 8 columns by 7 rows; three blocks in four get one dot, in a
- * cell drawn at random. About as dense as the dots placed by hand, spread
+ * columns 32 to 119 and rows 0 to 41 (the first screen is about 38 rows
+ * high on a wide screen), in blocks of 8 columns by 7 rows; three blocks in
+ * four get one dot, in a cell drawn at random. About as dense as the dots placed by hand, spread
  * evenly; a 1280px window ends before column 32, so it shows none of them.
  */
 const HERO_FILL_FROM = 32;
-const HERO_FILL_BLOCKS = [11, 5] as const;
-const HERO_BLOCK = [8, 7] as const;
+const HERO_BLOCK_COLUMNS = 8;
+const HERO_BLOCK_ROWS = 7;
+/** 11 blocks across (columns 32 to 119) and 6 down (rows 0 to 41). */
+const HERO_BLOCKS_ACROSS = 11;
+const HERO_BLOCKS_DOWN = 6;
 const HERO_PROOF: readonly (readonly [number, number])[] = (() => {
   const random = seeded(0x2b9e1c);
   const out: (readonly [number, number])[] = [...HERO_PLACED];
-  for (let bc = 0; bc < HERO_FILL_BLOCKS[0]; bc++) {
-    for (let br = 0; br < HERO_FILL_BLOCKS[1]; br++) {
+  for (let across = 0; across < HERO_BLOCKS_ACROSS; across++) {
+    for (let down = 0; down < HERO_BLOCKS_DOWN; down++) {
       if (random() >= 0.75) continue;
-      out.push([HERO_FILL_FROM + bc * HERO_BLOCK[0] + Math.floor(random() * HERO_BLOCK[0]), br * HERO_BLOCK[1] + Math.floor(random() * HERO_BLOCK[1])]);
+      const column = HERO_FILL_FROM + across * HERO_BLOCK_COLUMNS + Math.floor(random() * HERO_BLOCK_COLUMNS);
+      const row = down * HERO_BLOCK_ROWS + Math.floor(random() * HERO_BLOCK_ROWS);
+      out.push([column, row]);
     }
   }
   return out;
