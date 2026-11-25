@@ -651,10 +651,9 @@ body.proof_log .more {
   margin: 20px 0 0;
 }
 
-body.proof_log .download {
-  margin-top: 56px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
+/* The two links, a line of their own below the numbers and the sentence under them, before the list. */
+body.proof_log .numbers .download {
+  margin: 16px 0 0;
 }
 
 body.proof_log .download a + a {
@@ -686,10 +685,6 @@ body.proof_log .download a + a {
 
   body.proof_log .more a {
     display: flex;
-  }
-
-  body.proof_log .download {
-    margin-top: 40px;
   }
 }
 
