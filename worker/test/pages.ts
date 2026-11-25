@@ -72,13 +72,13 @@ export { mustSubmit };
 /** The policy of the visitors' pages (README.md, "頁面送的標頭"). */
 export const VISITOR_CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-/** The policy of the two pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
+/** The policy of the pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
 export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-/** Whether the page at a path loads the copy buttons' script when it is found: /verify and /hang/<short ID>, nothing else. */
+/** Whether the page at a path loads the copy buttons' script when it is found: /faq, /verify and /hang/<short ID>, nothing else. */
 export function withScript(path: string): boolean {
   const p = path.split("?")[0]!;
-  return p === "/verify" || p.startsWith("/hang/");
+  return p === "/faq" || p === "/verify" || p.startsWith("/hang/");
 }
 
 /**
@@ -207,8 +207,8 @@ export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
 
 /**
  * Requests a page and checks what every page of the visitors must be: the
- * headers; HTML with no script (but the copy buttons' script on /verify and
- * /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
+ * headers; HTML with no script (but the copy buttons' script on /faq, /verify
+ * and /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
  * event attribute and no description (but the home page's); the link
  * preview's one image if the page has a link preview (`previewImageMeta`);
  * the navigation bar and the foot; and, on a test log, the mark with the date it was
