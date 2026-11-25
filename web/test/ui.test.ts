@@ -14,6 +14,9 @@ import { scopeOf } from "iamreal-protocol/scope.ts";
 import { parseUsernameFormat } from "iamreal-protocol/username-format.ts";
 import { COPY, fill } from "../src/ui/copy.ts";
 import {
+  type AccountsView,
+  type DeclaredView,
+  type FillView,
   type ItemState,
   type Message,
   PROGRESS_ITEMS,
@@ -24,6 +27,7 @@ import {
   confirmView,
   daysBetween,
   doneView,
+  editListView,
   firstNotDone,
   itemStates,
   onePlatform,
@@ -31,6 +35,7 @@ import {
   readItemOf,
   rowLines,
   stopMessage,
+  switchView,
 } from "../src/ui/messages.ts";
 
 const text = (m: Message): string => ("code" in m ? `[${m.code}]` : fill(m.template, m.values));
@@ -254,32 +259,79 @@ const declared = (u: string, o: Partial<SlotStatus> = {}) => slot(THREADS, { cur
 const lines = (s: SlotStatus) => rowLines(s).map(t);
 
 describe("your accounts (step 4)", () => {
-  test("never declared: two lines on top, one row per platform of the table, the notes of a first declaration", () => {
-    const v = accountsView(status([slot(EXAMPLE), slot(THREADS)], { lastCardProof: null }));
+  const leadOf = (v: { lead: Message[][] }) => v.lead.map((l) => l.map(text).join(""));
+  const fillOf = (v: AccountsView): FillView => {
+    assert.equal(v.mode, "fill");
+    return v as FillView;
+  };
+  const declaredOf = (v: AccountsView): DeclaredView => {
+    assert.equal(v.mode, "declared");
+    return v as DeclaredView;
+  };
+
+  test("one platform, never declared: the field alone, the preview note; no rules of switching", () => {
+    const v = fillOf(accountsView(status([slot(THREADS)], { lastCardProof: null })));
     assert.equal(v.state, "never");
-    assert.equal(t(v.title), "你的帳號");
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
+    assert.equal(t(v.title), "你的 Threads 帳號");
+    assert.deepEqual(leadOf(v), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的 Threads 帳號。"]);
     assert.deepEqual(
       v.rows.map((r) => [r.platform, r.name, r.prefix, r.current, r.editable, r.preview, r.lines.map(t)]),
-      [
-        ["test-example", EXAMPLE_NAME, "", "", true, false, ["還沒有宣告過。"]],
-        ["threads", "Threads", "@", "", true, true, ["還沒有宣告過。"]],
-      ],
+      [["threads", "Threads", "@", "", true, true, []]],
     );
-    // No 了解更多 after any of them: the card proof's screens send no one elsewhere.
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
     );
-    // Below the button: that no one checks whose account it is, and what the account's owner does about it.
-    assert.equal(t(v.notYours!), "系統無法確認帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。");
     assert.equal(v.dailyLimit, null);
   });
 
-  test("declared: the list and the last card proof on one line; card proof again, how to change", () => {
-    const v = accountsView(status([slot(EXAMPLE), declared("alice", { switchCount: 1 })]));
+  test("one platform, everything withdrawn: the same screen, with what was withdrawn and the switches left under the field", () => {
+    const v = fillOf(accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02", switchCount: 1 })])));
+    assert.equal(v.state, "nothing");
+    assert.deepEqual(leadOf(v), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的 Threads 帳號。"]);
+    assert.deepEqual(v.rows[0]!.lines.map(t), ["上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。", "更換過 1 次，還可以更換 4 次。"]);
+    assert.deepEqual(
+      v.notes.map((n) => n.map(t).join("")),
+      ["預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+    );
+  });
+
+  test("one platform, declared: the account, the last card proof, 更新島民證明 and the two other actions", () => {
+    const v = declaredOf(accountsView(status([declared("alice", { switchCount: 1 })])));
     assert.equal(v.state, "declared");
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這是這張卡片目前宣告的帳號。上次過卡是 12 天前。"]);
+    assert.equal(t(v.title), "你的 Threads 帳號");
+    assert.deepEqual(
+      v.current.map((c) => [c.name, c.account, c.raw, c.line === null ? null : t(c.line)]),
+      [[null, "@alice", false, null]],
+    );
+    assert.equal(text(v.last), "上次過卡是 12 天前");
+    assert.equal(t(v.refreshNote), "宣告帳號不變，把島民證明上的日期更新成今天。");
+    assert.equal(v.switchAccount, true);
+    assert.equal(t(v.withdraw!), "收回對 @alice 的宣告");
+    assert.equal(v.editList, false);
+    assert.equal(v.dailyLimit, null);
+    // The last card proof today: 今天, not 0 天前.
+    assert.equal(text(declaredOf(accountsView(status([declared("alice")], { lastCardProof: TODAY }))).last), "上次過卡是今天");
+  });
+
+  test("more than one platform, declared: the accounts by platform, 修改帳號清單 in place of switching and withdrawing", () => {
+    const v = declaredOf(accountsView(status([slot(EXAMPLE), declared("alice"), slot(null, { platform: "x-new", current: "a-b", lastDeclared: "a-b" })])));
+    assert.equal(t(v.title), "你的帳號");
+    assert.deepEqual(
+      v.current.map((c) => [c.name, c.account, c.raw, c.line === null ? null : t(c.line)]),
+      [
+        ["Threads", "@alice", false, null],
+        ["x-new", "a-b", true, "這一頁還不認得這個平台。這個帳號會原樣保留，在這裡不能修改。"],
+      ],
+    );
+    assert.deepEqual([v.switchAccount, v.withdraw, v.editList], [false, null, true]);
+  });
+
+  test("more than one platform, 修改帳號清單: one row per platform with its line, how to change the list", () => {
+    const v = editListView(status([slot(EXAMPLE), declared("alice", { switchCount: 1 })]));
+    assert.equal(v.state, "declared");
+    assert.equal(t(v.title), "你的帳號");
+    assert.deepEqual(leadOf(v), ["這是這張卡片目前宣告的帳號。"]);
     assert.deepEqual(
       v.rows.map((r) => [r.current, r.lines.map(t)]),
       [
@@ -289,36 +341,45 @@ describe("your accounts (step 4)", () => {
     );
     assert.deepEqual(
       v.notes.map((n) => n.map(t).join("")),
-      ["什麼都不改，直接按「下一步」，就是再次過卡：把上次過卡的日期更新成今天。", "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+      ["填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
     );
   });
 
-  test("the last card proof today: 上次過卡是今天, not 0 天前", () => {
-    const v = accountsView(status([declared("alice", { correctionDate: TODAY, correctionToday: true })], { lastCardProof: TODAY }));
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這是這張卡片目前宣告的帳號。上次過卡是今天。"]);
+  test("more than one platform, never declared or everything withdrawn: the list to fill, as before", () => {
+    const never = fillOf(accountsView(status([slot(EXAMPLE), slot(THREADS)], { lastCardProof: null })));
+    assert.deepEqual(leadOf(never), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
+    assert.deepEqual(
+      never.rows.map((r) => [r.platform, r.name, r.prefix, r.editable, r.preview, r.lines.map(t)]),
+      [
+        ["test-example", EXAMPLE_NAME, "", true, false, ["還沒有宣告過。"]],
+        ["threads", "Threads", "@", true, true, ["還沒有宣告過。"]],
+      ],
+    );
+    assert.deepEqual(
+      never.notes.map((n) => n.map(t).join("")),
+      ["一張卡片在每個平台只能宣告一個帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。"],
+    );
+    const nothing = fillOf(accountsView(status([slot(EXAMPLE), slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })])));
+    assert.deepEqual(leadOf(nothing), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
+    assert.deepEqual(nothing.notes[0]!.map(t).join(""), "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。");
   });
 
-  test("everything withdrawn: two lines on top, no card proof again", () => {
-    const v = accountsView(status([slot(EXAMPLE), slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
-    assert.equal(v.state, "nothing");
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的帳號，至少一個。沒有要宣告的平台留空白。"]);
-    assert.ok(!v.notes.some((n) => n.some((x) => x.template === COPY.accounts.how_refresh)));
-    // One platform: the line names it.
-    const one = accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: "2026-03-02" })]));
-    assert.deepEqual(one.lead.map((l) => l.map(text).join("")), ["這張卡片目前沒有宣告任何帳號。", "填上你要宣告的 Threads 帳號。"]);
-  });
-
-  test("one platform: the title, the line on top and the note of a first declaration name it", () => {
-    const v = accountsView(status([slot(THREADS)], { lastCardProof: null }));
+  test("改成別的帳號: the account now, an empty field, what it does and the switches left after it", () => {
+    const v = switchView(status([declared("alice", { switchCount: 1 })]));
     assert.equal(t(v.title), "你的 Threads 帳號");
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這張卡片還沒有宣告過帳號。", "填上你要宣告的 Threads 帳號。"]);
-    assert.deepEqual(v.notes[0]!.map(t), ["一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。", "一張卡終身最多只能更換宣告的帳號 5 次。"]);
-    assert.equal(t(v.notYours!), "系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。");
-    // Declared, and on a day with 3 records: the title too.
-    assert.equal(t(accountsView(status([declared("alice")])).title), "你的 Threads 帳號");
-    assert.equal(t(accountsView(status([declared("alice")], { lastCardProof: TODAY, dailyLimit: true })).title), "你的 Threads 帳號");
-    // An account on a platform the device does not know: more than one.
-    assert.equal(t(accountsView(status([slot(null, { platform: "test-example", current: "a-b", lastDeclared: "a-b" }), slot(THREADS)], { lastCardProof: null })).title), "你的帳號");
+    assert.equal(t(v.intro), "這張卡片目前宣告 @alice。");
+    assert.deepEqual([v.row!.platform, v.row!.current, v.row!.editable, v.row!.preview, v.row!.lines], ["threads", "", true, true, []]);
+    assert.deepEqual(v.lines.map(t), ["改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。"]);
+    assert.equal(t(v.previewNote!), "預覽會在新分頁開平台上這個帳號的頁面，讓你確認沒有打錯。");
+    // The last one.
+    assert.deepEqual(switchView(status([declared("alice", { switchCount: 4 })])).lines.map(t)[1], "用掉最後一次更換。這次之後，這個平台不能再更換。");
+    // Put there today: a correction, not counted, even with none left.
+    assert.deepEqual(switchView(status([declared("alice", { switchCount: 5, correctionDate: TODAY, correctionToday: true })])).lines.map(t)[1], "今天才宣告的帳號，今天改掉不另外算一次更換。");
+    // Used up: no field, the reason only.
+    const used = switchView(status([declared("alice", { switchCount: 5 })]));
+    assert.equal(used.row, null);
+    assert.deepEqual(used.lines.map(t), ["已經更換 5 次，這個平台不能再更換。"]);
+    assert.equal(used.previewNote, null);
   });
 
   test("the line under each row, by its counts", () => {
@@ -340,19 +401,25 @@ describe("your accounts (step 4)", () => {
   });
 
   test("a platform the device does not know: a row as the server sent it, which cannot be changed", () => {
-    const v = accountsView(status([slot(null, { platform: "test-example", current: "alice-b", lastDeclared: "alice-b" }), declared("alice")]));
+    const v = editListView(status([slot(null, { platform: "test-example", current: "alice-b", lastDeclared: "alice-b" }), declared("alice")]));
     const r = v.rows[0]!;
     assert.deepEqual([r.platform, r.name, r.prefix, r.current, r.editable, r.preview], ["test-example", "test-example", "", "alice-b", false, false]);
     assert.deepEqual(r.lines.map(t), ["這一頁還不認得這個平台。這個帳號會原樣保留，在這裡不能修改。"]);
   });
 
-  test("3 records today: the list as it is, no line under the rows, the sentence in place of the button", () => {
-    const v = accountsView(status([slot(EXAMPLE, { current: "a-b", lastDeclared: "a-b", correctionDate: TODAY, correctionToday: true }), declared("alice")], { lastCardProof: TODAY, dailyLimit: true }));
-    assert.deepEqual(v.lead.map((l) => l.map(text).join("")), ["這是這張卡片目前宣告的帳號。上次過卡是今天。"]);
-    assert.ok(v.rows.every((r) => !r.editable && !r.preview && r.lines.length === 0));
+  test("3 records today: the accounts as they are, no action, the sentence in place of the buttons", () => {
+    const v = declaredOf(accountsView(status([slot(EXAMPLE, { current: "a-b", lastDeclared: "a-b", correctionDate: TODAY, correctionToday: true }), declared("alice")], { lastCardProof: TODAY, dailyLimit: true })));
+    assert.equal(text(v.last), "上次過卡是今天");
+    assert.deepEqual(v.current.map((c) => [c.name, c.account]), [["test-example", "a-b"], ["Threads", "@alice"]]);
+    assert.deepEqual([v.switchAccount, v.withdraw, v.editList], [false, null, false]);
     assert.equal(t(v.dailyLimit!), "這張卡片今天已經過卡 3 次，明天才能再過卡。");
-    assert.deepEqual(v.notes, []);
-    assert.equal(v.notYours, null);
+    // One platform: the title names it.
+    assert.equal(t(accountsView(status([declared("alice")], { lastCardProof: TODAY, dailyLimit: true })).title), "你的 Threads 帳號");
+    // Everything withdrawn, 3 records today: the rows as they are, nothing to type in.
+    const none = fillOf(accountsView(status([slot(THREADS, { lastDeclared: "bob", correctionDate: TODAY, correctionToday: true })], { lastCardProof: TODAY, dailyLimit: true })));
+    assert.ok(none.rows.every((r) => !r.editable && !r.preview && r.lines.length === 0));
+    assert.deepEqual(none.notes, []);
+    assert.equal(t(none.dailyLimit!), "這張卡片今天已經過卡 3 次，明天才能再過卡。");
   });
 
   test("one platform: one platform of the table the device knows, and no account on a platform it does not know", () => {
@@ -367,14 +434,13 @@ describe("your accounts (step 4)", () => {
     assert.equal(onePlatform(status([], { tablePlatforms: [] })), null);
   });
 
-  test("step 1: by the platforms the device knows; one named, or more listed together", () => {
+  test("step 1: by the platforms the device knows; one says nothing of the proof, more than one say they are listed together", () => {
     // The production build knows Threads only.
     const one = beforeView();
-    assert.equal(t(one.oneProof), "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。");
-    assert.equal(one.listedTogether, false);
+    assert.deepEqual([one.oneProof, one.listedTogether], [null, false]);
     assert.deepEqual(beforeView(new Set(["threads"])), one);
     const more = beforeView(new Set(["test-example", "threads"]));
-    assert.equal(t(more.oneProof), "一張自然人憑證換一張島民證明，上面列出這張卡片宣告的帳號，每個平台最多一個。");
+    assert.equal(t(more.oneProof!), "一張自然人憑證換一張島民證明，上面列出這張卡片宣告的帳號，每個平台最多一個。");
     assert.equal(more.listedTogether, true);
   });
 
@@ -394,6 +460,7 @@ function consequence(rows: ConsequenceRow[], o: Partial<Consequence> = {}): Cons
 
 describe("confirm (step 5)", () => {
   const rowsOf = (cq: Consequence) => confirmView(cq).rows.map((r) => [r.name, r.id, r.account, r.lines.map(t)]);
+  const pointsOf = (v: { points: Sentence[] }) => v.points.map(t);
 
   test("each row: the platform's name and ID, the account, what happens", () => {
     const cq = consequence([
@@ -404,13 +471,23 @@ describe("confirm (step 5)", () => {
       [EXAMPLE_NAME, "test-example", "a-b", ["新宣告"]],
       ["Threads", "threads", "@carol.tw", ["更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 1 次。"]],
     ]);
-    const v = confirmView(cq);
+    const v = confirmView(cq, null, ["Example", "Threads"]);
     assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片的帳號清單：");
     assert.equal(v.listedTogether, true);
     assert.equal(v.withdrawStays, false);
-    assert.equal(v.later, "之後可以用同一張卡片收回或更換帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。");
+    // Each platform of the screens named, where one platform would be.
+    assert.deepEqual(pointsOf(v), [
+      "證明紀錄不包含姓名、生日、身分證字號和卡號。Example、Threads、政府、我們都查不出這是誰的卡片。",
+      "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Example、Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+    ]);
     assert.equal(v.button, "宣告這份清單");
     assert.equal(v.date, TODAY);
+  });
+
+  test("the words that no record can be deleted are their own part of the sentence (shown in bold)", () => {
+    const v = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
+    const later = v.points[1]!;
+    assert.equal(later.values.cannot_delete, "所有紀錄公開後無法刪除");
   });
 
   test("the kinds of a row", () => {
@@ -430,13 +507,14 @@ describe("confirm (step 5)", () => {
     assert.deepEqual(rowsOf(consequence([crow({ platform: "x-new", row: null, kind: "refresh", username: "alice-b", current: "alice-b" })])), [["x-new", "x-new", "alice-b", ["不變"]]]);
   });
 
-  test("the button by the whole list", () => {
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })])).button, "再次過卡");
+  test("the button by the whole list: 更新島民證明 when nothing changes", () => {
+    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })])).button, "更新島民證明");
+    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads").button, "更新島民證明");
     assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })])).button, "宣告這份清單");
     assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" }), crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" })])).button, "宣告這份清單");
   });
 
-  test("an account withdrawn: its row, and that the record stays", () => {
+  test("more than one platform, an account withdrawn: its row, and that the record stays", () => {
     const cq = consequence([crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" }), crow({ kind: "refresh", username: "alice", current: "alice" })]);
     const v = confirmView(cq);
     assert.deepEqual(rowsOf(cq)[0], [EXAMPLE_NAME, "test-example", "a-b", ["收回"]]);
@@ -444,36 +522,35 @@ describe("confirm (step 5)", () => {
     assert.equal(v.listedTogether, true);
   });
 
-  test("one platform: this account is listed on the proof, in place of the accounts listed together", () => {
+  test("one platform: that it is made public is in the first sentence; the platform named in the two points", () => {
     const one = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
     assert.equal(one.listedTogether, false);
-    assert.equal(t(one.listedSingle!), "這個 Threads 帳號會公開列在島民證明上。");
-    // The first sentence and the button speak of the account.
-    assert.equal(one.intro, "按下後，證明紀錄會公開記下這張卡片宣告的帳號：");
+    assert.equal(one.intro, "按下後，證明紀錄會記下新的證明並公開給所有人：");
+    assert.deepEqual(pointsOf(one), [
+      "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+      "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+    ]);
     assert.equal(one.button, "宣告這個帳號");
-    const more = confirmView(consequence([crow({ kind: "first", username: "alice" })]), null);
-    assert.deepEqual([more.listedTogether, more.listedSingle], [true, null]);
-    assert.deepEqual([more.intro, more.button], ["按下後，證明紀錄會公開記下這張卡片的帳號清單：", "宣告這份清單"]);
-    // Card proof again with one platform: the first sentence of one platform, the button as it is.
-    const again = confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads");
-    assert.deepEqual([again.intro, again.button], ["按下後，證明紀錄會公開記下這張卡片宣告的帳號：", "再次過卡"]);
     // A switch or declared again: 宣告這個帳號.
     assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4 })]), "Threads").button, "宣告這個帳號");
     assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
-    // Everything withdrawn: neither, and the sentence and button of a withdrawal.
-    const none = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
-    assert.deepEqual([none.listedTogether, none.listedSingle], [false, null]);
-    assert.deepEqual([none.intro, none.button], ["按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：", "收回所有帳號"]);
   });
 
-  test("everything withdrawn: the other first sentence, no listed together, the other second point, the button", () => {
-    const v = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]));
-    assert.equal(v.intro, "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：");
-    assert.equal(v.listedTogether, false);
-    assert.equal(v.listedSingle, null);
-    assert.equal(v.withdrawStays, true);
-    assert.equal(v.later, "之後可以用同一張卡片再宣告。所有紀錄公開後無法刪除，這樣任何人才能驗證。");
-    assert.equal(v.button, "收回所有帳號");
+  test("everything withdrawn: the other first sentence, the three points, the button naming the account (one platform)", () => {
+    const one = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
+    assert.equal(one.intro, "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：");
+    assert.equal(one.listedTogether, false);
+    assert.equal(one.withdrawStays, false);
+    assert.deepEqual(pointsOf(one), [
+      "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
+      "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+      "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
+    ]);
+    assert.equal(one.button, "收回對 @alice 的宣告");
+    // More than one platform: the same points, 收回所有帳號.
+    const more = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" }), crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" })]), null, ["Example", "Threads"]);
+    assert.deepEqual([more.listedTogether, more.withdrawStays, more.button], [false, false, "收回所有帳號"]);
+    assert.equal(more.points.length, 3);
   });
 });
 
@@ -671,8 +748,10 @@ describe("done (step 6)", () => {
 
   test("an account of a platform the device does not know is shown as it is (spaces kept)", () => {
     const row = slot(null, { platform: "x-new", current: "a  b ", lastDeclared: "a  b " });
-    const a = accountsView(status([row]));
+    const a = editListView(status([row]));
     assert.deepEqual([a.rows[0]!.current, a.rows[0]!.raw, a.rows[0]!.name], ["a  b ", true, "x-new"]);
+    const d4 = accountsView(status([row]));
+    assert.deepEqual(d4.mode === "declared" ? d4.current.map((c) => [c.account, c.raw]) : null, [["a  b ", true]]);
     const cq = consequence([crow({ platform: "x-new", row: null, kind: "refresh", username: "a  b ", current: "a  b " })]);
     assert.deepEqual(confirmView(cq).rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);
     const d = doneView(done(cq.rows, [k("x-new", "refresh", "a  b ")]));
