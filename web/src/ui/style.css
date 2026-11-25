@@ -759,6 +759,7 @@ strong.heed {
 
 /* Step 1: where to get a card, in its question. */
 .asks details .btn {
+  text-decoration: none;
   margin: 0 0 12px;
   min-height: var(--min-target);
   padding: 0 18px;
