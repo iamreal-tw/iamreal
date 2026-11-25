@@ -408,6 +408,8 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 2", [say("read.title"), say("app_read.how", { spot: SPOT }), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
+    const figure = find((n) => n.id === "tap-place", "step 2's figure of where the card goes");
+    check(figure.description === say("app_read.figure_android"), "step 2's figure reads as its one sentence of the copy");
   }
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false });

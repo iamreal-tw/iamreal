@@ -21,9 +21,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -41,7 +41,10 @@ import androidx.compose.ui.unit.em
 @Composable
 internal fun TapPlace(c: Copy) {
     Column(
-        Modifier.fillMaxWidth().padding(top = 8.dp).clearAndSetSemantics { contentDescription = c.say("app_read.figure_android") }.testTag("tap-place"),
+        Modifier.fillMaxWidth().padding(top = 8.dp).clearAndSetSemantics {
+            contentDescription = c.say("app_read.figure_android")
+            testTag = "tap-place"
+        },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

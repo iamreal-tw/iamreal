@@ -7,6 +7,8 @@ import { execFileSync } from "node:child_process";
 export interface Node {
   text: string;
   id: string;
+  /** What a screen reader reads for the node (content-desc), when the app gives it one. */
+  description: string;
   clickable: boolean;
   enabled: boolean;
   /** The middle of the node on the screen, in pixels. */
@@ -79,7 +81,7 @@ export class Emulator {
       const text = attr("text");
       const id = attr("resource-id");
       if (text === "" && id === "") continue;
-      nodes.push({ text, id, clickable: attr("clickable") === "true", enabled: attr("enabled") === "true", x: (left + right) >> 1, y: (top + bottom) >> 1, top, bottom });
+      nodes.push({ text, id, description: attr("content-desc"), clickable: attr("clickable") === "true", enabled: attr("enabled") === "true", x: (left + right) >> 1, y: (top + bottom) >> 1, top, bottom });
     }
     return nodes;
   }
