@@ -340,11 +340,74 @@ describe("what a card proof needs", () => {
   });
 });
 
+/** check.md's four steps, each its three code blocks: the words on the left, the words of the picture (its title first), and what a screen reader is told of the picture. */
+function checkSteps(): { text: string[]; picture: string[]; told: string[] }[] {
+  const blocks = codeBlocks(copySection("check.md", "2. "));
+  assert.equal(blocks.length, 1 + 4 * 3, "check.md section 2: its heading, then three blocks for each of the four steps");
+  return [0, 1, 2, 3].map((i) => ({ text: blocks[1 + 3 * i]!, picture: blocks[2 + 3 * i]!, told: blocks[3 + 3 * i]! }));
+}
+
+/** The lines of check.md's pictures and steps 1 and 2, as a site with this domain writes them (check.md, 測試網站). */
+const onSite = (lines: readonly string[], host: string): string[] => copyLines(lines, "iamreal.tw", host);
+
+/** The last line of a picture that is a sentence under it rather than a piece of it (check.md, steps 3 and 4). */
+const NOTE_OF_STEP = [false, false, true, true];
+
+describe("how to check an account's proof", () => {
+  test("every sentence of check.md, in order, then the foot; each step's picture after its words, the picture's pieces hidden from a screen reader, which is told it in words; the preview", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/check");
+    assert.equal(status, 200);
+    const host = "test.iamreal.tw";
+    const steps = checkSteps();
+    const want = [
+      ...copyLines(block("check.md", "1. ")),
+      ...copyLines(block("check.md", "2. ", 0)),
+      ...steps.flatMap((s, i) => [...(i < 2 ? onSite(s.text, host) : copyLines(s.text)), ...onSite(s.picture.slice(0, 1), host), ...onSite(s.told, host), ...onSite(s.picture.slice(1), host)]),
+      ...copyLines(block("check.md", "3. ")),
+      ...copyLines(block("check.md", "4. ")),
+    ];
+    const foot = copyLines(block("home.md", "頁尾"));
+    wantLines(page, [...want, ...foot]);
+    assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last situation and the foot");
+
+    // Each step's 惡意手法: a <details> closed until it is opened, its <summary> the word.
+    const tricks = [...page.matchAll(/<details class="trick">\s*<summary>([^<]*)<\/summary>/g)].map((m) => m[1]);
+    assert.deepEqual(tricks, ["惡意手法", "惡意手法", "惡意手法", "惡意手法"], "four 惡意手法, each a <details> with its <summary>");
+    assert.doesNotMatch(page, /<details[^>]*\sopen/, "every 惡意手法 is closed");
+
+    // Each picture: its title, what a screen reader is told, its pieces hidden from it, and (steps 3 and 4) the sentence under it.
+    const figures = [...page.matchAll(/<figure class="sketch[^"]*">([\s\S]*?)<\/figure>/g)].map((m) => m[1]!);
+    assert.equal(figures.length, 4, "a picture for each step");
+    for (const [i, s] of steps.entries()) {
+      const figure = figures[i]!;
+      const picture = onSite(s.picture, host);
+      const note = NOTE_OF_STEP[i] ? picture[picture.length - 1]! : null;
+      const pieces = picture.slice(1, note === null ? undefined : -1);
+      const m = /^\s*<figcaption>([^<]*)<\/figcaption>\s*<p class="sr">([^<]*)<\/p>\s*<div class="sketch-body" aria-hidden="true">([\s\S]*)<\/div>\s*(?:<p class="sketch-note">([^<]*)<\/p>\s*)?$/.exec(figure);
+      assert.ok(m !== null, `step ${i + 1}: the picture is its title, what a screen reader is told, its hidden pieces and its sentence:\n${figure}`);
+      assert.deepEqual([unescapeHtml(m[1]!), unescapeHtml(m[2]!), squash(visibleText(m[3]!)), m[4] === undefined ? null : unescapeHtml(m[4])], [picture[0], onSite(s.told, host).join(""), squash(pieces.join("")), note], `step ${i + 1}: the words of the picture`);
+      assert.match(picture[0]!, /（示意）$/, `step ${i + 1}: its title says it is an illustration`);
+    }
+
+    // Its two links: the proof log, at its lookup box, and how to verify the proof log.
+    const situations = page.slice(page.indexOf('<section class="situations">'));
+    for (const [href, words] of [["/proof-log#q", "證明紀錄"], ["/verify", "如何驗證證明紀錄"]] as const) {
+      assert.ok(copySection("check.md", "4. ").includes(`「${words}」是連結，連到`) && copySection("check.md", "4. ").includes(`\`${href}\``), `check.md says where ${words} goes`);
+      assert.ok(situations.includes(`<a href="${href}">${words}</a>`), `the page links ${words} to ${href}`);
+    }
+    const { title, site, summary } = previewOf("check.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+    assert.equal(summary, "");
+    assert.doesNotMatch(page, OG_DESCRIPTION);
+  });
+});
+
 describe("the links", () => {
   test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
     const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
-    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
     const links = new Set<string>();
     for (const path of pages) {
       const { page } = await getPage(worker, path);

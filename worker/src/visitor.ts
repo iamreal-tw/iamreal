@@ -7,6 +7,7 @@
 //   /proof-log           the proof log page (design/copy/proof-log-page.md)
 //   /faq              the FAQ (design/copy/faq.md)
 //   /verify           how to verify the proof log (design/copy/verify.md)
+//   /check            how to check an account's proof (design/copy/check.md)
 //   /prepare          what a card proof needs (design/copy/prepare.md)
 //   /hang, /hang/…    hanging a proof on a profile (design/copy/hang.md)
 //   anything else     the page for what is not there
@@ -28,6 +29,7 @@ import { readShortIdInUrl } from "iamreal-protocol/scoped-id.ts";
 import { EVERY_RESPONSE, PROOF_LOG_PAGE_CACHE, SCRIPT_PAGE_HEADERS, TEST_SITE_HEADERS, VISITOR_HEADERS } from "./headers.ts";
 import type { PageData } from "./page-data.ts";
 import { accountPage, notAName } from "./pages/account.ts";
+import { checkPage } from "./pages/check.ts";
 import { faqPage } from "./pages/faq.ts";
 import { hangPage, hangWithout } from "./pages/hang.ts";
 import { homePage } from "./pages/home.ts";
@@ -67,7 +69,7 @@ async function ask<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /** Which kind of page a path is, for the log: never the short ID or the account in it. */
-type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "prepare" | "none";
+type Kind = "home" | "card" | "account" | "proof_log" | "hang" | "faq" | "verify" | "check" | "prepare" | "none";
 
 function kindOf(pathname: string): Kind {
   if (pathname === "/") return "home";
@@ -76,6 +78,7 @@ function kindOf(pathname: string): Kind {
   if (pathname === "/proof-log") return "proof_log";
   if (pathname === "/faq") return "faq";
   if (pathname === "/verify") return "verify";
+  if (pathname === "/check") return "check";
   if (pathname === "/prepare") return "prepare";
   if (pathname === "/hang" || pathname.startsWith("/hang/")) return "hang";
   return "none";
@@ -243,6 +246,7 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
     else if (kind === "hang") answer = await hang(site, parts, pathname);
     else if (kind === "faq") answer = page(site, 200, faqPage());
     else if (kind === "verify") answer = page(site, 200, verifyPage());
+    else if (kind === "check") answer = page(site, 200, checkPage(site));
     else if (kind === "prepare") answer = page(site, 200, preparePage());
     else answer = page(site, 404, notFoundPage());
   } catch (e) {

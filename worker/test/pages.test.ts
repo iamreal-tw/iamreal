@@ -405,7 +405,7 @@ describe("the home page", () => {
 describe("every page", () => {
   test("the production log: no mark of a test log and no noindex; the pages are otherwise the same", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:alice")], { kind: "production" });
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`]) {
       const { page } = await getPage(worker, path, { test: false });
       assert.ok(!page.includes("noindex") && !page.includes("上次清空"), path);
     }
@@ -417,6 +417,8 @@ describe("every page", () => {
     assert.ok(missing.includes('<span class="typed">iamreal.tw/p/7K2Q9FM4XE</span>') && !missing.includes("test.iamreal.tw"));
     const hang = (await getPage(worker, `/hang/${CARD_A}`, { test: false })).page;
     assert.ok(hang.includes('<p class="backlink">iamreal.tw/p/7K2Q9FM4XD</p>') && hang.includes('data-copy-text="https://iamreal.tw/p/7K2Q9FM4XD"') && !hang.includes("test.iamreal.tw"));
+    const check = (await getPage(worker, "/check", { test: false })).page;
+    assert.ok(check.includes("網域要一字不差是 iamreal.tw。") && check.includes("iamreal.tw/p/7K2Q9FM4XD") && !check.includes("test.iamreal.tw"), "/check writes the production site's domain");
     const none = await getPage(worker, "/nothing", { test: false });
     assert.equal(none.status, 404);
     wantLines(none.page, copyLines(block("not-found.md", "頁面")));
@@ -457,7 +459,7 @@ describe("every page", () => {
 
   test("the pages, the style sheet, the script, the typeface and the link preview's image take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH]) {
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH]) {
       // The style sheet, the script, the typeface and the image are files of Static Assets.
       const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH || path === OG_IMAGE_PATH;
       const cache = file ? "no-cache" : "public, max-age=60";
