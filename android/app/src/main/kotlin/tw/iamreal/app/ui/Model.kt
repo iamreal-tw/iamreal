@@ -27,7 +27,7 @@ internal enum class Step(val number: Int) { BEFORE(1), READ(2), PIN(3), ACCOUNTS
 internal enum class ItemState { NONE, NOW, DONE, HALT }
 
 /** The buttons of step 2. */
-internal enum class ReadButton { TAP, TAP_AGAIN, RESTART, NEXT }
+internal enum class ReadButton { TAP, TAP_AGAIN, NFC, RESTART, NEXT }
 
 /** The buttons under step 5's list when it stopped. */
 internal enum class ProgressButton { NONE, TAP_AGAIN, RESTART }
@@ -296,7 +296,12 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 readItems = items(4, doneCount, false, halted = true)
                 readMessage = messages.stop(stop, Messages.At.READ)
                 // A tap that did not happen is made again on the same card proof; anything else starts a new one.
-                readButton = if (stop.code == "card" && (reason == CardException.Reason.NO_TAP.name || reason == CardException.Reason.DROPPED.name)) ReadButton.TAP_AGAIN else ReadButton.RESTART
+                readButton = when {
+                    stop.code != "card" -> ReadButton.RESTART
+                    reason == CardException.Reason.NO_TAP.name || reason == CardException.Reason.DROPPED.name -> ReadButton.TAP_AGAIN
+                    reason == CardException.Reason.NFC_OFF.name -> ReadButton.NFC
+                    else -> ReadButton.RESTART
+                }
             },
         )
     }
@@ -350,8 +355,13 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 pinMessage = messages.stop(stop, Messages.At.PIN)
                 val reason = stop.values["reason"]
                 when {
-                    // The card did not take the PIN: it is typed again.
-                    stop.code == "card" && reason == CardException.Reason.PIN_INCORRECT.name -> pin.clear()
+                    // The card did not take the PIN, or may have: it is typed again (never sent again by itself).
+                    stop.code == "card" && (reason == CardException.Reason.PIN_INCORRECT.name || reason == CardException.Reason.PIN_MAYBE_SENT.name) -> pin.clear()
+                    // A locked card takes no PIN: the card proof is over.
+                    stop.code == "card" && reason == CardException.Reason.LOCKED.name -> {
+                        pin.clear()
+                        pinEnded = true
+                    }
                     // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
                     stop.code == "card" || stop.code == "other_card" -> {
                         if (pinMessage == null && reason != CardException.Reason.CANCELLED.name) pinMessage = copy.say("common.halted")
@@ -458,8 +468,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 progressMessage = messages.stop(stop, Messages.At.DECLARE)
                 progressRequestId = stop.requestId
                 // The tap did not get to a signature: the PIN is still there, and the tap is made again.
-                // A PIN the card refused is dropped with everything else.
-                val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] != CardException.Reason.PIN_INCORRECT.name)
+                // A PIN the card refused, or a card that is locked, is dropped with everything else.
+                val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name))
                 progressButton = if (again) ProgressButton.TAP_AGAIN else ProgressButton.RESTART
             },
         )

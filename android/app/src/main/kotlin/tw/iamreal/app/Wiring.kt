@@ -1,5 +1,6 @@
 package tw.iamreal.app
 
+import android.app.Activity
 import tw.iamreal.app.card.Card
 
 /**
@@ -17,7 +18,15 @@ internal class Wiring(
     val card: Card,
     /** Opens a session of the core. */
     val openSession: () -> Long,
+    /** Told when the app's screen comes to the front and leaves it: a card is read only in between. */
+    val front: Front? = null,
 ) {
+    interface Front {
+        fun resumed(activity: Activity)
+
+        fun paused(activity: Activity)
+    }
+
     /** The site as links on the screen write it: without the scheme. */
     val domain: String get() = site.substringAfter("://")
 }

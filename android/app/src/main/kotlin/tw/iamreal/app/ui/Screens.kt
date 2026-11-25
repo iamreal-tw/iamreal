@@ -49,7 +49,7 @@ import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
 
 /** What a screen asks of the phone: an address opened outside the app, a text put on the clipboard, a text handed to the system's share sheet. */
-internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, val share: (String) -> Unit)
+internal class Outside(val open: (String) -> Unit, val copy: (String) -> Unit, val share: (String) -> Unit, val nfcSettings: () -> Unit)
 
 /**
  * The six steps (design/copy/card-proof.md), one screen each, laid out
@@ -80,7 +80,7 @@ internal fun CardProofScreens(m: Model, r: ReminderModel, outside: Outside) {
                     Spacer(Modifier.height(6.dp))
                     when (m.step) {
                         Step.BEFORE -> Before(m)
-                        Step.READ -> Read(m)
+                        Step.READ -> Read(m, outside)
                         Step.PIN -> Pin(m)
                         Step.ACCOUNTS -> Accounts(m, outside)
                         Step.CONFIRM -> Confirm(m)
@@ -111,10 +111,15 @@ private fun Before(m: Model) {
 }
 
 @Composable
-private fun Read(m: Model) {
+private fun Read(m: Model, outside: Outside) {
     val c = m.copy
     Title(c.say("read.title"))
-    if (m.readButton == ReadButton.NEXT) Body(c.say("app_read.lift"), strong = true) else Body(c.say("app_read.how", "spot" to c.say("app_read.spot_android")))
+    if (m.readButton == ReadButton.NEXT) {
+        Body(c.say("app_read.lift"), strong = true)
+    } else {
+        Body(c.say("app_read.how", "spot" to c.say("app_read.spot_android")))
+        TapPlace(c)
+    }
     TaskList(c, listOf(c.say("read.server"), c.say("app_read.certificate"), c.say("read.check"), c.say("read.crl")), m.readItems, m.readMessage, "read-list")
     Actions {
         val wide = Modifier.fillMaxWidth()
@@ -124,6 +129,10 @@ private fun Read(m: Model) {
                 Button(c.say("common.back"), wide, enabled = !m.readBusy) { m.backToBefore() }
             }
             ReadButton.TAP_AGAIN -> Button(c.say("app_read.tap_again"), wide, primary = true) { m.tapToRead() }
+            ReadButton.NFC -> {
+                Button(c.say("app_read.nfc_settings"), wide, primary = true) { outside.nfcSettings() }
+                Button(c.say("app_read.nfc_retry"), wide) { m.tapToRead() }
+            }
             ReadButton.RESTART -> Button(c.say("app_read.restart"), wide, primary = true) { m.readAgain() }
             ReadButton.NEXT -> {
                 Button(c.say("common.next"), wide, primary = true) { m.toPin() }

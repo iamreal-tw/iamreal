@@ -621,7 +621,7 @@ class CardProof(private val deps: Deps) {
             sign(events, code, pin ?: throw Stop("cancelled"))
         } catch (e: Stop) {
             // A PIN the card refuses is dropped, like everything else: the card proof starts again (issue #133).
-            if (e.code == "card" && e.values["reason"] == CardException.Reason.PIN_INCORRECT.name) fail(e)
+            if (e.code == "card" && e.values["reason"] in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name)) fail(e)
             throw e
         }
         // The last tap is made: the PIN is not needed again.
