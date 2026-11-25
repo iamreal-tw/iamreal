@@ -930,7 +930,8 @@ body.home .hero-field .pulse {
 }
 
 /* 第一屏. Below the copy, 88px and the room of the line #335 took out from above the buttons (a line of --size-lead and
-   the 16px under it), so the dots and their legend keep the height of the final design on a wide screen. */
+   the 16px under it), so the dots and their legend keep the height of the final design on a wide screen: 691px, the
+   38 rows of dots src/pages/home.ts draws down to (HERO_ROWS). */
 body.home .hero {
   position: relative;
   padding-top: 64px;

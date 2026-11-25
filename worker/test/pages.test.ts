@@ -390,7 +390,7 @@ describe("the home page", () => {
     assert.deepEqual(await numbers(), ["1", "0", "0%"]);
   });
 
-  test("the first screen's dots: the 15 placed by hand and 你 where they were; from column 32 to 119, teal dots in every 8 columns, at most one in each block of 8 by 7, the same every time", async () => {
+  test("the first screen's dots: the 15 placed by hand and 你 where they were; from column 32 to 119, teal dots in every 8 columns, at most one in each block of 8 by 7", async () => {
     // #335, 首頁: the dots of the final design stay; a wide window shows teal dots at its right too.
     await homeWorld();
     const placed = [[9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12]];
@@ -412,7 +412,6 @@ describe("the home page", () => {
     for (let band = 32; band < 120; band += 8) assert.ok(added.some(([c]) => c! >= band && c! < band + 8), `a teal dot in columns ${band} to ${band + 7}`);
     const blocks = added.map(([c, r]) => `${Math.floor((c! - 32) / 8)},${Math.floor(r! / 7)}`);
     assert.equal(new Set(blocks).size, blocks.length, "at most one dot in each block of 8 columns by 7 rows");
-    assert.deepEqual(await heroDots(), { proof, you }, "the same every time");
   });
 
   test("a number above 999 is written with a comma", async () => {

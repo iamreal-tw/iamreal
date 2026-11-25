@@ -71,27 +71,27 @@ const HERO_YOU = [14, 11] as const;
 
 /**
  * Right of the dots placed by hand, as far as a 4K window shows (#335):
- * columns 32 to 119 and the 38 rows a wide first screen shows whole (it
- * is 691px high), in blocks of 8 columns by 7 rows; three blocks in four
- * get one dot, in a cell drawn at random, none in a row past the 38th. About as dense as the dots placed by hand, spread
- * evenly; a 1280px window ends before column 32, so it shows none of them.
+ * columns 32 to 119, in blocks of 8 columns by 7 rows, each with three
+ * chances in four of one dot in a cell drawn at random: about as dense as
+ * the dots placed by hand, spread evenly. Down to the last row a wide
+ * first screen shows whole: it is 691px high (the padding of .hero in
+ * site/pages.css keeps it so), 38 rows; the last block, 3 rows high, has
+ * its chance in proportion, so the density stays the same. A 1280px window
+ * ends before column 32, so it shows none of them.
  */
 const HERO_FILL_FROM = 32;
+const HERO_FILL_TO = 119;
+const HERO_ROWS = 38;
 const HERO_BLOCK_COLUMNS = 8;
 const HERO_BLOCK_ROWS = 7;
-/** 11 blocks across (columns 32 to 119) and 6 down (rows 0 to 41, of which 0 to 37 are drawn). */
-const HERO_BLOCKS_ACROSS = 11;
-const HERO_BLOCKS_DOWN = 6;
-const HERO_ROWS = 38;
 const HERO_PROOF: readonly (readonly [number, number])[] = (() => {
   const random = seeded(0x2b9e1c);
   const out: (readonly [number, number])[] = [...HERO_PLACED];
-  for (let across = 0; across < HERO_BLOCKS_ACROSS; across++) {
-    for (let down = 0; down < HERO_BLOCKS_DOWN; down++) {
-      if (random() >= 0.75) continue;
-      const column = HERO_FILL_FROM + across * HERO_BLOCK_COLUMNS + Math.floor(random() * HERO_BLOCK_COLUMNS);
-      const row = down * HERO_BLOCK_ROWS + Math.floor(random() * HERO_BLOCK_ROWS);
-      if (row < HERO_ROWS) out.push([column, row]);
+  for (let left = HERO_FILL_FROM; left <= HERO_FILL_TO; left += HERO_BLOCK_COLUMNS) {
+    for (let top = 0; top < HERO_ROWS; top += HERO_BLOCK_ROWS) {
+      const rows = Math.min(HERO_BLOCK_ROWS, HERO_ROWS - top);
+      if (random() >= (0.75 * rows) / HERO_BLOCK_ROWS) continue;
+      out.push([left + Math.floor(random() * HERO_BLOCK_COLUMNS), top + Math.floor(random() * rows)]);
     }
   }
   return out;
