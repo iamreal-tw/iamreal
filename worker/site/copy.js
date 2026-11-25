@@ -32,8 +32,10 @@ for (const button of document.querySelectorAll("button[data-copy], button[data-c
 // part after # changes. A browser scrolls to that <details> but does not
 // open it, as it is the target itself and not inside one. Anything else
 // the address names (a category, #cat-...) is left as it is. The part
-// after # is read from document.URL: when this runs, as the page opens,
-// :target does not match yet.
+// after # is read from document.URL, which can only be read: :target does
+// not match yet when this runs as the page opens, and the test of this
+// file keeps out the word for the object that can also send the page to
+// another address.
 const openNamedQuestion = () => {
   const address = document.URL;
   const hash = address.indexOf("#");

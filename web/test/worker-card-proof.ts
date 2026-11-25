@@ -241,13 +241,15 @@ try {
   /** Whether the top of the element with this id is on the screen. */
   const onScreen = (p: Page, id: string): Promise<boolean> =>
     p.eval<boolean>(`(() => { const r = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()`);
-  await visitor.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  /** Back to a desktop's width, after a screenshot at a phone's. */
+  const desktop = (p: Page): Promise<unknown> => p.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  await desktop(visitor);
   await visitor.goto(`${ORIGIN}/faq`);
   const questions = await visitor.eval<number>(`document.querySelectorAll("details.question").length`);
   check(questions > 20 && (await openIds(visitor)).length === 0, `/faq: all ${questions} questions folded`);
   await shot(visitor, "faq-desktop.png", 1100);
   await shot(visitor, "faq-phone.png", 390);
-  await visitor.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  await desktop(visitor);
   // A click on a question opens it, another closes it; from the keyboard too.
   await visitor.click("#personal-data > summary");
   check((await openIds(visitor)).join() === "personal-data", "/faq: a click on a question opens it");
@@ -269,6 +271,8 @@ try {
   await visitor.goto(`${ORIGIN}/`);
   await visitor.goto(`${ORIGIN}/faq#threads-knows`);
   check((await openIds(visitor)).join() === "threads-knows" && (await onScreen(visitor, "threads-knows")), "/faq#threads-knows: that question open, on the screen, no other");
+  // The whole page from its top, the question left open: a screenshot taken scrolled down leaves rows of it blank.
+  await visitor.eval("scrollTo(0, 0)");
   await shot(visitor, "faq-question-desktop.png", 1100);
   await shot(visitor, "faq-question-phone.png", 390);
   // (From another page: Page.navigate from /faq#… to /faq#… is a navigation in the page, with no load event to wait for.)
@@ -281,7 +285,7 @@ try {
   await noScript.send("Runtime.enable");
   await noScript.send("Network.enable");
   await noScript.send("Network.setBlockedURLs", { urls: ["*/copy.js"] });
-  await noScript.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+  await desktop(noScript);
   await noScript.goto(`${ORIGIN}/faq#threads-knows`);
   check((await openIds(noScript)).length === 0 && (await onScreen(noScript, "threads-knows")), "/faq#threads-knows without the script: the question on the screen, folded (the script is what opens it)");
   await noScript.click("#threads-knows > summary");
