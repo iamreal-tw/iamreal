@@ -931,11 +931,13 @@ body.home .hero-field .pulse {
   }
 }
 
-/* 第一屏 */
+/* 第一屏. Below the copy, 88px and the room of the line #335 took out from above the buttons (a line of --size-lead and
+   the 16px under it), so the dots and their legend keep the height of the final design on a wide screen: 691px, the
+   38 rows of dots src/pages/home.ts draws down to (HERO_ROWS). */
 body.home .hero {
   position: relative;
   padding-top: 64px;
-  padding-bottom: 88px;
+  padding-bottom: calc(88px + var(--size-lead) * var(--leading-h3) + 16px);
 }
 
 body.home .hero .copy {
@@ -952,13 +954,9 @@ body.home .hero .lede p + p {
   margin-top: 6px;
 }
 
-body.home .hero .rally {
-  margin-top: 34px;
-}
-
 body.home .hero .actions {
   gap: 12px 26px;
-  margin: 16px 0 0;
+  margin: 34px 0 0;
 }
 
 body.home .again {
@@ -1640,12 +1638,20 @@ body.home .crowd .rings {
   inset: 0;
 }
 
-/* The foundation and what is built on it (design/DESIGN.md, 元件, 地基; 線: dashed for what is not built yet). */
+/* The foundation and what is built on it, from left to right in the order they are numbered (design/DESIGN.md, 元件, 地基;
+   線: dashed for what is not built yet): three columns as wide and as high as one another, each but the first joined
+   to the middle of the one before it by a dashed teal line. */
 body.home .stack {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 28px 24px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 32px;
   margin-top: 80px;
+}
+
+body.home .layer {
+  position: relative;
+  padding: 24px 28px 26px;
+  border-radius: var(--radius-panel);
 }
 
 body.home .layer b {
@@ -1671,39 +1677,22 @@ body.home .layer .when {
   color: var(--mute);
 }
 
-body.home .layer .but {
-  font-size: var(--size-small);
-  color: var(--mute);
-}
-
 body.home .up {
-  position: relative;
-  grid-row: 1;
-  padding: 24px 28px 26px;
   border: 1.5px dashed var(--mute);
-  border-radius: var(--radius-panel);
 }
 
-body.home .up::after {
+body.home .up::before {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 100%;
-  height: 28px;
-  border-left: 2px dashed var(--proof);
+  top: 50%;
+  right: 100%;
+  width: 32px;
+  border-top: 2px dashed var(--proof);
 }
 
 body.home .ground {
-  grid-row: 2;
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 0 56px;
-  align-items: start;
-  padding: 30px 32px 32px;
   background: var(--proof-soft);
   border: 1.5px solid var(--proof);
-  border-radius: var(--radius-panel);
 }
 
 body.home .ground .when {
@@ -1718,20 +1707,6 @@ body.home .ground .when i {
   height: 10px;
   background: var(--proof);
   border-radius: 50%;
-}
-
-body.home .ground b {
-  font-size: 28px;
-}
-
-body.home .ground .found {
-  margin-top: 8px;
-  font-size: 15px;
-  color: var(--proof);
-}
-
-body.home .ground > div:last-child p:first-child {
-  margin-top: 0;
 }
 
 body.home .closing {
@@ -1934,21 +1909,17 @@ body.home .after {
     order: 4;
   }
 
-  body.home .hero .rally {
+  body.home .hero .actions {
     order: 5;
     margin-top: 28px;
   }
 
-  body.home .hero .actions {
+  body.home .hero .again {
     order: 6;
   }
 
-  body.home .hero .again {
-    order: 7;
-  }
-
   body.home .hero .needs {
-    order: 8;
+    order: 7;
   }
 
   body.home .legend {
@@ -1964,8 +1935,7 @@ body.home .after {
   body.home .qa .split,
   body.home .limit,
   body.home .tally,
-  body.home .stack,
-  body.home .ground {
+  body.home .stack {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
   }
@@ -2072,23 +2042,20 @@ body.home .after {
     margin-top: 56px;
   }
 
-  body.home .up,
-  body.home .ground {
-    grid-row: auto;
-    grid-column: auto;
-  }
-
-  body.home .ground {
-    gap: 0;
+  body.home .layer {
     padding: 24px 22px;
   }
 
-  body.home .ground > div:last-child p:first-child {
-    margin-top: 12px;
-  }
-
-  body.home .up::after {
+  /* One under another, 1, 2, 3: the line goes up to the one before. */
+  body.home .up::before {
+    top: auto;
+    right: auto;
+    bottom: 100%;
+    left: 50%;
+    width: 0;
     height: 20px;
+    border-top: 0;
+    border-left: 2px dashed var(--proof);
   }
 
   body.home .questions summary {

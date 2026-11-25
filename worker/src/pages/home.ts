@@ -49,34 +49,65 @@ function youDot([c, r]: readonly [number, number], pulse: boolean): Html {
 <text class="you-label" x="${x + 19}" y="${y + 6}">你</text>`;
 }
 
-/**
- * The first screen's dots, as the final design places them (in the right
- * half on a wide screen; under the headline on a phone, where the top left
- * of them shows, "you" among them).
- */
-const HERO_PROOF: readonly (readonly [number, number])[] = [
-  [9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12],
-];
-const HERO_YOU = [14, 11] as const;
-
-/**
- * The crowd of 一起能改變什麼: 71 columns by 17 rows, as wide as the site;
- * an account has a proof the more likely the further right (design/DESIGN.md,
- * 點: density, placed one by one, no pattern). The same every time: the
- * draw is seeded.
- */
-const CROWD_COLUMNS = 71;
-const CROWD_ROWS = 17;
-const CROWD_YOU = [5, 8] as const;
-const CROWD_PROOF: readonly (readonly [number, number])[] = (() => {
-  let seed = 0x1d6b78;
-  const random = (): number => {
-    // mulberry32
+/** A draw of numbers in [0, 1) that is the same every time for the same seed (mulberry32): the dots are placed one by one, and the page is the same on every load. */
+function seeded(seed: number): () => number {
+  return () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * The first screen's dots, as the final design places them (in the right
+ * half on a wide screen; under the headline on a phone, where the top left
+ * of them shows, "you" among them).
+ */
+const HERO_PLACED: readonly (readonly [number, number])[] = [
+  [9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12],
+];
+const HERO_YOU = [14, 11] as const;
+
+/**
+ * Right of the dots placed by hand, as far as a 4K window shows (#335):
+ * columns 32 to 119, in blocks of 8 columns by 7 rows, each with three
+ * chances in four of one dot in a cell drawn at random: about as dense as
+ * the dots placed by hand, spread evenly. Down to the last row a wide
+ * first screen shows whole: it is 691px high (the padding of .hero in
+ * site/pages.css keeps it so), 38 rows; the last block, 3 rows high, has
+ * its chance in proportion, so the density stays the same. A 1280px window
+ * ends before column 32, so it shows none of them.
+ */
+const HERO_FILL_FROM = 32;
+const HERO_FILL_TO = 119;
+const HERO_ROWS = 38;
+const HERO_BLOCK_COLUMNS = 8;
+const HERO_BLOCK_ROWS = 7;
+const HERO_PROOF: readonly (readonly [number, number])[] = (() => {
+  const random = seeded(0x2b9e1c);
+  const out: (readonly [number, number])[] = [...HERO_PLACED];
+  for (let left = HERO_FILL_FROM; left <= HERO_FILL_TO; left += HERO_BLOCK_COLUMNS) {
+    for (let top = 0; top < HERO_ROWS; top += HERO_BLOCK_ROWS) {
+      const rows = Math.min(HERO_BLOCK_ROWS, HERO_ROWS - top);
+      if (random() >= (0.75 * rows) / HERO_BLOCK_ROWS) continue;
+      out.push([left + Math.floor(random() * HERO_BLOCK_COLUMNS), top + Math.floor(random() * rows)]);
+    }
+  }
+  return out;
+})();
+
+/**
+ * The crowd of 一起能改變什麼: 71 columns by 17 rows, as wide as the site;
+ * an account has a proof the more likely the further right (design/DESIGN.md,
+ * 點: density, placed one by one, no pattern). The same every time: the
+ * draw is seeded, with a seed of its own.
+ */
+const CROWD_COLUMNS = 71;
+const CROWD_ROWS = 17;
+const CROWD_YOU = [5, 8] as const;
+const CROWD_PROOF: readonly (readonly [number, number])[] = (() => {
+  const random = seeded(0x1d6b78);
   const out: [number, number][] = [];
   for (let c = 0; c < CROWD_COLUMNS; c++) {
     const chance = 0.015 + 0.55 * (c / (CROWD_COLUMNS - 1)) ** 2.2;
@@ -103,7 +134,6 @@ export function homePage(numbers: HomeNumbers): Document {
 <p class="stress">你每天看到的討論、動態，背後有多少是真正的台灣人？</p>
 <p>用台灣自然人憑證，換一張島民證明：宣告你的 Threads 帳號是台灣人持有，同時不需要公開你的真實身分。</p>
 </div>
-<p class="stress rally">一起建立更值得信任的網路環境。</p>
 <p class="actions"><a class="button big" href="/proof">我要換島民證明</a> <a href="/proof-log">看其他人的島民證明</a></p>
 <p class="again">已經換過了？<a href="/proof">更新我的島民證明</a></p>
 <p class="small needs">${NEEDS}</p>
@@ -143,7 +173,7 @@ ${youDot(HERO_YOU, true)}
 <li><i aria-hidden="true"></i>早知道就好了，謝分享</li>
 </ul>
 <p class="count"><span class="strip rings short" aria-hidden="true"></span>還有 425 則</p>
-<p class="what">一則像真心推薦的行銷文案，下面一排附和的留言，讓人以為大家都在用。</p>
+<p class="what">一則像真心推薦的行銷文案，下面一排附和的留言。</p>
 </li>
 <li class="case">
 <p class="kind">一則「大家都不知道的真相」</p>
@@ -155,7 +185,7 @@ ${youDot(HERO_YOU, true)}
 <li><i aria-hidden="true"></i>用 AI 查了一下，錢怎麼流的都查得到，大家自己去看</li>
 </ul>
 <p class="count"><span class="strip rings long" aria-hidden="true"></span>還有 2,313 則</p>
-<p class="what">先說「大家都不知道」，再由一群講法各不相同的帳號接力補上「證據」，讓人覺得真相正在被揭開。這些帳號背後是不是真的有那麼多人，只讀內容分不出來。</p>
+<p class="what">先說「大家都不知道」，再由一群講法各不相同的帳號接力補上「證據」，讓人覺得真相正在被揭開。</p>
 </li>
 </ul>
 </div>
@@ -203,7 +233,7 @@ ${youDot(HERO_YOU, true)}
 <div><dt>無關政治傾向</dt><dd>只要你持有台灣自然人憑證，就能夠使用本服務宣告你的帳號是台灣人所持有，無任何審查，任何政治立場都可以使用。</dd></div>
 </dl>
 <div class="limit">
-<p class="heading"><span class="line">一張自然人憑證，</span><span class="line">在 Threads 只能替一個帳號背書。</span></p>
+<p class="heading"><span class="line">一張自然人憑證，</span><span class="line">只能替一個 Threads 帳號背書。</span></p>
 <div>
 <p>第一次申辦自然人憑證，要年滿 18 歲、本人到戶政事務所、花費 250 元。</p>
 <p>要產生一萬張島民證明，得先有一萬張真的自然人憑證，這會大幅增加假扮真人帳號的成本。</p>
@@ -237,22 +267,17 @@ ${youDot(CROWD_YOU, false)}
 </figure>
 <div class="in">
 <div class="stack">
-<div class="layer ground">
-<div><p class="when"><i></i>現在</p>
-<b>查一個帳號有沒有島民證明</b>
-<p class="found">其他服務可以建立在島民證明上。</p></div>
-<div><p>任何人都能查閱一個帳號，看看是否有島民證明替其背書，如果有，可以檢查上次過卡更新是幾天前。</p>
-<p class="but">島民證明只代表有一個自然人憑證宣稱持有某帳號，至於帳號主人承不承認這張證明，要看他有沒有把連結掛在自己的個人檔案上。</p></div>
-</div>
-<div class="layer up"><p class="when">任何專案都能夠建立</p>
+<div class="layer ground"><p class="when"><i></i>現在</p>
+<b>查一個帳號有沒有台灣人背書</b>
+<p>任何人都能查閱一個 Threads 帳號，看看是否有島民證明替其背書，還可以檢查上次過卡更新是幾天前。</p></div>
+<div class="layer up"><p class="when">基於島民證明的資料，分析 Threads 的聲量</p>
 <b>讓聲量更容易被檢視</b>
-<p>分析一則貼文下面，留言裡有島民證明的帳號有多少。</p>
-<p class="but">這個比例不代表台灣民意，也不能單憑它判定一場討論有沒有被操弄。但這會是一個極為有效的留言區「真人程度指標」，能大幅增加輿論操作的成本。</p></div>
-<div class="layer up"><p class="when">未來</p>
-<b>建立台灣人的討論空間</b>
-<p>其他網站可以接上或利用島民證明的技術，開設能驗證持有自然人憑證的留言板或論壇。一張卡只能持有一個帳號，參與者彼此不用公開姓名。</p></div>
+<p>任何人都能夠使用證明紀錄，開發服務或外掛，分析一則 Threads 動態的留言裡，有島民證明的帳號比例。</p></div>
+<div class="layer up"><p class="when">願景</p>
+<b>真實台灣人的討論空間</b>
+<p>其他網站可以整合或參考島民證明的技術，開設能驗證持有自然人憑證的討論區。在不揭露個資的情況下，確保一張卡只能註冊一個帳號。</p></div>
 </div>
-<p class="closing">你今天換的這張證明，不只是給自己看的。當更多人參與，它就有機會成為讓網路討論更容易被檢視的共同基礎。</p>
+<p class="closing">當更多人參與島民證明，它就有機會成為讓網路討論更容易被檢視的共同基礎。</p>
 </div>
 </section>
 
@@ -277,7 +302,7 @@ ${QUESTIONS.map((q) => html`<details><summary>${q.question}</summary>\n${q.answe
 <p><a class="button big" href="/proof">我要換島民證明</a></p>
 </div>
 <div>
-<h3 class="steps-title">怎麼換</h3>
+<h3 class="steps-title">如何換</h3>
 <ol class="steps">
 <li><span class="n">1</span><div><b>準備自然人憑證</b><span class="small">實體的卡片，和支援 NFC 的手機（iPhone 或 Android 都可以）。用讀卡機和電腦也可以。</span></div></li>
 <li><span class="n">2</span><div><b>用卡片宣告你的帳號</b><span class="small">過卡：輸入你的 Threads 帳號名稱，用卡片在你的裝置上算出證明。</span></div></li>
