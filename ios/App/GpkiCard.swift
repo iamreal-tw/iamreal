@@ -80,7 +80,9 @@ final class GpkiCard: CardConnection {
         }
         var block = CardChannel.signBlock(message)
         defer { CardChannel.wipe(&block) }
+        // Room for the whole of it up front, so that no copy is left behind unwiped.
         var signature: [UInt8] = []
+        signature.reserveCapacity(Self.signatureLength + 128)
         defer { CardChannel.wipe(&signature) }
         for half in 0..<2 {
             let more = half == 0

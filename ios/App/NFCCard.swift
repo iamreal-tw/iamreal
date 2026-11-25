@@ -51,8 +51,10 @@ final class NFCCard: Card {
             // Read before the session is ended here, which the system may also report as cancelled.
             let cancelled = reader.cancelled
             reader.stop()
-            // Cancelled on the panel once the card was there: as before it came (#172).
-            if cancelled { throw CardFailure.noTap }
+            // Cancelled on the panel once the card was there, before the
+            // PIN went out: as before it came. After, the card may have
+            // counted the PIN: that is a dropped tap (#172).
+            if cancelled && !card.pinSent { throw CardFailure.noTap }
             switch error {
             case let failure as CardFailure: throw failure
             case let error as NFCReaderError: throw Self.failure(error, pinSent: card.pinSent)
@@ -115,22 +117,17 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
     /// connected. Throws `CardFailure.noTap` when the session ends without
     /// one: cancelled, timed out, the app went to the background.
     func waitForCard(_ message: String) async throws -> NFCISO7816Tag {
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                queue.async {
-                    guard let session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: self.queue) else {
-                        continuation.resume(throwing: CardFailure.noTap)
-                        return
-                    }
-                    self.waiting = continuation
-                    self.session = session
-                    session.alertMessage = message
-                    session.begin()
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                guard let session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: self.queue) else {
+                    continuation.resume(throwing: CardFailure.noTap)
+                    return
                 }
+                self.waiting = continuation
+                self.session = session
+                session.alertMessage = message
+                session.begin()
             }
-        } onCancel: {
-            // The card proof was dropped while the panel waited: close it.
-            stop()
         }
     }
 

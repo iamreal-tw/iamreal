@@ -175,6 +175,7 @@ enum CardChannel {
             out += try cmac(key: key, input)
             i += 1
         }
+        defer { wipe(&out) }
         return Array(out[0..<length])
     }
 
@@ -210,7 +211,9 @@ enum CardChannel {
         }
         for b in 0..<(blocks - 1) {
             for i in 0..<16 { x[i] ^= data[b * 16 + i] }
-            x = try aes(encrypt: true, key: key, x)
+            var next = try aes(encrypt: true, key: key, x)
+            swap(&x, &next)
+            wipe(&next)
         }
         for i in 0..<16 { x[i] ^= last[i] }
         return try aes(encrypt: true, key: key, x)
