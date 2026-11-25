@@ -407,7 +407,8 @@ describe("the home page", () => {
     const byHand = proof.filter(([c]) => c! < 32);
     assert.deepEqual(byHand, placed, "the dots placed by hand");
     const added = proof.filter(([c]) => c! >= 32);
-    for (const [c, r] of added) assert.ok(Number.isInteger(c) && Number.isInteger(r) && c! <= 119 && r! >= 0, `a dot on the grid, from column 32 to 119: ${c}, ${r}`);
+    // A wide first screen is 691px high (design/screens/home-desktop.png): rows 0 to 37 show whole, none is cut by its lower edge.
+    for (const [c, r] of added) assert.ok(Number.isInteger(c) && Number.isInteger(r) && c! <= 119 && r! >= 0 && r! <= 37, `a dot on the grid, from column 32 to 119, row 0 to 37: ${c}, ${r}`);
     for (let band = 32; band < 120; band += 8) assert.ok(added.some(([c]) => c! >= band && c! < band + 8), `a teal dot in columns ${band} to ${band + 7}`);
     const blocks = added.map(([c, r]) => `${Math.floor((c! - 32) / 8)},${Math.floor(r! / 7)}`);
     assert.equal(new Set(blocks).size, blocks.length, "at most one dot in each block of 8 columns by 7 rows");
