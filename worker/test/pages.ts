@@ -107,8 +107,9 @@ export function checkVisitorHeaders(what: string, res: Response, expect: { cache
 
 /** Where each link of the navigation bar and the foot goes, by its words in home.md (導覽列, 頁尾), as home.md says. */
 const LINK_HREFS: Readonly<Record<string, string>> = {
-  怎麼驗證島民證明: "/verify",
+  如何檢查島民證明: "/check",
   證明紀錄: "/proof-log",
+  如何驗證證明紀錄: "/verify",
   常見問題: "/faq",
   GitHub: "https://github.com/iamreal-tw/iamreal",
   我要換島民證明: "/proof",
@@ -164,6 +165,8 @@ export function checkNavAndFoot(what: string, page: string): void {
   const menu = piece(what, bar, '<details class="menu">', "</details>");
   assert.ok(menu.startsWith(`<details class="menu"><summary>${phone[1]}</summary>`), `${what}: the menu is a <details> whose <summary> says ${phone[1]}`);
   assert.deepEqual(links(menu), [...navLinks, buttonLink], `${what}: the menu has the four links and the button`);
+  // How to verify the proof log is in the foot, not in the bar (#335).
+  assert.ok(!links(bar).some(([href]) => href.split(/[?#]/)[0] === "/verify"), `${what}: no link of the bar goes to /verify`);
   // Nothing takes the menu, or anything of the bar, away from the keyboard.
   assert.doesNotMatch(bar, /\stabindex=|\sinert\b|\sdisabled\b/, `${what}: the bar is reached from the keyboard`);
 

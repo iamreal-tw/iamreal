@@ -44,6 +44,20 @@ function specialTitles(): string[] {
   return titles;
 }
 
+/**
+ * Section 5 of the page of a card (proof-page.md): in the page's own content,
+ * one link only of how to judge it, to /check, with section 5's words; none to
+ * /verify; nowhere 驗證通過.
+ */
+function howToCheckOnce(what: string, page: string): void {
+  const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
+  const lines = copyLines(block("proof-page.md", "5. "));
+  const words = lines[lines.length - 1]!;
+  assert.ok(copySection("proof-page.md", "5. ").includes(`「${words}」是連結，連到「${words}」那一頁（\`check.md\`，\`/check\`）`), "proof-page.md: section 5's link goes to /check");
+  assert.deepEqual([...main.matchAll(/<a\s[^>]*href="\/(check|verify)[^"]*"[^>]*>(.*?)<\/a>/g)].map((m) => [m[1], m[2]]), [["check", words]], `${what}: one link, to /check, in the page's content`);
+  notOnPage(page, "驗證通過");
+}
+
 describe("the page of a card", () => {
   test("one card: sections 1 to 5a of proof-page.md, in order; its links, the profile, the preview", async () => {
     await exampleCards(true);
@@ -55,9 +69,10 @@ describe("the page of a card", () => {
     assert.ok(page.includes("<div><dt>順序</dt><dd>第 1 張島民證明</dd></div>"), "順序, the first row of section 4");
     assert.equal(page.split("第 1 張島民證明").length - 1, 2, "the ordinal twice, nowhere else");
 
-    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a href="/verify">怎麼驗證島民證明</a>', '<a class="button" href="/proof">我也要換島民證明</a>']) {
+    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a class="button" href="/proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
+    howToCheckOnce("one card", page);
     // The address to look for on the profile is written, not a link. A test log's site writes its own domain
     // (design/copy/test-site.md): that is where this card's page is.
     assert.equal(testSiteCardAddress(CARD_A), "test.iamreal.tw/p/7K2Q9FM4XD");
@@ -161,6 +176,7 @@ describe("the page of a card", () => {
     const three = block("proof-page.md", "3. ");
     notOnPage(page, one[2]!, one[3]!, [...one[7]!].slice(0, 10).join(""), two[1]!, "我要更新這張證明", three[0]!, three.at(-1)!);
     assert.ok(!page.includes("<iframe"), "no profile on the page of a withdrawn card");
+    howToCheckOnce("withdrawn", page);
     wantPreview(page, specialTitles()[0]!, "島民證明 iamreal.tw");
   });
 
@@ -183,10 +199,11 @@ describe("the page of a card", () => {
       ...copyLines(block("proof-page.md", "5a. ")),
     ]);
     const text = squash(visibleText(page));
-    // Each section by its longest line: its heading 驗證 is also in the navigation bar's 怎麼驗證島民證明.
+    // Each section by its longest line: a short line may be in the navigation bar or the foot too.
     const longest = (lines: string[]): string => lines.reduce((a, b) => (b.length > a.length ? b : a));
     for (const section of ["5. ", "5a. "]) assert.equal(text.split(squash(longest(copyLines(block("proof-page.md", section))))).length - 1, 1, `section ${section}once`);
     wantPreview(page, specialTitles()[1]!, "島民證明 iamreal.tw");
+    howToCheckOnce("two cards", page);
   });
 
   test("a short ID that resolves to no card, or does not read: 404 with section 9, what was typed written back; one that does not read is answered without the proof log's object", async () => {

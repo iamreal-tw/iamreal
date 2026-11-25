@@ -1,4 +1,4 @@
-// How to verify: design/copy/verify.md. What it checks and what it does
+// How to verify the proof log: design/copy/verify.md. What it checks and what it does
 // not, side by side on a wide screen; the AI assistant's paragraph beside
 // the prompt. The prompt is written exactly as verify.md has it, in a <pre>
 // that can be selected; the copy buttons' script (/copy.js) shows the
@@ -8,7 +8,7 @@ import type { Document } from "./layout.ts";
 
 export function verifyPage(): Document {
   const content = html`<section class="intro">
-<h1 class="title">怎麼驗證島民證明</h1>
+<h1 class="title">如何驗證證明紀錄</h1>
 <p>每一張島民證明都附著一份零知識證明，公布在證明紀錄裡。任何人下載證明紀錄、用公開的程式重算，都會得到和這個網站相同的結果。</p>
 </section>
 <section class="checks">
@@ -49,5 +49,5 @@ export function verifyPage(): Document {
 <h2>自己動手</h2>
 <p>不用 AI 也可以。步驟在程式庫的說明裡：<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md">cmd/iamreal-verify</a></p>
 </section>`;
-  return { title: "怎麼驗證島民證明", kind: "verify", script: true, content };
+  return { title: "如何驗證證明紀錄", kind: "verify", script: true, content };
 }

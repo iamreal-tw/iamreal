@@ -143,6 +143,15 @@ describe("the proof log page", () => {
   /** proof-log-page.md's first block: the whole page. */
   const wholePage = (...replace: string[]): string[] => copyLines(codeBlocks(readCopy("proof-log-page.md"))[0]!, ...replace);
   const rows = (page: string): number => page.split('<li><a href="/p/').length - 1;
+  /** The line of the two links (proof-log-page.md, 下載): its index in the whole page, and the words of each link. */
+  const linkLine = (): { at: number; download: string; verify: string } => {
+    const all = wholePage();
+    const at = all.findIndex((l) => /\u3000{2,}/.test(l));
+    const [download, verify, ...rest] = (all[at] ?? "").split(/\u3000{2,}/);
+    assert.ok(at > 4 && download !== undefined && verify !== undefined && rest.length === 0, "proof-log-page.md: one line of two links, after the sentence above the list");
+    assert.ok(copySection("proof-log-page.md", "下載").includes(`「${verify}」連到 \`verify.md\` 那一頁`), `proof-log-page.md: ${verify} goes to /verify`);
+    return { at, download, verify };
+  };
   /** The sentence where the list is when the proof log has no record yet. */
   const empty = (): string => block("proof-log-page.md", "清單")[0]!;
   /** The table of proof-log-page.md's 清單: what a row writes for each kind of record. */
@@ -166,7 +175,7 @@ describe("the proof log page", () => {
   /** The third card of the copy's example. */
   const CARD_C = "9Q4C2XN7B4";
 
-  test("the lookup box before the numbers, the sentence above the list, every valid record on Threads by its place in the proof log, the latest first, a withdrawal too; the download; the preview", async () => {
+  test("the lookup box before the numbers, the sentence and the two links above the list, every valid record on Threads by its place in the proof log, the latest first, a withdrawal too; the download; the preview", async () => {
     const [a, b, c, gone, old] = [cardStarting(CARD_A), cardStarting(CARD_B), cardStarting(CARD_C), cardStarting("8BN3TX5RJM"), newCard()];
     await pagesWorld(worker, "2026-11-18", [
       r("2026-08-01", old, "threads:erin"), // 109 days before: counted, not in the last three months
@@ -193,7 +202,7 @@ describe("the proof log page", () => {
     ]);
     assert.equal(rows(page), 8);
     notOnPage(page, "更多", empty());
-    for (const want of [`<li><a href="/p/${CARD_A}"><time>2026-11-18</time>`, `<li><a href="/p/8BN3TX5RJM"><time>2026-11-12</time>`, '<form method="get" action="/proof-log">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">怎麼驗證島民證明</a>']) {
+    for (const want of [`<li><a href="/p/${CARD_A}"><time>2026-11-18</time>`, `<li><a href="/p/8BN3TX5RJM"><time>2026-11-12</time>`, '<form method="get" action="/proof-log">', '<input type="text" id="q" name="q" value=""', `<a href="/verify">${linkLine().verify}</a>`]) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     assert.ok(page.indexOf('id="q"') < page.indexOf("現在有"), "the lookup box is before the numbers");
@@ -246,16 +255,18 @@ describe("the proof log page", () => {
     const { page } = await getPage(worker, "/proof-log");
     assert.ok(copySection("proof-log-page.md", "下載").includes("「下載全部的證明紀錄」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
     assert.ok(readFileSync(join(WORKER_DIR, "..", "cmd", "iamreal-verify", "README.md"), "utf8").includes("\n## 下載\n"), "the README has a section 下載");
-    assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">下載全部的證明紀錄</a> <a href="/verify">怎麼驗證島民證明</a>'));
+    const { download, verify } = linkLine();
+    assert.ok(page.includes(`<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">${download}</a> <a href="/verify">${verify}</a>`));
     assert.ok(!page.includes('href="/proof-log/"'));
   });
 
-  test("no record yet: one sentence where the list is, without the sentence above the list and without 更多", async () => {
+  test("no record yet: the two links below the numbers, one sentence where the list is, without the sentence above the list and without 更多", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/proof-log");
     assert.equal(status, 200);
     const all = wholePage("1,284", "0", "1,031", "0");
-    wantLines(page, [...all.slice(0, 4), empty(), all[all.length - 1]!]);
+    // The two links are below the numbers, before where the list is, as with records (proof-log-page.md, 下載).
+    wantLines(page, [...all.slice(0, 4), all[linkLine().at]!, empty()]);
     notOnPage(page, all[4]!, "更多");
     assert.ok(!page.includes("<li>"), "no row");
   });
