@@ -101,7 +101,7 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
     private fun connect() {
         if (selectsApplication()) return
         for (cla in listOf(0x80, 0x00)) {
-            if (transmit(cla, 0xA4, 0x00, 0x00, fid(0x3F00), 0).ok && transmit(cla, 0xA4, 0x00, 0x00, fid(CARD_DF), 0).ok) {
+            if (transmit(cla, 0xA4, 0x00, 0x00, fid(0x3F00), 0).ok && transmit(cla, 0xA4, 0x00, 0x00, fid(CARD_DF), 0).accepted) {
                 fail(CardException.Reason.FIRST_GENERATION)
             }
         }

@@ -97,7 +97,7 @@ class GpkiCardTest {
             val card = SimulatedCard(pinAnswer = answer)
             val e = runCatching { GpkiCard(card::transceive, TapCancel()).use { it.readCertificates(); it.sign(message, pin) } }.exceptionOrNull()
             assertEquals("%04X".format(answer), reason, (e as CardException).reason)
-            assertEquals(1, card.pinsReceived)
+            assertEquals("%04X: one VERIFY sent".format(answer), 1, card.commands.count { it[1].toInt() and 0xFF == 0x20 })
             assertEquals("nothing after the PIN", 0x20, card.commands.last()[1].toInt())
         }
     }

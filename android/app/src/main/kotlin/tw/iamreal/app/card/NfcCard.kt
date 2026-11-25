@@ -79,13 +79,16 @@ internal class NfcCard(private val adapter: NfcAdapter?) : Card, ReadsInFront {
                     throw CardException(CardException.Reason.DROPPED)
                 } catch (e: IllegalStateException) {
                     throw CardException(CardException.Reason.DROPPED)
+                } catch (e: UnsupportedOperationException) {
+                    // NFC was turned off under the tap.
+                    throw CardException(CardException.Reason.DROPPED)
                 }
                 return GpkiCard(transceive(iso), cancel).use { card -> use(card) }
             } finally {
                 try {
                     iso.close()
-                } catch (e: IOException) {
-                    // The card is gone already.
+                } catch (e: Exception) {
+                    // The card, or NFC, is gone already: what ended the tap is what it says.
                 }
             }
         } finally {
