@@ -308,6 +308,19 @@ describe("the home page", () => {
       for (const b of blocks) want.push(...copyLines(b, ...(section === "一起能改變什麼" ? ["1,284", "3", "1,031", "2"] : [])));
     }
     wantLines(page, want);
+    // What #335 took out of home.md: no longer in the copy file, so written here once, to be sure they left the page too.
+    notOnPage(
+      page,
+      "一起建立更值得信任的網路環境。",
+      "讓人以為大家都在用。",
+      "這些帳號背後是不是真的有那麼多人，只讀內容分不出來。",
+      "在 Threads 只能替一個帳號背書。",
+      "其他服務可以建立在島民證明上。",
+      "島民證明只代表有一個自然人憑證宣稱持有某帳號",
+      "這個比例不代表台灣民意",
+      "你今天換的這張證明，不只是給自己看的。",
+      "怎麼換",
+    );
 
     for (const [href, words] of [
       ["/proof-log", "看其他人的島民證明"],
