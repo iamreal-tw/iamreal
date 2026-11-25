@@ -43,7 +43,7 @@
 
 要檢查它們有沒有離開手機，看這幾個檔就夠：
 
-- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`：`GpkiCard.sign` 把它補成 VERIFY 的資料（`CardChannel.pinBlock`），只在安全通道建立之後、加密著送給卡片；安全通道建立不起來（`CardFailure.channel`）、是第一代的卡片（`CardFailure.firstGeneration`）時不送。PIN 的長度或字元沒有卡片收（6 到 10 個可列印的 ASCII 字元以外，`CardChannel.cardTakes`）時，按「確認卡片」不出現面板，PIN 丟掉，請持卡人再輸入一次。`Backend`、`DeviceCore` 沒有任何函式收 PIN
+- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確、安全通道建立不起來時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`：`GpkiCard.sign` 把它補成 VERIFY 的資料（`CardChannel.pinBlock`），只在安全通道建立之後、加密著送給卡片；安全通道建立不起來（`CardFailure.channel`）、是第一代的卡片（`CardFailure.firstGeneration`）時不送。PIN 的長度或字元沒有卡片收（6 到 10 個可列印的 ASCII 字元以外，`CardChannel.cardTakes`）時，按「確認卡片」不出現面板，PIN 丟掉，請持卡人再輸入一次。`Backend`、`DeviceCore` 沒有任何函式收 PIN
 - **第二、第三次感應**：`CardProofFlow.signTap` 先再讀一次憑證，第一次感應選定的那一張要在裡面，才把 PIN 交給卡片；不在就是 `CardFailure.otherCard`，PIN 沒有送
 - **憑證和簽章**：選定的憑證和第一個簽章留在 `CardProofFlow`，證明算完就蓋成零；核心自己的那一份跟著 session 蓋掉
 - **姓名**：核心檢查憑證後回傳，只交給「輸入 PIN」的畫面

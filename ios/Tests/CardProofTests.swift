@@ -435,6 +435,49 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 4)
     }
 
+    /// No secure channel with the card at tap 2: the PIN was not sent, but
+    /// it is dropped all the same and typed again; no "再感應一次卡片".
+    func testNoChannelAtTheSecondTapDropsThePIN() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        card.nextSignFails = .channel
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertTrue(model.screen.texts.contains("卡片和這支手機建立不起加密的連線，PIN 沒有送出。請改用電腦和讀卡機過卡。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(card.pinsReceived, 0)
+
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+    }
+
+    /// No secure channel with the card at tap 3: the PIN is dropped, and
+    /// the only way on is back to the start.
+    func testNoChannelAtTheThirdTapDropsThePIN() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        model.type("bob", on: "threads")
+        try await press("下一步", in: model)
+        card.nextSignFails = .channel
+        let button = try XCTUnwrap(model.screen.buttons.last?.label)
+        try await press(button, in: model)
+        XCTAssertEqual(model.screen.step, 5)
+        XCTAssertTrue(model.screen.texts.contains("卡片和這支手機建立不起加密的連線，PIN 沒有送出。請改用電腦和讀卡機過卡。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["回到開頭"])
+        XCTAssertNil(model.screen.cancel)
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+        try await press("回到開頭", in: model)
+        XCTAssertEqual(model.screen.step, 1)
+    }
+
     // ---------------------------------------------------------------------------
 
     /// The day after the back end started: the last day the test of the

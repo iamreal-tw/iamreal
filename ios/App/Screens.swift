@@ -306,7 +306,8 @@ struct Screens {
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
                 cancel: Button(label: copy("common.cancel"), action: .restart))
         }
-        if stop == .dateChanged {
+        // The PIN is gone, and the phone could not talk to the card: back to the start.
+        if stop == .dateChanged || stop == .card(.channel) {
             return Screen(step: 5, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
         }
         var buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]

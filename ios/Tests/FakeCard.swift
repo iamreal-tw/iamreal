@@ -20,6 +20,9 @@ final class FakeCard: Card {
     /// The card the next tap finds instead of this one: the cardholder
     /// picked up another card. One tap only.
     var nextTapFinds: FakeCard?
+    /// What the next signature stops at before the PIN is sent, as a
+    /// card the phone cannot set up the secure channel with. One tap only.
+    var nextSignFails: CardFailure?
 
     init(certificates: [Data], privateKey: Data, pin: String) {
         self.certificates = certificates
@@ -43,6 +46,10 @@ final class FakeCard: Card {
         }
 
         func sign(_ message: Data, pin: PIN) async throws -> Data {
+            if let failure = card.nextSignFails {
+                card.nextSignFails = nil
+                throw failure
+            }
             card.pinsReceived += 1
             guard pin.withBytes({ Array($0) }) == Array(card.pin.utf8) else { throw CardFailure.pinIncorrect }
             guard let key = card.key,

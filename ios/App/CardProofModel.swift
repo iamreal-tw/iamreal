@@ -329,7 +329,7 @@ final class CardProofModel: ObservableObject {
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
             switch stop {
-            case .card(.pinIncorrect):
+            case .card(.pinIncorrect), .card(.channel):
                 screen = screens.pin(name: name, state: .waiting(why.first))
             case .card(.otherCard):
                 self.pin = pin

@@ -211,7 +211,8 @@ final class ScreensTests: XCTestCase {
             XCTAssertEqual(screens.message(stop, tap: 2), [copy(key)])
         }
         document.check(screens.pin(name: "王小明", state: .waiting(copy("app_pin.pin_format"))))
-        document.check(screens.pin(name: "王小明", state: .stopped(screens.message(.card(.channel), tap: 2))))
+        document.check(screens.pin(name: "王小明", state: .waiting(screens.message(.card(.channel), tap: 2).first)))
+        document.check(screens.progress(reached: 1, stop: .card(.channel)))
         document.check(screens.read(reached: 1, running: false, stop: .card(.firstGeneration)))
     }
 
