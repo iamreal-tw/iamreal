@@ -31,21 +31,21 @@ final class GpkiCard: CardConnection {
     }
 
     // The files on the card.
-    private static let CARD_DF: UInt16 = 0x5030
-    private static let KEY_EF: UInt16 = 0x0810
-    private static let PRKDF: UInt16 = 0x4100
-    private static let CDF: UInt16 = 0x4104
-    private static let CHUNK = 0xc8
-    private static let RSA_LEN = 256
+    private static let cardDirectory: UInt16 = 0x5030
+    private static let keyFile: UInt16 = 0x0810
+    private static let privateKeyDirectory: UInt16 = 0x4100
+    private static let certificateDirectory: UInt16 = 0x4104
+    private static let chunk = 0xc8
+    private static let signatureLength = 256
 
     // CardConnection ----------------------------------------------------------------
 
-    /// The certificates the card's CDF names, in its order. None when the
-    /// card has no CDF: the core then says it has no certificate.
+    /// The certificates the card's certificateDirectory names, in its order. None when the
+    /// card has no certificateDirectory: the core then says it has no certificate.
     func certificates() async throws -> [Data] {
         try await connect()
         var certificates: [Data] = []
-        for entry in Der.records(try await readDirectory(Self.CDF)) {
+        for entry in Der.records(try await readDirectory(Self.certificateDirectory)) {
             guard let path = Self.certificatePath(entry) else { continue }
             try await selectPath(path.path)
             let raw = try await readRange(path.index, path.length > 0 ? path.length : 4096)
@@ -58,8 +58,8 @@ final class GpkiCard: CardConnection {
     /// The PIN to the card, then the card's signature of `message`
     /// (RSASSA-PKCS1-v1_5 with SHA-256), in one secure channel.
     func sign(_ message: Data, pin: PIN) async throws -> Data {
-        // A PIN no card takes is not sent: it cannot be this card's.
-        guard var pinBlock = CardChannel.pinBlock(pin) else { throw CardFailure.pinIncorrect }
+        // A PIN no card takes is not sent (the screen does not let one through).
+        guard var pinBlock = CardChannel.pinBlock(pin) else { throw CardFailure.failed(code: "pin_format") }
         defer { CardChannel.wipe(&pinBlock) }
         try await connect()
         let keyRef = try await signingKeyRef()
@@ -74,13 +74,14 @@ final class GpkiCard: CardConnection {
         case 0x63c1...0x63cf: throw CardFailure.pinIncorrect
         default: throw CardFailure.failed(code: "pin_refused")
         }
-        for fid in [Self.CARD_DF, Self.KEY_EF] {
-            let selected = try await secure(session, cla: 0x00, ins: 0xa4, p1: 0x00, p2: 0x04, data: [UInt8(fid >> 8), UInt8(fid & 0xff)], le: 0, encrypt: true)
-            guard Self.ok(selected.sw) || Self.warning(selected.sw) else { throw CardFailure.failed(code: "select_key") }
+        for fid in [Self.cardDirectory, Self.keyFile] {
+            let selected = try await secure(session, cla: 0x00, ins: 0xa4, p1: 0x00, p2: 0x04, data: Self.bytes(fid), le: 0, encrypt: true)
+            guard Self.selected(selected.sw) else { throw CardFailure.failed(code: "select_key") }
         }
         var block = CardChannel.signBlock(message)
         defer { CardChannel.wipe(&block) }
         var signature: [UInt8] = []
+        defer { CardChannel.wipe(&signature) }
         for half in 0..<2 {
             let more = half == 0
             let r = try await secure(
@@ -90,14 +91,14 @@ final class GpkiCard: CardConnection {
             signature += r.data
         }
         var reads = 0
-        while signature.count < Self.RSA_LEN && reads < 4 {
+        while signature.count < Self.signatureLength && reads < 4 {
             let r = try await secure(session, cla: 0x80, ins: 0xc1, p1: 0x00, p2: 0x80, data: [], le: 0x80, encrypt: false)
             guard Self.ok(r.sw), !r.data.isEmpty else { throw CardFailure.failed(code: "sign_read") }
             signature += r.data
             reads += 1
         }
-        guard signature.count >= Self.RSA_LEN else { throw CardFailure.failed(code: "sign_length") }
-        return Data(signature[0..<Self.RSA_LEN])
+        guard signature.count >= Self.signatureLength else { throw CardFailure.failed(code: "sign_length") }
+        return Data(signature[0..<Self.signatureLength])
     }
 
     // The application ---------------------------------------------------------------
@@ -123,8 +124,8 @@ final class GpkiCard: CardConnection {
     }
 
     private func selectFid(_ fid: UInt16) async throws -> Bool {
-        let sw = try await transmit(0x00, 0xa4, 0x00, 0x04, [UInt8(fid >> 8), UInt8(fid & 0xff)], le: 256).sw
-        return Self.ok(sw) || Self.warning(sw)
+        let sw = try await transmit(0x00, 0xa4, 0x00, 0x04, Self.bytes(fid), le: 256).sw
+        return Self.selected(sw)
     }
 
     private func selectPath(_ path: [UInt8]) async throws {
@@ -133,7 +134,7 @@ final class GpkiCard: CardConnection {
         if path.count >= 2 && path[0] == 0x3f && path[1] == 0x00 {
             i = 2
         } else if path.count <= 2 {
-            guard try await selectFid(Self.CARD_DF) else { throw CardFailure.failed(code: "select_directory") }
+            guard try await selectFid(Self.cardDirectory) else { throw CardFailure.failed(code: "select_directory") }
         }
         while i + 1 < path.count {
             let fid = UInt16(path[i]) << 8 | UInt16(path[i + 1])
@@ -154,7 +155,7 @@ final class GpkiCard: CardConnection {
                 want = 16
                 continue
             }
-            return Self.ok(r.sw) || Self.warning(r.sw) ? r.data : nil
+            return Self.selected(r.sw) ? r.data : nil
         }
     }
 
@@ -162,7 +163,7 @@ final class GpkiCard: CardConnection {
         var out: [UInt8] = []
         var offset = offset
         while out.count < length {
-            let want = min(Self.CHUNK, length - out.count)
+            let want = min(Self.chunk, length - out.count)
             guard let got = try await readBinary(offset, want), !got.isEmpty else { break }
             out += got
             offset += got.count
@@ -174,13 +175,13 @@ final class GpkiCard: CardConnection {
     /// A PKCS #15 directory file under DF 5030, up to the padding after its
     /// last record; empty when the card has no such file.
     private func readDirectory(_ fid: UInt16) async throws -> [UInt8] {
-        guard try await selectApplication(), try await selectFid(Self.CARD_DF), try await selectFid(fid) else { return [] }
+        guard try await selectApplication(), try await selectFid(Self.cardDirectory), try await selectFid(fid) else { return [] }
         var buffer: [UInt8] = []
         while buffer.count < 16 * 1024 {
-            guard let got = try await readBinary(buffer.count, Self.CHUNK), !got.isEmpty else { break }
+            guard let got = try await readBinary(buffer.count, Self.chunk), !got.isEmpty else { break }
             buffer += got
             if let end = Der.recordsEnd(buffer) { return Array(buffer[0..<end]) }
-            if got.count < Self.CHUNK { break }
+            if got.count < Self.chunk { break }
         }
         return buffer
     }
@@ -188,7 +189,7 @@ final class GpkiCard: CardConnection {
     /// The reference of the signing key: the PrKDF's key that may sign,
     /// the one labelled SIGN first.
     private func signingKeyRef() async throws -> UInt8 {
-        let keys = Der.records(try await readDirectory(Self.PRKDF)).compactMap(Self.key)
+        let keys = Der.records(try await readDirectory(Self.privateKeyDirectory)).compactMap(Self.key)
         let signers = keys.filter(\.canSign)
         guard let key = signers.first(where: { $0.id == Array("SIGN".utf8) || $0.label.uppercased().contains("SIGN") }) ?? signers.first ?? keys.first,
               let ref = UInt8(exactly: key.keyRef)
@@ -203,14 +204,14 @@ final class GpkiCard: CardConnection {
     /// ends in `CardFailure.channel`: nothing after it is sent.
     private func openChannel() async throws -> CardChannel.Session {
         let manager = try await transmit(0x00, 0xa4, 0x04, 0x00, CardChannel.ISD_CM_AID, le: 0).sw
-        guard Self.ok(manager) || Self.warning(manager) else { throw CardFailure.channel }
+        guard Self.selected(manager) else { throw CardFailure.channel }
         let information = try await transmit(0x80, 0xca, 0x00, 0xe0, [], le: 256)
         guard Self.ok(information.sw), CardChannel.acceptsKeyInformation(information.data) else { throw CardFailure.channel }
         let domain = try await transmit(0x00, 0xa4, 0x04, 0x00, CardChannel.ISD_AID, le: 0).sw
-        guard Self.ok(domain) || Self.warning(domain) else { throw CardFailure.channel }
+        guard Self.selected(domain) else { throw CardFailure.channel }
         let identifier = try await transmit(0x80, 0xca, 0x00, 0x45, [], le: 256)
         guard Self.ok(identifier.sw), let cardID = CardChannel.cardID(identifier.data) else { throw CardFailure.channel }
-        var keys = CardChannel.diversify(cardID)
+        var keys = try CardChannel.diversify(cardID)
         defer { keys.wipe() }
 
         guard try await selectApplication() else { throw CardFailure.channel }
@@ -218,7 +219,7 @@ final class GpkiCard: CardConnection {
         guard SecRandomCopyBytes(kSecRandomDefault, host.count, &host) == errSecSuccess else { throw CardFailure.channel }
         let update = try await transmit(0x80, 0x50, 0x01, 0x00, host, le: 256)
         guard Self.ok(update.sw), let card = CardChannel.initializeUpdate(update.data),
-              let (session, authenticate) = CardChannel.Session.establish(keys, hostChallenge: host, card: card)
+              let (session, authenticate) = try CardChannel.Session.establish(keys, hostChallenge: host, card: card)
         else { throw CardFailure.channel }
         guard Self.ok(try await transmit(0x84, 0x82, 0x03, 0x00, authenticate, le: 0).sw) else {
             session.wipe()
@@ -228,7 +229,7 @@ final class GpkiCard: CardConnection {
     }
 
     private func secure(_ session: CardChannel.Session, cla: UInt8, ins: UInt8, p1: UInt8, p2: UInt8, data: [UInt8], le: Int, encrypt: Bool) async throws -> (data: [UInt8], sw: UInt16) {
-        var (header, body) = session.wrap(cla: cla, ins: ins, p1: p1, p2: p2, data: data, encrypt: encrypt)
+        var (header, body) = try session.wrap(cla: cla, ins: ins, p1: p1, p2: p2, data: data, encrypt: encrypt)
         defer { CardChannel.wipe(&body) }
         return try await transmit(header[0], ins, p1, p2, body, le: le)
     }
@@ -258,7 +259,9 @@ final class GpkiCard: CardConnection {
     }
 
     private static func ok(_ sw: UInt16) -> Bool { sw == 0x9000 }
-    private static func warning(_ sw: UInt16) -> Bool { sw & 0xff00 == 0x6200 }
+    /// A SELECT or READ BINARY that did what was asked, perhaps with a warning (62xx).
+    private static func selected(_ sw: UInt16) -> Bool { ok(sw) || sw & 0xff00 == 0x6200 }
+    private static func bytes(_ fid: UInt16) -> [UInt8] { [UInt8(fid >> 8), UInt8(fid & 0xff)] }
 
     // PKCS #15 ----------------------------------------------------------------------
 

@@ -1,6 +1,6 @@
 # ios/：iPhone 的 app（Swift）
 
-**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開手機，而且 app 算的和檢查的就是 `device-core/` 那一份。** 協定的算法、裝置上的檢查、算證明都在 `device-core/`（Rust，ADR-0034），這裡的 Swift 只呼叫它對外的 C 函式（`idc_` 開頭），不自己算。之後的畫面、讀卡、送出請求都寫在這個目錄；要看 PIN 去了哪裡，看這裡就夠，`device-core/` 沒有任何函式收 PIN。
+**這個目錄讓人檢查的事：憑證、公鑰、簽章、PIN 沒有離開手機，而且 app 算的和檢查的就是 `device-core/` 那一份。** 協定的算法、裝置上的檢查、算證明都在 `device-core/`（Rust，ADR-0034），這裡的 Swift 只呼叫它對外的 C 函式（`idc_` 開頭），不自己算。例外是讀卡：對卡片送的指令和卡片要的安全通道（`spec/card-channel.md`）照 ADR-0034 寫在 Swift，`App/CardChannel.swift` 的測試讀 `spec/vectors/card-channel.json`。畫面、讀卡、送出請求都寫在這個目錄；要看 PIN 去了哪裡，看這裡就夠，`device-core/` 沒有任何函式收 PIN。
 
 這個目錄不引用 `protocol/`、`worker/`，沒有第三方的套件。
 
@@ -19,7 +19,7 @@
 | `App/CardProofFlow.swift` | 一次過卡，沒有畫面的狀態機。每一步呼叫核心的哪個函式、PIN 和憑證和簽章各留到什麼時候，寫在檔頭 |
 | `App/CardProofModel.swift`、`App/Screen.swift`、`App/Screens.swift` | 畫面看到的過卡：`Screen` 是一個畫面上從上到下的每一句話和每一個按鈕，`Screens` 決定 `design/copy/card-proof.md` 的哪一句放在哪裡，`CardProofModel` 做按鈕要做的事 |
 | `App/CardProofView.swift`、`App/CardFigure.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），長得和 `design/screens/` 的 `card-proof-app-*` 一樣；`CardFigure` 是讀取卡片那一步的感應位置示意圖。它們自己沒有任何句子，也不做任何判斷 |
-| `App/Theme.swift` | 畫面用的數值：`design/tokens.json` 裡 app 用到的那幾個，有 `-phone` 的用 `-phone` 的值。標題用包進 app 的源流明體 TW（執行時向系統登記，`Info.plist` 是產生的，不在那裡列）；其他的字用系統的字型 |
+| `App/Theme.swift` | 畫面用的數值：`design/tokens.json` 裡 app 用到的那幾個，有 `-phone` 的用 `-phone` 的值。標題用包進 app 的源流明體 TW（執行時向系統登記，不列在 `Info.plist`）；其他的字用系統的字型 |
 | `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
 | `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
 | `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀，不屬於過卡的從 `design/copy/app.json` 讀（兩個檔都原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
@@ -43,7 +43,7 @@
 
 要檢查它們有沒有離開手機，看這幾個檔就夠：
 
-- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`：`GpkiCard.sign` 把它補成 VERIFY 的資料（`CardChannel.pinBlock`），只在安全通道建立之後、加密著送給卡片；安全通道建立不起來（`CardFailure.channel`）、是第一代的卡片（`CardFailure.firstGeneration`）、PIN 的長度或字元沒有卡片收（6 到 10 個 ASCII 字元以外）時不送。`Backend`、`DeviceCore` 沒有任何函式收 PIN
+- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`：`GpkiCard.sign` 把它補成 VERIFY 的資料（`CardChannel.pinBlock`），只在安全通道建立之後、加密著送給卡片；安全通道建立不起來（`CardFailure.channel`）、是第一代的卡片（`CardFailure.firstGeneration`）時不送。PIN 的長度或字元沒有卡片收（6 到 10 個可列印的 ASCII 字元以外，`CardChannel.cardTakes`）時，按「確認卡片」不出現面板，PIN 丟掉，請持卡人再輸入一次。`Backend`、`DeviceCore` 沒有任何函式收 PIN
 - **第二、第三次感應**：`CardProofFlow.signTap` 先再讀一次憑證，第一次感應選定的那一張要在裡面，才把 PIN 交給卡片；不在就是 `CardFailure.otherCard`，PIN 沒有送
 - **憑證和簽章**：選定的憑證和第一個簽章留在 `CardProofFlow`，證明算完就蓋成零；核心自己的那一份跟著 session 蓋掉
 - **姓名**：核心檢查憑證後回傳，只交給「輸入 PIN」的畫面
@@ -54,7 +54,8 @@
 
 ### 還沒有的
 
-- 讀卡時的中斷，第 2、第 3 次感應的部分（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：卡片中途離開時，`CardFailure.dropped` 帶著 PIN 送出了沒有（`pinSent`），但畫面現在一律寫「讀卡時發生錯誤（代碼 `connection_lost`）……」、丟掉 PIN、從第 2 步重來；第 1 次感應已經照 `card-proof.md` 寫「卡片在讀取途中離開了手機……」並可以再感應一次。在面板上按「取消」、感應時切到別的 app，現在都當成沒有感應到卡片
+- 讀卡時的中斷，第 2、第 3 次感應的部分（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：卡片中途離開時，`CardFailure.dropped` 帶著 PIN 送出了沒有（`pinSent`），但畫面現在一律寫「讀卡時發生錯誤（代碼 `connection_lost`）……」、丟掉 PIN、從第 2 步重來；第 1 次感應已經照 `card-proof.md` 寫「卡片在讀取途中離開了手機……」並可以再感應一次。在面板上按「取消」（卡片接上之前或之後）、感應時切到別的 app，現在都當成沒有感應到卡片
+- 第一代的卡片：`GpkiCard` 認得出來（選不到第二代的應用程式、選得到主檔案），但只有在卡片有 `Config/Info.plist` 那三個應用程式之一時，系統才會把卡片交給 app。第一代的卡片有沒有，手上沒有卡片能試；沒有的話持卡人看到的是面板一直等、最後「沒有感應到卡片」
 - 中斷和錯誤（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：掉線後只重做那一次感應、送 PIN 時掉線、5 分鐘的上限、最低版本（`min_app`）、沒有 NFC。這裡已經有的只有：PIN 不正確時丟掉 PIN 再問一次、第二或第三次感應換了卡時不送 PIN 並可以再感應一次、手機的日期和題目的日期不同時在第三次感應之前停下、後台沒有回應時同一筆再送一次（網頁版在後台回 429、5xx 時也可以再送，再送被回「題目用過了」時會查現況確認那一筆是不是已經記下，這裡還沒有）
 - 文字沒有對應句子的兩種情況，畫面只顯示代碼，和網頁版相同（`web/src/ui/messages.ts`）：核心回了 app 不認得的憑證原因代碼、app 自己把步驟的順序叫錯（`state`）。兩種都是程式的錯，不是持卡人會遇到的情況；要不要有一句話留給 #172
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
@@ -253,6 +254,7 @@ agent 不碰卡片；這一節由營運者用自己的卡片和 iPhone 照著做
    - 第 1 次感應，面板寫「讀取中」時拿開：第 2 步停在「感應卡片，讀取卡片上的憑證」，寫「卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。」，按鈕「再感應一次」；再感應一次就接著做
    - 第 2 次感應，面板寫「卡片簽章中」時拿開：第 3 步寫「讀卡時發生錯誤（代碼 `connection_lost`）。請重新插卡再試一次。」，PIN 丟掉，按鈕「再感應一次卡片」回到第 2 步（這一段的句子和按鈕照 `card-proof.md` 改是 [#172](https://github.com/iamreal-tw/iamreal/issues/172)）。重新來一次，過得了卡
    - 拿開得太快，卡片還沒接上就離開時，面板會繼續等卡片；按面板的「取消」，畫面寫「沒有感應到卡片……」
+   - 卡片接上後、面板寫「讀取中」時按面板的「取消」：畫面也寫「沒有感應到卡片……」
 3. **輸入錯的 PIN 一次**：第 3 步寫「PIN 不正確。連續輸入錯誤三次，卡片會被鎖住。」，PIN 欄位是空的。接著輸入正確的 PIN，過得了卡。只錯一次，不要連錯三次
 4. **第二次感應換一張卡**：第 1 次感應用卡片 A，第 2 次感應換成另一張第二代的自然人憑證 B：第 3 步寫「這不是剛才讀到的那張卡片，PIN 沒有送出。請換回剛才那張卡片，再感應一次。」，按鈕「再感應一次」；換回 A 再感應就接著做，PIN 不用再輸入
 

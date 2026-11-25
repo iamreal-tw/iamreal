@@ -36,23 +36,28 @@ final class NFCCard: Card {
         guard claim() else { throw CardFailure.failed(code: "busy") }
         defer { release() }
 
+        let (busy, done) = purpose == .readCertificates
+            ? (copy("app_panel.reading"), copy("app_panel.read"))
+            : (copy("app_panel.signing"), copy("app_panel.signed"))
         let reader = TagReader()
         let tag = try await reader.waitForCard(copy("app_panel.iphone_wait"))
-        reader.say(purpose == .readCertificates ? copy("app_panel.reading") : copy("app_panel.signing"))
+        reader.say(busy)
         let card = GpkiCard(TagTransport(tag: tag))
         do {
             let result = try await body(card)
-            reader.finish(purpose == .readCertificates ? copy("app_panel.read") : copy("app_panel.signed"))
+            reader.finish(done)
             return result
-        } catch let failure as CardFailure {
-            reader.stop()
-            throw failure
-        } catch let error as NFCReaderError {
-            reader.stop()
-            throw Self.failure(error, pinSent: card.pinSent)
         } catch {
+            // Read before the session is ended here, which the system may also report as cancelled.
+            let cancelled = reader.cancelled
             reader.stop()
-            throw CardFailure.failed(code: "nfc")
+            // Cancelled on the panel once the card was there: as before it came (#172).
+            if cancelled { throw CardFailure.noTap }
+            switch error {
+            case let failure as CardFailure: throw failure
+            case let error as NFCReaderError: throw Self.failure(error, pinSent: card.pinSent)
+            default: throw CardFailure.failed(code: "nfc")
+            }
         }
     }
 
@@ -101,22 +106,31 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
     private var session: NFCTagReaderSession?
     /// Waiting for a card; resumed once, with the card or why none came.
     private var waiting: CheckedContinuation<NFCISO7816Tag, Error>?
+    private var cancelledOnPanel = false
+
+    /// Whether the session ended because "取消" was pressed on the panel.
+    var cancelled: Bool { queue.sync { cancelledOnPanel } }
 
     /// Shows the panel with `message` and returns the card once it is
     /// connected. Throws `CardFailure.noTap` when the session ends without
     /// one: cancelled, timed out, the app went to the background.
     func waitForCard(_ message: String) async throws -> NFCISO7816Tag {
-        try await withCheckedThrowingContinuation { continuation in
-            queue.async {
-                guard let session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: self.queue) else {
-                    continuation.resume(throwing: CardFailure.noTap)
-                    return
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async {
+                    guard let session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self, queue: self.queue) else {
+                        continuation.resume(throwing: CardFailure.noTap)
+                        return
+                    }
+                    self.waiting = continuation
+                    self.session = session
+                    session.alertMessage = message
+                    session.begin()
                 }
-                self.waiting = continuation
-                self.session = session
-                session.alertMessage = message
-                session.begin()
             }
+        } onCancel: {
+            // The card proof was dropped while the panel waited: close it.
+            stop()
         }
     }
 
@@ -141,6 +155,7 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate {
     func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
 
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
+        if (error as? NFCReaderError)?.code == .readerSessionInvalidationErrorUserCanceled { cancelledOnPanel = true }
         // Before a card: no card came. After, the commands fail on their own.
         waiting?.resume(throwing: CardFailure.noTap)
         waiting = nil

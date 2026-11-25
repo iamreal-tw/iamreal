@@ -33,10 +33,10 @@ enum CardChannel {
 
     /// The card's static keys from its 10-byte identifier (`diversify`).
     /// The key material is the upstream file's unless the vectors give theirs.
-    static func diversify(_ cardID: [UInt8], kek: [UInt8] = DIVERSE_KEK, masterEnc: [UInt8] = MASTER_ENC) -> StaticKeys {
-        var master = aes(encrypt: false, key: kek, masterEnc)
+    static func diversify(_ cardID: [UInt8], kek: [UInt8] = DIVERSE_KEK, masterEnc: [UInt8] = MASTER_ENC) throws -> StaticKeys {
+        var master = try aes(encrypt: false, key: kek, masterEnc)
         defer { wipe(&master) }
-        func derive(_ constant: UInt8) -> [UInt8] {
+        func derive(_ constant: UInt8) throws -> [UInt8] {
             var input = [UInt8](repeating: 0, count: 32)
             input[0x0b] = constant
             input[0x0e] = 0x80
@@ -44,9 +44,9 @@ enum CardChannel {
             input[0x10] = constant == 0x04 ? 0x01 : 0x02
             input.replaceSubrange(0x11..<0x1b, with: cardID)
             input.replaceSubrange(0x1b..<0x20, with: ISD_CM_AID[10..<15])
-            return cmac(key: master, input)
+            return try cmac(key: master, input)
         }
-        return StaticKeys(enc: derive(0x04), mac: derive(0x06))
+        return StaticKeys(enc: try derive(0x04), mac: try derive(0x06))
     }
 
     /// The card identifier in GET DATA 45's answer (`card_id`).
@@ -91,24 +91,24 @@ enum CardChannel {
 
         /// The session, and the data of EXTERNAL AUTHENTICATE; nil when the
         /// card's cryptogram is not the one its keys give (`session`).
-        static func establish(_ keys: StaticKeys, hostChallenge: [UInt8], card: CardChallenge) -> (Session, [UInt8])? {
+        static func establish(_ keys: StaticKeys, hostChallenge: [UInt8], card: CardChallenge) throws -> (Session, [UInt8])? {
             let context = hostChallenge + card.challenge
-            var sMac = kdf(keys.mac, 0x06, context, bits: 128)
-            var sEnc = kdf(keys.enc, 0x04, context, bits: 128)
-            guard kdf(sMac, 0x00, context, bits: 64) == card.cryptogram else {
+            var sMac = try kdf(keys.mac, 0x06, context, bits: 128)
+            var sEnc = try kdf(keys.enc, 0x04, context, bits: 128)
+            guard try kdf(sMac, 0x00, context, bits: 64) == card.cryptogram else {
                 CardChannel.wipe(&sMac)
                 CardChannel.wipe(&sEnc)
                 return nil
             }
-            let hostCryptogram = kdf(sMac, 0x01, context, bits: 64)
-            let mcv = cmac(key: sMac, [UInt8](repeating: 0, count: 16) + externalAuthenticateHeader + hostCryptogram)
+            let hostCryptogram = try kdf(sMac, 0x01, context, bits: 64)
+            let mcv = try cmac(key: sMac, [UInt8](repeating: 0, count: 16) + externalAuthenticateHeader + hostCryptogram)
             return (Session(sEnc: sEnc, sMac: sMac, mcv: mcv), hostCryptogram + mcv[0..<8])
         }
 
         /// A command in the channel (`sequence`): the header with the
         /// secure-messaging class, and the body (the encrypted data, then
         /// 8 bytes of the MAC). The counter goes up for every command.
-        func wrap(cla: UInt8, ins: UInt8, p1: UInt8, p2: UInt8, data: [UInt8], encrypt: Bool) -> (header: [UInt8], body: [UInt8]) {
+        func wrap(cla: UInt8, ins: UInt8, p1: UInt8, p2: UInt8, data: [UInt8], encrypt: Bool) throws -> (header: [UInt8], body: [UInt8]) {
             var encrypted: [UInt8] = []
             if encrypt && !data.isEmpty {
                 var block = [UInt8](repeating: 0, count: 16)
@@ -116,15 +116,15 @@ enum CardChannel {
                 block[13] = UInt8(truncatingIfNeeded: counter >> 16)
                 block[14] = UInt8(truncatingIfNeeded: counter >> 8)
                 block[15] = UInt8(truncatingIfNeeded: counter)
-                let iv = aes(encrypt: true, key: sEnc, block)
+                let iv = try aes(encrypt: true, key: sEnc, block)
                 var padded = data + [0x80]
                 while padded.count % 16 != 0 { padded.append(0) }
                 defer { CardChannel.wipe(&padded) }
-                encrypted = aes(encrypt: true, key: sEnc, iv: iv, padded)
+                encrypted = try aes(encrypt: true, key: sEnc, iv: iv, padded)
             }
             counter += 1
             let header = [cla | 0x04, ins, p1, p2, UInt8(encrypted.count + 8)]
-            mcv = cmac(key: sMac, mcv + header + encrypted)
+            mcv = try cmac(key: sMac, mcv + header + encrypted)
             return (header, encrypted + mcv[0..<8])
         }
 
@@ -141,10 +141,17 @@ enum CardChannel {
     /// The data of VERIFY: the PIN padded with FF to 10 bytes; nil for a
     /// PIN no card takes (`pin_block`).
     static func pinBlock(_ pin: PIN) -> [UInt8]? {
-        pin.withBytes { pin in
-            guard (6...10).contains(pin.count), pin.allSatisfy({ (0x20...0x7e).contains($0) }) else { return nil }
-            return Array(pin) + [UInt8](repeating: 0xff, count: 10 - pin.count)
+        guard cardTakes(pin) else { return nil }
+        return pin.withBytes { pin in
+            var block = [UInt8](repeating: 0xff, count: 10)
+            for i in pin.indices { block[i] = pin[i] }
+            return block
         }
+    }
+
+    /// Whether a card takes the PIN at all: 6 to 10 printable ASCII characters.
+    static func cardTakes(_ pin: PIN) -> Bool {
+        pin.withBytes { pin in (6...10).contains(pin.count) && pin.allSatisfy { (0x20...0x7e).contains($0) } }
     }
 
     /// What the card is given to sign for `message` (`sign_block`):
@@ -159,31 +166,40 @@ enum CardChannel {
     // The primitives ------------------------------------------------------------------
 
     /// `kdf` of spec/card-channel.md (SCP03's, NIST SP 800-108 in counter mode with AES-CMAC).
-    static func kdf(_ key: [UInt8], _ constant: UInt8, _ context: [UInt8], bits: Int) -> [UInt8] {
+    static func kdf(_ key: [UInt8], _ constant: UInt8, _ context: [UInt8], bits: Int) throws -> [UInt8] {
         let length = (bits + 7) / 8
         var out: [UInt8] = []
         var i: UInt8 = 1
         while out.count < length {
             let input = [UInt8](repeating: 0, count: 11) + [constant, 0x00, UInt8(bits >> 8), UInt8(bits & 0xff), i] + context
-            out += cmac(key: key, input)
+            out += try cmac(key: key, input)
             i += 1
         }
         return Array(out[0..<length])
     }
 
     /// AES-CMAC (RFC 4493).
-    static func cmac(key: [UInt8], _ data: [UInt8]) -> [UInt8] {
+    static func cmac(key: [UInt8], _ data: [UInt8]) throws -> [UInt8] {
         func double(_ b: [UInt8]) -> [UInt8] {
             var out = [UInt8](repeating: 0, count: 16)
             for i in 0..<16 { out[i] = (b[i] << 1) | (i < 15 ? b[i + 1] >> 7 : 0) }
             if b[0] & 0x80 != 0 { out[15] ^= 0x87 }
             return out
         }
-        let k1 = double(aes(encrypt: true, key: key, [UInt8](repeating: 0, count: 16)))
-        let k2 = double(k1)
+        var l = try aes(encrypt: true, key: key, [UInt8](repeating: 0, count: 16))
+        var k1 = double(l)
+        var k2 = double(k1)
+        var last = [UInt8](repeating: 0, count: 16)
+        var x = [UInt8](repeating: 0, count: 16)
+        defer {
+            wipe(&l)
+            wipe(&k1)
+            wipe(&k2)
+            wipe(&last)
+            wipe(&x)
+        }
         let blocks = max(1, (data.count + 15) / 16)
         let complete = !data.isEmpty && data.count % 16 == 0
-        var last = [UInt8](repeating: 0, count: 16)
         let start = (blocks - 1) * 16
         if complete {
             for i in 0..<16 { last[i] = data[start + i] ^ k1[i] }
@@ -192,25 +208,27 @@ enum CardChannel {
             last[data.count - start] = 0x80
             for i in 0..<16 { last[i] ^= k2[i] }
         }
-        var x = [UInt8](repeating: 0, count: 16)
         for b in 0..<(blocks - 1) {
             for i in 0..<16 { x[i] ^= data[b * 16 + i] }
-            x = aes(encrypt: true, key: key, x)
+            x = try aes(encrypt: true, key: key, x)
         }
         for i in 0..<16 { x[i] ^= last[i] }
-        return aes(encrypt: true, key: key, x)
+        return try aes(encrypt: true, key: key, x)
     }
 
     /// AES-128 in ECB (no `iv`) or CBC, without padding.
-    static func aes(encrypt: Bool, key: [UInt8], iv: [UInt8]? = nil, _ data: [UInt8]) -> [UInt8] {
-        precondition(key.count == 16 && data.count % 16 == 0)
+    static func aes(encrypt: Bool, key: [UInt8], iv: [UInt8]? = nil, _ data: [UInt8]) throws -> [UInt8] {
+        guard key.count == 16, data.count % 16 == 0, iv?.count ?? 16 == 16 else { throw CardFailure.failed(code: "crypto") }
         var out = [UInt8](repeating: 0, count: data.count)
         var moved = 0
         let status = CCCrypt(
             CCOperation(encrypt ? kCCEncrypt : kCCDecrypt), CCAlgorithm(kCCAlgorithmAES),
             CCOptions(iv == nil ? kCCOptionECBMode : 0),
             key, key.count, iv, data, data.count, &out, out.count, &moved)
-        precondition(status == kCCSuccess && moved == data.count)
+        guard status == kCCSuccess, moved == data.count else {
+            wipe(&out)
+            throw CardFailure.failed(code: "crypto")
+        }
         return out
     }
 

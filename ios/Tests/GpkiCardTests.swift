@@ -63,7 +63,7 @@ final class GpkiCardTests: XCTestCase {
                 _ = try await GpkiCard(card).sign(message, pin: PIN(pin))
                 XCTFail("signed with \(pin)")
             } catch {
-                XCTAssertEqual(error as? CardFailure, .pinIncorrect)
+                XCTAssertEqual(error as? CardFailure, .failed(code: "pin_format"))
             }
         }
         XCTAssertEqual(card.commands, [])

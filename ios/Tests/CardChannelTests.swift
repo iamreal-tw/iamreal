@@ -16,7 +16,7 @@ final class CardChannelTests: XCTestCase {
 
     func testDiversifyGivesTheCardsStaticKeys() throws {
         for c in try cases("diversify") {
-            let keys = CardChannel.diversify(
+            let keys = try CardChannel.diversify(
                 try bytes(c, "card_id"), kek: try bytes(c, "kek"), masterEnc: try bytes(c, "master_enc"))
             XCTAssertEqual(hex(keys.enc), c["k_enc"] as? String, c["name"] as? String ?? "")
             XCTAssertEqual(hex(keys.mac), c["k_mac"] as? String, c["name"] as? String ?? "")
@@ -27,8 +27,8 @@ final class CardChannelTests: XCTestCase {
         // The card identifier of the first case with the key material the
         // app carries gives other keys than the made-up material of the vectors.
         let c = try XCTUnwrap(try cases("diversify").first)
-        let made = CardChannel.diversify(try bytes(c, "card_id"), kek: try bytes(c, "kek"), masterEnc: try bytes(c, "master_enc"))
-        let carried = CardChannel.diversify(try bytes(c, "card_id"))
+        let made = try CardChannel.diversify(try bytes(c, "card_id"), kek: try bytes(c, "kek"), masterEnc: try bytes(c, "master_enc"))
+        let carried = try CardChannel.diversify(try bytes(c, "card_id"))
         XCTAssertNotEqual(carried.enc, made.enc)
         XCTAssertEqual(CardChannel.MASTER_ENC.count, 16)
         XCTAssertEqual(CardChannel.DIVERSE_KEK.count, 16)
@@ -64,7 +64,7 @@ final class CardChannelTests: XCTestCase {
             let name = c["name"] as? String ?? ""
             let keys = CardChannel.StaticKeys(enc: try bytes(c, "k_enc"), mac: try bytes(c, "k_mac"))
             let card = CardChannel.CardChallenge(challenge: try bytes(c, "card_challenge"), cryptogram: try bytes(c, "card_cryptogram"))
-            let opened = CardChannel.Session.establish(keys, hostChallenge: try bytes(c, "host_challenge"), card: card)
+            let opened = try CardChannel.Session.establish(keys, hostChallenge: try bytes(c, "host_challenge"), card: card)
             XCTAssertEqual(opened != nil, c["accepted"] as? Bool, name)
             guard let (session, authenticate) = opened else { continue }
             XCTAssertEqual(hex(session.sEnc), c["s_enc"] as? String, name)
@@ -88,7 +88,7 @@ final class CardChannelTests: XCTestCase {
         for step in steps {
             let name = step["name"] as? String ?? ""
             XCTAssertEqual(Int(session.counter), step["counter"] as? Int, name)
-            let wrapped = session.wrap(
+            let wrapped = try session.wrap(
                 cla: UInt8(try XCTUnwrap(step["cla"] as? Int)), ins: UInt8(try XCTUnwrap(step["ins"] as? Int)),
                 p1: UInt8(try XCTUnwrap(step["p1"] as? Int)), p2: UInt8(try XCTUnwrap(step["p2"] as? Int)),
                 data: try bytes(step, "data"), encrypt: try XCTUnwrap(step["encrypt"] as? Bool))

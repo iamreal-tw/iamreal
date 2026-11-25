@@ -90,7 +90,7 @@ final class SimulatedGpkiCard: APDUTransport {
         if ins == quirks.leavesAt { throw Left() }
 
         if cla & 0x04 != 0 && !(cla == 0x84 && ins == 0x82) {
-            return secure(cla: cla, ins: ins, p1: p1, p2: p2, body: data)
+            return try secure(cla: cla, ins: ins, p1: p1, p2: p2, body: data)
         }
         switch (ins, p1) {
         case (0xa4, 0x04):
@@ -122,18 +122,18 @@ final class SimulatedGpkiCard: APDUTransport {
             guard case .application = selected else { return ([], 0x6985) }
             hostChallenge = data
             cardChallenge = [0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8]
-            let keys = CardChannel.diversify(Self.cardID)
+            let keys = try CardChannel.diversify(Self.cardID)
             let context = hostChallenge + cardChallenge
-            let sMac = CardChannel.kdf(keys.mac, 0x06, context, bits: 128)
-            var cryptogram = CardChannel.kdf(sMac, 0x00, context, bits: 64)
+            let sMac = try CardChannel.kdf(keys.mac, 0x06, context, bits: 128)
+            var cryptogram = try CardChannel.kdf(sMac, 0x00, context, bits: 64)
             if quirks.wrongCryptogram { cryptogram[7] ^= 0x01 }
             return ([UInt8](repeating: 0, count: 10) + [0x30, 0x03, 0x70] + cardChallenge + cryptogram, 0x9000)
         case (0x82, _):
-            let keys = CardChannel.diversify(Self.cardID)
+            let keys = try CardChannel.diversify(Self.cardID)
             let context = hostChallenge + cardChallenge
-            let sMac = CardChannel.kdf(keys.mac, 0x06, context, bits: 128)
-            let card = CardChannel.CardChallenge(challenge: cardChallenge, cryptogram: CardChannel.kdf(sMac, 0x00, context, bits: 64))
-            guard let (opened, expected) = CardChannel.Session.establish(keys, hostChallenge: hostChallenge, card: card), expected == data else { return ([], 0x6300) }
+            let sMac = try CardChannel.kdf(keys.mac, 0x06, context, bits: 128)
+            let card = CardChannel.CardChallenge(challenge: cardChallenge, cryptogram: try CardChannel.kdf(sMac, 0x00, context, bits: 64))
+            guard let (opened, expected) = try CardChannel.Session.establish(keys, hostChallenge: hostChallenge, card: card), expected == data else { return ([], 0x6300) }
             session = (opened.sEnc, opened.sMac, opened.mcv, 1)
             return ([], 0x9000)
         default:
@@ -153,11 +153,11 @@ final class SimulatedGpkiCard: APDUTransport {
     }
 
     /// A command in the secure channel, checked and decrypted the card's way.
-    private func secure(cla: UInt8, ins: UInt8, p1: UInt8, p2: UInt8, body: [UInt8]) -> (data: [UInt8], sw: UInt16) {
+    private func secure(cla: UInt8, ins: UInt8, p1: UInt8, p2: UInt8, body: [UInt8]) throws -> (data: [UInt8], sw: UInt16) {
         guard var s = session, body.count >= 8 else { return ([], 0x6988) }
         let encrypted = Array(body[0..<(body.count - 8)])
         let header = [cla, ins, p1, p2, UInt8(body.count)]
-        let mac = CardChannel.cmac(key: s.sMac, s.mcv + header + encrypted)
+        let mac = try CardChannel.cmac(key: s.sMac, s.mcv + header + encrypted)
         guard Array(mac[0..<8]) == Array(body[(body.count - 8)...]) else {
             session = nil
             return ([], 0x6988)
@@ -166,8 +166,8 @@ final class SimulatedGpkiCard: APDUTransport {
         if !encrypted.isEmpty {
             var counterBlock = [UInt8](repeating: 0, count: 16)
             for i in 0..<4 { counterBlock[12 + i] = UInt8(truncatingIfNeeded: s.counter >> (24 - 8 * UInt32(i))) }
-            let iv = CardChannel.aes(encrypt: true, key: s.sEnc, counterBlock)
-            var padded = CardChannel.aes(encrypt: false, key: s.sEnc, iv: iv, encrypted)
+            let iv = try CardChannel.aes(encrypt: true, key: s.sEnc, counterBlock)
+            var padded = try CardChannel.aes(encrypt: false, key: s.sEnc, iv: iv, encrypted)
             while padded.last == 0x00 { padded.removeLast() }
             guard padded.last == 0x80 else {
                 session = nil

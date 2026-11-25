@@ -175,8 +175,6 @@ final class ScreensTests: XCTestCase {
         XCTAssertNil(screens.read(reached: 0, running: false, stop: nil).settings)
     }
 
-    /// No screen links out (docs/design/principles.md, principle 1): what a
-    /// button opens is the card's page, the account's, the share sheet.
     /// Where the card goes on an iPhone: drawn under the first sentence of
     /// step 2 before the tap, while it goes on under the system's panel,
     /// and when it stopped; not once the card is read. Its captions and
@@ -207,6 +205,18 @@ final class ScreensTests: XCTestCase {
         document.check(screen)
     }
 
+    /// The stops only the app has, with the card: each sentence is card-proof.md's.
+    func testTheCardsOwnStopsAreInTheDocument() {
+        for (stop, key) in [(Flow.Stop.card(.channel), "app_stops.channel"), (.card(.firstGeneration), "app_stops.first_generation"), (.card(.locked), "stops.card_locked")] {
+            XCTAssertEqual(screens.message(stop, tap: 2), [copy(key)])
+        }
+        document.check(screens.pin(name: "王小明", state: .waiting(copy("app_pin.pin_format"))))
+        document.check(screens.pin(name: "王小明", state: .stopped(screens.message(.card(.channel), tap: 2))))
+        document.check(screens.read(reached: 1, running: false, stop: .card(.firstGeneration)))
+    }
+
+    /// No screen links out (docs/design/principles.md, principle 1): what a
+    /// button opens is the card's page, the account's, the share sheet.
     func testNoScreenOpensAHelpPage() {
         for (name, screen) in firstDeclaration() {
             XCTAssertFalse(screen.texts.contains("了解更多"), name)
