@@ -6,7 +6,7 @@
 //   /threads/@…       the page of a Threads account (design/copy/account-page.md)
 //   /proof-log           the proof log page (design/copy/proof-log-page.md)
 //   /faq              the FAQ (design/copy/faq.md)
-//   /verify           how to verify (design/copy/verify.md)
+//   /verify           how to verify the proof log (design/copy/verify.md)
 //   /prepare          what a card proof needs (design/copy/prepare.md)
 //   /hang, /hang/…    hanging a proof on a profile (design/copy/hang.md)
 //   anything else     the page for what is not there

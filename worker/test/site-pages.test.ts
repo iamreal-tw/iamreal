@@ -1,4 +1,4 @@
-// The FAQ (/faq), how to verify (/verify), hanging a proof on a profile
+// The FAQ (/faq), how to verify the proof log (/verify), hanging a proof on a profile
 // (/hang, /hang/<short ID>) and the copy buttons' script (/copy.js), through
 // the Worker's HTTP (test/harness.ts), against the words of design/copy/
 // (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
@@ -147,7 +147,7 @@ function copiedWord(file: string): string {
   return copied;
 }
 
-describe("how to verify", () => {
+describe("how to verify the proof log", () => {
   test("every sentence of verify.md, in order; the prompt exactly; its copy button, shown by the one script; the preview", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/verify");
