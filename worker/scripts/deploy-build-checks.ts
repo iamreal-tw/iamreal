@@ -125,9 +125,11 @@ export function engineFiles(): Record<string, string> {
  * Worker requests nothing but MOICA's two CRLs.
  *
  *   - the repository, linked from every page (design/copy/home.md, 導覽列),
- *     and three of its files: iamreal-verify's README (how to verify, and
- *     its section 下載 from the proof log page; the section's name is not
- *     ASCII and is not read here), and the ADR one answer of the FAQ links to;
+ *     iamreal-verify's README in it (how to verify, and its section 下載
+ *     from the proof log page; the section's name is not ASCII and is not
+ *     read here), and its discussions, which the FAQ's answer of who runs
+ *     the service links to (design/copy/faq.md);
+ *   - the maintainer's blog, which that answer links to too;
  *   - Threads: the profile a page of a card or of an account embeds and
  *     links to (design/copy/proof-page.md, section 3; account-page.md), the
  *     site /hang opens (hang.md), and the one origin the pages' policy
@@ -149,8 +151,8 @@ export const PAGE_ADDRESSES: readonly string[] = [
   "https://github.com/iamreal-tw/iamreal",
   "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md",
   "https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#",
-  "https://github.com/iamreal-tw/iamreal/blob/main/docs/adr/0004-scoped-ids-and-proofs-are-public.md",
   "https://github.com/iamreal-tw/iamreal/discussions",
+  "https://opasschang.com",
   "https://www.threads.com/",
   "https://www.threads.com/@${account}",
   "https://www.threads.com/@${account}/embed/",

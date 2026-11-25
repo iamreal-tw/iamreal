@@ -966,8 +966,7 @@ export const GO_PATHS: readonly string[] = [
  * The typescript job: the three packages, what their tests read, the Go
  * programs worker/'s tests build and run, and android/, ios/, device-core/,
  * circuits/ and the workflows, which test/workflows.test.ts reads. That is every
- * directory of the repository but docs/, and of docs/ the one ADR the
- * site links to, whose file worker/'s tests look for.
+ * directory of the repository but docs/.
  */
 export const TYPESCRIPT_PATHS: readonly string[] = [
   ...EVERY_CHECK_PATHS,
@@ -985,7 +984,6 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
   "device-core/**",
   ".github/workflows/**",
   "circuits/**",
-  "docs/adr/0004-scoped-ids-and-proofs-are-public.md",
 ];
 /**
  * The device-core job: the Rust, the files of the repository its tests
