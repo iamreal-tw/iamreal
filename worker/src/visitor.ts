@@ -209,7 +209,7 @@ async function proofLog(site: Site, parts: VisitorParts, query: URLSearchParams)
  * /hang; only a short ID that reads is asked of the proof log.
  */
 async function hang(site: Site, parts: VisitorParts, pathname: string): Promise<Answer> {
-  if (pathname === "/hang") return page(site, 200, hangWithout());
+  if (pathname === "/hang") return page(site, 200, hangWithout(site));
   const typed = typedAfter(pathname, "/hang/");
   const short = readShortIdInUrl(typed);
   if (short !== null && short !== typed) return redirect(301, `/hang/${short}`);

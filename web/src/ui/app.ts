@@ -720,7 +720,7 @@ export function startApp(o: AppOptions): void {
             el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link)),
             copy,
             ...view.profiles.map((pr) => el("p", { class: "profile" }, newTab(pr.url, { "data-profile": "" }, say(pr.text)))),
-            el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_save)),
+            el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_add), el("li", {}, t.step_paste)),
           ),
         ),
         ...notes.filter((n): n is HTMLParagraphElement => n !== null),

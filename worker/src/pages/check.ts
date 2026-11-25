@@ -4,15 +4,16 @@
 // right. Then what a proof tells you, three side by side, and the usual
 // situations, as on what a card proof needs.
 //
-// The pictures are drawn with the style sheet's classes, in the colours
-// check.md allows (ink, text, secondary, line, soft): no image, no inline
-// style. Their pieces are hidden from a screen reader, which is told each
+// The pictures are drawn with the style sheet's classes (./sketch.ts, shared
+// with the page of hanging a proof), in the colours check.md allows (ink,
+// text, secondary, line, soft): no image, no inline style. Their pieces are hidden from a screen reader, which is told each
 // picture in words instead. The names, addresses, dates and numbers in
 // them are check.md's fixed examples, not the proof log's. Where a step or
 // a picture writes a proof's address or the site's domain, it writes the
 // site's own (design/copy/test-site.md).
 import { type Html, html } from "./html.ts";
 import type { Document, Site } from "./layout.ts";
+import { profile, sketch } from "./sketch.ts";
 
 /** The short ID of check.md's examples. */
 const EXAMPLE = "7K2Q9FM4XD";
@@ -33,30 +34,15 @@ ${picture}
 </li>`;
 }
 
-/** A picture: its title, what a screen reader is told of it, its pieces (hidden from a screen reader) and, if it has one, the sentence under it. */
-function sketch(kind: string, title: string, told: string, pieces: Html, note?: string): Html {
-  return html`<figure class="sketch ${kind}">
-<figcaption>${title}</figcaption>
-<p class="sr">${told}</p>
-<div class="sketch-body" aria-hidden="true">
-${pieces}
-</div>
-${note === undefined ? html`` : html`<p class="sketch-note">${note}</p>
-`}</figure>`;
-}
-
 /** The profile of check.md's example account, as steps 1 and 3 draw it: in step 1 its link is boxed and labelled, in step 3 its @alice is underlined. */
-function profile(host: string, step: 1 | 3): Html {
-  const link = html`<span class="link-icon"></span>${host}/p/${EXAMPLE}`;
-  return html`<div class="profile${step === 3 ? " small" : ""}">
-<div class="who"><b class="name">Alice</b><span class="handle${step === 3 ? " same" : ""}">@alice</span></div>
-<span class="avatar"></span>
-<span class="bio"></span>
-<span class="bio short"></span>
-${step === 1 ? html`<p class="link-row boxed">${link}</p>
-<span class="tag">找這個連結</span>` : html`<p class="link-row">${link}</p>`}
-<p class="followers">1,204 位粉絲</p>
-</div>`;
+function exampleProfile(host: string, step: 1 | 3): Html {
+  const address = `${host}/p/${EXAMPLE}`;
+  return profile({
+    name: "Alice",
+    account: "@alice",
+    followers: "1,204 位粉絲",
+    ...(step === 1 ? { link: { address, found: "找這個連結" } } : { small: true, same: true, link: { address } }),
+  });
 }
 
 export function checkPage(site: Site): Document {
@@ -73,7 +59,7 @@ ${step(
   "在個人檔案上找連結",
   `打開那個帳號在 Threads 的個人檔案，找 ${host}/p/ 開頭的連結，例如 ${host}/p/${EXAMPLE}。帳號主人自己把這個連結掛上個人檔案，才代表他承認這張證明。`,
   "在貼文、留言或私訊裡貼出島民證明的截圖或連結，宣稱自己有台灣人背書。截圖可以造假，連結也可能是別人的；任何一張卡片都能宣告任何帳號。只有帳號主人掛在自己個人檔案上的連結才算數。",
-  sketch("find", "Threads 的個人檔案（示意）", `一個帳號的個人檔案：名稱 Alice、帳號 @alice，簡介下面有一行連結 ${host}/p/${EXAMPLE}，要找的就是這個連結。`, profile(host, 1)),
+  sketch("find", "Threads 的個人檔案（示意）", `一個帳號的個人檔案：名稱 Alice、帳號 @alice，簡介下面有一行連結 ${host}/p/${EXAMPLE}，要找的就是這個連結。`, exampleProfile(host, 1)),
 )}
 ${step(
   2,
@@ -104,7 +90,7 @@ ${step(
     "左邊是 Threads 的個人檔案，帳號 @alice；右邊是島民證明的頁面，第 1,284 張島民證明，最大的字也是 @alice。",
     html`<div class="side">
 <p class="side-label">Threads 的個人檔案</p>
-${profile(host, 3)}
+${exampleProfile(host, 3)}
 </div>
 <span class="equals">＝</span>
 <div class="side">
