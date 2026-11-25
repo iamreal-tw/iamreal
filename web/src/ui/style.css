@@ -744,8 +744,11 @@ code,
   font-size: var(--size-body);
 }
 
-.switch-title {
+/* 改成別的帳號, above its field: a label in the body's typeface, not a heading of the screen. */
+.step h2.switch-title {
   font-family: var(--font-body);
+  font-size: var(--size-body);
+  margin: 32px 0 0;
 }
 
 /* Step 5: the words to heed, in bold ink (not red: design/DESIGN.md keeps the raspberry red off warnings). */
