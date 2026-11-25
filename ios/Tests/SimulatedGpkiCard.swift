@@ -17,7 +17,11 @@ final class SimulatedGpkiCard: APDUTransport {
         var wrongCryptogram = false
         /// GET DATA E0 says 32-byte keys.
         var longKeys = false
+        /// The card leaves when the command with this INS comes: it is not answered.
+        var leavesAt: UInt8?
     }
+
+    struct Left: Error {}
 
     static let cardID: [UInt8] = [0x24, 0x05, 0x69, 0x64, 0x13, 0x00, 0x01, 0x90, 0x39, 0x57]
     static let signingKeyRef: UInt8 = 0x81
@@ -83,6 +87,7 @@ final class SimulatedGpkiCard: APDUTransport {
         }
         let le = apdu.count == 5 ? (apdu[4] == 0 ? 256 : Int(apdu[4])) : (apdu.count > 5 + data.count ? Int(apdu[5 + data.count]) : 0)
         commands.append(ins)
+        if ins == quirks.leavesAt { throw Left() }
 
         if cla & 0x04 != 0 && !(cla == 0x84 && ins == 0x82) {
             return secure(cla: cla, ins: ins, p1: p1, p2: p2, body: data)

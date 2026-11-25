@@ -73,6 +73,20 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(section.components(separatedBy: "```\n").dropFirst().first, "\(name)\n")
     }
 
+    /// Reading the card over NFC: the purpose iOS asks for is
+    /// design/copy/app.md's; the applications the app may select by name
+    /// are the three it selects (spec/card-channel.md), the one that signs first, so
+    /// that the system selects it before it hands the card over; and the
+    /// app is offered only to a device that can read NFC.
+    func testTheAppDeclaresReadingTheCard() throws {
+        let app = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("design/copy/app.json")) as? [String: [String: String]])
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "NFCReaderUsageDescription") as? String, app["nfc"]?["usage"])
+        let identifiers = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "com.apple.developer.nfc.readersession.iso7816.select-identifiers") as? [String])
+        let named = [CardChannel.GPPKI_AID, CardChannel.ISD_CM_AID, CardChannel.ISD_AID].map { $0.map { String(format: "%02X", $0) }.joined() }
+        XCTAssertEqual(identifiers, named)
+        XCTAssertTrue((Bundle.main.object(forInfoDictionaryKey: "UIRequiredDeviceCapabilities") as? [String] ?? []).contains("nfc"))
+    }
+
     /// The hashes of the CRS are the ones the page's download checks.
     func testTheCRSHashesAreTheOnesOfThePage() throws {
         let page = try Repository.text("web/scripts/fetch-crs.mjs")
@@ -130,10 +144,11 @@ final class BuildTests: XCTestCase {
         }
         XCTAssertGreaterThan(keys["copy", default: 0], 100)
         // Every sentence of app.json but the names under the icon, which
-        // the project file holds, and Android's category of notifications.
+        // the project file holds, Android's category of notifications, and
+        // the purpose of reading NFC, which Config/Info.plist holds.
         let app = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("design/copy/app.json")) as? [String: [String: String]])
         let all = Set(app.flatMap { group, entries in entries.keys.map { "\(group).\($0)" } })
-        XCTAssertEqual(appKeys, all.subtracting(["name.store", "name.dev", "notification.channel"]))
+        XCTAssertEqual(appKeys, all.subtracting(["name.store", "name.dev", "notification.channel", "nfc.usage"]))
     }
 
     /// The PIN and a card proof under way are in memory only: the sources

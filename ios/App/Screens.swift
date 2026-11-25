@@ -73,17 +73,27 @@ struct Screens {
         let labels = [copy("read.server"), copy("app_read.certificate"), copy("read.check"), copy("read.crl")]
         let done = reached == labels.count
         let spot = copy("app_read.spot_iphone")
-        let blocks: [Block] = [
+        var blocks: [Block] = [
             .title(copy("read.title")),
             .text(done ? copy("app_read.lift") : copy("app_read.how", ["spot": spot])),
-            .items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })),
         ]
+        // Where the card goes, until it is read; the system's panel covers it while it is.
+        if !done {
+            blocks.append(.figure(Figure(
+                captions: [
+                    Figure.Caption(text: copy("app_read.figure_flip"), emphasis: copy("app_read.figure_flip_emphasis")),
+                    Figure.Caption(text: copy("app_read.figure_top"), emphasis: copy("app_read.figure_top_emphasis")),
+                ],
+                description: copy("app_read.figure_iphone"))))
+        }
+        blocks.append(.items(items(labels, reached: reached, running: running, why: stop.map { message($0, tap: 1) })))
         var buttons: [Button]
         if done {
             buttons = [Button(label: copy("common.next"), action: .toPIN)]
         } else if let stop {
-            // No card came: the same tap again. Anything else: the card is read again from the start.
-            buttons = [stop == .card(.noTap) ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
+            // No card came, or it left: the same tap again. Anything else: the card is read again from the start.
+            let again = stop == .card(.noTap) || stop == .card(.dropped(pinSent: false))
+            buttons = [again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
         } else {
             buttons = [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)]
         }
@@ -513,6 +523,8 @@ struct Screens {
         case .card(.locked): return [copy("stops.card_locked")]
         case .card(.channel): return [copy("app_stops.channel")]
         case .card(.firstGeneration): return [copy("app_stops.first_generation")]
+        // Taps 2 and 3: what follows depends on whether the PIN was sent (#172).
+        case .card(.dropped): return [tap == 1 ? copy("app_stops.read_dropped") : copy("stops.card_error", ["code": "connection_lost"])]
         case .card(.failed(let code)): return [copy("stops.card_error", ["code": code])]
         case .certificate(let problem, let date):
             let day = date.flatMap(Self.dateOfCertificateTime)

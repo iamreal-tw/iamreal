@@ -7,6 +7,9 @@
     "name": "島民證明",
     "site": "iamreal.tw"
   },
+  "nfc": {
+    "usage": "感應自然人憑證，讀取卡片上的憑證、讓卡片簽章。"
+  },
   "when": {
     "day": "{date}（{weekday}）",
     "monday": "星期一",

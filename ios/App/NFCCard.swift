@@ -39,8 +39,9 @@ final class NFCCard: Card {
         let reader = TagReader()
         let tag = try await reader.waitForCard(copy("app_panel.iphone_wait"))
         reader.say(purpose == .readCertificates ? copy("app_panel.reading") : copy("app_panel.signing"))
+        let card = GpkiCard(TagTransport(tag: tag))
         do {
-            let result = try await body(GpkiCard(TagTransport(tag: tag)))
+            let result = try await body(card)
             reader.finish(purpose == .readCertificates ? copy("app_panel.read") : copy("app_panel.signed"))
             return result
         } catch let failure as CardFailure {
@@ -48,7 +49,7 @@ final class NFCCard: Card {
             throw failure
         } catch let error as NFCReaderError {
             reader.stop()
-            throw Self.failure(error)
+            throw Self.failure(error, pinSent: card.pinSent)
         } catch {
             reader.stop()
             throw CardFailure.failed(code: "nfc")
@@ -69,13 +70,13 @@ final class NFCCard: Card {
         lock.unlock()
     }
 
-    /// An error of Core NFC once the card was there, as a fixed word.
-    private static func failure(_ error: NFCReaderError) -> CardFailure {
+    /// An error of Core NFC once the card was there.
+    private static func failure(_ error: NFCReaderError, pinSent: Bool) -> CardFailure {
         switch error.code {
         case .readerTransceiveErrorTagConnectionLost, .readerTransceiveErrorTagResponseError,
              .readerTransceiveErrorRetryExceeded, .readerTransceiveErrorTagNotConnected,
              .readerTransceiveErrorSessionInvalidated, .readerSessionInvalidationErrorSessionTimeout:
-            return .failed(code: "connection_lost")
+            return .dropped(pinSent: pinSent)
         default:
             return .failed(code: "nfc")
         }

@@ -6,16 +6,19 @@
 
 ## 現在有什麼
 
-過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。讀卡還沒有：這個 build 的「卡片」每一次感應都回「沒有感應到卡片」，NFC 在 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 接上。畫面和啟動畫面照 `design/screens/` 的 `card-proof-app-*`、`app-splash-phone.png`（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；感應位置的示意圖在 #174。過卡提醒和設定（[#298](https://github.com/iamreal-tw/iamreal/issues/298)，照 [#93](https://github.com/iamreal-tw/iamreal/issues/93)）照 `design/screens/` 的 `app-reminder-*`、`app-settings-phone.png`：完成的畫面問要不要提醒，提醒是手機自己排的本機通知。
+過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。卡片用 iPhone 的 NFC 讀（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：每一次感應是系統的一個讀卡面板，讀憑證不用 PIN，簽章前先和第二代卡片建立安全通道（`spec/card-channel.md`）才送 PIN。畫面和啟動畫面照 `design/screens/` 的 `card-proof-app-*`、`app-splash-phone.png`（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；讀取卡片那一步有感應位置的示意圖（`card-proof-app-2-read-iphone-phone.png`）。過卡提醒和設定（[#298](https://github.com/iamreal-tw/iamreal/issues/298)，照 [#93](https://github.com/iamreal-tw/iamreal/issues/93)）照 `design/screens/` 的 `app-reminder-*`、`app-settings-phone.png`：完成的畫面問要不要提醒，提醒是手機自己排的本機通知。
 
 | 檔案 | 內容 |
 |---|---|
 | `App/DeviceCore.swift` | `device-core/` 的 C 函式包成 Swift：位元組進、位元組出；核心交出來的每一塊緩衝區複製後立刻還給核心（核心會先蓋成零）。一次過卡的 session 是 `DeviceCore.Session`，放掉時核心把憑證和算出來的東西蓋成零 |
-| `App/Card.swift` | 「卡片」這一層：一次感應（`tap`）裡讀憑證、帶 PIN 簽章。`PIN` 也在這裡：只在記憶體，`clear()` 蓋成零 |
+| `App/Card.swift` | 「卡片」這一層：一次感應（`tap`）裡讀憑證、帶 PIN 簽章，和一次感應停下來的原因（`CardFailure`）。`PIN` 也在這裡：只在記憶體，`clear()` 蓋成零 |
+| `App/NFCCard.swift` | 用 Core NFC 讀卡：一次感應是一個 `NFCTagReaderSession`，系統的面板中間那一句照 `design/copy/card-proof.md`「app：感應的面板」；同時只開一個；卡片中途離開時說 PIN 送出了沒有 |
+| `App/GpkiCard.swift` | 對卡片送的指令：讀 PKCS #15 的目錄和每一張憑證（不用 PIN）；建立安全通道、驗 PIN、簽章；認出第一代的卡片 |
+| `App/CardChannel.swift` | `spec/card-channel.md`：卡片的靜態金鑰、安全通道的金鑰和每一道指令的加密與 MAC、PIN 和要簽的區塊。三個讀卡的檔（這個、`GpkiCard.swift`、`NFCCard.swift`）第一行寫出處：上游 `mctea01/my-Bonds-fork-android` 的 `GpkiCard.kt`，釘 commit `a8696253`（Apache-2.0，`NOTICE`） |
 | `App/Backend.swift` | 「後台」這一層：`config`、清冊鏡像的兩種檔、查現況、題目、送出。位元組進出，請求和回應的內容由核心寫和讀 |
 | `App/CardProofFlow.swift` | 一次過卡，沒有畫面的狀態機。每一步呼叫核心的哪個函式、PIN 和憑證和簽章各留到什麼時候，寫在檔頭 |
 | `App/CardProofModel.swift`、`App/Screen.swift`、`App/Screens.swift` | 畫面看到的過卡：`Screen` 是一個畫面上從上到下的每一句話和每一個按鈕，`Screens` 決定 `design/copy/card-proof.md` 的哪一句放在哪裡，`CardProofModel` 做按鈕要做的事 |
-| `App/CardProofView.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），長得和 `design/screens/` 的 `card-proof-app-*` 一樣。它自己沒有任何句子，也不做任何判斷 |
+| `App/CardProofView.swift`、`App/CardFigure.swift` | 把 `Screen` 畫出來（SwiftUI，`ScreenView`），長得和 `design/screens/` 的 `card-proof-app-*` 一樣；`CardFigure` 是讀取卡片那一步的感應位置示意圖。它們自己沒有任何句子，也不做任何判斷 |
 | `App/Theme.swift` | 畫面用的數值：`design/tokens.json` 裡 app 用到的那幾個，有 `-phone` 的用 `-phone` 的值。標題用包進 app 的源流明體 TW（執行時向系統登記，`Info.plist` 是產生的，不在那裡列）；其他的字用系統的字型 |
 | `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
 | `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
@@ -29,6 +32,7 @@
 | `App/Bridge.h` | Swift 看得到的 C：只有 `device-core/include/iamreal_device_core.h` |
 | `App/Assets.xcassets` | app 的圖示。暫時的：網站的 `--teal`（`#226977`）一整片，沒有字和圖案，正式的圖示在 [#154](https://github.com/iamreal-tw/iamreal/issues/154) 定。App Store Connect 不收沒有圖示的 build |
 | `Config/Shared.xcconfig`、`Config/Test.xcconfig` | 最低的 iOS 版本、只做 iPhone、連結哪一份核心；兩種 build 的識別碼和測試網站的環境 |
+| `Config/Info.plist`、`Config/IamrealApp.entitlements` | 讀卡要的宣告（「讀卡的宣告」）。`Info.plist` 的其他項目照專案檔的設定產生，和這個檔合在一起 |
 | `IamrealApp.xcodeproj` | 手寫的 Xcode 專案，兩個 target：`IamrealApp`、`IamrealAppTests`。`App/`、`Tests/` 是跟著資料夾走的群組，加檔案不用改專案檔 |
 | `build-core.sh` | 編 `device-core/` 給 iOS 用，並下載、核對 Barretenberg 的靜態函式庫和參數檔 |
 | `check-app.sh`、`check-app-test.sh` | 建置時的檢查，和它自己的測試 |
@@ -39,7 +43,7 @@
 
 要檢查它們有沒有離開手機，看這幾個檔就夠：
 
-- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`。`Backend`、`DeviceCore` 沒有任何函式收 PIN
+- **PIN**：從畫面的欄位（`CardProofView` 的 `SecureField`，值在 `CardProofModel.pinText`）進 `PIN`，按下「確認卡片」時欄位清空。`PIN` 交給 `CardProofFlow`，留到第三次感應送給卡片為止；完成、取消、停下來、卡片回 PIN 不正確時蓋成零。唯一收 PIN 的對外介面是 `CardConnection.sign`：`GpkiCard.sign` 把它補成 VERIFY 的資料（`CardChannel.pinBlock`），只在安全通道建立之後、加密著送給卡片；安全通道建立不起來（`CardFailure.channel`）、是第一代的卡片（`CardFailure.firstGeneration`）、PIN 的長度或字元沒有卡片收（6 到 10 個 ASCII 字元以外）時不送。`Backend`、`DeviceCore` 沒有任何函式收 PIN
 - **第二、第三次感應**：`CardProofFlow.signTap` 先再讀一次憑證，第一次感應選定的那一張要在裡面，才把 PIN 交給卡片；不在就是 `CardFailure.otherCard`，PIN 沒有送
 - **憑證和簽章**：選定的憑證和第一個簽章留在 `CardProofFlow`，證明算完就蓋成零；核心自己的那一份跟著 session 蓋掉
 - **姓名**：核心檢查憑證後回傳，只交給「輸入 PIN」的畫面
@@ -50,7 +54,7 @@
 
 ### 還沒有的
 
-- 讀卡（NFC，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：entitlement、`NFCReaderUsageDescription`、`Info.plist` 的 AID 清單、系統的讀卡面板和面板上的句子
+- 讀卡時的中斷，第 2、第 3 次感應的部分（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：卡片中途離開時，`CardFailure.dropped` 帶著 PIN 送出了沒有（`pinSent`），但畫面現在一律寫「讀卡時發生錯誤（代碼 `connection_lost`）……」、丟掉 PIN、從第 2 步重來；第 1 次感應已經照 `card-proof.md` 寫「卡片在讀取途中離開了手機……」並可以再感應一次。在面板上按「取消」、感應時切到別的 app，現在都當成沒有感應到卡片
 - 中斷和錯誤（[#172](https://github.com/iamreal-tw/iamreal/issues/172)）：掉線後只重做那一次感應、送 PIN 時掉線、5 分鐘的上限、最低版本（`min_app`）、沒有 NFC。這裡已經有的只有：PIN 不正確時丟掉 PIN 再問一次、第二或第三次感應換了卡時不送 PIN 並可以再感應一次、手機的日期和題目的日期不同時在第三次感應之前停下、後台沒有回應時同一筆再送一次（網頁版在後台回 429、5xx 時也可以再送，再送被回「題目用過了」時會查現況確認那一筆是不是已經記下，這裡還沒有）
 - 文字沒有對應句子的兩種情況，畫面只顯示代碼，和網頁版相同（`web/src/ui/messages.ts`）：核心回了 app 不認得的憑證原因代碼、app 自己把步驟的順序叫錯（`state`）。兩種都是程式的錯，不是持卡人會遇到的情況；要不要有一句話留給 #172
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
@@ -88,7 +92,25 @@
 
 這個數字寫在 `Config/Shared.xcconfig` 的 `IPHONEOS_DEPLOYMENT_TARGET`，`build-core.sh` 編 Rust 時讀同一行。這台開發用的電腦上只有 iOS 18.3 和 26.0 的模擬器，15.0 的手機或模擬器上還沒有跑過。
 
-只做 iPhone：`TARGETED_DEVICE_FAMILY = 1`（沒有 iPad 的介面），也不給 Mac 和 Vision Pro 當 iPhone app 裝（`SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD`、`SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD` 都是 `NO`）。iPad 仍然能用相容模式裝 iPhone 的 app；要讓 iPad 裝不了，得在 `UIRequiredDeviceCapabilities` 要求 `nfc`，那一項和讀卡一起加（#174）。模擬器只支援 Apple 晶片的 Mac：Aztec 沒有給 Intel Mac 的 iOS 模擬器用的函式庫。
+只做 iPhone：`TARGETED_DEVICE_FAMILY = 1`（沒有 iPad 的介面），也不給 Mac 和 Vision Pro 當 iPhone app 裝（`SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD`、`SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD` 都是 `NO`）。iPad 仍然能用相容模式裝 iPhone 的 app；要讓 iPad 裝不了，`Config/Info.plist` 的 `UIRequiredDeviceCapabilities` 要求 `nfc`（#174），沒有 NFC 的 iPhone 也裝不了。模擬器只支援 Apple 晶片的 Mac：Aztec 沒有給 Intel Mac 的 iOS 模擬器用的函式庫。
+
+## 讀卡的宣告
+
+- `Config/IamrealApp.entitlements`：`com.apple.developer.nfc.readersession.formats` 只有 `TAG`（[#85](https://github.com/iamreal-tw/iamreal/issues/85)）。app 的識別碼要在開發者帳號裡開了 NFC Tag Reading，簽出來的 app 才有這一項
+- `Config/Info.plist`：
+  - `NFCReaderUsageDescription`：`design/copy/app.md`「讀卡的用途說明（iOS）」那一句
+  - `com.apple.developer.nfc.readersession.iso7816.select-identifiers`：`spec/card-channel.md` 的三個應用程式，簽章的那一個排第一。系統照這個順序 SELECT，選到一個就把卡片交給 app；app 之後用名稱 SELECT 的只能是這三個（#85）。卡片管理員的兩個在 iPhone 上選得到（[#89](https://github.com/iamreal-tw/iamreal/issues/89)）
+  - `UIRequiredDeviceCapabilities`：`nfc`
+- `Tests/BuildTests.swift` 對 app 的 `Info.plist` 檢查這三項。entitlement 在模擬器上看不出來：用線裝到手機的 build 由 Xcode 簽章時放進去；上傳的 build 見「合併後才驗得到的」
+
+一次感應裡做的事（`App/NFCCard.swift`、`App/GpkiCard.swift`）：
+
+| 感應 | 指令 |
+|---|---|
+| 第 1 次：讀憑證 | 選第二代的應用程式（選不到、選得到主檔案的是第一代的卡片，停下）；讀 DF 5030 底下的 CDF，照它寫的路徑讀每一張憑證 |
+| 第 2、3 次：簽章 | 同上讀一次憑證（`CardProofFlow` 比對是不是第 1 次那張）；讀 PrKDF 找簽章的金鑰；選卡片管理員讀金鑰資訊、選安全網域讀卡片識別碼、算出這張卡片的靜態金鑰；INITIALIZE UPDATE、核對卡片的驗證碼、EXTERNAL AUTHENTICATE；之後每一道指令都在安全通道裡：VERIFY（PIN）、選金鑰檔、送要簽的區塊兩半、讀回簽章 |
+
+卡片接上之後大約 20 秒系統就結束連線（#89），所以一次感應裡不等人、不等網路：檢查憑證、清冊、題目、算證明都在兩次感應之間。#89 量過：從卡片接上到簽完兩次是 1.6 秒。
 
 ## 包進 app 的檔案
 
@@ -166,6 +188,8 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/BuildTests.swift`：這個 build 是開發用 build（識別碼、網址、場合字串；測試跑在 Debug；Release 的識別碼、名稱、網址由 `check-app.sh` 看）、只給 iPhone、內建的檔案都在而且就是上表的來源、參數檔的雜湊和網頁版下載時核對的相同、「測試的證明紀錄」的標示和 app 的名稱在 `design/copy/`、包進去的 `card-proof.json`、`app.json`、字型和程式庫裡的逐位元組相同；`App/` 的原始碼用到的每一句都在 `design/copy/card-proof.json` 或 `app.json`、`app.json` 的每一句都用到了（主畫面上的名稱和 Android 的通知類別除外）、自己沒有寫任何中文的句子；`App/` 的原始碼不寫磁碟（清冊編號和提醒的四樣除外）
 - `Tests/ReminderTests.swift`：下次提醒的日子（一個月、三個月、六個月、跨月跨年、同一個星期幾、選日期只管這一次、能選的日子、一週後再提醒、每次過卡重排）和手機上存的東西，不靠系統真的發通知（換成記下被叫做什麼的假通知）；關掉提醒後，偏好設定裡沒有留下任何一樣；系統不允許通知時什麼都不存
 - `Tests/CardProofTests.swift`：用假卡片過卡（上面那一節）
+- `Tests/CardChannelTests.swift`：安全通道對 `spec/vectors/card-channel.json` 的每一案：靜態金鑰、卡片識別碼、金鑰資訊、卡片的挑戰、安全通道的金鑰和 EXTERNAL AUTHENTICATE、一連串指令的加密、MAC 和計數器（沒有資料的指令也加一）、PIN 的區塊、要簽的區塊
+- `Tests/GpkiCardTests.swift`：`GpkiCard` 對一張模擬的第二代卡片（`Tests/SimulatedGpkiCard.swift`：照卡片的做法解密、檢查 MAC 和它自己的計數器，有 PIN 的錯誤次數和簽章的金鑰）：讀憑證不用 PIN、不建安全通道；簽章用簽章的那一把；PIN 錯兩次是 PIN 不正確、第三次鎖卡；卡片收不了的 PIN 不送；卡片的驗證碼不對、金鑰不是 16 個位元組時不送 PIN；第一代的卡片什麼都不讀、不送 PIN；卡片中途離開時知道 PIN 送出了沒有
 - `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
 - `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面：每一句都在文字檔裡、沒有「了解更多」；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
 - `Tests/DoneScreenTests.swift`：完成的畫面上提醒的那一段：沒存提醒時問、開著時寫重排後的日子、選了日期時不寫多久之後、系統不允許時的句子、憑證在提醒前到期時多的那一句、時刻的寫法。送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面說哪幾句：第一次宣告逐字照 `design/copy/card-proof.md` 第 6 步（含「app」那一節）、全部收回、已複製、和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
@@ -174,7 +198,7 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 ### 截圖
 
-`Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`；提醒的 `app-reminder-1-done-phone.png`、`-2-schedule`、`-4-from-notification`、`app-settings-phone.png`。`app-reminder-3-notification-phone.png` 是系統的通知的示意，不拍）。現在 `design/screens/` 放的是 Android 的（那裡的 README「版本」寫哪一個 app）；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。讀取卡片的那一張（`card-proof-app-2-read-phone.png`）不複製：`design/screens/` 的 `card-proof-app-2-read-iphone-phone.png` 是感應位置的示意圖的定稿，等 [#174](https://github.com/iamreal-tw/iamreal/issues/174) 畫了示意圖再換。
+`Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`；提醒的 `app-reminder-1-done-phone.png`、`-2-schedule`、`-4-from-notification`、`app-settings-phone.png`。`app-reminder-3-notification-phone.png` 是系統的通知的示意，不拍）。現在 `design/screens/` 放的是 Android 的（那裡的 README「版本」寫哪一個 app）；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。讀取卡片的那一張只有 iPhone 的，檔名是 `card-proof-app-2-read-iphone-phone.png`，`design/screens/` 放的是這裡拍的（#174）。感應中的那一張（`card-proof-app-2-reading-iphone-phone.png`）蓋著系統的面板，這裡拍不到，留著定稿。
 
 ## 建置時的檢查（`check-app.sh`）
 
@@ -213,6 +237,27 @@ xcrun devicectl device install app --device <手機的識別碼> build/Build/Pro
 
 團隊的代號不寫進專案檔，每次從命令列給（或在 Xcode 的 Signing & Capabilities 選，不要提交那個改動）。手機要先打開開發者模式。
 
+## 用真卡片測試
+
+agent 不碰卡片；這一節由營運者用自己的卡片和 iPhone 照著做，結果記在 PR（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）。用「怎麼用線裝到手機」裝開發用 build：它連測試網站、簽測試的證明紀錄的場合字串，可以重複過卡。
+
+記下來的：iPhone 的機型和 iOS 版本、卡片是第幾代、每一項照預期或不照預期（不照預期時，畫面上的代碼和停在哪一項）。PIN 不寫下來；截圖裡有姓名的不附。
+
+1. **三次感應的完整過卡**
+   - 第 2 步「感應卡片」之前，畫面上有感應位置的示意圖（`design/screens/card-proof-app-2-read-iphone-phone.png`）
+   - 按「感應卡片」：系統的面板寫「把自然人憑證貼在 iPhone 背面的上方」；卡片貼上去後「讀取中，不要移動卡片……」；讀完「讀到了，可以拿開卡片」，面板收起來
+   - 第 3 步顯示卡片上的姓名。輸入 PIN、按「確認卡片」：面板寫「卡片簽章中，不要移動卡片……」，簽完「卡片簽好了，可以拿開卡片」；接著出現這張卡片的帳號清單
+   - 填帳號、確認，按「宣告這個帳號」（或「再次過卡」）：第三次感應的面板同上，接著算證明、送出，到完成的畫面
+   - `https://test.iamreal.tw/p/<短編號>` 看得到這一筆
+2. **中途拿開卡片**
+   - 第 1 次感應，面板寫「讀取中」時拿開：第 2 步停在「感應卡片，讀取卡片上的憑證」，寫「卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。」，按鈕「再感應一次」；再感應一次就接著做
+   - 第 2 次感應，面板寫「卡片簽章中」時拿開：第 3 步寫「讀卡時發生錯誤（代碼 `connection_lost`）。請重新插卡再試一次。」，PIN 丟掉，按鈕「再感應一次卡片」回到第 2 步（這一段的句子和按鈕照 `card-proof.md` 改是 [#172](https://github.com/iamreal-tw/iamreal/issues/172)）。重新來一次，過得了卡
+   - 拿開得太快，卡片還沒接上就離開時，面板會繼續等卡片；按面板的「取消」，畫面寫「沒有感應到卡片……」
+3. **輸入錯的 PIN 一次**：第 3 步寫「PIN 不正確。連續輸入錯誤三次，卡片會被鎖住。」，PIN 欄位是空的。接著輸入正確的 PIN，過得了卡。只錯一次，不要連錯三次
+4. **第二次感應換一張卡**：第 1 次感應用卡片 A，第 2 次感應換成另一張第二代的自然人憑證 B：第 3 步寫「這不是剛才讀到的那張卡片，PIN 沒有送出。請換回剛才那張卡片，再感應一次。」，按鈕「再感應一次」；換回 A 再感應就接著做，PIN 不用再輸入
+
+沒有在這張清單上的：第一代的卡片（手上沒有）、別的 iPhone 機型、從 TestFlight 裝的 build。
+
 ## 上傳到 TestFlight
 
 商店的 build（Release，`tw.iamreal.app`）只從 GitHub Actions 上傳（ADR-0036、ADR-0037），工作流程是 `.github/workflows/upload-ios.yml`。只能手動觸發，營運者或營運者電腦上的 coding agent 在 `main` 上觸發：
@@ -250,7 +295,7 @@ gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main
 - `build` 交下去的 tar 檔，和 `upload` 把團隊代號寫進 `ExportOptions.plist` 那一步，在本機試過，沒有在 runner 上跑過
 - `build` 的指令：`checks-ios.yml` 每次用同樣的 `archive.sh` 做一次 archive、跑 `check-archive-test.sh`，所以拉取請求時就看得到；它沒有包成 tar 檔交下去
 - `upload` 整個工作：開發者角色的金鑰能不能用代管的憑證簽章（#143）、App Store Connect 收不收這個 build
-- 讀卡（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）加了 entitlement（NFC）之後：archive 沒有簽章，裡面沒有 entitlement；Xcode 匯出時給的 entitlement 有沒有 NFC，要看第一個有讀卡的 build。沒有的話 `build` 改成在 archive 時帶 entitlement 的檔，或在 `upload` 匯出後檢查
+- 讀卡的 entitlement（`Config/IamrealApp.entitlements`，[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：archive 沒有簽章，裡面沒有 entitlement；Xcode 匯出時給的 entitlement 有沒有 NFC，要看第一個有讀卡的 build。沒有的話感應時系統會擋下（`NFCReaderErrorSecurityViolation`），`build` 改成在 archive 時帶 entitlement 的檔，或在 `upload` 匯出後檢查
 
 ### 上傳之後營運者做的
 

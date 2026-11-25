@@ -43,6 +43,14 @@
 iamreal.tw
 ```
 
+## 讀卡的用途說明（iOS）
+
+iOS 要讀 NFC 的 app 在 `Info.plist` 寫一句用途說明（`NFCReaderUsageDescription`，`ios/Config/Info.plist`），沒有這一句就不能讀卡。
+
+```
+感應自然人憑證，讀取卡片上的憑證、讓卡片簽章。
+```
+
 ## 日子和時刻
 
 提醒的日子和時刻在每個畫面都這樣寫。`{date}` 是 `2027-02-08` 這樣的日期，`{weekday}` 是下面七個裡的一個：

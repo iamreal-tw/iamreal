@@ -23,6 +23,8 @@ protocol APDUTransport {
 final class GpkiCard: CardConnection {
     private let transport: APDUTransport
     private var connected = false
+    /// Whether VERIFY, with the PIN, has been handed to the transport.
+    private(set) var pinSent = false
 
     init(_ transport: APDUTransport) {
         self.transport = transport
@@ -64,6 +66,7 @@ final class GpkiCard: CardConnection {
         let session = try await openChannel()
         defer { session.wipe() }
 
+        pinSent = true
         let verify = try await secure(session, cla: 0x00, ins: 0x20, p1: 0x00, p2: 0x01, data: pinBlock, le: 0, encrypt: true)
         switch verify.sw {
         case 0x9000: break

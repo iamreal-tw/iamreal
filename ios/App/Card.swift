@@ -53,6 +53,11 @@ enum CardFailure: Error, Equatable {
     case firstGeneration
     /// The card is not the one read in the first tap. The PIN was not sent.
     case otherCard
+    /// The connection to the card was lost during the tap: the card was
+    /// taken away, or the system ended the connection. `pinSent`: whether
+    /// the PIN had gone to the card by then (whether the card received it
+    /// is not known).
+    case dropped(pinSent: Bool)
     /// Anything else the card or the connection did. `code` is a short
     /// fixed word, never a value read from the card.
     case failed(code: String)

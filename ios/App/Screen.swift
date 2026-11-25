@@ -85,6 +85,8 @@ enum Block: Equatable {
     case action(Button)
     /// What the app is doing, beside a spinner.
     case busy(String)
+    /// The picture of where the card goes on the phone, and its captions.
+    case figure(Figure)
 
     var texts: [String] {
         switch self {
@@ -103,8 +105,22 @@ enum Block: Equatable {
         case .row(let name, let account, let lines): return [name, account] + lines
         case .pair(let label, let value): return [label, value]
         case .button(let button, _), .action(let button): return [button.label]
+        case .figure(let figure): return figure.captions.map(\.text) + [figure.description]
         }
     }
+}
+
+/// A picture with a caption under each part: where the card goes.
+struct Figure: Equatable {
+    struct Caption: Equatable {
+        var text: String
+        /// The words of `text` written in ink and bold.
+        var emphasis: String
+    }
+
+    var captions: [Caption]
+    /// What the picture shows, for VoiceOver, which reads it in the place of the picture and the captions.
+    var description: String
 }
 
 /// The small card of the done screen (design/DESIGN.md, the components:

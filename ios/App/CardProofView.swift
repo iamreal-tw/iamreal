@@ -326,6 +326,8 @@ struct ScreenView: View {
                 Text(text).font(Theme.body(Theme.sizeKicker))
             }
             .padding(.top, 16)
+        case .figure(let figure):
+            CardFigure(figure: figure).padding(.top, 22)
         }
     }
 
