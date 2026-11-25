@@ -77,6 +77,9 @@ internal object SecureChannel {
     /** A command to the card: its header and what follows it. */
     class ExternalAuthenticate(val header: ByteArray, val body: ByteArray)
 
+    /** A session [Session.open] made, and the EXTERNAL AUTHENTICATE that opens it on the card. */
+    class Opened(val session: Session, val externalAuthenticate: ExternalAuthenticate)
+
     /** A command wrapped for the channel. [counter] and [iv] are what spec/card-channel.md calls them. */
     class Wrapped(val header: ByteArray, val body: ByteArray, val counter: Int, val iv: ByteArray?)
 
@@ -87,10 +90,6 @@ internal object SecureChannel {
     class Session(val sEnc: ByteArray, val sMac: ByteArray, mcv: ByteArray) {
         /** The chaining value the next command starts from. */
         var mcv: ByteArray = mcv
-            private set
-
-        /** EXTERNAL AUTHENTICATE, for a session [open] made. */
-        lateinit var externalAuthenticate: ExternalAuthenticate
             private set
 
         private var counter = 0
@@ -124,7 +123,7 @@ internal object SecureChannel {
 
         companion object {
             /** The session of [keys], [host] and the card's answer; null when the card's cryptogram is not the expected one. */
-            fun open(keys: StaticKeys, host: ByteArray, card: InitializeUpdate): Session? {
+            fun open(keys: StaticKeys, host: ByteArray, card: InitializeUpdate): Opened? {
                 val context = host + card.cardChallenge
                 val sMac = kdf(keys.mac, 0x06, context, 128)
                 val sEnc = kdf(keys.enc, 0x04, context, 128)
@@ -136,7 +135,7 @@ internal object SecureChannel {
                 val hostCryptogram = kdf(sMac, 0x01, context, 64)
                 val header = byteArrayOf(0x84.toByte(), 0x82.toByte(), 0x03, 0x00, 0x10)
                 val mac = aesCmac(sMac, ByteArray(16) + header + hostCryptogram)
-                return Session(sEnc, sMac, mac).also { it.externalAuthenticate = ExternalAuthenticate(header, hostCryptogram + mac.copyOf(8)) }
+                return Opened(Session(sEnc, sMac, mac), ExternalAuthenticate(header, hostCryptogram + mac.copyOf(8)))
             }
         }
     }

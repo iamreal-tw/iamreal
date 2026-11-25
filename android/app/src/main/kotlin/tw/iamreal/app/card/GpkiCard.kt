@@ -47,16 +47,19 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
         return certificates
     }
 
+    /** Only after [readCertificates] went to its end on this connection: the caller compares the certificates before the PIN goes. */
     override fun sign(message: ByteArray, pin: ByteArray): ByteArray {
-        if (!ready) readCertificates()
         if (!ready) fail(CardException.Reason.OTHER)
+        val s = session ?: fail(CardException.Reason.OTHER)
         // A PIN no card takes is not sent: it would only cost a try.
         val block = SecureChannel.pinBlock(pin) ?: fail(CardException.Reason.PIN_INCORRECT)
-        val verify = try {
-            sm(0x00, 0x20, 0x00, 0x01, block, 0, true, whenLost = CardException.Reason.PIN_MAYBE_SENT)
+        val wrapped = try {
+            s.wrap(0x00, 0x20, 0x00, 0x01, block, true)
         } finally {
             block.fill(0)
         }
+        // Sent once as it is, whatever the card answers: no 6CXX, no GET RESPONSE. A card that left on the way may have taken it.
+        val verify = send(apdu(wrapped.header[0].toInt() and 0xFF, 0x20, 0x00, 0x01, wrapped.body, 0), CardException.Reason.PIN_MAYBE_SENT)
         when {
             verify.sw == 0x9000 -> {}
             verify.sw == 0x6983 || verify.sw == 0x63C0 -> fail(CardException.Reason.LOCKED)
@@ -91,24 +94,32 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
 
     // The card's applications --------------------------------------------------------------
 
-    /** Selects the signing application; a card that has none but answers as a first-generation card says which it is. */
+    /**
+     * Selects the signing application. A card without it that has the first generation's master file and its
+     * DF 5030 says it is a first-generation card; any other card is no citizen digital certificate.
+     */
     private fun connect() {
-        if (transmit(0x00, 0xA4, 0x04, 0x0C, SecureChannel.GPPKI_AID, 256).ok) return
+        if (selectsApplication()) return
         for (cla in listOf(0x80, 0x00)) {
-            if (transmit(cla, 0xA4, 0x00, 0x00, byteArrayOf(0x3F, 0x00), 0).ok) fail(CardException.Reason.FIRST_GENERATION)
+            if (transmit(cla, 0xA4, 0x00, 0x00, fid(0x3F00), 0).ok && transmit(cla, 0xA4, 0x00, 0x00, fid(CARD_DF), 0).ok) {
+                fail(CardException.Reason.FIRST_GENERATION)
+            }
         }
         fail(CardException.Reason.OTHER)
     }
 
-    private fun selectMf() {
-        if (!transmit(0x00, 0xA4, 0x04, 0x0C, SecureChannel.GPPKI_AID, 256).ok) fail(CardException.Reason.OTHER)
+    private fun selectsApplication(): Boolean = transmit(0x00, 0xA4, 0x04, 0x0C, SecureChannel.GPPKI_AID, 256).ok
+
+    /** The signing application, whose files are read below it: what a second-generation card has in the place of a master file. */
+    private fun selectApplication() {
+        if (!selectsApplication()) fail(CardException.Reason.OTHER)
     }
 
-    private fun selectFid(fid: Int): Boolean = transmit(0x00, 0xA4, 0x00, 0x04, fid(fid), 256).let { it.ok || it.warning }
+    private fun selectFid(fid: Int): Boolean = transmit(0x00, 0xA4, 0x00, 0x04, fid(fid), 256).accepted
 
     private fun selectPath(path: ByteArray) {
         var i = 0
-        selectMf()
+        selectApplication()
         if (path.size >= 2 && path[0] == 0x3F.toByte() && path[1] == 0x00.toByte()) {
             i = 2
         } else if (path.size <= 2 && !selectFid(CARD_DF)) {
@@ -116,7 +127,7 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
         }
         while (i + 1 < path.size) {
             val f = ((path[i].toInt() and 0xFF) shl 8) or (path[i + 1].toInt() and 0xFF)
-            if (f == 0x7FFF) selectMf() else if (!selectFid(f)) fail(CardException.Reason.OTHER)
+            if (f == 0x7FFF) selectApplication() else if (!selectFid(f)) fail(CardException.Reason.OTHER)
             i += 2
         }
     }
@@ -129,7 +140,7 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
                 w = 16
                 continue
             }
-            return if (r.ok || r.warning) r.data else null
+            return if (r.accepted) r.data else null
         }
     }
 
@@ -149,7 +160,7 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
 
     /** A PKCS#15 directory file under DF 5030, up to the padding after its last record. */
     private fun readDirectory(f: Int): ByteArray {
-        selectMf()
+        selectApplication()
         if (!selectFid(CARD_DF) || !selectFid(f)) return ByteArray(0)
         var buf = ByteArray(0)
         var off = 0
@@ -169,40 +180,42 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
     /** The card's static keys, a session, and EXTERNAL AUTHENTICATE only when the card's cryptogram is the expected one. */
     private fun openChannel() {
         close()
-        if (!transmit(0x00, 0xA4, 0x04, 0x00, SecureChannel.ISD_CM_AID, 0).let { it.ok || it.warning }) fail(CardException.Reason.CHANNEL)
+        if (!transmit(0x00, 0xA4, 0x04, 0x00, SecureChannel.ISD_CM_AID, 0).accepted) fail(CardException.Reason.CHANNEL)
         val keyInformation = transmit(0x80, 0xCA, 0x00, 0xE0, ByteArray(0), 256)
         if (!keyInformation.ok || !SecureChannel.keyInformationAccepted(keyInformation.data)) fail(CardException.Reason.CHANNEL)
-        if (!transmit(0x00, 0xA4, 0x04, 0x00, SecureChannel.ISD_AID, 0).let { it.ok || it.warning }) fail(CardException.Reason.CHANNEL)
+        if (!transmit(0x00, 0xA4, 0x04, 0x00, SecureChannel.ISD_AID, 0).accepted) fail(CardException.Reason.CHANNEL)
         val tag45 = transmit(0x80, 0xCA, 0x00, 0x45, ByteArray(0), 256)
         val cardId = (if (tag45.ok) SecureChannel.cardId(tag45.data) else null) ?: fail(CardException.Reason.CHANNEL)
         val keys = SecureChannel.diversify(cardId)
         try {
-            if (!transmit(0x00, 0xA4, 0x04, 0x0C, SecureChannel.GPPKI_AID, 256).ok) fail(CardException.Reason.CHANNEL)
+            if (!selectsApplication()) fail(CardException.Reason.CHANNEL)
             val host = ByteArray(8).also { SecureRandom().nextBytes(it) }
             val update = transmit(0x80, 0x50, 0x01, 0x00, host, 256)
             val card = (if (update.ok) SecureChannel.InitializeUpdate.of(update.data) else null) ?: fail(CardException.Reason.CHANNEL)
             // Not the card the key material is for: nothing is sent back to it.
             val opened = SecureChannel.Session.open(keys, host, card) ?: fail(CardException.Reason.CHANNEL)
-            val authenticate = opened.externalAuthenticate
-            if (!transmit(authenticate.header[0].toInt() and 0xFF, 0x82, 0x03, 0x00, authenticate.body, 0).ok) {
-                opened.wipe()
-                fail(CardException.Reason.CHANNEL)
+            try {
+                val authenticate = opened.externalAuthenticate
+                if (!transmit(authenticate.header[0].toInt() and 0xFF, 0x82, 0x03, 0x00, authenticate.body, 0).ok) fail(CardException.Reason.CHANNEL)
+            } catch (e: CardException) {
+                // The card left, the tap was given up, or the card refused: the session's keys go with it.
+                opened.session.wipe()
+                throw e
             }
-            session = opened
+            session = opened.session
         } finally {
             keys.wipe()
         }
     }
 
-    private fun sm(cla: Int, ins: Int, p1: Int, p2: Int, data: ByteArray, le: Int, encrypt: Boolean, whenLost: CardException.Reason = CardException.Reason.DROPPED): Response {
+    private fun sm(cla: Int, ins: Int, p1: Int, p2: Int, data: ByteArray, le: Int, encrypt: Boolean): Response {
         val s = session ?: fail(CardException.Reason.CHANNEL)
         val w = s.wrap(cla, ins, p1, p2, data, encrypt)
-        return transmit(w.header[0].toInt() and 0xFF, ins, p1, p2, w.body, le, whenLost)
+        return transmit(w.header[0].toInt() and 0xFF, ins, p1, p2, w.body, le)
     }
 
     private fun smSelect(f: Int, refused: CardException.Reason) {
-        val r = sm(0x00, 0xA4, 0x00, 0x04, fid(f), 0, true)
-        if (!r.ok && !r.warning) fail(refused)
+        if (!sm(0x00, 0xA4, 0x00, 0x04, fid(f), 0, true).accepted) fail(refused)
     }
 
     // Commands -----------------------------------------------------------------------------
@@ -210,16 +223,22 @@ internal class GpkiCard(private val transceive: (ByteArray) -> ByteArray, privat
     private class Response(val sw: Int, val data: ByteArray) {
         val ok: Boolean get() = sw == 0x9000
         val warning: Boolean get() = sw and 0xFF00 == 0x6200
+
+        /** The length a 61XX or 6CXX says is there: XX, 00 being 256. */
+        val lengthAvailable: Int get() = (sw and 0xFF).let { if (it == 0) 256 else it }
+
+        /** Done, or done with a warning. */
+        val accepted: Boolean get() = ok || warning
     }
 
     /** A short command; [le] 0 is none, 256 is `00`. Takes 61XX with GET RESPONSE and 6CXX by sending again with that Le. */
-    private fun transmit(cla: Int, ins: Int, p1: Int, p2: Int, data: ByteArray, le: Int, whenLost: CardException.Reason = CardException.Reason.DROPPED): Response {
-        var r = send(apdu(cla, ins, p1, p2, data, le), whenLost)
-        if (r.sw shr 8 == 0x6C) r = send(apdu(cla, ins, p1, p2, data, (r.sw and 0xFF).let { if (it == 0) 256 else it }), whenLost)
+    private fun transmit(cla: Int, ins: Int, p1: Int, p2: Int, data: ByteArray, le: Int): Response {
+        var r = send(apdu(cla, ins, p1, p2, data, le), CardException.Reason.DROPPED)
+        if (r.sw shr 8 == 0x6C) r = send(apdu(cla, ins, p1, p2, data, r.lengthAvailable), CardException.Reason.DROPPED)
         var out = r.data
         var guard = 0
         while (r.sw shr 8 == 0x61 && guard++ < 32) {
-            r = send(apdu(0x00, 0xC0, 0x00, 0x00, ByteArray(0), (r.sw and 0xFF).let { if (it == 0) 256 else it }), CardException.Reason.DROPPED)
+            r = send(apdu(0x00, 0xC0, 0x00, 0x00, ByteArray(0), r.lengthAvailable), CardException.Reason.DROPPED)
             out += r.data
         }
         return Response(r.sw, out)

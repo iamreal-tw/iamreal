@@ -49,6 +49,16 @@ class TapCancel {
     }
 }
 
+/**
+ * A card that reads only while the app's screen is in front: told when the screen comes to the front and
+ * when it leaves (MainActivity).
+ */
+interface ReadsInFront {
+    fun resumed(activity: android.app.Activity)
+
+    fun paused(activity: android.app.Activity)
+}
+
 /** A card held to the phone, for the length of one tap. */
 interface CardConnection {
     /** The certificates on the card (DER), in the card's order. No PIN. */
@@ -56,7 +66,8 @@ interface CardConnection {
 
     /**
      * Verifies [pin] with the card, then has the card's signing key sign [message] (RSASSA-PKCS1-v1_5 with
-     * SHA-256): 256 bytes. [pin] stays the caller's, who overwrites it; an implementation keeps no copy.
+     * SHA-256): 256 bytes. [pin] stays the caller's, who overwrites it; an implementation keeps no copy. Only
+     * after [readCertificates] on this connection, whose certificates the caller compares first.
      */
     fun sign(message: ByteArray, pin: ByteArray): ByteArray
 }

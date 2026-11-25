@@ -60,8 +60,11 @@ class GpkiCardTest {
         val connection = GpkiCard(card::transceive, TapCancel())
         val e = runCatching { connection.readCertificates() }.exceptionOrNull()
         assertEquals(CardException.Reason.CHANNEL, (e as CardException).reason)
+        // Signing on a connection whose reading did not go to its end sends nothing.
+        val sent = card.commands.size
         val again = runCatching { connection.sign(message, pin) }.exceptionOrNull()
-        assertEquals(CardException.Reason.CHANNEL, (again as CardException).reason)
+        assertEquals(CardException.Reason.OTHER, (again as CardException).reason)
+        assertEquals(sent, card.commands.size)
         assertFalse("no PIN", card.sent(0x20))
     }
 
@@ -70,12 +73,27 @@ class GpkiCardTest {
         val card = SimulatedCard(firstGeneration = true)
         val e = runCatching { GpkiCard(card::transceive, TapCancel()).readCertificates() }.exceptionOrNull()
         assertEquals(CardException.Reason.FIRST_GENERATION, (e as CardException).reason)
-        assertEquals(listOf("a4", "a4"), card.commands.map { "%02x".format(it[1]) })
+        assertEquals(listOf("a4", "a4", "a4"), card.commands.map { "%02x".format(it[1]) })
+    }
+
+    @Test
+    fun `another card with a master file is not taken for a first-generation card`() {
+        val card = SimulatedCard(masterFileOnly = true)
+        val e = runCatching { GpkiCard(card::transceive, TapCancel()).readCertificates() }.exceptionOrNull()
+        assertEquals(CardException.Reason.OTHER, (e as CardException).reason)
     }
 
     @Test
     fun `a PIN the card refuses ends the tap, is not sent again, and nothing is signed`() {
-        for ((answer, reason) in listOf(0x63C2 to CardException.Reason.PIN_INCORRECT, 0x63C0 to CardException.Reason.LOCKED, 0x6983 to CardException.Reason.LOCKED)) {
+        // 6CXX and 61XX, which other commands follow with the command again or GET RESPONSE, included.
+        val answers = listOf(
+            0x63C2 to CardException.Reason.PIN_INCORRECT,
+            0x63C0 to CardException.Reason.LOCKED,
+            0x6983 to CardException.Reason.LOCKED,
+            0x6C0A to CardException.Reason.OTHER,
+            0x6105 to CardException.Reason.OTHER,
+        )
+        for ((answer, reason) in answers) {
             val card = SimulatedCard(pinAnswer = answer)
             val e = runCatching { GpkiCard(card::transceive, TapCancel()).use { it.readCertificates(); it.sign(message, pin) } }.exceptionOrNull()
             assertEquals("%04X".format(answer), reason, (e as CardException).reason)
@@ -131,6 +149,8 @@ class GpkiCardTest {
  */
 private class SimulatedCard(
     val firstGeneration: Boolean = false,
+    /** Another card: a master file, and nothing of a citizen digital certificate. */
+    val masterFileOnly: Boolean = false,
     val cryptogramRight: Boolean = true,
     val refuseEncrypted: Boolean = false,
     val pinAnswer: Int = 0x9000,
@@ -169,6 +189,7 @@ private class SimulatedCard(
             0xA4 -> when {
                 p1 == 0x04 -> select(hex(data))
                 firstGeneration -> ok()
+                masterFileOnly -> if (hex(data) == "3f00") ok() else status(0x6A82)
                 else -> selectFile(data)
             }
             0xB0 -> readBinary((p1 shl 8) or p2, apdu.last().toInt() and 0xFF)
@@ -184,7 +205,7 @@ private class SimulatedCard(
     }
 
     private fun select(aid: String): ByteArray {
-        if (firstGeneration) return status(0x6A82)
+        if (firstGeneration || masterFileOnly) return status(0x6A82)
         application = mapOf(hex(SecureChannel.GPPKI_AID) to "signing", hex(SecureChannel.ISD_CM_AID) to "manager", hex(SecureChannel.ISD_AID) to "domain")[aid] ?: return status(0x6A82)
         file = null
         session = null
@@ -217,8 +238,8 @@ private class SimulatedCard(
     private fun externalAuthenticate(apdu: ByteArray, data: ByteArray): ByteArray {
         val opened = SecureChannel.Session.open(SecureChannel.diversify(CARD_ID), host ?: return status(0x6985), SecureChannel.InitializeUpdate(CARD_CHALLENGE, cryptogram()))!!
         if (!opened.externalAuthenticate.header.contentEquals(apdu.copyOf(5)) || !opened.externalAuthenticate.body.contentEquals(data)) return status(0x6300)
-        session = opened
-        mcv = opened.mcv
+        session = opened.session
+        mcv = opened.session.mcv
         counter = 0
         return ok()
     }

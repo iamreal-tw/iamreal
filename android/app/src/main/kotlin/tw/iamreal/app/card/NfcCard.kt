@@ -11,7 +11,6 @@ import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import tw.iamreal.app.Wiring
 
 /**
  * The card, over the phone's NFC (issue #173): the system's reader mode,
@@ -24,7 +23,7 @@ import tw.iamreal.app.Wiring
  * the phone at any other time is not read. What is sent to the card is in
  * GpkiCard.kt.
  */
-internal class NfcCard(private val adapter: NfcAdapter?) : Card, Wiring.Front {
+internal class NfcCard(private val adapter: NfcAdapter?) : Card, ReadsInFront {
     private val main = Handler(Looper.getMainLooper())
 
     /** The screen in front, on the main thread only. */
@@ -75,8 +74,13 @@ internal class NfcCard(private val adapter: NfcAdapter?) : Card, Wiring.Front {
                     iso.timeout = COMMAND_MS
                 } catch (e: IOException) {
                     throw CardException(CardException.Reason.DROPPED)
+                } catch (e: SecurityException) {
+                    // The system says the tag is out of date: the card left and came back.
+                    throw CardException(CardException.Reason.DROPPED)
+                } catch (e: IllegalStateException) {
+                    throw CardException(CardException.Reason.DROPPED)
                 }
-                return GpkiCard(transceive(iso), cancel).use(use)
+                return GpkiCard(transceive(iso), cancel).use { card -> use(card) }
             } finally {
                 try {
                     iso.close()

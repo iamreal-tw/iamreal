@@ -85,12 +85,12 @@ class SecureChannelTest {
                 continue
             }
             session!!
-            assertEquals(name, case.getString("s_enc"), hex(session.sEnc))
-            assertEquals(name, case.getString("s_mac"), hex(session.sMac))
+            assertEquals(name, case.getString("s_enc"), hex(session.session.sEnc))
+            assertEquals(name, case.getString("s_mac"), hex(session.session.sMac))
             val authenticate = case.getJSONObject("external_authenticate")
             assertEquals(name, authenticate.getString("header"), hex(session.externalAuthenticate.header))
             assertEquals(name, authenticate.getString("body"), hex(session.externalAuthenticate.body))
-            assertEquals(name, case.getString("mcv"), hex(session.mcv))
+            assertEquals(name, case.getString("mcv"), hex(session.session.mcv))
         }
     }
 
