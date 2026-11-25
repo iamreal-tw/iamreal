@@ -390,6 +390,30 @@ describe("the home page", () => {
     assert.deepEqual(await numbers(), ["1", "0", "0%"]);
   });
 
+  test("the first screen's dots: the 15 placed by hand and 你 where they were; from column 32 to 119, teal dots in every 8 columns, at most one in each block of 8 by 7, the same every time", async () => {
+    // #335, 首頁: the dots of the final design stay; a wide window shows teal dots at its right too.
+    await homeWorld();
+    const placed = [[9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12]];
+    /** The column and row of each dot of the first screen (design/tokens.json, --dot-pitch: 18px, the first at 9). */
+    const heroDots = async (): Promise<{ proof: number[][]; you: number[][] }> => {
+      const { page } = await getPage(worker, "/");
+      const svg = /<figure class="hero-field">[\s\S]*?<svg[^>]*>([\s\S]*?)<\/svg>/.exec(page)?.[1] ?? "";
+      const cells = (cls: string): number[][] =>
+        [...svg.matchAll(new RegExp(`<circle class="${cls}" cx="(\\d+)" cy="(\\d+)"`, "g"))].map((m) => [(Number(m[1]) - 9) / 18, (Number(m[2]) - 9) / 18]);
+      return { proof: cells("proof"), you: cells("you") };
+    };
+    const { proof, you } = await heroDots();
+    assert.deepEqual(you, [[14, 11]], "你");
+    const byHand = proof.filter(([c]) => c! < 32);
+    assert.deepEqual(byHand, placed, "the dots placed by hand");
+    const added = proof.filter(([c]) => c! >= 32);
+    for (const [c, r] of added) assert.ok(Number.isInteger(c) && Number.isInteger(r) && c! <= 119 && r! >= 0, `a dot on the grid, from column 32 to 119: ${c}, ${r}`);
+    for (let band = 32; band < 120; band += 8) assert.ok(added.some(([c]) => c! >= band && c! < band + 8), `a teal dot in columns ${band} to ${band + 7}`);
+    const blocks = added.map(([c, r]) => `${Math.floor((c! - 32) / 8)},${Math.floor(r! / 7)}`);
+    assert.equal(new Set(blocks).size, blocks.length, "at most one dot in each block of 8 columns by 7 rows");
+    assert.deepEqual(await heroDots(), { proof, you }, "the same every time");
+  });
+
   test("a number above 999 is written with a comma", async () => {
     // What the page does with a number is the page's, whatever the proof log has: a proof log of a thousand cards is not built here.
     const { thousands } = await import("../src/pages/html.ts");

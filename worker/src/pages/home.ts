@@ -49,34 +49,59 @@ function youDot([c, r]: readonly [number, number], pulse: boolean): Html {
 <text class="you-label" x="${x + 19}" y="${y + 6}">你</text>`;
 }
 
-/**
- * The first screen's dots, as the final design places them (in the right
- * half on a wide screen; under the headline on a phone, where the top left
- * of them shows, "you" among them).
- */
-const HERO_PROOF: readonly (readonly [number, number])[] = [
-  [9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12],
-];
-const HERO_YOU = [14, 11] as const;
-
-/**
- * The crowd of 一起能改變什麼: 71 columns by 17 rows, as wide as the site;
- * an account has a proof the more likely the further right (design/DESIGN.md,
- * 點: density, placed one by one, no pattern). The same every time: the
- * draw is seeded.
- */
-const CROWD_COLUMNS = 71;
-const CROWD_ROWS = 17;
-const CROWD_YOU = [5, 8] as const;
-const CROWD_PROOF: readonly (readonly [number, number])[] = (() => {
-  let seed = 0x1d6b78;
-  const random = (): number => {
-    // mulberry32
+/** A draw of numbers in [0, 1) that is the same every time for the same seed (mulberry32): the dots are placed one by one, and the page is the same on every load. */
+function seeded(seed: number): () => number {
+  return () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * The first screen's dots, as the final design places them (in the right
+ * half on a wide screen; under the headline on a phone, where the top left
+ * of them shows, "you" among them).
+ */
+const HERO_PLACED: readonly (readonly [number, number])[] = [
+  [9, 4], [21, 6], [30, 9], [11, 13], [26, 2], [17, 17], [31, 19], [8, 23], [23, 24], [28, 29], [11, 31], [19, 34], [30, 35], [4, 8], [20, 12],
+];
+const HERO_YOU = [14, 11] as const;
+
+/**
+ * Right of the dots placed by hand, as far as a 4K window shows (#335):
+ * columns 32 to 119 and the 35 rows of the first screen on a wide screen,
+ * in blocks of 8 columns by 7 rows; three blocks in four get one dot, in a
+ * cell drawn at random. About as dense as the dots placed by hand, spread
+ * evenly; a 1280px window ends before column 32, so it shows none of them.
+ */
+const HERO_FILL_FROM = 32;
+const HERO_FILL_BLOCKS = [11, 5] as const;
+const HERO_BLOCK = [8, 7] as const;
+const HERO_PROOF: readonly (readonly [number, number])[] = (() => {
+  const random = seeded(0x2b9e1c);
+  const out: (readonly [number, number])[] = [...HERO_PLACED];
+  for (let bc = 0; bc < HERO_FILL_BLOCKS[0]; bc++) {
+    for (let br = 0; br < HERO_FILL_BLOCKS[1]; br++) {
+      if (random() >= 0.75) continue;
+      out.push([HERO_FILL_FROM + bc * HERO_BLOCK[0] + Math.floor(random() * HERO_BLOCK[0]), br * HERO_BLOCK[1] + Math.floor(random() * HERO_BLOCK[1])]);
+    }
+  }
+  return out;
+})();
+
+/**
+ * The crowd of 一起能改變什麼: 71 columns by 17 rows, as wide as the site;
+ * an account has a proof the more likely the further right (design/DESIGN.md,
+ * 點: density, placed one by one, no pattern). The same every time: the
+ * draw is seeded, with a seed of its own.
+ */
+const CROWD_COLUMNS = 71;
+const CROWD_ROWS = 17;
+const CROWD_YOU = [5, 8] as const;
+const CROWD_PROOF: readonly (readonly [number, number])[] = (() => {
+  const random = seeded(0x1d6b78);
   const out: [number, number][] = [];
   for (let c = 0; c < CROWD_COLUMNS; c++) {
     const chance = 0.015 + 0.55 * (c / (CROWD_COLUMNS - 1)) ** 2.2;
