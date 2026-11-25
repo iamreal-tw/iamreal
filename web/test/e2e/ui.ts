@@ -1645,6 +1645,9 @@ await tryStep("a platform the page does not know: the account kept in the list a
       [THREADS, THREADS_NAME, at("dave"), [K.unchanged]],
     ],
     C.confirm.button_refresh,
+    // The points name the platforms of the server's table the page knows: Threads alone now.
+    null,
+    [THREADS_NAME],
   );
   await screenshot("unknown-5-confirm");
   const submissions: Record<string, unknown>[] = [];
