@@ -437,6 +437,12 @@ async function cardProof(p: Proof): Promise<string> {
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
       check(waitingTaps.length === 0 && !textsOf(visible()).includes(say("app_panel.android_wait_title")), "step 3: with no PIN typed, no panel and no tap");
+      // A PIN no card takes: not sent, no panel, and gone (the right PIN typed next into an empty field signs below).
+      emulator.tap(field("pin"));
+      emulator.type("12345");
+      press(say("pin.confirm_card"));
+      await waitText(say("app_pin.pin_format"), "the sentence for a PIN no card takes", 10_000);
+      check(waitingTaps.length === 0 && !textsOf(visible()).includes(say("app_panel.android_wait_title")), "step 3: a PIN of 5 characters brings no panel and no tap");
     }
   }
   emulator.tap(field("pin"));
@@ -448,7 +454,7 @@ async function cardProof(p: Proof): Promise<string> {
   {
     const s = wholeScreen();
     check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
-    check(!s.includes(say("app_pin.need_pin")), "step 3: with a PIN typed, no 請輸入 PIN。");
+    check(!s.includes(say("app_pin.need_pin")) && !s.includes(say("app_pin.pin_format")), "step 3: with a PIN typed, no 請輸入 PIN。 and no sentence of the PIN's form");
   }
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });

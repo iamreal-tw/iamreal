@@ -11,6 +11,7 @@ import tw.iamreal.app.Wiring
 import tw.iamreal.app.backend.Backend
 import tw.iamreal.app.backend.ServerException
 import tw.iamreal.app.card.CardException
+import tw.iamreal.app.card.SecureChannel
 import tw.iamreal.app.flow.Blocked
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.Platforms
@@ -109,8 +110,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     var pinMessage by mutableStateOf<String?>(null)
         private set
 
-    /** What step 3 says under the PIN's field: "請輸入 PIN。" only while the field is empty (design/copy/card-proof.md, "3. 輸入 PIN", app). */
-    val pinNote: String? get() = pinMessage?.takeUnless { it == copy.say("app_pin.need_pin") && pin.length > 0 }
+    /** What step 3 says under the PIN's field. "請輸入 PIN。" and the sentence of the PIN's form only while the field is empty (design/copy/card-proof.md, "3. 輸入 PIN", app). */
+    val pinNote: String? get() = pinMessage?.takeUnless { (it == copy.say("app_pin.need_pin") || it == copy.say("app_pin.pin_format")) && pin.length > 0 }
 
     /** The card proof ended while the PIN was asked for: the only way on is to read the card again. */
     var pinEnded by mutableStateOf(false)
@@ -333,6 +334,15 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             return
         }
         val typed = pin.bytes()
+        // A PIN no card takes is not sent, and no panel comes up: it is typed again.
+        val block = SecureChannel.pinBlock(typed)
+        if (block == null) {
+            typed.fill(0)
+            pin.clear()
+            pinMessage = copy.say("app_pin.pin_format")
+            return
+        }
+        block.fill(0)
         pinMessage = null
         pinBusy = ""
         step(
