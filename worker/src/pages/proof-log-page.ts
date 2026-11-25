@@ -1,9 +1,9 @@
 // The proof log page: design/copy/proof-log-page.md. Every valid record on
 // Threads, by its place in the proof log, the latest first, 50 at a time; the
-// link 更多 carries the `seq` of the last one listed. Below the numbers, before
-// the list (proof-log-page.md, 下載), 下載全部的證明紀錄 goes to the part of
-// iamreal-verify's README about downloading: the proof log is on the data
-// domain (ADR-0027), not under /proof-log/. This file only turns data into HTML; the Worker
+// link 更多 carries the `seq` of the last one listed. Below the numbers,
+// before the list (proof-log-page.md, 下載), 下載全部的證明紀錄 goes to the
+// part of iamreal-verify's README about downloading: the proof log is on the
+// data domain (ADR-0027), not under /proof-log/. This file only turns data into HTML; the Worker
 // (src/visitor.ts) reads the address and the proof log.
 import { formatDay } from "iamreal-protocol/date.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";

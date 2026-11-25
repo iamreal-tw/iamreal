@@ -143,6 +143,15 @@ describe("the proof log page", () => {
   /** proof-log-page.md's first block: the whole page. */
   const wholePage = (...replace: string[]): string[] => copyLines(codeBlocks(readCopy("proof-log-page.md"))[0]!, ...replace);
   const rows = (page: string): number => page.split('<li><a href="/p/').length - 1;
+  /** The line of the two links (proof-log-page.md, 下載): its index in the whole page, and the words of each link. */
+  const linkLine = (): { at: number; download: string; verify: string } => {
+    const all = wholePage();
+    const at = all.findIndex((l) => /\u3000{2,}/.test(l));
+    const [download, verify, ...rest] = (all[at] ?? "").split(/\u3000{2,}/);
+    assert.ok(at > 4 && download !== undefined && verify !== undefined && rest.length === 0, "proof-log-page.md: one line of two links, after the sentence above the list");
+    assert.ok(copySection("proof-log-page.md", "下載").includes(`「${verify}」連到 \`verify.md\` 那一頁`), `proof-log-page.md: ${verify} goes to /verify`);
+    return { at, download, verify };
+  };
   /** The sentence where the list is when the proof log has no record yet. */
   const empty = (): string => block("proof-log-page.md", "清單")[0]!;
   /** The table of proof-log-page.md's 清單: what a row writes for each kind of record. */
@@ -193,7 +202,7 @@ describe("the proof log page", () => {
     ]);
     assert.equal(rows(page), 8);
     notOnPage(page, "更多", empty());
-    for (const want of [`<li><a href="/p/${CARD_A}"><time>2026-11-18</time>`, `<li><a href="/p/8BN3TX5RJM"><time>2026-11-12</time>`, '<form method="get" action="/proof-log">', '<input type="text" id="q" name="q" value=""', '<a href="/verify">如何驗證證明紀錄</a>']) {
+    for (const want of [`<li><a href="/p/${CARD_A}"><time>2026-11-18</time>`, `<li><a href="/p/8BN3TX5RJM"><time>2026-11-12</time>`, '<form method="get" action="/proof-log">', '<input type="text" id="q" name="q" value=""', `<a href="/verify">${linkLine().verify}</a>`]) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     assert.ok(page.indexOf('id="q"') < page.indexOf("現在有"), "the lookup box is before the numbers");
@@ -246,7 +255,8 @@ describe("the proof log page", () => {
     const { page } = await getPage(worker, "/proof-log");
     assert.ok(copySection("proof-log-page.md", "下載").includes("「下載全部的證明紀錄」連到 `cmd/iamreal-verify/README.md` 講下載的那一段"));
     assert.ok(readFileSync(join(WORKER_DIR, "..", "cmd", "iamreal-verify", "README.md"), "utf8").includes("\n## 下載\n"), "the README has a section 下載");
-    assert.ok(page.includes('<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">下載全部的證明紀錄</a> <a href="/verify">如何驗證證明紀錄</a>'));
+    const { download, verify } = linkLine();
+    assert.ok(page.includes(`<a href="https://github.com/iamreal-tw/iamreal/blob/main/cmd/iamreal-verify/README.md#下載">${download}</a> <a href="/verify">${verify}</a>`));
     assert.ok(!page.includes('href="/proof-log/"'));
   });
 
@@ -256,9 +266,7 @@ describe("the proof log page", () => {
     assert.equal(status, 200);
     const all = wholePage("1,284", "0", "1,031", "0");
     // The two links are below the numbers, before where the list is, as with records (proof-log-page.md, 下載).
-    const links = all.findIndex((l) => l.startsWith("下載全部的證明紀錄"));
-    assert.ok(links > 4, "proof-log-page.md: the links come after the sentence above the list");
-    wantLines(page, [...all.slice(0, 4), all[links]!, empty()]);
+    wantLines(page, [...all.slice(0, 4), all[linkLine().at]!, empty()]);
     notOnPage(page, all[4]!, "更多");
     assert.ok(!page.includes("<li>"), "no row");
   });

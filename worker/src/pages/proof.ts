@@ -153,7 +153,7 @@ ${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordW
 }
 
 /** proof-page.md, section 5: the page's one way on, to how to check an account's proof (/check). */
-const HOW_TO_CHECK = html`<section class="verify">
+const HOW_TO_CHECK = html`<section class="how-to-check">
 <h2>如何檢查</h2>
 <p>這張證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。看一個帳號有沒有台灣人背書，要看哪幾個地方、小心哪些手法：</p>
 <p><a href="/check">如何檢查 Threads 帳號的島民證明</a></p>
