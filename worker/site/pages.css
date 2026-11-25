@@ -2368,8 +2368,12 @@ body.hang .steps .say {
    read is a grey bar. Where to press is framed in raspberry, its label raspberry with white letters
    (design/DESIGN.md, 顏色: --you). */
 body.hang .sketch {
-  grid-column: 2;
   max-width: 360px;
+}
+
+/* More than the panel's own margin (0, the rule shared with /check below): .steps outweighs it. */
+body.hang .steps .sketch {
+  grid-column: 2;
   margin-top: 16px;
 }
 
@@ -2434,7 +2438,7 @@ body.hang .sketch .press {
 }
 
 body.hang .sketch .profile .buttons > .press {
-  border-radius: var(--radius-panel);
+  border: 1.5px solid var(--you);
 }
 
 body.hang .sketch .tag {
@@ -2521,8 +2525,9 @@ body.hang .sketch .screen .screen-top {
   min-height: 44px;
 }
 
-body.hang .sketch .screen .screen-top .blank {
-  width: 30%;
+body.hang .sketch .screen .screen-top .screen-title {
+  padding: 0;
+  border: 0;
 }
 
 body.hang .sketch .screen .screen-top .press {
@@ -3636,8 +3641,11 @@ body.account-not-a-name .title {
 
   /* The pictures under the number too: the whole link fits in 網址. */
   body.hang .sketch {
-    grid-column: 1 / -1;
     max-width: none;
+  }
+
+  body.hang .steps .sketch {
+    grid-column: 1 / -1;
   }
 
   body.hang .none-yet {

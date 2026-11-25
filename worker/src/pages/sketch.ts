@@ -20,8 +20,8 @@ ${note === undefined ? html`` : html`<p class="sketch-note">${note}</p>
 }
 
 /** A small label under what it marks: in ink for what to look for (check.md), in raspberry for where to press (hang.md). */
-export function tag(words: string, press = false): Html {
-  return html`<span class="tag${press ? " press" : ""}">${words}</span>`;
+export function tag(words: string, kind: "find" | "press"): Html {
+  return html`<span class="tag${kind === "press" ? " press" : ""}">${words}</span>`;
 }
 
 /** What a profile drawing shows. */
@@ -45,7 +45,7 @@ export interface Profile {
 /** The example profile: a white card with a thin frame, nothing of Threads' own look. */
 export function profile(p: Profile): Html {
   const link = p.link === undefined ? html`` : html`<p class="link-row${p.link.found === undefined ? "" : " boxed"}"><span class="link-icon"></span>${p.link.address}</p>
-${p.link.found === undefined ? html`` : html`${tag(p.link.found)}
+${p.link.found === undefined ? html`` : html`${tag(p.link.found, "find")}
 `}`;
   return html`<div class="profile${p.small ? " small" : ""}">
 <div class="who">${p.name === null ? html`<span class="name blank"></span>` : html`<b class="name">${p.name}</b>`}<span class="handle${p.same ? " same" : ""}">${p.account}</span></div>
@@ -54,6 +54,6 @@ ${p.link.found === undefined ? html`` : html`${tag(p.link.found)}
 <span class="bio short"></span>
 ${link}${p.followers === null ? html`<span class="followers blank"></span>` : html`<p class="followers">${p.followers}</p>`}
 ${p.edit === undefined ? html`` : html`<p class="buttons"><span class="press">編輯個人檔案</span><span class="blank"></span></p>
-${tag(p.edit, true)}
+${tag(p.edit, "press")}
 `}</div>`;
 }

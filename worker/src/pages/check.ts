@@ -6,8 +6,9 @@
 //
 // The pictures are drawn with the style sheet's classes (./sketch.ts, shared
 // with the page of hanging a proof), in the colours check.md allows (ink,
-// text, secondary, line, soft): no image, no inline style. Their pieces are hidden from a screen reader, which is told each
-// picture in words instead. The names, addresses, dates and numbers in
+// text, secondary, line, soft): no image, no inline style. Their pieces
+// are hidden from a screen reader, which is told each picture in words
+// instead. The names, addresses, dates and numbers in
 // them are check.md's fixed examples, not the proof log's. Where a step or
 // a picture writes a proof's address or the site's domain, it writes the
 // site's own (design/copy/test-site.md).
