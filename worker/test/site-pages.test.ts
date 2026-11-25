@@ -40,7 +40,7 @@ function faqByQuestion(question: string): ReturnType<typeof faqQuestions>[number
 }
 
 describe("the FAQ", () => {
-  test("every question of faq.md under its category, in order, each a heading with its id and its answer shown; nothing after the last but the foot", async () => {
+  test("every question of faq.md under its category, in order, each folded with its id, its answer under it; nothing after the last but the foot", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/faq");
     assert.equal(status, 200);
@@ -56,11 +56,18 @@ describe("the FAQ", () => {
     wantLines(page, [...want, ...foot]);
     assert.ok(squash(visibleText(page)).endsWith(squash(last) + foot.map(squash).join("")), "nothing between the last answer and the foot");
 
-    // Each question a heading with its id, its answer shown: no <details>.
-    assert.ok(!page.slice(page.indexOf("<main>"), page.indexOf("</main>")).includes("<details"), "no answer is folded");
+    // Each question folded, as the home page's are (faq.md, at the top; home.md, 常見問題): a <details> with its id, the
+    // question its <summary>, which opens and closes it without a script and from the keyboard. None is open when the page
+    // opens; the copy buttons' script (copy.js) opens the one the address names (/faq#<id>), web/test/worker-card-proof.ts
+    // in a browser.
     const ids = [...page.matchAll(/\sid="([^"]*)"/g)].map((m) => m[1]!);
     assert.equal(new Set(ids).size, ids.length, "no id twice");
-    for (const q of questions) assert.ok(page.includes(`<section class="question" id="${q.id}"><h3>${q.question}</h3>`), `${q.question} is a heading with the id ${q.id}`);
+    for (const q of questions) assert.ok(page.includes(`<details class="question" id="${q.id}"><summary>${q.question}</summary>\n`), `${q.question} is folded, with the id ${q.id}`);
+    const main = page.slice(page.indexOf("<main>"), page.indexOf("</main>"));
+    assert.equal(main.match(/<details\b/g)?.length, questions.length, "a <details> a question, and no other");
+    assert.doesNotMatch(main, /<details\b[^>]*\sopen\b/, "every question folded when the page opens");
+    assert.ok(/每一題可以展開，一開始收起來/.test(readCopy("faq.md")) && /每一題可以展開，一開始收起來/.test(readCopy("home.md")), "faq.md folds its questions the way home.md does");
+    assert.match(readCopy("faq.md"), /連到某一題時，那一題展開/, "faq.md says a link to a question opens it");
 
     // The list of the categories: each name a link to its category, in faq.md's order, under the title and above the first question.
     const listName = /螢幕閱讀器唸的名稱是「([^」]*)」/.exec(readCopy("faq.md"))?.[1];
@@ -78,7 +85,7 @@ describe("the FAQ", () => {
     assert.equal(sections.length, categories.length, "one section a category");
     categories.forEach((c, i) => {
       assert.ok(sections[i]!.startsWith(`<section class="category" id="${c.id}">\n<h2>${c.name}</h2>`), `${c.name}: the section #${c.id}, its name the heading`);
-      assert.deepEqual([...sections[i]!.matchAll(/<section class="question" id="([^"]*)">/g)].map((m) => m[1]), c.questions.map((q) => q.id), `${c.name}: its questions, in order`);
+      assert.deepEqual([...sections[i]!.matchAll(/<details class="question" id="([^"]*)">/g)].map((m) => m[1]), c.questions.map((q) => q.id), `${c.name}: its questions, in order`);
     });
     // Every link to a question that a copy file writes goes to one.
     for (const file of readdirSync(COPY_DIR).filter((f) => f.endsWith(".md"))) {
@@ -87,7 +94,7 @@ describe("the FAQ", () => {
 
     // Each answer exactly as faq.md writes it: its paragraphs, its list, its bold and its links.
     for (const q of questions) {
-      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(page);
+      const shown = new RegExp(`<details class="question" id="${q.id}"><summary>[^<]*</summary>\\n(.*?)</details>`, "s").exec(page);
       assert.equal(shown?.[1], faqAnswerHtml(q.answer), `${q.question}: the answer is faq.md's`);
     }
     // An answer answers the question: it sends no one to another page of the site or another question to read on (faq.md, at the top).
@@ -128,7 +135,7 @@ describe("the FAQ", () => {
     );
     for (const [, question, answer] of folded) {
       const q = faqByQuestion(question!);
-      const shown = new RegExp(`<section class="question" id="${q.id}"><h3>[^<]*</h3>\\n(.*?)</section>`, "s").exec(faq);
+      const shown = new RegExp(`<details class="question" id="${q.id}"><summary>[^<]*</summary>\\n(.*?)</details>`, "s").exec(faq);
       assert.equal(shown?.[1], answer, `${question}: the home page's answer is the FAQ's`);
     }
   });
@@ -172,12 +179,61 @@ describe("how to verify the proof log", () => {
   });
 });
 
+/** hang.md's pictures (part 2, 示意圖): the four steps' and the one of the result, each its words (its title first) and what a screen reader is told. */
+function hangPictures(): { picture: string[]; told: string[] }[] {
+  const section = copySection("hang.md", "2. ");
+  const pictures = section.slice(section.indexOf("\n### 示意圖\n")).split("\n#### ").slice(1);
+  assert.deepEqual(pictures.map((p) => p.slice(0, p.indexOf("\n"))), ["圖 1", "圖 2", "圖 3", "圖 4", "結果圖"], "hang.md has four pictures of the steps and one of the result");
+  return pictures.map((p) => {
+    const blocks = codeBlocks(p);
+    assert.equal(blocks.length, 2, `hang.md, ${p.slice(0, p.indexOf("\n"))}: two code blocks`);
+    return { picture: blocks[0]!, told: blocks[1]! };
+  });
+}
+
+/**
+ * Checks the page of hanging a proof against hang.md: every line of `lines` (part 2, then part 3 if it is
+ * there) in order, each step's picture after its words and the picture of the result after the two lines of
+ * part 3, as hang.md writes them with the examples replaced; each picture its title, what a screen reader is
+ * told and its pieces hidden from a screen reader; no inline style.
+ */
+function wantHangPage(page: string, lines: readonly string[], withResult: boolean, ...replace: string[]): void {
+  const pictures = hangPictures().map((p) => ({ picture: copyLines(p.picture, ...replace), told: copyLines(p.told, ...replace).join("") }));
+  const shown = withResult ? pictures : pictures.slice(0, 4);
+  const told = (p: (typeof pictures)[number]): string[] => [p.picture[0]!, p.told, ...p.picture.slice(1)];
+  const want: string[] = [];
+  const steps: number[] = [];
+  for (const line of lines) {
+    want.push(line);
+    const n = /^([1-4])\u3000/.exec(line)?.[1];
+    if (n === undefined) continue;
+    steps.push(Number(n));
+    want.push(...told(pictures[Number(n) - 1]!));
+  }
+  assert.deepEqual(steps, [1, 2, 3, 4], "hang.md has four steps, a picture after each");
+  if (withResult) want.push(...told(pictures[4]!));
+  wantLines(page, want);
+  const figures = [...page.matchAll(/<figure class="sketch[^"]*">([\s\S]*?)<\/figure>/g)].map((m) => m[1]!);
+  assert.equal(figures.length, shown.length, `${shown.length} pictures`);
+  for (const [i, p] of shown.entries()) {
+    const m = /^\s*<figcaption>([^<]*)<\/figcaption>\s*<p class="sr">([^<]*)<\/p>\s*<div class="sketch-body" aria-hidden="true">([\s\S]*)<\/div>\s*$/.exec(figures[i]!);
+    assert.ok(m !== null, `picture ${i + 1}: its title, what a screen reader is told and its hidden pieces:\n${figures[i]}`);
+    assert.deepEqual([unescapeHtml(m[1]!), unescapeHtml(m[2]!), squash(visibleText(m[3]!))], [p.picture[0], p.told, squash(p.picture.slice(1).join(""))], `picture ${i + 1}: its words`);
+    assert.match(p.picture[0]!, /（示意）$/, `picture ${i + 1}: its title says it is an illustration`);
+  }
+  assert.doesNotMatch(page, /\sstyle=/, "no inline style");
+}
+
 describe("hanging a proof on a profile", () => {
-  test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
+  test("/hang/<short ID>: part 2 and part 3 of hang.md for the card's account, a picture under each step and one of the result, the link written in the site's own domain, its copy button shown by the one script; the preview", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
     const { status, page } = await getPage(worker, `/hang/${CARD_A}`);
     assert.equal(status, 200);
-    wantLines(page, [...copyLines(block("hang.md", "2. ", 0), "@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"), ...copyLines(block("hang.md", "3. "))]);
+    const onTestSite = ["@alice", "@carol.tw", "iamreal.tw/p/", "test.iamreal.tw/p/"];
+    wantHangPage(page, [...copyLines(block("hang.md", "2. ", 0), ...onTestSite), ...copyLines(block("hang.md", "3. "))], true, ...onTestSite);
+    // The pictures write the card's account, not the example's.
+    assert.ok(!page.includes("alice"), "no @alice on the page of @carol.tw");
+    assert.equal([...page.matchAll(/<script\b/g)].length, 1, "one script: the copy buttons'");
     // The link is the one the page of the card writes (hang.md, part 2: 和島民證明頁面上的寫法相同): on a test
     // log's site, its own domain (design/copy/test-site.md). 複製連結 copies it whole, with https://.
     const address = testSiteCardAddress(CARD_A);
@@ -194,16 +250,18 @@ describe("hanging a proof on a profile", () => {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
     assert.equal(page.split(`href="/p/${CARD_A}"`).length, 2, "one link to the card's page");
-    notOnPage(page, "還沒有島民證明？", "https://");
+    // The link is written without https://; only picture 4 writes it whole, as 複製連結 copied it into 網址.
+    notOnPage(page.replace(/<figure class="sketch press">[\s\S]*?<\/figure>/g, ""), "還沒有島民證明？", "https://");
     const { title, site } = previewOf("hang.md", "連結被貼出去時的預覽");
     wantPreview(page, title, site);
   });
 
-  test("/hang without a proof: the page from the home page, with no script and no button", async () => {
+  test("/hang without a proof: the page from the home page, a picture under each step, with no script and no button", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     const { status, page } = await getPage(worker, "/hang");
     assert.equal(status, 200);
-    wantLines(page, copyLines(block("hang.md", "2. ", 1)));
+    // The pictures write hang.md's examples, in the site's own domain.
+    wantHangPage(page, copyLines(block("hang.md", "2. ", 1)), false, "iamreal.tw/p/", "test.iamreal.tw/p/");
     for (const want of ['<a class="button quiet" href="https://www.threads.com/" target="_blank" rel="noopener noreferrer">打開 Threads</a>', '<a class="button" href="/proof">我要換島民證明</a>']) {
       assert.ok(page.includes(want), `the page has ${want}`);
     }
@@ -267,7 +325,7 @@ describe("hanging a proof on a profile", () => {
 });
 
 describe("the copy buttons' script", () => {
-  test("/copy.js: the old back end's, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
+  test("/copy.js: the old back end's and the FAQ's lines, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by; nothing in it reaches another site", async () => {
     await pagesWorld(worker, "2026-11-18", []);
     await worker.seen();
     const res = await worker.fetch("/copy.js");
@@ -276,6 +334,8 @@ describe("the copy buttons' script", () => {
     const script = await res.text();
     assert.equal(script, readFileSync(join(WORKER_DIR, "site", "copy.js"), "utf8"));
     assert.ok(script.includes('document.querySelectorAll("button[data-copy], button[data-copy-text]")'));
+    // On the FAQ it opens the question the address names, when the page opens and when the part after # changes.
+    assert.ok(script.includes("document.getElementById(address.slice(hash + 1))") && script.includes('addEventListener("hashchange"'));
     for (const s of ["http", "fetch", "XMLHttpRequest", "sendBeacon", "import", "eval", "innerHTML", "location"]) assert.ok(!script.includes(s), `copy.js has ${s}`);
     const etag = res.headers.get("etag");
     assert.match(etag ?? "", /^"[0-9a-f]+"$/);

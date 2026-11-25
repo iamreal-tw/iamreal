@@ -781,9 +781,10 @@ body.home main ol {
   list-style: none;
 }
 
-/* Read by a screen reader, not shown: each figure's one sentence; on how to check an account's proof, what each picture shows. */
+/* Read by a screen reader, not shown: each figure's one sentence; on how to check an account's proof and on hanging a proof, what each picture shows. */
 body.home .sr,
-body.check .sr {
+body.check .sr,
+body.hang .sr {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1715,7 +1716,7 @@ body.home .closing {
   color: var(--ink);
 }
 
-/* 常見問題: each question folds (design/DESIGN.md, 元件). */
+/* 常見問題: each question folds (design/DESIGN.md, 元件). The FAQ's questions (body.faq .question) fold the same way. */
 body.home .qa .split {
   grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
 }
@@ -1728,7 +1729,8 @@ body.home .questions details:last-child {
   border-bottom: 1px solid var(--line);
 }
 
-body.home .questions summary {
+body.home .questions summary,
+body.faq .question summary {
   position: relative;
   min-height: var(--min-target);
   padding: 20px 40px 20px 0;
@@ -1740,11 +1742,13 @@ body.home .questions summary {
   color: var(--ink);
 }
 
-body.home .questions summary::-webkit-details-marker {
+body.home .questions summary::-webkit-details-marker,
+body.faq .question summary::-webkit-details-marker {
   display: none;
 }
 
 body.home .questions summary::after,
+body.faq .question summary::after,
 body.check .trick summary::after {
   content: "";
   position: absolute;
@@ -1759,6 +1763,7 @@ body.check .trick summary::after {
 }
 
 body.home .questions details[open] summary::after,
+body.faq .question[open] summary::after,
 body.check .trick[open] summary::after {
   margin-top: -2px;
   transform: rotate(-135deg);
@@ -2053,12 +2058,13 @@ body.home .after {
     border-left: 2px dashed var(--proof);
   }
 
-  body.home .questions summary {
+  body.home .questions summary,
+  body.faq .question summary {
     font-size: 17px;
   }
 }
 
-/* The FAQ (faq.md): the list of the categories, then every answer shown under its question -- */
+/* The FAQ (faq.md): the list of the categories, then every question, folded as the home page's are -- */
 
 /* Laid out after design/DESIGN.md: as wide as the site, its edges the navigation bar's (.top .bar); the list of the
    categories a narrow column at the left that stays on the screen, the questions beside it. */
@@ -2126,24 +2132,25 @@ body.faq .category h2 {
   border-bottom: 1px solid var(--ink);
 }
 
+/* A question: a line under it, as on the home page; open, its answer under the question, then room before the line. */
 body.faq .question {
   max-width: var(--measure);
-  padding: 30px 0 32px;
   border-bottom: 1px solid var(--line);
   scroll-margin-top: 16px;
 }
 
-body.faq .question h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: var(--weight-heading);
-  font-size: var(--size-lead);
-  line-height: var(--leading-h3);
+body.faq .question[open] {
+  padding-bottom: 28px;
 }
 
 body.faq .question p,
 body.faq .question ul.dots {
   margin: 12px 0 0;
+}
+
+body.faq .question summary + p,
+body.faq .question summary + ul.dots {
+  margin-top: 0;
 }
 
 body.faq .question strong {
@@ -2285,8 +2292,8 @@ body.verify .yourself p {
 
 /* Hanging a proof on a profile (hang.md; design/screens/hang-proof-*.png, hang-*.png) ------------
    Laid out after design/DESIGN.md in the one narrow column (--measure): the title, the link and its two
-   buttons, the three steps under a line of ink, apart by thin lines; then the two lines of part 3, or the
-   button of the page without a proof. No pictures yet (hang.md, 還沒定的). */
+   buttons, the four steps under a line of ink, apart by thin lines, each with its picture under its words;
+   then the two lines of part 3 and the picture of the result, or the button of the page without a proof. */
 
 body.hang .title {
   font-size: var(--size-h2);
@@ -2354,11 +2361,208 @@ body.hang .steps .n {
   font-size: 22px;
 }
 
-body.hang .steps li > div {
+body.hang .steps .say {
+  margin: 0;
   color: var(--ink);
   font-weight: 700;
   font-size: 17px;
   line-height: 1.6;
+}
+
+/* The pictures (hang.md, 示意圖): about as wide as a phone, under the words of their step, and the result's under
+   the two lines of part 3. A screen is a white card with a thin frame, nothing of Threads' own look; what is not
+   read is a grey bar. Where to press is framed in raspberry, its label raspberry with white letters
+   (design/DESIGN.md, 顏色: --you). */
+body.hang .sketch {
+  max-width: 360px;
+}
+
+/* More than the panel's own margin (0, the rule shared with /check below): .steps outweighs it. */
+body.hang .steps .sketch {
+  grid-column: 2;
+  margin-top: 16px;
+}
+
+body.hang .sketch.result {
+  margin-top: 24px;
+}
+
+body.hang .sketch .blank {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+body.hang .profile .name.blank {
+  width: 112px;
+  height: 12px;
+  margin: 6px 0 10px;
+  border-radius: 6px;
+}
+
+body.hang .profile .followers.blank {
+  width: 72px;
+}
+
+body.hang .sketch .profile .buttons {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+body.hang .sketch .profile .buttons > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  font-size: var(--size-small);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+body.hang .sketch .profile .buttons > .blank {
+  height: auto;
+  background: none;
+}
+
+body.hang .sketch .profile .buttons > .blank::after {
+  content: "";
+  width: 56%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+body.hang .sketch .press {
+  border: 1.5px solid var(--you);
+  border-radius: var(--radius);
+}
+
+body.hang .sketch .profile .buttons > .press {
+  border: 1.5px solid var(--you);
+}
+
+body.hang .sketch .tag {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 10px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: var(--size-small);
+  font-weight: 700;
+  line-height: var(--leading-small);
+}
+
+body.hang .sketch .sketch-body .tag.press {
+  border: 0;
+  background: var(--you);
+}
+
+body.hang .sketch .end {
+  text-align: right;
+}
+
+body.hang .sketch .screen {
+  padding: 4px 16px 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+body.hang .sketch .screen .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+}
+
+body.hang .sketch .screen .row:last-child {
+  border-bottom: 0;
+}
+
+body.hang .sketch .screen .row .blank {
+  width: 40%;
+}
+
+body.hang .sketch .screen .row.press {
+  margin-top: 4px;
+  padding: 0 10px;
+  border: 1.5px solid var(--you);
+}
+
+body.hang .sketch .screen .tag + .row {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* A chevron towards the right: two sides of a square, turned. */
+body.hang .sketch .screen .chevron {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-top: 1.5px solid var(--mute);
+  border-right: 1.5px solid var(--mute);
+  transform: rotate(45deg);
+}
+
+body.hang .sketch .screen .screen-title {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+}
+
+body.hang .sketch .screen .screen-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+}
+
+body.hang .sketch .screen .screen-top .screen-title {
+  padding: 0;
+  border: 0;
+}
+
+body.hang .sketch .screen .screen-top .press {
+  padding: 2px 10px;
+  font-weight: 700;
+}
+
+body.hang .sketch .screen .field-label {
+  margin-top: 12px;
+  font-size: var(--size-small);
+  color: var(--mute);
+}
+
+body.hang .sketch .screen .end + .field-label {
+  margin-top: 4px;
+}
+
+body.hang .sketch .screen .field {
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+body.hang .sketch .screen .field.press {
+  border: 1.5px solid var(--you);
 }
 
 body.hang .done {
@@ -2569,33 +2773,33 @@ body.check .trick p {
   line-height: var(--leading-small);
 }
 
-/* A picture: a rounded panel on the soft grey, its title a small line in the secondary colour. Ink, text, secondary, line and soft only. */
-body.check .sketch {
+/* A picture, on how to check an account's proof and on hanging a proof (src/pages/sketch.ts): a rounded panel on the soft grey, its title a small line in the secondary colour. Ink, text, secondary, line and soft only; on hanging a proof, raspberry where to press (below). */
+:is(body.check, body.hang) .sketch {
   margin: 0;
   padding: 24px;
   background: var(--soft);
   border-radius: var(--radius-panel);
 }
 
-body.check .sketch figcaption {
+:is(body.check, body.hang) .sketch figcaption {
   margin: 0 0 16px;
   font-size: var(--size-small);
   line-height: var(--leading-small);
   color: var(--mute);
 }
 
-body.check .sketch p {
+:is(body.check, body.hang) .sketch p {
   margin: 0;
 }
 
-body.check .sketch .sketch-note {
+:is(body.check, body.hang) .sketch .sketch-note {
   margin-top: 16px;
   font-size: 16px;
   line-height: var(--leading-small);
 }
 
-/* The example profile (steps 1 and 3): a white card with a thin frame, nothing of Threads' own look. */
-body.check .profile {
+/* The example profile (check.md, steps 1 and 3; hang.md, pictures 1 and the result): a white card with a thin frame, nothing of Threads' own look. */
+:is(body.check, body.hang) .profile {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0 16px;
@@ -2606,19 +2810,19 @@ body.check .profile {
   line-height: 1.5;
 }
 
-body.check .profile .name {
+:is(body.check, body.hang) .profile .name {
   display: block;
   font-size: 18px;
   color: var(--ink);
 }
 
-body.check .profile .handle {
+:is(body.check, body.hang) .profile .handle {
   display: block;
   font-size: 15px;
   color: var(--text);
 }
 
-body.check .profile .handle.same {
+:is(body.check, body.hang) .profile .handle.same {
   font-weight: 700;
   color: var(--ink);
   text-decoration: underline;
@@ -2626,7 +2830,7 @@ body.check .profile .handle.same {
   text-underline-offset: 4px;
 }
 
-body.check .profile .avatar {
+:is(body.check, body.hang) .profile .avatar {
   grid-column: 2;
   grid-row: 1;
   width: 56px;
@@ -2635,7 +2839,7 @@ body.check .profile .avatar {
   background: var(--line);
 }
 
-body.check .profile .bio {
+:is(body.check, body.hang) .profile .bio {
   grid-column: 1 / -1;
   width: 88%;
   height: 10px;
@@ -2644,12 +2848,12 @@ body.check .profile .bio {
   background: var(--line);
 }
 
-body.check .profile .bio.short {
+:is(body.check, body.hang) .profile .bio.short {
   width: 56%;
   margin-top: 8px;
 }
 
-body.check .profile .link-row {
+:is(body.check, body.hang) .profile .link-row {
   grid-column: 1 / -1;
   justify-self: start;
   display: flex;
@@ -2660,18 +2864,19 @@ body.check .profile .link-row {
   padding: 4px 10px 4px 0;
   border: 2px solid transparent;
   font-size: 15px;
+  font-weight: 700;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-body.check .profile .link-row.boxed {
+:is(body.check, body.hang) .profile .link-row.boxed {
   padding-left: 10px;
   border-color: var(--ink);
   border-radius: var(--radius);
 }
 
 /* A link's mark: a link of a chain, drawn with a border. */
-body.check .profile .link-icon {
+:is(body.check, body.hang) .profile .link-icon {
   flex: none;
   width: 16px;
   height: 8px;
@@ -2680,7 +2885,7 @@ body.check .profile .link-icon {
   transform: rotate(-45deg);
 }
 
-body.check .profile .tag {
+:is(body.check, body.hang) .profile .tag {
   grid-column: 1 / -1;
   justify-self: start;
   margin-top: 8px;
@@ -2692,7 +2897,7 @@ body.check .profile .tag {
   font-weight: 700;
 }
 
-body.check .profile .followers {
+:is(body.check, body.hang) .profile .followers {
   grid-column: 1 / -1;
   margin-top: 12px;
   font-size: var(--size-small);
@@ -3371,7 +3576,8 @@ body.account-not-a-name .title {
     margin-top: 12px;
   }
 
-  body.check .sketch {
+  body.check .sketch,
+  body.hang .sketch {
     padding: 20px 16px;
   }
 
@@ -3435,8 +3641,17 @@ body.account-not-a-name .title {
     grid-template-columns: 24px minmax(0, 1fr);
   }
 
-  body.hang .steps li > div {
+  body.hang .steps .say {
     font-size: var(--size-body-phone);
+  }
+
+  /* The pictures under the number too: the whole link fits in 網址. */
+  body.hang .sketch {
+    max-width: none;
+  }
+
+  body.hang .steps .sketch {
+    grid-column: 1 / -1;
   }
 
   body.hang .none-yet {
@@ -3491,12 +3706,8 @@ body.account-not-a-name .title {
     font-size: var(--size-h3-phone);
   }
 
-  body.faq .question {
-    padding: 24px 0 26px;
-  }
-
-  body.faq .question h3 {
-    font-size: var(--size-lead-phone);
+  body.faq .question[open] {
+    padding-bottom: 24px;
   }
 
   body.proof .first,
