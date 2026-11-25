@@ -73,8 +73,29 @@ class CardException(val reason: Reason) : Exception(reason.name) {
         /** The card left the phone before the tap was done. */
         DROPPED,
 
+        /**
+         * The card left the phone while the PIN was on its way to it: whether the card took it, and counted a
+         * wrong one, is not known. The PIN is not sent again by itself.
+         */
+        PIN_MAYBE_SENT,
+
         /** The card says the PIN is not its PIN. */
         PIN_INCORRECT,
+
+        /** The card's PIN is locked. */
+        LOCKED,
+
+        /** The phone has no NFC. */
+        NO_NFC,
+
+        /** The phone's NFC is turned off. */
+        NFC_OFF,
+
+        /** The secure channel the card requires could not be made. No PIN was sent. */
+        CHANNEL,
+
+        /** A first-generation card, which the app does not read. Nothing was sent to it but the commands that tell. */
+        FIRST_GENERATION,
 
         /** Anything else the card answered. */
         OTHER,
