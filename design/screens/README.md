@@ -37,6 +37,7 @@
 | `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 實作版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 實作版 |
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 實作版 |
+| `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
 | `faq-desktop.png`、`faq-phone.png` | `/faq` | 實作版 |
 | `prepare-desktop.png`、`prepare-phone.png` | `/prepare`（過卡需要什麼） | 實作版 |
 | `og-image.png` | 每一頁的連結預覽圖（`og:image`）。網站送的就是這一張：`worker/site/og-image.png` 是它逐位元組的拷貝（`worker/scripts/site-files.ts`），改這張圖時重跑那支腳本 | 定稿版 |

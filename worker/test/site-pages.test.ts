@@ -1,7 +1,9 @@
-// The FAQ (/faq), how to verify (/verify), hanging a proof on a profile
+// The FAQ (/faq), how to verify (/verify), how to check an account's proof
+// (/check), what a card proof needs (/prepare), hanging a proof on a profile
 // (/hang, /hang/<short ID>) and the copy buttons' script (/copy.js), through
 // the Worker's HTTP (test/harness.ts), against the words of design/copy/
-// (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
+// (faq.md, verify.md, check.md, prepare.md, hang.md), read the way
+// test/pages.test.ts reads them.
 // The cases are the Go backend's (e159ab9:server/site_test.go).
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -340,11 +342,80 @@ describe("what a card proof needs", () => {
   });
 });
 
+/**
+ * check.md's four steps (its "### 第 n 步"), each its three code blocks: the words on the left, the words of the picture (its
+ * title first), and what a screen reader is told of the picture; and whether the picture's last line is the sentence under it
+ * rather than a piece of it (check.md says 最後一句在圖的下面).
+ */
+function checkSteps(): { text: string[]; picture: string[]; told: string[]; note: boolean }[] {
+  const steps = copySection("check.md", "2. ").split("\n### 第 ").slice(1);
+  assert.equal(steps.length, 4, "check.md section 2 has four steps");
+  return steps.map((step, i) => {
+    assert.ok(step.startsWith(`${i + 1} 步\n`), `check.md step ${i + 1}`);
+    const blocks = codeBlocks(step);
+    assert.equal(blocks.length, 3, `check.md step ${i + 1}: three code blocks`);
+    return { text: blocks[0]!, picture: blocks[1]!, told: blocks[2]!, note: step.includes("最後一句在圖的下面") };
+  });
+}
+
+/** The lines of check.md's pictures and steps 1 and 2, as a site with this domain writes them (check.md, 測試網站). */
+const onSite = (lines: readonly string[], host: string): string[] => copyLines(lines, "iamreal.tw", host);
+
+describe("how to check an account's proof", () => {
+  test("every sentence of check.md, in order, then the foot; each step's picture after its words, the picture's pieces hidden from a screen reader, which is told it in words; the preview", async () => {
+    await pagesWorld(worker, "2026-11-18", []);
+    const { status, page } = await getPage(worker, "/check");
+    assert.equal(status, 200);
+    const host = "test.iamreal.tw";
+    const steps = checkSteps();
+    const want = [
+      ...copyLines(block("check.md", "1. ")),
+      ...copyLines(block("check.md", "2. ", 0)),
+      ...steps.flatMap((s, i) => [...(i < 2 ? onSite(s.text, host) : copyLines(s.text)), ...onSite(s.picture.slice(0, 1), host), ...onSite(s.told, host), ...onSite(s.picture.slice(1), host)]),
+      ...copyLines(block("check.md", "3. ")),
+      ...copyLines(block("check.md", "4. ")),
+    ];
+    const foot = copyLines(block("home.md", "頁尾"));
+    wantLines(page, [...want, ...foot]);
+    assert.ok(squash(visibleText(page)).endsWith(squash(want[want.length - 1]!) + foot.map(squash).join("")), "nothing between the last situation and the foot");
+
+    // Each step's 惡意手法: a <details> closed until it is opened, its <summary> the word.
+    const tricks = [...page.matchAll(/<details class="trick">\s*<summary>([^<]*)<\/summary>/g)].map((m) => m[1]);
+    assert.deepEqual(tricks, ["惡意手法", "惡意手法", "惡意手法", "惡意手法"], "four 惡意手法, each a <details> with its <summary>");
+    assert.doesNotMatch(page, /<details[^>]*\sopen/, "every 惡意手法 is closed");
+
+    // Each picture: its title, what a screen reader is told, its pieces hidden from it, and (steps 3 and 4) the sentence under it.
+    const figures = [...page.matchAll(/<figure class="sketch[^"]*">([\s\S]*?)<\/figure>/g)].map((m) => m[1]!);
+    assert.equal(figures.length, 4, "a picture for each step");
+    for (const [i, s] of steps.entries()) {
+      const figure = figures[i]!;
+      const picture = onSite(s.picture, host);
+      const note = s.note ? picture[picture.length - 1]! : null;
+      const pieces = picture.slice(1, note === null ? undefined : -1);
+      const m = /^\s*<figcaption>([^<]*)<\/figcaption>\s*<p class="sr">([^<]*)<\/p>\s*<div class="sketch-body" aria-hidden="true">([\s\S]*)<\/div>\s*(?:<p class="sketch-note">([^<]*)<\/p>\s*)?$/.exec(figure);
+      assert.ok(m !== null, `step ${i + 1}: the picture is its title, what a screen reader is told, its hidden pieces and its sentence:\n${figure}`);
+      assert.deepEqual([unescapeHtml(m[1]!), unescapeHtml(m[2]!), squash(visibleText(m[3]!)), m[4] === undefined ? null : unescapeHtml(m[4])], [picture[0], onSite(s.told, host).join(""), squash(pieces.join("")), note], `step ${i + 1}: the words of the picture`);
+      assert.match(picture[0]!, /（示意）$/, `step ${i + 1}: its title says it is an illustration`);
+    }
+
+    // Its two links: the proof log, at its lookup box, and how to verify the proof log.
+    const situations = page.slice(page.indexOf('<section class="situations">'));
+    for (const [href, words] of [["/proof-log#q", "證明紀錄"], ["/verify", "如何驗證證明紀錄"]] as const) {
+      assert.ok(copySection("check.md", "4. ").includes(`「${words}」是連結，連到`) && copySection("check.md", "4. ").includes(`\`${href}\``), `check.md says where ${words} goes`);
+      assert.ok(situations.includes(`<a href="${href}">${words}</a>`), `the page links ${words} to ${href}`);
+    }
+    const { title, site, summary } = previewOf("check.md", "連結被貼出去時的預覽");
+    wantPreview(page, title, site);
+    assert.equal(summary, "");
+    assert.doesNotMatch(page, OG_DESCRIPTION);
+  });
+});
+
 describe("the links", () => {
   test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
     const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
-    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
     const links = new Set<string>();
     for (const path of pages) {
       const { page } = await getPage(worker, path);
