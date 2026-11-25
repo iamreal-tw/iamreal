@@ -62,7 +62,7 @@ export const LOGO = new Html(
 export const NEEDS = "需要實體的自然人憑證，和手機，或讀卡機和電腦。";
 
 /** The four links of the navigation bar (home.md, 導覽列), and its one button. */
-const NAV_LINKS = html`<a href="/verify">怎麼驗證島民證明</a>
+const NAV_LINKS = html`<a href="/check">如何檢查島民證明</a>
 <a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
@@ -99,8 +99,9 @@ ${NAV_BUTTON}
 const FOOT = html`<footer class="foot">
 <div class="bar">
 <span class="site"><b>島民證明</b><span>iamreal.tw</span></span>
-<a href="/verify">怎麼驗證島民證明</a>
+<a href="/check">如何檢查島民證明</a>
 <a href="/proof-log">證明紀錄</a>
+<a href="/verify">如何驗證證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="/prepare">過卡需要什麼</a>
 <a href="https://github.com/iamreal-tw/iamreal/discussions">意見回饋</a>
