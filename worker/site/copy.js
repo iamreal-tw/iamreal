@@ -1,4 +1,4 @@
-// The one script of the visitors' pages, loaded only by /verify and
+// The one script of the visitors' pages, loaded only by /faq, /verify and
 // /hang/<short ID> (server/pages). A button
 //
 //   <button data-copy="ID" data-copied="已複製" hidden>…</button>
@@ -25,3 +25,22 @@ for (const button of document.querySelectorAll("button[data-copy], button[data-c
     );
   });
 }
+
+// On the FAQ every question is a <details>, folded, with the question's id;
+// its <summary> opens and closes it without this script. Opened here: the
+// question the address names (/faq#<id>), when the page opens and when the
+// part after # changes. A browser scrolls to that <details> but does not
+// open it, as it is the target itself and not inside one. Anything else
+// the address names (a category, #cat-...) is left as it is. The part
+// after # is read from document.URL, which can only be read: :target does
+// not match yet when this runs as the page opens, and the test of this
+// file keeps out the word for the object that can also send the page to
+// another address.
+const openNamedQuestion = () => {
+  const address = document.URL;
+  const hash = address.indexOf("#");
+  const named = hash === -1 ? null : document.getElementById(address.slice(hash + 1));
+  if (named !== null && named.tagName === "DETAILS") named.open = true;
+};
+openNamedQuestion();
+window.addEventListener("hashchange", openNamedQuestion);

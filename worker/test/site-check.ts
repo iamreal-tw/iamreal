@@ -117,7 +117,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     [`/p/${NO_SUCH_CARD}`, 404],
     ["/threads/@alice", 200],
     ["/proof-log", 200],
-    ["/faq", 200],
+    ["/faq", 200, true],
     ["/verify", 200, true],
     ["/check", 200],
     ["/prepare", 200],

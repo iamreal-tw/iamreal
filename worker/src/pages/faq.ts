@@ -1,5 +1,5 @@
 // The questions and answers of design/copy/faq.md, each written once: the
-// FAQ page (/faq) shows every one, under its category, the home page eight
+// FAQ page (/faq) has every one, under its category, the home page eight
 // (design/copy/home.md, 常見問題). The markup is the Go backend's
 // (e159ab9:server/pages/templates/faq.html, faq-answers.html). A blank line in
 // faq.md is a new paragraph; its lines that start with · are a list.
@@ -206,8 +206,13 @@ export function question(id: string): Question {
 
 /**
  * The FAQ page: under the title the list of the categories, each a link to
- * its category; every question a heading with its id, its answer shown under
- * it. Nothing after the last question but the foot (faq.md, 還沒定的).
+ * its category; every question folded, as the home page's are (faq.md, at
+ * the top): a <details> with the question's id, the question its <summary>,
+ * which opens and closes it without a script. None is open when the page
+ * opens. The page loads the copy buttons' script (site/copy.js), which opens
+ * the question the address names (/faq#<id>): browsers do not open a
+ * <details> that is itself the target. Nothing after the last question but
+ * the foot (faq.md, 還沒定的).
  */
 export function faqPage(): Document {
   const content = html`<h1 class="title">常見問題</h1>
@@ -219,11 +224,11 @@ ${CATEGORIES.map((c) => html`<li><a href="#${c.id}">${c.name}</a></li>`)}
 ${CATEGORIES.map(
   (c) => html`<section class="category" id="${c.id}">
 <h2>${c.name}</h2>
-${c.questions.map((q) => html`<section class="question" id="${q.id}"><h3>${q.question}</h3>
-${q.answer}</section>`)}
+${c.questions.map((q) => html`<details class="question" id="${q.id}"><summary>${q.question}</summary>
+${q.answer}</details>`)}
 </section>`,
 )}
 </div>
 </div>`;
-  return { title: "常見問題", kind: "faq", content };
+  return { title: "常見問題", kind: "faq", script: true, content };
 }

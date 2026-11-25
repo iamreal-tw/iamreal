@@ -382,7 +382,7 @@ private fun Done(m: Model, r: ReminderModel, outside: Outside) {
         for ((sentence, address) in view.profiles) Link(sentence) { outside.open(address) }
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             Rule(colour = Colours.ink)
-            for ((n, step) in listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_save")).withIndex()) {
+            for ((n, step) in listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")).withIndex()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
                     BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
                     BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.weightHeading))

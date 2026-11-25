@@ -425,7 +425,7 @@ struct Screens {
                         action: .openProfile(account.platform)), main: false)
                 }
             }
-            blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_save")]))
+            blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
             blocks += notes
             let hung = copy("done.hung").components(separatedBy: "{open_proof}")
             blocks += [
