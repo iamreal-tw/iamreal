@@ -757,7 +757,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
-  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫、它的幾個檔和討論區、Threads、掛上去複製的島民證明網址）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊。過卡頁面的 CSP 裡的資料網域不在這一包裡：那一組標頭寫在 `site/_headers`
+  - JavaScript 裡的網址只有內政部的兩個，加上頁面和標頭裡寫的那幾個（`PAGE_ADDRESSES`：公開的程式庫、它的一個檔（`cmd/iamreal-verify/README.md`）和討論區、維護者的部落格（常見問題「誰在做島民證明？」）、Threads、掛上去複製的島民證明網址）。後面這幾個只是寫在頁面和標頭裡的字，Worker 自己發出的請求仍然只有內政部的兩份清冊。過卡頁面的 CSP 裡的資料網域不在這一包裡：那一組標頭寫在 `site/_headers`
   - JavaScript 裡長到可能是 RSA 金鑰的字串，恰好是 `spec/vectors/issuers.json` 的兩個模數，加上 Barretenberg 通用參數的那一個點（128 個位元組寫成十六進位，用它的 SHA-256 認，要恰好出現一次）。找得到的寫法是十六進位、十進位、base64、PEM；拆成數字陣列或執行時才拼起來的金鑰，這個檢查看不到
   - 沒有假的內政部、時鐘的開關和測試專用建置的其他痕跡
   - wrangler 列出的 binding 只有 `PROOF_LOG`、`DATA`、`PROOF_LOG_OBJECT_NAME`、`PROOF_LOG_KIND`、`TEST_PROOF_LOG_CLEARED_ON`，所以金鑰、網址、時鐘沒有設定值可以讀，Worker 也沒有 `ASSETS` 可以讀 Static Assets 的檔。用 `wrangler secret` 另外設在 Worker 上的密鑰不在設定檔裡，這個檢查看不到

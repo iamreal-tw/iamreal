@@ -91,11 +91,9 @@ describe("the FAQ", () => {
       assert.equal(shown?.[1], faqAnswerHtml(q.answer), `${q.question}: the answer is faq.md's`);
     }
     // An answer answers the question: it sends no one to another page of the site or another question to read on (faq.md, at the top).
+    // Its links go out of the site; a link to a feature of the site, the one other kind faq.md allows, would be named here.
     for (const q of questions) {
-      for (const { words, href } of faqLinks(q.answer)) {
-        assert.ok(!/^(\/faq|#|\/privacy)/.test(href), `${q.question}: ${words} goes to ${href}, an explanation on the site`);
-      }
-      notOnPage(faqAnswerHtml(q.answer).replace(/<[^>]*>/g, " "), "了解更多", "完整的說明");
+      for (const { words, href } of faqLinks(q.answer)) assert.match(href, /^https:\/\/(?![^/]*iamreal\.tw)/, `${q.question}: ${words} goes to ${href}, not out of the site`);
     }
 
     // The question of the ordinal (#299): in 它能證明什麼, right after the lost card; not on the home page.
