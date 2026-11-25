@@ -60,15 +60,15 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 1)
         XCTAssertEqual(model.screen.texts, [
             "開始之前",
-            "請準備好你的實體自然人憑證。",
-            "我們只收台灣中華民國國民的自然人憑證正卡。非中華民國國籍人所持有的自然人憑證無法使用於島民證明。",
+            "請準備好你的實體自然人憑證卡片。",
+            "非中華民國國籍者所持有的自然人憑證無法用於島民證明。",
             "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。",
             "為什麼一定要實體的卡片？",
-            "實體卡片的簽章在卡片裡完成，只經過你的裝置。",
-            "行動自然人憑證的簽章要經過內政部的伺服器，內政部查得出是誰在使用；流程還要你輸入身分證字號，我們就得經手不必要的個資。所以只收實體的卡片。",
+            "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
+            "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
             "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
-            "內政部憑證管理中心的說明（moica.nat.gov.tw）",
+            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
             "下一步",
         ])
 
@@ -76,7 +76,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 2)
         XCTAssertEqual(model.screen.texts, [
             "讀取卡片",
-            "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。這一步不用 PIN。",
+            "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
@@ -105,7 +105,7 @@ final class CardProofTests: XCTestCase {
             "輸入 PIN",
             "已讀到卡片", "測試用戶", "（姓名只顯示在這裡，不會送出。）",
             "PIN",
-            "卡片會簽章一次，用來查這張卡片目前宣告的帳號。這一步還不會宣告，在你確認之前，不會公開任何東西。",
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
             "拿到你的卡片和 PIN 的人，查得出這張卡片宣告過的帳號。卡片請自行保管、請勿出借給他人。",
             "上一步",
@@ -129,7 +129,7 @@ final class CardProofTests: XCTestCase {
             "填上你要宣告的 Threads 帳號。",
             "Threads", "預覽", "還沒有宣告過。",
             "一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
-            "預覽會在 Threads 或瀏覽器開這個帳號的頁面，讓你確認沒有打錯。",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
             "下一步",
             "系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。",
             "取消",
@@ -155,7 +155,7 @@ final class CardProofTests: XCTestCase {
         let today = CardProofFlow.dateInTaiwan(now)
         XCTAssertEqual(model.screen.texts, [
             "確認",
-            "按下後，證明紀錄會公開記下這張卡片宣告的帳號：",
+            "按下後，證明紀錄會記下新的證明並公開給所有人：",
             "Threads", "@alice", "新宣告",
             "日期", today,
             "島民編號", "\(shortID) 開頭",
@@ -247,7 +247,7 @@ final class CardProofTests: XCTestCase {
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
+            "這是這張卡片目前宣告的帳號。上次過卡是今天",
             "Threads", "預覽",
             "還沒有更換過，還可以更換 5 次。",
             "今天才宣告的帳號，今天改掉不另外算一次更換。",
@@ -258,9 +258,9 @@ final class CardProofTests: XCTestCase {
 
         try await press("下一步", in: model)
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
-        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "再次過卡"])
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "更新島民證明"])
 
-        try await press("再次過卡", in: model)
+        try await press("更新島民證明", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertEqual(head(of: model.screen)?.title, "島民證明已更新")
         XCTAssertEqual(head(of: model.screen)?.card?.rows, [ProofCard.Row(name: nil, account: "@alice")])
@@ -293,7 +293,7 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 4)
         XCTAssertEqual(Array(model.screen.texts.prefix(5)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是 1 天前。",
+            "這是這張卡片目前宣告的帳號。上次過卡是 1 天前",
             "Threads", "預覽",
             "還沒有更換過，還可以更換 5 次。",
         ])
@@ -333,7 +333,7 @@ final class CardProofTests: XCTestCase {
         try await toAccounts(model)
         XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
+            "這是這張卡片目前宣告的帳號。上次過卡是今天",
             "Threads", "預覽",
             "更換過 1 次，還可以更換 4 次。",
             "今天才宣告的帳號，今天改掉不另外算一次更換。",

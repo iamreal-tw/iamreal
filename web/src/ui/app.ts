@@ -728,7 +728,8 @@ export function startApp(o: AppOptions): void {
         // With one, the first sentence says the account is made public.
         view.listedTogether ? el("p", { class: "public", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
         // The points; the words that no record can be deleted in bold ink (confirm.cannot_delete).
-        el("ul", { class: "facts", attrs: { "data-points": "" } }, ...view.points.map((pt) => el("li", {}, say(pt)))),
+        // Each point in one element: the list item is a grid of the dot and the words.
+        el("ul", { class: "facts", attrs: { "data-points": "" } }, ...view.points.map((pt) => el("li", {}, el("span", {}, say(pt))))),
         message.node,
         actions(secondary(COPY.common.back, back), go),
         cancel(),
