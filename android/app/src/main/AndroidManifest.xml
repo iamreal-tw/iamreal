@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The permissions asked for: the network (the server and the CRL
-     archive); the reminder's notification (asked for when "開啟提醒" is
+     archive); NFC, to read the card (card/NfcCard.kt); the reminder's notification (asked for when "開啟提醒" is
      pressed, Android 13 on); and being told the phone restarted, which
      forgets the reminder's alarm (reminder/Phone.kt). A library that brings the advertising ID's permission has it
      taken out here, and the build fails if the merged manifest still names
@@ -10,8 +10,16 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- A phone without NFC can install the app: design/copy/card-proof.md
+         ("1. 開始之前") has it say that this phone cannot read a card, a
+         screen of issue #171. Until then a tap on it stops at once. -->
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
 
     <uses-permission
         android:name="com.google.android.gms.permission.AD_ID"

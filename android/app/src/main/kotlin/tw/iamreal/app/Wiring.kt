@@ -1,6 +1,7 @@
 package tw.iamreal.app
 
 import tw.iamreal.app.card.Card
+import tw.iamreal.app.card.ReadsInFront
 
 /**
  * What the card proof is wired to. Target.kt of the build says which: the
@@ -17,6 +18,8 @@ internal class Wiring(
     val card: Card,
     /** Opens a session of the core. */
     val openSession: () -> Long,
+    /** Told when the app's screen comes to the front and leaves it: a card is read only in between. */
+    val front: ReadsInFront? = null,
 ) {
     /** The site as links on the screen write it: without the scheme. */
     val domain: String get() = site.substringAfter("://")
