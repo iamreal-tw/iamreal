@@ -652,10 +652,9 @@ body.proof_log .more {
   margin: 20px 0 0;
 }
 
-body.proof_log .download {
-  margin-top: 56px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
+/* The two links, a line of their own below the numbers and the sentence under them, before the list. */
+body.proof_log .numbers .download {
+  margin: 16px 0 0;
 }
 
 body.proof_log .download a + a {
@@ -687,10 +686,6 @@ body.proof_log .download a + a {
 
   body.proof_log .more a {
     display: flex;
-  }
-
-  body.proof_log .download {
-    margin-top: 40px;
   }
 }
 
@@ -3036,17 +3031,17 @@ body.proof .second .record {
   grid-column: 1;
 }
 
-body.proof .second .verify {
+body.proof .second .how-to-check {
   grid-column: 2;
 }
 
 /* After several cards, section 5 alone: on the left, as the sections above it. */
-body.proof .second .verify:only-child {
+body.proof .second .how-to-check:only-child {
   grid-column: 1;
 }
 
 body.proof .record h2,
-body.proof .verify h2 {
+body.proof .how-to-check h2 {
   font-size: var(--size-h3);
   line-height: var(--leading-h3);
   margin: 0 0 20px;
@@ -3519,7 +3514,7 @@ body.account-not-a-name .title {
   }
 
   body.proof .second .record,
-  body.proof .second .verify {
+  body.proof .second .how-to-check {
     grid-column: 1;
   }
 
@@ -3533,7 +3528,7 @@ body.account-not-a-name .title {
   body.account .title,
   body.proof .last .when,
   body.proof .record h2,
-  body.proof .verify h2 {
+  body.proof .how-to-check h2 {
     font-size: var(--size-h3-phone);
   }
 

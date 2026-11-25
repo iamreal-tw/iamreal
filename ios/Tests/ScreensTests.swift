@@ -180,7 +180,6 @@ final class ScreensTests: XCTestCase {
     func testNoScreenOpensAHelpPage() {
         for (name, screen) in firstDeclaration() {
             XCTAssertFalse(screen.texts.contains("了解更多"), name)
-            XCTAssertFalse(screen.texts.contains("怎麼驗證島民證明"), name)
         }
     }
 

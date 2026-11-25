@@ -318,7 +318,7 @@ func TestDataErrors(t *testing.T) {
 	}
 }
 
-// README.md quotes the prompt of the page "how to verify" exactly: the
+// README.md quotes the prompt of the page "how to verify the proof log" exactly: the
 // code block that follows "提示詞要逐字照這一段" in design/copy/verify.md.
 func TestReadmeQuotesThePrompt(t *testing.T) {
 	copyText, err := os.ReadFile("../../design/copy/verify.md")
