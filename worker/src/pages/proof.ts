@@ -152,11 +152,11 @@ ${rows.map((row) => html`<li><time>${formatDay(row.date)}</time> <span>${recordW
 </section>`;
 }
 
-/** proof-page.md, section 5. */
-const VERIFY = html`<section class="verify">
-<h2>驗證</h2>
-<p>這張證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。任何人都可以驗證證明紀錄裡的每一份證明，都來自一張有效的自然人憑證。</p>
-<p><a href="/verify">怎麼驗證島民證明</a></p>
+/** proof-page.md, section 5: the page's one way on, to how to check an account's proof (/check). */
+const HOW_TO_CHECK = html`<section class="verify">
+<h2>如何檢查</h2>
+<p>這張證明是在持卡人的裝置上算出來的，永久公布在證明紀錄裡。看一個帳號有沒有台灣人背書，要看哪幾個地方、小心哪些手法：</p>
+<p><a href="/check">如何檢查 Threads 帳號的島民證明</a></p>
 </section>`;
 
 /** proof-page.md, section 5a; the last line is home.md's 〈需要什麼〉. */
@@ -180,7 +180,7 @@ export function proofPage(site: Site, shortId: string, { today, cards }: CardsOf
     content = html`${firstScreen(site, cards[0]!, shortId, today, false)}
 <div class="second">
 ${record(cards[0]!)}
-${VERIFY}
+${HOW_TO_CHECK}
 </div>`;
   } else {
     const starts = prefixes(cards.map((c) => c.scopedId));
@@ -198,7 +198,7 @@ ${record(card)}
 </article>`,
 )}
 <div class="second">
-${VERIFY}
+${HOW_TO_CHECK}
 </div>`;
   }
   return { title: titleOf(cards), kind: "proof", content: html`${content}\n${MINE}` };
