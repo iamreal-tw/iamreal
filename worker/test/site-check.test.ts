@@ -70,7 +70,7 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying?: RegExp): 
 test("every check passes on the Worker as it is deployed, with a card proof page and CRLs of both issuer keys", async () => {
   const lines = await checkSite(AS_DEPLOYED);
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  assert.equal(lines.length, 24, "a line for each thing checked");
+  assert.equal(lines.length, 25, "a line for each thing checked");
   // The day after, before the alarm of midnight has run, the last line is yesterday's: that passes too.
   assert.deepEqual(await failed({ today: "2026-11-22" }), []);
 });
@@ -108,7 +108,7 @@ test("a page: another status, a header missing, a cookie, no noindex in the page
   await failsOnly({ site: siteWith("/", withCookie) }, "GET /", /cookie/);
   await failsOnly({ site: siteWith("/verify", (res, body) => new Response(body.replace('<meta name="robots" content="noindex">', ""), { status: res.status, headers: res.headers })) }, "GET /verify", /noindex/);
   const otherDate = await failed({ clearedOn: "2026-11-22" });
-  assert.equal(otherDate.length, 9, otherDate.join("\n"));
+  assert.equal(otherDate.length, 10, otherDate.join("\n"));
   assert.ok(otherDate.every((w) => w.includes("the date 2026-11-22")), otherDate.join("\n"));
 });
 
@@ -191,7 +191,7 @@ test("on the local Worker of `pnpm local` (local: true), the data is the site's 
   };
   const lines = await checkSite({ ...AS_DEPLOYED, data: noCors, local: true });
   assert.deepEqual(lines.filter((l) => !l.ok), []);
-  assert.equal(lines.length, 22, "the two lines about Cloudflare's running of the proof log are not there");
+  assert.equal(lines.length, 23, "the two lines about Cloudflare's running of the proof log are not there");
   assert.ok(!lines.some((l) => l.what.startsWith("the data domain: CORS") || l.what.startsWith("GET /api/v1/fingerprint: the proof log was published")));
   // A local proof log publishes only on a midnight the command was running over: never published, long after the clearing, passes.
   const neverPublished = siteWith("/api/v1/fingerprint", (res) => new Response(`{"date":null,"count":0,"fingerprint":"${"0".repeat(64)}"}`, { headers: res.headers }));

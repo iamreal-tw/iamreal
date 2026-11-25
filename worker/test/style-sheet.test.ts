@@ -80,3 +80,12 @@ test("the headings' typeface is the subset the site sends, under the name --font
   // The one address in the sheet is that file of this site.
   assert.deepEqual([...css.matchAll(/url\(([^)]*)\)/g)].map((m) => m[1]), ['"/fonts/GenRyuMin2TW-B.woff2"']);
 });
+
+test("how to check an account's proof is drawn in ink, text, secondary, line, soft and the page's white only: no teal, no raspberry red in its pictures", () => {
+  // design/copy/check.md, 示意圖; design/DESIGN.md, 顏色. Its links are a link's colour, from the rule of every <a>, not from these.
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter((m) => /body\.check\b/.test(m[1]!));
+  assert.ok(rules.length > 10, "the sheet lays the page out");
+  const colours = new Set(rules.flatMap((m) => [...m[2]!.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((v) => v[1]!)).filter((name) => !/^--(font|size|weight|leading|gutter|section|column|max|measure|button|radius|min|focus|dot-pitch|pulse)/.test(name)));
+  assert.deepEqual([...colours].filter((c) => !["--bg", "--ink", "--text", "--mute", "--line", "--soft"].includes(c)), []);
+  assert.ok(colours.has("--soft"), "the pictures are on the soft grey");
+});

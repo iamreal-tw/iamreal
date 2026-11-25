@@ -24,6 +24,7 @@ const ORIGINAL_OTF = join(DESIGN_DIR, "fonts", "GenRyuMin2TW-B.otf");
  */
 const NOT_IN_TYPEFACE: Readonly<Record<string, string>> = {
   "▸": "card-proof.md, the mark before the two questions of step 1",
+  "✕": "check.md, the label 不是 of the wrong addresses in the picture of step 2, which is in the body's typeface",
 };
 
 /** The tables of a WOFF2 file, uncompressed, by tag (https://www.w3.org/TR/WOFF2/). Only tables that are stored as they are can be read. */

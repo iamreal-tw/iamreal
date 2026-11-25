@@ -65,7 +65,7 @@ export function checkPage(site: Site): Document {
 <h1 class="title">如何檢查 Threads 帳號的島民證明</h1>
 <p>在 Threads 上看到一個帳號，想知道有沒有一張台灣的自然人憑證替它背書，照下面四步看。不用安裝任何東西，也不用登入。</p>
 </section>
-<section class="steps">
+<section class="walk">
 <h2>四個步驟</h2>
 <ol class="step-list">
 ${step(
