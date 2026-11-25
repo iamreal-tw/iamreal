@@ -447,9 +447,9 @@ export function startApp(o: AppOptions): void {
   function accounts(f: CardProofFlow, status: CardStatus, screen: AccountsScreen = { mode: "open" }): void {
     // Step 3, with the name, is taken down here.
     if (screen.mode === "switch") return switchScreen(f, status, screen.typed ?? null);
-    if (screen.mode === "edit") return listScreen(f, status, editListView(status), { typed: screen.typed ?? null, keep: true });
+    if (screen.mode === "edit") return listScreen(f, status, editListView(status), { typed: screen.typed ?? null, editList: true });
     const view = accountsView(status);
-    if (view.mode === "fill") return listScreen(f, status, view, { typed: screen.typed ?? null, keep: false });
+    if (view.mode === "fill") return listScreen(f, status, view, { typed: screen.typed ?? null, editList: false });
     declaredScreen(f, status, view);
   }
 
@@ -472,6 +472,9 @@ export function startApp(o: AppOptions): void {
 
   /** The card's list as it is: each platform the screen offers, its account now or "". */
   const listNow = (status: CardStatus): Record<string, string> => Object.fromEntries(status.slots.filter((sl) => sl.row !== null).map((sl) => [sl.platform, sl.current ?? ""]));
+
+  /** 3 records of the card today: the sentence, and "back to the beginning" (which drops the PIN, as cancel does). */
+  const dailyLimitBody = (s: Sentence): HTMLElement[] => [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)), actions(secondary(COPY.accounts.restart, () => before()))];
 
   /** Step 4's screen, with the six steps' line above it, and its state for the tests. */
   function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {
@@ -504,8 +507,7 @@ export function startApp(o: AppOptions): void {
     const here = (s: CardStatus): void => accounts(f, s);
     const showHere = (_platform: string | null, m: Message): void => message.show(m);
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? // 3 records of the card today: this sentence and "back to the beginning" (which drops the PIN, as cancel does).
-        [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(view.dailyLimit)), actions(secondary(a.restart, () => before()))]
+      ? dailyLimitBody(view.dailyLimit)
       : [
           message.node,
           // The main button: the list as it is, nothing to type.
@@ -602,9 +604,10 @@ export function startApp(o: AppOptions): void {
    * account on a platform the device does not know: the card declares
    * nothing (a row filled is a new declaration), or after
    * accounts.edit_list (each row changed on its own: filled, changed,
-   * emptied). `keep`: accounts.keep goes back to what the card declares.
+   * emptied). `editList`: opened with accounts.edit_list; accounts.keep goes
+   * back to what the card declares.
    */
-  function listScreen(f: CardProofFlow, status: CardStatus, view: FillView, o: { typed: Readonly<Record<string, string>> | null; keep: boolean }): void {
+  function listScreen(f: CardProofFlow, status: CardStatus, view: FillView, o: { typed: Readonly<Record<string, string>> | null; editList: boolean }): void {
     const message = messageArea();
     const { fields, showUnder, valid } = fieldSet(status, message);
     const rowNodes = view.rows.map((r) => rowNode(r, o.typed?.[r.platform] ?? r.current, fields, { onEnter: next, valid }));
@@ -620,16 +623,15 @@ export function startApp(o: AppOptions): void {
       }
       if (!ok) return;
       // Back from step 5: the same rows, as they were typed.
-      choose(f, entries, (st) => accounts(f, st, { mode: o.keep ? "edit" : "open", typed: entries }), showUnder);
+      choose(f, entries, (st) => accounts(f, st, { mode: o.editList ? "edit" : "open", typed: entries }), showUnder);
     }
 
     const notes = view.notes.length ? el("div", { class: "tips" }, ...view.notes.map((n) => el("p", {}, ...n.map((x) => say(x))))) : null;
     const body: (HTMLElement | null)[] = view.dailyLimit
-      ? // 3 records of the card today: the list as it is, then this sentence and "back to the beginning" (which drops the PIN, as cancel does).
-        [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(view.dailyLimit)), actions(secondary(COPY.accounts.restart, () => before()))]
-      : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.keep ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
+      ? dailyLimitBody(view.dailyLimit)
+      : [notes, message.node, actionsEnd(primary(COPY.common.next, next)), o.editList ? actions(textButton(COPY.accounts.keep, () => accounts(f, status))) : null, cancel()];
     const lead = view.lead.map((line, i) => el("p", { class: i === 0 ? "status" : "", attrs: i === 0 ? { "data-status": "" } : { "data-fact": "" } }, ...line.flatMap((m) => messageNodes(m))));
-    showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.keep ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
+    showAccounts(view.dailyLimit ? "daily_limit" : view.state, o.editList ? "edit" : "fill", el("h1", {}, say(view.title)), ...lead, el("div", { class: "acctlist", attrs: { "data-list": "accounts" } }, ...rowNodes), ...body);
     queueMicrotask(() => [...fields.values()][0]?.input.focus());
   }
 

@@ -458,8 +458,11 @@ function consequence(rows: ConsequenceRow[], o: Partial<Consequence> = {}): Cons
   return { accounts: rows.filter((r) => r.kind !== "withdraw").map((r) => ({ platform: r.platform, username: r.username })), rows, firstRecord: false, today: TODAY, ...o };
 }
 
+/** Step 5's view: with one platform, its name; with more, the names of the test's table. */
+const cv = (cq: Consequence, single: string | null = null) => confirmView(cq, single, single !== null ? [single] : ["Example", "Threads"]);
+
 describe("confirm (step 5)", () => {
-  const rowsOf = (cq: Consequence) => confirmView(cq).rows.map((r) => [r.name, r.id, r.account, r.lines.map(t)]);
+  const rowsOf = (cq: Consequence) => cv(cq).rows.map((r) => [r.name, r.id, r.account, r.lines.map(t)]);
   const pointsOf = (v: { points: Sentence[] }) => v.points.map(t);
 
   test("each row: the platform's name and ID, the account, what happens", () => {
@@ -485,7 +488,7 @@ describe("confirm (step 5)", () => {
   });
 
   test("the words that no record can be deleted are their own part of the sentence (shown in bold)", () => {
-    const v = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
+    const v = cv(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
     const later = v.points[1]!;
     assert.equal(later.values.cannot_delete, "所有紀錄公開後無法刪除");
   });
@@ -508,22 +511,22 @@ describe("confirm (step 5)", () => {
   });
 
   test("the button by the whole list: 更新島民證明 when nothing changes", () => {
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })])).button, "更新島民證明");
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads").button, "更新島民證明");
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })])).button, "宣告這份清單");
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "alice", current: "alice" }), crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" })])).button, "宣告這份清單");
+    assert.equal(cv(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })])).button, "更新島民證明");
+    assert.equal(cv(consequence([crow({ kind: "refresh", username: "alice", current: "alice" })]), "Threads").button, "更新島民證明");
+    assert.equal(cv(consequence([crow({ kind: "refresh", username: "bob", current: null })])).button, "宣告這份清單");
+    assert.equal(cv(consequence([crow({ kind: "refresh", username: "alice", current: "alice" }), crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" })])).button, "宣告這份清單");
   });
 
   test("more than one platform, an account withdrawn: its row, and that the record stays", () => {
     const cq = consequence([crow({ platform: "test-example", row: EXAMPLE, kind: "withdraw", username: "a-b", current: "a-b" }), crow({ kind: "refresh", username: "alice", current: "alice" })]);
-    const v = confirmView(cq);
+    const v = cv(cq);
     assert.deepEqual(rowsOf(cq)[0], [EXAMPLE_NAME, "test-example", "a-b", ["收回"]]);
     assert.equal(v.withdrawStays, true);
     assert.equal(v.listedTogether, true);
   });
 
   test("one platform: that it is made public is in the first sentence; the platform named in the two points", () => {
-    const one = confirmView(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
+    const one = cv(consequence([crow({ kind: "first", username: "alice" })]), "Threads");
     assert.equal(one.listedTogether, false);
     assert.equal(one.intro, "按下後，證明紀錄會記下新的證明並公開給所有人：");
     assert.deepEqual(pointsOf(one), [
@@ -532,12 +535,12 @@ describe("confirm (step 5)", () => {
     ]);
     assert.equal(one.button, "宣告這個帳號");
     // A switch or declared again: 宣告這個帳號.
-    assert.equal(confirmView(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4 })]), "Threads").button, "宣告這個帳號");
-    assert.equal(confirmView(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
+    assert.equal(cv(consequence([crow({ kind: "switch", username: "bob", current: "alice", previous: "alice", switchesLeftAfter: 4 })]), "Threads").button, "宣告這個帳號");
+    assert.equal(cv(consequence([crow({ kind: "refresh", username: "bob", current: null })]), "Threads").button, "宣告這個帳號");
   });
 
   test("everything withdrawn: the other first sentence, the three points, the button naming the account (one platform)", () => {
-    const one = confirmView(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
+    const one = cv(consequence([crow({ kind: "withdraw", username: "alice", current: "alice" })]), "Threads");
     assert.equal(one.intro, "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：");
     assert.equal(one.listedTogether, false);
     assert.equal(one.withdrawStays, false);
@@ -753,7 +756,7 @@ describe("done (step 6)", () => {
     const d4 = accountsView(status([row]));
     assert.deepEqual(d4.mode === "declared" ? d4.current.map((c) => [c.account, c.raw]) : null, [["a  b ", true]]);
     const cq = consequence([crow({ platform: "x-new", row: null, kind: "refresh", username: "a  b ", current: "a  b " })]);
-    assert.deepEqual(confirmView(cq).rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);
+    assert.deepEqual(cv(cq).rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);
     const d = doneView(done(cq.rows, [k("x-new", "refresh", "a  b ")]));
     assert.deepEqual(d.card, [{ name: "x-new", account: "a  b ", raw: true }]);
     assert.deepEqual(d.rows.map((r) => [r.account, r.raw]), [["a  b ", true]]);

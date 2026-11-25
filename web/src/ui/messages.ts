@@ -592,7 +592,7 @@ function allUnchanged(rows: readonly { kind: string; username: string; current: 
  * names of the platforms the points speak of (the one, or each the device
  * knows of the server's table).
  */
-export function confirmView(cq: Consequence, single: string | null = null, platforms: readonly string[] = single !== null ? [single] : []): ConfirmView {
+export function confirmView(cq: Consequence, single: string | null, platforms: readonly string[]): ConfirmView {
   const c = COPY.confirm;
   const empty = cq.accounts.length === 0;
   const rows = cq.rows.map((r) => ({
