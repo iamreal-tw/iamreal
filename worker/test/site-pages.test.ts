@@ -1,7 +1,9 @@
-// The FAQ (/faq), how to verify (/verify), hanging a proof on a profile
+// The FAQ (/faq), how to verify (/verify), how to check an account's proof
+// (/check), what a card proof needs (/prepare), hanging a proof on a profile
 // (/hang, /hang/<short ID>) and the copy buttons' script (/copy.js), through
 // the Worker's HTTP (test/harness.ts), against the words of design/copy/
-// (faq.md, verify.md, hang.md), read the way test/pages.test.ts reads them.
+// (faq.md, verify.md, check.md, prepare.md, hang.md), read the way
+// test/pages.test.ts reads them.
 // The cases are the Go backend's (e159ab9:server/site_test.go).
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";

@@ -1,12 +1,13 @@
 /*
  * The pages visitors read: the home page, the FAQ, how to verify, what a
  * card proof needs, hanging a proof on a profile, the page of a card, the
- * page of an account and the proof log page (src/pages/). The navigation
+ * page of an account, the proof log page and how to check an account's
+ * proof (src/pages/). The navigation
  * bar and the foot are as wide as the site (--max-width); the content of
  * each page is still one column, at most 560 wide, until that page is laid
  * out after design/DESIGN.md (so far: the home page, what a card proof
- * needs, the FAQ, how to verify, hanging a proof, the page of a card and
- * the page of an account).
+ * needs, the FAQ, how to verify, how to check an account's proof, hanging
+ * a proof, the page of a card and the page of an account).
  *
  * The values of :root are design/tokens.json's, each the one of the same
  * name (test/style-sheet.test.ts): what each colour means, and where it is
