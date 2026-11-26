@@ -1320,6 +1320,8 @@ async function oldVersionAndNoNfc(): Promise<void> {
   press(say("app_read.tap_card"));
   await hold(nfc("none"));
   await waitText(say("app_before.no_nfc_title"), "the screen in place of step 1, from step 2", 20_000);
+  // The app sends its counts one after the other, off the card proof's way: its stop is let arrive before the app is ended below.
+  for (let i = 0; i < 100 && !countsSent.some((c) => c.event === "stop" && c.reason === "no_nfc"); i++) await sleep(100);
   // A phone without NFC, as the app opens.
   phoneHasNfc = false;
   emulator.shell(`am force-stop ${APP}`);
