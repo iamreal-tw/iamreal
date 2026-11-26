@@ -124,6 +124,12 @@ class Counts(private val deps: Deps) {
             if (!stopped) send("event" to "action", "action" to "tap_dropped", "tap" to tap.toString())
         }
 
+        /** The cardholder sent the same record again after a submission that did not get through. */
+        @Synchronized
+        fun resubmitted() {
+            if (!stopped) send("event" to "action", "action" to "resubmit")
+        }
+
         /** The timed step [step] (`crl`, `tree`, `proved`) took [ms] milliseconds. */
         @Synchronized
         fun took(step: String, ms: Long) {

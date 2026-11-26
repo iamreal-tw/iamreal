@@ -281,10 +281,6 @@ again, and the card proof goes on.
 
 ### Durations
 
-A timed step that took a number of milliseconds is sent as the code whose
-range holds that number: under 1000 is `lt_1s`, 1000 to 2999 is `1s_3s`,
-and so on; 180000 and more is `gt_3m`.
-
 | Code | Meaning |
 |---|---|
 | `lt_1s` | under 1 second |
@@ -294,6 +290,13 @@ and so on; 180000 and more is `gt_3m`.
 | `30s_60s` | 30 seconds to under 60 |
 | `1m_3m` | 1 minute to under 3 |
 | `gt_3m` | 3 minutes or more |
+
+A client measures a timed step on its own clock, from when the step begins
+to when it is done, and sends the one duration the time falls in: each
+holds its start and not its end, so 999 ms is `lt_1s` and 1000 ms is
+`1s_3s` (`durations_of` in the vectors). The time itself is not sent. A
+step that did not get done sends no duration, and a time below 0 (a clock
+that went back) none either.
 
 ### Sources
 
@@ -336,7 +339,7 @@ Without a version. A client that cannot tell sends `other`.
 
 [`vectors/counts.json`](vectors/counts.json): `table` is every code above
 with the clients it is for; `cases` are parsed counts, each taken or
-dropped; `durations` are numbers of milliseconds and the code each is sent
-as; `device_ids` are a value a device keeps, a moment, 16 random bytes, and
+dropped; `durations_of` are numbers of milliseconds and the duration each
+is (`null`: none); `device_ids` are a value a device keeps, a moment, 16 random bytes, and
 the card proof device ID it uses then and the value it keeps from then on
 (`null`: the one it kept).

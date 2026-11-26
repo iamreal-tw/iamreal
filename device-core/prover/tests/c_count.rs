@@ -173,13 +173,19 @@ fn what_is_not_an_object_of_strings_is_not_a_count() {
 #[test]
 fn every_duration_of_the_vectors() {
     let v: Value = vectors("counts.json");
-    let durations = v["durations"].as_array().unwrap();
+    let durations = v["durations_of"].as_array().unwrap();
     assert!(!durations.is_empty());
     for d in durations {
-        let ms = d["ms"].as_u64().unwrap();
+        // A time below 0 is no duration, and no u64.
+        let Some(code) = d["took"].as_str() else {
+            assert!(d["ms"].as_f64().unwrap() < 0.0, "{d}");
+            continue;
+        };
+        // Whole milliseconds: a fraction dropped stays in its duration, as each starts on a whole one.
+        let ms = d["ms"].as_f64().unwrap().floor() as u64;
         assert_eq!(
             call(|out| unsafe { idc_count_took(ms, out) }).as_deref(),
-            Ok(d["took"].as_str().unwrap()),
+            Ok(code),
             "{ms} ms"
         );
     }

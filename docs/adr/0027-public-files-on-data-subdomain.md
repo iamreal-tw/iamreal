@@ -25,6 +25,8 @@ data.iamreal.tw/
     oldest.json                   連線紀錄裡最舊一筆的日期，和後台看的時間
   count-events/
     oldest.json                   計數的明細裡最舊一檔的日期，和後台看的時間
+  count-totals/
+    oldest.json                   計數的加總裡最早一天的日期，和後台看的時間
 ```
 
 - **檔名是這一檔之前的筆數**，寫成 16 位數字，不是這一檔第一筆的序號。序號照舊從 1 開始，指紋檔的筆數照舊等於最後一筆的序號。這樣雜湊清單 `0000000000001000.txt` 開頭附的值，就是指紋檔裡筆數 1000 的那個指紋。
@@ -32,6 +34,7 @@ data.iamreal.tw/
 - 不需要列出目錄。指紋檔最後一行的筆數決定有哪些紀錄檔和雜湊清單；`crl/index.jsonl` 列出有哪些清冊。
 - `connection-log/oldest.json` 不是證明紀錄的一部分，重驗用不到它（2026-11-26 加，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）。連線紀錄本身不公開，放在另一個沒有公開網域的儲存桶（ADR-0022）；這個檔只有兩個值：後台每小時去看的時間，和那時最舊一筆連線紀錄的日期。它讓任何人從外面看得出連線紀錄有沒有照說的 31 天刪掉，不用另外開一個要權杖的地方。
 - `count-events/oldest.json` 也不是證明紀錄的一部分，重驗用不到它（2026-11-26 加，[#54](https://github.com/iamreal-tw/iamreal/issues/54)）。計數的明細本身不公開，和連線紀錄放在同一個沒有公開網域的儲存桶（ADR-0032）；這個檔只有兩個值：後台每小時去看的時間，和那時最舊一檔明細的日期。它讓任何人從外面看得出計數的明細有沒有照說的 31 天刪掉。
+- `count-totals/oldest.json` 也不是證明紀錄的一部分，重驗用不到它（2026-11-27 加，[#435](https://github.com/iamreal-tw/iamreal/issues/435)）。計數的加總本身不公開，和明細放在同一個沒有公開網域的儲存桶，永久保存；這個檔只有兩個值：後台每小時去看的時間，和那時最早一天加總的日期。它讓任何人從外面看得出加總有沒有被到期規則刪掉。
 - 測試的證明紀錄不放在這個網域。規格只規定目錄裡面怎麼排，不規定網址，所以測試的證明紀錄在自己的網址下用同樣的排法。
 
 ## 每天換日時
@@ -56,7 +59,7 @@ data.iamreal.tw/
 
 ## 留多久
 
-紀錄目錄、雜湊清單、指紋檔、清冊存檔永久保留。`connection-log/oldest.json`、`count-events/oldest.json` 各只有一個檔，每小時整個換掉，不留舊的。卡片狀態檔只留 7 天（ADR-0025），由 R2 的生命週期規則照 `proof-log/card-state/` 刪（[object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)），不靠後台的程式。
+紀錄目錄、雜湊清單、指紋檔、清冊存檔永久保留。`connection-log/oldest.json`、`count-events/oldest.json`、`count-totals/oldest.json` 各只有一個檔，每小時整個換掉，不留舊的。卡片狀態檔只留 7 天（ADR-0025），由 R2 的生命週期規則照 `proof-log/card-state/` 刪（[object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)），不靠後台的程式。
 
 規則只需要有紀錄用到的清冊（`spec/revocation-tree.md`），但沒用到的也保留。
 

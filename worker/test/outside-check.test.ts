@@ -10,7 +10,7 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
+import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, COUNT_TOTALS_FIRST, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
 import type { Reader } from "./site-check.ts";
 
 /** The date this test's proof log was cleared on: the day its object first runs. */
@@ -57,14 +57,17 @@ async function failsOnly(parts: Partial<Parts>, line: string, saying: RegExp): P
 
 test("every check passes on a Worker that published today and has CRLs of both issuer keys", async () => {
   const lines = await checkFromOutside(AS_RUNNING);
-  assert.equal(lines.length, 8, "a line for each thing checked, and the two not checked yet");
+  assert.equal(lines.length, 9, "a line for each thing checked, and the three not checked yet");
   assert.deepEqual(lines.filter((l) => !l.ok), []);
   // The connection logs' line is off until #20 is deployed: it says so, and passes.
   assert.equal(CONNECTION_LOG_CHECKED, false);
-  assert.equal(lines.at(-2)!.what, "not checked yet: connection-log/oldest.json, the connection logs' age (#20)");
+  assert.equal(lines.at(-3)!.what, "not checked yet: connection-log/oldest.json, the connection logs' age (#20)");
   // And the counts' line until #54 is.
   assert.equal(COUNT_EVENTS_CHECKED, false);
-  assert.equal(lines.at(-1)!.what, "not checked yet: count-events/oldest.json, the counts' age (#54)");
+  assert.equal(lines.at(-2)!.what, "not checked yet: count-events/oldest.json, the counts' age (#54)");
+  // And the totals' line until the test site has its first day of totals (#435).
+  assert.equal(COUNT_TOTALS_FIRST, null);
+  assert.equal(lines.at(-1)!.what, "not checked yet: count-totals/oldest.json, the counts' totals are kept (#435)");
 });
 
 test("the connection logs (#20), when checked: the back end looked in the last 2 hours, and none is older than 33 days in UTC; a missing file fails", async () => {
@@ -93,6 +96,27 @@ test("the connection logs (#20), when checked: the back end looked in the last 2
   assert.deepEqual(await only("not json"), [`${line}: it is not JSON`]);
   assert.deepEqual(await only('{"oldest":null}'), [`${line}: it has no time of checking in UTC`]);
   assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07Z","oldest":"27 Oct"}'), [`${line}: its oldest is neither a date nor null`]);
+});
+
+test("the counts' totals (#435), when checked: the back end looked in the last 2 hours, and the earliest day of totals is still the first", async () => {
+  const now = Date.parse("2026-11-26T12:30:00Z");
+  const withFile = (body: string | null): Partial<Parts> => ({
+    now,
+    countTotalsFirst: "2026-11-20",
+    clearedOn: "2026-11-25",
+    data: async (p) => {
+      if (p === "/count-totals/oldest.json") return body === null ? new Response(null, { status: 404 }) : new Response(body, { headers: { "Content-Type": "application/json" } });
+      if (p.startsWith("/proof-log/")) return new Response(null, { status: 404 });
+      return answering("/crl/index.jsonl", () => new Response(null, { status: 404 }), data)(p);
+    },
+  });
+  const line = "the data domain: count-totals/oldest.json says the back end looked in the last 2 hours, and the counts' totals still begin on 2026-11-20";
+  const only = async (body: string | null): Promise<string[]> => (await failed(withFile(body))).filter((l) => l.startsWith("the data domain: count-totals/"));
+  assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-11-20"}'), []);
+  assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-11-21"}'), [`${line}: the earliest day of totals is 2026-11-21`], "a rule deleted the first day");
+  assert.deepEqual(await only('{"checked":"2026-11-26T12:00:07.123Z","oldest":null}'), [`${line}: the earliest day of totals is none`]);
+  assert.deepEqual(await only('{"checked":"2026-11-26T10:29:00Z","oldest":"2026-11-20"}'), [`${line}: the back end last looked 2 hours ago`]);
+  assert.deepEqual(await only(null), [`${line}: there is no file`]);
 });
 
 test("config not answering, and the home page not answering: each its own line", async () => {
