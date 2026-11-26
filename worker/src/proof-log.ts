@@ -42,6 +42,7 @@ import { type NewestCrls, newestOfEach } from "./crl-index.ts";
 import { ISSUER_NAMES } from "./issuers.ts";
 import type { CardsOfAccount, CardsOfShortId, Counts, LogPart } from "./page-data.ts";
 import { CACHE_DAILY, CACHE_FULL_FILE, FINGERPRINT_FILE, type FileBucket, type FileHeaders, PROOF_LOG_DIRECTORY, TYPE_JSON_LINES, TYPE_TEXT, cardStateFileKey, lengthAndSha256, readFullFile, writeAndReadBack, writeStreamAndReadBack } from "./proof-log-files.ts";
+import { PUBLISHED_STATES, REBUILD_STATE_TABLE, type RebuildProgress, RebuildRefused, beginRebuild, dropPublishedStates, publishedStatesDate, rebuildProgress, rebuildStep } from "./rebuild.ts";
 import { type ProofLogSettings, proofLogSettingsOf } from "./settings.ts";
 import { type CardsSoFar, VIEW_TABLES, accountCards, cardsOfAccount, cardsOfShortId, clearViews, counts, logRows, ordinalOf, ordinalsOwed, storedLines, viewOf, viewSeq, writeView, writeViewsOf } from "./views.ts";
 
@@ -195,6 +196,8 @@ const TABLES: readonly string[] = [
   // The views (views.ts). They came after the others, with SCHEMA_VERSION unchanged: an object made without them
   // gets them when it next starts, and fills them from its records (the constructor).
   ...VIEW_TABLES,
+  // What the last rebuild from the proof log was (rebuild.ts). It came after the others, with SCHEMA_VERSION unchanged.
+  REBUILD_STATE_TABLE,
 ];
 
 /**
@@ -407,9 +410,11 @@ export class ProofLog extends DurableObject<Env> {
    * of the record rules than this build's (spec/record-rules.md, "The
    * version number"). The object then issues no challenge and takes no
    * submission, so that no record is written from a state the rules of this
-   * build did not leave; everything else goes on.
+   * build did not leave; everything else goes on. A rebuild from the proof
+   * log that ends with a swap leaves a state this build's rules computed,
+   * and makes this false (`#rebuild`).
    */
-  readonly #paused: boolean;
+  #paused: boolean;
   /**
    * Whether the settings name another object than this one: the object of a
    * test log that was cleared (README.md, "清空測試的證明紀錄"). No request
@@ -598,7 +603,7 @@ export class ProofLog extends DurableObject<Env> {
    */
   async issueChallenge(): Promise<{ challenge: string | null }> {
     this.#checkTables();
-    if (this.#paused) return { challenge: null };
+    if (this.#paused || this.#rebuilding()) return { challenge: null };
     const issued = now().getTime();
     const challenge = `${formatDay(taiwanDay(issued))}.${encodeBase32(this.challengeRandom())}`;
     // A date outside 2000 to 2049 is not a challenge.
@@ -623,7 +628,7 @@ export class ProofLog extends DurableObject<Env> {
    */
   beginSubmission(challenge: string): "ok" | SubmissionRefusal {
     this.#checkTables();
-    if (this.#paused) return "paused";
+    if (this.#paused || this.#rebuilding()) return "paused";
     // Before the submission is counted: a record could not be written, and the challenge stays as it was.
     this.#checkViews();
     const row = this.#challenge(challenge);
@@ -657,7 +662,7 @@ export class ProofLog extends DurableObject<Env> {
    */
   async accept(fields: RecordFields): Promise<AcceptAnswer> {
     this.#checkTables();
-    if (this.#paused) return refused("paused");
+    if (this.#paused || this.#rebuilding()) return refused("paused");
     this.#checkViews();
     for (;;) {
       const { count, fingerprint } = this.#proofLogRow();
@@ -1281,9 +1286,113 @@ export class ProofLog extends DurableObject<Env> {
     this.ctx.storage.sql.exec("UPDATE published SET in_bucket = 1 WHERE date <= ?", lastDate);
   }
 
+  /** The failures in a row of a step of the rebuild that could not be made (the bucket did not answer), and when it is tried again. */
+  readonly #rebuildRetries = new Retries(this.ctx.storage.sql, "rebuild", LONGEST_RETRY_MS);
+
+  /** Whether a rebuild from the proof log is running: begun and neither put in place nor refused. No challenge is issued and no record taken meanwhile. */
+  #rebuilding(): boolean {
+    return rebuildProgress(this.ctx.storage.sql)?.status === "running";
+  }
+
+  /** What is known of the last rebuild from the proof log this object began, or null if it never began one. */
+  rebuildStatus(): RebuildProgress | null {
+    this.#checkTables();
+    return rebuildProgress(this.ctx.storage.sql);
+  }
+
+  /**
+   * Begins the rebuild from the proof log named `token` (ADR-0033; rebuild.ts),
+   * unless the last rebuild this object began has that name: a rebuild is
+   * made once for each name, whether it ended with a swap or was refused.
+   * The steps are the alarm's (`#rebuild`). Returns whether one was begun.
+   *
+   * `protected`: what calls it is the object itself, when it starts with a
+   * name it has not made a rebuild for, and the test build.
+   */
+  protected async beginRebuild(token: string): Promise<boolean> {
+    this.#checkTables();
+    if (rebuildProgress(this.ctx.storage.sql)?.token === token) return false;
+    // Not while the views are being filled, or a full file moved: both read and write what a rebuild replaces.
+    await this.viewsFilling;
+    await this.#moving;
+    await beginRebuild(this.ctx.storage, this.bucket(), token, now().getTime());
+    this.#rebuildRetries.succeeded();
+    console.log(JSON.stringify({ event: "rebuild_begun", token }));
+    await this.#setAlarmWithoutFailing();
+    return true;
+  }
+
+  /**
+   * The rebuild from the proof log, one step each time the alarm rings: a
+   * log file, or the records the object keeps (rebuild.ts, `rebuildStep`).
+   * Due at once while a rebuild is running; after a step that failed
+   * without ending the rebuild (the bucket did not answer), when the wait
+   * of the failures in a row is over (`Retries`).
+   *
+   * - A step is one transaction, so a rebuild that breaks off anywhere
+   *   leaves every table the object answers from as it was, and goes on
+   *   from the last step that was made when the alarm next rings, also
+   *   after the object started again.
+   * - The last step puts the result in place only if it is the proof log of
+   *   the last published line; otherwise the rebuild ends `refused`, with
+   *   the reason, and nothing has changed.
+   * - After a swap the states of the cards are this build's rules', so the
+   *   proof log is no longer paused for its version, and the views are at
+   *   the last record. The card state file of the last published date is
+   *   written again at once, from the states the rebuild computed for that
+   *   line's count, for a re-verifier to compare (spec/record-rules.md,
+   *   "The card state file").
+   * - One line is written for each step, with the count so far, and one
+   *   when it ends.
+   *
+   * No move of full files and no publication runs meanwhile: they are
+   * pieces of the alarm's work too, which runs one piece after the other.
+   */
+  #rebuild: TimedWork = {
+    due: () => (this.#rebuilding() ? (this.#rebuildRetries.againAt() ?? 0) : null),
+    run: async (time) => {
+      const sql = this.ctx.storage.sql;
+      try {
+        const step = await rebuildStep(this.ctx.storage, this.bucket(), { kind: this.settings.kind, platforms: this.settings.platforms, today: taiwanDay(time), time });
+        this.#rebuildRetries.succeeded();
+        const progress = rebuildProgress(sql)!;
+        console.log(JSON.stringify({ event: step === "done" ? "rebuild_swapped" : "rebuild_step", token: progress.token, records: progress.records }));
+        if (step === "more") return;
+        this.#paused = false;
+        this.#viewsAtLastRecord = true;
+        this.#fillRetries.succeeded();
+      } catch (e) {
+        if (e instanceof RebuildRefused) {
+          const progress = rebuildProgress(sql)!;
+          console.log(JSON.stringify({ event: "rebuild_refused", token: progress.token, records: progress.records, reason: progress.reason }));
+        } else {
+          this.#rebuildRetries.failedAt(time);
+          logFailure("rebuild_step_failed", e);
+        }
+        return;
+      }
+      // The swap is made. The card state file is written from it; a failure of that is its own, and the next daily publication writes one.
+      try {
+        const date = publishedStatesDate(sql);
+        if (date !== null) {
+          copyCards(sql, PUBLISHED_STATES);
+          try {
+            await this.#writeCardStateFile(date);
+          } finally {
+            dropCardsCopy(sql);
+          }
+        }
+      } catch (e) {
+        logFailure("rebuild_card_state_file_not_written", e);
+      } finally {
+        dropPublishedStates(sql);
+      }
+    },
+  };
+
   /** Every piece of timed work of the object (TimedWork). Whatever comes to need the alarm is added here. */
   protected timedWork(): readonly TimedWork[] {
-    return [this.#expiredChallenges, this.#viewsBehind, this.#fullFiles, this.#dailyPublication];
+    return [this.#expiredChallenges, this.#rebuild, this.#viewsBehind, this.#fullFiles, this.#dailyPublication];
   }
 
   /**
