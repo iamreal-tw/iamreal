@@ -36,8 +36,10 @@
 #   (build-core.sh).
 #
 # What it does not see: what Barretenberg's own code prints, what Rust
-# prints when the core panics (README.md, on logs), and anything a later
-# change hides from these patterns. It guards against slips; it does not
+# prints when the core panics (README.md, on logs), a required reason API
+# reached in a way the names it looks for do not show, whether the reason
+# the privacy manifest gives for an API is the true one, and anything a
+# later change hides from these patterns. It guards against slips; it does not
 # replace reading the change.
 #
 # IAMREAL_APP_SOURCES, IAMREAL_TEST_SOURCES, IAMREAL_PROJECT_FILE and
@@ -180,10 +182,10 @@ done < "$repo/device-core/crs.sha256"
 # space. What this does not see: an API reached in a way these names do not
 # show, and whether the reason written for a category is the true one.
 manifest=$app/PrivacyInfo.xcprivacy
-written=$sources/PrivacyInfo.xcprivacy
+manifest_source=$sources/PrivacyInfo.xcprivacy
 if [ ! -f "$manifest" ]; then
   problem "the app has no PrivacyInfo.xcprivacy, its privacy manifest"
-elif [ "$(plutil -convert xml1 -o - "$manifest" 2>/dev/null)" != "$(plutil -convert xml1 -o - "$written" 2>/dev/null)" ]; then
+elif [ "$(plutil -convert xml1 -o - "$manifest" 2>/dev/null)" != "$(plutil -convert xml1 -o - "$manifest_source" 2>/dev/null)" ]; then
   problem "PrivacyInfo.xcprivacy in the app is not App/PrivacyInfo.xcprivacy"
 else
   [ "$(plutil -extract NSPrivacyTracking raw -o - "$manifest" 2>/dev/null)" = false ] || problem "PrivacyInfo.xcprivacy does not say NSPrivacyTracking is false"
@@ -202,7 +204,8 @@ else
   if imports "mach_absolute_time" || names "systemUptime"; then used="$used SystemBootTime"; fi
   if imports "statfs|statvfs|fstatfs|fstatvfs" || names "volumeAvailableCapacity[A-Za-z]*Key|volumeTotalCapacityKey|systemFreeSize|systemSize"; then used="$used DiskSpace"; fi
   if names "activeInputModes"; then used="$used ActiveKeyboards"; fi
-  used=$(printf '%s\n' $used | sort | tr '\n' ' ')
+  # One word to a line, sorted, as `declared` is; no word, no line.
+  used=$(printf '%s\n' $used | sed '/^$/d' | sort | tr '\n' ' ')
   [ "$declared" = "$used" ] || problem "PrivacyInfo.xcprivacy declares the required reason APIs [ $declared], and the app uses [ $used]"
 fi
 
