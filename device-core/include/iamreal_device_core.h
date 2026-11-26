@@ -371,7 +371,9 @@ int32_t idc_session_check_date(idc_session session, int64_t now, idc_buf *out);
  * Any call forgets the challenge taken before, and so does doing step 2 or
  * step 4 again, or a records request refused for its files. With "ok": false the card
  * proof stops; the app says why and does not tell the server.
- * IDC_ERR_REFUSED unless steps 1 to 4 all passed. IDC_ERR_ARGUMENT for a
+ * IDC_ERR_REFUSED unless steps 1 to 4 all passed, and for a challenge
+ * this session computed a proof for (idc_session_records_request): it is
+ * not taken again. IDC_ERR_ARGUMENT for a
  * clock outside the years 2000 to 2049, and the session starts over. */
 int32_t idc_session_check_challenge(idc_session session, int64_t now,
                                     const uint8_t *challenge, size_t challenge_len,
@@ -410,6 +412,14 @@ int32_t idc_session_card_state_request(idc_session session, int64_t now,
  * proof is made at a time; a second call waits. The core compares the
  * proof's public inputs with the ones it expects and returns nothing if
  * any differs.
+ *
+ * One proof for the card's signatures (spec/device-checks.md): once the
+ * two signatures are found to be the card's, the challenge is spent,
+ * whether or not a proof comes out. A second call is IDC_ERR_REFUSED, and
+ * the session does not take this challenge again, whatever steps are done
+ * again: another proof takes another challenge, and so another signature
+ * of the card. The app keeps what this returned to send it again; when
+ * it failed, the app stops the card proof and drops the signatures.
  *
  * IDC_ERR_REFUSED unless steps 1 to 4 all passed, the challenge is the
  * one idc_session_check_challenge took last, and its date is the date the
