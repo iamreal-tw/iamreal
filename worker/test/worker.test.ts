@@ -18,7 +18,7 @@ const G3_SECOND = bytes("the fake MOICA's G3 CRL, second");
 const nameOf = (crl: Uint8Array): string => `crl/${sha256(crl)}.crl`;
 
 /** The names of the CRL files in the bucket: everything but the index. */
-const stored = async (worker: TestWorker): Promise<string[]> => (await worker.files()).map((f) => f.key).filter((key) => key !== "crl/index.jsonl");
+const stored = async (worker: TestWorker): Promise<string[]> => (await worker.files("crl/")).map((f) => f.key).filter((key) => key !== "crl/index.jsonl");
 
 describe("the Worker in the local workerd", () => {
   let worker: TestWorker;
@@ -55,11 +55,11 @@ describe("the hourly schedule mirrors MOICA's two CRLs", () => {
   test("each CRL is stored as the bytes MOICA gave, named by their SHA-256", async () => {
     worker.moica.serve("G2", G2_FIRST);
     worker.moica.serve("G3", G3_FIRST);
-    assert.deepEqual(await worker.files(), []);
+    assert.deepEqual(await worker.files("crl/"), []);
 
     assert.deepEqual(await worker.runSchedule(), { outcome: "ok", noRetry: false });
 
-    const files = (await worker.files()).filter((f) => f.key !== "crl/index.jsonl");
+    const files = (await worker.files("crl/")).filter((f) => f.key !== "crl/index.jsonl");
     assert.deepEqual(files.map((f) => f.key), [nameOf(G2_FIRST), nameOf(G3_FIRST)].sort());
     for (const f of files) assert.equal(f.key, nameOf(f.bytes));
     // A file's name never gets other bytes: it may be cached for a year.
@@ -67,13 +67,13 @@ describe("the hourly schedule mirrors MOICA's two CRLs", () => {
   });
 
   test("a second run with the same CRLs stores nothing again, and leaves the index as it is", async () => {
-    const before = await worker.files();
+    const before = await worker.files("crl/");
     assert.equal(before.length, 3);
     await new Promise((resolve) => setTimeout(resolve, 20)); // so that a rewritten file would have a later time
 
     assert.equal((await worker.runSchedule()).outcome, "ok");
 
-    const after = await worker.files();
+    const after = await worker.files("crl/");
     assert.deepEqual(after.map((f) => [f.key, f.uploaded.getTime()]), before.map((f) => [f.key, f.uploaded.getTime()]));
   });
 

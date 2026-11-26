@@ -72,19 +72,19 @@ describe("a round of the mirror writes the archive and its index", () => {
   });
 
   test("every object says how long it may be cached: a CRL file a year, the index a minute", async () => {
-    for (const f of await worker.files()) assert.equal(f.cacheControl, f.key === INDEX ? "public, max-age=60" : "public, max-age=31536000, immutable", f.key);
-    assert.equal((await worker.files()).length, 3);
+    for (const f of await worker.files("crl/")) assert.equal(f.cacheControl, f.key === INDEX ? "public, max-age=60" : "public, max-age=31536000, immutable", f.key);
+    assert.equal((await worker.files("crl/")).length, 3);
   });
 
   test("the same CRLs again: nothing is stored again, no tree is built, and the index is not written again", async () => {
-    const before = await worker.files();
+    const before = await worker.files("crl/");
     const builtBefore = indexed(worker).length;
     assert.equal(builtBefore, 2);
     await new Promise((resolve) => setTimeout(resolve, 20)); // so that a rewritten object would have a later time
 
     await round(worker);
 
-    assert.deepEqual((await worker.files()).map((f) => [f.key, f.uploaded.getTime()]), before.map((f) => [f.key, f.uploaded.getTime()]));
+    assert.deepEqual((await worker.files("crl/")).map((f) => [f.key, f.uploaded.getTime()]), before.map((f) => [f.key, f.uploaded.getTime()]));
     assert.equal(indexed(worker).length, builtBefore);
   });
 
