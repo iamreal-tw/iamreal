@@ -33,7 +33,8 @@ pub enum Verdict {
     /// no longer do a card proof.
     OkUntil(Date),
     /// The app does not ask for the PIN or read the card: it must be updated.
-    Stop,
+    /// With the date the bound started on, which the screen says.
+    Stop(Date),
     /// The field cannot be read: the app does not go on.
     Unreadable,
 }
@@ -70,6 +71,6 @@ pub fn verdict(config: &[u8], client: Client, app_build: u32, today: Date) -> Ve
     } else if today < from {
         Verdict::OkUntil(from)
     } else {
-        Verdict::Stop
+        Verdict::Stop(from)
     }
 }
