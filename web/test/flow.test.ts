@@ -300,6 +300,14 @@ describe("the operator stopped taking card proofs (config's paused, #105)", () =
     assert.equal(s.card.signed.length, 0);
     assertNoCardState(s);
   });
+  test("the challenge answered 503 paused (stopped after the card's state was read): stopped under the server, nothing signed a second time", async () => {
+    const s = await setup({ echoPublicInputs: true, backend: { challenge: () => ({ status: 503, body: { error: "paused" } }) } });
+    const cq = await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "paused", status: 503 });
+    assert.notEqual(s.flow.stop, null, "paused ends the flow");
+    assert.equal(s.card.signed.length, 1, "no second signature");
+  });
+
   test("config says not paused, or says nothing of it (an older server): the card proof goes on", async () => {
     for (const config of [{ paused: false, crl_max_age_days: 3, platforms: [THREADS_ROW] }, { crl_max_age_days: 3, platforms: [THREADS_ROW] }]) {
       const s = await setup({ backend: { config } });

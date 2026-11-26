@@ -113,7 +113,7 @@ describe("stops", () => {
     [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
     // The operator stopped taking card proofs, or the server stopped by itself (docs/api/card-proof.md, paused).
-    [{ code: "server", server: "paused", status: 503 }, "現在暫停收過卡，證明紀錄沒有變動。請晚點再來。", 4],
+    [{ code: "server", server: "paused", status: 503 }, COPY.stops.paused, 4],
     // The record rules, when the card's state changed after it was asked.
     [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", 4],
     [{ code: "server", server: "switch_limit", status: 400 }, "清單裡有一個平台不能再更換，整份清單都沒有記下，證明紀錄沒有變動。請再讀一次卡片。", 4],
