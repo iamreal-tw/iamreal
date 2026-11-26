@@ -195,6 +195,12 @@ export const FONT_PATH = `/${FONT_FILE}`;
 /** Where the link preview's image is: a file of Static Assets, a copy of design/screens/og-image.png. */
 export const OG_IMAGE_PATH = "/og-image.png";
 
+/** Where the site's icon is: a file of Static Assets (scripts/favicon.ts), at the address a browser or a link preview asks for by itself. */
+export const FAVICON_PATH = "/favicon.ico";
+
+/** The icon as every page writes it: the same file at /favicon.ico, so a page and a request for the address by itself get one image (#356). */
+export const FAVICON_LINK = `<link rel="icon" href="${FAVICON_PATH}">`;
+
 /**
  * The link preview's image as every page that has a link preview writes it
  * (proof-page.md, section 8, 預覽圖): the same image on each, at the address
@@ -253,6 +259,8 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   assert.equal(page.includes(previewImageMeta(test ? "test.iamreal.tw" : "iamreal.tw")), preview, `${path}: the link preview's image`);
   assert.equal(page.split("og:image").length - 1, preview ? 5 : 0, `${path}: the image once, and no other`);
   assert.ok(page.includes('<link rel="stylesheet" href="/pages.css">'), `${path}: the page has the style sheet`);
+  assert.equal(page.split('rel="icon"').length - 1, 1, `${path}: one icon`);
+  assert.ok(page.includes(FAVICON_LINK) && page.indexOf(FAVICON_LINK) < page.indexOf("</head>"), `${path}: the icon is /favicon.ico, in the head`);
   checkNavAndFoot(path, page);
   const mark = testProofLogMark(CLEARED_ON);
   assert.equal(page.includes("測試的證明紀錄"), test, `${path}: says 測試的證明紀錄`);

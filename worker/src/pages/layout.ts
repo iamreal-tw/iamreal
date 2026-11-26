@@ -7,6 +7,13 @@ import { Html, html } from "./html.ts";
 /** Where the style sheet is served, and what the pages link to. */
 export const CSS_PATH = "/pages.css";
 
+/**
+ * The site's icon, which every page links to (#356): site/favicon.ico, sent by
+ * Static Assets at the address a browser or a link preview asks for by itself,
+ * so both get the same image (scripts/favicon.ts).
+ */
+export const FAVICON_PATH = "/favicon.ico";
+
 /** Where the copy buttons' script is (site/copy.js, sent by Static Assets): loaded by /faq, /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
@@ -132,6 +139,7 @@ ${d.preview === false ? new Html("") : html`<meta property="og:title" content="$
 <meta property="og:image:alt" content="${OG_IMAGE_ALT}">
 `}${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
+<link rel="icon" href="${FAVICON_PATH}">
 ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
 ` : new Html("")}${d.demo === true ? html`<script src="${DEMO_JS_PATH}" defer></script>
 ` : new Html("")}</head>

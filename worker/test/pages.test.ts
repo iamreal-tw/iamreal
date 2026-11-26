@@ -9,10 +9,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
+import { icoImages } from "../scripts/favicon.ts";
 import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, codeBlocks, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withDemo, withScript } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, FAVICON_PATH, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withDemo, withScript } from "./pages.ts";
 import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -494,11 +495,11 @@ describe("every page", () => {
     assert.ok(!none.includes("<b>x") && !none.includes("&lt;b&gt;") && !none.includes("<i>") && !none.includes("&lt;i&gt;"));
   });
 
-  test("the pages, the style sheet, the script, the typeface and the link preview's image take GET and HEAD only; HEAD has the headers of GET", async () => {
+  test("the pages, the style sheet, the script, the typeface, the link preview's image and the icon take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH]) {
-      // The style sheet, the script, the typeface and the image are files of Static Assets.
-      const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH || path === OG_IMAGE_PATH;
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH, FAVICON_PATH]) {
+      // The style sheet, the script, the typeface, the image and the icon are files of Static Assets.
+      const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH || path === OG_IMAGE_PATH || path === FAVICON_PATH;
       const cache = file ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
       assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
@@ -570,13 +571,32 @@ describe("every page", () => {
     assert.deepEqual(await worker.seen(), [], "the Worker's code ran for neither request");
   });
 
+  test("the icon: site/favicon.ico, the mark at 16, 32 and 48 pixels, sent by Static Assets without the Worker, with the pages' headers and an ETag to ask again by", async () => {
+    await freshProofLog(worker, { clearedOn: CLEARED_ON });
+    await worker.seen();
+    const res = await worker.fetch(FAVICON_PATH);
+    assert.equal(res.status, 200);
+    // Static Assets names the type from the extension, as it does for the other files.
+    assert.match(res.headers.get("content-type") ?? "", /^image\/(x-icon|vnd\.microsoft\.icon)$/);
+    checkVisitorHeaders(FAVICON_PATH, res, { cache: "no-cache" });
+    const ico = Buffer.from(await res.arrayBuffer());
+    assert.ok(ico.equals(readFileSync(join(WORKER_DIR, "site", "favicon.ico"))), "site/favicon.ico, byte for byte");
+    assert.deepEqual(icoImages(ico).map((i) => i.size), [16, 32, 48]);
+    const etag = res.headers.get("etag");
+    assert.match(etag ?? "", /^"[0-9a-f]+"$/);
+    const again = await worker.fetch(FAVICON_PATH, { headers: { "If-None-Match": etag! } });
+    assert.equal(again.status, 304);
+    checkVisitorHeaders(`${FAVICON_PATH} again`, again, { cache: "no-cache" });
+    assert.deepEqual(await worker.seen(), [], "the Worker's code ran for neither request");
+  });
+
   test("what is not a page is the 404 page of design/copy/not-found.md, with what every page has; under /api/ it stays the API's answer", async () => {
     await freshProofLog(worker, { clearedOn: CLEARED_ON });
     const lines = copyLines(block("not-found.md", "頁面"));
     assert.deepEqual(lines, ["找不到這一頁", "這個網址沒有對到任何頁面。請確認網址有沒有抄錯。", "回到首頁"]);
     // Among them what is near a page but none: a slash too many, another case, the path of the proof log's files on
     // the data domain (the old back end had its files on this domain), a page of an account without its @.
-    for (const path of ["/index.html", "/pages.css/", "/favicon.ico", "/P/7K2Q9FM4XD", "/p", "/FAQ", "/faq/", "/proof-log/", "/proof-log/fingerprints.jsonl", "/verify/", "/threads/alice", "/threads", "/copy.js/", "/nothing?q=1"]) {
+    for (const path of ["/index.html", "/pages.css/", "/favicon.ico/", "/P/7K2Q9FM4XD", "/p", "/FAQ", "/faq/", "/proof-log/", "/proof-log/fingerprints.jsonl", "/verify/", "/threads/alice", "/threads", "/copy.js/", "/nothing?q=1"]) {
       // getPage checks the headers (noindex among them), the mark of the test log with its date, the navigation bar and the foot.
       const { status, page } = await getPage(worker, path);
       assert.equal(status, 404, path);
