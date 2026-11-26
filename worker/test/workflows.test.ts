@@ -39,6 +39,7 @@ import {
   INSTALL_PNPM,
   IOS_PATHS,
   REQUIRED_CHECKS,
+  REVERIFY_SCRIPT,
   UPLOAD_ANDROID_SCRIPTS,
   WORKFLOW_FILES,
   type Yaml,
@@ -54,7 +55,7 @@ const WORKFLOWS_DIR = join(REPO, ".github", "workflows");
 /** The script the changes job of checks.yml runs. */
 const CHANGED_PATHS_NAME = basename(CHANGED_PATHS_SCRIPT);
 /** The files of .github/workflows/ that are not workflows: the scripts the workflows run. */
-const SCRIPTS = [CHANGED_PATHS_NAME, ...UPLOAD_ANDROID_SCRIPTS];
+const SCRIPTS = [CHANGED_PATHS_NAME, REVERIFY_SCRIPT, ...UPLOAD_ANDROID_SCRIPTS];
 
 function realFiles(): Record<string, string> {
   return Object.fromEntries(
@@ -341,6 +342,29 @@ Object.assign(CHANGES, {
   "ios-upload 9 a run cancelling the one before": [replace(U, "  group: upload-ios\n  cancel-in-progress: false\n", "  group: upload-ios\n  cancel-in-progress: true\n")],
   "ios-upload 10 the default Xcode of the runner": [replace(U, "env:\n  # The one Xcode", "env:\n  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n  # The one Xcode")],
   "ios-upload 11 the key written to a file other users of the runner can read": [replace(U, "        run: umask 077 && ", "        run: ")],
+});
+
+// The daily re-verification (#421): by its schedule and by hand only, no secret, no cache, a token
+// that can only read, the command and the address written in test/workflows.ts.
+const R = "reverify.yml";
+const REVERIFY_RUN = "        run: bash .github/workflows/reverify.sh test https://test-data.iamreal.tw/\n";
+Object.assign(CHANGES, {
+  "reverify 1 triggered by a push to main too": [replace(R, "  workflow_dispatch:\n", "  workflow_dispatch:\n  push:\n    branches:\n      - main\n")],
+  "reverify 2 triggered by a pull request too": [replace(R, "  workflow_dispatch:\n", "  workflow_dispatch:\n  pull_request:\n")],
+  "reverify 3 triggered when another workflow ends": [replace(R, "  workflow_dispatch:\n", "  workflow_run:\n    workflows:\n      - deploy-test\n")],
+  "reverify 4 another schedule": [replace(R, '    - cron: "30 16 * * *"\n', '    - cron: "* * * * *"\n')],
+  "reverify 5 a secret given to the step that re-verifies": [replace(R, REVERIFY_RUN, `        env:\n          CLOUDFLARE_API_TOKEN: ${SECRET}\n${REVERIFY_RUN}`)],
+  "reverify 6 a token that can write": [replace(R, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+  "reverify 7 a token that can open issues": [replace(R, "permissions:\n  contents: read\n", "permissions:\n  contents: read\n  issues: write\n")],
+  "reverify 8 restoring a cache": [replace(R, "cache-mode: none\n", "cache-mode: read\n")],
+  "reverify 9 a cache action in a job": [replace(R, "      - name: Build iamreal-verify\n", `      - uses: actions/cache@${ACTIONS["actions/cache"]!.sha} # ${ACTIONS["actions/cache"]!.version}\n        with:\n          path: ~/go\n          key: go\n      - name: Build iamreal-verify\n`)],
+  "reverify 10 another address": [replace(R, REVERIFY_RUN, "        run: bash .github/workflows/reverify.sh test https://example.invalid/\n")],
+  "reverify 11 the script's result ignored": [replace(R, REVERIFY_RUN, "        run: bash .github/workflows/reverify.sh test https://test-data.iamreal.tw/ || true\n")],
+  "reverify 12 bb not checked": [replace(R, `      - name: bb is the one of bb.js 6.0.0\n        run: ${CHECK_BB}\n`, "")],
+  "reverify 13 the packages installed with their install scripts": [replace(R, "        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-web\n", "        run: pnpm install --frozen-lockfile\n")],
+  "reverify 14 a run cancelling the one before": [replace(R, "  group: reverify\n  cancel-in-progress: false\n", "  group: reverify\n  cancel-in-progress: true\n")],
+  "reverify 15 an action at a tag": [replace(R, `      - uses: actions/setup-go@${ACTIONS["actions/setup-go"]!.sha} # ${ACTIONS["actions/setup-go"]!.version}\n`, "      - uses: actions/setup-go@v7\n")],
+  "reverify 16 the production proof log running before its site is there": [replace(R, "  production:\n    if: false\n", "  production:\n")],
 });
 
 for (const [name, changes] of Object.entries(CHANGES)) {
@@ -1067,6 +1091,63 @@ test(".github/workflows/ holds the workflows and the scripts they run", () => {
   assert.deepEqual(readdirSync(WORKFLOWS_DIR).sort(), [...WORKFLOW_FILES, ...SCRIPTS].sort());
   // Like the workflows: printable ASCII only. They are read line by line with them (CONTRIBUTING.md).
   for (const f of SCRIPTS) assert.equal(/[^\x20-\x7e\n]/.exec(readFileSync(join(WORKFLOWS_DIR, f), "utf8")), null, f);
+});
+
+test("reverify.sh: prints how many records and how long, each record that is not valid, and ends with iamreal-verify's exit code", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "iamreal-reverify-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  // In place of iamreal-verify: writes its arguments and the bytes of the file it is given as the
+  // common reference string, then what the test tells it to.
+  const fake = join(dir, "fake-verify");
+  writeFileSync(fake, '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "$RUNNER_TEMP/args"\ncp "$4/bn254_g1.dat" "$RUNNER_TEMP/crs-seen"\ncat "$FAKE_STDOUT"\necho "iamreal-verify: $FAKE_STDERR" >&2\nexit "$FAKE_EXIT"\n', { mode: 0o755 });
+  const run = (stdout: string, stderr: string, exit: number, args = ["test", "https://test-data.iamreal.tw/"]) => {
+    writeFileSync(join(dir, "stdout"), stdout);
+    return spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), ...args], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, RUNNER_TEMP: dir, IAMREAL_BB: "/the/bb", IAMREAL_VERIFY: fake, FAKE_STDOUT: join(dir, "stdout"), FAKE_STDERR: stderr, FAKE_EXIT: String(exit) },
+    });
+  };
+  const state = "\nscope iamreal-test:public:0__________\n  cards:\n    E59ECJ4HET5FATK5W27W376YSBYA54YAQMTWD2AXHH8BQB9A74J0  last card proof 2026-11-25  ordinal 1\n      threads alice\n";
+
+  // It passed: the count, the fingerprint and the time; not the list of every record and card.
+  const passed = run(`log file: valid\nrecords: 2\nfingerprint: ${"ab".repeat(32)}\n\nrecords:\n  1 valid threads first\n  2 valid threads refresh\n${state}`, "every fingerprint is the proof log's", 0);
+  assert.equal(passed.status, 0, passed.stderr);
+  assert.match(passed.stdout, new RegExp(`^log file: valid\nrecords: 2\nfingerprint: ${"ab".repeat(32)}\nreverify: the test proof log at https://test-data\\.iamreal\\.tw/ passed: exit code 0, \\d+ seconds\n$`));
+  assert.match(passed.stderr, /every fingerprint is the proof log's/);
+  // What iamreal-verify was asked: the test proof log's table, the public address, bb, and the 64 bytes of the reference string.
+  assert.deepEqual(readFileSync(join(dir, "args"), "utf8").split("\n").slice(0, 8), ["-bb", "/the/bb", "-crs", join(dir, "crs"), "-proof-log", "test", "-data", "https://test-data.iamreal.tw/"]);
+  assert.equal(createHash("sha256").update(readFileSync(join(dir, "crs-seen"))).digest("hex"), "d6ba9329f8932c12192b37849f772104d20048f76434a3290512d9d814e4116f");
+
+  // A record that is not valid: which, and why; the job fails.
+  const invalid = run(`log file: valid\nrecords: 3\nfingerprint: ${"cd".repeat(32)}\n\nrecords:\n  1 valid threads first\n  2 invalid proof (bb verify failed)\n  3 invalid daily_limit\n${state}`, "card-state/2026-11-26.jsonl: card x is different", 1);
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stdout, /^records: 3\n/m);
+  assert.match(invalid.stdout, /^  2 invalid proof \(bb verify failed\)\n  3 invalid daily_limit\nreverify: the test proof log at \S+ DID NOT PASS .*: exit code 1, \d+ seconds\n$/m);
+  assert.doesNotMatch(invalid.stdout, /1 valid|scope|alice/);
+  assert.match(invalid.stderr, /card x is different/);
+
+  // A proof log that is broken: the line and the code.
+  const broken = run("log file: broken at line 1001: directory (a file is missing)\n", "", 1);
+  assert.equal(broken.status, 1);
+  assert.match(broken.stdout, /^log file: broken at line 1001: directory \(a file is missing\)\nreverify: .* DID NOT PASS/);
+
+  // It could not be checked: said as that, and the job fails too, so that someone looks.
+  const unread = run("", "proof-log/fingerprints.jsonl: 503", 2, ["production", "https://data.iamreal.tw/"]);
+  assert.equal(unread.status, 2);
+  assert.match(unread.stdout, /^reverify: the production proof log at https:\/\/data\.iamreal\.tw\/ could not be checked \(not a failure of the proof log; the next run starts over\): exit code 2, \d+ seconds\n$/);
+  assert.match(unread.stderr, /fingerprints\.jsonl: 503/);
+
+  // It did not run to its end (here: no such file): not said to be one of the two above.
+  const missing = spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test", "https://test-data.iamreal.tw/"], { encoding: "utf8", env: { PATH: process.env.PATH, RUNNER_TEMP: dir, IAMREAL_BB: "/the/bb", IAMREAL_VERIFY: join(dir, "none") } });
+  assert.equal(missing.status, 127);
+  assert.match(missing.stdout, /did not run to its end .*: exit code 127, \d+ seconds\n$/);
+  // Without what it reads from the environment it stops as "could not be checked", not as a proof log that did not pass.
+  assert.equal(spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test", "https://test-data.iamreal.tw/"], { encoding: "utf8", env: { PATH: process.env.PATH, IAMREAL_BB: "/the/bb" } }).status, 2);
+
+  // Without its two arguments it does not run iamreal-verify.
+  rmSync(join(dir, "args"));
+  assert.equal(spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test"], { encoding: "utf8", env: { PATH: process.env.PATH, RUNNER_TEMP: dir, IAMREAL_BB: "/the/bb", IAMREAL_VERIFY: fake } }).status, 2);
+  assert.ok(!existsSync(join(dir, "args")));
 });
 
 /** Files at the root that are not there now, and that would change every check if a pull request added them. */
