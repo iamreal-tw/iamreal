@@ -91,6 +91,8 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 
 **最低版本**（`min_app`，`spec/min-app.md`、ADR-0035）寫在 [`src/min-app.ts`](src/min-app.ts)，正式的證明紀錄和測試的證明紀錄各一組，同樣照 `PROOF_LOG_KIND` 選，從 `proofLogSettingsOf` 取得。現在兩組的 `build` 都是最小的 1，不擋任何一版 app。調高時改這個檔和 `test/api.test.ts` 裡逐字比對的 `config`，一次一個 PR，說明裡寫理由。後台收證明時不看 app 的版本；`test/api.test.ts` 確認兩份證明紀錄送出的值兩個 app 都讀得懂（`protocol/src/min-app.ts`）。
 
+**教操作的示範**（`design/motion/`，[#369](https://github.com/iamreal-tw/iamreal/issues/369)）的算法寫在 [`src/teaching-animation.ts`](src/teaching-animation.ts)：給時間表、平台和秒數，算出那一刻的狀態。後台自己不執行它；它是網站的播放程式要帶到瀏覽器的那一份，所以不引用任何檔。`test/teaching-animation.test.ts` 檢查兩份時間表自己說得通，並拿 `spec/vectors/teaching-animation.json` 的每一個答案比對。答案由 `test/generate/teaching-animation.ts` 寫出（在這個目錄跑 `node --experimental-strip-types test/generate/teaching-animation.ts`）：每一個答案手寫在裡面，寫檔前用 `src/teaching-animation.ts` 算一次，有一個不同就不寫。
+
 ### 證明紀錄和物件的名稱要對得上
 
 **命名規則：測試的證明紀錄的 Durable Object 名稱（`PROOF_LOG_OBJECT_NAME`）一律以 `test-` 開頭；正式的證明紀錄的不可以以 `test-` 開頭。** 所以從名稱就看得出一個物件裡是哪一份證明紀錄，設定錯了有兩層擋：
