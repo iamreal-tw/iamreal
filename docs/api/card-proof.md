@@ -209,8 +209,10 @@ Submits one card proof: the card's whole list of accounts.
   page or the app made and replaces after 31 days. It is no field of the
   record and is never written to the proof log: the server keeps it only in
   the connection log's entry of this request ("Rules for every endpoint").
-  A request without it is taken as ever. One whose `device_id` is not such a
-  string is `malformed`.
+  A request without it is taken as ever. So is one whose `device_id` is not
+  such a string, whatever its type: the value is dropped, as if the key had
+  not been sent, and the entry says none. A card proof is not refused over
+  a value that is kept only for the connection log.
 
   The request is JSON, not a line of the proof log. The order of the keys of
   the request and of an account, and whitespace between tokens, are free;
@@ -306,8 +308,8 @@ Submits one card proof: the card's whole list of accounts.
 
   1. The body is one JSON object with exactly the keys of the example, or
      those and `device_id`, each once, spelled as shown. Every value except
-     `accounts` is a string; `accounts` is present; `device_id`, if
-     present, is 32 lowercase hexadecimal digits. Otherwise `malformed`:
+     `accounts` and `device_id` is a string; `accounts` is present;
+     `device_id` may hold anything (above). Otherwise `malformed`:
      not JSON, a missing key (also `accounts`), an extra key, a key twice,
      a key in another case, a value of another type. This comes first
      because without it there is no scope to look at.

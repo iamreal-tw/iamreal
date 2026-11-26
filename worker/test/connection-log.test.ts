@@ -121,14 +121,37 @@ describe("a submission that becomes a record", () => {
     assert.equal(object!.entry.device_id, null);
   });
 
-  test("a device ID that is not 32 lowercase hex digits is malformed: no record, and no object", async () => {
-    for (const bad of ["0123456789ABCDEF0123456789ABCDEF", "0123456789abcdef", `${DEVICE}0`, "", 5, null, { id: DEVICE }]) {
-      const sent = await submit(await sub(worker, newCard(), root, "threads:alice"), { device_id: bad });
-      assert.deepEqual([sent.status, sent.body], [400, { error: "malformed" }], JSON.stringify(bad));
+  test("a device ID that is not 32 lowercase hex digits is as if none came: the card proof is taken, and the object says null, with nothing of what was sent", async () => {
+    const bad = ["0123456789ABCDEF0123456789ABCDEF", "0123456789abcdef", `${DEVICE}0`, "", "<script>not-an-id</script>", 5, null, { id: DEVICE }, [DEVICE]];
+    const ids: string[] = [];
+    for (const [i, value] of bad.entries()) {
+      const sent = await submit(await sub(worker, newCard(), root, `threads:user_${i}`), { device_id: value });
+      assert.equal(sent.status, 201, `${JSON.stringify(value)}: ${JSON.stringify(sent.body)}`);
+      ids.push(sent.requestId);
     }
-    // Another key beside it is no submission either.
+    assert.equal((await checkProofLog(worker)).length, bad.length);
+    const found = await entries(bad.length);
+    assert.deepEqual(found.map((f) => f.entry.request_id).sort(), [...ids].sort());
+    for (const f of found) {
+      assert.deepEqual(Object.keys(f.entry), ACCEPTED_KEYS);
+      assert.equal(f.entry.device_id, null);
+      assert.ok(!f.text.includes("not-an-id") && !f.text.includes("ABCDEF"), f.text);
+    }
+  });
+
+  test("of a refused submission with such a device ID, the entry says null for it too; the body is kept as it came", async () => {
+    const sent = await submit({ ...(await sub(worker, newCard(), root, "threads:alice")), proof: BAD_PROOF }, { device_id: "NOT-AN-ID" });
+    assert.deepEqual([sent.status, sent.body], [400, { error: "proof" }]);
+    const [object] = await entries(1);
+    assert.deepEqual([object!.entry.device_id, object!.entry.body], [null, sent.text]);
+  });
+
+  test("another key beside the device ID is no submission: malformed, no record, and no object", async () => {
     const sent = await submit(await sub(worker, newCard(), root, "threads:alice"), { device_id: DEVICE, visit_id: DEVICE });
     assert.deepEqual([sent.status, sent.body], [400, { error: "malformed" }]);
+    // The key twice is no submission either.
+    const twice = await send(JSON.stringify(await sub(worker, newCard(), root, "threads:alice")).replace(/}$/, `,"device_id":"${DEVICE}","device_id":"${DEVICE}"}`));
+    assert.deepEqual([twice.status, twice.body], [400, { error: "malformed" }]);
     assert.equal((await checkProofLog(worker)).length, 0);
     await stillEntries(0);
   });
