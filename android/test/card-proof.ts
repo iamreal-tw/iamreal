@@ -29,9 +29,10 @@
 //    (`adb reverse`): the app reaches this server and nothing else.
 // 4. Goes through the six steps the way a cardholder does (taps and typing,
 //    the screen read with uiautomator), four times with the same card: a
-//    first declaration and a card proof again today; a switch and a
-//    withdrawal the next day (the back end's clock and the emulator's are
-//    moved a day on). Every sentence it expects on a screen is read from
+//    first declaration (the field filled) and a card proof again today
+//    (更新島民證明); the next day another account (改成別的帳號) and its
+//    withdrawal (收回對 @bob 的宣告); the back end's clock and the emulator's
+//    are moved a day on. Every sentence it expects on a screen is read from
 //    design/copy/card-proof.json. Twice a card with another certificate is
 //    held to the phone at a tap that would hand over the PIN (the second,
 //    the third): it gets none. At the end the app's storage holds nothing
@@ -369,13 +370,15 @@ interface Proof {
   name: string;
   /** Reads every screen against the copy (the first card proof); the others read what differs. */
   thorough: boolean;
-  /** What step 4 shows before anything is typed. */
-  accounts: { lead: string[]; rowLines: string[]; notes: string[]; absent: string[] };
+  /**
+   * What step 4 shows as it opens, and what is done on it (design/copy/card-proof.md, "4. 你的帳號"):
+   * fill: the card declares nothing, the account is typed into the field; refresh: 更新島民證明; switch: 改成別的帳號, then the account typed
+   * (`after`: what the screen says once it is pressed); withdraw: 收回對 @alice 的宣告.
+   */
+  accounts: { shows: string[]; absent: string[]; act: { do: "fill"; type: string } | { do: "refresh" } | { do: "switch"; type: string; after: string[] } | { do: "withdraw" } };
   /** At the last tap, another card is held to the phone first. */
   otherCardAtLastTap?: boolean;
-  /** What is typed into the Threads row: null leaves it; "" clears it. */
-  type: string | null;
-  /** The account the row holds before. */
+  /** The account the card declares before: "" for none. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
   /** `card`: the card's proof, the hanging and what can be done besides are shown (all but a withdrawal of every account). `reminder`: what the reminder's part says. */
@@ -394,9 +397,25 @@ async function cardProof(p: Proof): Promise<string> {
     shot("step-1");
     await designShot("card-proof-app-1-before-phone.png");
     const s = wholeScreen();
-    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.one_proof_single", { platform: THREADS }), say("before.why_physical"), say("before.how_to_get"), say("common.next")]);
-    check(!s.includes(say("before.listed_together")) && !s.includes(say("common.back")), "step 1 has no 上一步, and with one platform not the sentence about several");
+    shows(s, "step 1", [say("common.service_name"), say("before.title"), say("before.prepare_card"), say("before.citizens_only"), say("before.why_physical"), say("before.how_to_get"), say("common.next")]);
+    check(!s.includes(say("before.one_proof")) && !s.includes(say("before.listed_together")) && !s.includes(say("common.back")), "step 1 has no 上一步, and with one platform not the sentences about several");
     check(!s.includes(say("before.duration")), "step 1 does not say the web's sentence of a card reader and 3 minutes");
+    check(!s.includes(say("before.why_physical_card")) && !s.includes(say("before.find_office")), "step 1: the two questions are closed");
+    // The two questions, opened: the second has the two ways out of the app, for someone without a card yet.
+    press(say("before.why_physical"));
+    press(say("before.how_to_get"));
+    shows(wholeScreen(), "step 1, the questions opened,", [say("before.why_physical_card"), say("before.why_physical_mobile"), say("before.how_to_get_counter"), say("before.find_office"), say("before.how_to_get_moica")]);
+    press(say("before.find_office"));
+    await sleep(2_000);
+    {
+      // The phone's map app, searching for the offices; this emulator has none, so the same search on a map's site, in its browser.
+      const top = onTop();
+      const office = encodeURIComponent("戶政事務所");
+      check(top.includes(`dat=geo:0,0?q=${office}`) || top.includes(`dat=https://www.google.com/maps/search/?api=1&query=${office}`), "step 1: 找附近的戶政事務所 opens a map's search for 戶政事務所 outside the app");
+      check(!new RegExp(`mResumedActivity.*${APP.replaceAll(".", "\\.")}/`).test(top), "step 1: the map's search is on top, not the app");
+    }
+    emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+    find((n) => n.text === step(1) || n.text === say("before.find_office"), "the app again, still at step 1");
   }
   press(say("common.next"));
 
@@ -431,8 +450,10 @@ async function cardProof(p: Proof): Promise<string> {
     const s = wholeScreen();
     shows(s, "step 3", [NAME, say("pin.name_note")]);
     if (p.thorough) {
-      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("pin.card_and_pin"), say("common.back"), say("pin.confirm_card")]);
+      shows(s, "step 3", [say("pin.title"), say("pin.card_read"), say("pin.label"), say("pin.purpose"), say("app_pin.stays"), say("common.back"), say("pin.confirm_card")]);
       check(!s.includes(say("pin.stays")) && !s.includes(say("pin.pin_characters")), "step 3 says 這支手機, and nothing about characters a PIN may not have");
+      // Who can look the card's accounts up with the card and the PIN is step 5's to say, once.
+      check(!s.some((t) => t.includes(say("pin.label")) && t !== say("pin.label") && t !== say("pin.title") && t !== say("pin.purpose") && t !== say("app_pin.stays")), "step 3 has the two points and no third");
       // Without a PIN, no panel.
       press(say("pin.confirm_card"));
       await waitText(say("app_pin.need_pin"), "the sentence for an empty PIN", 10_000);
@@ -462,26 +483,69 @@ async function cardProof(p: Proof): Promise<string> {
 
   // Step 4
   await waitText(step(4), "step 4", 120_000);
+  const act = p.accounts.act;
   {
     shot(`step-4-${p.name}`);
     const s = wholeScreen();
-    shows(s, "step 4", [say("accounts.title_single", { platform: THREADS }), ...p.accounts.lead, ...p.accounts.rowLines, ...p.accounts.notes]);
-    for (const a of p.accounts.absent) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}…"`);
-    if (p.thorough) {
-      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.not_yours_single", { platform: THREADS }), say("common.cancel")]);
-      check(!s.includes(say("accounts.preview")) && !s.includes(say("accounts.title")) && !s.includes(say("accounts.not_yours")), "step 4 is the one-platform screen, with 預覽");
+    shows(s, "step 4", [say("accounts.title_single", { platform: THREADS }), ...p.accounts.shows, say("common.cancel")]);
+    for (const a of [...p.accounts.absent, say("accounts.title"), say("accounts.edit_list"), say("accounts.switches_limited"), say("accounts.preview")]) check(!s.includes(a), `step 4 does not say "${a.slice(0, 40)}"`);
+    if (p.current === "") {
+      // Nothing declared: the field, and nothing of what a card with an account can do.
+      shows(s, "step 4", [THREADS, "@", say("app_accounts.preview"), say("app_accounts.preview_note", { platform: THREADS }), say("common.next")]);
+      for (const a of [say("accounts.refresh"), say("accounts.switch"), say("accounts.declared_now")]) check(!s.includes(a), `step 4, nothing declared, does not say "${a}"`);
+      check(field("account-threads").text === "", "step 4: the field is empty");
+    } else {
+      // An account declared: it is written out, with the main button and the two other things to do; no field.
+      const account = `@${p.current}`;
+      shows(s, "step 4", [say("accounts.declared_now"), account, say("accounts.refresh"), say("accounts.refresh_note"), say("accounts.switch"), say("accounts.withdraw", { account })]);
+      check(field("current-threads").text === account, `step 4: the card declares ${account}`);
+      check(!s.includes(say("common.next")) && !s.includes(say("app_accounts.preview")) && !s.includes(say("accounts.keep")), "step 4, an account declared: no field, no 下一步");
     }
-    check(field("account-threads").text === p.current, `step 4: the Threads row holds "${p.current}"`);
   }
-  if (p.type !== null) {
+  /** Types an account into the Threads field, which is empty. */
+  const typeAccount = (account: string): void => {
     emulator.tap(field("account-threads"));
-    emulator.erase(p.current.length);
-    if (p.type !== "") emulator.type(p.type);
+    emulator.type(account);
     hideKeyboard();
-    check(field("account-threads").text === p.type, `step 4: the Threads row now holds "${p.type}"`);
+    check(field("account-threads").text === account, `step 4: the field now holds "${account}"`);
+  };
+  if (act.do === "fill") {
+    if (p.thorough) {
+      // Nothing typed: 下一步 goes nowhere.
+      press(say("common.next"));
+      await waitText(say("accounts.need_one"), "step 4: the sentence for an empty list", 10_000);
+      check(true, "step 4: with nothing typed, 下一步 stays and says 請至少填一個帳號。");
+    }
+    typeAccount(act.type);
     if (p.thorough) await designShot("card-proof-app-4-accounts-phone.png");
+    press(say("common.next"));
+  } else if (act.do === "refresh") {
+    press(say("accounts.refresh"));
+  } else if (act.do === "withdraw") {
+    press(say("accounts.withdraw", { account: `@${p.current}` }));
+  } else {
+    const inline = say("accounts.declared_inline", { account: `@${p.current}` });
+    press(say("accounts.switch"));
+    await waitText(inline, "step 4 after 改成別的帳號", 10_000);
+    {
+      shot(`step-4-${p.name}-field`);
+      const s = wholeScreen();
+      shows(s, "step 4, after 改成別的帳號,", [step(4), say("accounts.title_single", { platform: THREADS }), inline, say("accounts.switch"), THREADS, "@", say("app_accounts.preview"), ...act.after, say("app_accounts.preview_note", { platform: THREADS }), say("common.next"), say("accounts.keep"), say("common.cancel")]);
+      check(!s.includes(say("accounts.refresh")) && !s.includes(say("accounts.declared_now")), "step 4, after 改成別的帳號: no 更新島民證明");
+      check(field("account-threads").text === "", "step 4, after 改成別的帳號: the field is empty");
+    }
+    // An empty field goes nowhere: withdrawing is the other thing to do.
+    press(say("common.next"));
+    await waitText(say("accounts.need_one"), "step 4: the sentence for an empty field", 10_000);
+    // 不改了: back to what the card declares; then again.
+    press(say("accounts.keep"));
+    await waitText(say("accounts.refresh"), "step 4 again, after 不改了", 10_000);
+    check(!textsOf(visible()).includes(inline), "step 4: 不改了 goes back to what the card declares");
+    press(say("accounts.switch"));
+    await waitText(inline, "step 4 after 改成別的帳號, again", 10_000);
+    typeAccount(act.type);
+    press(say("common.next"));
   }
-  press(say("common.next"));
 
   // Step 5
   await waitText(say("confirm.title"), "step 5");
@@ -490,11 +554,20 @@ async function cardProof(p: Proof): Promise<string> {
     shot(`step-5-${p.name}`);
     if (p.thorough) await designShot("card-proof-app-5-confirm-phone.png");
     const s = wholeScreen();
-    shows(s, "step 5", [step(5), p.confirm.intro, THREADS, p.confirm.account, p.confirm.under, say("confirm.date"), p.date, say("confirm.short_id_label"), say("confirm.no_identity"), ...p.confirm.shows, say("common.back"), p.confirm.button, say("common.cancel")]);
-    for (const a of p.confirm.absent) check(!s.includes(a), `step 5 does not say "${a.slice(0, 40)}…"`);
+    shows(s, "step 5", [step(5), p.confirm.intro, THREADS, p.confirm.account, p.confirm.under, say("confirm.date"), p.date, say("confirm.short_id_label"), say("confirm.not_identifiable", { platform: THREADS }), ...p.confirm.shows, say("common.back"), p.confirm.button, say("common.cancel")]);
+    // With one platform: nothing of a list of several.
+    for (const a of [...p.confirm.absent, say("confirm.intro"), say("confirm.listed_together"), say("confirm.withdraw_stays")]) check(!s.includes(a), `step 5 does not say "${a.slice(0, 40)}…"`);
     const opening = new RegExp(`^${say("confirm.short_id", { short_id: "([0-9A-Z]{10})" })}$`);
     shortId = s.map((t) => opening.exec(t)?.[1]).find((x) => x !== undefined) ?? "";
     check(shortId !== "", `step 5 shows how the card's short ID begins: ${shortId}`);
+  }
+  if (act.do === "fill" || act.do === "switch") {
+    // 上一步: the screen of step 4 the button was pressed on, the field as it was typed.
+    press(say("common.back"));
+    await waitText(step(4), "step 4 again, from step 5", 10_000);
+    check(field("account-threads").text === act.type, `step 5: 上一步 goes back to step 4 with "${act.type}" still in the field`);
+    press(say("common.next"));
+    await waitText(say("confirm.title"), "step 5 again");
   }
   press(p.confirm.button);
   await waitText(say("progress.title"), "step 5, in progress");
@@ -814,8 +887,9 @@ try {
 
   // 4. Four card proofs --------------------------------------------------------------
   const HANDLE = { alice: "@alice", bob: "@bob" };
-  const more = say("accounts.switches_limited");
-  const later = say("confirm.later") + say("confirm.permanent");
+  /** Step 5's two points when the list is not empty, and its three when it is. */
+  const holder = say("confirm.holder_later", { platform: THREADS, cannot_delete: say("confirm.cannot_delete") });
+  const WITHDRAWN = [say("confirm.history_stays"), say("confirm.holder_later_withdraw")];
 
   await anotherCardThenCancel();
 
@@ -824,15 +898,9 @@ try {
     what: "a first declaration: @alice",
     name: "first",
     thorough: true,
-    accounts: {
-      lead: [say("accounts.none_yet"), say("accounts.fill_one_single", { platform: THREADS })],
-      rowLines: [say("accounts.row_unused")],
-      notes: [say("accounts.one_per_platform_single", { platform: THREADS }) + more],
-      absent: [say("accounts.how_refresh"), say("accounts.current")],
-    },
-    type: "alice",
+    accounts: { shows: [say("accounts.none_yet"), say("accounts.fill_one_single", { platform: THREADS })], absent: [say("accounts.row_unused"), say("accounts.nothing_now")], act: { do: "fill", type: "alice" } },
     current: "",
-    confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.first"), button: say("confirm.button_declare_single"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.listed_together"), say("confirm.withdraw_stays")] },
+    confirm: { intro: say("confirm.intro_public"), account: HANDLE.alice, under: say("kinds.first"), button: say("confirm.button_declare_single"), shows: [holder], absent: WITHDRAWN },
     done: { title: say("done.first"), shows: [say("done.new_card")], absent: [say("done.withdrawn_link")], card: true, reminder: [...reminderSays(today), say("app_done.reminder_turn_on"), say("app_done.reminder_adjust")] },
     date: today,
   });
@@ -869,21 +937,15 @@ try {
   await backToApp();
   press(say("done.restart"));
 
-  // A card proof again, the same day: nothing changed.
+  // A card proof again, the same day: 更新島民證明, nothing typed.
   const again = await cardProof({
-    what: "a card proof again: nothing changed; another card at the last tap first",
+    what: "a card proof again: 更新島民證明; another card at the last tap first",
     name: "again",
     thorough: false,
     otherCardAtLastTap: true,
-    accounts: {
-      lead: [say("accounts.current") + say("accounts.last_card_proof_today")],
-      rowLines: [say("accounts.row_no_switches_yet", { switches_left: 5 }), say("accounts.row_today")],
-      notes: [say("accounts.how_refresh"), say("accounts.how_change") + more],
-      absent: [say("accounts.none_yet")],
-    },
-    type: null,
+    accounts: { shows: [say("accounts.last_proof_today")], absent: [say("accounts.none_yet")], act: { do: "refresh" } },
     current: "alice",
-    confirm: { intro: say("confirm.intro_single"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [say("confirm.listed_single", { platform: THREADS }), later], absent: [say("confirm.withdraw_stays")] },
+    confirm: { intro: say("confirm.intro_public"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [holder], absent: WITHDRAWN },
     done: { title: say("done.refresh"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true, reminder: [...reminderSays(today), say("app_done.reminder_change")] },
     date: today,
   });
@@ -893,52 +955,45 @@ try {
   // The next day, by the back end's clock and the emulator's.
   await setClocks(new Date(`${tomorrow}T12:00:00+08:00`));
 
-  // A switch: @alice gives way to @bob.
+  // 改成別的帳號: @alice gives way to @bob.
   await cardProof({
-    what: "the next day, a switch: @bob in place of @alice",
+    what: "the next day, 改成別的帳號: @bob in place of @alice",
     name: "switch",
     thorough: false,
     accounts: {
-      lead: [say("accounts.current") + say("accounts.last_card_proof", { days_ago: 1 })],
-      rowLines: [say("accounts.row_no_switches_yet", { switches_left: 5 })],
-      notes: [say("accounts.how_refresh"), say("accounts.how_change") + more],
-      absent: [say("accounts.row_today")],
+      shows: [say("accounts.last_proof", { days_ago: 1 })],
+      absent: [say("accounts.last_proof_today")],
+      // What the change does, and the switches left after it: said only now.
+      act: { do: "switch", type: "bob", after: [say("accounts.switch_effect", { account: HANDLE.alice }) + say("accounts.switch_limit", { switches_left: 4 })] },
     },
-    type: "bob",
     current: "alice",
     confirm: {
-      intro: say("confirm.intro_single"),
+      intro: say("confirm.intro_public"),
       account: HANDLE.bob,
       under: say("kinds.switch", { previous: HANDLE.alice }) + say("confirm.uses_switch", { switches_left: 4 }),
       button: say("confirm.button_declare_single"),
-      shows: [say("confirm.listed_single", { platform: THREADS }), later],
-      absent: [say("confirm.withdraw_stays")],
+      shows: [holder],
+      absent: WITHDRAWN,
     },
     done: { title: say("done.changed"), shows: [], absent: [say("done.new_card"), say("done.withdrawn_link")], card: true, reminder: [...reminderSays(tomorrow), say("app_done.reminder_change")] },
     date: tomorrow,
   });
   press(say("done.restart"));
 
-  // A withdrawal: the row cleared.
+  // 收回對 @bob 的宣告.
   await cardProof({
-    what: "a withdrawal: the row cleared",
+    what: "a withdrawal: 收回對 @bob 的宣告",
     name: "withdrawal",
     thorough: false,
-    accounts: {
-      lead: [say("accounts.current") + say("accounts.last_card_proof_today")],
-      rowLines: [say("accounts.row_switches", { switches_used: 1, switches_left: 4 }), say("accounts.row_today")],
-      notes: [say("accounts.how_refresh"), say("accounts.how_change") + more],
-      absent: [],
-    },
-    type: "",
+    accounts: { shows: [say("accounts.last_proof_today")], absent: [], act: { do: "withdraw" } },
     current: "bob",
     confirm: {
       intro: say("confirm.intro_withdraw_all"),
       account: HANDLE.bob,
       under: say("kinds.withdraw"),
-      button: say("confirm.button_withdraw_all"),
-      shows: [say("confirm.withdraw_stays"), say("confirm.later_withdraw") + say("confirm.permanent")],
-      absent: [say("confirm.listed_single", { platform: THREADS }), later],
+      button: say("confirm.button_withdraw", { account: HANDLE.bob }),
+      shows: WITHDRAWN,
+      absent: [holder, say("confirm.intro_public")],
     },
     done: { title: say("done.withdraw_all"), shows: [say("done.withdrawn_link")], absent: [say("done.new_card")], card: false, reminder: [] },
     date: tomorrow,
