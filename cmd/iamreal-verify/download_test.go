@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/iamreal-tw/iamreal/prooflog"
+	"github.com/iamreal-tw/iamreal/verifier"
 )
 
 // proofLogFilesAsked is the log files a server was asked for.
@@ -251,7 +252,20 @@ func TestDataTempDirOnInterrupt(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(release) })
 	tmp := t.TempDir()
-	c := exec.Command(cmd, "-bb", "bb", "-crs", "crs", "-proof-log", "test", "-data", srv.URL+"/")
+	// The verifier is made before any CRL is downloaded, so the command
+	// needs a bb that says its version and the CRS file: a stand-in bb, and
+	// the 64 bytes of verifier/README.md.
+	tools := t.TempDir()
+	bb := filepath.Join(tools, "bb")
+	if err := os.WriteFile(bb, []byte("#!/bin/sh\necho "+verifier.BBVersion+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g1 := make([]byte, 64)
+	g1[31], g1[63] = 1, 2
+	if err := os.WriteFile(filepath.Join(tools, verifier.CRSFile), g1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(cmd, "-bb", bb, "-crs", tools, "-proof-log", "test", "-data", srv.URL+"/")
 	c.Env = append(os.Environ(), "TMPDIR="+tmp)
 	var errOut bytes.Buffer
 	c.Stderr = &errOut
@@ -271,5 +285,116 @@ func TestDataTempDirOnInterrupt(t *testing.T) {
 	c.Wait()
 	if d := crlTempDirs(t, tmp); len(d) != 0 {
 		t.Errorf("left %v\n%s", d, errOut.String())
+	}
+}
+
+// With -data at a URL the CRL files are downloaded one at a time as the
+// index is rebuilt, and none is written to disk (#439): whenever one is
+// asked for, the temporary directory holds index.jsonl and no CRL file, and
+// the one asked for before has had its line computed. The result is that of
+// the same archive in a directory.
+func TestDataCRLsOneAtATime(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	files := testDataDomain(t)
+	served := serveData(t, files)
+	var held []string // what the temporary directory holds at each request for a CRL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".crl") {
+			dirs := crlTempDirs(t, tmp)
+			if len(dirs) != 1 {
+				t.Errorf("temporary directories %v", dirs)
+				return
+			}
+			entries, err := os.ReadDir(dirs[0])
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			held = append(held, strings.Join(names, " "))
+		}
+		res, err := http.Get(strings.TrimSuffix(served.URL, "/") + r.URL.Path)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer res.Body.Close()
+		w.WriteHeader(res.StatusCode)
+		var b bytes.Buffer
+		b.ReadFrom(res.Body)
+		w.Write(b.Bytes())
+	}))
+	t.Cleanup(srv.Close)
+
+	code, out, errOut := runDataArchive(t, srv.URL+"/")
+	if code != exitAllValid {
+		t.Fatalf("exit %d\n%s", code, errOut)
+	}
+	crls := 0
+	for p := range files {
+		if strings.HasSuffix(p, ".crl") {
+			crls++
+		}
+	}
+	if len(held) != crls || crls < 2 {
+		t.Fatalf("%d CRL files asked for, of %d", len(held), crls)
+	}
+	for i, names := range held {
+		if names != "index.jsonl" {
+			t.Errorf("at the request for CRL %d the temporary directory held %q", i+1, names)
+		}
+	}
+	// Each file is downloaded, then indexed, before the next is downloaded.
+	var steps []string
+	for _, l := range strings.Split(errOut, "\n") {
+		switch {
+		case strings.HasPrefix(l, "iamreal-verify: downloading ") && strings.HasSuffix(l, ".crl"):
+			steps = append(steps, "download "+l[strings.LastIndex(l, "/")+1:])
+		case strings.HasPrefix(l, "iamreal-verify: CRL ") && strings.HasSuffix(l, ".crl"):
+			steps = append(steps, "index "+strings.TrimPrefix(l, "iamreal-verify: CRL "))
+		}
+	}
+	if len(steps) != 2*crls {
+		t.Fatalf("steps %v", steps)
+	}
+	for i := 0; i < len(steps); i += 2 {
+		name := strings.TrimPrefix(steps[i], "download ")
+		if !strings.HasPrefix(steps[i], "download ") || steps[i+1] != "index "+name {
+			t.Errorf("steps %d and %d: %q, %q", i, i+1, steps[i], steps[i+1])
+		}
+	}
+	if d := crlTempDirs(t, tmp); len(d) != 0 {
+		t.Errorf("left %v", d)
+	}
+
+	// The same files in a directory: the same result on standard output.
+	dir := t.TempDir()
+	for p, b := range files {
+		f := filepath.Join(dir, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(f, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codeDir, outDir, errDir := runDataArchive(t, dir)
+	if codeDir != code || outDir != out {
+		t.Errorf("a directory: exit %d\n%s\n%s\nthe URL: exit %d\n%s", codeDir, outDir, errDir, code, out)
+	}
+	for _, json := range []bool{false, true} {
+		extra := []string{}
+		if json {
+			extra = append(extra, "-json")
+		}
+		_, a, _ := runDataArchive(t, srv.URL+"/", extra...)
+		_, b, _ := runDataArchive(t, dir, extra...)
+		if a != b || a == "" {
+			t.Errorf("-json %v: the URL and the directory print different results:\n%s\n%s", json, a, b)
+		}
 	}
 }

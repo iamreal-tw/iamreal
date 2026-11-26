@@ -70,12 +70,32 @@ type source interface {
 	// list returns the names of the files in the directory p, and false
 	// if the source cannot list a directory.
 	list(p string) ([]string, bool, error)
-	// crlArchive makes the CRL archive rooted here a local directory, for
-	// crl.RebuildArchive or crl.ReadArchiveIndex. It returns the directory,
-	// the problems it found on the way (each one line for people), and a
-	// function that removes what it made.
-	crlArchive(trustIndex bool, stderr io.Writer) (dir string, problems []string, cleanup func(), err error)
+	// crlArchive makes the CRL archive rooted here ready to open
+	// (openArchive), and returns it with a function that removes what it
+	// made.
+	crlArchive(trustIndex bool, stderr io.Writer) (files crlFiles, cleanup func(), err error)
 	String() string
+}
+
+// crlFiles is a CRL archive to open: a directory, or the files of a URL,
+// which are downloaded one at a time as the index is rebuilt.
+type crlFiles struct {
+	// dir holds index.jsonl; for a directory the command was given, every
+	// CRL file too. Empty for no archive.
+	dir string
+	// remote is set for an archive at a URL: the bytes of its index.jsonl
+	// (hasIndex false if it has none) and its files, each downloaded when
+	// it is read and held in memory only until its line is computed. No
+	// CRL file is written to disk, so the archive is never there whole: a
+	// year of it is tens of gigabytes.
+	remote   bool
+	index    []byte
+	hasIndex bool
+	files    []crl.ArchiveFile
+	// problems returns what reading the files found besides what
+	// rebuilding the index reports (each one line for people); nil if
+	// nothing can be found.
+	problems func() []string
 }
 
 // openSource reads s as an http:// or https:// URL, or else as a local
@@ -155,8 +175,8 @@ func (d dirSource) list(p string) ([]string, bool, error) {
 
 // crlArchive is the directory itself: every file in it is a CRL file of
 // the archive, whatever its name (spec/revocation-tree.md, "Files").
-func (d dirSource) crlArchive(bool, io.Writer) (string, []string, func(), error) {
-	return string(d), nil, func() {}, nil
+func (d dirSource) crlArchive(bool, io.Writer) (crlFiles, func(), error) {
+	return crlFiles{dir: string(d)}, func() {}, nil
 }
 
 func (d dirSource) String() string { return string(d) }
@@ -203,26 +223,32 @@ func (u urlSource) sub(p string) source {
 // list: there is no listing over HTTP.
 func (u urlSource) list(string) ([]string, bool, error) { return nil, false, nil }
 
-// crlArchive downloads the index and, unless trustIndex, every CRL file
-// the index lists, named by its SHA-256 as the mirror names them
-// (spec/revocation-tree.md, "Files"), into a new temporary directory.
+// crlArchive downloads the index into a new temporary directory and,
+// unless trustIndex, names every CRL file the index lists, by its SHA-256
+// as the mirror names them (spec/revocation-tree.md, "Files"), in the
+// order of the index: the CRLs of one issuer key one after another, which
+// is the order in which rebuilding reuses the most (crl.Indexer). A file is
+// downloaded when rebuilding reads it, and not kept: one CRL is in memory
+// at a time, and none is on disk.
+//
 // Without a listing, a file the index does not list is not seen. A file
 // the index lists that is not there (404), or whose content's SHA-256 is
 // not its name, is left out, so that rebuilding the index reports it; the
 // second is also a problem of its own. Lines that are not as the spec
 // writes them name no file; rebuilding reports them too.
-func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (string, []string, func(), error) {
+func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (crlFiles, func(), error) {
 	dir, cleanup, err := tempDir()
 	if err != nil {
-		return "", nil, nil, err
+		return crlFiles{}, nil, err
 	}
-	fail := func(err error) (string, []string, func(), error) {
+	fail := func(err error) (crlFiles, func(), error) {
 		cleanup()
-		return "", nil, nil, err
+		return crlFiles{}, nil, err
 	}
+	out := crlFiles{dir: dir, remote: true}
 	index, err := u.get(crl.IndexFileName, maxIndex)
 	if errors.Is(err, errNotFound) {
-		return dir, nil, cleanup, nil
+		return out, cleanup, nil
 	}
 	if err != nil {
 		return fail(err)
@@ -230,10 +256,12 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (string, []stri
 	if err := os.WriteFile(filepath.Join(dir, crl.IndexFileName), index, 0o600); err != nil {
 		return fail(err)
 	}
+	out.index, out.hasIndex = index, true
 	if trustIndex {
-		return dir, nil, cleanup, nil
+		return out, cleanup, nil
 	}
 	var problems []string
+	out.problems = func() []string { return problems }
 	seen := map[string]bool{}
 	for _, m := range indexSHA256.FindAllSubmatch(index, -1) {
 		sha := string(m[1])
@@ -242,24 +270,24 @@ func (u urlSource) crlArchive(trustIndex bool, stderr io.Writer) (string, []stri
 			continue
 		}
 		seen[name] = true
-		fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
-		b, err := u.get(name, maxCRL)
-		if errors.Is(err, errNotFound) {
-			continue
-		}
-		if err != nil {
-			return fail(err)
-		}
-		sum := sha256.Sum256(b)
-		if got := hex.EncodeToString(sum[:]); got != sha {
-			problems = append(problems, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got))
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
-			return fail(err)
-		}
+		out.files = append(out.files, crl.ArchiveFile{Name: name, Read: func() ([]byte, error) {
+			fmt.Fprintf(stderr, "iamreal-verify: downloading %s\n", u.url(name))
+			b, err := u.get(name, maxCRL)
+			if errors.Is(err, errNotFound) {
+				return nil, crl.ErrLeftOut
+			}
+			if err != nil {
+				return nil, err
+			}
+			sum := sha256.Sum256(b)
+			if got := hex.EncodeToString(sum[:]); got != sha {
+				problems = append(problems, fmt.Sprintf("%s: %s is not the SHA-256 of its content, %s; left out of the archive", u.url(name), sha, got))
+				return nil, crl.ErrLeftOut
+			}
+			return b, nil
+		}})
 	}
-	return dir, problems, cleanup, nil
+	return out, cleanup, nil
 }
 
 func (u urlSource) String() string { return u.base.String() }
