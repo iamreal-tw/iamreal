@@ -337,13 +337,17 @@ function find(match: (n: Node) => boolean, what: string): Node {
   let last: Node[] = [];
   for (const scroll of [() => emulator.scrollDown(), () => emulator.scrollUp()]) {
     let before = "";
-    for (let i = 0; i < 12; i++) {
+    let unmoved = 0;
+    for (let i = 0; i < 14; i++) {
       last = visible();
       const node = last.find(match);
       // Not one that only peeks over an edge of the screen.
       if (node && node.bottom < emulator.size().height - 80 && node.top > 80) return node;
       const now = JSON.stringify(last.map((n) => [n.text, n.top]));
-      if (now === before) break;
+      // The end of the step: the screen did not move, twice. Once is not enough: a swipe made while a demonstration is being
+      // drawn (steps 2 and 6) is now and then lost on a busy emulator.
+      unmoved = now === before ? unmoved + 1 : 0;
+      if (unmoved === 2) break;
       before = now;
       scroll();
     }

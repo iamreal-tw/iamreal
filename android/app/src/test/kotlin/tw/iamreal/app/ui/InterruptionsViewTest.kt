@@ -19,7 +19,7 @@ class InterruptionsViewTest {
     @Test
     fun `no card sensed - how to look for the place again, and nothing about holding the card still`() {
         val none = card(CardException.Reason.NO_TAP)
-        assertEquals("沒有感應到卡片。請再感應一次：把卡片平貼在手機背面，沒有反應就慢慢上下移動，畫面變成「讀取中」就停住。", messages.stop(none, Messages.At.READ))
+        assertEquals("沒有感應到卡片。請再感應一次：把卡片平貼在手機背面，沒有反應就慢慢上下移動卡片，畫面變成「讀取中」就停住。", messages.stop(none, Messages.At.READ))
         assertEquals(ReadButton.TAP_AGAIN, readButtonAfter(none))
     }
 
