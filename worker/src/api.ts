@@ -246,6 +246,20 @@ async function getFingerprint(_request: Request, env: Env): Promise<Reply> {
   return ok(line === null ? { date: null, count: 0, fingerprint: EMPTY_FINGERPRINT } : { date: formatDay(line.date), count: line.count, fingerprint: line.fingerprint });
 }
 
+/**
+ * `GET /api/v1/rebuild`: what the proof log's object knows of the last rebuild
+ * from the proof log it began (src/rebuild.ts): its name, whether it is
+ * running, was put in place or was refused, how many records it has applied,
+ * and why it was refused. Every field null, and no record, for an object that
+ * never began one. It is how the operator follows a rebuild: the Worker has no
+ * entry of the operator's own.
+ */
+async function getRebuild(_request: Request, env: Env): Promise<Reply> {
+  settings(env);
+  const rebuild = await askProofLog(() => proofLogOf(env).rebuildStatus());
+  return ok(rebuild === null ? { name: null, status: null, records: 0, reason: null } : { name: rebuild.token, status: rebuild.status, records: rebuild.records, reason: rebuild.reason });
+}
+
 /** What the API is given besides the environment: the pieces that are behind an interface, so that each can be replaced by itself. */
 export interface ApiParts {
   /** Verifies the proof of a submitted record (verify.ts). */
@@ -263,6 +277,7 @@ const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
   ["/api/v1/records", { method: "POST", handle: postRecord }],
   ["/api/v1/config", { method: "GET", handle: getConfig }],
   ["/api/v1/fingerprint", { method: "GET", handle: getFingerprint }],
+  ["/api/v1/rebuild", { method: "GET", handle: getRebuild }],
 ]);
 
 /** Whether the API answers for this path: everything under /api/. */
