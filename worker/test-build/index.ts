@@ -305,6 +305,11 @@ export class ProofLog extends DeployedProofLog {
     if (rowsWritten !== 1) throw new Error("no such row");
   }
 
+  /** Begins the rebuild from the proof log named `token`, as the object does for an operator's (src/proof-log.ts, `beginRebuild`); whether one was begun. */
+  testBeginRebuild(token: string): Promise<boolean> {
+    return this.beginRebuild(token);
+  }
+
   /** Drops the tables the API reads, so that the object's methods throw until it starts again. */
   testBreak(): void {
     this.ctx.storage.sql.exec("DROP TABLE challenges");
@@ -659,6 +664,8 @@ export default {
       return json(await testProofLogOf(env).testRuleState(scope_string, scoped_id));
     }
     if (route === "POST /__test/proof-log/page-plans") return json(await testProofLogOf(env).testPagePlans((await request.json()) as PagePlanQuestion));
+    if (route === "POST /__test/proof-log/rebuild") return json({ begun: await testProofLogOf(env).testBeginRebuild(((await request.json()) as { token: string }).token) });
+    if (route === "GET /__test/proof-log/rebuild") return json(await testProofLogOf(env).rebuildStatus());
     if (route === "GET /__test/proof-log/stored") return json(await testProofLogOf(env).testStored());
     if (route === "GET /__test/proof-log/kept") return json(await testProofLogOf(env).testKept());
     if (route === "GET /__test/proof-log/tables") return json(await testProofLogOf(env).testTables());

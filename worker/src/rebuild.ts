@@ -68,10 +68,16 @@ function stagedStatement(statement: string): string {
 
 /** Throws unless every table a staged statement names is a staged one: a statement that would read or write the object's own tables never runs. */
 function checkStaged(statement: string): void {
-  for (const m of statement.matchAll(/\b(?:FROM|INTO|UPDATE|EXISTS|ON|TABLE|BY)\s+([a-z_]+)\b/gi)) {
-    const name = m[1]!;
-    if (!name.startsWith(STAGE) && !["IF", "CONFLICT", "NOT", "SELECT"].includes(name.toUpperCase())) throw new Error(`rebuild: a staged statement names ${name}`);
-  }
+  // Where a statement names a table or an index: after FROM, INTO, JOIN, INDEXED BY, UPDATE (not the UPDATE of ON CONFLICT … DO UPDATE SET),
+  // CREATE TABLE and CREATE INDEX with their IF NOT EXISTS, the ON of CREATE INDEX, and DROP … IF EXISTS.
+  const names = [
+    ...statement.matchAll(/\b(?:FROM|INTO|JOIN|INDEXED BY)\s+([A-Za-z_]+)/g),
+    ...statement.matchAll(/\bUPDATE\s+(?!SET\b)([A-Za-z_]+)/g),
+    ...statement.matchAll(/\b(?:TABLE|INDEX) IF NOT EXISTS\s+([A-Za-z_]+)(?:\s+ON\s+([A-Za-z_]+))?/g),
+    ...statement.matchAll(/\bDROP (?:TABLE|INDEX) IF EXISTS\s+([A-Za-z_]+)/g),
+  ].flatMap((m) => m.slice(1).filter((name) => name !== undefined));
+  if (names.length === 0) throw new Error("rebuild: a staged statement names no table");
+  for (const name of names) if (!name.startsWith(STAGE)) throw new Error(`rebuild: a staged statement names ${name}`);
 }
 
 /** The object's storage, for card-table.ts and views.ts to read and write the staged tables through. */
