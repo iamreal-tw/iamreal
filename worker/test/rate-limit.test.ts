@@ -9,8 +9,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, beforeEach, describe, test } from "node:test";
 import { WORKER_DIR } from "./build.ts";
+import { block, copyLines, wantLines, wantPreview } from "./copy.ts";
 import { type RateBinding, type TestWorker, startWorker, withRateLimits } from "./harness.ts";
 import { TEST_SCOPE, freshProofLog, newCard, publishG3, sub } from "./records.ts";
 
@@ -23,6 +24,13 @@ before(async () => {
   await freshProofLog(worker);
 });
 after(() => worker.close());
+
+// The local workerd counts in fixed minutes of the clock: a test that fills a class and then expects 429 must
+// not have the minute change in between. No test here takes seconds, so each starts with ten of them left.
+beforeEach(async () => {
+  const left = 60_000 - (Date.now() % 60_000);
+  if (left < 10_000) await new Promise((resolve) => setTimeout(resolve, left + 50));
+});
 
 /** A network no other test used: its counts start at zero. */
 let networks = 0;
@@ -89,9 +97,11 @@ describe("what a request is counted as", () => {
     const a = newIpv4();
     for (let i = 0; i < LIMITS.RATE_CHALLENGES; i++) assert.equal((await REQUESTS.challenges!.send(a)).status, 200);
     assert.equal((await REQUESTS.challenges!.send(a)).status, 429);
-    // The next address of the same /24.
+    // The next address of the same /24 (never one this file's generator gives: its last number is at most 250).
     const [x, y, z, last] = a.split(".");
-    assert.equal((await REQUESTS.challenges!.send(`${x}.${y}.${z}.${Number(last) === 254 ? 253 : Number(last) + 100}`)).status, 200);
+    const neighbour = `${x}.${y}.${z}.${Number(last) === 250 ? 252 : 251}`;
+    for (let i = 0; i < LIMITS.RATE_CHALLENGES; i++) assert.equal((await REQUESTS.challenges!.send(neighbour)).status, 200, neighbour);
+    assert.equal((await REQUESTS.challenges!.send(neighbour)).status, 429);
   });
 
   test("IPv6 addresses of one /64 are counted together, in whatever way they are written; another /64 apart", async () => {
@@ -149,14 +159,17 @@ describe("the page a visitor gets", () => {
     const got = await ask("/p/7K2Q9FM4XD", ip);
     assert.equal(got.status, 429);
 
-    const copy = readFileSync(join(WORKER_DIR, "..", "design", "copy", "too-many-requests.md"), "utf8");
-    const [title, , sentence] = /## 頁面\n\n```\n([\s\S]*?)\n```/.exec(copy)![1]!.split("\n");
-    assert.deepEqual([title, sentence], ["請稍後再試", "這個網路送出的請求太多，請過一分鐘再試。"]);
+    // The lines of the copy file, as the other pages' tests read theirs (test/copy.ts).
+    const lines = copyLines(block("too-many-requests.md", "頁面"));
+    assert.deepEqual(lines, ["請稍後再試", "這個網路送出的請求太多，請過一分鐘再試。"]);
+    wantLines(got.body, lines);
+    // The section holds those two lines and nothing else.
     const main = /<section class="missing">([\s\S]*?)<\/section>/.exec(got.body)?.[1] ?? "";
-    assert.deepEqual([...main.matchAll(/>([^<>\n]+)</g)].map((m) => m[1]), [title, sentence]);
-    assert.match(got.body, new RegExp(`<title>${title}｜島民`));
-    // Not the address, not the short ID it was asked for, no link preview.
-    assert.ok(!got.body.includes(ip) && !got.body.includes("7K2Q9FM4XD") && !got.body.includes("og:title"), "the page says who or what");
+    assert.deepEqual([...main.matchAll(/>([^<>\n]+)</g)].map((m) => m[1]), lines);
+    // The tab's title, whole; no link preview.
+    wantPreview(got.body, lines[0]!, null);
+    // Not the address, not the short ID it was asked for.
+    assert.ok(!got.body.includes(ip) && !got.body.includes("7K2Q9FM4XD"), "the page says who or what");
     // HEAD is counted too, and gets the headers without the page.
     const head = await ask("/faq", ip, { method: "HEAD" });
     assert.deepEqual([head.status, head.retryAfter, head.body], [429, "60", ""]);
@@ -208,5 +221,91 @@ describe("the limits are settings", () => {
     } finally {
       await other.close();
     }
+  });
+});
+
+describe("the key, by itself", () => {
+  // The module is the Worker's; loaded by a path the type check of the tests does not follow (README.md, 型別檢查).
+  const load = async (): Promise<{
+    networkOf(ip: string): string | null;
+    rateKey(kind: string, ip: string | null): string | null;
+    withinLimit(env: unknown, kind: string, request: Request): Promise<boolean>;
+  }> => (await import(new URL("../src/rate-limit.ts", import.meta.url).href)) as never;
+
+  test("an IPv4 address is itself; an IPv6 address is its first four groups, however it is written; what is no address is nothing", async () => {
+    const { networkOf } = await load();
+    const cases: [string, string | null][] = [
+      ["192.0.2.1", "192.0.2.1"],
+      ["0.0.0.0", "0.0.0.0"],
+      ["255.255.255.255", "255.255.255.255"],
+      ["2001:db8:1:2:3:4:5:6", "2001:db8:1:2::/64"],
+      ["2001:0DB8:0001:0002:0000:0000:0000:0001", "2001:db8:1:2::/64"],
+      ["2001:db8:1:2::", "2001:db8:1:2::/64"],
+      ["2001:db8::1", "2001:db8:0:0::/64"],
+      ["2001:db8:0:0:8000::", "2001:db8:0:0::/64"],
+      ["1::", "1:0:0:0::/64"],
+      ["::", "0:0:0:0::/64"],
+      ["::1", "0:0:0:0::/64"],
+      ["1:2:3:4:5:6:7::", "1:2:3:4::/64"],
+      ["::2:3:4:5:6:7:8", "0:2:3:4::/64"],
+      ["1:2:3:4:5:6:192.0.2.1", "1:2:3:4::/64"],
+      ["::ffff:192.0.2.1", "192.0.2.1"],
+      ["::FFFF:c000:201", "192.0.2.1"],
+      // Not addresses.
+      ["", null],
+      ["1.2.3", null],
+      ["1.2.3.4.5", null],
+      ["256.1.1.1", null],
+      ["01.2.3.4", null],
+      ["1.2.3.4 ", null],
+      [":::", null],
+      ["1:2:3:4:5:6:7", null],
+      ["1:2:3:4:5:6:7:8:9", null],
+      ["1:2:3:4:5:6:7:8::", null],
+      ["::1:2:3:4:5:6:7:8", null],
+      ["1::2::3", null],
+      ["12345::", null],
+      ["g::", null],
+      ["fe80::1%eth0", null],
+      ["1:2:3:4:5:6:7:1.2.3.4", null],
+      ["1.2.3.4::", null],
+      ["2001:db8::1/64", null],
+    ];
+    for (const [ip, want] of cases) assert.equal(networkOf(ip), want, JSON.stringify(ip));
+  });
+
+  test("the key is the class and the network; a request with no address, or from this computer, has none", async () => {
+    const { rateKey } = await load();
+    assert.equal(rateKey("records", "192.0.2.1"), "records:192.0.2.1");
+    assert.equal(rateKey("pages", "2001:db8:1:2:3:4:5:6"), "pages:2001:db8:1:2::/64");
+    assert.notEqual(rateKey("records", "192.0.2.1"), rateKey("challenges", "192.0.2.1"));
+    for (const ip of [null, "", "nonsense", "127.0.0.1", "127.255.255.254", "::1", "::", "::ffff:127.0.0.1"]) assert.equal(rateKey("pages", ip), null, String(ip));
+    // Not loopback, though it begins alike.
+    assert.equal(rateKey("pages", "12.7.0.1"), "pages:12.7.0.1");
+    assert.equal(rateKey("pages", "0:0:0:1::1"), "pages:0:0:0:1::/64");
+  });
+
+  test("a binding that fails, or is not there, lets the request through and says so in one line with nothing of the request", async () => {
+    const { withinLimit } = await load();
+    const request = new Request("https://example.test/p/7K2Q9FM4XD", { headers: { "CF-Connecting-IP": "192.0.2.77" } });
+    const said: string[] = [];
+    const error = console.error;
+    console.error = (line: string) => void said.push(line);
+    try {
+      assert.equal(await withinLimit({ RATE_PAGES: { limit: () => Promise.reject(new Error("no")) } }, "pages", request), true);
+      assert.equal(await withinLimit({}, "records", request), true);
+      // A binding that answers is asked with the key, and its answer is the answer.
+      const keys: string[] = [];
+      const binding = { limit: ({ key }: { key: string }) => (keys.push(key), Promise.resolve({ success: false })) };
+      assert.equal(await withinLimit({ RATE_PAGES: binding }, "pages", request), false);
+      assert.deepEqual(keys, ["pages:192.0.2.77"]);
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(said.map((l) => JSON.parse(l) as unknown), [
+      { event: "rate_limit_unavailable", class: "pages", error: "Error" },
+      { event: "rate_limit_unavailable", class: "records", error: "TypeError" },
+    ]);
+    for (const line of said) assert.ok(!line.includes("192.0.2.77") && !line.includes("7K2Q9FM4XD"), line);
   });
 });

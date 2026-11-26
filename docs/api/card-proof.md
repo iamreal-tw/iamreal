@@ -28,9 +28,12 @@ record is or how it is verified. It can change without invalidating records.
   A request that is answered `429` was not read: it does not count towards
   a challenge's five submissions, and nothing is kept of it. The limits
   are more than a household or an office behind one address uses; they
-  are the operator's settings and not part of this document. A device
-  that gets `429` from `challenges`, `card-state` or `records` offers to
-  send the same request again and does not start the card proof over.
+  are the operator's settings and not part of this document. A request
+  that was answered `429` can be sent again as it was once the time has
+  passed: the card does not have to be read or sign again for it. What the
+  page and the apps do with a `429` today is in their own documents; that
+  each offers to send again, and that a `429` to `config` in the middle of
+  a card proof does not stop it, is not built yet.
 - **The server keeps a connection log of one kind of request, and of no
   other** (ADR-0022): a submission of a record (`POST /api/v1/records`)
   that carried a challenge the server issued and that it counted towards

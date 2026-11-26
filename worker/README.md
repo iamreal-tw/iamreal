@@ -12,7 +12,7 @@
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
 | 照 IP 的限流（[限流](#限流)）：題目、卡片現況、送出、公開的讀取、頁面五類分開算，IPv4 照單一位址、IPv6 照 /64；超過回 `429` 和 `Retry-After`，訪客頁面回一頁說明 | 全站的總量上限（只數開始過卡的那一次 `config`）、Durable Object 撐不住時的 `busy`、客戶端的處理；WAF 的那一條規則和挑戰頁還沒有在測試網站設過 |
 | 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記 | 查詢的指令；讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；客戶端還沒有帶過卡裝置編號 |
-| API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流 |
+| API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 全站的總量上限、Durable Object 撐不住時的 `busy`（照 IP 的上限有了，見上一列） |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
@@ -1301,12 +1301,12 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 | 題目 | `RATE_CHALLENGES` | `POST /api/v1/challenges` | 30 |
 | 卡片現況 | `RATE_CARD_STATE` | `POST /api/v1/card-state` | 30 |
 | 送出 | `RATE_RECORDS` | `POST /api/v1/records` | 30 |
-| 公開的讀取 | `RATE_PUBLIC_READS` | `GET /api/v1/config`、`fingerprint`、`rebuild`，三個合起來 | 60 |
+| 公開的讀取 | `RATE_PUBLIC_READS` | `GET /api/v1/config`、`fingerprint`、`rebuild`，三個合起來 | 180 |
 | 頁面 | `RATE_PAGES` | 每一個跑到 Worker 的頁面請求（`GET`、`HEAD`），找不到的網址也算 | 300 |
 
 - **一類被擋不影響另一類**：看了很多頁面的網路，過卡的三個介面照樣回答。
 - **不算的**：Static Assets 直接送的檔（過卡的頁面 `/proof`、樣式、字型，不跑 Worker）；方法不對的請求（`405`）；`/api/` 底下不是介面的路徑（`404`）。這幾種都不問 Durable Object。
-- **`config` 放在公開的讀取**：規格說不帶記號的 `config` 只受照 IP 的上限，沒有說哪一類。它不問 Durable Object；和 `fingerprint`、`rebuild` 放在一起是因為都是誰都能隨時問的讀取。一次過卡現在問 `config` 兩次（網頁版）或更多次（app 每次感應之前），上限要容得下。
+- **`config` 放在公開的讀取**：規格說不帶記號的 `config` 只受照 IP 的上限，沒有說哪一類。它不問 Durable Object；和 `fingerprint`、`rebuild` 放在一起是因為都是誰都能隨時問的讀取。一次過卡現在問 `config` 兩次（網頁版）或更多次（app 打開、回到前景、三次感應之前，算 6 次），所以這一類的上限是題目那一類的 6 倍：題目的上限還沒到之前，`config` 不會先被擋。**這一點現在特別要緊**：客戶端還沒有做「過卡途中的 `config` 被限流時不停下」（[#413](https://github.com/iamreal-tw/iamreal/issues/413)），`config` 回 `429` 會讓那一次過卡停在讀卡之前。
 
 **計次的鍵**由一個函式產生（`rateKey`）：類別加上來源的網路。
 
@@ -1322,7 +1322,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 - 頁面：`429`，一頁 HTML（[`design/copy/too-many-requests.md`](../design/copy/too-many-requests.md)），`Retry-After: 60`，`Cache-Control: no-store`。頁面上不寫位址，也不把訪客要的網址寫回來
 - 不算進題目的 5 次，不寫連線紀錄（[連線紀錄](#連線紀錄)），即時的輸出也不寫任何一行
 - `Retry-After` 固定是 60：綁定只回答過或不過，不說還剩幾次、什麼時候重新算（文件裡 `limit()` 的回應只有 `success`）；計次的期間是 60 秒，所以 60 秒是最長要等的時間
-- 綁定本身出錯時放行：問不到上限，不能把所有人都擋下
+- 綁定本身出錯、或環境沒有那個綁定時放行（問不到上限，不能把所有人都擋下），即時的輸出寫一行 `{"event":"rate_limit_unavailable","class":"pages","error":"TypeError"}`，裡面沒有請求的內容。新開一個環境（正式的）時要在它底下另外寫 `ratelimits`：綁定不會從別的環境繼承
 
 **這個綁定的性質**（[文件](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)，2026-11-26 讀的）：
 

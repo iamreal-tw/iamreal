@@ -106,15 +106,18 @@ export function rateKey(kind: RateClass, ip: string | null): string | null {
 
 /**
  * Whether this request is within its class's limit, and counts it. A
- * request that has no key is. If the binding fails, the request is let
- * through: a limit that cannot be asked must not stop everyone.
+ * request that has no key is. If the binding fails or is not there, the
+ * request is let through, and one line in the live log says which class
+ * is not limited: a limit that cannot be asked must not stop everyone, and
+ * must not go unnoticed either. The line has nothing of the request.
  */
 export async function withinLimit(env: Env, kind: RateClass, request: Request): Promise<boolean> {
   const key = rateKey(kind, request.headers.get("CF-Connecting-IP"));
   if (key === null) return true;
   try {
     return (await env[BINDINGS[kind]].limit({ key })).success;
-  } catch {
+  } catch (e) {
+    console.error(JSON.stringify({ event: "rate_limit_unavailable", class: kind, error: e instanceof Error ? e.name : "unknown" }));
     return true;
   }
 }
