@@ -71,8 +71,11 @@ struct Screens {
     /// `updateFrom`: the day from which this version can no longer do a
     /// card proof, for a build older than the server's lowest: said above
     /// everything, and a card proof goes on as usual. `idle`: the card
-    /// proof came back here after five minutes.
-    func before(notice: Notice? = nil, paused: Bool = false, updateFrom: String? = nil, idle: Bool = false) -> Screen {
+    /// proof came back here after five minutes. `busy`: the server turned
+    /// the start away as too many: said right above common.next, which
+    /// stays (card-proof.md, step 1, 人太多的時候). `starting`: common.next
+    /// was pressed and the server has not answered yet.
+    func before(notice: Notice? = nil, paused: Bool = false, updateFrom: String? = nil, idle: Bool = false, busy: Bool = false, starting: Bool = false) -> Screen {
         // The lowest version first, above the reminder's note too.
         var warnings: [Notice] = []
         if let updateFrom {
@@ -100,7 +103,8 @@ struct Screens {
             ]),
         ]
         if paused { return Screen(step: 1, blocks: Array(blocks[..<questions]) + [.message(copy("before.paused"))] + blocks[questions...], warnings: warnings, notice: notice, settings: settingsButton) }
-        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], warnings: warnings, notice: notice, settings: settingsButton)
+        if busy { blocks.append(.message(copy("before.busy"))) }
+        return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start, enabled: !starting)], warnings: warnings, notice: notice, settings: settingsButton)
     }
 
     private var settingsButton: Button { Button(label: appCopy("settings.open"), action: .openSettings) }
@@ -170,6 +174,8 @@ struct Screens {
         /// The tap ended and the PIN is kept (another card than the one read, no card, the card left before
         /// the PIN went or after it was accepted): why, and the same tap again.
         case tapAgain(String)
+        /// The card signed and the server turned its state away as too many: why, and the same request again.
+        case retry([String])
         /// The card proof stopped here.
         case stopped([String])
     }
@@ -192,6 +198,10 @@ struct Screens {
         case .tapAgain(let message):
             blocks.append(.message(message))
             buttons = [Button(label: copy("app_read.tap_again"), action: .confirmCard)]
+        case .retry(let why):
+            // Asked again, the card not tapped again; 上一步 reads the card again (card-proof.md, step 3).
+            blocks += why.map(Block.message)
+            buttons = [Button(label: copy("common.back"), action: .back), Button(label: copy("progress.retry"), action: .retryCardState)]
         case .stopped(let why):
             blocks += why.map(Block.message)
             buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
@@ -491,7 +501,7 @@ struct Screens {
         var blocks: [Block] = [.title(copy("progress.title")), .text(copy("app_progress.keep_open"))]
         // The card signed: it can be taken away.
         if reached >= 2 { blocks.append(.strong(copy("app_read.lift"))) }
-        let why = stop.map { submitFailed ? [copy("stops.submit_failed")] : message($0, tap: 3) }
+        let why = stop.map { submitFailed && !Self.isTooMany($0) ? [copy("stops.submit_failed")] : message($0, tap: 3) }
         blocks.append(.items(items(labels, reached: reached, running: stop == nil, why: why)))
         guard let stop else { return Screen(step: 5, blocks: blocks) }
         if Self.tapsAgain(stop) {
@@ -499,6 +509,13 @@ struct Screens {
             return Screen(
                 step: 5, blocks: blocks,
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
+                cancel: cancel)
+        }
+        if Self.isTooMany(stop) {
+            // Too many people: the challenge asked for again (then tap 3), or the record sent again; the card is not read again.
+            return Screen(
+                step: 5, blocks: blocks,
+                buttons: [Button(label: copy("progress.retry"), action: submitFailed ? .submitAgain : .declare)],
                 cancel: cancel)
         }
         // The PIN is gone, and the phone could not talk to the card: back to the start. So when the server takes no card
@@ -884,6 +901,8 @@ struct Screens {
         case .server(let failure):
             let sentence: String
             switch failure.code {
+            // Too many people (429, or 503 `busy`; ADR-0026): the same request can be sent again, the card not tapped again.
+            case _ where failure.tooMany: sentence = copy("stops.too_many")
             case "challenge_unknown": sentence = copy("stops.challenge_expired")
             case "crl_stale": sentence = copy("stops.server_crl_stale")
             case "daily_limit": sentence = copy("stops.daily_limit")
@@ -898,6 +917,11 @@ struct Screens {
             }
             return [sentence] + (failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? [])
         }
+    }
+
+    private static func isTooMany(_ stop: Flow.Stop) -> Bool {
+        if case .server(let failure) = stop { return failure.tooMany }
+        return false
     }
 
     private static func isPaused(_ stop: Flow.Stop) -> Bool {

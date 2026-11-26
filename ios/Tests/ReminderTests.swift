@@ -212,6 +212,7 @@ final class ReminderTests: XCTestCase {
         XCTAssertEqual(model.screen.notice?.button?.label, "一週後再提醒我")
         // Step 2 and back: still there.
         model.perform(.start)
+        await model.work?.value
         XCTAssertEqual(model.screen.step, 2)
         model.perform(.back)
         XCTAssertEqual(model.screen.step, 1)

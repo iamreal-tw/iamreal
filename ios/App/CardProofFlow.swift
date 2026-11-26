@@ -13,19 +13,23 @@ import Foundation
 ///   checksDone()      returns when every one of those passed
 ///   confirmCard(pin)  tap 2: the card signs the scope string; the core
 ///                     computes the scoped ID; the card's state
+///   retryCardState()  the card's state again, after the server turned it
+///                     away as too many; nothing signed again
 ///   choose(entries)   the account typed on each platform offered: the list
 ///                     the card would sign and what it does (the core
 ///                     computes it). No request, no signature
 ///   back()            from the consequence to the card's state again
 ///   prepare()         the date conditions again; a challenge, dated today;
 ///                     the list still does what the screen said; the
-///                     declaration code
+///                     declaration code. Again after the server turned the
+///                     challenge away as too many
 ///   sign()            tap 3: the card signs the declaration code; the PIN
 ///                     is cleared
 ///   prove()           the proof, made by the core; the certificate and the
 ///                     signatures are overwritten
 ///   submit()          the record goes to the server; again after a
-///                     failure, as it is
+///                     failure, as it is, and after the server turned it
+///                     away as too many
 ///   cancel()          drops everything
 ///
 /// Nothing is asked of a person or of the network during a tap: the
@@ -104,7 +108,7 @@ final class CardProofFlow {
     }
 
     enum Phase: Equatable {
-        case start, checking, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
+        case start, checking, cardStateFailed, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
     }
 
     struct Account: Equatable {
@@ -495,17 +499,57 @@ final class CardProofFlow {
             Self.wipe(&signature)
             guard let scopedID = try Self.object(body)["scoped_id"] as? String else { throw Stop.core(IDC_ERR_INTERNAL) }
             shortID = try DeviceCore.shortID(of: scopedID)
-            let state = try await deps.backend.cardState(body)
-            try live()
-            let status = try status(of: state)
-            cardState = state
-            phase = .statusKnown
-            return status
+            return try await cardStateNow(body)
+        } catch let away as TurnedAway {
+            // The card signed, the PIN is kept for tap 3: retryCardState() asks again.
+            throw Stop.server(away.failure)
         } catch {
             Self.wipe(&signature)
             pin.clear()
             throw fail(error)
         }
+    }
+
+    /// The card's state asked again, after the server turned it away as
+    /// too many (confirmCard): the card signed already and the PIN is
+    /// kept, so nothing is signed again.
+    func retryCardState() async throws -> CardStatus {
+        try expect(.cardStateFailed)
+        do {
+            guard let session, let scopeSignature else { throw Stop.state }
+            try stillValid(at: deps.clock())
+            let body = try session.cardStateRequest(now: deps.clock(), scopeSignature: scopeSignature.bytes)
+            return try await cardStateNow(body)
+        } catch let away as TurnedAway {
+            throw Stop.server(away.failure)
+        } catch {
+            throw fail(error)
+        }
+    }
+
+    /// The server turned a request away as too many people
+    /// (docs/api/card-proof.md, "Rules for every endpoint"): the card proof
+    /// does not end, and the same request can be sent again.
+    private struct TurnedAway: Error {
+        let failure: BackendFailure
+    }
+
+    /// The card's state, asked of the server with the scoped ID. Turned
+    /// away as too many, the flow waits in `cardStateFailed`.
+    private func cardStateNow(_ body: Data) async throws -> CardStatus {
+        let state: Data
+        do {
+            state = try await deps.backend.cardState(body)
+        } catch let failure as BackendFailure where failure.tooMany {
+            try live()
+            phase = .cardStateFailed
+            throw TurnedAway(failure: failure)
+        }
+        try live()
+        let status = try status(of: state)
+        cardState = state
+        phase = .statusKnown
+        return status
     }
 
     /// A tap with the PIN that ended without the PIN having gone to a card
@@ -649,10 +693,20 @@ final class CardProofFlow {
     /// the screen said.
     func prepare() async throws {
         try expect(.chosen)
+        let challenge: String
         do {
             try sameAsShown()
             try stillValid(at: deps.clock())
-            let challenge = try await deps.backend.challenge()
+            challenge = try await deps.backend.challenge()
+        } catch let failure as BackendFailure where failure.tooMany {
+            // Too many people: nothing was signed, the PIN is kept, and the
+            // flow is where it was; prepare() asks for a challenge again.
+            do { try live() } catch { throw fail(error) }
+            throw Stop.server(failure)
+        } catch {
+            throw fail(error)
+        }
+        do {
             try live()
             // The record is dated the challenge's date, and the core makes a
             // proof only for a challenge it took: dated today in Taiwan, in
@@ -727,8 +781,8 @@ final class CardProofFlow {
         }
     }
 
-    /// Sends the record. After `Stop.server` with the code `network`, it
-    /// can be sent again as it is.
+    /// Sends the record. After `Stop.server` with the code `network`, or
+    /// one the server turned away as too many, it can be sent again as it is.
     func submit() async throws -> Done {
         guard phase == .submitting || phase == .submitFailed else { throw Stop.state }
         guard let submission, let chosen, let challenge else { throw fail(Stop.state) }
@@ -736,7 +790,7 @@ final class CardProofFlow {
         let response: Data
         do {
             response = try await deps.backend.submit(submission)
-        } catch let failure as BackendFailure where failure.code == "network" {
+        } catch let failure as BackendFailure where failure.code == "network" || failure.tooMany {
             try live()
             phase = .submitFailed
             throw Stop.server(failure)
