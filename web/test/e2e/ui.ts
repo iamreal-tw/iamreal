@@ -2641,7 +2641,7 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(outside.length === 0, `the page and its workers (${types.join(", ")}) connected only to ${PAGE_ORIGIN}; the component's window only to ${componentOrigin}: ${JSON.stringify(outside.slice(0, 5))}`);
   // On its own origin, the page asked for the page itself and its files under /proof/, the API
   // and the CRL mirror, nothing else (the page moved from / to /proof). /favicon.ico is the
-  // browser's own request, not the page's.
+  // site's icon, which the page links to (index.html): a file of the site, not of the page's build.
   const own = ours
     .filter((r) => !popups.has(r.sessionId) && !r.url.startsWith("about:") && new URL(r.url).origin === PAGE_ORIGIN)
     .map((r) => new URL(r.url).pathname)
