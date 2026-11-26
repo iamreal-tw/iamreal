@@ -346,12 +346,12 @@ internal fun PinInput(pin: PinField, enabled: Boolean, tag: String, modifier: Mo
 
 private const val DOT = '•'
 
-/** Where in the six steps: "第 2 步，共 6 步", then six bars, the steps up to this one in ink. */
+/** Where in the steps: "第 2 步，共 8 步", then a bar a step, the steps up to this one in ink. */
 @Composable
 internal fun StepBar(copy: Copy, step: Int) = Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    BasicText(copy.say("common.step", "step" to step, "steps" to 6), style = style(Type.sizeKicker, Type.leadingKicker, Colours.mute))
+    BasicText(copy.say("common.step", "step" to step, "steps" to Step.COUNT), style = style(Type.sizeKicker, Type.leadingKicker, Colours.mute))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (i in 1..6) Box(Modifier.weight(1f).height(4.dp).background(if (i <= step) Colours.ink else Colours.line))
+        for (i in 1..Step.COUNT) Box(Modifier.weight(1f).height(4.dp).background(if (i <= step) Colours.ink else Colours.line))
     }
 }
 
