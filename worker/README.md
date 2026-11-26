@@ -1316,7 +1316,7 @@ pnpm run deploy:test
 - **最後一次公布之後的紀錄不在 R2 上，補不回來**（ADR-0033 的 Consequences）
 - 重建完，物件要等清冊鏡像下一輪（每小時）告訴它最新的清冊，在那之前 `records` 回 `crl_stale`：最新的清冊不是從證明紀錄算得出來的
 
-**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有營運者專用的入口；每一種裝置都不讀它。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
+**看進度和結果。** `GET /api/v1/rebuild`（`docs/api/card-proof.md`）：名稱、狀態（`running`、`swapped`、`refused`）、做到第幾筆、沒換的原因。它是公開的，沒有營運者專用的入口；每一種裝置都不讀它。它每次都問物件（讀 `rebuild_state` 的那一列），回應和 API 的其他回應一樣帶 `Cache-Control: no-store`，沒有快取：和 `GET /api/v1/fingerprint` 是同一種請求，物件做的事是讀一列。ADR-0026 的 60 秒快取是訪客頁面的；會打到物件的 API 路徑靠的是那份 ADR 的限流（WAF 那一條規則把這些路徑合起來算，Worker 裡的 Rate Limiting binding），限流現在還沒做（上面「現在有什麼」），做的時候這個路徑和 `fingerprint` 算在一起。沒有替它另外加快取：營運者要看的是當下做到第幾筆，而且重建進行中的回應每一步都在變。即時輸出（`wrangler tail` 或儀表板的即時紀錄，沒有開保存）每一步一行：
 
 | 事件 | 什麼時候 |
 |---|---|
