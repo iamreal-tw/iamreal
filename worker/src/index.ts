@@ -46,7 +46,7 @@ export default {
         try {
           return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer in 30 s")), 30_000)))]);
         } finally {
-          clearTimeout(timer);
+          if (timer !== undefined) clearTimeout(timer);
         }
       };
       const oldest = await inTime(oldestDay(env.CONNECTION_LOG));
