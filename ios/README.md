@@ -156,6 +156,7 @@ app 算證明要的檔案都在安裝檔裡，執行時不下載（ADR-0035）�
 | `GenRyuMin2TW-B.otf` | `design/fonts/GenRyuMin2TW-B.otf`：標題用的源流明體 TW 的子集 |
 | `hang.json` | `design/motion/hang.json`：第 6 步示範的時間表，和網頁、Android 讀的是同一個檔，app 沒有另外抄一份 |
 | `sense.json` | `design/motion/sense.json`：第 2 步示範的時間表（app 用其中 iPhone 的那一組） |
+| `PrivacyInfo.xcprivacy` | `App/PrivacyInfo.xcprivacy`：privacy manifest（下面「privacy manifest」） |
 
 Xcode 專案直接引用這些位置，不另存一份。核心在用之前還會自己核對電路檔、驗證金鑰、參數檔的 SHA-256（`idc_session_check_artifacts`，算證明時再核對一次）。
 
@@ -241,12 +242,37 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 `Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-hang`、`-6-hang-short`、`-7-reminder`、`-7-reminder-on`、`-7-reminder-refused`、`-8-done`、`-8-done-switch`、`-8-withdraw`、`app-splash-phone.png`；提醒的 `app-reminder-2-schedule-phone.png`、`-4-from-notification`、`app-settings-phone.png`。`app-reminder-3-notification-phone.png` 是系統的通知的示意，不拍）。`design/screens/` 放的是哪一個 app 的，寫在那裡的 README「版本」；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。已經宣告帳號的卡片的第 4、5 步也拍（`card-proof-app-4-accounts-existing-phone.png`、`-4-accounts-switch`、`-5-confirm-refresh`、`-5-confirm-switch`、`-5-confirm-withdraw`），`design/screens/` 沒有同名的，只留在輸出的目錄。示範另外畫幾個時間點（按下「複製證明連結」、四個 Threads 的示意畫面各自被按的那一刻、貼上、最後一格，和帳號有 30 個字時的三張）到 `web/test-output/app/screens-ios/demo/`，第 2 步的示範也畫（手機、卡片進來、貼好、紅圈、離開、停住）；`xcodebuild test` 前面加 `TEST_RUNNER_IAMREAL_DEMO_FRAMES=hang` 或 `=sense` 時那一段改成每十五分之一秒一格，可以接成影片。讀取卡片的那一張只有 iPhone 的，檔名是 `card-proof-app-2-read-iphone-phone.png`，`design/screens/` 放的是這裡拍的（#174）。感應中的那一張（`card-proof-app-2-reading-iphone-phone.png`）蓋著系統的面板，這裡拍不到，留著定稿。
 
+## privacy manifest（`App/PrivacyInfo.xcprivacy`）
+
+App Store 要 app 帶一份 privacy manifest，申報用到的 required reason API（[#445](https://github.com/iamreal-tw/iamreal/issues/445)，「app 的計數、當機回報和商店的隱私標示」[#94](https://github.com/iamreal-tw/iamreal/issues/94) 第 10 點）。檔名和四個鍵照 Apple 的 [Privacy manifest files](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)；API 的類別和理由代碼照 [Describing use of required reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api) 和它的 [`NSPrivacyAccessedAPIType`](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)（2026-11-26 讀的）。`App/` 是 Xcode 同步的資料夾，檔放在裡面就會包進 app，專案檔不用改。
+
+**用到的 required reason API。** Apple 的清單有五類，這個 app 用到兩類：
+
+| 類別 | 理由代碼 | 用在哪裡 | 為什麼是這個代碼 |
+|---|---|---|---|
+| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | `App/CRLNumbers.swift`（每把發證金鑰用過的最高清冊編號）、`App/Reminder.swift`（提醒的四樣設定），都是 `UserDefaults.standard` | Apple：「Declare this reason to access user defaults to read and write information that is only accessible to the app itself.」app 沒有 App Group、沒有延伸功能，讀寫的只有自己的 |
+| `NSPrivacyAccessedAPICategoryFileTimestamp` | `C617.1` | `App/` 的程式沒有用。連結進來的 `device-core/` 讓執行檔引用了這一類的函式：商店的 build 是 `fstat`、`lstat`（Barretenberg 的 `bbapi`），模擬器上的 Debug build 另外有 `stat`、`fstatat`（2026-11-26 用 `nm -u` 看的） | Apple：「Declare this reason to access the timestamps, size, or other metadata of files inside the app container, app group container, or the app's CloudKit container.」核心不碰檔案（`device-core/README.md`），app 交給它的是位元組，不是路徑；這些函式如果被叫到，碰得到的只有 app 自己容器裡的檔 |
+
+- **另外三類沒有用到**：系統開機時間（`systemUptime`、`mach_absolute_time`）、磁碟空間、使用中的鍵盤。`check-app.sh` 看原始碼裡的名稱和執行檔引用的函式，哪一類用到了卻沒申報、或申報了卻沒用到，建置就失敗。
+- **檔案時間戳那一類是往多報的方向填的。** Apple 的文件說的是：執行檔用到 required reason API，包著它的 bundle 就要有 privacy manifest 申報（「For each executable or dynamic library in an app that uses a required reason API, the bundle that includes the executable or dynamic library needs to include a privacy manifest file that reports the API.」）。文件沒有講「連結進來、但 app 的流程不會叫到」的函式算不算用到，也沒有講 C、Rust 的程式；App Store Connect 上傳時實際怎麼判斷，這裡沒有查到。執行檔既然引用了，就照會被叫到來申報。
+- **追蹤**：`NSPrivacyTracking` 是 `false`，沒有追蹤的網域（`docs/store-privacy-labels.md`「兩家各自另外問的」）。
+- **收集的資料**（`NSPrivacyCollectedDataTypes`）照 [`docs/store-privacy-labels.md`](../docs/store-privacy-labels.md) 裡 app 現在實際送的那幾列，每一類都是連結、不追蹤、用途 App Functionality：
+
+  | manifest 的值 | 那一份的第幾列 |
+  |---|---|
+  | `NSPrivacyCollectedDataTypeUserID` | 第 1 列：宣告的帳號和島民編號 |
+  | `NSPrivacyCollectedDataTypeCoarseLocation`、`NSPrivacyCollectedDataTypeOtherDiagnosticData` | 第 3 列：IP 位址（Cloudflare 的那一份現在就有） |
+  | `NSPrivacyCollectedDataTypeOtherDataTypes` | 第 10 列：紀錄的其他欄位 |
+
+  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面，做完不用改這個檔。第 5 到 9 列（過卡裝置編號和計數，[#434](https://github.com/iamreal-tw/iamreal/issues/434)）做的時候要加：`NSPrivacyCollectedDataTypeDeviceID`、`…ProductInteraction`、`…PerformanceData`，用途多一個 Analytics。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
+
 ## 建置時的檢查（`check-app.sh`）
 
 app 的最後一個建置階段跑 `check-app.sh`，不過就是建置失敗。它檢查建出來的 `.app` 和 `App/` 的原始碼：
 
 - 識別碼是這個組態的那一種 build 的（Debug 是 `tw.iamreal.app.dev`，Release 是 `tw.iamreal.app`；別的組態一律不過），圖示下面的名稱是 `design/copy/app.md` 給那一種 build 的；環境是 `IAMREAL_ENV_TEST`，執行檔裡有測試網站的兩個網址、沒有正式網站的。卡片簽的是不是測試的證明紀錄的場合字串，它從執行檔看不出來（兩條場合字串都寫死在核心裡），由 `Tests/BuildTests.swift` 檢查
 - `UIDeviceFamily` 只有 iPhone
+- app 裡有 `PrivacyInfo.xcprivacy`，內容就是 `App/PrivacyInfo.xcprivacy` 的；它寫不追蹤、沒有追蹤的網域；它申報的 required reason API 和 app 用到的一樣，不多不少（上面「privacy manifest」；用到與否看 `App/` 原始碼裡的名稱和執行檔引用的函式）。看不到的：這些名稱看不出來的用法，和理由代碼寫得對不對
 - 內建的電路檔、驗證金鑰和程式庫裡的逐位元組相同，參數檔的 SHA-256 等於 `device-core/crs.sha256`
 - app 裡沒有任何執行檔連結 `AdSupport` 或 `AppTrackingTransparency`；沒有 `Frameworks/`；專案檔沒有 Swift 套件。這是「沒有第三方 SDK」能從建置看出來的部分
 - 原始碼沒有 `identifierForVendor`
@@ -322,7 +348,7 @@ gh workflow run upload-ios.yml --repo iamreal-tw/iamreal --ref main
 | 交出去的 | archive 包成一個 tar 檔（artifact 不保留檔案的權限），加 `ExportOptions.plist` | 上傳到 App Store Connect |
 
 - **`archive.sh`** 做 Release 的 archive，不簽章（`CODE_SIGNING_ALLOWED=NO`；這個工作沒有能簽章的東西），最後跑 `check-archive.sh`。建置時 `check-app.sh` 照常當最後一個建置階段跑。
-- **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那九個，沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
+- **`check-archive.sh`** 確認要上傳的就是商店的 build：識別碼 `tw.iamreal.app`；版本和 build 是給它的那兩個數字，app 裡和 archive 自己的紀錄都是；app 有圖示（App Store Connect 不收沒有圖示的 build）；app 裡只有執行檔、Xcode 放的 `Info.plist`、`PkgInfo`、編好的圖示（`Assets.car` 和給舊版 iOS、給 iPad 相容模式的兩張 PNG）和「包進 app 的檔案」那張表的每一個（privacy manifest 也在裡面），沒有測試（`PlugIns/`，假卡片在裡面）、沒有別的檔，執行檔裡沒有 `FakeCard`；再以 Release 跑一次 `check-app.sh`（連測試網站、沒有正式網站的網址、沒有測試用的函式庫 `idc_testing_session_open`、內建的檔和程式庫的相同）。卡片簽哪一份證明紀錄的場合字串，執行檔裡看不出來（兩條都寫死在核心）；它跟著網址走：`App/AppEnvironment.swift` 在同一個編譯條件底下定網址和證明紀錄，執行檔裡是測試網站的網址，所以編進去的是測試那一支，而 `Tests/BuildTests.swift` 確認那一支簽 `iamreal-test:public:0`。
 - **簽章用 Apple 代管的發布憑證。** `ExportOptions.plist` 寫 `method` `app-store-connect`、`destination` `upload`、`signingStyle` `automatic`：Xcode 用 API 金鑰向 Apple 拿描述檔和代管的憑證，簽好直接上傳。發布憑證的私鑰不放在任何地方。開發者角色的金鑰能不能這樣做，是 [#143](https://github.com/iamreal-tw/iamreal/issues/143) 要實測的；做不到時，第一次執行的錯誤訊息記到 #143，再照 ADR-0036 把私鑰放進 `app-test`。
 - **團隊代號**是 environment `app-test` 的 variable `APPLE_TEAM_ID`（不是 secret：每個簽過的 app 裡都看得到它）。archive 沒有簽章、沒有團隊，匯出要知道用哪個團隊（`xcodebuild -help`：`teamID`「Defaults to the team used to build the archive」）。沒有設這個 variable，`upload` 在拿到金鑰之前就失敗。團隊代號不寫進程式庫（「怎麼用線裝到手機」）。
 - **`manageAppVersionAndBuildNumber` 是 `false`**：版本和 build 用 `archive.sh` 給的，Xcode 不另外改。`uploadSymbols` 是 `true`：Apple 收到當機報告時能還原成函式名稱（[#94](https://github.com/iamreal-tw/iamreal/issues/94)：當機只看商店自己的報告）。

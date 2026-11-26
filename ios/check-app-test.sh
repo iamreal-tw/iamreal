@@ -87,6 +87,44 @@ copy
 printf x >> "$tmp/app/IamrealApp.app/card-proof.json"
 expect "other sentences of the card proof" "card-proof.json in the app is not design/copy/card-proof.json"
 
+# The privacy manifest (issue #445).
+copy
+rm "$tmp/app/IamrealApp.app/PrivacyInfo.xcprivacy"
+expect "no privacy manifest" "the app has no PrivacyInfo.xcprivacy"
+
+copy
+plutil -replace NSPrivacyTracking -bool true "$tmp/app/IamrealApp.app/PrivacyInfo.xcprivacy"
+expect "a privacy manifest other than the one of App/" "PrivacyInfo.xcprivacy in the app is not App/PrivacyInfo.xcprivacy"
+
+# The manifest of the sources itself changed: a copy of App/ with another one, which the app carries too.
+alter_manifest() {
+  copy
+  rm -rf "$tmp/sources"
+  cp -R "$here/App" "$tmp/sources"
+  plutil "$@" "$tmp/sources/PrivacyInfo.xcprivacy"
+  cp "$tmp/sources/PrivacyInfo.xcprivacy" "$tmp/app/IamrealApp.app/PrivacyInfo.xcprivacy"
+}
+alter_manifest -replace NSPrivacyTracking -bool true
+expect "a manifest that says the app tracks" "does not say NSPrivacyTracking is false" IAMREAL_APP_SOURCES="$tmp/sources"
+
+alter_manifest -insert NSPrivacyTrackingDomains.0 -string example.invalid
+expect "a manifest with a tracking domain" "names tracking domains" IAMREAL_APP_SOURCES="$tmp/sources"
+
+alter_manifest -remove NSPrivacyAccessedAPITypes.0
+expect "user defaults not declared" "declares the required reason APIs [ FileTimestamp ], and the app uses [ FileTimestamp UserDefaults ]" IAMREAL_APP_SOURCES="$tmp/sources"
+
+alter_manifest -remove NSPrivacyAccessedAPITypes.1
+expect "the file timestamps the core's code can read not declared" "declares the required reason APIs [ UserDefaults ], and the app uses [ FileTimestamp UserDefaults ]" IAMREAL_APP_SOURCES="$tmp/sources"
+
+alter_manifest -insert NSPrivacyAccessedAPITypes.0 -json '{"NSPrivacyAccessedAPIType":"NSPrivacyAccessedAPICategoryDiskSpace","NSPrivacyAccessedAPITypeReasons":["E174.1"]}'
+expect "an API declared that the app does not use" "declares the required reason APIs [ DiskSpace FileTimestamp UserDefaults ]" IAMREAL_APP_SOURCES="$tmp/sources"
+
+copy
+rm -rf "$tmp/sources"
+cp -R "$here/App" "$tmp/sources"
+printf 'let uptime = ProcessInfo.processInfo.systemUptime\n' >> "$tmp/sources/Theme.swift"
+expect "a source that reads the system's uptime, not declared" "and the app uses [ FileTimestamp SystemBootTime UserDefaults ]" IAMREAL_APP_SOURCES="$tmp/sources"
+
 copy
 printf ' ' >> "$tmp/app/IamrealApp.app/hang.json"
 expect "another timeline of the demonstration" "hang.json in the app is not design/motion/hang.json"
@@ -149,6 +187,9 @@ source_with() {
   rm -rf "$tmp/src"
   mkdir "$tmp/src"
   cp "$here/App/Bridge.h" "$tmp/src/Bridge.h"
+  # The privacy manifest the app carries, and the one API of its list that App/ names.
+  cp "$here/App/PrivacyInfo.xcprivacy" "$tmp/src/PrivacyInfo.xcprivacy"
+  printf 'let defaults = UserDefaults.standard\n' > "$tmp/src/Defaults.swift"
   printf '%s\n' "$1" > "$tmp/src/X.swift"
 }
 source_with 'let id = UIDevice.current.identifierForVendor'

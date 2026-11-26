@@ -6,6 +6,7 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 - **對外的承諾是 [`design/copy/privacy.md`](../design/copy/privacy.md)**，這一份跟著它。app 送的東西多一種、保存的期限改了，同一個 PR 改 ADR、隱私權說明和這一份（[#94](https://github.com/iamreal-tw/iamreal/issues/94) 第 8 點）
 - **原則：兩家的文件答不出來的，往多報的方向填**（#94 第 7 點；那裡的理由是少報可能被下架，別人拿公開的程式來對也對得出來）。往多報填的每一格都標「多報」。有三項沒有照這個方向填，都寫明了為什麼、要多報時怎麼填：「[文件沒有回答的](#文件沒有回答的)」第 2、4、5 項
 - 只管兩個 app。網頁版不經過商店，沒有標示；它收什麼寫在隱私權說明
+- iOS 的 privacy manifest（`ios/App/PrivacyInfo.xcprivacy`）裡「收集的資料」照這一份填，填的是 app 現在實際送的那幾列（`ios/README.md`「privacy manifest」）。哪一列從「還沒做」變成有了，那個檔一起改
 
 **這張表照的是 ADR，不是現在的程式**（#274 的留言）。表裡標「還沒做」的，app 現在還沒有送；送審時 app 實際送什麼，就填到哪裡，見「[現在的程式做到哪裡](#現在的程式做到哪裡)」。
 
