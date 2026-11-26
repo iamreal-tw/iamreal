@@ -31,20 +31,23 @@ struct Screens {
     /// `notice`: on top, when the app was opened from the reminder.
     func before(notice: Notice? = nil) -> Screen {
         // No platform table yet: by the platforms the app has its own definition of.
-        let only = Platform.known.count == 1 ? Platform.known[0] : nil
         var blocks: [Block] = [
             .title(copy("before.title")),
             .text(copy("before.prepare_card")),
             .text(copy("before.citizens_only")),
         ]
-        if let only {
-            blocks.append(.text(copy("before.one_proof_single", ["platform": only.name])))
-        } else {
+        // One platform: what the proof says and that it is public is step 5's to say.
+        if Platform.known.count != 1 {
             blocks += [.text(copy("before.one_proof")), .strong(copy("before.listed_together"))]
         }
         blocks += [
-            .question(copy("before.why_physical"), [copy("before.why_physical_card"), copy("before.why_physical_mobile")]),
-            .question(copy("before.how_to_get"), [copy("before.how_to_get_counter"), copy("before.how_to_get_moica")]),
+            .question(copy("before.why_physical"), [.text(copy("before.why_physical_card")), .text(copy("before.why_physical_mobile"))]),
+            // The two ways out of the card proof's screens: a person without a card cannot go on (card-proof.md, step 1).
+            .question(copy("before.how_to_get"), [
+                .text(copy("before.how_to_get_counter")),
+                .button(Button(label: copy("before.find_office"), action: .findOffice), main: false),
+                .action(Button(label: copy("before.how_to_get_moica"), action: .howToApply)),
+            ]),
         ]
         return Screen(step: 1, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .start)], notice: notice, settings: settingsButton)
     }
@@ -137,7 +140,7 @@ struct Screens {
             blocks += why.map(Block.message)
             buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
         }
-        blocks.append(.points([copy("pin.purpose"), copy("app_pin.stays"), copy("pin.card_and_pin")]))
+        blocks.append(.points([copy("pin.purpose"), copy("app_pin.stays")]))
         return Screen(step: 3, blocks: blocks, buttons: buttons)
     }
 
@@ -167,65 +170,182 @@ struct Screens {
         return lines
     }
 
-    /// `typed`: what each field holds; `errors`: what is wrong with a
-    /// row, by platform; `message`: what is wrong with the whole list.
-    func accounts(_ status: Flow.CardStatus, typed: [String: String], errors: [String: String], message: String?) -> Screen {
-        let single = Self.onePlatform(status)
-        let daily = status.dailyLimit
-        var blocks: [Block] = [.title(single.map { copy("accounts.title_single", ["platform": $0]) } ?? copy("accounts.title"))]
-        let fillOne = single.map { copy("accounts.fill_one_single", ["platform": $0]) } ?? copy("accounts.fill_one")
-        let declared = status.rows.contains { $0.current != nil }
-        var previews = false
-        if declared {
-            let last = status.daysSince.map { $0 <= 0 ? copy("accounts.last_card_proof_today") : copy("accounts.last_card_proof", ["days_ago": String($0)]) } ?? ""
-            blocks.append(.text(copy("accounts.current") + last))
-        } else {
-            blocks += [.text(status.lastCardProof == nil ? copy("accounts.none_yet") : copy("accounts.nothing_now")), .text(fillOne)]
-        }
-        for row in status.rows {
+    /// Which of step 4's screens is up.
+    enum AccountsMode: Equatable {
+        /// As the step opens: the rows to fill when the card declares
+        /// nothing; what it declares and what can be done when it does.
+        case open
+        /// After "改成別的帳號" (one platform): a field for another account.
+        case switching
+        /// After "修改帳號清單" (more than one platform): a row for each.
+        case editing
+    }
+
+    /// The card's list as it is: for each platform the screens offer, its account now, or "".
+    static func listNow(_ status: Flow.CardStatus) -> [String: String] {
+        Dictionary(status.rows.filter(\.known).map { ($0.platform, $0.current ?? "") }, uniquingKeysWith: { first, _ in first })
+    }
+
+    private func accountsTitle(_ single: String?) -> Block {
+        .title(single.map { copy("accounts.title_single", ["platform": $0]) } ?? copy("accounts.title"))
+    }
+
+    /// A row with a field for each platform the app knows; the row as it
+    /// is for an account on a platform it does not know. `lines`: whether
+    /// a row says its counts.
+    private func fields(_ status: Flow.CardStatus, typed: [String: String], errors: [String: String], lines: Bool) -> [Block] {
+        status.rows.map { row -> Block in
             guard row.known, let platform = Platform.of(row.platform) else {
                 // Shown as the server sent it; kept in the list as it is.
-                blocks.append(.row(name: row.platform, account: row.current ?? "", lines: daily ? [] : rowLines(row)))
-                continue
+                return .row(name: row.platform, account: row.current ?? "", lines: rowLines(row))
             }
-            if daily {
-                blocks.append(.row(name: platform.name, account: row.current.map { Platform.handle(row.platform, $0) } ?? "", lines: []))
-                continue
-            }
-            previews = true
-            blocks.append(.account(AccountRow(
+            return .account(AccountRow(
                 platform: row.platform,
                 name: platform.name,
                 prefix: platform.prefix,
                 text: typed[row.platform] ?? "",
                 preview: Button(label: copy("app_accounts.preview"), action: .preview(row.platform)),
-                lines: rowLines(row),
-                error: errors[row.platform])))
+                lines: lines ? rowLines(row) : [],
+                error: errors[row.platform]))
         }
-        if let message { blocks.append(.message(message)) }
-        if daily {
+    }
+
+    private func previewNote(_ single: String?) -> [Block] {
+        guard let name = single ?? Platform.known.first?.name else { return [] }
+        return [.text(copy("app_accounts.preview_note", ["platform": name]))]
+    }
+
+    private var cancel: Button { Button(label: copy("common.cancel"), action: .restart) }
+    private var keep: Button { Button(label: copy("accounts.keep"), action: .keep) }
+
+    /// Step 4 (design/copy/card-proof.md, step 4, and its "app"), by what
+    /// the card declares and by `mode`; the same choices as accountsView,
+    /// switchView and editListView of web/src/ui/messages.ts. `typed`: what
+    /// each field holds; `errors`: what is wrong with a row, by platform;
+    /// `message`: what is wrong with the whole list.
+    func accounts(_ status: Flow.CardStatus, mode: AccountsMode = .open, typed: [String: String], errors: [String: String], message: String?) -> Screen {
+        let declared = status.rows.contains { $0.current != nil }
+        guard declared else { return fill(status, typed: typed, errors: errors, message: message) }
+        // 3 records today: what the card declares, and the way back to the start.
+        if status.dailyLimit { return declaredNow(status, message: message) }
+        switch mode {
+        case .open: return declaredNow(status, message: message)
+        case .switching: return switching(status, typed: typed, errors: errors, message: message)
+        case .editing: return editing(status, typed: typed, errors: errors, message: message)
+        }
+    }
+
+    /// The card declares nothing: a row to fill for each platform.
+    private func fill(_ status: Flow.CardStatus, typed: [String: String], errors: [String: String], message: String?) -> Screen {
+        let single = Self.onePlatform(status)
+        let never = status.lastCardProof == nil
+        var blocks: [Block] = [
+            accountsTitle(single),
+            .text(never ? copy("accounts.none_yet") : copy("accounts.nothing_now")),
+            .text(single.map { copy("accounts.fill_one_single", ["platform": $0]) } ?? copy("accounts.fill_one")),
+        ]
+        if status.dailyLimit {
+            // The rows as they are, without a field.
+            blocks += status.rows.map { row in
+                Block.row(name: row.known ? Platform.of(row.platform)?.name ?? row.platform : row.platform, account: "", lines: [])
+            }
+            if let message { blocks.append(.message(message)) }
             blocks.append(.text(copy("stops.daily_limit")))
             return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
         }
-        let limited = copy("accounts.switches_limited")
-        if declared {
-            blocks += [.text(copy("accounts.how_refresh")), .text(copy("accounts.how_change") + limited)]
-        } else if status.lastCardProof != nil {
-            blocks.append(.text(copy("accounts.how_change") + limited))
+        // One platform: no line under a row never declared, and no rules of switching.
+        blocks += fields(status, typed: typed, errors: errors, lines: single == nil || !never)
+        if let message { blocks.append(.message(message)) }
+        if single == nil {
+            blocks.append(.text((never ? copy("accounts.one_per_platform") : copy("accounts.how_change")) + copy("accounts.switches_limited")))
+        }
+        blocks += previewNote(single)
+        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], cancel: cancel)
+    }
+
+    /// The card declares accounts: which, when it last did, "更新島民證明",
+    /// and under it the other things that can be done.
+    private func declaredNow(_ status: Flow.CardStatus, message: String?) -> Screen {
+        let single = Self.onePlatform(status)
+        var blocks: [Block] = [accountsTitle(single), .text(copy("accounts.declared_now"))]
+        let current = status.rows.filter { $0.current != nil }
+        if single != nil {
+            blocks += current.map { Block.declared(Platform.handle($0.platform, $0.current ?? "")) }
         } else {
-            let onePer = single.map { copy("accounts.one_per_platform_single", ["platform": $0]) } ?? copy("accounts.one_per_platform")
-            blocks.append(.text(onePer + limited))
+            blocks += current.map { row in
+                row.known
+                    ? Block.row(name: Platform.of(row.platform)?.name ?? row.platform, account: Platform.handle(row.platform, row.current ?? ""), lines: [])
+                    : Block.row(name: row.platform, account: row.current ?? "", lines: [copy("accounts.row_unknown_platform")])
+            }
         }
-        if previews, let name = single ?? Platform.known.first?.name {
-            blocks.append(.text(copy("app_accounts.preview_note", ["platform": name])))
+        if let days = status.daysSince {
+            blocks.append(.text(days <= 0 ? copy("accounts.last_proof_today") : copy("accounts.last_proof", ["days_ago": String(days)])))
         }
-        // Under the button: the system cannot tell whose an account is.
-        let notYours = single.map { copy("accounts.not_yours_single", ["platform": $0]) } ?? copy("accounts.not_yours")
-        return Screen(
-            step: 4, blocks: blocks,
-            buttons: [Button(label: copy("common.next"), action: .toConfirm)],
-            below: [.small(notYours)],
-            cancel: Button(label: copy("common.cancel"), action: .restart))
+        if let message { blocks.append(.message(message)) }
+        if status.dailyLimit {
+            blocks.append(.text(copy("stops.daily_limit")))
+            return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
+        }
+        blocks += [
+            .button(Button(label: copy("accounts.refresh"), action: .refresh), main: true),
+            .small(copy("accounts.refresh_note")),
+        ]
+        if single != nil, let only = current.first {
+            blocks += [
+                .action(Button(label: copy("accounts.switch"), action: .toSwitch)),
+                .action(Button(label: copy("accounts.withdraw", ["account": Platform.handle(only.platform, only.current ?? "")]), action: .withdraw)),
+            ]
+        } else {
+            blocks.append(.action(Button(label: copy("accounts.edit_list"), action: .editList)))
+        }
+        return Screen(step: 4, blocks: blocks, cancel: cancel)
+    }
+
+    /// After "改成別的帳號": the account now, a field for another, what
+    /// changing it does and what it costs. No field when no switch is left.
+    private func switching(_ status: Flow.CardStatus, typed: [String: String], errors: [String: String], message: String?) -> Screen {
+        let single = Self.onePlatform(status)
+        guard let row = status.rows.first(where: { $0.known && $0.current != nil }), let platform = Platform.of(row.platform) else {
+            return declaredNow(status, message: message)
+        }
+        let now = Platform.handle(row.platform, row.current ?? "")
+        var blocks: [Block] = [accountsTitle(single), .text(copy("accounts.declared_inline", ["account": now]))]
+        // Used up, and not put there today: no other account can be declared.
+        if !row.correctionToday, row.switchesLeft == 0 {
+            blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
+            return Screen(step: 4, blocks: blocks, secondary: keep, cancel: cancel)
+        }
+        let cost = row.correctionToday
+            ? copy("accounts.row_today")
+            : row.switchesLeft == 1
+                ? copy("confirm.uses_final_switch")
+                : copy("accounts.switch_limit", ["switches_left": String(row.switchesLeft - 1)])
+        blocks += [
+            .subheading(copy("accounts.switch")),
+            .account(AccountRow(
+                platform: row.platform,
+                name: platform.name,
+                prefix: platform.prefix,
+                text: typed[row.platform] ?? "",
+                preview: Button(label: copy("app_accounts.preview"), action: .preview(row.platform)),
+                lines: [],
+                error: errors[row.platform])),
+        ]
+        if let message { blocks.append(.message(message)) }
+        blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
+        blocks += previewNote(single)
+        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], secondary: keep, cancel: cancel)
+    }
+
+    /// After "修改帳號清單": a row for each platform, each changed on its own.
+    private func editing(_ status: Flow.CardStatus, typed: [String: String], errors: [String: String], message: String?) -> Screen {
+        let single = Self.onePlatform(status)
+        var blocks: [Block] = [accountsTitle(single), .text(copy("accounts.current"))]
+        blocks += fields(status, typed: typed, errors: errors, lines: true)
+        if let message { blocks.append(.message(message)) }
+        blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
+        blocks += previewNote(single)
+        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], secondary: keep, cancel: cancel)
     }
 
     // Step 5: confirming ----------------------------------------------------------------------
@@ -259,32 +379,51 @@ struct Screens {
         rows.allSatisfy { $0.kind == "refresh" && $0.current == $0.username }
     }
 
+    /// Step 5 (design/copy/card-proof.md, step 5); the same choices as
+    /// confirmView of web/src/ui/messages.ts.
     func confirm(_ status: Flow.CardStatus, _ consequence: Flow.Consequence) -> Screen {
         let single = Self.onePlatform(status)
         let empty = consequence.accounts.isEmpty
         var blocks: [Block] = [
             .title(copy("confirm.title")),
-            .text(empty ? copy("confirm.intro_withdraw_all") : single != nil ? copy("confirm.intro_single") : copy("confirm.intro")),
+            .text(empty ? copy("confirm.intro_withdraw_all") : single != nil ? copy("confirm.intro_public") : copy("confirm.intro")),
         ]
-        blocks += consequence.rows.map { row($0, lines: rowSentences($0)) }
+        let rows = consequence.rows.map { row($0, lines: rowSentences($0)) }
+        blocks += rows
         blocks += [
             .pair(copy("confirm.date"), consequence.today),
             .pair(copy("confirm.short_id_label"), copy("confirm.short_id", ["short_id": status.shortID])),
         ]
-        if consequence.rows.contains(where: { $0.kind == "withdraw" }) { blocks.append(.text(copy("confirm.withdraw_stays"))) }
-        if !empty {
-            blocks.append(.lead(single.map { copy("confirm.listed_single", ["platform": $0]) } ?? copy("confirm.listed_together")))
+        if !empty, single == nil {
+            if consequence.rows.contains(where: { $0.kind == "withdraw" }) { blocks.append(.text(copy("confirm.withdraw_stays"))) }
+            blocks.append(.lead(copy("confirm.listed_together")))
         }
-        blocks.append(.points([copy("confirm.no_identity"), (empty ? copy("confirm.later_withdraw") : copy("confirm.later")) + copy("confirm.permanent")]))
-        let button = empty
-            ? copy("confirm.button_withdraw_all")
-            : Self.allUnchanged(consequence.rows)
-                ? copy("confirm.button_refresh")
-                : single != nil ? copy("confirm.button_declare_single") : copy("confirm.button_declare")
+        // The points name the platforms of the screens: the one, or each the app knows of the server's table.
+        let named = single ?? status.knownPlatforms.map { Platform.of($0)?.name ?? $0 }.joined(separator: copy("confirm.platform_separator"))
+        let notIdentifiable = copy("confirm.not_identifiable", ["platform": named])
+        if empty {
+            blocks.append(.points([copy("confirm.history_stays"), notIdentifiable, copy("confirm.holder_later_withdraw")]))
+        } else {
+            // "所有紀錄公開後無法刪除" in ink and bold: red is for the way on, not for a warning (card-proof.md, step 5).
+            let cannotDelete = copy("confirm.cannot_delete")
+            blocks.append(.points([notIdentifiable, copy("confirm.holder_later", ["platform": named, "cannot_delete": cannotDelete])], bold: cannotDelete))
+        }
+        let button: String
+        if empty {
+            if single != nil, consequence.rows.count == 1, case .row(_, let account, _) = rows[0] {
+                button = copy("confirm.button_withdraw", ["account": account])
+            } else {
+                button = copy("confirm.button_withdraw_all")
+            }
+        } else if Self.allUnchanged(consequence.rows) {
+            button = copy("confirm.button_refresh")
+        } else {
+            button = single != nil ? copy("confirm.button_declare_single") : copy("confirm.button_declare")
+        }
         return Screen(
             step: 5, blocks: blocks,
             buttons: [Button(label: copy("common.back"), action: .back), Button(label: button, action: .declare)],
-            cancel: Button(label: copy("common.cancel"), action: .restart))
+            cancel: cancel)
     }
 
     /// Step 5 once the button was pressed. `reached`: how many items are
@@ -304,7 +443,7 @@ struct Screens {
             return Screen(
                 step: 5, blocks: blocks,
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
-                cancel: Button(label: copy("common.cancel"), action: .restart))
+                cancel: cancel)
         }
         // The PIN is gone, and the phone could not talk to the card: back to the start.
         if stop == .dateChanged || stop == .card(.channel) {

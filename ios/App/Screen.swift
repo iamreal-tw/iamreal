@@ -13,8 +13,9 @@ struct Screen: Equatable {
     /// The last of `buttons` is the screen's main button (design/DESIGN.md,
     /// the components: one main button on a screen).
     var mainButton = true
-    /// What stands under the buttons: what to know after the way on.
-    var below: [Block] = []
+    /// Under the buttons, as a link: the way back to the screen this one
+    /// was opened from ("不改了" of step 4).
+    var secondary: Button?
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
     /// Above the step: the note of a reminder the app was opened from.
@@ -25,7 +26,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + below.flatMap(\.texts) + (cancel.map { [$0.label] } ?? [])
+        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + (secondary.map { [$0.label] } ?? []) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -43,6 +44,10 @@ enum Block: Equatable {
     /// A heading of one item among others, smaller than `heading`.
     case subheading(String)
     case text(String)
+    /// Sentences written one after another as one paragraph.
+    case sentences([String])
+    /// The account the card declares now, on its own line (step 4).
+    case declared(String)
     /// A paragraph as conspicuous as the title's lead: what may change
     /// whether to go on.
     case strong(String)
@@ -59,10 +64,11 @@ enum Block: Equatable {
     case steps([String])
     /// A sentence with a link in it: the words before, the link, the words after.
     case linked(String, Button, String)
-    /// Points, each with a dot before it.
-    case points([String])
+    /// Points, each with a dot before it; `bold`: the words among them
+    /// written in ink and bold.
+    case points([String], bold: String? = nil)
     /// A question that opens to its answer.
-    case question(String, [String])
+    case question(String, [Block])
     /// One of the two progress lists.
     case items([Item])
     /// The name read from the card, with its label and the note under it.
@@ -91,13 +97,13 @@ enum Block: Equatable {
     var texts: [String] {
         switch self {
         case .title(let text), .heading(let text), .subheading(let text), .text(let text), .strong(let text),
-             .lead(let text), .small(let text), .kicker(let text), .message(let text), .link(let text), .busy(let text):
+             .lead(let text), .small(let text), .kicker(let text), .message(let text), .link(let text), .busy(let text), .declared(let text):
             return [text]
         case .doneHead(let card, let title, let lines): return (card?.texts ?? []) + [title] + lines
-        case .steps(let steps): return steps
+        case .steps(let steps), .sentences(let steps): return steps
         case .linked(let before, let link, let after): return [before + link.label + after]
-        case .points(let points): return points
-        case .question(let question, let answer): return [question] + answer
+        case .points(let points, _): return points
+        case .question(let question, let answer): return [question] + answer.flatMap(\.texts)
         case .items(let items): return items.flatMap { [$0.label] + ($0.status.isEmpty ? [] : [$0.status]) + $0.why }
         case .cardName(let label, let name, let note): return [label, name, note]
         case .pinField(let label): return [label]
@@ -185,8 +191,22 @@ enum Action: Equatable {
     case toPIN
     /// Tap 2.
     case confirmCard
-    /// From step 4 to step 5: what the list would do.
+    /// From step 4 to step 5: what the list typed would do.
     case toConfirm
+    /// "更新島民證明" of step 4: the card's list as it is, to step 5.
+    case refresh
+    /// "收回對 @alice 的宣告" of step 4: the list without its accounts, to step 5.
+    case withdraw
+    /// "改成別的帳號" of step 4: a field for another account.
+    case toSwitch
+    /// "修改帳號清單" of step 4: a row for each platform.
+    case editList
+    /// "不改了": back to what the card declares.
+    case keep
+    /// The phone's map, searching for household registration offices (step 1).
+    case findOffice
+    /// MOICA's site, in the browser (step 1).
+    case howToApply
     /// Tap 3, the proof and the submission.
     case declare
     /// Tap 3 again, with the PIN in memory.

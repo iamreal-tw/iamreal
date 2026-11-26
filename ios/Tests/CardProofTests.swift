@@ -62,15 +62,21 @@ final class CardProofTests: XCTestCase {
             "開始之前",
             "請準備好你的實體自然人憑證卡片。",
             "非中華民國國籍者所持有的自然人憑證無法用於島民證明。",
-            "一張自然人憑證換一張島民證明，上面寫著這張卡片宣告的 Threads 帳號。",
             "為什麼一定要實體的卡片？",
             "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
             "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
             "還沒有自然人憑證，怎麼申辦？",
             "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "找附近的戶政事務所",
             "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
             "下一步",
         ])
+        // The two ways to a card: the phone's map, and MOICA's site. Nothing of the app goes with them.
+        try await press("找附近的戶政事務所", in: model)
+        XCTAssertEqual(opened.last?.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
+        try await press("內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", in: model)
+        XCTAssertEqual(opened.last?.absoluteString, "https://moica.nat.gov.tw/")
+        XCTAssertEqual(model.screen.step, 1)
 
         try await press("下一步", in: model)
         XCTAssertEqual(model.screen.step, 2)
@@ -110,7 +116,6 @@ final class CardProofTests: XCTestCase {
             "PIN",
             "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
             "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
-            "拿到你的卡片和 PIN 的人，查得出這張卡片宣告過的帳號。卡片請自行保管、請勿出借給他人。",
             "上一步",
             "確認卡片",
         ])
@@ -130,11 +135,9 @@ final class CardProofTests: XCTestCase {
             "你的 Threads 帳號",
             "這張卡片還沒有宣告過帳號。",
             "填上你要宣告的 Threads 帳號。",
-            "Threads", "預覽", "還沒有宣告過。",
-            "一張卡片只能宣告一個 Threads 帳號，之後改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
+            "Threads", "預覽",
             "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
             "下一步",
-            "系統無法確認這個 Threads 帳號是不是你的：任何持卡人都可以宣告任何帳號。所以過卡完成後，會建議帳號主人把這張證明的連結放在個人檔案上，表示承認這張證明。",
             "取消",
         ])
         await Snapshot.save(model, as: "4-accounts")
@@ -158,13 +161,12 @@ final class CardProofTests: XCTestCase {
         let today = CardProofFlow.dateInTaiwan(now)
         XCTAssertEqual(model.screen.texts, [
             "確認",
-            "按下後，證明紀錄會公開記下這張卡片宣告的帳號：",
+            "按下後，證明紀錄會記下新的證明並公開給所有人：",
             "Threads", "@alice", "新宣告",
             "日期", today,
             "島民編號", "\(shortID) 開頭",
-            "這個 Threads 帳號會公開列在島民證明上。",
-            "紀錄裡沒有姓名、身分證字號和憑證序號。平台、營運者、政府都查不出這是誰的卡片；但拿到你的卡片和 PIN 的人，查得出你宣告過的帳號。",
-            "之後可以用同一張卡片收回或更換帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+            "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+            "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
             "上一步",
             "宣告這個帳號",
             "取消",
@@ -248,20 +250,30 @@ final class CardProofTests: XCTestCase {
     private func comesAgain() async throws {
         let model = makeModel()
         try await toAccounts(model)
-        XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
+        // The account is not typed again: the main button is the card proof again.
+        XCTAssertEqual(model.screen.texts, [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
-            "Threads", "預覽",
-            "還沒有更換過，還可以更換 5 次。",
-            "今天才宣告的帳號，今天改掉不另外算一次更換。",
+            "這張卡片目前宣告：",
+            "@alice",
+            "上次過卡是今天",
+            "更新島民證明",
+            "宣告帳號不變，把島民證明上的日期更新成今天。",
+            "改成別的帳號",
+            "收回對 @alice 的宣告",
+            "取消",
         ])
-        XCTAssertEqual(typed(in: model), "alice", "the field starts with the account declared")
-        XCTAssertTrue(model.screen.texts.contains("什麼都不改，直接按「下一步」，就是再次過卡：把上次過卡的日期更新成今天。"))
-        XCTAssertTrue(model.screen.texts.contains("填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。"))
+        XCTAssertNil(typed(in: model), "no field")
+        await Snapshot.save(model, as: "4-declared")
 
-        try await press("下一步", in: model)
+        try await press("更新島民證明", in: model)
+        XCTAssertEqual(model.screen.step, 5)
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@alice", "不變"]])
         XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "更新島民證明"])
+        // Back: the screen the button was pressed on.
+        try await press("上一步", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+        XCTAssertTrue(model.screen.texts.contains("這張卡片目前宣告："))
+        try await press("更新島民證明", in: model)
 
         try await press("更新島民證明", in: model)
         XCTAssertEqual(model.screen.step, 6)
@@ -294,16 +306,40 @@ final class CardProofTests: XCTestCase {
 
         try await press("再感應一次", in: model)
         XCTAssertEqual(model.screen.step, 4)
-        XCTAssertEqual(Array(model.screen.texts.prefix(5)), [
+        XCTAssertEqual(Array(model.screen.texts.prefix(4)), ["你的 Threads 帳號", "這張卡片目前宣告：", "@alice", "上次過卡是 1 天前"])
+
+        try await press("改成別的帳號", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+        XCTAssertEqual(model.screen.texts, [
             "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是 1 天前。",
+            "這張卡片目前宣告 @alice。",
+            "改成別的帳號",
             "Threads", "預覽",
-            "還沒有更換過，還可以更換 5 次。",
+            "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 4 次。",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
+            "下一步",
+            "不改了",
+            "取消",
         ])
+        XCTAssertEqual(typed(in: model), "", "the field starts empty")
+        await Snapshot.save(model, as: "4-switch")
+        // An empty field goes nowhere: withdrawing is the other action.
+        try await press("下一步", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+        XCTAssertTrue(model.screen.texts.contains("請至少填一個帳號。"))
+        // "不改了": what the card declares again; then to the field once more.
+        try await press("不改了", in: model)
+        XCTAssertTrue(model.screen.texts.contains("更新島民證明"))
+        try await press("改成別的帳號", in: model)
 
         model.type("bob", on: "threads")
         try await press("下一步", in: model)
         XCTAssertEqual(rows(on: model.screen), [["Threads", "@bob", "更換，原本是 @alice。", "用掉一次更換，不會恢復。之後還可以更換 4 次。"]])
+        // Back: the field as it was typed.
+        try await press("上一步", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+        XCTAssertEqual(typed(in: model), "bob")
+        try await press("下一步", in: model)
         XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "宣告這個帳號"])
 
         card.nextTapFinds = other
@@ -334,15 +370,12 @@ final class CardProofTests: XCTestCase {
     private func withdraws() async throws {
         let model = makeModel()
         try await toAccounts(model)
-        XCTAssertEqual(Array(model.screen.texts.prefix(6)), [
-            "你的 Threads 帳號",
-            "這是這張卡片目前宣告的帳號。上次過卡是今天。",
-            "Threads", "預覽",
-            "更換過 1 次，還可以更換 4 次。",
-            "今天才宣告的帳號，今天改掉不另外算一次更換。",
-        ])
-        model.type("", on: "threads")
-        try await press("下一步", in: model)
+        XCTAssertEqual(Array(model.screen.texts.prefix(4)), ["你的 Threads 帳號", "這張卡片目前宣告：", "@bob", "上次過卡是今天"])
+        // Changed today: changing it again today is not another switch.
+        try await press("改成別的帳號", in: model)
+        XCTAssertTrue(model.screen.texts.contains("今天才宣告的帳號，今天改掉不另外算一次更換。"))
+        try await press("不改了", in: model)
+        try await press("收回對 @bob 的宣告", in: model)
         let shortID = try shortID(on: model.screen)
         XCTAssertEqual(model.screen.texts, [
             "確認",
@@ -350,16 +383,16 @@ final class CardProofTests: XCTestCase {
             "Threads", "@bob", "收回",
             "日期", CardProofFlow.dateInTaiwan(now),
             "島民編號", "\(shortID) 開頭",
-            "收回之後，證明紀錄裡原本的紀錄還在：看得出這張卡片宣告過這個帳號。",
-            "紀錄裡沒有姓名、身分證字號和憑證序號。平台、營運者、政府都查不出這是誰的卡片；但拿到你的卡片和 PIN 的人，查得出你宣告過的帳號。",
-            "之後可以用同一張卡片再宣告。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+            "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
+            "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+            "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
             "上一步",
-            "收回所有帳號",
+            "收回對 @bob 的宣告",
             "取消",
         ])
         await Snapshot.save(model, as: "5-withdraw")
 
-        try await press("收回所有帳號", in: model)
+        try await press("收回對 @bob 的宣告", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertEqual(model.screen.texts, [
             "已全部收回",
@@ -381,9 +414,7 @@ final class CardProofTests: XCTestCase {
         now = now.addingTimeInterval(24 * 3600)
         let model = makeModel()
         try await toAccounts(model)
-        // An account of the document's examples, whatever this card declared before.
-        model.type("bob", on: "threads")
-        try await press("下一步", in: model)
+        try await typeBob(in: model)
         XCTAssertEqual(model.screen.step, 5)
         let button = try XCTUnwrap(model.screen.buttons.last?.label)
         try await press(button, in: model)
@@ -463,8 +494,7 @@ final class CardProofTests: XCTestCase {
         try await onTheSecondDay()
         let model = makeModel()
         try await toAccounts(model)
-        model.type("bob", on: "threads")
-        try await press("下一步", in: model)
+        try await typeBob(in: model)
         card.nextSignFails = .channel
         let button = try XCTUnwrap(model.screen.buttons.last?.label)
         try await press(button, in: model)
@@ -530,17 +560,29 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.step, 4)
     }
 
+    /// From step 4 to step 5 with @bob, an account of the document's
+    /// examples, whatever this card declares: in the field of a card that
+    /// declares nothing, or after "改成別的帳號" of one that declares an account.
+    private func typeBob(in model: CardProofModel) async throws {
+        if model.screen.texts.contains("改成別的帳號") { try await press("改成別的帳號", in: model) }
+        model.type("bob", on: "threads")
+        try await press("下一步", in: model)
+    }
+
     /// Presses the button with these words on the screen, waits for what
     /// it starts to end, and checks the screen it leaves against the copy.
     private func press(_ label: String, in model: CardProofModel, file: StaticString = #filePath, line: UInt = #line) async throws {
-        let inline = model.screen.blocks.flatMap { block -> [Button] in
+        func within(_ block: Block) -> [Button] {
             switch block {
             case .button(let button, _), .linked(_, let button, _), .action(let button): return [button]
             case .account(let row): return row.preview.map { [$0] } ?? []
+            // Under a question: what its answer holds, once it is opened.
+            case .question(_, let answer): return answer.flatMap(within)
             default: return []
             }
         }
-        let buttons = model.screen.buttons + (model.screen.cancel.map { [$0] } ?? []) + inline
+        let inline = model.screen.blocks.flatMap(within)
+        let buttons = model.screen.buttons + [model.screen.secondary, model.screen.cancel].compactMap { $0 } + inline
         let button = try XCTUnwrap(buttons.first { $0.label == label }, "no button \(label) among \(buttons.map(\.label))", file: file, line: line)
         XCTAssertTrue(button.enabled, "\(label) cannot be pressed", file: file, line: line)
         model.perform(button.action)

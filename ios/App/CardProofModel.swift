@@ -52,6 +52,8 @@ final class CardProofModel: ObservableObject {
     /// than the one read is in the way: the tap is made again with it.
     private var pin: PIN?
     private var status: CardProofFlow.CardStatus?
+    /// Which of step 4's screens is up, and what its fields hold.
+    private var mode = Screens.AccountsMode.open
     private var typed: [String: String] = [:]
     private var consequence: CardProofFlow.Consequence?
     private var finished: (done: CardProofFlow.Done, single: String?)?
@@ -103,7 +105,7 @@ final class CardProofModel: ObservableObject {
     func type(_ text: String, on platform: String) {
         guard screen.step == 4, let status, !status.dailyLimit else { return }
         typed[platform] = text
-        screen = screens.accounts(status, typed: typed, errors: [:], message: nil)
+        screen = accounts(status)
     }
 
     func perform(_ action: Action) {
@@ -117,6 +119,17 @@ final class CardProofModel: ObservableObject {
             screen = screens.pin(name: name, state: .waiting(nil))
         case .confirmCard: run { await self.confirmCard() }
         case .toConfirm: toConfirm()
+        case .refresh:
+            // The list as it is: nothing to type.
+            if let status { confirm(Screens.listNow(status)) }
+        case .withdraw:
+            // The list without its accounts.
+            if let status { confirm(Screens.listNow(status).mapValues { _ in "" }) }
+        case .toSwitch: edit(.switching)
+        case .editList: edit(.editing)
+        case .keep: edit(.open)
+        case .findOffice: deps.open(Self.findOffice)
+        case .howToApply: deps.open(Self.moica)
         case .declare: run { await self.declare() }
         case .signAgain: run { await self.signAndSubmit() }
         case .submitAgain: run { await self.submit() }
@@ -150,6 +163,14 @@ final class CardProofModel: ObservableObject {
             run { await self.snoozeReminder() }
         }
     }
+
+    /// The phone's map, searching for "戶政事務所": a map link, which Maps
+    /// opens (https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/MapLinks/MapLinks.html).
+    /// The app asks for no location; what is near is the map's to tell.
+    /// Nothing of the card proof goes with it (design/copy/card-proof.md, step 1).
+    static let findOffice = URL(string: "https://maps.apple.com/?q=%E6%88%B6%E6%94%BF%E4%BA%8B%E5%8B%99%E6%89%80")!
+    /// MOICA's site: its page on applying is not checked yet (card-proof.md, step 1).
+    static let moica = URL(string: "https://moica.nat.gov.tw/")!
 
     // The screens that show the reminder ---------------------------------------------
 
@@ -214,6 +235,7 @@ final class CardProofModel: ObservableObject {
         pinText = ""
         name = ""
         status = nil
+        mode = .open
         typed = [:]
         consequence = nil
         finished = nil
@@ -234,7 +256,8 @@ final class CardProofModel: ObservableObject {
         case 5:
             guard let status, (try? flow?.back()) != nil else { return }
             consequence = nil
-            screen = screens.accounts(status, typed: typed, errors: [:], message: nil)
+            // The screen the button was pressed on, its field as it was typed.
+            screen = accounts(status)
         default: break
         }
     }
@@ -322,8 +345,9 @@ final class CardProofModel: ObservableObject {
             }
             guard self.flow === flow else { return }
             self.status = status
-            typed = Dictionary(uniqueKeysWithValues: status.rows.filter(\.known).map { ($0.platform, $0.current ?? "") })
-            screen = screens.accounts(status, typed: typed, errors: [:], message: nil)
+            mode = .open
+            typed = Screens.listNow(status)
+            screen = accounts(status)
         } catch {
             guard self.flow === flow else { return }
             let stop = error as? CardProofFlow.Stop ?? .state
@@ -342,10 +366,39 @@ final class CardProofModel: ObservableObject {
 
     // The list ----------------------------------------------------------------------
 
+    private func accounts(_ status: CardProofFlow.CardStatus, errors: [String: String] = [:], message: String? = nil) -> Screen {
+        screens.accounts(status, mode: mode, typed: typed, errors: errors, message: message)
+    }
+
+    /// Another of step 4's screens: "改成別的帳號" with an empty field,
+    /// "修改帳號清單" and "不改了" with the list as it is.
+    private func edit(_ mode: Screens.AccountsMode) {
+        guard screen.step == 4, let status, !status.dailyLimit else { return }
+        self.mode = mode
+        typed = Screens.listNow(status)
+        if mode == .switching { typed = typed.mapValues { _ in "" } }
+        screen = accounts(status)
+    }
+
+    /// "下一步" of step 4: the list the fields make.
     private func toConfirm() {
-        guard let flow, let status else { return }
+        guard let status else { return }
+        guard mode == .switching else { return confirm(typed) }
+        // Withdrawing is the other action: an empty field goes nowhere.
+        let empty = typed.filter { Platform.of($0.key)?.tidy($0.value).isEmpty ?? $0.value.isEmpty }
+        if let platform = empty.keys.sorted().first {
+            screen = accounts(status, errors: [platform: deps.copy("accounts.need_one")])
+            return
+        }
+        confirm(typed)
+    }
+
+    /// From step 4 to step 5 with `entries`, the account on each platform
+    /// the screens offer; what is wrong with them stays on step 4.
+    private func confirm(_ entries: [String: String]) {
+        guard screen.step == 4, let flow, let status else { return }
         do {
-            let consequence = try flow.choose(typed)
+            let consequence = try flow.choose(entries)
             self.consequence = consequence
             screen = screens.confirm(status, consequence)
         } catch {
@@ -358,9 +411,9 @@ final class CardProofModel: ObservableObject {
         let why = screens.message(stop, tap: 2).first ?? ""
         switch stop {
         case .username(let platform), .blocked(_, let platform?):
-            screen = screens.accounts(status, typed: typed, errors: [platform: why], message: nil)
+            screen = accounts(status, errors: [platform: why])
         default:
-            screen = screens.accounts(status, typed: typed, errors: [:], message: why)
+            screen = accounts(status, message: why)
         }
     }
 
