@@ -106,10 +106,12 @@ struct Session {
     /// The challenge [`check_challenge`] took: dated the session's date
     /// when it was taken. The proof is made for this one only.
     challenge: Option<[u8; CHALLENGE_LENGTH]>,
-    /// The challenges a proof was computed for, whether or not it came
+    /// The challenges the card's two signatures were accepted for, which
+    /// is where a proof starts to be computed, whether or not one came
     /// out: none of them is taken again (spec/device-checks.md, "One
     /// proof for the card's signatures"). Kept when the session starts
-    /// over, so that other checks do not make room for a second proof.
+    /// over, whatever card it then checks, so that other checks do not
+    /// make room for a second proof.
     spent: Vec<[u8; CHALLENGE_LENGTH]>,
 }
 
@@ -687,7 +689,7 @@ pub fn check_challenge(handle: u64, now: i64, challenge: &[u8]) -> Result<Vec<u8
             .today
             .and_then(|date| session.passed(date))
             .ok_or(IDC_ERR_REFUSED)?;
-        if session.spent.iter().any(|spent| spent.as_slice() == challenge) {
+        if session.spent.iter().any(|used| used.as_slice() == challenge) {
             return Err(IDC_ERR_REFUSED);
         }
         let date = match challenge_rules::check_challenge(challenge, today) {
@@ -858,9 +860,9 @@ pub fn records_request(
         }
         // From here on a proof is computed: the only one for this
         // challenge, and so for the card's signature over its code.
-        let spent: [u8; CHALLENGE_LENGTH] = challenge.try_into().map_err(|_| IDC_ERR_INPUT)?;
-        session.challenge = None;
-        session.spent.push(spent);
+        if let Some(taken) = session.challenge.take() {
+            session.spent.push(taken);
+        }
         let passed = session.passed(date).ok_or(IDC_ERR_REFUSED)?;
         let id = scoped_id_of(scope_signature)?;
         let issuers = session.trust.issuer_keys();

@@ -4,8 +4,8 @@ Status: **Draft**.
 
 Before the card signs anything, the cardholder's device chooses the
 certificate a card proof uses, checks it, and checks the CRL it builds the
-revocation tree from. Once the card has signed, it
-computes one proof for the signatures. These checks protect the cardholder: a card that
+revocation tree from. Once the card has signed, the device computes one
+proof for the signatures. These checks protect the cardholder: a card that
 cannot pass is told so before any PIN is used, and a server cannot loosen
 them (ADR-0015, ADR-0016). This document defines them, so that every
 client (the web page, the Android and iOS apps) gives the same answer for
@@ -329,9 +329,10 @@ Which CRLs are usable, case by case with their reason codes, is in
 [`../crl/testdata/`](../crl/testdata) (`expected.json`).
 
 "One proof for the card's signatures" is about what a device does not do,
-so it has no vectors: each client tests it in its own flow
-(`web/test/flow.test.ts`; `device-core/prover/tests/proof.rs`, where the
-core refuses a challenge it computed a proof for).
+so it has no vectors. The web page tests it in its flow
+(`web/test/flow.test.ts`); the apps compute their proofs in the core,
+which refuses a challenge it computed a proof for
+(`device-core/prover/tests/proof.rs`).
 
 The file is written by `web/test/generate/device-checks.ts` from the test
 fixtures of `web/test/fixtures/`, with keys made on the spot (the private

@@ -281,6 +281,12 @@ impl Card {
                 artifacts,
             },
         ));
+        self.check(&session, files, skipped);
+        session
+    }
+
+    /// Every step but `skipped`, on `session`: again, when it made them before.
+    fn check(&self, session: &Session, files: &Files, skipped: Option<Step>) {
         let done = |code: i32, out: IdcBuf| {
             let result = finish(code, out);
             if let Ok(result) = &result {
@@ -333,7 +339,6 @@ impl Card {
         if skipped != Some(Step::Artifacts) {
             let _ = session.check_artifacts(files);
         }
-        session
     }
 
     /// A session that passed every check and took the card's challenge.
@@ -899,33 +904,24 @@ fn the_cards_signatures_get_one_proof() {
     );
     // Nor with the checks made again from the start, which is how the
     // tree's root and the path would be other ones: the same handle goes
-    // through every step again, and still does not take the challenge.
-    let again = card.session_without(None);
-    assert_eq!(
-        again.check_challenge(card.now, &card.challenge),
-        Ok(json!({ "ok": true })),
-        "another session has made no proof"
+    // through every step again and passes, as a card state request
+    // shows, and still does not take the challenge.
+    card.check(&session, &card.files, None);
+    assert!(
+        session
+            .card_state_request(card.now, &card.scope_signature)
+            .is_ok()
     );
-    let der = &card.certificate;
-    assert_eq!(
-        unsafe { idc_session_add_certificate(session.0, der.as_ptr(), der.len()) },
-        IDC_OK
-    );
-    let mut out = empty();
-    let code = unsafe { idc_session_check_certificates(session.0, card.now, &mut out) };
-    assert_eq!(finish(code, out).map(|r| r["ok"] == true), Ok(true));
     assert_eq!(
         session.check_challenge(card.now, &card.challenge),
         Err(IDC_ERR_REFUSED)
     );
-    // The challenge of a signature that was not the card's is not spent:
-    // no proof was computed for it (what_the_card_did_not_sign_gives_no_proof).
-    // Another challenge is taken: its declaration code is another one,
-    // which the card has to sign.
-    let session = card.passed();
-    session
-        .records_request(&card.files, &card.declaration())
-        .unwrap();
+    assert_eq!(
+        session.records_request(&card.files, &card.declaration()),
+        Err(IDC_ERR_REFUSED)
+    );
+    // Another challenge is taken, also by this session: its declaration
+    // code is another one, which the card has to sign.
     let another = "2026-11-16.000G40R40M30E209185GR38E20";
     assert_eq!(
         session.check_challenge(card.now, another),
@@ -940,6 +936,12 @@ fn the_cards_signatures_get_one_proof() {
             }
         ),
         Err(IDC_ERR_INPUT)
+    );
+    // That signature was not the card's: nothing was computed, and the
+    // challenge is not spent (what_the_card_did_not_sign_gives_no_proof).
+    assert_eq!(
+        session.check_challenge(card.now, another),
+        Ok(json!({ "ok": true }))
     );
 }
 
