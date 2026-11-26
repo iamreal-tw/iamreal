@@ -25,10 +25,16 @@ export const HOURLY = "0 * * * *";
 
 /** What the fake MOICA does with a request for one issuer key's CRL. */
 type Answer =
-  | { readonly kind: "body"; readonly body: Uint8Array; readonly chunked: boolean }
+  | { readonly kind: "body"; readonly body: Uint8Array; readonly chunked: boolean; readonly validators: Validators }
   | { readonly kind: "status"; readonly status: number }
   | { readonly kind: "cut"; readonly sent: Uint8Array; readonly contentLength: number | undefined }
   | { readonly kind: "stall"; readonly sent: Uint8Array | undefined };
+
+/** The `ETag` and the `Last-Modified` the fake MOICA sends with a body, and answers 304 to when a request names them. */
+export interface Validators {
+  readonly etag?: string;
+  readonly lastModified?: string;
+}
 
 /** One request the fake MOICA received. */
 export interface MoicaRequest {
@@ -64,9 +70,16 @@ export class FakeMoica {
       switch (answer.kind) {
         case "status":
           return void res.writeHead(answer.status).end("error");
-        case "body":
+        case "body": {
+          const { etag, lastModified } = answer.validators;
+          const said = { ...(etag !== undefined && { ETag: etag }), ...(lastModified !== undefined && { "Last-Modified": lastModified }) };
+          // As a server does (RFC 9110, 13.1.3): If-Modified-Since counts only for a request without If-None-Match.
+          const noneMatch = req.headers["if-none-match"];
+          const same = noneMatch !== undefined ? etag !== undefined && noneMatch === etag : lastModified !== undefined && req.headers["if-modified-since"] === lastModified;
+          if (same) return void res.writeHead(304, said).end();
           // Without Content-Length, Node sends the body chunked.
-          return void res.writeHead(200, { ...type, ...(!answer.chunked && { "Content-Length": answer.body.length }) }).end(answer.body);
+          return void res.writeHead(200, { ...type, ...said, ...(!answer.chunked && { "Content-Length": answer.body.length }) }).end(answer.body);
+        }
         case "cut":
           // Without Content-Length, Node sends the body chunked.
           res.writeHead(200, { ...type, ...(answer.contentLength !== undefined && { "Content-Length": answer.contentLength }) });
@@ -80,9 +93,12 @@ export class FakeMoica {
     return moica;
   }
 
-  /** From now on this issuer's address gives these bytes. */
-  serve(issuer: IssuerName, body: Uint8Array, how: "with Content-Length" | "chunked" = "with Content-Length"): void {
-    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "body", body, chunked: how === "chunked" });
+  /**
+   * From now on this issuer's address gives these bytes; with `validators`, it says them of the bytes, and answers 304 to
+   * a request that is conditional on them.
+   */
+  serve(issuer: IssuerName, body: Uint8Array, how: "with Content-Length" | "chunked" = "with Content-Length", validators: Validators = {}): void {
+    this.#answers.set(TEST_CRL_PATHS[issuer], { kind: "body", body, chunked: how === "chunked", validators });
   }
 
   /** From now on this issuer's address answers with this HTTP status. */
