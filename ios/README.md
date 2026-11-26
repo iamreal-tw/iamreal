@@ -52,7 +52,8 @@
 | `App/Mark.swift` | 記號：斜放的卡片和從後面站起來的島，和 `web/src/ui/logo.ts` 同一張圖、同一份輪廓 |
 | `App/SplashView.swift` | 啟動畫面：記號和「島民證明 │ iamreal.tw」（`design/copy/app.json`）。打開 app 時顯示一秒，同時向後台拿 `config`。系統自己的啟動畫面沒有改（它只能放圖片和底色，改它要動專案檔） |
 | `App/Copy.swift`、`App/Platforms.swift` | 句子從 `design/copy/card-proof.json` 讀，不屬於過卡的從 `design/copy/app.json` 讀（兩個檔都原樣包進 app）；Threads 的名稱、`@`、怎麼整理輸入的帳號、個人檔案的網址寫死在 app |
-| `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣 |
+| `App/CRLNumbers.swift` | 每一把發證金鑰用過的最高清冊編號。公開的數字；過卡之後 app 留下來的，除了它只有提醒的四樣和過卡裝置編號 |
+| `App/Counts.swift` | 計數：過卡裝置編號（換的規則在核心）、一次過卡的嘗試、`CardProofFlow.Stop` 對到表上的原因（見「PIN、憑證、簽章在哪裡」的計數那一點） |
 | `App/Reminder.swift` | 過卡提醒：下次提醒的日子怎麼算（間隔是整數週，落在同一個星期幾；選日期；一週後再提醒；每次過卡完成重排），和手機上存的四樣（開關、間隔、時刻、下次提醒的日子，存在偏好設定，關掉就一起刪掉；ADR-0016「app 在手機上留下什麼」） |
 | `App/ReminderScreens.swift`、`App/ReminderPages.swift`、`App/ReminderViews.swift` | 提醒的畫面：日子和時刻的寫法、選間隔和時刻、設定、從通知點進來的第 1 步上面那一段（句子從 `design/copy/app.json` 讀；過卡第 7 步在 `Screens.swift`，句子在 `card-proof.json`）；兩個畫面的按鈕要做的事；系統的通知（`UNUserNotificationCenter`，通知上有「一週後再提醒我」）。通知的權限在持卡人按「開啟提醒」時才要；系統不允許時什麼都不存，過卡照常完成；第 7 步的「打開通知設定」在 iOS 16 以上開到這個 app 的通知設定，iOS 15 開到這個 app 的設定頁。點通知打開第 1 步；正在過卡（第 2 到 5 步，可能有 PIN 在記憶體裡）時不丟掉，第 1 步上面那一段等回到第 1 步才出現，過完卡就不再出現。app 開著的時候通知照樣跳出來 |
 | `App/AppEnvironment.swift` | 這個 build 連哪個網站、簽哪一份證明紀錄的場合字串，是商店的 build 還是開發用 build，商店上那一個 app 的頁面。建置時寫死 |
@@ -78,7 +79,7 @@
 - **姓名**：核心檢查憑證後回傳，只交給「輸入 PIN」的畫面
 - **憑證的到期日**：第 7 步要比憑證的到期日和下次提醒的日子（到期日比較早就多一句），所以 `CardProofFlow` 把選定的憑證的 `not_after` 交給送出之後的畫面（`CardProofFlow.Done.notAfter`），只在記憶體裡，回到開頭就丟；不存進手機，通知不提
 - **不寫磁碟**：過卡做到一半的狀態只在 `CardProofModel` 和 `CardProofFlow` 的記憶體裡，沒有用系統保存畫面狀態的任何機制，app 被系統結束就從第 1 步來。`Tests/BuildTests.swift` 檢查 `App/` 的原始碼沒有寫檔、偏好設定、鑰匙圈、狀態保存的呼叫，例外只有 `CRLNumbers.swift` 的清冊編號、`Reminder.swift` 的提醒的四樣、`Counts.swift` 的過卡裝置編號，和持卡人按「複製連結」時的剪貼簿
-- **計數**（`App/Counts.swift`，`spec/counts.md`；ADR-0032、ADR-0039，#434）：過卡到了表上的哪一步、停下來或要再試一次的原因代碼、感應中途卡片離開（第幾次感應）、送出被擋後再送同一筆、下載清冊、建樹、算證明花了多久的分級。一筆一個請求（`Backend.count`），不等回應、送不出去不重送，過卡照常。每一筆帶 `client`（`ios`）、嘗試編號（一次過卡一個，只在記憶體裡）、過卡裝置編號（`UserDefaults`，台灣的日期起算 31 天後換新的，舊的不留，規則在核心的 `idc_count_device_id`）、系統版本（`UIDevice.current.systemVersion`）、app 版本（`CFBundleShortVersionString`）、手機型號（`utsname` 的 machine，例如 `iPhone15,2`；不是 `UIDevice.name` 那個持卡人取的名字）；版本和型號不合格式的整個不送。內文由核心照步驟表組（`idc_count`）。原因是 `Counts.reason(of:)` 從 `CardProofFlow.Stop` 選的，不帶任何文字、帳號、匿名編號、卡片上的值。`CardProofFlow` 停下來（`fail`）的送 stop、讓那一步再做一次的送 retry；設定、最低版本、開始時被擋這幾種在建立流程之前，由 `CardProofModel` 送；`open` 在第 1 步出現時送。持卡人取消、呼叫的順序不對被拒絕都不送。送出一筆的內文最前面加上過卡裝置編號（`CardProofFlow.withDeviceID`）。不用 IDFA、`identifierForVendor`、推播權杖，不連結 `AdSupport`，沒有第三方的分析（#94）
+- **計數**（`App/Counts.swift`，`spec/counts.md`；ADR-0032、ADR-0039，#434）：過卡到了表上的哪一步、停下來或要再試一次的原因代碼、感應中途卡片離開（第幾次感應）、送出被擋後再送同一筆、下載清冊、建樹、算證明花了多久的分級（時鐘往回調時不送）。一筆一個請求（`Backend.count`），不等回應、送不出去不重送，過卡照常。每一筆帶 `client`（`ios`）、嘗試編號（一次過卡一個，只在記憶體裡）、過卡裝置編號（`UserDefaults`，台灣的日期起算 31 天後換新的，舊的不留，規則在核心的 `idc_count_device_id`）、系統版本（`UIDevice.current.systemVersion`）、app 版本（`CFBundleShortVersionString`）、手機型號（`utsname` 的 machine，例如 `iPhone15,2`；不是 `UIDevice.name` 那個持卡人取的名字）；版本和型號不合格式的整個不送。內文由核心照步驟表組（`idc_count`）。原因是 `Counts.reason(of:)` 從 `CardProofFlow.Stop` 選的，不帶任何文字、帳號、匿名編號、卡片上的值。`CardProofFlow` 停下來（`fail`）的送 stop、讓那一步再做一次的送 retry；設定、最低版本、開始時被擋這幾種在建立流程之前，由 `CardProofModel` 送；`open` 在第 1 步出現時送。持卡人取消、呼叫的順序不對被拒絕都不送。送出一筆的內文最前面加上過卡裝置編號（`CardProofFlow.withDeviceID`）。不用 IDFA、`identifierForVendor`、推播權杖，不連結 `AdSupport`，沒有第三方的分析（#94）
 
 已知的限制：`SecureField` 交出來的是 Swift 的 `String`，欄位清空之後它在記憶體裡的那一份 app 蓋不到；`PIN` 自己的位元組會蓋成零。
 

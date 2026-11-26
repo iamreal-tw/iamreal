@@ -311,9 +311,11 @@ final class CardProofModel: ObservableObject {
     // The counts -------------------------------------------------------------------------
 
     /// Step 1 shows: the first screen of a card proof (spec/counts.md,
-    /// `open`). A new attempt, unless the one there has not begun.
+    /// `open`). A new attempt, unless the one there has no card asked for
+    /// yet: step 1 drawn again, also after its start was turned away, is
+    /// the same screen.
     private func opened() {
-        guard let counts = deps.flow.counts, attempt?.begun ?? true else { return }
+        guard let counts = deps.flow.counts, attempt?.tapped ?? true else { return }
         attempt = counts.attempt()
         attempt?.step("open")
     }
@@ -661,8 +663,8 @@ final class CardProofModel: ObservableObject {
             screen = read(reached: 0, running: false, stop: .server(failure))
             return
         }
-        // The server answered its config.
-        if CardProofFlow.paused(config) == false { attempt?.step("config") }
+        // The server answered a config a card proof can start from.
+        if CardProofFlow.takes(config) { attempt?.step("config") }
         // The lowest version, from the config this card proof will use: before any card is read.
         version = deps.minApp(config, deps.flow.clock())
         switch version {

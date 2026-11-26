@@ -35,22 +35,44 @@ final class CountsTests: XCTestCase {
 
     private func at(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
 
-    func testTheDeviceIDIsKeptFor31DaysFromTheDateItWasMadeOnInTaiwan() throws {
-        let counts = counts()
-        // 23:30 in Taiwan on 2027-01-01.
-        now = at("2027-01-01T15:30:00Z")
-        let id = try XCTUnwrap(counts.deviceID())
-        XCTAssertEqual(stored, "\(id).2027-01-01")
-        now = at("2027-01-31T15:59:59Z")
-        XCTAssertEqual(counts.deviceID(), id)
-        now = at("2027-01-31T16:00:00Z")
-        let next = try XCTUnwrap(counts.deviceID())
-        XCTAssertNotEqual(next, id)
-        XCTAssertEqual(stored, "\(next).2027-02-01")
-        // A value that cannot be read is replaced.
-        stored = "x"
-        let again = try XCTUnwrap(counts.deviceID())
-        XCTAssertEqual(stored, "\(again).2027-02-01")
+    /// spec/vectors/counts.json, `device_ids`: the ID used and the value kept, by the core's rule.
+    func testTheDeviceIDOfEveryCaseOfTheVectors() throws {
+        let vectors = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("spec/vectors/counts.json")) as? [String: Any])
+        let cases = try XCTUnwrap(vectors["device_ids"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let name = try XCTUnwrap(c["name"] as? String)
+            let hex = try XCTUnwrap(c["random"] as? String)
+            let random = Data(stride(from: 0, to: hex.count, by: 2).map { UInt8(hex.dropFirst($0).prefix(2), radix: 16)! })
+            stored = c["stored"] as? String
+            let kept = stored
+            now = Date(timeIntervalSince1970: try XCTUnwrap(c["now"] as? Double))
+            let counts = Counts(Counts.Dependencies(
+                send: { _ in }, clock: { [unowned self] in self.now }, random: { _ in random },
+                stored: { [unowned self] in self.stored }, store: { [unowned self] in self.stored = $0 },
+                osVersion: "", appVersion: "", model: ""))
+            XCTAssertEqual(counts.deviceID(), c["device_id"] as? String, name)
+            XCTAssertEqual(stored, (c["store"] as? String) ?? kept, name)
+        }
+    }
+
+    /// spec/vectors/counts.json, `durations_of`: the duration of each time, none below 0.
+    func testEveryDurationOfTheVectors() throws {
+        let vectors = try XCTUnwrap(try JSONSerialization.jsonObject(with: Repository.data("spec/vectors/counts.json")) as? [String: Any])
+        let cases = try XCTUnwrap(vectors["durations_of"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let ms = try XCTUnwrap(c["ms"] as? Double)
+            sent = []
+            counts().attempt().took("tree", seconds: ms / 1000)
+            XCTAssertEqual(sent.first?["took"], c["took"] as? String, "\(ms) ms")
+        }
+    }
+
+    /// A count that cannot be sent is nobody's: the back end's request returns, throwing nothing, when no server answers.
+    func testACountThatCannotBeSentHoldsNothingUp() async {
+        let backend = HTTPBackend(site: URL(string: "http://127.0.0.1:1")!, publicFiles: URL(string: "http://127.0.0.1:1")!)
+        await backend.count(Data("{}".utf8))
     }
 
     func testACountCarriesTheClientTheTwoIDsTheVersionsAndTheModelAndNothingElse() throws {
@@ -79,6 +101,7 @@ final class CountsTests: XCTestCase {
         attempt.retry("no_tap")
         attempt.tapDropped(2)
         attempt.took("tree", seconds: 12.345)
+        attempt.took("crl", seconds: -1)
         attempt.resubmitted()
         attempt.retry("server_http_502")
         attempt.stop("server_teapot")

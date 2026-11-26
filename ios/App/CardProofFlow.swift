@@ -330,6 +330,14 @@ final class CardProofFlow {
         knownPlatforms = (try? JSONSerialization.data(withJSONObject: Platform.known.map(\.id))) ?? Data("[]".utf8)
     }
 
+    /// Whether a card proof can start from `config`: it has a table of
+    /// platforms and says card proofs are taken. For the count of the step
+    /// `config` (spec/counts.md), before the lowest version is read.
+    static func takes(_ config: Data) -> Bool {
+        guard paused(config) == false, let body = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return false }
+        return body["platforms"] != nil
+    }
+
     /// `config`'s `paused` (docs/api/card-proof.md): whether the operator
     /// stopped taking card proofs. Absent is false; nil when it is there
     /// and is neither true nor false (spec/device-checks.md:
@@ -361,8 +369,11 @@ final class CardProofFlow {
             certificates = try await deps.card.tap(.readCertificates) { try await $0.certificates() }
         } catch {
             dropped(error, tap: 1)
-            // Nothing is held yet: the same step can be done again.
-            throw Self.stop(error)
+            let stop = Self.stop(error)
+            // Nothing is held yet: a tap that did not happen, was closed or lost the card is made again (Screens.tapsAgain);
+            // any other ends the card proof, and step 2 starts a new one.
+            if Screens.tapsAgain(stop) { throw stop }
+            throw fail(stop)
         }
         defer { for i in certificates.indices { Self.wipe(&certificates[i]) } }
         try live()
@@ -399,7 +410,9 @@ final class CardProofFlow {
                     self.attempt?.step("checked")
                 } catch {
                     // Counted when it fails, as on the web page; the flow stops on it when the screen waits for it.
-                    if !self.cancelled, self.phase != .stopped, let reason = Counts.reason(of: Self.stop(error)) { self.attempt?.stop(reason) }
+                    if !self.cancelled, self.phase != .stopped, let reason = Counts.reason(of: Self.stop(error)) {
+                        self.attempt?.stop(reason)
+                    }
                     throw error
                 }
             }
@@ -642,14 +655,17 @@ final class CardProofFlow {
                 return try await connection.sign(message, pin: pin)
             }
         } catch {
-            dropped(error, tap: tap)
+            dropped(error, tap: tap, pinAccepted: pin.accepted)
             throw error
         }
     }
 
-    /// A card that left during tap `tap` is an action, not a reason (spec/counts.md, "Actions of a card proof").
-    private func dropped(_ error: Error, tap: Int) {
-        if case CardFailure.dropped = error { attempt?.tapDropped(tap) }
+    /// A card that left during tap `tap` is an action, not a reason (spec/counts.md, "Actions of a card proof"); but
+    /// one that left while a PIN the card never accepted was going to it is the reason `pin_maybe_received`, and not
+    /// this action as well.
+    private func dropped(_ error: Error, tap: Int, pinAccepted: Bool = false) {
+        guard case CardFailure.dropped(let fate) = error, fate != .sent || pinAccepted else { return }
+        attempt?.tapDropped(tap)
     }
 
     /// Runs a step of the flow, and tells the counts why it failed: as
@@ -666,6 +682,8 @@ final class CardProofFlow {
     private func count(_ error: Error) {
         // Cancelled by the caller, or a call refused as out of order: nothing changed, nothing to count.
         guard !cancelled, let stop = error as? Stop, stop != .state, let reason = Counts.reason(of: stop) else { return }
+        // Tap 3 lost the card while the PIN, accepted at tap 2, was going to it: the action was counted, and is no reason.
+        if stop == .card(.dropped(.sent)), pin?.accepted == true { return }
         if phase == .stopped { attempt?.stop(reason) } else { attempt?.retry(reason) }
     }
 
@@ -945,7 +963,7 @@ final class CardProofFlow {
     /// (docs/api/card-proof.md, `device_id`): a member the server writes in
     /// the connection log and nowhere else (ADR-0022, ADR-0039).
     nonisolated static func withDeviceID(_ body: Data, _ id: String) -> Data {
-        guard body.count > 2, body.first == UInt8(ascii: "{"), id.count == 32, id.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else { return body }
+        guard body.count > 2, body.first == UInt8(ascii: "{"), id.utf8.count == 32, id.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0) }) else { return body }
         return Data("{\"device_id\":\"\(id)\",".utf8) + body.dropFirst()
     }
 

@@ -126,6 +126,7 @@ final class BusyTests: XCTestCase {
         func cardState(_ body: Data) async throws -> Data { throw BackendFailure(code: "network", requestID: nil) }
         func challenge() async throws -> String { throw BackendFailure(code: "network", requestID: nil) }
         func submit(_ body: Data) async throws -> Data { throw BackendFailure(code: "network", requestID: nil) }
+        func count(_ body: Data) async {}
     }
 
     /// A card that is never there, and counts the taps that looked for it.

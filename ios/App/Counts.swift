@@ -105,8 +105,13 @@ final class Counts {
         }
 
         /// A card was read for this card proof, or it stopped: a card proof
-        /// after it is another one. Taps that read no card are the same one's.
+        /// after it is another one. Taps that read no card are the same
+        /// one's: step 2 makes a new flow for each tap (CardProofModel),
+        /// where the Android app keeps one, so the line is the card read.
         var begun: Bool { stopped || reached.contains("certificates") }
+
+        /// The cardholder asked for a card to be read in this card proof.
+        var tapped: Bool { reached.contains("read") }
 
         /// The card proof reached `step`.
         func step(_ step: String) {
@@ -141,7 +146,8 @@ final class Counts {
 
         /// The timed step `step` (`crl`, `tree`, `proved`) took `seconds`.
         func took(_ step: String, seconds: TimeInterval) {
-            guard !stopped, let took = try? DeviceCore.countTook(milliseconds: UInt64(max(0, seconds) * 1000)) else { return }
+            // A time below 0 (the clock went back) is no duration (spec/counts.md, "Durations").
+            guard !stopped, seconds >= 0, let took = try? DeviceCore.countTook(milliseconds: UInt64(seconds * 1000)) else { return }
             _ = counts.send(["event": "duration", "step": step, "took": took], attempt: id)
         }
 

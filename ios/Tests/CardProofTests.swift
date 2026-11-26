@@ -106,8 +106,12 @@ final class CardProofTests: XCTestCase {
             guard let event = c["event"], event == "stop" || event == "retry" else { return nil }
             return "\(event):\(c["reason"] ?? "")"
         })
-        XCTAssertTrue(said.contains("stop:server_paused"), "\(said)")
-        XCTAssertTrue(said.contains("retry:other_card"), "\(said)")
+        // Stopped (#394), another card at a tap, and too many people (#420): the start turned away twice, the card's state,
+        // the challenge and the record turned away once each, and the record sent again.
+        for expected in ["stop:server_paused", "retry:other_card", "stop:server_busy", "stop:server_rate_limited", "retry:server_busy", "retry:server_rate_limited"] {
+            XCTAssertTrue(said.contains(expected), "\(expected) not in \(said)")
+        }
+        XCTAssertTrue(countsSent.contains { $0["event"] == "action" && $0["action"] == "resubmit" })
         let ids = Set(countsSent.compactMap { $0["device_id"] })
         XCTAssertEqual(ids.count, 1)
         let records = submitted + (asked?.submitted ?? [])
@@ -827,6 +831,10 @@ final class CardProofTests: XCTestCase {
         XCTAssertTrue(model.holdsPIN)
         try await press("再感應一次", in: model)
         XCTAssertEqual(model.screen.step, 4)
+        // Each a card that left during tap 2, counted as such: the PIN had been accepted when the second left as it went.
+        let dropped = countsSent.filter { $0["event"] == "action" && $0["action"] == "tap_dropped" }
+        XCTAssertEqual(dropped.map { $0["tap"] }, ["2", "2"])
+        XCTAssertFalse(countsSent.contains { $0["reason"] == "pin_maybe_received" })
     }
 
     // The server does not answer --------------------------------------------------------------------
