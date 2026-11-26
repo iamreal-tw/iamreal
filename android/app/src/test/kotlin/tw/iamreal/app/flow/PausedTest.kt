@@ -19,7 +19,7 @@ class PausedTest {
     private val platforms = """"platforms":[{"platform":"threads","display_name":"Threads","username_format":"[a-z0-9._]{1,30}"}]"""
 
     private fun config(paused: String?) =
-        ("{" + (if (paused == null) "" else """"paused":$paused,""") + """"crl_max_age_days":3,$platforms}""").toByteArray()
+        ("{" + (if (paused == null) "" else """"paused":$paused,""") + """"crl_max_age_days":3,$platforms,"min_app":{"android":{"build":1,"from":"2026-11-20"}}}""").toByteArray()
 
     /** The card the flow would read: it says it was tapped, and goes no further. */
     private class Tapped : RuntimeException()
@@ -40,7 +40,9 @@ class PausedTest {
             override fun config() = config
             override fun openSession(): Long = fail("no session before the card is read").let { 0L }
             override fun bundled(name: String): ByteArray = fail("no file before the card is read").let { ByteArray(0) }
-            override fun now() = 0L
+            // A moment the core takes (2027): the minimum app version is read before the card too.
+            override fun now() = 1_800_000_000_000L
+            override val appBuild = 1
             override val crlNumbers = object : CardProof.CrlNumbers {
                 override fun get(issuer: String): String? = null
                 override fun set(issuer: String, number: String) {}

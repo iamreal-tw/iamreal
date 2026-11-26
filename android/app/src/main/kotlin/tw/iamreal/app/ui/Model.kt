@@ -14,6 +14,7 @@ import tw.iamreal.app.card.CardException
 import tw.iamreal.app.card.SecureChannel
 import tw.iamreal.app.flow.Blocked
 import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.flow.Stop
 import java.util.concurrent.ExecutionException
@@ -48,6 +49,9 @@ internal enum class ReadButton { TAP, TAP_AGAIN, NFC, RESTART, NEXT }
  * declares and the actions); after accounts.switch (one platform); after accounts.edit_list (several).
  */
 internal enum class AccountsMode { OPEN, SWITCH, EDIT }
+
+/** What stands in the place of step 1: a phone that cannot read a card, or a version of the app that can no longer do a card proof. */
+internal enum class Gate { NO_NFC, TOO_OLD }
 
 /** The buttons under step 5's list when it stopped. */
 internal enum class ProgressButton { NONE, TAP_AGAIN, RESTART }
@@ -132,6 +136,33 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
      */
     var paused by mutableStateOf(false)
         private set
+
+    /**
+     * What the minimum app version of the server's config last said of this build (spec/min-app.md; ADR-0035): step 1
+     * says from which date this version can no longer do a card proof, or is replaced when it no longer can. Until the
+     * config answers, and when it does not or cannot be read: [MinApp.Ok], and step 2 asks again and stops there.
+     */
+    var minApp by mutableStateOf<MinApp>(MinApp.Ok)
+        private set
+
+    /** Whether this phone can read a card at all; a phone without NFC has step 1 replaced. True until the card says otherwise. */
+    var hasNfc by mutableStateOf(true)
+        private set
+
+    init {
+        thread(name = "nfc") {
+            val has = wiring.card.hasNfc
+            main.post { hasNfc = has }
+        }
+    }
+
+    /** What stands in the place of step 1 (design/copy/card-proof.md, "1. 開始之前", app), if anything: nothing of a card proof can be reached from it. */
+    val gate: Gate?
+        get() = when {
+            !hasNfc -> Gate.NO_NFC
+            minApp is MinApp.TooOld -> Gate.TOO_OLD
+            else -> null
+        }
 
     /** Above step 1: why the card proof came back to it. */
     var notice by mutableStateOf<String?>(null)
@@ -231,8 +262,15 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         thread(name = "config") {
             it.run()
             val said = try { CardProof.pausedIn(it.get()) == true } catch (e: ExecutionException) { false }
+            // An answer that did not come, or a clock the core does not take, says nothing of the version: step 2 stops there.
+            val version = try { CardProof.minApp(it.get(), wiring.appBuild, System.currentTimeMillis()) } catch (e: ExecutionException) { MinApp.Ok } catch (e: Stop) { MinApp.Ok }
             // Not when it was asked again meanwhile: the later answer says.
-            main.post { if (synchronized(this@Model) { config === it }) paused = said }
+            main.post {
+                if (synchronized(this@Model) { config === it }) {
+                    paused = said
+                    minApp = if (version == MinApp.Unreadable) MinApp.Ok else version
+                }
+            }
         }
     }
 
@@ -264,6 +302,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             override fun openSession() = wiring.openSession()
             override fun bundled(name: String) = this@Model.bundled(name)
             override fun now() = System.currentTimeMillis()
+            override val appBuild = wiring.appBuild
             override val crlNumbers = this@Model.crlNumbers
         }).also { flow = it }
     }
@@ -322,6 +361,8 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     // Step 1 ---------------------------------------------------------------------------
 
     fun start() {
+        // Nothing of a card proof from a screen that stands in the place of step 1.
+        if (gate != null) return
         notice = null
         toRead()
     }
@@ -382,6 +423,20 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             },
             { stop ->
                 readBusy = false
+                // The server's minimum version went past this build since step 1 asked: back to step 1, which is replaced.
+                if (stop.code == "min_app") {
+                    dropAll()
+                    minApp = MinApp.TooOld(stop.values.getValue("from"))
+                    step = Step.BEFORE
+                    return@step
+                }
+                // A phone without NFC is told so in place of step 1.
+                if (stop.code == "card" && stop.values["reason"] == CardException.Reason.NO_NFC.name) {
+                    dropAll()
+                    hasNfc = false
+                    step = Step.BEFORE
+                    return@step
+                }
                 val reason = stop.values["reason"]
                 if (stop.code == "card" && reason == CardException.Reason.CANCELLED.name) {
                     // Back to the screen as it was before the button was pressed.

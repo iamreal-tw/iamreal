@@ -14,10 +14,9 @@ import tw.iamreal.app.fake.TestSide
  * (checkApk).
  */
 internal object Target {
-    @Suppress("UNUSED_PARAMETER")
     fun wiring(context: Context): Wiring {
         val side = TestSide(ORIGIN)
-        return Wiring(ORIGIN, ORIGIN, FakeCard(side), openSession = { TestingCore.sessionOpen(side.issuers()) })
+        return Wiring(ORIGIN, ORIGIN, FakeCard(side), openSession = { TestingCore.sessionOpen(side.issuers()) }, appBuild = appBuildOf(context))
     }
 
     /**

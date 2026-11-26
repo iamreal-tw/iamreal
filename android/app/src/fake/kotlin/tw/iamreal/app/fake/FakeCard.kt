@@ -37,6 +37,9 @@ import java.util.Base64
  *                         "signing" (after it accepted the PIN).
  *                         nfc: "off" or "none", a phone whose NFC is turned
  *                         off or that has none, in place of a card
+ *   GET /__test/phone     {"nfc":false} for a phone without NFC; any other
+ *                         answer, or none, is a phone that has it. Asked
+ *                         once, when the app opens
  *   GET /__test/pin       tells the test that a card was handed a PIN,
  *                         whichever PIN and whichever card: how a test
  *                         sees that a card it held out got none
@@ -66,6 +69,11 @@ internal class TestSide(private val origin: String) {
  * without a PIN, a signature only with its PIN.
  */
 internal class FakeCard(private val side: TestSide) : Card {
+    override val hasNfc: Boolean by lazy {
+        val phone = try { side.get("/__test/phone") } catch (e: IOException) { null }
+        phone == null || JSONObject(String(phone, Charsets.UTF_8)).optBoolean("nfc", true)
+    }
+
     override fun <T> tap(cancel: TapCancel, use: (CardConnection) -> T): T {
         val held = try {
             // Cancelling ends the wait for the test's answer.

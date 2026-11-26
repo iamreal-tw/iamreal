@@ -13,6 +13,6 @@ import tw.iamreal.app.core.DeviceCore
 internal object Target {
     fun wiring(context: Context): Wiring {
         val card = NfcCard(NfcAdapter.getDefaultAdapter(context))
-        return Wiring(Environment.SITE, Environment.DATA, card, DeviceCore::sessionOpen, card)
+        return Wiring(Environment.SITE, Environment.DATA, card, DeviceCore::sessionOpen, appBuildOf(context), card)
     }
 }

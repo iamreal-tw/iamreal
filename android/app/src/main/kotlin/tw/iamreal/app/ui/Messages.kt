@@ -32,7 +32,8 @@ internal class Messages(private val c: Copy) {
             CardException.Reason.PIN_MAYBE_SENT.name -> if (at == At.DECLARE) c.say("app_stops.dropped") else c.say("app_stops.pin_maybe_received")
             CardException.Reason.PIN_INCORRECT.name -> c.say("pin.pin_incorrect")
             CardException.Reason.LOCKED.name -> c.say("stops.card_locked")
-            CardException.Reason.NFC_OFF.name -> if (at == At.READ) c.say("app_stops.nfc_off") else null
+            // At step 2 the sentence names its button; later the tap is made again once NFC is back on.
+            CardException.Reason.NFC_OFF.name -> if (at == At.READ) c.say("app_stops.nfc_off") else c.say("app_stops.nfc_off_tap")
             CardException.Reason.CHANNEL.name -> c.say("app_stops.channel")
             CardException.Reason.FIRST_GENERATION.name -> c.say("app_stops.first_generation")
             // On the panels of reading and of the PIN, cancelling says nothing.

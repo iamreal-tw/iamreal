@@ -18,6 +18,13 @@ interface Card {
      * [CardException.Reason.CANCELLED] when [cancel] was cancelled while it waited for a card, or before.
      */
     fun <T> tap(cancel: TapCancel, use: (CardConnection) -> T): T
+
+    /**
+     * Whether this phone can read a card at all: false for a phone without NFC, which is told so in place of
+     * step 1 (design/copy/card-proof.md, "1. 開始之前", app). NFC that is turned off is not this: the tap says so
+     * ([CardException.Reason.NFC_OFF]). It may ask something that takes a moment: not for the main thread.
+     */
+    val hasNfc: Boolean get() = true
 }
 
 /**
