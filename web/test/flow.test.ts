@@ -1,18 +1,22 @@
 // The flow against a fake server that gives, one at a time, a value the
-// device must not accept. Each time the device stops, and no request it sends
-// carries the reason (ADR-0016). The proof itself is made only in the
-// headless browser test (test/e2e/); here the prover's `prove` is a stub.
+// device must not accept. Each time the device stops, and the only request
+// that carries the reason is a count, which holds one code of the table for
+// it and nothing else (ADR-0032; spec/counts.md). The proof itself is made
+// only in the headless browser test (test/e2e/); here the prover's `prove`
+// is a stub.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { CardError } from "../src/card/card.ts";
 import { FakeCard } from "../src/card/fake.ts";
 import { buildWith } from "../src/crl/build.ts";
+import { DEVICE_ID_KEY, type FlowCounts, cardProofCounts, reasonOf } from "../src/counts.ts";
 import { CardProofFlow, type CardStatus, type Choice, type Consequence, FlowStop, IDLE_MS, type Progress, type Stop } from "../src/flow.ts";
 import type { IssuerName } from "../src/issuers.ts";
 import { ArtifactError, loadCircuit } from "../src/prover/artifacts.ts";
 import type { Prover } from "../src/prover/prover.ts";
 import { memoryStore } from "../src/storage.ts";
+import { readCount } from "iamreal-protocol/counts.ts";
 import { declarationCode } from "iamreal-protocol/declaration-code.ts";
 import { pack31 } from "iamreal-protocol/field.ts";
 import { poseidon } from "./bb.ts";
@@ -55,7 +59,20 @@ interface Setup {
    * its log) at once, the answer only when the returned function is called.
    */
   hold: (path: string) => () => void;
+  /**
+   * The counts the page sent (`POST /api/v1/counts`), in order, each as it
+   * was sent. They are not in the server's log (`backend.log`): that is every
+   * other request.
+   */
+  counted: Record<string, unknown>[];
+  /** The page's counts: another flow given them is another card proof on the same page. */
+  counts: FlowCounts;
+  /** What the page keeps in `localStorage` for the counts. */
+  idStorage: Map<string, string>;
 }
+
+/** The `User-Agent` of the page in these tests: Chrome on Windows. */
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /** A card that reports a blocked window for the next `n` calls of `which`, then passes calls through. */
 function blockWindows(card: FakeCard, which: "readCertificates" | "sign", n: number): { blocked: () => number } {
@@ -88,6 +105,8 @@ async function setup(o: {
   signer?: "signing" | "encryption";
   /** The flow's clock at the start; NOW by default. */
   start?: number;
+  /** What becomes of a count the page sends: answered (by default), refused by the network, or never answered. */
+  countsAre?: "answered" | "failing" | "held";
 } = {}): Promise<Setup> {
   const w = o.world ?? (await makeWorld());
   const files = new Map<string, Uint8Array>(circuitFiles);
@@ -146,6 +165,21 @@ async function setup(o: {
     await gates.get(path);
     return res;
   };
+  const counted: Record<string, unknown>[] = [];
+  const idStorage = new Map<string, string>();
+  const counts = cardProofCounts({
+    fetch: async (path, init) => {
+      assert.deepEqual([path, init?.method], ["/api/v1/counts", "POST"]);
+      counted.push(JSON.parse(init!.body!) as Record<string, unknown>);
+      if (o.countsAre === "failing") throw new TypeError("Failed to fetch");
+      if (o.countsAre === "held") return new Promise<Response>(() => undefined);
+      return new Response(null, { status: 204 });
+    },
+    storage: { getItem: (k) => idStorage.get(k) ?? null, setItem: (k, v) => void idStorage.set(k, v) },
+    clock: () => now,
+    random: (bytes) => crypto.getRandomValues(bytes as Uint8Array<ArrayBuffer>),
+    userAgent: USER_AGENT,
+  });
   const timers: { at: number; f: () => void; done: boolean }[] = [];
   const idleStops: Stop[] = [];
   const progress: Progress[] = [];
@@ -164,6 +198,7 @@ async function setup(o: {
       onBackgroundStop: onStop,
       onIdle: (s) => idleStops.push(s),
       onProgress: (p) => progress.push(p),
+      counts,
       setTimer: (ms, f) => {
         const t = { at: now + ms, f, done: false };
         timers.push(t);
@@ -180,7 +215,7 @@ async function setup(o: {
       }
     }
   };
-  return { w, backend, data, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold };
+  return { w, backend, data, card, flow, store, backgroundStop, proveCalls, advance, fireTimers, idleStops, progress, prover, hold, counted, counts, idStorage };
 }
 
 /** A slot of the card-state answer (docs/api/card-proof.md): empty unless the test says otherwise. */
@@ -257,9 +292,18 @@ async function stopOf(p: Promise<unknown>): Promise<Stop> {
   assert.fail("did not stop");
 }
 
-/** No request after the stop, none submitted a record, none carries the reason. */
+/**
+ * No request after the stop, none submitted a record, and none carries the
+ * reason but one count: a `stop` with the code of the table for it, which
+ * holds nothing else of the stop.
+ */
 async function assertQuiet(s: Setup, stop: Stop, requestsAtStop: number): Promise<void> {
   await new Promise((r) => setTimeout(r, 50));
+  assertCounts(s);
+  const told = (event: string): unknown[] => s.counted.filter((c) => c.event === event).map((c) => c.reason);
+  // A stop that ended the flow is one `stop`; one that leaves the step to be tried again is a `retry`, and no `stop`.
+  if (s.flow.stop !== null || s.counted.some((c) => c.event === "stop")) assert.deepEqual(told("stop"), [reasonOf(stop)], "one count says why it stopped");
+  else assert.equal(told("retry").at(-1), reasonOf(stop), "a count says why the step must be tried again");
   assert.equal(s.backend.log.length, requestsAtStop, "requests after the stop");
   assert.equal(s.backend.log.filter((r) => r.path === "/api/v1/records").length, 0, "a record was submitted");
   // The reason codes in the stop (code, problem, reason), at any depth.
@@ -275,6 +319,19 @@ async function assertQuiet(s: Setup, stop: Stop, requestsAtStop: number): Promis
   assert.ok(words.length > 0);
   for (const r of s.backend.log) {
     for (const word of words) assert.ok(!(r.path + r.body).includes(word), `request ${r.method} ${r.path} carries "${word}"`);
+  }
+}
+
+/**
+ * Every count the page sent is one the table takes (spec/counts.md), from
+ * the web page, with the browser's and the system's names and no version;
+ * its members are the table's and nothing else.
+ */
+function assertCounts(s: Setup): void {
+  for (const c of s.counted) {
+    assert.deepEqual(readCount(c), c, `a count the table does not take, or not in its order: ${JSON.stringify(c)}`);
+    assert.deepEqual([c.client, c.browser, c.os], ["web", "chrome", "windows"]);
+    assert.deepEqual(Object.keys(c).filter((k) => !["client", "event", "step", "reason", "action", "device_id", "attempt_id", "browser", "os"].includes(k)), []);
   }
 }
 
@@ -833,7 +890,9 @@ describe("the submission and what the server says it recorded", () => {
     const done = await s.flow.proceed(cq.accounts);
     const raw = s.backend.log.find((r) => r.path === "/api/v1/records")!.body;
     const sub = JSON.parse(raw) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(sub), ["scope_string", "scoped_id", "accounts", "challenge", "issuer", "smt_root", "circuit", "proof"]);
+    // After the record's fields, the card proof device ID (ADR-0039), which is no part of the record.
+    assert.deepEqual(Object.keys(sub), ["scope_string", "scoped_id", "accounts", "challenge", "issuer", "smt_root", "circuit", "proof", "device_id"]);
+    assert.equal(sub.device_id, s.counts.deviceId());
     assert.equal(sub.scope_string, SCOPE);
     assert.ok(raw.includes('"accounts":[{"platform":"test-example","username":"a-b"},{"platform":"threads","username":"alice"}]'), raw.slice(0, 300));
     const code = await declarationCode(SCOPE, cq.accounts, sub.challenge as string);
@@ -2008,5 +2067,177 @@ describe("one proof for the card's signatures (spec/device-checks.md)", () => {
     assert.equal(s.proveCalls.length, 1, "one proof");
     assert.equal(s.backend.submissions[0]!.proof, s.backend.submissions[1]!.proof);
     assertNothingHeld(s.flow, "after the proof");
+  });
+});
+
+describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () => {
+  const sent = async (s: Setup): Promise<Record<string, unknown>[]> => {
+    await new Promise((r) => setTimeout(r, 20));
+    assertCounts(s);
+    return s.counted;
+  };
+  const stepsOf = (counted: Record<string, unknown>[]): unknown[] => counted.filter((c) => c.event === "step").map((c) => c.step);
+
+  test("a whole card proof: each step once, in order, under one attempt ID and the device ID the submission carries; nothing of the card, the account or the record", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    // As the screen does: the PIN is asked for once the checks have passed.
+    await s.flow.checksDone();
+    const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
+    const done = await s.flow.proceed(cq.accounts);
+    const counted = await sent(s);
+    assert.deepEqual(counted.map((c) => c.event), new Array(counted.length).fill("step"));
+    const steps = stepsOf(counted);
+    // The checks after the card is read run together: their steps come in any order, between the certificate and `checked`.
+    const together = ["config", "circuit", "engine", "crl", "tree"];
+    assert.deepEqual(steps.slice(0, 4), ["read", "component", "certificates", "certificate"]);
+    assert.deepEqual([...steps.slice(4, 9)].sort(), [...together].sort());
+    assert.deepEqual(steps.slice(9), ["checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"]);
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+    assert.equal(new Set(counted.map((c) => c.device_id)).size, 1);
+    // The submission carries the device ID, after the record's members; no other request does.
+    const device = counted[0]!.device_id as string;
+    assert.deepEqual(Object.keys(s.backend.submissions[0]!).at(-1), "device_id");
+    assert.equal(s.backend.submissions[0]!.device_id, device);
+    for (const r of s.backend.log.filter((r) => r.path !== "/api/v1/records")) assert.ok(!(r.path + r.body).includes(device), `${r.path} carries the device ID`);
+    // Nothing of the card, the account, the record or the PIN in any count.
+    const all = JSON.stringify(counted);
+    for (const part of [done.scopedId, done.shortId, "alice", "threads", PIN, done.record.challenge, done.record.smt_root, "2026-11-16"]) assert.ok(!all.includes(part), part);
+  });
+
+  test("a wrong PIN and a blocked window: `retry` with the code, the same attempt goes on, and `pin` is sent once", async () => {
+    const s = await setup({ echoPublicInputs: true });
+    await s.flow.readCard();
+    assert.deepEqual(await stopOf(s.flow.confirmCard("000000")), { code: "card", card: "pin_incorrect" });
+    blockWindows(s.card, "sign", 1);
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), { code: "card", card: "popup_blocked" });
+    const status = await s.flow.confirmCard(PIN);
+    // A list that is not possible is tried again too.
+    assert.deepEqual(refused(() => s.flow.choose(listOf(status, { threads: "No Such Name" }))), { code: "username", platform: "threads" });
+    await s.flow.proceed(s.flow.choose(listOf(status, { threads: "alice" })).accounts);
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [
+      ["retry", "pin_incorrect"],
+      ["retry", "popup_blocked"],
+      ["retry", "username"],
+    ]);
+    assert.equal(stepsOf(counted).filter((x) => x === "pin").length, 1);
+    assert.equal(stepsOf(counted).at(-1), "done");
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
+  test("a window blocked when the card is read: `retry`, and reading again is the same attempt", async () => {
+    const s = await setup();
+    blockWindows(s.card, "readCertificates", 2);
+    assert.deepEqual(await stopOf(s.flow.readCard()), { code: "card", card: "popup_blocked" });
+    assert.deepEqual(await stopOf(s.flow.readCard()), { code: "card", card: "popup_blocked" });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const counted = await sent(s);
+    assert.deepEqual(counted.slice(0, 4).map((c) => c.step ?? `${String(c.event)} ${String(c.reason)}`), ["read", "retry popup_blocked", "retry popup_blocked", "component"]);
+    assert.equal(stepsOf(counted).filter((x) => x === "read").length, 1);
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
+  test("a stop ends the attempt: the next card proof on the page has another attempt ID and the same device ID", async () => {
+    const s = await setup({ backend: { cardState: { nonsense: true } } });
+    await s.flow.readCard();
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), MALFORMED);
+    const first = [...(await sent(s))];
+    assert.deepEqual(first.at(-1), { client: "web", event: "stop", reason: "server_malformed_response", device_id: first[0]!.device_id, attempt_id: first[0]!.attempt_id, browser: "chrome", os: "windows" });
+    // Every step called again throws the same stop, and tells the counts nothing more.
+    await stopOf(s.flow.confirmCard(PIN));
+    await stopOf(s.flow.readCard());
+    assert.equal((await sent(s)).length, first.length);
+
+    const again = await setup({ echoPublicInputs: true });
+    const second = new CardProofFlow({ ...(again.flow as unknown as { deps: ConstructorParameters<typeof CardProofFlow>[0] }).deps, counts: s.counts });
+    await second.readCard();
+    await second.checksDone();
+    const later = (await sent(s)).slice(first.length);
+    assert.equal(later[0]!.step, "read");
+    assert.equal(new Set(later.map((c) => c.attempt_id)).size, 1);
+    assert.notEqual(later[0]!.attempt_id, first[0]!.attempt_id);
+    assert.equal(later[0]!.device_id, first[0]!.device_id);
+  });
+
+  test("the page opened, then the card read: `open` and the first card proof are one attempt; a card read again without a stop is another", async () => {
+    const s = await setup();
+    s.counts.step("open");
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    s.flow.cancel();
+    const first = [...(await sent(s))];
+    assert.deepEqual(stepsOf(first).slice(0, 2), ["open", "read"]);
+    assert.equal(new Set(first.map((c) => c.attempt_id)).size, 1);
+    // Leaving a card proof is no stop: nothing says so.
+    assert.ok(first.every((c) => c.event === "step"));
+    const again = await setup();
+    const second = new CardProofFlow({ ...(again.flow as unknown as { deps: ConstructorParameters<typeof CardProofFlow>[0] }).deps, counts: s.counts });
+    await second.readCard();
+    const later = (await sent(s)).slice(first.length);
+    assert.equal(later[0]!.step, "read");
+    assert.notEqual(later[0]!.attempt_id, first[0]!.attempt_id);
+  });
+
+  test("a check that fails while the card's checks run is told when it fails, and once", async () => {
+    const s = await setup({ tamperCircuit: true });
+    const stop = await readAndWait(s);
+    assert.equal(stop?.code, "artifact");
+    assert.deepEqual((await sent(s)).filter((c) => c.event === "stop").map((c) => c.reason), ["artifact"]);
+    // The step that ends the flow on it tells nothing more; the file's path is in no count.
+    assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), stop);
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event === "stop").map((c) => c.reason), ["artifact"]);
+    assert.ok(!JSON.stringify(counted).includes("circuits"));
+    // After its stop the card proof has no step: the PIN that was given is not one, and no other attempt begins.
+    assert.ok(!stepsOf(counted).includes("pin"));
+    assert.equal(counted.at(-1)!.event, "stop");
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
+  test("the record sent again: an action, and `retry` for the submission that did not get through", async () => {
+    let answers = 0;
+    const s = await setup({ echoPublicInputs: true, backend: { submit: () => (++answers === 1 ? { status: 500, body: { error: "internal" } } : { status: 201, body: { seq: 1, record_hash: "00".repeat(32), ordinal: 1, kinds: [{ platform: "threads", kind: "first", username: "alice", account_cards: 1 }] } }) } });
+    const cq = await toChosen(s);
+    assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "internal", status: 500 });
+    await s.flow.resubmit();
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason ?? c.action]), [
+      ["retry", "server_internal"],
+      ["action", "resubmit"],
+    ]);
+    assert.equal(stepsOf(counted).at(-1), "done");
+    // Both submissions carry the device ID.
+    assert.deepEqual(s.backend.submissions.map((b) => b.device_id), [counted[0]!.device_id, counted[0]!.device_id]);
+  });
+
+  for (const countsAre of ["failing", "held"] as const) {
+    test(`counts that are ${countsAre === "failing" ? "refused by the network" : "never answered"}: the card proof is made as ever, and none is sent twice`, async () => {
+      const s = await setup({ echoPublicInputs: true, countsAre });
+      const cq = await toChosen(s);
+      const done = await s.flow.proceed(cq.accounts);
+      assert.equal(done.seq, 1);
+      const counted = await sent(s);
+      assert.equal(stepsOf(counted).at(-1), "done");
+      assert.equal(new Set(stepsOf(counted)).size, counted.length);
+    });
+  }
+
+  test("the card proof device ID is kept with the date it was made on, replaced 31 days after it, and the old one is kept nowhere", async () => {
+    const s = await setup();
+    const first = s.counts.deviceId()!;
+    assert.equal(s.idStorage.get(DEVICE_ID_KEY), `${first}.2026-11-16`);
+    assert.deepEqual([...s.idStorage.keys()], [DEVICE_ID_KEY]);
+    s.advance(30 * 86_400_000);
+    assert.equal(s.counts.deviceId(), first, "30 days after: the same");
+    s.advance(86_400_000);
+    const second = s.counts.deviceId();
+    assert.notEqual(second, first);
+    assert.equal(s.idStorage.get(DEVICE_ID_KEY), `${second}.2026-12-17`);
+    assert.ok(![...s.idStorage.values()].join().includes(first));
+    // A count sent from now on carries the new one.
+    s.counts.step("open");
+    assert.equal((await sent(s)).at(-1)!.device_id, second);
   });
 });

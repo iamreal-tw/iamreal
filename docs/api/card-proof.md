@@ -21,10 +21,11 @@ record is or how it is verified. It can change without invalidating records.
 - **Every endpoint can answer `429` `rate_limited`**, with a `Retry-After`
   header: the number of seconds to wait, a whole minute at most. The server
   counts the requests of one network in each minute, an IPv4 address by
-  itself and an IPv6 address by its /64, and counts them apart in five
+  itself and an IPv6 address by its /64, and counts them apart in six
   classes, so that being over one's limit does not stop the others
   (ADR-0026): `challenges`; `card-state`; `records`; the public reads
-  `config`, `fingerprint` and `rebuild` together; and the visitors' pages.
+  `config`, `fingerprint` and `rebuild` together; `counts`; and the
+  visitors' pages.
   A request that is answered `429` was not read: it does not count towards
   a challenge's five submissions, and nothing is kept of it. The limits
   are more than a household or an office behind one address uses; they
@@ -51,8 +52,9 @@ record is or how it is verified. It can change without invalidating records.
     it takes to reproduce a failed verification.
 
   Nothing is written for any other request: a page, a static file,
-  `config`, `challenges`, `card-state`, `fingerprint`, and a submission
-  that was not counted: one that is not well formed, one refused because
+  `config`, `challenges`, `card-state`, `fingerprint`, a count (`counts`,
+  which is kept elsewhere and without an address: see there), and a
+  submission that was not counted: one that is not well formed, one refused because
   card proofs are stopped, and one whose challenge does not pass the first
   look (the server did not issue it or it has expired, a record was
   already written for it, or it was counted five times). Those can be sent
@@ -71,7 +73,8 @@ record is or how it is verified. It can change without invalidating records.
   device shows the ID next to an error from the server, so that a
   cardholder can report it.
 - A request body that the endpoint reads is at most 64 KB (65,536 bytes); a
-  larger one is `400` `malformed`. `challenges` takes no body and does not
+  larger one is `400` `malformed`. (`counts` has a limit and an answer of
+  its own: see there.) `challenges` takes no body and does not
   read one: whatever is sent with it, of any length, is ignored.
 - A body that is read is `400` `malformed` unless it is UTF-8 without a byte
   order mark and one JSON value with nothing but whitespace around it. No
@@ -85,8 +88,10 @@ record is or how it is verified. It can change without invalidating records.
   another method, with the header `Allow` naming the one it takes; `500`
   `internal`.
 - An error is a 4xx or 5xx status with `{"error":"CODE"}`. The device shows a
-  message for the code. It does not report failures of its own (a card that
-  cannot pass, a challenge it refused) to the server (ADR-0016).
+  message for the code. Of a failure of its own (a card that cannot pass, a
+  challenge it refused) it tells the server one thing: a reason code of a
+  fixed table, in a count (`counts`; ADR-0032). Nothing else of the failure
+  leaves the device (ADR-0016).
 - The device treats every value it receives as described under "What the
   device does with it". The server deciding a value is never enough
   (ADR-0016).
@@ -527,6 +532,45 @@ No device reads it.
 - While a rebuild is `running`, `challenges` and `records` answer `paused`.
 - Errors: `429` `rate_limited` ("Rules for every endpoint").
 
+## `POST /api/v1/counts`
+
+One count: a visitor opened a page, or a card proof reached a step or
+stopped (ADR-0032, ADR-0039). The table every value is chosen from, the
+members of a count and which counts are taken are in
+[`spec/counts.md`](../../spec/counts.md).
+
+- Request: one count, a JSON object whose values are all strings, at most
+  2,048 bytes:
+  `{"client":"web","event":"stop","reason":"no_reader","device_id":"0123456789abcdef0123456789abcdef","attempt_id":"fedcba9876543210fedcba9876543210","browser":"chrome","os":"windows"}`
+- Response `204`, with no body, whether the count was taken or dropped. A
+  client does not read the answer and does not wait for it: a count that
+  could not be sent is not sent again, and a card proof goes on without it.
+- A count that is not as `spec/counts.md` has it is dropped whole: a value
+  that is not in the table, a member too many or too few, an ID or a version
+  or a card reader's name not in its format, a body that is not JSON or is
+  longer than the limit. A dropped count leaves nothing on the server.
+- What the server keeps of a count that is taken is the count, rebuilt
+  member by member from the table, and the minute it was received in (UTC).
+  Not the IP address, which is used for the limit below and for nothing
+  else; no header of the request; not the request ID. A count is not in the
+  connection log, and nothing of a count is written to the live log: when
+  the server itself fails to keep one, the line it writes there says that
+  it failed and nothing of the count.
+- The counts of one minute are written as one file, in a place that is not
+  public, where they are deleted after 31 days. A minute holds a set number
+  of counts at most (the operator's setting); more than that in one minute
+  are not kept, and the file only says how many there were.
+- The part of the server that takes counts does not ask the part that
+  writes the proof log, so counts never wait on a card proof, nor a card
+  proof on them.
+- Counts can be sent by anyone, with any values the table has. They are for
+  the operator to see where card proofs stop, and decide nothing about any
+  record (ADR-0005).
+- Errors, each with the JSON body of any error: `429` `rate_limited`
+  ("Rules for every endpoint"), and the count is then not read; `405` for
+  another method; `500` `internal` when the server's settings are not
+  right, as for every endpoint.
+
 ## Public files
 
 The CRL archive and the published proof log are not served by the server.
@@ -539,6 +583,7 @@ without going through the server's code (ADR-0027). The test site's are on
 | `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
 | `https://data.iamreal.tw/connection-log/oldest.json` | `{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-27"}`: when the server last looked at its connection log (UTC), every hour, and the date (UTC) of the oldest entry it then held, `null` if it held none. Nothing else of the connection log is published. An `oldest` more than 33 days before today means the entries are not being deleted after the 31 days of "Rules for every endpoint" (31 days, up to a day for the deletion to happen, and the dates being UTC); a `checked` more than two hours old means the server no longer looks. No device reads this file |
+| `https://data.iamreal.tw/count-events/oldest.json` | The same of the counts the server keeps (`counts`): `{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-27"}`, when the server last looked (UTC), every hour, and the date (UTC) of the oldest minute of counts it then held, `null` if it held none. Nothing else of the counts is published. Read in the same way: an `oldest` more than 33 days before today means the counts are not being deleted after their 31 days. No device reads this file |
 | `https://data.iamreal.tw/proof-log/` | The log directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published proof log"), and the card state files of the last days (`card-state/`, [`spec/record-rules.md`](../../spec/record-rules.md), "The card state file") |
 
 Only `GET` from the card proof page's origin is allowed across origins

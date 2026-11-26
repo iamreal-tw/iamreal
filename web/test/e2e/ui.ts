@@ -81,6 +81,7 @@ import { build } from "vite";
 import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../../src/platforms.ts";
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
+import { DEVICE_ID_KEY } from "../../src/counts.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { COPY, fill } from "../../src/ui/copy.ts";
 import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, buildTbs, certificate, name, subjectDirectoryAttributes } from "../fixtures/certs.ts";
@@ -2673,7 +2674,10 @@ await tryStep("storage", async () => {
     caches: await caches.keys(),
     cookies: document.cookie,
   }))()`);
-  check(JSON.stringify(st.local) === JSON.stringify({ [STORAGE_KEY_PREFIX + "G3"]: String(g3Number) }), `localStorage holds only the CRL number (${g3Number}): ${JSON.stringify(st.local)}`);
+  check(
+    /^[0-9a-f]{32}\.\d{4}-\d{2}-\d{2}$/.test(String(st.local[DEVICE_ID_KEY])) && JSON.stringify({ ...st.local, [DEVICE_ID_KEY]: undefined }) === JSON.stringify({ [STORAGE_KEY_PREFIX + "G3"]: String(g3Number) }),
+    `localStorage holds only the CRL number (${g3Number}) and the card proof device ID with its date: ${JSON.stringify(st.local)}`,
+  );
   check(st.session === 0 && st.idb.length === 0 && st.caches.length === 0 && st.cookies === "", `nothing else stored: ${JSON.stringify(st)}`);
 });
 

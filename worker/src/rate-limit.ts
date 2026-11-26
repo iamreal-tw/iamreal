@@ -26,15 +26,16 @@
 // connection log (ADR-0022).
 
 /** The classes of request that are counted apart. */
-export type RateClass = "challenges" | "card_state" | "records" | "public_reads" | "pages";
+export type RateClass = "challenges" | "card_state" | "records" | "public_reads" | "pages" | "counts";
 
 /** The binding of each class (wrangler.jsonc, "ratelimits"). */
-const BINDINGS: Readonly<Record<RateClass, "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES">> = {
+const BINDINGS: Readonly<Record<RateClass, "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES" | "RATE_COUNTS">> = {
   challenges: "RATE_CHALLENGES",
   card_state: "RATE_CARD_STATE",
   records: "RATE_RECORDS",
   public_reads: "RATE_PUBLIC_READS",
   pages: "RATE_PAGES",
+  counts: "RATE_COUNTS",
 };
 
 /** The period of every binding, in seconds, and so what `Retry-After` says. */

@@ -14,7 +14,7 @@
 // other request, and the schedule, is the deployed Worker's.
 import deployed from "../src/index.ts";
 
-export { ProofLog } from "../src/index.ts";
+export { Counts, ProofLog } from "../src/index.ts";
 
 /** The paths of the data domain (docs/api/card-proof.md, "Public files"): the CRL archive and the log directory. */
 const DATA_PATHS = /^\/(crl|proof-log)\/./;
