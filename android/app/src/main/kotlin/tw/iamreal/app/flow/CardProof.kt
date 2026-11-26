@@ -621,7 +621,8 @@ class CardProof(private val deps: Deps) {
             sign(events, code, pin ?: throw Stop("cancelled"))
         } catch (e: Stop) {
             // A PIN the card refuses is dropped, like everything else: the card proof starts again (issue #133).
-            if (e.code == "card" && e.values["reason"] in setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name)) fail(e)
+            // So is the PIN of a card the secure channel cannot be made with: no tap of it will take the PIN (issue #365).
+            if (e.code == "card" && e.values["reason"] in ENDS_AT_LAST_TAP) fail(e)
             throw e
         }
         // The last tap is made: the PIN is not needed again.
@@ -715,6 +716,12 @@ class CardProof(private val deps: Deps) {
         /** The longest the PIN waits between tap 2 and tap 3: 5 minutes (issue #133), as on the web page. */
         const val IDLE_MS = 5 * 60_000L
 
+        /**
+         * Why the last tap ended the card proof, the PIN dropped with everything else: the card refused the PIN, its PIN is locked,
+         * or the secure channel could not be made (design/copy/card-proof.md, "5. 確認", app). Any other reason keeps the PIN, and
+         * the tap is made again.
+         */
+        val ENDS_AT_LAST_TAP: Set<String> = setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name, CardException.Reason.CHANNEL.name)
 
         private const val CRS_G1 = "bn254_g1_compressed_2p18.dat"
         private const val CRS_G2 = "bn254_g2.dat"
