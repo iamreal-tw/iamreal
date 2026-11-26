@@ -246,6 +246,25 @@
     "mismatch_no_platform": "沒有這個平台",
     "mismatch_switch_used": "這次用掉了一次更換。"
   },
+  "hang": {
+    "title_single": "把證明掛上你的 {platform} 個人檔案",
+    "title": "把證明掛上你的個人檔案",
+    "why_single": "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
+    "copy": "複製證明連結",
+    "new_card": "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
+    "still_there_single": "你的 {platform} 個人檔案上，還有這個連結嗎？",
+    "look": "{open_proof}看看。",
+    "rehang": "沒有看到連結，重新掛上"
+  },
+  "finish": {
+    "first": "恭喜你完成島民證明",
+    "switched": "島民證明換成 {account} 了",
+    "ordinal": "這是第 {ordinal} 張島民證明。",
+    "invite": "愈多人成為島民，知道彼此都是台灣人，我們能讓台灣的網路討論變得更貼近真實、更有意義。",
+    "thanks": "謝謝你加入島民，誠摯的邀請你分享島民證明。",
+    "unlink_single": "你可以拿掉 {platform} 個人檔案上的證明連結。",
+    "done": "完成"
+  },
   "app_before": {
     "idle": "超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。",
     "update_soon": "這一版的 app 從 {min_app_from} 起不能過卡。請在那之前到 {store} 更新。",
@@ -332,5 +351,12 @@
     "reminder_change": "更改",
     "reminder_denied": "沒有排提醒：手機不允許這個 app 發通知。到手機的設定打開通知後，再回來開啟提醒。",
     "reminder_expires": "這張自然人憑證在 {valid_until} 到期，比下次提醒早。到期之後要展期或換新卡，才能再過卡。"
+  },
+  "app_reminder": {
+    "why": "建議定期更新島民證明，增加說服力。",
+    "adjust": "改提醒間隔或時刻",
+    "skip": "這次不要",
+    "denied": "沒有排提醒：手機不允許這個 app 發通知。請允許通知設定，我們不會在沒有經過你同意的情況下打擾你。",
+    "settings": "打開通知設定"
   }
 }

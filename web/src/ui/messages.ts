@@ -627,7 +627,7 @@ export function confirmView(cq: Consequence, single: string | null, platforms: r
   };
 }
 
-// Step 6: done ----------------------------------------------------------------------
+// After the submission: hang it (step 6), done and share (the last step) -----------
 
 export interface DoneRecordRow {
   platform: string;
@@ -646,9 +646,12 @@ export interface DoneRecordRow {
 }
 
 export interface DoneView {
+  /** The last step's title (the table of titles), by what this card proof did. */
   title: Sentence;
-  /** The list is empty: no card, no hanging it, nothing more to do. */
+  /** The list is empty: no step 6, no card; the last step says the links can be taken down. */
   withdrawAll: boolean;
+  /** Everything withdrawn: finish.unlink_single, or with more than one platform done.withdrawn_link. */
+  unlink: Sentence;
   /** The card's list after this record: what the small card shows; `name` is null when the screens speak of one platform. */
   card: { name: string | null; account: string; raw: boolean }[];
   /** What the server recorded differs from what step 5 said: done.mismatch, above everything. */
@@ -657,10 +660,16 @@ export interface DoneView {
   shortId: string;
   /** done.recorded_on: the day the proof log recorded it. */
   recordedOn: Sentence;
-  /** done.hang_title, or with one platform done.hang_title_single. */
+  /** hang.title, or with one platform hang.title_single. */
   hangTitle: Sentence;
-  /** done.anyone, or with one platform done.anyone_single. */
-  anyone: Sentence;
+  /** Why to hang it: done.anyone, or with one platform hang.why_single. */
+  why: Sentence;
+  /** Step 6 asks only whether the link is still there: a card proof again (every row unchanged), with one platform, as step 5 said. */
+  short: boolean;
+  /** The short step 6's question (hang.still_there_single); null when step 6 is the whole one. */
+  stillThere: Sentence | null;
+  /** finish.ordinal, before the invitation to share; null when the answer had no ordinal. */
+  ordinal: Sentence | null;
   /** The link to put on the profiles, as the screen writes it (no scheme): the card's page. */
   link: string;
   /** The link as it is copied: a whole https:// URL. */
@@ -671,11 +680,11 @@ export interface DoneView {
   proofPath: string;
   /** done.open_profile and the profile it opens, for each account of the card whose platform has a public page. */
   profiles: { text: Sentence; url: string }[];
-  /** done.share_note, done.share and the page they open, with the text suggested (`shareText`) and the card's link, for each platform of the build with a page to share from. */
-  shares: { note: Sentence; button: Sentence; url: string }[];
+  /** done.share and the page it opens, with the text suggested (`shareText`) and the card's link, for each platform of the build with a page to share from. */
+  shares: { button: Sentence; url: string }[];
   /** The card's first record: the sentence about a new card. */
   newCard: boolean;
-  /** An account was withdrawn: its link can be taken down. */
+  /** An account was withdrawn and the list is not empty: its link can be taken down (step 6). */
   withdrawnLink: boolean;
   /** The proof log's record is shown only when what it recorded differs from what step 5 said. */
   showRecord: boolean;
@@ -689,14 +698,33 @@ export interface DoneView {
   shortIdLine: Sentence;
 }
 
-/** The title of step 6 (the table of titles), by what the server says was recorded. */
-export function doneTitle(d: Done): Sentence {
-  const t = COPY.done;
-  if (d.kinds === null) return say(t.recorded_only);
-  if (d.firstRecord) return say(t.first);
-  if (d.accounts.length === 0) return say(t.withdraw_all);
+/** The server's kinds with what each platform declared before: whether every row is unchanged (a card proof again). */
+function recordedUnchanged(d: Done): boolean {
+  if (d.kinds === null) return false;
   const current = new Map(d.expected.map((r) => [r.platform, r.current]));
-  return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null }))) ? say(t.refresh) : say(t.changed);
+  return allUnchanged(d.kinds.map((k) => ({ ...k, current: current.get(k.platform) ?? null })));
+}
+
+/**
+ * The title of the last step (the table of titles), by what the server says
+ * was recorded. `single`: the one platform's name when the screens speak of
+ * one platform; then a new declaration (or one again after a withdrawal) is
+ * congratulated like a first one, and a switch names the account it is now.
+ */
+export function doneTitle(d: Done, single: string | null = null): Sentence {
+  const t = COPY.done;
+  const f = COPY.finish;
+  if (d.kinds === null) return say(t.recorded_only);
+  if (d.firstRecord) return say(f.first);
+  if (d.accounts.length === 0) return say(t.withdraw_all);
+  if (recordedUnchanged(d)) return say(t.refresh);
+  const k = single !== null && d.kinds.length === 1 ? d.kinds[0]! : null;
+  if (k !== null) {
+    const before = d.expected.find((r) => r.platform === k.platform)?.current ?? null;
+    if (k.kind === "first" || (k.kind === "refresh" && before === null)) return say(f.first);
+    if (k.kind === "switch" || k.kind === "correction") return say(f.switched, { account: handle(k.platform, k.username) });
+  }
+  return say(t.changed);
 }
 
 /**
@@ -758,18 +786,24 @@ export function doneView(d: Done, single: string | null = null): DoneView {
   const text = `${shareText(d.ordinal)}\nhttps://${link}`;
   const shares = [...KNOWN_PLATFORMS].flatMap((id) => {
     const p = presentationOf(id)!;
-    return p.shareUrl ? [{ note: say(t.share_note, { platform: p.name }), button: say(t.share, { platform: p.name }), url: p.shareUrl(text) }] : [];
+    return p.shareUrl ? [{ button: say(t.share, { platform: p.name }), url: p.shareUrl(text) }] : [];
   });
+  const h = COPY.hang;
+  const short = single !== null && !withdrawAll && !d.firstRecord && d.mismatches.length === 0 && recordedUnchanged(d);
   return {
-    title: doneTitle(d),
+    title: doneTitle(d, single),
     withdrawAll,
+    unlink: single !== null ? say(COPY.finish.unlink_single, { platform: single }) : say(t.withdrawn_link),
     card: d.accounts.map((a) => ({ name: single !== null ? null : nameOf(a.platform), account: accountOf(a.platform, a.username), raw: rawOf(a.platform) })),
     mismatch: d.mismatches.length > 0 ? say(t.mismatch) : null,
     date: d.date,
     shortId: d.shortId,
     recordedOn: say(t.recorded_on, { date: d.date }),
-    hangTitle: single !== null ? say(t.hang_title_single, { platform: single }) : say(t.hang_title),
-    anyone: single !== null ? say(t.anyone_single) : say(t.anyone),
+    hangTitle: single !== null ? say(h.title_single, { platform: single }) : say(h.title),
+    why: single !== null ? say(h.why_single) : say(t.anyone),
+    short,
+    stillThere: short ? say(h.still_there_single, { platform: single! }) : null,
+    ordinal: d.ordinal === null ? null : say(COPY.finish.ordinal, { ordinal: thousands(d.ordinal) }),
     link,
     url: `https://${link}`,
     hangUrl: `https://${SITE_DOMAIN}/${hangPath(d.shortId)}`,
@@ -780,7 +814,7 @@ export function doneView(d: Done, single: string | null = null): DoneView {
     }),
     shares,
     newCard: d.firstRecord,
-    withdrawnLink: withdrew,
+    withdrawnLink: withdrew && !withdrawAll,
     showRecord: d.mismatches.length > 0,
     record: d.kinds === null ? null : say(withdrawAll ? t.record_withdraw_all : single !== null ? t.record_single : t.record_list),
     rows,

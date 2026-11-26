@@ -51,7 +51,7 @@ const EXAMPLES: Record<string, string> = {
   short_id: "7K2Q9FM4XD",
   request_id: "3f9c2a7e5b1d4c80",
   step: "2",
-  steps: "6",
+  steps: "7",
   domain: SITE_DOMAIN,
   // done.share_text: the card's ordinal.
   ordinal: "128",
@@ -77,6 +77,8 @@ const OVERRIDES: Record<string, Record<string, string>> = {
   "accounts.row_used_up": { switches_used: "5" },
   "confirm.uses_switch": { switches_left: "1" },
   "accounts.switch_limit": { switches_left: "3" },
+  // finish.switched: the account switched to, in the table of titles.
+  "finish.switched": { account: "@carol.tw" },
 };
 /**
  * Values the screen shows on their own, not in a sentence: the example

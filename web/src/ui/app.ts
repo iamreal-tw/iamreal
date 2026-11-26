@@ -1,6 +1,6 @@
-// The screens of a card proof (design/copy/card-proof.md): six steps, one
+// The screens of a card proof (design/copy/card-proof.md): seven steps, one
 // screen each: before you start, read the card, the PIN, your accounts,
-// confirm (and in progress), done. There is no screen to pick a platform:
+// confirm (and in progress), hang it on the profile, done and share. There is no screen to pick a platform:
 // one card proof covers the card's whole list of accounts (ADR-0017). First
 // the card is confirmed, then the cardholder edits the list, then the list
 // is declared. Three clicks open the component's window: read the card,
@@ -50,6 +50,7 @@ import { qrSvg } from "./qr.ts";
 import {
   type AccountRowView,
   type DeclaredView,
+  type DoneView,
   type FillView,
   type HelpTopic,
   type ItemState,
@@ -87,8 +88,8 @@ export interface AppOptions {
   onTiming?: (step: string, ms: number) => void;
 }
 
-/** The six steps (card-proof.md). */
-const STEPS = 6;
+/** The seven steps of the web (card-proof.md: the app has a reminder between hanging it and done, eight). */
+const STEPS = 7;
 
 /** Where a help link goes: what a card proof needs, a page of the site (/prepare, made by the Worker). */
 const HELP_HREF: Record<HelpTopic, string> = { prepare: "/prepare" };
@@ -193,7 +194,7 @@ export function startApp(o: AppOptions): void {
   /** A FlowStop that leaves the step to be tried again (the flow did not end). */
   const retryable = (f: CardProofFlow, e: unknown): e is FlowStop => e instanceof FlowStop && f.stop === null;
 
-  /** Puts a screen up: the mark, the service's name and the site's; where in the six steps; the screen. */
+  /** Puts a screen up: the mark, the service's name and the site's; where in the seven steps; the screen. */
   function show(step: number, screen: HTMLElement): void {
     const where = el(
       "div",
@@ -476,7 +477,7 @@ export function startApp(o: AppOptions): void {
   /** 3 records of the card today: the sentence, and "back to the beginning" (which drops the PIN, as cancel does). */
   const dailyLimitBody = (s: Sentence): HTMLElement[] => [el("p", { class: "stop", attrs: { "data-daily-limit": "" } }, say(s)), actions(secondary(COPY.accounts.restart, () => before()))];
 
-  /** Step 4's screen, with the six steps' line above it, and its state for the tests. */
+  /** Step 4's screen, with the seven steps' line above it, and its state for the tests. */
   function showAccounts(state: string, mode: string, ...children: (Node | null)[]): void {
     show(4, el("section", { class: "step", attrs: { "data-step": "accounts", "data-state": state, "data-mode": mode } }, ...children));
   }
@@ -799,50 +800,90 @@ export function startApp(o: AppOptions): void {
     finish(f.proceed(cq.accounts));
   }
 
-  // Step 6: done -----------------------------------------------------------------------
+  // After the submission: step 6, hang it; the last step, done and share ------------
 
+  /**
+   * Where the submission leads (design/copy/card-proof.md, steps 6 and 8;
+   * the web has no reminder, so its last step is 7). Everything withdrawn:
+   * straight to the last step, nothing to hang or share. Otherwise step 6,
+   * short for a card proof again with one platform. The card proof is over:
+   * the engine holds nothing, and going back between steps 6 and 7 asks
+   * nothing of the card.
+   */
   function doneScreen(d: Done, single: string | null): void {
-    const t = COPY.done;
     flow = null;
     const view = doneView(d, single);
-    const subhead = (text: string): HTMLElement => el("h3", {}, text);
-    const card = view.withdrawAll
-      ? null
-      : el(
-          "div",
-          { class: "cert", attrs: { "data-proof": "" } },
-          el("div", { class: "cert-top" }, logo({ animated: true }), el("span", {}, t.proof)),
-          ...view.card.map((r) =>
-            el(
-              "p",
-              { class: "cert-row", attrs: { "data-card-row": "" } },
-              r.name === null ? null : el("span", { class: "cert-platform", attrs: { "data-card-platform": "" } }, r.name),
-              el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-card-account": "" } }, r.account),
-            ),
-          ),
-          el("p", { class: "cert-id" }, COPY.confirm.short_id_label, " ", sentence(COPY.confirm.short_id, { short_id: view.shortId })),
-        );
-    const head = el(
-      "div",
-      { class: card ? "done-head" : "done-head bare" },
-      card,
-      el(
-        "div",
-        { class: "done-title" },
-        el("h1", {}, say(view.title)),
-        el("p", { attrs: { "data-recorded-on": "" } }, say(view.recordedOn), t.unplug),
-        view.kindsUnreadable ? el("p", { attrs: { "data-kinds-unreadable": "" } }, t.kinds_unreadable) : null,
-      ),
-    );
-    // Under the link: a new card's new link, a withdrawn account's link, the other cards that declare an account.
-    const notes = [
-      view.newCard && !view.withdrawAll ? el("p", { class: "small", attrs: { "data-new-card": "" } }, t.new_card) : null,
-      view.withdrawnLink ? el("p", { class: "small", attrs: { "data-withdrawn-link": "" } }, t.withdrawn_link) : null,
-      ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
+    if (view.withdrawAll) return finishScreen(view, null);
+    hangScreen(view, view.short);
+  }
+
+  /** The day the proof log recorded it, that the card can come out, and when the kinds could not be read, that sentence. */
+  function recordedLines(view: DoneView): HTMLElement[] {
+    return [
+      el("p", { class: "recorded", attrs: { "data-recorded-on": "" } }, say(view.recordedOn), COPY.done.unplug),
+      ...(view.kindsUnreadable ? [el("p", { class: "small", attrs: { "data-kinds-unreadable": "" } }, COPY.done.kinds_unreadable)] : []),
     ];
-    let hang: HTMLElement[] = [];
-    if (!view.withdrawAll) {
-      const copy = primary(t.copy, () => {
+  }
+
+  /** What the server recorded is not what step 5 said: the sentence first of all, and the record (only then). */
+  function recordParts(view: DoneView): { note: HTMLElement | null; record: HTMLElement[] } {
+    const t = COPY.done;
+    const note = view.mismatch ? el("p", { class: "stop", attrs: { role: "alert", "data-mismatch-note": "" } }, say(view.mismatch)) : null;
+    if (!view.showRecord) return { note, record: [] };
+    const rows = view.rows.flatMap((r) => [
+      el("dt", { attrs: { "data-done-row": r.platform } }, r.name),
+      el(
+        "dd",
+        { attrs: { "data-done-row": r.platform, ...(r.mismatch ? { "data-mismatch": "" } : {}) } },
+        el("span", { class: r.raw ? "acct raw" : "acct" }, r.account),
+        r.kind ? el("span", { class: "kind", attrs: { "data-kind": "" } }, say(r.kind)) : null,
+        r.expected ? el("span", { class: "kind", attrs: { "data-expected": "" } }, say(r.expected)) : null,
+        r.switchUsed ? el("span", { class: "kind", attrs: { "data-switch-used": "" } }, t.mismatch_switch_used) : null,
+        // What the server recorded is not what step 5 said: no sentence in the copy, the code.
+        r.mismatch ? el("code", { class: "kind", attrs: { "data-code": "" } }, "kind_mismatch") : null,
+      ),
+    ]);
+    return {
+      note,
+      record: [
+        el("h2", { class: "record-title" }, t.recorded),
+        el(
+          "div",
+          { class: "rec6", attrs: { "data-record": "" } },
+          el("p", {}, el("time", {}, view.date)),
+          view.record ? el("p", {}, say(view.record)) : null,
+          rows.length ? el("dl", { class: "list" }, ...rows) : null,
+          el("p", {}, say(view.shortIdLine)),
+        ),
+      ],
+    };
+  }
+
+  /** done.open_proof as a link to the card's page, in a sentence (done.hung, hang.look). */
+  const openProofIn = (template: string, view: DoneView): (string | HTMLElement)[] =>
+    parts(template, { open_proof: COPY.done.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(view.proofPath, { "data-open-proof": "" }, p.text)));
+
+  /**
+   * Step 6: hang the link on the profile (hang.md, part 1). `short`: only
+   * whether the link is still there; hang.rehang shows the whole step.
+   */
+  function hangScreen(view: DoneView, short: boolean): void {
+    const t = COPY.done;
+    const h = COPY.hang;
+    const { note, record } = recordParts(view);
+    const linkbox = el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link));
+    const next = primary(COPY.common.next, () => finishScreen(view, () => hangScreen(view, short)));
+    let body: (HTMLElement | null)[];
+    if (short) {
+      body = [
+        el("h1", { class: "hang-title" }, say(view.stillThere!)),
+        linkbox,
+        el("p", { class: "look" }, ...openProofIn(h.look, view)),
+        el("p", { class: "why", attrs: { "data-why-hang": "" } }, say(view.why)),
+        actions(secondary(h.rehang, () => hangScreen(view, false)), next),
+      ];
+    } else {
+      const copy = primary(h.copy, () => {
         // The whole https:// address, so that a profile turns it into a link.
         navigator.clipboard.writeText(view.url).then(
           () => replace(copy, t.copied),
@@ -852,84 +893,93 @@ export function startApp(o: AppOptions): void {
       const qr = qrSvg(view.hangUrl);
       // The link is written beside it, in the other column: the code is not read out.
       qr.setAttribute("aria-hidden", "true");
-      const hung = parts(t.hung, { open_proof: t.open_proof }).map((p) => (p.placeholder === null ? p.text : newTab(view.proofPath, { "data-open-proof": "" }, p.text)));
-      hang = [
-        el("h2", { class: "hang-title" }, say(view.hangTitle)),
-        el("p", { class: "anyone", attrs: { "data-anyone": "" } }, say(view.anyone)),
+      // Under the link: a new card's new link, a withdrawn account's link, the other cards that declare an account.
+      const notes = [
+        view.newCard ? el("p", { class: "small", attrs: { "data-new-card": "" } }, h.new_card) : null,
+        view.withdrawnLink ? el("p", { class: "small", attrs: { "data-withdrawn-link": "" } }, t.withdrawn_link) : null,
+        ...view.otherCards.map((oc) => el("p", { class: "small", attrs: { "data-other-cards": "" } }, say(oc))),
+      ];
+      body = [
+        el("h1", { class: "hang-title" }, say(view.hangTitle)),
+        el("p", { class: "why", attrs: { "data-why-hang": "" } }, say(view.why)),
         el(
           "div",
           { class: "hang" },
-          el("div", { class: "hang-phone" }, subhead(t.by_phone), el("div", { class: "qr", attrs: { "data-qr": view.hangUrl } }, qr), el("p", { class: "small" }, t.by_phone_scan)),
+          el("div", { class: "hang-phone" }, el("h3", {}, t.by_phone), el("div", { class: "qr", attrs: { "data-qr": view.hangUrl } }, qr), el("p", { class: "small" }, t.by_phone_scan)),
           el(
             "div",
             { class: "hang-computer" },
-            subhead(t.on_computer),
-            el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link)),
+            el("h3", {}, t.on_computer),
+            linkbox,
             copy,
-            ...view.profiles.map((pr) => el("p", { class: "profile" }, newTab(pr.url, { "data-profile": "" }, say(pr.text)))),
+            ...view.profiles.map((pr) => newTab(pr.url, { class: "btn ghost", "data-profile": "" }, say(pr.text))),
             el("ol", { class: "hang-steps" }, el("li", {}, t.step_edit), el("li", {}, t.step_link), el("li", {}, t.step_add), el("li", {}, t.step_paste)),
           ),
         ),
-        ...notes.filter((n): n is HTMLParagraphElement => n !== null),
-        el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...hung), el("p", {}, t.hung_done)),
+        ...notes,
+        el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...openProofIn(t.hung, view)), el("p", {}, t.hung_done)),
+        ...record,
+        actionsEnd(next),
       ];
     }
-    // What the proof log recorded: only where it is not what step 5 said.
-    const recordRows = view.rows.flatMap((r) => [
-      el("dt", { attrs: { "data-done-row": r.platform } }, r.name),
-      el(
-        "dd",
-        { attrs: { "data-done-row": r.platform, ...(r.mismatch ? { "data-mismatch": "" } : {}) } },
-        el("span", { class: r.raw ? "acct raw" : "acct" }, r.account),
-        r.kind ? el("span", { class: "kind", attrs: { "data-kind": "" } }, say(r.kind)) : null,
-        r.expected ? el("span", { class: "kind", attrs: { "data-expected": "" } }, say(r.expected)) : null,
-        r.switchUsed ? el("span", { class: "kind", attrs: { "data-switch-used": "" } }, COPY.done.mismatch_switch_used) : null,
-        // What the server recorded is not what step 5 said: no sentence in the copy, the code.
-        r.mismatch ? el("code", { class: "kind", attrs: { "data-code": "" } }, "kind_mismatch") : null,
+    show(6, el("section", { class: "step", attrs: { "data-step": "hang", "data-short": String(short) } }, note, ...recordedLines(view), ...body));
+  }
+
+  /**
+   * The last step: done and share; `back` goes to step 6 as it was left.
+   * Everything withdrawn: the day, that the links can come down, and
+   * nothing else (no back: there was no step 6).
+   */
+  function finishScreen(view: DoneView, back: (() => void) | null): void {
+    const t = COPY.done;
+    const f = COPY.finish;
+    const result = view.withdrawAll ? "withdraw_all" : view.kindsUnreadable ? "recorded_only" : "list";
+    const done = (cls: string): HTMLButtonElement => button(f.done, () => before(), cls);
+    if (view.withdrawAll) {
+      const { note, record } = recordParts(view);
+      show(
+        STEPS,
+        el(
+          "section",
+          { class: "step", attrs: { "data-step": "done", "data-result": result } },
+          note,
+          el("h1", {}, say(view.title)),
+          ...recordedLines(view),
+          el("p", { class: "unlink", attrs: { "data-unlink": "" } }, say(view.unlink)),
+          ...record,
+          actionsEnd(done("btn")),
+        ),
+      );
+      return;
+    }
+    const card = el(
+      "div",
+      { class: "cert", attrs: { "data-proof": "" } },
+      el("div", { class: "cert-top" }, logo({ animated: true }), el("span", {}, t.proof)),
+      ...view.card.map((r) =>
+        el(
+          "p",
+          { class: "cert-row", attrs: { "data-card-row": "" } },
+          r.name === null ? null : el("span", { class: "cert-platform", attrs: { "data-card-platform": "" } }, r.name),
+          el("span", { class: r.raw ? "acct raw" : "acct", attrs: { "data-card-account": "" } }, r.account),
+        ),
       ),
-    ]);
-    const record = view.showRecord
-      ? [
-          el("h2", { class: "record-title" }, t.recorded),
-          el(
-            "div",
-            { class: "rec6", attrs: { "data-record": "" } },
-            el("p", {}, el("time", {}, view.date)),
-            view.record ? el("p", {}, say(view.record)) : null,
-            recordRows.length ? el("dl", { class: "list" }, ...recordRows) : null,
-            el("p", {}, say(view.shortIdLine)),
-          ),
-        ]
-      : [];
-    const optional = view.withdrawAll
-      ? null
-      : el(
-          "div",
-          { class: "optional", attrs: { "data-optional": "" } },
-          el("p", { class: "optional-title" }, t.optional),
-          el(
-            "div",
-            { class: "optional-items" },
-            ...view.shares.map((sh) =>
-              el("div", { class: "optional-item" }, subhead(t.share_title), el("p", {}, say(sh.note)), newTab(sh.url, { class: "btn ghost", "data-share": "" }, say(sh.button))),
-            ),
-            el("div", { class: "optional-item" }, subhead(t.return_title), el("p", {}, t.return_note)),
-          ),
-        );
+      el("p", { class: "cert-id" }, COPY.confirm.short_id_label, " ", sentence(COPY.confirm.short_id, { short_id: view.shortId })),
+    );
     show(
-      6,
+      STEPS,
       el(
         "section",
-        { class: "step", attrs: { "data-step": "done", "data-result": view.withdrawAll ? "withdraw_all" : d.kinds === null ? "recorded_only" : "list" } },
-        // What the proof log recorded is not what step 5 said: first of all.
-        view.mismatch ? el("p", { class: "stop", attrs: { role: "alert", "data-mismatch-note": "" } }, say(view.mismatch)) : null,
-        head,
-        ...hang,
-        ...(view.withdrawAll ? notes : []),
-        ...record,
-        optional,
-        // Another card proof, with the same engine (ADR-0013).
-        actions(secondary(t.restart, () => before())),
+        { class: "step", attrs: { "data-step": "done", "data-result": result } },
+        el("h1", {}, say(view.title)),
+        card,
+        // The call to share (principles: the one place of a fact page that may move the reader): the card's ordinal when the answer had it.
+        el("p", { class: "invite", attrs: { "data-invite": "" } }, view.ordinal ? say(view.ordinal) : null, f.invite),
+        el("p", { class: "invite" }, f.thanks),
+        el("div", { class: "share" }, ...view.shares.map((sh) => newTab(sh.url, { class: "btn", "data-share": "" }, say(sh.button)))),
+        // The web has no reminder: when to come back, in words (the app's step 7).
+        el("div", { class: "return", attrs: { "data-return": "" } }, el("h3", {}, t.return_title), el("p", {}, t.return_note)),
+        actions(back ? secondary(COPY.common.back, back) : null, done("btn ghost")),
       ),
     );
   }
