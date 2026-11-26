@@ -21,8 +21,8 @@ checkIssuerTable(ISSUERS);
 const API_PARTS: ApiParts = { verifier: proofVerifier };
 
 export default {
-  async fetch(request, env, _ctx): Promise<Response> {
-    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS);
+  async fetch(request, env, ctx): Promise<Response> {
+    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS, (work) => ctx.waitUntil(work));
     // The only place that says where the pages read the proof log from (src/page-data.ts, `PageData`): its Durable Object.
     const parts: VisitorParts = { pageData: pageDataOfProofLog(env) };
     return visitor(request, env, parts);

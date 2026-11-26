@@ -2,23 +2,26 @@
 // records and config.
 //
 // Every answer is JSON with `Cache-Control: no-store` and an `X-Request-Id`
-// of its own; none sets a cookie or a CORS header. This back end keeps no
-// request log: nothing is written for a request it answers. Only when the
-// back end itself fails does it write one line, with the request ID, the
-// endpoint and where it failed, to the live log, which is not kept. That
-// line holds nothing that came in the request and nothing of the error's
-// own text, which could quote it.
+// of its own; none sets a cookie or a CORS header. The back end keeps a
+// connection log of one kind of request and no other (ADR-0022): a
+// submission of a record that the proof log's object counted, written by
+// connection-log.ts with the IP address it came from, kept 31 days. For any
+// other request nothing is written. When the back end itself fails it
+// writes one line, with the request ID, the endpoint and where it failed,
+// to the live log, which is not kept. That line holds nothing that came in
+// the request and nothing of the error's own text, which could quote it.
 //
 // Every endpoint reads the environment's settings first (settings.ts): with
 // a `PROOF_LOG_KIND` that names no proof log, none of them answers anything but
 // `500`.
-import { ISSUERS } from "#target";
+import { ISSUERS, now } from "#target";
 import { hexOf } from "iamreal-protocol/bytes.ts";
 import { formatDay } from "iamreal-protocol/date.ts";
 import { EMPTY_FINGERPRINT } from "iamreal-protocol/record.ts";
 import { EMPTY_SLOT } from "iamreal-protocol/record-rules.ts";
 import { lookupScope } from "iamreal-protocol/scope.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
+import { type CountedSubmission, entryOf, writeEntry } from "./connection-log.ts";
 import { readStrings } from "./json.ts";
 import { recordVerifies } from "./record-proof.ts";
 import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, proofLogOf } from "./proof-log.ts";
@@ -35,6 +38,15 @@ interface Reply {
   readonly status: number;
   readonly body: unknown;
   readonly allow?: string;
+}
+
+/**
+ * What an endpoint leaves for `api` beside its answer, also when it throws:
+ * the submission the proof log's object counted, if the request was one.
+ * Only that request gets an entry of the connection log.
+ */
+interface Notes {
+  counted?: CountedSubmission;
 }
 
 const ok = (body: unknown): Reply => ({ status: 200, body });
@@ -160,19 +172,27 @@ async function postChallenge(_request: Request, env: Env): Promise<Reply> {
  *
  * A verifier that could not run gives no verdict: the answer is `500`, and
  * the object is not asked to write anything.
+ *
+ * From step 2 on, once the object counted the submission, it is one the
+ * connection log keeps (`notes.counted`), however it ends: the challenge is
+ * one the back end issued, and a challenge is counted five times at most,
+ * so how many entries there are is not up to whoever sends requests.
  */
-async function postRecord(request: Request, env: Env, parts: ApiParts): Promise<Reply> {
+async function postRecord(request: Request, env: Env, parts: ApiParts, notes: Notes): Promise<Reply> {
   const { kind, cardProofsPaused } = settings(env);
   const text = await readBody(request);
   if (text === null) return MALFORMED;
-  const fields = readSubmission(kind, text);
-  if (typeof fields === "string") return fail(400, fields);
+  const submission = readSubmission(kind, text);
+  if (typeof submission === "string") return fail(400, submission);
+  // The device ID stays here: what goes on to the object and into the record is `fields` alone.
+  const { fields, deviceId } = submission;
   // The operator stopped taking card proofs: before the object, as its own `paused` is, so the submission does not count.
   if (cardProofsPaused) return refuse("paused");
 
   const proofLog = proofLogOf(env);
   const begun = await askProofLog(() => proofLog.beginSubmission(fields.challenge));
   if (begun !== "ok") return refuse(begun);
+  notes.counted = { deviceId, body: text };
 
   let verifies: boolean;
   try {
@@ -268,7 +288,7 @@ export interface ApiParts {
 
 interface Endpoint {
   readonly method: string;
-  readonly handle: (request: Request, env: Env, parts: ApiParts) => Promise<Reply>;
+  readonly handle: (request: Request, env: Env, parts: ApiParts, notes: Notes) => Promise<Reply>;
 }
 
 const ENDPOINTS: ReadonlyMap<string, Endpoint> = new Map([
@@ -290,9 +310,13 @@ function requestId(): string {
   return hexOf(crypto.getRandomValues(new Uint8Array(8)));
 }
 
-/** Answers a request under /api/. */
-export async function api(request: Request, env: Env, parts: ApiParts): Promise<Response> {
+/**
+ * Answers a request under /api/. `later` takes work the answer does not
+ * wait for (the request's `waitUntil`): the entry of the connection log.
+ */
+export async function api(request: Request, env: Env, parts: ApiParts, later: (work: Promise<unknown>) => void): Promise<Response> {
   const id = requestId();
+  const notes: Notes = {};
   const { pathname } = new URL(request.url);
   const endpoint = ENDPOINTS.get(pathname);
   let reply: Reply;
@@ -300,7 +324,7 @@ export async function api(request: Request, env: Env, parts: ApiParts): Promise<
   else if (request.method !== endpoint.method) reply = { ...fail(405, "method_not_allowed"), allow: endpoint.method };
   else {
     try {
-      reply = await endpoint.handle(request, env, parts);
+      reply = await endpoint.handle(request, env, parts, notes);
     } catch (e) {
       // The path is one of the endpoints' own, not what the client wrote; the
       // error is named by its class and the step, never by its message.
@@ -308,6 +332,12 @@ export async function api(request: Request, env: Env, parts: ApiParts): Promise<
       console.error(JSON.stringify({ event: "internal_error", id, endpoint: pathname, where: e instanceof Internal ? e.where : "handler", error: cause instanceof Error ? cause.name : "unknown" }));
       reply = fail(500, "internal");
     }
+  }
+  if (notes.counted !== undefined) {
+    const seq = reply.status === 201 ? (reply.body as { seq: number }).seq : undefined;
+    const end = seq !== undefined ? { status: reply.status, seq } : { status: reply.status, error: (reply.body as { error: string }).error };
+    // Not awaited: the answer is the same whether the entry is written or not (connection-log.ts).
+    later(writeEntry(env.CONNECTION_LOG, entryOf(request, id, now(), notes.counted, end)));
   }
   const headers = new Headers({
     "Content-Type": "application/json",

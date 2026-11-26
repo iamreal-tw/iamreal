@@ -56,7 +56,15 @@
       "triggers": { "crons": ["0 * * * *"] },
       "durable_objects": { "bindings": [{ "name": "PROOF_LOG", "class_name": "ProofLog" }] },
       // The public files, downloaded from test-data.iamreal.tw (ADR-0027).
-      "r2_buckets": [{ "binding": "DATA", "bucket_name": "iamreal-test-data" }],
+      // DATA: the public data (ADR-0027). CONNECTION_LOG: the bucket the connection log is written
+      // to (ADR-0022), under "connection/": a bucket with no public domain, apart from the public
+      // data, whose lifecycle rule deletes every object under that prefix after 31 days (README.md,
+      // "連線紀錄"). The operator makes the bucket and the rule before the first deploy; the
+      // deploy's check reads the rule back (scripts/check-connection-log.ts).
+      "r2_buckets": [
+        { "binding": "DATA", "bucket_name": "iamreal-test-data" },
+        { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }
+      ],
       "vars": {
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.
         // The name of a test log's object always starts with "test-"; keep that when changing it.

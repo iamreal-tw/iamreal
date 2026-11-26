@@ -81,7 +81,7 @@ const INSTALL_WRANGLER = "        run: pnpm install --frozen-lockfile --ignore-s
 const UPLOAD_RUN = "        run: WRANGLER_SEND_METRICS=false WRANGLER_HIDE_BANNER=true node_modules/.bin/wrangler deploy";
 const DOWNLOAD = "      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2\n";
 const BUILD_JOB = "  build:\n    runs-on: ubuntu-24.04\n";
-const DEPLOY_JOB = "  deploy:\n    needs: build\n";
+const DEPLOY_JOB = "  deploy:\n    needs:\n      - build\n      - connection-log\n";
 const GO_JOB = "  go:\n    needs: changes\n";
 /** The `if` of a required check of checks.yml, as written there (#206). */
 const jobIf = (check: string): string => `    if: always() && (needs.changes.result != 'success' || github.event_name != 'pull_request' || needs.changes.outputs.${check} == 'true')\n`;

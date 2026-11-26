@@ -22,7 +22,10 @@
 //      checks (deploy-build-checks.ts, `configuredCpuMs`). This process has
 //      the shell's environment as it is; that code reads the file and
 //      sends nothing.
-// 3. The upload of that directory as it is (`uploadArgs`), with the token:
+// 3. The check of the connection log's bucket (check-connection-log.ts),
+//    with a third line of `.env.local`, CLOUDFLARE_API_TOKEN_TEST_R2_READ:
+//    a token that can read R2's settings and nothing else. Then the upload
+//    of that directory as it is (`uploadArgs`), with the deploy's token:
 //    the two lines CLOUDFLARE_API_TOKEN_TEST and CLOUDFLARE_ACCOUNT_ID of
 //    `.env.local`, read only now, and given to the wrangler command as
 //    CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in its environment.
@@ -35,7 +38,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKER_DIR, WRANGLER, buildDeploy, buildSite, deployTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
+import { CHECK_CONNECTION_LOG, WORKER_DIR, WRANGLER, buildDeploy, buildSite, deployTokenOf, r2ReadTokenOf, uploadArgs, wranglerEnv } from "./deploy.ts";
 import { PROOF_DIR } from "./proof-page.ts";
 
 const ENV_FILE = join(WORKER_DIR, "..", ".env.local");
@@ -52,7 +55,15 @@ let status = 1;
 try {
   buildSite();
   buildDeploy(dir);
-  const token = deployTokenOf(readFileSync(ENV_FILE, "utf8"));
+  const envFile = readFileSync(ENV_FILE, "utf8");
+  const token = deployTokenOf(envFile);
+  // Before anything is uploaded: the connection log's bucket deletes what is under connection/ after 31 days
+  // (check-connection-log.ts), read with a token of its own, in a process that has nothing else of the shell's
+  // Cloudflare settings. Not with --dry-run, which sends nothing anywhere.
+  if (!extra.includes("--dry-run")) {
+    const check = spawnSync(process.execPath, [...CHECK_CONNECTION_LOG], { cwd: WORKER_DIR, stdio: "inherit", env: wranglerEnv(process.env, r2ReadTokenOf(envFile)) });
+    if (check.status !== 0) throw new Error("the connection log's bucket did not pass its check: nothing was uploaded");
+  }
   const r = spawnSync(WRANGLER, [...uploadArgs(join(dir, "index.js")), ...extra], { cwd: WORKER_DIR, stdio: "inherit", env: wranglerEnv(process.env, token) });
   status = r.status ?? 1;
 } finally {

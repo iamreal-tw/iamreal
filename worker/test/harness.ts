@@ -166,6 +166,15 @@ export interface TestWorker {
   putFile(key: string, bytes: Uint8Array | string, cacheControl?: string, contentType?: string): Promise<void>;
   deleteFile(key: string): Promise<void>;
   /**
+   * The objects of the connection log's bucket (ADR-0022), in the order of
+   * their keys: each one's key and the JSON it holds, as text and read.
+   */
+  connectionLog(): Promise<{ key: string; text: string; entry: Record<string, unknown>; contentType: string | undefined }[]>;
+  /** From now on every write to the connection log's bucket fails, or, with false, none does. */
+  failConnectionLog(fails: boolean): Promise<void>;
+  /** Takes every object out of the connection log's bucket. */
+  emptyConnectionLog(): Promise<void>;
+  /**
    * What the proof log's Durable Object knows of the CRL archive, through the
    * test build's `GET /__test/newest-crls`.
    */
@@ -487,7 +496,7 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     rmSync(run, { recursive: true, force: true });
     throw e;
   }
-  const worker = server.getWorker<{ DATA: Bucket }>();
+  const worker = server.getWorker<{ DATA: Bucket; CONNECTION_LOG: Bucket }>();
   let settings: TestSettings = {};
   const proofLogObject = (): { name: string } => ({ name: settings.PROOF_LOG_OBJECT_NAME ?? DEPLOYED_PROOF_LOG_OBJECT });
   /** The objects the settings named before and no longer do, that `switchProofLog` has yet to start with settings that make them replaced ones. */
@@ -592,6 +601,36 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
     },
     async deleteFile(key) {
       await (await worker.getEnv()).DATA.delete(key);
+    },
+    async connectionLog() {
+      const { CONNECTION_LOG } = await worker.getEnv();
+      const keys: string[] = [];
+      for (let cursor: string | undefined; ; ) {
+        const page = await CONNECTION_LOG.list({ ...(cursor !== undefined && { cursor }) });
+        keys.push(...page.objects.map((o) => o.key));
+        if (!page.truncated) break;
+        cursor = page.cursor;
+      }
+      const out = [];
+      for (const key of keys.sort()) {
+        const object = await CONNECTION_LOG.get(key);
+        if (!object) throw new Error(`${key} was listed but is not there`);
+        const text = new TextDecoder().decode(await object.arrayBuffer());
+        out.push({ key, text, entry: JSON.parse(text) as Record<string, unknown>, contentType: object.httpMetadata?.contentType });
+      }
+      return out;
+    },
+    async emptyConnectionLog() {
+      const { CONNECTION_LOG } = await worker.getEnv();
+      for (;;) {
+        const page = await CONNECTION_LOG.list();
+        if (page.objects.length === 0) return;
+        for (const o of page.objects) await CONNECTION_LOG.delete(o.key);
+      }
+    },
+    async failConnectionLog(fails) {
+      const res = await server.fetch("/__test/connection-log-fault", { method: "PUT", body: String(fails) });
+      if (res.status !== 204) throw new Error(`setting the connection log's fault: HTTP ${res.status}`);
     },
     async newestCrls() {
       const res = await server.fetch("/__test/newest-crls");

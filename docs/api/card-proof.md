@@ -18,18 +18,40 @@ record is or how it is verified. It can change without invalidating records.
 - Every response carries `X-Content-Type-Options: nosniff`.
 - **A request that carries a scoped ID is a `POST` with the scoped ID in the
   body, never in the URL.**
-- **No request's IP address is logged**, by the application, the reverse
-  proxy or the load balancer, for any endpoint or static file. A scoped ID
-  next to an IP address would let the operator, or anyone who obtains the
-  logs, look for the person behind a card. Logging it only for the other
-  requests does not help: loading the page, downloading the CRL and asking
-  for a challenge all happen within a minute or two before the submission,
-  and the order of the records is public, so the times alone would link an
-  address to a record.
-- Every API response carries the header `X-Request-Id`. The server logs the
-  same ID with the time, the endpoint, the status and the error code, and
-  nothing that came in the request. The device shows the ID next to an error
-  from the server, so that a cardholder can report it.
+- **The server keeps a connection log of one kind of request, and of no
+  other** (ADR-0022): a submission of a record (`POST /api/v1/records`)
+  that carried a challenge the server issued and that it counted towards
+  the challenge's five (under `records`: "a submission counts once the
+  challenge passed the first look"). For
+  each it keeps one entry, for 31 days, after which the entry is deleted:
+  - the request ID, the time, the HTTP status answered, the IP address the
+    request came from, the country code and the AS number of that address,
+    and the card proof device ID if the request carried one (`device_id`,
+    under `records`);
+  - for a submission that became a record, the record's `seq`, and not the
+    body: it is in the proof log;
+  - for a submission that did not, the error code answered and the body as
+    it came (the scoped ID, the accounts, the challenge, the proof): what
+    it takes to reproduce a failed verification.
+
+  Nothing is written for any other request: a page, a static file,
+  `config`, `challenges`, `card-state`, `fingerprint`, a submission that is
+  not well formed or whose challenge the server did not issue, a
+  submission after the challenge's fifth or after its record was written,
+  or one refused because card proofs are stopped. In particular the server
+  keeps no entry that puts the scoped ID of a `card-state` request next to
+  an IP address. The entry of a submission that became a record does put an
+  IP address next to a `seq`, and through it next to a scoped ID and its
+  accounts, for those 31 days; the privacy notice says so. The network the
+  service is reached through keeps its own record of every request's
+  address, for the same 31 days (ADR-0022).
+- Every API response carries the header `X-Request-Id`. For a request that
+  has an entry in the connection log, the entry carries the same ID. For
+  any other request the server writes nothing, unless it fails itself
+  (`500`): then one line with the ID, the endpoint and where it failed, and
+  nothing that came in the request, to its live log, which is not kept. The
+  device shows the ID next to an error from the server, so that a
+  cardholder can report it.
 - A request body that the endpoint reads is at most 64 KB (65,536 bytes); a
   larger one is `400` `malformed`. `challenges` takes no body and does not
   read one: whatever is sent with it, of any length, is ignored.
@@ -178,6 +200,14 @@ Submits one card proof: the card's whole list of accounts.
   with the card's current list and does not fill in anything. The list is
   what the card signed; any other list fails verification.
 
+  The request may carry one more key, `device_id`: the card proof device ID
+  (ADR-0039), 16 random bytes as 32 lowercase hexadecimal digits, which the
+  page or the app made and replaces after 31 days. It is no field of the
+  record and is never written to the proof log: the server keeps it only in
+  the connection log's entry of this request ("Rules for every endpoint").
+  A request without it is taken as ever. One whose `device_id` is not such a
+  string is `malformed`.
+
   The request is JSON, not a line of the proof log. The order of the keys of
   the request and of an account, and whitespace between tokens, are free;
   the server writes the proof log line itself from the template. What is not
@@ -258,17 +288,21 @@ Submits one card proof: the card's whole list of accounts.
   written. One that is `paused`, or `challenge_unknown` or `challenge_used`
   at the first look, does not count. Neither does one the server fails on
   (`500`) before it has counted it: it could not read its settings or what
-  it stores, or the write that counts the submission itself failed.
+  it stores, or the write that counts the submission itself failed. The
+  submissions that count are the ones the connection log has an entry for
+  ("Rules for every endpoint"): so a challenge has five entries at most,
+  and one more if a record was written on its fifth.
 
   **Reading the request**, and which of `malformed`, `scope` and `platform`
   it gets:
 
-  1. The body is one JSON object with exactly the keys of the example, each
-     once, spelled as shown. Every value except `accounts` is a string;
-     `accounts` is present. Otherwise `malformed`: not JSON, a missing key
-     (also `accounts`), an extra key, a key twice, a key in another case, a
-     value of another type. This comes first because without it there is
-     no scope to look at.
+  1. The body is one JSON object with exactly the keys of the example, or
+     those and `device_id`, each once, spelled as shown. Every value except
+     `accounts` is a string; `accounts` is present; `device_id`, if
+     present, is 32 lowercase hexadecimal digits. Otherwise `malformed`:
+     not JSON, a missing key (also `accounts`), an extra key, a key twice,
+     a key in another case, a value of another type. This comes first
+     because without it there is no scope to look at.
   2. `scope_string` is not a scope of this proof log: `scope`.
   3. `accounts` is a list, every element of it is an object with exactly
      the two keys `platform` and `username`, each once, both strings, and
