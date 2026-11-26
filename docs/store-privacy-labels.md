@@ -107,7 +107,8 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 | 5 到 9 | 沒有：app 不送計數，沒有過卡裝置編號 | Android [#433](https://github.com/iamreal-tw/iamreal/issues/433)、iOS [#434](https://github.com/iamreal-tw/iamreal/issues/434) 做完才有 |
 
 - **送審時照那一版 app 實際送的填。** 計數的票在上線前做完（[#431](https://github.com/iamreal-tw/iamreal/issues/431)）；封閉測試的 build 如果早於它們送審，標示只填第 1、3、10 列，#20 和計數上了之後在兩家的後台補上第 2、4 到 9 列
-- **iOS 的請求現在可能已經帶著 app 的 build 和系統的版本。** `ios/App/Backend.swift` 沒有設 `User-Agent`，用的是系統預設的；Android 設成固定的 `iamreal`（`android/…/backend/Backend.kt`）。系統預設的 `User-Agent` 實際長什麼樣，這一份沒有量過；一般的了解是它帶 app 的名稱和 build、CFNetwork 和 Darwin 的版本。如果是，這幾個值現在就會和 IP 一起出現在 Cloudflare 自己的那一份裡，第 9 列對 iOS 就不是「還沒做」。送審之前要量一次，或讓 iOS 和 Android 一樣送固定的值；在那之前，iOS 的標示把第 9 列也填上（多報）
+- **請求的標頭不帶手機的東西**（[#444](https://github.com/iamreal-tw/iamreal/issues/444)）。兩個 app 的每個請求，`User-Agent` 都是固定的 `iamreal`（`ios/App/Backend.swift`、`android/…/backend/Backend.kt`）；iOS 的 `Accept-Language` 是固定的 `zh-TW`，Android 不送這個標頭。系統另外加的只有 `Host`、`Accept`、`Accept-Encoding`、`Connection`、`Content-Type`、`Content-Length`，量到的值沒有手機的型號、版本或語言（iOS 的測試 `ios/Tests/UserAgentTests.swift` 逐個請求核對）。所以第 9 列在 iOS 和 Android 一樣是「還沒做」
+- **#444 之前的 iOS build 送的不一樣**：2026-11-26 在模擬器上量到 `User-Agent: IamrealApp/1 CFNetwork/3860.100.1 Darwin/27.2.0`（app 的名稱和 build、CFNetwork 和系統核心的版本）和 `Accept-Language: zh-TW,zh-Hant;q=0.9`（手機的語言清單），跟著每個請求送出，在 Cloudflare 自己的那一份裡留 31 天。送審的 build 要是 #444 之後的
 - **多報不是這裡的選項**：還沒有送的東西先填上去，商店頁就寫了 app 沒有做的事（`docs/design/principles.md`：不說得比實際多）
 
 ## 和隱私權說明逐項對過
