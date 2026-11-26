@@ -83,7 +83,8 @@ final class ScreensTests: XCTestCase {
         let (consequence, done) = declaration()
         return [
             ("card-proof-app-1-before-phone", screens.before()),
-            ("card-proof-app-2-read-iphone-phone", screens.read(reached: 0, running: false, stop: nil)),
+            // The demonstration at rest: the card in place behind the top of the phone.
+            ("card-proof-app-2-read-iphone-phone", screens.read(reached: 0, running: false, stop: nil, demoPlayed: true)),
             ("card-proof-app-3-pin-phone", screens.pin(name: "王小明", state: .waiting(nil))),
             ("card-proof-app-4-accounts-phone", screens.accounts(newCard, typed: ["threads": "alice"], errors: [:], message: nil)),
             ("card-proof-app-5-confirm-phone", screens.confirm(newCard, consequence)),
@@ -423,6 +424,80 @@ final class ScreensTests: XCTestCase {
         XCTAssertEqual(opened, ["https://test.iamreal.tw/faq", "https://test.iamreal.tw/privacy", "https://github.com/iamreal-tw/iamreal"])
     }
 
+    /// A build that has its page in the store.
+    private var inStore: Screens { Screens(copy: copy, appCopy: appCopy, host: "iamreal.tw", storePage: true) }
+
+    /// The lowest version (card-proof.md, step 1, "app"; ADR-0035): before the day, said above step 1 and above
+    /// the reminder's note, with the way to the store; from the day, in the place of step 1, with nothing that
+    /// leads to a card. A build with no page in the store yet says the same without the button.
+    func testTheLowestVersionBeforeTheDayAndFromIt() {
+        let soon = inStore.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil), updateFrom: "2027-03-01", idle: true)
+        XCTAssertEqual(soon.step, 1)
+        XCTAssertEqual(soon.warnings, [
+            Notice(text: "這一版的 app 從 2027-03-01 起不能過卡。請在那之前到 App Store 更新。", button: Button(label: "到 App Store 更新", action: .openStore)),
+            Notice(text: "超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。", button: nil),
+        ])
+        XCTAssertEqual(Array(soon.texts.prefix(4)), [
+            "這一版的 app 從 2027-03-01 起不能過卡。請在那之前到 App Store 更新。", "到 App Store 更新",
+            "超過 5 分鐘沒有完成，為了不讓 PIN 留在手機上太久，已經回到開頭。請再感應一次卡片。",
+            "這是過卡的提醒。現在不方便的話，可以晚點再做。",
+        ])
+        XCTAssertEqual(soon.buttons.map(\.action), [.start], "a card proof goes on as usual")
+        let stop = inStore.tooOld(from: "2027-03-01")
+        XCTAssertEqual(stop.step, 0, "none of the steps")
+        XCTAssertEqual(stop.texts, [
+            "這一版不能過卡了",
+            "從 2027-03-01 起，這一版的島民證明 app 不能過卡。請更新到最新的版本。",
+            "卡片還沒有被讀取，沒有任何東西送出去。",
+            "到 App Store 更新",
+            "也可以用電腦和讀卡機，在 iamreal.tw 過卡。",
+        ])
+        XCTAssertEqual(stop.buttons, [])
+        XCTAssertNil(stop.cancel)
+        // No page in the store yet: the same sentences, no button.
+        XCTAssertNil(screens.before(updateFrom: "2027-03-01").warnings.first?.button)
+        XCTAssertFalse(screens.tooOld(from: "2027-03-01").texts.contains("到 App Store 更新"))
+        for screen in [inStore.before(updateFrom: "2027-03-01", idle: true), stop, screens.tooOld(from: "2027-03-01")] { document.check(screen) }
+    }
+
+    /// A phone that cannot read a card: in the place of step 1, the other way to a card proof.
+    func testAPhoneWithoutNFC() {
+        let screen = screens.noNFC()
+        XCTAssertEqual(screen.step, 0)
+        XCTAssertEqual(screen.texts, ["這支手機不能感應卡片", "這支手機沒有 NFC，不能用 app 過卡。", "可以用電腦和讀卡機，在 iamreal.tw 過卡。"])
+        XCTAssertEqual(screen.buttons, [])
+        document.check(screen)
+    }
+
+    /// What a tap that ended says, by which of the three it was (card-proof.md, steps 2, 3 and 5, "app"; #133).
+    func testWhatATapThatEndedSaysByWhichTapItWas() {
+        let left = Flow.Stop.card(.dropped(.notSent))
+        XCTAssertEqual(screens.message(left, tap: 1), ["卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。"])
+        XCTAssertEqual(screens.message(left, tap: 2), ["卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。"])
+        XCTAssertEqual(screens.message(.card(.dropped(.accepted)), tap: 2), ["卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。"])
+        XCTAssertEqual(screens.message(.card(.dropped(.sent)), tap: 2), [copy("app_stops.pin_maybe_received")])
+        for pin in [PINFate.notSent, .sent, .accepted] {
+            XCTAssertEqual(screens.message(.card(.dropped(pin)), tap: 3), ["卡片在感應途中離開了手機。請再感應一次。"])
+        }
+        // The panel closed by the cardholder: said only where the card would have signed the declaration.
+        XCTAssertEqual(screens.message(.card(.cancelled), tap: 1), [])
+        XCTAssertEqual(screens.message(.card(.cancelled), tap: 2), [])
+        XCTAssertEqual(screens.message(.card(.cancelled), tap: 3), ["感應取消了，卡片沒有簽。"])
+        // Step 3 with the PIN kept: the same tap again. Step 5: the same tap again, or out.
+        let kept = screens.pin(name: "王小明", state: .tapAgain(screens.message(left, tap: 2)[0]))
+        XCTAssertEqual(kept.buttons, [Button(label: "再感應一次", action: .confirmCard)])
+        let maybe = screens.pin(name: "王小明", state: .waiting(screens.message(.card(.dropped(.sent)), tap: 2).first))
+        XCTAssertEqual(maybe.buttons.map(\.label), ["上一步", "確認卡片"])
+        for stop in [left, .card(.cancelled), .card(.noTap), .card(.otherCard)] {
+            let progress = screens.progress(reached: 1, stop: stop)
+            XCTAssertEqual(progress.buttons, [Button(label: "再感應一次", action: .signAgain)], "\(stop)")
+            XCTAssertEqual(progress.cancel?.label, "取消")
+            document.check(progress)
+        }
+        document.check(kept)
+        document.check(maybe)
+    }
+
     /// Step 1 opened from the notification: the note on top, as app.md writes it.
     func testStepOneFromTheNotification() {
         let reminderScreens = ReminderScreens(appCopy: appCopy)
@@ -438,8 +513,8 @@ final class ScreensTests: XCTestCase {
 
     /// Where the card goes on an iPhone: drawn under the first sentence of
     /// step 2 before the tap, while it goes on under the system's panel,
-    /// and when it stopped; not once the card is read. Its captions and
-    /// the sentence VoiceOver reads are card-proof.md's.
+    /// and when it stopped; not once the card is read. The sentence
+    /// VoiceOver reads in its place is card-proof.md's.
     func testTheReadingStepShowsWhereTheCardGoesUntilItIsRead() throws {
         let shown = [
             screens.read(reached: 0, running: false, stop: nil),
@@ -447,19 +522,42 @@ final class ScreensTests: XCTestCase {
             screens.read(reached: 1, running: false, stop: .card(.noTap)),
         ]
         for screen in shown {
-            guard case .figure(let figure) = screen.blocks[2] else { return XCTFail("no picture after the first sentence: \(screen.blocks)") }
-            XCTAssertEqual(figure.captions.map(\.text), ["① 翻到有相機的那面", "② 卡片貼住上方"])
-            XCTAssertEqual(figure.captions.map(\.emphasis), ["有相機", "上方"])
-            XCTAssertEqual(figure.description, "把手機翻到有相機的那一面，卡片貼住上方")
+            guard case .senseDemo(let demo) = screen.blocks[2] else { return XCTFail("no demonstration after the first sentence: \(screen.blocks)") }
+            XCTAssertEqual(demo.description, "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。")
+            XCTAssertEqual(demo.control.label, "再看一次")
             document.check(screen)
         }
+        // The sentence above it is the copy's, as before.
+        XCTAssertEqual(shown[0].texts[1], "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。")
         let read = screens.read(reached: 4, running: false, stop: nil)
-        XCTAssertFalse(read.blocks.contains { if case .figure = $0 { return true } else { return false } })
+        XCTAssertFalse(read.blocks.contains { if case .senseDemo = $0 { return true } else { return false } })
+    }
+
+    /// The demonstration's one button: it stops it while it plays, and plays it again otherwise. While a tap is
+    /// under way it does not play and its button cannot be pressed: the system's panel is over it. Not playing, it
+    /// is the phone alone before it ever played, and at rest with the card in place after.
+    func testTheDemonstrationOfWhereTheCardGoesAndItsButton() throws {
+        func demo(_ screen: Screen) throws -> SenseDemo {
+            for case .senseDemo(let demo) in screen.blocks { return demo }
+            throw XCTSkip("no demonstration")
+        }
+        let playing = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
+        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertTrue(playing.playing && playing.played)
+        let before = try demo(screens.read(reached: 0, running: false, stop: nil))
+        XCTAssertEqual(before.control, Button(label: "再看一次", action: .playDemo))
+        XCTAssertFalse(before.playing || before.played)
+        let rested = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlayed: true))
+        XCTAssertTrue(!rested.playing && rested.played)
+        let tapping = try demo(screens.read(reached: 1, running: true, stop: nil, demoPlaying: true))
+        XCTAssertEqual(tapping.control, Button(label: "再看一次", action: .playDemo, enabled: false))
+        XCTAssertTrue(!tapping.playing && tapping.played, "at rest under the system's panel")
+        document.check(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
     }
 
     /// The card left during the first tap: step 2 says so, and the same tap is done again.
     func testACardThatLeftTheFirstTapIsTappedAgain() {
-        let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(pinSent: false)))
+        let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(.notSent)))
         XCTAssertTrue(screen.texts.contains(copy("app_stops.read_dropped")))
         XCTAssertEqual(screen.buttons.map(\.action), [.readCard])
         XCTAssertEqual(screen.buttons.map(\.label), [copy("app_read.tap_again")])
@@ -499,6 +597,11 @@ final class ScreensTests: XCTestCase {
         // screen, the settings with the reminder on. Step 7 is among the steps above.
         let reminderScreens: [(String, Screen)] = [
             ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
+            // The lowest version and a phone without NFC, as this build shows them: it has no page in the store
+            // yet (AppEnvironment.storePage), so the sentences stand without the button.
+            ("app-update-soon-phone", screens.before(updateFrom: "2027-03-01")),
+            ("app-update-required-phone", screens.tooOld(from: "2027-03-01")),
+            ("app-no-nfc-phone", screens.noNFC()),
         ]
         for (name, screen) in reminderScreens {
             let drawn = await Self.draw(ScreenView(screen: screen, copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true), height: nil)
@@ -535,7 +638,7 @@ final class ScreensTests: XCTestCase {
             ("pasted", demo, 14.4), ("listed", demo, 16.7), ("result", demo, timeline.duration),
             ("long-own", long, 0), ("long-profile", long, 4.0), ("long-result", long, timeline.duration),
         ]
-        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] != nil {
+        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] == "hang" {
             moments = stride(from: 0, through: timeline.duration, by: 1.0 / 15).enumerated().map { (String(format: "frame-%04d", $0.offset), demo, $0.element) }
         }
         for (name, demo, seconds) in moments {
@@ -544,6 +647,30 @@ final class ScreensTests: XCTestCase {
             let image = try XCTUnwrap(drawn)
             // The picture is 4 wide to 5 high.
             XCTAssertEqual(image.size.height / image.size.width, 1.25, accuracy: 0.01, name)
+            try Self.save(image, as: "demo/\(name)")
+        }
+    }
+
+    /// The demonstration of step 2 at moments of its timeline, drawn as the
+    /// app draws it, 350 points wide, to
+    /// web/test-output/app/screens-ios/demo/: the phone alone, the card
+    /// coming in, in place behind the top of the phone, the ring, leaving,
+    /// and at rest after three rounds. Every fifteenth of a second when
+    /// IAMREAL_DEMO_FRAMES is "sense", for a film of it.
+    func testTheDemonstrationOfWhereTheCardGoesAsTheAppDrawsIt() async throws {
+        guard #available(iOS 16.4, *) else { throw XCTSkip("pictures are drawn on iOS 16.4 or later") }
+        let timeline = try XCTUnwrap(SenseTimeline.bundled)
+        let length = try TeachingAnimation.senseLength(timeline, variant: SenseDemoView.variant)
+        let demo = SenseDemo(description: copy("app_demo.sense_iphone"), control: Button(label: copy("app_demo.replay"), action: .playDemo), playing: false, played: false)
+        var moments: [(String, Double)] = [("sense-start", 0), ("sense-entering", 0.75), ("sense-in-place", 1.6), ("sense-ring", 2.0), ("sense-leaving", 3.25), ("sense-rest", length)]
+        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] == "sense" {
+            moments = stride(from: 0, through: length + 1, by: 1.0 / 15).enumerated().map { (String(format: "sense-frame-%04d", $0.offset), $0.element) }
+        }
+        for (name, seconds) in moments {
+            let view = SenseDemoView(demo: demo, timeline: timeline, perform: { _ in }, moment: seconds).frame(width: 350)
+            let drawn = await Self.draw(view, width: 350, height: nil, settle: 150_000_000)
+            let image = try XCTUnwrap(drawn)
+            XCTAssertEqual(image.size.width / image.size.height, 1.5, accuracy: 0.01, name)
             try Self.save(image, as: "demo/\(name)")
         }
     }

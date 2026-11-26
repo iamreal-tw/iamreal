@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +50,8 @@ import androidx.compose.ui.unit.sp
 import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
+import tw.iamreal.app.ui.demo.HangDemo
+import tw.iamreal.app.ui.demo.HangDemoWords
 
 /**
  * What a screen asks of the phone: an address opened outside the app (false when no app on the phone opens it), a text put on the clipboard,
@@ -579,19 +583,39 @@ private fun Hang(m: Model, outside: Outside) {
     Title(view.hangTitle)
     Body(view.why)
     ProofLink(link)
-    // One main button a screen (design/DESIGN.md): copying the link is what this step is for.
-    Actions {
-        Button(if (copied) c.say("done.copied") else c.say("hang.copy"), wide, primary = true) {
+    // One main button a screen (design/DESIGN.md): copying the link is what this step is for. The two side by side, above the
+    // demonstration, as its first screen draws them; one over the other where they do not fit so (card-proof.md, "示範").
+    val profile = view.profiles.firstOrNull()
+    SideBySide(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+        Button(if (copied) c.say("done.copied") else c.say("hang.copy"), primary = true) {
             outside.copy(url)
             copied = true
         }
-        for ((sentence, address) in view.profiles) Button(sentence, wide) { outside.open(address) }
+        if (profile != null) Button(profile.label, told = profile.told) { outside.open(profile.address) }
     }
-    // The four steps on the platform; the demonstration takes their place later (card-proof.md, "示範").
+    for (other in view.profiles.drop(1)) Button(other.label, wide.padding(top = 12.dp), told = other.told) { outside.open(other.address) }
+    // The demonstration, with the account and the link of this card proof; then its four steps in words, the one it is showing marked.
+    val demo = m.hangDemo
+    if (demo != null && profile != null) {
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val account = d.accounts.firstOrNull { (platform, _) -> Platforms.of(platform) != null }
+            val words = HangDemoWords(view.hangTitle, account?.let { Platforms.handle(it.first, it.second) } ?: "", link, url, profile.label)
+            HangDemo(demo, c, words, c.say("app_demo.hang")) { label, onClick -> Button(label, Modifier.testTag("hang-demo-button"), height = 46.dp, onClick = onClick) }
+        }
+    }
+    val shown = demo?.step ?: 0
     Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Rule(colour = Colours.ink)
         for ((n, step) in view.steps.withIndex()) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 18.dp)) {
+            // The step the demonstration is at: on the light grey, a bar of the red of what you do at its left (hang.md, "示範").
+            val now = demo != null && demo.playing && shown == n + 1
+            Row(
+                Modifier.fillMaxWidth().drawBehind {
+                    if (!now) return@drawBehind
+                    drawRect(Colours.soft)
+                    drawRect(Colours.you, size = Size(3.dp.toPx(), size.height))
+                }.padding(vertical = 18.dp).padding(start = 12.dp),
+            ) {
                 BasicText("${n + 1}", Modifier.width(36.dp).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 22.sp, lineHeight = 1.4.em, fontWeight = Type.weightHeading, fontFamily = Type.display))
                 BasicText(step, Modifier.weight(1f).alignByBaseline(), style = TextStyle(color = Colours.ink, fontSize = 17.sp, lineHeight = 1.6.em, fontWeight = Type.weightHeading))
             }

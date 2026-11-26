@@ -28,4 +28,36 @@ final class DeviceCoreTests: XCTestCase {
         }
         XCTAssertEqual(seen, 2)
     }
+
+    /// The lowest app version, as the app reads it through the core
+    /// (MinApp.read, idc_min_app), against the cases of
+    /// spec/vectors/min-app.json for the iOS app: new enough, older before
+    /// the day and from it, and every field that cannot be read.
+    func testTheLowestVersionIsWhatTheVectorsSayForTheIOSApp() throws {
+        let cases = try XCTUnwrap(try Repository.vectors("min-app.json")["cases"] as? [[String: Any]])
+        var verdicts: Set<String> = []
+        for item in cases where item["client"] as? String == "ios" {
+            let name = try XCTUnwrap(item["name"] as? String)
+            let config = try JSONSerialization.data(withJSONObject: try XCTUnwrap(item["config"]), options: [.fragmentsAllowed])
+            let build = try XCTUnwrap(item["app_build"] as? Int)
+            let now = Date(timeIntervalSince1970: TimeInterval(try XCTUnwrap(item["now"] as? Int)))
+            let result = try XCTUnwrap(item["result"] as? String)
+            verdicts.insert(result)
+            let read = MinApp.read(config: config, build: String(build), now: now)
+            switch result {
+            case "ok": XCTAssertEqual(read, .ok, name)
+            case "ok_until": XCTAssertEqual(read, .okUntil(try XCTUnwrap(item["from"] as? String)), name)
+            case "stop":
+                // The day it started on, which the screen writes: the config's own.
+                guard case .stop(let from) = read else { XCTFail("\(name): \(read)"); continue }
+                XCTAssertEqual(from.count, 10, name)
+            case "unreadable": XCTAssertEqual(read, .unreadable, name)
+            default: XCTFail("\(name): a verdict the test does not know, \(result)")
+            }
+        }
+        XCTAssertEqual(verdicts, ["ok", "ok_until", "stop", "unreadable"], "the cases cover every verdict for the iOS app")
+        // A build number that is not one: the app does not go on.
+        XCTAssertEqual(MinApp.read(config: Data("{}".utf8), build: nil, now: Date()), .unreadable)
+        XCTAssertEqual(MinApp.read(config: Data("{}".utf8), build: "1.2", now: Date()), .unreadable)
+    }
 }

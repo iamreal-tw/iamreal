@@ -59,8 +59,10 @@ struct ScreenView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(screen.warnings.enumerated()), id: \.offset) { _, warning in self.notice(warning) }
             if let notice = screen.notice { self.notice(notice) }
-            stepBars
+            // A screen in the place of step 1 is none of the steps.
+            if screen.step > 0 { stepBars }
             ForEach(Array(screen.blocks.enumerated()), id: \.offset) { index, block in
                 self.block(block, first: index == 0)
             }
@@ -349,8 +351,15 @@ struct ScreenView: View {
                 Text(text).font(Theme.body(Theme.sizeKicker))
             }
             .padding(.top, 16)
-        case .figure(let figure):
-            CardFigure(figure: figure).padding(.top, 22)
+        case .senseDemo(let demo):
+            // Without the timeline there is no picture; the sentence above it says where the card goes.
+            if let timeline = SenseTimeline.bundled {
+                VStack(spacing: 12) {
+                    SenseDemoView(demo: demo, timeline: timeline, perform: perform)
+                    self.button(demo.control, main: false)
+                }
+                .padding(.top, 22)
+            }
         }
     }
 

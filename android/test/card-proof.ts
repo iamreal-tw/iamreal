@@ -321,6 +321,17 @@ function wholeScreen(): string[] {
   return [...seen];
 }
 
+/** Scrolls the step back to its top. */
+function toTop(): void {
+  let before = "";
+  for (let i = 0; i < 12; i++) {
+    const now = JSON.stringify(visible().map((n) => [n.text, n.top]));
+    if (now === before) break;
+    before = now;
+    emulator.scrollUp();
+  }
+}
+
 /** Finds a node, scrolling for it: down to the end of the step, then back up to its top. */
 function find(match: (n: Node) => boolean, what: string): Node {
   let last: Node[] = [];
@@ -646,11 +657,13 @@ const backToApp = async (n: number): Promise<void> => {
 const HUNG = say("done.hung", { open_proof: say("done.open_proof") });
 const LOOK = say("hang.look", { open_proof: say("done.open_proof") });
 const WHY = say("hang.why_single");
+/** The button of step 6 that opens the profile: its short words, beside 複製證明連結. A screen reader reads done.open_profile, with the account. */
+const OPEN = say("hang.open_threads", { platform: THREADS });
 /** What only the whole step 6 has. */
-const wholeHang = (account: string): string[] => [
+const wholeHang = (_account: string): string[] => [
   say("hang.title_single", { platform: THREADS }),
   say("hang.copy"),
-  say("done.open_profile", { account, platform: THREADS }),
+  OPEN,
   say("done.step_edit"),
   say("done.step_link"),
   say("done.step_add"),
@@ -673,12 +686,47 @@ const neverAfter = (account: string): string[] => [
   say("done.return_note"),
 ];
 
+/** Where IAMREAL_RECORD says to keep a recording of step 6's demonstration, played once from its start (android/README.md). */
+const RECORD = process.env.IAMREAL_RECORD;
+
+/**
+ * The demonstration of step 6 (design/copy/card-proof.md, "示範"): to a screen reader one element with its one sentence; under it one
+ * button, 停止 while it plays and 再看一次 otherwise. It plays by itself once it is on the screen; 停止 goes straight to its last frame.
+ * Leaves it stopped, at its last frame. `record`: with IAMREAL_RECORD set, it is played once more from its start and recorded.
+ */
+async function demonstration(record: boolean): Promise<void> {
+  const picture = find((n) => n.id === "hang-demo", "the demonstration of step 6");
+  check(picture.description === say("app_demo.hang"), `step 6's demonstration reads as its one sentence of the copy ("${picture.description.slice(0, 20)}…")`);
+  const [stop, replay] = [say("app_demo.stop"), say("app_demo.replay")];
+  // On the screen it has started; a test that got here late finds it played out, and plays it again.
+  field("hang-demo-button");
+  const says = (label: string): boolean => textsOf(visible()).includes(label);
+  if (says(replay)) {
+    press(replay);
+    await waitText(stop, "the demonstration playing again", 10_000);
+  }
+  check(says(stop) && !says(replay), "step 6: while the demonstration plays its button says 停止");
+  press(stop);
+  await waitText(replay, "the demonstration stopped", 10_000);
+  check(says(replay) && !says(stop), "step 6: 停止 stops the demonstration, and its button says 再看一次");
+  if (record && RECORD !== undefined) {
+    // The emulator's own recording, from the host: the one inside it cannot read the screen (no hardware encoder).
+    emulator.adb("emu", "screenrecord", "start", "--fps", "60", "--bit-rate", "12M", "--time-limit", "40", RECORD);
+    await sleep(1_000);
+    press(replay);
+    await sleep(23_000);
+    emulator.adb("emu", "screenrecord", "stop");
+    await waitText(replay, "the demonstration played to its end", 10_000);
+    check(true, `step 6: the demonstration played to its end by itself, recorded as ${RECORD}`);
+  }
+}
+
 /**
  * Step 6 (design/copy/card-proof.md, "6. 掛上去", app). `short`: a card proof again, asked only whether the link is still there, then
  * 沒有看到連結，重新掛上 for the whole of it. `newCard`: the card's first record. `buttons`: presses what opens something outside the app.
  * Leaves the whole step 6 on the screen.
  */
-async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string }): Promise<void> {
+async function hangStep(o: { name: string; shortId: string; account: string; date: string; short: boolean; newCard: boolean; buttons?: boolean; design?: string; record?: boolean }): Promise<void> {
   const link = `${SITE}/p/${o.shortId}`;
   const recorded = say("done.recorded_on", { date: o.date });
   if (o.short) {
@@ -694,10 +742,29 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     press(say("hang.rehang"));
     await waitText(say("hang.copy"), "the whole step 6, after 沒有看到連結，重新掛上", 10_000);
   }
+  await demonstration(o.record === true);
+  toTop();
   shot(`step-6-${o.name}`);
   if (o.design !== undefined) await designShot(o.design);
   const s = wholeScreen();
-  shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
+  shows(s, "step 6", [step(6), recorded, ...wholeHang(o.account), WHY, link, say("app_demo.replay"), say("common.next"), ...(o.newCard ? [say("hang.new_card")] : [])]);
+  // The words drawn in the demonstration are not read: a screen reader gets its one sentence, and the four steps in words.
+  check(!s.includes(say("app_demo_hang.kick_profile")) && !s.includes(say("app_demo_hang.press")), "step 6: what is drawn in the demonstration is not read");
+  {
+    // The two buttons side by side, above the demonstration.
+    // All three as one look at the screen has them, from the step's top: the picture starts under the buttons, and may go on below the screen.
+    toTop();
+    const now = visible();
+    const copy = now.find((n) => n.text === say("hang.copy"));
+    const open = now.find((n) => n.text === OPEN);
+    const picture = now.find((n) => n.id === "hang-demo");
+    if (check(copy !== undefined && open !== undefined && picture !== undefined, "step 6: the two buttons and the top of the demonstration are on the screen together")) {
+      check(Math.abs(copy!.y - open!.y) < 40 && copy!.x < open!.x, `step 6: 複製證明連結 and 打開 Threads are side by side (${copy!.x},${copy!.y} and ${open!.x},${open!.y})`);
+      check(copy!.bottom < picture!.top && open!.bottom < picture!.top, "step 6: the two buttons are above the demonstration");
+      const told = say("done.open_profile", { account: o.account, platform: THREADS });
+      check(open!.description === told, `step 6: 打開 Threads reads to a screen reader as "${told}" ("${open!.description}")`);
+    }
+  }
   check(!s.includes(app("settings.open")), "step 6 has no 設定 in its header");
   const absent = [say("common.back"), say("hang.rehang"), say("done.withdrawn_link"), say("done.share", { platform: THREADS }), say("app_done.reminder_title"), say("finish.done"), ...(o.newCard ? [] : [say("hang.new_card")]), ...neverAfter(o.account)];
   for (const a of absent) check(!s.includes(a), `step 6 does not say "${a.slice(0, 40)}"`);
@@ -705,7 +772,7 @@ async function hangStep(o: { name: string; shortId: string; account: string; dat
     press(say("hang.copy"));
     await waitText(say("done.copied"), "the button after the link was copied", 10_000);
     check(true, "step 6: 複製證明連結 turns into 已複製");
-    press(say("done.open_profile", { account: o.account, platform: THREADS }));
+    press(OPEN);
     await sleep(2_000);
     check(onTop().includes(`dat=https://www.threads.com/${o.account}`), `step 6: 打開 ${o.account} 的 Threads 個人檔案 opens https://www.threads.com/${o.account} outside the app`);
     await backToApp(6);
@@ -1440,7 +1507,7 @@ try {
   });
 
   // Step 6, the whole of it: the card's first record. Then the reminder, offered; then step 8.
-  await hangStep({ name: "first", shortId, account: HANDLE.alice, date: today, short: false, newCard: true, buttons: true, design: "card-proof-app-6-hang-phone.png" });
+  await hangStep({ name: "first", shortId, account: HANDLE.alice, date: today, short: false, newCard: true, buttons: true, design: "card-proof-app-6-hang-phone.png", record: true });
   press(say("common.next"));
   await reminderOffered(shortId);
   press(say("common.next"));

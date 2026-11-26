@@ -992,7 +992,7 @@ export const TYPESCRIPT_PATHS: readonly string[] = [
  */
 export const DEVICE_CORE_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "device-core/**", "spec/**", "crl/testdata/**", "web/circuits/**", "verifier/vk/**", ".github/workflows/cache.yml"];
 /** The android job: the app, the Rust it links, the files Gradle bundles into the app, the ones its unit tests read, and cache.yml, hashed into the keys of its caches like device-core's. */
-export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/fonts/**", "design/copy/**", ".github/workflows/cache.yml"];
+export const ANDROID_PATHS: readonly string[] = [...EVERY_CHECK_PATHS, "android/**", "device-core/**", "web/circuits/**", "verifier/vk/**", "spec/vectors/**", "design/fonts/**", "design/copy/**", "design/motion/**", ".github/workflows/cache.yml"];
 /** A list of patterns for each required check, by the check's name. */
 export type CheckLists = Readonly<Record<string, readonly string[]>>;
 /** Each required check's list. */

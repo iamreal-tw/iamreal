@@ -277,7 +277,7 @@ const CHANGES: Record<string, Change[]> = {
   "222 an output of the changes job written in, not the script's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: false\n")],
   "223 an output of the changes job that is another check's": [replace(C, "      go: ${{ steps.paths.outputs.go }}\n", "      go: ${{ steps.paths.outputs.android }}\n")],
   "224 a path less in a list the changes job is given": [replace(C, " cmd/** crl/** prooflog/**", " crl/** prooflog/**")],
-  "225 a path more in a list the changes job is given": [replace(C, ' design/copy/** .github/workflows/cache.yml"\n', ' design/copy/** .github/workflows/cache.yml docs/**"\n')],
+  "225 a path more in a list the changes job is given": [replace(C, ' design/motion/** .github/workflows/cache.yml"\n', ' design/motion/** .github/workflows/cache.yml docs/**"\n')],
   "226 the changes job without the whole history": [replace(C, "          fetch-depth: 0\n", "")],
   "227 the changes job keeping the token": [replace(C, "          persist-credentials: false\n          fetch-depth: 0\n", "          fetch-depth: 0\n")],
   "228 the changes job with an if": [replace(C, "  changes:\n", "  changes:\n    if: github.event_name == 'pull_request'\n")],

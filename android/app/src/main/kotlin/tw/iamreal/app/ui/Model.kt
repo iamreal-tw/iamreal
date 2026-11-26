@@ -17,6 +17,8 @@ import tw.iamreal.app.flow.CardProof
 import tw.iamreal.app.flow.MinApp
 import tw.iamreal.app.flow.Platforms
 import tw.iamreal.app.flow.Stop
+import tw.iamreal.app.ui.demo.HangDemoPlayer
+import tw.iamreal.app.ui.demo.HangTimeline
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
@@ -131,7 +133,14 @@ internal class PinField(private val onFirst: () -> Unit = {}) {
  * process; nothing of it is saved anywhere, so an app the system ended
  * starts at step 1.
  */
-internal class Model(private val wiring: Wiring, private val bundled: (String) -> ByteArray, private val crlNumbers: CardProof.CrlNumbers, val copy: Copy) {
+internal class Model(
+    private val wiring: Wiring,
+    private val bundled: (String) -> ByteArray,
+    private val crlNumbers: CardProof.CrlNumbers,
+    val copy: Copy,
+    /** design/motion/hang.json, as the installer carries it: read when a card proof first gets to step 6. */
+    hangMotion: () -> String,
+) {
     val messages = Messages(copy)
     private val backend = Backend(wiring.site, wiring.data)
     private val main = Handler(Looper.getMainLooper())
@@ -260,6 +269,12 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     // Steps 6 to 8
     var done by mutableStateOf<CardProof.Done?>(null)
+        private set
+
+    private val hangTimeline by lazy { HangTimeline(hangMotion()) }
+
+    /** The demonstration of step 6, for this card proof: where it has got to is kept while the steps after the submission are gone through, so coming back to step 6 does not play it again from its start. */
+    var hangDemo by mutableStateOf<HangDemoPlayer?>(null)
         private set
 
     /** Step 6 is the whole one: "沒有看到連結，重新掛上" was pressed on the short one. */
@@ -704,6 +719,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 dropAll(keepDone = true)
                 onDone(done)
                 hangWhole = false
+                hangDemo = HangDemoPlayer(hangTimeline)
                 // Everything withdrawn: nothing to hang, to be reminded of or to share.
                 step = if (done.accounts.isEmpty()) Step.DONE else Step.HANG
             },
@@ -812,6 +828,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
             done = null
             single = null
             hangWhole = false
+            hangDemo = null
         }
     }
 
