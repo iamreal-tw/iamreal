@@ -60,7 +60,7 @@ describe("the reason code of a stop", () => {
     [{ code: "server", server: "proof", status: 400 }, "server_proof"],
     [{ code: "server", server: "switch_restricted", status: 403 }, "server_switch_restricted"],
     // A code the table has no reason for, an HTTP status without a code, and a code that is no code at all.
-    [{ code: "server", server: "busy", status: 503 }, "server_other"],
+    [{ code: "server", server: "slow_down", status: 503 }, "server_other"],
     [{ code: "server", server: "http_502", status: 502 }, "server_other"],
     [{ code: "server", server: "other", status: 400 }, "server_other"],
     [{ code: "server", server: "constructor", status: 400 }, "server_other"],
