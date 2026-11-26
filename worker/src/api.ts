@@ -47,6 +47,12 @@ interface Reply {
  */
 interface Notes {
   counted?: CountedSubmission;
+  /**
+   * Called by `postRecord` the moment the object counted the submission.
+   * From then on the request is kept alive until its entry is written,
+   * also if the client goes away before the answer.
+   */
+  count(submission: CountedSubmission): void;
 }
 
 const ok = (body: unknown): Reply => ({ status: 200, body });
@@ -192,7 +198,7 @@ async function postRecord(request: Request, env: Env, parts: ApiParts, notes: No
   const proofLog = proofLogOf(env);
   const begun = await askProofLog(() => proofLog.beginSubmission(fields.challenge));
   if (begun !== "ok") return refuse(begun);
-  notes.counted = { deviceId, body: text };
+  notes.count({ deviceId, body: text });
 
   let verifies: boolean;
   try {
@@ -316,7 +322,15 @@ function requestId(): string {
  */
 export async function api(request: Request, env: Env, parts: ApiParts, later: (work: Promise<unknown>) => void): Promise<Response> {
   const id = requestId();
-  const notes: Notes = {};
+  // The entry's write is promised to the runtime when the submission is counted, not when the answer is ready:
+  // a request whose client left in between is still worked to its end, and its entry written.
+  let written: () => void = () => {};
+  const notes: Notes = {
+    count(submission) {
+      this.counted = submission;
+      later(new Promise<void>((resolve) => (written = resolve)));
+    },
+  };
   const { pathname } = new URL(request.url);
   const endpoint = ENDPOINTS.get(pathname);
   let reply: Reply;
@@ -337,7 +351,7 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
     const seq = reply.status === 201 ? (reply.body as { seq: number }).seq : undefined;
     const end = seq !== undefined ? { status: reply.status, seq } : { status: reply.status, error: (reply.body as { error: string }).error };
     // Not awaited: the answer is the same whether the entry is written or not (connection-log.ts).
-    later(writeEntry(env.CONNECTION_LOG, entryOf(request, id, now(), notes.counted, end)));
+    void writeEntry(env.CONNECTION_LOG, entryOf(request, id, now(), notes.counted, end)).then(written);
   }
   const headers = new Headers({
     "Content-Type": "application/json",

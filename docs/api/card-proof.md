@@ -35,16 +35,18 @@ record is or how it is verified. It can change without invalidating records.
     it takes to reproduce a failed verification.
 
   Nothing is written for any other request: a page, a static file,
-  `config`, `challenges`, `card-state`, `fingerprint`, a submission that is
-  not well formed or whose challenge the server did not issue, a
-  submission after the challenge's fifth or after its record was written,
-  or one refused because card proofs are stopped. In particular the server
+  `config`, `challenges`, `card-state`, `fingerprint`, and a submission
+  that was not counted: one that is not well formed, one refused because
+  card proofs are stopped, and one whose challenge does not pass the first
+  look (the server did not issue it or it has expired, a record was
+  already written for it, or it was counted five times). Those can be sent
+  without end by anyone, so they are not kept. In particular the server
   keeps no entry that puts the scoped ID of a `card-state` request next to
   an IP address. The entry of a submission that became a record does put an
   IP address next to a `seq`, and through it next to a scoped ID and its
   accounts, for those 31 days; the privacy notice says so. The network the
-  service is reached through keeps its own record of every request's
-  address, for the same 31 days (ADR-0022).
+  service is reached through has its own view of requests' addresses, for
+  the same 31 days: a sample, not every request (ADR-0022).
 - Every API response carries the header `X-Request-Id`. For a request that
   has an entry in the connection log, the entry carries the same ID. For
   any other request the server writes nothing, unless it fails itself
@@ -84,7 +86,9 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - Response `200`: `{"challenge":"2026-11-16.000G40R40M30E209185GR38E1W"}`
 - The server stores the challenge with the time it was issued. It is usable
   for 10 minutes, for one accepted card proof, and for at most 5 submissions.
-- The server does not log the challenge.
+- The server writes nothing for this request. A challenge is in its
+  connection log only inside the body of a counted submission that did not
+  become a record ("Rules for every endpoint").
 - Errors: `429` `rate_limited`; `503` `paused` (under `records`, below):
   no challenge is issued.
 
@@ -289,9 +293,13 @@ Submits one card proof: the card's whole list of accounts.
   at the first look, does not count. Neither does one the server fails on
   (`500`) before it has counted it: it could not read its settings or what
   it stores, or the write that counts the submission itself failed. The
-  submissions that count are the ones the connection log has an entry for
+  submissions that count are the ones the connection log has an entry for,
+  short of a failure of the server between counting one and writing its
+  entry
   ("Rules for every endpoint"): so a challenge has five entries at most,
-  and one more if a record was written on its fifth.
+  the one of its record among them. That includes a submission the second
+  look refuses with `challenge_used` or `challenge_unknown`: it was counted
+  by then, and its entry has its body.
 
   **Reading the request**, and which of `malformed`, `scope` and `platform`
   it gets:

@@ -40,8 +40,17 @@ export default {
     // from outside sees; here it is one line in the live log.
     try {
       const time = now();
-      const oldest = await oldestDay(env.CONNECTION_LOG);
-      await env.DATA.put(OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } });
+      // A bucket that does not answer must not keep the mirror waiting: half a minute, then it is this hour's trouble.
+      const inTime = async <T>(work: Promise<T>): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer in 30 s")), 30_000)))]);
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+      const oldest = await inTime(oldestDay(env.CONNECTION_LOG));
+      await inTime(env.DATA.put(OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
       // An entry older than any should be: the bucket's lifecycle rule is not deleting. Said here too; whoever
       // checks from outside reads the same from the file.
       if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "connection_log_overdue", oldest }));

@@ -1291,7 +1291,7 @@ pnpm run deploy:test
 
 - 看頁面、靜態檔、`config`、拿題目、查卡片現況、`fingerprint`、`rebuild`
 - 第 1 段擋下的送出（`malformed`、`scope`、`platform`）
-- 第 2 段擋下的送出：題目不是後台發的或已經過期（`challenge_unknown`）、這個題目已經寫過一筆（`challenge_used`）、第 6 次起（`challenge_attempts`）、停止收過卡（`paused`）。這幾種誰都能無限次送
+- 第 2 段擋下的送出：題目不是後台發的或已經過期（`challenge_unknown`）、這個題目已經寫過一筆（`challenge_used`）、第 6 次起（`challenge_attempts`）、停止收過卡（`paused`）。這幾種誰都能無限次送。第 4 段再看題目時才擋下的 `challenge_used`、`challenge_unknown` 不同：那一次已經算了，照記，有內文
 - 被限流擋下的請求：限流還沒有做（[#32](https://github.com/iamreal-tw/iamreal/issues/32)），做的時候它在這之前就回答，不會走到這裡
 
 **一筆記什麼**。一筆一個 JSON 物件，欄位就是下面這些，沒有別的（`test/connection-log.test.ts` 逐一比對物件的鍵）：
@@ -1326,7 +1326,7 @@ pnpm run deploy:test
   ```
 
   `checked` 是這一次看的時間，`oldest` 是最舊一筆的日期（UTC），一筆都沒有時是 `null`
-- **這個檔為什麼可以公開**：裡面只有這兩個時間。沒有筆數、沒有鍵、沒有任何一筆紀錄的內容（請求編號、IP、過卡裝置編號、內文都沒有）。最舊那一筆是哪一天，從證明紀錄的紀錄日期本來就大致看得出來
+- **這個檔為什麼可以公開**：裡面只有這兩個時間。沒有筆數、沒有鍵、沒有任何一筆紀錄的內容（請求編號、IP、過卡裝置編號、內文都沒有）。長期看這個檔的人看得出的是：哪幾天有被算了一次的送出。成功的那些天從證明紀錄本來就看得出來；多出來的是只有失敗的送出的日子
 - 判斷留給外面的檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）：`oldest` 比今天早超過 33 天，就是規則沒有在刪（31 天，加上文件寫的 24 小時內移除，加上日期是 UTC 的進位）；`checked` 超過兩小時沒變，就是後台沒有在看（排程沒跑、儲存桶列不出來、或這個檔寫不進去）。外面的檢查照這個檔自己算。後台看到 `oldest` 超過 33 天時，另外在即時的輸出寫一行 `{"event":"connection_log_overdue","oldest":"2026-10-17"}`（沒有開保存，要當下在看才看得到）
 - 列不出來、第一個鍵不是日期開頭、或檔寫不進去時，這個檔留著上一次的時間，即時的輸出多一行 `{"event":"connection_log_oldest_not_published","error":"Error"}`；清冊鏡像照常做
 - 規則本身由營運者在儲存桶上設（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）：`connection-31-days`，前綴 `connection/`，31 天後刪除。新的儲存桶在第一筆滿 31 天之前，這個檢查看不出規則設錯；營運者設的時候看一次
@@ -1345,6 +1345,8 @@ pnpm run deploy:test
 ```
 
 那一筆連線紀錄就是沒有了，不會補寫。
+
+**還有兩種時候，算了一次的送出沒有紀錄**：Durable Object 已經把次數加上去、回應卻沒有回到 Worker（那個請求回 `500`）；Worker 這一次執行在算了之後被平台結束（例如用完 CPU 時間）。後一種為了不讓「送出後馬上斷線」躲掉紀錄，寫入是在算了一次的那一刻就向執行環境登記的（`waitUntil`），不是等回應準備好才登記；客戶端斷線後請求是不是照樣跑完，沒有在 Cloudflare 上看過。
 
 **還沒有的**：營運者查詢用的指令（下載指定日期的物件、照欄位篩）、收到查詢或刪除請求時的做法，在營運的規格（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）的別張票。**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移。
 
