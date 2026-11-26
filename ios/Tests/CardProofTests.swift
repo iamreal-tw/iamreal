@@ -348,7 +348,7 @@ final class CardProofTests: XCTestCase {
 
     private func comesAgain() async throws {
         let model = makeModel()
-        // Too many people on the way (#419): step 1, the reading's config, and the card's state turned away.
+        // Too many people on the way (#420): step 1, the reading's config, and the card's state turned away.
         try await tooManyToTheList(model)
         // The account is not typed again: the main button is the card proof again.
         XCTAssertEqual(model.screen.texts, [
@@ -377,7 +377,7 @@ final class CardProofTests: XCTestCase {
 
         // The reminder is on, as a cardholder who turned it on the last time has it.
         await reminders.turnOn(interval: .weeks12, time: .evening)
-        // The challenge and the record turned away (#419): each is asked again, the card tapped once at step 5.
+        // The challenge and the record turned away (#420): each is asked again, the card tapped once at step 5.
         try await tooManyAtStepFive(model, button: "更新島民證明")
         XCTAssertFalse(model.holdsPIN)
         // Step 6, the short one: only whether the link is still there.
@@ -1218,7 +1218,7 @@ final class CardProofTests: XCTestCase {
         return nil
     }
 
-    // Too many people (#419) -----------------------------------------------------------
+    // Too many people (#420) -----------------------------------------------------------
 
     /// What a screen says under the item it stopped at, the request ID of this run standing where the copy has its example.
     private func checkWithTheRequestID(_ model: CardProofModel) {
@@ -1260,13 +1260,18 @@ final class CardProofTests: XCTestCase {
             if failure == CountingBackend.busy { await Snapshot.save(model, as: "1-busy") }
         }
 
-        // The start goes through; the reading's config is turned away, and the card is read all the same.
-        asked.turnAway["config"] = [CountingBackend.rateLimited]
+        // The start goes through; the config the reading asks again (asked as step 2 comes up, and once more if that one
+        // has failed by the tap) is turned away, and the card is read all the same, with the start's.
+        asked.turnAway["config"] = [CountingBackend.rateLimited, CountingBackend.rateLimited]
+        let plain = asked.asked["config", default: 0]
         try await press("下一步", in: model)
         XCTAssertEqual(model.screen.step, 2)
         XCTAssertFalse(model.screen.texts.contains(say("before.busy")))
         try await press("感應卡片", in: model)
-        XCTAssertEqual(asked.turnAway["config"], [], "the reading's config was turned away")
+        let turned = 2 - (asked.turnAway["config"]?.count ?? 0)
+        XCTAssertEqual(asked.asked["config", default: 0] - plain, turned, "every config the reading asked was turned away (\(turned))")
+        XCTAssertGreaterThan(turned, 0)
+        asked.turnAway["config"] = []
         XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"], "the card was read with the start's config")
         try await press("下一步", in: model)
 
@@ -1282,8 +1287,11 @@ final class CardProofTests: XCTestCase {
         XCTAssertTrue(model.holdsPIN, "the PIN is kept for the last tap")
         await Snapshot.save(model, as: "3-busy")
         let (taps, pins, states) = (card.taps.count, card.pinsReceived, asked.asked["card-state", default: 0])
+        // Typed into the field meanwhile: the field has no say in it, and what was typed is not kept.
+        model.pinText = "000000"
         try await press("再試一次", in: model)
         XCTAssertEqual(model.screen.step, 4)
+        XCTAssertEqual(model.pinText, "", "a PIN typed after the card signed is not kept")
         XCTAssertEqual(card.taps.count, taps, "再試一次: no tap")
         XCTAssertEqual(card.pinsReceived, pins, "再試一次: no PIN to the card")
         XCTAssertEqual(asked.asked["card-state"], states + 1)

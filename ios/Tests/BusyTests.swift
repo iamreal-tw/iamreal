@@ -25,8 +25,8 @@ final class BusyTests: XCTestCase {
 
     private func copy(_ key: String, _ values: [String: String] = [:]) -> String { sentences(key, values) }
 
-    private static let rateLimited = BackendFailure(code: "rate_limited", requestID: "0123456789abcdef", status: 429)
-    private static let busy = BackendFailure(code: "busy", requestID: "0123456789abcdef", status: 503)
+    private static let rateLimited = CountingBackend.rateLimited
+    private static let busy = CountingBackend.busy
 
     // The requests ----------------------------------------------------------------------
 

@@ -99,6 +99,12 @@ final class CardProofFlow {
         case dateChanged
         /// A step called out of order.
         case state
+
+        /// The server turned the request away as too many (BackendFailure.tooMany): the same request can be sent again.
+        var tooMany: Bool {
+            if case .server(let failure) = self { return failure.tooMany }
+            return false
+        }
     }
 
     /// What tap 1 has done, for the screen's list.
@@ -108,7 +114,7 @@ final class CardProofFlow {
     }
 
     enum Phase: Equatable {
-        case start, checking, cardStateFailed, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
+        case start, checking, cardStateTurnedAway, statusKnown, chosen, readyToSign, signed, submitting, submitFailed, done, stopped
     }
 
     struct Account: Equatable {
@@ -514,7 +520,7 @@ final class CardProofFlow {
     /// too many (confirmCard): the card signed already and the PIN is
     /// kept, so nothing is signed again.
     func retryCardState() async throws -> CardStatus {
-        try expect(.cardStateFailed)
+        try expect(.cardStateTurnedAway)
         do {
             guard let session, let scopeSignature else { throw Stop.state }
             try stillValid(at: deps.clock())
@@ -535,14 +541,14 @@ final class CardProofFlow {
     }
 
     /// The card's state, asked of the server with the scoped ID. Turned
-    /// away as too many, the flow waits in `cardStateFailed`.
+    /// away as too many, the flow waits in `cardStateTurnedAway`.
     private func cardStateNow(_ body: Data) async throws -> CardStatus {
         let state: Data
         do {
             state = try await deps.backend.cardState(body)
         } catch let failure as BackendFailure where failure.tooMany {
             try live()
-            phase = .cardStateFailed
+            phase = .cardStateTurnedAway
             throw TurnedAway(failure: failure)
         }
         try live()

@@ -40,7 +40,7 @@ struct BackendFailure: Error, Equatable {
     let requestID: String?
     /// The answer's HTTP status; 0 when there was no answer, or the app
     /// itself could not read one.
-    var status = 0
+    let status: Int
 
     init(code: String, requestID: String?, status: Int = 0) {
         self.code = code

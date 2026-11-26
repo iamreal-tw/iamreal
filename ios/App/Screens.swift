@@ -501,7 +501,7 @@ struct Screens {
         var blocks: [Block] = [.title(copy("progress.title")), .text(copy("app_progress.keep_open"))]
         // The card signed: it can be taken away.
         if reached >= 2 { blocks.append(.strong(copy("app_read.lift"))) }
-        let why = stop.map { submitFailed && !Self.isTooMany($0) ? [copy("stops.submit_failed")] : message($0, tap: 3) }
+        let why = stop.map { submitFailed && !$0.tooMany ? [copy("stops.submit_failed")] : message($0, tap: 3) }
         blocks.append(.items(items(labels, reached: reached, running: stop == nil, why: why)))
         guard let stop else { return Screen(step: 5, blocks: blocks) }
         if Self.tapsAgain(stop) {
@@ -511,7 +511,7 @@ struct Screens {
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
                 cancel: cancel)
         }
-        if Self.isTooMany(stop) {
+        if stop.tooMany {
             // Too many people: the challenge asked for again (then tap 3), or the record sent again; the card is not read again.
             return Screen(
                 step: 5, blocks: blocks,
@@ -899,10 +899,11 @@ struct Screens {
         case .dateChanged: return [copy("stops.date_changed")]
         case .state: return ["state"]
         case .server(let failure):
+            let requestID = failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? []
+            // Too many people (429, or 503 `busy`; ADR-0026): the same request can be sent again, the card not tapped again.
+            if failure.tooMany { return [copy("stops.too_many")] + requestID }
             let sentence: String
             switch failure.code {
-            // Too many people (429, or 503 `busy`; ADR-0026): the same request can be sent again, the card not tapped again.
-            case _ where failure.tooMany: sentence = copy("stops.too_many")
             case "challenge_unknown": sentence = copy("stops.challenge_expired")
             case "crl_stale": sentence = copy("stops.server_crl_stale")
             case "daily_limit": sentence = copy("stops.daily_limit")
@@ -915,13 +916,8 @@ struct Screens {
                 sentence = copy("stops.rejected", ["code": failure.code])
             default: sentence = copy("stops.server_unreadable", ["code": failure.code])
             }
-            return [sentence] + (failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? [])
+            return [sentence] + requestID
         }
-    }
-
-    private static func isTooMany(_ stop: Flow.Stop) -> Bool {
-        if case .server(let failure) = stop { return failure.tooMany }
-        return false
     }
 
     private static func isPaused(_ stop: Flow.Stop) -> Bool {

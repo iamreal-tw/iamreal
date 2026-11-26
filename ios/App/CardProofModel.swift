@@ -725,7 +725,7 @@ final class CardProofModel: ObservableObject {
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
             switch stop {
-            case .server(let failure) where failure.tooMany:
+            case _ where stop.tooMany:
                 // The card signed; the flow keeps the PIN for tap 3, and 再試一次 asks for the card's state again.
                 screen = screens.pin(name: name, state: .retry(why))
             case .card(.pinIncorrect), .card(.channel), .card(.dropped(.sent)):
@@ -748,6 +748,8 @@ final class CardProofModel: ObservableObject {
     /// turned it away as too many. Nothing is signed again.
     private func retryCardState() async {
         guard let flow else { return }
+        // The PIN for the last tap is the flow's: one typed into the field meanwhile goes to no card, and is not kept.
+        pinText = ""
         screen = screens.pin(name: name, state: .signed)
         do {
             let status = try await flow.retryCardState()
@@ -757,7 +759,7 @@ final class CardProofModel: ObservableObject {
             guard self.flow === flow else { return }
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
-            if case .server(let failure) = stop, failure.tooMany {
+            if stop.tooMany {
                 screen = screens.pin(name: name, state: .retry(why))
             } else {
                 screen = screens.pin(name: name, state: .stopped(why))
