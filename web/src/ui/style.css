@@ -1030,13 +1030,12 @@ time {
   margin-top: 12px;
 }
 
+/* Opening the profile: a second button, its sentence on two lines if it must, broken between words. */
 .hang-computer .btn.ghost {
-  height: auto;
-  min-height: var(--button-height);
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding: 8px 16px;
+  font-size: 16px;
+  text-align: center;
   text-decoration: none;
-  word-break: break-all;
 }
 
 .hang-steps {
