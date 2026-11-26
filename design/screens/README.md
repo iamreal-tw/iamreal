@@ -103,6 +103,6 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `app-reminder-4-from-notification-phone.png` | 從通知點進來的第 1 步 | 實作版（iOS） |
 | `app-settings-phone.png` | 設定，提醒開著 | 實作版（iOS） |
 | `app-splash-phone.png` | 啟動畫面（Android 的實作版由模擬器上的過卡測試拍，同上） | 實作版（Android） |
-| `app-update-soon-phone.png` | 這一版快不能過卡了 | 定稿版 |
-| `app-update-required-phone.png` | 這一版不能過卡了 | 定稿版 |
-| `app-no-nfc-phone.png` | 這支手機沒有 NFC | 定稿版 |
+| `app-update-soon-phone.png` | 這一版快不能過卡了 | 實作版（iOS） |
+| `app-update-required-phone.png` | 這一版不能過卡了 | 實作版（iOS） |
+| `app-no-nfc-phone.png` | 這支手機沒有 NFC | 實作版（iOS） |

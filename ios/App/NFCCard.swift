@@ -31,8 +31,11 @@ final class NFCCard: Card {
     private let lock = NSLock()
     private var reading = false
 
+    /// Whether this phone can read a card: false on one without NFC.
+    static var available: Bool { NFCTagReaderSession.readingAvailable }
+
     convenience init(copy: Copy) {
-        self.init(copy: copy, available: { NFCTagReaderSession.readingAvailable }, open: { TagReader() })
+        self.init(copy: copy, available: { Self.available }, open: { TagReader() })
     }
 
     /// `available`: whether this phone can read a card now. `open`: a new

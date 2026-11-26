@@ -784,4 +784,21 @@ enum MinApp: Equatable {
         if case .stop = self { return true }
         return false
     }
+
+    /// As the core reads the server's `config` for the build `build` of
+    /// this app (DeviceCore.minApp). A build number that is not one, or an
+    /// answer of the core's the app cannot read, is as a field it cannot
+    /// read: the app does not go on.
+    static func read(config: Data, build: String?, now: Date) -> MinApp {
+        guard let build = build.flatMap(UInt32.init),
+              let answer = try? DeviceCore.minApp(config: config, build: build, now: now),
+              let verdict = try? JSONSerialization.jsonObject(with: answer) as? [String: Any]
+        else { return .unreadable }
+        switch (verdict["verdict"] as? String, verdict["from"] as? String) {
+        case ("ok", _): return .ok
+        case ("ok_until", let from?): return .okUntil(from)
+        case ("stop", let from?): return .stop(from)
+        default: return .unreadable
+        }
+    }
 }
