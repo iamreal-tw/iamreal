@@ -567,8 +567,9 @@ struct Screens {
     /// panel said the card can be taken away when it signed). In the
     /// order of the page a phone opens to hang it: the link, the two
     /// buttons side by side, the demonstration, the four steps.
-    /// `demoPlaying`: the demonstration is playing.
-    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false) -> Screen {
+    /// `demoPlaying`: the demonstration is playing; `demoPlayed`: it has
+    /// played in this card proof.
+    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false, demoPlaying: Bool = false, demoPlayed: Bool = false) -> Screen {
         let kinds = done.answer.kinds
         let link = Block.link("\(host)/p/\(done.shortID)")
         var blocks = mismatch(done)
@@ -600,7 +601,7 @@ struct Screens {
             }
         }
         blocks.append(.sideBySide([Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink)] + profiles))
-        if let demo = hangDemo(done, playing: demoPlaying) { blocks.append(.demo(demo)) }
+        if let demo = hangDemo(done, playing: demoPlaying, played: demoPlayed) { blocks.append(.demo(demo)) }
         blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
         // A new card's new link, a withdrawn account's link, the other cards that declare an account.
         if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
@@ -621,7 +622,7 @@ struct Screens {
     /// Threads (card-proof.md, the demonstrations); none for a card
     /// without one. Its first screen is this step's own, with this step's
     /// words; the other four are the sketches of Threads.
-    func hangDemo(_ done: Flow.Done, playing: Bool) -> HangDemo? {
+    func hangDemo(_ done: Flow.Done, playing: Bool, played: Bool = false) -> HangDemo? {
         let threads = Platform.threads
         guard let account = done.accounts.first(where: { $0.platform == threads.id }) else { return nil }
         let handle = Platform.handle(threads.id, account.username)
@@ -656,6 +657,7 @@ struct Screens {
                 ? Button(label: copy("app_demo.stop"), action: .stopDemo)
                 : Button(label: copy("app_demo.replay"), action: .playDemo),
             playing: playing,
+            played: playing || played,
             account: handle,
             link: link,
             address: "https://" + link,

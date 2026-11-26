@@ -205,6 +205,9 @@ struct HangDemo: Equatable {
     /// The one button beside it: it stops while the demonstration plays, and plays it again otherwise.
     var control: Button
     var playing: Bool
+    /// It has played, or is playing, in this card proof: not playing, it
+    /// is then at its last frame; before, at its first.
+    var played: Bool
     /// The card's account on Threads, as the screens write it, and its
     /// page's address: as the link is shown, and whole as it is pasted.
     var account: String
@@ -300,8 +303,10 @@ enum Action: Equatable {
     case toFinish
     /// The system's settings, at this app's notifications.
     case openNotificationSettings
-    /// The demonstration of step 6 from its start: its button, or the
-    /// picture coming onto the screen.
+    /// The picture of step 6's demonstration has come onto the screen: it
+    /// plays, the first time in a card proof.
+    case showDemo
+    /// The demonstration of step 6 from its start: its button.
     case playDemo
     /// The demonstration at its last frame: its button, or its end.
     case stopDemo

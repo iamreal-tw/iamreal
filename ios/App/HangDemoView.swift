@@ -13,10 +13,11 @@ import UIKit
 /// timeline names report where they were laid out, and the camera is aimed
 /// by those places, so no coordinate is written here.
 ///
-/// It plays once when most of it has come onto the screen, and then when
-/// its button says so (`demo.playing`, which CardProofModel holds). Not
-/// playing, it is its first frame before it ever played and its last frame
-/// after. It plays whatever the phone's setting to reduce motion: the
+/// When most of it has come onto the screen it says so (`.showDemo`), and
+/// CardProofModel plays it, once in a card proof; then it plays when its
+/// button says so. Whether it plays and whether it has played are the
+/// model's (`demo.playing`, `demo.played`): not playing, it is its first
+/// frame before it ever played and its last frame after. It plays whatever the phone's setting to reduce motion: the
 /// button beside it stops it (#369). To VoiceOver the whole picture is one
 /// sentence.
 struct HangDemoView: View {
@@ -30,15 +31,14 @@ struct HangDemoView: View {
 
     /// When this play started; nil while it does not play.
     @State private var started: Date?
-    @State private var played = false
-    /// It has come onto the screen once.
+    /// It has said that it came onto the screen.
     @State private var seen = false
     /// Where each named box was laid out, in the row of screens.
     @State private var places: [String: CGRect] = [:]
 
     private static let row = "hang-demo-row"
     /// The platform whose way back the demonstration shows.
-    private static let variant = "ios"
+    static let variant = "ios"
     /// How much of the picture is on the screen when it starts.
     private static let most: CGFloat = 0.6
 
@@ -47,9 +47,10 @@ struct HangDemoView: View {
             if let moment {
                 picture(at: moment)
             } else if demo.playing, let started {
-                TimelineView(.animation) { context in picture(at: context.date.timeIntervalSince(started)) }
+                // No more often than the timeline's sixty moments a second, whatever the screen can show.
+                TimelineView(.animation(minimumInterval: 1.0 / 60)) { context in picture(at: context.date.timeIntervalSince(started)) }
             } else {
-                picture(at: played ? timeline.duration : 0)
+                picture(at: demo.played ? timeline.duration : 0)
             }
         }
         .aspectRatio(timeline.picture.width / timeline.picture.height, contentMode: .fit)
@@ -61,13 +62,13 @@ struct HangDemoView: View {
             Color.clear.preference(key: OnScreen.self, value: geometry.frame(in: .global))
         })
         .onPreferenceChange(OnScreen.self) { frame in
-            guard !seen, frame.height > 0 else { return }
+            guard moment == nil, !seen, frame.height > 0 else { return }
             let screen = UIScreen.main.bounds
             let visible = frame.intersection(screen).height
             // Most of the picture, or on a screen lower than the picture, most of the screen.
             guard visible >= Self.most * frame.height || visible >= Self.most * screen.height else { return }
             seen = true
-            perform(.playDemo)
+            perform(.showDemo)
         }
         .onAppear { follow(demo.playing) }
         .onChange(of: demo.playing) { follow($0) }
@@ -78,7 +79,6 @@ struct HangDemoView: View {
     private func follow(_ playing: Bool) {
         if playing {
             if started == nil { started = Date() }
-            played = true
         } else {
             started = nil
             step = 0
@@ -113,10 +113,9 @@ struct HangDemoView: View {
     /// A framing as the row's scale and place in a picture of `size`
     /// (design/motion/README.md, on framings); nil until its boxes have reported where they are.
     private func pose(_ name: String, in size: CGSize) -> Pose? {
-        guard let frame = timeline.frames[name], let screen = places[timeline.start],
-              let x = places[frame.x.t], let y = places[frame.y.t], screen.width > 0
-        else { return nil }
-        let scale = size.width / (CGFloat(frame.span) * screen.width / CGFloat(timeline.screen))
+        guard let frame = timeline.frames[name], let x = places[frame.x.t], let y = places[frame.y.t] else { return nil }
+        // A screen is drawn as many points wide as the timeline has units to a screen (`width`).
+        let scale = size.width / (CGFloat(frame.span) * width / CGFloat(timeline.screen))
         return Pose(
             scale: scale,
             x: size.width * CGFloat(frame.x.v) - scale * (x.minX + x.width * CGFloat(frame.x.a)),
@@ -161,12 +160,24 @@ struct HangDemoView: View {
         .padding(60)
     }
 
-    private func box(_ name: String, _ state: HangState, tag: String? = nil, trailing: Bool = false) -> Box {
-        Box(name: name, state: state, press: timeline.tap.press, ringFrom: timeline.tap.from, tag: tag, trailing: trailing)
+    /// The boxes of design/motion/hang.json this picture draws, by the
+    /// names the timeline calls them: the five screens and what is
+    /// pressed, framed or aimed at on them. What an iPhone does not have
+    /// is not here: the ✕ an Android goes back by (`x3`).
+    enum Name: String, CaseIterable {
+        case s0, copy, open
+        case s1, edit, linkrow
+        case s2, links
+        case s3, add, done3
+        case s4, urlfield, paste, done4
+    }
+
+    private func box(_ name: Name, _ state: HangState, tag: String? = nil, trailing: Bool = false) -> Box {
+        Box(name: name.rawValue, state: state, press: timeline.tap.press, ringFrom: timeline.tap.from, tag: tag, trailing: trailing)
     }
 
     /// One screen: the small words above it, and its card.
-    private func shot<Content: View>(_ name: String, _ kick: String, _ state: HangState, @ViewBuilder content: () -> Content) -> some View {
+    private func shot<Content: View>(_ name: Name, _ kick: String, _ state: HangState, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(kick).font(.system(size: 13)).foregroundColor(Theme.mute.color).lineLimit(1)
             VStack(alignment: .leading, spacing: 14, content: content)
@@ -191,7 +202,7 @@ struct HangDemoView: View {
     /// The app's own screen: this step's title, the link, the two buttons.
     private func own(_ state: HangState) -> some View {
         let copied = state.states["copied"] ?? 0
-        return shot("s0", demo.words.kickOwn, state) {
+        return shot(.s0, demo.words.kickOwn, state) {
             Text(demo.words.title).font(.system(size: 20, weight: .bold)).foregroundColor(Theme.ink.color)
                 .fixedSize(horizontal: false, vertical: true)
             Text(demo.link).font(.system(size: 13, design: .monospaced)).foregroundColor(Theme.ink.color).lineLimit(1)
@@ -208,14 +219,14 @@ struct HangDemoView: View {
                 .frame(height: 44)
                 .background(Theme.you.color)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
-                .modifier(box("copy", state))
+                .modifier(box(.copy, state))
                 Text(demo.words.open).font(.system(size: 14, weight: .bold)).foregroundColor(Theme.ink.color)
                     .lineLimit(1).truncationMode(.tail)
                     .padding(.horizontal, 10)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.ink.color, lineWidth: 1.5))
-                    .modifier(box("open", state))
+                    .modifier(box(.open, state))
             }
             VStack(alignment: .leading, spacing: 10) {
                 blank(280)
@@ -231,7 +242,7 @@ struct HangDemoView: View {
     private func profile(_ state: HangState) -> some View {
         let hung = CGFloat(state.states["linkOnProfile"] ?? 0)
         let labelled = CGFloat(state.states["resultLabel"] ?? 0)
-        return shot("s1", demo.words.kickProfile, state) {
+        return shot(.s1, demo.words.kickProfile, state) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     blank(120, 14)
@@ -261,7 +272,7 @@ struct HangDemoView: View {
                     .alignmentGuide(.bottom) { $0[.top] - 10 }
                     .opacity(labelled)
             }
-            .modifier(box("linkrow", state))
+            .modifier(box(.linkrow, state))
             .opacity(hung)
             .frame(height: 24 * hung + 40 * labelled, alignment: .top)
             .padding(.top, -14 * (1 - hung))
@@ -271,7 +282,7 @@ struct HangDemoView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line.color, lineWidth: 1))
-                    .modifier(box("edit", state, tag: demo.words.press))
+                    .modifier(box(.edit, state, tag: demo.words.press))
                 blank(60)
                     .frame(maxWidth: .infinity)
                     .frame(height: 38)
@@ -297,7 +308,7 @@ struct HangDemoView: View {
 
     /// Editing the profile: the list, of which the links are pressed.
     private func editing(_ state: HangState) -> some View {
-        shot("s2", demo.words.kickEdit, state) {
+        shot(.s2, demo.words.kickEdit, state) {
             bold(demo.words.edit)
             VStack(spacing: 0) {
                 ForEach(Array(demo.words.rows.enumerated()), id: \.offset) { _, name in row(name) }
@@ -307,7 +318,7 @@ struct HangDemoView: View {
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.mute.color)
                 }
                 .frame(height: 46)
-                .modifier(box("links", state, tag: demo.words.press))
+                .modifier(box(.links, state, tag: demo.words.press))
                 // Room for the tag under the row.
                 .padding(.bottom, 30)
                 Divider().overlay(Theme.line.color)
@@ -319,11 +330,11 @@ struct HangDemoView: View {
     /// The links: the row that adds one, and once one was added, it above that row.
     private func links(_ state: HangState) -> some View {
         let listed = CGFloat(state.states["linkListed"] ?? 0)
-        return shot("s3", demo.words.kickLinks, state) {
+        return shot(.s3, demo.words.kickLinks, state) {
             HStack {
                 bold(demo.words.links)
                 Spacer()
-                bold(demo.words.done, 15).modifier(box("done3", state, tag: demo.words.pressAgain, trailing: true))
+                bold(demo.words.done, 15).modifier(box(.done3, state, tag: demo.words.pressAgain, trailing: true))
             }
             // Room for the tag under what is at the top right.
             .padding(.bottom, 26)
@@ -336,7 +347,7 @@ struct HangDemoView: View {
                 Text(demo.words.add).font(.system(size: 15)).foregroundColor(Theme.ink.color).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 46)
-                    .modifier(box("add", state, tag: demo.words.press))
+                    .modifier(box(.add, state, tag: demo.words.press))
             }
             .padding(.bottom, 30)
         }
@@ -346,11 +357,11 @@ struct HangDemoView: View {
     private func adding(_ state: HangState) -> some View {
         let menu = state.states["pasteMenu"] ?? 0
         let pasted = state.states["pasted"] ?? 0
-        return shot("s4", demo.words.kickAdd, state) {
+        return shot(.s4, demo.words.kickAdd, state) {
             HStack {
                 bold(demo.words.add)
                 Spacer()
-                bold(demo.words.done, 15).modifier(box("done4", state, tag: demo.words.pressThen, trailing: true))
+                bold(demo.words.done, 15).modifier(box(.done4, state, tag: demo.words.pressThen, trailing: true))
             }
             // Room for the tag under what is at the top right, and for the paste bubble over the field.
             .padding(.bottom, 34)
@@ -370,11 +381,11 @@ struct HangDemoView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .opacity(menu * (1 - pasted))
                             .fixedSize()
-                            .modifier(box("paste", state))
+                            .modifier(box(.paste, state))
                             .alignmentGuide(.top) { $0[.bottom] + 6 }
                             .padding(.leading, 12)
                     }
-                    .modifier(box("urlfield", state, tag: demo.words.pasteHere, trailing: true))
+                    .modifier(box(.urlfield, state, tag: demo.words.pasteHere, trailing: true))
             }
             // Room for the tag under the field.
             .padding(.bottom, 26)

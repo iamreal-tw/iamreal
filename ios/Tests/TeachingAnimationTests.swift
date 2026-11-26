@@ -58,6 +58,28 @@ final class TeachingAnimationTests: XCTestCase {
         XCTAssertEqual(variants, ["ios", "android"], "the cases cover both platforms")
     }
 
+    /// Every box the timeline presses, frames or aims at on an iPhone is one the picture draws
+    /// (HangDemoView.Name), and the picture draws no box the timeline does not use: a name that
+    /// changed in one and not the other would leave the camera with nowhere to aim.
+    func testThePictureDrawsEveryBoxTheTimelineUsesOnAnIPhone() throws {
+        let timeline = try timeline()
+        let variant = HangDemoView.variant
+        var used: Set<String> = []
+        var framings: Set<String> = [timeline.start]
+        for event in timeline.events {
+            if let target = event.target { used.insert(timeline.own(target, for: variant)) }
+            if let frame = event.frame { framings.insert(timeline.own(frame, for: variant)) }
+        }
+        for name in framings {
+            let frame = try XCTUnwrap(timeline.frames[name], "no framing \(name)")
+            used.formUnion([frame.x.t, frame.y.t])
+        }
+        let drawn = Set(HangDemoView.Name.allCases.map(\.rawValue))
+        XCTAssertEqual(used.subtracting(drawn), [], "the timeline uses boxes the picture does not draw")
+        // The five screens are drawn whether or not a framing names them.
+        XCTAssertEqual(drawn.subtracting(used).subtracting(["s0", "s1", "s2", "s3", "s4"]), [], "the picture draws boxes the timeline does not use")
+    }
+
     func testAPlatformTheTimelineDoesNotHaveIsRefused() throws {
         XCTAssertThrowsError(try TeachingAnimation.hangState(try timeline(), variant: "desktop", at: 1))
     }

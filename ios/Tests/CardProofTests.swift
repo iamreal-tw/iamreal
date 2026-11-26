@@ -209,11 +209,13 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(demo.account, "@alice")
         XCTAssertEqual(demo.link, link)
         XCTAssertEqual(demo.description, Copy.bundled()("app_demo.hang"))
-        model.perform(.playDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.played, false)
+        model.perform(.showDemo)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
         try await press("停止", in: model)
         XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
         XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(demonstration(on: model.screen)?.played, true, "at its last frame")
         try await press("再看一次", in: model)
         XCTAssertEqual(demonstration(on: model.screen)?.playing, true)
         // Its end, as the picture tells it.
@@ -254,10 +256,13 @@ final class CardProofTests: XCTestCase {
         ]
         XCTAssertEqual(model.screen.texts, offered + ["上一步", "開啟提醒", "改提醒間隔或時刻", "這次不要"])
         await Snapshot.save(model, as: "7-reminder")
-        // Back to step 6, as it was left, and on again.
+        // Back to step 6, as it was left, and on again. The demonstration does not play by itself a second time.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("已複製"))
+        model.perform(.showDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(demonstration(on: model.screen)?.played, true)
         try await press("下一步", in: model)
 
         // The system does not let the app notify: nothing is set, and the step says why.
