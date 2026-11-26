@@ -2,8 +2,8 @@ import Foundation
 import UserNotifications
 
 /// The two screens of the reminder, over the card proof: the settings,
-/// and the screen to choose the interval and time (from the done screen
-/// or the settings). What they show is `schedule` and `settings`; what
+/// and the screen to choose the interval and time (from step 7 of the
+/// card proof or the settings). What they show is `schedule` and `settings`; what
 /// their buttons do is here.
 @MainActor
 final class ReminderPages: ObservableObject {

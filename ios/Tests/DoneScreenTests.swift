@@ -47,7 +47,7 @@ final class DoneScreenTests: XCTestCase {
         XCTAssertEqual(Flow.Answer.read(body, rows: Data("not rows".utf8)), .nothing)
     }
 
-    // The done screen ----------------------------------------------------------------------------
+    // The steps after the record was sent ------------------------------------------------------
 
     private func row(_ platform: String, _ kind: String, _ username: String, current: String? = nil, previous: String? = nil, known: Bool = true) -> Flow.ConsequenceRow {
         Flow.ConsequenceRow(platform: platform, known: known, kind: kind, username: username, current: current, previous: previous, switchesLeft: nil)

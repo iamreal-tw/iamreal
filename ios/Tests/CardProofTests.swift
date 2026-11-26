@@ -256,6 +256,12 @@ final class CardProofTests: XCTestCase {
         while let work = model.work { await work.value }
         XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
         XCTAssertNil(reminderStore.kept)
+        // "這次不要", then back from the last step: asked again as step 7 comes up, and still refused.
+        try await press("這次不要", in: model)
+        XCTAssertEqual(model.screen.step, 8)
+        try await press("上一步", in: model)
+        XCTAssertTrue(model.screen.texts.contains("打開通知設定"))
+        XCTAssertNil(reminderStore.kept)
         // Allowed in the settings: back in the app the reminder is set as offered, and the step says when.
         notifier.allows = true
         model.cameBack()

@@ -164,8 +164,12 @@ final class CardProofModel: ObservableObject {
         case .rehang:
             rehanging = true
             redraw()
-        case .toRemind: show(.remind)
-        case .toFinish: show(.finish)
+        case .toRemind:
+            show(.remind)
+            // Refused before, and maybe allowed since in the system's settings.
+            askAgain()
+        // Not while the system is being asked: what it answers would be set after "這次不要".
+        case .toFinish: if work == nil { show(.finish) }
         case .openNotificationSettings: deps.openNotificationSettings()
         case .turnOnReminder:
             run {
@@ -210,7 +214,15 @@ final class CardProofModel: ObservableObject {
     /// the app notify, and the cardholder may have been to the system's
     /// settings: asked again, and set as offered if it is allowed now.
     func cameBack() {
-        guard finished != nil, after == .remind, reminderRefused else { return }
+        askAgain()
+    }
+
+    /// Step 7 is up and says the system does not let the app notify: the
+    /// system is asked again (it shows nothing once it was refused), and
+    /// the reminder is set as offered if it is allowed now. Not when a
+    /// reminder was set meanwhile, from the settings: that one stays.
+    private func askAgain() {
+        guard finished != nil, after == .remind, reminderRefused, deps.reminders.settings == nil else { return }
         run {
             _ = await self.turnOnAsOffered()
             self.redraw()
@@ -310,7 +322,9 @@ final class CardProofModel: ObservableObject {
             screen = accounts(status)
         // After the record was sent nothing touches the card: back one step.
         case 7: show(.hang)
-        case 8: show(.remind)
+        case 8:
+            show(.remind)
+            askAgain()
         default: break
         }
     }

@@ -7,8 +7,8 @@ import SwiftUI
 /// Natural Earth's public-domain map data (1:50m), as the page has it. It
 /// holds no text and is hidden from VoiceOver.
 ///
-/// `animated` (the small card of the done screen, design/copy/card-proof.md
-/// step 6): the card slides in and the island stands up, as the page's
+/// `animated` (the small card of the last step, design/copy/card-proof.md
+/// step 8): the card slides in and the island stands up, as the page's
 /// style.css plays it; not when the phone is set to reduce motion.
 struct Mark: View {
     var animated = false

@@ -25,7 +25,7 @@ struct CopyDocument {
         // A short ID is the document's example.
         sentence = sentence.replacingOccurrences(of: #"(?<![0-9A-Za-z])[0-9A-HJKMNP-TV-Z]{10}(?![0-9A-Za-z])"#, with: "7K2Q9FM4XD", options: .regularExpression)
         // A date: the document's example of a record, or of the reminder's
-        // day with its weekday (2027-02-08（星期一）, step 6, the app's
+        // day with its weekday (2027-02-08（星期一）, step 7, the
         // reminder), whose weekday is a word.
         let dated = [
             sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}"#, with: "2026-11-16", options: .regularExpression),
