@@ -22,9 +22,11 @@ internal class Messages(private val c: Copy) {
     /** The sentence for a stop, or null where the copy has none for the app. */
     fun stop(stop: Stop, at: At): String? = when (stop.code) {
         "card" -> when (stop.values["reason"]) {
-            CardException.Reason.NO_TAP.name -> c.say("app_stops.no_tap", "spot" to c.say("app_read.spot_android"))
+            // Android's own sentences where a card is looked for on the phone's back: moving it is how it is found, and it is kept
+            // still only once the screen says it is being read (design/copy/card-proof.md, the rule for Android after step 2).
+            CardException.Reason.NO_TAP.name -> c.say("app_stops.no_tap_android")
             CardException.Reason.DROPPED.name -> when (at) {
-                At.READ -> c.say("app_stops.read_dropped")
+                At.READ -> c.say("app_stops.read_dropped_android")
                 At.PIN -> c.say("app_stops.dropped_pin_kept")
                 At.DECLARE -> c.say("app_stops.dropped")
             }

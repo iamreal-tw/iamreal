@@ -18,10 +18,14 @@ import (
 )
 
 // Extension is a CRL or entry extension. Value is the content of extnValue.
+// IDContent, when not nil, is written as the content of the OBJECT
+// IDENTIFIER in place of ID, as it is: for an identifier a library would
+// not write.
 type Extension struct {
-	ID       asn1.ObjectIdentifier
-	Critical bool
-	Value    []byte
+	ID        asn1.ObjectIdentifier
+	IDContent []byte
+	Critical  bool
+	Value     []byte
 }
 
 // Entry is one revoked certificate. Serial is the INTEGER's content bytes,
@@ -97,7 +101,11 @@ func addExtensions(b *cryptobyte.Builder, exts []Extension) {
 	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 		for _, x := range exts {
 			b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
-				b.AddASN1ObjectIdentifier(x.ID)
+				if x.IDContent != nil {
+					b.AddASN1(cbasn1.OBJECT_IDENTIFIER, func(b *cryptobyte.Builder) { b.AddBytes(x.IDContent) })
+				} else {
+					b.AddASN1ObjectIdentifier(x.ID)
+				}
 				if x.Critical {
 					b.AddASN1Boolean(true)
 				}
