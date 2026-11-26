@@ -234,6 +234,18 @@ func main() {
 		return c
 	})
 	write("entries-one-extension", fmt.Sprintf("%d entries of one-byte serials, each with one extension", n*1000), der)
+
+	// The most entries a file can hold: a serial number without content is
+	// not a serial number, but a reader finds that only after the signature.
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		c.Entries = make([]crltest.Entry, n*1000)
+		for i := range c.Entries {
+			c.Entries[i] = crltest.Entry{Serial: []byte{}, RevocationDate: crltest.ThisUpdate}
+		}
+		return c
+	})
+	write("entries-empty-serial", fmt.Sprintf("%d entries whose serial numbers have no content", n*1000), der)
 }
 
 // utcTime is a UTCTime, 2026-11-19T16:00:00Z.

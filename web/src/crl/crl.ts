@@ -278,33 +278,64 @@ export async function checkCrl(c: ParsedCrl, issuerKey: CryptoKey, bits: number)
   if (crlNumber === null) throw new Unusable("not_usable_crl_number", "malformed cRLNumber, or longer than 20 bytes");
 
   // From here on the bytes are MOICA's: the signature verified. What follows may cost what a CRL MOICA signs costs.
-  const keys = new Uint32Array(c.entryCount * KEY_WORDS);
+  // One more key than there are entries: the place a key is written to before it is known to be new.
+  const keys = new Uint32Array((c.entryCount + 1) * KEY_WORDS);
   let count = 0;
-  const seen = new Set<string>();
-  const low127 = new Map<string, number>();
-  const firstEntry: number[] = [];
+  const seen = emptySlots(c.entryCount);
+  /** Which entry each key first came from. */
+  const firstEntry = new Uint32Array(c.entryCount);
   for (let i = 0; i < c.entryCount; i++) {
     // Entries in order: the first with a problem decides, its extensions before its serial number.
     if (c.entryProblem?.index === i) throw new Unusable(c.entryProblem.code, c.entryProblem.detail);
     const k = keyFromSerial(c.der.subarray(c.serials[2 * i]!, c.serials[2 * i + 1]!));
     if (typeof k === "string") throw new Unusable("not_usable_serial", `entry ${i}: ${k}`);
-    const full = Array.from(k).join(",");
-    if (seen.has(full)) continue; // the same serial number again: one key
-    seen.add(full);
     keys.set(k, count * KEY_WORDS);
-    firstEntry.push(i);
+    if (earlierOrAdd(seen, keys, count, KEY_WORDS, 0xffffffff) >= 0) continue; // the same serial number again: one key
+    firstEntry[count] = i;
     count++;
   }
+  const low127 = emptySlots(count);
   for (let n = 0; n < count; n++) {
-    const w = keys.subarray(n * KEY_WORDS, n * KEY_WORDS + 4);
-    const id = `${w[0]},${w[1]},${w[2]},${w[3]! & 0x7fffffff}`;
-    const other = low127.get(id);
-    if (other !== undefined) {
-      throw new Unusable("not_usable_collision", `entries ${firstEntry[other]} and ${firstEntry[n]} share their lowest 127 bits`);
-    }
-    low127.set(id, n);
+    // The lowest 127 bits: the first three words and all but the highest bit of the fourth.
+    const other = earlierOrAdd(low127, keys, n, 4, 0x7fffffff);
+    if (other >= 0) throw new Unusable("not_usable_collision", `entries ${firstEntry[other]} and ${firstEntry[n]} share their lowest 127 bits`);
   }
   return { crlNumber, thisUpdate: c.thisUpdate, keys: keys.slice(0, count * KEY_WORDS), count };
+}
+
+/**
+ * An empty table for `earlierOrAdd`, for up to `n` keys: a power of two of
+ * slots, at least twice as many as keys, each 0 or the number of a key plus
+ * one. Four bytes a slot, where a set of strings took some hundred a key
+ * (README.md, "讀清冊的記憶體").
+ */
+function emptySlots(n: number): Uint32Array {
+  let size = 16;
+  while (size < 2 * n) size *= 2;
+  return new Uint32Array(size);
+}
+
+/**
+ * Looks key `n` of `keys` up in the table by its first `words` words, the
+ * last of them under `lastMask`. Returns the number of an earlier key that
+ * is the same there; otherwise puts `n` in and returns -1.
+ */
+function earlierOrAdd(slots: Uint32Array, keys: Uint32Array, n: number, words: number, lastMask: number): number {
+  const at = n * KEY_WORDS;
+  const last = words - 1;
+  let h = 0;
+  for (let w = 0; w < words; w++) h = Math.imul(h ^ (w === last ? keys[at + w]! & lastMask : keys[at + w]!), 0x9e3779b1) ^ (h >>> 15);
+  for (let slot = (h ^ (h >>> 16)) & (slots.length - 1); ; slot = (slot + 1) & (slots.length - 1)) {
+    const held = slots[slot]!;
+    if (held === 0) {
+      slots[slot] = n + 1;
+      return -1;
+    }
+    const other = (held - 1) * KEY_WORDS;
+    let same = true;
+    for (let w = 0; same && w < words; w++) same = w === last ? ((keys[at + w]! ^ keys[other + w]!) & lastMask) === 0 : keys[at + w] === keys[other + w];
+    if (same) return held - 1;
+  }
 }
 
 /** Parse and check in one step; a file that is not DER is `not_usable_der`. */

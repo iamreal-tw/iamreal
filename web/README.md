@@ -369,7 +369,7 @@ IAMREAL_TEST_PROOF_LOG_CLEARED_ON=2026-11-19 pnpm build:test-site   # 測試網�
 | `test/list-consequence.test.ts` | `spec/vectors/list-consequence.json` 的每一案：`requestConfig` 讀平台表、`requestCardState` 讀現況（只留頁面有自己那一份的平台）、`consequenceOfChoice`（`src/flow.ts`）算清單在每個平台上的後果，和標準答案相同。`device-core/` 讀同一份 |
 | `test/card-status.test.ts` | `spec/vectors/card-status.json` 的每一案：同樣讀平台表和現況，`statusOf`（`src/flow.ts`）算出「你的帳號」那個畫面要的現況（今天是不是已經 3 筆、每一列還剩幾次、今天改是不是更正、原樣保留的帳號），上次過卡到今天幾天用 `daysBetween`（`src/ui/messages.ts`），和標準答案相同。`device-core/` 讀同一份 |
 | `test/records-response.test.ts` | `spec/vectors/records-response.json` 的每一案：`submitRecord`（`src/api.ts`）讀送出後後台回的 201（`seq`、`record_hash`、`ordinal`、`kinds`、`account_cards`），`mismatchesOf`（`src/flow.ts`）比對確認畫面那幾列，和標準答案相同。`device-core/` 讀同一份 |
-| `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`spec/vectors/revocation-tree.json`（整份清冊可用、樹根，清冊裡每個序號的路徑或「在樹裡」，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；`crl/testdata/times/` 的每一份（時間的各種寫法），哪些收、哪些是 `not_usable_der`，收的 `thisUpdate` 和清冊日期和 `times/expected.json` 相同（最後九份是延伸欄位的 OID，規格「Object identifiers」）；時間欄位寫成 30 萬個字元的清冊是 `not_usable_der`，不是丟出別種例外（[#227](https://github.com/iamreal-tw/iamreal/issues/227)）；分份建樹和一次建的結果相同 |
+| `test/crl.test.ts` | `spec/vectors/poseidon2.json`（`hash_2`、`hash_3`、匿名編號、廢止清冊的樹和「不在樹裡」的證明，分 1、2、4 份建）；`spec/vectors/revocation-tree.json`（整份清冊可用、樹根，清冊裡每個序號的路徑或「在樹裡」，分 1、2、4 份建）；`crl/testdata/` 的每一份清冊，可不可用、原因代碼、編號、清冊日期、樹根都和 `crl/testdata/expected.json`（Go 的結果）相同；`crl/testdata/times/` 的每一份（時間的各種寫法），哪些收、哪些是 `not_usable_der`，收的 `thisUpdate` 和清冊日期和 `times/expected.json` 相同（最後十六份不是時間：延伸欄位的 OID，規格「Object identifiers」；元素後面多了東西）；時間欄位寫成 30 萬個字元的清冊是 `not_usable_der`，不是丟出別種例外（[#227](https://github.com/iamreal-tw/iamreal/issues/227)）；分份建樹和一次建的結果相同 |
 | `test/device-checks.test.ts` | `spec/vectors/device-checks.json`（`spec/device-checks.md`）：選憑證和檢查憑證（`src/certificate.ts` 的 `selectCertificate`），每一案的結果是選出的憑證和讀到的值，或原因；`crl_max_age_days` 哪些值讀得懂、清冊多舊算過期的 `L`、從索引選哪個檔、鏡像給的清冊用不用（`src/api.ts` 的 `requestConfig`，`src/crl/revocation.ts` 的 `crlMaxAge`、`chooseFromIndex`、`loadCrl`），每一案的結果是用的清冊或原因，和之後記住的編號。標準答案由 `test/generate/device-checks.ts` 用 `test/fixtures/` 產生，每一案的結果手寫在產生器裡（見 `spec/device-checks.md`「Test vectors」） |
 | `test/circuit-inputs.test.ts` | `spec/vectors/circuit-inputs.json`：每一案的憑證通過檢查、選到的電路，電路的輸入（`src/prover/inputs.ts`）和預期的公開輸入都和標準答案相同。標準答案由 `test/generate/circuit-inputs.ts` 從 `test/fixtures/` 產生，產生時讓電路執行過每一案 |
 | `test/certificate.test.ts` | 照電路的走法預先檢查憑證時，每一次讀取都在 TBS 裡面（標準答案表達不了的部分） |
@@ -500,11 +500,14 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 
 ## 讀清冊的記憶體
 
-清冊是從資料網域下載的，鏡像最多存 32 MiB 的檔（`worker/src/mirror.ts`）；驗過簽章之前，檔裡的位元組可以是路上任何人放的。所以 `src/crl/crl.ts` 的 `parseCrl` 讀到驗章為止，用的記憶體不隨元素裡放了多少東西而長（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）：
+清冊是從資料網域下載的；驗過簽章之前，檔裡的位元組可以是路上任何人放的。所以 `src/crl/crl.ts` 的 `parseCrl` 讀到驗章為止，用的記憶體不隨元素裡放了多少東西而長，只隨檔案的大小長（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）：
 
 - **不先把一個元素裡的子元素列成陣列**，一個一個走（`src/der.ts` 的 `Elements`）。一個延伸欄位只看前兩三個子元素，後面還有東西就不是 DER，不用走完
 - **每一筆廢止只留序號在檔裡的位置**（兩個 32 位元的數字，放在一個會加倍的陣列）。每一筆的延伸欄位讀完就丟，只記第一筆有問題的那一筆是哪一筆、什麼原因：照規格，各筆依序看，第一筆有問題的決定結果
 - **OID 不轉成字串**，檢查完直接比位元組（`checkOid`）
+- **驗章之後找重複的序號、找最低 127 個位元相同的兩把鍵，用一張放鍵的編號的表**（`earlierOrAdd`，每格 4 個位元組），不替每把鍵建字串放進集合
+
+**上限是鏡像的，不是這一頁的。** 鏡像最多存 32 MiB 的檔（`worker/src/mirror.ts`），下面量的是這個大小之內最壞的檔。這一頁下載清冊時自己不設大小的上限（`src/api.ts`）：資料網域給更大的檔，記憶體照檔案的大小等比例多用（檔案本身、驗章時的一份、每 19 個位元組最多一筆的 8 個位元組）。要不要在裝置上加上限是規格的事，這裡沒有做
 
 量法是 [`test/crl-size.ts`](test/crl-size.ts)（`node --experimental-strip-types test/crl-size.ts DIR`），每個檔一個程序，量程序的記憶體高點從讀檔之前到 `usableCrl` 回來漲了多少。檔由 `go run ./crl/internal/crltest/makelarge -out DIR` 寫，都在 32 MiB 之內，用沒有人信任的金鑰簽。2026-11-26，Node 22.23.4，Apple Silicon：
 
@@ -516,14 +519,16 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | 一個延伸欄位的 OID 約 3,355 萬節 | 1,113.1 MiB | 68.5 MiB | 32.2 MiB |
 | 1,118,000 筆廢止，每筆一個延伸欄位 | 766.0 MiB | 93.6 MiB | 32.5 MiB |
 | 1,677,697 筆廢止，沒有延伸欄位 | 522.5 MiB | 94.1 MiB | 32.1 MiB |
+| 1,765,000 筆廢止，序號沒有內容（一個檔裝得下的最多筆數） | 沒有量 | 95.0 MiB | 32.1 MiB |
 | 16 個延伸欄位，15 個的 OID 各約 224 萬節 | 489.5 MiB | 68.4 MiB | 32.3 MiB |
 | 3,050,361 個清冊層級的延伸欄位 | 104.1 MiB | 72.3 MiB | 32.3 MiB |
 | 一筆帶 3,050,356 個延伸欄位 | 103.7 MiB | 71.8 MiB | 32.4 MiB |
 | 清冊編號、序號、發證者名稱各約 33,553,000 個位元組 | 65 到 67 MiB | 65.8 到 65.9 MiB | 32.1 到 32.3 MiB |
+| 對照：線上的 G2（2026-11-26 17 時，339,764 把鍵，可用；從 `test-data.iamreal.tw` 下載） | 407.3 MiB | 64.3 MiB | 16.1 MiB |
 
-- **現在最高是 94 MiB**：檔案本身 32 MiB，驗章時 WebCrypto 把要驗的內容再複製一份約 32 MiB，序號的位置最多約 24 MiB（168 萬筆，陣列加倍的那一刻新舊兩份）。前三列的檔不是 DER，讀到第一個多出來的子元素就停，沒有走到驗章
-- **簽章驗得過之後**（`checkCrl` 的後半）才配置每一筆的鍵，找重複用的集合也在那之後：那時位元組是內政部簽的，大小是內政部的清冊的大小，不是路上的人能決定的。這一段沒有改，也不在上表
-- 每一案的結果和改之前相同：`crl/testdata/` 兩個目錄的每一份；另外把那些檔隨機改壞 6,000 份（刪、複製、插入子元素，改標籤、截短），新舊兩份讀法、`device-core/` 和 Go 的 `crl/` 四者的原因代碼逐份相同（一次性的比對，程式沒有留在版控裡）
+- **32 MiB 之內現在最高是 95 MiB**：檔案本身 32 MiB，驗章時 WebCrypto 把要驗的內容再複製一份約 32 MiB，序號的位置最多約 24 MiB（168 到 177 萬筆，陣列加倍的那一刻新舊兩份）。前三列的檔不是 DER，讀到第一個多出來的子元素就停，沒有走到驗章
+- **簽章驗得過之後**（`checkCrl` 的後半）才配置每一筆的鍵和找重複用的表：那時位元組是內政部簽的，大小是內政部的清冊的大小，不是路上的人能決定的。上表只有最後一列走到這裡：線上的 G2 原本多用 407 MiB，幾乎都是替 34 萬把鍵各建兩個字串放進集合；現在 64 MiB
+- 每一案的結果和改之前相同：`crl/testdata/` 兩個目錄的每一份。為了這次改寫加的案例：多筆廢止之間由第一筆有問題的決定（`crl/testdata/` 的 `entry-*-then-entry-*` 三份）、元素後面多了東西（`crl/testdata/times/` 的 `extension-*`、`entry-*`、`tbs-then-null` 七份）。另外做過一次性的比對（程式沒有留在版控裡，這一項不能重跑）：把那些檔隨機改壞 6,000 份（刪、複製、插入子元素，改標籤、截短），新舊兩份讀法、`device-core/` 和 Go 的 `crl/` 四者的原因代碼逐份相同
 
 ## 已知的限制
 
