@@ -65,26 +65,26 @@ export interface HangState {
   step: number;
 }
 
-export type TapEvent =
+export type SenseEvent =
   | { at: number; do: "enter" | "move"; y: number; dur: number }
   | { at: number; do: "ring" | "leave"; dur: number };
 
-/** design/motion/tap.json. */
-export interface TapTimeline {
+/** design/motion/sense.json. */
+export interface SenseTimeline {
   version: number;
   rounds: number;
   rest: { card: string; ring: boolean };
   enter: { from: number };
   ring: { from: number; to: number };
-  variants: Record<string, { duration: number; events: TapEvent[] }>;
+  variants: Record<string, { duration: number; events: SenseEvent[] }>;
 }
 
-export interface TapState {
+export interface SenseState {
   /** 1 for the first round. */
   round: number;
   /** True from the moment the last round rests. */
   stopped: boolean;
-  /** The card's centre: `y` down the phone (0 top, 1 bottom), `x` phone widths to the side of its place; and how much of it shows. */
+  /** The card's centre: `y` down the phone (0 top, 1 bottom), `x` phone widths to the right of its place; and how much of it shows. */
   card: { y: number; x: number; opacity: number };
   ring: Ring | null;
 }
@@ -168,7 +168,7 @@ export function hangStateAt(timeline: HangTimeline, variant: string, seconds: nu
 }
 
 /** How long the picture of the card's place plays for `variant` before it rests: every round but the last whole, the last up to where it would leave. */
-export function tapLength(timeline: TapTimeline, variant: string): number {
+export function senseLength(timeline: SenseTimeline, variant: string): number {
   const v = timeline.variants[variant];
   if (v === undefined) throw new Error(`no variant ${variant}`);
   const leave = v.events.find((e) => e.do === "leave");
@@ -176,8 +176,8 @@ export function tapLength(timeline: TapTimeline, variant: string): number {
 }
 
 /** The picture of where the card goes, `seconds` after it starts, for the platform `variant` ("ios" or "android"). */
-export function tapStateAt(timeline: TapTimeline, variant: string, seconds: number): TapState {
-  const length = tapLength(timeline, variant);
+export function senseStateAt(timeline: SenseTimeline, variant: string, seconds: number): SenseState {
+  const length = senseLength(timeline, variant);
   const v = timeline.variants[variant]!;
   const t = within(seconds, length);
   const round = Math.min(timeline.rounds, Math.floor(t / v.duration) + 1);
@@ -187,7 +187,7 @@ export function tapStateAt(timeline: TapTimeline, variant: string, seconds: numb
   let ring: Ring | null = null;
   let placed = false;
   for (const e of v.events) {
-    // Before the card comes in it waits, unseen, beside where it will come in.
+    // Before the card comes in it waits, unseen, to the right of where it will come in.
     if (e.do === "enter" && !placed) {
       card.y = e.y;
       placed = true;

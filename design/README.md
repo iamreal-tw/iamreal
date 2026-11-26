@@ -13,7 +13,7 @@
 | `copy/` | 畫面上的文字，一個流程一份 |
 | `DESIGN.md` | 看起來怎麼樣，以及為什麼：兩層的視覺、顏色、字、點、線、版面、元件、動態、無障礙、不做的 |
 | `tokens.json` | 顏色、字級、間距的數值；key 是 CSS 變數的名稱 |
-| `motion/` | 教操作的兩段示範的時間表：掛上去（`hang.json`）、感應位置（`tap.json`），和格式的說明（`motion/README.md`） |
+| `motion/` | 教操作的兩段示範的時間表：掛上去（`hang.json`）、感應位置（`sense.json`），和格式的說明（`motion/README.md`） |
 | `screens/` | 每一頁、每一個畫面定稿的截圖，施工後換成實際的截圖 |
 | `fonts/` | 標題用的源流明體 TW 的子集（網頁用 WOFF2、app 用 OpenType）、授權（`OFL.txt`）、重新產生子集的腳本（`fonts/README.md`） |
 

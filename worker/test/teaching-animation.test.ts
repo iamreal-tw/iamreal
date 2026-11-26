@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { type HangEvent, hangStateAt, tapLength, tapStateAt } from "../src/teaching-animation.ts";
+import { type HangEvent, hangStateAt, senseLength, senseStateAt } from "../src/teaching-animation.ts";
 import { WORKER_DIR } from "./build.ts";
-import { difference, hangTimeline, tapTimeline, vectors } from "./teaching-animation.ts";
+import { difference, hangTimeline, senseTimeline, vectors } from "./teaching-animation.ts";
 
 const PLATFORMS = ["android", "ios"];
 /** The six changes of the screens (design/motion/README.md). */
@@ -28,6 +28,10 @@ test("hang.json makes sense on its own", () => {
   assert.deepEqual(Object.keys(tl.variants).sort(), PLATFORMS);
   assert.deepEqual(Object.keys(tl.states).sort(), [...CHANGES].sort());
   assert.ok(tl.start in tl.frames, `the first framing ${tl.start} is defined`);
+  // Every time a state divides by: none is 0. (The six changes may be: one that takes no time is done at once.)
+  for (const [name, seconds] of Object.entries({ duration: tl.duration, fade: tl.mark.fade, pressIn: tap.pressIn, pressHold: tap.pressHold, pressOut: tap.pressOut, ring: tap.ring, holdIn: tap.holdIn, holdOut: tap.holdOut })) assert.ok(seconds > 0, `${name} is more than 0 s`);
+  assert.ok(tap.from > 0 && tap.holdAt > tap.from && tap.to > tap.holdAt, "the ring only grows");
+  for (const [name, seconds] of Object.entries(tl.states)) assert.ok(seconds >= 0, `${name} does not take less than 0 s`);
   for (const [name, f] of Object.entries(tl.frames)) {
     assert.ok(f.span > 0, `framing ${name} has a width`);
     for (const anchor of [f.x, f.y]) {
@@ -50,7 +54,7 @@ test("hang.json makes sense on its own", () => {
       if (e.do === "camera") return e.at + e.dur;
       if (e.do === "mark" || e.do === "unmark") return e.at + tl.mark.fade;
       if (e.do === "state") return e.at + (tl.states[e.state] ?? 0);
-      if (e.do === "tap") return e.at + (e.hold ?? 0) + Math.max(e.hold === undefined ? tap.ring : tap.holdOut, tap.pressHold + tap.pressOut);
+      if (e.do === "tap") return e.at + (e.hold ?? 0) + Math.max((e.hold ?? 0) > 0 ? tap.holdOut : tap.ring, tap.pressHold + tap.pressOut);
       return e.at;
     };
     const marked = new Map<string, number>();
@@ -103,14 +107,15 @@ test("hang.json is the 20.7 s the research settled, and the platforms differ in 
   assert.deepEqual(tl.variants, { ios: { back: "done3" }, android: { back: "x3" } });
 });
 
-test("tap.json makes sense on its own", () => {
-  const tl = tapTimeline();
+test("sense.json makes sense on its own", () => {
+  const tl = senseTimeline();
   assert.equal(tl.rounds, 3);
   assert.deepEqual(tl.rest, { card: "stays", ring: false });
   assert.ok(tl.enter.from > 0 && tl.ring.to > tl.ring.from && tl.ring.from > 0);
   assert.deepEqual(Object.keys(tl.variants).sort(), PLATFORMS);
   for (const [platform, v] of Object.entries(tl.variants)) {
-    inOrder(v.events, `tap.json, ${platform}`);
+    inOrder(v.events, `sense.json, ${platform}`);
+    assert.ok(v.duration > 0, `${platform}: a round takes time`);
     assert.equal(v.events[0]!.do, "enter", `${platform}: the card comes in first`);
     assert.equal(v.events.at(-1)!.do, "leave", `${platform}: the card leaves last`);
     for (const kind of ["enter", "ring", "leave"]) assert.equal(v.events.filter((e) => e.do === kind).length, 1, `${platform}: one ${kind} a round`);
@@ -124,23 +129,23 @@ test("tap.json makes sense on its own", () => {
     }
     assert.ok(free <= v.duration + 1e-9, `${platform}: the last event ends at ${free} s, after the ${v.duration} s of a round`);
   }
-  assert.equal(tapLength(tl, "android"), 8.75 * 2 + 8.05);
-  assert.equal(tapLength(tl, "ios"), 3.75 * 2 + 3.05);
+  assert.equal(senseLength(tl, "android"), 8.75 * 2 + 8.05);
+  assert.equal(senseLength(tl, "ios"), 3.75 * 2 + 3.05);
 });
 
 test("the states are the answers of spec/vectors/teaching-animation.json", () => {
   const v = vectors();
   const hang = hangTimeline();
-  const tap = tapTimeline();
-  assert.ok(v.hang.length >= 12 && v.tap.length >= 12, "a dozen moments of each");
+  const sense = senseTimeline();
+  assert.ok(v.hang.length >= 12 && v.sense.length >= 12, "a dozen moments of each");
   for (const c of v.hang) assert.equal(difference(hangStateAt(hang, c.variant, c.seconds), c.state, v.tolerance), null, `hang, ${c.name} (${c.seconds} s)`);
-  for (const c of v.tap) assert.equal(difference(tapStateAt(tap, c.variant, c.seconds), c.state, v.tolerance), null, `tap, ${c.name} (${c.seconds} s)`);
+  for (const c of v.sense) assert.equal(difference(senseStateAt(sense, c.variant, c.seconds), c.state, v.tolerance), null, `sense, ${c.name} (${c.seconds} s)`);
 });
 
 test("the answers cover what the platforms have to agree on", () => {
   const v = vectors();
   const hang = hangTimeline();
-  const tap = tapTimeline();
+  const sense = senseTimeline();
   const at = (seconds: number) => v.hang.filter((c) => c.seconds === seconds);
   assert.ok(at(0).length > 0 && at(hang.duration).length > 0, "the start and the last frame");
   assert.ok(v.hang.some((c) => c.seconds > hang.duration), "past the end");
@@ -151,31 +156,56 @@ test("the answers cover what the platforms have to agree on", () => {
   // A long press, held: the event has `hold`, and the moment is inside it.
   const holds = hang.events.filter((e) => e.do === "tap" && e.hold !== undefined) as { at: number; hold: number }[];
   assert.ok(holds.some((e) => v.hang.some((c) => c.seconds > e.at && c.seconds < e.at + e.hold)), "a long press being held");
-  for (const step of [0, 1, 4, 5]) assert.ok(v.hang.some((c) => c.state.step === step), `step ${step}`);
+  for (const step of [0, 1, 2, 3, 4, 5]) assert.ok(v.hang.some((c) => c.state.step === step), `step ${step}`);
   // The one difference between the platforms: the same moment, another box.
   const differing = v.hang.filter((c) => c.variant === "android" && c.state.camera.to === "x3").map((c) => c.seconds);
   assert.ok(differing.some((s) => v.hang.some((c) => c.variant === "ios" && c.seconds === s && c.state.camera.to === "done3")), "going back, on both platforms");
   for (const platform of PLATFORMS) {
-    const cases = v.tap.filter((c) => c.variant === platform);
+    const cases = v.sense.filter((c) => c.variant === platform);
     for (const round of [1, 2, 3]) assert.ok(cases.some((c) => c.state.round === round), `${platform}, round ${round}`);
-    assert.ok(cases.some((c) => c.state.stopped && c.seconds > tapLength(tap, platform)), `${platform}, at rest`);
+    assert.ok(cases.some((c) => c.state.stopped && c.seconds > senseLength(sense, platform)), `${platform}, at rest`);
     assert.ok(cases.some((c) => c.state.ring !== null), `${platform}, a ring`);
+  }
+});
+
+// Where something ends (a tap, a ring, the last round), an implementation may
+// say "nothing" or "a ring that is all gone": the same picture, and which one
+// it says there depends on how it rounds. So no answer is that near an end.
+test("no answer is at the moment something ends", () => {
+  const v = vectors();
+  const hang = hangTimeline();
+  const sense = senseTimeline();
+  const NEAR = 0.001;
+  const tap = hang.tap;
+  const hangEnds = hang.events.flatMap((e) => (e.do === "tap" ? [e.at + (e.hold ?? 0) + Math.max((e.hold ?? 0) > 0 ? tap.holdOut : tap.ring, tap.pressHold + tap.pressOut)] : []));
+  for (const c of v.hang) for (const end of hangEnds) assert.ok(Math.abs(c.seconds - end) > NEAR, `hang, ${c.name}: ${c.seconds} s is where a tap ends`);
+  for (const [platform, timeline] of Object.entries(sense.variants)) {
+    const ends = [senseLength(sense, platform)];
+    for (let round = 0; round < sense.rounds; round++) {
+      if (round > 0) ends.push(round * timeline.duration);
+      for (const e of timeline.events) if (e.do === "ring") ends.push(round * timeline.duration + e.at + e.dur);
+    }
+    for (const c of v.sense.filter((x) => x.variant === platform)) {
+      // The start of a round is exact (a whole number of rounds), and the answers hold it on purpose.
+      const exact = c.seconds % timeline.duration === 0;
+      for (const end of ends) assert.ok(exact || Math.abs(c.seconds - end) > NEAR, `sense, ${c.name}: ${c.seconds} s is where something ends`);
+    }
   }
 });
 
 test("a state depends on the timeline and the seconds, and on nothing asked before", () => {
   const hang = hangTimeline();
-  const tap = tapTimeline();
+  const sense = senseTimeline();
   const moments = [0, 1.7, 11.9, 16.65, 20.7];
   const forward = moments.map((s) => hangStateAt(hang, "ios", s));
   const backward = [...moments].reverse().map((s) => hangStateAt(hang, "ios", s)).reverse();
   assert.deepEqual(backward, forward);
-  assert.deepEqual(tapStateAt(tap, "android", 7.25), (tapStateAt(tap, "android", 25.6), tapStateAt(tap, "android", 7.25)));
+  assert.deepEqual(senseStateAt(sense, "android", 7.25), (senseStateAt(sense, "android", 25.6), senseStateAt(sense, "android", 7.25)));
   // The timelines are read, never written.
   assert.deepEqual(hang, hangTimeline());
-  assert.deepEqual(tap, tapTimeline());
+  assert.deepEqual(sense, senseTimeline());
   assert.throws(() => hangStateAt(hang, "windows", 0), /no variant/);
-  assert.throws(() => tapStateAt(tap, "windows", 0), /no variant/);
+  assert.throws(() => senseStateAt(sense, "windows", 0), /no variant/);
 });
 
 test("the file the site's player will carry imports nothing and touches no clock or page", () => {

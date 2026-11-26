@@ -6,8 +6,8 @@
 // writing, each moment is asked of src/teaching-animation.ts; if one differs,
 // nothing is written.
 import { writeFileSync } from "node:fs";
-import { type HangState, type Ring, type TapState, hangStateAt, tapStateAt } from "../../src/teaching-animation.ts";
-import { TOLERANCE, VECTORS_FILE, type Vectors, difference, hangTimeline, tapTimeline } from "../teaching-animation.ts";
+import { type HangState, type Ring, type SenseState, hangStateAt, senseStateAt } from "../../src/teaching-animation.ts";
+import { TOLERANCE, VECTORS_FILE, type Vectors, difference, hangTimeline, senseTimeline } from "../teaching-animation.ts";
 
 // The two easings at half their time: cubic in and out is 0.5, quintic out is 1 - 0.5^5.
 const HALF_OUT = 0.96875;
@@ -57,6 +57,8 @@ h(
   3.1,
   hangState(["open", "s1", 0], 1, { marks: { open: 0.4 }, tap: { target: "open", pressed: 0.4, ring: TAP_HALF }, states: { copied: 1 } }),
 );
+h("the second step: the screen of editing the profile, whole", 6.2, hangState(["edit", "s2", 1], 2, { states: { copied: 1 } }));
+h("the third step: the screen of the links, whole", 8.4, hangState(["links", "s3", 1], 3, { states: { copied: 1 } }));
 h(
   "a long press, its ring growing",
   11.775,
@@ -95,10 +97,10 @@ h("the last frame, on iOS", 20.7, LAST);
 h("the last frame, on Android", 20.7, LAST, "android");
 h("past the end is the last frame", 25, LAST);
 
-const tap: Vectors["tap"] = [];
+const sense: Vectors["sense"] = [];
 const t = (name: string, variant: string, seconds: number, round: number, card: [number, number, number], ringNow: Ring | null = null, stopped = false) => {
-  const state: TapState = { round, stopped, card: { y: card[0], x: card[1], opacity: card[2] }, ring: ringNow };
-  tap.push({ name, variant, seconds, state });
+  const state: SenseState = { round, stopped, card: { y: card[0], x: card[1], opacity: card[2] }, ring: ringNow };
+  sense.push({ name, variant, seconds, state });
 };
 // The card halfway in: 1.39 × (1 - 0.96875) phone widths still to go.
 const COMING_X = 0.043438;
@@ -106,7 +108,7 @@ const COMING_X = 0.043438;
 const RING_HALF = ring(1.65625, 0.03125);
 
 t("Android, before the start is the start", "android", -1, 1, [0.735, 1.39, 0]);
-t("Android, the start: the card waits unseen, beside where it comes in", "android", 0, 1, [0.735, 1.39, 0]);
+t("Android, the start: the card waits unseen, to the right of where it comes in", "android", 0, 1, [0.735, 1.39, 0]);
 t("Android, the card halfway in", "android", 1, 1, [0.735, COMING_X, HALF_OUT]);
 // Halfway from 0.735 to 0.19.
 t("Android, the first move up, halfway", "android", 2.35, 1, [0.4625, 0, 1]);
@@ -132,15 +134,15 @@ t("iPhone, at rest", "ios", 10.6, 3, [0.213, 0, 1], null, true);
 t("iPhone, long after: still at rest", "ios", 60, 3, [0.213, 0, 1], null, true);
 
 const hangTl = hangTimeline();
-const tapTl = tapTimeline();
+const senseTl = senseTimeline();
 const wrong: string[] = [];
 for (const c of hang) {
   const d = difference(hangStateAt(hangTl, c.variant, c.seconds), c.state, TOLERANCE);
   if (d !== null) wrong.push(`hang, ${c.name} (${c.seconds} s): ${d}`);
 }
-for (const c of tap) {
-  const d = difference(tapStateAt(tapTl, c.variant, c.seconds), c.state, TOLERANCE);
-  if (d !== null) wrong.push(`tap, ${c.name} (${c.seconds} s): ${d}`);
+for (const c of sense) {
+  const d = difference(senseStateAt(senseTl, c.variant, c.seconds), c.state, TOLERANCE);
+  if (d !== null) wrong.push(`sense, ${c.name} (${c.seconds} s): ${d}`);
 }
 if (wrong.length > 0) {
   console.error(wrong.join("\n"));
@@ -151,10 +153,10 @@ if (wrong.length > 0) {
 const out: Vectors = {
   description:
     "The teaching animations at given moments (design/motion/README.md). Each case: with the timeline of `timelines` and the platform `variant`, the state `seconds` after the start. A number of an implementation's state is right when it is within `tolerance` of the number here; everything else is the same or it is wrong.",
-  timelines: { hang: "design/motion/hang.json", tap: "design/motion/tap.json" },
+  timelines: { hang: "design/motion/hang.json", sense: "design/motion/sense.json" },
   tolerance: TOLERANCE,
   hang,
-  tap,
+  sense,
 };
 writeFileSync(VECTORS_FILE, JSON.stringify(out, null, 1) + "\n");
-console.log(`Wrote ${hang.length} moments of hanging the link and ${tap.length} of the card's place to ${VECTORS_FILE}.`);
+console.log(`Wrote ${hang.length} moments of hanging the link and ${sense.length} of the card's place to ${VECTORS_FILE}.`);

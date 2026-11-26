@@ -2,7 +2,7 @@
  "description": "The teaching animations at given moments (design/motion/README.md). Each case: with the timeline of `timelines` and the platform `variant`, the state `seconds` after the start. A number of an implementation's state is right when it is within `tolerance` of the number here; everything else is the same or it is wrong.",
  "timelines": {
   "hang": "design/motion/hang.json",
-  "tap": "design/motion/tap.json"
+  "sense": "design/motion/sense.json"
  },
  "tolerance": 0.000001,
  "hang": [
@@ -217,6 +217,52 @@
      "resultLabel": 0
     },
     "step": 1
+   }
+  },
+  {
+   "name": "the second step: the screen of editing the profile, whole",
+   "variant": "ios",
+   "seconds": 6.2,
+   "state": {
+    "camera": {
+     "from": "edit",
+     "to": "s2",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 2
+   }
+  },
+  {
+   "name": "the third step: the screen of the links, whole",
+   "variant": "ios",
+   "seconds": 8.4,
+   "state": {
+    "camera": {
+     "from": "links",
+     "to": "s3",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 3
    }
   },
   {
@@ -644,7 +690,7 @@
    }
   }
  ],
- "tap": [
+ "sense": [
   {
    "name": "Android, before the start is the start",
    "variant": "android",
@@ -661,7 +707,7 @@
    }
   },
   {
-   "name": "Android, the start: the card waits unseen, beside where it comes in",
+   "name": "Android, the start: the card waits unseen, to the right of where it comes in",
    "variant": "android",
    "seconds": 0,
    "state": {

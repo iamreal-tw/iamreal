@@ -4,7 +4,7 @@
 // file's tolerance, everything else the same.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { HangState, HangTimeline, TapState, TapTimeline } from "../src/teaching-animation.ts";
+import type { HangState, HangTimeline, SenseState, SenseTimeline } from "../src/teaching-animation.ts";
 import { WORKER_DIR } from "./build.ts";
 
 export const MOTION_DIR = join(WORKER_DIR, "..", "design", "motion");
@@ -15,14 +15,14 @@ export const TOLERANCE = 0.000001;
 
 export interface Vectors {
   description: string;
-  timelines: { hang: string; tap: string };
+  timelines: { hang: string; sense: string };
   tolerance: number;
   hang: { name: string; variant: string; seconds: number; state: HangState }[];
-  tap: { name: string; variant: string; seconds: number; state: TapState }[];
+  sense: { name: string; variant: string; seconds: number; state: SenseState }[];
 }
 
 export const hangTimeline = (): HangTimeline => JSON.parse(readFileSync(join(MOTION_DIR, "hang.json"), "utf8")) as HangTimeline;
-export const tapTimeline = (): TapTimeline => JSON.parse(readFileSync(join(MOTION_DIR, "tap.json"), "utf8")) as TapTimeline;
+export const senseTimeline = (): SenseTimeline => JSON.parse(readFileSync(join(MOTION_DIR, "sense.json"), "utf8")) as SenseTimeline;
 export const vectors = (): Vectors => JSON.parse(readFileSync(VECTORS_FILE, "utf8")) as Vectors;
 
 /** Where `got` differs from `want`, as a path into the state; null when they are the same. */
