@@ -205,18 +205,24 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         thread(name = "config") {
             it.run()
             val said = try { CardProof.pausedIn(it.get()) == true } catch (e: ExecutionException) { false }
-            main.post { paused = said }
+            // Not when it was asked again meanwhile: the later answer says.
+            main.post { if (synchronized(this@Model) { config === it }) paused = said }
         }
     }
 
     /**
-     * The config, once the server answered. An answer that did not come, or that said card proofs are stopped, is asked for
-     * again the next time.
+     * The config, once the server answered. An answer that did not come is asked for again the next time; one that said card
+     * proofs are stopped is asked for again now, once: the operator may have resumed since.
      */
     private fun awaitConfig(): ByteArray {
-        val asked = synchronized(this) { config }
+        val kept = answerOf(synchronized(this) { config })
+        if (CardProof.pausedIn(kept) != true) return kept
+        return answerOf(synchronized(this) { askConfig().also { config = it } })
+    }
+
+    private fun answerOf(asked: FutureTask<ByteArray>): ByteArray {
         try {
-            return asked.get().also { if (CardProof.pausedIn(it) == true) synchronized(this) { if (config === asked) config = askConfig() } }
+            return asked.get()
         } catch (e: ExecutionException) {
             synchronized(this) { if (config === asked) config = askConfig() }
             throw e.cause as? ServerException ?: ServerException(Backend.NETWORK, 0, null)
