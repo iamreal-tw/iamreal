@@ -196,8 +196,10 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 /**
  * The test environment's only settings are the proof log's object, the data
  * bucket, the object's name, which proof log it is, the date it was last
- * cleared on and whether card proofs are taken (`CARD_PROOFS_PAUSED`, which
- * the operator changes on the dashboard: README.md, "停止和恢復收過卡"): so the issuer keys, MOICA's addresses and the clock cannot be
+ * cleared on, whether card proofs are taken (`CARD_PROOFS_PAUSED`, which
+ * the operator changes on the dashboard: README.md, "停止和恢復收過卡") and the
+ * name of a rebuild from the proof log the operator asks for
+ * (`REBUILD_PROOF_LOG`, changed the same way: README.md, "從證明紀錄重建"): so the issuer keys, MOICA's addresses and the clock cannot be
  * read from a setting, and the Worker has no binding to read the files of
  * Static Assets by (`checkSiteFiles`). (A secret set on the Worker with
  * `wrangler secret` is not in the configuration and is not seen here.)
@@ -205,7 +207,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
+    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }

@@ -118,7 +118,12 @@ describe("an object that is stopped between every two writes", () => {
     [6, 2, ["threads:b"]],
   ];
 
-  async function run(restart: boolean): Promise<{ answers: Answer[]; states: unknown[] }> {
+  /**
+   * `rebuild`: after every submission the object is rebuilt from the proof log (src/rebuild.ts), and stopped
+   * between the rebuild's beginning and its step, so that every later record is decided on a state that was
+   * computed again from the records, by an object that was not running when the step began.
+   */
+  async function run(restart: boolean, rebuild = false): Promise<{ answers: Answer[]; states: unknown[] }> {
     await freshProofLog(worker);
     const root = await publishG3(worker);
     const answers: Answer[] = [];
@@ -130,6 +135,12 @@ describe("an object that is stopped between every two writes", () => {
       if (restart) await worker.proofLog.restart();
       answers.push(await submit(worker, s));
       if (restart) await worker.proofLog.restart();
+      if (rebuild) {
+        assert.equal(await worker.proofLog.beginRebuild(`after-${i}`), true);
+        await worker.proofLog.restart();
+        await worker.proofLog.runAlarm();
+        assert.deepEqual(await worker.proofLog.rebuildStatus(), { token: `after-${i}`, status: "swapped", records: answers.filter((a) => a.status === 201).length, reason: null });
+      }
     }
     return { answers, states: await Promise.all(CARDS.map((c) => cardState(worker, c))) };
   }
@@ -142,6 +153,10 @@ describe("an object that is stopped between every two writes", () => {
     const codes = kept.answers.map((a) => (a.status === 201 ? "written" : (a.body.error as string)));
     assert.deepEqual([...new Set(codes)].sort(), ["daily_limit", "empty", "switch_limit", "written"]);
     assert.equal((kept.states[0] as { count: number }).count, codes.filter((c) => c === "written").length);
+  });
+
+  test("rebuilt from the proof log after every submission, with the object stopped in the middle of each rebuild, it answers the same and leaves every card in the same state", async () => {
+    assert.deepEqual(await run(true, true), await run(false));
   });
 });
 

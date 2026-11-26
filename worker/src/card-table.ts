@@ -139,12 +139,13 @@ export function readCard(sql: SqlStorage, platforms: readonly PlatformRow[], sco
 /**
  * Makes a copy of the card state table as it is now, in place of any copy
  * there is: SQLite copies the rows, and none of them passes through
- * JavaScript.
+ * JavaScript. `from` is another table of the same columns to copy in its
+ * place: the states a rebuild computed for a published count (rebuild.ts).
  */
-export function copyCards(sql: SqlStorage): void {
+export function copyCards(sql: SqlStorage, from = "cards"): void {
   dropCardsCopy(sql);
   sql.exec(`CREATE TABLE ${CARDS_COPY} ${CARD_COLUMNS}`);
-  sql.exec(`INSERT INTO ${CARDS_COPY} (scope_string, scoped_id, ${COLUMNS}) SELECT scope_string, scoped_id, ${COLUMNS} FROM cards`);
+  sql.exec(`INSERT INTO ${CARDS_COPY} (scope_string, scoped_id, ${COLUMNS}) SELECT scope_string, scoped_id, ${COLUMNS} FROM ${from}`);
 }
 
 /** Drops the copy of the card state table, if there is one. */
