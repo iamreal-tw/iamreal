@@ -26,7 +26,7 @@ import { readCountText } from "iamreal-protocol/counts.ts";
 import { type CountedSubmission, entryOf, writeEntry } from "./connection-log.ts";
 import { countsOf, countsPerMinuteOf } from "./counts.ts";
 import { readStrings } from "./json.ts";
-import { RETRY_AFTER_SECONDS, type RateClass, withinLimit } from "./rate-limit.ts";
+import { RETRY_AFTER_SECONDS, type RateClass, isOverloaded, withinLimit, withinStarts } from "./rate-limit.ts";
 import { recordVerifies } from "./record-proof.ts";
 import { type AcceptAnswer, CRL_MAX_AGE_DAYS, OTHER_SCHEMA, type RecordRefusal, type SubmissionRefusal, proofLogOf } from "./proof-log.ts";
 import { proofLogSettingsOf } from "./settings.ts";
@@ -383,6 +383,9 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
   // Before anything of the request is read and before the proof log's object is asked: a request over its
   // class's limit costs nothing more, counts towards no challenge, and leaves nothing in the connection log.
   else if (!(await withinLimit(env, endpoint.rate, request))) reply = { ...fail(429, "rate_limited"), retryAfter: RETRY_AFTER_SECONDS };
+  // The site-wide limit counts the one `config` a client asks for when a card proof starts, and no other request
+  // (rate-limit.ts, withinStarts; ADR-0026). Over it, the cardholder is told before a card is read.
+  else if (pathname === "/api/v1/config" && new URL(request.url).searchParams.has("start") && !(await withinStarts(env))) reply = { ...fail(503, "busy"), retryAfter: RETRY_AFTER_SECONDS };
   else {
     try {
       reply = await endpoint.handle(request, env, parts, notes);
@@ -390,8 +393,14 @@ export async function api(request: Request, env: Env, parts: ApiParts, later: (w
       // The path is one of the endpoints' own, not what the client wrote; the
       // error is named by its class and the step, never by its message.
       const cause = e instanceof Internal ? e.cause : e;
-      console.error(JSON.stringify({ event: "internal_error", id, endpoint: pathname, where: e instanceof Internal ? e.where : "handler", error: cause instanceof Error ? cause.name : "unknown" }));
-      reply = fail(500, "internal");
+      if (isOverloaded(cause)) {
+        // The proof log's object is overloaded: not to be asked again at once (ADR-0026).
+        console.error(JSON.stringify({ event: "proof_log_overloaded", id, endpoint: pathname }));
+        reply = { ...fail(503, "busy"), retryAfter: RETRY_AFTER_SECONDS };
+      } else {
+        console.error(JSON.stringify({ event: "internal_error", id, endpoint: pathname, where: e instanceof Internal ? e.where : "handler", error: cause instanceof Error ? cause.name : "unknown" }));
+        reply = fail(500, "internal");
+      }
     }
   }
   if (notes.counted !== undefined) {

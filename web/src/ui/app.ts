@@ -40,7 +40,7 @@
 // formats from the server's table (the engine's CardStatus); each
 // platform's prefix, hint and address from src/platforms.ts. ids and data-*
 // attributes are for the headless browser test and hold no value.
-import { type CardProofFlow, type CardStatus, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, cardProofsPaused, pageCounts, createCardProof, presentationOf } from "../index.ts";
+import { type CardProofFlow, type CardStatus, type Config, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, askToStart, cardProofsPaused, pageCounts, createCardProof, presentationOf } from "../index.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
@@ -207,11 +207,15 @@ export function startApp(o: AppOptions): void {
     window.scrollTo(0, 0);
   }
 
+  /** What `config` answered when the cardholder last pressed common.next on step 1 (askToStart): the card proofs that follow fall back on it. */
+  let startConfig: Config | null = null;
+
   function newFlow(): CardProofFlow {
     flow?.cancel();
     const f = createCardProof({
       card,
       prover: o.prover,
+      startConfig,
       onTiming: o.onTiming,
       onIdle: (stop) => flow === f && before(stopMessage(stop)),
       onProgress: (step) => flow === f && onProgress?.(step),
@@ -236,11 +240,32 @@ export function startApp(o: AppOptions): void {
     const message = messageArea();
     const faq = (q: string, ...answers: (string | Node)[]): HTMLElement =>
       el("details", {}, el("summary", {}, q), ...answers.map((a) => el("p", {}, a)));
-    const next = actionsEnd(primary(COPY.common.next, () => read()));
+    const pausedLine = (): HTMLElement => el("p", { class: "stop", attrs: { role: "status", "data-paused": "" } }, c.paused);
+    // Too many people now (card-proof.md, step 1, the section on too many people): above common.next, which stays to be pressed again.
+    const busyLine = el("p", { class: "stop", attrs: { role: "status", "data-busy": "" } }, c.busy);
+    // The start of a card proof: `config` asked with its mark, the one request counted against the site-wide
+    // limit (ADR-0026), before a card is read or the component's window opens. No answer: on to step 2, which asks again.
+    const start = primary(COPY.common.next, () => {
+      start.disabled = true;
+      busyLine.remove();
+      askToStart().then((answer) => {
+        start.disabled = false;
+        if (!next.isConnected) return;
+        if (answer !== null && typeof answer === "object" && "turnedAway" in answer) {
+          // Step 1 stays, to be pressed again: a retry (spec/counts.md).
+          pageCounts().retry(answer.turnedAway);
+          return void next.before(busyLine);
+        }
+        if (answer === "paused") return void next.replaceWith(pausedLine());
+        startConfig = answer;
+        read();
+      });
+    });
+    const next = actionsEnd(start);
     // The operator stopped taking card proofs: said here, before a card is read, in place of common.next
     // (card-proof.md, step 1). No answer: common.next stays, and step 2 asks again.
     cardProofsPaused().then((paused) => {
-      if (paused === true && next.isConnected) next.replaceWith(el("p", { class: "stop", attrs: { role: "status", "data-paused": "" } }, c.paused));
+      if (paused === true && next.isConnected) next.replaceWith(pausedLine());
     });
     show(
       1,
@@ -395,22 +420,36 @@ export function startApp(o: AppOptions): void {
       back.disabled = true;
       message.show(null);
       replace(working, c.signing);
-      f.confirmCard(value).then(
-        (status) => flow === f && accounts(f, status),
-        (e) => {
-          if (flow !== f) return;
-          card.release();
-          replace(working);
-          back.disabled = false;
-          message.show(stopMessage(stopOf(e)));
-          // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
-          if (retryable(f, e)) {
-            field.disabled = false;
-            field.focus();
-          }
-          // Otherwise the card proof ended: back reads the card again.
-        },
-      );
+      f.confirmCard(value).then((status) => flow === f && accounts(f, status), stopped);
+    }
+
+    function stopped(e: unknown): void {
+      if (flow !== f) return;
+      card.release();
+      replace(working);
+      back.disabled = false;
+      message.show(stopMessage(stopOf(e)));
+      if (retryable(f, e) && f.phase === "card_state_failed") {
+        // The card signed; the server said too many people to its state (card-proof.md, step 3): asked again
+        // with nothing signed again, so neither the PIN nor the card is needed.
+        confirm.hidden = true;
+        const again = primary(COPY.progress.retry, () => {
+          again.remove();
+          back.disabled = true;
+          message.show(null);
+          replace(working, c.signing);
+          f.retryCardState().then((status) => flow === f && accounts(f, status), stopped);
+        });
+        again.dataset.retry = "";
+        working.after(again);
+        return;
+      }
+      // A wrong PIN or a blocked window leaves the step to be tried again; nothing is resent by itself.
+      if (retryable(f, e)) {
+        field.disabled = false;
+        field.focus();
+      }
+      // Otherwise the card proof ended: back reads the card again.
     }
 
     show(
@@ -796,13 +835,21 @@ export function startApp(o: AppOptions): void {
             kinds.includes("restart") ? secondary(COPY.accounts.restart, () => before()) : null,
             kinds.includes("retry")
               ? primary(c.retry, () => {
+                  // Too many people when the challenge was asked (phase "chosen"): asked again, and the card signs;
+                  // the component's window opens in this click. Otherwise the same submission again.
+                  const again = f.phase === "chosen";
+                  if (again && !card.open()) {
+                    // Nothing was sent: the same button, once the browser allows the window.
+                    pageCounts().retry("popup_blocked");
+                    return void list.render(itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: at }), { at, message: stopMessage({ code: "card", card: "popup_blocked" }) });
+                  }
                   replace(buttons);
                   list.render(itemStates(PROGRESS_ITEMS, seen, { running: true, stoppedAt: null }));
                   onProgress = (step) => {
                     seen.add(step);
                     render();
                   };
-                  finish(f.resubmit());
+                  finish(again ? f.proceed(cq.accounts) : f.resubmit());
                 })
               : null,
           );

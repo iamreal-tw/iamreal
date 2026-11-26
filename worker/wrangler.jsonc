@@ -89,7 +89,11 @@
         { "name": "RATE_RECORDS", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
         { "name": "RATE_PUBLIC_READS", "namespace_id": "1004", "simple": { "limit": 180, "period": 60 } },
         { "name": "RATE_PAGES", "namespace_id": "1005", "simple": { "limit": 300, "period": 60 } },
-        { "name": "RATE_COUNTS", "namespace_id": "1006", "simple": { "limit": 120, "period": 60 } }
+        { "name": "RATE_COUNTS", "namespace_id": "1006", "simple": { "limit": 120, "period": 60 } },
+        // The site-wide limit (ADR-0026; src/rate-limit.ts, withinStarts): card proofs that may start in a
+        // minute, all networks together, counted on `GET /api/v1/config?start` only. A starting value for
+        // the operator to set (README.md, "限流").
+        { "name": "RATE_STARTS", "namespace_id": "1007", "simple": { "limit": 60, "period": 60 } }
       ],
       "vars": {
         // The name of the proof log's Durable Object: clearing the test log is giving it a new name.

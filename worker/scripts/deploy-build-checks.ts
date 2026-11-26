@@ -215,7 +215,7 @@ export function checkNothingOfTheTestBuild(b: BuildContents): void {
 export function checkBindings(wranglerOutput: string): void {
   assert.deepEqual(
     bindingsIn(wranglerOutput),
-    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_COUNTS: "Rate Limit", COUNTS: "Durable Object", COUNT_EVENTS_PER_MINUTE: "Environment Variable", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
+    { PROOF_LOG: "Durable Object", DATA: "R2 Bucket", CONNECTION_LOG: "R2 Bucket", RATE_CHALLENGES: "Rate Limit", RATE_CARD_STATE: "Rate Limit", RATE_RECORDS: "Rate Limit", RATE_PUBLIC_READS: "Rate Limit", RATE_PAGES: "Rate Limit", RATE_COUNTS: "Rate Limit", RATE_STARTS: "Rate Limit", COUNTS: "Durable Object", COUNT_EVENTS_PER_MINUTE: "Environment Variable", PROOF_LOG_OBJECT_NAME: "Environment Variable", PROOF_LOG_KIND: "Environment Variable", CARD_PROOFS_PAUSED: "Environment Variable", REBUILD_PROOF_LOG: "Environment Variable", TEST_PROOF_LOG_CLEARED_ON: "Environment Variable" },
     "the deploy build's bindings",
   );
 }
