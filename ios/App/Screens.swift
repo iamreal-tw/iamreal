@@ -107,7 +107,7 @@ struct Screens {
             buttons = [Button(label: copy("common.next"), action: .toPIN)]
         } else if let stop {
             // No card came, or it left: the same tap again. Anything else: the card is read again from the start.
-            let again = stop == .card(.noTap) || stop == .card(.dropped(pinSent: false))
+            let again = Self.tapsAgain(stop)
             buttons = [again ? Button(label: copy("app_read.tap_again"), action: .readCard) : Button(label: copy("app_read.restart"), action: .readAgain)]
         } else {
             buttons = [Button(label: copy("common.back"), action: .back, enabled: !running), Button(label: copy("app_read.tap_card"), action: .readCard, enabled: !running)]
@@ -124,8 +124,9 @@ struct Screens {
         case tapping
         /// The card signed; the card's state is being asked for.
         case signed
-        /// Another card than the one read: the PIN is kept, the tap can be made again.
-        case otherCard(String)
+        /// The tap ended and the PIN is kept (another card than the one read, no card, the card left before
+        /// the PIN went or after it was accepted): why, and the same tap again.
+        case tapAgain(String)
         /// The card proof stopped here.
         case stopped([String])
     }
@@ -145,7 +146,7 @@ struct Screens {
         case .signed:
             blocks.append(.busy(copy("app_pin.signed")))
             buttons = buttons.map { Button(label: $0.label, action: $0.action, enabled: false) }
-        case .otherCard(let message):
+        case .tapAgain(let message):
             blocks.append(.message(message))
             buttons = [Button(label: copy("app_read.tap_again"), action: .confirmCard)]
         case .stopped(let why):
@@ -450,7 +451,7 @@ struct Screens {
         let why = stop.map { submitFailed ? [copy("stops.submit_failed")] : message($0, tap: 3) }
         blocks.append(.items(items(labels, reached: reached, running: stop == nil, why: why)))
         guard let stop else { return Screen(step: 5, blocks: blocks) }
-        if stop == .card(.otherCard) {
+        if Self.tapsAgain(stop) {
             // The PIN is still there: only this tap again.
             return Screen(
                 step: 5, blocks: blocks,
@@ -772,6 +773,16 @@ struct Screens {
             mainButton: false, settings: settingsButton)
     }
 
+    /// The tap ended in a way that leaves it to be made again as it is:
+    /// no card came or the panel was closed, another card than the one
+    /// read, the card left.
+    static func tapsAgain(_ stop: Flow.Stop) -> Bool {
+        switch stop {
+        case .card(.noTap), .card(.cancelled), .card(.otherCard), .card(.dropped): return true
+        default: return false
+        }
+    }
+
     // Why a step stopped -------------------------------------------------------------
 
     /// The sentence for a stop, and after it the server's request ID when
@@ -787,8 +798,16 @@ struct Screens {
         case .card(.locked): return [copy("stops.card_locked")]
         case .card(.channel): return [copy("app_stops.channel")]
         case .card(.firstGeneration): return [copy("app_stops.first_generation")]
-        // Taps 2 and 3: what follows depends on whether the PIN was sent (#172).
-        case .card(.dropped): return [tap == 1 ? copy("app_stops.read_dropped") : copy("stops.card_error", ["code": "connection_lost"])]
+        // The card left: in tap 1 nothing is lost. In tap 2 the PIN is kept, but for a PIN that went to the card
+        // and was never accepted: that one is typed again. In tap 3 the card has accepted it before (#133).
+        case .card(.dropped(let pin)):
+            switch tap {
+            case 1: return [copy("app_stops.read_dropped")]
+            case 2: return [pin == .sent ? copy("app_stops.pin_maybe_received") : copy("app_stops.dropped_pin_kept")]
+            default: return [copy("app_stops.dropped")]
+            }
+        // The panel closed by the cardholder: said only where the card would have signed the declaration.
+        case .card(.cancelled): return tap == 3 ? [copy("app_stops.tap_cancelled")] : []
         case .card(.failed(let code)): return [copy("stops.card_error", ["code": code])]
         case .certificate(let problem, let date):
             let day = date.flatMap(Self.dateOfCertificateTime)

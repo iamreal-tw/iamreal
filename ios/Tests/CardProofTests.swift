@@ -624,6 +624,114 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
     }
 
+    // The card leaves, the panel is closed (#172) -------------------------------------------------
+
+    /// The first tap: a card that left, or none that came, is tapped again; a panel the cardholder closed
+    /// leaves the step as it was before the button, with no reason written.
+    func testTheFirstTapIsMadeAgain() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        card.nextTapsFail = [.dropped(.notSent), .noTap, .cancelled]
+        try await press("感應卡片", in: model)
+        XCTAssertTrue(model.screen.texts.contains("卡片在讀取途中離開了手機。請再感應一次，感應時不要移動卡片。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+        try await press("再感應一次", in: model)
+        XCTAssertTrue(model.screen.texts.contains("沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。"))
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertFalse(model.screen.texts.contains("停在這裡"), "no reason for a panel that was closed")
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "感應卡片"])
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["下一步"])
+        XCTAssertEqual(card.pinsReceived, 0)
+    }
+
+    /// The second tap, with the PIN in memory: only that tap is made again, and the PIN is not typed again,
+    /// when the card left before the PIN went to it, when it left after it had accepted the PIN, and when no
+    /// card came. A panel the cardholder closed leaves the step as before the button, the PIN still there.
+    func testTheSecondTapIsMadeAgainWithThePINInMemory() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        let kept = "卡片在感應途中離開了手機。PIN 還在，不用再輸入，請再感應一次。"
+        for (failure, sentence) in [(CardFailure.dropped(.notSent), kept), (.dropped(.accepted), kept), (.noTap, "沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。")] {
+            card.nextTapsFail = [failure]
+            if model.pinText.isEmpty, !model.holdsPIN { model.pinText = backend.pin }
+            let button = try XCTUnwrap(model.screen.buttons.last?.label)
+            try await press(button, in: model)
+            XCTAssertEqual(model.screen.step, 3)
+            XCTAssertTrue(model.screen.texts.contains(sentence), "\(failure): \(model.screen.texts)")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+            XCTAssertTrue(model.holdsPIN, "the PIN is kept for the tap to be made again")
+            XCTAssertEqual(model.pinText, "", "and not in the field")
+        }
+        // The panel closed: no reason, the screen as before the button; "確認卡片" taps again with the PIN kept.
+        card.nextTapsFail = [.cancelled]
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.screen.blocks.contains { if case .message = $0 { return true } else { return false } }, "no reason")
+        XCTAssertTrue(model.holdsPIN)
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4, "the same tap again, with the PIN that was in memory")
+        XCTAssertEqual(card.pinsReceived, 1, "the PIN went to the card once")
+    }
+
+    /// The card left while the PIN was going to it, and has never accepted this PIN: whether it counted a try
+    /// is not known. The PIN is not sent again by itself: it is dropped, the screen says so, and it is typed again.
+    func testAPINThatMayHaveReachedTheCardIsNotSentAgainByItself() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        card.nextTapsFail = [.dropped(.sent)]
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertTrue(model.screen.texts.contains("感應在送出 PIN 的時候中斷了，不確定卡片有沒有收到。為了不在你不知道的時候多用掉一次 PIN 的錯誤次數，app 不會自動重送。請再輸入一次 PIN，再感應一次。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.holdsPIN, "the PIN is dropped")
+        // Without a PIN typed again, no tap.
+        let taps = card.taps.count
+        try await press("確認卡片", in: model)
+        XCTAssertTrue(model.screen.texts.contains("請輸入 PIN。"))
+        XCTAssertEqual(card.taps.count, taps)
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+    }
+
+    /// The third tap: the card has accepted the PIN before, so wherever this tap loses the card, also while
+    /// the PIN goes to it, only this tap is made again with the PIN in memory. A panel the cardholder closed
+    /// says that the card did not sign. "取消" drops the PIN.
+    func testTheThirdTapIsMadeAgainWithThePINInMemory() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        let signatures = card.signatures
+        let left = "卡片在感應途中離開了手機。請再感應一次。"
+        var button = try XCTUnwrap(model.screen.buttons.last?.label)
+        for (failure, sentence) in [(CardFailure.dropped(.notSent), left), (.dropped(.sent), left), (.dropped(.accepted), left), (.cancelled, "感應取消了，卡片沒有簽。"), (.noTap, "沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。")] {
+            card.nextTapsFail = [failure]
+            try await press(button, in: model)
+            XCTAssertEqual(model.screen.step, 5)
+            XCTAssertTrue(model.screen.texts.contains(sentence), "\(failure): \(model.screen.texts)")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["再感應一次"])
+            XCTAssertEqual(model.screen.cancel?.label, "取消")
+            XCTAssertTrue(model.holdsPIN, "the PIN is kept: \(failure)")
+            XCTAssertEqual(card.signatures, signatures, "the card did not sign")
+            button = "再感應一次"
+        }
+        try await press("取消", in: model)
+        XCTAssertEqual(model.screen.step, 1)
+        XCTAssertFalse(model.holdsPIN)
+    }
+
     /// A PIN the card refuses is dropped, and asked for again on the same screen.
     func testAWrongPINIsDroppedAndAskedForAgain() async throws {
         try await onTheSecondDay()

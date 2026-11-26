@@ -66,12 +66,12 @@ final class NFCCard: Card {
             // Whatever stopped the tap, the panel closes as a failure. Cancelled on the panel, the system has closed it.
             if !cancelled { panel.fail(copy("app_panel.failed")) }
             // Cancelled on the panel once the card was there, before the
-            // PIN went out: as before it came. After, the card may have
-            // counted the PIN: that is a dropped tap (#172).
-            if cancelled && !card.pinSent { throw CardFailure.noTap }
+            // PIN went out: cancelled, as before it came. After, the card
+            // may have counted the PIN: that is a dropped tap (#172).
+            if cancelled && !card.pinSent { throw CardFailure.cancelled }
             switch error {
             case let failure as CardFailure: throw failure
-            case let error as NFCReaderError: throw Self.failure(error, pinSent: card.pinSent)
+            case let error as NFCReaderError: throw Self.failure(error, pin: card.pinFate)
             default: throw CardFailure.failed(code: "nfc")
             }
         }
@@ -92,12 +92,12 @@ final class NFCCard: Card {
     }
 
     /// An error of Core NFC once the card was there.
-    private static func failure(_ error: NFCReaderError, pinSent: Bool) -> CardFailure {
+    private static func failure(_ error: NFCReaderError, pin: PINFate) -> CardFailure {
         switch error.code {
         case .readerTransceiveErrorTagConnectionLost, .readerTransceiveErrorTagResponseError,
              .readerTransceiveErrorRetryExceeded, .readerTransceiveErrorTagNotConnected,
              .readerTransceiveErrorSessionInvalidated, .readerSessionInvalidationErrorSessionTimeout:
-            return .dropped(pinSent: pinSent)
+            return .dropped(pin)
         default:
             return .failed(code: "nfc")
         }
@@ -122,8 +122,9 @@ protocol CardPanel {
     /// Whether the panel closed because it was cancelled on the panel itself.
     var cancelled: Bool { get }
     /// Shows the panel with `message` and returns the way to send the card
-    /// commands once it is connected. Throws `CardFailure.noTap` when the
-    /// panel closes without a card.
+    /// commands once it is connected. Throws when the panel closes
+    /// without a card: `CardFailure.cancelled` when the cardholder closed
+    /// it, `CardFailure.noTap` otherwise.
     func waitForCard(_ message: String) async throws -> APDUTransport
     /// The panel's middle sentence, while the tap goes on.
     func say(_ message: String)
@@ -145,8 +146,9 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate, CardPanel 
     /// Whether the session ended because "取消" was pressed on the panel.
     var cancelled: Bool { queue.sync { cancelledOnPanel } }
 
-    /// Throws `CardFailure.noTap` when the session ends without a card:
-    /// cancelled, timed out, the app went to the background.
+    /// Throws when the session ends without a card: `cancelled` when the
+    /// cardholder closed the panel; `noTap` when it timed out or the app
+    /// went to the background.
     func waitForCard(_ message: String) async throws -> APDUTransport {
         let tag: NFCISO7816Tag = try await withCheckedThrowingContinuation { continuation in
             queue.async {
@@ -186,8 +188,8 @@ private final class TagReader: NSObject, NFCTagReaderSessionDelegate, CardPanel 
         if (error as? NFCReaderError)?.code == .readerSessionInvalidationErrorUserCanceled { cancelledOnPanel = true }
         // The panel is closed: nothing more is said on it, and it is not closed again.
         self.session = nil
-        // Before a card: no card came. After, the commands fail on their own.
-        waiting?.resume(throwing: CardFailure.noTap)
+        // Before a card: the cardholder closed the panel, or no card came. After, the commands fail on their own.
+        waiting?.resume(throwing: cancelledOnPanel ? CardFailure.cancelled : CardFailure.noTap)
         waiting = nil
     }
 

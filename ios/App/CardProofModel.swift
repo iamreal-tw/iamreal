@@ -480,6 +480,11 @@ final class CardProofModel: ObservableObject {
             guard self.flow === flow else { return }
             reached = 4
             screen = read(reached: 4, running: false, stop: nil)
+        } catch CardProofFlow.Stop.card(.cancelled) {
+            // The panel was closed: the step as before the button, no reason.
+            guard self.flow === flow else { return }
+            reached = 0
+            screen = read(reached: 0, running: false, stop: nil)
         } catch {
             guard self.flow === flow else { return }
             screen = read(reached: reached, running: false, stop: error as? CardProofFlow.Stop ?? .state)
@@ -490,8 +495,14 @@ final class CardProofModel: ObservableObject {
 
     private func confirmCard() async {
         guard let flow else { return }
-        // Another card was in the way: the PIN typed before is still here.
-        let pin = self.pin ?? PIN(pinText)
+        // The tap is made again: the PIN typed before is still here. One typed since takes its place.
+        let pin: PIN
+        if let kept = self.pin, pinText.isEmpty {
+            pin = kept
+        } else {
+            self.pin?.clear()
+            pin = PIN(pinText)
+        }
         self.pin = nil
         pinText = ""
         guard !pin.isEmpty else {
@@ -520,11 +531,16 @@ final class CardProofModel: ObservableObject {
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
             switch stop {
-            case .card(.pinIncorrect), .card(.channel):
+            case .card(.pinIncorrect), .card(.channel), .card(.dropped(.sent)):
+                // The flow dropped the PIN: it is typed again.
                 screen = screens.pin(name: name, state: .waiting(why.first))
-            case .card(.otherCard):
+            case .card(.cancelled):
+                // The panel was closed: the screen as before the button, no reason; the PIN is still here.
                 self.pin = pin
-                screen = screens.pin(name: name, state: .otherCard(why.first ?? ""))
+                screen = screens.pin(name: name, state: .waiting(nil))
+            case .card(.otherCard), .card(.noTap), .card(.dropped):
+                self.pin = pin
+                screen = screens.pin(name: name, state: .tapAgain(why.first ?? ""))
             default:
                 screen = screens.pin(name: name, state: .stopped(why))
             }

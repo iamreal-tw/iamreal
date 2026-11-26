@@ -483,7 +483,7 @@ final class ScreensTests: XCTestCase {
 
     /// The card left during the first tap: step 2 says so, and the same tap is done again.
     func testACardThatLeftTheFirstTapIsTappedAgain() {
-        let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(pinSent: false)))
+        let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(.notSent)))
         XCTAssertTrue(screen.texts.contains(copy("app_stops.read_dropped")))
         XCTAssertEqual(screen.buttons.map(\.action), [.readCard])
         XCTAssertEqual(screen.buttons.map(\.label), [copy("app_read.tap_again")])

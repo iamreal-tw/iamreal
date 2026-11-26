@@ -115,7 +115,7 @@ final class GpkiCardTests: XCTestCase {
     /// When the card leaves, the tap says whether the PIN had been sent:
     /// what happens next depends on it (#172).
     func testWhenTheCardLeavesTheTapKnowsWhetherThePINWasSent() async throws {
-        for (leavesAt, sent) in [(UInt8(0x50), false), (0x20, true), (0xea, true)] {
+        for (leavesAt, sent, fate) in [(UInt8(0x50), false, PINFate.notSent), (0x20, true, .sent), (0xea, true, .accepted)] {
             let card = try SimulatedGpkiCard(quirks: .init(leavesAt: leavesAt))
             let connection = GpkiCard(card)
             do {
@@ -125,6 +125,8 @@ final class GpkiCardTests: XCTestCase {
                 XCTAssertTrue(error is SimulatedGpkiCard.Left)
             }
             XCTAssertEqual(connection.pinSent, sent, "left at \(leavesAt)")
+            // Before the channel: not sent. At the PIN's command: sent, not answered. At the signature: the card had accepted it.
+            XCTAssertEqual(connection.pinFate, fate, "left at \(leavesAt)")
         }
     }
 }
