@@ -27,6 +27,13 @@
 //    that one, on the screen; without the script (/copy.js, blocked) a
 //    question is still opened by a click. Screenshots of the page folded
 //    and with one question opened by its address.
+// 8. Opens the card's page of hanging its proof (/hang/<short ID>,
+//    design/copy/hang.md, 示範): the demonstration plays in place of the five
+//    pictures, to its last frame; its one button stops it there and plays it
+//    again; the step being shown is marked; beside the steps on a desktop,
+//    above them on a phone, where it starts once it is on the screen; with
+//    reduced motion it plays all the same; without its player (/demo.js,
+//    blocked) the page is the five pictures. Screenshots of the three.
 //
 // The screens' own sentences, every way a card proof stops and every kind
 // of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
@@ -42,7 +49,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { COPY } from "../src/ui/copy.ts";
-import { Browser, type Page } from "./e2e/cdp.ts";
+import { Browser, type Page, sleep } from "./e2e/cdp.ts";
 import { FakeComponent } from "./e2e/fake-component.ts";
 import { startWorkerSite } from "./e2e/worker-site.ts";
 import { AUTHORITY_KEY_ID, KEY_USAGE_ENCRYPTION, SUBJECT_KEY_ID, buildTbs, certificate, name } from "./fixtures/certs.ts";
@@ -293,6 +300,129 @@ try {
   check((await openIds(noScript)).length === 0 && (await onScreen(noScript, "threads-knows")), "/faq#threads-knows without the script: the question on the screen, folded (the script is what opens it)");
   await noScript.click("#threads-knows > summary");
   check((await openIds(noScript)).join() === "threads-knows", "/faq without the script: a click on a question opens it");
+
+  // 8. Hanging the proof: the demonstration of design/copy/hang.md (示範), played by /demo.js -----------------
+  /** What the page shows of the demonstration: whether it plays, the button's word, the steps marked, how far the timeline is (ms). */
+  const demoNow = (p: Page): Promise<{ playing: string | undefined; button: string; marked: string[]; at: number; still: number }> =>
+    p.eval(`(() => {
+      const demo = document.querySelector("[data-demo]");
+      const row = demo.querySelector(".demo-row");
+      const shown = (e) => e !== null && e.getClientRects().length > 0;
+      return {
+        playing: demo.dataset.playing,
+        button: demo.querySelector("[data-demo-button]").textContent,
+        marked: [...document.querySelectorAll("[data-step].now")].map((e) => e.dataset.step),
+        at: row.getAnimations().length === 0 ? -1 : Number(row.getAnimations()[0].currentTime),
+        still: [...document.querySelectorAll("figure.sketch")].filter(shown).length,
+      };
+    })()`);
+  /** The whole timeline, in ms (design/motion/hang.json). */
+  const DEMO_LENGTH = 20_700;
+  const demoCopy = /\n## 示範\n([\s\S]*?)\n## /.exec(readFileSync(join(repo, "design", "copy", "hang.md"), "utf8"))![1]!;
+  const stopWord = /\| 示範還在動 \| (.*) \|/.exec(demoCopy)![1]!;
+  const replayWord = /\| 停了或動完了 \| (.*) \|/.exec(demoCopy)![1]!;
+  const hangUrl = `${ORIGIN}/hang/${short}`;
+  // A tab in the background is not drawn, so nothing comes onto its screen: each page here is brought to the front first.
+  await visitor.send("Page.bringToFront");
+  await desktop(visitor);
+  await visitor.goto(hangUrl);
+  // In place of the five pictures as the page opens; it plays once most of the picture is on the screen.
+  check((await visitor.waitFor<string>(`document.querySelector("[data-demo]").dataset.playing`, "the player to show the demonstration", 10_000)) !== undefined, "the player shows the demonstration");
+  await visitor.eval(`document.querySelector(".demo-picture").scrollIntoView({ block: "center" })`);
+  await visitor.waitFor(`document.querySelector("[data-demo]").dataset.playing === "true"`, "the demonstration to start", 10_000);
+  let demo = await demoNow(visitor);
+  check(demo.button === stopWord && demo.still === 0, `/hang/<short ID>: the demonstration plays in place of the pictures, its button says ${stopWord}: ${JSON.stringify(demo)}`);
+  check(await visitor.eval<boolean>(`(() => { const d = document.querySelector("[data-demo]"); const r = d.querySelector(".demo-picture").getBoundingClientRect(); return !d.hidden && Math.abs(r.width / r.height - 4 / 5) < 0.01; })()`), "the picture is shown, 4:5");
+  // On a desktop the four steps are beside it; the first screen writes the card's account and address.
+  check(await visitor.eval<boolean>(`document.querySelector(".steps").getBoundingClientRect().left >= document.querySelector(".demo-picture").getBoundingClientRect().right`), "on a desktop the four steps are to the right of the demonstration");
+  check(squash(await visitor.eval<string>(`document.querySelector('[data-box="s0"]').textContent`)).includes(squash("@alice 的個人檔案")) && (await visitor.eval<string>(`document.querySelector('[data-box="s0"] .address').textContent`)).endsWith(`/p/${short}`), "the first screen writes the card's account and its address");
+  // The step being shown is marked: at 6 s that is step 2 (the timeline's `step` events), and no other.
+  await visitor.eval(`(() => { for (const a of document.getAnimations()) a.currentTime = 6000; })()`);
+  await visitor.waitFor(`document.querySelector('[data-step="2"]').classList.contains("now")`, "step 2 to be marked", 5_000);
+  demo = await demoNow(visitor);
+  check(demo.marked.join() === "2" && demo.playing === "true", `at 6 s step 2 is the one marked, and it still plays: ${JSON.stringify(demo)}`);
+  // 停止, halfway: straight to the last frame, and the button plays it again.
+  await visitor.clickButton(stopWord);
+  demo = await demoNow(visitor);
+  check(demo.playing === "false" && demo.button === replayWord && demo.at === DEMO_LENGTH && demo.marked.length === 0, `${stopWord} goes to the last frame, the button then says ${replayWord}: ${JSON.stringify(demo)}`);
+  const lastFrame = (p: Page): Promise<boolean> =>
+    p.eval<boolean>(`(() => {
+      const picture = document.querySelector(".demo-picture").getBoundingClientRect();
+      const line = document.querySelector('[data-box="linkrow"]');
+      const r = line.getBoundingClientRect();
+      const tag = line.querySelector(".found-tag");
+      return getComputedStyle(line).opacity === "1" && getComputedStyle(tag).opacity === "1" && r.left >= picture.left && r.right <= picture.right && r.top >= picture.top && r.bottom <= picture.bottom;
+    })()`);
+  check(await lastFrame(visitor), "the last frame: the line of the link on the profile, with its label, inside the picture");
+  await shot(visitor, "hang-demo-desktop.png", 1100);
+  await desktop(visitor);
+  // 再看一次: from the start.
+  await visitor.clickButton(replayWord);
+  demo = await demoNow(visitor);
+  check(demo.playing === "true" && demo.button === stopWord && demo.at < 2_000, `${replayWord} plays it from the start: ${JSON.stringify(demo)}`);
+  // Left alone it plays to the end and stops there by itself (the last second of it, here).
+  await visitor.eval(`(() => { for (const a of document.getAnimations()) a.currentTime = ${DEMO_LENGTH - 1000}; })()`);
+  await visitor.waitFor(`document.querySelector("[data-demo]").dataset.playing === "false"`, "the demonstration to end", 10_000);
+  demo = await demoNow(visitor);
+  check(demo.button === replayWord && demo.at === DEMO_LENGTH && (await lastFrame(visitor)), `played to the end it stops on the last frame, the button says ${replayWord}: ${JSON.stringify(demo)}`);
+  // From the keyboard: the button takes the focus, shows it, and Enter plays.
+  await visitor.eval(`document.querySelector("[data-demo-button]").focus()`);
+  for (const type of ["keyDown", "keyUp"]) await visitor.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, ...(type === "keyDown" && { text: "\r" }) });
+  check((await visitor.waitFor<string>(`document.querySelector("[data-demo]").dataset.playing === "true" ? "playing" : null`, "Enter to play it", 5_000).catch(() => "")) === "playing", "Enter on the button plays it");
+  check(await visitor.eval<boolean>(`(() => { const b = document.querySelector("[data-demo-button]"); return document.activeElement === b && b.matches(":focus-visible") && getComputedStyle(b).outlineStyle !== "none"; })()`), "used from the keyboard, the button shows its focus ring");
+  await visitor.clickButton(stopWord);
+
+  // On a phone the demonstration is above the four steps, and starts only when most of it is on the screen.
+  const phone = await browser.newPage();
+  await phone.send("Page.enable");
+  await phone.send("Runtime.enable");
+  await phone.send("Page.bringToFront");
+  await phone.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 420, deviceScaleFactor: 1, mobile: true });
+  await phone.goto(hangUrl);
+  await sleep(800);
+  demo = await demoNow(phone);
+  check(demo.playing === "false" && demo.at === 0 && demo.button === replayWord, `on a short screen the demonstration waits below the fold, at its first frame: ${JSON.stringify(demo)}`);
+  check(await phone.eval<boolean>(`document.querySelector(".steps").getBoundingClientRect().top >= document.querySelector(".demo-picture").getBoundingClientRect().bottom`), "on a phone the four steps are under the demonstration");
+  await phone.eval(`document.querySelector(".demo-picture").scrollIntoView({ block: "center" })`);
+  await phone.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await phone.waitFor(`document.querySelector("[data-demo]").dataset.playing === "true"`, "the demonstration to start once it is on the screen", 10_000);
+  check(true, "scrolled onto the screen, it starts");
+  // Another width while it plays: the same moment, aimed again.
+  await phone.eval(`(() => { for (const a of document.getAnimations()) a.currentTime = ${DEMO_LENGTH - 500}; })()`);
+  await phone.waitFor(`document.querySelector("[data-demo]").dataset.playing === "false"`, "the demonstration to end on the phone", 10_000);
+  await phone.send("Emulation.setDeviceMetricsOverride", { width: 340, height: 844, deviceScaleFactor: 1, mobile: true });
+  await sleep(500);
+  check(await lastFrame(phone), "at another width the last frame is aimed again: the line of the link inside the picture");
+  await shot(phone, "hang-demo-phone.png", 390);
+
+  // With the system set to reduce motion it plays all the same (#369, the comment of 2026-11-26): the button is how to stop it.
+  const calm = await browser.newPage();
+  await calm.send("Page.enable");
+  await calm.send("Runtime.enable");
+  await calm.send("Page.bringToFront");
+  await calm.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  await desktop(calm);
+  await calm.goto(hangUrl);
+  await calm.waitFor(`document.querySelector("[data-demo]").dataset.playing`, "the player to show the demonstration", 10_000);
+  await calm.eval(`document.querySelector(".demo-picture").scrollIntoView({ block: "center" })`);
+  await calm.waitFor(`document.querySelector("[data-demo]").dataset.playing === "true"`, "the demonstration to start with reduced motion", 10_000);
+  check(await calm.eval<boolean>(`matchMedia("(prefers-reduced-motion: reduce)").matches`), "with reduced motion the demonstration plays, with its button");
+
+  // Without the player (blocked): the page as it was, the four pictures and the one of the result, no button of the demonstration.
+  const noPlayer = await browser.newPage();
+  await noPlayer.send("Page.enable");
+  await noPlayer.send("Runtime.enable");
+  await noPlayer.send("Page.bringToFront");
+  await noPlayer.send("Network.enable");
+  await noPlayer.send("Network.setBlockedURLs", { urls: ["*/demo.js"] });
+  await desktop(noPlayer);
+  await noPlayer.goto(hangUrl);
+  await sleep(300);
+  check(
+    await noPlayer.eval<boolean>(`(() => { const shown = (e) => e.getClientRects().length > 0; return !shown(document.querySelector("[data-demo]")) && !shown(document.querySelector("[data-demo-button]")) && [...document.querySelectorAll("figure.sketch")].filter(shown).length === 5 && document.querySelectorAll("[data-step].now").length === 0; })()`),
+    "/hang/<short ID> without the player: the five pictures, no demonstration and no button of it",
+  );
+  await shot(noPlayer, "hang-still-desktop.png", 1100);
 
   const violations = browser.logs.filter((l) => /Content Security Policy/i.test(l.text) && !/threads\.com/.test(l.text));
   check(violations.length === 0, `no Content-Security-Policy violation on the card proof page or the visitors' pages ${JSON.stringify(violations.map((l) => l.text))}`);

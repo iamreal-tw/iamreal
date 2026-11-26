@@ -18,6 +18,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -58,14 +59,17 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -144,31 +148,41 @@ internal fun Button(label: String, modifier: Modifier = Modifier, primary: Boole
     }
 }
 
-/** A line of text that is pressed: "取消". */
+/** A line of text that is pressed: "取消". `action`: one of a step's other things to do ("改成別的帳號"), in ink and the body's size. */
 @Composable
-internal fun TextButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
+internal fun TextButton(label: String, modifier: Modifier = Modifier, action: Boolean = false, onClick: () -> Unit) = BasicText(
     label,
     modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 10.dp),
-    style = TextStyle(color = Colours.mute, fontSize = 15.sp, textDecoration = TextDecoration.Underline),
+    style = TextStyle(color = if (action) Colours.ink else Colours.mute, fontSize = if (action) Type.sizeBody else 15.sp, textDecoration = TextDecoration.Underline),
 )
 
 /** A link inside the body: the red of what you do, underlined, bold. Opens a page outside the app. */
 @Composable
-internal fun Link(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) = BasicText(
+internal fun Link(text: String, modifier: Modifier = Modifier, size: TextUnit = 17.sp, onClick: () -> Unit) = BasicText(
     text,
     modifier.clickable(role = Role.Button, onClick = onClick).defaultMinSize(minHeight = Type.minTarget).padding(vertical = 8.dp),
-    style = TextStyle(color = Colours.you, fontSize = 17.sp, lineHeight = Type.leadingSmall, fontWeight = Type.weightHeading, textDecoration = TextDecoration.Underline),
+    style = TextStyle(color = Colours.you, fontSize = size, lineHeight = Type.leadingSmall, fontWeight = Type.weightHeading, textDecoration = TextDecoration.Underline),
 )
 
 /** The buttons of a step, one under another, as wide as the screen: the primary one first. */
 @Composable
 internal fun Actions(content: @Composable () -> Unit) = Column(Modifier.fillMaxWidth().padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { content() }
 
-/** One of the points under a screen's main part: a dot in ink before it. */
+/** One of the points under a screen's main part: a dot in ink before it. `strong`: the words of it in bold ink (not red: design/DESIGN.md keeps red for what you do). */
 @Composable
-internal fun Point(text: String) = Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+internal fun Point(text: String, strong: String? = null) = Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
     Box(Modifier.width(18.dp).padding(top = 11.dp)) { Box(Modifier.size(6.dp).background(Colours.ink, RoundedCornerShape(3.dp))) }
-    BasicText(text, Modifier.weight(1f), style = style(Type.sizeBody, 1.75.em))
+    val at = if (strong.isNullOrEmpty()) -1 else text.indexOf(strong)
+    val words = buildAnnotatedString {
+        if (at < 0) {
+            append(text)
+        } else {
+            append(text.substring(0, at))
+            withStyle(SpanStyle(color = Colours.ink, fontWeight = Type.weightHeading)) { append(strong!!) }
+            append(text.substring(at + strong!!.length))
+        }
+    }
+    BasicText(words, Modifier.weight(1f), style = style(Type.sizeBody, 1.75.em))
 }
 
 /** The questions that open to their answers, between lines. */
@@ -180,7 +194,7 @@ internal fun Questions(content: @Composable () -> Unit) = Column(Modifier.fillMa
 
 /** A question that opens to its answer (design/DESIGN.md, "元件", 常見問題): between lines, an arrow on the right. */
 @Composable
-internal fun Question(question: String, vararg answers: String) {
+internal fun Question(question: String, answer: @Composable ColumnScope.() -> Unit) {
     var open by remember { mutableStateOf(false) }
     Column {
         Row(
@@ -191,10 +205,14 @@ internal fun Question(question: String, vararg answers: String) {
             BasicText(question, Modifier.weight(1f), style = style(Type.sizeBody, Type.leadingH3, Colours.ink, Type.weightHeading))
             Chevron(open)
         }
-        if (open) for (a in answers) BasicText(a, Modifier.padding(bottom = 12.dp), style = style(15.sp, 1.75.em))
+        if (open) answer()
         Rule()
     }
 }
+
+/** A sentence of a question's answer. */
+@Composable
+internal fun Answer(text: String) = BasicText(text, Modifier.padding(bottom = 12.dp), style = style(15.sp, 1.75.em))
 
 /** The arrow of a question: down while it is closed, up while it is open. Not part of the question's text. */
 @Composable

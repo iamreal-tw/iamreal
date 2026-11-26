@@ -33,7 +33,8 @@
 | `proof-desktop.png`、`proof-phone.png` | `/p/7K2Q9FM4XD`（島民證明頁） | 實作版 |
 | `account-desktop.png`、`account-phone.png` | `/threads/@alice`（查詢頁，有卡片宣告這個帳號） | 實作版 |
 | `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 實作版 |
-| `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來） | 實作版 |
+| `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來）：示範停在最後一格 | 實作版 |
+| `hang-proof-still-desktop.png`、`hang-proof-still-phone.png` | 同一頁，示範的播放程式沒有載入時：四步各一張示意圖和結果圖 | 實作版 |
 | `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 實作版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 實作版 |
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 實作版 |
@@ -73,14 +74,14 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（iOS） |
+| `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 的感應位置 | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，有感應位置的示意圖 | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |
-| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（iOS） |
-| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（iOS） |
-| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（iOS） |
-| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（iOS） |
+| `card-proof-app-3-pin-phone.png` | 第 3 步：輸入 PIN | 實作版（Android） |
+| `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
+| `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
+| `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
 | `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（iOS） |
 | `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（iOS） |
 | `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（iOS） |

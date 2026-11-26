@@ -78,36 +78,181 @@ internal class Messages(private val c: Copy) {
     fun onePlatform(status: CardProof.Status): String? =
         if (status.tablePlatforms.size == 1 && status.slots.all { it.known }) Platforms.of(status.tablePlatforms[0])?.name else null
 
-    /** The lines above the list of step 4. */
-    fun accountsLead(status: CardProof.Status, single: String?): List<String> {
-        val fillOne = if (single != null) c.say("accounts.fill_one_single", "platform" to single) else c.say("accounts.fill_one")
-        val days = status.daysSince
-        return when {
-            status.slots.any { it.current != null } && days != null -> listOf(
-                c.say("accounts.current") + if (days == 0) c.say("accounts.last_card_proof_today") else c.say("accounts.last_card_proof", "days_ago" to days),
-            )
-            days != null -> listOf(c.say("accounts.nothing_now"), fillOne)
-            else -> listOf(c.say("accounts.none_yet"), fillOne)
-        }
+    /** Step 1's sentences of a proof that lists several accounts (before.one_proof, before.listed_together): only when the app knows more than one platform. */
+    fun beforeSeveral(): List<String> = if (Platforms.known.size == 1) emptyList() else listOf(c.say("before.one_proof"), c.say("before.listed_together"))
+
+    // Step 4 ---------------------------------------------------------------------------
+
+    /** A row of step 4 with a field, or shown as it is. */
+    class AccountRow(
+        val platform: String,
+        /** The app's name for the platform; its ID for one the app does not know. */
+        val name: String,
+        /** What the screen writes before the account (`@`); "" for a platform the app does not know. */
+        val prefix: String,
+        /** What the field starts with: the account the row holds now, or "". */
+        val current: String,
+        /** A field to type in, with app_accounts.preview beside it; false for a platform the app does not know (kept as it is), and on a day with 3 records. */
+        val editable: Boolean,
+        /** The lines under the row ("每一列下面的那一行"). */
+        val lines: List<String>,
+    )
+
+    /** Step 4 as it opens: [FillView] or [DeclaredView]. */
+    sealed class AccountsView {
+        abstract val title: String
     }
 
-    /** The notes below the list of step 4, before the button. */
-    fun accountsNotes(status: CardProof.Status, single: String?): List<String> {
-        if (status.dailyLimit) return emptyList()
-        val change = c.say("accounts.how_change") + c.say("accounts.switches_limited")
-        val preview = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name))
-        return when {
-            status.slots.any { it.current != null } -> listOf(c.say("accounts.how_refresh"), change, preview)
-            status.lastCardProof != null -> listOf(change, preview)
-            else -> listOf(
-                (if (single != null) c.say("accounts.one_per_platform_single", "platform" to single) else c.say("accounts.one_per_platform")) + c.say("accounts.switches_limited"),
-                preview,
-            )
-        }
+    /** Rows to fill: the card declares nothing, or (several platforms) the list opened with accounts.edit_list. */
+    class FillView(
+        override val title: String,
+        /** The lines above the rows. */
+        val lead: List<String>,
+        val rows: List<AccountRow>,
+        /** The lines below the rows, before the button. */
+        val notes: List<String>,
+        /** 3 records of the card today: the rows as they are, this sentence, and accounts.restart only. */
+        val dailyLimit: String?,
+        /** Opened with accounts.edit_list: accounts.keep goes back to what the card declares. */
+        val editList: Boolean,
+    ) : AccountsView()
+
+    /** An account the card declares now: `name` null where the screens speak of one platform. */
+    class Declared(val platform: String, val name: String?, val account: String)
+
+    /** The card declares accounts: what it declares, accounts.refresh, and the other actions. */
+    class DeclaredView(
+        override val title: String,
+        val declaredNow: String,
+        val current: List<Declared>,
+        /** accounts.last_proof, or accounts.last_proof_today. */
+        val last: String?,
+        val refresh: String,
+        val refreshNote: String,
+        /** accounts.switch: one platform, not on a day with 3 records. */
+        val switchAccount: String?,
+        /** accounts.withdraw, naming the account: one platform, not on a day with 3 records. */
+        val withdraw: String?,
+        /** accounts.edit_list in place of the two: several platforms, not on a day with 3 records. */
+        val editList: String?,
+        /** 3 records of the card today: the accounts as they are, this sentence, and accounts.restart only. */
+        val dailyLimit: String?,
+    ) : AccountsView()
+
+    /** Step 4 after accounts.switch (one platform, the card declares an account). */
+    class SwitchView(
+        val title: String,
+        /** accounts.declared_inline */
+        val intro: String,
+        /** accounts.switch above the field; null without a field. */
+        val heading: String?,
+        /** The field, empty; null when no switch is left (and the account was not put there today). */
+        val row: AccountRow?,
+        /** Below the field: what changing it does and what it uses up; or that no switch is left. */
+        val cost: String,
+        /** app_accounts.preview_note; null without a field. */
+        val previewNote: String?,
+        val keep: String,
+    )
+
+    private fun accountsTitle(single: String?): String = if (single != null) c.say("accounts.title_single", "platform" to single) else c.say("accounts.title")
+
+    private fun previewNote(single: String?): String = c.say("app_accounts.preview_note", "platform" to (single ?: Platforms.THREADS.name))
+
+    private fun row(slot: CardProof.Slot, daily: Boolean, lines: Boolean, current: String = slot.current ?: ""): AccountRow {
+        val p = if (slot.known) Platforms.of(slot.platform) else null
+        return AccountRow(
+            platform = slot.platform,
+            name = p?.name ?: slot.platform,
+            prefix = p?.prefix ?: "",
+            current = current,
+            editable = p != null && !daily,
+            lines = if (daily || !lines) emptyList() else rowLines(slot),
+        )
     }
 
-    /** The sentence under step 4's button: the system cannot tell whose an account is. */
-    fun notYours(single: String?): String = if (single != null) c.say("accounts.not_yours_single", "platform" to single) else c.say("accounts.not_yours")
+    private fun previewNotes(rows: List<AccountRow>, single: String?): List<String> = if (rows.any { it.editable }) listOf(previewNote(single)) else emptyList()
+
+    /** Step 4 as it opens ("4. 你的帳號"): rows to fill when the card declares nothing; what it declares and the actions when it does. */
+    fun accountsView(status: CardProof.Status): AccountsView {
+        val daily = status.dailyLimit
+        val single = onePlatform(status)
+        val dailyLimit = if (daily) c.say("stops.daily_limit") else null
+        val declared = status.slots.filter { it.current != null }
+        if (declared.isNotEmpty()) {
+            val current = declared.map {
+                val name = if (it.known) Platforms.of(it.platform)?.name ?: it.platform else it.platform
+                Declared(it.platform, if (single != null) null else name, if (it.known) Platforms.handle(it.platform, it.current!!) else it.current!!)
+            }
+            val days = status.daysSince
+            val only = if (single != null && !daily) current[0] else null
+            return DeclaredView(
+                title = accountsTitle(single),
+                declaredNow = c.say("accounts.declared_now"),
+                current = current,
+                last = days?.let { if (it == 0) c.say("accounts.last_proof_today") else c.say("accounts.last_proof", "days_ago" to it) },
+                refresh = c.say("accounts.refresh"),
+                refreshNote = c.say("accounts.refresh_note"),
+                switchAccount = only?.let { c.say("accounts.switch") },
+                withdraw = only?.let { c.say("accounts.withdraw", "account" to it.account) },
+                editList = if (single == null && !daily) c.say("accounts.edit_list") else null,
+                dailyLimit = dailyLimit,
+            )
+        }
+        // Nothing declared now. One platform: no line under a row never declared, and no rules of switching.
+        val never = status.lastCardProof == null
+        val rows = status.slots.map { row(it, daily, lines = single == null || !never) }
+        val rules = when {
+            single != null -> emptyList()
+            never -> listOf(c.say("accounts.one_per_platform") + c.say("accounts.switches_limited"))
+            else -> listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited"))
+        }
+        return FillView(
+            title = accountsTitle(single),
+            lead = listOf(if (never) c.say("accounts.none_yet") else c.say("accounts.nothing_now"), if (single != null) c.say("accounts.fill_one_single", "platform" to single) else c.say("accounts.fill_one")),
+            rows = rows,
+            notes = if (daily) emptyList() else rules + previewNotes(rows, single),
+            dailyLimit = dailyLimit,
+            editList = false,
+        )
+    }
+
+    /** Step 4 after accounts.edit_list (several platforms): one row per platform, each changed on its own. */
+    fun editListView(status: CardProof.Status): FillView {
+        val single = onePlatform(status)
+        val rows = status.slots.map { row(it, daily = false, lines = true) }
+        return FillView(
+            title = accountsTitle(single),
+            lead = listOf(c.say("accounts.current")),
+            rows = rows,
+            notes = listOf(c.say("accounts.how_change") + c.say("accounts.switches_limited")) + previewNotes(rows, single),
+            dailyLimit = null,
+            editList = true,
+        )
+    }
+
+    /** The row accounts.switch changes: the one account of a card on one platform; null when it declares none. */
+    fun switchSlot(status: CardProof.Status): CardProof.Slot? = status.slots.firstOrNull { it.known && it.current != null }
+
+    /** Step 4 after accounts.switch (one platform): the account now, a field for another, and what it costs. Only for a card [switchSlot] has a row of. */
+    fun switchView(status: CardProof.Status): SwitchView {
+        val single = onePlatform(status)
+        val slot = switchSlot(status)!!
+        val now = Platforms.handle(slot.platform, slot.current!!)
+        val title = accountsTitle(single)
+        val intro = c.say("accounts.declared_inline", "account" to now)
+        val keep = c.say("accounts.keep")
+        // Used up, and not put there today: no other account can be declared.
+        if (!slot.correctionToday && slot.switchesLeft == 0) {
+            return SwitchView(title, intro, null, null, c.say("accounts.row_used_up", "switches_used" to slot.switchCount), null, keep)
+        }
+        val cost = when {
+            slot.correctionToday -> c.say("accounts.row_today")
+            slot.switchesLeft == 1 -> c.say("confirm.uses_final_switch")
+            else -> c.say("accounts.switch_limit", "switches_left" to slot.switchesLeft - 1)
+        }
+        return SwitchView(title, intro, c.say("accounts.switch"), row(slot, daily = false, lines = false, current = ""), c.say("accounts.switch_effect", "account" to now) + cost, previewNote(single), keep)
+    }
 
     /** The lines under one row of step 4 (card-proof.md, "每一列下面的那一行"). None for a platform the app does not know: that sentence is not written yet. */
     fun rowLines(slot: CardProof.Slot): List<String> {
@@ -148,12 +293,45 @@ internal class Messages(private val c: Copy) {
 
     private fun allUnchanged(rows: List<Triple<String, String, String?>>): Boolean = rows.all { (kind, username, current) -> kind == "refresh" && current == username }
 
-    /** The button of step 5, by the whole list. */
-    fun confirmButton(q: CardProof.Consequence, single: String?): String = when {
-        q.accounts.isEmpty() -> c.say("confirm.button_withdraw_all")
-        allUnchanged(q.rows.map { Triple(it.kind, it.username, it.current) }) -> c.say("confirm.button_refresh")
-        single != null -> c.say("confirm.button_declare_single")
-        else -> c.say("confirm.button_declare")
+    /** One of the points under step 5's list; `strong`: the words of it in bold ink (confirm.cannot_delete). */
+    class ConfirmPoint(val text: String, val strong: String?)
+
+    /** What step 5 says around the list ("5. 確認"). The same choices as confirmView of web/src/ui/messages.ts. */
+    class ConfirmView(
+        val intro: String,
+        /** confirm.withdraw_stays: several platforms, an account withdrawn, the list not empty. */
+        val withdrawStays: String?,
+        /** confirm.listed_together: several platforms, the list not empty. */
+        val listedTogether: String?,
+        val points: List<ConfirmPoint>,
+        /** By the whole list: the same words as the button of step 4 that led here. */
+        val button: String,
+    )
+
+    fun confirmView(q: CardProof.Consequence, status: CardProof.Status): ConfirmView {
+        val single = onePlatform(status)
+        val empty = q.accounts.isEmpty()
+        // The points name the platforms of the screens: the one, or each the app knows of the server's table.
+        val named = if (single != null) single else status.tablePlatforms.joinToString(c.say("confirm.platform_separator")) { Platforms.of(it)?.name ?: it }
+        val notIdentifiable = ConfirmPoint(c.say("confirm.not_identifiable", "platform" to named), null)
+        val cannotDelete = c.say("confirm.cannot_delete")
+        return ConfirmView(
+            intro = if (empty) c.say("confirm.intro_withdraw_all") else if (single != null) c.say("confirm.intro_public") else c.say("confirm.intro"),
+            withdrawStays = if (!empty && single == null && q.rows.any { it.kind == "withdraw" }) c.say("confirm.withdraw_stays") else null,
+            listedTogether = if (!empty && single == null) c.say("confirm.listed_together") else null,
+            points = if (empty) {
+                listOf(ConfirmPoint(c.say("confirm.history_stays"), null), notIdentifiable, ConfirmPoint(c.say("confirm.holder_later_withdraw"), null))
+            } else {
+                listOf(notIdentifiable, ConfirmPoint(c.say("confirm.holder_later", "platform" to named, "cannot_delete" to cannotDelete), cannotDelete))
+            },
+            button = when {
+                empty && single != null && q.rows.size == 1 -> q.rows[0].let { c.say("confirm.button_withdraw", "account" to Platforms.handle(it.platform, it.username)) }
+                empty -> c.say("confirm.button_withdraw_all")
+                allUnchanged(q.rows.map { Triple(it.kind, it.username, it.current) }) -> c.say("confirm.button_refresh")
+                single != null -> c.say("confirm.button_declare_single")
+                else -> c.say("confirm.button_declare")
+            },
+        )
     }
 
     /** The title of step 6 (card-proof.md, the table of titles), by what the server says was recorded. */
