@@ -44,6 +44,24 @@ class DeviceCoreTest {
     }
 
     @Test
+    fun `the minimum app version is read as the cases of the Android app say`() {
+        val cases = vectors("min-app.json").getJSONArray("cases")
+        val mine = (0 until cases.length()).map { cases.getJSONObject(it) }.filter { it.getString("client") == "android" }
+        assertTrue("cases of the Android app", mine.size >= 20)
+        val verdicts = mutableSetOf<String>()
+        for (case in mine) {
+            val answer = JSONObject(String(DeviceCore.minApp(case.getJSONObject("config").toString().toByteArray(), case.getInt("app_build"), case.getLong("now"))))
+            assertEquals(case.getString("name"), case.getString("result"), answer.getString("verdict"))
+            if (case.getString("result") == "ok_until") assertEquals(case.getString("name"), case.getString("from"), answer.getString("from"))
+            verdicts += answer.getString("verdict")
+        }
+        assertEquals(setOf("ok", "ok_until", "stop", "unreadable"), verdicts)
+        // A build below 0 is a mistake of the app's code, not a build that is too old.
+        val e = assertThrows(DeviceCoreException::class.java) { DeviceCore.minApp("{}".toByteArray(), -1, 1_803_830_400) }
+        assertEquals(DeviceCoreException.ARGUMENT, e.code)
+    }
+
+    @Test
     fun `a list the core does not read is an exception with the code for input and nothing else`() {
         val challenge = vectors("declaration-code.json").getJSONArray("cases").getJSONObject(0).getString("challenge").toByteArray()
         val unsorted = """[{"platform":"threads","username":"alice"},{"platform":"test-example","username":"alice"}]"""

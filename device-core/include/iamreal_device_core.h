@@ -50,6 +50,10 @@ extern "C" {
 #define IDC_PROOF_LOG_PRODUCTION 0
 #define IDC_PROOF_LOG_TEST 1
 
+/* Which app asks, for idc_min_app. */
+#define IDC_CLIENT_ANDROID 0
+#define IDC_CLIENT_IOS 1
+
 /* Bytes the core hands to its caller. */
 typedef struct idc_buf {
   uint8_t *ptr;
@@ -162,6 +166,29 @@ int32_t idc_card_status(const uint8_t *platforms_json, size_t platforms_json_len
  * body of idc_session_card_state_request has it. IDC_ERR_INPUT for
  * anything else. */
 int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *out);
+
+/* Whether this build of the app may do a card proof, from the minimum app
+ * version of the server's config (spec/min-app.md): JSON in *out.
+ *
+ * config: the body of GET /api/v1/config, as the server sent it.
+ * client: IDC_CLIENT_ANDROID or IDC_CLIENT_IOS, the app that asks; it reads
+ * only its own member of min_app.
+ * app_build: the app's own build, the store's integer version number (the
+ * versionCode of the Android app, the build number of the iOS app).
+ * now: the phone's clock, in seconds since 1970-01-01T00:00:00Z.
+ *
+ * *out is one of:
+ *   {"verdict":"ok"}                              the app goes on as usual
+ *   {"verdict":"ok_until","from":"2027-03-01"}    it goes on, and says that
+ *     from that date in Taiwan this version can no longer do a card proof
+ *   {"verdict":"stop"}          it does not ask for the PIN or read the card,
+ *     and says this version must be updated
+ *   {"verdict":"unreadable"}    the field cannot be read (a body that is not
+ *     config's included): the app does not go on either
+ *
+ * No config is an error. IDC_ERR_ARGUMENT when client is neither of the two;
+ * IDC_ERR_INPUT when now is outside the years 2000 to 2049 in Taiwan. */
+int32_t idc_min_app(const uint8_t *config, size_t config_len, uint32_t client, uint32_t app_build, int64_t now, idc_buf *out);
 
 /* The answer to a submission, as the done screen tells it
  * (spec/records-response.md): JSON in *out.

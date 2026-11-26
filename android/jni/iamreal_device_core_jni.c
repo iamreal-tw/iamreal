@@ -189,6 +189,19 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeShortId(J
   return result(env, code, &out);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeMinApp(JNIEnv *env, jobject self, jbyteArray config, jint app_build,
+                                                                             jlong now) {
+  (void)self;
+  /* A build is 1 or more; one below 0 is not a build, and is not passed on as a large one. */
+  if (app_build < 0) return result(env, IDC_ERR_ARGUMENT, &(idc_buf){NULL, 0});
+  copy in;
+  if (!copy_in(env, config, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_min_app(in.ptr, in.len, IDC_CLIENT_ANDROID, (uint32_t)app_build, (int64_t)now, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
 JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeRecordsResponse(JNIEnv *env, jobject self, jbyteArray response,
                                                                                       jbyteArray rows_json) {
   (void)self;

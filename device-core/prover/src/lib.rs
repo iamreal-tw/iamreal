@@ -13,6 +13,7 @@
 
 mod alloc;
 mod json;
+mod min_app;
 mod records_response;
 mod server_state;
 
@@ -63,6 +64,11 @@ pub const IDC_ERR_REFUSED: i32 = 4;
 pub const IDC_PROOF_LOG_PRODUCTION: u32 = 0;
 /// A test log.
 pub const IDC_PROOF_LOG_TEST: u32 = 1;
+
+/// The Android app, for [`idc_min_app`].
+pub const IDC_CLIENT_ANDROID: u32 = 0;
+/// The iOS app, for [`idc_min_app`].
+pub const IDC_CLIENT_IOS: u32 = 1;
 
 /// Bytes the core hands to its caller. The caller reads `len` bytes at
 /// `ptr` and gives the buffer back with [`idc_buf_free`], once.
@@ -580,6 +586,65 @@ pub unsafe extern "C" fn idc_short_id(
         parse_scoped_id(text).ok_or(IDC_ERR_INPUT)?;
         let text = std::str::from_utf8(text).map_err(|_| IDC_ERR_INPUT)?;
         Ok(short_id(text).ok_or(IDC_ERR_INPUT)?.as_bytes().to_vec())
+    })
+}
+
+/// Whether this build of the app may do a card proof, from the minimum app
+/// version of the server's `config` (spec/min-app.md): JSON in `*out`.
+///
+/// - `config`: the body of `GET /api/v1/config`, as the server sent it.
+/// - `client`: `IDC_CLIENT_ANDROID` or `IDC_CLIENT_IOS`, the app that asks;
+///   it reads only its own member of `min_app`.
+/// - `app_build`: the app's own build, the store's integer version number
+///   (the `versionCode` of the Android app, the build number of the iOS
+///   app).
+/// - `now`: the phone's clock, in seconds since 1970-01-01T00:00:00Z.
+///
+/// `*out` is one of:
+///
+/// - `{"verdict":"ok"}`: the app goes on as usual.
+/// - `{"verdict":"ok_until","from":"2027-03-01"}`: the app goes on as
+///   usual, and says that from that date in Taiwan this version can no
+///   longer do a card proof.
+/// - `{"verdict":"stop"}`: the app does not ask for the PIN or read the
+///   card; it says this version must be updated.
+/// - `{"verdict":"unreadable"}`: the field cannot be read (a body that is
+///   not `config`'s included), and the app does not go on either.
+///
+/// No `config` is an error. `IDC_ERR_ARGUMENT` when `client` is neither of
+/// the two; `IDC_ERR_INPUT` when `now` is outside the years 2000 to 2049 in
+/// Taiwan.
+///
+/// # Safety
+/// `config` points to `config_len` bytes; `out` is null or points to an
+/// `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_min_app(
+    config: *const u8,
+    config_len: usize,
+    client: u32,
+    app_build: u32,
+    now: i64,
+    out: *mut IdcBuf,
+) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let config = unsafe { input(config, config_len) }?;
+        let client = match client {
+            IDC_CLIENT_ANDROID => min_app::Client::Android,
+            IDC_CLIENT_IOS => min_app::Client::Ios,
+            _ => return Err(IDC_ERR_ARGUMENT),
+        };
+        let today = Date::in_taiwan(now).ok_or(IDC_ERR_INPUT)?;
+        let answer = match min_app::verdict(config, client, app_build, today) {
+            min_app::Verdict::Ok => json!({"verdict": "ok"}),
+            min_app::Verdict::OkUntil(from) => {
+                json!({"verdict": "ok_until", "from": from.to_string()})
+            }
+            min_app::Verdict::Stop => json!({"verdict": "stop"}),
+            min_app::Verdict::Unreadable => json!({"verdict": "unreadable"}),
+        };
+        Ok(answer.to_string().into_bytes())
     })
 }
 
