@@ -594,13 +594,13 @@ describe("the links", () => {
   test("every link to this site on the home page, the page of a card, the navigation bar, the foot and the pages of this file and of test/lookup-pages.test.ts is 200, with no redirect", async () => {
     const recs = Array.from({ length: 51 }, (_, i) => r("2026-11-01", newCard(), `threads:a${String(i).padStart(2, "0")}`));
     await pagesWorld(worker, "2026-11-18", [...recs, r("2026-11-06", cardStarting(CARD_A), "threads:alice")]);
-    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/check", "/prepare", "/hang", `/hang/${CARD_A}`, "/nothing"];
+    const pages = ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/threads/@alice", "/threads/@a-b", "/proof-log", "/proof-log?q=a-b", "/faq", "/verify", "/check", "/prepare", "/privacy", "/hang", `/hang/${CARD_A}`, "/nothing"];
     const links = new Set<string>();
     for (const path of pages) {
       const { page } = await getPage(worker, path);
       for (const m of page.matchAll(/\s(?:href|src|action)="(\/(?!\/)[^"]*)"/g)) links.add(unescapeHtml(m[1]!).replace(/#.*/, ""));
     }
-    for (const want of ["/", "/proof", "/prepare", "/verify", "/proof-log", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
+    for (const want of ["/", "/proof", "/prepare", "/privacy", "/verify", "/proof-log", "/faq", "/hang", `/p/${CARD_A}`, "/pages.css", "/copy.js"]) assert.ok(links.has(want), `a page links to ${want}`);
     assert.ok([...links].some((l) => l.startsWith("/proof-log?after=")), "更多 is among them");
     const failing: string[] = [];
     for (const link of links) {

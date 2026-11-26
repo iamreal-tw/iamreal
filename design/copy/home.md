@@ -368,12 +368,13 @@ who
 每一頁最下面。
 
 ```
-島民證明　iamreal.tw　　如何檢查島民證明　　證明紀錄　　如何驗證證明紀錄　　常見問題　　過卡需要什麼　　意見回饋　　GitHub
+島民證明　iamreal.tw　　如何檢查島民證明　　證明紀錄　　如何驗證證明紀錄　　常見問題　　過卡需要什麼　　隱私權說明　　意見回饋　　GitHub
 ```
 
 - 「如何檢查島民證明」「證明紀錄」「常見問題」「GitHub」連到的地方和導覽列相同
 - 「如何驗證證明紀錄」連到 `verify.md` 那一頁（`/verify`）；導覽列上沒有這一頁
 - 「過卡需要什麼」連到「過卡需要什麼」那一頁（`/prepare`，文字在 `prepare.md`；`card-proof.md` 第 2 步也有同一個連結）
+- 「隱私權說明」連到「隱私權說明」那一頁（`/privacy`，文字在 `privacy.md`）
 - 「意見回饋」連到公開的程式庫的 GitHub Discussions（https://github.com/iamreal-tw/iamreal/discussions）
 - 桌機排成一行；手機上「島民證明　iamreal.tw」一行，連結排成兩欄
 
