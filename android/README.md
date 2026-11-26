@@ -290,6 +290,7 @@ cd device-core && rustup target add aarch64-linux-android x86_64-linux-android &
 - 最低版本：測試改寫後台 `config` 的 `min_app` 再交給 app（測試的 build 是 1）。起算日是明天時第 1 步最上面有提醒和開 Google Play 的按鈕，照常能往下；畫面停在第 1 步、把模擬器的時鐘調到起算日，第 2 步在等卡片之前就換成「這一版不能過卡了」；起算日是今天時一打開就是那個畫面，沒有「下一步」。`min_app` 讀不懂、`config` 沒有回應：第 2 步在等卡片之前停下，寫網頁版的那一句
 - 沒有 NFC 的手機：假卡片在感應時說沒有 NFC，和 app 一打開就問到沒有，兩條路都換成「這支手機不能感應卡片」
 - 隔天的兩次：把後台的時鐘和模擬器的時鐘都調到明天（測試結束時把模擬器的調回來）
+- 停止收過卡（[#394](https://github.com/iamreal-tw/iamreal/issues/394)、[#402](https://github.com/iamreal-tw/iamreal/issues/402)），在新宣告之前：`app-backend.ts` 的 `PUT /__app-test/paused` 切換後台的 `CARD_PROOFS_PAUSED`。停止時打開 app，第 1 步是 `before.paused` 那一句、沒有「下一步」；恢復後回到 app，「下一步」回來了。走到第 5 步才停止：拿題目回 `paused`（卡片沒有被交到 PIN），和題目拿到了、卡片簽了才停止而送出回 `paused`，兩次都停在那一項，寫 `stops.paused` 和請求編號，只有「回到開頭」，回到的第 1 步寫停止的那一句。恢復之後的新宣告就是「恢復之後走得完」，所以證明紀錄還是那四筆
 - 這裡的測試全過之後，`app-backend.ts` 讓 Worker 在下一個午夜公布證明紀錄，抄下資料桶，用 Go 的 `iamreal-verify`（帶 `iamrealtest` 標籤建置，才收測試的發證金鑰）和原生的 `bb` 重驗：四筆紀錄都有效，每一筆的種類是新宣告、再次過卡、更換、收回
 - 截圖留在 `test-output/screens/`。加上 `IAMREAL_DESIGN_SCREENS=<目錄>` 時，另外在那個目錄拍 `design/screens/` 的那幾張（`app-splash-phone.png`、`card-proof-app-*`），大小照 `design/screens/README.md`：拍的時候把模擬器的螢幕暫時換成 390 dp 寬、一個像素一個 dp，拍完換回來。裁切用 macOS 的 `sips`，所以這個選項只在 Mac 上用
 

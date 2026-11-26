@@ -77,6 +77,7 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
 | `card-proof-app-1-before-phone.png` | 第 1 步：開始之前 | 實作版（Android） |
+| `card-proof-app-1-paused-phone.png` | 第 1 步：營運者停止收過卡時，那一句在「下一步」的位置 | 實作版（Android） |
 | `card-proof-app-2-read-iphone-phone.png` | 第 2 步：讀取卡片，iPhone 感應位置的示範（停在卡片貼好的那一格） | 實作版（iOS） |
 | `card-proof-app-2-read-android-phone.png` | 第 2 步：讀取卡片，Android，感應位置的示範停在卡片貼好的那一格 | 實作版（Android） |
 | `card-proof-app-2-reading-iphone-phone.png` | 第 2 步：iPhone 感應中，系統的感應面板 | 定稿版 |
@@ -104,6 +105,6 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `app-reminder-4-from-notification-phone.png` | 從通知點進來的第 1 步 | 實作版（iOS） |
 | `app-settings-phone.png` | 設定，提醒開著 | 實作版（iOS） |
 | `app-splash-phone.png` | 啟動畫面（Android 的實作版由模擬器上的過卡測試拍，同上） | 實作版（Android） |
-| `app-update-soon-phone.png` | 這一版快不能過卡了。「到 App Store 更新」的按鈕等 app 在 App Store 的頁面定了才有（`ios/README.md`），這一張和下一張還沒有 | 實作版（iOS） |
+| `app-update-soon-phone.png` | 這一版快不能過卡了。這一張和下一張是商店的 build 的畫面，有「到 App Store 更新」的按鈕；開發用 build 沒有（`ios/README.md`） | 實作版（iOS） |
 | `app-update-required-phone.png` | 這一版不能過卡了 | 實作版（iOS） |
 | `app-no-nfc-phone.png` | 這支手機沒有 NFC | 實作版（iOS） |
