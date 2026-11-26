@@ -40,7 +40,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { FAVICON_FILE, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -304,6 +304,10 @@ export interface ConfiguredSite {
   readonly scriptSha256: string | null;
   /** The SHA-256 of `copy.js` there as the commit checked out holds it; null if there is none to read. */
   readonly committedScriptSha256: string | null;
+  /** The SHA-256 of the icon there (`FAVICON_FILE`); null if the file is not there. */
+  readonly faviconSha256: string | null;
+  /** The SHA-256 of the icon there as the commit checked out holds it; null if there is none to read. */
+  readonly committedFaviconSha256: string | null;
   /** The SHA-256 of the typeface there (`FONT_FILE`); null if the file is not there. */
   readonly fontSha256: string | null;
   /** The SHA-256 of the link preview's image there (`OG_IMAGE_FILE`); null if the file is not there. */
@@ -368,6 +372,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       committedStyleSheetSha256: committedSha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
       committedScriptSha256: committedSha256Of("copy.js"),
+      faviconSha256: sha256Of(FAVICON_FILE),
+      committedFaviconSha256: committedSha256Of(FAVICON_FILE),
       fontSha256: sha256Of(FONT_FILE),
       ogImageSha256: sha256Of(OG_IMAGE_FILE),
     };
@@ -377,7 +383,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
 
 /**
  * In every environment, Cloudflare sends the card proof page's files, the
- * style sheet, the copy buttons' script, the typeface and the link preview's image itself, and the Worker's code has no part in what a file
+ * style sheet, the copy buttons' script, the icon, the typeface and the link preview's image itself, and the Worker's code has no part in what a file
  * is sent as (README.md, "Static Assets"):
  *
  *   - their paths are kept out of the Worker's (`RUN_WORKER_FIRST`), and
@@ -385,7 +391,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
  *   - the files of the directory outside proof/ are the ones listed
- *     (`SITE_FILES`) and no other; the style sheet and the script are the
+ *     (`SITE_FILES`) and no other; the style sheet, the script and the icon are the
  *     ones the commit checked out holds (`sha256InHead`), so a deploy
  *     uploads the ones that were reviewed, not a change that was not
  *     committed or one a build made, and one git cannot read from HEAD does
@@ -418,6 +424,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     for (const [name, there, committed] of [
       ["pages.css", site.styleSheetSha256, site.committedStyleSheetSha256],
       ["copy.js", site.scriptSha256, site.committedScriptSha256],
+      [FAVICON_FILE, site.faviconSha256, site.committedFaviconSha256],
     ] as const) {
       const message = `${name} of the ${env} environment is the one of HEAD, byte for byte: commit it before a deploy, and have nothing change it after`;
       assert.notEqual(committed, null, message);

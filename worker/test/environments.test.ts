@@ -130,7 +130,7 @@ test("every environment sends the files of site/ past the Worker, with the heade
   for (const [env, expected] of Object.entries(ENVIRONMENTS)) {
     assert.deepEqual(sites[env], {
       kind: expected.kind,
-      runWorkerFirst: ["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"],
+      runWorkerFirst: ["/*", "!/copy.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"],
       binding: undefined,
       htmlHandling: "none",
       notFoundHandling: "none",
@@ -138,18 +138,20 @@ test("every environment sends the files of site/ past the Worker, with the heade
       redirects: SITE_REDIRECTS,
       // Without site/proof/, where a deploy builds the card proof page: that build is `configuredProofPages`'s to read
       // (test/proof-page.test.ts), and one left there by a deploy build made on this computer changes nothing here.
-      files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"],
+      files: ["_headers", "_redirects", "copy.js", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"],
       // What it uploads is what this commit holds: the two files as they are in HEAD, byte for byte.
       styleSheetSha256: inHead("worker/site/pages.css"),
       committedStyleSheetSha256: inHead("worker/site/pages.css"),
       scriptSha256: inHead("worker/site/copy.js"),
       committedScriptSha256: inHead("worker/site/copy.js"),
+      faviconSha256: inHead("worker/site/favicon.ico"),
+      committedFaviconSha256: inHead("worker/site/favicon.ico"),
       fontSha256: createHash("sha256").update(readFileSync(join(WORKER_DIR, "..", "design", "fonts", "GenRyuMin2TW-B.woff2"))).digest("hex"),
       ogImageSha256: createHash("sha256").update(readFileSync(join(WORKER_DIR, "..", "design", "screens", "og-image.png"))).digest("hex"),
     });
   }
-  assert.deepEqual(RUN_WORKER_FIRST, ["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]);
-  assert.deepEqual(SITE_FILES, ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"]);
+  assert.deepEqual(RUN_WORKER_FIRST, ["/*", "!/copy.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"]);
+  assert.deepEqual(SITE_FILES, ["_headers", "_redirects", "copy.js", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"]);
   checkSiteFiles(sites);
   // Set once, at the top level, which every environment shares.
   const { rawConfig } = experimental_readRawConfig({ config: join(WORKER_DIR, "wrangler.jsonc") });
@@ -161,10 +163,10 @@ test("a configuration that runs the Worker for the card proof page's files, lets
   const cases: [string, Partial<ConfiguredSite>, RegExp][] = [
     ["the Worker first for everything", { runWorkerFirst: true }, /run_worker_first of the test environment/],
     ["no rule at all: a file that is not there would run the Worker", { runWorkerFirst: undefined }, /run_worker_first of the test environment/],
-    ["/proof itself not among the rules", { runWorkerFirst: ["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof/*"] }, /run_worker_first of the test environment/],
-    ["the script not among the rules: the Worker would answer /copy.js", { runWorkerFirst: ["/*", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
-    ["the typeface not among the rules: the Worker would answer /fonts/…", { runWorkerFirst: ["/*", "!/copy.js", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
-    ["the image not among the rules: the Worker would answer /og-image.png", { runWorkerFirst: ["/*", "!/copy.js", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["/proof itself not among the rules", { runWorkerFirst: ["/*", "!/copy.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["the script not among the rules: the Worker would answer /copy.js", { runWorkerFirst: ["/*", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["the typeface not among the rules: the Worker would answer /fonts/…", { runWorkerFirst: ["/*", "!/copy.js", "!/favicon.ico", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["the image not among the rules: the Worker would answer /og-image.png", { runWorkerFirst: ["/*", "!/copy.js", "!/favicon.ico", "!/fonts/*", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
     ["a binding to read the files by", { binding: "ASSETS" }, /no binding/],
     ["index.html found for directories", { htmlHandling: "auto-trailing-slash" }, /html_handling/],
     ["a page for what is not there", { notFoundHandling: "single-page-application" }, /not_found_handling/],
@@ -174,18 +176,22 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["no _redirects", { redirects: null }, /_redirects of the test environment/],
     ["another redirect", { redirects: `${SITE_REDIRECTS}/proof/other.html https://example.org/ 302\n` }, /_redirects of the test environment/],
     ["a kind that is none", { kind: "staging" }, /PROOF_LOG_KIND of the test environment/],
-    ["another file beside the six", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
-    ["no style sheet", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "og-image.png"], styleSheetSha256: null }, /files of the test environment/],
+    ["another file beside the seven", { files: [...real.files, "robots.txt"] }, /files of the test environment/],
+    ["no style sheet", { files: ["_headers", "_redirects", "copy.js", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "og-image.png"], styleSheetSha256: null }, /files of the test environment/],
     ["a style sheet that is not the one of HEAD: changed and not committed, or changed by the build", { styleSheetSha256: "0".repeat(64) }, /pages\.css of the test environment is the one of HEAD/],
     ["a style sheet that is not in HEAD, or a checkout that is not git's", { committedStyleSheetSha256: null }, /pages\.css of the test environment is the one of HEAD/],
     ["neither there nor in HEAD: null is not taken for the same", { styleSheetSha256: null, committedStyleSheetSha256: null }, /pages\.css of the test environment is the one of HEAD/],
-    ["no script", { files: ["_headers", "_redirects", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"], scriptSha256: null }, /files of the test environment/],
+    ["no script", { files: ["_headers", "_redirects", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"], scriptSha256: null }, /files of the test environment/],
     ["a script that is not the one of HEAD", { scriptSha256: "0".repeat(64) }, /copy\.js of the test environment is the one of HEAD/],
     ["a script that is not in HEAD, or a checkout that is not git's", { committedScriptSha256: null }, /copy\.js of the test environment is the one of HEAD/],
     ["neither there nor in HEAD", { scriptSha256: null, committedScriptSha256: null }, /copy\.js of the test environment is the one of HEAD/],
-    ["no typeface", { files: ["_headers", "_redirects", "copy.js", "og-image.png", "pages.css"], fontSha256: null }, /files of the test environment/],
+    ["the icon not among the rules: the Worker would answer /favicon.ico", { runWorkerFirst: ["/*", "!/copy.js", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"] }, /run_worker_first of the test environment/],
+    ["no icon", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"], faviconSha256: null }, /files of the test environment/],
+    ["an icon that is not the one of HEAD", { faviconSha256: "0".repeat(64) }, /favicon\.ico of the test environment is the one of HEAD/],
+    ["an icon that is not in HEAD", { committedFaviconSha256: null }, /favicon\.ico of the test environment is the one of HEAD/],
+    ["no typeface", { files: ["_headers", "_redirects", "copy.js", "favicon.ico", "og-image.png", "pages.css"], fontSha256: null }, /files of the test environment/],
     ["a typeface that is not the subset of design/fonts/", { fontSha256: "0".repeat(64) }, /GenRyuMin2TW-B\.woff2 of the test environment is the subset of design\/fonts\//],
-    ["no image", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "pages.css"], ogImageSha256: null }, /files of the test environment/],
+    ["no image", { files: ["_headers", "_redirects", "copy.js", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "pages.css"], ogImageSha256: null }, /files of the test environment/],
     ["an image that is not design/screens/og-image.png", { ogImageSha256: "0".repeat(64) }, /og-image\.png of the test environment is design\/screens\/og-image\.png/],
   ];
   for (const [name, change, message] of cases) assert.throws(() => checkSiteFiles({ test: { ...real, ...change } }), message, name);
