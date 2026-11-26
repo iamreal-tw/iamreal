@@ -16,6 +16,7 @@ import { type VisitorParts, visitor } from "./visitor.ts";
 
 export { Counts } from "./counts.ts";
 export { ProofLog } from "./proof-log.ts";
+export { Starts } from "./starts.ts";
 
 // A build whose issuer keys are not one G2 and one G3 key does not start.
 checkIssuerTable(ISSUERS);

@@ -7,6 +7,8 @@ status: accepted
 > 補充：Worker 裡分開算的請求多一種，計數（ADR-0032）。
 >
 > 補充（2026-11-26，[#418](https://github.com/iamreal-tw/iamreal/issues/418)）：再多一種，公開的讀取（`GET /api/v1/config`、`fingerprint`、`rebuild`），三個合起來算。後兩個每次都問 Durable Object；`config` 不問，放在這一類是因為它同樣是誰都能隨時問的讀取。
+>
+> 補充（2026-11-27，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：Rate Limiting binding 在 Cloudflare 上的計數是每台機器各一份，不是每個機房一份。在測試網站量到：同一條連線送 50 次，第 30 次之後被擋；每次開新連線送 100 次，一次都沒擋。照 IP 的上限因此只擋得住在同一條連線上連發的來源，每次開新連線的來源要靠第二層的 WAF 規則；全站的總量上限改用一個 Durable Object 計數。
 
 會打到 Durable Object 的請求，由三層限流擋：Cloudflare 自動的 DDoS 防護、一條 WAF 的限流規則、Worker 裡的 Rate Limiting binding。請求多到撐不住時，先放掉過卡，留住訪客的頁面；全站的總量上限擋在「開始過卡」，持卡人在插卡之前就知道現在人太多。
 
@@ -28,6 +30,8 @@ ADR-0023 讓讀取和寫入擠在同一個 Durable Object：題目、卡片現�
 
    計次的鍵由一個函式產生，現在是請求的種類加上 IP。之後的查詢介面發金鑰時，帶金鑰的請求改用金鑰當鍵。
 
+   binding 的計數在每台機器各一份：擋得住在同一條連線上連發的來源，擋不住每次開新連線的來源，那種要靠第二層（2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
+
 每一種的上限是共用 IP 的家庭或辦公室也用不完的量：擋的是單一來源的大量請求，不是擋人。
 
 ## 全站的總量上限
@@ -37,7 +41,7 @@ ADR-0023 讓讀取和寫入擠在同一個 Durable Object：題目、卡片現�
 - **擋在 `GET /api/v1/config`。** 過卡的頁面在持卡人按下「開始」之後、讀卡之前先要設定（平台表、清冊可以多舊）；這個請求由 Worker 回答，不經過 Durable Object，擋在這裡不增加它的負擔。算的只有持卡人按下「開始」時送的那一次：它帶一個記號（`GET /api/v1/config?start`）。其他時候問的 `config`（頁面一打開、讀卡時、app 每次感應之前）不帶記號，只受照 IP 的上限（2026-11-26 補，[#32](https://github.com/iamreal-tw/iamreal/issues/32)：寫這一段時一次過卡只問一次 `config`，現在網頁版問兩次、app 問更多次，不分開的話，總量算的就不是開始過卡的人數）。
 - 被擋的人在插卡之前看到「現在人太多，請稍後再來」。
 - 通過的人照常往下做。過卡途中 Durable Object 撐不住時，照下一節。
-- Rate Limiting binding 是每個 Cloudflare 機房分開算的近似值；台灣的連線大多進同一個機房，實際上接近全站的量。
+- 計數的是一個專用的 Durable Object，整個網站只有一份，不分機房。它只在開始過卡時被問一次，量小；它不是證明紀錄的物件，也不是收計數的物件，那兩個撐不住時，開始過卡不受影響。（2026-11-27 改，[#466](https://github.com/iamreal-tw/iamreal/issues/466)；原本寫的是「Rate Limiting binding 是每個 Cloudflare 機房分開算的近似值；台灣的連線大多進同一個機房，實際上接近全站的量。」binding 的計數實際上是每台機器各一份，同一個機房裡的請求分散到很多台時，每一台都各自放行到上限。）
 
 ## Durable Object 撐不住時
 
@@ -75,7 +79,7 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 
 理由：
 
-- **能用 Cloudflare 的就用。** 擋大量的惡意流量是 Cloudflare 的專業；自己寫的只有它在這個方案做不到的部分（分種類、IPv6 的 /64、總量上限），而且用的也是它的 binding。
+- **能用 Cloudflare 的就用。** 擋大量的惡意流量是 Cloudflare 的專業；自己寫的只有它在這個方案做不到的部分（分種類、IPv6 的 /64、總量上限）。分種類和 IPv6 的 /64 用它的 binding；總量上限要整個網站只有一份計數，binding 給不了，用一個 Durable Object（2026-11-27 改，[#466](https://github.com/iamreal-tw/iamreal/issues/466)；原本寫的是「而且用的也是它的 binding」）。
 - **一條 WAF 規則就夠當外層。** Free 方案只有 1 條限流規則、計數期間 10 秒（[rate limiting rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)）；細的分法放在 Worker，不必為了規則的數量換方案。
 - **總量上限擋在開始，不擋在題目。** 題目在第一次簽章之後才要，擋在那裡，持卡人已經插卡、輸入過 PIN 才失敗。
 
@@ -86,6 +90,9 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 - **只照 IP，不分種類**：一個上限要同時容得下看很多頁面的人和偶爾過卡的人，對過卡的請求太鬆。
 - **全站的總量上限擋在題目**：頁面不用改請求的順序；被擋的人已經插卡、輸入過 PIN。
 - **不設總量上限，只靠 Durable Object 自己回 `overloaded`**：撐不住時頁面和過卡一起失敗，沒有誰先讓路。
+- **總量上限用 Rate Limiting binding，整個網站一個鍵**（2026-11-26 到 11-27 用過）：binding 的計數每台機器各一份，總量實際上是上限乘上收到請求的機器數；測試網站上 2 秒內 80 次開始過卡全部放行，上限是 60（[#466](https://github.com/iamreal-tw/iamreal/issues/466)）。
+- **總量上限放在收計數的物件**（ADR-0032）：計數只受照 IP 的上限，很多網路一起送計數就可能讓那個物件撐不住，開始過卡不該跟著停。
+- **照 IP 的上限也搬進 Durable Object**：算得準，IPv6 的 /64 也有，但每個 API 請求都多問一次 Durable Object，限流本來就是為了減少 Durable Object 的負擔。
 - **整站的 I'm Under Attack 模式**：過卡的介面、下載、程式化的讀取全部一起擋。
 - **被擋的請求也記內文**：被打時量大，內文對查問題沒有用。
 
@@ -94,7 +101,8 @@ Durable Object 回 `overloaded` 時（文件說這個錯誤不要重試，[error
 - **過卡的頁面改請求的順序**：`GET /api/v1/config` 移到按下「開始」之後、讀卡之前；它的 `503` 在讀卡之前顯示「現在人太多」。`docs/api/card-proof.md` 在 `config`、`card-state` 加上 `429`、`503`，每個 `429` 附 `Retry-After`。
 - **通過開始那一關的人，之後仍可能遇到 Durable Object 撐不住。** 那時已經插過卡；畫面讓他重試，不必重新開始。
 - **隱私權說明加挑戰頁的那一段**，和平常不放 cookie 的說法放在一起。
-- **還沒查到、要在測試網站上看的**：WAF 的限流規則會不會連快取命中的請求一起算（所以外層的上限訂得比 Worker 寬很多）；Workers 的快取哪些方案能用、快取命中時 WAF 還跑不跑；Rate Limiting binding 的計數存在哪裡、留多久。
+- **還沒查到、要在測試網站上看的**：WAF 的限流規則會不會連快取命中的請求一起算（所以外層的上限訂得比 Worker 寬很多）；Workers 的快取哪些方案能用、快取命中時 WAF 還跑不跑。（2026-11-27 改，[#466](https://github.com/iamreal-tw/iamreal/issues/466)：原本還列了「Rate Limiting binding 的計數存在哪裡、留多久」，量到的是每台機器各一份，見上面的補充。）
+- **每次開新連線的單一來源，只有 WAF 那一條規則擋得住**（2026-11-27 補，[#466](https://github.com/iamreal-tw/iamreal/issues/466)）：那條規則上線前一定要設好。它照完整的 IP 算，IPv6 換 /64 裡的位址又每次開新連線的來源，兩層都擋不住；被打時先看 Cloudflare 的分析，再決定要不要把照 IP 的上限也搬進 Durable Object。
 - **頁面真的被輪著打時**，先打開挑戰頁，再把頁面的資料搬出 Durable Object；搬到 KV 還是 D1（ADR-0023 寫的是 D1），到時候再定，資料都從紀錄重建得出來。讀取量量出來撐不到尖峰時也一樣。為了改得快，施工時頁面讀資料經過一個換得掉的介面。這一份的三層不變。
 - **挑戰頁開著的期間**，訪客要先過一次檢查；平台抓連結預覽的程式過不了，那段時間貼出去的島民證明連結可能沒有預覽。
 - 查詢介面的金鑰怎麼申請、額度多少，跟查詢介面一起定。

@@ -79,10 +79,10 @@ test("the deploy build holds nothing of the test build", () => {
   checkNothingOfTheTestBuild(deploy);
 });
 
-test("the test environment's only settings are the proof log's object, the data bucket, the connection log's bucket, the six per-IP limits and the site-wide one, the counts' object and how many counts a minute holds, the object's name, which proof log it is, the date it was last cleared on, whether card proofs are taken and the name of a rebuild asked for", () => {
+test("the test environment's only settings are the proof log's object, the data bucket, the connection log's bucket, the six per-IP limits, the counts' object and how many counts a minute holds, the site-wide limit's object and its number, the object's name, which proof log it is, the date it was last cleared on, whether card proofs are taken and the name of a rebuild asked for", () => {
   checkBindings(deploy.output);
   // Not the files of Static Assets: with a binding to them the Worker could read and send them itself.
-  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["CARD_PROOFS_PAUSED", "CONNECTION_LOG", "COUNTS", "COUNT_EVENTS_PER_MINUTE", "DATA", "PROOF_LOG", "PROOF_LOG_KIND", "PROOF_LOG_OBJECT_NAME", "RATE_CARD_STATE", "RATE_CHALLENGES", "RATE_COUNTS", "RATE_PAGES", "RATE_PUBLIC_READS", "RATE_RECORDS", "RATE_STARTS", "REBUILD_PROOF_LOG", "TEST_PROOF_LOG_CLEARED_ON"]);
+  assert.deepEqual(Object.keys(bindingsIn(deploy.output)).sort(), ["CARD_PROOFS_PAUSED", "CARD_PROOF_STARTS_PER_MINUTE", "CONNECTION_LOG", "COUNTS", "COUNT_EVENTS_PER_MINUTE", "DATA", "PROOF_LOG", "PROOF_LOG_KIND", "PROOF_LOG_OBJECT_NAME", "RATE_CARD_STATE", "RATE_CHALLENGES", "RATE_COUNTS", "RATE_PAGES", "RATE_PUBLIC_READS", "RATE_RECORDS", "REBUILD_PROOF_LOG", "STARTS", "TEST_PROOF_LOG_CLEARED_ON"]);
   assert.throws(() => checkBindings(`${deploy.output}\nenv.ASSETS      Assets\n`));
 });
 

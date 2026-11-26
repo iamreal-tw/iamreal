@@ -15,7 +15,7 @@ import { block, copyLines, wantLines, wantPreview } from "./copy.ts";
 import { type RateBinding, type TestWorker, startWorker, withRateLimits } from "./harness.ts";
 import { TEST_SCOPE, freshProofLog, newCard, publishG3, sub } from "./records.ts";
 
-const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_COUNTS: 7, RATE_STARTS: 50 };
+const LIMITS: Readonly<Record<RateBinding, number>> = { RATE_CHALLENGES: 3, RATE_CARD_STATE: 4, RATE_RECORDS: 2, RATE_PUBLIC_READS: 5, RATE_PAGES: 6, RATE_COUNTS: 7 };
 
 let worker: TestWorker;
 before(async () => {
@@ -211,7 +211,7 @@ describe("the limits are settings", () => {
     assert.throws(() => withRateLimits(config.replace("RATE_PAGES", "RATE_OTHER"), { RATE_PAGES: 1 }));
     // Each counter is its own: no two bindings share a namespace.
     const namespaces = [...config.matchAll(/"namespace_id": "([0-9]+)"/g)].map((m) => m[1]);
-    assert.deepEqual([namespaces.length, new Set(namespaces).size], [7, 7]);
+    assert.deepEqual([namespaces.length, new Set(namespaces).size], [6, 6]);
   });
 
   test("another Worker, started with another number for one class, stops that class at that number", async () => {

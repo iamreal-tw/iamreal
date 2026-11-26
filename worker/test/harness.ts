@@ -488,7 +488,7 @@ export interface StartOptions {
 }
 
 /** The bindings of the per-IP limits (wrangler.jsonc, "ratelimits"). */
-export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES" | "RATE_COUNTS" | "RATE_STARTS";
+export type RateBinding = "RATE_CHALLENGES" | "RATE_CARD_STATE" | "RATE_RECORDS" | "RATE_PUBLIC_READS" | "RATE_PAGES" | "RATE_COUNTS";
 
 /** The text of wrangler.jsonc with the limit of each binding named in `limits` replaced. Throws if a binding is not there once. */
 export function withRateLimits(config: string, limits: Readonly<Partial<Record<RateBinding, number>>>): string {
