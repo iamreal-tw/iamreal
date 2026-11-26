@@ -23,7 +23,9 @@
 // shows it in place of the pictures and plays it; without the player the
 // page is the one above. Every box the timeline names is a [data-box]; what a
 // change of the screens shows or moves says so in data-on, data-off and
-// data-shift (demo/player.js). Nothing inline: the looks are the style
+// data-shift (demo/player.js). The paste bubble is inside its box, not the box
+// itself: its ring goes on where the bubble was after the bubble is gone
+// (design/motion/README.md, 按). Nothing inline: the looks are the style
 // sheet's, and what moves is the player's.
 //
 // The title is broken after 掛到 by hand (design/DESIGN.md, 字: 標題的斷行要手動指定).
@@ -168,7 +170,7 @@ ${linksTop}
 <div class="shot s4" data-box="s4"><p class="kick">按了「新增連結」之後（示意）</p>
 <p class="top"><b>新增連結</b><span class="act" data-box="done4">完成${mark("再按這裡", " right")}${PRESS}</span></p>
 <p class="field-label">網址</p>
-<p class="field" data-box="urlfield"><span class="clip" data-on="pasted">${link}</span><span class="paste" data-box="paste" data-on="pasteMenu" data-off="pasted">貼上${PRESS}</span>${mark("貼在這裡", " right")}${PRESS}</p>
+<p class="field" data-box="urlfield"><span class="clip" data-on="pasted">${link}</span><span class="paste-at" data-box="paste"><span class="paste" data-on="pasteMenu" data-off="pasted">貼上</span>${PRESS}</span>${mark("貼在這裡", " right")}${PRESS}</p>
 <p class="field-label">標題（選填）</p>
 <p class="field"></p>
 </div>

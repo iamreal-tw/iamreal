@@ -17,17 +17,29 @@ import { difference, hangTimeline, vectors } from "./teaching-animation.ts";
 /** Two versions of Node may leave other spaces where the types were: the text is compared without any. */
 const unspaced = (text: string): string => text.replace(/\s+/g, "");
 
+/** The two halves of the file: the states, whose types Node took off, and the player, which is written as it is. */
+const PLAYER_STARTS = "// The player of the demonstration";
+const halves = (script: string): [string, string] => {
+  const cut = script.indexOf(PLAYER_STARTS);
+  assert.ok(cut > 0, "the player starts where its comment says");
+  return [script.slice(0, cut), script.slice(cut)];
+};
+
 test("site/demo.js is the one scripts/site-files.ts writes from src/teaching-animation.ts and demo/player.js", () => {
-  const there = readFileSync(join(WORKER_DIR, "site", DEMO_FILE), "utf8");
-  assert.equal(unspaced(there), unspaced(demoScript()), "run `node --experimental-strip-types scripts/site-files.ts` after a change of either, and commit site/demo.js");
+  const stale = "run `node --experimental-strip-types scripts/site-files.ts` after a change of either, and commit site/demo.js";
+  const [states, player] = halves(readFileSync(join(WORKER_DIR, "site", DEMO_FILE), "utf8"));
+  const [wantStates, wantPlayer] = halves(demoScript());
+  assert.equal(unspaced(states), unspaced(wantStates), stale);
+  // The player has no types to take off: character for character, spaces in its strings too.
+  assert.equal(player, wantPlayer, stale);
 });
 
 test("the states site/demo.js computes are the answers of spec/vectors/teaching-animation.json", () => {
   // The file as the browser gets it, with the player cut off (it needs a page) and the function handed out.
-  const script = readFileSync(join(WORKER_DIR, "site", DEMO_FILE), "utf8");
-  const cut = script.indexOf("// The player of the demonstration");
-  assert.ok(cut > 0, "the player starts where its comment says");
-  const states = new Function(`${script.slice(script.indexOf("(() => {") + "(() => {".length, cut)}; return hangStateAt;`)() as typeof hangStateAt;
+  const [first, player] = halves(readFileSync(join(WORKER_DIR, "site", DEMO_FILE), "utf8"));
+  const states = new Function(`${first.slice(first.indexOf("(() => {") + "(() => {".length)}; return hangStateAt;`)() as typeof hangStateAt;
+  // The player half is a script too: it reads as one (what it does in a page is web/test/worker-card-proof.ts's to check).
+  new Function(player.slice(0, player.lastIndexOf("})();")));
   const timeline = hangTimeline();
   const v = vectors();
   for (const c of v.hang) assert.equal(difference(states(timeline, c.variant, c.seconds), c.state, v.tolerance), null, `${c.name} (${c.seconds} s)`);

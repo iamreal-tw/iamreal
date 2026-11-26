@@ -3025,10 +3025,17 @@ body.hang .shot .field .clip {
   opacity: 0;
 }
 
-body.hang .shot .paste {
+/* Where the paste bubble is: the box the timeline presses. The bubble in it comes and goes; its ring stays to the end. */
+body.hang .shot .paste-at {
   position: absolute;
   left: 18px;
   top: -44px;
+  border-radius: 9px;
+}
+
+body.hang .shot .paste {
+  display: block;
+  position: relative;
   padding: 9px 16px;
   background: var(--ink);
   border-radius: 9px;
@@ -3051,7 +3058,7 @@ body.hang .shot .paste::after {
 
 /* With the player: the demonstration in place of the pictures, beside the four steps; the step it is showing is
    marked. The column is wider for the two. */
-body.hang main:has(.playing) {
+body.hang main.with-demo {
   max-width: calc(920px + 2 * var(--gutter));
 }
 

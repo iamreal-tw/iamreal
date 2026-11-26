@@ -23,7 +23,14 @@
 // `checkSiteFiles`), and test/proof-files.test.ts that the local workerd
 // sends what they say.
 //
-// `node --experimental-strip-types scripts/site-files.ts` writes all four again,
+//   site/demo.js     the player of the demonstration on the page of hanging a
+//                    proof, from src/teaching-animation.ts and demo/player.js
+//                    (`demoScript`).
+//
+// And one file of the Worker's own code, src/pages/hang-timeline.ts: its copy
+// of design/motion/hang.json, which that page writes into itself.
+//
+// `node --experimental-strip-types scripts/site-files.ts` writes all of them again,
 // after a change of src/headers.ts, of the subset or of the image.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
@@ -189,5 +196,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   copyFileSync(OG_IMAGE_SOURCE, join(SITE_DIR, OG_IMAGE_FILE));
   writeFileSync(join(SITE_DIR, DEMO_FILE), demoScript());
   writeFileSync(HANG_TIMELINE_FILE, hangTimelineModule());
-  console.log(`Wrote _headers, _redirects, ${DEMO_FILE}, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site.`);
+  console.log(`Wrote _headers, _redirects, ${DEMO_FILE}, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site, and ${HANG_TIMELINE_FILE}.`);
 }

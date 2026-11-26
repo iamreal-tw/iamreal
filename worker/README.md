@@ -625,7 +625,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
 `site/` 裡 `proof/` 以外的檔案照舊由 `checkSiteFiles` 核對：恰好是 `scripts/site-files.ts` 的 `SITE_FILES` 列的那七個；`pages.css`、`copy.js` 和 `demo.js` 要和目前 checkout 的 commit（`HEAD`）裡的那一份逐位元組相同（`git show HEAD:./pages.css`，`deploy-build-checks.ts` 的 `sha256InHead`）。所以部署上傳的是提交過的那一份（GitHub Actions 上就是 `main` 審查過的那一份）：本機 `pnpm run deploy:test` 時這兩個檔有還沒提交的改動、或建置過程改到它們，都過不了；`HEAD` 裡讀不到那一份（不在 git 的 checkout 裡、檔案沒進版控）也不過，不會跳過。改這兩個檔時不用改別的檔；`test/environments.test.ts` 也拿真的設定跑這項檢查，所以改了之前先提交，再跑測試、再部署。
 
 - 本機的 `pnpm run deploy:test` 結束時（不論有沒有上傳）刪掉 `site/proof/`。單獨跑 `scripts/build-deploy.ts`（GitHub Actions 的做法）會把它留著，因為下一個工作要從那裡拿；留著不影響測試（`checkSiteFiles` 和測試的工具都不看 `proof/`），下一次部署的建置會先清空它。
-- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的六個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
+- GitHub Actions 上，`build` 工作在自己的 checkout 裡建置、檢查，把 `worker/site/proof/` 交成第二個 artifact（`proof-page`）；`deploy` 工作把它下載到自己 checkout 的同一個位置，wrangler 上傳時和版控裡的七個檔一起讀到（[從 GitHub Actions 部署](#從-github-actions-部署)）。
 - 帶著這份建置的第一次部署是 2026-11-21（`main` 的 `1400e11`，GitHub Actions）。線上看到的在下面「Cloudflare 上看過的」。
 
 設定的每一項：

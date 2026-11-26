@@ -364,9 +364,9 @@ try {
   check(demo.button === replayWord && demo.at === DEMO_LENGTH && (await lastFrame(visitor)), `played to the end it stops on the last frame, the button says ${replayWord}: ${JSON.stringify(demo)}`);
   // From the keyboard: the button takes the focus, shows it, and Enter plays.
   await visitor.eval(`document.querySelector("[data-demo-button]").focus()`);
-  check(await visitor.eval<boolean>(`document.querySelector("[data-demo-button]").matches(":focus-visible") || document.activeElement === document.querySelector("[data-demo-button]")`), "the button takes the keyboard's focus");
   for (const type of ["keyDown", "keyUp"]) await visitor.send("Input.dispatchKeyEvent", { type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, ...(type === "keyDown" && { text: "\r" }) });
   check((await visitor.waitFor<string>(`document.querySelector("[data-demo]").dataset.playing === "true" ? "playing" : null`, "Enter to play it", 5_000).catch(() => "")) === "playing", "Enter on the button plays it");
+  check(await visitor.eval<boolean>(`(() => { const b = document.querySelector("[data-demo-button]"); return document.activeElement === b && b.matches(":focus-visible") && getComputedStyle(b).outlineStyle !== "none"; })()`), "used from the keyboard, the button shows its focus ring");
   await visitor.clickButton(stopWord);
 
   // On a phone the demonstration is above the four steps, and starts only when most of it is on the screen.
