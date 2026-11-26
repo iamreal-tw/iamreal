@@ -251,9 +251,9 @@ export function startApp(o: AppOptions): void {
       askToStart().then((answer) => {
         start.disabled = false;
         if (!next.isConnected) return;
-        if (answer === "busy" || answer === "rate_limited") {
-          // Step 1 stays, to be pressed again: a retry, with the server's code (spec/counts.md).
-          pageCounts().retry(answer === "busy" ? "server_busy" : "server_rate_limited");
+        if (answer !== null && typeof answer === "object" && "turnedAway" in answer) {
+          // Step 1 stays, to be pressed again: a retry (spec/counts.md).
+          pageCounts().retry(answer.turnedAway);
           return void next.before(busyLine);
         }
         if (answer === "paused") return void next.replaceWith(pausedLine());
@@ -838,7 +838,11 @@ export function startApp(o: AppOptions): void {
                   // Too many people when the challenge was asked (phase "chosen"): asked again, and the card signs;
                   // the component's window opens in this click. Otherwise the same submission again.
                   const again = f.phase === "chosen";
-                  if (again && !card.open()) return void list.render(itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: at }), { at, message: stopMessage({ code: "card", card: "popup_blocked" }) });
+                  if (again && !card.open()) {
+                    // Nothing was sent: the same button, once the browser allows the window.
+                    pageCounts().retry("popup_blocked");
+                    return void list.render(itemStates(PROGRESS_ITEMS, seen, { running: false, stoppedAt: at }), { at, message: stopMessage({ code: "card", card: "popup_blocked" }) });
+                  }
                   replace(buttons);
                   list.render(itemStates(PROGRESS_ITEMS, seen, { running: true, stoppedAt: null }));
                   onProgress = (step) => {
