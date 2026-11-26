@@ -20,16 +20,24 @@ import kotlin.concurrent.thread
  * One card proof, without a screen: the order of web/src/flow.ts with the
  * card held to the phone three times (issue #133).
  *
- *   readCard()         the server's config, asked for when the app opened;
+ *   begin()            step 1's 下一步: the server's config, asked with the
+ *                      mark of a start; turned away as too many, nothing more
+ *   readCard()         the server's config, asked without the mark (the
+ *                      start's when that one is turned away as too many);
  *                      tap 1: the certificates, no PIN. The core checks
  *                      them; the CRL is downloaded and checked; the tree is
  *                      built in the background
  *   confirmCard(pin)   tap 2: the same card, then the PIN; the card signs
  *                      the scope string; the card's state
+ *   retryCardState()   the card's state again, after the server turned it
+ *                      away as too many; nothing signed again
  *   choose(entries)    what the list would do; nothing signed, nothing sent
  *   declare()          the challenge; tap 3: the same card, then the PIN;
  *                      the card signs the declaration code; the PIN is
- *                      dropped; the proof; the submission
+ *                      dropped; the proof; the submission. After the server
+ *                      turned the challenge away as too many, called again
+ *   resubmit()         the same record again, after the server turned the
+ *                      submission away as too many; nothing signed again
  *   cancel()           drops everything
  *
  * Every check and every computation is the core's (device-core/, through
@@ -54,7 +62,15 @@ import kotlin.concurrent.thread
  * under way finds the card proof ended after its next wait and goes no
  * further.
  */
-class CardProof(private val deps: Deps) {
+class CardProof(
+    private val deps: Deps,
+    /**
+     * What `config` answered when the cardholder last pressed step 1's 下一步 (`GET /api/v1/config?start`, [begin]), for a card proof
+     * that does not begin there (再感應一次卡片): the `config` it asks is not counted against the site-wide limit, and when that one is
+     * turned away as too many, the card proof goes on with this one (docs/api/card-proof.md, `config`). Null: none.
+     */
+    started: ByteArray? = null,
+) {
     interface Deps {
         val backend: Backend
         val card: Card
@@ -225,6 +241,10 @@ class CardProof(private val deps: Deps) {
     )
 
     private var config: ByteArray? = null
+    private var startConfig: ByteArray? = started
+
+    /** [begin] has been called. */
+    private var begun = false
     private var platformsJson: ByteArray? = null
     private var session = 0L
     private var certificate: ByteArray? = null
@@ -239,6 +259,14 @@ class CardProof(private val deps: Deps) {
     private var entries: Map<String, String>? = null
     private var chosen: Consequence? = null
     private var chosenAccountsJson: ByteArray? = null
+
+    /** The server turned the card's state away as too many: [retryCardState] asks again. */
+    private var cardStateTurnedAway = false
+
+    /** The record the server turned away as too many, and what [Done] is made of: [resubmit] sends it again. */
+    private class Unsent(val record: ByteArray, val shown: Consequence, val challenge: String, val shortId: String)
+
+    private var unsent: Unsent? = null
 
     @Volatile private var firstSignedAt: Long? = null
 
@@ -299,14 +327,44 @@ class CardProof(private val deps: Deps) {
         if (idleExpired()) fail(Stop("idle"))
     }
 
+    // Step 1's 下一步 ------------------------------------------------------------------
+
+    /**
+     * The start of the card proof, before a card is read: `config` asked with the mark of a start, the one request of a card
+     * proof the server counts against its site-wide limit (docs/api/card-proof.md, `config`; ADR-0026). Turned away as too
+     * many (`429`, `503` `busy`), the card proof ends here: no card is read, and step 1 says so. Card proofs stopped
+     * (`paused`): the same. No answer, another refusal, or an answer that cannot be read: it goes on, and [readCard] asks
+     * again. An answer that can be read is what [readCard] falls back on, and [startedWith] for a card proof that follows this one.
+     */
+    fun begin() {
+        if (begun || session != 0L || ended) throw Stop("state")
+        begun = true
+        val answer = try {
+            deps.backend.config(start = true)
+        } catch (e: ServerException) {
+            if (e.tooMany) fail(Stop.server(e))
+            null
+        }
+        live()
+        if (answer != null && pausedIn(answer) == true) fail(Stop("server", mapOf("code" to "paused")))
+        // Only an answer that can be read is one to fall back on: the reading asks again in any case.
+        startConfig = answer?.takeIf { pausedIn(it) != null && RawJson.member(it, "platforms") != null }
+    }
+
+    /** What `config` answered at the start ([begin], or the card proof's before it): for the card proof that follows this one. */
+    val startedWith: ByteArray? get() = startConfig
+
     // Tap 1: the certificates, no PIN --------------------------------------------------
 
     fun readCard(events: Events): CardRead {
         if (session != 0L || ended) throw Stop("state")
+        // Asked again without the mark: when it is turned away as too many, the card proof goes on with the start's
+        // (docs/api/card-proof.md, `config`; design/copy/card-proof.md, step 1, 人太多的時候).
         val config = try {
             deps.config()
         } catch (e: ServerException) {
-            throw Stop.server(e)
+            if (!e.tooMany) throw Stop.server(e)
+            startConfig ?: throw Stop.server(e)
         }
         live()
         // Without a platform table there is nothing to offer (docs/api/card-proof.md).
@@ -475,6 +533,26 @@ class CardProof(private val deps: Deps) {
             throw e
         }
 
+        return cardStateNow()
+    }
+
+    /**
+     * The card's state asked again, after the server turned it away as too many ([confirmCard]): the card signed already and
+     * the PIN is kept, so nothing is signed again. The wait for the last tap still counts from tap 2.
+     */
+    fun retryCardState(): Status {
+        if (!cardStateTurnedAway || ended) throw Stop("state")
+        checkIdle()
+        return cardStateNow()
+    }
+
+    /**
+     * The card's state, asked of the server with the scoped ID. Turned away as too many (docs/api/card-proof.md, "Rules for
+     * every endpoint"), the card proof does not end: [retryCardState] asks again. Any other failure ends it.
+     */
+    private fun cardStateNow(): Status {
+        cardStateTurnedAway = false
+        val signature = scopeSignature ?: throw Stop("cancelled")
         val request: ByteArray
         try {
             checkDate()
@@ -486,7 +564,11 @@ class CardProof(private val deps: Deps) {
         val answer = try {
             deps.backend.cardState(request)
         } catch (e: ServerException) {
-            fail(Stop.server(e))
+            live()
+            if (!e.tooMany) fail(Stop.server(e))
+            checkIdle()
+            keep { cardStateTurnedAway = true }
+            throw Stop.server(e)
         }
         live()
         checkIdle()
@@ -632,6 +714,10 @@ class CardProof(private val deps: Deps) {
             challenge = try {
                 deps.backend.challenge()
             } catch (e: ServerException) {
+                live()
+                // Too many people: nothing was signed, the PIN is kept. Called again, this asks for a challenge again; the wait for
+                // the last tap still counts from tap 2.
+                if (e.tooMany) throw Stop.server(e)
                 fail(Stop.server(e))
             }
             live()
@@ -689,14 +775,34 @@ class CardProof(private val deps: Deps) {
         dropSecrets()
         live()
         events.done(Item.PROVED)
+        return submit(Unsent(record, shown, challenge, status.shortId))
+    }
 
+    /** The record [declare] made, sent again after the server turned it away as too many: nothing signed or computed again. */
+    fun resubmit(): Done {
+        val kept = unsent
+        if (kept == null || ended) throw Stop("state")
+        return submit(kept)
+    }
+
+    /**
+     * The submission. Turned away as too many, the card proof does not end: the server did not record it, and [resubmit] sends
+     * the same record again (docs/api/card-proof.md, "Rules for every endpoint"). Any other failure ends it.
+     */
+    private fun submit(record: Unsent): Done {
+        unsent = null
         val answer = try {
-            deps.backend.submit(record)
+            deps.backend.submit(record.record)
         } catch (e: ServerException) {
-            fail(Stop("server", mapOf("code" to e.code, "submitting" to "true"), e.requestId))
+            live()
+            val stop = Stop.server(e, "submitting" to "true")
+            if (!e.tooMany) fail(stop)
+            keep { unsent = record }
+            throw stop
         }
         ended = true
-        return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts, validUntil)
+        val shown = record.shown
+        return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, record.challenge.substring(0, 10), record.shortId, shown.accounts, validUntil)
     }
 
     // The end --------------------------------------------------------------------------
@@ -723,6 +829,8 @@ class CardProof(private val deps: Deps) {
         entries = null
         chosenAccountsJson = null
         validUntil = null
+        cardStateTurnedAway = false
+        unsent = null
     }
 
     private fun dropPin() {
@@ -809,7 +917,8 @@ class CardProof(private val deps: Deps) {
  *   artifact        a bundled file is not the one written into the core
  *   engine          the core failed
  *   server          `code`, the server's error code or what the app could not read;
- *                   `submitting` when it answered the submission
+ *                   `submitting` when it answered the submission; `too_many` when it
+ *                   turned the request away as too many ([tooMany])
  *   date_mismatch   the challenge is not dated today by the phone's clock
  *   date_changed    the list would now do something other than the screen said
  *   idle            [CardProof.IDLE_MS] passed after tap 2
@@ -818,8 +927,12 @@ class CardProof(private val deps: Deps) {
  *   cancelled, state
  */
 class Stop(val code: String, val values: Map<String, String> = emptyMap(), val requestId: String? = null) : Exception(code) {
+    /** The server turned the request away as too many ([ServerException.tooMany]): the same request can be sent again. */
+    val tooMany: Boolean get() = code == "server" && values["too_many"] == "true"
+
     companion object {
-        fun server(e: ServerException) = Stop("server", mapOf("code" to e.code), e.requestId)
+        fun server(e: ServerException, vararg more: Pair<String, String>) =
+            Stop("server", mapOf("code" to e.code) + (if (e.tooMany) mapOf("too_many" to "true") else emptyMap()) + more, e.requestId)
 
         fun core(e: DeviceCoreException) = Stop(if (e.code == DeviceCoreException.ARGUMENT) "clock" else "engine")
 

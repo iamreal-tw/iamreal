@@ -58,7 +58,10 @@ internal class Messages(private val c: Copy) {
             else -> c.say("stops.crl_unavailable", "code" to stop.values.getValue("code"))
         }
         "revoked" -> c.say("stops.revoked")
-        "server" -> when (val code = stop.values.getValue("code")) {
+        "server" -> if (stop.tooMany) {
+            // Too many people (429, or 503 `busy`; ADR-0026): the same request can be sent again, the card not held to the phone again.
+            c.say("stops.too_many")
+        } else when (val code = stop.values.getValue("code")) {
             "network" -> if (at == At.DECLARE && stop.values["submitting"] == "true") c.say("stops.submit_failed") else c.say("stops.server_unreadable", "code" to code)
             "crl_stale" -> c.say("stops.server_crl_stale")
             "daily_limit" -> c.say("stops.daily_limit")
