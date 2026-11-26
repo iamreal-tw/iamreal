@@ -108,6 +108,7 @@ App Store 的「App 隱私權」和 Google Play 的「資料安全性」，兩�
 
 - **送審時照那一版 app 實際送的填。** 計數的票在上線前做完（[#431](https://github.com/iamreal-tw/iamreal/issues/431)）；封閉測試的 build 如果早於它們送審，標示只填第 1、3、10 列，#20 和計數上了之後在兩家的後台補上第 2、4 到 9 列
 - **請求的標頭不帶手機的東西**（[#444](https://github.com/iamreal-tw/iamreal/issues/444)）。兩個 app 的每個請求，`User-Agent` 都是固定的 `iamreal`（`ios/App/Backend.swift`、`android/…/backend/Backend.kt`）；iOS 的 `Accept-Language` 是固定的 `zh-TW`，Android 不送這個標頭。系統另外加的只有 `Host`、`Accept`、`Accept-Encoding`、`Connection`、`Content-Type`、`Content-Length`，量到的值沒有手機的型號、版本或語言（iOS 的測試 `ios/Tests/UserAgentTests.swift` 逐個請求核對）。所以第 9 列在 iOS 和 Android 一樣是「還沒做」
+- **`Accept-Encoding` 是系統填的，沒有固定。** 量到的是 iOS `gzip, deflate`、Android `gzip`（2026-11-26，模擬器，本機的 `http://`）。值裡沒有裝置的東西，但不同版本的系統、或正式用的 `https://` 上，列出的壓縮方式可能不一樣，那會間接看得出系統大概是哪一段版本；這一點沒有量過。沒有去固定它，因為自己設這個標頭可能讓系統不再自動解壓縮（#444）
 - **#444 之前的 iOS build 送的不一樣**：2026-11-26 在模擬器上量到 `User-Agent: IamrealApp/1 CFNetwork/3860.100.1 Darwin/27.2.0`（app 的名稱和 build、CFNetwork 和系統核心的版本）和 `Accept-Language: zh-TW,zh-Hant;q=0.9`（手機的語言清單），跟著每個請求送出，在 Cloudflare 自己的那一份裡留 31 天。送審的 build 要是 #444 之後的
 - **多報不是這裡的選項**：還沒有送的東西先填上去，商店頁就寫了 app 沒有做的事（`docs/design/principles.md`：不說得比實際多）
 
