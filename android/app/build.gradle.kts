@@ -489,11 +489,13 @@ abstract class CheckApk : DefaultTask() {
 
 /**
  * design/'s files the app carries as they are, by where they go in its resources (res/): the sentences of the
- * card proof and of the app, and the subset of the headings' typeface. Each is design/'s own file, not a copy kept here.
+ * card proof and of the app, the timeline of step 6's demonstration, and the subset of the headings' typeface.
+ * Each is design/'s own file, not a copy kept here.
  */
 val designResources = mapOf(
     "raw/card_proof_copy.json" to rootProject.file("../design/copy/card-proof.json"),
     "raw/app_copy.json" to rootProject.file("../design/copy/app.json"),
+    "raw/hang_motion.json" to rootProject.file("../design/motion/hang.json"),
     "font/genryumin2tw_b.otf" to rootProject.file("../design/fonts/GenRyuMin2TW-B.otf"),
 )
 
@@ -622,4 +624,6 @@ tasks.withType<Test>().configureEach {
     inputs.files("src/main/res/values/strings.xml", "src/debug/res/values/strings.xml")
     inputs.dir(rootProject.file("../spec/vectors"))
     inputs.files(rootProject.file("../design/copy/app.md"), rootProject.file("../design/copy/app.json"))
+    // The timeline the answers of spec/vectors/teaching-animation.json are for (HangMotionTest).
+    inputs.files(rootProject.file("../design/motion/hang.json"))
 }

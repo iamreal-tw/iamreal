@@ -53,7 +53,7 @@ class DoneViewTest {
         assertEquals("2026-11-16 記進了證明紀錄。", view.recordedOn)
         assertEquals("把證明掛上你的 Threads 個人檔案", view.hangTitle)
         assertEquals("在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。", view.why)
-        assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
+        assertEquals(listOf(Messages.OpensProfile("打開 Threads", "打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice")), view.profiles)
         assertEquals(listOf("按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」"), view.steps)
         assertEquals("掛好了嗎？打開你的島民證明看看。", view.hung)
         assertEquals(false, view.short)
@@ -126,7 +126,7 @@ class DoneViewTest {
         assertEquals("把證明掛上你的個人檔案", view.hangTitle)
         assertEquals("任何人都能宣告任何帳號。你把同一個連結掛上每個帳號的個人檔案，別人才知道那個帳號承認這張證明。", view.why)
         // No page of an account on a platform the app does not know.
-        assertEquals(listOf("打開 @alice 的 Threads 個人檔案" to "https://www.threads.com/@alice"), view.profiles)
+        assertEquals(listOf(Messages.OpensProfile("打開 Threads", "打開 @alice 的 Threads 個人檔案", "https://www.threads.com/@alice")), view.profiles)
         assertEquals(emptyList<String>(), view.notes)
         assertEquals(false, view.short)
     }
@@ -144,7 +144,7 @@ class DoneViewTest {
         // That sentence is step 6's only when the list still has an account: there is no step 6 here.
         assertEquals(emptyList<String>(), view.notes)
         assertEquals(emptyList<Pair<String?, String>>(), view.card)
-        assertEquals(emptyList<Pair<String, String>>(), view.profiles)
+        assertEquals(emptyList<Messages.OpensProfile>(), view.profiles)
         assertEquals(false, view.showRecord)
     }
 
