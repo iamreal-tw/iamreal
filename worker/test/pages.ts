@@ -205,6 +205,12 @@ export const previewImageMeta = (host: string): string =>
 /** The one script a page may load, as the page writes it. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
 
+/** The player of the demonstration, as the page of hanging a card's proof writes it, after the copy buttons' script. */
+export const DEMO_SCRIPT = '<script src="/demo.js" defer></script>';
+
+/** How the timeline of the demonstration starts in that page: data, which a browser does not run. */
+export const DEMO_DATA = '<script type="application/json" id="hang-timeline">';
+
 /**
  * Requests a page and checks what every page of the visitors must be: the
  * headers; HTML with no script (but the copy buttons' script on /faq, /verify
@@ -223,8 +229,10 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test, script });
   assert.equal(res.headers.get("content-type"), "text/html; charset=utf-8", `${path}: Content-Type`);
   if (script) {
-    assert.equal(page.match(/<\s*script/gi)?.length, 1, `${path}: one script`);
-    assert.ok(page.includes(COPY_SCRIPT), `${path}: the one script is /copy.js`);
+    // The page of hanging a card's proof also has the demonstration: its player, and its timeline as data (hang.md, 示範).
+    const demo = path.startsWith("/hang/");
+    assert.deepEqual(page.match(/<\s*script[^>]*>/gi), demo ? [COPY_SCRIPT.replace("</script>", ""), DEMO_SCRIPT.replace("</script>", ""), DEMO_DATA] : [COPY_SCRIPT.replace("</script>", "")], `${path}: the scripts are this site's files, and nothing inline that runs`);
+    assert.ok(page.includes(COPY_SCRIPT) && (!demo || page.includes(DEMO_SCRIPT)), `${path}: each script is a file and holds nothing`);
   } else assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
