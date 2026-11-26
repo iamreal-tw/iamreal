@@ -13,6 +13,20 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.publicFiles.absoluteString, "https://test-data.iamreal.tw")
     }
 
+    /// One app in the store (ADR-0037): one number, and only the store's build opens its page.
+    func testTheStorePageIsTheOneAppInTheStoreAndOnlyTheStoreBuildOpensIt() throws {
+        XCTAssertEqual(AppEnvironment.storePage(appID: "1234567890", storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id1234567890")
+        // The development build is not in the store: the page would be of another app.
+        XCTAssertNil(AppEnvironment.storePage(appID: "1234567890", storeBuild: false))
+        // Not known yet, or not a number: no page, so no button.
+        XCTAssertNil(AppEnvironment.storePage(appID: nil, storeBuild: true))
+        XCTAssertNil(AppEnvironment.storePage(appID: "", storeBuild: true))
+        XCTAssertNil(AppEnvironment.storePage(appID: "id1234567890", storeBuild: true))
+        // This build, the development one.
+        XCTAssertFalse(AppEnvironment.storeBuild)
+        XCTAssertNil(AppEnvironment.storePage)
+    }
+
     func testTheCardSignsTheScopeStringOfTheTestProofLog() throws {
         let expected = try Repository.testScopeString()
         XCTAssertTrue(expected.hasPrefix("iamreal-test:public:0"))

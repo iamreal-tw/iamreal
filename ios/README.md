@@ -24,7 +24,11 @@
 | `min_app` 讀不懂（包括 app 自己的 build number 不是整數） | 第 2 步停在「連上島民證明的伺服器」，和 `config` 讀不懂相同，不讀卡 |
 | 手機不能讀卡（沒有 NFC） | 整個畫面換掉第 1 步 |
 
-「到 App Store 更新」開的是 `App/AppEnvironment.swift` 的 `storePage`（`https://apps.apple.com/app/id<數字>`）。這個 app 在 App Store Connect 的數字還沒有寫進去，寫進去之前那兩個畫面照樣寫要更新，沒有按鈕。
+「到 App Store 更新」開的是商店上那一個 app（`tw.iamreal.app`，ADR-0037）的頁面，`https://apps.apple.com/app/id<數字>`。商店上只有一個 app，TestFlight 和 App Store 是 App Store Connect 的同一筆，所以數字只有一個，連測試網站或正式網站都一樣：
+
+- **數字還沒有。** 拿到之後改一行：`App/AppEnvironment.swift` 的 `storeAppID`，從 `nil` 改成那串數字（例如 `"1234567890"`，只有數字，不帶 `id`）。數字在 App Store Connect 這個 app 的「App 資訊」裡，叫 Apple ID。它不是密鑰。
+- **寫進去之前**，那兩個畫面照樣寫要更新，沒有按鈕。
+- **開發用 build（Debug，`tw.iamreal.app.dev`）一律沒有按鈕**，寫了數字也一樣：它不在商店，商店的頁面是另一個 app 的，在那裡更新不會讓這個 build 變新。開發用 build 太舊時，從新的原始碼再用線裝一次（「怎麼用線裝到手機」）。畫面上的句子不分 build，照樣寫到 App Store 更新。
 
 第 2 步有感應位置的示範（[#376](https://github.com/iamreal-tw/iamreal/issues/376)），取代原本的示意圖和圖說：進到第 2 步就開始，三輪（10.55 秒）後停在卡片貼好的那一格；下面是同一顆按鈕（「停止」「再看一次」）。按了「感應卡片」之後示範停在卡片貼好的那一格、不自己重播（沒有感應到、再感應一次時也是），感應中那顆按鈕不能按；讀完之後不畫。減少動態時照樣播，對 VoiceOver 是一句說明（`app_demo.sense_iphone`）。說明的那一句沒有改。
 
