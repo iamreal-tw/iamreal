@@ -54,7 +54,7 @@ object DeviceCore {
 
     /**
      * Whether this build of the app may do a card proof (spec/min-app.md): JSON, `{"verdict":"ok"}`,
-     * `{"verdict":"ok_until","from":"2027-03-01"}`, `{"verdict":"stop"}` or `{"verdict":"unreadable"}`.
+     * `{"verdict":"ok_until","from":"2027-03-01"}`, `{"verdict":"stop","from":"2027-03-01"}` or `{"verdict":"unreadable"}`.
      * [config] is the body of `GET /api/v1/config` as the server sent it; [appBuild] the app's own
      * `versionCode`; [now] the phone's clock in seconds. The core reads the Android app's entry.
      */

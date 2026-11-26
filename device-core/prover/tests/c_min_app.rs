@@ -64,6 +64,9 @@ fn every_case_of_the_vectors() {
         let result = text(c, "result");
         let want = if result == "ok_until" {
             json!({"verdict": "ok_until", "from": text(c, "from")})
+        } else if result == "stop" {
+            // The vectors give `from` with `ok_until` only; a stop carries the same date, the entry's own, for the screen to say.
+            json!({"verdict": "stop", "from": c["config"]["min_app"][text(c, "client")]["from"]})
         } else {
             json!({ "verdict": result })
         };
@@ -116,7 +119,7 @@ fn a_body_that_is_not_config() {
         let body = CONFIG.replacen("12", build, 1);
         assert_eq!(
             min_app(body.as_bytes(), IDC_CLIENT_ANDROID, 11, ON),
-            Ok(json!({"verdict": "stop"})),
+            Ok(json!({"verdict": "stop", "from": "2027-03-01"})),
             "{build}"
         );
         assert_eq!(

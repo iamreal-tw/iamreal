@@ -606,8 +606,9 @@ pub unsafe extern "C" fn idc_short_id(
 /// - `{"verdict":"ok_until","from":"2027-03-01"}`: the app goes on as
 ///   usual, and says that from that date in Taiwan this version can no
 ///   longer do a card proof.
-/// - `{"verdict":"stop"}`: the app does not ask for the PIN or read the
-///   card; it says this version must be updated.
+/// - `{"verdict":"stop","from":"2027-03-01"}`: the app does not ask for the
+///   PIN or read the card; it says that since that date this version must
+///   be updated.
 /// - `{"verdict":"unreadable"}`: the field cannot be read (a body that is
 ///   not `config`'s included), and the app does not go on either.
 ///
@@ -641,7 +642,7 @@ pub unsafe extern "C" fn idc_min_app(
             min_app::Verdict::OkUntil(from) => {
                 json!({"verdict": "ok_until", "from": from.to_string()})
             }
-            min_app::Verdict::Stop => json!({"verdict": "stop"}),
+            min_app::Verdict::Stop(from) => json!({"verdict": "stop", "from": from.to_string()}),
             min_app::Verdict::Unreadable => json!({"verdict": "unreadable"}),
         };
         Ok(answer.to_string().into_bytes())

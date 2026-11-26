@@ -181,8 +181,9 @@ int32_t idc_short_id(const uint8_t *scoped_id, size_t scoped_id_len, idc_buf *ou
  *   {"verdict":"ok"}                              the app goes on as usual
  *   {"verdict":"ok_until","from":"2027-03-01"}    it goes on, and says that
  *     from that date in Taiwan this version can no longer do a card proof
- *   {"verdict":"stop"}          it does not ask for the PIN or read the card,
- *     and says this version must be updated
+ *   {"verdict":"stop","from":"2027-03-01"}        it does not ask for the PIN
+ *     or read the card, and says that since that date this version must be
+ *     updated
  *   {"verdict":"unreadable"}    the field cannot be read (a body that is not
  *     config's included): the app does not go on either
  *
