@@ -285,8 +285,8 @@ export function onePlatform(st: Pick<CardStatus, "tablePlatforms" | "slots">): s
 }
 
 export interface BeforeView {
-  /** before.one_proof, or with one platform before.one_proof_single. */
-  oneProof: Sentence;
+  /** before.one_proof, with more than one platform; null with one (what the proof says and that it is public is step 5's first sentence). */
+  oneProof: Sentence | null;
   /** before.listed_together: more than one platform. */
   listedTogether: boolean;
 }
@@ -296,9 +296,7 @@ export interface BeforeView {
  * by the platforms the device has its own definition of (src/platforms.ts).
  */
 export function beforeView(known: ReadonlySet<string> = KNOWN_PLATFORMS): BeforeView {
-  const c = COPY.before;
-  const only = known.size === 1 ? presentationOf([...known][0]!) : null;
-  return only ? { oneProof: say(c.one_proof_single, { platform: only.name }), listedTogether: false } : { oneProof: say(c.one_proof), listedTogether: true };
+  return known.size === 1 ? { oneProof: null, listedTogether: false } : { oneProof: say(COPY.before.one_proof), listedTogether: true };
 }
 
 // Step 4: the card's list ------------------------------------------------------------
@@ -308,7 +306,6 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86_400_000);
 }
 
-/** A platform's name on the screen: the server's display name, or for a platform the device does not know its ID. */
 /**
  * A platform's name on the screen: the device's own (src/platforms.ts), not
  * the display name of the server's table; for a platform the device does
@@ -336,12 +333,16 @@ export interface AccountRowView {
   lines: Sentence[];
 }
 
-export interface AccountsView {
-  /**
-   * never: the card has no valid record; declared: it declares at least one
-   * account now; nothing: it declared before and withdrew everything.
-   */
-  state: "never" | "declared" | "nothing";
+/**
+ * never: the card has no valid record; declared: it declares at least one
+ * account now; nothing: it declared before and withdrew everything.
+ */
+export type AccountsState = "never" | "declared" | "nothing";
+
+/** Step 4 as rows to fill: the card declares nothing, or (more than one platform) the list opened with accounts.edit_list. */
+export interface FillView {
+  mode: "fill";
+  state: AccountsState;
   /** accounts.title, or with one platform accounts.title_single. */
   title: Sentence;
   /** The lines above the list. */
@@ -349,10 +350,44 @@ export interface AccountsView {
   rows: AccountRowView[];
   /** The lines below the list, before the button; each line one or two sentences. Nothing follows them: the card proof's screens link to no other page. */
   notes: Sentence[][];
-  /** Below the button: accounts.not_yours, or with one platform accounts.not_yours_single; null on a day with 3 records. */
-  notYours: Sentence | null;
   /** 3 records of the card today: the list as it is, this sentence, and accounts.restart only. */
   dailyLimit: Sentence | null;
+}
+
+/** Step 4 when the card declares accounts: what it declares, accounts.refresh, and the other actions. */
+export interface DeclaredView {
+  mode: "declared";
+  state: "declared";
+  title: Sentence;
+  /** The accounts declared now, under accounts.declared_now: `name` null with one platform; `line` for a platform the device does not know. */
+  current: { platform: string; name: string | null; account: string; raw: boolean; line: Sentence | null }[];
+  /** accounts.last_proof, or accounts.last_proof_today. */
+  last: Message;
+  /** Under accounts.refresh: accounts.refresh_note. */
+  refreshNote: Sentence;
+  /** accounts.switch: one platform, not on a day with 3 records. */
+  switchAccount: boolean;
+  /** accounts.withdraw, naming the account: one platform, not on a day with 3 records. */
+  withdraw: Sentence | null;
+  /** accounts.edit_list in place of the two: more than one platform, not on a day with 3 records. */
+  editList: boolean;
+  /** 3 records of the card today: the accounts as they are, this sentence, and accounts.restart only. */
+  dailyLimit: Sentence | null;
+}
+
+export type AccountsView = FillView | DeclaredView;
+
+/** Step 4 after accounts.switch (one platform, the card declares an account). */
+export interface SwitchView {
+  title: Sentence;
+  /** accounts.declared_inline */
+  intro: Sentence;
+  /** The field, empty; null when no switch is left (and the account was not put there today). */
+  row: AccountRowView | null;
+  /** Below the field: what changing it does and the switches left after it; or that no switch is left. */
+  lines: Sentence[];
+  /** accounts.preview_note; null without a field or a preview. */
+  previewNote: Sentence | null;
 }
 
 /** The lines under one row (step 4, the table of the line under each row). */
@@ -381,61 +416,112 @@ export function rowLines(slot: SlotStatus): Sentence[] {
   return lines;
 }
 
-export function accountsView(st: CardStatus): AccountsView {
-  const a = COPY.accounts;
-  const daily = st.dailyLimit;
-  // One platform (onePlatform): the title and two lines name it.
-  const single = onePlatform(st);
-  const title = single !== null ? say(a.title_single, { platform: single }) : say(a.title);
-  const fillOne = single !== null ? say(a.fill_one_single, { platform: single }) : say(a.fill_one);
-  const onePer = single !== null ? say(a.one_per_platform_single, { platform: single }) : say(a.one_per_platform);
-  const rows: AccountRowView[] = st.slots.map((slot) => ({
+/** The title of step 4: with one platform (onePlatform), it names it. */
+function accountsTitle(single: string | null): Sentence {
+  return single !== null ? say(COPY.accounts.title_single, { platform: single }) : say(COPY.accounts.title);
+}
+
+/** A row of the list to fill; `lines` whether the row says its counts. */
+function rowView(slot: SlotStatus, o: { daily: boolean; lines: boolean; current?: string }): AccountRowView {
+  return {
     platform: slot.platform,
     name: platformName(slot),
     prefix: slot.row === null ? "" : (presentationOf(slot.platform)?.prefix ?? ""),
     raw: slot.row === null,
-    current: slot.current ?? "",
-    editable: slot.row !== null && !daily,
-    preview: slot.row !== null && !daily && (presentationOf(slot.platform)?.profileUrl ?? null) !== null,
-    lines: daily ? [] : rowLines(slot),
-  }));
-  const anyPreview = rows.some((r) => r.preview);
-  const preview = anyPreview ? [[say(a.preview_note)]] : [];
-  const notYours = daily ? null : single !== null ? say(a.not_yours_single, { platform: single }) : say(a.not_yours);
-  const last: Message =
-    st.lastCardProof === null ? { code: "no_last_card_proof" } : st.lastCardProof === st.today ? say(a.last_card_proof_today) : say(a.last_card_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
+    current: o.current ?? slot.current ?? "",
+    editable: slot.row !== null && !o.daily,
+    preview: slot.row !== null && !o.daily && (presentationOf(slot.platform)?.profileUrl ?? null) !== null,
+    lines: o.daily || !o.lines ? [] : rowLines(slot),
+  };
+}
+
+function previewNotes(rows: readonly AccountRowView[]): Sentence[][] {
+  return rows.some((r) => r.preview) ? [[say(COPY.accounts.preview_note)]] : [];
+}
+
+function lastCardProof(st: CardStatus): Message {
+  const a = COPY.accounts;
+  if (st.lastCardProof === null) return { code: "no_last_card_proof" };
+  return st.lastCardProof === st.today ? say(a.last_proof_today) : say(a.last_proof, { days_ago: daysBetween(st.lastCardProof, st.today) });
+}
+
+/**
+ * Step 4 as it opens (design/copy/card-proof.md, step 4): rows to fill when
+ * the card declares nothing; what it declares and the actions when it does.
+ */
+export function accountsView(st: CardStatus): AccountsView {
+  const a = COPY.accounts;
+  const daily = st.dailyLimit;
+  const single = onePlatform(st);
+  const title = accountsTitle(single);
   const dailyLimit = daily ? say(s.daily_limit) : null;
   if (st.accounts.length > 0) {
+    const current = st.slots
+      .filter((slot) => slot.current !== null)
+      .map((slot) => ({
+        platform: slot.platform,
+        name: single !== null ? null : platformName(slot),
+        account: slot.row === null ? slot.current! : handle(slot.platform, slot.current!),
+        raw: slot.row === null,
+        line: slot.row === null ? say(a.row_unknown_platform) : null,
+      }));
+    const only = single !== null ? current[0]! : null;
     return {
+      mode: "declared",
       state: "declared",
       title,
-      lead: [[say(a.current), last]],
-      rows,
-      notes: daily ? [] : [[say(a.how_refresh)], [say(a.how_change), say(a.switches_limited)], ...preview],
-      notYours,
+      current,
+      last: lastCardProof(st),
+      refreshNote: say(a.refresh_note),
+      switchAccount: only !== null && !daily,
+      withdraw: only !== null && !daily ? say(a.withdraw, { account: only.account }) : null,
+      editList: single === null && !daily,
       dailyLimit,
     };
   }
-  if (st.lastCardProof !== null) {
-    return {
-      state: "nothing",
-      title,
-      lead: [[say(a.nothing_now)], [fillOne]],
-      rows,
-      notes: daily ? [] : [[say(a.how_change), say(a.switches_limited)], ...preview],
-      notYours,
-      dailyLimit,
-    };
-  }
+  // Nothing declared now: the rows to fill. One platform: no line under a row never declared, and no rules of switching.
+  const never = st.lastCardProof === null;
+  const rows = st.slots.map((slot) => rowView(slot, { daily, lines: single === null || !never }));
+  const fillOne = single !== null ? say(a.fill_one_single, { platform: single }) : say(a.fill_one);
+  const rules = single !== null ? [] : [never ? [say(a.one_per_platform), say(a.switches_limited)] : [say(a.how_change), say(a.switches_limited)]];
   return {
-    state: "never",
+    mode: "fill",
+    state: never ? "never" : "nothing",
     title,
-    lead: [[say(a.none_yet)], [fillOne]],
+    lead: [[say(never ? a.none_yet : a.nothing_now)], [fillOne]],
     rows,
-    notes: daily ? [] : [[onePer, say(a.switches_limited)], ...preview],
-    notYours,
+    notes: daily ? [] : [...rules, ...previewNotes(rows)],
     dailyLimit,
   };
+}
+
+/** Step 4 after accounts.edit_list (more than one platform): one row per platform, each changed on its own. */
+export function editListView(st: CardStatus): FillView {
+  const a = COPY.accounts;
+  const rows = st.slots.map((slot) => rowView(slot, { daily: false, lines: true }));
+  return {
+    mode: "fill",
+    state: "declared",
+    title: accountsTitle(onePlatform(st)),
+    lead: [[say(a.current)]],
+    rows,
+    notes: [[say(a.how_change), say(a.switches_limited)], ...previewNotes(rows)],
+    dailyLimit: null,
+  };
+}
+
+/** Step 4 after accounts.switch (one platform): the account now, a field for another, and what it costs. */
+export function switchView(st: CardStatus): SwitchView {
+  const a = COPY.accounts;
+  const slot = st.slots.find((sl) => sl.row !== null && sl.current !== null)!;
+  const now = handle(slot.platform, slot.current!);
+  const intro = say(a.declared_inline, { account: now });
+  const title = accountsTitle(onePlatform(st));
+  // Used up, and not put there today: no other account can be declared.
+  if (!slot.correctionToday && slot.switchesLeft === 0) return { title, intro, row: null, lines: [say(a.row_used_up, { switches_used: slot.switchCount })], previewNote: null };
+  const row = rowView(slot, { daily: false, lines: false, current: "" });
+  const cost = slot.correctionToday ? say(a.row_today) : slot.switchesLeft === 1 ? say(COPY.confirm.uses_final_switch) : say(a.switch_limit, { switches_left: slot.switchesLeft - 1 });
+  return { title, intro, row, lines: [say(a.switch_effect, { account: now }), cost], previewNote: row.preview ? say(a.preview_note) : null };
 }
 
 // Step 5: the list to be signed ------------------------------------------------------
@@ -486,14 +572,12 @@ export interface ConfirmView {
   intro: string;
   rows: ConfirmRowView[];
   date: string;
-  /** confirm.withdraw_stays: an account is withdrawn. */
+  /** confirm.withdraw_stays: more than one platform, an account withdrawn, the list not empty. */
   withdrawStays: boolean;
   /** confirm.listed_together: the list is not empty, and the screens speak of more than one platform (onePlatform). */
   listedTogether: boolean;
-  /** confirm.listed_single, in its place: the list is not empty, and the screens speak of one platform. */
-  listedSingle: Sentence | null;
-  /** The second point: what can be done later, and that no record can be deleted. */
-  later: string;
+  /** The points under the list; in confirm.holder_later, the value `cannot_delete` is shown in bold. */
+  points: Sentence[];
   button: string;
 }
 
@@ -502,8 +586,13 @@ function allUnchanged(rows: readonly { kind: string; username: string; current: 
   return rows.every((r) => r.kind === "refresh" && r.current === r.username);
 }
 
-/** `single`: the one platform's name when the screens speak of one platform (onePlatform of the card's status); null otherwise. */
-export function confirmView(cq: Consequence, single: string | null = null): ConfirmView {
+/**
+ * `single`: the one platform's name when the screens speak of one platform
+ * (onePlatform of the card's status); null otherwise. `platforms`: the
+ * names of the platforms the points speak of (the one, or each the device
+ * knows of the server's table).
+ */
+export function confirmView(cq: Consequence, single: string | null, platforms: readonly string[]): ConfirmView {
   const c = COPY.confirm;
   const empty = cq.accounts.length === 0;
   const rows = cq.rows.map((r) => ({
@@ -514,15 +603,27 @@ export function confirmView(cq: Consequence, single: string | null = null): Conf
     raw: r.row === null,
     lines: rowSentences(r),
   }));
+  const named = platforms.join(c.platform_separator);
+  const notIdentifiable = say(c.not_identifiable, { platform: named });
+  const button = empty
+    ? single !== null && rows.length === 1
+      ? fill(c.button_withdraw, { account: rows[0]!.account })
+      : c.button_withdraw_all
+    : allUnchanged(cq.rows)
+      ? c.button_refresh
+      : single !== null
+        ? c.button_declare_single
+        : c.button_declare;
   return {
-    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_single : c.intro,
+    intro: empty ? c.intro_withdraw_all : single !== null ? c.intro_public : c.intro,
     rows,
     date: cq.today,
-    withdrawStays: cq.rows.some((r) => r.kind === "withdraw"),
+    withdrawStays: !empty && single === null && cq.rows.some((r) => r.kind === "withdraw"),
     listedTogether: !empty && single === null,
-    listedSingle: !empty && single !== null ? say(c.listed_single, { platform: single }) : null,
-    later: (empty ? c.later_withdraw : c.later) + c.permanent,
-    button: empty ? c.button_withdraw_all : allUnchanged(cq.rows) ? c.button_refresh : single !== null ? c.button_declare_single : c.button_declare,
+    points: empty
+      ? [say(c.history_stays), notIdentifiable, say(c.holder_later_withdraw)]
+      : [notIdentifiable, say(c.holder_later, { platform: named, cannot_delete: c.cannot_delete })],
+    button,
   };
 }
 
