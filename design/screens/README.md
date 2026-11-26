@@ -35,7 +35,8 @@
 | `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 實作版 |
 | `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來）：示範停在最後一格 | 實作版 |
 | `hang-proof-still-desktop.png`、`hang-proof-still-phone.png` | 同一頁，示範的播放程式沒有載入時：四步各一張示意圖和結果圖 | 實作版 |
-| `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 實作版 |
+| `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張）：示範停在最後一格 | 實作版 |
+| `hang-still-desktop.png`、`hang-still-phone.png` | 同一頁，示範的播放程式沒有載入時：四步各一張示意圖 | 實作版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 實作版 |
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 實作版 |
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |
@@ -82,15 +83,14 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（Android） |
 | `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（Android） |
 | `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（Android） |
-| `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（iOS） |
-| `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（iOS） |
-| `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（iOS） |
-| `card-proof-app-7-reminder-on-phone.png` | 第 7 步：提醒已經開著 | 實作版（iOS） |
+| `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（Android） |
+| `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（Android） |
+| `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（Android） |
+| `card-proof-app-7-reminder-on-phone.png` | 第 7 步：提醒已經開著 | 實作版（Android） |
 | `card-proof-app-7-reminder-refused-phone.png` | 第 7 步：系統不允許這個 app 發通知 | 實作版（iOS） |
-| `card-proof-app-8-done-phone.png` | 第 8 步：完成和分享，這張卡片的第一筆紀錄 | 實作版（iOS） |
-| `card-proof-app-8-done-switch-phone.png` | 第 8 步：更換之後 | 實作版（iOS） |
-| `card-proof-app-8-withdraw-phone.png` | 第 8 步：全部收回（第 5 步之後直接到這裡） | 實作版（iOS） |
-| `card-proof-app-6-done-phone.png` | 拆成三步之前的第 6 步（完成），Android 的；Android 改成八步時（#362）拿掉 | 實作版（Android） |
+| `card-proof-app-8-done-phone.png` | 第 8 步：完成和分享，這張卡片的第一筆紀錄 | 實作版（Android） |
+| `card-proof-app-8-done-switch-phone.png` | 第 8 步：更換之後 | 實作版（Android） |
+| `card-proof-app-8-withdraw-phone.png` | 第 8 步：全部收回（第 5 步之後直接到這裡） | 實作版（Android） |
 
 ### app 的其他畫面
 
@@ -98,7 +98,6 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `app-reminder-1-done-phone.png` | 拆成三步之前的完成畫面上問要不要提醒的那一段（現在是過卡的第 7 步），iOS 拍的；Android 的測試和註解還提到這個檔名，Android 改成八步時（#362）拿掉 | 實作版（iOS） |
 | `app-reminder-2-schedule-phone.png` | 提醒的間隔和時刻 | 實作版（iOS） |
 | `app-reminder-3-notification-phone.png` | 提醒的通知（示意，不是系統的實際畫面） | 定稿版 |
 | `app-reminder-4-from-notification-phone.png` | 從通知點進來的第 1 步 | 實作版（iOS） |

@@ -336,16 +336,32 @@ internal class Messages(private val c: Copy) {
         )
     }
 
-    /** The title of step 6 (card-proof.md, the table of titles), by what the server says was recorded. */
-    fun doneTitle(d: CardProof.Done): String {
-        val kinds = d.answer.kinds ?: return c.say("done.recorded_only")
+    // After the submission: step 6 (hang it), step 8 (done and share) --------------------
+
+    /** The server's kinds with what each platform declared before: whether every row is unchanged (a card proof again). */
+    private fun recordedUnchanged(d: CardProof.Done): Boolean {
+        val kinds = d.answer.kinds ?: return false
         val current = d.expected.associate { it.platform to it.current }
-        return when {
-            d.firstRecord -> c.say("done.first")
-            d.accounts.isEmpty() -> c.say("done.withdraw_all")
-            allUnchanged(kinds.map { Triple(it.kind, it.username, current[it.platform]) }) -> c.say("done.refresh")
-            else -> c.say("done.changed")
+        return allUnchanged(kinds.map { Triple(it.kind, it.username, current[it.platform]) })
+    }
+
+    /**
+     * The title of the last step (card-proof.md, "8. 完成和分享", the table of titles), by what the server says was recorded.
+     * [single]: the one platform's name when the screens speak of one platform; then a new declaration (or one again after a
+     * withdrawal) is congratulated like a first one, and a switch names the account it is now.
+     */
+    fun doneTitle(d: CardProof.Done, single: String?): String {
+        val kinds = d.answer.kinds ?: return c.say("done.recorded_only")
+        if (d.firstRecord) return c.say("finish.first")
+        if (d.accounts.isEmpty()) return c.say("done.withdraw_all")
+        if (recordedUnchanged(d)) return c.say("done.refresh")
+        val k = if (single != null && kinds.size == 1) kinds[0] else null
+        if (k != null) {
+            val before = d.expected.firstOrNull { it.platform == k.platform }?.current
+            if (k.kind == "first" || (k.kind == "refresh" && before == null)) return c.say("finish.first")
+            if (k.kind == "switch" || k.kind == "correction") return c.say("finish.switched", "account" to Platforms.handle(k.platform, k.username))
         }
+        return c.say("done.changed")
     }
 
     /** A row of "證明紀錄記下了這一筆": one platform of the record, as the server says it recorded it. */
@@ -362,52 +378,67 @@ internal class Messages(private val c: Copy) {
         val switchUsed: String?,
     )
 
-    /** What step 6 says (design/copy/card-proof.md, "6. 完成"). The same choices as doneView of web/src/ui/messages.ts. */
+    /**
+     * What the steps after the submission say (design/copy/card-proof.md, "6. 掛上去" and "8. 完成和分享", each with its part
+     * marked app). The same choices as doneView of web/src/ui/messages.ts.
+     */
     class DoneView(
+        /** The last step's title. */
         val title: String,
-        /** The list is empty: no small card, no hanging, nothing to do besides. */
+        /** The list is empty: no step 6 or 7, no small card; the last step says the links can be taken down. */
         val withdrawAll: Boolean,
+        /** Everything withdrawn: finish.unlink_single, or with several platforms done.withdrawn_link. */
+        val unlink: String,
         /** The small card's accounts, as they are after this card proof: each with its platform's name, or none where the screens speak of one platform. */
         val card: List<Pair<String?, String>>,
-        /** The date the proof log recorded it. */
+        /** The date the proof log recorded it: the first line of step 6, and of the last step when everything was withdrawn. */
         val recordedOn: String,
+        /** hang.title, or with one platform hang.title_single. */
         val hangTitle: String,
-        val anyone: String,
+        /** Why to hang it: done.anyone, or with one platform hang.why_single. */
+        val why: String,
+        /** Step 6 asks only whether the link is still there: a card proof again (every row unchanged), with one platform, recorded as step 5 said. */
+        val short: Boolean,
+        /** The short step 6's question (hang.still_there_single); null when step 6 is the whole one. */
+        val stillThere: String?,
+        /** "打開你的島民證明看看。", the short step 6's line that opens the card's page. */
+        val look: String,
         /** "打開 @alice 的 Threads 個人檔案" and the address it opens: one per account on a platform the app knows. */
         val profiles: List<Pair<String, String>>,
-        /** What can be done besides: share the card's page, the sentence that names a platform and the button. One per platform the app knows. */
-        val shares: List<Pair<String, String>>,
-        /**
-         * What the share sheet gets before the card's address, on the line above it: the sentence with the card's
-         * ordinal, or without a number when the answer had none (design/copy/card-proof.md, "6. 完成").
-         */
-        val shareText: String,
+        /** The four steps on the platform, until the demonstration takes their place (card-proof.md, "示範"). */
+        val steps: List<String>,
+        /** Under the steps: a new card's new link (the card's first record), a withdrawn account's link (the list not empty), the other cards that declare an account. */
+        val notes: List<String>,
         /** "掛好了嗎？打開你的島民證明看看。", the line that opens the card's page. */
         val hung: String,
-        /** The card's first record: a new card has a new link (done.new_card). */
-        val newCard: Boolean,
-        /** done.mismatch, above the title: what the server recorded differs from what step 5 said. */
+        /** finish.ordinal, before the invitation to share; null when the answer had no ordinal. */
+        val ordinal: String?,
+        /** "分享到 Threads": one per platform the app knows. Each opens the system's share sheet. */
+        val shares: List<String>,
+        /**
+         * What the share sheet gets before the card's address, on the line above it: the sentence with the card's
+         * ordinal, or without a number when the answer had none.
+         */
+        val shareText: String,
+        /** done.mismatch, above everything: what the server recorded differs from what step 5 said. */
         val mismatch: String?,
         /** The record as the server says it recorded it: only where that differs from what step 5 said. */
         val showRecord: Boolean,
         /** The proof log's line; null when the answer's kinds could not be read. */
         val record: String?,
         /**
-         * Where the answer's kinds could not be read, the sentence that says so instead of the rows. The app's
-         * wording is not written yet (card-proof.md, "完成", app); until it is, the web's (ios/ does the same).
+         * Where the answer's kinds could not be read, the sentence that says so under the date. The app's
+         * wording is not written yet (card-proof.md, "6. 掛上去", app); until it is, the web's (ios/ does the same).
          */
         val kindsUnreadable: String?,
         val rows: List<DoneRow>,
-        /** One per account of the list that other cards declare too (`account_cards` above 1). */
-        val otherCards: List<String>,
-        /** An account was withdrawn: its link can be taken down. */
-        val withdrawnLink: Boolean,
     )
 
     fun done(d: CardProof.Done, single: String?): DoneView {
         val expected = d.expected.associateBy { it.platform }
         val kinds = d.answer.kinds
         val withdrawAll = d.accounts.isEmpty()
+        val mismatched = d.answer.mismatches.isNotEmpty()
         // A platform step 5 did not show (the server's answer differs) is named as the app knows it.
         val knownOf = { platform: String -> expected[platform]?.known ?: (Platforms.of(platform) != null) }
         val account = { platform: String, username: String -> if (knownOf(platform)) Platforms.handle(platform, username) else username }
@@ -433,29 +464,39 @@ internal class Messages(private val c: Copy) {
             }
             rows.sortBy { it.platform }
         }
+        val withdrew = kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" }
+        val short = single != null && !withdrawAll && !d.firstRecord && !mismatched && recordedUnchanged(d)
+        val openProof = c.say("done.open_proof")
         return DoneView(
-            title = doneTitle(d),
+            title = doneTitle(d, single),
             withdrawAll = withdrawAll,
+            unlink = if (single != null) c.say("finish.unlink_single", "platform" to single) else c.say("done.withdrawn_link"),
             card = d.accounts.map { (platform, username) -> (if (single != null) null else if (knownOf(platform)) Platforms.of(platform)?.name ?: platform else platform) to account(platform, username) },
             recordedOn = c.say("done.recorded_on", "date" to d.date),
-            hangTitle = if (single != null) c.say("done.hang_title_single", "platform" to single) else c.say("done.hang_title"),
-            anyone = if (single != null) c.say("done.anyone_single") else c.say("done.anyone"),
+            hangTitle = if (single != null) c.say("hang.title_single", "platform" to single) else c.say("hang.title"),
+            why = if (single != null) c.say("hang.why_single") else c.say("done.anyone"),
+            short = short,
+            stillThere = if (short) c.say("hang.still_there_single", "platform" to single!!) else null,
+            look = c.say("hang.look", "open_proof" to openProof),
             profiles = d.accounts.mapNotNull { (platform, username) ->
                 val p = if (knownOf(platform)) Platforms.of(platform) else null
                 p?.let { c.say("done.open_profile", "account" to account(platform, username), "platform" to it.name) to it.profileUrl(username) }
             },
-            // The button opens the system's share sheet, not the platform: it says only 分享 (design/copy/card-proof.md, "6. 完成", app).
-            shares = Platforms.known.map { c.say("done.share_note", "platform" to it.name) to c.say("app_done.share") },
+            steps = listOf(c.say("done.step_edit"), c.say("done.step_link"), c.say("done.step_add"), c.say("done.step_paste")),
+            notes = listOfNotNull(
+                if (d.firstRecord && !withdrawAll) c.say("hang.new_card") else null,
+                if (withdrew && !withdrawAll) c.say("done.withdrawn_link") else null,
+            ) + (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
+            hung = c.say("done.hung", "open_proof" to openProof),
+            ordinal = d.answer.ordinal?.let { c.say("finish.ordinal", "ordinal" to thousands(it)) },
+            // The button names the platform, as the web's; it opens the system's share sheet (card-proof.md, "8. 完成和分享", app).
+            shares = Platforms.known.map { c.say("done.share", "platform" to it.name) },
             shareText = d.answer.ordinal?.let { c.say("done.share_text", "ordinal" to thousands(it)) } ?: c.say("done.share_text_unnumbered"),
-            hung = c.say("done.hung", "open_proof" to c.say("done.open_proof")),
-            newCard = d.firstRecord,
-            mismatch = if (d.answer.mismatches.isNotEmpty()) c.say("done.mismatch") else null,
-            showRecord = d.answer.mismatches.isNotEmpty(),
+            mismatch = if (mismatched) c.say("done.mismatch") else null,
+            showRecord = mismatched,
             record = if (kinds == null) null else if (withdrawAll) c.say("done.record_withdraw_all") else if (single != null) c.say("done.record_single") else c.say("done.record_list"),
             kindsUnreadable = if (kinds == null) c.say("done.kinds_unreadable") else null,
             rows = rows,
-            otherCards = (kinds ?: emptyList()).filter { it.kind != "withdraw" && (it.accountCards ?: 0) > 1 }.map { c.say("done.other_cards", "account" to account(it.platform, it.username)) },
-            withdrawnLink = kinds?.any { it.kind == "withdraw" } ?: d.expected.any { it.kind == "withdraw" },
         )
     }
 

@@ -2961,7 +2961,13 @@ body.hang .shot .top .act {
   font-weight: 700;
 }
 
-body.hang .shot .top .act.dim {
+/* The links' top has both ways back; the player says which platform the demonstration shows. On the iPhone's, 完成
+   at the right is what to press and ✕ is not there; on Android's, ✕ at the left is, and 完成 is grey. */
+body.hang .demo[data-variant="ios"] .shot [data-box="x3"] {
+  display: none;
+}
+
+body.hang .demo[data-variant="android"] .shot [data-box="done3"] {
   color: var(--dot);
 }
 

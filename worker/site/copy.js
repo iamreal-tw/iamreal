@@ -1,4 +1,4 @@
-// The one script of the visitors' pages, loaded only by /faq, /verify and
+// The copy buttons' script of the visitors' pages, loaded only by /faq, /verify and
 // /hang/<short ID> (server/pages). A button
 //
 //   <button data-copy="ID" data-copied="已複製" hidden>…</button>

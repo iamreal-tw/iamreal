@@ -13,7 +13,7 @@ import { icoImages } from "../scripts/favicon.ts";
 import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, codeBlocks, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, FAVICON_PATH, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withScript } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, FAVICON_PATH, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withDemo, withScript } from "./pages.ts";
 import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -504,7 +504,7 @@ describe("every page", () => {
       const head = await worker.fetch(path, { method: "HEAD" });
       assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
       assert.equal(await head.text(), "");
-      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) });
+      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) || withDemo(path) });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
         // The pages are the Worker's; the style sheet, the script, the typeface and the image are sent by Static Assets, whose 405 has no

@@ -118,6 +118,21 @@ class MainActivity : ComponentActivity() {
                     // Nothing on the phone to share with: nothing to do here.
                 }
             },
+            notificationSettings = {
+                // The system's page of this app's notifications; a phone without it, the page of the app.
+                val pages = listOf(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+                )
+                for (page in pages) {
+                    try {
+                        startActivity(page)
+                        break
+                    } catch (e: ActivityNotFoundException) {
+                        // The next one.
+                    }
+                }
+            },
             nfcSettings = {
                 // The system's page with the NFC switch; a phone without it, the page of the connections.
                 for (page in listOf(Settings.ACTION_NFC_SETTINGS, Settings.ACTION_WIRELESS_SETTINGS)) {
@@ -162,7 +177,14 @@ class MainActivity : ComponentActivity() {
                     if (reminder.back()) return
                     if (model.panel != null) return model.cancelTap()
                     when (model.step) {
-                        Step.BEFORE, Step.DONE -> finish()
+                        Step.BEFORE -> finish()
+                        // Step 6 cannot go back: step 5 has submitted. From the last step of a card proof that withdrew everything, neither.
+                        Step.HANG -> finish()
+                        Step.REMIND -> {
+                            reminder.notNow()
+                            model.backToHang()
+                        }
+                        Step.DONE -> if (!model.backFromDone()) finish()
                         Step.READ -> model.backToBefore()
                         Step.PIN -> model.backToRead()
                         Step.CONFIRM -> model.backToAccounts()
@@ -184,6 +206,8 @@ class MainActivity : ComponentActivity() {
         model(applicationContext).checkPaused()
         // "一週後再提醒我" on the notification may have changed the reminder meanwhile.
         reminder(applicationContext).refresh()
+        // Back from the system's page of the app's notifications ("打開通知設定" of step 7): asked again whether the app may notify.
+        if (model(applicationContext).step == Step.REMIND) reminder(applicationContext).backAtRemind(Phone.notificationsAllowed(this))
     }
 
     override fun onPause() {
@@ -198,7 +222,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Opened from the reminder's notification: step 1 says so. A card proof under way is left as it is; from
-     * step 6, back to step 1. Another app could open the app the same way: all it gets is that sentence.
+     * the steps after the submission, back to step 1. Another app could open the app the same way: all it gets is that sentence.
      */
     private fun handle(intent: Intent?) {
         if (intent?.getBooleanExtra(Phone.FROM_REMINDER, false) != true) return
@@ -207,7 +231,7 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Phone.FROM_REMINDER)
         val model = model(applicationContext)
         reminder(applicationContext).openedFromNotification()
-        if (model.step == Step.DONE) model.cancel()
+        if (model.step.submitted) model.cancel()
     }
 
     /** Told whether the app may notify, once the system has asked: the one waiting for it. */
