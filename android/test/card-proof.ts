@@ -35,8 +35,10 @@
 //    are moved a day on. Every sentence it expects on a screen is read from
 //    design/copy/card-proof.json. Twice a card with another certificate is
 //    held to the phone at a tap that would hand over the PIN (the second,
-//    the third): it gets none. At the end the app's storage holds nothing
-//    of a card proof.
+//    the third): it gets none. Twice a card the secure channel cannot be
+//    made with is held there: no PIN goes, the PIN typed is dropped, and
+//    the tap is not offered again. At the end the app's storage holds
+//    nothing of a card proof.
 //    After the submission each step does one thing: step 6 hangs the link
 //    (the whole of it, or for a card proof again only whether the link is
 //    still there), step 7 is the reminder, step 8 is done and the
@@ -147,6 +149,8 @@ const card = async (pauseMs = 0): Promise<string> => JSON.stringify({ certificat
  * (the same two certificates, in the other order). Same key, same PIN: only the comparison keeps the PIN from it.
  */
 const otherCard = JSON.stringify({ certificates: [...backend.certificates].reverse(), key, pin: PIN, pause_ms: 0 });
+/** The card that was read, but the secure channel cannot be made with it: it stops before any PIN goes (card/GpkiCard.kt makes the channel while it reads). */
+const cardWithoutChannel = JSON.stringify({ certificates: backend.certificates, key, pin: PIN, pause_ms: 0, no_channel: true });
 
 /** The date in Taiwan `days` after the day the back end's clock starts on. */
 const dayAfter = (days: number): string => new Date(Date.parse(backend.now) + 8 * 3600_000 + days * 86_400_000).toISOString().slice(0, 10);
@@ -755,6 +759,67 @@ async function anotherCardThenCancel(): Promise<void> {
   taps = 0;
 }
 
+/**
+ * Before any record: a card the secure channel cannot be made with, at each tap that would hand over the PIN (design/copy/card-proof.md, "3. 輸入 PIN" and
+ * "5. 確認", app; issue #365). The sentence sends the cardholder to a card reader, so the tap is not offered again with the PIN kept: at step 3 the PIN is gone
+ * and is typed again; at step 5 everything is dropped, and the only button goes back to step 1.
+ */
+async function noSecureChannel(): Promise<void> {
+  console.log("\na card the secure channel cannot be made with, at the second tap and at the third");
+  const channel = say("app_stops.channel");
+  await waitText(step(1), "step 1");
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  const handed = pinsHanded;
+  press(say("pin.confirm_card"));
+  await hold(cardWithoutChannel);
+  await waitText(channel, "step 3: the sentence for a card without a secure channel", 20_000);
+  {
+    const s = wholeScreen();
+    shows(s, "step 3, no secure channel,", [step(3), channel, say("common.back"), say("pin.confirm_card")]);
+    check(!s.includes(say("app_read.tap_again")) && !s.includes(say("app_read.restart")), "step 3, no secure channel: no 再感應一次");
+    check(field("pin").text === "", `step 3, no secure channel: the PIN's field is empty ("${field("pin").text}")`);
+    check(pinsHanded === handed, "step 3, no secure channel: the card was not handed the PIN");
+  }
+  // The PIN is gone: 確認卡片 brings no panel and no tap until it is typed again.
+  press(say("pin.confirm_card"));
+  await waitText(say("app_pin.need_pin"), "step 3: the sentence for an empty PIN, after the channel failed", 10_000);
+  check(waitingTaps.length === 0 && !textsOf(visible()).includes(say("app_panel.android_wait_title")), "step 3, no secure channel: 確認卡片 with the PIN gone brings no panel and no tap");
+  // Typed again, with a card whose channel works: on to step 4.
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(step(4), "step 4", 120_000);
+  emulator.tap(field("account-threads"));
+  emulator.type("alice");
+  hideKeyboard();
+  press(say("common.next"));
+  await waitText(say("confirm.title"), "step 5");
+  const handedBefore = pinsHanded;
+  press(say("confirm.button_declare_single"));
+  await waitText(say("progress.title"), "step 5, in progress");
+  await hold(cardWithoutChannel);
+  await waitText(channel, "step 5: the sentence for a card without a secure channel", 20_000);
+  {
+    const s = wholeScreen();
+    shows(s, "step 5, no secure channel,", [step(5), say("common.halted"), channel, say("accounts.restart")]);
+    check(!s.includes(say("app_read.tap_again")) && !s.includes(say("common.cancel")), "step 5, no secure channel: only 回到開頭, no 再感應一次 and no 取消");
+    check(pinsHanded === handedBefore, "step 5, no secure channel: the card was not handed the PIN");
+  }
+  press(say("accounts.restart"));
+  await waitText(step(1), "step 1 again, after 回到開頭", 20_000);
+  check(waitingTaps.length === 0, "step 5, no secure channel: 回到開頭 goes back to step 1, with no tap waiting");
+  taps = 0;
+}
+
 // 5. The reminder ---------------------------------------------------------------------
 
 /** Where the app keeps the reminder (src/main/…/reminder/Phone.kt), and what is in it. */
@@ -979,6 +1044,7 @@ try {
   const WITHDRAWN = [say("confirm.history_stays"), say("confirm.holder_later_withdraw")];
 
   await anotherCardThenCancel();
+  await noSecureChannel();
 
   // A first declaration: @alice.
   const shortId = await cardProof({
