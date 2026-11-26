@@ -41,19 +41,31 @@ internal open class DemoPlayer(val length: Double) {
         playing = false
     }
 
-    /** A frame of the system's: the demonstration is [by] seconds further on, and stops at its end. */
-    fun advance(by: Double) {
+    /**
+     * A frame of the system's, [sinceLast] nanoseconds after the one before: the demonstration is that much further on,
+     * and stops at its end. It keeps to the clock on a phone that draws slowly: a frame that comes late moves it on by
+     * all the time that passed. Of a wait longer than [LONGEST_FRAME] only that much counts: the app was away, and
+     * the demonstration goes on from about where it was left.
+     */
+    fun frame(sinceLast: Long) {
+        val by = minOf(sinceLast, LONGEST_FRAME) / 1e9
         if (seconds + by >= length) stop() else seconds += by
+    }
+
+    companion object {
+        /**
+         * The most one frame moves a demonstration on, in nanoseconds: a second. No phone draws so slowly, so anything
+         * longer is the app in the background. Not less: a limit near the time between two frames makes the
+         * demonstration run behind the clock on a phone that draws slowly.
+         */
+        const val LONGEST_FRAME = 1_000_000_000L
     }
 }
 
-/** The most one frame moves a demonstration on, in nanoseconds: a wait longer than this was the app being away. */
-private const val LONGEST_FRAME = 100_000_000L
-
 /**
  * Keeps [player]'s time while it plays, by the frames the system gives (withFrameNanos). Frame by frame from where it
- * is: a screen left and come back to goes on from there, and a long wait between two frames is not time of the
- * demonstration. The system's setting that turns animations off does not stop it (issue #369): the button does.
+ * is: a screen left and come back to goes on from there, and the time the app was away is not time of the
+ * demonstration ([DemoPlayer.frame]). The system's setting that turns animations off does not stop it (issue #369): the button does.
  */
 @Composable
 internal fun Frames(player: DemoPlayer) {
@@ -62,7 +74,7 @@ internal fun Frames(player: DemoPlayer) {
         var last = withFrameNanos { it }
         while (player.playing) {
             val now = withFrameNanos { it }
-            player.advance(minOf(now - last, LONGEST_FRAME) / 1e9)
+            player.frame(now - last)
             last = now
         }
     }
