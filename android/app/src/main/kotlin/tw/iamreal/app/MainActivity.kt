@@ -261,6 +261,7 @@ class MainActivity : ComponentActivity() {
             crlNumbers = StoredCrlNumbers(context),
             copy = Copy(context.resources.openRawResource(R.raw.card_proof_copy).use { String(it.readBytes(), Charsets.UTF_8) }),
             hangMotion = { context.resources.openRawResource(R.raw.hang_motion).use { String(it.readBytes(), Charsets.UTF_8) } },
+            senseMotion = { context.resources.openRawResource(R.raw.sense_motion).use { String(it.readBytes(), Charsets.UTF_8) } },
         ).also { model = it }
 
         /** The reminder as the screens show it, for this process. */

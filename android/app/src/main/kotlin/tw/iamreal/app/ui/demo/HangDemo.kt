@@ -23,10 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -78,8 +76,6 @@ private const val VARIANT = "android"
 /** How much of the picture must be on the screen, or how much of the screen it must fill, before the demonstration starts by itself: as on the site's page. */
 private const val MOST = 0.6f
 
-/** The most one frame moves the demonstration on, in nanoseconds: a wait longer than this was the app being away. */
-private const val LONGEST_FRAME = 100_000_000L
 
 /** What the demonstration shows of this card proof: its account, its link, and the words of the app's own step 6. */
 internal class HangDemoWords(
@@ -99,15 +95,7 @@ internal class HangDemoWords(
  * The demonstration's time and where its boxes are: one of it as long as step 6 is up. The time is the only thing
  * that changes while it plays; the state is worked out from it, once a frame.
  */
-internal class HangDemoPlayer(val timeline: HangTimeline) {
-    var seconds by mutableDoubleStateOf(0.0)
-        private set
-    var playing by mutableStateOf(false)
-        private set
-
-    /** It has started by itself once: coming onto the screen again does not start it again. */
-    private var started = false
-
+internal class HangDemoPlayer(val timeline: HangTimeline) : DemoPlayer(timeline.duration) {
     /** Most of the picture is on the screen. */
     private var inSight = false
 
@@ -160,27 +148,7 @@ internal class HangDemoPlayer(val timeline: HangTimeline) {
 
     /** By itself once, when the picture is in sight and the camera can be aimed. */
     private fun startOnce() {
-        if (started || !inSight || places == null) return
-        started = true
-        play()
-    }
-
-    /** "再看一次": from the start. */
-    fun play() {
-        seconds = 0.0
-        playing = true
-    }
-
-    /** "停止": straight to the last frame, where the link is on the profile. */
-    fun stop() {
-        started = true
-        seconds = timeline.duration
-        playing = false
-    }
-
-    /** A frame of the system's: the demonstration is [by] seconds further on, and stops at its end. */
-    fun advance(by: Double) {
-        if (seconds + by >= timeline.duration) stop() else seconds += by
+        if (inSight && places != null) playOnce()
     }
 
     /** The density of the screen the boxes' places are for. On another, they are forgotten and asked again. */
@@ -225,17 +193,7 @@ internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, 
     // The row's lengths are pixels of this screen: on a screen of another density the boxes are asked again where they are.
     val density = LocalDensity.current.density
     LaunchedEffect(density) { player.measuredAt(density) }
-    LaunchedEffect(player, player.playing) {
-        if (!player.playing) return@LaunchedEffect
-        // Frame by frame from where it is: step 6 left and come back to goes on from there, and a long wait between two
-        // frames (the app was away) is not time of the demonstration.
-        var last = withFrameNanos { it }
-        while (player.playing) {
-            val now = withFrameNanos { it }
-            player.advance(minOf(now - last, LONGEST_FRAME) / 1e9)
-            last = now
-        }
-    }
+    Frames(player)
     Box(
         Modifier
             .fillMaxWidth()
