@@ -59,6 +59,8 @@ internal class Messages(private val c: Copy) {
             "network" -> if (at == At.DECLARE && stop.values["submitting"] == "true") c.say("stops.submit_failed") else c.say("stops.server_unreadable", "code" to code)
             "crl_stale" -> c.say("stops.server_crl_stale")
             "daily_limit" -> c.say("stops.daily_limit")
+            // The server takes no card proof for now (docs/api/card-proof.md, `paused`): not a failure to send again.
+            "paused" -> c.say("stops.paused")
             "switch_restricted" -> c.say("stops.switch_restricted")
             // The app's sentences for these three are not written yet.
             "challenge_unknown", "switch_limit", "empty" -> null

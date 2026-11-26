@@ -40,6 +40,30 @@ internal enum class AccountsMode { OPEN, SWITCH, EDIT }
 internal enum class ProgressButton { NONE, TAP_AGAIN, RESTART }
 
 /**
+ * Step 2's button after a stop: a tap that did not happen is made again on the same card proof; anything else, the server's
+ * `paused` among them, starts a new one.
+ */
+internal fun readButtonAfter(stop: Stop): ReadButton {
+    val reason = stop.values["reason"]
+    return when {
+        stop.code != "card" -> ReadButton.RESTART
+        reason == CardException.Reason.NO_TAP.name || reason == CardException.Reason.DROPPED.name -> ReadButton.TAP_AGAIN
+        reason == CardException.Reason.NFC_OFF.name -> ReadButton.NFC
+        else -> ReadButton.RESTART
+    }
+}
+
+/**
+ * Step 5's button after a stop. The tap did not get to a signature: the PIN is still there, and the tap is made again. A PIN
+ * the card refused, a card that is locked, a card the secure channel cannot be made with: the flow dropped the PIN with
+ * everything else, and the only way on is back to the beginning; so for any stop of the server, `paused` among them.
+ */
+internal fun progressButtonAfter(stop: Stop): ProgressButton {
+    val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in CardProof.ENDS_AT_LAST_TAP)
+    return if (again) ProgressButton.TAP_AGAIN else ProgressButton.RESTART
+}
+
+/**
  * The PIN as it is typed: characters in an array this class overwrites,
  * never a String of the app's. It is in memory only: not in the saved
  * state of the activity, not in any file.
@@ -86,6 +110,13 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     private var flow: CardProof? = null
 
     var step by mutableStateOf(Step.BEFORE)
+        private set
+
+    /**
+     * The operator stopped taking card proofs, as the server's config last said (docs/api/card-proof.md, `paused`): step 1
+     * says so in place of its button. Until the config answers, and when it does not: false, and step 2 asks again.
+     */
+    var paused by mutableStateOf(false)
         private set
 
     /** Above step 1: why the card proof came back to it. */
@@ -170,13 +201,22 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
 
     private var config: FutureTask<ByteArray> = askConfig()
 
-    private fun askConfig(): FutureTask<ByteArray> = FutureTask { backend.config() }.also { thread(name = "config") { it.run() } }
+    private fun askConfig(): FutureTask<ByteArray> = FutureTask { backend.config() }.also {
+        thread(name = "config") {
+            it.run()
+            val said = try { CardProof.pausedIn(it.get()) == true } catch (e: ExecutionException) { false }
+            main.post { paused = said }
+        }
+    }
 
-    /** The config, once the server answered. An answer that did not come is asked for again the next time. */
+    /**
+     * The config, once the server answered. An answer that did not come, or that said card proofs are stopped, is asked for
+     * again the next time.
+     */
     private fun awaitConfig(): ByteArray {
         val asked = synchronized(this) { config }
         try {
-            return asked.get()
+            return asked.get().also { if (CardProof.pausedIn(it) == true) synchronized(this) { if (config === asked) config = askConfig() } }
         } catch (e: ExecutionException) {
             synchronized(this) { if (config === asked) config = askConfig() }
             throw e.cause as? ServerException ?: ServerException(Backend.NETWORK, 0, null)
@@ -267,6 +307,11 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         step = Step.READ
     }
 
+    /** Step 1 in front again while it says card proofs are stopped: asks the server whether they still are. */
+    fun checkPaused() {
+        if (step == Step.BEFORE && paused) synchronized(this) { if (config.isDone) config = askConfig() }
+    }
+
     fun backToBefore() {
         dropAll()
         step = Step.BEFORE
@@ -304,13 +349,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 }
                 readItems = items(4, doneCount, false, halted = true)
                 readMessage = messages.stop(stop, Messages.At.READ)
-                // A tap that did not happen is made again on the same card proof; anything else starts a new one.
-                readButton = when {
-                    stop.code != "card" -> ReadButton.RESTART
-                    reason == CardException.Reason.NO_TAP.name || reason == CardException.Reason.DROPPED.name -> ReadButton.TAP_AGAIN
-                    reason == CardException.Reason.NFC_OFF.name -> ReadButton.NFC
-                    else -> ReadButton.RESTART
-                }
+                readButton = readButtonAfter(stop)
             },
         )
     }
@@ -543,11 +582,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                 progressItems = items(4, doneCount, false, halted = true)
                 progressMessage = messages.stop(stop, Messages.At.DECLARE)
                 progressRequestId = stop.requestId
-                // The tap did not get to a signature: the PIN is still there, and the tap is made again.
-                // A PIN the card refused, a card that is locked, a card the secure channel cannot be made with: the flow dropped the PIN
-                // with everything else, and the only way on is back to the beginning.
-                val again = stop.code == "other_card" || (stop.code == "card" && stop.values["reason"] !in CardProof.ENDS_AT_LAST_TAP)
-                progressButton = if (again) ProgressButton.TAP_AGAIN else ProgressButton.RESTART
+                progressButton = progressButtonAfter(stop)
             },
         )
     }
