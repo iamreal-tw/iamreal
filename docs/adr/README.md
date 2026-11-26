@@ -87,9 +87,10 @@
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
 | 0022 | 不記 IP | [#20](https://github.com/iamreal-tw/iamreal/issues/20) |
+| 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
-| 0028 | 測試的證明紀錄每天重驗了（`.github/workflows/reverify.yml`）；沒通過時還沒有東西通知營運者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
+| 0028 | 測試的證明紀錄每天重驗了；沒通過時還沒有東西通知營運者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0029 | 只有測試網站的部署（合併到 main）；沒有推版本標籤部署正式網站的工作流程、production environment、正式的權杖 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
 | 0033 | 沒有副本、沒有抄副本的工作流程、清冊檔沒有鎖、後台沒有「從證明紀錄重建」、沒有 `docs/playbooks/` | [#102](https://github.com/iamreal-tw/iamreal/issues/102)、[#103](https://github.com/iamreal-tw/iamreal/issues/103)、[#105](https://github.com/iamreal-tw/iamreal/issues/105)、[#106](https://github.com/iamreal-tw/iamreal/issues/106)、[#107](https://github.com/iamreal-tw/iamreal/issues/107)、[#108](https://github.com/iamreal-tw/iamreal/issues/108)、[#109](https://github.com/iamreal-tw/iamreal/issues/109)、[#110](https://github.com/iamreal-tw/iamreal/issues/110)、[#111](https://github.com/iamreal-tw/iamreal/issues/111)；常見問題的那一句在 [#104](https://github.com/iamreal-tw/iamreal/issues/104) |
 | 0034 | 沒有 `device-core/`、`android/`、`ios/`；裝置上的檢查（憑證、清冊、電路輸入、建樹的路徑）還沒有寫進 `spec/` | 地圖 [#83](https://github.com/iamreal-tw/iamreal/issues/83) |

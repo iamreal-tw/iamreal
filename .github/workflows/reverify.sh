@@ -26,13 +26,14 @@
 #   1  it did not pass: the operator does what ADR-0025 says
 #   2  it could not be checked (a file could not be read): not a failure of
 #      the proof log (ADR-0025), and the next run starts over
+#   any other: iamreal-verify did not run to its end (not found, killed)
 # The last line says which, and how long the run took: past an hour, the
 # operator opens a ticket for the progress file (.github/README.md).
 set -uf -o pipefail
 export LC_ALL=C
 
-if [ "$#" -ne 2 ]; then
-  echo "usage: reverify.sh <test|production> <the address of the published files>" >&2
+if [ "$#" -ne 2 ] || [ -z "${RUNNER_TEMP:-}" ] || [ -z "${IAMREAL_BB:-}" ]; then
+  echo "usage: reverify.sh <test|production> <the address of the published files>, with RUNNER_TEMP and IAMREAL_BB set" >&2
   exit 2
 fi
 proof_log=$1
@@ -58,7 +59,8 @@ grep -E '^  [0-9]+ invalid ' "$out" || true
 case $code in
   0) verdict="passed" ;;
   1) verdict="DID NOT PASS (the lines above say which record or file, and what; ADR-0025 says what the operator does)" ;;
-  *) verdict="could not be checked (not a failure of the proof log; the next run starts over)" ;;
+  2) verdict="could not be checked (not a failure of the proof log; the next run starts over)" ;;
+  *) verdict="did not run to its end (iamreal-verify was not found or was stopped; nothing is known about the proof log)" ;;
 esac
 echo "reverify: the $proof_log proof log at $data $verdict: exit code $code, $seconds seconds"
 if [ "$seconds" -gt 3600 ]; then

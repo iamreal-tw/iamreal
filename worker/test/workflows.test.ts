@@ -1137,6 +1137,13 @@ test("reverify.sh: prints how many records and how long, each record that is not
   assert.match(unread.stdout, /^reverify: the production proof log at https:\/\/data\.iamreal\.tw\/ could not be checked \(not a failure of the proof log; the next run starts over\): exit code 2, \d+ seconds\n$/);
   assert.match(unread.stderr, /fingerprints\.jsonl: 503/);
 
+  // It did not run to its end (here: no such file): not said to be one of the two above.
+  const missing = spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test", "https://test-data.iamreal.tw/"], { encoding: "utf8", env: { PATH: process.env.PATH, RUNNER_TEMP: dir, IAMREAL_BB: "/the/bb", IAMREAL_VERIFY: join(dir, "none") } });
+  assert.equal(missing.status, 127);
+  assert.match(missing.stdout, /did not run to its end .*: exit code 127, \d+ seconds\n$/);
+  // Without what it reads from the environment it stops as "could not be checked", not as a proof log that did not pass.
+  assert.equal(spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test", "https://test-data.iamreal.tw/"], { encoding: "utf8", env: { PATH: process.env.PATH, IAMREAL_BB: "/the/bb" } }).status, 2);
+
   // Without its two arguments it does not run iamreal-verify.
   rmSync(join(dir, "args"));
   assert.equal(spawnSync("bash", [join(WORKFLOWS_DIR, REVERIFY_SCRIPT), "test"], { encoding: "utf8", env: { PATH: process.env.PATH, RUNNER_TEMP: dir, IAMREAL_BB: "/the/bb", IAMREAL_VERIFY: fake } }).status, 2);

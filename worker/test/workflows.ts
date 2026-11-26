@@ -3,7 +3,8 @@
 // test/workflows.test.ts can run it on the real files and on altered copies.
 //
 // What it is: a guard against slips and against plain changes to what
-// ADR-0029, ADR-0036 and CONTRIBUTING.md ("部署會執行到的東西") require: only
+// ADR-0029, ADR-0036, ADR-0025 (the daily re-verification holds no key of
+// the back end) and CONTRIBUTING.md ("部署會執行到的東西") require: only
 // the deploy job's upload step has the token, nothing before it in that job
 // runs code of the repository or of a package's install scripts; the keys
 // of the apps' uploads are only in the upload jobs, which build nothing
@@ -15,9 +16,9 @@
 // workflow's two jobs, the device-core and android jobs of checks.yml, the
 // jobs of cache.yml, the two jobs of upload-android.yml, the two jobs of
 // upload-ios.yml (only its upload job in the environment with the App Store
-// Connect key, and that key in its last step only), and the one job each of
-// checks-ios.yml and checks-circuits.yml, must be exactly the ones written
-// here.
+// Connect key, and that key in its last step only), the two jobs of
+// reverify.yml, and the one job each of checks-ios.yml and
+// checks-circuits.yml, must be exactly the ones written here.
 //
 // What it is not: a replacement for reading every line of a change to
 // these files, which CONTRIBUTING.md requires. It does not see:
@@ -29,6 +30,11 @@
 // - what the scripts upload-android.yml runs do (android-version.sh,
 //   android-sign.sh, play-upload.sh): test/upload-android.test.ts runs them,
 //   with curl replaced, and Google Play's own answers are seen only on GitHub;
+// - what reverify.yml runs: the repository's Go (the build of
+//   iamreal-verify) and reverify.sh, with no secret, a token that can only
+//   read and no cache; test/workflows.test.ts runs the script with
+//   iamreal-verify replaced, and what the command itself checks is Go's
+//   to test (cmd/iamreal-verify);
 // - what the build job of upload-ios.yml makes (ios/build-core.sh,
 //   ios/archive.sh, Xcode and cargo on the repository's code): its archive
 //   is what gets signed and uploaded; ios/check-archive.sh looks for the
@@ -766,8 +772,9 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
  * rules for every file), so a run can touch neither the back end nor
  * another run.
  *
- * The schedule is 00:30 in Taiwan (16:30 UTC), after the change of day there, when
- * the back end publishes (a run that comes first checks up to the line of the day before).
+ * The schedule is 00:30 in Taiwan (16:30 UTC), after the change of day
+ * there, when the back end publishes (a run that comes first checks up to
+ * the line of the day before).
  */
 export const REVERIFY_WORKFLOW = "reverify.yml";
 export const REVERIFY_ON: Yaml = { schedule: [{ cron: "30 16 * * *" }], workflow_dispatch: null };
@@ -775,7 +782,7 @@ export const REVERIFY_GROUP = "reverify";
 /** The script of .github/workflows/ that each of its jobs runs. */
 export const REVERIFY_SCRIPT = "reverify.sh";
 /** Where each proof log is published (ADR-0027, ADR-0028). */
-export const REVERIFY_DATA: Readonly<Record<string, string>> = { test: "https://test-data.iamreal.tw/", production: "https://data.iamreal.tw/" };
+export const REVERIFY_DATA = { test: "https://test-data.iamreal.tw/", production: "https://data.iamreal.tw/" } as const;
 /**
  * The job that re-verifies one proof log, exactly. It runs the repository's
  * Go (the build of iamreal-verify) and the one script; the packages it
@@ -783,7 +790,7 @@ export const REVERIFY_DATA: Readonly<Record<string, string>> = { test: "https://
  * .pnpmfile.cjs, from npm's registry, and bb's SHA-256 is checked before
  * the script uses it. 360 minutes is the most a job gets.
  */
-const reverifyJob = (proofLog: string): YamlMap => ({
+const reverifyJob = (proofLog: keyof typeof REVERIFY_DATA): YamlMap => ({
   "runs-on": "ubuntu-24.04",
   "timeout-minutes": "360",
   steps: [
@@ -797,7 +804,7 @@ const reverifyJob = (proofLog: string): YamlMap => ({
     },
     { name: "bb is the one of bb.js 6.0.0", run: CHECK_BB },
     { name: "Build iamreal-verify", run: 'go build -o "$RUNNER_TEMP/iamreal-verify" ./cmd/iamreal-verify' },
-    { name: `Re-verify the ${proofLog} proof log from record 1`, run: `bash .github/workflows/${REVERIFY_SCRIPT} ${proofLog} ${REVERIFY_DATA[proofLog]!}` },
+    { name: `Re-verify the ${proofLog} proof log from record 1`, run: `bash .github/workflows/${REVERIFY_SCRIPT} ${proofLog} ${REVERIFY_DATA[proofLog]}` },
   ],
 });
 /**
