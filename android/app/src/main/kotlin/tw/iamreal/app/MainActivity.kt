@@ -202,6 +202,8 @@ class MainActivity : ComponentActivity() {
         wiring(applicationContext).front?.resumed(this)
         // The timer of the PIN's 5 minutes may not have run while the app was away.
         model(applicationContext).checkIdle()
+        // The operator may have stopped card proofs, or resumed them, meanwhile.
+        model(applicationContext).checkPaused()
         // "一週後再提醒我" on the notification may have changed the reminder meanwhile.
         reminder(applicationContext).refresh()
         // Back from the system's page of the app's notifications ("打開通知設定" of step 7): asked again whether the app may notify.

@@ -290,6 +290,12 @@ class CardProof(private val deps: Deps) {
         live()
         // Without a platform table there is nothing to offer (docs/api/card-proof.md).
         platformsJson = RawJson.member(config, "platforms") ?: throw Stop("server", mapOf("code" to "malformed_response"))
+        // The operator stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the card is read.
+        when (pausedIn(config)) {
+            true -> throw Stop("server", mapOf("code" to "paused"))
+            null -> throw Stop("server", mapOf("code" to "malformed_response"))
+            false -> {}
+        }
         this.config = config
         events.done(Item.SERVER)
 
@@ -722,6 +728,16 @@ class CardProof(private val deps: Deps) {
          * the tap is made again.
          */
         val ENDS_AT_LAST_TAP: Set<String> = setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name, CardException.Reason.CHANNEL.name)
+
+        /**
+         * `config`'s `paused` (docs/api/card-proof.md): whether the operator stopped taking card proofs. Absent is false; null when
+         * it is there and is neither true nor false (spec/device-checks.md: `malformed_response`).
+         */
+        fun pausedIn(config: ByteArray): Boolean? = when (RawJson.member(config, "paused")?.toString(Charsets.UTF_8)) {
+            null, "false" -> false
+            "true" -> true
+            else -> null
+        }
 
         private const val CRS_G1 = "bn254_g1_compressed_2p18.dat"
         private const val CRS_G2 = "bn254_g2.dat"
