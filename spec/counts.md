@@ -40,6 +40,7 @@ A count is a JSON object whose values are all strings. Its members:
 | `browser_version` | A version number | May be in a card proof's count of the client `web` |
 | `os_version` | A version number | May be in a card proof's count |
 | `app_version` | A version number | May be in a card proof's count of an app |
+| `model` | A phone's model | May be in a card proof's count of an app |
 | `reader` | A card reader's name | May be in a card proof's count of the client `web` |
 
 - **A visitor's count** is a `page`, or an `action` whose code is of
@@ -56,11 +57,22 @@ A count is a JSON object whose values are all strings. Its members:
   an attempt ID.
 - **A version number** is 1 to 4 parts joined by `.`, each part 1 to 5
   decimal digits: `131.0.6778.86`, `18.1`. Nothing else of a version (a
-  build's name, a letter) is sent.
+  build's name, a letter) is sent. An app's `os_version` is the system's
+  version as the system gives it (Android's `Build.VERSION.RELEASE`, iOS's
+  `UIDevice.current.systemVersion`), and its `app_version` the version the
+  store shows (Android's `versionName`, iOS's
+  `CFBundleShortVersionString`). Neither carries a security patch's date, a
+  firmware's name or a build number (ADR-0039).
 - **A card reader's name** is the one field the card reader's component
   reports as the reader's name, 1 to 64 characters, each an ASCII letter, a
   digit or a space. A client leaves out a name that is anything else; it
   does not shorten or rewrite it.
+- **A phone's model** is the identifier the phone's system gives its model:
+  Android's `Build.MODEL` (`SM-S918B`, `Pixel 8 Pro`, `moto g(60)`), iOS's
+  `utsname().machine` (`iPhone15,2`). It is never a name the phone's owner
+  gave it. It is 1 to 32 characters, each an ASCII letter, a digit, a space,
+  or one of `-` `_` `.` `,` `(` `)` `+`. An app leaves out a model that is
+  anything else; it does not shorten or rewrite it (ADR-0032, ADR-0039).
 
 A count has no time (the server uses the time it received it, and keeps
 that to the minute), no account, no scoped ID, nothing read from a card, a
@@ -258,6 +270,10 @@ again, and the card proof goes on.
 
 ### Durations
 
+A timed step that took a number of milliseconds is sent as the code whose
+range holds that number: under 1000 is `lt_1s`, 1000 to 2999 is `1s_3s`,
+and so on; 180000 and more is `gt_3m`.
+
 | Code | Meaning |
 |---|---|
 | `lt_1s` | under 1 second |
@@ -309,4 +325,5 @@ Without a version. A client that cannot tell sends `other`.
 
 [`vectors/counts.json`](vectors/counts.json): `table` is every code above
 with the clients it is for; `cases` are parsed counts, each taken or
-dropped.
+dropped; `durations` are numbers of milliseconds and the code each is sent
+as.

@@ -29,6 +29,7 @@ macro_rules! for_tests {
 for_tests!(artifacts, hashes, proof, quiet, session, tree, witness);
 
 use iamreal_device_checks::challenge::parse_challenge;
+use iamreal_device_checks::counts;
 use iamreal_device_checks::date::Date;
 use iamreal_device_checks::declaration_code::{Account, declaration_code};
 use iamreal_device_checks::field::fe_of_u64;
@@ -587,6 +588,59 @@ pub unsafe extern "C" fn idc_short_id(
         let text = std::str::from_utf8(text).map_err(|_| IDC_ERR_INPUT)?;
         Ok(short_id(text).ok_or(IDC_ERR_INPUT)?.as_bytes().to_vec())
     })
+}
+
+/// The count an app sends (spec/counts.md), as the body of
+/// `POST /api/v1/counts`: JSON in `*out`, its members in the order of the
+/// table.
+///
+/// `count` is a JSON object whose every value is a string: the count's
+/// members as the app has them. A version or a phone's model that is not
+/// in its format is left out, not shortened or rewritten; the rest must be
+/// a count the server takes, or `IDC_ERR_INPUT`: a fault of the app's
+/// program, and nothing to send. A key written twice is `IDC_ERR_INPUT`.
+///
+/// # Safety
+///
+/// `count` points to `count_len` bytes; `out` is null or points to an
+/// `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_count(count: *const u8, count_len: usize, out: *mut IdcBuf) -> i32 {
+    output(out, || {
+        // SAFETY: the caller's promise.
+        let bytes = unsafe { input(count, count_len) }?;
+        let json = Json::parse(bytes).ok_or(IDC_ERR_INPUT)?;
+        let members = json
+            .as_object()
+            .ok_or(IDC_ERR_INPUT)?
+            .iter()
+            .map(|(name, v)| Some((name.as_str(), v.as_str()?)))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(IDC_ERR_INPUT)?;
+        let sent = counts::to_send(&members).ok_or(IDC_ERR_INPUT)?;
+        let mut body = String::from("{");
+        for (i, (name, value)) in sent.iter().enumerate() {
+            if i > 0 {
+                body.push(',');
+            }
+            body.push_str(&json!(name).to_string());
+            body.push(':');
+            body.push_str(&json!(value).to_string());
+        }
+        body.push('}');
+        Ok(body.into_bytes())
+    })
+}
+
+/// The code a timed step that took `ms` milliseconds is sent as
+/// (spec/counts.md, "Durations"): ASCII in `*out`, such as `10s_30s`.
+///
+/// # Safety
+///
+/// `out` is null or points to an `idc_buf` the core may write.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn idc_count_took(ms: u64, out: *mut IdcBuf) -> i32 {
+    output(out, || Ok(counts::took(ms).as_bytes().to_vec()))
 }
 
 /// Whether this build of the app may do a card proof, from the minimum app

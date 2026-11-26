@@ -5,8 +5,8 @@
 // sent with the same reader.
 //
 // A count holds nothing but what is here: codes of the table, three random
-// IDs, and three values checked by their format (a short ID, version
-// numbers, a card reader's name). No time, no account, no scoped ID, nothing
+// IDs, and four values checked by their format (a short ID, version
+// numbers, a card reader's name, a phone's model). No time, no account, no scoped ID, nothing
 // read from a card, a certificate or a CRL, and no text of an error.
 
 /** The clients (GLOSSARY, "client"). */
@@ -153,6 +153,16 @@ export const TIMED_STEPS = { crl: ALL, tree: ALL, proved: ALL } as const satisfi
 
 /** How long a timed step took: under 1 s, 1 to 3 s, … over 3 minutes. */
 export const DURATIONS = ["lt_1s", "1s_3s", "3s_10s", "10s_30s", "30s_60s", "1m_3m", "gt_3m"] as const;
+export type Duration = (typeof DURATIONS)[number];
+
+/** Where each range of `DURATIONS` but the last ends, in milliseconds. */
+const DURATION_ENDS = [1_000, 3_000, 10_000, 30_000, 60_000, 180_000] as const;
+
+/** The code a timed step that took `ms` milliseconds is sent as (spec/counts.md, "Durations"). */
+export function tookOf(ms: number): Duration {
+  const i = DURATION_ENDS.findIndex((end) => ms < end);
+  return DURATIONS[i === -1 ? DURATIONS.length - 1 : i]!;
+}
 
 /**
  * Where a visitor came from, as far as it is told apart for now: with a
@@ -175,12 +185,14 @@ const SHORT_ID = /^[0-9A-HJKMNP-TV-Z]{10}$/;
 export const VERSION = /^[0-9]{1,5}(?:\.[0-9]{1,5}){0,3}$/;
 /** A card reader's name: letters, digits and spaces, 1 to 64 of them. */
 export const READER = /^[A-Za-z0-9 ]{1,64}$/;
+/** A phone's model as its system gives it: letters, digits, spaces and `-_.,()+`, 1 to 32 of them. */
+export const MODEL = /^[A-Za-z0-9 \-_.,()+]{1,32}$/;
 
 /** A count that was taken: its members in the order of spec/counts.md, and no other. */
 export type Count = Readonly<Record<string, string>>;
 
 /** The members of a count, in the one order a taken count is written in. */
-const ORDER = ["client", "event", "page", "short_id", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "reader"] as const;
+const ORDER = ["client", "event", "page", "short_id", "step", "reason", "action", "tap", "took", "visit_id", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "app_version", "model", "reader"] as const;
 type Member = (typeof ORDER)[number];
 
 const has = (list: readonly string[], x: string | undefined): boolean => x !== undefined && list.includes(x);
@@ -209,12 +221,13 @@ const CARD_PROOF: Readonly<Partial<Record<Member, Rule>>> = {
   browser_version: (v, c) => c["client"] === "web" && VERSION.test(v),
   os_version: (v) => VERSION.test(v),
   app_version: (v, c) => c["client"] !== "web" && VERSION.test(v),
+  model: (v, c) => c["client"] !== "web" && MODEL.test(v),
   reader: (v, c) => c["client"] === "web" && READER.test(v),
 };
 
 /** Members a count may leave out. `browser` and `os` only where the client is an app, which has none. */
 const optional = (member: Member, client: string): boolean =>
-  member === "browser_version" || member === "os_version" || member === "app_version" || member === "reader" || ((member === "browser" || member === "os") && client !== "web");
+  member === "browser_version" || member === "os_version" || member === "app_version" || member === "model" || member === "reader" || ((member === "browser" || member === "os") && client !== "web");
 
 /** The rules of one count's members, by what it says happened; null if it says nothing the table has. */
 function rulesOf(c: Readonly<Record<string, string>>): Readonly<Partial<Record<Member, Rule>>> | null {

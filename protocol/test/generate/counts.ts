@@ -4,7 +4,7 @@
 // written here by hand. Before writing, each case is read with
 // src/counts.ts; if one gives another result, nothing is written.
 import { writeFileSync } from "node:fs";
-import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount } from "../../src/counts.ts";
+import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount, tookOf } from "../../src/counts.ts";
 
 const DEVICE = "0123456789abcdef0123456789abcdef";
 const ATTEMPT = "fedcba9876543210fedcba9876543210";
@@ -43,6 +43,12 @@ const cases: Case[] = [
   taken("android, how long the tree took", { ...app("android"), event: "duration", step: "tree", took: "lt_1s" }),
   taken("web, with versions and the card reader's name", { ...web, event: "step", step: "pin", browser_version: "131.0.6778.86", os_version: "10.0", reader: "Generic Smart Card Reader 0" }),
   taken("ios, with versions", { ...app("ios"), event: "step", step: "done", os_version: "18.1.1", app_version: "1.4" }),
+  taken("ios, with the phone's model", { ...app("ios"), event: "step", step: "read", os_version: "18.1.1", app_version: "2026.11.5", model: "iPhone15,2" }),
+  taken("android, with the phone's model", { ...app("android"), event: "stop", reason: "nfc_off", os_version: "14", app_version: "2026.11.5", model: "SM-S918B" }),
+  taken("a model with spaces and brackets", { ...app("android"), event: "step", step: "read", model: "moto g(60)" }),
+  taken("a model with a plus", { ...app("android"), event: "step", step: "read", model: "HTC U12+" }),
+  taken("a model with an underscore", { ...app("android"), event: "step", step: "read", model: "ASUS_AI2302" }),
+  taken("a model of 32 characters", { ...app("android"), event: "step", step: "read", model: "A".repeat(32) }),
   taken("the members in another order", { step: "read", os: "macos", browser: "firefox", attempt_id: ATTEMPT, device_id: DEVICE, event: "step", client: "web" }),
   // Taken: a visitor.
   taken("a page", { ...visitor, event: "page", page: "home" }),
@@ -127,7 +133,22 @@ const cases: Case[] = [
   dropped("a card reader's name of 65 characters", { ...web, event: "step", step: "read", reader: "A".repeat(65) }),
   dropped("a card reader's name with a character outside ASCII", { ...web, event: "step", step: "read", reader: "讀卡機" }),
   dropped("an empty card reader's name", { ...web, event: "step", step: "read", reader: "" }),
+  dropped("a model of 33 characters", { ...app("android"), event: "step", step: "read", model: "A".repeat(33) }),
+  dropped("an empty model", { ...app("ios"), event: "step", step: "read", model: "" }),
+  dropped("a model with a slash", { ...app("android"), event: "step", step: "read", model: "Pixel 8/Pro" }),
+  dropped("a model with a character outside ASCII", { ...app("android"), event: "step", step: "read", model: "小米 13" }),
+  dropped("a name the phone's owner gave it", { ...app("ios"), event: "step", step: "read", model: "Alice’s iPhone" }),
+  dropped("a web count with a model", { ...web, event: "step", step: "read", model: "SM-S918B" }),
+  dropped("a page with a model", { ...visitor, event: "page", page: "home", model: "SM-S918B" }),
 ];
+
+/** How long a timed step took, in milliseconds, and the code it is sent as: each range's first and last. */
+const durations: { ms: number; took: string }[] = [
+  [0, "lt_1s"], [999, "lt_1s"], [1_000, "1s_3s"], [2_999, "1s_3s"], [3_000, "3s_10s"], [9_999, "3s_10s"],
+  [10_000, "10s_30s"], [29_999, "10s_30s"], [30_000, "30s_60s"], [59_999, "30s_60s"], [60_000, "1m_3m"], [179_999, "1m_3m"],
+  [180_000, "gt_3m"], [3_600_000, "gt_3m"],
+].map(([ms, took]) => ({ ms: ms as number, took: took as string }));
+for (const d of durations) if (tookOf(d.ms) !== d.took) throw new Error(`${d.ms} ms is written as ${d.took}, and src/counts.ts says otherwise`);
 
 for (const c of cases) {
   const kept = readCount(c.count);
@@ -137,7 +158,7 @@ for (const c of cases) {
 const file = {
   spec: "counts",
   status: "draft",
-  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole.",
+  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations: how long a timed step took, in milliseconds, and the code it is sent as.",
   generated_by: "protocol/test/generate/counts.ts",
   table: {
     clients: CLIENTS,
@@ -155,6 +176,7 @@ const file = {
     oses: OSES,
   },
   cases,
+  durations,
 };
 writeFileSync(new URL("../../../spec/vectors/counts.json", import.meta.url), `${JSON.stringify(file, null, 2)}\n`);
 console.log(`${cases.length} cases`);

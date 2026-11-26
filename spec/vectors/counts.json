@@ -1,7 +1,7 @@
 {
   "spec": "counts",
   "status": "draft",
-  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole.",
+  "note": "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations: how long a timed step took, in milliseconds, and the code it is sent as.",
   "generated_by": "protocol/test/generate/counts.ts",
   "table": {
     "clients": [
@@ -756,6 +756,82 @@
         "step": "done",
         "os_version": "18.1.1",
         "app_version": "1.4"
+      },
+      "taken": true
+    },
+    {
+      "name": "ios, with the phone's model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "os_version": "18.1.1",
+        "app_version": "2026.11.5",
+        "model": "iPhone15,2"
+      },
+      "taken": true
+    },
+    {
+      "name": "android, with the phone's model",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "stop",
+        "reason": "nfc_off",
+        "os_version": "14",
+        "app_version": "2026.11.5",
+        "model": "SM-S918B"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with spaces and brackets",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "moto g(60)"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with a plus",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "HTC U12+"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model with an underscore",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "ASUS_AI2302"
+      },
+      "taken": true
+    },
+    {
+      "name": "a model of 32 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       },
       "taken": true
     },
@@ -1756,6 +1832,151 @@
         "reader": ""
       },
       "taken": false
+    },
+    {
+      "name": "a model of 33 characters",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty model",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a slash",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Pixel 8/Pro"
+      },
+      "taken": false
+    },
+    {
+      "name": "a model with a character outside ASCII",
+      "count": {
+        "client": "android",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "小米 13"
+      },
+      "taken": false
+    },
+    {
+      "name": "a name the phone's owner gave it",
+      "count": {
+        "client": "ios",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "event": "step",
+        "step": "read",
+        "model": "Alice’s iPhone"
+      },
+      "taken": false
+    },
+    {
+      "name": "a web count with a model",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "model": "SM-S918B"
+      },
+      "taken": false
+    },
+    {
+      "name": "a page with a model",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "model": "SM-S918B"
+      },
+      "taken": false
+    }
+  ],
+  "durations": [
+    {
+      "ms": 0,
+      "took": "lt_1s"
+    },
+    {
+      "ms": 999,
+      "took": "lt_1s"
+    },
+    {
+      "ms": 1000,
+      "took": "1s_3s"
+    },
+    {
+      "ms": 2999,
+      "took": "1s_3s"
+    },
+    {
+      "ms": 3000,
+      "took": "3s_10s"
+    },
+    {
+      "ms": 9999,
+      "took": "3s_10s"
+    },
+    {
+      "ms": 10000,
+      "took": "10s_30s"
+    },
+    {
+      "ms": 29999,
+      "took": "10s_30s"
+    },
+    {
+      "ms": 30000,
+      "took": "30s_60s"
+    },
+    {
+      "ms": 59999,
+      "took": "30s_60s"
+    },
+    {
+      "ms": 60000,
+      "took": "1m_3m"
+    },
+    {
+      "ms": 179999,
+      "took": "1m_3m"
+    },
+    {
+      "ms": 180000,
+      "took": "gt_3m"
+    },
+    {
+      "ms": 3600000,
+      "took": "gt_3m"
     }
   ]
 }
