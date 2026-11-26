@@ -39,8 +39,8 @@ struct When {
     }
 }
 
-/// The reminder's part of the done screen (design/copy/card-proof.md,
-/// step 6, the app's reminder): what the phone keeps decides which.
+/// Which of step 7's screens (design/copy/card-proof.md, step 7): what the
+/// phone keeps of the reminder decides.
 enum DoneReminder: Equatable {
     /// Nothing is kept: the question, with the day the default would set.
     case ask(ReminderSettings)

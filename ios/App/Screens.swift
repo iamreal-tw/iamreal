@@ -1,6 +1,6 @@
 import Foundation
 
-/// The six screens of the card proof, each from what the flow knows at
+/// The screens of the card proof's eight steps, each from what the flow knows at
 /// that step: which sentence of design/copy/card-proof.md goes where (the
 /// paragraphs marked "app", and the shared ones where the app has none).
 /// Pure functions; the sentences come from `copy`, never from here.
@@ -16,6 +16,10 @@ struct Screens {
     let host: String
 
     typealias Flow = CardProofFlow
+
+    /// How many steps the app's card proof has (card-proof.md: 8 in the
+    /// app, where the reminder is a step; 7 on the web page).
+    static let steps = 8
 
     /// The screens speak of one platform (design/copy/card-proof.md,
     /// the section on one platform): the server's table has one platform the app
@@ -321,7 +325,7 @@ struct Screens {
         if !row.correctionToday, row.switchesLeft == 0 {
             blocks.append(.text(copy("accounts.row_used_up", ["switches_used": String(row.switchCount)])))
             if let whole = message ?? errors[row.platform] { blocks.append(.message(whole)) }
-            return Screen(step: 4, blocks: blocks, secondary: keep, cancel: cancel)
+            return Screen(step: 4, blocks: blocks, links: [keep], cancel: cancel)
         }
         let cost = row.correctionToday
             ? copy("accounts.row_today")
@@ -335,7 +339,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.sentences([copy("accounts.switch_effect", ["account": now]), cost]))
         blocks += previewNote(single)
-        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], secondary: keep, cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
     }
 
     /// After "修改帳號清單": a row for each platform, each changed on its own.
@@ -346,7 +350,7 @@ struct Screens {
         if let message { blocks.append(.message(message)) }
         blocks.append(.text(copy("accounts.how_change") + copy("accounts.switches_limited")))
         blocks += previewNote(single)
-        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], secondary: keep, cancel: cancel)
+        return Screen(step: 4, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toConfirm)], links: [keep], cancel: cancel)
     }
 
     // Step 5: confirming ----------------------------------------------------------------------
@@ -454,17 +458,33 @@ struct Screens {
         return Screen(step: 5, blocks: blocks, buttons: buttons)
     }
 
-    // Step 6: done ----------------------------------------------------------------------
+    // After the record was sent: steps 6 to 8 ------------------------------------------------
 
-    /// The title of step 6 (card-proof.md, the table of titles), by what
-    /// the server says was recorded.
-    private func doneTitle(_ done: Flow.Done) -> String {
-        guard let kinds = done.answer.kinds else { return copy("done.recorded_only") }
-        if done.firstRecord { return copy("done.first") }
-        if done.accounts.isEmpty { return copy("done.withdraw_all") }
+    /// What the server says was recorded changes nothing: a card proof again.
+    private func recordedUnchanged(_ done: Flow.Done) -> Bool {
+        guard let kinds = done.answer.kinds else { return false }
         let current = Dictionary(done.expected.map { ($0.platform, $0.current) }, uniquingKeysWith: { first, _ in first })
-        let unchanged = kinds.allSatisfy { $0.kind == "refresh" && current[$0.platform] == .some($0.username) }
-        return unchanged ? copy("done.refresh") : copy("done.changed")
+        return kinds.allSatisfy { $0.kind == "refresh" && current[$0.platform] == .some($0.username) }
+    }
+
+    /// The title of the last step (card-proof.md, step 8, the table of
+    /// titles), by what the server says was recorded; the same choices as
+    /// doneTitle of web/src/ui/messages.ts. With one platform a new
+    /// declaration, or one again after a withdrawal, is congratulated like
+    /// a first one, and a switch names the account it is now.
+    private func finishTitle(_ done: Flow.Done, single: String?) -> String {
+        guard let kinds = done.answer.kinds else { return copy("done.recorded_only") }
+        if done.firstRecord { return copy("finish.first") }
+        if done.accounts.isEmpty { return copy("done.withdraw_all") }
+        if recordedUnchanged(done) { return copy("done.refresh") }
+        if single != nil, kinds.count == 1, let kind = kinds.first {
+            let before = done.expected.first { $0.platform == kind.platform }?.current
+            if kind.kind == "first" || (kind.kind == "refresh" && before == nil) { return copy("finish.first") }
+            if kind.kind == "switch" || kind.kind == "correction" {
+                return copy("finish.switched", ["account": Platform.handle(kind.platform, kind.username)])
+            }
+        }
+        return copy("done.changed")
     }
 
     /// The rows of "證明紀錄記下了這一筆": one for every platform the server
@@ -508,10 +528,139 @@ struct Screens {
         return rows.sorted { $0.platform < $1.platform }.map(\.block)
     }
 
+    /// What the proof log recorded, shown only where it is not what step 5
+    /// said (card-proof.md, step 6, the record that differs): under the
+    /// whole of step 6, or on the last step when everything was withdrawn.
+    private func record(_ done: Flow.Done, single: String?) -> [Block] {
+        guard let kinds = done.answer.kinds, !done.answer.mismatches.isEmpty else { return [] }
+        let first = done.accounts.isEmpty ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")
+        return [.heading(copy("done.recorded")), .text(done.date), .text(first)]
+            + recordedRows(done, kinds: kinds)
+            + [.text(copy("done.short_id", ["short_id": done.shortID]))]
+    }
+
+    /// What every screen after the record was sent starts with: that what
+    /// was recorded differs from step 5, when it does.
+    private func mismatch(_ done: Flow.Done) -> [Block] {
+        done.answer.mismatches.isEmpty ? [] : [.message(copy("done.mismatch"))]
+    }
+
+    /// A sentence of the copy with the link to the card's page in the place of `{open_proof}`.
+    private func openingTheProof(_ key: String) -> Block {
+        let parts = copy(key).components(separatedBy: "{open_proof}")
+        return .linked(parts.first ?? "", Button(label: copy("done.open_proof"), action: .openProof), parts.dropFirst().first ?? "")
+    }
+
+    /// Step 6 asks only whether the link is still there (card-proof.md,
+    /// step 6, the short one): a card proof again, with one platform,
+    /// recorded as step 5 said.
+    func hangIsShort(_ done: Flow.Done, single: String?) -> Bool {
+        single != nil && !done.accounts.isEmpty && !done.firstRecord && done.answer.mismatches.isEmpty && recordedUnchanged(done)
+    }
+
+    /// Step 6: the link to the card's page, to put on the profile
+    /// (card-proof.md, step 6 and its "app"). `single`: the one platform's
+    /// name, as step 5 decided it. `copied`: the link was copied. `whole`:
+    /// the whole step also where the short one would do ("沒有看到連結，
+    /// 重新掛上" was pressed). The same parts as the web page's, but for
+    /// what only the page has: the QR code, and "現在可以拔出卡片。" (the
+    /// panel said the card can be taken away when it signed). The four
+    /// steps stand where the demonstration will (#375).
+    func hang(_ done: Flow.Done, single: String?, copied: Bool, whole: Bool = false) -> Screen {
+        let kinds = done.answer.kinds
+        let link = Block.link("\(host)/p/\(done.shortID)")
+        var blocks = mismatch(done)
+        blocks.append(.text(copy("done.recorded_on", ["date": done.date])))
+        if kinds == nil { blocks.append(.text(copy("done.kinds_unreadable"))) }
+        if !whole, hangIsShort(done, single: single), let single {
+            blocks += [
+                .title(copy("hang.still_there_single", ["platform": single])),
+                link,
+                openingTheProof("hang.look"),
+                .text(copy("hang.why_single")),
+            ]
+            return Screen(
+                step: 6, blocks: blocks,
+                buttons: [Button(label: copy("hang.rehang"), action: .rehang), Button(label: copy("common.next"), action: .toRemind)])
+        }
+        blocks += [
+            .title(single.map { copy("hang.title_single", ["platform": $0]) } ?? copy("hang.title")),
+            .text(single != nil ? copy("hang.why_single") : copy("done.anyone")),
+            link,
+            .button(Button(label: copied ? copy("done.copied") : copy("hang.copy"), action: .copyLink), main: true),
+        ]
+        // The public page of each account of the card, on a platform the app knows.
+        blocks += done.accounts.compactMap { account in
+            Platform.of(account.platform).map { platform in
+                Block.button(Button(
+                    label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
+                    action: .openProfile(account.platform)), main: false)
+            }
+        }
+        blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
+        // A new card's new link, a withdrawn account's link, the other cards that declare an account.
+        if done.firstRecord { blocks.append(.small(copy("hang.new_card"))) }
+        let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
+        if withdrew { blocks.append(.small(copy("done.withdrawn_link"))) }
+        blocks += (kinds ?? []).filter { $0.kind != "withdraw" && ($0.accountCards ?? 0) > 1 }.map { kind in
+            let account = (done.expected.first { $0.platform == kind.platform }?.known ?? (Platform.of(kind.platform) != nil))
+                ? Platform.handle(kind.platform, kind.username) : kind.username
+            return Block.small(copy("done.other_cards", ["account": account]))
+        }
+        blocks += [openingTheProof("done.hung"), .text(copy("done.hung_done"))]
+        blocks += record(done, single: single)
+        // One main button a screen (design/DESIGN.md): copying the link, here.
+        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("common.next"), action: .toRemind)], mainButton: false)
+    }
+
+    /// Step 7: the reminder to come back (card-proof.md, step 7), by what
+    /// the phone keeps. `notAfter`: the end of the card's certificate,
+    /// YYMMDDHHMMSS, compared in memory with the reminder's day.
+    func remind(_ reminder: DoneReminder, notAfter: String?) -> Screen {
+        var blocks: [Block] = [.title(copy("app_done.reminder_title"))]
+        let back = Button(label: copy("common.back"), action: .back)
+        let adjust = Button(label: copy("app_reminder.adjust"), action: .adjustReminder)
+        let skip = Button(label: copy("app_reminder.skip"), action: .toFinish)
+        let settings: ReminderSettings
+        let counted: Bool
+        switch reminder {
+        case .refused:
+            blocks.append(.text(copy("app_reminder.denied")))
+            return Screen(
+                step: 7, blocks: blocks,
+                buttons: [back, Button(label: copy("app_reminder.settings"), action: .openNotificationSettings)],
+                links: [skip])
+        case .ask(let asked):
+            settings = asked
+            counted = true
+        case .on(let kept, let fromToday):
+            settings = kept
+            counted = fromToday
+        }
+        let when = When(appCopy: appCopy)
+        let values = ["day": when.day(settings.next), "time": when.time(settings.time), "interval": when.interval(settings.interval)]
+        blocks += [
+            .text(copy("app_reminder.why")),
+            .text(counted ? copy("app_done.reminder_next_about", values) : copy("app_done.reminder_next", values)),
+        ]
+        // The certificate ends before the reminder comes.
+        if let validUntil = notAfter.flatMap(Self.dateOfCertificateTime), validUntil < settings.next.iso {
+            blocks.append(.text(copy("app_done.reminder_expires", ["valid_until": validUntil])))
+        }
+        if case .ask = reminder {
+            return Screen(
+                step: 7, blocks: blocks,
+                buttons: [back, Button(label: copy("app_done.reminder_turn_on"), action: .turnOnReminder)],
+                links: [adjust, skip])
+        }
+        // On already: turned off from the settings, not here.
+        return Screen(step: 7, blocks: blocks, buttons: [back, Button(label: copy("common.next"), action: .toFinish)], links: [adjust])
+    }
+
     /// What the share sheet gets before the card's address, on the line
     /// above it: the sentence with the card's ordinal, written as the
     /// card's page writes it, or without a number when the answer had none
-    /// (design/copy/card-proof.md, "6. 完成").
+    /// (design/copy/card-proof.md, step 8).
     func shareText(_ done: Flow.Done) -> String {
         guard let ordinal = done.answer.ordinal else { return copy("done.share_text_unnumbered") }
         return copy("done.share_text", ["ordinal": Self.thousands(ordinal)])
@@ -523,129 +672,42 @@ struct Screens {
         return digits.enumerated().map { i, c in (i > 0 && (digits.count - i) % 3 == 0 ? "," : "") + String(c) }.joined()
     }
 
-    /// `single`: the one platform's name, as step 5 decided it. `copied`:
-    /// the link was copied. The same parts, in the same order, as the web
-    /// page's done screen (doneView of web/src/ui/messages.ts), but for
-    /// what only the page has: the QR code to hang it from a phone, "現在
-    /// 可以拔出卡片。" (the app said "可以把卡片拿開了。" when the card
-    /// signed), and the share link, which here is the system's share sheet
-    /// (design/copy/card-proof.md, step 6, "app"). `reminder`: the
-    /// reminder's part, in the place of the page's "記得每三個月回來過卡一次".
-    func done(_ done: Flow.Done, single: String?, copied: Bool, reminder: DoneReminder) -> Screen {
-        let withdrawAll = done.accounts.isEmpty
-        let kinds = done.answer.kinds
-        var blocks: [Block] = []
-        // What the proof log recorded is not what step 5 said: first of all, above the title.
-        if !done.answer.mismatches.isEmpty { blocks.append(.message(copy("done.mismatch"))) }
-        let card = withdrawAll ? nil : ProofCard(
+    /// Step 8: done, and the invitation to share (card-proof.md, step 8
+    /// and its "app"). When every account was withdrawn it follows step 5:
+    /// no card, nothing to hang, to be reminded of or to share.
+    func finish(_ done: Flow.Done, single: String?) -> Screen {
+        let end = Button(label: copy("finish.done"), action: .restart)
+        guard !done.accounts.isEmpty else {
+            var blocks = mismatch(done)
+            blocks += [.title(finishTitle(done, single: single)), .text(copy("done.recorded_on", ["date": done.date]))]
+            if done.answer.kinds == nil { blocks.append(.text(copy("done.kinds_unreadable"))) }
+            blocks.append(.text(single.map { copy("finish.unlink_single", ["platform": $0]) } ?? copy("done.withdrawn_link")))
+            blocks += record(done, single: single)
+            return Screen(step: 8, blocks: blocks, buttons: [end], settings: settingsButton)
+        }
+        let card = ProofCard(
             label: copy("done.proof"),
             rows: done.accounts.map { account in
                 ProofCard.Row(name: single != nil ? nil : Platform.of(account.platform)?.name ?? account.platform, account: Platform.handle(account.platform, account.username))
             },
             shortID: copy("confirm.short_id_label") + " " + copy("confirm.short_id", ["short_id": done.shortID]))
-        var lines = [copy("done.recorded_on", ["date": done.date])]
-        if kinds == nil { lines.append(copy("done.kinds_unreadable")) }
-        blocks.append(.doneHead(card, title: doneTitle(done), lines: lines))
-
-        // Under the link: a new card's new link, a withdrawn account's link, the other cards that declare an account.
-        var notes: [Block] = []
-        if done.firstRecord, !withdrawAll { notes.append(.small(copy("done.new_card"))) }
-        let withdrew = kinds.map { $0.contains { $0.kind == "withdraw" } } ?? done.expected.contains { $0.kind == "withdraw" }
-        if withdrew { notes.append(.small(copy("done.withdrawn_link"))) }
-        notes += (kinds ?? []).filter { $0.kind != "withdraw" && ($0.accountCards ?? 0) > 1 }.map { kind in
-            let account = (done.expected.first { $0.platform == kind.platform }?.known ?? (Platform.of(kind.platform) != nil))
-                ? Platform.handle(kind.platform, kind.username) : kind.username
-            return .small(copy("done.other_cards", ["account": account]))
-        }
-
-        if withdrawAll {
-            blocks += notes
-        } else {
-            blocks += [
-                .heading(single.map { copy("done.hang_title_single", ["platform": $0]) } ?? copy("done.hang_title")),
-                .text(single != nil ? copy("done.anyone_single") : copy("done.anyone")),
-                .link("\(host)/p/\(done.shortID)"),
-                .button(Button(label: copied ? copy("done.copied") : copy("done.copy"), action: .copyLink), main: true),
-            ]
-            // The public page of each account of the card, on a platform the app knows.
-            blocks += done.accounts.compactMap { account in
-                Platform.of(account.platform).map { platform in
-                    .button(Button(
-                        label: copy("done.open_profile", ["account": Platform.handle(account.platform, account.username), "platform": platform.name]),
-                        action: .openProfile(account.platform)), main: false)
-                }
-            }
-            blocks.append(.steps([copy("done.step_edit"), copy("done.step_link"), copy("done.step_add"), copy("done.step_paste")]))
-            blocks += notes
-            let hung = copy("done.hung").components(separatedBy: "{open_proof}")
-            blocks += [
-                .linked(hung.first ?? "", Button(label: copy("done.open_proof"), action: .openProof), hung.dropFirst().first ?? ""),
-                .text(copy("done.hung_done")),
-            ]
-        }
-
-        // What the proof log recorded: only where it is not what step 5 said.
-        if let kinds, !done.answer.mismatches.isEmpty {
-            blocks += [
-                .heading(copy("done.recorded")),
-                .text(done.date),
-                .text(withdrawAll ? copy("done.record_withdraw_all") : single != nil ? copy("done.record_single") : copy("done.record_list")),
-            ]
-            blocks += recordedRows(done, kinds: kinds)
-            blocks.append(.text(copy("done.short_id", ["short_id": done.shortID])))
-        }
-
-        if !withdrawAll {
-            blocks.append(.kicker(copy("done.optional")))
-            // One share sheet, whichever platform: the note names the one the app knows.
-            if let platform = Platform.known.first {
-                blocks += [
-                    .subheading(copy("done.share_title")),
-                    .text(copy("done.share_note", ["platform": platform.name])),
-                    .button(Button(label: copy("app_done.share"), action: .share), main: false),
-                ]
-            }
-            blocks += reminderPart(reminder, notAfter: done.notAfter)
-        }
-        return Screen(step: 6, blocks: blocks, buttons: [Button(label: copy("done.restart"), action: .restart)], mainButton: false, settings: settingsButton)
-    }
-
-    /// The reminder's part of the done screen (card-proof.md, step 6, the
-    /// app's reminder). `notAfter`: the end of the card's certificate,
-    /// YYMMDDHHMMSS, compared in memory with the reminder's day.
-    private func reminderPart(_ reminder: DoneReminder, notAfter: String?) -> [Block] {
-        let settings: ReminderSettings
-        let counted: Bool
-        switch reminder {
-        case .refused:
-            return [.subheading(copy("done.return_title")), .text(copy("done.return_note")), .text(copy("app_done.reminder_denied"))]
-        case .ask(let asked):
-            settings = asked
-            counted = true
-        case .on(let kept, let fromToday):
-            settings = kept
-            counted = fromToday
-        }
-        let when = When(appCopy: appCopy)
-        let values = ["day": when.day(settings.next), "time": when.time(settings.time), "interval": when.interval(settings.interval)]
+        // The card's ordinal, when the answer had one, before the invitation.
+        let ordinal = done.answer.ordinal.map { [copy("finish.ordinal", ["ordinal": Self.thousands($0)])] } ?? []
         var blocks: [Block] = [
-            .subheading(copy("app_done.reminder_title")),
-            .text(copy("app_done.reminder_why") + (counted ? copy("app_done.reminder_next_about", values) : copy("app_done.reminder_next", values))),
-            .text(copy("app_done.reminder_local")),
+            .title(finishTitle(done, single: single)),
+            .proofCard(card),
+            .sentences(ordinal + [copy("finish.invite")]),
+            .text(copy("finish.thanks")),
         ]
-        if case .ask = reminder {
-            blocks += [
-                .button(Button(label: copy("app_done.reminder_turn_on"), action: .turnOnReminder), main: true),
-                .action(Button(label: copy("app_done.reminder_adjust"), action: .adjustReminder)),
-            ]
-        } else {
-            blocks.append(.action(Button(label: copy("app_done.reminder_change"), action: .adjustReminder)))
+        // One share sheet, whichever platform: the button names the one the app knows.
+        if let platform = Platform.known.first {
+            blocks.append(.button(Button(label: copy("done.share", ["platform": platform.name]), action: .share), main: true))
         }
-        // The certificate ends before the reminder comes.
-        if let validUntil = notAfter.flatMap(Self.dateOfCertificateTime), validUntil < settings.next.iso {
-            blocks.append(.text(copy("app_done.reminder_expires", ["valid_until": validUntil])))
-        }
-        return blocks
+        // One main button a screen (design/DESIGN.md): sharing, here.
+        return Screen(
+            step: 8, blocks: blocks,
+            buttons: [Button(label: copy("common.back"), action: .back), end],
+            mainButton: false, settings: settingsButton)
     }
 
     // Why a step stopped -------------------------------------------------------------
