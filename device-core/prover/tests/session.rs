@@ -557,6 +557,14 @@ fn a_session_that_passed_every_check_gives_the_card_state_request() {
             "{}",
             card.label
         );
+        // Asked again with the same signature, as an app does when the server turned the
+        // card's state away as too many (docs/api/card-proof.md): the same request.
+        assert_eq!(
+            session.card_state_request(card.now, &card.scope_signature),
+            Ok(request),
+            "{}: asked again",
+            card.label
+        );
     }
 }
 
