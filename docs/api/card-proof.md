@@ -32,9 +32,10 @@ record is or how it is verified. It can change without invalidating records.
   are the operator's settings and not part of this document. A request
   that was answered `429` can be sent again as it was once the time has
   passed: the card does not have to be read or sign again for it. The web
-  page offers to send again after a `429` to `challenges`, `card-state` or
-  `records`, and a `429` to a `config` without the mark (`config`, below)
-  does not stop its card proof; the apps do not yet (their own documents).
+  page and the Android app offer to send again after a `429` to
+  `challenges`, `card-state` or `records`, and a `429` to a `config`
+  without the mark (`config`, below) does not stop their card proofs; the
+  iOS app does not yet (its own document).
 - **Every endpoint that asks the proof log can answer `503` `busy`**, with
   a `Retry-After` header: the proof log is overloaded and turned the
   request away (ADR-0026, "Durable Object 撐不住時"). Like a `429`, the

@@ -69,6 +69,15 @@
 //    stopped after step 1, so that challenges answers paused, then records
 //    does (stops.paused, and only 回到開頭); taken again, the first
 //    declaration goes through.
+// 8. Too many people (ADR-0026, #419), in the card proof again: the server
+//    here answers a request as the Worker does when it turns one away
+//    (429 rate_limited or 503 busy, Retry-After). The config of step 1 that
+//    has no mark turned away: step 1 goes on as it was. The start
+//    (config?start) turned away, busy then rate limited: step 1 stays and
+//    says so above 下一步, and the app does not wait for a card. Then the
+//    card's state (step 3), the challenge and the submission (step 5)
+//    turned away: 再試一次 sends the same request again, and the card is
+//    held to the phone no more than in any card proof.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -202,6 +211,15 @@ let phoneHasNfc = true;
  * come. Undefined: the back end's own.
  */
 let minApp: { value: unknown } | "unanswered" | undefined;
+/**
+ * The requests the server here turns away as too many, by `METHOD /path?query`: the next ones that come are answered as the
+ * Worker answers one it turns away (docs/api/card-proof.md, "Rules for every endpoint"), not handed on. Each is taken once.
+ */
+const turnAway = new Map<string, { status: 429 | 503; code: "rate_limited" | "busy" }[]>();
+/** How many requests came, by `METHOD /path?query`. */
+const asked = new Map<string, number>();
+/** The next request `line` that comes is turned away as too many. */
+const away = (line: string, status: 429 | 503, code: "rate_limited" | "busy"): void => void turnAway.set(line, [...(turnAway.get(line) ?? []), { status, code }]);
 /** What the app's requests called themselves (User-Agent), each once. */
 const userAgents = new Set<string>();
 /** Holds a card to the phone: answers the tap the app is waiting with. */
@@ -243,6 +261,13 @@ const front = createServer(async (req, res) => {
     }
     // What the app itself asks: the API and the CRL archive.
     if (path.startsWith("/api/") || path.startsWith("/crl/")) userAgents.add(req.headers["user-agent"] ?? "");
+    const line = `${req.method} ${req.url}`;
+    asked.set(line, (asked.get(line) ?? 0) + 1);
+    const turned = turnAway.get(line)?.shift();
+    if (turned !== undefined) {
+      for await (const _ of req) void _;
+      return void res.writeHead(turned.status, { "Content-Type": "application/json", "Cache-Control": "no-store", "Retry-After": "60" }).end(JSON.stringify({ error: turned.code }));
+    }
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const headers: Record<string, string> = {};
@@ -443,6 +468,8 @@ interface Proof {
   accounts: { shows: string[]; absent: string[]; act: { do: "fill"; type: string } | { do: "refresh" } | { do: "switch"; type: string; after: string[] } | { do: "withdraw" } };
   /** At the last tap, another card is held to the phone first. */
   otherCardAtLastTap?: boolean;
+  /** The server turns requests away as too many people (section 8): step 1's config, the start, the card's state, the challenge, the submission. */
+  turnedAway?: boolean;
   /** The account the card declares before: "" for none. */
   current: string;
   confirm: { intro: string; account: string; under: string; button: string; shows: string[]; absent: string[] };
@@ -482,6 +509,7 @@ async function cardProof(p: Proof): Promise<string> {
     emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
     find((n) => n.text === step(1) || n.text === say("before.find_office"), "the app again, still at step 1");
   }
+  if (p.turnedAway) await turnedAwayAtStart();
   press(say("common.next"));
 
   // Step 2
@@ -564,9 +592,11 @@ async function cardProof(p: Proof): Promise<string> {
     check(!s.some((t) => t.includes(PIN)), "step 3: the PIN typed is not on the screen");
     check(!s.includes(say("app_pin.need_pin")) && !s.includes(say("app_pin.pin_format")), "step 3: with a PIN typed, no 請輸入 PIN。 and no sentence of the PIN's form");
   }
+  if (p.turnedAway) away("POST /api/v1/card-state", 503, "busy");
   press(say("pin.confirm_card"));
   if (p.thorough) await tapWithPanel({ signs: true });
   else await tap();
+  if (p.turnedAway) await turnedAwayAtCardState();
 
   // Step 4
   await waitText(step(4), "step 4", 120_000);
@@ -664,8 +694,13 @@ async function cardProof(p: Proof): Promise<string> {
     press(act.do === "refresh" ? say("accounts.refresh") : say("accounts.withdraw", { account: `@${p.current}` }));
     await waitText(say("confirm.title"), "step 5 again");
   }
+  if (p.turnedAway) {
+    away("POST /api/v1/challenges", 429, "rate_limited");
+    away("POST /api/v1/records", 503, "busy");
+  }
   press(p.confirm.button);
   await waitText(say("progress.title"), "step 5, in progress");
+  if (p.turnedAway) await turnedAwayAtStepFive(say("progress.server"), "the challenge");
   if (p.otherCardAtLastTap) {
     // Not the card that was read: it gets no PIN, and the same tap is offered again.
     const handed = pinsHanded;
@@ -685,6 +720,7 @@ async function cardProof(p: Proof): Promise<string> {
     await designShot("card-proof-app-5-progress-phone.png");
     const s = textsOf(visible());
   } else await tap();
+  if (p.turnedAway) await turnedAwayAtStepFive(say("progress.submit"), "the submission");
 
   // Recorded: the step after the submission.
   await waitText(step(p.after), `step ${p.after}`, 300_000);
@@ -1587,10 +1623,11 @@ try {
 
   // A card proof again, the same day: 更新島民證明, nothing typed.
   const again = await cardProof({
-    what: "a card proof again: 更新島民證明; another card at the last tap first",
+    what: "a card proof again: 更新島民證明; another card at the last tap first; too many people on the way",
     name: "again",
     thorough: false,
     otherCardAtLastTap: true,
+    turnedAway: true,
     accounts: { shows: [say("accounts.last_proof_today")], absent: [say("accounts.none_yet")], act: { do: "refresh" } },
     current: "alice",
     confirm: { intro: say("confirm.intro_public"), account: HANDLE.alice, under: say("kinds.unchanged"), button: say("confirm.button_refresh"), shows: [holder], absent: WITHDRAWN },
@@ -1810,4 +1847,78 @@ async function stoppedTakingCardProofs(): Promise<void> {
   bringBack();
   await waitText(say("common.next"), "step 1's 下一步, card proofs taken again", 20_000);
   taps = 0;
+}
+
+// 8. Too many people ---------------------------------------------------------------
+// (Called from cardProof, for the card proof again.)
+
+/** Step 1: the config without the mark turned away goes unnoticed; the start turned away keeps step 1, and says so above 下一步. */
+async function turnedAwayAtStart(): Promise<void> {
+  console.log("too many people: step 1");
+  // The config step 1 asks as the app comes back, turned away: step 1 is as it was (docs/api/card-proof.md, `config`).
+  const plain = asked.get("GET /api/v1/config") ?? 0;
+  away("GET /api/v1/config", 429, "rate_limited");
+  bringBack();
+  for (let i = 0; i < 100 && (asked.get("GET /api/v1/config") ?? 0) === plain; i++) await sleep(100);
+  await waitText(say("common.next"), "step 1's 下一步, its config turned away", 20_000);
+  check((turnAway.get("GET /api/v1/config") ?? []).length === 0, "step 1 asked its config as the app came back, and it was turned away");
+  for (const a of [say("before.busy"), say("before.paused")]) check(!textsOf(visible()).includes(a), `step 1's config turned away: step 1 does not say "${a}"`);
+
+  for (const [status, code] of [[503, "busy"], [429, "rate_limited"]] as const) {
+    const starts = asked.get("GET /api/v1/config?start") ?? 0;
+    const tapsBefore = taps;
+    away("GET /api/v1/config?start", status, code);
+    press(say("common.next"));
+    await waitText(say("before.busy"), `step 1: too many people (${status})`, 20_000);
+    const s = wholeScreen();
+    shows(s, `step 1, the start turned away (${status}),`, [step(1), say("before.title"), say("before.busy"), say("common.next")]);
+    check(s.indexOf(say("before.busy")) === s.indexOf(say("common.next")) - 1, `step 1, ${status}: the sentence is right above 下一步`);
+    check((asked.get("GET /api/v1/config?start") ?? 0) === starts + 1, `step 1, ${status}: 下一步 asked config with the mark of a start, once`);
+    await sleep(1_000);
+    check(waitingTaps.length === 0 && taps === tapsBefore && !textsOf(visible()).includes(step(2)), `step 1, ${status}: still step 1, and the app does not wait for a card`);
+    if (status === 503) {
+      shot("busy-1-before");
+      await designShot("card-proof-app-1-busy-phone.png");
+    }
+  }
+}
+
+/** Step 3: the card signed, its state turned away; 再試一次 asks again, the card not held to the phone again, and on to step 4. */
+async function turnedAwayAtCardState(): Promise<void> {
+  console.log("too many people: step 3");
+  await waitText(say("stops.too_many"), "step 3: the card's state turned away", 60_000);
+  const s = wholeScreen();
+  shows(s, "step 3, the card's state turned away,", [step(3), say("stops.too_many"), say("progress.retry"), say("common.back")]);
+  check(!s.includes(say("pin.confirm_card")) && !s.includes(say("app_read.tap_again")), "step 3, the card's state turned away: 再試一次 in place of 確認卡片, and no tap offered");
+  check(field("pin").text === "", "step 3, the card's state turned away: the PIN's field is empty");
+  shot("busy-3-pin");
+  await designShot("card-proof-app-3-busy-phone.png");
+  const [tapsBefore, handed, states] = [taps, pinsHanded, asked.get("POST /api/v1/card-state") ?? 0];
+  press(say("progress.retry"));
+  await waitText(step(4), "step 4, after 再試一次", 60_000);
+  check(taps === tapsBefore && pinsHanded === handed && waitingTaps.length === 0, "step 3, 再試一次: the card was not held to the phone again, nor handed the PIN");
+  check((asked.get("POST /api/v1/card-state") ?? 0) === states + 1, "step 3, 再試一次: the card's state asked once more");
+}
+
+/** Step 5 stopped at `item` (`what` turned away): stops.too_many, 再試一次 and 取消; 再試一次 sends it again, and the card proof goes on. */
+async function turnedAwayAtStepFive(item: string, what: string): Promise<void> {
+  console.log(`too many people: step 5, ${what}`);
+  await waitText(say("stops.too_many"), `step 5: ${what} turned away`, 300_000);
+  const s = wholeScreen();
+  shows(s, `step 5, ${what} turned away,`, [step(5), item, say("common.halted"), say("stops.too_many"), say("progress.retry"), say("common.cancel")]);
+  const halted = s.indexOf(say("common.halted"));
+  check(halted > 0 && s[halted - 1] === item && s[halted + 1] === say("stops.too_many"), `step 5, ${what} turned away: stopped at "${item}" (${JSON.stringify(s.slice(Math.max(0, halted - 1), halted + 2))})`);
+  for (const a of [say("app_read.tap_again"), say("accounts.restart"), say("stops.submit_failed")]) check(!s.includes(a), `step 5, ${what} turned away: does not offer or say "${a}"`);
+  shot(`busy-5-${what.replaceAll(" ", "-")}`);
+  if (what === "the challenge") await designShot("card-proof-app-5-busy-phone.png");
+  const [tapsBefore, handed] = [taps, pinsHanded];
+  press(say("progress.retry"));
+  if (what === "the challenge") {
+    // The challenge asked for again; the card has signed nothing yet, and the last tap comes now.
+    await waitText(say("app_panel.android_wait_title"), "step 5, 再試一次: the panel of the last tap", 60_000);
+    check(pinsHanded === handed, "step 5, the challenge turned away: the card was not handed the PIN before 再試一次");
+  } else {
+    await sleep(1_000);
+    check(taps === tapsBefore && pinsHanded === handed && waitingTaps.length === 0, "step 5, 再試一次 after the submission: the card was not held to the phone again");
+  }
 }
