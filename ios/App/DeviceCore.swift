@@ -102,6 +102,32 @@ enum DeviceCore {
         return String(decoding: short, as: UTF8.self)
     }
 
+    /// The count to send (spec/counts.md), the body of POST /api/v1/counts,
+    /// from `count`: a JSON object whose every value is a string. A version
+    /// or the phone's model not in its format is left out; the rest must be
+    /// a count the server takes, or `Failure` IDC_ERR_INPUT.
+    static func count(_ count: Data) throws -> Data {
+        try count.withUnsafeBytes { c in try output { idc_count(c.bytes, c.count, $0) } }
+    }
+
+    /// The code a timed step that took `milliseconds` is sent as
+    /// (spec/counts.md, "Durations").
+    static func countTook(milliseconds: UInt64) throws -> String {
+        String(decoding: try output { idc_count_took(milliseconds, $0) }, as: UTF8.self)
+    }
+
+    /// The card proof device ID at `now` from `stored`, the value the app
+    /// keeps (empty for none), and 16 `random` bytes (spec/counts.md, "The
+    /// card proof device ID"): JSON, `{"device_id":"…","store":"…"}`,
+    /// `store` null when what the app keeps stays as it is.
+    static func countDeviceID(stored: Data, now: Date, random: Data) throws -> Data {
+        try stored.withUnsafeBytes { s in
+            try random.withUnsafeBytes { r in
+                try output { idc_count_device_id(s.bytes, s.count, seconds(now), r.bytes, r.count, $0) }
+            }
+        }
+    }
+
     /// The answer to a submission as the steps after it tell it
     /// (idc_records_response): JSON. `response` is the body of the
     /// server's 201 as it sent it, `rows` the rows of listConsequence for
