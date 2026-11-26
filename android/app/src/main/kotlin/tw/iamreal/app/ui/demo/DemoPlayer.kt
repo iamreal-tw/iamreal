@@ -44,8 +44,8 @@ internal open class DemoPlayer(val length: Double) {
     /**
      * A frame of the system's, [sinceLast] nanoseconds after the one before: the demonstration is that much further on,
      * and stops at its end. It keeps to the clock on a phone that draws slowly: a frame that comes late moves it on by
-     * all the time that passed. Only a wait of more than [LONGEST_FRAME] is not time of the demonstration: the app was
-     * away, and what was not shown is not skipped.
+     * all the time that passed. Of a wait longer than [LONGEST_FRAME] only that much counts: the app was away, and
+     * the demonstration goes on from about where it was left.
      */
     fun frame(sinceLast: Long) {
         val by = minOf(sinceLast, LONGEST_FRAME) / 1e9
@@ -55,8 +55,8 @@ internal open class DemoPlayer(val length: Double) {
     companion object {
         /**
          * The most one frame moves a demonstration on, in nanoseconds: a second. No phone draws so slowly, so anything
-         * longer is the app in the background. It was a tenth of a second: at fewer than ten frames a second the
-         * demonstration then ran behind the clock (a busy emulator took 34 seconds over the 20.7 of step 6's).
+         * longer is the app in the background. Not less: a limit near the time between two frames makes the
+         * demonstration run behind the clock on a phone that draws slowly.
          */
         const val LONGEST_FRAME = 1_000_000_000L
     }
