@@ -1582,3 +1582,54 @@ test("the android check runs when anything it uses changes: every file and direc
   // The app links device-core/ and bundles the files its proofs need: the whole of each.
   for (const p of ["android/**", "device-core/**", "web/circuits/**", "verifier/vk/**"]) assert.ok(list.includes(p), p);
 });
+
+// The check from outside Cloudflare (watch-test.yml, #53): what would let it hold a secret, write, use a cache,
+// run on something other than its schedule, or run code of a package it did not mean to, is turned away.
+const W = "watch-test.yml";
+const WATCH_JOBS_PROBLEM = /^watch-test\.yml: the jobs are not exactly the ones in test\/workflows\.ts/;
+const WATCH_CHANGES: Readonly<Record<string, { changes: readonly Change[]; problem: RegExp }>> = {
+  "watch-test 1 a secret given to the check": {
+    changes: [replace(W, "        working-directory: worker\n", `        working-directory: worker\n        env:\n          CLOUDFLARE_API_TOKEN: ${SECRET}\n`)],
+    problem: /^the lines with "secrets" in them are/,
+  },
+  "watch-test 2 also on a push, where a change of a pull request's author runs before anyone looks": {
+    changes: [replace(W, "on:\n", "on:\n  push:\n    branches:\n      - main\n")],
+    problem: /^watch-test\.yml: not triggered on its schedule and by hand only/,
+  },
+  "watch-test 3 a token that can write": {
+    changes: [replace(W, "permissions:\n  contents: read\n", "permissions:\n  contents: write\n")],
+    problem: /^watch-test\.yml: permissions is not exactly contents: read/,
+  },
+  "watch-test 4 allowed to restore caches": {
+    changes: [(f) => void (f[W] = f[W]!.replace(/^cache-mode: .*$/m, "cache-mode: read"))],
+    problem: /^watch-test\.yml: cache-mode is not none/,
+  },
+  "watch-test 5 an action at a tag, not at its commit": {
+    changes: [replace(W, "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n", "      - uses: actions/checkout@v7\n")],
+    problem: /^watch-test\.yml: not an action of the list at its commit/,
+  },
+  "watch-test 6 the packages' install scripts run": {
+    changes: [replace(W, " --ignore-scripts --ignore-pnpmfile", "")],
+    problem: WATCH_JOBS_PROBLEM,
+  },
+  "watch-test 7 a failing check that does not fail the job": {
+    changes: [replace(W, "      - name: Check the test site from outside Cloudflare\n", "      - name: Check the test site from outside Cloudflare\n        continue-on-error: true\n")],
+    problem: WATCH_JOBS_PROBLEM,
+  },
+  "watch-test 8 a run cancelled by the next": {
+    changes: [replace(W, "  group: watch-test\n  cancel-in-progress: false\n", "  group: watch-test\n  cancel-in-progress: true\n")],
+    problem: /^watch-test\.yml: concurrency is not group watch-test/,
+  },
+};
+
+for (const [name, { changes, problem }] of Object.entries(WATCH_CHANGES)) {
+  test(`turned away: ${name}`, () => {
+    const files = realFiles();
+    for (const change of changes) change(files);
+    const problems = workflowProblems(files);
+    assert.ok(
+      problems.some((p) => problem.test(p)),
+      `no problem like ${problem}: ${JSON.stringify(problems)}`,
+    );
+  });
+}
