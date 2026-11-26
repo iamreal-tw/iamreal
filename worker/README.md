@@ -1449,7 +1449,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 
 [`test/site-check.ts`](test/site-check.ts) 對部署好的測試網站和它的資料網域只送 `GET`，每檢查一樣印一行（`ok` 或 `FAIL`），有一項不過結束碼是 1。不用卡片、不開瀏覽器、不用權杖，不會對內政部的元件送任何請求，可以隨時重跑。它檢查：
 
-- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
+- Worker 產生的每一種頁面（首頁、島民證明的「找不到」、查詢頁、證明紀錄頁、常見問題、如何驗證證明紀錄、如何檢查 Threads 帳號的島民證明、過卡需要什麼、隱私權說明、掛上去、「找不到這一頁」）：狀態碼、[頁面送的標頭](#頁面送的標頭)的每一項、不設 cookie、頁面上有測試的證明紀錄的標示和 `noindex`，標示旁的日期是這個 checkout 的 `wrangler.jsonc` 寫的 `TEST_PROOF_LOG_CLEARED_ON`。島民證明用範例的短編號 `7K2Q9FM4XD`，要回 `404`
 - 沒有一頁有不是自己網站的 script：Worker 產生的頁面和 `/proof` 都看。頁面裡每一個 `<script>` 都要有 `src`、而且指到自己網站的路徑；別的網域的、寫在頁面裡的都不過（這個程式庫的頁面沒有寫在頁面裡的 script）
 - 每個請求都照瀏覽器的送法：頁面帶 `Accept: text/html`，其餘帶 `Accept: */*`。Worker 和訪客之間的東西（Cloudflare 的功能）可能只在這種請求上改頁面：2026-11-21 就是這樣，不帶這個標頭的 `curl` 看不到被加進去的 script
 - 樣式表、複製按鈕的程式、圖示、字型、連結預覽圖、過卡的頁面 `/proof` 在不在，和它們帶的 `noindex`、`nosniff`；說明頁的舊網址 `/proof/help.html` 是 `301` 到 `/prepare`
