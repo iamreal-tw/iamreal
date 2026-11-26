@@ -102,6 +102,7 @@ pub const REASONS: &[Code] = &[
     ("idle", ALL),
     ("state", ALL),
     ("app_too_old", APPS),
+    ("clock", APPS),
     ("username", ALL),
     ("blocked_switch_limit", ALL),
     ("blocked_empty", ALL),

@@ -45,8 +45,14 @@ import kotlin.concurrent.thread
  *                  the core's session; overwritten at the end
  *   signatures     here until the proof is made; overwritten then
  *   name           returned to the screen by readCard() and kept nowhere
- * Nothing of a card proof under way is written to storage. The one thing
- * stored is the highest CRL number used, per issuer key ([CrlNumbers]).
+ * Nothing of a card proof under way is written to storage. Stored are the
+ * highest CRL number used, per issuer key ([CrlNumbers]), and the card proof
+ * device ID ([Counts]).
+ *
+ * The counts ([Counts]): each step the table names is sent once as it is
+ * reached; a stop that ends the card proof as `stop`, one the screen offers
+ * to try again as `retry`; a card that left during a tap as an action. The
+ * cardholder leaving is not counted. Nothing waits for them.
  *
  * The steps that wait for a card or a server block: each is called on a
  * background thread, one at a time. [choose] and [inFormat] ask only the
@@ -78,6 +84,12 @@ class CardProof(private val deps: Deps) {
         val appBuild: Int
 
         val crlNumbers: CrlNumbers
+
+        /** The counts of this run of the app: the card proof makes its attempt from them. */
+        val counts: Counts
+
+        /** A clock that only goes forward, in milliseconds: how long a timed step took. */
+        fun elapsed(): Long = System.nanoTime() / 1_000_000
     }
 
     /** The highest CRL number the phone has used, per issuer key (spec/device-checks.md): the one thing the app stores. */
@@ -242,6 +254,9 @@ class CardProof(private val deps: Deps) {
 
     @Volatile private var firstSignedAt: Long? = null
 
+    /** This card proof's counts; its first, `open`, is sent as it is made. */
+    private val counted = deps.counts.attempt()
+
     /**
      * The card has accepted this card proof's PIN at some tap, also one that then failed. From then on a card that
      * leaves while the PIN is on its way is a card that left: the PIN is right, and is sent again (issue #133).
@@ -281,6 +296,23 @@ class CardProof(private val deps: Deps) {
     }
 
     /**
+     * Runs a step of the card proof, and tells the counts why it stopped: as `stop` if the card proof is over, as `retry`
+     * if the screen offers the step again on it.
+     */
+    private inline fun <T> counting(step: () -> T): T = try {
+        step()
+    } catch (e: Stop) {
+        Counts.reasonOf(e)?.let { if (ended) counted.stop(it) else counted.retry(it) }
+        throw e
+    }
+
+    /** The card proof is over for [stop], which the screen found ([Counts]): everything is dropped. */
+    fun end(stop: Stop) {
+        Counts.reasonOf(stop)?.let(counted::stop)
+        cancel()
+    }
+
+    /**
      * The minimum app version of [config] at the phone's clock now (spec/min-app.md; ADR-0035: before a PIN is asked for and
      * before a card is tapped). Before each tap: the start date may come while a card proof is on its way.
      */
@@ -301,34 +333,46 @@ class CardProof(private val deps: Deps) {
 
     // Tap 1: the certificates, no PIN --------------------------------------------------
 
-    fun readCard(events: Events): CardRead {
+    fun readCard(events: Events): CardRead = counting { readCardCounted(events) }
+
+    private fun readCardCounted(events: Events): CardRead {
         if (session != 0L || ended) throw Stop("state")
+        counted.step("read")
+        // Each of these ends the card proof: step 2 offers only a new one.
         val config = try {
             deps.config()
         } catch (e: ServerException) {
-            throw Stop.server(e)
+            fail(Stop.server(e))
         }
         live()
         // Without a platform table there is nothing to offer (docs/api/card-proof.md).
-        platformsJson = RawJson.member(config, "platforms") ?: throw Stop("server", mapOf("code" to "malformed_response"))
+        platformsJson = RawJson.member(config, "platforms") ?: fail(Stop("server", mapOf("code" to "malformed_response")))
         // The operator stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the card is read.
         when (pausedIn(config)) {
-            true -> throw Stop("server", mapOf("code" to "paused"))
-            null -> throw Stop("server", mapOf("code" to "malformed_response"))
+            true -> fail(Stop("server", mapOf("code" to "paused")))
+            null -> fail(Stop("server", mapOf("code" to "malformed_response")))
             false -> {}
         }
+        counted.step("config")
         // The minimum app version (spec/min-app.md), before the card is read: step 1 looked too, at the answer it had.
         checkMinApp(config)
         this.config = config
         events.done(Item.SERVER)
 
-        val certificates = tap(events) { connection ->
-            events.tap(Tap.READING)
-            connection.readCertificates().also { events.tap(Tap.READ) }
+        val certificates = try {
+            tap(events, 1) { connection ->
+                events.tap(Tap.READING)
+                connection.readCertificates().also { events.tap(Tap.READ) }
+            }
+        } catch (e: Stop) {
+            // A tap that did not happen, a card that left, NFC turned off: the same card proof taps again (Model's readButtonAfter).
+            if (e.code == "card" && e.values["reason"] !in TAPPED_AGAIN_AT_FIRST) fail(e)
+            throw e
         }
         val name: String
         try {
             live()
+            counted.step("certificates")
             events.done(Item.CARD)
             keep { session = deps.openSession() }
             for (c in certificates) DeviceCore.sessionAddCertificate(session, c)
@@ -345,8 +389,10 @@ class CardProof(private val deps: Deps) {
         } finally {
             for (c in certificates) c.fill(0)
         }
+        counted.step("certificate")
         events.done(Item.CHECK)
 
+        val crlFrom = deps.elapsed()
         try {
             val index = try {
                 deps.backend.crlIndex()
@@ -369,14 +415,23 @@ class CardProof(private val deps: Deps) {
         } catch (e: DeviceCoreException) {
             fail(Stop.core(e))
         }
+        counted.took("crl", deps.elapsed() - crlFrom)
+        counted.step("crl")
         events.done(Item.CRL)
 
-        // The tree and the files of the proof, while the cardholder types the PIN.
+        // The tree and the files of the proof, while the cardholder types the PIN. A failure here is counted when
+        // step 3 waits for it.
         val s = session
         background = FutureTask {
+            val treeFrom = deps.elapsed()
             DeviceCore.sessionBuildTree(s)
+            counted.took("tree", deps.elapsed() - treeFrom)
+            counted.step("tree")
             val files = proofFiles()
             DeviceCore.sessionCheckArtifacts(s, files.circuit, files.verificationKey, files.crsG1, files.crsG2)
+            // The files are the ones written into the core, which proves with them.
+            counted.step("circuit")
+            counted.step("engine")
         }.also { thread(name = "tree") { it.run() } }
         return CardRead(name)
     }
@@ -407,8 +462,8 @@ class CardProof(private val deps: Deps) {
         live()
     }
 
-    /** One tap. A card that is not there, or left, ends nothing: the screen offers the tap again. */
-    private fun <T> tap(events: Events, use: (CardConnection) -> T): T {
+    /** Tap [number] (1, 2 or 3). A card that is not there, or left, ends nothing: the screen offers the tap again. */
+    private fun <T> tap(events: Events, number: Int, use: (CardConnection) -> T): T {
         val cancel = TapCancel()
         tapCancel = cancel
         // A card proof that ended before the line above gives this tap up here; one that ends after it, through `cancel`.
@@ -417,6 +472,8 @@ class CardProof(private val deps: Deps) {
         try {
             return deps.card.tap(cancel, use)
         } catch (e: CardException) {
+            // A card that left is an action, not a reason (spec/counts.md, "Actions of a card proof").
+            if (e.reason == CardException.Reason.DROPPED) counted.tapDropped(number)
             throw Stop("card", mapOf("reason" to e.reason.name))
         } finally {
             tapCancel = null
@@ -428,7 +485,7 @@ class CardProof(private val deps: Deps) {
      * Taps 2 and 3: the card must be the one of tap 1 before it gets the PIN. Then it signs [message].
      * `other_card`, a tap that did not happen and a card that left end nothing; the screen offers the tap again.
      */
-    private fun sign(events: Events, message: ByteArray, pin: ByteArray): ByteArray = tap(events) { connection ->
+    private fun sign(events: Events, number: Int, message: ByteArray, pin: ByteArray): ByteArray = tap(events, number) { connection ->
         events.tap(Tap.READING)
         val read = connection.readCertificates()
         val first = certificate
@@ -457,12 +514,22 @@ class CardProof(private val deps: Deps) {
     // Tap 2: the card signs the scope string -------------------------------------------
 
     /** [pin] stays the caller's, who overwrites it. A PIN the card refuses ends nothing: the screen asks again. */
-    fun confirmCard(pin: ByteArray, events: Events): Status {
+    fun confirmCard(pin: ByteArray, events: Events): Status = counting { confirmCardCounted(pin, events) }
+
+    private fun confirmCardCounted(pin: ByteArray, events: Events): Status {
         if (session == 0L || background == null || scopeSignature != null || ended) throw Stop("state")
+        counted.step("pin")
         config?.let(::checkMinApp)
         // Nothing is signed, and no request carries the scoped ID, before these pass.
         awaitBackground()
-        val signature = sign(events, DeviceCore.scopeString(), pin)
+        counted.step("checked")
+        val signature = try {
+            sign(events, 2, DeviceCore.scopeString(), pin)
+        } catch (e: Stop) {
+            // A locked card takes no PIN, a phone without NFC reads none: the card proof is over (Model's confirmCard).
+            if (e.code == "card" && e.values["reason"] in ENDS_AT_SECOND_TAP) fail(e)
+            throw e
+        }
         try {
             keep {
                 this.pin = pin.copyOf()
@@ -483,6 +550,7 @@ class CardProof(private val deps: Deps) {
             // The signature is not this card's over the scope string.
             fail(if (e.code == DeviceCoreException.INPUT) Stop("card_signature") else Stop.core(e))
         }
+        counted.step("scope_signed")
         val answer = try {
             deps.backend.cardState(request)
         } catch (e: ServerException) {
@@ -502,6 +570,7 @@ class CardProof(private val deps: Deps) {
             cardState = answer
             this.status = status
         }
+        counted.step("state")
         return status
     }
 
@@ -545,12 +614,21 @@ class CardProof(private val deps: Deps) {
      */
     fun choose(entries: Map<String, String>): Consequence {
         if (status == null || ended) throw Stop("state")
-        checkIdle()
-        val consequence = consequenceOf(entries)
+        val consequence = counting {
+            checkIdle()
+            try {
+                consequenceOf(entries)
+            } catch (e: Blocked) {
+                // The cardholder changes the list: the card proof goes on.
+                counted.retry(Counts.reasonOf(e))
+                throw e
+            }
+        }
         this.entries = entries.toMap()
         chosen = consequence
         // The list the card signs, as the core takes it.
         chosenAccountsJson = accountsJson(consequence.accounts.toMap())
+        counted.step("chosen")
         return consequence
     }
 
@@ -617,9 +695,12 @@ class CardProof(private val deps: Deps) {
 
     // Tap 3: the card signs the declaration code; the proof; the submission ------------
 
-    fun declare(events: Events): Done {
+    fun declare(events: Events): Done = counting { declareCounted(events) }
+
+    private fun declareCounted(events: Events): Done {
         val shown = chosen
         if (shown == null || ended) throw Stop("state")
+        counted.step("confirmed")
         checkIdle()
         config?.let(::checkMinApp)
         sameAsShown()
@@ -650,23 +731,26 @@ class CardProof(private val deps: Deps) {
         } catch (e: DeviceCoreException) {
             fail(Stop.core(e))
         }
+        counted.step("challenge")
         events.done(Item.CHALLENGE)
         checkIdle()
 
         val signature = try {
-            sign(events, code, pin ?: throw Stop("cancelled"))
+            sign(events, 3, code, pin ?: throw Stop("cancelled"))
         } catch (e: Stop) {
             // A PIN the card refuses is dropped, like everything else: the card proof starts again (issue #133).
             // So is the PIN of a card the secure channel cannot be made with: no tap of it will take the PIN (issue #365).
-            if (e.code == "card" && e.values["reason"] in ENDS_AT_LAST_TAP) fail(e)
+            if (e.code == "card" && (e.values["reason"] in ENDS_AT_LAST_TAP || e.values["reason"] == CardException.Reason.NO_NFC.name)) fail(e)
             throw e
         }
         // The last tap is made: the PIN is not needed again.
         dropPin()
         if (ended) signature.fill(0)
         live()
+        counted.step("code_signed")
         events.done(Item.SIGNED)
 
+        val provedFrom = deps.elapsed()
         val record = try {
             val files = proofFiles()
             DeviceCore.sessionRecordsRequest(
@@ -688,14 +772,17 @@ class CardProof(private val deps: Deps) {
         val status = status!!
         dropSecrets()
         live()
+        counted.took("proved", deps.elapsed() - provedFrom)
+        counted.step("proved")
         events.done(Item.PROVED)
 
         val answer = try {
-            deps.backend.submit(record)
+            deps.backend.submit(withDeviceId(record, deps.counts.deviceId()))
         } catch (e: ServerException) {
             fail(Stop("server", mapOf("code" to e.code, "submitting" to "true"), e.requestId))
         }
         ended = true
+        counted.step("done")
         return Done(shown.rows, Answer.of(answer, shown.rowsJson), shown.firstRecord, challenge.substring(0, 10), status.shortId, shown.accounts, validUntil)
     }
 
@@ -758,6 +845,22 @@ class CardProof(private val deps: Deps) {
          * the tap is made again.
          */
         val ENDS_AT_LAST_TAP: Set<String> = setOf(CardException.Reason.PIN_INCORRECT.name, CardException.Reason.LOCKED.name, CardException.Reason.CHANNEL.name)
+
+        /** Why the first tap is made again on the same card proof (Model's readButtonAfter); any other reason ends it. */
+        private val TAPPED_AGAIN_AT_FIRST: Set<String> =
+            setOf(CardException.Reason.NO_TAP.name, CardException.Reason.DROPPED.name, CardException.Reason.NFC_OFF.name, CardException.Reason.CANCELLED.name)
+
+        /** Why the second tap ends the card proof (Model's confirmCard); any other reason has the PIN typed or the tap made again. */
+        private val ENDS_AT_SECOND_TAP: Set<String> = setOf(CardException.Reason.LOCKED.name, CardException.Reason.NO_NFC.name)
+
+        /**
+         * The submission [record], the core's, carrying the card proof device ID (docs/api/card-proof.md, `device_id`): a
+         * member the server writes in the connection log and nowhere else (ADR-0022, ADR-0039).
+         */
+        internal fun withDeviceId(record: ByteArray, deviceId: String): ByteArray {
+            require(record.size > 2 && record[0] == '{'.code.toByte() && deviceId.length == 32 && deviceId.all { it in '0'..'9' || it in 'a'..'f' })
+            return "{\"device_id\":\"$deviceId\",".toByteArray() + record.copyOfRange(1, record.size)
+        }
 
         /**
          * `config`'s `paused` (docs/api/card-proof.md): whether the operator stopped taking card proofs. Absent is false; null when

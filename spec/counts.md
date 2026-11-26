@@ -215,6 +215,7 @@ reader, a browser or the server said in words is never sent.
 | `idle` | web, android, ios | The PIN waited longer than 5 minutes for the second signature |
 | `state` | web, android, ios | A step was called out of order: a fault of the program |
 | `app_too_old` | android, ios | The app is older than the minimum version |
+| `clock` | android, ios | The phone's clock is outside the years the core takes (2000 to 2049) |
 | `username` | web, android, ios | An account typed is not in its platform's format |
 | `blocked_switch_limit` | web, android, ios | The list switches a slot whose switches are used up |
 | `blocked_empty` | web, android, ios | The list is empty, and the card declares no account |

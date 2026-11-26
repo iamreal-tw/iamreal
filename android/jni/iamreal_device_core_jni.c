@@ -202,6 +202,25 @@ JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeMinApp(JN
   return result(env, code, &out);
 }
 
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCount(JNIEnv *env, jobject self, jbyteArray count) {
+  (void)self;
+  copy in;
+  if (!copy_in(env, count, &in)) return NULL;
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_count(in.ptr, in.len, &out);
+  copy_free(&in);
+  return result(env, code, &out);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeCountTook(JNIEnv *env, jobject self, jlong ms) {
+  (void)self;
+  /* A time that runs backwards is no duration, and is not passed on as a large one. */
+  if (ms < 0) return result(env, IDC_ERR_ARGUMENT, &(idc_buf){NULL, 0});
+  idc_buf out = {NULL, 0};
+  int32_t code = idc_count_took((uint64_t)ms, &out);
+  return result(env, code, &out);
+}
+
 JNIEXPORT jbyteArray JNICALL Java_tw_iamreal_app_core_DeviceCore_nativeRecordsResponse(JNIEnv *env, jobject self, jbyteArray response,
                                                                                       jbyteArray rows_json) {
   (void)self;

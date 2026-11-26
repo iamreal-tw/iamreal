@@ -47,6 +47,7 @@ class MinAppTest {
                 override fun get(issuer: String): String? = null
                 override fun set(issuer: String, number: String) {}
             }
+            override val counts = RecordedCounts().counts
         })
         return try {
             flow.readCard(object : CardProof.Events {})

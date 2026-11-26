@@ -303,6 +303,10 @@
         "android",
         "ios"
       ],
+      "clock": [
+        "android",
+        "ios"
+      ],
       "username": [
         "web",
         "android",

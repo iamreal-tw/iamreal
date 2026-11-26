@@ -100,6 +100,7 @@ export const REASONS = {
   idle: ALL,
   state: ALL,
   app_too_old: APPS,
+  clock: APPS,
   // The list.
   username: ALL,
   blocked_switch_limit: ALL,

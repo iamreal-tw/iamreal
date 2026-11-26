@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.ComposeView
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 import tw.iamreal.app.flow.CardProof
+import tw.iamreal.app.flow.Counts
 import tw.iamreal.app.reminder.Phone
 import tw.iamreal.app.ui.CardProofScreens
 import tw.iamreal.app.ui.Copy
@@ -264,6 +265,8 @@ class MainActivity : ComponentActivity() {
             copy = Copy(context.resources.openRawResource(R.raw.card_proof_copy).use { String(it.readBytes(), Charsets.UTF_8) }),
             hangMotion = { context.resources.openRawResource(R.raw.hang_motion).use { String(it.readBytes(), Charsets.UTF_8) } },
             senseMotion = { context.resources.openRawResource(R.raw.sense_motion).use { String(it.readBytes(), Charsets.UTF_8) } },
+            deviceIdStore = StoredDeviceId(context),
+            appVersion = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "",
         ).also { model = it }
 
         /** The reminder as the screens show it, for this process. */
@@ -277,10 +280,11 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * The one thing the app stores: per issuer key, the highest CRL number the
- * phone has used (spec/device-checks.md), in the app's own preferences. A
- * CRL number is public; no certificate, signature, PIN, scoped ID or
- * account is ever stored.
+ * Per issuer key, the highest CRL number the phone has used
+ * (spec/device-checks.md), in the app's own preferences. A CRL number is
+ * public; no certificate, signature, PIN, scoped ID or account is ever
+ * stored. The one other thing a card proof stores is the card proof device
+ * ID ([StoredDeviceId]).
  */
 private class StoredCrlNumbers(context: Context) : CardProof.CrlNumbers {
     private val preferences = context.getSharedPreferences("highest_crl_number", Context.MODE_PRIVATE)
@@ -289,5 +293,25 @@ private class StoredCrlNumbers(context: Context) : CardProof.CrlNumbers {
 
     override fun set(issuer: String, number: String) {
         preferences.edit().putString(issuer, number).apply()
+    }
+}
+
+/**
+ * The card proof device ID and the date it was made on (flow/Counts.kt; ADR-0039), in the app's own preferences: 16
+ * random bytes, replaced 31 days after they were made, the old ones not kept. Nothing of the app goes into a backup
+ * (AndroidManifest.xml).
+ */
+private class StoredDeviceId(context: Context) : Counts.Store {
+    private val preferences = context.getSharedPreferences("card_proof_device_id", Context.MODE_PRIVATE)
+
+    override fun get(): String? = preferences.getString(KEY, null)
+
+    override fun set(value: String) {
+        // commit, not apply: the old one is gone from the file before the new one is sent.
+        preferences.edit().putString(KEY, value).commit()
+    }
+
+    private companion object {
+        const val KEY = "id"
     }
 }
