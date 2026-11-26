@@ -19,6 +19,8 @@
 //                     checked; card signs the declaration code; PIN dropped;
 //                     prove; submit; what the server recorded, against what
 //                     was shown (Done.mismatches)
+//   retryCardState()  after the server said too many people (429 or busy)
+//                     to the card's state: asks it again, nothing signed again
 //   resubmit()        after a network failure, the same record again
 //   cancel()          drop everything
 //
@@ -72,7 +74,7 @@
 //                    signature is made, the flow stops, or IDLE_MS pass
 //                    after the first; never stored
 //   failures         returned to the caller only; no request carries them
-import { type AcceptedKind, type CardStateResponse, type Fetch, NOTHING_TOLD, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
+import { type AcceptedKind, type CardStateResponse, type Config, type Fetch, NOTHING_TOLD, type PlatformRow, ServerError, type Submission, requestCardState, requestChallenge, requestConfig, submitRecord } from "./api.ts";
 import { type Card, CardError, type CardErrorCode, type CardSignature } from "./card/card.ts";
 import { type CardCertificate, type CertificateProblem, cardKey, selectCertificate } from "./certificate.ts";
 import type { TreeBuilder } from "./crl/build.ts";
@@ -180,6 +182,13 @@ export interface FlowDeps {
   onProgress?: (step: Progress) => void;
   /** How long the PIN may wait between the two signatures; IDLE_MS unless a test shortens it. */
   idleMs?: number;
+  /**
+   * What `config` answered when the card proof started (`GET /api/v1/config?start`,
+   * docs/api/card-proof.md): the `config` the reading asks again is not
+   * counted against the site-wide limit, and when it is turned away as too
+   * many (429, or 503 `busy`) the card proof goes on with this one (ADR-0026).
+   */
+  startConfig?: Config | null;
   /** Runs `f` after `ms` milliseconds; returns a function that cancels it. setTimeout in the page; tests replace it with the clock. */
   setTimer?: (ms: number, f: () => void) => () => void;
 }
@@ -340,11 +349,13 @@ export interface Done {
  * no signature are running; the screen does not ask for the PIN yet.
  * "ready_for_pin": they all passed. "status_known": the card signed the
  * scope string and its state is known; the cardholder edits the list.
+ * "card_state_failed": the card signed the scope string, and the server
+ * said too many people to its state (retryCardState()).
  * "chosen": the consequence of the list is shown; the next step is the
  * second signature. "signing": proceed() is asking for the challenge and the
  * second signature.
  */
-export type Phase = "start" | "checking" | "ready_for_pin" | "status_known" | "chosen" | "signing" | "submitting" | "submit_failed" | "done" | "stopped";
+export type Phase = "start" | "checking" | "ready_for_pin" | "card_state_failed" | "status_known" | "chosen" | "signing" | "submitting" | "submit_failed" | "done" | "stopped";
 
 interface BackgroundResult {
   tree: AbsenceProof;
@@ -670,7 +681,7 @@ export class CardProofFlow {
       this.deps.prover.ready().then(() => progress("engine"), () => undefined);
       let builder: TreeBuilder | null = null;
       try {
-        const config = await this.timed("config", requestConfig(this.deps.fetch));
+        const config = await this.timed("config", this.configNow());
         // The operator stopped taking card proofs since step 1 asked (docs/api/card-proof.md, `paused`): before the PIN.
         if (config.paused) throw new FlowStop({ code: "server", server: "paused", status: 200 });
         progress("config");
@@ -699,6 +710,16 @@ export class CardProofFlow {
     return bg;
   }
 
+  /** The server's `config`, or, when the server turned this request away as too many people, the one of the card proof's start. */
+  private async configNow(): Promise<Config> {
+    try {
+      return await requestConfig(this.deps.fetch);
+    } catch (e) {
+      if (tooMany(e) && this.deps.startConfig) return this.deps.startConfig;
+      throw e;
+    }
+  }
+
   private checkBackground(): void {
     if (this.background?.failed) this.fail(this.background.failed);
   }
@@ -723,6 +744,13 @@ export class CardProofFlow {
   async confirmCard(pin: string): Promise<CardStatus> {
     this.expect("checking", "ready_for_pin");
     return this.once(() => this.confirmCardStep(pin));
+  }
+
+  /** The card's state asked again, after the server said too many people to it (cardStateNow). Nothing is signed again. */
+  async retryCardState(): Promise<CardStatus> {
+    this.expect("card_state_failed");
+    this.checkIdle();
+    return this.once(() => this.cardStateNow());
   }
 
   private async confirmCardStep(pin: string): Promise<CardStatus> {
@@ -754,12 +782,28 @@ export class CardProofFlow {
     const id = await scopedId(sig, (a, b) => this.deps.prover.hash2(a, b));
     this.live();
     this.scopedIdValue = id;
-    const idText = scopedIdText(id);
+    return this.cardStateNow();
+  }
+
+  /**
+   * The card's state, asked of the server with the scoped ID. Too many people
+   * (429, 503 `busy`) does not end the flow: the card signed already and the
+   * PIN is kept, so retryCardState() asks again with nothing signed again
+   * (phase "card_state_failed"); the wait for the second signature still
+   * counts from the first.
+   */
+  private async cardStateNow(): Promise<CardStatus> {
+    const idText = scopedIdText(this.scopedIdValue!);
     let state: CardStateResponse;
     try {
       state = await requestCardState(this.deps.fetch, this.scopeStringValue, idText, this.background!.done!.platforms, this.today());
     } catch (e) {
       this.live();
+      if (tooMany(e)) {
+        this.phaseValue = "card_state_failed";
+        this.checkIdle();
+        throw new FlowStop(toStop(e));
+      }
       this.fail(toStop(e));
     }
     // The wait may have run out while the server answered.
@@ -859,6 +903,13 @@ export class CardProofFlow {
       challenge = await requestChallenge(this.deps.fetch);
     } catch (e) {
       this.live();
+      if (tooMany(e)) {
+        // Too many people: nothing was signed, the PIN is kept. The flow is back where it was, and
+        // proceed() asks for a challenge again; the wait for the second signature still counts from the first.
+        this.phaseValue = "chosen";
+        this.checkIdle();
+        throw new FlowStop(toStop(e));
+      }
       this.fail(toStop(e));
     }
     this.live();
@@ -1238,4 +1289,13 @@ function base64(b: Uint8Array): string {
   let s = "";
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
   return btoa(s);
+}
+
+/**
+ * The server turned the request away as too many: rate limited (429), or the
+ * proof log overloaded or too many card proofs starting (503 `busy`). Sending
+ * the same request again later may get through (ADR-0026).
+ */
+export function tooMany(e: unknown): boolean {
+  return e instanceof ServerError && (e.status === 429 || (e.status === 503 && e.code === "busy"));
 }

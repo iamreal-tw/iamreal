@@ -126,6 +126,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
       // The server takes no card proof for now (docs/api/card-proof.md, `paused`): not a failure to send again.
       if (stop.server === "paused") return { ...say(s.paused), ...id };
+      // Too many people (429, or 503 `busy`; ADR-0026): the same request can be sent again, the card not read again.
+      if (stop.server === "rate_limited" || stop.server === "busy") return { ...say(s.too_many), retry: true, ...id };
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
       // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
@@ -256,13 +258,17 @@ export function itemStates(items: readonly ListItem[], seen: ReadonlySet<Progres
  *               stop: the flow ended, or the second signature was made); the
  *               card proof starts again from reading the card
  *   retry       progress.retry, besides: the submission did not get through
- *               ("submit_failed") and can be sent again as it is
+ *               ("submit_failed") and can be sent again as it is; or the
+ *               server said too many people when the challenge was asked
+ *               ("chosen"): it is asked again, the card signs, no PIN typed again
  */
 export function progressButtons(phase: string, stop?: Stop): ("back" | "read_again" | "retry" | "restart")[] {
   // The date changed: nothing was signed, and the card proof starts again from the beginning (stops.date_changed).
   if (stop?.code === "date_changed") return ["restart"];
   // The server takes no card proof for now: reading the card again or sending again meets the same answer.
   if (stop?.code === "server" && stop.server === "paused") return ["restart"];
+  // Too many people when the challenge was asked: nothing was signed, the PIN is kept; the challenge asked again.
+  if (phase === "chosen" && stop?.code === "server" && (stop.server === "rate_limited" || stop.server === "busy")) return ["back", "retry"];
   if (phase === "chosen") return ["back"];
   if (phase === "submit_failed") return ["read_again", "retry"];
   return ["read_again"];

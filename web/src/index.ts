@@ -5,11 +5,11 @@
 // domain), the clock, the one storage key.
 // The screen (src/ui/) calls startEngine() once when the page opens, then
 // createCardProof() with that engine for each card proof (ADR-0013).
-import { dataOriginFetch, requestConfig, sameOriginFetch } from "./api.ts";
+import { type Config, dataOriginFetch, requestConfig, sameOriginFetch } from "./api.ts";
 import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
-import { CardProofFlow, type FlowDeps } from "./flow.ts";
+import { CardProofFlow, type FlowDeps, tooMany as tooManyOf } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
 import { KNOWN_PLATFORMS } from "./platforms.ts";
@@ -36,6 +36,8 @@ export function createCardProof(opts: {
   onTiming?: FlowDeps["onTiming"];
   onIdle?: FlowDeps["onIdle"];
   onProgress?: FlowDeps["onProgress"];
+  /** What `config` answered when the card proof started (askToStart). */
+  startConfig?: Config | null;
 }): CardProofFlow {
   return new CardProofFlow({
     proofLog: PROOF_LOG,
@@ -53,7 +55,27 @@ export function createCardProof(opts: {
     onIdle: opts.onIdle,
     onProgress: opts.onProgress,
     idleMs: IDLE_LIMIT_MS,
+    startConfig: opts.startConfig ?? null,
   });
+}
+
+/**
+ * The cardholder pressed the button that starts a card proof: `config` asked
+ * with the mark of a start (`?start`, docs/api/card-proof.md), the one
+ * request counted against the site-wide limit (ADR-0026). `busy` when the
+ * server turned it away as too many (429, or 503 `busy`): the screen says so
+ * before a card is read. `paused` when card proofs are stopped. The config
+ * otherwise, for the card proof to fall back on (createCardProof's
+ * startConfig); null when there was no answer or none that could be read:
+ * the card proof goes on, and the reading asks again.
+ */
+export async function askToStart(): Promise<"busy" | "paused" | Config | null> {
+  try {
+    const config = await requestConfig(sameOriginFetch, { start: true });
+    return config.paused ? "paused" : config;
+  } catch (e) {
+    return tooManyOf(e) ? "busy" : null;
+  }
 }
 
 /**
@@ -84,8 +106,9 @@ export {
   type Done,
   type Phase,
   type Progress,
+  tooMany,
 } from "./flow.ts";
-export type { AcceptedKind, PlatformRow } from "./api.ts";
+export type { AcceptedKind, Config, PlatformRow } from "./api.ts";
 export type { Account } from "iamreal-protocol/declaration-code.ts";
 export { CardError, type Card, type CardErrorCode } from "./card/card.ts";
 export { KNOWN_PLATFORMS, SITE_DOMAIN, cardPath, handle, presentationOf } from "./platforms.ts";

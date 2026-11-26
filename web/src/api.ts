@@ -203,8 +203,9 @@ function isDisplayName(x: unknown): x is string {
  *   - No row it can read: the table is not read (`malformed_response`); the
  *     device has nothing to offer and nothing to check an account against.
  */
-export async function requestConfig(fetchFn: Fetch): Promise<Config> {
-  const b = await request(fetchFn, "/api/v1/config", { method: "GET" }, 200);
+export async function requestConfig(fetchFn: Fetch, o: { start?: boolean } = {}): Promise<Config> {
+  // `?start`: the one request of a card proof's start, which the server counts against its site-wide limit (ADR-0026).
+  const b = await request(fetchFn, o.start === true ? "/api/v1/config?start" : "/api/v1/config", { method: "GET" }, 200);
   const paused = b.paused ?? false;
   if (typeof paused !== "boolean") throw unreadable(b, 200);
   const n = b.crl_max_age_days;
