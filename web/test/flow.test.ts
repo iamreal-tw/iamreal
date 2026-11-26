@@ -292,6 +292,22 @@ async function readAndWait(s: Setup): Promise<Stop | null> {
 
 const MALFORMED: Stop = { code: "server", server: "malformed_response", status: 200 };
 
+describe("the operator stopped taking card proofs (config's paused, #105)", () => {
+  const THREADS_ROW = { platform: "threads", display_name: "Threads", username_format: "[a-z0-9._]{1,30}" };
+  test("config says paused while the card is read: stopped before the PIN, under the server's item; nothing signed, no card-state", async () => {
+    const s = await setup({ backend: { config: { paused: true, crl_max_age_days: 3, platforms: [THREADS_ROW] } } });
+    assert.deepEqual(await readAndWait(s), { code: "server", server: "paused", status: 200 });
+    assert.equal(s.card.signed.length, 0);
+    assertNoCardState(s);
+  });
+  test("config says not paused, or says nothing of it (an older server): the card proof goes on", async () => {
+    for (const config of [{ paused: false, crl_max_age_days: 3, platforms: [THREADS_ROW] }, { crl_max_age_days: 3, platforms: [THREADS_ROW] }]) {
+      const s = await setup({ backend: { config } });
+      assert.equal(await readAndWait(s), null, JSON.stringify(config));
+    }
+  });
+});
+
 describe("the flow, with a server that gives values the device must not accept", async () => {
   test("a challenge not dated today", async () => {
     const s = await setup({ backend: { challenge: () => "2026-11-15.000G40R40M30E209185GR38E1W" } });
@@ -452,6 +468,14 @@ describe("the flow, with a server that gives values the device must not accept",
     const cq = await toChosen(s);
     assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "crl_stale", status: 503 });
     assert.notEqual(s.flow.stop, null, "crl_stale ends the flow");
+
+    // The server takes no card proof until the operator resumes (#105, #131): not "submit_failed", no 再試一次.
+    answer = { status: 503, body: { error: "paused" } };
+    const p = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });
+    const cqp = await toChosen(p);
+    assert.deepEqual(await stopOf(p.flow.proceed(cqp.accounts)), { code: "server", server: "paused", status: 503 });
+    assert.notEqual(p.flow.stop, null, "paused ends the flow");
+    assert.notEqual(p.flow.phase, "submit_failed");
 
     answer = { status: 500, body: { error: "internal" } };
     const t = await setup({ echoPublicInputs: true, backend: { submit: () => answer } });

@@ -112,6 +112,8 @@ describe("stops", () => {
     // The server's operating policy refused a switch the rules allow (none by default): its own sentence.
     [{ code: "server", server: "switch_restricted", status: 403 }, "這個平台目前不接受更多次更換。", 4],
     [{ code: "server", server: "crl_stale", status: 503 }, "內政部的廢止清冊超過 3 天沒有更新，現在不能過卡。", 4],
+    // The operator stopped taking card proofs, or the server stopped by itself (docs/api/card-proof.md, paused).
+    [{ code: "server", server: "paused", status: 503 }, "現在暫停收過卡，證明紀錄沒有變動。請晚點再來。", 4],
     // The record rules, when the card's state changed after it was asked.
     [{ code: "server", server: "daily_limit", status: 400 }, "這張卡片今天已經過卡 3 次，明天才能再過卡。", 4],
     [{ code: "server", server: "switch_limit", status: 400 }, "清單裡有一個平台不能再更換，整份清單都沒有記下，證明紀錄沒有變動。請再讀一次卡片。", 4],
@@ -149,8 +151,17 @@ describe("stops", () => {
     assert.equal(m.requestId, "0123456789abcdef");
   });
 
+  test("paused when sending: its own sentence, no retry; only 回到開頭", () => {
+    const stop = { code: "server", server: "paused", status: 503, requestId: "ab" } as const;
+    const m = stopMessage(stop, true);
+    assert.equal(text(m), COPY.stops.paused);
+    assert.ok(!("code" in m) && !m.retry);
+    assert.equal(m.requestId, "ab");
+    for (const phase of ["submit_failed", "stopped", "chosen"]) assert.deepEqual(progressButtons(phase, stop), ["restart"], phase);
+  });
+
   test("every server error carries its request ID", () => {
-    for (const server of ["root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "switch_restricted", "malformed_response", "not_found"]) {
+    for (const server of ["paused", "root", "challenge_unknown", "challenge_used", "crl_stale", "daily_limit", "switch_limit", "empty", "switch_restricted", "malformed_response", "not_found"]) {
       assert.equal(stopMessage({ code: "server", server, status: 400, requestId: "ab" }).requestId, "ab", server);
     }
   });

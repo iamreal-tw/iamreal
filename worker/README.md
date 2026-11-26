@@ -10,7 +10,7 @@
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
-| API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時 `challenges` 和 `records` 回 `paused` | 限流 |
+| API 的五個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
 | 驗證證明和 Poseidon2 的雜湊（[驗證證明](#驗證證明)），在本機的 workerd 裡逐案和原生的 `bb verify` 比對過；送出一筆時用它驗證 | |
@@ -762,7 +762,7 @@ IAMREAL_SEQUENCE_STORAGE=1 node --experimental-strip-types --test test/sequence.
   - `PUT /__test/proof-log/card` 照給的內容寫卡片狀態表的一列。`records` 寫不出來的：紀錄規則不會留下的狀態。只用來寫這種狀態：壞掉的（`card-state` 要回 `500`），和少了平台表裡某個平台的名額的（平台加進表之前寫的）。唯一的例外是壞掉的那些案例的起點：每個壞掉的狀態都是從同一個好的狀態改一項來的，那個好的狀態也用這個入口寫一次，確認它本身讀得過。其他規則會留下的狀態，測試一律用真的送出（`POST /api/v1/records`）寫。
   - `PUT /__test/verifier` 選 `records` 用哪一個驗證器。預設是 `real`，就是部署的那一個；用真的證明的測試（[`test/records-real.test.ts`](test/records-real.test.ts)）用它。`stand-in` 只看證明的第一個位元組：0 通過、1 拒絕、2 是驗證器跑不起來、3 是先把測試的時鐘往後撥 1 毫秒再通過（驗證花了時間，用來測題目在驗證時過期）。做一份真的證明要卡片的金鑰和幾秒鐘，所以測題目、清冊、紀錄規則、寫入的那些案例用它，和 Go 舊後台的測試相同（它的 `harness_test.go` 的 `fakeProofs`）。它接在 `src/index.ts` 指定驗證器的同一個介面後面（`ApiParts`）。
   - `index.ts` 另外有通到證明紀錄那個 Durable Object 的入口，`/__test/proof-log/…`。測試專用建置的 Durable Object 是部署的那一個類別（`src/proof-log.ts`）加上只給測試用的方法：現在就跑一次 alarm、讀 alarm 設在什麼時候（這兩個加 `?object=<名稱>` 時問的是那個名稱的物件，不是設定指的那一個：清空之後被換掉的物件只有這樣叫得到）；多塞一件假的定時工作、讀那件工作什麼時候跑過；指定下一個題目的 16 個位元組（測試才拿得到證明當初用的那個題目）；把存著的表的版本、規則的版本改成另一個數字；照給的內容寫卡片狀態表的一列（上面的 `PUT /__test/proof-log/card`），或一次寫一批（`PUT /__test/proof-log/cards`，只給量測用，見[每天換日公布證明紀錄](#每天換日公布證明紀錄)「大小的上限」）；單獨複製卡片狀態表或刪掉複本（`POST /__test/proof-log/cards-copy`，也只給量測用）；列出物件資料庫裡的表（`GET /__test/proof-log/tables`，看公布完沒有留下複本）；把題目表和卡片狀態表丟掉、把一張卡片存著的名額改成不是 JSON 的字再改回來、或讓某一張表的每次寫入都失敗（看後台自己出錯時回什麼、寫到一半失敗留下什麼）；把最新清冊的那張表丟掉；拿 `spec/vectors/record-rules.json` 的一筆事件（或長序列的一筆，寫法相同），對存著的狀態跑一次紀錄規則（讀狀態、寫狀態用的是送出一筆的同一段程式；無效的紀錄後台不會寫，所以要有這個入口）；讀證明紀錄裡最晚的有效日期和每個帳號底下的卡片數，讀法和數法是部署的那一段（`POST /__test/proof-log/rule-state`，見[紀錄規則和 Go 的 `prooflog/` 逐筆比對](#紀錄規則和-go-的-prooflog-逐筆比對)）；讀出存著的紀錄和證明紀錄那一列（`GET /__test/proof-log/stored`，部署的後台沒有介面讀得到它們；搬到 R2 的檔不在裡面，測試從 R2 的模擬讀）；只讀物件裡留著幾筆、從哪一筆到哪一筆（`GET /__test/proof-log/kept`）；讓物件對資料儲存桶某一個物件的寫入或讀取出錯（`PUT /__test/proof-log/bucket-fault`：寫不進去、寫到串流中間斷掉、送出去或存下來的位元組不同、標頭不同、寫進去了但回應丟了、讀不出來；物件經過 `src/proof-log.ts` 的 `bucket()` 拿儲存桶，只有測試專用的建置覆寫它）；等物件把衍生表重建完或放棄（`POST /__test/proof-log/views-filled`）；算一筆紀錄的雜湊之前先等幾毫秒、讀它算過幾次雜湊（`/__test/proof-log/hash-delay`，見[寫入是一個交易](#寫入是一個交易)）。部署的那一包沒有這些方法。
-  - `PUT /__test/settings` 換掉環境的設定（`PROOF_LOG_KIND`、`PROOF_LOG_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`TEST_PROOF_LOG_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式的證明紀錄的案例、設定寫錯的案例、更換政策的案例用它測。
+  - `PUT /__test/settings` 換掉環境的設定（`PROOF_LOG_KIND`、`PROOF_LOG_OBJECT_NAME`、`RESTRICT_LATE_SWITCHES`、`CARD_PROOFS_PAUSED`、`TEST_PROOF_LOG_CLEARED_ON`）：換上的值只放在測試專用建置的記憶體裡，蓋在 Worker 和 Durable Object 拿到的環境上。`wrangler.jsonc` 沒有動，部署的建置讀的是設定檔裡的值。正式的證明紀錄的案例、設定寫錯的案例、更換政策的案例用它測。
 - 測試的發證金鑰每個測試的程序產生一次（[`test/crls.ts`](test/crls.ts)）。私鑰留在那個程序的記憶體裡，用來簽測試的清冊；不寫進任何檔案，也不進任何建置。和 `crl/testdata/` 比對的那個測試，G2 換成簽 `crl/testdata/` 的那一把（只有公鑰）。
 - 怎麼換：[`test/build.ts`](test/build.ts) 經由 [`scripts/deploy.ts`](scripts/deploy.ts) 的 `bundleWorker` 跑 `wrangler deploy --dry-run`，用 `--alias` 把 `#target` 指到 `test-build/target.ts`，進入點換成 `test-build/index.ts`，金鑰和網址用 `--define` 帶進去。wrangler 的設定檔和部署的指令裡沒有這些參數，所以部署的建置拿到的一定是 `src/target.ts`。
 - 部署的那一包在上傳之前一定經過 [`scripts/deploy-build-checks.ts`](scripts/deploy-build-checks.ts) 的檢查（本機的 `pnpm run deploy:test` 和 GitHub Actions 的 `build` 工作都是，見「[部署測試環境](#部署測試環境)」）：
@@ -888,6 +888,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 | `vars.PROOF_LOG_OBJECT_NAME` | `test-3` | 證明紀錄那個 Durable Object 的名稱。清空測試的證明紀錄時換成下一個號碼，用過的名稱不再用（[清空測試的證明紀錄](#清空測試的證明紀錄)）；維持 `test-` 開頭（[證明紀錄和物件的名稱要對得上](#證明紀錄和物件的名稱要對得上)） |
 | `vars.PROOF_LOG_KIND` | `test` | 這個環境用哪一份證明紀錄，`test` 或 `production`。它決定接受哪個場合字串、平台表是哪一張（ADR-0028）；兩者的內容寫在 `protocol/`，不在設定裡。不是這兩個值、或和 `PROOF_LOG_OBJECT_NAME` 對不上時，五個介面和 Worker 產生的每個頁面都回 `500`（Static Assets 的檔案不跑 Worker，照常送） |
 | `vars.TEST_PROOF_LOG_CLEARED_ON` | `2026-11-23` | 測試的證明紀錄上次清空的日期，每一頁的標示旁寫它（[測試的證明紀錄的標示](#測試的證明紀錄的標示)）。第一次清空是 2026-11-21（紀錄規則的版本從 1 加到 2，[#120](https://github.com/iamreal-tw/iamreal/issues/120)）；第二次是 2026-11-23（Durable Object 的類別改名，migration `v2` 刪掉舊的類別，[#277](https://github.com/iamreal-tw/iamreal/issues/277)）；在那之前寫的是測試網站第一次部署的日期 2026-11-19。清空時和 `PROOF_LOG_OBJECT_NAME` 一起改（[清空測試的證明紀錄](#清空測試的證明紀錄)） |
+| `vars.CARD_PROOFS_PAUSED` | `false` | `"true"` 停止收過卡，`"false"` 收（[停止和恢復收過卡](#停止和恢復收過卡)）。營運者在儀表板改；下一次部署寫回這裡的值。不是這兩個值時，API 回 `500` |
 | `assets`（最上層，每個環境共用） | `./site`，沒有 binding | 樣式表、複製按鈕的程式和過卡頁面的檔案，Cloudflare 直接送，不跑 Worker（[Static Assets](#static-assets)） |
 
 **`limits.cpu_ms` 是 `300000`，寫在最上層。** 一次呼叫最多用多少 CPU 時間：300,000 毫秒是能設的最大值，沒有設是 30 秒（[Workers limits](https://developers.cloudflare.com/workers/platform/limits/)「CPU time」，2026-11-20 讀的），一棵樹都建不完（[Cloudflare 上第一次建樹](#cloudflare-上第一次建樹)）。
@@ -1248,6 +1249,27 @@ pnpm run deploy:test
 - 這些數字來自 `wrangler tail --env test --format json`（同一把權杖）和資料網域的回應標頭。只看了這一次排程，沒有從別的地方對內政部的網址送請求。
 
 還沒看過的：內政部回錯誤、斷線、逾時的時候，Cloudflare 上的行為和本機的 workerd 是不是一樣（「排程做什麼」最後一段寫的那兩件事）。
+
+## 停止和恢復收過卡
+
+營運者改 Worker 的一個設定值 `CARD_PROOFS_PAUSED`，就停止或恢復收過卡（ADR-0033，[#105](https://github.com/iamreal-tw/iamreal/issues/105)）：`"true"` 停止，`"false"` 收。在 Cloudflare 的儀表板改，不經過 Actions；Worker 沒有營運者專用的入口。
+
+停止的時候：
+
+- `GET /api/v1/config` 回 `"paused": true`。過卡的頁面第 1 步一打開就問，在讀卡之前講「現在暫停收過卡。……」，沒有「下一步」（`design/copy/card-proof.md` 第 1 步「停止收過卡時」）。第 1 步之後才停的，停在「連上島民證明的伺服器」或「送出」下面：「現在暫停收過卡，證明紀錄沒有變動。請晚點再來。」，按鈕只有「回到開頭」
+- `POST /api/v1/challenges` 和 `POST /api/v1/records` 回 `503` `paused`（`docs/api/card-proof.md`）。Worker 在問證明紀錄的物件之前就回：題目不發，送出不計次（同一個題目恢復後照樣能送），證明紀錄不多任何一筆。格式讀不懂的送出照樣是 `400`
+- 卡片現況、指紋、每一種訪客頁面、儲存桶裡的檔案（證明紀錄、清冊存檔）照常。每天換日的那一次照常寫（最後一檔、卡片狀態檔、指紋檔的那一行）：證明紀錄的物件不知道停止了，它的 alarm 照常響。清冊鏡像照常
+- 值不是 `"true"` 也不是 `"false"` 時，API 回 `500`，Worker 產生的頁面也是（和 `PROOF_LOG_KIND` 一樣，不猜）
+
+`test/pause.test.ts` 在本機的 Worker 上核對上面每一項，和恢復之後照常收。
+
+### 怎麼停、怎麼恢復
+
+1. Cloudflare 的儀表板：Workers & Pages → `iamreal-test` → Settings → Variables and Secrets，把 `CARD_PROOFS_PAUSED` 改成 `true`（純文字），按 Deploy。存下去就是 Worker 的一個新版本
+2. 確認停了：`curl -s https://test.iamreal.tw/api/v1/config` 的 `paused` 是 `true`；`curl -s -X POST https://test.iamreal.tw/api/v1/challenges` 回 `{"error":"paused"}`。打開 `https://test.iamreal.tw/proof`，第 1 步是停止的那一句
+3. 恢復：同一個地方改回 `false`，按 Deploy，再看一次 `config` 的 `paused` 是 `false`
+
+**部署會把值寫回設定檔的。** `wrangler deploy` 照 `wrangler.jsonc` 的 `vars` 寫整份設定，儀表板上改的值會被設定檔裡的 `false` 蓋掉（沒有用 `keep_vars`：設定值的來源只有這個檔）。測試網站每一次合併到 `main` 就部署一次（[從 GitHub Actions 部署](#從-github-actions-部署)），所以停止期間有 PR 合併，就會恢復收過卡。要停得久、或停止期間要部署：開一個 PR 把 `wrangler.jsonc` 的 `CARD_PROOFS_PAUSED` 改成 `"true"`，和要部署的東西一起合併；恢復時同樣開 PR 改回 `"false"`。正式網站從推版本標籤部署時（還沒有），同樣是設定檔的值算數。
 
 ## 清空測試的證明紀錄
 

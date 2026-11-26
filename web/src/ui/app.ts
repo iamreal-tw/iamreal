@@ -40,7 +40,7 @@
 // formats from the server's table (the engine's CardStatus); each
 // platform's prefix, hint and address from src/platforms.ts. ids and data-*
 // attributes are for the headless browser test and hold no value.
-import { type CardProofFlow, type CardStatus, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, createCardProof, presentationOf } from "../index.ts";
+import { type CardProofFlow, type CardStatus, type Consequence, type Done, FlowStop, type Progress, type Prover, type Stop, cardProofsPaused, createCardProof, presentationOf } from "../index.ts";
 import type { Card } from "../card/card.ts";
 import { COPY, fill, parts } from "./copy.ts";
 import { button, el, replace, sentence } from "./dom.ts";
@@ -236,6 +236,12 @@ export function startApp(o: AppOptions): void {
     const message = messageArea();
     const faq = (q: string, ...answers: (string | Node)[]): HTMLElement =>
       el("details", {}, el("summary", {}, q), ...answers.map((a) => el("p", {}, a)));
+    const next = actionsEnd(primary(COPY.common.next, () => read()));
+    // The operator stopped taking card proofs: said here, before a card is read, in place of common.next
+    // (card-proof.md, step 1). No answer: common.next stays, and step 2 asks again.
+    cardProofsPaused().then((paused) => {
+      if (paused === true && next.isConnected) next.replaceWith(el("p", { class: "stop", attrs: { role: "status", "data-paused": "" } }, c.paused));
+    });
     show(
       1,
       el(
@@ -252,7 +258,7 @@ export function startApp(o: AppOptions): void {
         // and cannot be undone). With one, nothing: step 5's first sentence says it is made public.
         view.oneProof ? el("p", { class: "lead", attrs: { "data-one-proof": "" } }, say(view.oneProof)) : null,
         view.listedTogether ? el("p", { class: "lead", attrs: { "data-listed-together": "" } }, c.listed_together) : null,
-        actionsEnd(primary(COPY.common.next, () => read())),
+        next,
         el(
           "div",
           { class: "asks" },
