@@ -58,7 +58,7 @@
 | 示意畫面 | 伺服器寫出的 HTML，樣式在 `pages.css` | Compose 的 `Box`、`Row`、`Column`、`BasicText` | SwiftUI 的 `HStack`、`VStack`、`Text` |
 | 鏡頭 | 整列的 `transform`（位移加縮放） | 整列的 `graphicsLayer`（位移加縮放） | 整列的 `scaleEffect` 加 `offset` |
 | 每一格的時間 | Web Animations API（`Element.animate`），一個元素一串關鍵影格 | `withFrameNanos` | `TimelineView(.animation)` |
-| 框的位置 | `offsetLeft`、`offsetTop` 往上加到那一列 | `onGloballyPositioned` 加 `localBoundingBoxOf` | `transformAnchorPreference` 加 `GeometryReader` |
+| 框的位置 | `offsetLeft`、`offsetTop` 往上加到那一列 | `onGloballyPositioned`：整列還沒移動時，每個框和整列各自的 `positionInRoot` 相減 | `transformAnchorPreference` 加 `GeometryReader` |
 | 新的套件 | 沒有 | 沒有（`allowedLibraries` 已經有的三個） | 沒有 |
 | 雛型的大小 | 播放程式 5.9 KB，壓縮後 2.3 KB（沒有縮小化） | 410 行 Kotlin | 301 行 Swift |
 

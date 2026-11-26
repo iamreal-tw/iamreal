@@ -38,10 +38,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -73,8 +75,11 @@ import tw.iamreal.app.ui.Type
 /** The platform whose way back the app shows: on Threads for Android, the cross at the top left. */
 private const val VARIANT = "android"
 
-/** How much of the picture must be on the screen before the demonstration starts by itself, as on the site's page. */
+/** How much of the picture must be on the screen, or how much of the screen it must fill, before the demonstration starts by itself: as on the site's page. */
 private const val MOST = 0.6f
+
+/** The most one frame moves the demonstration on, in nanoseconds: a wait longer than this was the app being away. */
+private const val LONGEST_FRAME = 100_000_000L
 
 /** What the demonstration shows of this card proof: its account, its link, and the words of the app's own step 6. */
 internal class HangDemoWords(
@@ -173,16 +178,29 @@ internal class HangDemoPlayer(val timeline: HangTimeline) {
         playing = false
     }
 
-    /** A frame of the system's, [elapsed] seconds after the demonstration started playing. */
-    fun at(elapsed: Double) {
-        if (elapsed >= timeline.duration) stop() else seconds = elapsed
+    /** A frame of the system's: the demonstration is [by] seconds further on, and stops at its end. */
+    fun advance(by: Double) {
+        if (seconds + by >= timeline.duration) stop() else seconds += by
+    }
+
+    /** The density of the screen the boxes' places are for. On another, they are forgotten and asked again. */
+    private var measured = 0f
+
+    fun measuredAt(density: Float) {
+        if (measured != 0f && measured != density) {
+            reported.clear()
+            rowAt = null
+            places = null
+        }
+        measured = density
     }
 
     /** The row's scale and place for a framing (design/motion/README.md, "取景"), or null before the boxes are known. */
     fun pose(frame: String): Pose? {
         val at = places ?: return null
         val f = timeline.frames[frame] ?: return null
-        val screen = at[timeline.start] ?: return null
+        // The unit of a framing's span: the width of a screen, which the framing the timeline starts at is aimed at.
+        val screen = at[timeline.frames[timeline.start]?.x?.t] ?: return null
         val x = at[f.x.t] ?: return null
         val y = at[f.y.t] ?: return null
         val scale = picture.width / (f.span * screen.width / timeline.screen)
@@ -204,10 +222,19 @@ internal class Pose(val scale: Float, val x: Float, val y: Float)
 @Composable
 internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, told: String, button: @Composable (label: String, onClick: () -> Unit) -> Unit) {
     val timeline = player.timeline
-    LaunchedEffect(player.playing) {
+    // The row's lengths are pixels of this screen: on a screen of another density the boxes are asked again where they are.
+    val density = LocalDensity.current.density
+    LaunchedEffect(density) { player.measuredAt(density) }
+    LaunchedEffect(player, player.playing) {
         if (!player.playing) return@LaunchedEffect
-        val from = withFrameNanos { it }
-        while (player.playing) player.at(withFrameNanos { (it - from) / 1e9 })
+        // Frame by frame from where it is: step 6 left and come back to goes on from there, and a long wait between two
+        // frames (the app was away) is not time of the demonstration.
+        var last = withFrameNanos { it }
+        while (player.playing) {
+            val now = withFrameNanos { it }
+            player.advance(minOf(now - last, LONGEST_FRAME) / 1e9)
+            last = now
+        }
     }
     Box(
         Modifier
@@ -218,7 +245,8 @@ internal fun HangDemo(player: HangDemoPlayer, copy: Copy, words: HangDemoWords, 
             .onSizeChanged { player.picture = it }
             // Most of it on the screen, or it fills most of the screen: then it starts, once.
             .onGloballyPositioned { c ->
-                player.sight(c.size.height > 0 && c.boundsInWindow().height >= MOST * c.size.height)
+                val shown = c.boundsInWindow().height
+                player.sight(c.size.height > 0 && (shown >= MOST * c.size.height || shown >= MOST * c.findRootCoordinates().size.height))
             }
             // One element to a screen reader, and to a test: nothing drawn in it is read.
             .clearAndSetSemantics {
@@ -291,8 +319,17 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
     @Composable
     private fun Blank(modifier: Modifier) = Box(modifier.height(12.dp).background(Colours.line, RoundedCornerShape(6.dp)))
 
-    /** How far a change of the screens has gone, read where it is drawn. */
-    private fun gone(change: String): Float = (player.state.states[change] ?: 0.0).toFloat()
+    /** How far a change of the screens has gone, read where it is drawn. Nothing has changed while the boxes are asked where they are: a part that moves is then where it was laid out. */
+    private fun changed(change: String): Float = if (player.places == null) 0f else (player.state.states[change] ?: 0.0).toFloat()
+
+    /** How much the mark of a box shows. */
+    private fun marked(name: String): Float = (player.state.marks[name] ?: 0.0).toFloat().coerceIn(0f, 1f)
+
+    /** The frame of a mark, around a box and a little outside it. */
+    private fun DrawScope.frame(colour: Color, shows: Float) {
+        val out = 6.dp.toPx()
+        drawRoundRect(colour, Offset(-out, -out), Size(size.width + 2 * out, size.height + 2 * out), CornerRadius(12.dp.toPx()), Stroke(2.dp.toPx()), alpha = shows)
+    }
 
     /**
      * A box the timeline names: where it is is told to the player; over it, the ink that darkens it while it is
@@ -308,11 +345,8 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                     val state = player.state
                     val tap = state.tap?.takeIf { it.target == name }
                     if (tap != null) drawRoundRect(ink, alpha = (tap.pressed * player.timeline.tap.press).toFloat().coerceIn(0f, 1f), cornerRadius = CornerRadius(corner.toPx()))
-                    val mark = (state.marks[name] ?: 0.0).toFloat()
-                    if (mark > 0f) {
-                        val out = 6.dp.toPx()
-                        drawRoundRect(Colours.you, Offset(-out, -out), Size(size.width + 2 * out, size.height + 2 * out), CornerRadius(12.dp.toPx()), Stroke(2.dp.toPx()), alpha = mark.coerceAtMost(1f))
-                    }
+                    val mark = marked(name)
+                    if (mark > 0f) frame(Colours.you, mark)
                     // A ring that has gone out is drawn as none: at the last moment of a press it may be either.
                     if (tap != null && tap.ring.opacity > 0) {
                         drawCircle(Colours.you, (RING / 2).toPx() * tap.ring.scale.toFloat(), center, alpha = tap.ring.opacity.toFloat().coerceIn(0f, 1f), style = Stroke(3.dp.toPx()))
@@ -320,7 +354,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                 },
         ) {
             content()
-            if (tag != null) Tag(tag, Colours.you, tagAt) { (player.state.marks[name] ?: 0.0).toFloat() }
+            if (tag != null) Tag(tag, Colours.you, tagAt) { marked(name) }
         }
     }
 
@@ -364,12 +398,12 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
             val button = Modifier.weight(1f).height(52.dp)
             Target("copy", button.background(Colours.you, RoundedCornerShape(Type.radius)), corner = Type.radius) {
                 // The button's words change where they are: one over the other.
-                val label = style(14.dp, Colours.bg, FontWeight.Bold, align = TextAlign.Center)
-                Line(c.say("hang.copy"), label, Modifier.align(Alignment.Center).graphicsLayer { alpha = 1 - gone("copied") })
-                Line(c.say("done.copied"), label, Modifier.align(Alignment.Center).graphicsLayer { alpha = gone("copied") })
+                val label = style(14.dp, Colours.bg, Type.weightHeading, align = TextAlign.Center)
+                Line(c.say("hang.copy"), label, Modifier.align(Alignment.Center).graphicsLayer { alpha = 1 - changed("copied") })
+                Line(c.say("done.copied"), label, Modifier.align(Alignment.Center).graphicsLayer { alpha = changed("copied") })
             }
             Target("open", button.border(1.5.dp, ink, RoundedCornerShape(Type.radius)), corner = Type.radius) {
-                BasicText(words.openProfile, Modifier.align(Alignment.Center).padding(horizontal = 8.dp), style = style(13.dp, weight = FontWeight.Bold, align = TextAlign.Center), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                BasicText(words.openProfile, Modifier.align(Alignment.Center).padding(horizontal = 8.dp), style = style(13.dp, weight = Type.weightHeading, align = TextAlign.Center), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Column(Modifier.padding(top = 34.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -393,25 +427,21 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
         }
         Box(Modifier.fillMaxWidth()) {
             // The line a visitor looks for: framed in ink, not in the red of what to press.
-            Target("linkrow", Modifier.padding(top = 16.dp).graphicsLayer { alpha = gone("linkOnProfile") }, corner = 6.dp) {
+            Target("linkrow", Modifier.padding(top = 16.dp).graphicsLayer { alpha = changed("linkOnProfile") }, corner = 6.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LinkIcon()
-                    Line(words.link, style(15.dp, weight = FontWeight.Bold))
+                    Line(words.link, style(15.dp, weight = Type.weightHeading))
                 }
-                Box(
-                    Modifier.matchParentSize().drawWithContent {
-                        val out = 6.dp.toPx()
-                        drawRoundRect(ink, Offset(-out, -out), Size(size.width + 2 * out, size.height + 2 * out), CornerRadius(12.dp.toPx()), Stroke(2.dp.toPx()), alpha = gone("resultLabel"))
-                    },
-                )
-                Tag(c.say("app_demo_hang.found"), ink, TagAt.BELOW) { gone("resultLabel") }
+                Box(Modifier.matchParentSize().drawWithContent { frame(ink, changed("resultLabel")) })
+                Tag(c.say("app_demo_hang.found"), ink, TagAt.BELOW) { changed("resultLabel") }
             }
-            Column(Modifier.fillMaxWidth().graphicsLayer { translationY = gone("linkOnProfile") * LINK_ROW.toPx() }) {
+            // What is under it makes room for the line, and then for the label under the line.
+            Column(Modifier.fillMaxWidth().graphicsLayer { translationY = changed("linkOnProfile") * LINK_ROW.toPx() + changed("resultLabel") * FOUND_TAG.toPx() }) {
                 Blank(Modifier.padding(top = 16.dp).fillMaxWidth(0.34f))
                 Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val button = Modifier.weight(1f).height(38.dp).border(1.dp, Colours.dot, RoundedCornerShape(10.dp))
                     Target("edit", button, tag = c.say("app_demo_hang.press"), corner = 10.dp) {
-                        Line(c.say("app_demo_hang.edit"), style(14.dp, weight = FontWeight.Bold), Modifier.align(Alignment.Center))
+                        Line(c.say("app_demo_hang.edit"), style(14.dp, weight = Type.weightHeading), Modifier.align(Alignment.Center))
                     }
                     Box(button, contentAlignment = Alignment.Center) { Blank(Modifier.fillMaxWidth(0.56f)) }
                 }
@@ -448,7 +478,7 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
     /** Editing the profile: a list, of which the row of links is the one to press. */
     @Composable
     fun EditProfile() = Shot("s2", c.say("app_demo_hang.kick_edit")) {
-        Top { Line(c.say("app_demo_hang.edit"), style(17.dp, weight = FontWeight.Bold)) }
+        Top { Line(c.say("app_demo_hang.edit"), style(17.dp, weight = Type.weightHeading)) }
         val value = @Composable { Blank(Modifier.width(96.dp)) }
         Column(Modifier.padding(top = 10.dp)) {
             for (name in listOf("row_name", "row_username", "row_bio", "row_interests")) ListRow(c.say("app_demo_hang.$name"), end = value)
@@ -479,12 +509,12 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
                     drawLine(ink, Offset(size.width, 0f), Offset(0f, size.height), s, StrokeCap.Round)
                 }
             }
-            Line(c.say("app_demo_hang.row_links"), style(17.dp, weight = FontWeight.Bold))
-            Line(c.say("app_demo_hang.done"), style(16.dp, Colours.dot, FontWeight.Bold), Modifier.padding(horizontal = 4.dp))
+            Line(c.say("app_demo_hang.row_links"), style(17.dp, weight = Type.weightHeading))
+            Line(c.say("app_demo_hang.done"), style(16.dp, Colours.dot, Type.weightHeading), Modifier.padding(horizontal = 4.dp))
         }
         Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(ROW * 2)) {
-            Box(Modifier.graphicsLayer { alpha = gone("linkListed") }) { ListRow(words.link) }
-            Target("add", Modifier.graphicsLayer { translationY = gone("linkListed") * ROW.toPx() }, tag = c.say("app_demo_hang.press"), corner = 6.dp) {
+            Box(Modifier.graphicsLayer { alpha = changed("linkListed") }) { ListRow(words.link) }
+            Target("add", Modifier.graphicsLayer { translationY = changed("linkListed") * ROW.toPx() }, tag = c.say("app_demo_hang.press"), corner = 6.dp) {
                 ListRow(c.say("app_demo_hang.add"))
             }
         }
@@ -494,9 +524,9 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
     @Composable
     fun AddLink(words: HangDemoWords) = Shot("s4", c.say("app_demo_hang.kick_add")) {
         Top {
-            Line(c.say("app_demo_hang.add"), style(17.dp, weight = FontWeight.Bold))
+            Line(c.say("app_demo_hang.add"), style(17.dp, weight = Type.weightHeading))
             Target("done4", Modifier.padding(horizontal = 4.dp, vertical = 6.dp), tag = c.say("app_demo_hang.press_then"), tagAt = TagAt.BELOW_END, corner = 8.dp) {
-                Line(c.say("app_demo_hang.done"), style(16.dp, weight = FontWeight.Bold))
+                Line(c.say("app_demo_hang.done"), style(16.dp, weight = Type.weightHeading))
             }
         }
         val label = style(12.dp, Colours.mute)
@@ -504,12 +534,12 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
         // Room above the field for the bubble that comes over it.
         Line(c.say("app_demo_hang.url"), label, Modifier.padding(top = 56.dp, bottom = 6.dp))
         Target("urlfield", field, tag = c.say("app_demo_hang.paste_here"), tagAt = TagAt.BELOW_END, corner = 10.dp) {
-            Line(words.url, style(12.5.dp, family = Type.mono), Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp).graphicsLayer { alpha = gone("pasted") })
+            Line(words.url, style(12.5.dp, family = Type.mono), Modifier.align(Alignment.CenterStart).padding(horizontal = 12.dp).graphicsLayer { alpha = changed("pasted") })
             // The bubble is a box of its own, which the timeline presses: its ring stays to the end where the bubble was.
             Layout(
                 content = {
                     Target("paste", corner = 9.dp) {
-                        Box(Modifier.graphicsLayer { alpha = gone("pasteMenu") * (1 - gone("pasted")) }.background(ink, RoundedCornerShape(9.dp)).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                        Box(Modifier.graphicsLayer { alpha = changed("pasteMenu") * (1 - changed("pasted")) }.background(ink, RoundedCornerShape(9.dp)).padding(horizontal = 16.dp, vertical = 9.dp)) {
                             Line(c.say("app_demo_hang.paste"), style(14.dp, Colours.bg))
                         }
                     }
@@ -533,5 +563,8 @@ private class Drawn(val player: HangDemoPlayer, val c: Copy) {
 
         /** How far what is under the profile's link moves down to make room for it. */
         val LINK_ROW = 38.dp
+
+        /** And how much further for the label under that line. */
+        val FOUND_TAG = 46.dp
     }
 }

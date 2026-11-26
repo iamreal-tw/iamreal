@@ -177,7 +177,7 @@ internal class Model(
 
     private val hangTimeline by lazy { HangTimeline(hangMotion()) }
 
-    /** The demonstration of step 6, for this card proof: its time goes on, or stays at its end, while the steps after the submission are gone through. */
+    /** The demonstration of step 6, for this card proof: where it has got to is kept while the steps after the submission are gone through, so coming back to step 6 does not play it again from its start. */
     var hangDemo by mutableStateOf<HangDemoPlayer?>(null)
         private set
 

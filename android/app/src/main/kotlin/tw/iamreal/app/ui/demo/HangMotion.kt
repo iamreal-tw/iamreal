@@ -141,6 +141,7 @@ private fun gone(t: Double, at: Double, dur: Double): Double = if (dur > 0) minO
 
 /** The picture of hanging the link, [seconds] after it starts, for the platform [variant] ("ios" or "android"). */
 internal fun hangStateAt(timeline: HangTimeline, variant: String, seconds: Double): HangState {
+    require(variant in timeline.variants) { "no variant $variant" }
     // Before the start is the start, after the end is the end.
     val t = if (seconds > 0) minOf(seconds, timeline.duration) else 0.0
     val tap = timeline.tap
