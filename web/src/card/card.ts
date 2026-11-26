@@ -51,4 +51,10 @@ export interface Card {
    * implementation passes it to the card and keeps no copy.
    */
   sign(message: Uint8Array, pin: string): Promise<CardSignature>;
+  /**
+   * The name of the card reader the last readCertificates() read from, as
+   * the card's reader names it; null if it did not say, or there was more
+   * than one card. Sent in the counts only in its form (counts.ts).
+   */
+  readerName?(): string | null;
 }

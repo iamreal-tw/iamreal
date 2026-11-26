@@ -90,6 +90,8 @@ const PIN_UNSAFE = /[+%]/;
 export class HipkiCard implements Card {
   private readonly origin: string;
   private next: Popup | null = null;
+  /** The reader of the last readCertificates() (readerOfReply), or null. */
+  private reader: string | null = null;
 
   constructor(origin: string) {
     // Throws on anything but an origin.
@@ -122,8 +124,16 @@ export class HipkiCard implements Card {
   }
 
   async readCertificates(onConnected?: () => void): Promise<Uint8Array[]> {
+    this.reader = null;
     const reply = await this.take().request(JSON.stringify({ func: "GetUserCert" }), onConnected);
-    return certificatesOfReply(reply);
+    const certificates = certificatesOfReply(reply);
+    this.reader = readerOfReply(reply);
+    return certificates;
+  }
+
+  /** The reader of the last readCertificates(), as the component names it (readerOfReply). */
+  readerName(): string | null {
+    return this.reader;
   }
 
   async sign(message: Uint8Array, pin: string): Promise<CardSignature> {
@@ -364,6 +374,25 @@ export function certificatesOfReply(text: string): Uint8Array[] {
     }
   }
   return out;
+}
+
+/**
+ * The card reader's name in a GetUserCert reply: the `slotDescription` of
+ * the one slot with a card, as the component wrote it (the field MOICA's
+ * component and Chunghwa Telecom's library name the reader by). None if no
+ * slot or more than one has a card, if it is not a string, or if the reply is
+ * not a success. Whether it may be sent is the counts' to say (counts.ts).
+ */
+export function readerOfReply(text: string): string | null {
+  try {
+    const r = parseReply(text);
+    if (!isSuccess(r) || !Array.isArray(r.slots)) return null;
+    const withCard = r.slots.filter((s): s is Reply => typeof s === "object" && s !== null && typeof (s as Reply).token === "object" && (s as Reply).token !== null);
+    const name = withCard.length === 1 ? withCard[0]!.slotDescription : undefined;
+    return typeof name === "string" ? name : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The signature of a MakeSignature reply, and the certificate the component says made it. */

@@ -13,13 +13,18 @@
 //   carries it too (api.ts). The attempt ID is 16 random bytes kept in
 //   memory, and dropped when the card proof stops or is done.
 // - The browser and the operating system are sent as one of a few names,
-//   worked out here from the `User-Agent`; the text itself is not sent in a
-//   count.
+//   worked out here from the `User-Agent`, with the versions it holds
+//   (`versionsOf`); the text itself is not sent in a count.
+// - The card reader's name is the one field the component reports for it,
+//   sent only in its form (letters, digits and spaces, at most 64), with
+//   every count of the attempt once it is known.
+// - How long a timed step took is one of a few durations (`tookOf`), never
+//   the time.
 // - Sending never holds the card proof up: nothing waits for the request,
 //   and one that fails is not sent again. The request is marked to be kept
 //   alive, so that the last count of a page being left is still sent.
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type Browser, COUNT_ID, type CardProofAction, type Os, REASONS, type Reason, type Step } from "iamreal-protocol/counts.ts";
+import { type Browser, COUNT_ID, type CardProofAction, type Os, READER, REASONS, type Reason, type Step, type TimedStep, VERSION, tookOf } from "iamreal-protocol/counts.ts";
 import type { Fetch } from "./api.ts";
 import type { Stop } from "./flow.ts";
 
@@ -78,6 +83,50 @@ export function familiesOf(userAgent: string): { browser: Browser; os: Os } {
               : "other";
   const os: Os = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
   return { browser, os };
+}
+
+/** Where each browser of the table writes its version in a `User-Agent`: the major version is the first number. */
+const BROWSER_VERSION: Readonly<Record<Browser, RegExp | null>> = {
+  edge: /\bEdg(?:e|A|iOS)?\/(\d+)/,
+  samsung: /\bSamsungBrowser\/(\d+)/,
+  firefox: /\b(?:Firefox|FxiOS)\/(\d+)/,
+  chrome: /\b(?:Chrome|CriOS)\/(\d+)/,
+  safari: /\bVersion\/(\d+)/,
+  other: null,
+};
+
+/**
+ * The browser's and the system's versions, from a `User-Agent`, as far as
+ * it holds them (ADR-0032; the `User-Agent` only, and nothing else the
+ * browser could be asked):
+ *
+ * - The browser: its major version, and nothing after it. A browser the
+ *   table does not name has none.
+ * - The system: only where the `User-Agent` holds the true one. Windows'
+ *   NT number (10.0 is Windows 10 or 11), iOS, and Android in a browser
+ *   that is not Chromium's. Not macOS (every browser writes 10.15), not
+ *   ChromeOS, and not Android in Chrome, Edge or Samsung Internet: their
+ *   `User-Agent` holds a frozen value (Android 10), and none is better than a
+ *   false one.
+ *
+ * A value not in the form of a version (VERSION) is left out, not shortened.
+ */
+export function versionsOf(userAgent: string): { browser_version?: string; os_version?: string } {
+  const { browser, os } = familiesOf(userAgent);
+  const out: { browser_version?: string; os_version?: string } = {};
+  const major = BROWSER_VERSION[browser]?.exec(userAgent)?.[1];
+  if (major !== undefined && VERSION.test(major)) out.browser_version = major;
+  const chromium = browser === "chrome" || browser === "edge" || browser === "samsung";
+  const system =
+    os === "windows"
+      ? /\bWindows NT (\d+\.\d+)/.exec(userAgent)?.[1]
+      : os === "ios"
+        ? /\bOS (\d+(?:_\d+){0,2}) like Mac OS X/.exec(userAgent)?.[1]?.replaceAll("_", ".")
+        : os === "android" && !chromium
+          ? /\bAndroid (\d+(?:\.\d+){0,2})/.exec(userAgent)?.[1]
+          : undefined;
+  if (system !== undefined && VERSION.test(system)) out.os_version = system;
+  return out;
 }
 
 /** The codes the server answers that the table has a reason for. */
@@ -149,6 +198,14 @@ export interface FlowCounts {
   retry(reason: Reason): void;
   /** An action of the cardholder's. */
   action(action: CardProofAction): void;
+  /** A timed step was done, after `ms` milliseconds: sent as its duration, not the time. */
+  duration(step: TimedStep, ms: number): void;
+  /**
+   * The card reader the card was read in, as the component names it: kept
+   * for the rest of the attempt and sent with each of its counts. A name not
+   * in its form (READER) is none, and is not shortened or rewritten.
+   */
+  reader(name: string | null): void;
   /** The card proof device ID, for the submission of a record; null if none could be made. */
   deviceId(): string | null;
 }
@@ -169,19 +226,21 @@ export interface CountsDeps {
 /** The counts of the card proofs made on one page. */
 export function cardProofCounts(deps: CountsDeps): FlowCounts {
   const { browser, os } = familiesOf(deps.userAgent);
+  const versions = versionsOf(deps.userAgent);
   /** For a browser whose storage cannot be used: one ID while the page is open. */
   let pageId: string | null = null;
   const deviceId = (): string => deviceIdOn(taiwanDay(deps.clock()), deps.storage, deps.random, () => (pageId ??= newId(deps.random)));
-  /** The attempt under way and the steps sent in it; null when the next count begins one. */
-  let attempt: { id: string; steps: Set<Step> } | null = null;
-  const current = (): { id: string; steps: Set<Step> } => (attempt ??= { id: newId(deps.random), steps: new Set() });
+  /** The attempt under way, the steps sent in it and its card reader's name; null when the next count begins one. */
+  type Attempt = { id: string; steps: Set<Step>; reader: string | null };
+  let attempt: Attempt | null = null;
+  const current = (): Attempt => (attempt ??= { id: newId(deps.random), steps: new Set(), reader: null });
 
   const send = (members: Record<string, string>): void => {
     try {
       const device = deviceId();
-      const id = current().id;
+      const { id, reader } = current();
       if (!COUNT_ID.test(device) || !COUNT_ID.test(id)) return;
-      const body = JSON.stringify({ client: "web", ...members, device_id: device, attempt_id: id, browser, os });
+      const body = JSON.stringify({ client: "web", ...members, device_id: device, attempt_id: id, browser, os, ...versions, ...(reader !== null && { reader }) });
       // Not awaited, and its failure is nobody's: a count never holds a card proof up, and is not sent again.
       void Promise.resolve()
         .then(() => deps.fetch("/api/v1/counts", { method: "POST", body, keepalive: true }))
@@ -217,6 +276,17 @@ export function cardProofCounts(deps: CountsDeps): FlowCounts {
     },
     action(action) {
       send({ event: "action", action });
+    },
+    duration(step, ms) {
+      const took = tookOf(ms);
+      if (took !== null) send({ event: "duration", step, took });
+    },
+    reader(name) {
+      try {
+        current().reader = name !== null && READER.test(name) ? name : null;
+      } catch {
+        // Without a random source there is no attempt, and no count to carry it.
+      }
     },
     deviceId() {
       try {

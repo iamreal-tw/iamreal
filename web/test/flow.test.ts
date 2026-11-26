@@ -107,6 +107,10 @@ async function setup(o: {
   start?: number;
   /** What becomes of a count the page sends: answered (by default), refused by the network, or never answered. */
   countsAre?: "answered" | "failing" | "held";
+  /** The card reader's name the card reports; none by default. */
+  readerName?: string;
+  /** How long the flow's clock moves while each timed step runs, in milliseconds; not at all by default. */
+  takes?: { crl?: number; tree?: number; proved?: number };
 } = {}): Promise<Setup> {
   const w = o.world ?? (await makeWorld());
   const files = new Map<string, Uint8Array>(circuitFiles);
@@ -120,7 +124,7 @@ async function setup(o: {
   const backend = new FakeBackend({ files, clock: () => NOW, ...o.backend });
   const data = new FakeBackend({ files: crlFiles, clock: () => NOW });
   const signingCertificate = o.signer === "signing" ? w.signingCert : o.signer === "encryption" ? w.encryptionCert : undefined;
-  const card = new FakeCard({ certificates: [w.encryptionCert, w.signingCert], signingKey: w.card.privateKey, pin: PIN, signingCertificate });
+  const card = new FakeCard({ certificates: [w.encryptionCert, w.signingCert], signingKey: w.card.privateKey, pin: PIN, signingCertificate, readerName: o.readerName });
   const p = await poseidon();
   const proveCalls: Record<string, unknown>[] = [];
   const prover: Prover = {
@@ -132,6 +136,9 @@ async function setup(o: {
     preloadCircuit: async (name) => void (await loadCircuit(backend.fetch, name)),
     prove: async (_name, inputs) => {
       proveCalls.push(inputs);
+      // After the step began: the flow reads its clock once the call returns.
+      await Promise.resolve();
+      now += o.takes?.proved ?? 0;
       if (!o.echoPublicInputs) return { proof: new Uint8Array(14_656), publicInputs: [] };
       const big = (x: unknown) => BigInt(x as string);
       let nullifier = 0n;
@@ -181,6 +188,7 @@ async function setup(o: {
     userAgent: USER_AGENT,
   });
   const timers: { at: number; f: () => void; done: boolean }[] = [];
+  let crlTaken = false;
   const idleStops: Stop[] = [];
   const progress: Progress[] = [];
   const flow = new CardProofFlow(
@@ -189,12 +197,27 @@ async function setup(o: {
       issuers: w.issuers,
       knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
-      dataFetch: data.fetch,
+      dataFetch: async (path, init) => {
+        const res = await data.fetch(path, init);
+        // The CRL's first file: the clock moves once, while the CRL is fetched.
+        if (!crlTaken) {
+          crlTaken = true;
+          now += o.takes?.crl ?? 0;
+        }
+        return res;
+      },
       clock: () => now,
       store,
       card,
       prover,
-      startTreeBuilder: async () => ({ build: (k, n, s) => buildWith([p.runner(), p.runner()], k, n, s), close: () => undefined }),
+      startTreeBuilder: async () => ({
+        build: (k, n, s) =>
+          buildWith([p.runner(), p.runner()], k, n, s).then((r) => {
+            now += o.takes?.tree ?? 0;
+            return r;
+          }),
+        close: () => undefined,
+      }),
       onBackgroundStop: onStop,
       onIdle: (s) => idleStops.push(s),
       onProgress: (p) => progress.push(p),
@@ -330,8 +353,8 @@ async function assertQuiet(s: Setup, stop: Stop, requestsAtStop: number): Promis
 function assertCounts(s: Setup): void {
   for (const c of s.counted) {
     assert.deepEqual(readCount(c), c, `a count the table does not take, or not in its order: ${JSON.stringify(c)}`);
-    assert.deepEqual([c.client, c.browser, c.os], ["web", "chrome", "windows"]);
-    assert.deepEqual(Object.keys(c).filter((k) => !["client", "event", "step", "reason", "action", "device_id", "attempt_id", "browser", "os"].includes(k)), []);
+    assert.deepEqual([c.client, c.browser, c.os, c.browser_version, c.os_version], ["web", "chrome", "windows", "131", "10.0"]);
+    assert.deepEqual(Object.keys(c).filter((k) => !["client", "event", "step", "reason", "action", "took", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "reader"].includes(k)), []);
   }
 }
 
@@ -2086,7 +2109,12 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     const cq = s.flow.choose(listOf(await s.flow.confirmCard(PIN), { threads: "alice" }));
     const done = await s.flow.proceed(cq.accounts);
     const counted = await sent(s);
-    assert.deepEqual(counted.map((c) => c.event), new Array(counted.length).fill("step"));
+    // Every step, and the three timed steps' durations; nothing else.
+    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.step]).sort(), [
+      ["duration", "crl"],
+      ["duration", "proved"],
+      ["duration", "tree"],
+    ]);
     const steps = stepsOf(counted);
     // The checks after the card is read run together: their steps come in any order, between the certificate and `checked`.
     const together = ["config", "circuit", "engine", "crl", "tree"];
@@ -2116,7 +2144,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.deepEqual(refused(() => s.flow.choose(listOf(status, { threads: "No Such Name" }))), { code: "username", platform: "threads" });
     await s.flow.proceed(s.flow.choose(listOf(status, { threads: "alice" })).accounts);
     const counted = await sent(s);
-    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [
+    assert.deepEqual(counted.filter((c) => c.event !== "step" && c.event !== "duration").map((c) => [c.event, c.reason]), [
       ["retry", "pin_incorrect"],
       ["retry", "popup_blocked"],
       ["retry", "username"],
@@ -2144,7 +2172,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     await s.flow.readCard();
     assert.deepEqual(await stopOf(s.flow.confirmCard(PIN)), MALFORMED);
     const first = [...(await sent(s))];
-    assert.deepEqual(first.at(-1), { client: "web", event: "stop", reason: "server_malformed_response", device_id: first[0]!.device_id, attempt_id: first[0]!.attempt_id, browser: "chrome", os: "windows" });
+    assert.deepEqual(first.at(-1), { client: "web", event: "stop", reason: "server_malformed_response", device_id: first[0]!.device_id, attempt_id: first[0]!.attempt_id, browser: "chrome", os: "windows", browser_version: "131", os_version: "10.0" });
     // Every step called again throws the same stop, and tells the counts nothing more.
     await stopOf(s.flow.confirmCard(PIN));
     await stopOf(s.flow.readCard());
@@ -2171,7 +2199,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.deepEqual(stepsOf(first).slice(0, 2), ["open", "read"]);
     assert.equal(new Set(first.map((c) => c.attempt_id)).size, 1);
     // Leaving a card proof is no stop: nothing says so.
-    assert.ok(first.every((c) => c.event === "step"));
+    assert.ok(first.every((c) => c.event === "step" || c.event === "duration"));
     const again = await setup();
     const second = new CardProofFlow({ ...(again.flow as unknown as { deps: ConstructorParameters<typeof CardProofFlow>[0] }).deps, counts: s.counts });
     await second.readCard();
@@ -2203,7 +2231,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.deepEqual(await stopOf(s.flow.proceed(cq.accounts)), { code: "server", server: "internal", status: 500 });
     await s.flow.resubmit();
     const counted = await sent(s);
-    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason ?? c.action]), [
+    assert.deepEqual(counted.filter((c) => c.event !== "step" && c.event !== "duration").map((c) => [c.event, c.reason ?? c.action]), [
       ["retry", "server_internal"],
       ["action", "resubmit"],
     ]);
@@ -2222,7 +2250,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     const done = await s.flow.proceed(s.flow.choose(listOf(s.flow.cardStatus!, { threads: "alice" })).accounts);
     assert.equal(done.seq, 1);
     const counted = await sent(s);
-    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [["retry", "server_busy"]]);
+    assert.deepEqual(counted.filter((c) => c.event !== "step" && c.event !== "duration").map((c) => [c.event, c.reason]), [["retry", "server_busy"]]);
     assert.equal(stepsOf(counted).filter((st) => st === "scope_signed").length, 1);
     assert.equal(stepsOf(counted).at(-1), "done");
     assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
@@ -2237,9 +2265,68 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     const done = await s.flow.proceed(cq.accounts);
     assert.equal(done.seq, 1);
     const counted = await sent(s);
-    assert.deepEqual(counted.filter((c) => c.event !== "step").map((c) => [c.event, c.reason]), [["retry", "server_rate_limited"]]);
+    assert.deepEqual(counted.filter((c) => c.event !== "step" && c.event !== "duration").map((c) => [c.event, c.reason]), [["retry", "server_rate_limited"]]);
     assert.equal(stepsOf(counted).at(-1), "done");
     assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
+  test("the timed steps: each sends how long it took, once it is done, as a duration of the table measured on the flow's clock", async () => {
+    const s = await setup({ echoPublicInputs: true, takes: { crl: 2_500, tree: 45_000, proved: 200_000 } });
+    const cq = await toChosen(s);
+    assert.equal((await s.flow.proceed(cq.accounts)).seq, 1);
+    const counted = await sent(s);
+    const durations = counted.filter((c) => c.event === "duration");
+    assert.deepEqual(
+      durations.map((c) => [c.step, c.took]).sort(),
+      [
+        ["crl", "1s_3s"],
+        ["proved", "gt_3m"],
+        ["tree", "30s_60s"],
+      ],
+    );
+    // In the attempt, and no time in any count.
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+    for (const c of durations) assert.deepEqual(Object.keys(c).filter((k) => !["client", "event", "step", "took", "device_id", "attempt_id", "browser", "os", "browser_version", "os_version", "reader"].includes(k)), []);
+  });
+
+  for (const [ms, took] of [[0, "lt_1s"], [1_000, "1s_3s"], [3_000, "3s_10s"], [10_000, "10s_30s"], [30_000, "30s_60s"], [60_000, "1m_3m"], [180_000, "gt_3m"]] as const) {
+    test(`a proof that took ${ms} ms on the flow's clock is ${took}`, async () => {
+      const s = await setup({ echoPublicInputs: true, takes: { proved: ms } });
+      const cq = await toChosen(s);
+      await s.flow.proceed(cq.accounts);
+      const counted = await sent(s);
+      assert.deepEqual(counted.filter((c) => c.event === "duration" && c.step === "proved").map((c) => c.took), [took]);
+    });
+  }
+
+  test("the card reader's name: in every count once the card was read, and in none before", async () => {
+    const s = await setup({ echoPublicInputs: true, readerName: "ACS ACR39U ICC Reader 0" });
+    const cq = await toChosen(s);
+    await s.flow.proceed(cq.accounts);
+    const counted = await sent(s);
+    const at = counted.findIndex((c) => c.step === "certificates");
+    assert.ok(at > 0);
+    assert.deepEqual(new Set(counted.slice(0, at).map((c) => c.reader ?? null)), new Set([null]));
+    assert.deepEqual(new Set(counted.slice(at).map((c) => c.reader)), new Set(["ACS ACR39U ICC Reader 0"]));
+    assert.equal(stepsOf(counted).at(-1), "done");
+  });
+
+  test("a card reader's name not in its form: no reader in any count, and nothing in its place", async () => {
+    const s = await setup({ echoPublicInputs: true, readerName: "Microsoft Usbccid Smartcard Reader (WUDF) 0" });
+    const cq = await toChosen(s);
+    await s.flow.proceed(cq.accounts);
+    const counted = await sent(s);
+    assert.ok(counted.every((c) => !("reader" in c)));
+    assert.ok(!JSON.stringify(counted).includes("Usbccid"));
+  });
+
+  test("a timed step that did not get done sends no duration", async () => {
+    const s = await setup({ echoPublicInputs: true, engineFails: true, takes: { crl: 2_500 } });
+    await stopOf(toChosen(s));
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event === "duration" && c.step === "proved"), []);
+    // The CRL was done before the engine failed: its duration was sent.
+    assert.deepEqual(counted.filter((c) => c.event === "duration" && c.step === "crl").map((c) => c.took), ["1s_3s"]);
   });
 
   for (const countsAre of ["failing", "held"] as const) {
@@ -2250,7 +2337,11 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
       assert.equal(done.seq, 1);
       const counted = await sent(s);
       assert.equal(stepsOf(counted).at(-1), "done");
-      assert.equal(new Set(stepsOf(counted)).size, counted.length);
+      // Each step once, each timed step's duration once, and nothing else.
+      assert.equal(new Set(stepsOf(counted)).size, stepsOf(counted).length);
+      const durations = counted.filter((c) => c.event === "duration").map((c) => c.step);
+      assert.equal(new Set(durations).size, durations.length);
+      assert.equal(stepsOf(counted).length + durations.length, counted.length);
     });
   }
 

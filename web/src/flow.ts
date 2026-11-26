@@ -95,7 +95,7 @@ import { EMPTY_SLOT, type Kind, MAX_SWITCHES, type SlotState, applyList, dailyLi
 import { type ProofLog, scopeOf } from "iamreal-protocol/scope.ts";
 import { scopedId, scopedIdText, shortId } from "iamreal-protocol/scoped-id.ts";
 import { byPlatform, isAnyUsername } from "iamreal-protocol/username-format.ts";
-import type { Step } from "iamreal-protocol/counts.ts";
+import type { Step, TimedStep } from "iamreal-protocol/counts.ts";
 import { type FlowCounts, reasonOf } from "./counts.ts";
 import type { CrlNumberStore } from "./storage.ts";
 import { bytesOfBigint, equalBytes, wipe } from "iamreal-protocol/bytes.ts";
@@ -505,10 +505,18 @@ export class CardProofFlow {
     throw new FlowStop(stop);
   }
 
-  private timed<T>(step: string, p: Promise<T>): Promise<T> {
+  /**
+   * `p`, timed: onTiming gets the milliseconds (the page's console), and a
+   * step of the counts' table (`counted`) its duration, on the flow's clock
+   * (spec/counts.md, "Durations"). Only once it is done: a step that failed
+   * sends no duration.
+   */
+  private timed<T>(step: string, p: Promise<T>, counted?: TimedStep): Promise<T> {
     const t = performance.now();
+    const started = this.deps.clock();
     return p.then((v) => {
       this.deps.onTiming?.(step, performance.now() - t);
+      if (counted !== undefined) this.deps.counts?.duration(counted, this.deps.clock() - started);
       return v;
     });
   }
@@ -699,6 +707,8 @@ export class CardProofFlow {
       this.fail(cardStop(e));
     }
     this.live(...ders);
+    // The reader's name, for this attempt's counts from here on (counts.ts checks its form).
+    this.deps.counts?.reader(this.deps.card.readerName?.() ?? null);
     this.progress("certificates");
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);
@@ -760,10 +770,10 @@ export class CardProofFlow {
         if (config.paused) throw new FlowStop({ code: "server", server: "paused", status: 200 });
         progress("config");
         const maxAgeDays = crlMaxAge(config.crlMaxAgeDays);
-        const crl = await this.timed("crl", loadCrl({ fetch: this.deps.dataFetch, issuer, today, maxAgeDays, store: this.deps.store }));
+        const crl = await this.timed("crl", loadCrl({ fetch: this.deps.dataFetch, issuer, today, maxAgeDays, store: this.deps.store }), "crl");
         progress("crl");
         builder = await builderP;
-        const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial));
+        const result = await this.timed("tree_build", builder.build(crl.keys, crl.count, serial), "tree");
         if (result.inTree) throw new FlowStop({ code: "revoked" });
         progress("tree");
         await circuitP;
@@ -1082,7 +1092,7 @@ export class CardProofFlow {
     });
     let proof;
     try {
-      proof = await this.timed("proof", this.deps.prover.prove(circuit, inputs));
+      proof = await this.timed("proof", this.deps.prover.prove(circuit, inputs), "proved");
     } catch (e) {
       this.live();
       this.fail(toStop(e));
