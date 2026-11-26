@@ -63,6 +63,12 @@
 //    (the sentence above step 1 before its start date, the screen in place
 //    of step 1 from it on, a field that cannot be read, a config that does
 //    not come) and a phone without NFC.
+// 7. The operator stops taking card proofs, and takes them again (#394, #402;
+//    app-backend.ts's PUT /__app-test/paused), before the first declaration:
+//    the app opened while stopped (step 1's sentence in place of 下一步);
+//    stopped after step 1, so that challenges answers paused, then records
+//    does (stops.paused, and only 回到開頭); taken again, the first
+//    declaration goes through.
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -243,6 +249,11 @@ const front = createServer(async (req, res) => {
     res.writeHead(502).end(String(e));
   }
 });
+
+// Connections the app keeps open stay open longer than Node's 5 seconds: at 5 the server closed one as the app sent a POST on it
+// (step 5's challenge, about 5 seconds after step 3's card state), which Android's HttpURLConnection does not send again, and the card
+// proof stopped with `network` (#402). 5 minutes is longer than any wait of this test between two requests of the app.
+front.keepAliveTimeout = 300_000;
 
 // The screen -----------------------------------------------------------------------
 
@@ -1518,6 +1529,8 @@ try {
   await noSecureChannel();
   await interruptions();
   await oldVersionAndNoNfc();
+  // Card proofs stopped and taken again (#394, #402): the first declaration below is the card proof that goes through after.
+  await stoppedTakingCardProofs();
 
   // A first declaration: @alice.
   const shortId = await cardProof({
@@ -1675,3 +1688,107 @@ try {
 // With every check passed, app-backend.ts goes on to iamreal-verify.
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);
+
+// 7. Card proofs stopped ---------------------------------------------------------------
+// (Called in section 4, before the first declaration.)
+
+/** The operator stops taking card proofs, or takes them again: the back end's setting (app-backend.ts, PUT /__app-test/paused). */
+async function setPaused(paused: boolean): Promise<void> {
+  const res = await fetch(`${backend.origin}/__app-test/paused`, { method: "PUT", body: String(paused) });
+  if (res.status !== 204) throw new Error(`stopping or taking card proofs: HTTP ${res.status}`);
+}
+
+/** The app in front again (MainActivity.onResume): step 1 asks the server's config again. */
+function bringBack(): void {
+  emulator.shell("input keyevent KEYCODE_HOME");
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+}
+
+/** Step 1 as it is while card proofs are stopped: its sentence in place of 下一步 (design/copy/card-proof.md, step 1). */
+async function stepOneStopped(where: string): Promise<void> {
+  await waitText(say("before.paused"), `${where}: step 1's sentence for card proofs stopped`, 20_000);
+  const s = wholeScreen();
+  shows(s, `${where}, step 1,`, [step(1), say("before.title"), say("before.paused"), say("before.why_physical")]);
+  check(!s.includes(say("common.next")), `${where}: step 1 has no 下一步`);
+}
+
+/** From step 1 to step 5's button, the card read and the PIN handed over, @alice typed into the empty field. */
+async function toDeclare(): Promise<void> {
+  await waitText(say("common.next"), "step 1's 下一步", 20_000);
+  press(say("common.next"));
+  await waitText(step(2), "step 2");
+  press(say("app_read.tap_card"));
+  await tap();
+  await waitText(say("app_read.lift"), "step 2's list to end", 120_000);
+  press(say("common.next"));
+  await waitText(step(3), "step 3");
+  emulator.tap(field("pin"));
+  emulator.type(PIN);
+  press(say("pin.confirm_card"));
+  await tap();
+  await waitText(step(4), "step 4", 120_000);
+  emulator.tap(field("account-threads"));
+  emulator.type("alice");
+  hideKeyboard();
+  press(say("common.next"));
+  await waitText(say("confirm.title"), "step 5");
+}
+
+/** Step 5 stopped at `item` with the server's paused: its sentence and request ID, and only 回到開頭; then back to step 1, which says so. */
+async function stepFiveStopped(item: string, where: string): Promise<void> {
+  await waitText(say("stops.paused"), `${where}: stops.paused`, 120_000);
+  const s = wholeScreen();
+  shows(s, `${where}, step 5,`, [step(5), item, say("common.halted"), say("stops.paused"), say("accounts.restart")]);
+  // Stopped at that item: 停在這裡 after its label, the sentence after it.
+  const halted = s.indexOf(say("common.halted"));
+  check(halted > 0 && s[halted - 1] === item && s[halted + 1] === say("stops.paused"), `${where}: stopped at "${item}" with stops.paused (${JSON.stringify(s.slice(Math.max(0, halted - 1), halted + 2))})`);
+  check(s.some((t) => new RegExp(`^${say("stops.request_id", { request_id: "[0-9A-Za-z-]+" })}$`).test(t)), `${where}: the request ID under the sentence`);
+  for (const a of [say("progress.retry"), say("app_read.tap_again"), say("app_read.restart"), say("common.cancel"), say("stops.submit_failed")]) check(!s.includes(a), `${where}: step 5 does not offer or say "${a}"`);
+  shot(`paused-5-${where.replaceAll(" ", "-")}`);
+  press(say("accounts.restart"));
+  await stepOneStopped(`${where}, 回到開頭`);
+}
+
+async function stoppedTakingCardProofs(): Promise<void> {
+  console.log("\ncard proofs stopped by the operator, and taken again");
+  // The app opened while card proofs are stopped.
+  await setPaused(true);
+  emulator.shell(`am force-stop ${APP}`);
+  emulator.shell(`am start -n ${APP}/tw.iamreal.app.MainActivity`);
+  await stepOneStopped("opened while card proofs are stopped");
+  shot("paused-1-before");
+  await designShot("card-proof-app-1-paused-phone.png");
+
+  // Taken again while the app was away: step 1 asks again as it comes back.
+  await setPaused(false);
+  bringBack();
+  await waitText(say("common.next"), "step 1's 下一步, card proofs taken again", 20_000);
+  check(!textsOf(visible()).includes(say("before.paused")), "card proofs taken again: step 1 no longer says they are stopped");
+
+  // Stopped after step 1: challenges answers paused. The card has signed nothing.
+  await toDeclare();
+  await setPaused(true);
+  const handed = pinsHanded;
+  press(say("confirm.button_declare_single"));
+  await stepFiveStopped(say("progress.server"), "challenges paused");
+  check(pinsHanded === handed, "challenges paused: the card was not handed the PIN at the last tap");
+
+  // Stopped once the challenge was issued: records answers paused, after the card signed and the proof was computed.
+  await setPaused(false);
+  bringBack();
+  await toDeclare();
+  press(say("confirm.button_declare_single"));
+  await waitText(say("progress.title"), "step 5, in progress");
+  // The app waits for the card once it has the challenge.
+  for (let i = 0; i < 300 && waitingTaps.length === 0; i++) await sleep(100);
+  check(waitingTaps.length > 0, "records paused: the app got the challenge and waits for the card");
+  await setPaused(true);
+  await tap();
+  await stepFiveStopped(say("progress.submit"), "records paused");
+
+  // Taken again: the first declaration below goes through.
+  await setPaused(false);
+  bringBack();
+  await waitText(say("common.next"), "step 1's 下一步, card proofs taken again", 20_000);
+  taps = 0;
+}
