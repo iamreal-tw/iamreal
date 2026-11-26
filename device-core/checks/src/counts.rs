@@ -212,12 +212,12 @@ pub const DEVICE_ID_DAYS: i64 = 31;
 /// bytes: the ID to use, and the value to keep from now on, or `None` to
 /// keep the stored one.
 pub fn device_id(stored: Option<&str>, today: Date, random: &[u8; 16]) -> (String, Option<String>) {
-    if let Some((id, made)) = stored.and_then(|s| s.split_once('.')) {
-        if let Some(made) = Date::parse(made.as_bytes()) {
-            let age = today.days_since_1970() - made.days_since_1970();
-            if is_id(id) && (0..DEVICE_ID_DAYS).contains(&age) {
-                return (id.to_string(), None);
-            }
+    if let Some((id, made)) = stored.and_then(|s| s.split_once('.'))
+        && let Some(made) = Date::parse(made.as_bytes())
+    {
+        let age = today.days_since_1970() - made.days_since_1970();
+        if is_id(id) && (0..DEVICE_ID_DAYS).contains(&age) {
+            return (id.to_string(), None);
         }
     }
     let id: String = random.iter().map(|b| format!("{b:02x}")).collect();
