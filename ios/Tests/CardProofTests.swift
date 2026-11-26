@@ -46,6 +46,8 @@ final class CardProofTests: XCTestCase {
     /// the declaration it would be a correction.
     func testACardDeclaresComesAgainSwitchesAndWithdraws() async throws {
         try await backend.setClock(now)
+        // Card proofs stopped and taken again (#394, #402): the first declaration is the card proof that goes through after.
+        try await cardProofsStopped()
         try await declares()
         try await comesAgain()
         now = backend.start.addingTimeInterval(24 * 3600)
@@ -748,5 +750,86 @@ final class CardProofTests: XCTestCase {
     private func typed(in model: CardProofModel) -> String? {
         for case .account(let row) in model.screen.blocks where row.platform == "threads" { return row.text }
         return nil
+    }
+
+    // Card proofs stopped -----------------------------------------------------------
+
+    /// The operator stops taking card proofs, and takes them again
+    /// (app-backend.ts, PUT /__app-test/paused; #394, #402): the app opened
+    /// while they are stopped says so at step 1, in place of 下一步, and
+    /// asks again as it comes back; stopped after step 1, `challenges`, then
+    /// `records`, answer `paused`: step 5 says stops.paused, and offers only
+    /// 回到開頭, after which step 1 says they are stopped. No record is made.
+    private func cardProofsStopped() async throws {
+        let say = Copy.bundled()
+        func until(_ what: String, _ condition: () -> Bool) async throws {
+            for _ in 0..<500 where !condition() { try await Task.sleep(nanoseconds: 20_000_000) }
+            XCTAssertTrue(condition(), what)
+        }
+        func stepOneStopped(_ model: CardProofModel, _ context: String) async throws {
+            try await until("\(context): step 1 says card proofs are stopped") { model.screen.texts.contains(say("before.paused")) }
+            XCTAssertEqual(model.screen.step, 1, context)
+            XCTAssertFalse(model.screen.buttons.map(\.label).contains("下一步"), "\(context): no 下一步")
+            checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        }
+        /// Presses step 5's button, which stops: the request ID of this run stands where the copy has its example.
+        func declare(_ model: CardProofModel) async throws {
+            let button = try XCTUnwrap(model.screen.buttons.last)
+            model.perform(button.action)
+            while let work = model.work { await work.value }
+            let prefix = say("stops.request_id", ["request_id": ""])
+            for text in model.screen.texts where text.hasPrefix(prefix) && text != prefix {
+                values[String(text.dropFirst(prefix.count))] = "3f9c2a7e5b1d4c80"
+            }
+            checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+        }
+        func stepFiveStopped(_ model: CardProofModel, at item: String, _ context: String) {
+            let texts = model.screen.texts
+            XCTAssertEqual(model.screen.step, 5, context)
+            let halted = texts.firstIndex(of: say("common.halted"))
+            XCTAssertEqual(halted.map { texts[$0 - 1] }, item, "\(context): stopped at \(item)")
+            XCTAssertEqual(halted.map { texts[$0 + 1] }, say("stops.paused"), context)
+            XCTAssertTrue(texts.contains { $0.hasPrefix(say("stops.request_id", ["request_id": ""])) && $0 != say("stops.request_id", ["request_id": ""]) }, "\(context): the request ID")
+            XCTAssertEqual(model.screen.buttons.map(\.label), ["回到開頭"], "\(context): only 回到開頭, not 再試一次")
+            XCTAssertNil(model.screen.cancel, context)
+        }
+
+        // The app opened while card proofs are stopped; taken again while it was away.
+        try await backend.setPaused(true)
+        let model = makeModel()
+        try await stepOneStopped(model, "opened while card proofs are stopped")
+        try await backend.setPaused(false)
+        model.cameBack()
+        try await until("card proofs taken again: 下一步") { model.screen.buttons.map(\.label) == ["下一步"] }
+        XCTAssertFalse(model.screen.texts.contains(say("before.paused")))
+
+        // Stopped after step 1: challenges answers paused. The card signs nothing more.
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        try await backend.setPaused(true)
+        let signatures = card.signatures
+        try await declare(model)
+        stepFiveStopped(model, at: "連上島民證明的伺服器", "challenges paused")
+        XCTAssertEqual(card.signatures, signatures, "challenges paused: the card was not asked to sign")
+        XCTAssertFalse(model.holdsPIN)
+        try await press("回到開頭", in: model)
+        try await stepOneStopped(model, "challenges paused, 回到開頭")
+
+        // Stopped once the challenge was issued: records answers paused, after the card signed and the proof was computed.
+        try await backend.setPaused(false)
+        model.cameBack()
+        try await until("card proofs taken again: 下一步") { model.screen.buttons.map(\.label) == ["下一步"] }
+        try await toAccounts(model)
+        try await typeBob(in: model)
+        asked.beforeSubmit = { [backend] in try await backend!.setPaused(true) }
+        try await declare(model)
+        asked.beforeSubmit = nil
+        stepFiveStopped(model, at: "送出", "records paused")
+        try await press("回到開頭", in: model)
+        try await stepOneStopped(model, "records paused, 回到開頭")
+
+        // Taken again: the first declaration goes through, with a card that has not been tapped yet.
+        try await backend.setPaused(false)
+        card = FakeCard(certificates: backend.certificates, privateKey: backend.privateKey, pin: backend.pin)
     }
 }
