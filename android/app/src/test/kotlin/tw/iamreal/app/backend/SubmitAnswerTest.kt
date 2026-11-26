@@ -30,13 +30,20 @@ class SubmitAnswerTest {
                     val input = BufferedInputStream(c.getInputStream())
                     // The request's head, then as many bytes as its Content-Length says.
                     val lines = StringBuilder()
-                    while (!lines.endsWith("\r\n\r\n")) lines.append(input.read().toChar())
+                    while (!lines.endsWith("\r\n\r\n")) {
+                        val b = input.read()
+                        if (b < 0) return@thread
+                        lines.append(b.toChar())
+                    }
                     val length = Regex("(?i)content-length: *(\\d+)").find(lines)?.groupValues?.get(1)?.toInt() ?: 0
                     repeat(length) { input.read() }
                     val out = c.getOutputStream()
                     out.write(head.toByteArray())
                     // In pieces, so that a cut is a cut and not one write the client sees whole or not at all.
-                    body.toList().chunked(16 * 1024).forEach { out.write(it.toByteArray()); out.flush() }
+                    for (at in body.indices step 16 * 1024) {
+                        out.write(body, at, minOf(16 * 1024, body.size - at))
+                        out.flush()
+                    }
                 }
             }
         }
