@@ -119,19 +119,34 @@ pub fn all_children(der: &[u8], parent: &Tlv) -> Result<Vec<Tlv>, NotDer> {
     children(der, parent).collect()
 }
 
-/// Whether an OID's content bytes are well formed: not empty, every arc
-/// in its shortest form, the last arc complete. Two well-formed OIDs are
-/// the same OID exactly when their bytes are the same.
+/// The largest number an OID may hold, as written
+/// (spec/revocation-tree.md, "Object identifiers").
+const MAX_OID_NUMBER: u64 = (1 << 31) - 1;
+
+/// Whether an OID's content bytes are well formed: not empty, every
+/// number in its shortest form and at most 2^31 - 1, the last one
+/// complete (spec/revocation-tree.md, "Object identifiers"). Two
+/// well-formed OIDs are the same OID exactly when their bytes are the
+/// same.
 pub fn is_oid(bytes: &[u8]) -> bool {
     let Some(last) = bytes.last() else {
         return false;
     };
-    let mut at_start_of_arc = true;
+    let mut at_start_of_number = true;
+    let mut number: u64 = 0;
     for b in bytes {
-        if at_start_of_arc && *b == 0x80 {
+        if at_start_of_number && *b == 0x80 {
             return false;
         }
-        at_start_of_arc = b & 0x80 == 0;
+        // Checked at every byte, so `number` never grows past 38 bits.
+        number = number << 7 | u64::from(b & 0x7f);
+        if number > MAX_OID_NUMBER {
+            return false;
+        }
+        at_start_of_number = b & 0x80 == 0;
+        if at_start_of_number {
+            number = 0;
+        }
     }
     last & 0x80 == 0
 }
