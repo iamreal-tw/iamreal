@@ -757,6 +757,59 @@ export const IOS_UPLOAD_JOBS: YamlMap = {
 };
 
 /**
+ * reverify.yml (#421, ADR-0025, ADR-0028): the operator's daily
+ * re-verification of the published proof logs, each from record 1, by the
+ * command anyone runs (cmd/iamreal-verify) on the files anyone reads.
+ * Started by the schedule and by hand, and by nothing a change can bring
+ * about; one run at a time, none cancelled. It holds no secret (SECRET_LINES
+ * names no line of it), its token can only read and it uses no cache (the
+ * rules for every file), so a run can touch neither the back end nor
+ * another run.
+ *
+ * The schedule is 00:30 in Taiwan (16:30 UTC), after the change of day there, when
+ * the back end publishes (a run that comes first checks up to the line of the day before).
+ */
+export const REVERIFY_WORKFLOW = "reverify.yml";
+export const REVERIFY_ON: Yaml = { schedule: [{ cron: "30 16 * * *" }], workflow_dispatch: null };
+export const REVERIFY_GROUP = "reverify";
+/** The script of .github/workflows/ that each of its jobs runs. */
+export const REVERIFY_SCRIPT = "reverify.sh";
+/** Where each proof log is published (ADR-0027, ADR-0028). */
+export const REVERIFY_DATA: Readonly<Record<string, string>> = { test: "https://test-data.iamreal.tw/", production: "https://data.iamreal.tw/" };
+/**
+ * The job that re-verifies one proof log, exactly. It runs the repository's
+ * Go (the build of iamreal-verify) and the one script; the packages it
+ * installs are web/'s only, for bb, with no install script and no
+ * .pnpmfile.cjs, from npm's registry, and bb's SHA-256 is checked before
+ * the script uses it. 360 minutes is the most a job gets.
+ */
+const reverifyJob = (proofLog: string): YamlMap => ({
+  "runs-on": "ubuntu-24.04",
+  "timeout-minutes": "360",
+  steps: [
+    step("actions/checkout"),
+    step("actions/setup-go"),
+    step("actions/setup-node"),
+    { name: "Install pnpm", run: INSTALL_PNPM },
+    {
+      name: "Install the packages of web/ (for bb), running no install script",
+      run: "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile --registry=https://registry.npmjs.org/ --filter iamreal-web",
+    },
+    { name: "bb is the one of bb.js 6.0.0", run: CHECK_BB },
+    { name: "Build iamreal-verify", run: 'go build -o "$RUNNER_TEMP/iamreal-verify" ./cmd/iamreal-verify' },
+    { name: `Re-verify the ${proofLog} proof log from record 1`, run: `bash .github/workflows/${REVERIFY_SCRIPT} ${proofLog} ${REVERIFY_DATA[proofLog]!}` },
+  ],
+});
+/**
+ * Its jobs, exactly: the test proof log, and the production one, which does
+ * not run (`if: false`) until its site is there.
+ */
+export const REVERIFY_JOBS: YamlMap = {
+  test: reverifyJob("test"),
+  production: { if: "false", ...reverifyJob("production") },
+};
+
+/**
  * How cache.yml is triggered and its concurrency group: pushes to main, one
  * run at a time, none cancelled. The group's name is no other workflow's.
  */
@@ -1282,6 +1335,7 @@ export const WORKFLOW_FILES: readonly string[] = [
   "checks-ios.yml",
   "checks.yml",
   "deploy-test.yml",
+  REVERIFY_WORKFLOW,
   UPLOAD_ANDROID_WORKFLOW,
   IOS_UPLOAD_WORKFLOW,
 ];
@@ -1341,6 +1395,14 @@ export function workflowProblems(files: Readonly<Record<string, string>>, checkP
       if (!same(doc.on, { push: { branches: ["main"] } })) p("not triggered by a push to main only");
       if (doc.env !== undefined) p("an env at the top");
       if (!same(doc.jobs, DEPLOY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
+      continue;
+    }
+    if (f === REVERIFY_WORKFLOW) {
+      // The schedule and by hand only: no push, pull request or other workflow starts it.
+      if (!same(doc.on, REVERIFY_ON)) p(`not triggered by its schedule and by hand only: ${JSON.stringify(doc.on)}`);
+      if (!same(doc.concurrency, { group: REVERIFY_GROUP, "cancel-in-progress": "false" })) p(`concurrency is not group ${REVERIFY_GROUP}, one run at a time and none cancelled`);
+      if (!same(doc.env, { IAMREAL_BB: BB_PATH })) p("the env at the top is not the one in test/workflows.ts");
+      if (!same(doc.jobs, REVERIFY_JOBS)) p(`the jobs are not exactly the ones in test/workflows.ts: ${JSON.stringify(doc.jobs)}`);
       continue;
     }
     if (f === UPLOAD_ANDROID_WORKFLOW) {
