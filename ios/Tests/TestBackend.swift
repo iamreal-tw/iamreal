@@ -48,6 +48,16 @@ struct TestBackend {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
     }
 
+    /// From now on the operator has stopped taking card proofs, or taken
+    /// them again (`CARD_PROOFS_PAUSED`; app-backend.ts, PUT /__app-test/paused).
+    func setPaused(_ paused: Bool) async throws {
+        var request = URLRequest(url: origin.appendingPathComponent("__app-test/paused"))
+        request.httpMethod = "PUT"
+        request.httpBody = Data(String(paused).utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
+    }
+
     /// A session of the core that trusts the back end's issuer keys in
     /// place of MOICA's: the library of the tests has the function, the
     /// library of an app for an iPhone does not.
@@ -78,6 +88,8 @@ final class MemoryCRLNumbers: CRLNumbers {
 final class CountingBackend: Backend {
     private let backend: Backend
     private(set) var configRequests = 0
+    /// Done before a record is sent on: for a test to change the back end between the challenge and the record.
+    var beforeSubmit: (() async throws -> Void)?
     /// The record does not reach the server: as a phone that lost the network.
     var submitFails = false
     /// The server does not answer when asked for its config.
@@ -98,6 +110,7 @@ final class CountingBackend: Backend {
     func cardState(_ body: Data) async throws -> Data { try await backend.cardState(body) }
     func challenge() async throws -> String { try await backend.challenge() }
     func submit(_ body: Data) async throws -> Data {
+        try await beforeSubmit?()
         if submitFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.submit(body)
     }

@@ -19,7 +19,10 @@
 //    takes `PUT /__app-test/clock` (an ISO time): from then on the Worker's
 //    clock shows that time. The tests move it to the next day between card
 //    proofs, as a card may have 3 records a day and a switch on the day of
-//    the declaration is a correction.
+//    the declaration is a correction. And `PUT /__app-test/paused` (`true`
+//    or `false`): from then on the operator has stopped taking card proofs,
+//    or taken them again (`CARD_PROOFS_PAUSED`, worker/README.md, "停止和恢復
+//    收過卡"), for the tests of #394's screens.
 // 4. Writes test-output/app/backend.json, which the tests read from the
 //    disk (a simulator sees the files of the machine it runs on), and
 //    prints `listening on <origin>`. The file is removed when the command
@@ -114,6 +117,12 @@ const worker = await startWorker({ issuers });
 /** The latest time the Worker's clock was set to. */
 let clock = start;
 const front = await startFront(worker, async (req, body) => {
+  if (req.method === "PUT" && req.url === "/__app-test/paused") {
+    const paused = body.toString();
+    if (paused !== "true" && paused !== "false") return 400;
+    await worker.setSettings(paused === "true" ? { CARD_PROOFS_PAUSED: "true" } : {});
+    return 204;
+  }
   if (req.method !== "PUT" || req.url !== "/__app-test/clock") return undefined;
   const time = new Date(body.toString());
   if (Number.isNaN(time.getTime())) return 400;

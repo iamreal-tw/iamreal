@@ -2,7 +2,10 @@
 //
 // 1. Asks MOICA for each issuer key's complete CRL and keeps every distinct
 //    file, as the original bytes, in the data bucket under
-//    `crl/<SHA-256>.crl` (ADR-0027).
+//    `crl/<SHA-256>.crl` (ADR-0027). It asks with a condition: MOICA signs
+//    a CRL four times a day and the mirror asks every hour, so most rounds
+//    the file is the one it has, and MOICA says so without sending it
+//    (`lastAnswers`).
 // 2. Gives every file of the archive that the index does not list its line:
 //    reads it, checks the signature and, if it is a usable CRL, builds its
 //    tree (src/crl.ts, src/crl-tree.ts). Usable or not, every file gets a
@@ -41,11 +44,12 @@
 // place (ADR-0023).
 //
 // What the first step stores is whatever a complete answer with status 200
-// held, CRL or not. What it can tell at the level of HTTP is that an answer
+// held, CRL or not. A 304 to a request that carried a condition stores
+// nothing: the file the condition was of is in the bucket. What it can tell at the level of HTTP is that an answer
 // is not complete, or cannot be a CRL, and then it stores nothing:
 //
-// - any status but 200, no answer, or an answer that takes longer than the
-//   limit;
+// - any status but 200 (or 304, see above), no answer, or an answer that
+//   takes longer than the limit;
 // - an answer the runtime reports as broken off;
 // - fewer or more bytes than the answer's Content-Length;
 // - no bytes at all, or more than MAX_CRL_BYTES.
@@ -77,7 +81,11 @@ export interface CrlSource {
 
 /** What one round did with one source. */
 export type SourceResult =
-  | { readonly issuer: IssuerName; readonly result: "stored" | "already_stored"; readonly sha256: string }
+  /**
+   * `stored`: a file the bucket did not have. `already_stored`: the whole answer came, and the bucket has its bytes.
+   * `not_modified`: MOICA answered 304, nothing was downloaded; `sha256` is the file the request's condition was of.
+   */
+  | { readonly issuer: IssuerName; readonly result: "stored" | "already_stored" | "not_modified"; readonly sha256: string }
   | { readonly issuer: IssuerName; readonly result: "failed"; readonly error: string };
 
 /** What one round did with one file of the archive that the index did not list. */
@@ -162,6 +170,20 @@ const CACHE_IMMUTABLE = "public, max-age=31536000, immutable";
 /** The index changes whenever MOICA signs a CRL: it may be cached for a minute. */
 const CACHE_MINUTE = "public, max-age=60";
 
+/**
+ * What a stored file's custom metadata says of the answer it came in: the
+ * address it was asked of, and the answer's `ETag` and `Last-Modified` as
+ * MOICA sent them. They are kept with the bytes they describe, so they are
+ * gone when the file is.
+ */
+const META_SOURCE = "source";
+const META_ETAG = "etag";
+const META_LAST_MODIFIED = "last-modified";
+
+/** A header value the mirror keeps and sends back: printable ASCII, not long. Anything else is as if MOICA sent none. */
+const KEPT_HEADER = /^[\x20-\x7e]{1,256}$/;
+const keptHeader = (value: string | null | undefined): string | undefined => (typeof value === "string" && KEPT_HEADER.test(value) ? value : undefined);
+
 const INDEX_KEY = "crl/index.jsonl";
 const FILE_KEY = /^crl\/([0-9a-f]{64})\.crl$/;
 
@@ -187,7 +209,7 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 export function crlMirrorInWorker(parts: MirrorParts): CrlMirror {
   return {
     async round() {
-      const sources = await fetchAll(parts.sources, parts.bucket, parts.timeoutMs);
+      const sources = await fetchAll(parts.sources, parts.bucket, parts.timeoutMs, await lastAnswers(parts.bucket));
       const files: FileResult[] = [];
       const errors = sources.flatMap((s) => (s.result === "failed" ? [`${s.issuer} failed: ${s.error}`] : []));
       try {
@@ -401,13 +423,63 @@ async function indexFile(parts: MirrorParts, sha256: string): Promise<FileResult
   };
 }
 
+/** The file a source's last new answer was stored as, and what MOICA said of that answer. */
+interface LastAnswer {
+  readonly sha256: string;
+  readonly etag: string | undefined;
+  readonly lastModified: string | undefined;
+}
+
+/**
+ * For each address, the file stored last of those that came from it with
+ * an `ETag` or a `Last-Modified` and that the index lists as a usable CRL:
+ * what the next request to that address is conditional on.
+ *
+ * - A file of the archive without them (from an answer that had none) is no
+ *   one's last answer, and its address is asked without a condition.
+ * - Only a usable CRL, one whose signature the mirror checked: MOICA's
+ *   addresses are plain HTTP, and anyone on the way can answer once with
+ *   other bytes under MOICA's own `ETag`. Were that file a condition, MOICA
+ *   itself would answer 304 to it until its next CRL, and the mirror would
+ *   not fetch the real one. As it is, the next round asks again.
+ *
+ * If the archive cannot be read, every address is asked without a
+ * condition: the round then downloads what it may already have, as every
+ * round did before the mirror asked with conditions.
+ */
+async function lastAnswers(bucket: R2Bucket): Promise<ReadonlyMap<string, LastAnswer>> {
+  const last = new Map<string, LastAnswer & { readonly uploaded: number }>();
+  try {
+    const index = await bucket.get(INDEX_KEY);
+    const usable = new Set(readIndex(index === null ? "" : await index.text()).flatMap((line) => (line.root.startsWith("-") ? [] : [line.sha256])));
+    for (let cursor: string | undefined; ; ) {
+      const page = await bucket.list({ prefix: "crl/", include: ["customMetadata"], ...(cursor !== undefined && { cursor }) });
+      for (const object of page.objects) {
+        const name = FILE_KEY.exec(object.key);
+        const source = object.customMetadata?.[META_SOURCE];
+        if (!name || source === undefined || !usable.has(name[1]!)) continue;
+        const etag = keptHeader(object.customMetadata?.[META_ETAG]);
+        const lastModified = keptHeader(object.customMetadata?.[META_LAST_MODIFIED]);
+        if (etag === undefined && lastModified === undefined) continue;
+        const uploaded = object.uploaded.getTime();
+        if ((last.get(source)?.uploaded ?? -Infinity) < uploaded) last.set(source, { sha256: name[1]!, etag, lastModified, uploaded });
+      }
+      if (!page.truncated) break;
+      cursor = page.cursor;
+    }
+  } catch {
+    return new Map();
+  }
+  return last;
+}
+
 /**
  * Asks every source once, all at the same time, each for at most
  * `timeoutMs`. A source that fails stores nothing, and neither a failing
  * nor a slow source keeps another from being stored; a file the bucket
  * already has is not written again.
  */
-async function fetchAll(sources: readonly CrlSource[], bucket: R2Bucket, timeoutMs: number): Promise<SourceResult[]> {
+async function fetchAll(sources: readonly CrlSource[], bucket: R2Bucket, timeoutMs: number, last: ReadonlyMap<string, LastAnswer>): Promise<SourceResult[]> {
   return Promise.all(
     sources.map(async (source): Promise<SourceResult> => {
       const abort = new AbortController();
@@ -421,7 +493,7 @@ async function fetchAll(sources: readonly CrlSource[], bucket: R2Bucket, timeout
         abort.abort();
       }, timeoutMs);
       try {
-        return { issuer: source.issuer, ...(await Promise.race([fetchOne(source, bucket, abort.signal), late])) };
+        return { issuer: source.issuer, ...(await Promise.race([fetchOne(source, bucket, abort.signal, last.get(source.url)), late])) };
       } catch (e) {
         return { issuer: source.issuer, result: "failed", error: messageOf(e) };
       } finally {
@@ -431,8 +503,23 @@ async function fetchAll(sources: readonly CrlSource[], bucket: R2Bucket, timeout
   );
 }
 
-async function fetchOne(source: CrlSource, bucket: R2Bucket, signal: AbortSignal): Promise<{ result: "stored" | "already_stored"; sha256: string }> {
-  const response = await fetch(source.url, { headers: { "User-Agent": USER_AGENT }, signal });
+/**
+ * One request to one source. With `last`, the request is conditional on
+ * that answer (RFC 9110, 13.1): `If-None-Match` with its `ETag`, or, if it
+ * had none, `If-Modified-Since` with its `Last-Modified`. One of the two,
+ * not both: a server that is given `If-None-Match` does not look at the
+ * other, and one condition is what MOICA was seen to answer 304 to
+ * (README.md, "內政部對條件式請求怎麼回").
+ */
+async function fetchOne(source: CrlSource, bucket: R2Bucket, signal: AbortSignal, last: LastAnswer | undefined): Promise<{ result: "stored" | "already_stored" | "not_modified"; sha256: string }> {
+  const condition: Record<string, string> = last === undefined ? {} : last.etag !== undefined ? { "If-None-Match": last.etag } : { "If-Modified-Since": last.lastModified! };
+  const response = await fetch(source.url, { headers: { "User-Agent": USER_AGENT, ...condition }, signal });
+  if (response.status === 304 && last !== undefined) {
+    await response.body?.cancel();
+    // The file the condition was of was in the bucket when the round began; it is said to be there only if it still is.
+    if (!(await bucket.head(`crl/${last.sha256}.crl`))) throw new Error(`HTTP status 304, and the file it is about, ${last.sha256}, is not in the bucket`);
+    return { result: "not_modified", sha256: last.sha256 };
+  }
   if (response.status !== 200) {
     await response.body?.cancel();
     throw new Error(`HTTP status ${response.status}`);
@@ -450,10 +537,29 @@ async function fetchOne(source: CrlSource, bucket: R2Bucket, signal: AbortSignal
   if (declared !== null && declared !== String(bytes.byteLength)) throw new Error(`${bytes.byteLength} bytes, Content-Length ${declared}`);
   const sha256 = hexOf(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
   const key = `crl/${sha256}.crl`;
+  // What MOICA said of this answer is kept only if the answer said how long it is and was that long: an answer that
+  // may have been broken off (see the top of this file) must not be the one a later request is conditional on.
+  const etag = declared === null ? undefined : keptHeader(response.headers.get("ETag"));
+  const lastModified = declared === null ? undefined : keptHeader(response.headers.get("Last-Modified"));
+  const said: Record<string, string> | undefined =
+    etag === undefined && lastModified === undefined ? undefined : { [META_SOURCE]: source.url, ...(etag !== undefined && { [META_ETAG]: etag }), ...(lastModified !== undefined && { [META_LAST_MODIFIED]: lastModified }) };
+  const file = { httpMetadata: { cacheControl: CACHE_IMMUTABLE }, ...(said !== undefined && { customMetadata: said }) };
   // The name is the SHA-256 of the bytes, so a file of this name has these bytes.
-  if (await bucket.head(key)) return { result: "already_stored", sha256 };
+  const have = await bucket.head(key);
+  if (have) {
+    // The whole file came although the bucket has it: what the request was conditional on, if anything, is not what
+    // MOICA says of these bytes now (a file stored before the mirror kept this, or bytes MOICA put up again). The
+    // file is written again with what it says now, so that the next request is conditional on that; otherwise
+    // every round until MOICA's next CRL would download it whole.
+    const recorded = have.customMetadata ?? {};
+    if (said !== undefined && [META_SOURCE, META_ETAG, META_LAST_MODIFIED].some((name) => recorded[name] !== said[name])) {
+      signal.throwIfAborted();
+      await bucket.put(key, bytes, file);
+    }
+    return { result: "already_stored", sha256 };
+  }
   signal.throwIfAborted(); // nothing is written once the limit has passed
-  await bucket.put(key, bytes, { httpMetadata: { cacheControl: CACHE_IMMUTABLE } });
+  await bucket.put(key, bytes, file);
   return { result: "stored", sha256 };
 }
 
