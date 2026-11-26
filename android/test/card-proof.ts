@@ -223,9 +223,10 @@ const front = createServer(async (req, res) => {
   }
 });
 
-// Connections the app keeps open stay open for as long as the test can pause between two requests: Node's 5 seconds would close one
-// as the app sends a POST on it, which Android's HttpURLConnection cannot send again, and the card proof would stop with `network`.
-front.keepAliveTimeout = 120_000;
+// Connections the app keeps open stay open longer than Node's 5 seconds: at 5 the server closed one as the app sent a POST on it
+// (step 5's challenge, about 5 seconds after step 3's card state), which Android's HttpURLConnection does not send again, and the card
+// proof stopped with `network` (#402). 5 minutes is longer than any wait of this test between two requests of the app.
+front.keepAliveTimeout = 300_000;
 
 // The screen -----------------------------------------------------------------------
 
@@ -1266,6 +1267,9 @@ async function stepFiveStopped(item: string, where: string): Promise<void> {
   await waitText(say("stops.paused"), `${where}: stops.paused`, 120_000);
   const s = wholeScreen();
   shows(s, `${where}, step 5,`, [step(5), item, say("common.halted"), say("stops.paused"), say("accounts.restart")]);
+  // Stopped at that item: 停在這裡 after its label, the sentence after it.
+  const halted = s.indexOf(say("common.halted"));
+  check(halted > 0 && s[halted - 1] === item && s[halted + 1] === say("stops.paused"), `${where}: stopped at "${item}" with stops.paused (${JSON.stringify(s.slice(Math.max(0, halted - 1), halted + 2))})`);
   check(s.some((t) => new RegExp(`^${say("stops.request_id", { request_id: "[0-9A-Za-z-]+" })}$`).test(t)), `${where}: the request ID under the sentence`);
   for (const a of [say("progress.retry"), say("app_read.tap_again"), say("app_read.restart"), say("common.cancel"), say("stops.submit_failed")]) check(!s.includes(a), `${where}: step 5 does not offer or say "${a}"`);
   shot(`paused-5-${where.replaceAll(" ", "-")}`);
@@ -1305,6 +1309,7 @@ async function stoppedTakingCardProofs(): Promise<void> {
   await waitText(say("progress.title"), "step 5, in progress");
   // The app waits for the card once it has the challenge.
   for (let i = 0; i < 300 && waitingTaps.length === 0; i++) await sleep(100);
+  check(waitingTaps.length > 0, "records paused: the app got the challenge and waits for the card");
   await setPaused(true);
   await tap();
   await stepFiveStopped(say("progress.submit"), "records paused");

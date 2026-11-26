@@ -778,10 +778,10 @@ final class CardProofTests: XCTestCase {
             model.perform(button.action)
             while let work = model.work { await work.value }
             let prefix = say("stops.request_id", ["request_id": ""])
-            for text in model.screen.texts where text.hasPrefix(prefix) && text != prefix {
-                values[String(text.dropFirst(prefix.count))] = "3f9c2a7e5b1d4c80"
-            }
+            let ids = model.screen.texts.filter { $0.hasPrefix(prefix) && $0 != prefix }.map { String($0.dropFirst(prefix.count)) }
+            for id in ids { values[id] = "3f9c2a7e5b1d4c80" }
             checkAgainstTheCopy(model.screen, file: #filePath, line: #line)
+            for id in ids { values[id] = nil }
         }
         func stepFiveStopped(_ model: CardProofModel, at item: String, _ context: String) {
             let texts = model.screen.texts
