@@ -45,6 +45,19 @@ final class ScreensTests: XCTestCase {
         shortID: "7K2Q9FM4XD", lastCardProof: nil, daysSince: nil, dailyLimit: false, knownPlatforms: ["threads"],
         rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: nil, switchCount: 0, switchesLeft: 5, correctionToday: false)])
 
+    /// A card that declares @alice, `days` days after its last card proof,
+    /// with `used` of its 5 switches used.
+    private func card(days: Int = 12, used: Int = 1, today: Bool = false, dailyLimit: Bool = false) -> Flow.CardStatus {
+        Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: days, dailyLimit: dailyLimit, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: used, switchesLeft: 5 - used, correctionToday: today)])
+    }
+
+    private func consequence(_ kind: String, _ username: String, switchesLeft: Int? = nil) -> Flow.Consequence {
+        let row = Flow.ConsequenceRow(platform: "threads", known: true, kind: kind, username: username, current: "alice", previous: kind == "switch" ? "alice" : nil, switchesLeft: switchesLeft)
+        return Flow.Consequence(accounts: kind == "withdraw" ? [] : [Flow.Account(platform: "threads", username: username)], rows: [row], firstRecord: false, today: "2026-11-16")
+    }
+
     private func declaration() -> (Flow.Consequence, Flow.Done) {
         let row = Flow.ConsequenceRow(platform: "threads", known: true, kind: "first", username: "alice", current: nil, previous: nil, switchesLeft: nil)
         let accounts = [Flow.Account(platform: "threads", username: "alice")]
@@ -71,9 +84,241 @@ final class ScreensTests: XCTestCase {
     }
 
     func testEverySentenceOfTheScreensIsInTheDocument() {
-        for (_, screen) in firstDeclaration() {
+        for (_, screen) in firstDeclaration() + laterCardProofs() {
             document.check(screen)
         }
+    }
+
+    /// Step 4 and step 5 for a card that declares @alice, by the name of a picture.
+    private func laterCardProofs() -> [(String, Screen)] {
+        [
+            ("card-proof-app-4-accounts-existing-phone", screens.accounts(card(), typed: ["threads": "alice"], errors: [:], message: nil)),
+            ("card-proof-app-4-accounts-switch-phone", screens.accounts(card(), mode: .switching, typed: ["threads": "carol.tw"], errors: [:], message: nil)),
+            ("card-proof-app-5-confirm-refresh-phone", screens.confirm(card(), consequence("refresh", "alice"))),
+            ("card-proof-app-5-confirm-switch-phone", screens.confirm(card(), consequence("switch", "carol.tw", switchesLeft: 3))),
+            ("card-proof-app-5-confirm-withdraw-phone", screens.confirm(card(), consequence("withdraw", "alice"))),
+        ]
+    }
+
+    /// Step 1 as card-proof.md writes it for the app: what to prepare, the
+    /// two questions, and under the second the two ways out.
+    func testStepOneSaysWhatToPrepareAndWhereToGetACard() {
+        let screen = screens.before()
+        XCTAssertEqual(screen.texts, [
+            "開始之前",
+            "請準備好你的實體自然人憑證卡片。",
+            "非中華民國國籍者所持有的自然人憑證無法用於島民證明。",
+            "為什麼一定要實體的卡片？",
+            "實體卡片簽章在卡片裡完成，卡片效期約 5 ~ 8 年。",
+            "行動自然人憑證簽章依賴內政部伺服器，而且每年會更換金鑰，不適合作為島民證明使用。",
+            "還沒有自然人憑證，怎麼申辦？",
+            "本人攜帶身分證到戶政事務所臨櫃申辦，當場拿到卡片，費用 250 元。",
+            "找附近的戶政事務所",
+            "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）",
+            "下一步",
+        ])
+        guard case .question(_, let answer)? = screen.blocks.last else { return XCTFail("no question at the end: \(screen.blocks)") }
+        XCTAssertEqual(Array(answer.dropFirst()), [
+            .button(Button(label: "找附近的戶政事務所", action: .findOffice), main: false),
+            .action(Button(label: "內政部憑證管理中心：如何申請自然人憑證（moica.nat.gov.tw）", action: .howToApply)),
+        ])
+        // The phone's map searches for the word; the app sends no place of its own.
+        XCTAssertEqual(CardProofModel.findOffice.absoluteString.removingPercentEncoding, "https://maps.apple.com/?q=戶政事務所")
+        XCTAssertEqual(CardProofModel.moica.absoluteString, "https://moica.nat.gov.tw/")
+    }
+
+    /// Step 3 says two things under the field; who holds the card and the PIN is step 5's to say.
+    func testStepThreeSaysTwoThingsUnderTheField() {
+        XCTAssertEqual(Array(screens.pin(name: "王小明", state: .waiting(nil)).texts.suffix(4)), [
+            "按下確認後，卡片會簽章一次，用來查詢這張卡片目前宣告的帳號。",
+            "PIN、姓名和憑證、卡片的簽章不會離開這支手機。",
+            "上一步", "確認卡片",
+        ])
+    }
+
+    // Step 4, by what the card declares ------------------------------------------
+
+    func testStepFourOfACardThatDeclaresNothingHasOnlyTheField() {
+        let screen = screens.accounts(newCard, typed: ["threads": ""], errors: [:], message: nil)
+        XCTAssertEqual(screen.texts, [
+            "你的 Threads 帳號",
+            "這張卡片還沒有宣告過帳號。",
+            "填上你要宣告的 Threads 帳號。",
+            "Threads", "預覽",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
+            "下一步",
+            "取消",
+        ])
+        XCTAssertEqual(screen.buttons.map(\.action), [.toConfirm])
+    }
+
+    /// Everything was withdrawn: the field, and under it the account declared last and the switches left.
+    func testStepFourOfACardThatWithdrewEverything() {
+        let withdrawn = Flow.CardStatus(
+            shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"],
+            rows: [Flow.StatusRow(platform: "threads", known: true, current: nil, lastDeclared: "bob", switchCount: 1, switchesLeft: 4, correctionToday: false)])
+        let screen = screens.accounts(withdrawn, typed: ["threads": ""], errors: [:], message: nil)
+        XCTAssertEqual(screen.texts, [
+            "你的 Threads 帳號",
+            "這張卡片目前沒有宣告任何帳號。",
+            "填上你要宣告的 Threads 帳號。",
+            "Threads", "預覽",
+            "上一次宣告的是 @bob，已經收回。填回 @bob 不算更換。",
+            "更換過 1 次，還可以更換 4 次。",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
+            "下一步",
+            "取消",
+        ])
+        document.check(screen)
+    }
+
+    func testStepFourOfACardThatDeclaresAnAccount() {
+        let screen = screens.accounts(card(), typed: ["threads": "alice"], errors: [:], message: nil)
+        XCTAssertEqual(screen.texts, [
+            "你的 Threads 帳號",
+            "這張卡片目前宣告：",
+            "@alice",
+            "上次過卡是 12 天前",
+            "更新島民證明",
+            "宣告帳號不變，把島民證明上的日期更新成今天。",
+            "改成別的帳號",
+            "收回對 @alice 的宣告",
+            "取消",
+        ])
+        // One main button; the other two are links under it.
+        XCTAssertEqual(Array(screen.blocks.suffix(4)), [
+            .button(Button(label: "更新島民證明", action: .refresh), main: true),
+            .small("宣告帳號不變，把島民證明上的日期更新成今天。"),
+            .action(Button(label: "改成別的帳號", action: .toSwitch)),
+            .action(Button(label: "收回對 @alice 的宣告", action: .withdraw)),
+        ])
+        XCTAssertEqual(screen.buttons, [])
+        XCTAssertFalse(screen.blocks.contains { if case .account = $0 { return true } else { return false } }, "nothing to type")
+        // The same day: "today", not "0 days ago".
+        XCTAssertTrue(screens.accounts(card(days: 0), typed: [:], errors: [:], message: nil).texts.contains("上次過卡是今天"))
+    }
+
+    func testStepFourToAnotherAccount() {
+        let screen = screens.accounts(card(), mode: .switching, typed: ["threads": "carol.tw"], errors: [:], message: nil)
+        XCTAssertEqual(screen.texts, [
+            "你的 Threads 帳號",
+            "這張卡片目前宣告 @alice。",
+            "改成別的帳號",
+            "Threads", "預覽",
+            "改了之後，@alice 不再是這張卡片宣告的帳號。", "一張卡終身最多更換 5 次，這次之後還可以更換 3 次。",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
+            "下一步",
+            "不改了",
+            "取消",
+        ])
+        XCTAssertEqual(screen.secondary, Button(label: "不改了", action: .keep))
+        // What it costs, by the switches left.
+        func cost(_ status: Flow.CardStatus) -> String? {
+            for case .sentences(let sentences) in screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil).blocks { return sentences.last }
+            return nil
+        }
+        XCTAssertEqual(cost(card(used: 4)), "用掉最後一次更換。這次之後，這個平台不能再更換。")
+        XCTAssertEqual(cost(card(used: 5, today: true)), "今天才宣告的帳號，今天改掉不另外算一次更換。")
+        // None left, and the account was not put there today: no field, and the only ways are back.
+        let usedUp = screens.accounts(card(used: 5), mode: .switching, typed: [:], errors: [:], message: nil)
+        XCTAssertEqual(usedUp.texts, ["你的 Threads 帳號", "這張卡片目前宣告 @alice。", "已經更換 5 次，這個平台不能再更換。", "不改了", "取消"])
+        for status in [card(used: 4), card(used: 5, today: true), card(used: 5)] {
+            document.check(screens.accounts(status, mode: .switching, typed: [:], errors: [:], message: nil))
+        }
+    }
+
+    /// 3 records today: what the card declares, and the way back to the start; whatever the screen was.
+    func testStepFourOnADayWithThreeRecords() {
+        for mode in [Screens.AccountsMode.open, .switching] {
+            let screen = screens.accounts(card(days: 0, dailyLimit: true), mode: mode, typed: [:], errors: [:], message: nil)
+            XCTAssertEqual(screen.texts, [
+                "你的 Threads 帳號",
+                "這張卡片目前宣告：",
+                "@alice",
+                "上次過卡是今天",
+                "這張卡片今天已經過卡 3 次，明天才能再過卡。",
+                "回到開頭",
+            ])
+            XCTAssertNil(screen.cancel)
+            document.check(screen)
+        }
+    }
+
+    /// The card keeps an account on a platform the app does not know: the
+    /// screens speak of more than one platform, and the list is changed row by row.
+    func testStepFourWithAPlatformTheAppDoesNotKnow() {
+        let rows = [
+            Flow.StatusRow(platform: "test-example", known: false, current: "alice-b", lastDeclared: "alice-b", switchCount: 0, switchesLeft: 5, correctionToday: false),
+            Flow.StatusRow(platform: "threads", known: true, current: "alice", lastDeclared: "alice", switchCount: 1, switchesLeft: 4, correctionToday: false),
+        ]
+        let status = Flow.CardStatus(shortID: "7K2Q9FM4XD", lastCardProof: "2026-11-04", daysSince: 12, dailyLimit: false, knownPlatforms: ["threads"], rows: rows)
+        let declared = screens.accounts(status, typed: [:], errors: [:], message: nil)
+        XCTAssertEqual(declared.texts, [
+            "你的帳號",
+            "這張卡片目前宣告：",
+            "test-example", "alice-b", "這一頁還不認得這個平台。這個帳號會原樣保留，在這裡不能修改。",
+            "Threads", "@alice",
+            "上次過卡是 12 天前",
+            "更新島民證明",
+            "宣告帳號不變，把島民證明上的日期更新成今天。",
+            "修改帳號清單",
+            "取消",
+        ])
+        let editing = screens.accounts(status, mode: .editing, typed: ["threads": "alice"], errors: [:], message: nil)
+        XCTAssertEqual(editing.texts, [
+            "你的帳號",
+            "這是這張卡片目前宣告的帳號。",
+            "test-example", "alice-b", "這一頁還不認得這個平台。這個帳號會原樣保留，在這裡不能修改。",
+            "Threads", "預覽", "更換過 1 次，還可以更換 4 次。",
+            "填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。",
+            "預覽會在 Threads 或瀏覽器打開個人檔案，讓你確認沒有打錯。",
+            "下一步",
+            "不改了",
+            "取消",
+        ])
+        document.check(declared)
+        document.check(editing)
+    }
+
+    // Step 5 ---------------------------------------------------------------------
+
+    func testStepFiveOfACardProofAgain() {
+        let screen = screens.confirm(card(), consequence("refresh", "alice"))
+        XCTAssertEqual(screen.texts, [
+            "確認",
+            "按下後，證明紀錄會記下新的證明並公開給所有人：",
+            "Threads", "@alice", "不變",
+            "日期", "2026-11-16",
+            "島民編號", "7K2Q9FM4XD 開頭",
+            "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+            "之後拿著這張卡片和 PIN 的人，都能查詢、更新、收回或更換這張證明宣告的 Threads 帳號。所有紀錄公開後無法刪除，這樣任何人才能驗證。",
+            "上一步", "更新島民證明",
+            "取消",
+        ])
+        // "所有紀錄公開後無法刪除" is the part in bold.
+        guard case .points(_, let bold)? = screen.blocks.last else { return XCTFail("no points at the end: \(screen.blocks)") }
+        XCTAssertEqual(bold, "所有紀錄公開後無法刪除")
+    }
+
+    func testStepFiveByWhatTheListDoes() {
+        XCTAssertEqual(screens.confirm(newCard, declaration().0).buttons.last?.label, "宣告這個帳號")
+        let switching = screens.confirm(card(), consequence("switch", "carol.tw", switchesLeft: 3))
+        XCTAssertEqual(switching.buttons.last?.label, "宣告這個帳號")
+        XCTAssertTrue(switching.texts.contains("用掉一次更換，不會恢復。之後還可以更換 3 次。"))
+        XCTAssertTrue(switching.texts.contains("按下後，證明紀錄會記下新的證明並公開給所有人："))
+        let withdrawing = screens.confirm(card(), consequence("withdraw", "alice"))
+        XCTAssertEqual(withdrawing.texts, [
+            "確認",
+            "按下後，證明紀錄會公開記下這張卡片不再宣告任何帳號：",
+            "Threads", "@alice", "收回",
+            "日期", "2026-11-16",
+            "島民編號", "7K2Q9FM4XD 開頭",
+            "歷史證明紀錄無法刪除，依然看得出這張卡片過去曾宣告過的帳號。",
+            "證明紀錄不包含姓名、生日、身分證字號和卡號。Threads、政府、我們都查不出這是誰的卡片。",
+            "之後拿著這張卡片和 PIN 的人，都能查詢或再宣告。",
+            "上一步", "收回對 @alice 的宣告",
+            "取消",
+        ])
     }
 
     /// The splash screen's words are design/copy/app.md's: the lines of the
@@ -216,17 +461,18 @@ final class ScreensTests: XCTestCase {
         document.check(screens.read(reached: 1, running: false, stop: .card(.firstGeneration)))
     }
 
-    /// No screen links out (docs/design/principles.md, principle 1): what a
-    /// button opens is the card's page, the account's, the share sheet.
+    /// No screen links out (docs/design/principles.md, principle 1), but
+    /// for step 1's two ways to a card: what a button opens is the card's
+    /// page, the account's, the share sheet.
     func testNoScreenOpensAHelpPage() {
-        for (name, screen) in firstDeclaration() {
+        for (name, screen) in firstDeclaration() + laterCardProofs() {
             XCTAssertFalse(screen.texts.contains("了解更多"), name)
         }
     }
 
     func testTheScreensAsTheAppDrawsThem() async throws {
         guard #available(iOS 16.4, *) else { throw XCTSkip("pictures are drawn on iOS 16.4 or later") }
-        for (name, screen) in firstDeclaration() {
+        for (name, screen) in firstDeclaration() + laterCardProofs() {
             let view = ScreenView(screen: screen, copy: copy, pinText: .constant(name.contains("-3-") ? "123456" : ""), perform: { _ in }, type: { _, _ in }, unscrolled: true)
             let drawn = await Self.draw(view, height: nil)
             let image = try XCTUnwrap(drawn)

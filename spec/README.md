@@ -44,6 +44,12 @@ tests. Of `record-rules.json`, Rust reads every case's `state` and not its
 `ordinals`: the device does not compute the ordinal (`record-rules.md`, "The
 ordinal"). `card-channel.json` is read by the tests of `android/` and `ios/`.
 
+`teaching-animation.json` belongs to no document here: it holds the two
+teaching animations of the card proof at given moments, and what it means is
+in [`design/motion/README.md`](../design/motion/README.md). It is here
+because the web page, the Android app and the iOS app each compute those
+states and are tested against the same answers.
+
 ## Shared conventions
 
 - **Base32 alphabet**: Crockford, `0123456789ABCDEFGHJKMNPQRSTVWXYZ`.

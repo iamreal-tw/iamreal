@@ -1,0 +1,1070 @@
+{
+ "description": "The teaching animations at given moments (design/motion/README.md). Each case: with the timeline of `timelines` and the platform `variant`, the state `seconds` after the start. A number of an implementation's state is right when it is within `tolerance` of the number here; everything else is the same or it is wrong.",
+ "timelines": {
+  "hang": "design/motion/hang.json",
+  "sense": "design/motion/sense.json"
+ },
+ "tolerance": 0.000001,
+ "hang": [
+  {
+   "name": "before the start is the start",
+   "variant": "ios",
+   "seconds": -1,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "s0",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 0,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "the start: the first screen whole, nothing marked, no step past the buttons",
+   "variant": "ios",
+   "seconds": 0,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "s0",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 0,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a camera move, halfway",
+   "variant": "ios",
+   "seconds": 0.825,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "copy",
+     "progress": 0.5
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 0,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a mark, halfway in; the camera has arrived",
+   "variant": "ios",
+   "seconds": 1.275,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "copy",
+     "progress": 1
+    },
+    "marks": {
+     "copy": 0.5
+    },
+    "tap": null,
+    "states": {
+     "copied": 0,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a tap, as it starts: nothing pressed yet, the ring out",
+   "variant": "ios",
+   "seconds": 1.4,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "copy",
+     "progress": 1
+    },
+    "marks": {
+     "copy": 1
+    },
+    "tap": {
+     "target": "copy",
+     "pressed": 0,
+     "ring": {
+      "scale": 0.35,
+      "opacity": 1
+     }
+    },
+    "states": {
+     "copied": 0,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a tap, halfway through its ring: the press coming up, the mark going, the button's text changing",
+   "variant": "ios",
+   "seconds": 1.7,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "copy",
+     "progress": 1
+    },
+    "marks": {
+     "copy": 0.4
+    },
+    "tap": {
+     "target": "copy",
+     "pressed": 0.4,
+     "ring": {
+      "scale": 1.8515625,
+      "opacity": 0.03125
+     }
+    },
+    "states": {
+     "copied": 0.99419,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a tap, a mark and a change, all over",
+   "variant": "ios",
+   "seconds": 2.05,
+   "state": {
+    "camera": {
+     "from": "s0",
+     "to": "copy",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 0
+   }
+  },
+  {
+   "name": "a step changes as the camera leaves for the next screen",
+   "variant": "ios",
+   "seconds": 3.1,
+   "state": {
+    "camera": {
+     "from": "open",
+     "to": "s1",
+     "progress": 0
+    },
+    "marks": {
+     "open": 0.4
+    },
+    "tap": {
+     "target": "open",
+     "pressed": 0.4,
+     "ring": {
+      "scale": 1.8515625,
+      "opacity": 0.03125
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 1
+   }
+  },
+  {
+   "name": "the second step: the screen of editing the profile, whole",
+   "variant": "ios",
+   "seconds": 6.2,
+   "state": {
+    "camera": {
+     "from": "edit",
+     "to": "s2",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 2
+   }
+  },
+  {
+   "name": "the third step: the screen of the links, whole",
+   "variant": "ios",
+   "seconds": 8.4,
+   "state": {
+    "camera": {
+     "from": "links",
+     "to": "s3",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 3
+   }
+  },
+  {
+   "name": "a long press, its ring growing",
+   "variant": "ios",
+   "seconds": 11.775,
+   "state": {
+    "camera": {
+     "from": "s4",
+     "to": "urlfield",
+     "progress": 1
+    },
+    "marks": {
+     "urlfield": 1
+    },
+    "tap": {
+     "target": "urlfield",
+     "pressed": 1,
+     "ring": {
+      "scale": 0.8828125,
+      "opacity": 0.96875
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "a long press, halfway: held down, the ring waiting",
+   "variant": "ios",
+   "seconds": 11.9,
+   "state": {
+    "camera": {
+     "from": "s4",
+     "to": "urlfield",
+     "progress": 1
+    },
+    "marks": {
+     "urlfield": 1
+    },
+    "tap": {
+     "target": "urlfield",
+     "pressed": 1,
+     "ring": {
+      "scale": 0.9,
+      "opacity": 1
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "a long press, let go: the ring going out, the paste bubble halfway in",
+   "variant": "ios",
+   "seconds": 12.3,
+   "state": {
+    "camera": {
+     "from": "s4",
+     "to": "urlfield",
+     "progress": 1
+    },
+    "marks": {
+     "urlfield": 1
+    },
+    "tap": {
+     "target": "urlfield",
+     "pressed": 0.9,
+     "ring": {
+      "scale": 1.73193,
+      "opacity": 0.16807
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 0.96875,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the tap on the paste bubble",
+   "variant": "ios",
+   "seconds": 12.75,
+   "state": {
+    "camera": {
+     "from": "s4",
+     "to": "urlfield",
+     "progress": 1
+    },
+    "marks": {
+     "urlfield": 1
+    },
+    "tap": {
+     "target": "paste",
+     "pressed": 1,
+     "ring": {
+      "scale": 1.27709,
+      "opacity": 0.401878
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 0,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the address is in the field",
+   "variant": "ios",
+   "seconds": 13.3,
+   "state": {
+    "camera": {
+     "from": "s4",
+     "to": "urlfield",
+     "progress": 1
+    },
+    "marks": {
+     "urlfield": 1
+    },
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 0,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "a change that takes no time: the list has the link while the camera is still moving",
+   "variant": "ios",
+   "seconds": 15,
+   "state": {
+    "camera": {
+     "from": "done4",
+     "to": "s3",
+     "progress": 0.406519
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the camera halfway to what goes back, on iOS",
+   "variant": "ios",
+   "seconds": 16.075,
+   "state": {
+    "camera": {
+     "from": "s3",
+     "to": "done3",
+     "progress": 0.5
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the camera halfway to what goes back, on Android",
+   "variant": "android",
+   "seconds": 16.075,
+   "state": {
+    "camera": {
+     "from": "s3",
+     "to": "x3",
+     "progress": 0.5
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the tap that goes back, as it starts, on iOS",
+   "variant": "ios",
+   "seconds": 16.65,
+   "state": {
+    "camera": {
+     "from": "s3",
+     "to": "done3",
+     "progress": 1
+    },
+    "marks": {
+     "done3": 1
+    },
+    "tap": {
+     "target": "done3",
+     "pressed": 0,
+     "ring": {
+      "scale": 0.35,
+      "opacity": 1
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the tap that goes back, as it starts, on Android",
+   "variant": "android",
+   "seconds": 16.65,
+   "state": {
+    "camera": {
+     "from": "s3",
+     "to": "x3",
+     "progress": 1
+    },
+    "marks": {
+     "x3": 1
+    },
+    "tap": {
+     "target": "x3",
+     "pressed": 0,
+     "ring": {
+      "scale": 0.35,
+      "opacity": 1
+     }
+    },
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 0,
+     "resultLabel": 0
+    },
+    "step": 4
+   }
+  },
+  {
+   "name": "the camera halfway back to the profile, the link already on it, on iOS",
+   "variant": "ios",
+   "seconds": 17.45,
+   "state": {
+    "camera": {
+     "from": "done3",
+     "to": "s1",
+     "progress": 0.5
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 0
+    },
+    "step": 5
+   }
+  },
+  {
+   "name": "the camera halfway back to the profile, the link already on it, on Android",
+   "variant": "android",
+   "seconds": 17.45,
+   "state": {
+    "camera": {
+     "from": "x3",
+     "to": "s1",
+     "progress": 0.5
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 0
+    },
+    "step": 5
+   }
+  },
+  {
+   "name": "the label of the result, halfway in",
+   "variant": "ios",
+   "seconds": 19.375,
+   "state": {
+    "camera": {
+     "from": "s1",
+     "to": "linkrow",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 0.96875
+    },
+    "step": 5
+   }
+  },
+  {
+   "name": "the last frame, on iOS",
+   "variant": "ios",
+   "seconds": 20.7,
+   "state": {
+    "camera": {
+     "from": "s1",
+     "to": "linkrow",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 1
+    },
+    "step": 5
+   }
+  },
+  {
+   "name": "the last frame, on Android",
+   "variant": "android",
+   "seconds": 20.7,
+   "state": {
+    "camera": {
+     "from": "s1",
+     "to": "linkrow",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 1
+    },
+    "step": 5
+   }
+  },
+  {
+   "name": "past the end is the last frame",
+   "variant": "ios",
+   "seconds": 25,
+   "state": {
+    "camera": {
+     "from": "s1",
+     "to": "linkrow",
+     "progress": 1
+    },
+    "marks": {},
+    "tap": null,
+    "states": {
+     "copied": 1,
+     "pasteMenu": 1,
+     "pasted": 1,
+     "linkListed": 1,
+     "linkOnProfile": 1,
+     "resultLabel": 1
+    },
+    "step": 5
+   }
+  }
+ ],
+ "sense": [
+  {
+   "name": "Android, before the start is the start",
+   "variant": "android",
+   "seconds": -1,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.735,
+     "x": 1.39,
+     "opacity": 0
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the start: the card waits unseen, to the right of where it comes in",
+   "variant": "android",
+   "seconds": 0,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.735,
+     "x": 1.39,
+     "opacity": 0
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the card halfway in",
+   "variant": "android",
+   "seconds": 1,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.735,
+     "x": 0.043438,
+     "opacity": 0.96875
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the first move up, halfway",
+   "variant": "android",
+   "seconds": 2.35,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.4625,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, where the phone reads it, before the ring",
+   "variant": "android",
+   "seconds": 6.75,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the ring as it starts",
+   "variant": "android",
+   "seconds": 6.85,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": {
+     "scale": 0.3,
+     "opacity": 1
+    }
+   }
+  },
+  {
+   "name": "Android, the ring halfway",
+   "variant": "android",
+   "seconds": 7.25,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": {
+     "scale": 1.65625,
+     "opacity": 0.03125
+    }
+   }
+  },
+  {
+   "name": "Android, the first round leaving, halfway",
+   "variant": "android",
+   "seconds": 8.25,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 0.5
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the first round gone",
+   "variant": "android",
+   "seconds": 8.6,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 0
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the second round starts as the first did",
+   "variant": "android",
+   "seconds": 8.75,
+   "state": {
+    "round": 2,
+    "stopped": false,
+    "card": {
+     "y": 0.735,
+     "x": 1.39,
+     "opacity": 0
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the second round, the card halfway in",
+   "variant": "android",
+   "seconds": 9.75,
+   "state": {
+    "round": 2,
+    "stopped": false,
+    "card": {
+     "y": 0.735,
+     "x": 0.043438,
+     "opacity": 0.96875
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the second round, the first move up, halfway",
+   "variant": "android",
+   "seconds": 11.1,
+   "state": {
+    "round": 2,
+    "stopped": false,
+    "card": {
+     "y": 0.4625,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, the third round, the ring halfway",
+   "variant": "android",
+   "seconds": 24.75,
+   "state": {
+    "round": 3,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": {
+     "scale": 1.65625,
+     "opacity": 0.03125
+    }
+   }
+  },
+  {
+   "name": "Android, the third round, the ring gone, not yet at rest",
+   "variant": "android",
+   "seconds": 25.5,
+   "state": {
+    "round": 3,
+    "stopped": false,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, at rest: the third round does not leave",
+   "variant": "android",
+   "seconds": 25.6,
+   "state": {
+    "round": 3,
+    "stopped": true,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "Android, long after: still at rest",
+   "variant": "android",
+   "seconds": 60,
+   "state": {
+    "round": 3,
+    "stopped": true,
+    "card": {
+     "y": 0.375,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, the start",
+   "variant": "ios",
+   "seconds": 0,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 1.39,
+     "opacity": 0
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, the card halfway in",
+   "variant": "ios",
+   "seconds": 1,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 0.043438,
+     "opacity": 0.96875
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, the ring halfway",
+   "variant": "ios",
+   "seconds": 2.25,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": {
+     "scale": 1.65625,
+     "opacity": 0.03125
+    }
+   }
+  },
+  {
+   "name": "iPhone, the first round leaving, halfway",
+   "variant": "ios",
+   "seconds": 3.25,
+   "state": {
+    "round": 1,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 0,
+     "opacity": 0.5
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, the second round, the card halfway in",
+   "variant": "ios",
+   "seconds": 4.75,
+   "state": {
+    "round": 2,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 0.043438,
+     "opacity": 0.96875
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, the third round, the ring halfway",
+   "variant": "ios",
+   "seconds": 9.75,
+   "state": {
+    "round": 3,
+    "stopped": false,
+    "card": {
+     "y": 0.213,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": {
+     "scale": 1.65625,
+     "opacity": 0.03125
+    }
+   }
+  },
+  {
+   "name": "iPhone, at rest",
+   "variant": "ios",
+   "seconds": 10.6,
+   "state": {
+    "round": 3,
+    "stopped": true,
+    "card": {
+     "y": 0.213,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  },
+  {
+   "name": "iPhone, long after: still at rest",
+   "variant": "ios",
+   "seconds": 60,
+   "state": {
+    "round": 3,
+    "stopped": true,
+    "card": {
+     "y": 0.213,
+     "x": 0,
+     "opacity": 1
+    },
+    "ring": null
+   }
+  }
+ ]
+}
