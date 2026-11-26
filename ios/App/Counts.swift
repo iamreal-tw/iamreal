@@ -1,4 +1,6 @@
 import Foundation
+import Security
+import UIKit
 
 /// The counts of the app's card proofs (spec/counts.md; ADR-0032,
 /// ADR-0039): which step a card proof reached, why it stopped or must be
@@ -101,9 +103,9 @@ final class Counts {
             self.id = id
         }
 
-        /// A card was asked to be read for this card proof, or it stopped:
-        /// a card proof after it is another one.
-        var begun: Bool { stopped || reached.contains("read") }
+        /// A card was read for this card proof, or it stopped: a card proof
+        /// after it is another one. Taps that read no card are the same one's.
+        var begun: Bool { stopped || reached.contains("certificates") }
 
         /// The card proof reached `step`.
         func step(_ step: String) {
@@ -192,6 +194,45 @@ final class Counts {
         case .challengeNotToday: return "challenge_not_today"
         case .dateChanged: return "date_changed"
         case .state: return "state"
+        }
+    }
+}
+
+extension Counts {
+    /// The counts of this phone: sent to `backend`, the card proof device
+    /// ID in the app's own user defaults, the system's version, the app's,
+    /// the phone's model.
+    static func ofThisDevice(backend: Backend) -> Counts {
+        Counts(Dependencies(
+            // Not waited for, in no order the server needs.
+            send: { body in Task.detached { await backend.count(body) } },
+            clock: Date.init,
+            random: { count in
+                var bytes = Data(count: count)
+                let status = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, count, $0.baseAddress!) }
+                // Without the random source, no ID: the core refuses what is not 16 bytes, and no count is sent.
+                return status == errSecSuccess ? bytes : Data()
+            },
+            stored: { UserDefaults.standard.string(forKey: deviceIDKey) },
+            // In place of the old one: the old one is kept nowhere.
+            store: { UserDefaults.standard.set($0, forKey: deviceIDKey) },
+            osVersion: UIDevice.current.systemVersion,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            model: machine()))
+    }
+
+    /// Where the card proof device ID is kept in the app's user defaults.
+    nonisolated static let deviceIDKey = "card-proof-device-id"
+
+    /// The phone's model as the system names it (`iPhone15,2`): `utsname`'s
+    /// machine, which on the simulator is the Mac's, so there the model it
+    /// simulates. Never the name the phone's owner gave it (`UIDevice.name`).
+    nonisolated static func machine() -> String {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return simulated }
+        var system = utsname()
+        uname(&system)
+        return withUnsafeBytes(of: &system.machine) { bytes in
+            String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
         }
     }
 }

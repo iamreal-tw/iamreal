@@ -96,6 +96,8 @@ final class CountingBackend: Backend {
     var beforeSubmit: (() async throws -> Void)?
     /// The record does not reach the server: as a phone that lost the network.
     var submitFails = false
+    /// The body of every record sent, as it went: for the card proof device ID it carries.
+    private(set) var submitted: [Data] = []
     /// The server does not answer when asked for its config.
     var configFails = false
     /// The next requests to a path (`config?start`, `config`, `card-state`,
@@ -140,8 +142,10 @@ final class CountingBackend: Backend {
         try request("challenges")
         return try await backend.challenge()
     }
+    func count(_ body: Data) async { await backend.count(body) }
     func submit(_ body: Data) async throws -> Data {
         try await beforeSubmit?()
+        submitted.append(body)
         try request("records")
         if submitFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.submit(body)

@@ -82,14 +82,16 @@ extension CardProofModel {
     /// AppEnvironment, the core's own session (MOICA's keys), the files
     /// the app carries.
     static func ofThisBuild(copy: Copy, appCopy: Copy, reminders: Reminders, pages: ReminderPages) -> CardProofModel {
+        let backend = HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles)
         let flow = CardProofFlow.Dependencies(
             proofLog: AppEnvironment.proofLog,
-            backend: HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles),
+            backend: backend,
             card: NFCCard(copy: copy),
             clock: Date.init,
             crlNumbers: StoredCRLNumbers(),
             openSession: { try DeviceCore.Session(AppEnvironment.proofLog) },
-            proofFiles: BundledFile.proofFiles(for:))
+            proofFiles: BundledFile.proofFiles(for:),
+            counts: Counts.ofThisDevice(backend: backend))
         return CardProofModel(CardProofModel.Dependencies(
             flow: flow,
             copy: copy,

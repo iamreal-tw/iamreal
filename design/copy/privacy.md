@@ -57,7 +57,7 @@
 用 app 過卡時，app 在手機上存三樣東西：它用過的廢止清冊的版本號，和網頁一樣；開著過卡提醒時，提醒的間隔、時刻和下次提醒的日子，關掉提醒，這些設定就刪掉；還有過卡裝置編號，31 天換一個。前兩樣不會送出；過卡裝置編號在計數和送出時都會帶著（見下面「Cookie 和計數」）。
 ```
 
-瀏覽器裡存的東西見 `web/src/storage.ts`（廢止清冊的版本號）、`web/src/counts.ts`（過卡裝置編號）和 ADR-0015。app 存的見 Android 的 `MainActivity.kt`（廢止清冊的版本號）、`reminder/Phone.kt`（提醒），過卡裝置編號存在 `MainActivity.kt`、31 天換新的在 `flow/Counts.kt`，iOS 的 `CRLNumbers.swift`、`Reminder.swift`；提醒是手機自己排的通知，不經過營運者（#297）。iOS 的過卡裝置編號在 #434 加。
+瀏覽器裡存的東西見 `web/src/storage.ts`（廢止清冊的版本號）、`web/src/counts.ts`（過卡裝置編號）和 ADR-0015。app 存的見 Android 的 `MainActivity.kt`（廢止清冊的版本號）、`reminder/Phone.kt`（提醒），過卡裝置編號存在 `MainActivity.kt`、31 天換新的在 `flow/Counts.kt`，iOS 的 `CRLNumbers.swift`、`Reminder.swift`、`Counts.swift`（過卡裝置編號）；提醒是手機自己排的通知，不經過營運者（#297）。
 
 ## 4. 持卡人：送出、而且公開的
 

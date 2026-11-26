@@ -34,6 +34,11 @@ extension Backend {
     }
 }
 
+extension Backend {
+    /// A back end that takes no counts: a test's that does not look at them.
+    func count(_ body: Data) async {}
+}
+
 /// The back end did not give what was asked for.
 struct BackendFailure: Error, Equatable {
     /// The server's error code, `http_<status>` when it gave none,

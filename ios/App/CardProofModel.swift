@@ -77,6 +77,8 @@ final class CardProofModel: ObservableObject {
     /// its 下一步, which stays, to be pressed again (card-proof.md, step 1,
     /// 人太多的時候).
     private var startTurnedAway = false
+    /// The counts of the card proof to come or under way (Counts); its first count is `open`, as step 1 shows.
+    private var attempt: Counts.Attempt?
     /// What the server's lowest version says of this build, as the config
     /// last said. Until the config answers: as if it were not too old.
     private var version = MinApp.ok
@@ -290,6 +292,7 @@ final class CardProofModel: ObservableObject {
     }
 
     private func before() -> Screen {
+        opened()
         // A phone that cannot read a card, a version that can no longer do a card proof: in the place of step 1.
         guard deps.canReadCards() else { return screens.noNFC() }
         if case .stop(let from) = version { return screens.tooOld(from: from) }
@@ -303,6 +306,29 @@ final class CardProofModel: ObservableObject {
         case .snoozed(let settings): notice = reminderScreens.fromNotification(snoozed: settings)
         }
         return screens.before(notice: notice, paused: paused, updateFrom: updateFrom, idle: idle, busy: startTurnedAway, starting: starting)
+    }
+
+    // The counts -------------------------------------------------------------------------
+
+    /// Step 1 shows: the first screen of a card proof (spec/counts.md,
+    /// `open`). A new attempt, unless the one there has not begun.
+    private func opened() {
+        guard let counts = deps.flow.counts, attempt?.begun ?? true else { return }
+        attempt = counts.attempt()
+        attempt?.step("open")
+    }
+
+    /// The attempt of the card proof going on: the one step 1 opened, or
+    /// a new one if it has begun (a card proof started again from step 2).
+    private func going() -> Counts.Attempt? {
+        if let attempt, !attempt.begun { return attempt }
+        attempt = deps.flow.counts?.attempt()
+        return attempt
+    }
+
+    /// The card proof stopped before a flow had it: `stop`'s reason.
+    private func stopped(_ stop: CardProofFlow.Stop) {
+        if let reason = Counts.reason(of: stop) { going()?.stop(reason) }
     }
 
     // Step 1's 下一步 ------------------------------------------------------------------
@@ -324,6 +350,7 @@ final class CardProofModel: ObservableObject {
         } catch let failure as BackendFailure where failure.tooMany {
             starting = false
             startTurnedAway = true
+            stopped(.server(failure))
             screen = before()
             return
         } catch {
@@ -333,6 +360,7 @@ final class CardProofModel: ObservableObject {
         if let answer {
             if CardProofFlow.paused(answer) == true {
                 paused = true
+                stopped(.server(BackendFailure(code: "paused", requestID: nil)))
                 screen = before()
                 return
             }
@@ -340,6 +368,7 @@ final class CardProofModel: ObservableObject {
             startConfig = (try? CardProofFlow(deps.flow, config: answer)) != nil ? answer : nil
             version = deps.minApp(answer, deps.flow.clock())
             if version.stops {
+                going()?.stop("app_too_old")
                 screen = before()
                 return
             }
@@ -418,6 +447,7 @@ final class CardProofModel: ObservableObject {
             stopPINClock()
             return false
         }
+        attempt?.stop("idle")
         reset()
         idle = true
         askConfigAgain()
@@ -606,6 +636,8 @@ final class CardProofModel: ObservableObject {
         sensePlayed = true
         reached = 0
         screen = read(reached: 0, running: true, stop: nil)
+        let attempt = going()
+        attempt?.step("read")
         // The server first: the lowest version that may do a card proof is its to say.
         var config: Data
         do {
@@ -625,33 +657,42 @@ final class CardProofModel: ObservableObject {
         } catch {
             configuring = nil
             let failure = error as? BackendFailure ?? BackendFailure(code: "network", requestID: nil)
+            stopped(.server(failure))
             screen = read(reached: 0, running: false, stop: .server(failure))
             return
         }
+        // The server answered its config.
+        if CardProofFlow.paused(config) == false { attempt?.step("config") }
         // The lowest version, from the config this card proof will use: before any card is read.
         version = deps.minApp(config, deps.flow.clock())
         switch version {
         case .stop:
+            attempt?.stop("app_too_old")
             // In the place of step 1 from now on.
             screen = before()
             return
         case .unreadable:
             // As a platform table that cannot be read: the card proof does not go on (ADR-0035).
-            screen = read(reached: 0, running: false, stop: .server(BackendFailure(code: "malformed_response", requestID: nil)))
+            let stop = CardProofFlow.Stop.server(BackendFailure(code: "malformed_response", requestID: nil))
+            stopped(stop)
+            screen = read(reached: 0, running: false, stop: stop)
             return
         case .ok, .okUntil:
             break
         }
         let flow: CardProofFlow
         do {
-            flow = try CardProofFlow(deps.flow, config: config)
+            flow = try CardProofFlow(deps.flow, config: config, attempt: attempt)
         } catch CardProofFlow.Stop.server(let failure) where failure.code == "paused" {
             // Step 1 says so from now on.
             paused = true
+            stopped(.server(failure))
             screen = read(reached: 0, running: false, stop: .server(failure))
             return
         } catch {
-            screen = read(reached: 0, running: false, stop: error as? CardProofFlow.Stop ?? .state)
+            let stop = error as? CardProofFlow.Stop ?? .state
+            stopped(stop)
+            screen = read(reached: 0, running: false, stop: stop)
             return
         }
         self.flow = flow

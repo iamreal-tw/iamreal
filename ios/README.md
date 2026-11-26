@@ -252,21 +252,25 @@ App Store 要 app 帶一份 privacy manifest，申報用到的 required reason A
 
 | 類別 | 理由代碼 | 用在哪裡 | 為什麼是這個代碼 |
 |---|---|---|---|
-| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | `App/CRLNumbers.swift`（每把發證金鑰用過的最高清冊編號）、`App/Reminder.swift`（提醒的四樣設定），都是 `UserDefaults.standard` | Apple：「Declare this reason to access user defaults to read and write information that is only accessible to the app itself.」app 沒有 App Group、沒有延伸功能，讀寫的只有自己的 |
+| `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | `App/CRLNumbers.swift`（每把發證金鑰用過的最高清冊編號）、`App/Reminder.swift`（提醒的四樣設定）、`App/Counts.swift`（過卡裝置編號和產生的日子），都是 `UserDefaults.standard` | Apple：「Declare this reason to access user defaults to read and write information that is only accessible to the app itself.」app 沒有 App Group、沒有延伸功能，讀寫的只有自己的 |
 | `NSPrivacyAccessedAPICategoryFileTimestamp` | `C617.1` | `App/` 的程式沒有用。連結進來的 `device-core/` 讓執行檔引用了這一類的函式：商店的 build 是 `fstat`、`lstat`（Barretenberg 的 `bbapi`），模擬器上的 Debug build 另外有 `stat`、`fstatat`（2026-11-26 用 `nm -u` 看的） | Apple：「Declare this reason to access the timestamps, size, or other metadata of files inside the app container, app group container, or the app's CloudKit container.」核心不碰檔案（`device-core/README.md`），app 交給它的是位元組，不是路徑；這些函式如果被叫到，碰得到的只有 app 自己容器裡的檔 |
 
 - **另外三類沒有用到**：系統開機時間（`systemUptime`、`mach_absolute_time`）、磁碟空間、使用中的鍵盤。`check-app.sh` 看原始碼裡的名稱和執行檔引用的函式，哪一類用到了卻沒申報、或申報了卻沒用到，建置就失敗。
 - **檔案時間戳那一類是往多報的方向填的。** Apple 的文件說的是：執行檔用到 required reason API，包著它的 bundle 就要有 privacy manifest 申報（「For each executable or dynamic library in an app that uses a required reason API, the bundle that includes the executable or dynamic library needs to include a privacy manifest file that reports the API.」）。文件沒有講「連結進來、但 app 的流程不會叫到」的函式算不算用到，也沒有講 C、Rust 的程式；App Store Connect 上傳時實際怎麼判斷，這裡沒有查到。執行檔既然引用了，就照會被叫到來申報。
 - **追蹤**：`NSPrivacyTracking` 是 `false`，沒有追蹤的網域（`docs/store-privacy-labels.md`「兩家各自另外問的」）。
-- **收集的資料**（`NSPrivacyCollectedDataTypes`）照 [`docs/store-privacy-labels.md`](../docs/store-privacy-labels.md) 裡 app 現在實際送的那幾列，每一類都是連結、不追蹤、用途 App Functionality：
+- **收集的資料**（`NSPrivacyCollectedDataTypes`）照 [`docs/store-privacy-labels.md`](../docs/store-privacy-labels.md) 裡 app 現在實際送的那幾列，每一類都是連結、不追蹤，用途照那一份（App Functionality、Analytics）：
 
   | manifest 的值 | 那一份的第幾列 |
   |---|---|
   | `NSPrivacyCollectedDataTypeUserID` | 第 1 列：宣告的帳號和島民編號 |
   | `NSPrivacyCollectedDataTypeCoarseLocation`、`NSPrivacyCollectedDataTypeOtherDiagnosticData` | 第 3 列：IP 位址（Cloudflare 的那一份現在就有） |
   | `NSPrivacyCollectedDataTypeOtherDataTypes` | 第 10 列：紀錄的其他欄位 |
+  | `NSPrivacyCollectedDataTypeDeviceID`（App Functionality、Analytics） | 第 5 列：過卡裝置編號 |
+  | `NSPrivacyCollectedDataTypeProductInteraction`（Analytics） | 第 6 列：計數的步驟和動作 |
+  | `NSPrivacyCollectedDataTypeOtherDiagnosticData` 多一個 Analytics | 第 7、9 列：停下來的原因代碼；手機型號、系統版本、app 版本 |
+  | `NSPrivacyCollectedDataTypePerformanceData`（Analytics） | 第 8 列：花了多久的分級 |
 
-  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面，做完不用改這個檔。第 5 到 9 列（過卡裝置編號和計數，[#434](https://github.com/iamreal-tw/iamreal/issues/434)）做的時候要加：`NSPrivacyCollectedDataTypeDeviceID`、`…ProductInteraction`、`…PerformanceData`，用途多一個 Analytics。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
+  第 2、4 列（後台的連線紀錄，[#20](https://github.com/iamreal-tw/iamreal/issues/20)）用的類別已經在上面。Apple：Xcode 把 app 和各 SDK 的 manifest 彙整成一份 privacy report，在 App Store Connect 填隱私標示時參考它；標示本身還是要營運者在後台填（[#161](https://github.com/iamreal-tw/iamreal/issues/161)）。
 
 ## 建置時的檢查（`check-app.sh`）
 
