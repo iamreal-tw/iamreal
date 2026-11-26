@@ -345,7 +345,7 @@ describe("hanging a proof on a profile", () => {
   test("the page is the same for every device: it has both ways back from the links, for the player to choose in the browser; the Worker reads nothing of the device", async () => {
     await pagesWorld(worker, "2026-11-18", [r("2026-11-06", cardStarting(CARD_A), "threads:carol.tw")]);
     const section = copySection("hang.md", "示範");
-    assert.ok(section.includes("由播放程式在瀏覽器裡決定") && section.includes("裡有 `Android` 的是 Android 的版本"), "hang.md says the rule");
+    assert.ok(section.includes("由示範的那支程式在瀏覽器裡決定") && section.includes("裡有 `Android` 的是 Android 的版本"), "hang.md says the rule");
     const agents: (string | null)[] = [
       "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
