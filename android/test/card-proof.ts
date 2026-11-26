@@ -192,6 +192,9 @@ const waitingTaps: ServerResponse[] = [];
 let taps = 0;
 /** How many times a card was handed a PIN (src/fake/…/FakeCard.kt tells). */
 let pinsHanded = 0;
+/** The requests for a challenge that came (`POST /api/v1/challenges`), and whether the next one gets no answer: its connection is closed with the request read (issue #404). */
+let challengesAsked = 0;
+let dropNextChallenge = false;
 /** Whether the phone the app is on has NFC (src/fake/…/FakeCard.kt asks once, when the app opens). */
 let phoneHasNfc = true;
 /**
@@ -216,6 +219,15 @@ const front = createServer(async (req, res) => {
     if (path === "/__test/issuers") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(backend.issuers));
     if (path === "/__test/phone") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ nfc: phoneHasNfc }));
     if (path === "/api/v1/config" && minApp === "unanswered") return void req.socket.destroy();
+    if (path === "/api/v1/challenges" && req.method === "POST") {
+      challengesAsked++;
+      if (dropNextChallenge) {
+        // As a connection the phone kept and something on the way has closed: the request goes out, and not a byte comes back.
+        dropNextChallenge = false;
+        for await (const _ of req) void _;
+        return void req.socket.destroy();
+      }
+    }
     if (path === "/__test/pin") {
       pinsHanded++;
       return void res.writeHead(200).end();
@@ -1598,6 +1610,9 @@ try {
   await setClocks(new Date(`${tomorrow}T12:00:00+08:00`));
 
   // 改成別的帳號: @alice gives way to @bob.
+  // The first request for this card proof's challenge gets no answer: the app asks once more by itself, and the card proof goes on (#404).
+  const challengesBefore = challengesAsked;
+  dropNextChallenge = true;
   const switched = await cardProof({
     what: "the next day, 改成別的帳號: @bob in place of @alice",
     name: "switch",
@@ -1620,6 +1635,7 @@ try {
     after: 6,
     date: tomorrow,
   });
+  check(!dropNextChallenge && challengesAsked - challengesBefore === 2, `step 5: the challenge that got no answer was asked for once more, and the card proof went on (${challengesAsked - challengesBefore} requests)`);
   // Another account: the whole step 6 (not a new card), the reminder from the new day, and step 8 names the account.
   await hangStep({ name: "switch", shortId: switched, account: HANDLE.bob, date: tomorrow, short: false, newCard: false });
   press(say("common.next"));

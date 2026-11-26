@@ -13,6 +13,7 @@
 | [`workflows/upload-ios.yml`](workflows/upload-ios.yml) | 只能手動觸發（`workflow_dispatch`），在 `main` 上 | 建置 iPhone 的商店 build、檢查它，再簽章、上傳到 App Store Connect（TestFlight）：`build`、`upload` 兩個工作。`build` 沒有金鑰；`upload` 在 environment `app-test`，不取出程式庫、不跑程式庫的腳本，只有最後一步拿到 App Store Connect 的 API 金鑰（[`ios/README.md`「上傳到 TestFlight」](../ios/README.md#上傳到-testflight)）。碰不到快取（`cache-mode: none`） |
 | [`workflows/cache.yml`](workflows/cache.yml) | 推到 `main` | 編譯 `device-core/`、建置 `android/`，把 cargo 的 registry、`device-core/target/`、Gradle 的依賴和 wrapper 存成快取，給 `checks.yml` 的 `device-core`、`android` 還原：`cache-device-core`、`cache-android` 兩個工作。不引用任何 secret，`GITHUB_TOKEN` 只能讀（`contents: read`）；唯一能存快取的工作流程（`cache-mode: write`） |
 | [`workflows/reverify.yml`](workflows/reverify.yml) | 每天台灣時間 00:30（排程，`schedule`），和手動觸發（`workflow_dispatch`） | 營運者每天的重驗（ADR-0025）：用 Go 的 `iamreal-verify` 和原生的 `bb`，讀公開的網址，把測試的證明紀錄從第 1 筆整份重驗：`test` 一個工作；正式的那一份 `production` 寫好了、還不跑（下面「每天的重驗」）。不引用任何 secret，`GITHUB_TOKEN` 只能讀，碰不到快取（`cache-mode: none`） |
+| [`workflows/watch-test.yml`](workflows/watch-test.yml) | 每小時一次（`schedule`，每小時的第 17 分），和營運者手動觸發（`workflow_dispatch`） | 從 Cloudflare 以外檢查測試網站公開的結果，有一項不對工作就失敗，GitHub 寄通知信（[從外面定時檢查](#從外面定時檢查53)）。不引用任何 secret，權杖只能讀，碰不到快取（`cache-mode: none`） |
 
 **為什麼 `browser` 分開、只在有關的檔改了才跑**（#123）：這兩套測試在 GitHub 的 runner 上要約 16 分鐘（2026-11-20 在 #119 量的：`browser` 15 分 28 秒，`go` 1 分 56 秒，`typescript` 5 分 11 秒），是一次檢查的三分之二。只動文件、app 或 `server/` 的 PR 和它們無關，不必多等這 16 分鐘（那時這兩套測試配的是 Go 的舊後台，只動 `worker/` 的 PR 也不跑；#69 之後它們對 Worker 跑，`worker/` 有改就跑）。分開的時候程式庫還沒公開，Actions 的用量算在組織免費方案每月含的額度裡，用完就不能再跑；2026-11-21 公開之後，標準的 GitHub-hosted runner 在公開的程式庫不算用量（「The following usage remains free independently and does not reduce the included compute usage: Standard GitHub-hosted runners in public repositories」，[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)），所以現在分開是為了時間，不是額度。`checks.yml` 的四個必要檢查在 PR 階段也照路徑跳過（#206），但做法不同、在合併佇列裡四項全跑：見下面「必要檢查在 PR 階段照路徑跳過」。
 
@@ -290,13 +291,75 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 
 每一次都開一張公開的 issue：第幾筆、哪個代碼、原因、怎麼修的。**測試的證明紀錄沒通過時**只要營運者知道，不停收過卡、不開公開的 issue（ADR-0028）；現在跑的只有這一份。
 
-現在沒有東西通知營運者（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）：工作失敗時 GitHub 只照各人的通知設定寄信給排程的最後修改者，所以要自己看 Actions 的頁面。
+工作失敗時，營運者收到的是 GitHub 的通知信，和[從外面定時檢查](#從外面定時檢查53)走同一個管道（[#53](https://github.com/iamreal-tw/iamreal/issues/53)、#413「通知」）。信寄給誰、合併之後要把這個工作流程停用再啟用一次，見[通知信寄給誰](#通知信寄給誰)。
 
 **一次超過一小時，就開票做進度檔。** 最後一行印秒數，超過 3,600 秒時再多印一行提醒。
 
 **時間現在幾乎都花在清冊存檔，不在紀錄。** 2026-11-26 在一台 M1 Max 上照這個工作的做法對測試網站跑了一次：1 筆紀錄、58 份清冊（G2、G3 各 29 份），575 秒，其中驗那一筆證明不到一秒，其餘是下載每一份清冊、重新驗章、建樹（`cmd/iamreal-verify/README.md`：內政部大小的清冊一份 5 到 10 秒）。清冊存檔只會變多，測試網站 2026-11-19 部署到那一天是 58 份，一天約 8 份、一份約 10 秒；照這個速度估，約 360 份時一次就超過一小時，大約在 2027 年 1 月上旬，不必等紀錄變多。到那時候要做的進度檔，先記的是「驗過的清冊」那一項（ADR-0025 的進度檔本來就有它）。GitHub 的 runner 上要多久，看第一次手動觸發的執行紀錄。做進度檔時要一起解的：ADR-0025 寫進度檔放 GitHub Actions 的快取，ADR-0029 之後只有 `cache.yml` 能寫快取（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）。工作的上限是 6 小時，GitHub 給一個工作最長的時間。
 
 **正式的證明紀錄**：`production` 這個工作寫好了，讀 `https://data.iamreal.tw/`，但有一行 `if: false`，不跑。正式網站有了之後，刪掉 `reverify.yml` 裡 `production` 底下的 `if: false` 那一行，和 `worker/test/workflows.ts` 的 `REVERIFY_JOBS` 裡 `production` 的 `if: "false"`（兩邊要一致，測試會擋）。
+
+## 從外面定時檢查（#53）
+
+`watch-test.yml` 每小時跑一次 [`worker/test/outside-check.ts`](../worker/test/outside-check.ts)，只對 `test.iamreal.tw` 和 `test-data.iamreal.tw` 送 `GET`（#413「通知」）。任何一項不對，工作就失敗：
+
+| 檢查 | 不對的時候 |
+|---|---|
+| `GET /api/v1/config` 回 `200`，有平台表 | 後台沒有回應 |
+| 首頁 `GET /` 回 `200` | 頁面打不開 |
+| 資料網域的 `proof-log/fingerprints.jsonl` 最後一行的日期是今天（台灣） | 今天的證明紀錄沒有公布 |
+| 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
+| 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
+| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
+
+門檻和時間：
+
+- **每小時一次，第 17 分。** 不在整點，是因為 GitHub 寫了整點是高負載的時候，排程可能被延後，負載夠高時「some queued jobs may be dropped」（[Events that trigger workflows, `schedule`](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)，2026-11-26 讀）。
+- **公布有一小時的寬限。** 每天的公布在台灣時間午夜，第一個小時每分鐘重試（`worker/README.md`「每天公布」）。所以台灣時間 01:00 以前，昨天那一行、昨天的卡片狀態檔也算過。
+- **測試的證明紀錄剛清空時不算失敗。** 清空的那一天起兩天內，還沒有指紋檔和卡片狀態檔也算過，日期讀 `worker/wrangler.jsonc` 的 `TEST_PROOF_LOG_CLEARED_ON`，和 `worker/test/site-check.ts` 相同。
+- **清冊的門檻是一天。** 內政部大約每六小時發一份（2026-11-26 看測試網站的索引：每天 05、10、17、23 時左右各一份）。裝置在清冊超過 3 天時停下（`config` 的 `crl_max_age_days`），所以這一項比過卡停下早一天以上失敗。
+
+印出來的、通知裡的，只有每一項的名稱，不對的那一項加上狀態碼或日期。沒有連線紀錄的內容，也沒有 IP 位址。
+
+在本機對 `worker/test/` 的 Worker 跑，每一種狀況各自失敗，是 `worker/test/outside-check.test.ts`。對線上的測試網站手動跑：
+
+```sh
+cd worker
+node --experimental-strip-types test/outside-check.ts
+```
+
+**連線紀錄那一項（#20）還沒打開。**
+
+- 後台每小時看一次最舊的連線紀錄，把結果寫成資料網域上的 `connection-log/oldest.json`：`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一筆都沒有時 `oldest` 是 `null`。
+- 這個檢查只讀那一個公開的檔，不讀儲存桶，不握讀 R2 的權杖。
+- 33 天的來歷：31 天，加 R2 的生命週期規則最多晚一天刪，再留一天。
+- #20 合併、部署之前沒有這個檔，所以這一項由 `worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED` 關著，跑的時候印一行 `--  not checked yet`，不算過也不算不過。
+- 打開之後，檔不在就算失敗。#20 部署後過了一個整點、這個檔出現了，再開一個 PR 把它改成 `true`。
+
+還沒做的：正式網站。有了之後加上同樣的檢查。
+
+### 通知信寄給誰
+
+工作失敗時，GitHub 寄通知信。這是上線前唯一的通知管道：後台不握送通知的金鑰，不接其他服務（#413「通知」）。
+
+GitHub 的兩頁文件說法不同（2026-11-26 讀）：
+
+- [Events that trigger workflows](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)：「Notifications for scheduled workflows are sent to the user who last modified the cron syntax in the workflow file.」
+- [Notifications for workflow runs](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)：「Notifications for scheduled workflows are sent to the user who initially created the workflow. If a different user updates the cron syntax in the workflow file, subsequent notifications will be sent to that user instead.」同一頁還寫：「If a scheduled workflow is disabled and then re-enabled, notifications will be sent to the user who re-enabled the workflow rather than the user who last modified the cron syntax.」
+
+在這個程式庫，兩種說法都可能不是營運者。推到 `main` 的是合併佇列：2026-11-26 看 `cache.yml` 由推送觸發的 run，`actor` 和 `triggering_actor` 都是 `github-merge-queue[bot]`，合併提交的作者是營運者。文件沒有說「建立」「最後改 `cron` 的人」指推送的人還是提交的作者，所以信可能寄給這個 bot，也就是沒有人收。
+
+**所以合併之後，營運者要在 Actions 的頁面把 `watch-test` 和 `reverify` 各停用、再啟用一次。** 照上面第二頁的最後一句，之後的通知寄給重新啟用的人。之後有人改了 `cron` 那一行，或再停用、啟用過，收信的人可能又換掉，要再做一次。
+
+收不收得到信，看收信的人自己在 GitHub 的設定：Settings → Notifications → System → Actions，選 Email，並勾「Only notify for failed workflows」（[Configuring notifications for GitHub Actions](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications)）。手動觸發的工作，信寄給按下觸發的人。
+
+### 已知的缺口
+
+**排程自己沒有跑的時候，沒有人會發現。** 上線前不解（#413）：
+
+- 整點附近的排程可能被延後或丟掉（上面的出處）。
+- 公開的程式庫 60 天沒有活動，排程的工作流程會被自動停用：「In a public repository, scheduled workflows are automatically disabled when no repository activity has occurred in 60 days.」（同上）。文件沒有寫停用時會不會通知誰。
+- 之後要補時，加一個外部的監測，不用改上面的做法。
 
 ## 在本機檢查
 

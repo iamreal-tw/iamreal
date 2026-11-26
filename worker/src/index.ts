@@ -6,6 +6,7 @@ import { CRL_CATCH_UP_MS, CRL_SOURCES, CRL_TIMEOUT_MS, ISSUERS, now } from "#tar
 import { type ApiParts, api, isApiPath } from "./api.ts";
 import { poseidon2Hash, proofVerifier } from "./in-worker.ts";
 import { checkIssuerTable } from "./issuers.ts";
+import { OLDEST_KEY, isOverdue, oldestDay, oldestFile } from "./connection-log.ts";
 import { type CrlMirror, crlMirrorInWorker } from "./mirror.ts";
 import { pageDataOfProofLog } from "./page-data.ts";
 import { proofLogOf } from "./proof-log.ts";
@@ -21,15 +22,42 @@ checkIssuerTable(ISSUERS);
 const API_PARTS: ApiParts = { verifier: proofVerifier };
 
 export default {
-  async fetch(request, env, _ctx): Promise<Response> {
-    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS);
+  async fetch(request, env, ctx): Promise<Response> {
+    if (isApiPath(new URL(request.url).pathname)) return api(request, env, API_PARTS, (work) => ctx.waitUntil(work));
     // The only place that says where the pages read the proof log from (src/page-data.ts, `PageData`): its Durable Object.
     const parts: VisitorParts = { pageData: pageDataOfProofLog(env) };
     return visitor(request, env, parts);
   },
 
-  /** The hourly schedule (wrangler.jsonc, "triggers"): one round of the CRL mirror. */
+  /**
+   * The hourly schedule (wrangler.jsonc, "triggers"): the date of the
+   * connection log's oldest entry is published (connection-log.ts), then
+   * one round of the CRL mirror.
+   */
   async scheduled(_controller, env): Promise<void> {
+    // First, and by itself: the mirror's trouble is not this file's, nor the other way round. If the bucket
+    // cannot be listed or the file cannot be written, the file keeps its earlier time, which is what a check
+    // from outside sees; here it is one line in the live log.
+    try {
+      const time = now();
+      // A bucket that does not answer must not keep the mirror waiting: half a minute, then it is this hour's trouble.
+      const inTime = async <T>(work: Promise<T>): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([work, new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("no answer in 30 s")), 30_000)))]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      };
+      const oldest = await inTime(oldestDay(env.CONNECTION_LOG));
+      await inTime(env.DATA.put(OLDEST_KEY, oldestFile(time, oldest), { httpMetadata: { cacheControl: "public, max-age=60", contentType: "application/json" } }));
+      // An entry older than any should be: the bucket's lifecycle rule is not deleting. Said here too; whoever
+      // checks from outside reads the same from the file.
+      if (isOverdue(oldest, time)) console.error(JSON.stringify({ event: "connection_log_overdue", oldest }));
+    } catch (e) {
+      console.error(JSON.stringify({ event: "connection_log_oldest_not_published", error: e instanceof Error ? e.name : "unknown" }));
+    }
+
     // The only place that says which mirror it is (src/mirror.ts, `CrlMirror`).
     const mirror: CrlMirror = crlMirrorInWorker({
       sources: CRL_SOURCES,
