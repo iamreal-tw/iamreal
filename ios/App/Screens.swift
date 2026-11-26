@@ -453,8 +453,9 @@ struct Screens {
                 buttons: [Button(label: copy("app_read.tap_again"), action: .signAgain)],
                 cancel: cancel)
         }
-        // The PIN is gone, and the phone could not talk to the card: back to the start.
-        if stop == .dateChanged || stop == .card(.channel) {
+        // The PIN is gone, and the phone could not talk to the card: back to the start. So when the server takes no card
+        // proof for now (docs/api/card-proof.md, `paused`): the same record would be refused again.
+        if stop == .dateChanged || stop == .card(.channel) || Self.isPaused(stop) {
             return Screen(step: 5, blocks: blocks, buttons: [Button(label: copy("accounts.restart"), action: .restart)])
         }
         var buttons = [Button(label: copy("app_read.restart"), action: .readAgain)]
@@ -778,6 +779,11 @@ struct Screens {
             }
             return [sentence] + (failure.requestID.map { [copy("stops.request_id", ["request_id": $0])] } ?? [])
         }
+    }
+
+    private static func isPaused(_ stop: Flow.Stop) -> Bool {
+        if case .server(let failure) = stop { return failure.code == "paused" }
+        return false
     }
 
     /// A certificate's time, YYMMDDHHMMSS (UTC), as its date in Taiwan.

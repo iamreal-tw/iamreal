@@ -117,11 +117,11 @@ final class PausedTests: XCTestCase {
 
     func testChallengesOrRecordsAnsweredPausedOnlyANewCardProof() {
         let stop = Flow.Stop.server(BackendFailure(code: "paused", requestID: "0123456789abcdef"))
-        // challenges: step 5's first item; records: its last. Not progress.retry: it would be paused again.
+        // challenges: step 5's first item; records: its last. Only 回到開頭: not progress.retry, it would be paused again.
         for reached in [0, 3] {
             let screen = screens.progress(reached: reached, stop: stop, submitFailed: false)
             XCTAssertEqual(why(screen), [copy("stops.paused"), copy("stops.request_id", ["request_id": "0123456789abcdef"])], "\(reached)")
-            XCTAssertEqual(screen.buttons, [Button(label: copy("app_read.restart"), action: .readAgain)], "\(reached)")
+            XCTAssertEqual(screen.buttons, [Button(label: copy("accounts.restart"), action: .restart)], "\(reached)")
         }
     }
 
