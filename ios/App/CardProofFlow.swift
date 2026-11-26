@@ -432,12 +432,22 @@ final class CardProofFlow {
     /// card that may have counted it wrong, with a PIN typed again otherwise.
     /// `signed` is called when the card has signed and can be taken away.
     func confirmCard(pin: PIN, signed: () -> Void) async throws -> CardStatus {
-        try await checksDone()
-        guard let session else { throw fail(Stop.state) }
+        // Whatever stops it before the tap: the PIN is not kept.
+        do {
+            try await checksDone()
+        } catch {
+            pin.clear()
+            throw error
+        }
+        guard let session else {
+            pin.clear()
+            throw fail(Stop.state)
+        }
         let scope: Data
         do {
             scope = try DeviceCore.scopeString(deps.proofLog)
         } catch {
+            pin.clear()
             throw fail(error)
         }
         var signature: Data
@@ -453,10 +463,12 @@ final class CardProofFlow {
             // a computer instead.
             pin.clear()
             throw Stop.card(.channel)
-        } catch let failure as CardFailure where Self.tapCanBeMadeAgain(failure) {
-            // The PIN did not go to a card that may have counted it wrong:
-            // it is the caller's still, for the same tap again.
-            throw Stop.card(failure)
+        } catch let failure as CardFailure where Self.tapCanBeMadeAgain(failure) || (failure == .dropped(.sent) && pin.accepted) {
+            // The PIN did not go to a card that may have counted it wrong
+            // (it never went, or the card has accepted it): it is the
+            // caller's still, for the same tap again.
+            if failure == .dropped(.accepted) { pin.accepted = true }
+            throw Stop.card(failure == .dropped(.sent) ? .dropped(.accepted) : failure)
         } catch CardFailure.dropped(.sent) {
             // The card left while the PIN was going to it, and has never
             // accepted this PIN: whether it counted a try is not known.
@@ -477,6 +489,7 @@ final class CardProofFlow {
             } catch let failure as DeviceCore.Failure where failure.code == IDC_ERR_INPUT {
                 throw Stop.cardSignature
             }
+            pin.accepted = true
             self.pin = pin
             scopeSignature = Secret(signature)
             Self.wipe(&signature)

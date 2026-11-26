@@ -83,6 +83,10 @@ enum PINFate: Equatable {
 /// proof clears it when it is done, cancelled or stopped.
 final class PIN {
     private var bytes: [UInt8]
+    /// The card has accepted this PIN once: it is the card's. From then on
+    /// a tap that loses the card while the PIN goes to it is made again
+    /// with it (issue #133).
+    var accepted = false
 
     init(_ text: String) {
         bytes = Array(text.utf8)

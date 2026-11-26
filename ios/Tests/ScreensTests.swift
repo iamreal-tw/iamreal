@@ -597,10 +597,11 @@ final class ScreensTests: XCTestCase {
         // screen, the settings with the reminder on. Step 7 is among the steps above.
         let reminderScreens: [(String, Screen)] = [
             ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
-            // The lowest version and a phone without NFC, as a build that has its page in the store shows them.
-            ("app-update-soon-phone", inStore.before(updateFrom: "2027-03-01")),
-            ("app-update-required-phone", inStore.tooOld(from: "2027-03-01")),
-            ("app-no-nfc-phone", inStore.noNFC()),
+            // The lowest version and a phone without NFC, as this build shows them: it has no page in the store
+            // yet (AppEnvironment.storePage), so the sentences stand without the button.
+            ("app-update-soon-phone", screens.before(updateFrom: "2027-03-01")),
+            ("app-update-required-phone", screens.tooOld(from: "2027-03-01")),
+            ("app-no-nfc-phone", screens.noNFC()),
         ]
         for (name, screen) in reminderScreens {
             let drawn = await Self.draw(ScreenView(screen: screen, copy: copy, pinText: .constant(""), perform: { _ in }, type: { _, _ in }, unscrolled: true), height: nil)

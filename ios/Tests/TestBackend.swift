@@ -80,6 +80,8 @@ final class CountingBackend: Backend {
     private(set) var configRequests = 0
     /// The record does not reach the server: as a phone that lost the network.
     var submitFails = false
+    /// The server does not answer when asked for its config.
+    var configFails = false
 
     init(_ backend: Backend) {
         self.backend = backend
@@ -87,6 +89,7 @@ final class CountingBackend: Backend {
 
     func config() async throws -> Data {
         configRequests += 1
+        if configFails { throw BackendFailure(code: "network", requestID: nil) }
         return try await backend.config()
     }
 

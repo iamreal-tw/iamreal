@@ -47,7 +47,10 @@ final class CardProofModel: ObservableObject {
 
     @Published private(set) var screen: Screen
     /// What the PIN field holds. Emptied as soon as the PIN is handed on.
-    @Published var pinText = ""
+    @Published var pinText = "" {
+        // A PIN is in memory from its first character: its five minutes start then.
+        didSet { if oldValue.isEmpty, !pinText.isEmpty, pinDeadline == nil { startPINClock() } }
+    }
 
     /// The sentences, for what every screen has above its blocks.
     var copy: Copy { deps.copy }
@@ -66,8 +69,9 @@ final class CardProofModel: ObservableObject {
     /// What the server's lowest version says of this build, as the config
     /// last said. Until the config answers: as if it were not too old.
     private var version = MinApp.ok
-    /// When the PIN in memory is dropped whatever the card proof is at.
+    /// When the PIN in memory is dropped whatever the card proof is at, and when its five minutes started.
     private var pinDeadline: Date?
+    private var pinSince: Date?
     private var pinTimer: Task<Void, Never>?
     /// The card proof came back to step 1 after five minutes: step 1 says so until it starts again.
     private var idle = false
@@ -295,33 +299,65 @@ final class CardProofModel: ObservableObject {
 
     // The PIN's five minutes ---------------------------------------------------------
 
-    /// The PIN was taken from the field: from now it has five minutes.
+    /// A PIN came into memory, in the field: from now it has five minutes.
     private func startPINClock() {
-        let deadline = deps.flow.clock().addingTimeInterval(Self.pinLifetime)
-        pinDeadline = deadline
+        let now = deps.flow.clock()
+        pinSince = now
+        pinDeadline = now.addingTimeInterval(Self.pinLifetime)
         pinTimer?.cancel()
         pinTimer = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.pinLifetime * 1_000_000_000))
-            // The system may have held the app meanwhile: the clock says.
-            if !Task.isCancelled { _ = self?.dropPINIfItsTimeIsUp() }
+            // Until the PIN is gone: the system may hold the app meanwhile, and the phone's clock may be set.
+            while !Task.isCancelled {
+                guard let self, let left = self.pinTimeLeft else { return }
+                if left <= 0 {
+                    if self.dropPINIfItsTimeIsUp() { return }
+                    // A tap or a request is under way: again when it has had time to end.
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                } else {
+                    try? await Task.sleep(nanoseconds: UInt64(min(left, Self.pinLifetime) * 1_000_000_000))
+                }
+            }
         }
     }
 
     private func stopPINClock() {
         pinDeadline = nil
+        pinSince = nil
         pinTimer?.cancel()
         pinTimer = nil
     }
 
-    /// Five minutes after the PIN was typed and a PIN still in memory: it
+    /// The seconds the PIN in memory still has; nil when no clock runs.
+    /// None left as well when the phone's clock is before the moment the
+    /// PIN was typed: a clock set back does not give the PIN more time.
+    private var pinTimeLeft: TimeInterval? {
+        guard let pinDeadline, let pinSince else { return nil }
+        let now = deps.flow.clock()
+        return now < pinSince ? 0 : pinDeadline.timeIntervalSince(now)
+    }
+
+    /// No PIN is in memory any more (it was sent the last time, or
+    /// dropped): its clock stops, so that it is not counted against the
+    /// next PIN typed.
+    private func stopPINClockIfThePINIsGone() {
+        if !holdsPIN { stopPINClock() }
+    }
+
+    /// Five minutes after a PIN came into memory and one still there: it
     /// is dropped with the card proof, and step 1 says why (card-proof.md,
     /// step 1, "app"). Not in the middle of a tap or a request: when that
-    /// ends. True when it did so.
+    /// ends (`run`), and before the PIN goes to the card the last time
+    /// (`declare`). True when it did so.
     @discardableResult
     private func dropPINIfItsTimeIsUp() -> Bool {
-        guard let pinDeadline, deps.flow.clock() >= pinDeadline, work == nil else { return false }
+        guard work == nil else { return false }
+        return dropPINNowIfItsTimeIsUp()
+    }
+
+    /// The same, also from inside the step under way.
+    private func dropPINNowIfItsTimeIsUp() -> Bool {
+        guard let left = pinTimeLeft, left <= 0 else { return false }
         guard holdsPIN else {
-            // The PIN is gone already: sent the last time, or dropped.
             stopPINClock()
             return false
         }
@@ -340,7 +376,7 @@ final class CardProofModel: ObservableObject {
         if dropPINIfItsTimeIsUp() { return }
         askAgain()
         // The operator may have stopped card proofs, or resumed them, meanwhile.
-        if flow == nil, screen.step == 1 { askConfigAgain() }
+        if flow == nil, screen.step <= 1 { askConfigAgain() }
     }
 
     /// Step 7 is up and says the system does not let the app notify: the
@@ -422,7 +458,8 @@ final class CardProofModel: ObservableObject {
     private func redraw() {
         if let finished {
             screen = afterSending(finished)
-        } else if flow == nil, screen.step == 1 {
+        } else if flow == nil, screen.step <= 1 {
+            // Step 1, or the screen in its place.
             screen = before()
         }
     }
@@ -587,6 +624,12 @@ final class CardProofModel: ObservableObject {
     // Tap 2 -------------------------------------------------------------------------
 
     private func confirmCard() async {
+        await confirmCardOnce()
+        // The PIN was refused or dropped: its five minutes are not the next PIN's.
+        stopPINClockIfThePINIsGone()
+    }
+
+    private func confirmCardOnce() async {
         guard let flow else { return }
         // The tap is made again: the PIN typed before is still here. One typed since takes its place.
         let pin: PIN
@@ -595,8 +638,6 @@ final class CardProofModel: ObservableObject {
         } else {
             self.pin?.clear()
             pin = PIN(pinText)
-            // A PIN newly in memory: its five minutes start.
-            if !pin.isEmpty { startPINClock() }
         }
         self.pin = nil
         pinText = ""
@@ -722,6 +763,8 @@ final class CardProofModel: ObservableObject {
             return
         }
         guard self.flow === flow else { return }
+        // The server took its time: the PIN does not go to the card past its five minutes.
+        if dropPINNowIfItsTimeIsUp() { return }
         reached = 1
         await signAndSubmit()
     }
