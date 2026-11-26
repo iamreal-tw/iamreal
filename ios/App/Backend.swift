@@ -35,7 +35,12 @@ struct BackendFailure: Error, Equatable {
 /// (AppEnvironment); a test gives it the address of a local Worker.
 ///
 /// No request carries a cookie, a cache or an identifier of the device,
-/// and nothing is stored: the session is ephemeral.
+/// and nothing is stored: the session is ephemeral. Two headers the system
+/// would fill with what differs from phone to phone are fixed: User-Agent
+/// (the system's has the app's build and the system's version) and
+/// Accept-Language (the system's is the phone's list of languages). The
+/// others the system adds (Accept, Accept-Encoding, Connection) had, when
+/// measured, values that name nothing of the phone (UserAgentTests).
 struct HTTPBackend: Backend {
     let site: URL
     let publicFiles: URL
@@ -55,6 +60,8 @@ struct HTTPBackend: Backend {
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        // In place of the system's own, which name the app's build, the system's version and the phone's languages (#444).
+        configuration.httpAdditionalHeaders = ["User-Agent": Self.userAgent, "Accept-Language": Self.acceptLanguage]
         configuration.timeoutIntervalForRequest = 30
         // A CRL is tens of megabytes.
         configuration.timeoutIntervalForResource = 5 * 60
@@ -187,6 +194,15 @@ struct HTTPBackend: Backend {
         }
         return data
     }
+
+    /// What every request calls itself: the same for every phone and every
+    /// version of the app, and the same as Android's (Backend.kt, USER_AGENT).
+    static let userAgent = "iamreal"
+
+    /// The one language every request names, whatever the phone's
+    /// languages are: URLSession sends the header in any case (an empty
+    /// value goes out as an empty header), and the back end does not read it.
+    static let acceptLanguage = "zh-TW"
 
     /// The most the app reads of the answer to a submission or to the request for a challenge: 1 MiB.
     private static let mostOfAnAnswer = 1 << 20

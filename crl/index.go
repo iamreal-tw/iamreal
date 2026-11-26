@@ -85,6 +85,40 @@ const (
 // wrong, ReasonSignature otherwise. A file that is not a DER CertificateList
 // has only its SHA-256 and ReasonDER.
 func IndexFile(der []byte, keys []NamedKey) IndexLine {
+	return indexFile(der, keys, func(c *CRL, _ string, key *rsa.PublicKey) (*Tree, error) { return c.Tree(key) })
+}
+
+// An Indexer gives the index lines of the files of an archive, one after
+// another, and reuses hashes between the trees of one issuer key
+// (TreeBuilder). Each file is read, checked and hashed as IndexFile does
+// it, and its line is IndexFile's line: what is reused is the result of the
+// hash function, never a check. It keeps the hashes of the last usable CRL
+// of each issuer key, in memory, for as long as it is used.
+type Indexer struct {
+	keys     []NamedKey
+	builders map[string]*TreeBuilder
+}
+
+// NewIndexer returns an Indexer that tries keys in order, as IndexFile.
+func NewIndexer(keys []NamedKey) *Indexer {
+	return &Indexer{keys: keys, builders: map[string]*TreeBuilder{}}
+}
+
+// IndexFile returns the index line of one archive file.
+func (x *Indexer) IndexFile(der []byte) IndexLine {
+	return indexFile(der, x.keys, func(c *CRL, issuer string, key *rsa.PublicKey) (*Tree, error) {
+		b := x.builders[issuer]
+		if b == nil {
+			b = new(TreeBuilder)
+			x.builders[issuer] = b
+		}
+		return c.treeWith(b, key)
+	})
+}
+
+// indexFile is IndexFile with the way a usable CRL's tree is built: tree is
+// called with the CRL, the name of the key that signed it, and that key.
+func indexFile(der []byte, keys []NamedKey, tree func(c *CRL, issuer string, key *rsa.PublicKey) (*Tree, error)) IndexLine {
 	sum := sha256Hex(der)
 	l := IndexLine{Issuer: none, CRLNumber: none, ThisUpdate: none, NextUpdate: none, CRLDate: none, SHA256: sum}
 	c, err := Parse(der)
@@ -115,7 +149,7 @@ func IndexFile(der []byte, keys []NamedKey) IndexLine {
 		}
 		return l
 	}
-	tree, err := c.Tree(key)
+	t, err := tree(c, l.Issuer, key)
 	if err != nil {
 		var u *Unusable
 		if !errors.As(err, &u) {
@@ -124,7 +158,7 @@ func IndexFile(der []byte, keys []NamedKey) IndexLine {
 		l.Root = none + u.Code
 		return l
 	}
-	l.Root = tree.RootHex()
+	l.Root = t.RootHex()
 	return l
 }
 
@@ -136,6 +170,20 @@ func (c *CRL) Tree(issuerKey *rsa.PublicKey) (*Tree, error) {
 		return nil, err
 	}
 	t, err := NewTree(keys)
+	if err != nil {
+		// Check returns distinct keys that do not collide.
+		panic(err)
+	}
+	return t, nil
+}
+
+// treeWith is Tree with the tree built by b.
+func (c *CRL) treeWith(b *TreeBuilder, issuerKey *rsa.PublicKey) (*Tree, error) {
+	keys, err := c.Check(issuerKey)
+	if err != nil {
+		return nil, err
+	}
+	t, err := b.NewTree(keys)
 	if err != nil {
 		// Check returns distinct keys that do not collide.
 		panic(err)
@@ -165,24 +213,64 @@ func archiveFiles(dir string) ([]string, error) {
 	return names, nil
 }
 
-// BuildIndex returns the index of the archive directory dir: one line per
-// file, sorted (SortIndex). progress, if not nil, is called with each file
-// name before the file is read; a G2 CRL takes about 10 seconds.
-func BuildIndex(dir string, keys []NamedKey, progress func(name string)) ([]IndexLine, error) {
+// An ArchiveFile is one file of an archive, read when its turn comes: so
+// that an archive that is not on disk (one downloaded file by file) is
+// never held whole, on disk or in memory.
+type ArchiveFile struct {
+	Name string
+	// Read returns the file's bytes; ErrLeftOut for a file that is not
+	// part of the archive after all (it is not there); any other error
+	// stops the rebuilding.
+	Read func() ([]byte, error)
+}
+
+// ErrLeftOut is what ArchiveFile.Read returns for a file to leave out.
+var ErrLeftOut = errors.New("crl: the file is left out of the archive")
+
+// dirFiles returns the files of an archive directory, in the order of
+// their names.
+func dirFiles(dir string) ([]ArchiveFile, error) {
 	names, err := archiveFiles(dir)
 	if err != nil {
 		return nil, err
 	}
-	lines := make([]IndexLine, 0, len(names))
-	for _, name := range names {
-		if progress != nil {
-			progress(name)
+	files := make([]ArchiveFile, len(names))
+	for i, name := range names {
+		files[i] = ArchiveFile{Name: name, Read: func() ([]byte, error) { return os.ReadFile(filepath.Join(dir, name)) }}
+	}
+	return files, nil
+}
+
+// BuildIndex returns the index of the archive directory dir: one line per
+// file, sorted (SortIndex). progress, if not nil, is called with each file
+// name once the file is read, before its line is computed. The first CRL of an issuer key takes
+// seconds, the later ones a fraction of one (Indexer).
+func BuildIndex(dir string, keys []NamedKey, progress func(name string)) ([]IndexLine, error) {
+	files, err := dirFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	return BuildIndexOf(files, keys, progress)
+}
+
+// BuildIndexOf is BuildIndex for files given one by one. Each is read,
+// indexed and let go before the next is read. progress, if not nil, is
+// called with the name of each file that was read, before it is indexed.
+func BuildIndexOf(files []ArchiveFile, keys []NamedKey, progress func(name string)) ([]IndexLine, error) {
+	x := NewIndexer(keys)
+	lines := make([]IndexLine, 0, len(files))
+	for _, f := range files {
+		der, err := f.Read()
+		if errors.Is(err, ErrLeftOut) {
+			continue
 		}
-		der, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return nil, err
 		}
-		lines = append(lines, IndexFile(der, keys))
+		if progress != nil {
+			progress(f.Name)
+		}
+		lines = append(lines, x.IndexFile(der))
 	}
 	SortIndex(lines)
 	return lines, nil
@@ -477,16 +565,28 @@ func (m IndexMismatch) String() string {
 //
 // Only a file that cannot be read is an error.
 func RebuildArchive(dir string, keys []NamedKey, progress func(name string)) (*Archive, []IndexMismatch, error) {
+	data, err := os.ReadFile(filepath.Join(dir, IndexFileName))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	files, ferr := dirFiles(dir)
+	if ferr != nil {
+		return nil, nil, ferr
+	}
+	return RebuildArchiveOf(data, err == nil, files, keys, progress)
+}
+
+// RebuildArchiveOf is RebuildArchive for an archive given as the bytes of
+// its index.jsonl (hasIndex false if it has none) and its files one by one
+// (BuildIndexOf).
+func RebuildArchiveOf(data []byte, hasIndex bool, files []ArchiveFile, keys []NamedKey, progress func(name string)) (*Archive, []IndexMismatch, error) {
 	var diffs []IndexMismatch
 	var index []IndexLine
 	compare := true
-	data, err := os.ReadFile(filepath.Join(dir, IndexFileName))
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	case !hasIndex:
 		diffs = append(diffs, IndexMismatch{Problem: "is missing"})
 		compare = false
-	case err != nil:
-		return nil, nil, err
 	default:
 		lines, problems, whole := scanIndex(data)
 		if whole != nil {
@@ -498,7 +598,7 @@ func RebuildArchive(dir string, keys []NamedKey, progress func(name string)) (*A
 		}
 		index = lines
 	}
-	got, err := BuildIndex(dir, keys, progress)
+	got, err := BuildIndexOf(files, keys, progress)
 	if err != nil {
 		return nil, nil, err
 	}

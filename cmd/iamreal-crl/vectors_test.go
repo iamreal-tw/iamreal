@@ -226,3 +226,42 @@ func TestVectorsCircuitInputsPaths(t *testing.T) {
 		})
 	}
 }
+
+// The CRLs of revocation-tree.json, indexed one after another with hashes
+// reused between those of one issuer key (crl.Indexer), in the order of the
+// file and in the reverse order: each has the root of the vectors, and its
+// line is the one crl.IndexFile gives it alone (#439).
+func TestVectorRootsWithReuse(t *testing.T) {
+	v, _ := crlsByName(t)
+	if len(v.CRLs) == 0 {
+		t.Fatal("no CRLs")
+	}
+	var keys []crl.NamedKey
+	for _, i := range v.Issuers {
+		n, ok := new(big.Int).SetString(i.Modulus, 0)
+		if !ok {
+			t.Fatalf("test issuer %s: modulus %q", i.Issuer, i.Modulus)
+		}
+		keys = append(keys, crl.NamedKey{Name: i.Issuer, Key: &rsa.PublicKey{N: n, E: 65537}})
+	}
+	for _, reversed := range []bool{false, true} {
+		x := crl.NewIndexer(keys)
+		for n := range v.CRLs {
+			c := v.CRLs[n]
+			if reversed {
+				c = v.CRLs[len(v.CRLs)-1-n]
+			}
+			der, err := hex.DecodeString(c.CRL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := x.IndexFile(der)
+			if want := crl.IndexFile(der, keys); got != want {
+				t.Fatalf("%s:\n got  %s want %s", c.Name, got.Line(), want.Line())
+			}
+			if got.Issuer != c.Issuer || "0x"+got.Root != c.Root {
+				t.Errorf("%s: issuer %s root %s, want %s %s", c.Name, got.Issuer, got.Root, c.Issuer, c.Root)
+			}
+		}
+	}
+}
