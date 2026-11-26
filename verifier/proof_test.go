@@ -405,44 +405,48 @@ func outcomeOf(err error) string {
 }
 
 // A bb that crashes or hangs: both are rejections, and the verifier keeps
-// working. Each fake bb first waits a second, as a process can take to start
-// on a loaded machine (#220): longer than the timeout the hanging ones get.
-// What is checked does not depend on how long anything took, but for the
-// last bound, which only tells a bb stopped at its timeout from one waited
-// for to the end of its 30 seconds.
+// working. A fake bb that crashes, and every fake bb saying its version,
+// first waits a second, as a process can take to start on a loaded machine
+// (#220): longer than the timeout the hanging ones get, so neither making the
+// verifier nor a crash may be held to that timeout. What is checked does not
+// depend on how long anything took, but for the last bound, which tells a bb
+// stopped at its timeout from one waited for to the end of its 30 seconds
+// (the child that holds the pipe: cmd.WaitDelay).
 func TestBBCrashAndTimeout(t *testing.T) {
 	d := loadProofs(t)
 	dir := t.TempDir()
-	script := func(name, body string) string {
-		path := filepath.Join(dir, name)
-		src := "#!/bin/sh\nsleep 1\nif [ \"$1\" = --version ]; then echo 6.0.0; exit 0; fi\n" + body + "\n"
-		if err := os.WriteFile(path, []byte(src), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
 	const (
 		crashes = "bb verify failed"
 		hangs   = "bb verify did not finish"
 	)
 	cases := []struct {
 		name, body string
-		// The timeout of the verifier: none to speak of for a bb that crashes, so that it crashes however slowly it starts.
+		// The per-proof timeout: the default (30 s) for a bb that crashes, so that it crashes however slowly it starts.
 		timeout time.Duration
 		want    string
 	}{
-		{"abort", "kill -ABRT $$", 0, crashes},
-		{"segfault", "kill -SEGV $$", 0, crashes},
-		{"exit 134", "exit 134", 0, crashes},
+		{"abort", "sleep 1; kill -ABRT $$", 0, crashes},
+		{"segfault", "sleep 1; kill -SEGV $$", 0, crashes},
+		{"exit 134", "sleep 1; exit 134", 0, crashes},
 		{"hang", "exec sleep 30", 500 * time.Millisecond, hangs},
 		{"hang, child holds pipe", "sleep 30", 500 * time.Millisecond, hangs},
+	}
+	// Every script written before any runs: a file still open for writing while another case starts a process cannot be run (ETXTBSY on Linux).
+	scripts := map[string]string{}
+	for _, c := range cases {
+		path := filepath.Join(dir, strings.ReplaceAll(c.name, " ", "_"))
+		src := "#!/bin/sh\nif [ \"$1\" = --version ]; then sleep 1; echo 6.0.0; exit 0; fi\n" + c.body + "\n"
+		if err := os.WriteFile(path, []byte(src), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		scripts[c.name] = path
 	}
 	r := records(t, d)[0]
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			// Making the verifier runs bb --version, which takes the second too: it is not held to the per-proof timeout.
-			v := testVerifier(t, d, verifier.Config{BB: script(strings.ReplaceAll(c.name, " ", "_"), c.body), Timeout: c.timeout})
+			v := testVerifier(t, d, verifier.Config{BB: scripts[c.name], Timeout: c.timeout})
 			start := time.Now()
 			err := v.VerifyRecord(r)
 			var rej *verifier.Rejection
