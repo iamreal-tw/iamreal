@@ -1,12 +1,12 @@
 import XCTest
 @testable import IamrealApp
 
-/// The demonstration of hanging the link at given moments
-/// (App/TeachingAnimation.swift), against the answers of
-/// spec/vectors/teaching-animation.json, which the site's and the Android
-/// app's implementations are tested against too: with the timeline of
-/// design/motion/hang.json, the state at each case's seconds is the case's,
-/// numbers within the file's tolerance and everything else the same.
+/// The two demonstrations at given moments (App/TeachingAnimation.swift),
+/// against the answers of spec/vectors/teaching-animation.json, which the
+/// site's and the Android app's implementations are tested against too:
+/// with the timelines of design/motion/, the state at each case's seconds
+/// is the case's, numbers within the file's tolerance and everything else
+/// the same.
 final class TeachingAnimationTests: XCTestCase {
     private func timeline() throws -> HangTimeline {
         try JSONDecoder().decode(HangTimeline.self, from: Repository.data("design/motion/hang.json"))
@@ -78,6 +78,63 @@ final class TeachingAnimationTests: XCTestCase {
         XCTAssertEqual(used.subtracting(drawn), [], "the timeline uses boxes the picture does not draw")
         // The five screens are drawn whether or not a framing names them.
         XCTAssertEqual(drawn.subtracting(used).subtracting(["s0", "s1", "s2", "s3", "s4"]), [], "the picture draws boxes the timeline does not use")
+    }
+
+    // Where the card goes ----------------------------------------------------------------------
+
+    private func senseTimeline() throws -> SenseTimeline {
+        try JSONDecoder().decode(SenseTimeline.self, from: Repository.data("design/motion/sense.json"))
+    }
+
+    /// The picture of where the card goes at every moment of the vectors:
+    /// the round, whether it rests, the card's place and how much of it
+    /// shows, the ring; for an iPhone and for an Android.
+    func testTheCardsPlaceAtEveryMomentOfTheVectorsIsTheirs() throws {
+        let vectors = try Repository.vectors("teaching-animation.json")
+        XCTAssertEqual((vectors["timelines"] as? [String: String])?["sense"], "design/motion/sense.json")
+        let tolerance = try XCTUnwrap(vectors["tolerance"] as? Double)
+        let cases = try XCTUnwrap(vectors["sense"] as? [[String: Any]])
+        XCTAssertGreaterThanOrEqual(cases.count, 24)
+        let timeline = try senseTimeline()
+        var variants: Set<String> = []
+        for item in cases {
+            let name = try XCTUnwrap(item["name"] as? String)
+            let variant = try XCTUnwrap(item["variant"] as? String)
+            let seconds = try XCTUnwrap(item["seconds"] as? Double)
+            let expected = try XCTUnwrap(item["state"] as? [String: Any])
+            variants.insert(variant)
+            let state = try TeachingAnimation.senseState(timeline, variant: variant, at: seconds)
+            XCTAssertEqual(state.round, expected["round"] as? Int, name)
+            XCTAssertEqual(state.stopped, expected["stopped"] as? Bool, name)
+            let card = try XCTUnwrap(expected["card"] as? [String: Double])
+            XCTAssertEqual(state.card.y, try XCTUnwrap(card["y"]), accuracy: tolerance, name)
+            XCTAssertEqual(state.card.x, try XCTUnwrap(card["x"]), accuracy: tolerance, name)
+            XCTAssertEqual(state.card.opacity, try XCTUnwrap(card["opacity"]), accuracy: tolerance, name)
+            if let ring = expected["ring"] as? [String: Double] {
+                let shown = try XCTUnwrap(state.ring, name)
+                XCTAssertEqual(shown.scale, try XCTUnwrap(ring["scale"]), accuracy: tolerance, name)
+                XCTAssertEqual(shown.opacity, try XCTUnwrap(ring["opacity"]), accuracy: tolerance, name)
+            } else {
+                XCTAssertTrue(expected["ring"] is NSNull, name)
+                XCTAssertNil(state.ring, name)
+            }
+        }
+        XCTAssertEqual(variants, ["ios", "android"], "the cases cover both platforms")
+    }
+
+    /// An iPhone's plays three rounds and rests with the card where the phone reads it: at the top of its back.
+    func testAnIPhonesRestsAfterThreeRoundsWithTheCardInPlace() throws {
+        let timeline = try senseTimeline()
+        XCTAssertEqual(timeline.rounds, 3)
+        // The one way of resting the algorithm is written for.
+        XCTAssertEqual(timeline.rest, SenseTimeline.Rest(card: "stays", ring: false))
+        let length = try TeachingAnimation.senseLength(timeline, variant: "ios")
+        XCTAssertEqual(length, 10.55, accuracy: 0.000001)
+        let rest = try TeachingAnimation.senseState(timeline, variant: "ios", at: length)
+        XCTAssertEqual(rest, SenseState(round: 3, stopped: true, card: SenseState.Card(y: 0.213, x: 0, opacity: 1), ring: nil))
+        XCTAssertEqual(try TeachingAnimation.senseState(timeline, variant: "ios", at: 600), rest)
+        XCTAssertFalse(try TeachingAnimation.senseState(timeline, variant: "ios", at: length - 0.01).stopped)
+        XCTAssertThrowsError(try TeachingAnimation.senseState(timeline, variant: "desktop", at: 1))
     }
 
     func testAPlatformTheTimelineDoesNotHaveIsRefused() throws {

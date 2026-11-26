@@ -83,7 +83,7 @@ if [ -d "$app" ]; then
     -e card_proof_rs2048.json -e card_proof_rs4096.json \
     -e card_proof_rs2048.vk -e card_proof_rs4096.vk \
     -e bn254_g1_compressed_2p18.dat -e bn254_g2.dat \
-    -e card-proof.json -e app.json -e GenRyuMin2TW-B.otf -e hang.json || true)
+    -e card-proof.json -e app.json -e GenRyuMin2TW-B.otf -e hang.json -e sense.json || true)
   [ -z "$extra" ] || problem "the app holds what it should not: $(printf '%s\n' "$extra" | head -n 3 | tr '\n' ' ')"
   if LC_ALL=C grep -q -a -F FakeCard "$app/IamrealApp" 2>/dev/null; then
     problem "the executable has FakeCard in it, the fake card of the tests"
