@@ -176,6 +176,11 @@ export class FakeBackend {
     }
     if (method === "POST" && path === "/api/v1/challenges") {
       const c = o.challenge ? o.challenge() : `${formatDay(taiwanDay(o.clock()))}.${encodeBase32(crypto.getRandomValues(new Uint8Array(16)))}`;
+      // An answer of its own (an error such as 503 paused): { status, body } as it is.
+      if (typeof c === "object" && c !== null && "status" in c) {
+        const a = c as unknown as { status: number; body: unknown };
+        return this.json(a.status, a.body);
+      }
       return this.json(200, { challenge: c });
     }
     if (method === "POST" && path === "/api/v1/card-state") {

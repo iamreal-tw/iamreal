@@ -35,7 +35,8 @@
 | `account-none-desktop.png`、`account-none-phone.png` | `/threads/@alice`（查詢頁，沒有卡片宣告這個帳號） | 實作版 |
 | `hang-proof-desktop.png`、`hang-proof-phone.png` | `/hang/7K2Q9FM4XD`（掛上去，從一張島民證明來）：示範停在最後一格 | 實作版 |
 | `hang-proof-still-desktop.png`、`hang-proof-still-phone.png` | 同一頁，示範的播放程式沒有載入時：四步各一張示意圖和結果圖 | 實作版 |
-| `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張） | 實作版 |
+| `hang-desktop.png`、`hang-phone.png` | `/hang`（掛上去，沒有指定哪一張）：示範停在最後一格 | 實作版 |
+| `hang-still-desktop.png`、`hang-still-phone.png` | 同一頁，示範的播放程式沒有載入時：四步各一張示意圖 | 實作版 |
 | `proof-log-desktop.png`、`proof-log-phone.png` | `/proof-log` | 實作版 |
 | `verify-desktop.png`、`verify-phone.png` | `/verify` | 實作版 |
 | `check-desktop.png`、`check-phone.png` | `/check`（如何檢查 Threads 帳號的島民證明；「惡意手法」都折著） | 實作版 |

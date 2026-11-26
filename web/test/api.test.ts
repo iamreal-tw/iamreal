@@ -116,6 +116,13 @@ describe("the platform table of config (src/api.ts)", () => {
       new Response(JSON.stringify(body), { status: 200 });
   const row = (platform: unknown, username_format: unknown, display_name: unknown = "Name") => ({ platform, display_name, username_format });
 
+  test("paused: true or false as sent; absent (an older server), false", async () => {
+    for (const [paused, want] of [[true, true], [false, false], [undefined, false]] as const) {
+      const c = await requestConfig(answer({ ...(paused === undefined ? {} : { paused }), crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}")] }));
+      assert.equal(c.paused, want, String(paused));
+    }
+  });
+
   test("the rows read, in order; a row it cannot read is a platform it does not know; fields it does not know ignored", async () => {
     const c = await requestConfig(
       answer({
@@ -153,6 +160,7 @@ describe("the platform table of config (src/api.ts)", () => {
     ["twice, once unreadable", { crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}"), row("threads", "a")] }],
     ["no CRL age", { platforms: [row("threads", "[a]{1,1}")] }],
     ["a negative CRL age", { crl_max_age_days: -1, platforms: [row("threads", "[a]{1,1}")] }],
+    ["paused that is not true or false", { paused: "yes", crl_max_age_days: 3, platforms: [row("threads", "[a]{1,1}")] }],
   ] as const) {
     test(`not read: ${label}`, async () => {
       await assert.rejects(requestConfig(answer(body)), (e) => e instanceof ServerError && e.code === "malformed_response");

@@ -166,6 +166,8 @@ export async function requestChallenge(fetchFn: Fetch): Promise<unknown> {
 export type { PlatformRow };
 
 export interface Config {
+  /** `paused`: the operator stopped taking card proofs (ADR-0033). Absent from an older server's answer: false. */
+  paused: boolean;
   /** `crl_max_age_days`; the caller takes the smaller of it and the built-in 7 (crl/revocation.ts). */
   crlMaxAgeDays: number;
   /** The rows the device can read, in ascending order of platform. A platform of no row here is one the device does not know. */
@@ -188,6 +190,7 @@ function isDisplayName(x: unknown): x is string {
  * (docs/api/card-proof.md): which scope string the card signs is never taken
  * from it (protocol/src/scope.ts).
  *
+ *   - `paused` is true or false, or absent (false), or the answer is not read.
  *   - `crl_max_age_days` is a non-negative integer, or the answer is not read.
  *   - `platforms` is a list. Every element that names a platform ID (a
  *     string of 1 to 21 `a-z0-9-`) must do so in strictly ascending order,
@@ -202,6 +205,8 @@ function isDisplayName(x: unknown): x is string {
  */
 export async function requestConfig(fetchFn: Fetch): Promise<Config> {
   const b = await request(fetchFn, "/api/v1/config", { method: "GET" }, 200);
+  const paused = b.paused ?? false;
+  if (typeof paused !== "boolean") throw unreadable(b, 200);
   const n = b.crl_max_age_days;
   if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) throw unreadable(b, 200);
   if (!Array.isArray(b.platforms)) throw unreadable(b, 200);
@@ -216,7 +221,7 @@ export async function requestConfig(fetchFn: Fetch): Promise<Config> {
   }
   for (let i = 1; i < named.length; i++) if (!(named[i - 1]! < named[i]!)) throw unreadable(b, 200);
   if (rows.length === 0) throw unreadable(b, 200);
-  return { crlMaxAgeDays: n, platforms: Object.freeze(rows) };
+  return { paused, crlMaxAgeDays: n, platforms: Object.freeze(rows) };
 }
 
 export interface CardStateResponse extends CardState {

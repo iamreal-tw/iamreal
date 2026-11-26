@@ -120,6 +120,8 @@ test("a script added to a page on its way to a browser fails: one of another ori
   await failsOnly({ site: adding('<script type="module" src="https://example.com/beacon.js"></script>') }, line, /\/faq has <script type="module" src="https:\/\/example\.com/);
   await failsOnly({ site: adding('<script src="//example.com/a.js"></script>') }, line, /\/faq/);
   await failsOnly({ site: adding("<script>1</script>") }, line, /\/faq has <script>/);
+  // A block of data is none (the timeline on the pages of hanging a proof); one that only says it is data, and could run, is.
+  await failsOnly({ site: adding('<script type="application/json" id="x" async>1</script>') }, line, /\/faq has <script type="application\/json" id="x" async>/);
   // The card proof page is read for the same.
   const added = siteWith("/proof", (res, body, headers) => new Response(headers?.Accept === "text/html" ? body.replace("</body>", '<script type="module" src="https://example.com/beacon.js"></script></body>') : body, { status: res.status, headers: res.headers }));
   await failsOnly({ site: added }, line, /\/proof has <script type="module" src="https:\/\/example\.com/);

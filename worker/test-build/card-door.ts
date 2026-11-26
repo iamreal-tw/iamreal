@@ -48,6 +48,8 @@ export interface TestSettings {
   readonly PROOF_LOG_OBJECT_NAME?: string;
   /** The back end's policy on late switches (src/settings.ts): "true" turns it on. wrangler.jsonc does not set it. */
   readonly RESTRICT_LATE_SWITCHES?: string;
+  /** The operator stopped taking card proofs (src/settings.ts): "true" stops it. wrangler.jsonc sets "false". */
+  readonly CARD_PROOFS_PAUSED?: string;
   /** The date the test log was last cleared on (src/settings.ts), in place of wrangler.jsonc's. */
   readonly TEST_PROOF_LOG_CLEARED_ON?: string;
 }

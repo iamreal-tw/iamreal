@@ -47,6 +47,16 @@ export interface ProofLogSettings {
    */
   readonly restrictLateSwitches: boolean;
   /**
+   * The operator stopped taking card proofs (`CARD_PROOFS_PAUSED`, ADR-0033;
+   * README.md, "停止和恢復收過卡"): `challenges` and `records` answer
+   * `paused` and the proof log takes no record; `config` says so, so that a
+   * device says it before it reads a card. Everything else goes on: the
+   * visitors' pages, `card-state`, the files, the daily publication. The
+   * proof log's object is not told: the Worker refuses before it asks it.
+   * wrangler.jsonc sets it to "false"; absent, as in a test, it is false.
+   */
+  readonly cardProofsPaused: boolean;
+  /**
    * For a test log, the date it was last cleared on, `YYYY-MM-DD`
    * (`TEST_PROOF_LOG_CLEARED_ON`; ADR-0028): every page of the site says it
    * beside the mark of a test log. Before the first clearing it is the
@@ -94,8 +104,11 @@ export function proofLogSettingsOf(env: Env): ProofLogSettings {
   // Not one of the environment's declared settings (wrangler.jsonc): absent, or exactly "true" or "false".
   const restrict: unknown = (env as { RESTRICT_LATE_SWITCHES?: unknown }).RESTRICT_LATE_SWITCHES;
   if (restrict !== undefined && restrict !== "true" && restrict !== "false") throw new Error("RESTRICT_LATE_SWITCHES is neither true nor false");
+  // Declared in wrangler.jsonc; a value that is neither is a mistake made on the dashboard: nothing answers rather than guess.
+  const paused: unknown = (env as { CARD_PROOFS_PAUSED?: unknown }).CARD_PROOFS_PAUSED;
+  if (paused !== undefined && paused !== "true" && paused !== "false") throw new Error("CARD_PROOFS_PAUSED is neither true nor false");
   // A test log's pages are not served without the date beside their mark.
   const cleared: unknown = (env as { TEST_PROOF_LOG_CLEARED_ON?: unknown }).TEST_PROOF_LOG_CLEARED_ON;
   if (kind === "test" && (typeof cleared !== "string" || parseDay(cleared) === null)) throw new Error("TEST_PROOF_LOG_CLEARED_ON is not a date");
-  return { kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
+  return { kind, platforms: platformsOf(kind), minApp: MIN_APP[kind], restrictLateSwitches: restrict === "true", cardProofsPaused: paused === "true", testProofLogClearedOn: kind === "test" ? (cleared as string) : null, siteHost: SITE_HOSTS[kind] };
 }

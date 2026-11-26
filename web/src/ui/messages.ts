@@ -124,6 +124,8 @@ export function stopMessage(stop: Stop, submitFailed = false): Message {
       return formatHint(stop.platform) ?? say(COPY.accounts.format_no_hint);
     case "server": {
       const id = stop.requestId ? { requestId: stop.requestId } : {};
+      // The server takes no card proof for now (docs/api/card-proof.md, `paused`): not a failure to send again.
+      if (stop.server === "paused") return { ...say(s.paused), ...id };
       if (submitFailed) return { ...say(s.submit_failed), retry: true, ...id };
       if (stop.server === "challenge_unknown") return { ...say(s.challenge_expired), ...id };
       // The server's newest CRL is more than 3 days old (docs/api/card-proof.md).
@@ -259,6 +261,8 @@ export function itemStates(items: readonly ListItem[], seen: ReadonlySet<Progres
 export function progressButtons(phase: string, stop?: Stop): ("back" | "read_again" | "retry" | "restart")[] {
   // The date changed: nothing was signed, and the card proof starts again from the beginning (stops.date_changed).
   if (stop?.code === "date_changed") return ["restart"];
+  // The server takes no card proof for now: reading the card again or sending again meets the same answer.
+  if (stop?.code === "server" && stop.server === "paused") return ["restart"];
   if (phase === "chosen") return ["back"];
   if (phase === "submit_failed") return ["read_again", "retry"];
   return ["read_again"];
