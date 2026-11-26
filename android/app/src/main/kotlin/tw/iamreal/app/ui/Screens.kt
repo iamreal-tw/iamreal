@@ -193,7 +193,7 @@ private fun Pin(m: Model) {
     }
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Subhead(c.say("pin.label"))
-        PinInput(m.pin, enabled = !busy && !m.pinEnded, tag = "pin", modifier = Modifier.fillMaxWidth())
+        PinInput(m.pin, enabled = !busy && !m.pinEnded && !m.pinKept, tag = "pin", modifier = Modifier.fillMaxWidth())
     }
     m.pinNote?.let { Problem(it) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -205,6 +205,8 @@ private fun Pin(m: Model) {
         val wide = Modifier.fillMaxWidth()
         if (m.pinEnded) {
             Button(c.say("app_read.restart"), wide, primary = true) { m.readAgain() }
+        } else if (m.pinKept) {
+            Button(c.say("app_read.tap_again"), wide, primary = true, enabled = !busy) { m.confirmCard() }
         } else {
             Button(c.say("pin.confirm_card"), wide, primary = true, enabled = !busy) { m.confirmCard() }
             Button(c.say("common.back"), wide, enabled = !busy) { m.backToRead() }

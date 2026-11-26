@@ -164,6 +164,14 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** What step 3 says under the PIN's field. "請輸入 PIN。" and the sentence of the PIN's form only while the field is empty (design/copy/card-proof.md, "3. 輸入 PIN", app). */
     val pinNote: String? get() = pinMessage?.takeUnless { (it == copy.say("app_pin.need_pin") || it == copy.say("app_pin.pin_format")) && pin.length > 0 }
 
+    /**
+     * The tap of step 3 did not get as far as a PIN the card refused, and the PIN typed is still the one to send:
+     * the card left, or was not the card that was read. The one button is 再感應一次, and the field is not typed in
+     * (design/copy/card-proof.md, "3. 輸入 PIN", app: "PIN 還在，不用再輸入").
+     */
+    var pinKept by mutableStateOf(false)
+        private set
+
     /** The card proof ended while the PIN was asked for: the only way on is to read the card again. */
     var pinEnded by mutableStateOf(false)
         private set
@@ -399,6 +407,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         pinBusy = null
         pinMessage = null
         pinEnded = false
+        pinKept = false
         step = Step.PIN
     }
 
@@ -425,6 +434,7 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
         }
         block.fill(0)
         pinMessage = null
+        pinKept = false
         pinBusy = ""
         step(
             f,
@@ -457,7 +467,9 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
                     }
                     // The PIN did not reach a card, or the tap was cancelled: the same PIN, the tap again.
                     stop.code == "card" || stop.code == "other_card" -> {
-                        if (pinMessage == null && reason != CardException.Reason.CANCELLED.name) pinMessage = copy.say("common.halted")
+                        // Cancelling the panel is back to the screen as it was; anything else offers the tap again.
+                        pinKept = reason != CardException.Reason.CANCELLED.name
+                        if (pinMessage == null && pinKept) pinMessage = copy.say("common.halted")
                     }
                     else -> {
                         pin.clear()

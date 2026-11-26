@@ -239,6 +239,12 @@ class CardProof(private val deps: Deps) {
 
     @Volatile private var firstSignedAt: Long? = null
 
+    /**
+     * The card has accepted this card proof's PIN at some tap, also one that then failed. From then on a card that
+     * leaves while the PIN is on its way is a card that left: the PIN is right, and is sent again (issue #133).
+     */
+    @Volatile private var pinAccepted = false
+
     @Volatile private var ended = false
 
     /** The tap under way, to give it up from another thread. */
@@ -421,7 +427,13 @@ class CardProof(private val deps: Deps) {
             live()
             events.tap(Tap.SIGNING)
             connection.sign(message, handed).also { events.tap(Tap.SIGNED) }
+        } catch (e: CardException) {
+            // Whether this PIN was ever accepted is looked at before this tap adds to it.
+            val accepted = pinAccepted
+            if (connection.pinAccepted) pinAccepted = true
+            throw if (e.reason == CardException.Reason.PIN_MAYBE_SENT && accepted) CardException(CardException.Reason.DROPPED) else e
         } finally {
+            if (connection.pinAccepted) pinAccepted = true
             handed.fill(0)
         }
     }

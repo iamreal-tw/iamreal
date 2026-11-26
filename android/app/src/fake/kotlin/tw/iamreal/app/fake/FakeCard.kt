@@ -22,14 +22,21 @@ import java.util.Base64
  *   GET /__test/tap       answers when the test holds a card to the phone:
  *                         {"certificates":["<base64 DER>",…],
  *                          "key":"<base64 PKCS#8>","pin":"…","pause_ms":0,
- *                          "no_channel":false}
+ *                          "no_channel":false,"leaves":null,"nfc":null}
  *                         or 204 when the test takes the tap back.
  *                         pause_ms: how long the card takes over each thing
  *                         (its certificates, a signature, leaving the
  *                         phone), so that a test can read the panel.
  *                         no_channel: a card the secure channel cannot be
  *                         made with; it stops where card/GpkiCard.kt does,
- *                         reading its certificates, before any PIN
+ *                         reading its certificates, before any PIN.
+ *                         leaves: where the card leaves the phone, as
+ *                         card/GpkiCard.kt tells each: "reading" (its
+ *                         certificates), "pin" (while the PIN is on its way:
+ *                         the card got it or not, the app cannot know),
+ *                         "signing" (after it accepted the PIN).
+ *                         nfc: "off" or "none", a phone whose NFC is turned
+ *                         off or that has none, in place of a card
  *   GET /__test/pin       tells the test that a card was handed a PIN,
  *                         whichever PIN and whichever card: how a test
  *                         sees that a card it held out got none
@@ -68,19 +75,31 @@ internal class FakeCard(private val side: TestSide) : Card {
         }
         if (cancel.isCancelled) throw CardException(CardException.Reason.CANCELLED)
         val card = JSONObject(String(held ?: throw CardException(CardException.Reason.NO_TAP), Charsets.UTF_8))
+        when (card.optString("nfc")) {
+            "off" -> throw CardException(CardException.Reason.NFC_OFF)
+            "none" -> throw CardException(CardException.Reason.NO_NFC)
+        }
         val decode = Base64.getDecoder()
         val pause = card.optLong("pause_ms")
+        val leaves = card.optString("leaves")
         return use(object : CardConnection {
+            override var pinAccepted = false
+                private set
+
             override fun readCertificates(): List<ByteArray> {
                 Thread.sleep(pause)
+                if (leaves == "reading") throw CardException(CardException.Reason.DROPPED)
                 if (card.optBoolean("no_channel")) throw CardException(CardException.Reason.CHANNEL)
                 return card.getJSONArray("certificates").let { list -> (0 until list.length()).map { decode.decode(list.getString(it)) } }
             }
 
             override fun sign(message: ByteArray, pin: ByteArray): ByteArray {
                 side.get("/__test/pin")
+                if (leaves == "pin") throw CardException(CardException.Reason.PIN_MAYBE_SENT)
                 if (!pin.contentEquals(card.getString("pin").toByteArray())) throw CardException(CardException.Reason.PIN_INCORRECT)
+                pinAccepted = true
                 Thread.sleep(pause)
+                if (leaves == "signing") throw CardException(CardException.Reason.DROPPED)
                 val key = KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(decode.decode(card.getString("key"))))
                 return Signature.getInstance("SHA256withRSA").run {
                     initSign(key)
