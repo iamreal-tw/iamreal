@@ -122,27 +122,31 @@ const bodyOf = async (req: IncomingMessage): Promise<string> => {
   for await (const c of req) chunks.push(c as Buffer);
   return Buffer.concat(chunks).toString();
 };
-/** The two paths of the tests' own (3.): the status to answer with, no body. */
-const own = async (path: string, body: string): Promise<number> => {
-  if (path === "/__app-test/paused") {
+/** The tests' own paths (3.), each taking PUT: what it does with the body, and the status to answer with (no body). */
+const APP_TEST: Readonly<Record<string, (body: string) => Promise<number>>> = {
+  "/__app-test/clock": async (body) => {
+    const time = new Date(body);
+    if (Number.isNaN(time.getTime())) return 400;
+    await worker.setClock(time);
+    if (time > clock) clock = time;
+    return 204;
+  },
+  "/__app-test/paused": async (body) => {
     if (body !== "true" && body !== "false") return 400;
     await worker.setSettings(body === "true" ? { CARD_PROOFS_PAUSED: "true" } : {});
     return 204;
-  }
-  const time = new Date(body);
-  if (Number.isNaN(time.getTime())) return 400;
-  await worker.setClock(time);
-  if (time > clock) clock = time;
-  return 204;
+  },
 };
 const front = await startWorkerSite({
   issuers,
   own: async (req, res, path) => {
-    if (req.method !== "PUT" || (path !== "/__app-test/clock" && path !== "/__app-test/paused")) return false;
-    res.writeHead(await own(path, await bodyOf(req))).end();
+    const answer = APP_TEST[path];
+    if (req.method !== "PUT" || answer === undefined) return false;
+    res.writeHead(await answer(await bodyOf(req))).end();
     return true;
   },
 });
+// The tests' paths use it once the server is listening, after this line.
 const worker = front.worker;
 
 try {
