@@ -56,5 +56,5 @@ export interface Card {
    * the card's reader names it; null if it did not say, or there was more
    * than one card. Sent in the counts only in its form (counts.ts).
    */
-  readerName?(): string | null;
+  readerName(): string | null;
 }

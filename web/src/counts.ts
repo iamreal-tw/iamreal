@@ -65,35 +65,40 @@ export function deviceIdOn(today: Day, storage: IdStorage, random: (bytes: Uint8
   }
 }
 
+/**
+ * The browsers a `User-Agent` is told apart by, in the order they are looked
+ * for (Edge and Samsung Internet also write `Chrome/`, Chrome writes
+ * `Safari/`). The first group is the major version; a browser the table does
+ * not name (Opera) is `other`, and has none.
+ */
+const BROWSER_PATTERNS: readonly (readonly [Browser, RegExp])[] = [
+  ["edge", /\bEdg(?:e|A|iOS)?\/(\d+)/],
+  ["samsung", /\bSamsungBrowser\/(\d+)/],
+  ["other", /\b(?:OPR|Opera)\//],
+  ["firefox", /\b(?:Firefox|FxiOS)\/(\d+)/],
+  ["chrome", /\b(?:Chrome|CriOS)\/(\d+)/],
+  ["safari", /\bVersion\/(\d+)[\d.]* .*Safari\//],
+];
+
+/** Browsers of Chromium's, whose `User-Agent` holds frozen system versions. */
+const CHROMIUM: ReadonlySet<Browser> = new Set(["chrome", "edge", "samsung"]);
+
+/** The browser, and the major version its pattern found, if any. */
+function browserOf(userAgent: string): { browser: Browser; major: string | undefined } {
+  for (const [browser, re] of BROWSER_PATTERNS) {
+    const m = re.exec(userAgent);
+    if (m !== null) return { browser, major: m[1] };
+  }
+  return { browser: "other", major: undefined };
+}
+
 /** The browser and the operating system as the table names them, from a `User-Agent`. What it cannot tell is `other`. */
 export function familiesOf(userAgent: string): { browser: Browser; os: Os } {
   const has = (re: RegExp): boolean => re.test(userAgent);
-  const browser: Browser = has(/\bEdg(?:e|A|iOS)?\//)
-    ? "edge"
-    : has(/\bSamsungBrowser\//)
-      ? "samsung"
-      : has(/\b(?:OPR|Opera)\//)
-        ? "other"
-        : has(/\b(?:Firefox|FxiOS)\//)
-          ? "firefox"
-          : has(/\b(?:Chrome|CriOS)\//)
-            ? "chrome"
-            : has(/\bVersion\/[\d.]+ .*Safari\//)
-              ? "safari"
-              : "other";
+  const { browser } = browserOf(userAgent);
   const os: Os = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
   return { browser, os };
 }
-
-/** Where each browser of the table writes its version in a `User-Agent`: the major version is the first number. */
-const BROWSER_VERSION: Readonly<Record<Browser, RegExp | null>> = {
-  edge: /\bEdg(?:e|A|iOS)?\/(\d+)/,
-  samsung: /\bSamsungBrowser\/(\d+)/,
-  firefox: /\b(?:Firefox|FxiOS)\/(\d+)/,
-  chrome: /\b(?:Chrome|CriOS)\/(\d+)/,
-  safari: /\bVersion\/(\d+)/,
-  other: null,
-};
 
 /**
  * The browser's and the system's versions, from a `User-Agent`, as far as
@@ -102,27 +107,38 @@ const BROWSER_VERSION: Readonly<Record<Browser, RegExp | null>> = {
  *
  * - The browser: its major version, and nothing after it. A browser the
  *   table does not name has none.
- * - The system: only where the `User-Agent` holds the true one. Windows'
- *   NT number (10.0 is Windows 10 or 11), iOS, and Android in a browser
- *   that is not Chromium's. Not macOS (every browser writes 10.15), not
- *   ChromeOS, and not Android in Chrome, Edge or Samsung Internet: their
- *   `User-Agent` holds a frozen value (Android 10), and none is better than a
- *   false one.
+ * - The system: only where the `User-Agent` holds the true one: Windows'
+ *   NT number (10.0 is Windows 10 or 11), iOS but 18.6, and Android in a
+ *   browser that is not Chromium's. Where it holds a frozen value, none is
+ *   sent: none is better than a false one.
+ *   - Chromium's reduced `User-Agent` writes literal values for macOS
+ *     (10_15_7), ChromeOS and Android ("Android 10; K"), "they will not
+ *     update even if a user is on an updated operating system"
+ *     (https://www.chromium.org/updates/ua-reduction/).
+ *   - Firefox caps macOS at 10.15 (https://bugzilla.mozilla.org/show_bug.cgi?id=1679929),
+ *     and so does Safari, which "first started freezing the Mac OS string"
+ *     in 2017: so no browser's macOS version is sent.
+ *   - Safari on iOS 26 "no longer lists the current version of the
+ *     operating system", and writes 18_6
+ *     (https://webkit.org/blog/17333/webkit-features-in-safari-26-0/): a real
+ *     18.6 is not told apart from it.
  *
  * A value not in the form of a version (VERSION) is left out, not shortened.
  */
 export function versionsOf(userAgent: string): { browser_version?: string; os_version?: string } {
-  const { browser, os } = familiesOf(userAgent);
+  const { browser, major } = browserOf(userAgent);
+  const { os } = familiesOf(userAgent);
   const out: { browser_version?: string; os_version?: string } = {};
-  const major = BROWSER_VERSION[browser]?.exec(userAgent)?.[1];
-  if (major !== undefined && VERSION.test(major)) out.browser_version = major;
-  const chromium = browser === "chrome" || browser === "edge" || browser === "samsung";
+  if (browser !== "other" && major !== undefined && VERSION.test(major)) out.browser_version = major;
+  const ios = os === "ios" ? /\bOS (\d+(?:_\d+){0,2}) like Mac OS X/.exec(userAgent)?.[1]?.replaceAll("_", ".") : undefined;
   const system =
     os === "windows"
       ? /\bWindows NT (\d+\.\d+)/.exec(userAgent)?.[1]
-      : os === "ios"
-        ? /\bOS (\d+(?:_\d+){0,2}) like Mac OS X/.exec(userAgent)?.[1]?.replaceAll("_", ".")
-        : os === "android" && !chromium
+      : ios !== undefined
+        ? ios === "18.6"
+          ? undefined
+          : ios
+        : os === "android" && !CHROMIUM.has(browser)
           ? /\bAndroid (\d+(?:\.\d+){0,2})/.exec(userAgent)?.[1]
           : undefined;
   if (system !== undefined && VERSION.test(system)) out.os_version = system;

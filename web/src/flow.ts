@@ -508,15 +508,17 @@ export class CardProofFlow {
   /**
    * `p`, timed: onTiming gets the milliseconds (the page's console), and a
    * step of the counts' table (`counted`) its duration, on the flow's clock
-   * (spec/counts.md, "Durations"). Only once it is done: a step that failed
-   * sends no duration.
+   * (spec/counts.md, "Durations"). Only once it is done, and only while the
+   * card proof goes on (as reached()): a step that failed sends no duration,
+   * and neither does one done in the background after the card proof stopped
+   * or was left, which would go into the next card proof's attempt.
    */
   private timed<T>(step: string, p: Promise<T>, counted?: TimedStep): Promise<T> {
     const t = performance.now();
     const started = this.deps.clock();
     return p.then((v) => {
       this.deps.onTiming?.(step, performance.now() - t);
-      if (counted !== undefined) this.deps.counts?.duration(counted, this.deps.clock() - started);
+      if (counted !== undefined && !this.stopped && !this.stopCounted) this.deps.counts?.duration(counted, this.deps.clock() - started);
       return v;
     });
   }
@@ -708,7 +710,7 @@ export class CardProofFlow {
     }
     this.live(...ders);
     // The reader's name, for this attempt's counts from here on (counts.ts checks its form).
-    this.deps.counts?.reader(this.deps.card.readerName?.() ?? null);
+    this.deps.counts?.reader(this.deps.card.readerName());
     this.progress("certificates");
     const today = this.today();
     const sel = await selectCertificate(ders, today, this.deps.issuers);

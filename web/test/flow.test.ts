@@ -109,6 +109,8 @@ async function setup(o: {
   countsAre?: "answered" | "failing" | "held";
   /** The card reader's name the card reports; none by default. */
   readerName?: string;
+  /** Until it settles, the CRL's files are not answered. */
+  crlHeld?: Promise<void>;
   /** How long the flow's clock moves while each timed step runs, in milliseconds; not at all by default. */
   takes?: { crl?: number; tree?: number; proved?: number };
 } = {}): Promise<Setup> {
@@ -198,6 +200,7 @@ async function setup(o: {
       knownPlatforms: new Set(o.knownPlatforms ?? ["test-example", "threads"]),
       fetch: gatedFetch,
       dataFetch: async (path, init) => {
+        await o.crlHeld;
         const res = await data.fetch(path, init);
         // The CRL's first file: the clock moves once, while the CRL is fetched.
         if (!crlTaken) {
@@ -2318,6 +2321,18 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     const counted = await sent(s);
     assert.ok(counted.every((c) => !("reader" in c)));
     assert.ok(!JSON.stringify(counted).includes("Usbccid"));
+  });
+
+  test("a timed step done after the card proof was left sends no duration: the next card proof's attempt holds none of it", async () => {
+    let release!: () => void;
+    const s = await setup({ crlHeld: new Promise<void>((r) => (release = r)), takes: { crl: 2_500 } });
+    await s.flow.readCard();
+    s.flow.cancel();
+    release();
+    await new Promise((r) => setTimeout(r, 200));
+    const counted = await sent(s);
+    assert.deepEqual(counted.filter((c) => c.event === "duration"), []);
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
   });
 
   test("a timed step that did not get done sends no duration", async () => {
