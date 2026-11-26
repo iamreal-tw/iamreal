@@ -7,6 +7,9 @@
 //
 // The upstream RS2048 / RS4096 / linking / audit tests read fixture files made
 // from a real certificate. Here they run on synthetic certificates instead.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   AUTHORITY_KEY_ID, buildTbs, cardHolderRank, CERT_POLICIES, keyUsage, KEY_USAGE_ENCRYPTION,
   KEY_USAGE_SIGNING, makeKey, name, opaqueExtension, SUBJECT_DIR_ATTRS, SUBJECT_KEY_ID,
@@ -17,9 +20,29 @@ import { chainCase, sigCase } from "./lib/inputs.mjs";
 // 2026-11-14 15:59:59 UTC as YYMMDDHHMMSS.
 export const NOW = 261114155959n;
 export const SCOPE = Buffer.from("iamreal-test:threads:0_________", "ascii");
-// The code tests/lib/declaration-code.mjs (an earlier draft) gives for declare,
-// @alice, challenge 1234567890.
-export const CODE = Buffer.from("DX8FHVFCJDJXXEVP2Q0W9PJ1EBH5Z8Z", "ascii");
+// The declaration codes of the tests are standard answers of
+// spec/vectors/declaration-code.json: nothing here computes one. The circuit
+// does not compute one either: it checks the card's signature over the 31
+// bytes and their first byte, so a code is 31 bytes to it, whichever scope
+// string, list and challenge the code was computed from (the verifier
+// recomputes it from those, spec/declaration-code.md).
+const codeVectors = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "spec", "vectors", "declaration-code.json"), "utf8")).cases;
+const codeVector = (label) => {
+  const found = codeVectors.find((c) => c.label === label);
+  if (!found) throw new Error(`spec/vectors/declaration-code.json has no case "${label}"`);
+  return {
+    code: Buffer.from(found.declaration_code, "ascii"),
+    packed: BigInt(found.declaration_code_packed),
+    scopeString: found.scope_string,
+    accounts: found.accounts,
+    challenge: found.challenge,
+  };
+};
+/** The example of spec/declaration-code.md: a list of one account, threads:alice, under one challenge. */
+export const CODE_VECTOR = codeVector("one account (the example of declaration-code.md)");
+/** The same scope string and the same list under another challenge. */
+export const OTHER_CHALLENGE_CODE_VECTOR = codeVector("another challenge");
+export const CODE = CODE_VECTOR.code;
 
 // The first byte of a signed message decides its kind (ADR-0007). `scope`:
 // accepted as the scope string; `code`: accepted as the declaration code.

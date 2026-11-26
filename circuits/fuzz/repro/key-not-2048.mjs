@@ -11,6 +11,7 @@ import { bigToBytes, FUZZ, loadPool, rngFor, signStd } from "../lib/common.mjs";
 import { genChain, genMessage, manualSpki } from "../lib/gen.mjs";
 import { Runners, prepareChain } from "../lib/exec.mjs";
 import { walk } from "../lib/oracle.mjs";
+import { CODE } from "../../tests/cases.mjs";
 
 const pool = loadPool();
 const rn = new Runners();
@@ -30,7 +31,8 @@ for (const group of ["user2047", "user1024"]) {
     if (p.certOk) break;
   }
   const scope = Buffer.from("iamreal-test:threads:0_________");
-  const code = Buffer.from("DX8FHVFCJDJXXEVP2Q0W9PJ1EBH5Z8Z");
+  // The tests' declaration code: a standard answer of spec/vectors/declaration-code.json.
+  const code = CODE;
   const ss = signStd(key, scope), cs = signStd(key, code);
   const certNoir = await rn.runNoir("cert_chain_rs2048", { ...p.noir, pk_blind: "0x3039" });
   const certCircom = await rn.runCircom("certChainRS2048", p.circom);
