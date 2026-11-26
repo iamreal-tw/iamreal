@@ -82,6 +82,7 @@ import { SITE_DOMAIN, cardPath, handle, presentationOf } from "../../src/platfor
 import { scopeOf } from "iamreal-protocol/scope.ts";
 import { shortId } from "iamreal-protocol/scoped-id.ts";
 import { DEVICE_ID_KEY } from "../../src/counts.ts";
+import { CLOSE_AGAIN_MS } from "../../src/card/hipki.ts";
 import { STORAGE_KEY_PREFIX } from "../../src/storage.ts";
 import { COPY, fill } from "../../src/ui/copy.ts";
 import { CERT_POLICIES, KEY_USAGE_ENCRYPTION, AUTHORITY_KEY_ID, SUBJECT_KEY_ID, buildTbs, certificate, name, subjectDirectoryAttributes } from "../fixtures/certs.ts";
@@ -2776,6 +2777,10 @@ await tryStep("too many people: the start turned away before a card is read; the
     check(JSON.stringify(await buttonTexts()) === JSON.stringify([C.progress.back, C.progress.retry]), `step 5, challenge rate limited: 回到上一步 and 再試一次 ${JSON.stringify(await buttonTexts())}`);
     check(componentCount("MakeSignature") === signs, "step 5, challenge rate limited: no second signature");
     await screenshot("busy-5-challenge");
+    // The window opened for the second signature was closed unused, a few milliseconds after it opened (the challenge was
+    // turned away at once): Chrome may keep such a window, and the page closes it again on its schedule (CLOSE_AGAIN_MS).
+    // 再試一次 is pressed after the last of those looks, as a cardholder reading the message would.
+    await new Promise((r) => setTimeout(r, Math.max(...CLOSE_AGAIN_MS) + 500));
     await page.clickButton(C.progress.retry);
     const ok = await waitDoneOrMessage();
     check(ok.done && (await recordCount()) === records + 1 && componentCount("MakeSignature") === signs + 1, `step 5, 再試一次: a challenge, the second signature, one record more (${ok.message})`);
