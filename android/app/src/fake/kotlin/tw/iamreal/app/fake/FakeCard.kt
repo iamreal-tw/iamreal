@@ -21,11 +21,15 @@ import java.util.Base64
  *                         idc_testing_session_open takes them
  *   GET /__test/tap       answers when the test holds a card to the phone:
  *                         {"certificates":["<base64 DER>",…],
- *                          "key":"<base64 PKCS#8>","pin":"…","pause_ms":0}
+ *                          "key":"<base64 PKCS#8>","pin":"…","pause_ms":0,
+ *                          "no_channel":false}
  *                         or 204 when the test takes the tap back.
  *                         pause_ms: how long the card takes over each thing
  *                         (its certificates, a signature, leaving the
- *                         phone), so that a test can read the panel
+ *                         phone), so that a test can read the panel.
+ *                         no_channel: a card the secure channel cannot be
+ *                         made with; it stops where card/GpkiCard.kt does,
+ *                         reading its certificates, before any PIN
  *   GET /__test/pin       tells the test that a card was handed a PIN,
  *                         whichever PIN and whichever card: how a test
  *                         sees that a card it held out got none
@@ -69,6 +73,7 @@ internal class FakeCard(private val side: TestSide) : Card {
         return use(object : CardConnection {
             override fun readCertificates(): List<ByteArray> {
                 Thread.sleep(pause)
+                if (card.optBoolean("no_channel")) throw CardException(CardException.Reason.CHANNEL)
                 return card.getJSONArray("certificates").let { list -> (0 until list.length()).map { decode.decode(list.getString(it)) } }
             }
 
