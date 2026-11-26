@@ -15,7 +15,8 @@
 //
 // The pages are made here, from what `PageData` answers (page-data.ts).
 // Their style sheet (/pages.css), the copy buttons' script that /faq, /verify
-// and /hang/… load (/copy.js) and the card proof page (/proof and everything
+// and /hang/… load (/copy.js), the player of the demonstration that /hang and
+// /hang/… load (/demo.js) and the card proof page (/proof and everything
 // under it) are not: they are files of Static Assets, which
 // sends them itself, and a request for one of those paths does not run the
 // Worker at all (wrangler.jsonc, "assets"; README.md, "Static Assets"). The
@@ -89,7 +90,7 @@ interface Answer {
   readonly status: number;
   readonly headers: Record<string, string>;
   readonly body: string | null;
-  /** A page that loads the copy buttons' script: its policy lets scripts of this origin run. */
+  /** A page that loads a script of this site (the copy buttons', the demonstration's player): its policy lets scripts of this origin run. */
   readonly script?: boolean;
 }
 
@@ -102,7 +103,7 @@ function page(site: Site, status: number, document: Document): Answer {
   } catch (e) {
     throw new Internal("render", e);
   }
-  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: document.script === true };
+  return { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": PROOF_LOG_PAGE_CACHE }, body, script: document.script === true || document.demo === true };
 }
 
 /** `GET /`: the home page, with the proof log's two numbers. */
