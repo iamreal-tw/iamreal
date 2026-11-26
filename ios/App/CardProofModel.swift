@@ -63,6 +63,9 @@ final class CardProofModel: ObservableObject {
     private var after = After.hang
     /// "沒有看到連結，重新掛上" was pressed: step 6 is the whole one.
     private var rehanging = false
+    /// The demonstration of step 6 is playing; it has played in this card proof.
+    private var demoPlaying = false
+    private var demoPlayed = false
     private var copied = false
     /// "開啟提醒" was pressed on step 7 and the system said no.
     private var reminderRefused = false
@@ -164,7 +167,12 @@ final class CardProofModel: ObservableObject {
         case .rehang:
             rehanging = true
             redraw()
+        // By itself only once in a card proof: not again on the way back from step 7.
+        case .showDemo: if !demoPlayed { playDemo(true) }
+        case .playDemo: playDemo(true)
+        case .stopDemo: playDemo(false)
         case .toRemind:
+            demoPlaying = false
             show(.remind)
             // Refused before, and maybe allowed since in the system's settings.
             askAgain()
@@ -238,6 +246,15 @@ final class CardProofModel: ObservableObject {
         return allowed
     }
 
+    /// The demonstration of step 6 from its start, or at its last frame.
+    /// The screen draws it; here is only which, for its one button.
+    private func playDemo(_ playing: Bool) {
+        guard finished != nil, after == .hang, demoPlaying != playing else { return }
+        demoPlaying = playing
+        if playing { demoPlayed = true }
+        redraw()
+    }
+
     /// Another of the steps after the record was sent.
     private func show(_ step: After) {
         guard finished != nil else { return }
@@ -249,7 +266,7 @@ final class CardProofModel: ObservableObject {
     private func afterSending(_ finished: (done: CardProofFlow.Done, single: String?)) -> Screen {
         switch after {
         case .hang:
-            return screens.hang(finished.done, single: finished.single, copied: copied, whole: rehanging)
+            return screens.hang(finished.done, single: finished.single, copied: copied, whole: rehanging, demoPlaying: demoPlaying, demoPlayed: demoPlayed)
         case .remind:
             let reminders = deps.reminders
             let reminder: DoneReminder
@@ -301,6 +318,8 @@ final class CardProofModel: ObservableObject {
         finished = nil
         after = .hang
         rehanging = false
+        demoPlaying = false
+        demoPlayed = false
         copied = false
         reminderRefused = false
         reached = 0

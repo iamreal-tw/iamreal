@@ -187,7 +187,9 @@ final class CardProofTests: XCTestCase {
             "在個人檔案添加證明連結，別人才知道這個帳號承認這張證明。",
             link,
             "複製證明連結",
-            "打開 @alice 的 Threads 個人檔案",
+            "打開 Threads",
+            "示範：按「複製證明連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。",
+            "再看一次",
             "按「編輯個人檔案」", "按「連結」", "按「新增連結」", "在「網址」貼上剛才複製的連結，按右上角的「完成」",
             "如果你換了新的自然人憑證，請把個人檔案的連結換成新的連結。",
             "掛好了嗎？打開你的島民證明看看。",
@@ -195,6 +197,30 @@ final class CardProofTests: XCTestCase {
             "下一步",
         ])
         await Snapshot.save(model, as: "6-hang")
+        // The two buttons are side by side, above the demonstration.
+        XCTAssertTrue(model.screen.blocks.contains(.sideBySide([
+            Button(label: "複製證明連結", action: .copyLink),
+            Button(label: "打開 Threads", action: .openProfile("threads"), spoken: "打開 @alice 的 Threads 個人檔案"),
+        ])))
+        // The demonstration, with this card's account and the address of its page. It plays when its picture
+        // comes onto the screen (the picture then asks for it, as here): its button stops it, at its last
+        // frame, and then plays it again.
+        let demo = try XCTUnwrap(demonstration(on: model.screen))
+        XCTAssertEqual(demo.account, "@alice")
+        XCTAssertEqual(demo.link, link)
+        XCTAssertEqual(demo.description, Copy.bundled()("app_demo.hang"))
+        XCTAssertEqual(demonstration(on: model.screen)?.played, false)
+        model.perform(.showDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
+        try await press("停止", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(demonstration(on: model.screen)?.played, true, "at its last frame")
+        try await press("再看一次", in: model)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, true)
+        // Its end, as the picture tells it.
+        model.perform(.stopDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.control.label, "再看一次")
 
         XCTAssertEqual(asked.configRequests, 1, "the card proof used the config the app asked for when it opened")
         // The card was tapped three times and signed twice; the PIN is gone.
@@ -217,7 +243,7 @@ final class CardProofTests: XCTestCase {
         let ordinal = try XCTUnwrap(
             html.range(of: #"(?<=<p class="ordinal">第 )[0-9,]+(?= 張島民證明</p>)"#, options: .regularExpression).map { String(html[$0]) },
             "the card's page writes its ordinal")
-        try await press("打開 @alice 的 Threads 個人檔案", in: model)
+        try await press("打開 Threads", in: model)
         XCTAssertEqual(opened.last?.absoluteString, "https://www.threads.com/@alice")
 
         // Step 7: the reminder, offered: three months from today, 9:00 in the evening.
@@ -230,10 +256,13 @@ final class CardProofTests: XCTestCase {
         ]
         XCTAssertEqual(model.screen.texts, offered + ["上一步", "開啟提醒", "改提醒間隔或時刻", "這次不要"])
         await Snapshot.save(model, as: "7-reminder")
-        // Back to step 6, as it was left, and on again.
+        // Back to step 6, as it was left, and on again. The demonstration does not play by itself a second time.
         try await press("上一步", in: model)
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("已複製"))
+        model.perform(.showDemo)
+        XCTAssertEqual(demonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(demonstration(on: model.screen)?.played, true)
         try await press("下一步", in: model)
 
         // The system does not let the app notify: nothing is set, and the step says why.
@@ -457,7 +486,10 @@ final class CardProofTests: XCTestCase {
         // Another account: the whole of step 6, for the new account's profile.
         XCTAssertEqual(model.screen.step, 6)
         XCTAssertTrue(model.screen.texts.contains("把證明掛上你的 Threads 個人檔案"))
-        XCTAssertTrue(model.screen.texts.contains("打開 @carol.tw 的 Threads 個人檔案"))
+        XCTAssertTrue(model.screen.blocks.contains(.sideBySide([
+            Button(label: "複製證明連結", action: .copyLink),
+            Button(label: "打開 Threads", action: .openProfile("threads"), spoken: "打開 @carol.tw 的 Threads 個人檔案"),
+        ])))
         XCTAssertFalse(model.screen.texts.contains { $0.hasPrefix("如果你換了新的自然人憑證") })
         // Step 7, asked again (nothing is kept on this phone), and "這次不要": nothing is kept, on to the last step.
         try await press("下一步", in: model)
@@ -686,6 +718,8 @@ final class CardProofTests: XCTestCase {
         func within(_ block: Block) -> [Button] {
             switch block {
             case .button(let button, _), .linked(_, let button, _), .action(let button): return [button]
+            case .sideBySide(let buttons): return buttons
+            case .demo(let demo): return [demo.control]
             case .account(let row): return row.preview.map { [$0] } ?? []
             // Under a question: what its answer holds, once it is opened.
             case .question(_, let answer): return answer.flatMap(within)
@@ -729,6 +763,12 @@ final class CardProofTests: XCTestCase {
 
     private func title(of screen: Screen) -> String? {
         for case .title(let title) in screen.blocks { return title }
+        return nil
+    }
+
+    /// The demonstration of step 6.
+    private func demonstration(on screen: Screen) -> HangDemo? {
+        for case .demo(let demo) in screen.blocks { return demo }
         return nil
     }
 

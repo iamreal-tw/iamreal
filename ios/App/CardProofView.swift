@@ -35,6 +35,8 @@ struct ScreenView: View {
     var unscrolled = false
     /// Drawn again when the phone's text size changes (Theme's sizes follow it).
     @Environment(\.sizeCategory) private var sizeCategory
+    /// Which of step 6's written steps its demonstration is at, 1 to 4; 0 when at none.
+    @State private var demoStep = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -193,11 +195,18 @@ struct ScreenView: View {
         case .steps(let steps):
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    // The step the demonstration is at: on soft grey, a red line at its left (design/copy/hang.md).
+                    let now = index + 1 == demoStep
                     HStack(alignment: .firstTextBaseline, spacing: 14) {
                         Text(verbatim: String(index + 1)).font(Theme.display(Theme.sizeHeading)).foregroundColor(Theme.ink.color)
                         Text(step).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(now ? Theme.soft.color : Theme.bg.color)
+                    .overlay(alignment: .leading) { Rectangle().fill(now ? Theme.you.color : Theme.bg.color).frame(width: 3) }
+                    .padding(.horizontal, -10)
                 }
             }
             .padding(.top, 20)
@@ -316,6 +325,17 @@ struct ScreenView: View {
                 .padding(.top, 20)
         case .button(let button, let main):
             self.button(button, main: main).padding(.top, 12)
+        case .sideBySide(let buttons):
+            sideBySide(buttons).padding(.top, 12)
+        case .demo(let demo):
+            // Without the timeline there is no picture; the written steps under it say the same.
+            if let timeline = HangTimeline.bundled {
+                VStack(spacing: 12) {
+                    HangDemoView(demo: demo, timeline: timeline, perform: perform, step: $demoStep)
+                    self.button(demo.control, main: false)
+                }
+                .padding(.top, 24)
+            }
         case .action(let button):
             SwiftUI.Button { perform(button.action) } label: {
                 Text(button.label).font(Theme.body(Theme.sizeBody)).underline().foregroundColor(Theme.you.color)
@@ -345,17 +365,40 @@ struct ScreenView: View {
 
     /// A button as wide as the screen (design/DESIGN.md, the components):
     /// the main one red with white words, the others framed in ink.
-    private func button(_ button: Button, main: Bool) -> some View {
+    private func button(_ button: Button, main: Bool, oneLine: Bool = false) -> some View {
         SwiftUI.Button { perform(button.action) } label: {
             Text(button.label)
                 .font(Theme.body(Theme.sizeBody, Theme.weightHeading))
+                .lineLimit(oneLine ? 1 : nil)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: Theme.buttonHeight.value)
                 .padding(.horizontal, 12)
         }
         .buttonStyle(Framed(main: main))
+        .accessibilityLabel(button.spoken ?? button.label)
         .disabled(!button.enabled)
         .opacity(button.enabled ? 1 : 0.45)
+    }
+
+    /// Buttons side by side, the first the main one, each on one line;
+    /// one under the other where that does not fit (a long account, large
+    /// text). Before iOS 16 the system cannot be asked which fits: one
+    /// under the other.
+    @ViewBuilder
+    private func sideBySide(_ buttons: [Button]) -> some View {
+        let column = VStack(spacing: 12) {
+            ForEach(Array(buttons.enumerated()), id: \.offset) { index, button in self.button(button, main: index == 0) }
+        }
+        if #available(iOS 16.0, *) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    ForEach(Array(buttons.enumerated()), id: \.offset) { index, button in self.button(button, main: index == 0, oneLine: true) }
+                }
+                column
+            }
+        } else {
+            column
+        }
     }
 
     /// The main button red with white words, darker while pressed; the

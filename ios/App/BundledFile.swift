@@ -32,3 +32,12 @@ enum BundledFile: String, CaseIterable {
         return DeviceCore.ProofFiles(circuit: try circuit.load(), verificationKey: try key.load(), crsG1: try crsG1.load(), crsG2: try crsG2.load())
     }
 }
+
+extension HangTimeline {
+    /// design/motion/hang.json, as the app carries it: the same file the
+    /// site's and the Android app's demonstrations read.
+    static let bundled: HangTimeline? = {
+        guard let url = Bundle.main.url(forResource: "hang", withExtension: "json"), let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(HangTimeline.self, from: data)
+    }()
+}

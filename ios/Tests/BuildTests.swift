@@ -111,6 +111,16 @@ final class BuildTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/copy/app.json"))
     }
 
+    /// The timeline of step 6's demonstration is design/motion/hang.json, as it is in the repository: the app has no
+    /// copy of its own, and what it reads is what the site and the Android app read.
+    func testTheBundledTimelineIsTheOneOfTheRepository() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "hang", withExtension: "json"))
+        XCTAssertEqual(try Data(contentsOf: url), try Repository.data("design/motion/hang.json"))
+        let bundled = try XCTUnwrap(HangTimeline.bundled)
+        XCTAssertEqual(bundled, try JSONDecoder().decode(HangTimeline.self, from: Repository.data("design/motion/hang.json")))
+        XCTAssertEqual(bundled.duration, 20.7)
+    }
+
     /// The headings' typeface is the subset of design/fonts/, as it is in the repository.
     func testTheBundledTypefaceIsTheOneOfTheRepository() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "GenRyuMin2TW-B", withExtension: "otf"))

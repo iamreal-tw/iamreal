@@ -16,6 +16,7 @@
 		1A0000000000000000000031 /* card-proof.json in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000030 /* card-proof.json */; };
 		1A0000000000000000000033 /* app.json in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000032 /* app.json */; };
 		1A0000000000000000000035 /* GenRyuMin2TW-B.otf in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000034 /* GenRyuMin2TW-B.otf */; };
+		1A0000000000000000000037 /* hang.json in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000036 /* hang.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +43,7 @@
 		1A0000000000000000000030 /* card-proof.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "card-proof.json"; path = "../design/copy/card-proof.json"; sourceTree = SOURCE_ROOT; };
 		1A0000000000000000000032 /* app.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = app.json; path = ../design/copy/app.json; sourceTree = SOURCE_ROOT; };
 		1A0000000000000000000034 /* GenRyuMin2TW-B.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GenRyuMin2TW-B.otf"; path = "../design/fonts/GenRyuMin2TW-B.otf"; sourceTree = SOURCE_ROOT; };
+		1A0000000000000000000036 /* hang.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = hang.json; path = ../design/motion/hang.json; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -116,6 +118,7 @@
 				1A0000000000000000000030 /* card-proof.json */,
 				1A0000000000000000000032 /* app.json */,
 				1A0000000000000000000034 /* GenRyuMin2TW-B.otf */,
+				1A0000000000000000000036 /* hang.json */,
 			);
 			name = Bundled;
 			sourceTree = "<group>";
@@ -212,6 +215,7 @@
 				1A0000000000000000000031 /* card-proof.json in Resources */,
 				1A0000000000000000000033 /* app.json in Resources */,
 				1A0000000000000000000035 /* GenRyuMin2TW-B.otf in Resources */,
+				1A0000000000000000000037 /* hang.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
