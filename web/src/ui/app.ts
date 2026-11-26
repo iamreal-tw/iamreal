@@ -872,7 +872,8 @@ export function startApp(o: AppOptions): void {
     const h = COPY.hang;
     const { note, record } = recordParts(view);
     const linkbox = el("div", { class: "linkbox" }, el("span", { class: "id", attrs: { "data-link": "" } }, view.link));
-    const next = primary(COPY.common.next, () => finishScreen(view, () => hangScreen(view, short)));
+    // One main button a screen (design/DESIGN.md): hang.copy on the whole step 6, common.next on the short one.
+    const toFinish = (): void => finishScreen(view, () => hangScreen(view, short));
     let body: (HTMLElement | null)[];
     if (short) {
       body = [
@@ -880,7 +881,7 @@ export function startApp(o: AppOptions): void {
         linkbox,
         el("p", { class: "look" }, ...openProofIn(h.look, view)),
         el("p", { class: "why", attrs: { "data-why-hang": "" } }, say(view.why)),
-        actions(secondary(h.rehang, () => hangScreen(view, false)), next),
+        actions(secondary(h.rehang, () => hangScreen(view, false)), primary(COPY.common.next, toFinish)),
       ];
     } else {
       const copy = primary(h.copy, () => {
@@ -919,7 +920,7 @@ export function startApp(o: AppOptions): void {
         ...notes,
         el("div", { class: "hung" }, el("p", { class: "hung-ask" }, ...openProofIn(t.hung, view)), el("p", {}, t.hung_done)),
         ...record,
-        actionsEnd(next),
+        actionsEnd(secondary(COPY.common.next, toFinish)),
       ];
     }
     show(6, el("section", { class: "step", attrs: { "data-step": "hang", "data-short": String(short) } }, note, ...recordedLines(view), ...body));
@@ -934,7 +935,6 @@ export function startApp(o: AppOptions): void {
     const t = COPY.done;
     const f = COPY.finish;
     const result = view.withdrawAll ? "withdraw_all" : view.kindsUnreadable ? "recorded_only" : "list";
-    const done = (cls: string): HTMLButtonElement => button(f.done, () => before(), cls);
     if (view.withdrawAll) {
       const { note, record } = recordParts(view);
       show(
@@ -947,7 +947,7 @@ export function startApp(o: AppOptions): void {
           ...recordedLines(view),
           el("p", { class: "unlink", attrs: { "data-unlink": "" } }, say(view.unlink)),
           ...record,
-          actionsEnd(done("btn")),
+          actionsEnd(primary(f.done, () => before())),
         ),
       );
       return;
@@ -979,7 +979,7 @@ export function startApp(o: AppOptions): void {
         el("div", { class: "share" }, ...view.shares.map((sh) => newTab(sh.url, { class: "btn", "data-share": "" }, say(sh.button)))),
         // The web has no reminder: when to come back, in words (the app's step 7).
         el("div", { class: "return", attrs: { "data-return": "" } }, el("h3", {}, t.return_title), el("p", {}, t.return_note)),
-        actions(back ? secondary(COPY.common.back, back) : null, done("btn ghost")),
+        actions(back ? secondary(COPY.common.back, back) : null, secondary(f.done, () => before())),
       ),
     );
   }

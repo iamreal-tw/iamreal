@@ -196,7 +196,7 @@ code,
   stroke: var(--bg);
 }
 
-/* Where in the six steps: the line, then six bars, the steps done in ink. */
+/* Where in the seven steps: the line, then seven bars, the steps done in ink. */
 .where .count {
   font-size: var(--size-kicker);
   line-height: var(--leading-kicker);

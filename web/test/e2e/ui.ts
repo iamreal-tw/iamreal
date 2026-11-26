@@ -16,7 +16,7 @@
 //    it sends the CRL archive from the Worker's bucket, read-only.
 // 3. Runs a fake component (fake-component.ts) on localhost:61171, the
 //    test build's component address.
-// 4. Clicks through the six steps like a cardholder (real mouse events,
+// 4. Clicks through the seven steps like a cardholder (real mouse events,
 //    cdp.ts; design/copy/card-proof.md): one card proof handles the card's
 //    whole list of accounts (ADR-0017). With one card: a first declaration
 //    of one platform; card proof again with nothing changed; a correction
