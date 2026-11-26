@@ -10,7 +10,7 @@
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
-| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則。其他的請求不記 | 部署前核對那條生命週期規則；查詢的指令；客戶端還沒有帶過卡裝置編號 |
+| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則；每小時公布最舊一筆的日期，讓外面看得出規則有沒有在刪。其他的請求不記 | 查詢的指令；讀那個日期的外部檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）；客戶端還沒有帶過卡裝置編號 |
 | API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
@@ -910,7 +910,7 @@ IAMREAL_BB=/path/to/bb node --experimental-strip-types --test test/compare.test.
 
 ## 排程做什麼
 
-每小時一次，一輪清冊鏡像（[`src/mirror.ts`](src/mirror.ts)），照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。三步：
+每小時一次。先公布連線紀錄最舊一筆的日期（[連線紀錄](#連線紀錄)，和下面的鏡像互不影響），再做一輪清冊鏡像（[`src/mirror.ts`](src/mirror.ts)），照 [`spec/revocation-tree.md`](../spec/revocation-tree.md)。鏡像三步：
 
 **一、抓和存。**
 
@@ -1316,13 +1316,20 @@ pnpm run deploy:test
 
 **留 31 天，靠儲存桶的生命週期規則**：前綴 `connection/`，物件建立 31 天後刪除。程式自己不刪。文件寫到期的物件「Objects will typically be removed from a bucket within 24 hours of the `x-amz-expiration` value」（[Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)，2026-11-26 讀的），所以實際是 31 到 32 天。
 
-**這條規則現在沒有程式在部署前核對**（票的驗收條件之一，還沒做到）。[`scripts/check-connection-log.ts`](scripts/check-connection-log.ts) 寫好了，可以手動跑：它向 Cloudflare 的 API 讀回儲存桶的生命週期規則，下面任何一項不對就失敗：
+**規則有沒有在刪，從外面看得到**。後台不在部署前讀回這條規則：讀儲存桶的設定要一把有「Workers R2 Storage: Read」的權杖，而這個權限同時讀得到、列得出帳號裡每個儲存桶的物件，連線紀錄本身也在內；Cloudflare 沒有只讀設定、或只限一個儲存桶又讀得到設定的權限。把這樣一把權杖放進 Actions，等於多一個讀得到 IP 的地方。改成看結果：
 
-- 啟用中、會刪物件、碰得到 `connection/` 的規則剛好一條
-- 它的前綴是 `connection/` 或沒有前綴
-- 它照物件的年齡刪，年齡是 2,678,400 秒（31 天）
+- 每小時的排程（和清冊鏡像同一次，在它之前、各做各的）用 `CONNECTION_LOG` 的綁定列出 `connection/` 底下的第一個鍵。鍵以日期開頭，儲存桶照順序列，所以第一個就是最舊的一筆；不管裡面有多少筆，都是一個請求（`src/connection-log.ts` 的 `oldestDay`）
+- 把結果寫成公開資料的一個檔，`connection-log/oldest.json`（`Cache-Control: public, max-age=60`）：
 
-只中止沒傳完的分段上傳的規則（每個儲存桶預設有一條，7 天）、只換儲存等級的規則、沒有啟用的規則、別的前綴的規則都不算。沒有接進部署的原因：讀儲存桶的設定要一把有「Workers R2 Storage: Read」的權杖，而這個權限同時讀得到、列得出帳號裡每個儲存桶的物件，連線紀錄本身也在內；Cloudflare 沒有只讀設定、或只限一個儲存桶又讀得到設定的權限。把這樣一把權杖放進 Actions，等於多一個讀得到 IP 的地方。換哪一種做法還在定（[#20](https://github.com/iamreal-tw/iamreal/issues/20)）。在那之前，這條規則靠營運者設的時候看一次（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。
+  ```
+  {"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-27"}
+  ```
+
+  `checked` 是這一次看的時間，`oldest` 是最舊一筆的日期（UTC），一筆都沒有時是 `null`
+- **這個檔為什麼可以公開**：裡面只有這兩個時間。沒有筆數、沒有鍵、沒有任何一筆紀錄的內容（請求編號、IP、過卡裝置編號、內文都沒有）。最舊那一筆是哪一天，從證明紀錄的紀錄日期本來就大致看得出來
+- 判斷留給外面的檢查（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）：`oldest` 比今天早超過 33 天，就是規則沒有在刪（31 天，加上文件寫的 24 小時內移除，加上日期是 UTC 的進位）；`checked` 超過兩小時沒變，就是後台沒有在看（排程沒跑、儲存桶列不出來、或這個檔寫不進去）。外面的檢查照這個檔自己算。後台看到 `oldest` 超過 33 天時，另外在即時的輸出寫一行 `{"event":"connection_log_overdue","oldest":"2026-10-17"}`（沒有開保存，要當下在看才看得到）
+- 列不出來、第一個鍵不是日期開頭、或檔寫不進去時，這個檔留著上一次的時間，即時的輸出多一行 `{"event":"connection_log_oldest_not_published","error":"Error"}`；清冊鏡像照常做
+- 規則本身由營運者在儲存桶上設（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）：`connection-31-days`，前綴 `connection/`，31 天後刪除。新的儲存桶在第一筆滿 31 天之前，這個檢查看不出規則設錯；營運者設的時候看一次
 
 **刪掉的物件救不救得回來**。規格要求確認 R2 沒有把刪掉的物件救回來的機制（救得回來的話，對外說的 31 天就不成立）。2026-11-26 讀 Cloudflare 的文件，結果是「文件上沒有這種機制」，不是「文件保證沒有」：
 
@@ -1339,7 +1346,7 @@ pnpm run deploy:test
 
 那一筆連線紀錄就是沒有了，不會補寫。
 
-**還沒有的**：營運者查詢用的指令（下載指定日期的物件、照欄位篩）、收到查詢或刪除請求時的做法，在營運的規格（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）的別張票。**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後最舊的物件是哪一天。
+**還沒有的**：營運者查詢用的指令（下載指定日期的物件、照欄位篩）、收到查詢或刪除請求時的做法，在營運的規格（[#413](https://github.com/iamreal-tw/iamreal/issues/413)）的別張票。**還沒在 Cloudflare 上看過的**：`CF-Connecting-IP`、`request.cf` 的 `country` 和 `asn` 實際的值（本機的 workerd 裡 IP 是測試自己帶的標頭）；滿 32 天後 `oldest.json` 的日期有沒有跟著往後移。
 
 ## 停止和恢復收過卡
 
@@ -1562,7 +1569,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
 | R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」） |
-| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。現在沒有程式核對這條規則，改它之前先讀那一節 |
+| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。規則沒有在刪時，公開的 `connection-log/oldest.json` 看得出來 |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)、[每天換日公布證明紀錄](#每天換日公布證明紀錄)）；沒設的物件不會被快取 |
 | Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |

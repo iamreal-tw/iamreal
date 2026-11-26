@@ -3,6 +3,9 @@
 // object counted, and for nothing else. The bucket is private and has no
 // public domain; its lifecycle rule deletes every object under
 // `connection/` 31 days after it was written (README.md, "連線紀錄").
+// Whether that rule does its work is seen from outside: every hour the
+// date of the oldest entry is published, and nothing else of the log
+// (`oldestDay`).
 //
 // What an object holds is all there is in `entryOf`, and no more: this is
 // where the back end keeps an IP address.
@@ -79,7 +82,7 @@ export function entryOf(request: Request, requestId: string, time: Date, submiss
 /**
  * Under this prefix, and under no other, the bucket's lifecycle rule
  * deletes after 31 days: the bucket may hold other things under other
- * prefixes. scripts/check-connection-log.ts reads the rule back.
+ * prefixes.
  */
 export const CONNECTION_LOG_PREFIX = "connection/";
 
@@ -97,4 +100,46 @@ export async function writeEntry(bucket: R2Bucket, entry: ConnectionLogEntry): P
   } catch (e) {
     console.error(JSON.stringify({ event: "connection_log_not_written", id: entry.request_id, error: e instanceof Error ? e.name : "unknown" }));
   }
+}
+
+/**
+ * The date (UTC, `YYYY-MM-DD`) of the oldest entry the bucket holds, or
+ * null if it holds none. A key begins with its entry's date and a bucket
+ * lists its keys in order, so the first key under the prefix is the oldest
+ * entry's: one request, whatever the log holds. Throws if the bucket cannot
+ * be listed, or if that key is not an entry's: then nothing can be said.
+ */
+export async function oldestDay(bucket: R2Bucket): Promise<string | null> {
+  const first = (await bucket.list({ prefix: CONNECTION_LOG_PREFIX, limit: 1 })).objects[0];
+  if (first === undefined) return null;
+  const day = /^(\d{4}-\d{2}-\d{2})\//.exec(first.key.slice(CONNECTION_LOG_PREFIX.length))?.[1];
+  if (day === undefined) throw new Error("the first key of the connection log does not begin with a date");
+  return day;
+}
+
+/** Where the oldest entry's date is published, in the bucket of the public data. */
+export const OLDEST_KEY = "connection-log/oldest.json";
+
+/**
+ * What is published of the connection log, and all that is: when the
+ * bucket was looked at, and the date of its oldest entry. Not how many
+ * entries there are, no key, nothing an entry holds. Whoever checks from
+ * outside reads from it whether the bucket's lifecycle rule deletes what
+ * is older than 31 days (README.md, "連線紀錄"), and whether this look
+ * still happens.
+ */
+export const oldestFile = (checked: Date, oldest: string | null): string => `${JSON.stringify({ checked: checked.toISOString(), oldest })}\n`;
+
+/**
+ * How old the oldest entry may be before something is wrong, in days: the
+ * 31 days of the lifecycle rule, the day R2 may take to remove an object
+ * that has expired, and a day for the dates being whole days in UTC.
+ */
+export const OVERDUE_DAYS = 33;
+
+/** Whether an entry of the day `oldest` is older, at `time`, than any entry should be (`OVERDUE_DAYS`). */
+export function isOverdue(oldest: string | null, time: Date): boolean {
+  if (oldest === null) return false;
+  const today = Date.parse(`${time.toISOString().slice(0, 10)}T00:00:00Z`);
+  return today - Date.parse(`${oldest}T00:00:00Z`) > OVERDUE_DAYS * 24 * 60 * 60 * 1000;
 }

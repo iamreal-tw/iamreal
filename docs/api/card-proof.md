@@ -507,6 +507,7 @@ without going through the server's code (ADR-0027). The test site's are on
 |---|---|
 | `https://data.iamreal.tw/crl/index.jsonl` | The archive index ([`spec/revocation-tree.md`](../../spec/revocation-tree.md), "Archive index") |
 | `https://data.iamreal.tw/crl/<SHA-256>.crl` | One CRL of the archive, the original bytes; `<SHA-256>` is the file's SHA-256 as 64 lowercase hex digits |
+| `https://data.iamreal.tw/connection-log/oldest.json` | `{"checked":"2026-11-26T12:00:07.123Z","oldest":"2026-10-27"}`: when the server last looked at its connection log (UTC), every hour, and the date (UTC) of the oldest entry it then held, `null` if it held none. Nothing else of the connection log is published. An `oldest` more than 33 days before today means the entries are not being deleted after the 31 days of "Rules for every endpoint" (31 days, up to a day for the deletion to happen, and the dates being UTC); a `checked` more than two hours old means the server no longer looks. No device reads this file |
 | `https://data.iamreal.tw/proof-log/` | The log directory, its record hash lists (`hashes/`) and `fingerprints.jsonl` ([`spec/record.md`](../../spec/record.md), "The published proof log"), and the card state files of the last days (`card-state/`, [`spec/record-rules.md`](../../spec/record-rules.md), "The card state file") |
 
 Only `GET` from the card proof page's origin is allowed across origins

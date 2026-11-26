@@ -35,7 +35,7 @@ const conditionsOf = (requests: readonly MoicaRequest[], issuer: string): Record
 };
 
 /** Every file of the bucket and when it was written. */
-const written = async (worker: TestWorker): Promise<[string, number][]> => (await worker.files()).map((f) => [f.key, f.uploaded.getTime()]);
+const written = async (worker: TestWorker): Promise<[string, number][]> => (await worker.files("crl/")).map((f) => [f.key, f.uploaded.getTime()]);
 
 describe("the mirror asks MOICA with a condition", () => {
   let worker: TestWorker;

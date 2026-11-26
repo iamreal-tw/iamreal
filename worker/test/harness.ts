@@ -174,6 +174,8 @@ export interface TestWorker {
   failConnectionLog(fails: boolean): Promise<void>;
   /** Takes every object out of the connection log's bucket. */
   emptyConnectionLog(): Promise<void>;
+  /** Puts an object into the connection log's bucket behind the Worker's back, under any key. */
+  putInConnectionLogBucket(key: string, text: string): Promise<void>;
   /**
    * What the proof log's Durable Object knows of the CRL archive, through the
    * test build's `GET /__test/newest-crls`.
@@ -619,6 +621,9 @@ export async function startWorker(options: StartOptions = {}): Promise<TestWorke
         out.push({ key, text, entry: JSON.parse(text) as Record<string, unknown>, contentType: object.httpMetadata?.contentType });
       }
       return out;
+    },
+    async putInConnectionLogBucket(key, text) {
+      await (await worker.getEnv()).CONNECTION_LOG.put(key, text);
     },
     async emptyConnectionLog() {
       const { CONNECTION_LOG } = await worker.getEnv();

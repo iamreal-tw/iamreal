@@ -266,3 +266,72 @@ describe("writing the connection log does not go through the proof log's object"
     }
   });
 });
+
+describe("the date of the oldest entry is published every hour, and nothing else of the log", () => {
+  const OLDEST = "connection-log/oldest.json";
+  /** The published file after one run of the schedule: its text, what it says, and its headers. */
+  async function published(): Promise<{ text: string; said: Record<string, unknown>; cacheControl: string | undefined; contentType: string | undefined }> {
+    // The round of the mirror in the same run ends as it will (MOICA has nothing here): not this file's business.
+    await worker.runSchedule();
+    const [file] = await worker.files(OLDEST);
+    assert.ok(file, `the data bucket has ${OLDEST}`);
+    const text = new TextDecoder().decode(file.bytes);
+    return { text, said: JSON.parse(text) as Record<string, unknown>, cacheControl: file.cacheControl, contentType: file.contentType };
+  }
+
+  test("an empty log: the time it was looked at, and null", async () => {
+    const file = await published();
+    assert.equal(file.text, `{"checked":"${START.toISOString()}","oldest":null}\n`);
+    assert.deepEqual([file.cacheControl, file.contentType], ["public, max-age=60", "application/json"]);
+  });
+
+  test("entries of several days: the earliest day, whatever else the bucket holds; the two keys and no other", async () => {
+    const later = new Date(START.getTime() + 3 * 24 * 3600 * 1000);
+    await worker.setClock(later);
+    const second = await submit(await sub(worker, newCard(), root, "threads:bob"), { device_id: DEVICE });
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+    await worker.setClock(START);
+    const first = await submit({ ...(await sub(worker, newCard(), root, "threads:alice")), proof: BAD_PROOF });
+    assert.equal(first.body.error, "proof");
+    await entries(2);
+    // Under another prefix of the same bucket, older: not the connection log's.
+    await worker.putInConnectionLogBucket("counts/2020-01-01/x.json", "{}");
+
+    await worker.setClock(later);
+    const file = await published();
+    assert.deepEqual(Object.keys(file.said), ["checked", "oldest"]);
+    assert.deepEqual(file.said, { checked: later.toISOString(), oldest: "2026-11-20" });
+    // Nothing an entry holds, and not how many there are.
+    for (const part of [IP, DEVICE, first.requestId, second.requestId, "alice", "bob", "proof"]) assert.ok(!file.text.includes(part), part);
+  });
+
+  test("an entry older than 31 days and the two days of slack: its date is published as it is, and the live log says the log is overdue; one day less, and it does not", async () => {
+    const overdue = (lines: number): unknown[] => worker.logLines().slice(lines).filter((l) => l.includes("connection_log_overdue")).map((l) => JSON.parse(l) as unknown);
+    // START is 2026-11-20 (UTC): 33 days before it is 2026-10-18.
+    await worker.putInConnectionLogBucket("connection/2026-10-18/2026-10-18T03:00:00.000Z-0123456789abcdef.json", "{}");
+    let lines = worker.logLines().length;
+    assert.deepEqual((await published()).said, { checked: START.toISOString(), oldest: "2026-10-18" });
+    assert.deepEqual(overdue(lines), [], "33 days old is not overdue yet");
+
+    await worker.putInConnectionLogBucket("connection/2026-10-17/2026-10-17T23:59:59.999Z-fedcba9876543210.json", "{}");
+    lines = worker.logLines().length;
+    assert.deepEqual((await published()).said, { checked: START.toISOString(), oldest: "2026-10-17" });
+    assert.deepEqual(overdue(lines), [{ event: "connection_log_overdue", oldest: "2026-10-17" }]);
+
+    // The old ones gone, as the lifecycle rule takes them: nothing is said again.
+    await worker.emptyConnectionLog();
+    lines = worker.logLines().length;
+    assert.deepEqual((await published()).said, { checked: START.toISOString(), oldest: null });
+    assert.deepEqual(overdue(lines), []);
+  });
+
+  test("a bucket whose first key is no entry's: nothing is said, the file keeps its earlier time, and the live log has one line", async () => {
+    const before = await published();
+    await worker.putInConnectionLogBucket("connection/0-not-a-date.json", "{}");
+    await worker.setClock(new Date(START.getTime() + 3600 * 1000));
+    const lines = worker.logLines().length;
+    const after = await published();
+    assert.equal(after.text, before.text);
+    assert.deepEqual(worker.logLines().slice(lines).filter((l) => l.includes("connection_log_oldest")).map((l) => JSON.parse(l) as unknown), [{ event: "connection_log_oldest_not_published", error: "Error" }]);
+  });
+});
