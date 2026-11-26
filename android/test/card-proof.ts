@@ -378,7 +378,6 @@ function shows(screen: string[], where: string, sentences: string[]): void {
 /** "第 2 步，共 8 步": the same from step 1 on. */
 const step = (n: number): string => say("common.step", { step: n, steps: 8 });
 const THREADS = "Threads";
-const SPOT = say("app_read.spot_android");
 const READ_ITEMS = [say("read.server"), say("app_read.certificate"), say("read.check"), say("read.crl")];
 const PROGRESS_ITEMS = [say("progress.server"), say("app_progress.sign"), say("app_progress.compute", { seconds: 10 }), say("progress.submit")];
 
@@ -489,7 +488,7 @@ async function cardProof(p: Proof): Promise<string> {
     shows(s, "step 2", [say("read.title"), say("app_read.how_android"), say("app_demo.replay"), ...READ_ITEMS, say("common.back"), say("app_read.tap_card")]);
     check(![say("read.component"), say("read.reader"), say("read.certificate")].some((x) => s.includes(x)), "step 2's list has no item of MOICA's component or a card reader");
     // Where on its back differs from one Android phone to another: nothing here says the middle, or not to move the card.
-    check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: SPOT })), "step 2 does not say where on the phone's back, nor the sentence that says not to move the card");
+    check(!s.some((t) => t.includes(say("app_read.spot_iphone")) || t === say("app_read.how", { spot: say("app_read.spot_iphone") })), "step 2 does not say where on the phone's back, nor the iPhone's sentence that says not to move the card");
   }
   press(say("app_read.tap_card"));
   if (p.thorough) await tapWithPanel({ signs: false });
@@ -966,7 +965,7 @@ async function interruptions(): Promise<void> {
   // Tap 1: the card leaves while it is read.
   press(say("app_read.tap_card"));
   await hold(leaving("reading"));
-  await waitText(say("app_stops.read_dropped"), "step 2: the sentence for a card that left", 20_000);
+  await waitText(say("app_stops.read_dropped_android"), "step 2: Android's sentence for a card that left", 20_000);
   shows(wholeScreen(), "step 2, the card left,", [say("common.halted"), again]);
   press(again);
   await tap();

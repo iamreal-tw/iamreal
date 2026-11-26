@@ -17,9 +17,30 @@ class InterruptionsViewTest {
     private fun card(reason: CardException.Reason) = Stop("card", mapOf("reason" to reason.name))
 
     @Test
+    fun `no card sensed - how to look for the place again, and nothing about holding the card still`() {
+        val none = card(CardException.Reason.NO_TAP)
+        assertEquals("沒有感應到卡片。請再感應一次：把卡片平貼在手機背面，沒有反應就慢慢上下移動，畫面變成「讀取中」就停住。", messages.stop(none, Messages.At.READ))
+        assertEquals(ReadButton.TAP_AGAIN, readButtonAfter(none))
+    }
+
+    @Test
+    fun `where a card is looked for the app's sentences never say not to move it`() {
+        // The rule (design/copy/card-proof.md, after step 2): moving the card is how its place is found; it is kept still once the
+        // screen says it is being read. So "不要移動" only where the sentence is about that moment.
+        val still = "不要移動"
+        for (key in listOf("app_read.how_android", "app_panel.android_wait", "app_demo.sense_android", "app_stops.no_tap_android")) {
+            assertEquals("$key says not to move the card", false, copy.say(key).contains(still))
+        }
+        val reading = copy.say("app_panel.android_busy_title")
+        for (key in listOf("app_panel.reading", "app_panel.signing")) assertEquals(key, true, copy.say(key).contains(still))
+        assertEquals("app_stops.read_dropped_android ties it to the screen saying so", true, copy.say("app_stops.read_dropped_android").contains("「$reading」之後$still"))
+    }
+
+    @Test
     fun `a card that left - each step's own sentence, and the tap again`() {
         val left = card(CardException.Reason.DROPPED)
-        assertEquals(copy.say("app_stops.read_dropped"), messages.stop(left, Messages.At.READ))
+        // Android's own: the card is kept still once the screen says it is being read, not while it is looked for.
+        assertEquals("卡片在讀取途中離開了手機。請再感應一次；畫面變成「讀取中」之後不要移動卡片，直到畫面說可以拿開。", messages.stop(left, Messages.At.READ))
         assertEquals(copy.say("app_stops.dropped_pin_kept"), messages.stop(left, Messages.At.PIN))
         assertEquals(copy.say("app_stops.dropped"), messages.stop(left, Messages.At.DECLARE))
         assertEquals(ReadButton.TAP_AGAIN, readButtonAfter(left))
