@@ -265,6 +265,9 @@ func readExtensions(s *cryptobyte.String) ([]Extension, error) {
 	for !seq.Empty() {
 		var ext, value cryptobyte.String
 		var x Extension
+		// ReadASN1ObjectIdentifier takes exactly what the spec does ("Object
+		// identifiers"): not empty, every number in its shortest form and at
+		// most 2^31 - 1, the last one complete.
 		if !seq.ReadASN1(&ext, cbasn1.SEQUENCE) || !ext.ReadASN1ObjectIdentifier(&x.ID) {
 			return nil, errors.New("malformed Extension")
 		}

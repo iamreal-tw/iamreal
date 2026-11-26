@@ -78,7 +78,14 @@ export const TAG = {
   SET: 0x31,
 } as const;
 
-/** An OID's content bytes in dotted form. */
+/** The largest number an OID may hold, as written (spec/revocation-tree.md, "Object identifiers"). */
+const MAX_OID_NUMBER = 2 ** 31 - 1;
+
+/**
+ * An OID's content bytes in dotted form: not empty, every number in its
+ * shortest form and at most 2^31 - 1, the last one complete
+ * (spec/revocation-tree.md, "Object identifiers").
+ */
 export function oidString(bytes: Uint8Array): string {
   if (bytes.length === 0) throw new DerError("empty OID");
   const parts: number[] = [];
@@ -87,6 +94,8 @@ export function oidString(bytes: Uint8Array): string {
     const c = bytes[i]!;
     if (x === 0 && c === 0x80) throw new DerError("non-minimal OID arc");
     x = x * 128 + (c & 0x7f);
+    // Checked at every byte, so `x` stays far below what a number holds exactly.
+    if (x > MAX_OID_NUMBER) throw new DerError("an OID number above 2^31 - 1");
     if (!(c & 0x80)) {
       if (parts.length === 0) {
         const first = x < 40 ? 0 : x < 80 ? 1 : 2;
@@ -104,6 +113,9 @@ export function oidString(bytes: Uint8Array): string {
  * the epoch: the spellings of RFC 5280 (spec/revocation-tree.md, "Times").
  */
 export function readTime(der: Uint8Array, t: Tlv): number {
+  // The length first: a UTCTime is 13 bytes and a GeneralizedTime 15, and a very long content must not be spread into arguments
+  // (that throws a RangeError, which is not "this is not DER").
+  if (t.end - t.contentStart !== (t.tag === TAG.UTC_TIME ? 13 : 15)) throw new DerError("not a DER time");
   const s = String.fromCharCode(...content(der, t));
   let full: string;
   if (t.tag === TAG.UTC_TIME && /^[0-9]{12}Z$/.test(s)) full = (Number(s.slice(0, 2)) >= 50 ? "19" : "20") + s;
