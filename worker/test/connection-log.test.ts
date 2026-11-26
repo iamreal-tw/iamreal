@@ -22,14 +22,16 @@ before(async () => {
 after(() => worker.close());
 
 beforeEach(async () => {
+  IP = `203.0.113.${++tests}`;
   await worker.failConnectionLog(false);
   await freshProofLog(worker);
   root = await publishG3(worker);
   await worker.emptyConnectionLog();
 });
 
-/** Where the test says its requests come from. */
-const IP = "203.0.113.7";
+/** Where the test says its requests come from: an address of its own for each test, so that none is over a per-IP limit (ADR-0026) for what another sent. */
+let IP = "203.0.113.0";
+let tests = 0;
 const DEVICE = "0123456789abcdef0123456789abcdef";
 
 interface Sent {

@@ -18,6 +18,19 @@ record is or how it is verified. It can change without invalidating records.
 - Every response carries `X-Content-Type-Options: nosniff`.
 - **A request that carries a scoped ID is a `POST` with the scoped ID in the
   body, never in the URL.**
+- **Every endpoint can answer `429` `rate_limited`**, with a `Retry-After`
+  header: the number of seconds to wait, a whole minute at most. The server
+  counts the requests of one network in each minute, an IPv4 address by
+  itself and an IPv6 address by its /64, and counts them apart in five
+  classes, so that being over one's limit does not stop the others
+  (ADR-0026): `challenges`; `card-state`; `records`; the public reads
+  `config`, `fingerprint` and `rebuild` together; and the visitors' pages.
+  A request that is answered `429` was not read: it does not count towards
+  a challenge's five submissions, and nothing is kept of it. The limits
+  are more than a household or an office behind one address uses; they
+  are the operator's settings and not part of this document. A device
+  that gets `429` from `challenges`, `card-state` or `records` offers to
+  send the same request again and does not start the card proof over.
 - **The server keeps a connection log of one kind of request, and of no
   other** (ADR-0022): a submission of a record (`POST /api/v1/records`)
   that carried a challenge the server issued and that it counted towards
@@ -89,8 +102,8 @@ Issues a challenge ([`spec/challenge.md`](../../spec/challenge.md)).
 - The server writes nothing for this request. A challenge is in its
   connection log only inside the body of a counted submission that did not
   become a record ("Rules for every endpoint").
-- Errors: `429` `rate_limited`; `503` `paused` (under `records`, below):
-  no challenge is issued.
+- Errors: `429` `rate_limited` ("Rules for every endpoint"); `503` `paused`
+  (under `records`, below): no challenge is issued.
 
 What the device does with it: checks the format in its one spelling; checks
 that the date is today in Taiwan by the device's own clock, and stops
@@ -134,7 +147,8 @@ for all of them (ADR-0017).
   - `count` is the number of records the answer was computed at: every
     record stored at that moment, not the count of the last line published
     in `fingerprints.jsonl`. The answer carries no proof log fingerprint.
-- Errors: `400` `malformed`, also for a scope this proof log does not accept.
+- Errors: `400` `malformed`, also for a scope this proof log does not accept;
+  `429` `rate_limited` ("Rules for every endpoint").
 
 The server sends facts, not conclusions. The device computes the rest from
 them and from today's date in Taiwan by its own clock:
@@ -282,7 +296,7 @@ Submits one card proof: the card's whole list of accounts.
   | `400` | `empty`, `switch_limit`, `daily_limit` | The record rule of that name. The whole list is refused; nothing is recorded for any platform |
   | `403` | `switch_restricted` | The record rules accept the record, but the server's operating policy does not accept a switch in it. The whole list is refused |
   | `503` | `crl_stale` | The newest CRL of the record's issuer key is more than 3 days old, or the server has none; no card proof of that issuer key is accepted |
-  | `429` | `rate_limited` | |
+  | `429` | `rate_limited` | The network sent too many submissions in this minute ("Rules for every endpoint"). The submission was not read and does not count |
 
   A submission that fails leaves the challenge usable, up to the 5
   submissions. The challenge is looked at twice (below), and a submission
@@ -453,6 +467,8 @@ name the platforms the cardholder sees: the device shows its own names
 proof log does not accept; the cardholder sees the platform ID and the account
 in the list before signing.
 
+- Errors: `429` `rate_limited` ("Rules for every endpoint").
+
 What the device does with what it cannot read:
 
 - **No response, or no `platforms` it can read**: the device does not go on
@@ -482,6 +498,7 @@ What the device does with what it cannot read:
 - It says nothing of the records written since that line: `count` here can
   be less than the `count` of `card-state`.
 - It is answered while the proof log is paused.
+- Errors: `429` `rate_limited` ("Rules for every endpoint").
 
 ## `GET /api/v1/rebuild`
 
@@ -505,6 +522,7 @@ No device reads it.
   name the operator set while card proofs were not stopped begins nothing,
   and the answer stays what it was.
 - While a rebuild is `running`, `challenges` and `records` answer `paused`.
+- Errors: `429` `rate_limited` ("Rules for every endpoint").
 
 ## Public files
 

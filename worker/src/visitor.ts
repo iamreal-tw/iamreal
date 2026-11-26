@@ -14,6 +14,10 @@
 //   anything else     the page for what is not there
 //                     (design/copy/not-found.md), with 404
 //
+// A network that asked for too many pages in a minute gets, in place of any
+// of them, the page that says so (design/copy/too-many-requests.md), with
+// 429 and Retry-After (rate-limit.ts; ADR-0026).
+//
 // The pages are made here, from what `PageData` answers (page-data.ts).
 // Their style sheet (/pages.css), the copy buttons' script that /faq, /verify
 // and /hang/… load (/copy.js), the player of the demonstration that /hang and
@@ -43,6 +47,8 @@ import { PLATFORM, isThreadsUsername, proofMissing, proofPage } from "./pages/pr
 import { PAGE_SIZE, proofLogPage, readAfter } from "./pages/proof-log-page.ts";
 import { verifyPage } from "./pages/verify.ts";
 import { OTHER_SCHEMA } from "./proof-log.ts";
+import { tooManyRequestsPage } from "./pages/too-many-requests.ts";
+import { RETRY_AFTER_SECONDS, withinLimit } from "./rate-limit.ts";
 import { proofLogSettingsOf } from "./settings.ts";
 
 /** What the pages are given besides the environment: the piece that is behind an interface, so that it can be replaced by itself. */
@@ -243,7 +249,12 @@ export async function visitor(request: Request, env: Env, parts: VisitorParts): 
       throw new Internal("settings", e);
     }
     if (request.method !== "GET" && request.method !== "HEAD") answer = { ...text(405, "method not allowed\n"), headers: { ...text(405, "").headers, Allow: "GET, HEAD" } };
-    else if (kind === "home") answer = await home(site, parts);
+    // Every page that reaches the Worker is counted, the ones that ask the proof log's object nothing too
+    // (ADR-0026): before the object is asked. The page that says so is not kept by any cache.
+    else if (!(await withinLimit(env, "pages", request))) {
+      const told = page(site, 429, tooManyRequestsPage());
+      answer = { ...told, headers: { ...told.headers, "Cache-Control": "no-store", "Retry-After": String(RETRY_AFTER_SECONDS) } };
+    } else if (kind === "home") answer = await home(site, parts);
     else if (kind === "card") answer = await card(site, parts, pathname);
     else if (kind === "proof_log") answer = await proofLog(site, parts, searchParams);
     else if (kind === "account") answer = await threadsAccount(site, parts, pathname);

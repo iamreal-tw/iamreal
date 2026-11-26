@@ -87,7 +87,7 @@
 | ADR | 程式現在還是 | 票 |
 |---|---|---|
 | 0025 | 每天的重驗有了（`.github/workflows/reverify.yml`），只跑測試的證明紀錄：正式的那一份寫好了、等正式網站才打開；每次從第 1 筆整份重驗，沒有進度檔，`iamreal-verify` 也還不能接著上次做、指定一段序號；沒通過時沒有東西通知營運者 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)，通知在 [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
-| 0026 | 沒有限流；`config` 在流程一開始就拿 | [#32](https://github.com/iamreal-tw/iamreal/issues/32) |
+| 0026 | 後台有了照 IP 的那一層（Worker 裡的 Rate Limiting binding，[#418](https://github.com/iamreal-tw/iamreal/issues/418)）；沒有全站的總量上限、Durable Object 撐不住時的處理、客戶端對 `429` 的處理；WAF 的限流規則和挑戰頁還沒有設 | [#413](https://github.com/iamreal-tw/iamreal/issues/413)、[#32](https://github.com/iamreal-tw/iamreal/issues/32) |
 | 0027 | 指紋檔沒有另一份 | [#35](https://github.com/iamreal-tw/iamreal/issues/35) |
 | 0028 | 測試的證明紀錄每天重驗了；沒通過時還沒有東西通知營運者，要自己看執行紀錄 | [#53](https://github.com/iamreal-tw/iamreal/issues/53) |
 | 0029 | 只有測試網站的部署（合併到 main）；沒有推版本標籤部署正式網站的工作流程、production environment、正式的權杖 | [#39](https://github.com/iamreal-tw/iamreal/issues/39) |
