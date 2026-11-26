@@ -71,6 +71,11 @@ final class CardProofModel: ObservableObject {
     /// The demonstration of step 6 is playing; it has played in this card proof.
     private var demoPlaying = false
     private var demoPlayed = false
+    /// The demonstration of step 2 is playing; it has played since the step came up.
+    private var sensePlaying = false
+    private var sensePlayed = false
+    /// What step 2 shows: how far the list is, whether a tap is under way, why it stopped.
+    private var reading: (reached: Int, running: Bool, stop: CardProofFlow.Stop?) = (0, false, nil)
     private var copied = false
     /// "開啟提醒" was pressed on step 7 and the system said no.
     private var reminderRefused = false
@@ -149,9 +154,16 @@ final class CardProofModel: ObservableObject {
 
     func perform(_ action: Action) {
         switch action {
-        case .start, .readAgain:
+        case .start:
             reset()
-            screen = screens.read(reached: 0, running: false, stop: nil)
+            // The demonstration of where the card goes plays as the step comes up.
+            sensePlaying = true
+            screen = read(reached: 0, running: false, stop: nil)
+        case .readAgain:
+            reset()
+            // The card was tapped once already: the demonstration is at rest, and plays again only by its button.
+            sensePlayed = true
+            screen = read(reached: 0, running: false, stop: nil)
         case .back: back()
         case .readCard: run { await self.readCard() }
         case .toPIN:
@@ -276,9 +288,25 @@ final class CardProofModel: ObservableObject {
         return allowed
     }
 
-    /// The demonstration of step 6 from its start, or at its last frame.
-    /// The screen draws it; here is only which, for its one button.
+    /// Step 2 as it is now, with its demonstration.
+    private func read(reached: Int, running: Bool, stop: CardProofFlow.Stop?) -> Screen {
+        reading = (reached, running, stop)
+        if sensePlaying { sensePlayed = true }
+        return screens.read(reached: reached, running: running, stop: stop, demoPlaying: sensePlaying, demoPlayed: sensePlayed)
+    }
+
+    /// The demonstration of the step that is up (2 or 6) from its start,
+    /// or at its last frame. The screen draws it; here is only which, for
+    /// its one button.
     private func playDemo(_ playing: Bool) {
+        // Step 2's, of where the card goes: not while a tap is under way.
+        if finished == nil, screen.step == 2 {
+            guard !reading.running, sensePlaying != playing else { return }
+            sensePlaying = playing
+            if playing { sensePlayed = true }
+            screen = read(reached: reading.reached, running: reading.running, stop: reading.stop)
+            return
+        }
         guard finished != nil, after == .hang, demoPlaying != playing else { return }
         demoPlaying = playing
         if playing { demoPlayed = true }
@@ -350,6 +378,8 @@ final class CardProofModel: ObservableObject {
         rehanging = false
         demoPlaying = false
         demoPlayed = false
+        sensePlaying = false
+        sensePlayed = false
         copied = false
         reminderRefused = false
         reached = 0
@@ -364,7 +394,8 @@ final class CardProofModel: ObservableObject {
         case 3:
             // Back to reading the card, which is read again.
             reset()
-            screen = screens.read(reached: 0, running: false, stop: nil)
+            sensePlaying = true
+            screen = read(reached: 0, running: false, stop: nil)
         case 5:
             guard let status, (try? flow?.back()) != nil else { return }
             consequence = nil
@@ -398,8 +429,10 @@ final class CardProofModel: ObservableObject {
 
     private func readCard() async {
         reset()
+        // The tap is on: the demonstration is at rest, and does not play again by itself.
+        sensePlayed = true
         reached = 0
-        screen = screens.read(reached: 0, running: true, stop: nil)
+        screen = read(reached: 0, running: true, stop: nil)
         // The server first: the lowest version that may do a card proof is its to say.
         var config: Data
         do {
@@ -415,7 +448,7 @@ final class CardProofModel: ObservableObject {
         } catch {
             configuring = nil
             let failure = error as? BackendFailure ?? BackendFailure(code: "network", requestID: nil)
-            screen = screens.read(reached: 0, running: false, stop: .server(failure))
+            screen = read(reached: 0, running: false, stop: .server(failure))
             return
         }
         let flow: CardProofFlow
@@ -424,15 +457,15 @@ final class CardProofModel: ObservableObject {
         } catch CardProofFlow.Stop.server(let failure) where failure.code == "paused" {
             // Step 1 says so from now on.
             paused = true
-            screen = screens.read(reached: 0, running: false, stop: .server(failure))
+            screen = read(reached: 0, running: false, stop: .server(failure))
             return
         } catch {
-            screen = screens.read(reached: 0, running: false, stop: error as? CardProofFlow.Stop ?? .state)
+            screen = read(reached: 0, running: false, stop: error as? CardProofFlow.Stop ?? .state)
             return
         }
         self.flow = flow
         reached = 1
-        screen = screens.read(reached: 1, running: true, stop: nil)
+        screen = read(reached: 1, running: true, stop: nil)
         do {
             name = try await flow.readCard { [weak self] progress in
                 guard let self, self.flow === flow else { return }
@@ -440,16 +473,16 @@ final class CardProofModel: ObservableObject {
                 case .certificatesRead: self.reached = 2
                 case .certificateChecked: self.reached = 3
                 }
-                self.screen = self.screens.read(reached: self.reached, running: true, stop: nil)
+                self.screen = self.read(reached: self.reached, running: true, stop: nil)
             }
             // The list ends with the CRL; the tree is built while the PIN is typed.
             try await flow.revocationChecked()
             guard self.flow === flow else { return }
             reached = 4
-            screen = screens.read(reached: 4, running: false, stop: nil)
+            screen = read(reached: 4, running: false, stop: nil)
         } catch {
             guard self.flow === flow else { return }
-            screen = screens.read(reached: reached, running: false, stop: error as? CardProofFlow.Stop ?? .state)
+            screen = read(reached: reached, running: false, stop: error as? CardProofFlow.Stop ?? .state)
         }
     }
 

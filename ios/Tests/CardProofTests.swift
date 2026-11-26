@@ -86,9 +86,10 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "讀取卡片",
             "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。",
-            "① 翻到有相機的那面",
-            "② 卡片貼住上方",
-            "把手機翻到有相機的那一面，卡片貼住上方",
+            // The demonstration of where the card goes: what VoiceOver reads in its place, and its button. It plays
+            // as the step comes up.
+            "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。",
+            "停止",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
@@ -96,6 +97,19 @@ final class CardProofTests: XCTestCase {
             "上一步",
             "感應卡片",
         ])
+
+        // Its button stops it, at rest with the card in place, and then plays it again; its three rounds over, as
+        // the picture tells it, it is at rest again.
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.description, Copy.bundled()("app_demo.sense_iphone"))
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
+        try await press("停止", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.replay"))
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.played, true)
+        try await press("再看一次", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.control.label, Copy.bundled()("app_demo.stop"))
+        model.perform(.stopDemo)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, false)
+        try await press("再看一次", in: model)
 
         try await press("感應卡片", in: model)
         XCTAssertEqual(model.screen.texts, [
@@ -587,6 +601,29 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
     }
 
+    /// "感應卡片" was pressed and no card came: the demonstration of where the card goes is at rest with the card
+    /// in place, and does not play again by itself, also not after "再感應一次"; its button plays it again.
+    func testTheDemonstrationDoesNotPlayAgainByItselfOnceTheCardWasTapped() async throws {
+        let model = makeModel(card: NoCardReader())
+        try await press("下一步", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true, "it plays as the step comes up")
+        try await press("感應卡片", in: model)
+        XCTAssertEqual(model.screen.step, 2)
+        XCTAssertTrue(model.screen.texts.contains("沒有感應到卡片。請再感應一次，把卡片平貼在手機背面的上方。"))
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, false)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.played, true)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.control, Button(label: "再看一次", action: .playDemo))
+        try await press("再感應一次", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, false)
+        try await press("再看一次", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
+        // Back to step 1 and to step 2 again: it plays as the step comes up.
+        try await press("再感應一次", in: model)
+        model.perform(.restart)
+        try await press("下一步", in: model)
+        XCTAssertEqual(senseDemonstration(on: model.screen)?.playing, true)
+    }
+
     /// A PIN the card refuses is dropped, and asked for again on the same screen.
     func testAWrongPINIsDroppedAndAskedForAgain() async throws {
         try await onTheSecondDay()
@@ -662,7 +699,7 @@ final class CardProofTests: XCTestCase {
     /// A model as the app makes its own, with the card and the back end of
     /// this test. `opened`: it has asked for `config`, as the screen makes
     /// it do when it is first drawn.
-    private func makeModel(opened: Bool = true) -> CardProofModel {
+    private func makeModel(opened: Bool = true, card: Card? = nil) -> CardProofModel {
         let backend = self.backend!
         let asked = CountingBackend(HTTPBackend(site: backend.origin, publicFiles: backend.origin))
         self.asked = asked
@@ -672,7 +709,7 @@ final class CardProofTests: XCTestCase {
         let flow = CardProofFlow.Dependencies(
             proofLog: .test,
             backend: asked,
-            card: card,
+            card: card ?? self.card,
             clock: { [unowned self] in self.now },
             crlNumbers: MemoryCRLNumbers(),
             openSession: backend.openSession,
@@ -720,6 +757,7 @@ final class CardProofTests: XCTestCase {
             case .button(let button, _), .linked(_, let button, _), .action(let button): return [button]
             case .sideBySide(let buttons): return buttons
             case .demo(let demo): return [demo.control]
+            case .senseDemo(let demo): return [demo.control]
             case .account(let row): return row.preview.map { [$0] } ?? []
             // Under a question: what its answer holds, once it is opened.
             case .question(_, let answer): return answer.flatMap(within)
@@ -763,6 +801,12 @@ final class CardProofTests: XCTestCase {
 
     private func title(of screen: Screen) -> String? {
         for case .title(let title) in screen.blocks { return title }
+        return nil
+    }
+
+    /// The demonstration of step 2.
+    private func senseDemonstration(on screen: Screen) -> SenseDemo? {
+        for case .senseDemo(let demo) in screen.blocks { return demo }
         return nil
     }
 

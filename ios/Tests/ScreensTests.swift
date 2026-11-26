@@ -83,7 +83,8 @@ final class ScreensTests: XCTestCase {
         let (consequence, done) = declaration()
         return [
             ("card-proof-app-1-before-phone", screens.before()),
-            ("card-proof-app-2-read-iphone-phone", screens.read(reached: 0, running: false, stop: nil)),
+            // The demonstration at rest: the card in place behind the top of the phone.
+            ("card-proof-app-2-read-iphone-phone", screens.read(reached: 0, running: false, stop: nil, demoPlayed: true)),
             ("card-proof-app-3-pin-phone", screens.pin(name: "王小明", state: .waiting(nil))),
             ("card-proof-app-4-accounts-phone", screens.accounts(newCard, typed: ["threads": "alice"], errors: [:], message: nil)),
             ("card-proof-app-5-confirm-phone", screens.confirm(newCard, consequence)),
@@ -438,8 +439,8 @@ final class ScreensTests: XCTestCase {
 
     /// Where the card goes on an iPhone: drawn under the first sentence of
     /// step 2 before the tap, while it goes on under the system's panel,
-    /// and when it stopped; not once the card is read. Its captions and
-    /// the sentence VoiceOver reads are card-proof.md's.
+    /// and when it stopped; not once the card is read. The sentence
+    /// VoiceOver reads in its place is card-proof.md's.
     func testTheReadingStepShowsWhereTheCardGoesUntilItIsRead() throws {
         let shown = [
             screens.read(reached: 0, running: false, stop: nil),
@@ -447,14 +448,37 @@ final class ScreensTests: XCTestCase {
             screens.read(reached: 1, running: false, stop: .card(.noTap)),
         ]
         for screen in shown {
-            guard case .figure(let figure) = screen.blocks[2] else { return XCTFail("no picture after the first sentence: \(screen.blocks)") }
-            XCTAssertEqual(figure.captions.map(\.text), ["① 翻到有相機的那面", "② 卡片貼住上方"])
-            XCTAssertEqual(figure.captions.map(\.emphasis), ["有相機", "上方"])
-            XCTAssertEqual(figure.description, "把手機翻到有相機的那一面，卡片貼住上方")
+            guard case .senseDemo(let demo) = screen.blocks[2] else { return XCTFail("no demonstration after the first sentence: \(screen.blocks)") }
+            XCTAssertEqual(demo.description, "示範：手機正面朝你，不用翻面。把自然人憑證貼到手機背面的上方，停住不動。")
+            XCTAssertEqual(demo.control.label, "再看一次")
             document.check(screen)
         }
+        // The sentence above it is the copy's, as before.
+        XCTAssertEqual(shown[0].texts[1], "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。")
         let read = screens.read(reached: 4, running: false, stop: nil)
-        XCTAssertFalse(read.blocks.contains { if case .figure = $0 { return true } else { return false } })
+        XCTAssertFalse(read.blocks.contains { if case .senseDemo = $0 { return true } else { return false } })
+    }
+
+    /// The demonstration's one button: it stops it while it plays, and plays it again otherwise. While a tap is
+    /// under way it does not play and its button cannot be pressed: the system's panel is over it. Not playing, it
+    /// is the phone alone before it ever played, and at rest with the card in place after.
+    func testTheDemonstrationOfWhereTheCardGoesAndItsButton() throws {
+        func demo(_ screen: Screen) throws -> SenseDemo {
+            for case .senseDemo(let demo) in screen.blocks { return demo }
+            throw XCTSkip("no demonstration")
+        }
+        let playing = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
+        XCTAssertEqual(playing.control, Button(label: "停止", action: .stopDemo))
+        XCTAssertTrue(playing.playing && playing.played)
+        let before = try demo(screens.read(reached: 0, running: false, stop: nil))
+        XCTAssertEqual(before.control, Button(label: "再看一次", action: .playDemo))
+        XCTAssertFalse(before.playing || before.played)
+        let rested = try demo(screens.read(reached: 0, running: false, stop: nil, demoPlayed: true))
+        XCTAssertTrue(!rested.playing && rested.played)
+        let tapping = try demo(screens.read(reached: 1, running: true, stop: nil, demoPlaying: true))
+        XCTAssertEqual(tapping.control, Button(label: "再看一次", action: .playDemo, enabled: false))
+        XCTAssertTrue(!tapping.playing && tapping.played, "at rest under the system's panel")
+        document.check(screens.read(reached: 0, running: false, stop: nil, demoPlaying: true))
     }
 
     /// The card left during the first tap: step 2 says so, and the same tap is done again.
@@ -535,7 +559,7 @@ final class ScreensTests: XCTestCase {
             ("pasted", demo, 14.4), ("listed", demo, 16.7), ("result", demo, timeline.duration),
             ("long-own", long, 0), ("long-profile", long, 4.0), ("long-result", long, timeline.duration),
         ]
-        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] != nil {
+        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] == "hang" {
             moments = stride(from: 0, through: timeline.duration, by: 1.0 / 15).enumerated().map { (String(format: "frame-%04d", $0.offset), demo, $0.element) }
         }
         for (name, demo, seconds) in moments {
@@ -544,6 +568,30 @@ final class ScreensTests: XCTestCase {
             let image = try XCTUnwrap(drawn)
             // The picture is 4 wide to 5 high.
             XCTAssertEqual(image.size.height / image.size.width, 1.25, accuracy: 0.01, name)
+            try Self.save(image, as: "demo/\(name)")
+        }
+    }
+
+    /// The demonstration of step 2 at moments of its timeline, drawn as the
+    /// app draws it, 350 points wide, to
+    /// web/test-output/app/screens-ios/demo/: the phone alone, the card
+    /// coming in, in place behind the top of the phone, the ring, leaving,
+    /// and at rest after three rounds. Every fifteenth of a second when
+    /// IAMREAL_DEMO_FRAMES is "sense", for a film of it.
+    func testTheDemonstrationOfWhereTheCardGoesAsTheAppDrawsIt() async throws {
+        guard #available(iOS 16.4, *) else { throw XCTSkip("pictures are drawn on iOS 16.4 or later") }
+        let timeline = try XCTUnwrap(SenseTimeline.bundled)
+        let length = try TeachingAnimation.senseLength(timeline, variant: SenseDemoView.variant)
+        let demo = SenseDemo(description: copy("app_demo.sense_iphone"), control: Button(label: copy("app_demo.replay"), action: .playDemo), playing: false, played: false)
+        var moments: [(String, Double)] = [("sense-start", 0), ("sense-entering", 0.75), ("sense-in-place", 1.6), ("sense-ring", 2.0), ("sense-leaving", 3.25), ("sense-rest", length)]
+        if ProcessInfo.processInfo.environment["IAMREAL_DEMO_FRAMES"] == "sense" {
+            moments = stride(from: 0, through: length + 1, by: 1.0 / 15).enumerated().map { (String(format: "sense-frame-%04d", $0.offset), $0.element) }
+        }
+        for (name, seconds) in moments {
+            let view = SenseDemoView(demo: demo, timeline: timeline, perform: { _ in }, moment: seconds).frame(width: 350)
+            let drawn = await Self.draw(view, width: 350, height: nil, settle: 150_000_000)
+            let image = try XCTUnwrap(drawn)
+            XCTAssertEqual(image.size.width / image.size.height, 1.5, accuracy: 0.01, name)
             try Self.save(image, as: "demo/\(name)")
         }
     }

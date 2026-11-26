@@ -1,14 +1,14 @@
 import Foundation
 
-/// The demonstration of hanging the link on a profile at one moment: given
-/// the timeline of design/motion/hang.json, the platform and a number of
-/// seconds, what the picture is then. design/motion/README.md says what
+/// The two demonstrations (hanging the link on a profile, where the card
+/// goes on the phone) at one moment: given a timeline of design/motion/,
+/// the platform and a number of seconds, what the picture is then. design/motion/README.md says what
 /// each value means; spec/vectors/teaching-animation.json holds the answers
 /// this file, the Android app's and the site's are tested against.
 ///
 /// Pure: no clock, no screen, nothing kept between two calls, so any moment
-/// can be asked for in any order. The timeline is the app's copy of the
-/// file of design/motion/, as it is in the repository (BundledFile).
+/// can be asked for in any order. The timelines are the app's copies of
+/// the files of design/motion/, as they are in the repository (BundledFile).
 struct HangTimeline: Decodable, Equatable {
     /// Where a box's point goes in the picture: point `a` (0 to 1) of box
     /// `t` at `v` (0 to 1) of the picture.
@@ -111,15 +111,123 @@ struct HangState: Equatable {
     var step = 0
 }
 
+/// design/motion/sense.json: where the card goes on the phone.
+struct SenseTimeline: Decodable, Equatable {
+    struct Rest: Decodable, Equatable {
+        let card: String
+        let ring: Bool
+    }
+
+    struct Enter: Decodable, Equatable {
+        /// How far to the right the card comes in from, in phone widths.
+        let from: Double
+    }
+
+    struct Ring: Decodable, Equatable {
+        let from: Double
+        let to: Double
+    }
+
+    /// One event of a round; `y` for the ones that put the card somewhere.
+    struct Event: Decodable, Equatable {
+        let at: Double
+        let `do`: String
+        let y: Double?
+        let dur: Double
+    }
+
+    /// A platform's own round: how long it is, and what happens in it.
+    struct Variant: Decodable, Equatable {
+        let duration: Double
+        let events: [Event]
+    }
+
+    let rounds: Int
+    let rest: Rest
+    let enter: Enter
+    let ring: Ring
+    let variants: [String: Variant]
+}
+
+struct SenseState: Equatable {
+    struct Card: Equatable {
+        /// The card's centre down the phone: 0 its top, 1 its bottom.
+        var y: Double
+        /// Phone widths to the right of its place; 0 when it is there.
+        var x: Double
+        var opacity: Double
+    }
+
+    /// 1 for the first round.
+    var round: Int
+    /// True from the moment the last round rests.
+    var stopped: Bool
+    var card: Card
+    var ring: HangState.Ring?
+}
+
 enum TeachingAnimation {
     struct NoVariant: Error {}
 
-    /// Cubic ease in and out: the camera.
+    /// How long the picture of the card's place plays for `variant` before
+    /// it rests: every round but the last whole, the last up to where it
+    /// would leave.
+    static func senseLength(_ timeline: SenseTimeline, variant: String) throws -> Double {
+        guard let own = timeline.variants[variant] else { throw NoVariant() }
+        let leave = own.events.first { $0.do == "leave" }
+        return own.duration * Double(timeline.rounds - 1) + (leave?.at ?? own.duration)
+    }
+
+    /// The picture of where the card goes, `seconds` after it starts, for
+    /// the platform `variant` ("ios" or "android"). Before the start is
+    /// the start; from the moment the last round rests it is the same
+    /// however long after.
+    static func senseState(_ timeline: SenseTimeline, variant: String, at seconds: Double) throws -> SenseState {
+        let length = try senseLength(timeline, variant: variant)
+        guard let own = timeline.variants[variant] else { throw NoVariant() }
+        let t = seconds > 0 ? min(seconds, length) : 0
+        let round = min(timeline.rounds, Int((t / own.duration).rounded(.down)) + 1)
+        let local = t - Double(round - 1) * own.duration
+
+        var card = SenseState.Card(y: 0, x: timeline.enter.from, opacity: 0)
+        var ring: HangState.Ring?
+        var placed = false
+        for event in own.events {
+            // Before the card comes in it waits, unseen, to the right of where it will come in.
+            if event.do == "enter", !placed {
+                card.y = event.y ?? 0
+                placed = true
+            }
+            if event.at > local { continue }
+            let dt = local - event.at
+            switch event.do {
+            case "enter":
+                let p = easeOut(gone(dt, 0, event.dur))
+                card.x = timeline.enter.from * (1 - p)
+                card.opacity = p
+            case "move":
+                card.y += ((event.y ?? card.y) - card.y) * easeInOut(gone(dt, 0, event.dur))
+            case "ring":
+                if dt < event.dur {
+                    let p = easeOut(dt / event.dur)
+                    ring = HangState.Ring(scale: timeline.ring.from + (timeline.ring.to - timeline.ring.from) * p, opacity: 1 - p)
+                }
+            case "leave":
+                // The last round does not leave: the card stays where the phone read it.
+                if round < timeline.rounds { card.opacity = 1 - gone(dt, 0, event.dur) }
+            default:
+                continue
+            }
+        }
+        return SenseState(round: round, stopped: t >= length, card: card, ring: ring)
+    }
+
+    /// Cubic ease in and out: the camera, and the card moving along the phone.
     static func easeInOut(_ p: Double) -> Double {
         p < 0.5 ? 4 * p * p * p : 1 - pow(-2 * p + 2, 3) / 2
     }
 
-    /// Quintic ease out: the rings, and the changes of the screens.
+    /// Quintic ease out: the rings, the changes of the screens, and the card coming in.
     static func easeOut(_ p: Double) -> Double {
         1 - pow(1 - p, 5)
     }
