@@ -1,6 +1,7 @@
 // What the tests of the visitors' pages share: a proof log built by submitting
 // card proofs over several days, and the checks every page must pass.
 // Everything goes through the Worker's HTTP (test/harness.ts).
+import { VISITOR_ACTIONS } from "iamreal-protocol/counts.ts";
 import assert from "node:assert/strict";
 import { parseDay } from "iamreal-protocol/date.ts";
 import { parseScopedId } from "iamreal-protocol/scoped-id.ts";
@@ -72,13 +73,26 @@ export { mustSubmit };
 /** The policy of the visitors' pages (README.md, "頁面送的標頭"). */
 export const VISITOR_CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-/** The policy of the pages that load the copy buttons' script: the visitors' pages', with scripts of this origin. */
-export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+/** The policy of the pages that load a script of this site: the visitors' pages', with scripts of this origin and requests to it (the counts). */
+export const SCRIPT_PAGE_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; frame-src https://www.threads.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 /** Whether the page at a path loads the copy buttons' script when it is found: /faq, /verify and /hang/<short ID>, nothing else. */
 export function withScript(path: string): boolean {
   const p = path.split("?")[0]!;
   return p === "/faq" || p === "/verify" || p.startsWith("/hang/");
+}
+
+/**
+ * The counts' script as a page that is found writes it (spec/counts.md,
+ * "Pages"): which page the path is, and on the page of a card its short ID,
+ * which a page that is found has in its one spelling.
+ */
+export function countScript(path: string): string {
+  const p = path.split("?")[0]!;
+  const page: Readonly<Record<string, string>> = { "/": "home", "/proof-log": "proof_log", "/faq": "faq", "/verify": "verify", "/check": "check", "/prepare": "prepare", "/privacy": "privacy", "/hang": "hang" };
+  const kind = page[p] ?? (p.startsWith("/p/") ? "card" : p.startsWith("/threads/") ? "account" : p.startsWith("/hang/") ? "hang" : null);
+  assert.ok(kind !== null, `${path} is a page the table has`);
+  return `<script src="/count.js" defer data-page="${kind}"${kind === "card" ? ` data-short-id="${p.slice("/p/".length)}"` : ""}></script>`;
 }
 
 /** Whether the page at a path has the demonstration when it is found, so loads its player: /hang and /hang/<short ID>. */
@@ -90,8 +104,8 @@ export function withDemo(path: string): boolean {
 /**
  * What a response of the visitors' pages has for headers: these, each with
  * this value, and no other. `noindex` is false on the production log;
- * `script` is true for a page that loads a script of this site (the copy
- * buttons', the demonstration's player).
+ * `script` is true for a page that loads a script of this site (the counts',
+ * the copy buttons', the demonstration's player).
  */
 export function checkVisitorHeaders(what: string, res: Response, expect: { cache: string; noindex?: boolean; script?: boolean; more?: readonly string[] }): void {
   const want: Record<string, string> = {
@@ -169,7 +183,7 @@ export function checkNavAndFoot(what: string, page: string): void {
   assert.match(bar, /<a class="home" href="\/"><svg class="logo"/, `${what}: the mark before the name`);
   const wide = piece(what, bar, '<nav class="links">', "</nav>");
   assert.deepEqual(links(wide), navLinks, `${what}: the bar's links`);
-  assert.ok(bar.includes(`<a class="button nav-button" href="${buttonLink[0]}">${button}</a>`), `${what}: the bar's button`);
+  assert.ok(bar.includes(`<a class="button nav-button" href="${buttonLink[0]}" data-count="start_card_proof">${button}</a>`), `${what}: the bar's button, counted when it is pressed`);
   const menu = piece(what, bar, '<details class="menu">', "</details>");
   assert.ok(menu.startsWith(`<details class="menu"><summary>${phone[1]}</summary>`), `${what}: the menu is a <details> whose <summary> says ${phone[1]}`);
   assert.deepEqual(links(menu), [...navLinks, buttonLink], `${what}: the menu has the four links and the button`);
@@ -216,7 +230,7 @@ export const previewImageMeta = (host: string): string =>
     `<meta property="og:image:alt" content="${previewImageAlt()}">`,
   ].join("\n");
 
-/** The one script a page may load, as the page writes it. */
+/** The copy buttons' script, as the page writes it, after the counts'. */
 export const COPY_SCRIPT = '<script src="/copy.js" defer></script>';
 
 /** The player of the demonstration, as the page of hanging a card's proof writes it, after the copy buttons' script. */
@@ -227,8 +241,10 @@ export const DEMO_DATA = '<script type="application/json" id="hang-timeline">';
 
 /**
  * Requests a page and checks what every page of the visitors must be: the
- * headers; HTML with no script (but the copy buttons' script on /faq, /verify
- * and /hang/<short ID>, `withScript`, and nothing inline), no inline style, no
+ * headers; HTML with no script (but on a page that is found the counts'
+ * script, `countScript`, and the copy buttons' script on /faq, /verify
+ * and /hang/<short ID>, `withScript`, and nothing inline); every link to the
+ * card proof page counted when it is pressed; no inline style, no
  * event attribute and no description (but the home page's); the link
  * preview's one image if the page has a link preview (`previewImageMeta`);
  * the navigation bar and the foot; and, on a test log, the mark with the date it was
@@ -239,9 +255,10 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   const res = await worker.fetch(path, { redirect: "manual" });
   const page = await res.text();
   const test = expect.test !== false;
+  const counted = res.status === 200;
   const copies = withScript(path) && res.status === 200;
   const demo = withDemo(path) && res.status === 200;
-  const script = copies || demo;
+  const script = counted || copies || demo;
   checkVisitorHeaders(path, res, { cache: expect.cache ?? "public, max-age=60", noindex: test, script });
   // No page differs by the device that asks: none says so to a cache. (The local workerd may add what it compresses by.)
   assert.doesNotMatch(res.headers.get("vary") ?? "", /User-Agent/i, `${path}: Vary does not name User-Agent`);
@@ -249,9 +266,14 @@ export async function getPage(worker: TestWorker, path: string, expect: { test?:
   if (script) {
     // The pages of hanging a proof have the demonstration: its player, and its timeline as data (hang.md, 示範).
     const tag = (whole: string): string => whole.replace("</script>", "");
-    assert.deepEqual(page.match(/<\s*script[^>]*>/gi), [...(copies ? [tag(COPY_SCRIPT)] : []), ...(demo ? [tag(DEMO_SCRIPT), DEMO_DATA] : [])], `${path}: the scripts are this site's files, and nothing inline that runs`);
-    assert.ok((!copies || page.includes(COPY_SCRIPT)) && (!demo || page.includes(DEMO_SCRIPT)), `${path}: each script is a file and holds nothing`);
+    const counts = counted ? countScript(path) : "";
+    assert.deepEqual(page.match(/<\s*script[^>]*>/gi), [...(counted ? [tag(counts)] : []), ...(copies ? [tag(COPY_SCRIPT)] : []), ...(demo ? [tag(DEMO_SCRIPT), DEMO_DATA] : [])], `${path}: the scripts are this site's files, and nothing inline that runs`);
+    assert.ok((!counted || page.includes(counts)) && (!copies || page.includes(COPY_SCRIPT)) && (!demo || page.includes(DEMO_SCRIPT)), `${path}: each script is a file and holds nothing`);
   } else assert.doesNotMatch(page, /<\s*script/i, `${path}: no script`);
+  // Every link to the card proof page is the action that starts one (spec/counts.md, "Actions of a visitor").
+  for (const link of page.match(/<a\s[^>]*href="\/proof"[^>]*>/g) ?? []) assert.match(link, /\sdata-count="start_card_proof"/, `${path}: ${link} is counted when it is pressed`);
+  // Nothing is marked to be counted but with an action of the table.
+  for (const [, action] of page.matchAll(/\sdata-count="([^"]*)"/g)) assert.ok(Object.hasOwn(VISITOR_ACTIONS, action!), `${path}: data-count="${action}" is an action of a visitor`);
   assert.doesNotMatch(page, /\son[a-z]+\s*=/i, `${path}: no event attribute`);
   assert.doesNotMatch(page, /\sstyle\s*=|<\s*style/i, `${path}: no inline style`);
   assert.doesNotMatch(page, path.split("?")[0] === "/" ? /name="description"/i : /name="description"|og:description/i, `${path}: no description`);

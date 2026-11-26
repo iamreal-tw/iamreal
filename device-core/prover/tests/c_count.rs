@@ -57,6 +57,7 @@ const ORDER: &[&str] = &[
     "event",
     "page",
     "short_id",
+    "source",
     "step",
     "reason",
     "action",

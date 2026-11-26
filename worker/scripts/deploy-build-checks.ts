@@ -40,7 +40,7 @@ import { ROUND_CPU_MS } from "../src/round-budget.ts";
 import { WASM_FILE, WASM_SHA256, vkFile } from "./engine-files.ts";
 import { moduliInSpec } from "./issuers-in-spec.ts";
 import { PROOF_DIR, type ProofPage, checkProofPage, readProofPage } from "./proof-page.ts";
-import { DEMO_FILE, FAVICON_FILE, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
+import { COUNT_FILE, DEMO_FILE, FAVICON_FILE, FONT_FILE, FONT_SOURCE, OG_IMAGE_FILE, OG_IMAGE_SOURCE, RUN_WORKER_FIRST, SITE_FILES, SITE_REDIRECTS, siteHeaders } from "./site-files.ts";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -315,6 +315,10 @@ export interface ConfiguredSite {
   readonly scriptSha256: string | null;
   /** The SHA-256 of `copy.js` there as the commit checked out holds it; null if there is none to read. */
   readonly committedScriptSha256: string | null;
+  /** The SHA-256 of `count.js` there (`COUNT_FILE`); null if the file is not there. */
+  readonly countSha256: string | null;
+  /** The SHA-256 of `count.js` there as the commit checked out holds it; null if there is none to read. */
+  readonly committedCountSha256: string | null;
   /** The SHA-256 of `demo.js` there (`DEMO_FILE`); null if the file is not there. */
   readonly demoSha256: string | null;
   /** The SHA-256 of `demo.js` there as the commit checked out holds it; null if there is none to read. */
@@ -387,6 +391,8 @@ export function configuredSites(): Record<string, ConfiguredSite> {
       committedStyleSheetSha256: committedSha256Of("pages.css"),
       scriptSha256: sha256Of("copy.js"),
       committedScriptSha256: committedSha256Of("copy.js"),
+      countSha256: sha256Of(COUNT_FILE),
+      committedCountSha256: committedSha256Of(COUNT_FILE),
       demoSha256: sha256Of(DEMO_FILE),
       committedDemoSha256: committedSha256Of(DEMO_FILE),
       faviconSha256: sha256Of(FAVICON_FILE),
@@ -408,7 +414,7 @@ export function configuredSites(): Record<string, ConfiguredSite> {
  *     request for one of those paths never runs the Worker; on Cloudflare
  *     that is not confirmed for a file that is not there (README.md);
  *   - the files of the directory outside proof/ are the ones listed
- *     (`SITE_FILES`) and no other; the style sheet, the script and the icon are the
+ *     (`SITE_FILES`) and no other; the style sheet, the scripts and the icon are the
  *     ones the commit checked out holds (`sha256InHead`), so a deploy
  *     uploads the ones that were reviewed, not a change that was not
  *     committed or one a build made, and one git cannot read from HEAD does
@@ -441,6 +447,7 @@ export function checkSiteFiles(sites: Readonly<Record<string, ConfiguredSite>>):
     for (const [name, there, committed] of [
       ["pages.css", site.styleSheetSha256, site.committedStyleSheetSha256],
       ["copy.js", site.scriptSha256, site.committedScriptSha256],
+      [COUNT_FILE, site.countSha256, site.committedCountSha256],
       [DEMO_FILE, site.demoSha256, site.committedDemoSha256],
       [FAVICON_FILE, site.faviconSha256, site.committedFaviconSha256],
     ] as const) {

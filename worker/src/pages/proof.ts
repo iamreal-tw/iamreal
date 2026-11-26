@@ -116,7 +116,7 @@ ${accountName(account)}`)}
 <section class="last">
 ${when}
 <p class="small">過卡日當天，這張自然人憑證在效期內，不在廢止清冊上。無法判斷卡片是否依然有效，要等下一次過卡才知道。因此越久沒過卡，這張證明的說服力越低，建議持卡人每三個月過卡一次。</p>
-<p class="small"><a href="/proof">我要更新這張證明</a></p>
+<p class="small"><a href="/proof" data-count="start_card_proof">我要更新這張證明</a></p>
 </section>
 </div>
 <section class="owner">
@@ -162,7 +162,7 @@ const HOW_TO_CHECK = html`<section class="how-to-check">
 /** proof-page.md, section 5a; the last line is home.md's 〈需要什麼〉. */
 const MINE = html`<section class="mine">
 <p>一張自然人憑證可以換一張 Threads 的島民證明，上面寫著你的 Threads 帳號。</p>
-<p><a class="button" href="/proof">我也要換島民證明</a></p>
+<p><a class="button" href="/proof" data-count="start_card_proof">我也要換島民證明</a></p>
 <p class="small">${NEEDS}</p>
 </section>`;
 

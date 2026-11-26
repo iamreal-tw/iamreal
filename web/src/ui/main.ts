@@ -2,7 +2,7 @@
 // (ADR-0013), then the screens, with MOICA's component as the card.
 import "./style.css";
 import { HipkiCard } from "../card/hipki.ts";
-import { pageCounts, startEngine } from "../index.ts";
+import { endVisitorsVisit, pageCounts, startEngine } from "../index.ts";
 import { COMPONENT_ORIGIN } from "../target.ts";
 import { startApp } from "./app.ts";
 
@@ -15,6 +15,8 @@ const onTiming = (step: string, ms: number): void => {
   }
 };
 
+// A visitor's page opened after this one is a new visit (ADR-0039): its visit ID, never read here, is taken away.
+endVisitorsVisit();
 // The page was opened: the first count of a card proof (spec/counts.md, `open`).
 pageCounts().step("open");
 const prover = startEngine((step, ms) => onTiming(`engine_${step}`, ms));

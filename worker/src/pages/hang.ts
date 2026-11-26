@@ -195,7 +195,7 @@ export function hangWithout(site: Site): Document {
 ${demo(site, EXAMPLE_ACCOUNT, EXAMPLE_SHORT, "有了島民證明之後的這一頁")}
 ${steps(site, EXAMPLE_ACCOUNT, EXAMPLE_SHORT, "你的島民證明的連結")}
 </div>
-<p class="none-yet">還沒有島民證明？ <a class="button" href="/proof">我要換島民證明</a></p>
+<p class="none-yet">還沒有島民證明？ <a class="button" href="/proof" data-count="start_card_proof">我要換島民證明</a></p>
 </section>`;
   return { title: TITLE, kind: "hang", demo: true, content };
 }
@@ -207,7 +207,7 @@ export function hangPage(site: Site, short: string, account: string): Document {
   const content = html`<section class="hang">
 <h1 class="title"><span class="line">把島民證明掛到</span> <span class="line"><span class="account">@${account}</span> 的個人檔案</span></h1>
 <p class="backlink">${address}</p>
-<p class="actions"><button type="button" class="copy button" data-copy-text="${proofLink(site, short)}" data-copied="已複製" hidden>複製連結</button> <a class="button quiet" href="https://www.threads.com/@${account}" target="_blank" rel="noopener noreferrer">打開 Threads</a></p>
+<p class="actions"><button type="button" class="copy button" data-copy-text="${proofLink(site, short)}" data-copied="已複製" data-count="copy_proof_link" hidden>複製連結</button> <a class="button quiet" href="https://www.threads.com/@${account}" target="_blank" rel="noopener noreferrer">打開 Threads</a></p>
 <div class="how">
 ${demo(site, account, short, "島民證明的畫面")}
 ${steps(site, account, short, "剛才複製的連結")}

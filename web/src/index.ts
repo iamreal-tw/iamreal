@@ -10,7 +10,7 @@ import { BASE } from "./base.ts";
 import type { Card } from "./card/card.ts";
 import { startTreeBuilder, treeWorkerCount } from "./crl/parallel.ts";
 import type { Reason } from "iamreal-protocol/counts.ts";
-import { type FlowCounts, cardProofCounts, reasonOf } from "./counts.ts";
+import { type FlowCounts, cardProofCounts, endVisit, reasonOf } from "./counts.ts";
 import { CardProofFlow, type FlowDeps, tooMany as tooManyOf } from "./flow.ts";
 import { proofEngine } from "./prover/engine.ts";
 import type { Prover } from "./prover/prover.ts";
@@ -31,6 +31,17 @@ export function startEngine(onTiming?: (step: string, ms: number) => void): Prov
 }
 
 let counts: FlowCounts | null = null;
+
+/** Ends the tab's visit of the visitors' pages (counts.ts, endVisit): call it once, when the page opens. */
+export function endVisitorsVisit(): void {
+  let storage: Storage;
+  try {
+    storage = sessionStorage;
+  } catch {
+    return;
+  }
+  endVisit(storage);
+}
 
 /**
  * The counts of this page (src/counts.ts; ADR-0032): one for every card

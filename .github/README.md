@@ -310,8 +310,8 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 資料網域的 `proof-log/fingerprints.jsonl` 最後一行的日期是今天（台灣） | 今天的證明紀錄沒有公布 |
 | 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
-| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
-| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；還沒打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
+| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；2026-11-27 打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
+| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；2026-11-27 打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
 | 資料網域的 `count-totals/oldest.json`，同一種讀法，`checked` 在 2 小時內，`oldest` 是測試網站第一天加總的日期（#435；還沒打開） | 後台沒有在看計數的加總，或最早一天的加總被刪了 |
 
 門檻和時間：
@@ -330,13 +330,12 @@ cd worker
 node --experimental-strip-types test/outside-check.ts
 ```
 
-**連線紀錄那一項（#20）和計數那一項（#54）還沒打開。** 計數那一項和連線紀錄的做法相同：後台每小時看計數明細最舊一檔的日期，寫成 `count-events/oldest.json`；由 `COUNT_EVENTS_CHECKED` 關著，等 #54 部署、檔案出現之後打開。下面講連線紀錄的幾點，計數都一樣。
+**連線紀錄那一項（#20）和計數那一項（#54）2026-11-27 打開了。** 計數那一項和連線紀錄的做法相同：後台每小時看計數明細最舊一檔的日期，寫成 `count-events/oldest.json`。下面講連線紀錄的幾點，計數都一樣。
 
 - 後台每小時看一次最舊的連線紀錄，把結果寫成資料網域上的 `connection-log/oldest.json`：`{"checked":"<UTC 的時間>","oldest":"<UTC 的日期>"}`，一筆都沒有時 `oldest` 是 `null`。
 - 這個檢查只讀那一個公開的檔，不讀儲存桶，不握讀 R2 的權杖。
 - 33 天的來歷：31 天，加 R2 的生命週期規則最多晚一天刪，再留一天。
-- #20 合併、部署之前沒有這個檔，所以這一項由 `worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED` 關著，跑的時候印一行 `--  not checked yet`，不算過也不算不過。
-- 打開之後，檔不在就算失敗。#20 部署後過了一個整點、這個檔出現了，再開一個 PR 把它改成 `true`。
+- #20、#54 部署之後，這兩個檔出現在測試網站上（2026-11-27 讀到的都是 `{"checked":"2026-11-26T18:00:13.633Z","oldest":null}`），`worker/test/outside-check.ts` 的 `CONNECTION_LOG_CHECKED`、`COUNT_EVENTS_CHECKED` 改成 `true`。檔不在、後台超過 2 小時沒看、最舊的超過 33 天，都算失敗。
 
 **加總那一項（#435）也還沒打開。** 加總永久保存，最早一天不會變：後台每小時看 `count-totals/day/` 最早一天的日期，寫成 `count-totals/oldest.json`（同一種格式）；檢查比對的是 `worker/test/outside-check.ts` 的 `COUNT_TOTALS_FIRST`。現在是 `null`（關著）；測試網站有了第一天的加總、這個檔出現日期之後，開一個 PR 填上那一天。日期變晚就是到期規則刪了它。
 

@@ -213,7 +213,8 @@ PIN 錯（元件回 `ret_code` `0x76100006`、`last_error` `0xA0`）時，畫面
 | `current_time` | 裝置的時鐘，絕對時間換成 UTC+8 的日期（`protocol/src/date.ts`），不用裝置設定的時區 | 證明的公開輸入 |
 | 失敗的原因 | 裝置自己的檢查 | 回給呼叫的程式（`FlowStop`）顯示。送給後台的只有一個代碼：`src/counts.ts` 的 `reasonOf` 照原因的種類從 `spec/counts.md` 的表選一個，放在一筆計數裡（`POST /api/v1/counts`，ADR-0032）。原因裡其他的東西都不送：讀卡元件或瀏覽器給的代碼和訊息、檔案的路徑、日期、平台、請求編號。帶著原因的請求只有計數（`test/flow.test.ts` 每一個失敗的測試都檢查） |
 | 過卡裝置編號、嘗試編號 | 裝置自己用 `crypto.getRandomValues` 產生，各 16 個位元組（ADR-0039） | 每一筆計數；過卡裝置編號另外隨送出一筆的請求送出（`device_id`，後台記在連線紀錄的那一筆，不寫進證明紀錄）。不從裝置、瀏覽器或卡片的任何資料算出來 |
-| 瀏覽器和作業系統 | `navigator.userAgent`，在裝置上分成寫死的幾類（`src/counts.ts` 的 `familiesOf`） | 每一筆計數帶兩個類別的名稱（例如 `chrome`、`windows`），不帶版本，不帶那串字本身。瀏覽器自己在每個請求的標頭送出的 `User-Agent` 不是這裡送的，後台收計數時不存它 |
+| 訪客頁面的造訪編號 | 訪客頁面存在分頁的 `sessionStorage`（`iamreal.visit_id`，`worker/README.md`「訪客頁面送計數」） | 這一頁不讀、不送。頁面打開時把它刪掉（`src/counts.ts` 的 `endVisit`），之後再打開的訪客頁面換一個新的（ADR-0039「過卡之後換造訪編號」） |
+| 瀏覽器和作業系統 | `navigator.userAgent`，在裝置上分成寫死的幾類（`protocol/src/families.ts` 的 `familiesOf`，訪客頁面用同一份） | 每一筆計數帶兩個類別的名稱（例如 `chrome`、`windows`），不帶版本，不帶那串字本身。瀏覽器自己在每個請求的標頭送出的 `User-Agent` 不是這裡送的，後台收計數時不存它 |
 
 ## 從伺服器拿到的值，裝置怎麼檢查（ADR-0016 落到程式上）
 
