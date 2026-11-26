@@ -3,7 +3,7 @@
 // of the vectors is taken or dropped as the vectors say.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount, readCountText } from "../src/counts.ts";
+import { BROWSERS, CARD_PROOF_ACTIONS, CLIENTS, DURATIONS, EVENTS, OSES, PAGES, REASONS, SOURCES, STEPS, TAPS, TIMED_STEPS, VISITOR_ACTIONS, readCount, readCountText, tookOf } from "../src/counts.ts";
 import { repoFile, vectors } from "./vectors.ts";
 
 const file = vectors("counts.json");
@@ -28,6 +28,14 @@ describe("counts.json", () => {
       assert.deepEqual(Object.keys(readCount(Object.fromEntries(Object.entries(c.count).reverse()))!), Object.keys(kept));
     });
   }
+
+  for (const d of file.durations_of as { ms: number; took: string | null }[]) {
+    test(`${d.ms} ms is ${d.took ?? "no duration"}`, () => assert.equal(tookOf(d.ms), d.took));
+  }
+
+  test("a time that is not a number is no duration", () => {
+    for (const ms of [Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(tookOf(ms), null);
+  });
 
   test("a text that is not JSON is dropped", () => {
     for (const text of ["", "{", "step", '{"client":"web"', "﻿{}"]) assert.equal(readCountText(text), null);

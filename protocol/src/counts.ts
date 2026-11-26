@@ -150,9 +150,25 @@ export const TAPS = ["1", "2", "3"] as const;
 
 /** The steps whose time is counted (`duration`). */
 export const TIMED_STEPS = { crl: ALL, tree: ALL, proved: ALL } as const satisfies Codes;
+export type TimedStep = keyof typeof TIMED_STEPS;
 
 /** How long a timed step took: under 1 s, 1 to 3 s, … over 3 minutes. */
 export const DURATIONS = ["lt_1s", "1s_3s", "3s_10s", "10s_30s", "30s_60s", "1m_3m", "gt_3m"] as const;
+export type Duration = (typeof DURATIONS)[number];
+
+/** Where each of DURATIONS but the last ends, in milliseconds: a duration holds its start and not its end. */
+const DURATION_ENDS_MS = [1_000, 3_000, 10_000, 30_000, 60_000, 180_000] as const;
+
+/**
+ * The duration of a timed step that took `ms` milliseconds (spec/counts.md,
+ * "Durations"). A time below 0, or one that is not a finite number (a clock
+ * that went back, or none), is no duration: null, and no count is sent.
+ */
+export function tookOf(ms: number): Duration | null {
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const i = DURATION_ENDS_MS.findIndex((end) => ms < end);
+  return DURATIONS[i === -1 ? DURATIONS.length - 1 : i]!;
+}
 
 /**
  * Where a visitor came from, as far as it is told apart for now: with a

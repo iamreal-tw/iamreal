@@ -152,10 +152,33 @@ for (const c of cases) {
   if ((kept !== null) !== c.taken) throw new Error(`"${c.name}" is written as ${c.taken ? "taken" : "dropped"}, and src/counts.ts says otherwise`);
 }
 
+/**
+ * How long a timed step took, in milliseconds, and the duration it is: each
+ * end of the table's durations on both sides, written out by hand (the
+ * durations are "under 1 second", "1 second to under 3", …). Below 0 is none.
+ */
+const durationsOf: { ms: number; took: string | null }[] = [
+  { ms: 0, took: "lt_1s" },
+  { ms: 999, took: "lt_1s" },
+  { ms: 1000, took: "1s_3s" },
+  { ms: 2999.5, took: "1s_3s" },
+  { ms: 3000, took: "3s_10s" },
+  { ms: 9999, took: "3s_10s" },
+  { ms: 10000, took: "10s_30s" },
+  { ms: 29999, took: "10s_30s" },
+  { ms: 30000, took: "30s_60s" },
+  { ms: 59999, took: "30s_60s" },
+  { ms: 60000, took: "1m_3m" },
+  { ms: 179999, took: "1m_3m" },
+  { ms: 180000, took: "gt_3m" },
+  { ms: 3600000, took: "gt_3m" },
+  { ms: -1, took: null },
+];
+
 const file = {
   spec: "counts",
   status: "draft",
-  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole.",
+  note: "table: every code of spec/counts.md and the clients it is for, as an implementation has it. cases: a parsed count, and whether it is taken or dropped whole. durations_of: how long a timed step took, in milliseconds, and the duration it is (null: none).",
   generated_by: "protocol/test/generate/counts.ts",
   table: {
     clients: CLIENTS,
@@ -173,6 +196,7 @@ const file = {
     oses: OSES,
   },
   cases,
+  durations_of: durationsOf,
 };
 writeFileSync(new URL("../../../spec/vectors/counts.json", import.meta.url), `${JSON.stringify(file, null, 2)}\n`);
 console.log(`${cases.length} cases`);

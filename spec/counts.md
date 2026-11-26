@@ -277,6 +277,13 @@ again, and the card proof goes on.
 | `1m_3m` | 1 minute to under 3 |
 | `gt_3m` | 3 minutes or more |
 
+A client measures a timed step on its own clock, from when the step begins
+to when it is done, and sends the one duration the time falls in: each
+holds its start and not its end, so 999 ms is `lt_1s` and 1000 ms is
+`1s_3s` (`durations_of` in the vectors). The time itself is not sent. A
+step that did not get done sends no duration, and a time below 0 (a clock
+that went back) none either.
+
 ### Sources
 
 Where a visitor came from. Until a measurement shows what the built-in

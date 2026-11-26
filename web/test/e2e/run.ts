@@ -291,7 +291,19 @@ try {
       attempts.length === RUNS.length && attempts.every((a) => ["read", "certificates", "certificate", "config", "circuit", "engine", "crl", "tree", "checked", "pin", "scope_signed", "state", "chosen", "confirmed", "challenge", "code_signed", "proved", "done"].every((s) => stepsOf(a).includes(s))),
       `a device's counts: ${attempts.length} card proofs, each with every step up to done (${attempts.map((a) => stepsOf(a).length).join(" / ")} steps)`,
     );
-    check(own.every((c) => c.event === "step"), "no card proof stopped: every count is a step");
+    check(own.every((c) => c.event === "step" || c.event === "duration"), "no card proof stopped: every count is a step or a duration");
+    // The card reader's name reached the Worker: in every count of a card proof from its certificates on, in none before.
+    check(
+      // By step, not by order: the counts are sent without waiting, and may arrive in any order.
+      attempts.every((a) => own.filter((c) => c.attempt_id === a).every((c) => (c.event === "step" && ["open", "read", "component"].includes(c.step!) ? c.reader === undefined : c.reader === "Fake Reader 0"))),
+      "a device's counts: the card reader's name in each count once the card was read",
+    );
+    // Each card proof: how long the CRL, the tree and the proof took, each once, as a duration of the table.
+    const durationsOf = (attempt: string): string[] => own.filter((c) => c.attempt_id === attempt && c.event === "duration").map((c) => `${c.step} ${c.took}`);
+    check(
+      attempts.every((a) => JSON.stringify(durationsOf(a).map((d) => d.split(" ")[0]).sort()) === JSON.stringify(["crl", "proved", "tree"])),
+      `a device's counts: each card proof's three durations (${attempts.map((a) => durationsOf(a).join(", ")).join(" / ")})`,
+    );
   }
 } finally {
   await site.close();
