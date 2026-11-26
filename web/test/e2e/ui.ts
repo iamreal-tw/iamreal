@@ -1346,7 +1346,7 @@ await tryStep("card proof again, nothing changed (the first submission dropped, 
   } finally {
     await undoConfig();
   }
-  check(seenConfig.length === 1 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are");
+  check(seenConfig.length === 2 && !st.main.includes("Not "), "the server's display names are not shown; the page's own are (config asked by step 1, whether card proofs are stopped, and by step 2)");
   checkDeclared("refresh", st, [[THREADS_NAME, at("alice")]], 0);
   // 修改帳號清單: each row with its counts, how to change the list; 不改了 goes back.
   const edit = await openEdit();
@@ -2462,7 +2462,7 @@ await tryStep("Threads only: a first declaration (the field alone)", async () =>
   component.card = single.spec();
   const seenConfig: unknown[] = [];
   const st = await toAccountsThreadsOnly({ screenshots: "single", seen: seenConfig });
-  check(seenConfig.length === 1, "the config was read once, and changed on its way");
+  check(seenConfig.length === 2, `the config was read by step 1 and step 2, and changed on its way (${seenConfig.length})`);
   check(st.state === "never" && st.mode === "fill", `a new card: ${st.state} ${st.mode}`);
   // The field alone: no line under it, no rules of switching, nothing about who owns the account.
   checkRows("one platform", st.rows, { [THREADS]: [THREADS_NAME, "", []] });
@@ -2591,6 +2591,68 @@ await tryStep("Threads only: 收回對 @yui.tw 的宣告; the next day, the fiel
   await page.clickButton(C.common.cancel);
   await waitStep("before", "step 1, after 取消");
 });
+// The operator stops taking card proofs (CARD_PROOFS_PAUSED, #105) and resumes ---------
+
+const pausedCard = await makeCard({ serial: "0b90567890abcdef1234567890abcdef" });
+/** Card proofs stopped or taken: the Worker's setting, laid over wrangler.jsonc's (`setSettings`). */
+const setPaused = (paused: boolean) => worker.setSettings(paused ? { CARD_PROOFS_PAUSED: "true" } : {});
+
+await tryStep("card proofs stopped: step 1 says so before a card is read; stopped on the way, under the server's item; resumed, a card proof is made", async () => {
+  component.card = pausedCard.spec();
+  try {
+    // Stopped before the page opens: step 1 asks config, and its sentence takes the place of 下一步.
+    await setPaused(true);
+    const reads = componentCount();
+    await open();
+    await page.waitFor(`document.querySelector('[data-paused]') || null`, "step 1 says card proofs are stopped", 15_000);
+    check((await page.text("[data-paused]")) === C.before.paused, `step 1, stopped: "${await page.text("[data-paused]")}"`);
+    check(!(await buttonTexts()).includes(C.common.next), `step 1, stopped: no 下一步 ${JSON.stringify(await buttonTexts())}`);
+    check(componentCount() === reads, "step 1, stopped: nothing asked of the component");
+    await screenshot("paused-1-before");
+
+    // Stopped after step 1 said nothing: step 2 asks config again and stops under 連上島民證明的伺服器, before the PIN.
+    await setPaused(false);
+    await open();
+    await page.waitFor(`[...document.querySelectorAll('main button')].some((b) => b.textContent === ${JSON.stringify(C.common.next)}) || null`, "step 1 not stopped: 下一步");
+    check(!(await page.eval<boolean>(`!!document.querySelector('[data-paused]')`)), "step 1, taken: no sentence of a stop");
+    await setPaused(true);
+    await page.clickButton(C.common.next);
+    await waitStep("read", "step 2");
+    const r = await readCard();
+    check(!r.done && r.item === "server" && r.message.startsWith(C.stops.paused), `step 2, stopped on the way: under 連上島民證明的伺服器 "${r.message}" (${r.item})`);
+    check(!(await page.eval<boolean>(`!!document.querySelector('#pin')`)), "step 2, stopped: no PIN field");
+    await screenshot("paused-2-read");
+
+    // Stopped between step 4 and the last click: no challenge, its sentence under 連上島民證明的伺服器, 回到開頭 only.
+    await setPaused(false);
+    await toAccounts();
+    await typeRows({ [THREADS]: "pia" });
+    await waitConfirm();
+    await setPaused(true);
+    const signs = componentCount("MakeSignature");
+    const records = await recordCount();
+    await page.clickButton(C.confirm.button_declare);
+    const d = await waitDoneOrMessage();
+    check(!d.done && d.item === "server" && d.message.startsWith(C.stops.paused), `step 5, stopped: under 連上島民證明的伺服器 "${d.message}" (${d.item})`);
+    check(JSON.stringify(await buttonTexts()) === JSON.stringify([A.restart]), `step 5, stopped: 回到開頭 only ${JSON.stringify(await buttonTexts())}`);
+    check(refused("paused") && componentCount("MakeSignature") === signs && (await recordCount()) === records, "step 5, stopped: the server answered paused; no second signature, nothing recorded");
+    await screenshot("paused-5-progress");
+    await page.clickButton(A.restart);
+    await waitStep("before", "回到開頭");
+
+    // Resumed: a card proof is made as ever.
+    await setPaused(false);
+    await toAccounts();
+    await typeRows({ [THREADS]: "pia" });
+    await waitConfirm();
+    await page.clickButton(C.confirm.button_declare);
+    const ok = await waitDoneOrMessage();
+    check(ok.done && (await recordCount()) === records + 1, `resumed: the card proof is made, one record more (${ok.message})`);
+  } finally {
+    await setPaused(false);
+  }
+});
+
 // 6. Storage, connections, policy ---------------------------------------------
 
 await tryStep("storage", async () => {
@@ -2655,12 +2717,12 @@ await tryStep("before the PIN: a CRL older than the one this browser used", () =
   check(workers > 0, `the requests of the workers were seen too (${workers})`);
   const csp = browser.logs.filter((l) => /Content Security Policy/i.test(l.text));
   check(csp.length === 0, `no Content-Security-Policy violation ${JSON.stringify(csp.slice(0, 3))}`);
-  // Three windows had no request: the silent component's, and the two opened for the second
-  // signature that the challenge of another day and the date that changed on step 5 stopped
-  // (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
+  // Four windows had no request: the silent component's, and the three opened for the second
+  // signature that the challenge of another day, the date that changed on step 5 and card proofs
+  // stopped on step 5 stopped (each closed unused). The blocked clicks opened none. A PIN the bridge does not send: its
   // window is closed unused (and may not have loaded).
   check(
-    popups.size === component.requests.length + 3 + unusedWindows && unusedWindows <= 3,
+    popups.size === component.requests.length + 4 + unusedWindows && unusedWindows <= 3,
     `one component window per request (${popups.size} windows, ${component.requests.length} requests, ${unusedWindows} closed unused for a PIN not sent)`,
   );
   check(component.requests.every((r) => r.func !== "MakeSignature" || (r.pin ?? "") !== ""), "no signing request without a PIN");
