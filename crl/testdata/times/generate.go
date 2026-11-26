@@ -66,6 +66,9 @@ type timeCase struct {
 	// revocation, when not nil, is the revocationDate of the one entry the
 	// file then has; otherwise it has none.
 	revocation *spelled
+	// noNull writes sha256WithRSAEncryption without NULL parameters, in both
+	// places (spec/revocation-tree.md, "Reason codes", row 2).
+	noNull bool
 	// What the index line says; all empty if the file is not DER.
 	thisUpdate, nextUpdate, crlDate string
 }
@@ -138,6 +141,8 @@ var cases = []timeCase{
 	refused("generalized-leap-day-1900", generalized("19000229000000Z"), "1900 is not a leap year"),
 	this("generalized-leap-day-2400", generalized("24000229000000Z"), "2400-02-29T00:00:00Z", "2400-02-29", "2400 is a leap year"),
 	refused("generalized-two-digit-year", generalized("261119160000Z"), "a two-digit year in a GeneralizedTime"),
+	// Rows 1 and 2 of the reason codes at once: the time comes first (#218).
+	{name: "utc-offset-no-null", what: "a thisUpdate with an offset, and sha256WithRSAEncryption without NULL parameters: the time (check 1) comes before the algorithm (check 2)", this: utc("261119160000+0800"), noNull: true},
 
 	{name: "next-update-absent", what: "no nextUpdate", noNext: true, thisUpdate: usualThis, nextUpdate: "-", crlDate: usualDate},
 	{name: "next-update-year-1", what: "nextUpdate is 0001-01-01T00:00:00Z: a time like any other, not a missing one", next: generalized("00010101000000Z"), thisUpdate: usualThis, nextUpdate: "0001-01-01T00:00:00Z", crlDate: usualDate},
@@ -185,6 +190,7 @@ func main() {
 		if c.revocation != nil {
 			list.Entries = []crltest.Entry{{Serial: []byte{0x05}, RevocationDateDER: c.revocation.der()}}
 		}
+		list.NoNullTBS, list.NoNullOuter = c.noNull, c.noNull
 		der := crltest.Make(list, key)
 		got := crl.IndexFile(der, keys)
 		want := crl.IndexLine{Issuer: "-", CRLNumber: "4660", ThisUpdate: c.thisUpdate, NextUpdate: c.nextUpdate, CRLDate: c.crlDate, SHA256: got.SHA256, Root: "-" + crl.ReasonSignature}
