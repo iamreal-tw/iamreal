@@ -15,13 +15,15 @@ final class BuildTests: XCTestCase {
 
     /// One app in the store (ADR-0037): one number, and only the store's build opens its page.
     func testTheStorePageIsTheOneAppInTheStoreAndOnlyTheStoreBuildOpensIt() throws {
-        XCTAssertEqual(AppEnvironment.storePage(appID: "1234567890", storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id1234567890")
+        XCTAssertEqual(AppEnvironment.pageInStore(appID: "1234567890", storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id1234567890")
         // The development build is not in the store: the page would be of another app.
-        XCTAssertNil(AppEnvironment.storePage(appID: "1234567890", storeBuild: false))
-        // Not known yet, or not a number: no page, so no button.
-        XCTAssertNil(AppEnvironment.storePage(appID: nil, storeBuild: true))
-        XCTAssertNil(AppEnvironment.storePage(appID: "", storeBuild: true))
-        XCTAssertNil(AppEnvironment.storePage(appID: "id1234567890", storeBuild: true))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "1234567890", storeBuild: false))
+        // No number, or not a number: no page, so no button.
+        XCTAssertNil(AppEnvironment.pageInStore(appID: nil, storeBuild: true))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "", storeBuild: true))
+        XCTAssertNil(AppEnvironment.pageInStore(appID: "id1234567890", storeBuild: true))
+        // The number the operator was given for tw.iamreal.app.
+        XCTAssertEqual(AppEnvironment.pageInStore(appID: AppEnvironment.storeAppID, storeBuild: true)?.absoluteString, "https://apps.apple.com/app/id6837606453")
         // This build, the development one.
         XCTAssertFalse(AppEnvironment.storeBuild)
         XCTAssertNil(AppEnvironment.storePage)

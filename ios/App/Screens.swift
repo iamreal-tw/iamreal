@@ -37,7 +37,7 @@ struct Screens {
 
     // Step 1: before starting ------------------------------------------------------------------
 
-    /// The way to the app's page in the store; none in a build that has no such page yet.
+    /// The way to the app's page in the store; none in a build that opens no such page (the development build, AppEnvironment).
     private var update: Button? {
         storePage ? Button(label: copy("app_before.update", ["store": Self.store]), action: .openStore) : nil
     }

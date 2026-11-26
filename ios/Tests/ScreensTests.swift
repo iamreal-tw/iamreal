@@ -595,12 +595,14 @@ final class ScreensTests: XCTestCase {
         }
         // The reminder's: step 1 from the notification, the schedule
         // screen, the settings with the reminder on. Step 7 is among the steps above.
+        var storeScreens: Screens = screens
+        storeScreens.storePage = true
         let reminderScreens: [(String, Screen)] = [
             ("app-reminder-4-from-notification-phone", screens.before(notice: ReminderScreens(appCopy: appCopy).fromNotification(snoozed: nil))),
-            // The lowest version and a phone without NFC, as this build shows them: the development build opens
-            // no page in the store (AppEnvironment.storePage), so the sentences stand without the button.
-            ("app-update-soon-phone", screens.before(updateFrom: "2027-03-01")),
-            ("app-update-required-phone", screens.tooOld(from: "2027-03-01")),
+            // The lowest version, as the store's build shows it: with the button to its page in the
+            // store (AppEnvironment.storePage), which the development build does not have. And a phone without NFC.
+            ("app-update-soon-phone", storeScreens.before(updateFrom: "2027-03-01")),
+            ("app-update-required-phone", storeScreens.tooOld(from: "2027-03-01")),
             ("app-no-nfc-phone", screens.noNFC()),
         ]
         for (name, screen) in reminderScreens {
