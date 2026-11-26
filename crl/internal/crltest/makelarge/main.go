@@ -198,4 +198,59 @@ func main() {
 		return c
 	})
 	write("long-oids-alike", fmt.Sprintf("16 extensions of the CRL, 15 of them with OIDs of about %d arcs that differ only in the last", n*100), der)
+
+	// What a reader that lists the elements inside an element before it
+	// looks at them pays for most (#410): elements of two bytes, as many as
+	// fit, where a CertificateList has a few. None of these is DER; a reader
+	// finds that out only at the end of the element.
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		c.Extensions = []crltest.Extension{{Raw: sequence(append([]byte{0x06, 0x02, 0x2a, 0x03}, nulls(n*1000)...))}}
+		return c
+	})
+	write("extension-parts", fmt.Sprintf("one extension of the CRL with %d NULLs after its OID", n*1000), der)
+
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		entry := append([]byte{0x02, 0x01, 0x05}, utcTime...)
+		c.Entries = []crltest.Entry{{Raw: sequence(append(entry, nulls(n*1000)...))}}
+		return c
+	})
+	write("entry-parts", fmt.Sprintf("one entry with %d NULLs after its revocationDate", n*1000), der)
+
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		c.AfterExtensions = nulls(n * 1000)
+		return c
+	})
+	write("tbs-parts", fmt.Sprintf("%d NULLs at the end of tbsCertList", n*1000), der)
+
+	der, n = fill(func(n int) *crltest.CRL {
+		c := base()
+		c.Entries = make([]crltest.Entry, n*1000)
+		for i := range c.Entries {
+			c.Entries[i] = crltest.Entry{Serial: []byte{byte(i % 128)}, RevocationDate: crltest.ThisUpdate, Extensions: []crltest.Extension{{ID: asn1.ObjectIdentifier{1, 2, 3}}}}
+		}
+		return c
+	})
+	write("entries-one-extension", fmt.Sprintf("%d entries of one-byte serials, each with one extension", n*1000), der)
+}
+
+// utcTime is a UTCTime, 2026-11-19T16:00:00Z.
+var utcTime = append([]byte{0x17, 0x0d}, "261119160000Z"...)
+
+// nulls is n NULL elements, two bytes each.
+func nulls(n int) []byte {
+	out := make([]byte, 2*n)
+	for i := 0; i < len(out); i += 2 {
+		out[i] = 0x05
+	}
+	return out
+}
+
+// sequence is a SEQUENCE of content.
+func sequence(content []byte) []byte {
+	var b cryptobyte.Builder
+	b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) { b.AddBytes(content) })
+	return b.BytesOrPanic()
 }

@@ -449,6 +449,7 @@ node --experimental-strip-types test/generate/records-response.ts
 | `node --experimental-strip-types test/e2e/check-component.ts` | 對**真的**元件只送 `CheckEnvir`（環境檢查，不讀憑證、不簽章），頁面在 `http://localhost:<埠>`、帶後台的兩個標頭：看頁面是不是跨來源隔離、元件能不能來回 |
 | `node --experimental-strip-types test/e2e/smoke.ts <網址>` | 對跑著的頁面（例如 `pnpm local`）開到第一個畫面為止，不碰元件 |
 | `node --experimental-strip-types test/e2e/background.ts [次數]` | 量分頁在背景時過卡的時間（見「時間」） |
+| `node --experimental-strip-types test/crl-size.ts <目錄>` | 量讀清冊的記憶體高點和時間（見「讀清冊的記憶體」） |
 
 ### 假卡片
 
@@ -496,6 +497,33 @@ M1 Max（10 核）、Chrome 157 無頭模式，`pnpm test:e2e` 量的（2026-11-
 | `test/` | 測試；`test/fixtures/` 是測試金鑰做的憑證、清冊和假伺服器（Node 裡的測試用）；`test/generate/` 從它們產生 `spec/vectors/` 的標準答案（不是測試，`pnpm test` 不跑）；`test/e2e/` 是無頭瀏覽器的測試、假元件、Worker 前面扮演資料網域的小服務（`worker-site.ts`）、量測。無頭瀏覽器的測試引用 `worker/test/` 的測試工具來啟動 Worker |
 
 執行時的外部依賴只有 `@aztec-foundation/bb.js` 6.0.0 和 `@noir-lang/noir_js` 1.0.0（和 `circuits/` 釘的相同），另外引用這個程式庫的 `protocol/`（workspace，沒有外部依賴）。開發用的只有 Vite、TypeScript 和 `@types/node`。全部是精確版本，根目錄的 `pnpm-workspace.yaml` 設了不安裝發布未滿 7 天的版本，鎖檔是根目錄的 `pnpm-lock.yaml`。沒有介面框架；DER 自己解析。
+
+## 讀清冊的記憶體
+
+清冊是從資料網域下載的，鏡像最多存 32 MiB 的檔（`worker/src/mirror.ts`）；驗過簽章之前，檔裡的位元組可以是路上任何人放的。所以 `src/crl/crl.ts` 的 `parseCrl` 讀到驗章為止，用的記憶體不隨元素裡放了多少東西而長（[#410](https://github.com/iamreal-tw/iamreal/issues/410)）：
+
+- **不先把一個元素裡的子元素列成陣列**，一個一個走（`src/der.ts` 的 `Elements`）。一個延伸欄位只看前兩三個子元素，後面還有東西就不是 DER，不用走完
+- **每一筆廢止只留序號在檔裡的位置**（兩個 32 位元的數字，放在一個會加倍的陣列）。每一筆的延伸欄位讀完就丟，只記第一筆有問題的那一筆是哪一筆、什麼原因：照規格，各筆依序看，第一筆有問題的決定結果
+- **OID 不轉成字串**，檢查完直接比位元組（`checkOid`）
+
+量法是 [`test/crl-size.ts`](test/crl-size.ts)（`node --experimental-strip-types test/crl-size.ts DIR`），每個檔一個程序，量程序的記憶體高點從讀檔之前到 `usableCrl` 回來漲了多少。檔由 `go run ./crl/internal/crltest/makelarge -out DIR` 寫，都在 32 MiB 之內，用沒有人信任的金鑰簽。2026-11-26，Node 22.23.4，Apple Silicon：
+
+| 檔 | 改之前多用 | 現在多用 | 其中檔案本身 |
+|---|---|---|---|
+| 一個清冊延伸欄位，OID 後面 16,776,000 個 NULL | 1,322.5 MiB | 33.9 MiB | 32.9 MiB |
+| 一筆廢止，日期後面 16,776,000 個 NULL | 1,304.6 MiB | 33.5 MiB | 32.5 MiB |
+| `tbsCertList` 最後面 16,776,000 個 NULL | 1,313.9 MiB | 33.4 MiB | 32.4 MiB |
+| 一個延伸欄位的 OID 約 3,355 萬節 | 1,113.1 MiB | 68.5 MiB | 32.2 MiB |
+| 1,118,000 筆廢止，每筆一個延伸欄位 | 766.0 MiB | 93.6 MiB | 32.5 MiB |
+| 1,677,697 筆廢止，沒有延伸欄位 | 522.5 MiB | 94.1 MiB | 32.1 MiB |
+| 16 個延伸欄位，15 個的 OID 各約 224 萬節 | 489.5 MiB | 68.4 MiB | 32.3 MiB |
+| 3,050,361 個清冊層級的延伸欄位 | 104.1 MiB | 72.3 MiB | 32.3 MiB |
+| 一筆帶 3,050,356 個延伸欄位 | 103.7 MiB | 71.8 MiB | 32.4 MiB |
+| 清冊編號、序號、發證者名稱各約 33,553,000 個位元組 | 65 到 67 MiB | 65.8 到 65.9 MiB | 32.1 到 32.3 MiB |
+
+- **現在最高是 94 MiB**：檔案本身 32 MiB，驗章時 WebCrypto 把要驗的內容再複製一份約 32 MiB，序號的位置最多約 24 MiB（168 萬筆，陣列加倍的那一刻新舊兩份）。前三列的檔不是 DER，讀到第一個多出來的子元素就停，沒有走到驗章
+- **簽章驗得過之後**（`checkCrl` 的後半）才配置每一筆的鍵，找重複用的集合也在那之後：那時位元組是內政部簽的，大小是內政部的清冊的大小，不是路上的人能決定的。這一段沒有改，也不在上表
+- 每一案的結果和改之前相同：`crl/testdata/` 兩個目錄的每一份；另外把那些檔隨機改壞 6,000 份（刪、複製、插入子元素，改標籤、截短），新舊兩份讀法、`device-core/` 和 Go 的 `crl/` 四者的原因代碼逐份相同（一次性的比對，程式沒有留在版控裡）
 
 ## 已知的限制
 

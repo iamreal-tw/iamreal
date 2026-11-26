@@ -109,13 +109,12 @@ struct Extension<'a> {
     value: &'a [u8],
 }
 
-struct Entry<'a> {
-    /// The serial number's content bytes, as encoded.
-    serial: &'a [u8],
-    extensions: Vec<Extension<'a>>,
-}
-
 /// A DER `CertificateList`, split into what the checks read.
+///
+/// Nothing here grows with what an element holds but `serials`, one slice
+/// (two words) an entry: the file is as long as the mirror stores (32 MiB),
+/// and before its signature is checked its bytes are anyone's who is on
+/// the way (README.md, "讀清冊的記憶體").
 pub struct ParsedCrl<'a> {
     tbs: &'a [u8],
     tbs_signature_algorithm: &'a [u8],
@@ -123,7 +122,12 @@ pub struct ParsedCrl<'a> {
     signature: &'a [u8],
     /// thisUpdate, in seconds since 1970-01-01T00:00:00Z.
     this_update: i64,
-    entries: Vec<Entry<'a>>,
+    /// Each entry's serial number: its content bytes, as encoded.
+    serials: Vec<&'a [u8]>,
+    /// The first entry whose extensions make the CRL not usable, counted
+    /// from 0, and why; of the later entries' extensions nothing is kept.
+    entry_problem: Option<(usize, Unusable)>,
+    /// The extensions of the CRL: at most `MAX_EXTENSIONS + 1` of them.
     extensions: Vec<Extension<'a>>,
 }
 
@@ -161,27 +165,27 @@ fn read_extensions<'a>(der: &'a [u8], sequence: &Tlv) -> Result<Vec<Extension<'a
         if extension.tag != der::SEQUENCE {
             return Err(NotDer);
         }
-        let parts = der::all_children(der, &extension)?;
-        let oid = parts.first().filter(|t| t.tag == der::OID).ok_or(NotDer)?;
-        if !der::is_oid(oid.content(der)) {
+        // One part at a time: an extension has two or three, and a file
+        // may write millions.
+        let mut parts = der::children(der, &extension);
+        let oid = parts.next().ok_or(NotDer)??;
+        if oid.tag != der::OID || !der::is_oid(oid.content(der)) {
             return Err(NotDer);
         }
-        let mut next = 1;
+        let mut value = parts.next().ok_or(NotDer)??;
         let mut critical = false;
-        if let Some(flag) = parts.get(next).filter(|t| t.tag == der::BOOLEAN) {
+        if value.tag == der::BOOLEAN {
             // An explicit FALSE is not DER, but is accepted, as crl/ does.
-            critical = match flag.content(der) {
+            critical = match value.content(der) {
                 [0x00] => false,
                 [0xff] => true,
                 _ => return Err(NotDer),
             };
-            next += 1;
+            value = parts.next().ok_or(NotDer)??;
         }
-        let value = parts
-            .get(next)
-            .filter(|t| t.tag == der::OCTET_STRING)
-            .ok_or(NotDer)?;
-        if next + 1 != parts.len() {
+        // Nothing after the value: seen where the value ends, without
+        // walking what follows.
+        if value.tag != der::OCTET_STRING || value.end != extension.end {
             return Err(NotDer);
         }
         if extensions.len() <= MAX_EXTENSIONS {
@@ -199,7 +203,9 @@ fn read_extensions<'a>(der: &'a [u8], sequence: &Tlv) -> Result<Vec<Extension<'a
     Ok(extensions)
 }
 
-fn read_entry<'a>(der: &'a [u8], entry: &Tlv) -> Result<Entry<'a>, NotDer> {
+/// One entry: its serial number's content bytes, and what is wrong with its
+/// extensions, if anything.
+fn read_entry<'a>(der: &'a [u8], entry: &Tlv) -> Result<(&'a [u8], Option<Unusable>), NotDer> {
     if entry.tag != der::SEQUENCE {
         return Err(NotDer);
     }
@@ -210,17 +216,18 @@ fn read_entry<'a>(der: &'a [u8], entry: &Tlv) -> Result<Entry<'a>, NotDer> {
     }
     let revocation_date = fields.next().ok_or(NotDer)??;
     der::read_time(der, &revocation_date)?;
-    let extensions = match fields.next() {
-        Some(extensions) => read_extensions(der, &extensions?)?,
-        None => Vec::new(),
+    let problem = match fields.next() {
+        Some(extensions) => {
+            let extensions = extensions?;
+            // Nothing after the extensions.
+            if extensions.end != entry.end {
+                return Err(NotDer);
+            }
+            check_extensions(&read_extensions(der, &extensions)?).err()
+        }
+        None => None,
     };
-    if fields.next().is_some() {
-        return Err(NotDer);
-    }
-    Ok(Entry {
-        serial: serial.content(der),
-        extensions,
-    })
+    Ok((serial.content(der), problem))
 }
 
 /// Reads a DER `CertificateList` (RFC 5280 section 5) strictly.
@@ -229,10 +236,13 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
     if list.tag != der::SEQUENCE || list.end != der.len() {
         return Err(NotDer);
     }
-    let parts = der::all_children(der, &list)?;
-    let [tbs, algorithm, signature] = parts.as_slice() else {
+    let mut parts = der::children(der, &list);
+    let tbs = parts.next().ok_or(NotDer)??;
+    let algorithm = parts.next().ok_or(NotDer)??;
+    let signature = parts.next().ok_or(NotDer)??;
+    if signature.end != list.end {
         return Err(NotDer);
-    };
+    }
     let tags = [tbs.tag, algorithm.tag, signature.tag];
     if tags != [der::SEQUENCE, der::SEQUENCE, der::BIT_STRING] {
         return Err(NotDer);
@@ -242,7 +252,7 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
         return Err(NotDer);
     };
 
-    let mut fields = der::children(der, tbs).peekable();
+    let mut fields = der::children(der, &tbs).peekable();
     let mut version = 1;
     if let Some(Ok(v)) = fields
         .peek()
@@ -264,13 +274,18 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
         der::read_time(der, next_update)?;
         fields.next();
     }
-    let mut entries = Vec::new();
+    let mut serials = Vec::new();
+    let mut entry_problem = None;
     if let Some(Ok(list)) = fields
         .peek()
         .filter(|f| matches!(f, Ok(t) if t.tag == der::SEQUENCE))
     {
         for entry in der::children(der, list) {
-            entries.push(read_entry(der, &entry?)?);
+            let (serial, problem) = read_entry(der, &entry?)?;
+            if let (None, Some(problem)) = (&entry_problem, problem) {
+                entry_problem = Some((serials.len(), problem));
+            }
+            serials.push(serial);
         }
         fields.next();
     }
@@ -282,11 +297,11 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
         if version != 2 {
             return Err(NotDer);
         }
-        let inner = der::all_children(der, outer)?;
-        let [sequence] = inner.as_slice() else {
+        let sequence = der::children(der, outer).next().ok_or(NotDer)??;
+        if sequence.end != outer.end {
             return Err(NotDer);
-        };
-        extensions = read_extensions(der, sequence)?;
+        }
+        extensions = read_extensions(der, &sequence)?;
         fields.next();
     }
     // Nothing else, and nothing that is not DER.
@@ -299,7 +314,8 @@ pub fn parse_crl(der: &[u8]) -> Result<ParsedCrl<'_>, NotDer> {
         signature_algorithm: algorithm.whole(der),
         signature: signature_bytes,
         this_update,
-        entries,
+        serials,
+        entry_problem,
         extensions,
     })
 }
@@ -407,12 +423,16 @@ pub fn check_crl(
         .and_then(|e| read_crl_number(e.value))
         .ok_or(Unusable::CrlNumber)?;
 
-    // Entries in order: the first entry with a problem decides.
-    let mut keys = Vec::with_capacity(crl.entries.len());
-    let mut seen = HashSet::with_capacity(crl.entries.len());
-    for entry in &crl.entries {
-        check_extensions(&entry.extensions)?;
-        let key = Key::from_crl_serial(entry.serial).ok_or(Unusable::Serial)?;
+    // From here on the bytes are MOICA's: the signature verified.
+    // Entries in order: the first entry with a problem decides, its
+    // extensions before its serial number.
+    let mut keys = Vec::with_capacity(crl.serials.len());
+    let mut seen = HashSet::with_capacity(crl.serials.len());
+    for (index, serial) in crl.serials.iter().enumerate() {
+        if let Some((_, problem)) = crl.entry_problem.filter(|(at, _)| *at == index) {
+            return Err(problem);
+        }
+        let key = Key::from_crl_serial(serial).ok_or(Unusable::Serial)?;
         // The same serial number listed twice is one key.
         if seen.insert(key) {
             keys.push(key);
