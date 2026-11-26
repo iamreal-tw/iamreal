@@ -31,8 +31,10 @@ struct CopyDocument {
             sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}"#, with: "2026-11-16", options: .regularExpression),
             sentence.replacingOccurrences(of: #"\d{4}-\d{2}-\d{2}（星期.）"#, with: "2027-02-08（星期一）", options: .regularExpression),
         ]
-        // An account: the document's own example in that sentence, or `@alice`.
-        let candidates = dated.flatMap { [$0, $0.replacingOccurrences(of: #"@[a-z0-9._]+"#, with: "@alice", options: .regularExpression)] }
+        // An account: as it is, or the document's example in that sentence (`@alice`, `@bob`, `@carol.tw`).
+        let candidates = dated.flatMap { sentence in
+            [sentence] + ["@alice", "@bob", "@carol.tw"].map { sentence.replacingOccurrences(of: #"@[a-z0-9._]+"#, with: $0, options: .regularExpression) }
+        }
         return candidates.contains { candidate in
             let pattern = NSRegularExpression.escapedPattern(for: candidate).replacingOccurrences(of: #"\d+"#, with: #"\\d+"#, options: .regularExpression)
             return self.text.range(of: pattern, options: .regularExpression) != nil

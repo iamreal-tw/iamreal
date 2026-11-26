@@ -72,7 +72,7 @@ struct ScreenView: View {
                 .padding(.top, 36)
             }
             // The ways back, as links: to the screen before, then out of the card proof.
-            ForEach(Array([screen.secondary, screen.cancel].compactMap { $0 }.enumerated()), id: \.offset) { index, link in
+            ForEach(Array((screen.links + [screen.cancel].compactMap { $0 }).enumerated()), id: \.offset) { index, link in
                 SwiftUI.Button { perform(link.action) } label: {
                     Text(link.label)
                         .font(Theme.body(Theme.sizeKicker))
@@ -104,15 +104,15 @@ struct ScreenView: View {
         .padding(.bottom, 24)
     }
 
-    /// Which of the six steps: the line, then six bars, those done in ink.
+    /// Which of the eight steps: the line, then a bar for each, those done in ink.
     private var stepBars: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(copy("common.step", ["step": String(screen.step), "steps": "6"]))
+            Text(copy("common.step", ["step": String(screen.step), "steps": String(Screens.steps)]))
                 .font(Theme.body(Theme.sizeKicker))
                 .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
                 .foregroundColor(Theme.mute.color)
             HStack(spacing: 6) {
-                ForEach(1...6, id: \.self) { step in
+                ForEach(1...Screens.steps, id: \.self) { step in
                     Rectangle()
                         .fill(step <= screen.step ? Theme.ink.color : Theme.line.color)
                         .frame(height: 4)
@@ -188,8 +188,8 @@ struct ScreenView: View {
                     .lineSpacing(Theme.spacing(Theme.leadingKicker, Theme.sizeKicker))
             }
             .padding(.top, 40)
-        case .doneHead(let card, let title, let lines):
-            doneHead(card, title: title, lines: lines).padding(.top, 28)
+        case .proofCard(let card):
+            proofCard(card).frame(maxWidth: 260).padding(.top, 24)
         case .steps(let steps):
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
@@ -440,22 +440,6 @@ struct ScreenView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-
-    /// The box on top of the done screen: the small card on the left (none
-    /// when every account was withdrawn), the title and its lines beside it.
-    private func doneHead(_ card: ProofCard?, title: String, lines: [String]) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            if let card { proofCard(card).frame(width: 128) }
-            VStack(alignment: .leading, spacing: 8) {
-                display(title, Theme.sizeLead, Theme.leadingHeading)
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in small(line, color: Theme.text) }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.soft.color)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusPanel.value))
     }
 
     /// The small card (design/DESIGN.md, the components: the proof card):

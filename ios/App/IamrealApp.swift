@@ -1,14 +1,15 @@
 import SwiftUI
 import UIKit
 
-/// The iOS app: the splash screen (SplashView), then the card proof, six
-/// screens (CardProofView); over it the settings and the screen to choose
+/// The iOS app: the splash screen (SplashView), then the card proof, eight
+/// steps (CardProofView); over it the settings and the screen to choose
 /// the reminder's interval and time (ReminderViews).
 @main
 struct IamrealApp: App {
     @StateObject private var model: CardProofModel
     @StateObject private var pages: ReminderPages
     @State private var opening = true
+    @Environment(\.scenePhase) private var scenePhase
     /// The system's notifications. Made as the app starts, before the
     /// system hands it what was pressed on a notification.
     private let notifier: SystemNotifier
@@ -65,6 +66,10 @@ struct IamrealApp: App {
                 }
                 // The colors are design/tokens.json's, whatever the phone's appearance.
                 .preferredColorScheme(.light)
+                // Back from the system's settings, where notifications may have been allowed (step 7).
+                .onChange(of: scenePhase) { phase in
+                    if phase == .active { model.cameBack() }
+                }
                 .task {
                     // The server is asked for its config while the splash screen is up.
                     model.open()
@@ -95,11 +100,24 @@ extension CardProofModel {
             appCopy: appCopy,
             reminders: reminders,
             openSchedule: { [weak pages] in pages?.openSchedule() },
+            openNotificationSettings: openNotificationSettings,
             openSettings: { [weak pages] in pages?.openSettings() },
             site: AppEnvironment.site,
             open: { UIApplication.shared.open($0) },
             copyText: { UIPasteboard.general.string = $0 },
             share: share))
+    }
+
+    /// The system's settings at this app's notifications; before iOS 16,
+    /// at this app, where the notifications are one row.
+    private static func openNotificationSettings() {
+        let address: String
+        if #available(iOS 16.0, *) {
+            address = UIApplication.openNotificationSettingsURLString
+        } else {
+            address = UIApplication.openSettingsURLString
+        }
+        if let url = URL(string: address) { UIApplication.shared.open(url) }
     }
 
     /// The system's share sheet with `text`, over what the app shows.

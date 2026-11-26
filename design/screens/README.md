@@ -81,7 +81,13 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 | `card-proof-app-4-accounts-phone.png` | 第 4 步：你的帳號 | 實作版（iOS） |
 | `card-proof-app-5-confirm-phone.png` | 第 5 步：確認 | 實作版（iOS） |
 | `card-proof-app-5-progress-phone.png` | 第 5 步：進行中 | 實作版（iOS） |
-| `card-proof-app-6-done-phone.png` | 第 6 步：完成，這張卡片的第一筆紀錄 | 實作版（Android） |
+| `card-proof-app-6-hang-phone.png` | 第 6 步：掛上去，這張卡片的第一筆紀錄 | 實作版（iOS） |
+| `card-proof-app-6-hang-short-phone.png` | 第 6 步：再次過卡的短版 | 實作版（iOS） |
+| `card-proof-app-7-reminder-phone.png` | 第 7 步：提醒，手機上還沒有存提醒 | 實作版（iOS） |
+| `card-proof-app-8-done-phone.png` | 第 8 步：完成和分享，這張卡片的第一筆紀錄 | 實作版（iOS） |
+| `card-proof-app-8-done-switch-phone.png` | 第 8 步：更換之後 | 實作版（iOS） |
+| `card-proof-app-8-withdraw-phone.png` | 第 8 步：全部收回（第 5 步之後直接到這裡） | 實作版（iOS） |
+| `card-proof-app-6-done-phone.png` | 拆成三步之前的第 6 步（完成），Android 的；Android 改成八步時（#362）拿掉 | 實作版（Android） |
 
 ### app 的其他畫面
 
@@ -89,7 +95,6 @@ Android 的實作版由模擬器上的過卡測試（`android/test/card-proof.ts
 
 | 截圖 | 畫面 | 版本 |
 |---|---|---|
-| `app-reminder-1-done-phone.png` | 第一次過卡完成，問要不要提醒（整個完成的畫面） | 實作版（iOS） |
 | `app-reminder-2-schedule-phone.png` | 提醒的間隔和時刻 | 實作版（iOS） |
 | `app-reminder-3-notification-phone.png` | 提醒的通知（示意，不是系統的實際畫面） | 定稿版 |
 | `app-reminder-4-from-notification-phone.png` | 從通知點進來的第 1 步 | 實作版（iOS） |
