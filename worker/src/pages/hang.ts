@@ -17,8 +17,18 @@
 // raspberry. They write the card's account and its address, or hang.md's
 // fixed examples on the page without a proof, in the site's own domain.
 //
+// The page of a card also has the demonstration (hang.md, 示範): the five
+// screens of design/motion/hang.json in a row, hidden as the page is sent, and
+// that timeline as data the browser does not run. The player (/demo.js)
+// shows it in place of the pictures and plays it; without the player the
+// page is the one above. Every box the timeline names is a [data-box]; what a
+// change of the screens shows or moves says so in data-on, data-off and
+// data-shift (demo/player.js). Nothing inline: the looks are the style
+// sheet's, and what moves is the player's.
+//
 // The title is broken after 掛到 by hand (design/DESIGN.md, 字: 標題的斷行要手動指定).
-import { type Html, html } from "./html.ts";
+import { HANG_TIMELINE_JSON } from "./hang-timeline.ts";
+import { Html, html } from "./html.ts";
 import type { Document, Site } from "./layout.ts";
 import { isThreadsUsername } from "./proof.ts";
 import { profile, sketch, tag } from "./sketch.ts";
@@ -89,10 +99,84 @@ ${tag("貼在這裡", "press")}
     ],
   ];
   return html`<ol class="steps">
-${four.map(([words, picture], i) => html`<li><span class="n">${i + 1}</span><p class="say">${words}</p>
+${four.map(([words, picture], i) => html`<li data-step="${i + 1}"><span class="n">${i + 1}</span><p class="say">${words}</p>
 ${picture}
 </li>`)}
 </ol>`;
+}
+
+/** Where the demonstration's timeline is in the page: the id of its data block. */
+const TIMELINE_ID = "hang-timeline";
+
+/** What a screen reader is told of the whole demonstration (hang.md, 示範). */
+const DEMO_TOLD = "示範：按「複製連結」，到 Threads 的個人檔案按「編輯個人檔案」、「連結」、「新增連結」，貼上網址後按「完成」，個人檔案上多了一行連結。";
+
+/** The frame around what to press and its label, there while the timeline marks the box. */
+const mark = (label?: string, where = ""): Html => html`<span class="mark"></span>${label === undefined ? html`` : html`<span class="mark-tag${where}">${label}</span>`}`;
+
+/** What a box that is pressed has: the ink that darkens it, and the ring. */
+const PRESS = html`<span class="pressed"></span><span class="ring"></span>`;
+
+/** A row of the two lists: its words, then a grey bar or what stands in its place. */
+const row = (words: string, end: Html = html`<span class="blank"></span>`): Html => html`<p class="row"><span>${words}</span>${end}</p>`;
+
+/**
+ * The demonstration for the account `account` (without its @) and the card of `short`, on the platform `variant`
+ * ("ios" or "android": what goes back from the links, design/motion/README.md, 框), with its button and its timeline.
+ */
+function demo(site: Site, account: string, short: string, variant: "ios" | "android"): Html {
+  const address = `${site.host}/p/${short}`;
+  const link = proofLink(site, short);
+  // The links' top: on iOS 完成 at the right is what goes back; on Android it is grey, and ✕ at the left is.
+  const linksTop =
+    variant === "ios"
+      ? html`<p class="top"><b>連結</b><span class="act" data-box="done3">完成${mark("再按一次", " right")}${PRESS}</span></p>`
+      : html`<p class="top"><span class="act close" data-box="x3">✕${mark("按這裡", " beside")}${PRESS}</span><b>連結</b><span class="act dim">完成</span></p>`;
+  return html`<div class="demo" data-demo="${TIMELINE_ID}" data-variant="${variant}" hidden>
+<div class="demo-picture" role="img" aria-label="${DEMO_TOLD}">
+<div class="demo-row" aria-hidden="true">
+<div class="shot s0" data-box="s0"><p class="kick">島民證明的畫面</p>
+<p class="heading"><span>把島民證明掛到</span><span class="cut"><span class="clip">@${account}</span> 的個人檔案</span></p>
+<p class="address">${address}</p>
+<p class="pair"><span class="main" data-box="copy"><span class="swap"><span data-off="copied">複製連結</span><span class="over" data-on="copied">已複製</span></span>${mark()}${PRESS}</span><span class="second" data-box="open">打開 Threads${mark()}${PRESS}</span></p>
+<p class="lines"><span class="blank"></span><span class="blank"></span><span class="blank"></span><span class="blank"></span></p>
+</div>
+<div class="shot s1" data-box="s1"><p class="kick">Threads 的個人檔案（示意）</p>
+<p class="who"><span><span class="blank name"></span><span class="handle clip">@${account}</span></span><span class="avatar"></span></p>
+<p class="bio"><span class="blank"></span><span class="blank"></span></p>
+<div class="below">
+<p class="link-row" data-box="linkrow" data-on="linkOnProfile"><span class="link-icon"></span><span class="clip">${address}</span><span class="found" data-on="resultLabel"></span><span class="found-tag" data-on="resultLabel">訪客找的就是這一行</span></p>
+<div class="rest" data-shift="linkOnProfile:38 resultLabel:46">
+<p class="blank followers"></p>
+<p class="buttons"><span data-box="edit">編輯個人檔案${mark("按這裡")}${PRESS}</span><span><span class="blank"></span></span></p>
+</div>
+</div>
+</div>
+<div class="shot s2" data-box="s2"><p class="kick">按了「編輯個人檔案」之後（示意）</p>
+<p class="top"><b>編輯個人檔案</b></p>
+${["名稱", "用戶名稱", "個人簡介", "興趣"].map((item) => row(item))}
+<p class="row" data-box="links"><span>連結</span><span class="chevron"></span>${mark("按這裡")}${PRESS}</p>
+${row("精選")}
+</div>
+<div class="shot s3" data-box="s3"><p class="kick">按了「連結」之後（示意）</p>
+${linksTop}
+<div class="below">
+<p class="row added" data-on="linkListed"><span class="clip">${address}</span></p>
+<p class="row" data-box="add" data-shift="linkListed:54"><span>新增連結</span>${mark("按這裡")}${PRESS}</p>
+</div>
+</div>
+<div class="shot s4" data-box="s4"><p class="kick">按了「新增連結」之後（示意）</p>
+<p class="top"><b>新增連結</b><span class="act" data-box="done4">完成${mark("再按這裡", " right")}${PRESS}</span></p>
+<p class="field-label">網址</p>
+<p class="field" data-box="urlfield"><span class="clip" data-on="pasted">${link}</span><span class="paste" data-box="paste" data-on="pasteMenu" data-off="pasted">貼上${PRESS}</span>${mark("貼在這裡", " right")}${PRESS}</p>
+<p class="field-label">標題（選填）</p>
+<p class="field"></p>
+</div>
+</div>
+</div>
+<p class="demo-control"><button type="button" class="button quiet" data-demo-button data-stop="停止" data-replay="再看一次">再看一次</button></p>
+</div>
+<script type="application/json" id="${TIMELINE_ID}">${new Html(HANG_TIMELINE_JSON.replaceAll("<", "\\u003c"))}</script>`;
 }
 
 /** /hang: the page from the home page, without a proof. */
@@ -114,7 +198,10 @@ export function hangPage(site: Site, short: string, account: string): Document {
 <h1 class="title"><span class="line">把島民證明掛到</span> <span class="line"><span class="account">@${account}</span> 的個人檔案</span></h1>
 <p class="backlink">${address}</p>
 <p class="actions"><button type="button" class="copy button" data-copy-text="${proofLink(site, short)}" data-copied="已複製" hidden>複製連結</button> <a class="button quiet" href="https://www.threads.com/@${account}" target="_blank" rel="noopener noreferrer">打開 Threads</a></p>
+<div class="how">
+${demo(site, account, short, "ios")}
 ${steps(site, account, short, "剛才複製的連結")}
+</div>
 <p class="done"><a href="/p/${short}">掛好了嗎？打開你的島民證明看看。</a></p>
 <p class="small">頁面上的個人檔案裡看得到這個連結，就成功了。</p>
 ${sketch(
@@ -124,5 +211,5 @@ ${sketch(
   profile({ name: null, account: `@${account}`, followers: null, link: { address, found: "訪客找的就是這一行" } }),
 )}
 </section>`;
-  return { title: TITLE, kind: "hang", script: true, content };
+  return { title: TITLE, kind: "hang", script: true, demo: true, content };
 }

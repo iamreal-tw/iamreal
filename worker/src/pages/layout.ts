@@ -10,6 +10,9 @@ export const CSS_PATH = "/pages.css";
 /** Where the copy buttons' script is (site/copy.js, sent by Static Assets): the one script of the pages, loaded by /faq, /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
+/** Where the player of the demonstration is (site/demo.js, sent by Static Assets): loaded by /hang/<short ID> only, beside the copy buttons' script (design/copy/hang.md, 示範). */
+export const DEMO_JS_PATH = "/demo.js";
+
 /**
  * The alt text of the image of every page's link preview
  * (design/copy/proof-page.md, section 8, 預覽圖). The image is
@@ -46,6 +49,8 @@ export interface Document {
   readonly preview?: boolean;
   /** True for a page that loads the copy buttons' script (`COPY_JS_PATH`). */
   readonly script?: boolean;
+  /** True for the page that also loads the demonstration's player (`DEMO_JS_PATH`). */
+  readonly demo?: boolean;
   /** og:description, for the one page that has one. */
   readonly description?: string;
   /** Which page: the class of <body>. */
@@ -128,6 +133,7 @@ ${d.preview === false ? new Html("") : html`<meta property="og:title" content="$
 `}${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
 ${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
+` : new Html("")}${d.demo === true ? html`<script src="${DEMO_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">
 ${test === null ? new Html("") : html`<p class="test-proof-log">測試的證明紀錄　不定期清空，上次清空：<time>${test}</time></p>

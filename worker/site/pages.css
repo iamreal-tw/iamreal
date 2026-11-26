@@ -2586,6 +2586,496 @@ body.hang .none-yet .button {
   margin: 0;
 }
 
+/* The demonstration (hang.md, 示範; design/motion/README.md): the five screens in a row, 360 wide each, and a
+   picture of 4:5 that looks at a part of the row. The page sends it hidden; the player (/demo.js) shows it,
+   moves the row and plays what the timeline says. Lengths inside the row are the row's own: the camera scales them.
+   What the player changes (the row's place, the marks, the press, the rings, what a change of the screens shows)
+   starts here as it is before anything has happened. */
+body.hang .demo {
+  margin: 0 0 32px;
+}
+
+body.hang .demo-picture {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: var(--soft);
+  border-radius: var(--radius-panel);
+}
+
+body.hang .demo-row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+body.hang .demo-row p {
+  margin: 0;
+}
+
+body.hang .demo-control {
+  margin: 12px 0 0;
+}
+
+body.hang .demo-control .button {
+  margin: 0;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+body.hang .shot {
+  position: absolute;
+  top: 0;
+  width: 360px;
+  height: 440px;
+  padding: 22px 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+body.hang .shot.s1 {
+  left: 440px;
+}
+
+body.hang .shot.s2 {
+  left: 880px;
+}
+
+body.hang .shot.s3 {
+  left: 1320px;
+}
+
+body.hang .shot.s4 {
+  left: 1760px;
+}
+
+body.hang .shot .kick {
+  position: absolute;
+  left: 4px;
+  top: -30px;
+  color: var(--mute);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* An account of 30 characters and a long address stay on their line, cut at the end. */
+body.hang .shot .clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.hang .shot .blank {
+  display: block;
+  height: 12px;
+  background: var(--line);
+  border-radius: 6px;
+}
+
+/* What to press: the frame and its label, the ink that darkens it, the ring. */
+body.hang .shot [data-box] {
+  position: relative;
+}
+
+body.hang .shot .mark,
+body.hang .shot .found {
+  position: absolute;
+  inset: -6px;
+  border: 2px solid var(--you);
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.hang .shot .mark-tag,
+body.hang .shot .found-tag {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  transform: translateX(-50%);
+  padding: 6px 9px;
+  background: var(--you);
+  border-radius: 6px;
+  color: var(--bg);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+body.hang .shot .mark-tag.right {
+  left: auto;
+  right: -6px;
+  transform: none;
+}
+
+body.hang .shot .mark-tag.beside {
+  left: calc(100% + 14px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* The line a visitor looks for is framed in ink, as on the picture of the result. */
+body.hang .shot .found {
+  border-color: var(--ink);
+}
+
+body.hang .shot .found-tag {
+  background: var(--ink);
+}
+
+body.hang .shot .pressed {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  border-radius: inherit;
+  opacity: 0;
+}
+
+body.hang .shot .ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border: 3px solid var(--you);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The first screen: this page's own title, link and two buttons. */
+body.hang .shot .heading {
+  margin: 26px 0 22px;
+  font-family: var(--font-display);
+  font-weight: var(--weight-heading);
+  font-size: 25px;
+}
+
+body.hang .shot .heading > span {
+  display: block;
+}
+
+body.hang .shot .heading .cut {
+  display: flex;
+  gap: 0.25em;
+  white-space: nowrap;
+}
+
+body.hang .shot .address {
+  padding: 12px;
+  overflow: hidden;
+  background: var(--soft);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.hang .shot .pair {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+body.hang .shot .pair > span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 46px;
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+
+body.hang .shot .pair .main {
+  background: var(--you);
+  color: var(--bg);
+}
+
+body.hang .shot .pair .second {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+body.hang .shot .swap {
+  position: relative;
+}
+
+body.hang .shot .swap .over {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+body.hang .shot .lines {
+  display: grid;
+  gap: 14px;
+  margin-top: 34px;
+}
+
+body.hang .shot .lines .blank:nth-child(1) {
+  width: 78%;
+}
+
+body.hang .shot .lines .blank:nth-child(2) {
+  width: 52%;
+}
+
+body.hang .shot .lines .blank:nth-child(3) {
+  width: 64%;
+}
+
+body.hang .shot .lines .blank:nth-child(4) {
+  width: 86%;
+}
+
+/* The profile. The line of the link comes over what is under it, which moves down to make room. */
+body.hang .shot .who {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+body.hang .shot .who > span:first-child {
+  min-width: 0;
+}
+
+body.hang .shot .who .name {
+  width: 120px;
+  height: 18px;
+}
+
+body.hang .shot .who .handle {
+  display: block;
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+body.hang .shot .avatar {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  background: var(--line);
+  border-radius: 50%;
+}
+
+body.hang .shot .bio {
+  display: grid;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+body.hang .shot .bio .blank:nth-child(1) {
+  width: 82%;
+}
+
+body.hang .shot .bio .blank:nth-child(2) {
+  width: 60%;
+}
+
+body.hang .shot .below {
+  position: relative;
+}
+
+body.hang .shot .link-row {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font-weight: 700;
+  opacity: 0;
+}
+
+body.hang .shot .link-icon {
+  flex: none;
+  width: 16px;
+  height: 8px;
+  border: 1.5px solid var(--mute);
+  border-radius: 4px;
+  transform: rotate(-45deg);
+}
+
+body.hang .shot .followers {
+  width: 34%;
+  margin-top: 16px;
+}
+
+body.hang .shot .buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+body.hang .shot .buttons > span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border: 1px solid var(--dot);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body.hang .shot .buttons .blank {
+  width: 56%;
+}
+
+/* The two lists and the form. */
+body.hang .shot .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 40px;
+  margin-bottom: 10px;
+  font-size: 17px;
+}
+
+body.hang .shot .top .act {
+  padding: 6px 4px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+body.hang .shot .top .act.dim {
+  color: var(--dot);
+}
+
+body.hang .shot .top .act.close {
+  padding: 7px 8px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+body.hang .shot .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 54px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+body.hang .shot .row .blank {
+  width: 96px;
+}
+
+body.hang .shot .row .chevron {
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-top: 1.5px solid var(--mute);
+  border-right: 1.5px solid var(--mute);
+  transform: rotate(45deg);
+}
+
+body.hang .shot .row.added {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  opacity: 0;
+}
+
+body.hang .shot .field-label {
+  margin: 16px 0 6px;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+body.hang .shot .field {
+  display: flex;
+  align-items: center;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--dot);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+body.hang .shot .field .clip {
+  flex: 1;
+  opacity: 0;
+}
+
+body.hang .shot .paste {
+  position: absolute;
+  left: 18px;
+  top: -44px;
+  padding: 9px 16px;
+  background: var(--ink);
+  border-radius: 9px;
+  color: var(--bg);
+  font-family: var(--font-body);
+  font-size: 14px;
+  opacity: 0;
+}
+
+body.hang .shot .paste::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+
+/* With the player: the demonstration in place of the pictures, beside the four steps; the step it is showing is
+   marked. The column is wider for the two. */
+body.hang main:has(.playing) {
+  max-width: calc(920px + 2 * var(--gutter));
+}
+
+body.hang .playing .steps .sketch,
+body.hang .playing .sketch.result {
+  display: none;
+}
+
+body.hang .playing .how {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+body.hang .playing .steps li {
+  padding: 20px 14px;
+}
+
+body.hang .playing .steps li.now {
+  background: var(--soft);
+  box-shadow: inset 3px 0 0 var(--you);
+}
+
 /* What a card proof needs (/prepare) ------------------------------------------- */
 
 /* Laid out after design/DESIGN.md: as wide as the site, its edges the navigation bar's (.top .bar); what to have and the four steps side by side, the usual troubles under them. */
@@ -3635,6 +4125,11 @@ body.account-not-a-name .title {
   body.hang .actions .button {
     flex: 1 1 0;
     min-width: 0;
+  }
+
+  /* The demonstration above the four steps, as wide as the column. */
+  body.hang .playing .how {
+    display: block;
   }
 
   body.hang .steps li {
