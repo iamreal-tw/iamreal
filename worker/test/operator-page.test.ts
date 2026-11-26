@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
-import { DAY_TOTALS_PREFIX, DEFAULT_DAYS, MONTH_TOTALS_PREFIX, type Snapshot, gather, lastRun, optionsOf, pageOf } from "../scripts/operator-page.ts";
+import { DAY_TOTALS_PREFIX, DEFAULT_DAYS, KEPT_PER_DAY, MONTH_TOTALS_PREFIX, type Snapshot, gather, lastRun, optionsOf, pageOf } from "../scripts/operator-page.ts";
 import { FINGERPRINTS, FIXTURE_DAYS, RUNS, androidDone, androidStarted, fixtureDays, fixtureSources, webDone, webStarted } from "./operator-page-fixture.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
 import { freshProofLog, publishG3 } from "./records.ts";
@@ -76,17 +76,18 @@ describe("the operator's page of a fixed set of files", () => {
     assert.ok(!html.includes(`data-client="ios"`));
   });
 
-  test("the funnel: the days' sums of started, of each step reached, and of done", () => {
+  test("the funnel: the days' sums of started, then of each step reached, up to done", () => {
     const days = fixtureDays();
     const funnel = rowsOf(clientPart(html, "card-proofs", "web"), "漏斗");
     const started = days.reduce((a, d) => a + d.attempts.web!.started, 0);
     assert.deepEqual(funnel[0]!.slice(0, 2), ["開始", String(started)]);
-    assert.deepEqual(funnel.at(-1)!.slice(0, 2), ["完成", String(days.reduce((a, d) => a + d.attempts.web!.done, 0))]);
     const steps = Object.keys(days[0]!.attempts.web!.reached);
     assert.deepEqual(
-      funnel.slice(1, -1).map((r) => r.slice(0, 2)),
+      funnel.slice(1).map((r) => r.slice(0, 2)),
       steps.map((s) => [s, String(days.reduce((a, d) => a + d.attempts.web!.reached[s]!, 0))]),
     );
+    // Done is the last step, once: the day's `done` is the attempts that reached it.
+    assert.deepEqual(funnel.at(-1)!.slice(0, 2), ["done", String(days.reduce((a, d) => a + d.attempts.web!.done, 0))]);
   });
 
   test("the reasons: each code's sum over the days, most first, none that did not happen", () => {
@@ -132,6 +133,7 @@ describe("the operator's page of a fixed set of files", () => {
       ["7K2Q9FM4XD", "412", "9", "31"],
       ["3MZ8R2KQ0P", "120", "2", "7"],
       ["9QW4T6YH2B", "15", "0", "1"],
+      ["全部 3 張", "547", "11", "39"],
     ]);
     assert.deepEqual(rowsOf(html, "2026-11-26：證明紀錄裡的 518 張島民證明"), [
       ["0", "380"],
@@ -147,7 +149,7 @@ describe("the operator's page of a fixed set of files", () => {
     ]);
   });
 
-  test("the operations: the fingerprint file's last lines, each issuer key's newest CRL line, the last runs", () => {
+  test("the operations: the fingerprint file's last lines, each issuer key's newest usable CRL line, the last runs", () => {
     assert.deepEqual(rowsOf(html, "指紋檔的最後幾行"), [...FINGERPRINTS].reverse().map((f) => [f.date, String(f.count)]));
     assert.deepEqual(rowsOf(html, "清冊存檔"), [
       ["G2", "812", "2026-11-26T16:00:00Z", "2026-11-27"],
@@ -195,8 +197,12 @@ describe("where the page's numbers come from when something cannot be read", () 
     };
     const run = { conclusion: "success", created_at: "2026-11-26T16:31:02Z", html_url: "https://github.com/iamreal-tw/iamreal/actions/runs/1" };
     assert.deepEqual(await lastRun("reverify.yml", answer(200, { workflow_runs: [{ ...run, id: 1 }] }) as typeof fetch), run);
-    assert.equal(asked[0]!.url, "https://api.github.com/repos/iamreal-tw/iamreal/actions/workflows/reverify.yml/runs?status=completed&per_page=1&exclude_pull_requests=true");
+    assert.equal(asked[0]!.url, "https://api.github.com/repos/iamreal-tw/iamreal/actions/workflows/reverify.yml/runs?branch=main&status=completed&per_page=1&exclude_pull_requests=true");
     assert.ok(!Object.keys(asked[0]!.headers).some((h) => h.toLowerCase() === "authorization"));
+    // A general User-Agent: no project's name (CONTRIBUTING.md, "工作時對外的請求").
+    assert.equal(asked[0]!.headers["User-Agent"], "Mozilla/5.0 (compatible)");
+    // A link that is not a run's page of this repository is not put on the page.
+    for (const html_url of ["https://example.com/x", "javascript:alert(1)", "https://github.com/iamreal-tw/iamreal/actions/runs/1/../../x"]) assert.equal(await lastRun("reverify.yml", answer(200, { workflow_runs: [{ ...run, html_url }] }) as typeof fetch), null);
     assert.equal(await lastRun("reverify.yml", answer(200, { workflow_runs: [] }) as typeof fetch), null);
     assert.equal(await lastRun("reverify.yml", answer(403, {}) as typeof fetch), null);
   });
@@ -207,8 +213,17 @@ describe("where the page's numbers come from when something cannot be read", () 
     for (const bad of [["--days", "0"], ["--days", "x"], ["--days"], ["--token", "x"]]) assert.throws(() => optionsOf(bad));
   });
 
-  test("the prefixes written again are src/count-totals.ts's", () => {
+  test("a listing that answers a key outside the totals' prefixes: that key is not read", async () => {
+    const src = fixtureSources();
+    const keys = src.totals.keys;
+    src.totals.keys = async (prefix) => [...(await keys(prefix)), "connection/2026-11-20/x.json", `${prefix}../../connection/x.json`];
+    await gather(src, { days: DEFAULT_DAYS, now: NOW });
+    assert.deepEqual(src.asked.filter((a) => a.startsWith("get") && !/^get count-totals\/(day|month)\/[0-9-]+\.json$/.test(a)), []);
+  });
+
+  test("the prefixes and the number of values a day keeps, written again, are src/count-totals.ts's", () => {
     const source = readFileSync(join(WORKER_DIR, "src", "count-totals.ts"), "utf8");
+    assert.match(source, new RegExp(`export const KEPT_PER_DAY = ${KEPT_PER_DAY};`));
     assert.match(source, /export const COUNT_TOTALS_PREFIX = "count-totals\/";/);
     assert.match(source, /DAY_TOTALS_PREFIX = `\$\{COUNT_TOTALS_PREFIX\}day\/`;/);
     assert.match(source, /MONTH_TOTALS_PREFIX = `\$\{COUNT_TOTALS_PREFIX\}month\/`;/);

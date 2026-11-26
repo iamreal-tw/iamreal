@@ -84,10 +84,11 @@ export const FINGERPRINTS = [
 ];
 const fingerprintFile = (): string => FINGERPRINTS.map((f) => `{"date":"${f.date}","count":${f.count},"fingerprint":"${"ab".repeat(32)}"}\n`).join("");
 
-/** The CRL index: G2 has two lines, the newer one is number 812. */
+/** The CRL index: G2's newest usable line is number 812; 813 is a CRL that was not usable (its root says why). */
 export const CRL_INDEX = [
   `{"issuer":"G2","crl_number":"811","this_update":"2026-11-25T16:00:00Z","next_update":"2026-11-26T16:00:00Z","crl_date":"2026-11-26","sha256":"${"01".repeat(32)}","root":"${"11".repeat(32)}"}`,
   `{"issuer":"G2","crl_number":"812","this_update":"2026-11-26T16:00:00Z","next_update":"2026-11-27T16:00:00Z","crl_date":"2026-11-27","sha256":"${"02".repeat(32)}","root":"${"12".repeat(32)}"}`,
+  `{"issuer":"G2","crl_number":"813","this_update":"2026-11-27T16:00:00Z","next_update":"2026-11-28T16:00:00Z","crl_date":"2026-11-28","sha256":"${"04".repeat(32)}","root":"-signature"}`,
   `{"issuer":"G3","crl_number":"4471","this_update":"2026-11-26T15:30:00Z","next_update":"2026-11-27T15:30:00Z","crl_date":"2026-11-26","sha256":"${"03".repeat(32)}","root":"${"13".repeat(32)}"}`,
 ]
   .map((l) => `${l}\n`)

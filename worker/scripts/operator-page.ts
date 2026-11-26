@@ -27,17 +27,25 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type IndexLine, readIndex } from "../src/crl-index.ts";
+import { type IndexLine, compareNumbers, readIndex, usable } from "../src/crl-index.ts";
+import { DATA_ORIGINS } from "../src/headers.ts";
 import { ISSUER_NAMES, type IssuerName } from "../src/issuers.ts";
 import { type Store, keysIn, r2Store } from "./connection-log.ts";
 
 /** The prefixes of src/count-totals.ts, written again: that file needs the Workers runtime's types. test/operator-page.test.ts reads them there. */
 export const DAY_TOTALS_PREFIX = "count-totals/day/";
 export const MONTH_TOTALS_PREFIX = "count-totals/month/";
-/** The test site's data domain (test/outside-check.ts). */
-export const DATA_ORIGIN = "https://test-data.iamreal.tw";
-/** Where the public repository's runs are (GitHub's REST API). */
+/** The test site's data domain. */
+export const DATA_ORIGIN = DATA_ORIGINS.test;
+/** Where the public repository's runs are (GitHub's REST API), and where a run's own page is. */
 export const RUNS_API = "https://api.github.com/repos/iamreal-tw/iamreal/actions/workflows";
+/**
+ * A general User-Agent, naming no project and no person (CONTRIBUTING.md,
+ * "工作時對外的請求"; as src/mirror.ts): GitHub rejects a request without
+ * one ("All API requests must include a valid `User-Agent` header",
+ * https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api).
+ */
+const USER_AGENT = "Mozilla/5.0 (compatible)";
 /** The workflows whose last run the page shows: the daily re-verification and the outside check of the test site. */
 export const WORKFLOWS = { reverify: "reverify.yml", watch: "watch-test.yml" } as const;
 /** How many days of totals the page shows unless asked; and of months, how many. */
@@ -46,6 +54,8 @@ const MONTHS = 3;
 /** How many lines of the fingerprint file, and how many values of a list, are shown. */
 const FINGERPRINT_LINES = 14;
 const TOP = 20;
+/** How many values of a monthly cell a day keeps by themselves (src/count-totals.ts, KEPT_PER_DAY; test/operator-page.test.ts checks it there). */
+export const KEPT_PER_DAY = 100;
 
 type Numbers = Record<string, number>;
 
@@ -123,8 +133,10 @@ export async function gather(src: Sources, o: { days: number; now: Date }): Prom
     }
     return out;
   };
-  const days = await read<DayTotals>((await src.totals.keys(DAY_TOTALS_PREFIX)).slice(-o.days));
-  const months = await read<MonthTotals>((await src.totals.keys(MONTH_TOTALS_PREFIX)).slice(-MONTHS));
+  // Only what is under the two prefixes, whatever a listing answers.
+  const under = async (prefix: string): Promise<string[]> => (await src.totals.keys(prefix)).filter((k) => k.startsWith(prefix) && !k.includes(".."));
+  const days = await read<DayTotals>((await under(DAY_TOTALS_PREFIX)).slice(-o.days));
+  const months = await read<MonthTotals>((await under(MONTH_TOTALS_PREFIX)).slice(-MONTHS));
 
   const fingerprints = await (async () => {
     try {
@@ -146,7 +158,9 @@ export async function gather(src: Sources, o: { days: number; now: Date }): Prom
       const res = await src.data("/crl/index.jsonl");
       if (res.status !== 200) return null;
       const lines = readIndex(await res.text());
-      const newest = (issuer: IssuerName): IndexLine | null => lines.filter((l) => l.issuer === issuer && l.crlNumber !== "-").sort((a, b) => (BigInt(b.crlNumber) > BigInt(a.crlNumber) ? 1 : -1))[0] ?? null;
+      // As src/crl-index.ts's newestCrls picks them: a usable line, the highest number, then the sha256; with the line's time, which that leaves out.
+      const newest = (issuer: IssuerName): IndexLine | null =>
+        lines.filter((l) => l.issuer === issuer && usable(l)).sort((a, b) => compareNumbers(b.crlNumber, a.crlNumber) || (a.sha256 < b.sha256 ? 1 : a.sha256 > b.sha256 ? -1 : 0))[0] ?? null;
       return Object.fromEntries(ISSUER_NAMES.map((i) => [i, newest(i)])) as Record<IssuerName, IndexLine | null>;
     } catch {
       return null;
@@ -191,9 +205,6 @@ function trend(values: readonly number[]): string {
   return `<svg class="trend" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
 }
 
-/** The values of one key over the days, adding up the keys of each client. */
-const perDay = (days: readonly DayTotals[], f: (d: DayTotals) => number): number[] => days.map(f);
-
 /** Every client that has any count in the days. */
 function clientsIn(days: readonly DayTotals[]): string[] {
   const seen = new Set<string>();
@@ -223,27 +234,27 @@ function operations(s: Snapshot): string {
         );
   const runRow = (name: string, r: Run | null): string[] => (r === null ? [escape(name), "讀不到", "", ""] : [escape(name), escape(r.conclusion), escape(r.created_at), `<a href="${escape(r.html_url)}">執行紀錄</a>`]);
   const runs = table(["工作", "結果", "開始的時間（UTC）", ""], [runRow("每天的重驗（reverify）", s.runs.reverify), runRow("外部檢查（watch-test）", s.runs.watch)], "最近一次執行（GitHub）");
-  return `<section id="operations"><h2>營運的狀況</h2><p class="note">都來自公開的檔和公開的執行紀錄。</p>${fp}${crl}${runs}</section>`;
+  return `${fp}${crl}${runs}`;
 }
 
 function cardProofs(days: readonly DayTotals[]): string {
   const parts: string[] = [];
   for (const client of clientsIn(days)) {
-    const started = perDay(days, (d) => d.attempts[client]?.started ?? 0);
-    const done = perDay(days, (d) => d.attempts[client]?.done ?? 0);
+    const started = days.map((d) => d.attempts[client]?.started ?? 0);
+    const done = days.map((d) => d.attempts[client]?.done ?? 0);
     const rows = days.map((d, i) => [escape(d.date), num(started[i]!), num(done[i]!), share(done[i]!, started[i]!)]).reverse();
     const reached = totalsOf(days, (d) => d.attempts[client]?.reached);
     const allStarted = sum(started);
     const funnel = table(
       ["步驟", "走到的嘗試", "佔開始的"],
-      [["開始", num(allStarted), share(allStarted, allStarted)], ...orderedSteps(days, client, reached).map(([step, v]) => [escape(step), num(v), share(v, allStarted)]), ["完成", num(sum(done)), share(sum(done), allStarted)]],
+      [["開始", num(allStarted), share(allStarted, allStarted)], ...orderedSteps(days, client, reached).map(([step, v]) => [escape(step), num(v), share(v, allStarted)])],
       `漏斗（這 ${days.length} 天加起來）`,
     );
     parts.push(
       `<h3 data-client="${escape(client)}">${escape(client)}</h3><div class="row"><div><p>每天開始的嘗試 ${trend(started)}</p><p>每天完成的 ${trend(done)}</p>${funnel}</div><div>${table(["日期（UTC）", "開始", "完成", "完成的比例"], rows, "每天")}</div></div>`,
     );
   }
-  return `<section id="card-proofs"><h2>過卡</h2><p class="note">照嘗試編號接起來之後的嘗試：算在它第一筆計數的那一天。</p>${parts.join("") || `<p class="none">沒有資料</p>`}</section>`;
+  return `${parts.join("")}`;
 }
 
 /** The steps a client's attempts reached, in the order of the day's file (the table's order), with their sums. */
@@ -259,7 +270,7 @@ function reasons(days: readonly DayTotals[]): string {
     const retries = totalsOf(days, (d) => d.retries[client]);
     return `<h3>${escape(client)}</h3><div class="row"><div>${table(["原因", "次數"], stops.map(([r, v]) => [escape(r), num(v)]), "停下來")}</div><div>${table(["原因", "次數"], retries.map(([r, v]) => [escape(r), num(v)]), "重試")}</div></div>`;
   });
-  return `<section id="reasons"><h2>停下來和重試的原因</h2><p class="note">這 ${days.length} 天加起來，次數多的在前；沒有發生的不列。</p>${parts.join("") || `<p class="none">沒有資料</p>`}</section>`;
+  return `${parts.join("")}`;
 }
 
 function durations(days: readonly DayTotals[]): string {
@@ -273,17 +284,17 @@ function durations(days: readonly DayTotals[]): string {
     });
     return `<h3>${escape(client)}</h3>${table(["步驟", ...levels], rows)}`;
   });
-  return `<section id="durations"><h2>花了多久</h2><p class="note">這 ${days.length} 天加起來，每一級幾次（spec/counts.md「Durations」）。</p>${parts.join("") || `<p class="none">沒有資料</p>`}</section>`;
+  return `${parts.join("")}`;
 }
 
 function clients(days: readonly DayTotals[]): string {
   const names = [...new Set(days.flatMap((d) => Object.keys(d.clients)))].sort();
   const rows = days.map((d) => [escape(d.date), ...names.map((c) => num(d.clients[c] ?? 0)), num(d.minutes), num(d.dropped)]).reverse();
-  return `<section id="clients"><h2>各客戶端的計數</h2><p class="note">每天收下的計數筆數；「每分鐘的檔」是那一天有幾個檔，「沒留下」是超過每分鐘的上限沒有留下的筆數。</p>${table(["日期（UTC）", ...names, "每分鐘的檔", "沒留下"], rows)}</section>`;
+  return `${table(["日期（UTC）", ...names, "每分鐘的檔", "沒留下"], rows)}`;
 }
 
 /** What a month's card proofs were counted by, in words. */
-const DIMENSION_NAMES: Readonly<Record<string, string>> = { browser: "瀏覽器和版本", os: "作業系統和版本", reader: "讀卡機", os_version: "系統版本", app_version: "app 版本", model: "型號" };
+const DIMENSION_NAMES: Readonly<Record<string, string>> = { browser: "瀏覽器和版本", os: "作業系統和版本", reader: "讀卡機", os_version: "系統版本", app_version: "app 版本" };
 
 function cells(months: readonly MonthTotals[]): string {
   const parts: string[] = [];
@@ -302,7 +313,7 @@ function cells(months: readonly MonthTotals[]): string {
       }
     }
   }
-  return `<section id="cells"><h2>型號、版本、讀卡機</h2><p class="note">每月的檔；每一天每一種分法只留嘗試最多的 100 個值，其餘的在 other。</p>${parts.join("") || `<p class="none">沒有資料</p>`}</section>`;
+  return `${parts.join("")}`;
 }
 
 function addCells(cs: readonly Cell[]): Cell {
@@ -311,6 +322,7 @@ function addCells(cs: readonly Cell[]): Cell {
     out.attempts += c.attempts;
     out.done += c.done;
     for (const [r, v] of Object.entries(c.stops)) out.stops[r] = (out.stops[r] ?? 0) + v;
+    for (const [r, v] of Object.entries(c.retries)) out.retries[r] = (out.retries[r] ?? 0) + v;
   }
   return out;
 }
@@ -327,8 +339,8 @@ function pages(days: readonly DayTotals[]): string {
     }
     return out;
   }).slice(0, TOP);
-  const views = perDay(days, (d) => sum(Object.values(d.pages)));
-  return `<section id="pages"><h2>頁面瀏覽和來源</h2><p>每天打開的頁面 ${trend(views)}</p><div class="row"><div>${table(["日期（UTC）", ...names], rows, "每天，照頁面的種類")}</div><div>${table(["來源", "次數"], domains.map(([d, v]) => [escape(d), num(v)]), `來源（這 ${days.length} 天加起來，前 ${TOP} 個）`)}</div></div></section>`;
+  const views = days.map((d) => sum(Object.values(d.pages)));
+  return `<p>每天打開的頁面 ${trend(views)}</p><div class="row"><div>${table(["日期（UTC）", ...names], rows, "每天，照頁面的種類")}</div><div>${table(["來源", "次數"], domains.map(([d, v]) => [escape(d), num(v)]), `來源（這 ${days.length} 天加起來，前 ${TOP} 個）`)}</div></div>`;
 }
 
 function cards(days: readonly DayTotals[], months: readonly MonthTotals[]): string {
@@ -339,14 +351,16 @@ function cards(days: readonly DayTotals[], months: readonly MonthTotals[]): stri
       .sort((a, b) => b[1].opened - a[1].opened || (a[0] < b[0] ? -1 : 1))
       .slice(0, TOP)
       .map(([id, c]) => [`<code>${escape(id)}</code>`, num(c.opened), num(c.download_app), num(c.start_card_proof)]);
-    return table(["短編號", "被打開", "下載 app", "從它開始過卡"], rows, `${m.month}（前 ${TOP} 張，照被打開的次數）`);
+    const all = Object.values(m.cards);
+    if (all.length > 0) rows.push([`全部 ${n(all.length)} 張`, num(sum(all.map((c) => c.opened))), num(sum(all.map((c) => c.download_app))), num(sum(all.map((c) => c.start_card_proof)))]);
+    return table(["短編號", "被打開", "下載 app", "從它開始過卡"], rows, `${m.month}（前 ${TOP} 張，照被打開的次數；最後一列是全部）`);
   });
-  return `<section id="cards"><h2>每張島民證明</h2>${opened}${monthly.join("")}</section>`;
+  return `${opened}${monthly.join("")}`;
 }
 
 function devices(months: readonly MonthTotals[]): string {
   const rows = [...months].reverse().map((m) => (m.devices === null ? [escape(m.month), "月份還沒結束", "", ""] : [escape(m.month), num(m.devices.cards_2), num(m.devices.cards_3_or_more), num(m.devices.days.length)]));
-  return `<section id="devices"><h2>送出好幾張卡片的裝置</h2><p class="note">從連線紀錄裡成功的送出算，月份結束才有。</p>${table(["月份", "2 張", "3 張以上", "用了幾天的檔"], rows)}</section>`;
+  return `${table(["月份", "2 張", "3 張以上", "用了幾天的檔"], rows)}`;
 }
 
 const STYLE = `
@@ -373,19 +387,21 @@ export function pageOf(s: Snapshot): string {
   const first = s.days[0]?.date;
   const last = s.days.at(-1)?.date;
   const range = first === undefined ? "還沒有每天的加總" : `${first} 到 ${last}，${s.days.length} 天（UTC）`;
-  const nav = [
-    ["operations", "營運的狀況"],
-    ["card-proofs", "過卡"],
-    ["reasons", "原因"],
-    ["durations", "花了多久"],
-    ["clients", "客戶端"],
-    ["cells", "型號、版本、讀卡機"],
-    ["pages", "頁面和來源"],
-    ["cards", "每張島民證明"],
-    ["devices", "好幾張卡片的裝置"],
-  ]
-    .map(([id, name]) => `<a href="#${id}">${name}</a>`)
-    .join("");
+  const days = s.days.length;
+  // Each section: its id, its name in the list at the top, its heading, a line under it, and what it holds.
+  const sections: readonly [string, string, string, string | null, string][] = [
+    ["operations", "營運的狀況", "營運的狀況", "都來自公開的檔和公開的執行紀錄。", operations(s)],
+    ["card-proofs", "過卡", "過卡", "照嘗試編號接起來之後的嘗試：算在它第一筆計數的那一天。", cardProofs(s.days)],
+    ["reasons", "原因", "停下來和重試的原因", `這 ${days} 天加起來，次數多的在前；沒有發生的不列。`, reasons(s.days)],
+    ["durations", "花了多久", "花了多久", `這 ${days} 天加起來，每一級幾次（spec/counts.md「Durations」）。`, durations(s.days)],
+    ["clients", "客戶端", "各客戶端的計數", "每天收下的計數筆數；「每分鐘的檔」是那一天有幾個檔，「沒留下」是超過每分鐘的上限沒有留下的筆數。", clients(s.days)],
+    ["cells", "型號、版本、讀卡機", "型號、版本、讀卡機", `每月的檔；每一天每一種分法只留嘗試最多的 ${KEPT_PER_DAY} 個值，其餘的在 other。`, cells(s.months)],
+    ["pages", "頁面和來源", "頁面瀏覽和來源", null, pages(s.days)],
+    ["cards", "每張島民證明", "每張島民證明", null, cards(s.days, s.months)],
+    ["devices", "好幾張卡片的裝置", "送出好幾張卡片的裝置", "從連線紀錄裡成功的送出算，月份結束才有。", devices(s.months)],
+  ];
+  const nav = sections.map(([id, name]) => `<a href="#${id}">${name}</a>`).join("");
+  const body = sections.map(([id, , title, note, html]) => `<section id="${id}"><h2>${title}</h2>${note === null ? "" : `<p class="note">${escape(note)}</p>`}${html || `<p class="none">沒有資料</p>`}</section>`).join("\n");
   return `<!doctype html>
 <html lang="zh-Hant-TW">
 <head>
@@ -398,17 +414,9 @@ export function pageOf(s: Snapshot): string {
 </head>
 <body>
 <h1>iamreal 營運者的數字</h1>
-<p class="made">測試網站。產生的時間 ${escape(s.made)}；加總：${escape(range)}。這一頁只在這台電腦上，不送出任何東西。</p>
+<p class="made">測試網站。產生的時間 ${escape(s.made)}；加總：${escape(range)}。這一頁只在這台電腦上，打開時不送出任何東西，只有按了執行紀錄的連結才會連到 GitHub。</p>
 <nav>${nav}</nav>
-${operations(s)}
-${cardProofs(s.days)}
-${reasons(s.days)}
-${durations(s.days)}
-${clients(s.days)}
-${cells(s.months)}
-${pages(s.days)}
-${cards(s.days, s.months)}
-${devices(s.months)}
+${body}
 </body>
 </html>
 `;
@@ -419,12 +427,13 @@ ${devices(s.months)}
 
 /** The last finished run of a workflow on the default branch, from GitHub's public API: no token. */
 export async function lastRun(workflow: string, fetchFn: typeof fetch = fetch): Promise<Run | null> {
-  const res = await fetchFn(`${RUNS_API}/${workflow}/runs?status=completed&per_page=1&exclude_pull_requests=true`, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "iamreal-operator-page" },
+  const res = await fetchFn(`${RUNS_API}/${workflow}/runs?branch=main&status=completed&per_page=1&exclude_pull_requests=true`, {
+    headers: { Accept: "application/vnd.github+json", "User-Agent": USER_AGENT },
   });
   if (res.status !== 200) return null;
   const run = ((await res.json()) as { workflow_runs?: { conclusion?: unknown; created_at?: unknown; html_url?: unknown }[] }).workflow_runs?.[0];
-  if (run === undefined || typeof run.conclusion !== "string" || typeof run.created_at !== "string" || typeof run.html_url !== "string") return null;
+  // The link goes on the page: only a run's page of this repository.
+  if (run === undefined || typeof run.conclusion !== "string" || typeof run.created_at !== "string" || typeof run.html_url !== "string" || !/^https:\/\/github\.com\/iamreal-tw\/iamreal\/actions\/runs\/\d+$/.test(run.html_url)) return null;
   return { conclusion: run.conclusion, created_at: run.created_at, html_url: run.html_url };
 }
 

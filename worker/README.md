@@ -1661,7 +1661,7 @@ node --experimental-strip-types scripts/operator-page.ts [--days 30] [--out <檔
 - `--days`：最近幾天的加總，預設 30；每月的檔讀最近 3 個月
 - `--out`：寫到哪裡，預設系統暫存目錄的 `iamreal-operator-page.html`（權限 600）。不要寫進程式庫的目錄
 - **要哪一種權限**：只要讀不公開的儲存桶裡的 `count-totals/`。用的是[查連線紀錄](#查連線紀錄)的同一把權杖、同一個金鑰檔（`~/.config/iamreal/connection-log.env`）：R2 的「Object Read only」，只限 `iamreal-test-logs` 一個儲存桶。不要為這一頁建別的權杖，也不要用讀得到整個帳號的。照那一節的做法，要看的時候才建、看完刪。這把權杖也讀得到連線紀錄（有 IP），一樣當敏感的東西保管；這支指令只列出、讀取 `count-totals/day/` 和 `count-totals/month/` 底下的檔
-- 營運的狀況讀公開的東西，不用權杖：公開資料網域的 `proof-log/fingerprints.jsonl`（最後 14 行）、`crl/index.jsonl`（兩把發證金鑰各自最新的一行），和 GitHub 公開的 API 上 `reverify.yml`、`watch-test.yml` 最近一次跑完的結果（沒有登入，一小時 60 次的上限）
+- 營運的狀況讀公開的東西，不用權杖：公開資料網域的 `proof-log/fingerprints.jsonl`（最後 14 行）、`crl/index.jsonl`（兩把發證金鑰各自最新的一行），和 GitHub 公開的 API 上 `reverify.yml`、`watch-test.yml` 在 `main` 最近一次跑完的結果。這兩個請求不登入，帶一般的 `User-Agent`；GitHub 對沒登入的請求照 IP 算，「The primary rate limit for unauthenticated requests is 60 requests per hour」（[Rate limits for the REST API](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)，2026-11-27 讀的），一次跑用兩個
 
 頁面上有什麼（第一版，營運者看了再調）：
 
