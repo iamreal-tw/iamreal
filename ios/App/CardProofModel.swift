@@ -308,6 +308,12 @@ final class CardProofModel: ObservableObject {
             screen = screens.pin(name: name, state: .waiting(deps.copy("app_pin.need_pin")))
             return
         }
+        // A PIN no card takes goes to no card: no tap, nothing used up.
+        guard CardChannel.cardTakes(pin) else {
+            pin.clear()
+            screen = screens.pin(name: name, state: .waiting(deps.copy("app_pin.pin_format")))
+            return
+        }
         screen = screens.pin(name: name, state: .tapping)
         do {
             let status = try await flow.confirmCard(pin: pin) { [weak self] in
@@ -323,7 +329,7 @@ final class CardProofModel: ObservableObject {
             let stop = error as? CardProofFlow.Stop ?? .state
             let why = screens.message(stop, tap: 2)
             switch stop {
-            case .card(.pinIncorrect):
+            case .card(.pinIncorrect), .card(.channel):
                 screen = screens.pin(name: name, state: .waiting(why.first))
             case .card(.otherCard):
                 self.pin = pin

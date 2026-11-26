@@ -61,7 +61,7 @@ final class ScreensTests: XCTestCase {
         let (consequence, done) = declaration()
         return [
             ("card-proof-app-1-before-phone", screens.before()),
-            ("card-proof-app-2-read-phone", screens.read(reached: 0, running: false, stop: nil)),
+            ("card-proof-app-2-read-iphone-phone", screens.read(reached: 0, running: false, stop: nil)),
             ("card-proof-app-3-pin-phone", screens.pin(name: "王小明", state: .waiting(nil))),
             ("card-proof-app-4-accounts-phone", screens.accounts(newCard, typed: ["threads": "alice"], errors: [:], message: nil)),
             ("card-proof-app-5-confirm-phone", screens.confirm(newCard, consequence)),
@@ -173,6 +173,47 @@ final class ScreensTests: XCTestCase {
         // The settings are on steps 1 and 6 only.
         XCTAssertEqual(screens.before().settings, Button(label: "設定", action: .openSettings))
         XCTAssertNil(screens.read(reached: 0, running: false, stop: nil).settings)
+    }
+
+    /// Where the card goes on an iPhone: drawn under the first sentence of
+    /// step 2 before the tap, while it goes on under the system's panel,
+    /// and when it stopped; not once the card is read. Its captions and
+    /// the sentence VoiceOver reads are card-proof.md's.
+    func testTheReadingStepShowsWhereTheCardGoesUntilItIsRead() throws {
+        let shown = [
+            screens.read(reached: 0, running: false, stop: nil),
+            screens.read(reached: 1, running: true, stop: nil),
+            screens.read(reached: 1, running: false, stop: .card(.noTap)),
+        ]
+        for screen in shown {
+            guard case .figure(let figure) = screen.blocks[2] else { return XCTFail("no picture after the first sentence: \(screen.blocks)") }
+            XCTAssertEqual(figure.captions.map(\.text), ["① 翻到有相機的那面", "② 卡片貼住上方"])
+            XCTAssertEqual(figure.captions.map(\.emphasis), ["有相機", "上方"])
+            XCTAssertEqual(figure.description, "把手機翻到有相機的那一面，卡片貼住上方")
+            document.check(screen)
+        }
+        let read = screens.read(reached: 4, running: false, stop: nil)
+        XCTAssertFalse(read.blocks.contains { if case .figure = $0 { return true } else { return false } })
+    }
+
+    /// The card left during the first tap: step 2 says so, and the same tap is done again.
+    func testACardThatLeftTheFirstTapIsTappedAgain() {
+        let screen = screens.read(reached: 1, running: false, stop: .card(.dropped(pinSent: false)))
+        XCTAssertTrue(screen.texts.contains(copy("app_stops.read_dropped")))
+        XCTAssertEqual(screen.buttons.map(\.action), [.readCard])
+        XCTAssertEqual(screen.buttons.map(\.label), [copy("app_read.tap_again")])
+        document.check(screen)
+    }
+
+    /// The stops only the app has, with the card: each sentence is card-proof.md's.
+    func testTheCardsOwnStopsAreInTheDocument() {
+        for (stop, key) in [(Flow.Stop.card(.channel), "app_stops.channel"), (.card(.firstGeneration), "app_stops.first_generation"), (.card(.locked), "stops.card_locked")] {
+            XCTAssertEqual(screens.message(stop, tap: 2), [copy(key)])
+        }
+        document.check(screens.pin(name: "王小明", state: .waiting(copy("app_pin.pin_format"))))
+        document.check(screens.pin(name: "王小明", state: .waiting(screens.message(.card(.channel), tap: 2).first)))
+        document.check(screens.progress(reached: 1, stop: .card(.channel)))
+        document.check(screens.read(reached: 1, running: false, stop: .card(.firstGeneration)))
     }
 
     /// No screen links out (docs/design/principles.md, principle 1): what a

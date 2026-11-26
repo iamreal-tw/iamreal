@@ -77,6 +77,9 @@ final class CardProofTests: XCTestCase {
         XCTAssertEqual(model.screen.texts, [
             "讀取卡片",
             "按「感應卡片」，再把自然人憑證平貼在手機背面的上方，不要移動，直到畫面說可以拿開。",
+            "① 翻到有相機的那面",
+            "② 卡片貼住上方",
+            "把手機翻到有相機的那一面，卡片貼住上方",
             "連上島民證明的伺服器",
             "感應卡片，讀取卡片上的憑證",
             "檢查憑證",
@@ -430,6 +433,49 @@ final class CardProofTests: XCTestCase {
         model.pinText = backend.pin
         try await press("確認卡片", in: model)
         XCTAssertEqual(model.screen.step, 4)
+    }
+
+    /// No secure channel with the card at tap 2: the PIN was not sent, but
+    /// it is dropped all the same and typed again; no "再感應一次卡片".
+    func testNoChannelAtTheSecondTapDropsThePIN() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await press("下一步", in: model)
+        try await press("感應卡片", in: model)
+        try await press("下一步", in: model)
+        card.nextSignFails = .channel
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 3)
+        XCTAssertTrue(model.screen.texts.contains("卡片和這支手機建立不起加密的連線，PIN 沒有送出。請改用電腦和讀卡機過卡。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["上一步", "確認卡片"])
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(card.pinsReceived, 0)
+
+        model.pinText = backend.pin
+        try await press("確認卡片", in: model)
+        XCTAssertEqual(model.screen.step, 4)
+    }
+
+    /// No secure channel with the card at tap 3: the PIN is dropped, and
+    /// the only way on is back to the start.
+    func testNoChannelAtTheThirdTapDropsThePIN() async throws {
+        try await onTheSecondDay()
+        let model = makeModel()
+        try await toAccounts(model)
+        model.type("bob", on: "threads")
+        try await press("下一步", in: model)
+        card.nextSignFails = .channel
+        let button = try XCTUnwrap(model.screen.buttons.last?.label)
+        try await press(button, in: model)
+        XCTAssertEqual(model.screen.step, 5)
+        XCTAssertTrue(model.screen.texts.contains("卡片和這支手機建立不起加密的連線，PIN 沒有送出。請改用電腦和讀卡機過卡。"))
+        XCTAssertEqual(model.screen.buttons.map(\.label), ["回到開頭"])
+        XCTAssertNil(model.screen.cancel)
+        XCTAssertFalse(model.holdsPIN)
+        XCTAssertEqual(card.signatures, 1, "the card signed the scope string only")
+        try await press("回到開頭", in: model)
+        XCTAssertEqual(model.screen.step, 1)
     }
 
     // ---------------------------------------------------------------------------

@@ -429,6 +429,12 @@ final class CardProofFlow {
             // The PIN is not the card's: it is not kept.
             pin.clear()
             throw Stop.card(.pinIncorrect)
+        } catch CardFailure.channel {
+            // The PIN went nowhere, but it is typed again all the same: the
+            // phone could not talk to this card, and the screen says to use
+            // a computer instead.
+            pin.clear()
+            throw Stop.card(.channel)
         } catch CardFailure.otherCard {
             // The PIN went nowhere.
             throw Stop.card(.otherCard)

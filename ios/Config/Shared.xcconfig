@@ -9,7 +9,7 @@ IPHONEOS_DEPLOYMENT_TARGET = 15.0
 // iPhone only: no iPad interface, and not offered to a Mac or a Vision Pro
 // as an iPhone app. An iPad can still install an iPhone app and run it in
 // compatibility mode; what keeps it off an iPad is requiring NFC in
-// UIRequiredDeviceCapabilities, which comes with reading the card (#174).
+// UIRequiredDeviceCapabilities, in Config/Info.plist (#174).
 TARGETED_DEVICE_FAMILY = 1
 SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO
 SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO

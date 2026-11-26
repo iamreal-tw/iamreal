@@ -84,7 +84,7 @@ extension CardProofModel {
         let flow = CardProofFlow.Dependencies(
             proofLog: AppEnvironment.proofLog,
             backend: HTTPBackend(site: AppEnvironment.site, publicFiles: AppEnvironment.publicFiles),
-            card: NoCardReader(),
+            card: NFCCard(copy: copy),
             clock: Date.init,
             crlNumbers: StoredCRLNumbers(),
             openSession: { try DeviceCore.Session(AppEnvironment.proofLog) },
