@@ -54,7 +54,9 @@ func TestIndexFile(t *testing.T) {
 		if !c.Usable {
 			want.Root = "-" + c.Reason
 		}
-		if c.Reason == ReasonSignature {
+		// The key the signature verifies under, whatever the reason (spec/revocation-tree.md, `issuer`): none for a
+		// signature that does not verify, and none for the case where an earlier reason (the algorithm) hides that one.
+		if c.Reason == ReasonSignature || c.Name == "no-null-bad-signature" {
 			want.Issuer = "-"
 		}
 		if got := IndexFile(der, testKeys(t)); got != want {
