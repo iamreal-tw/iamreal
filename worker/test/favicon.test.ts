@@ -24,6 +24,13 @@ test("the mark drawn is the pages' own, in the colours of design/tokens.json", (
   assert.deepEqual(shapes(svg), shapes(String(LOGO)));
   assert.ok(svg.includes(`fill="${tokens["--you"]}"`) && svg.includes(`fill="${tokens["--ink"]}" stroke="${tokens["--bg"]}"`) && svg.includes(`fill="${tokens["--bg"]}"`));
   assert.doesNotMatch(svg, /class=/);
+  // The colours the pages draw the mark in: site/pages.css's rules for LOGO's classes, the same tokens.
+  const css = readFileSync(join(WORKER_DIR, "site", "pages.css"), "utf8");
+  const rule = (cls: string): string => css.match(new RegExp(`\\n\\.${cls} \\{([^}]*)\\}`))![1]!.replace(/\s+/g, " ").trim();
+  assert.deepEqual(
+    [rule("logo-card-body"), rule("logo-chip"), rule("logo-island-body")],
+    ["fill: var(--you);", "fill: var(--bg);", "fill: var(--ink); stroke: var(--bg);"],
+  );
 });
 
 test("an ICO of PNGs: the directory, an entry for each, the PNGs; read back as written", () => {

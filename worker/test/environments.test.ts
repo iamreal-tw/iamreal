@@ -189,6 +189,7 @@ test("a configuration that runs the Worker for the card proof page's files, lets
     ["no icon", { files: ["_headers", "_redirects", "copy.js", "fonts/GenRyuMin2TW-B.woff2", "og-image.png", "pages.css"], faviconSha256: null }, /files of the test environment/],
     ["an icon that is not the one of HEAD", { faviconSha256: "0".repeat(64) }, /favicon\.ico of the test environment is the one of HEAD/],
     ["an icon that is not in HEAD", { committedFaviconSha256: null }, /favicon\.ico of the test environment is the one of HEAD/],
+    ["an icon neither there nor in HEAD", { faviconSha256: null, committedFaviconSha256: null }, /favicon\.ico of the test environment is the one of HEAD/],
     ["no typeface", { files: ["_headers", "_redirects", "copy.js", "favicon.ico", "og-image.png", "pages.css"], fontSha256: null }, /files of the test environment/],
     ["a typeface that is not the subset of design/fonts/", { fontSha256: "0".repeat(64) }, /GenRyuMin2TW-B\.woff2 of the test environment is the subset of design\/fonts\//],
     ["no image", { files: ["_headers", "_redirects", "copy.js", "favicon.ico", "fonts/GenRyuMin2TW-B.woff2", "pages.css"], ogImageSha256: null }, /files of the test environment/],

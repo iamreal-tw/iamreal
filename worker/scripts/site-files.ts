@@ -15,9 +15,6 @@
 //                    design/screens/og-image.png (design/copy/proof-page.md,
 //                    section 8), byte for byte.
 //
-// Static Assets also sends site/favicon.ico, the site's icon, which
-// scripts/favicon.ts draws and this script does not touch (`FAVICON_FILE`).
-//
 // Both are in the repository as a test log's site needs them, the only
 // environment there is: the job that uploads checks the repository out and
 // runs none of its scripts, so what it uploads is what a reader of the
@@ -28,6 +25,9 @@
 //
 // `node --experimental-strip-types scripts/site-files.ts` writes all four again,
 // after a change of src/headers.ts, of the subset or of the image.
+//
+// Static Assets also sends site/favicon.ico, the site's icon, which
+// scripts/favicon.ts draws and this script does not touch (`FAVICON_FILE`).
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
