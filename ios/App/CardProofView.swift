@@ -71,22 +71,16 @@ struct ScreenView: View {
                 }
                 .padding(.top, 36)
             }
-            ForEach(Array(screen.below.enumerated()), id: \.offset) { _, block in
-                VStack(alignment: .leading, spacing: 0) {
-                    Divider().overlay(Theme.line.color)
-                    self.block(block, first: true).padding(.top, 20)
-                }
-                .padding(.top, 32)
-            }
-            if let cancel = screen.cancel {
-                SwiftUI.Button { perform(cancel.action) } label: {
-                    Text(cancel.label)
+            // The ways back, as links: to the screen before, then out of the card proof.
+            ForEach(Array([screen.secondary, screen.cancel].compactMap { $0 }.enumerated()), id: \.offset) { index, link in
+                SwiftUI.Button { perform(link.action) } label: {
+                    Text(link.label)
                         .font(Theme.body(Theme.sizeKicker))
                         .underline()
                         .foregroundColor(Theme.text.color)
                         .frame(minHeight: Theme.minTarget.value)
                 }
-                .padding(.top, 16)
+                .padding(.top, index == 0 ? 16 : 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -170,6 +164,13 @@ struct ScreenView: View {
                 .padding(.top, 20)
         case .text(let text):
             paragraph(text).padding(.top, 12)
+        case .sentences(let sentences):
+            paragraph(sentences.joined()).padding(.top, 12)
+        case .declared(let account):
+            Text(account).font(Theme.body(Theme.sizeHeading, Theme.weightAccount)).foregroundColor(Theme.ink.color)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
         case .strong(let text):
             Text(text).font(Theme.body(Theme.sizeBody, Theme.weightHeading)).foregroundColor(Theme.ink.color)
                 .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody))
@@ -210,12 +211,12 @@ struct ScreenView: View {
                     .frame(maxWidth: .infinity, minHeight: Theme.minTarget.value, alignment: .leading)
             }
             .padding(.top, 28)
-        case .points(let points):
+        case .points(let points, let bold):
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                     HStack(alignment: .firstTextBaseline, spacing: 14) {
                         Circle().fill(Theme.ink.color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
-                        Text(point).font(Theme.body(Theme.sizeBody))
+                        Self.emphasised(point, bold).font(Theme.body(Theme.sizeBody))
                             .lineSpacing(Theme.spacing(Theme.leadingBody, Theme.sizeBody) * 0.8)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -227,7 +228,8 @@ struct ScreenView: View {
                 Divider().overlay(Theme.line.color)
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(answer.enumerated()), id: \.offset) { _, line in paragraph(line) }
+                        // An answer holds a paragraph, a button or a link: drawn as on the screen itself.
+                        ForEach(Array(answer.enumerated()), id: \.offset) { _, part in AnyView(self.block(part, first: false)) }
                     }
                     .padding(.bottom, 12)
                 } label: {
@@ -329,6 +331,14 @@ struct ScreenView: View {
         case .figure(let figure):
             CardFigure(figure: figure).padding(.top, 22)
         }
+    }
+
+    /// `text` with the words `bold` among it in ink and bold.
+    private static func emphasised(_ text: String, _ bold: String?) -> Text {
+        guard let bold, let range = text.range(of: bold) else { return Text(text) }
+        return Text(text[..<range.lowerBound])
+            + Text(bold).fontWeight(Font.Weight(css: Theme.weightHeading.value)).foregroundColor(Theme.ink.color)
+            + Text(text[range.upperBound...])
     }
 
     // The parts -----------------------------------------------------------------------

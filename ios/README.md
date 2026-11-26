@@ -6,7 +6,7 @@
 
 ## 現在有什麼
 
-過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。卡片用 iPhone 的 NFC 讀（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：每一次感應是系統的一個讀卡面板，讀憑證不用 PIN，簽章前先和第二代卡片建立安全通道（`spec/card-channel.md`）才送 PIN。畫面和啟動畫面照 `design/screens/` 的 `card-proof-app-*`、`app-splash-phone.png`（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；讀取卡片那一步有感應位置的示意圖（`card-proof-app-2-read-iphone-phone.png`）。過卡提醒和設定（[#298](https://github.com/iamreal-tw/iamreal/issues/298)，照 [#93](https://github.com/iamreal-tw/iamreal/issues/93)）照 `design/screens/` 的 `app-reminder-*`、`app-settings-phone.png`：完成的畫面問要不要提醒，提醒是手機自己排的本機通知。
+過卡的六個畫面和流程（[#170](https://github.com/iamreal-tw/iamreal/issues/170)），照網頁版 `web/src/flow.ts` 的順序，卡片感應三次（[#133](https://github.com/iamreal-tw/iamreal/issues/133)）。卡片用 iPhone 的 NFC 讀（[#174](https://github.com/iamreal-tw/iamreal/issues/174)）：每一次感應是系統的一個讀卡面板，讀憑證不用 PIN，簽章前先和第二代卡片建立安全通道（`spec/card-channel.md`）才送 PIN。畫面和啟動畫面照 `design/screens/` 的 `card-proof-app-*`、`app-splash-phone.png`（[#296](https://github.com/iamreal-tw/iamreal/issues/296)），完成的畫面和網頁的結構相同；讀取卡片那一步有感應位置的示意圖（`card-proof-app-2-read-iphone-phone.png`）。第 1 到 5 步的字和第 4 步的分流照 `design/copy/card-proof.md`（[#363](https://github.com/iamreal-tw/iamreal/issues/363)）：第 1 步「找附近的戶政事務所」交給 iPhone 的地圖搜尋「戶政事務所」（地圖的連結 `https://maps.apple.com/?q=…`，app 不要位置的權限），另一個連結用瀏覽器開內政部憑證管理中心的網站；第 4 步在卡片沒有宣告時只有填帳號的欄位，已經有宣告時主按鈕是「更新島民證明」，下面是「改成別的帳號」和「收回對 @alice 的宣告」。過卡提醒和設定（[#298](https://github.com/iamreal-tw/iamreal/issues/298)，照 [#93](https://github.com/iamreal-tw/iamreal/issues/93)）照 `design/screens/` 的 `app-reminder-*`、`app-settings-phone.png`：完成的畫面問要不要提醒，提醒是手機自己排的本機通知。
 
 | 檔案 | 內容 |
 |---|---|
@@ -163,7 +163,8 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 
 測試從畫面那一層操作（按畫面上有的按鈕、在欄位打字），「卡片」換成 `Tests/FakeCard.swift`，「後台」是真的 `HTTPBackend` 連本機的 Worker，核心、證明都是真的：
 
-- 同一張卡片新宣告、再次過卡、隔天更換、收回各一次，每個畫面上的每一句話和預期的逐句相同，而且每一句都在 `design/copy/card-proof.md` 裡
+- 同一張卡片新宣告、再次過卡、隔天更換、收回各一次，每個畫面上的每一句話和預期的逐句相同，而且每一句都在 `design/copy/card-proof.md` 裡。第 4 步走的是畫面上的那幾個按鈕：新宣告填欄位，再次過卡按「更新島民證明」，更換按「改成別的帳號」再填，收回按「收回對 @bob 的宣告」；欄位空著按「下一步」不往下，「不改了」和第 5 步的「上一步」回到按下之前的那個畫面
+- 第 1 步「找附近的戶政事務所」和內政部憑證管理中心的連結交給系統開的網址
 - 第一次感應不送 PIN；第二、第三次感應換成另一張卡時，那張卡沒有收到 PIN，畫面請持卡人換回來，再感應一次就接著做
 - 完成、取消、PIN 不正確之後，記憶體裡沒有 PIN
 - app 一打開（畫面第一次畫出來）就向後台拿 `config`，過卡用的是那一份
@@ -192,14 +193,14 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/CardChannelTests.swift`：安全通道對 `spec/vectors/card-channel.json` 的每一案：靜態金鑰、卡片識別碼、金鑰資訊、卡片的挑戰、安全通道的金鑰和 EXTERNAL AUTHENTICATE、一連串指令的加密、MAC 和計數器（沒有資料的指令也加一）、PIN 的區塊、要簽的區塊
 - `Tests/GpkiCardTests.swift`：`GpkiCard` 對一張模擬的第二代卡片（`Tests/SimulatedGpkiCard.swift`：照卡片的做法解密、檢查 MAC 和它自己的計數器，有 PIN 的錯誤次數和簽章的金鑰）：讀憑證不用 PIN、不建安全通道；簽章用簽章的那一把；PIN 錯兩次是 PIN 不正確、第三次鎖卡；卡片收不了的 PIN 不送；卡片的驗證碼不對、金鑰不是 16 個位元組時不送 PIN；第一代的卡片什麼都不讀、不送 PIN；卡片中途離開時知道 PIN 送出了沒有
 - `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
-- `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面：每一句都在文字檔裡、沒有「了解更多」；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
+- `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面，和已經宣告 `@alice` 的卡片的第 4、5 步（目前宣告的帳號、改成別的帳號、再次過卡、更換、收回的確認）：每一句都在文字檔裡、沒有「了解更多」；第 1 步、第 3 步、第 4 步的每一種（沒有宣告、全部收回過、已經有宣告、改成別的帳號和它依次數換掉的那一句、不能再更換、今天已經過卡 3 次、卡片在 app 不認得的平台上有帳號）、第 5 步的每一種逐句照文字檔；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
 - `Tests/DoneScreenTests.swift`：完成的畫面上提醒的那一段：沒存提醒時問、開著時寫重排後的日子、選了日期時不寫多久之後、系統不允許時的句子、憑證在提醒前到期時多的那一句、時刻的寫法。送出後後台的回應。`spec/vectors/records-response.json` 的每一案由核心讀（`idc_records_response`），app 拿到的和標準答案相同；完成的畫面說哪幾句：第一次宣告逐字照 `design/copy/card-proof.md` 第 6 步（含「app」那一節）、全部收回、已複製、和確認時相同、讀不出每個平台記成什麼、別的卡片也宣告了同一個帳號、和確認時不同的每一種。後台是誠實的時候用假卡片過卡遇不到最後一種，所以在這裡測
 - `check-app-test.sh`：`check-app.sh` 讓建好的 app 通過，並擋下每一份改過的副本
 - `check-archive-test.sh`：`check-archive.sh` 讓 `archive.sh` 做的 archive 通過，並擋下每一份改過的副本（「上傳到 TestFlight」）
 
 ### 截圖
 
-`Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`；提醒的 `app-reminder-1-done-phone.png`、`-2-schedule`、`-4-from-notification`、`app-settings-phone.png`。`app-reminder-3-notification-phone.png` 是系統的通知的示意，不拍）。現在 `design/screens/` 放的是 Android 的（那裡的 README「版本」寫哪一個 app）；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。讀取卡片的那一張只有 iPhone 的，檔名是 `card-proof-app-2-read-iphone-phone.png`，`design/screens/` 放的是這裡拍的（#174）。感應中的那一張（`card-proof-app-2-reading-iphone-phone.png`）蓋著系統的面板，這裡拍不到，留著定稿。
+`Tests/ScreensTests.swift` 拍的截圖，檔名就是 `design/screens/` 裡 app 共用的那幾張（`card-proof-app-1-before-phone.png`、`-3-pin`、`-4-accounts`、`-5-confirm`、`-5-progress`、`-6-done`、`app-splash-phone.png`；提醒的 `app-reminder-1-done-phone.png`、`-2-schedule`、`-4-from-notification`、`app-settings-phone.png`。`app-reminder-3-notification-phone.png` 是系統的通知的示意，不拍）。`design/screens/` 放的是哪一個 app 的，寫在那裡的 README「版本」；要換成 iPhone 的，跑過 `xcodebuild test` 之後從 `web/test-output/app/screens-ios/` 把同名的檔複製過去，版本改成「實作版（iOS）」。已經宣告帳號的卡片的第 4、5 步也拍（`card-proof-app-4-accounts-existing-phone.png`、`-4-accounts-switch`、`-5-confirm-refresh`、`-5-confirm-switch`、`-5-confirm-withdraw`），`design/screens/` 沒有同名的，只留在輸出的目錄。讀取卡片的那一張只有 iPhone 的，檔名是 `card-proof-app-2-read-iphone-phone.png`，`design/screens/` 放的是這裡拍的（#174）。感應中的那一張（`card-proof-app-2-reading-iphone-phone.png`）蓋著系統的面板，這裡拍不到，留著定稿。
 
 ## 建置時的檢查（`check-app.sh`）
 
