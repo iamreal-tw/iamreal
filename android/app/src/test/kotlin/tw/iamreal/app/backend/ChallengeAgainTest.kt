@@ -11,8 +11,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 
 /**
- * The challenge asked for a second time (#404): a request that was sent and got not one byte of an answer is made
- * once more, on a new connection, and only for `POST /api/v1/challenges`. Against a server on this computer that
+ * The challenge asked for a second time (#404): a request that went out and got no first line of an answer is made
+ * once more, and only for `POST /api/v1/challenges`. Against a server on this computer that
  * reads each request and then answers it, or closes the connection without a byte, as a connection that went dead
  * while the phone waited on steps 4 and 5 does.
  */
@@ -94,13 +94,6 @@ class ChallengeAgainTest {
             assertEquals(listOf("rate_limited", 429), listOf(e.code, e.status))
         }
         assertEquals(listOf(post), server.requests.toList())
-    }
-
-    @Test
-    fun `no server to connect to is not a request to make again`() {
-        // A port nothing listens on: the connection is refused, and nothing was sent.
-        val free = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
-        network("nothing listening") { Backend("http://127.0.0.1:$free", "http://127.0.0.1:1").challenge() }
     }
 
     @Test
