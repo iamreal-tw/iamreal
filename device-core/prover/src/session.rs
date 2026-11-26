@@ -106,6 +106,11 @@ struct Session {
     /// The challenge [`check_challenge`] took: dated the session's date
     /// when it was taken. The proof is made for this one only.
     challenge: Option<[u8; CHALLENGE_LENGTH]>,
+    /// The challenges a proof was computed for, whether or not it came
+    /// out: none of them is taken again (spec/device-checks.md, "One
+    /// proof for the card's signatures"). Kept when the session starts
+    /// over, so that other checks do not make room for a second proof.
+    spent: Vec<[u8; CHALLENGE_LENGTH]>,
 }
 
 /// What a session that passed every check holds.
@@ -217,6 +222,7 @@ pub fn open(proof_log: ProofLog, trust: Trust) -> u64 {
         path: None,
         artifacts_checked: false,
         challenge: None,
+        spent: Vec::new(),
     };
     let handle = NEXT.fetch_add(1, Ordering::Relaxed);
     SESSIONS
@@ -661,7 +667,10 @@ pub fn check_date(handle: u64, now: i64) -> Result<Vec<u8>, i32> {
 /// or step 4 again. A challenge that is not taken leaves the session's
 /// checks as they were: the card proof stops, and the app says why.
 ///
-/// `IDC_ERR_REFUSED` unless the session passed every check on its date.
+/// `IDC_ERR_REFUSED` unless the session passed every check on its date,
+/// and for a challenge the session computed a proof for
+/// ([`records_request`]): the card's signature over its declaration code
+/// gets one proof.
 /// `IDC_ERR_ARGUMENT` for a clock outside 2000 to 2049; the session
 /// starts over then.
 pub fn check_challenge(handle: u64, now: i64, challenge: &[u8]) -> Result<Vec<u8>, i32> {
@@ -678,6 +687,9 @@ pub fn check_challenge(handle: u64, now: i64, challenge: &[u8]) -> Result<Vec<u8
             .today
             .and_then(|date| session.passed(date))
             .ok_or(IDC_ERR_REFUSED)?;
+        if session.spent.iter().any(|spent| spent.as_slice() == challenge) {
+            return Err(IDC_ERR_REFUSED);
+        }
         let date = match challenge_rules::check_challenge(challenge, today) {
             Ok(date) => date,
             Err(problem) => {
@@ -772,6 +784,14 @@ fn scoped_id_of(signature: &[u8]) -> Result<[u8; 32], i32> {
 /// keeps neither signature: its copies, the circuit's inputs and the
 /// witness are overwritten before this returns.
 ///
+/// One proof for the card's signatures (spec/device-checks.md): once the
+/// two signatures are found to be the card's, the challenge is spent,
+/// whether or not a proof comes out. The session takes no challenge
+/// after that until [`check_challenge`] takes another one, and never
+/// this one again: a second proof takes a new challenge, so a new
+/// declaration code and a new signature of the card. The app sends the
+/// body this returned again as it is; it does not ask for it again.
+///
 /// `IDC_ERR_REFUSED` unless the session passed every check and the
 /// challenge's date is the date its checks hold for: the record is dated
 /// the challenge's date, so this function takes no clock. A card proof
@@ -836,6 +856,12 @@ pub fn records_request(
         {
             return Err(IDC_ERR_INPUT);
         }
+        // From here on a proof is computed: the only one for this
+        // challenge, and so for the card's signature over its code.
+        let spent: [u8; CHALLENGE_LENGTH] = challenge.try_into().map_err(|_| IDC_ERR_INPUT)?;
+        session.challenge = None;
+        session.spent.push(spent);
+        let passed = session.passed(date).ok_or(IDC_ERR_REFUSED)?;
         let id = scoped_id_of(scope_signature)?;
         let issuers = session.trust.issuer_keys();
         let issuer_key = issuers

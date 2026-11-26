@@ -4,7 +4,8 @@ Status: **Draft**.
 
 Before the card signs anything, the cardholder's device chooses the
 certificate a card proof uses, checks it, and checks the CRL it builds the
-revocation tree from. These checks protect the cardholder: a card that
+revocation tree from. Once the card has signed, it
+computes one proof for the signatures. These checks protect the cardholder: a card that
 cannot pass is told so before any PIN is used, and a server cannot loosen
 them (ADR-0015, ADR-0016). This document defines them, so that every
 client (the web page, the Android and iOS apps) gives the same answer for
@@ -262,6 +263,39 @@ An answer that is an error of the server carries the server's own code
 ([`docs/api/card-proof.md`](../docs/api/card-proof.md)), which the device
 shows as it is.
 
+## One proof for the card's signatures
+
+The card's signatures over the scope string and over a declaration code do
+not change, and a device that holds them needs neither the card nor the PIN
+to compute proofs. Each proof it computes with other inputs (another
+`smt_root` and path, another `current_time`) answers one question about the
+certificate, to whoever chose the inputs and sees whether a proof came out.
+The device chooses those inputs itself (ADR-0015, ADR-0016); this rule is
+there for the case that something else got to choose them after all.
+
+- **One proof.** For the card's signature over one declaration code, the
+  device computes one proof. A declaration code names its challenge
+  ([`declaration-code.md`](declaration-code.md)), so this is one proof for
+  one challenge.
+- **A failure stops.** When no proof comes out (the circuit has none for
+  the inputs, the proof engine fails, or the proof's public inputs are not
+  the ones the device expects,
+  [`circuit-inputs.md`](circuit-inputs.md)), the card proof stops. The
+  device does not compute another proof with the signatures it holds,
+  whether with the same inputs or with others, and no longer keeps the
+  signatures.
+- **To try again is to sign again.** Another attempt is another card
+  proof: the device asks for another challenge, and the card signs its
+  declaration code, with the PIN. No answer of a server makes the device
+  try again on its own.
+- **Sending is not proving.** Sending the record that carries the proof
+  again as it is, after a submission that got no answer or a failure of the
+  server ([`docs/api/card-proof.md`](../docs/api/card-proof.md)), computes
+  nothing: the cardholder may do that.
+
+The rule has no reason code of its own: the card proof stops with the
+reason of the failure.
+
 ## Test vectors
 
 [`vectors/device-checks.json`](vectors/device-checks.json):
@@ -293,6 +327,11 @@ shows as it is.
 
 Which CRLs are usable, case by case with their reason codes, is in
 [`../crl/testdata/`](../crl/testdata) (`expected.json`).
+
+"One proof for the card's signatures" is about what a device does not do,
+so it has no vectors: each client tests it in its own flow
+(`web/test/flow.test.ts`; `device-core/prover/tests/proof.rs`, where the
+core refuses a challenge it computed a proof for).
 
 The file is written by `web/test/generate/device-checks.ts` from the test
 fixtures of `web/test/fixtures/`, with keys made on the spot (the private

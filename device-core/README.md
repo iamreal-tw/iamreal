@@ -108,6 +108,8 @@ Android 開它的是只給模擬器測試的建置（build type `fake`）和 JVM
 5. 電路輸入（`spec/circuit-inputs.md`）、見證、證明。電路解不出見證是 `IDC_ERR_INPUT`：前面都過了還解不出來，是電路自己的檢查不成立。
 6. 證明帶的公開輸入和核心自己算的那一份逐一比對（發證金鑰、樹根、`current_time`、匿名編號、場合字串、宣告碼），有一個不同就什麼都不回（`IDC_ERR_INTERNAL`）。
 
+**一個題目只算一次證明**（`spec/device-checks.md`「One proof for the card's signatures」，ADR-0016）。第 4 步的兩個簽章驗過之後，這個題目就用掉了，不管第 5、6 步有沒有做出證明：同一個 session 再呼叫一次是 `IDC_ERR_REFUSED`，`idc_session_check_challenge` 也不再收這個題目（`IDC_ERR_REFUSED`），重做前面哪一步都一樣。要再算一次就要新的題目，宣告碼跟著不同，卡片要重新簽章。簽章不對（第 4 步的 `IDC_ERR_INPUT`）什麼都沒有算，題目不算用掉。核心擋的是同一個 session 裡的第二次；app 另開一個 session 再拿同一組簽章來，核心認不出來，那要靠 app 的流程在失敗時停下、丟掉簽章（`ios/App/CardProofFlow.swift`、Android 的流程），和上面「關卡擋的是寫錯順序」同一個道理。送出沒有回應時，app 重送的是這個函式回過的那一份內容，不再呼叫它。
+
 證明的設定是固定的：零知識、Poseidon2，就是驗證紀錄時 `bb verify -t noir-recursive` 的那一組，呼叫的人和後台都選不了。證明 14,656 個位元組。
 
 **通用參數交給 Barretenberg 一次。** 行程裡第一次算證明時，核對過的兩個參數檔交給 Barretenberg，它留著用到行程結束；之後的證明仍然每次核對四個檔，但不再交一次。
