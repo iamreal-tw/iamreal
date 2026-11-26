@@ -81,7 +81,8 @@ these is not so:
    out; when present they are in their form.
 
 A dropped count leaves nothing: the server does not keep it, count it or
-log it. The server answers the same either way.
+log it. A count that was read is answered the same whether it was taken or
+dropped.
 
 A count that is taken is kept with its members in the order of the table
 above, whatever order they came in.

@@ -552,9 +552,10 @@ members of a count and which counts are taken are in
 - What the server keeps of a count that is taken is the count, rebuilt
   member by member from the table, and the minute it was received in (UTC).
   Not the IP address, which is used for the limit below and for nothing
-  else; no header of the request; not the request ID, which for a count is
-  written nowhere. A count is not in the connection log, and nothing is
-  written about it to the live log.
+  else; no header of the request; not the request ID. A count is not in the
+  connection log, and nothing of a count is written to the live log: when
+  the server itself fails to keep one, the line it writes there says that
+  it failed and nothing of the count.
 - The counts of one minute are written as one file, in a place that is not
   public, where they are deleted after 31 days. A minute holds a set number
   of counts at most (the operator's setting); more than that in one minute
@@ -565,8 +566,10 @@ members of a count and which counts are taken are in
 - Counts can be sent by anyone, with any values the table has. They are for
   the operator to see where card proofs stop, and decide nothing about any
   record (ADR-0005).
-- Errors: `429` `rate_limited` ("Rules for every endpoint"), with the JSON
-  body of any error; the count is then not read. `405` for another method.
+- Errors, each with the JSON body of any error: `429` `rate_limited`
+  ("Rules for every endpoint"), and the count is then not read; `405` for
+  another method; `500` `internal` when the server's settings are not
+  right, as for every endpoint.
 
 ## Public files
 

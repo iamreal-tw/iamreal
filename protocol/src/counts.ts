@@ -249,7 +249,8 @@ function rulesOf(c: Readonly<Record<string, string>>): Readonly<Partial<Record<M
 export function readCount(parsed: unknown): Count | null {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
   const given = parsed as Record<string, unknown>;
-  const count: Record<string, string> = {};
+  // Without a prototype: a member named `__proto__` is a member like any other, and one the table has not.
+  const count = Object.create(null) as Record<string, string>;
   for (const [name, value] of Object.entries(given)) {
     if (typeof value !== "string") return null;
     count[name] = value;

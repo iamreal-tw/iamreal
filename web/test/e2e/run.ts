@@ -278,7 +278,8 @@ try {
     );
   }
   // The counts (ADR-0032): the Worker writes a minute's counts when the minute is over, so wait for the clock's next one.
-  await new Promise((r) => setTimeout(r, 61_000 - (Date.now() % 60_000)));
+  // Three seconds into it: the object's own timer, a second in, has written by then.
+  await new Promise((r) => setTimeout(r, 63_000 - (Date.now() % 60_000)));
   await worker.ringCounts();
   const counted = (await worker.connectionLog()).filter((o) => o.key.startsWith("count-events/")).flatMap((o) => (o.entry as { counts: Record<string, string>[] }).counts);
   check(counted.length > 0 && counted.every((c) => JSON.stringify(readCount(c)) === JSON.stringify(c) && c.client === "web"), `the Worker took ${counted.length} counts, each one of the table's`);

@@ -170,6 +170,8 @@ describe("a count as it is sent", () => {
       userAgent: "",
     });
     noRandom.step("open");
+    // And the submission goes without a device ID rather than not at all.
+    assert.equal(noRandom.deviceId(), null);
     await settled();
   });
 });

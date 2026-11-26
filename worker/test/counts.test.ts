@@ -86,7 +86,9 @@ const minute = (at: Date): string => `${at.toISOString().slice(0, 16)}Z`;
 describe("which counts are taken: spec/vectors/counts.json", () => {
   test("every case gets the same answer, without a body; the minute's file holds the ones the table takes, in the order they came, and nothing of the others", async () => {
     const began = time;
-    for (const c of VECTORS.cases) {
+    for (const [i, c] of VECTORS.cases.entries()) {
+      // From several addresses: the cases are more than one address may send in a minute (ADR-0026).
+      IP = `198.51.100.${(i % 20) + 1}`;
       const answer = await send(c.count);
       assert.deepEqual([answer.status, answer.body, answer.contentType, answer.cacheControl], [204, "", null, "no-store"], c.name);
       assert.match(answer.requestId ?? "", /^[0-9a-f]{16}$/);
@@ -111,7 +113,8 @@ describe("which counts are taken: spec/vectors/counts.json", () => {
     const long = { ...step("read"), reader: "A".repeat(64) };
     const padded = `${JSON.stringify(long).slice(0, -1)}${" ".repeat(2049)}}`;
     for (const body of ["", "{", "null", '"step"', new Uint8Array([0x7b, 0xff, 0x7d]), `﻿${JSON.stringify(step("read"))}`, padded]) {
-      assert.deepEqual([(await sendText(body)).status, (await sendText(body)).body], [204, ""]);
+      const answer = await sendText(body);
+      assert.deepEqual([answer.status, answer.body], [204, ""]);
     }
     // The longest count the table allows is well within the limit, and taken.
     assert.equal((await send({ ...long, browser_version: "12345.12345.12345.12345", os_version: "12345.12345.12345.12345" })).status, 204);

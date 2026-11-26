@@ -2126,6 +2126,19 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
   });
 
+  test("a window blocked when the card is read: `retry`, and reading again is the same attempt", async () => {
+    const s = await setup();
+    blockWindows(s.card, "readCertificates", 2);
+    assert.deepEqual(await stopOf(s.flow.readCard()), { code: "card", card: "popup_blocked" });
+    assert.deepEqual(await stopOf(s.flow.readCard()), { code: "card", card: "popup_blocked" });
+    await s.flow.readCard();
+    await s.flow.checksDone();
+    const counted = await sent(s);
+    assert.deepEqual(counted.slice(0, 4).map((c) => c.step ?? `${String(c.event)} ${String(c.reason)}`), ["read", "retry popup_blocked", "retry popup_blocked", "component"]);
+    assert.equal(stepsOf(counted).filter((x) => x === "read").length, 1);
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
+  });
+
   test("a stop ends the attempt: the next card proof on the page has another attempt ID and the same device ID", async () => {
     const s = await setup({ backend: { cardState: { nonsense: true } } });
     await s.flow.readCard();
@@ -2177,7 +2190,10 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
     const counted = await sent(s);
     assert.deepEqual(counted.filter((c) => c.event === "stop").map((c) => c.reason), ["artifact"]);
     assert.ok(!JSON.stringify(counted).includes("circuits"));
-    assert.ok(!stepsOf(counted).includes("pin") || stepsOf(counted).indexOf("pin") > -1);
+    // After its stop the card proof has no step: the PIN that was given is not one, and no other attempt begins.
+    assert.ok(!stepsOf(counted).includes("pin"));
+    assert.equal(counted.at(-1)!.event, "stop");
+    assert.equal(new Set(counted.map((c) => c.attempt_id)).size, 1);
   });
 
   test("the record sent again: an action, and `retry` for the submission that did not get through", async () => {
@@ -2210,7 +2226,7 @@ describe("the counts the page sends (spec/counts.md; ADR-0032, ADR-0039)", () =>
 
   test("the card proof device ID is kept with the date it was made on, replaced 31 days after it, and the old one is kept nowhere", async () => {
     const s = await setup();
-    const first = s.counts.deviceId();
+    const first = s.counts.deviceId()!;
     assert.equal(s.idStorage.get(DEVICE_ID_KEY), `${first}.2026-11-16`);
     assert.deepEqual([...s.idStorage.keys()], [DEVICE_ID_KEY]);
     s.advance(30 * 86_400_000);

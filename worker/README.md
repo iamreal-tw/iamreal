@@ -1442,7 +1442,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 - 內容最多 2,048 個位元組。照表讀（`readCount`）：有一個值不在表上、多一個或少一個成員、編號或版本號或讀卡機名稱的格式不對、不是 JSON，整筆丟掉，什麼都不留
 - 收下和丟掉回的都是 `204`，沒有內容。客戶端不看回應
 - 限流另算一類（[限流](#限流)的 `RATE_COUNTS`），照 IP 算。**IP 只用在這裡**：交給 Durable Object 的是讀表時照表重新組出來的那一筆，沒有請求的任何東西（位址、標頭、請求編號）
-- 計數不寫連線紀錄，即時的輸出也不寫任何一行
+- 計數不寫連線紀錄；即時的輸出不寫計數的任何內容。後台自己出錯時才有一行：交不到收計數的物件是 `{"event":"count_not_kept","error":"Error"}`；設定不對（`PROOF_LOG_KIND` 等，和每個介面一樣先讀，或 `COUNT_EVENTS_PER_MINUTE` 不是數字）回 `500`，寫 `internal_error` 那一行
 - 不問證明紀錄的 Durable Object：Worker 檢查完交給另一個物件（綁定 `COUNTS`，類別 `Counts`，名稱固定是 `counts`）。看頁面的量比過卡多得多，不讓它和寫證明紀錄的搶同一個寫入者（ADR-0023）
 
 **存**：
@@ -1456,7 +1456,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
   ```
 
   `counts` 照收到的順序，每一筆的成員照 `spec/counts.md` 的順序。沒有收下任何一筆的那一分鐘不寫檔
-- 寫檔靠物件的 alarm（設在這一分鐘結束後一秒）；alarm 晚了的話，下一分鐘第一筆計數進來時先把上一分鐘寫掉
+- 寫檔靠物件裡的一個計時器（`setTimeout`，設在這一分鐘結束後一秒）。用計時器是為了讓物件留在記憶體：Cloudflare 會把閒置的 Durable Object 收掉，能休眠的 10 秒就收，記憶體裡的東西跟著沒了；還有計時器沒跑完的物件不會被收（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)，2026-11-26 讀的：休眠的條件之一是「No setTimeout/setInterval scheduled callbacks are set」）。另外設一個 alarm（存在物件的儲存裡）當備用；下一分鐘第一筆計數進來時，上一分鐘還沒寫也會先寫掉
 - **每分鐘最多留 `COUNT_EVENTS_PER_MINUTE` 筆**（[設定檔](#設定檔)，現在 600）。超過的不留，只在那個檔的 `dropped` 記這一分鐘另外來了幾筆：明細的量不由送的人決定。這個數字由 Worker 每次帶給物件，物件自己不讀設定
 - 寫檔失敗時，即時的輸出寫一行 `{"event":"count_events_not_written","minute":"…","error":"Error"}`，那一分鐘的計數就沒了。物件被重啟或換版（部署）時，還在記憶體裡的那一分鐘也沒了。計數只供營運者參考，不補
 - 儲存桶裡三個前綴互不重疊：`connection/`（連線紀錄）、`count-events/`（計數的明細，31 天）、`count-totals/`（加總，永久，[#435](https://github.com/iamreal-tw/iamreal/issues/435)，還沒有）
@@ -1468,7 +1468,7 @@ ADR-0026 的三層裡，這裡做的是第三層：Worker 裡照 IP 算的上限
 **還沒在 Cloudflare 上看過的**：
 
 - 這個物件一秒收得了多少（和 [#52](https://github.com/iamreal-tw/iamreal/issues/52) 的量測一起量）
-- 物件沒有請求時會不會在 alarm 響之前被收掉、那一分鐘因此沒寫出來（本機的 workerd 不會收掉物件，測不到）
+- 計時器是不是真的讓物件留到那一分鐘寫出來（照文件會；本機的 workerd 不會收掉物件，測不到）
 - 生命週期規則真的刪掉 `count-events/` 的檔：滿 32 天後營運者看一次
 
 ## 停止和恢復收過卡

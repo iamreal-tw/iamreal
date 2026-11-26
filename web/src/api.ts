@@ -33,10 +33,10 @@ export const API_TIMEOUT_MS = 30_000;
 export const FILE_TIMEOUT_MS = 5 * 60_000;
 
 /** `fetch` restricted to the page's own origin. Tests pass a fake. `signal` aborts the request (its time limit). */
-export type Fetch = (path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal }) => Promise<Response>;
+export type Fetch = (path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal; keepalive?: boolean }) => Promise<Response>;
 
 /** The page's fetch: same origin, no credentials, no cache, no redirects. */
-export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal }): Promise<Response> {
+export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; body?: string; signal?: AbortSignal; keepalive?: boolean }): Promise<Response> {
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("not a same-origin path");
   return fetch(path, {
     method: init?.method ?? "GET",
@@ -47,6 +47,7 @@ export function sameOriginFetch(path: string, init?: { method: "GET" | "POST"; b
     redirect: "error",
     referrerPolicy: "no-referrer",
     signal: init?.signal,
+    ...(init?.keepalive && { keepalive: true }),
   });
 }
 

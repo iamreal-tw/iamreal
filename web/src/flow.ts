@@ -428,6 +428,8 @@ export class CardProofFlow {
   private inStep = false;
   /** resubmit() was called: the submission's earlier answer may have been lost. */
   private resubmitted = false;
+  /** The counts were told this card proof begins (readCard). */
+  private begun = false;
   /** The counts were told why this card proof stopped (countStop). */
   private stopCounted = false;
 
@@ -463,13 +465,16 @@ export class CardProofFlow {
   /** Tells the screen and the counts a thing is done, unless the flow stopped. */
   private progress(step: Progress): void {
     if (this.stopped) return;
-    this.deps.counts?.step(STEP_OF[step]);
+    this.reached(STEP_OF[step]);
     this.deps.onProgress?.(step);
   }
 
-  /** Tells the counts a step that is no item of the screen's lists was reached, unless the flow stopped. */
+  /**
+   * Tells the counts a step was reached, unless the flow stopped or the
+   * counts were told why it will: after its stop a card proof has no step.
+   */
   private reached(step: Step): void {
-    if (!this.stopped) this.deps.counts?.step(step);
+    if (!this.stopped && !this.stopCounted) this.deps.counts?.step(step);
   }
 
   /**
@@ -662,6 +667,11 @@ export class CardProofFlow {
   async readCard(): Promise<CardRead> {
     this.expect("start");
     return this.once(() => {
+      // Once for a flow: reading again after a blocked window is the same card proof.
+      if (!this.begun) {
+        this.begun = true;
+        this.deps.counts?.begin();
+      }
       this.reached("read");
       return this.readCardStep();
     });

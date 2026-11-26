@@ -16,7 +16,8 @@
 //   worked out here from the `User-Agent`; the text itself is not sent in a
 //   count.
 // - Sending never holds the card proof up: nothing waits for the request,
-//   and one that fails is not sent again.
+//   and one that fails is not sent again. The request is marked to be kept
+//   alive, so that the last count of a page being left is still sent.
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
 import { type Browser, COUNT_ID, type CardProofAction, type Os, REASONS, type Reason, type Step } from "iamreal-protocol/counts.ts";
 import type { Fetch } from "./api.ts";
@@ -134,6 +135,12 @@ export function reasonOf(stop: Stop): Reason {
 
 /** What the flow tells the counts (flow.ts). */
 export interface FlowCounts {
+  /**
+   * A card proof begins: the card is about to be read for it. One that
+   * the page's opening began and whose card was not read yet goes on; any
+   * other is over, however it ended.
+   */
+  begin(): void;
   /** The card proof reached a step. A step is sent once in a card proof. */
   step(step: Step): void;
   /** The card proof stopped, and is over. */
@@ -142,8 +149,8 @@ export interface FlowCounts {
   retry(reason: Reason): void;
   /** An action of the cardholder's. */
   action(action: CardProofAction): void;
-  /** The card proof device ID, for the submission of a record. */
-  deviceId(): string;
+  /** The card proof device ID, for the submission of a record; null if none could be made. */
+  deviceId(): string | null;
 }
 
 export interface CountsDeps {
@@ -177,7 +184,7 @@ export function cardProofCounts(deps: CountsDeps): FlowCounts {
       const body = JSON.stringify({ client: "web", ...members, device_id: device, attempt_id: id, browser, os });
       // Not awaited, and its failure is nobody's: a count never holds a card proof up, and is not sent again.
       void Promise.resolve()
-        .then(() => deps.fetch("/api/v1/counts", { method: "POST", body }))
+        .then(() => deps.fetch("/api/v1/counts", { method: "POST", body, keepalive: true }))
         .then((res) => res.body?.cancel())
         .catch(() => undefined);
     } catch {
@@ -186,9 +193,10 @@ export function cardProofCounts(deps: CountsDeps): FlowCounts {
   };
 
   return {
+    begin() {
+      if (attempt?.steps.has("read")) attempt = null;
+    },
     step(step) {
-      // Reading the card begins a card proof: one whose card was read already is over, however it ended.
-      if (step === "read" && attempt?.steps.has("read")) attempt = null;
       try {
         const now = current();
         if (now.steps.has(step)) return;
@@ -210,6 +218,13 @@ export function cardProofCounts(deps: CountsDeps): FlowCounts {
     action(action) {
       send({ event: "action", action });
     },
-    deviceId,
+    deviceId() {
+      try {
+        const id = deviceId();
+        return COUNT_ID.test(id) ? id : null;
+      } catch {
+        return null;
+      }
+    },
   };
 }

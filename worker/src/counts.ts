@@ -17,9 +17,16 @@
 //   is not kept: the file only says how many there were. How much is
 //   stored is not up to whoever sends counts.
 // - The minute in memory is lost when the object is stopped (a deploy, or
-//   Cloudflare moving it, or putting an idle one to sleep before its minute
-//   is written). The counts are for the operator to look at and decide
-//   nothing: none is made up for.
+//   Cloudflare moving it). The counts are for the operator to look at and
+//   decide nothing: none is made up for.
+// - Cloudflare takes an object that is idle out of memory, after 10 seconds
+//   for one that can hibernate, and what it held in memory is then gone; a
+//   timer that is still to run keeps it in memory
+//   (https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/,
+//   read 2026-11-26: "No setTimeout/setInterval scheduled callbacks are
+//   set" among the conditions of hibernation). So a minute that holds counts
+//   has a timer that runs when it is over and writes it. The alarm, which
+//   is stored, is set as well: it writes the minute if the timer did not.
 import { DurableObject } from "cloudflare:workers";
 import { now } from "#target";
 import type { Count } from "iamreal-protocol/counts.ts";
@@ -68,6 +75,8 @@ export class Counts extends DurableObject<Env> {
   #minute: string | null = null;
   #counts: Count[] = [];
   #dropped = 0;
+  /** The timer that writes the minute in memory when it is over, and keeps the object in memory until then. */
+  #timer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Takes one count: kept in memory until its minute is over, or, in a
@@ -77,12 +86,12 @@ export class Counts extends DurableObject<Env> {
     const minute = minuteOf(now());
     // The alarm is what writes a minute; this is for one that rang late, or not at all.
     if (this.#minute !== null && this.#minute !== minute) await this.#write();
-    if (this.#minute === null) {
-      this.#minute = minute;
-      await this.#ringAfterThisMinute();
-    }
+    // Kept before anything is awaited: what follows cannot lose it.
+    this.#minute ??= minute;
     if (this.#counts.length < perMinute) this.#counts.push(count);
     else this.#dropped++;
+    this.#writeWhenOver();
+    await this.#ringAfterThisMinute();
   }
 
   /** Rings when a minute is over: writes it. If counts of a later minute are held by then, it rings again for them. */
@@ -91,11 +100,36 @@ export class Counts extends DurableObject<Env> {
     if (this.#minute !== null) await this.#ringAfterThisMinute();
   }
 
-  /** Sets the alarm for a second after the clock's minute ends, unless one is set. */
+  /** How long until a second after the clock's minute ends, in milliseconds. */
+  static #untilOver(): number {
+    return 61_000 - (Date.now() % 60_000);
+  }
+
+  /** Starts the timer that writes the minute in memory once it is over, unless it runs already. */
+  #writeWhenOver(): void {
+    if (this.#timer !== null) return;
+    this.#timer = setTimeout(() => {
+      this.#timer = null;
+      void (async () => {
+        if (this.#minute !== null && this.#minute !== minuteOf(now())) await this.#write();
+        // Counts of a minute that is not over yet (they came since, or the clock is a test's): again when it is.
+        if (this.#minute !== null) this.#writeWhenOver();
+      })();
+    }, Counts.#untilOver());
+  }
+
+  /**
+   * Sets the alarm for a second after the clock's minute ends, unless one
+   * is set. An alarm that cannot be set is one line in the live log: the
+   * timer writes the minute all the same.
+   */
   async #ringAfterThisMinute(): Promise<void> {
-    if ((await this.ctx.storage.getAlarm()) !== null) return;
-    const real = Date.now();
-    await this.ctx.storage.setAlarm(real - (real % 60_000) + 61_000);
+    try {
+      if ((await this.ctx.storage.getAlarm()) !== null) return;
+      await this.ctx.storage.setAlarm(Date.now() + Counts.#untilOver());
+    } catch (e) {
+      console.error(JSON.stringify({ event: "count_events_alarm_not_set", error: e instanceof Error ? e.name : "unknown" }));
+    }
   }
 
   /**

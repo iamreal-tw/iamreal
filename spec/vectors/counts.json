@@ -1255,6 +1255,60 @@
       "taken": false
     },
     {
+      "name": "a member named __proto__",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "__proto__": "anything"
+      },
+      "taken": false
+    },
+    {
+      "name": "a member named constructor",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "read",
+        "constructor": "anything"
+      },
+      "taken": false
+    },
+    {
+      "name": "a step named after a method of every object",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "toString"
+      },
+      "taken": false
+    },
+    {
+      "name": "a reason named constructor",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "stop",
+        "reason": "constructor"
+      },
+      "taken": false
+    },
+    {
       "name": "a time",
       "count": {
         "client": "web",
