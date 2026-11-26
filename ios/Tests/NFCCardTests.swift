@@ -107,13 +107,13 @@ final class NFCCardTests: XCTestCase {
             (CardFailure.channel, .channel),
             (CardFailure.firstGeneration, .firstGeneration),
             (CardFailure.otherCard, .otherCard),
-            (CardFailure.dropped(pinSent: false), .dropped(pinSent: false)),
-            (CardFailure.dropped(pinSent: true), .dropped(pinSent: true)),
+            (CardFailure.dropped(.notSent), .dropped(.notSent)),
+            (CardFailure.dropped(.sent), .dropped(.sent)),
             (CardFailure.failed(code: "card_error"), .failed(code: "card_error")),
             // As Core NFC says it: the card left, the card stopped answering, the connection ran out.
-            (NFCReaderError(.readerTransceiveErrorTagConnectionLost), .dropped(pinSent: false)),
-            (NFCReaderError(.readerTransceiveErrorTagResponseError), .dropped(pinSent: false)),
-            (NFCReaderError(.readerSessionInvalidationErrorSessionTimeout), .dropped(pinSent: false)),
+            (NFCReaderError(.readerTransceiveErrorTagConnectionLost), .dropped(.notSent)),
+            (NFCReaderError(.readerTransceiveErrorTagResponseError), .dropped(.notSent)),
+            (NFCReaderError(.readerSessionInvalidationErrorSessionTimeout), .dropped(.notSent)),
             (NFCReaderError(.readerErrorUnsupportedFeature), .failed(code: "nfc")),
             (Other(), .failed(code: "nfc")),
         ]
@@ -136,7 +136,7 @@ final class NFCCardTests: XCTestCase {
                 throw NFCReaderError(.readerTransceiveErrorSessionInvalidated)
             }
         }
-        XCTAssertEqual(why, .noTap)
+        XCTAssertEqual(why, .cancelled)
         XCTAssertEqual(panel.told.count, 2, "waiting and reading, and nothing after: \(panel.told)")
     }
 
@@ -153,7 +153,7 @@ final class NFCCardTests: XCTestCase {
                 throw NFCReaderError(.readerTransceiveErrorSessionInvalidated)
             }
         }
-        XCTAssertEqual(why, .dropped(pinSent: true))
+        XCTAssertEqual(why, .dropped(.sent), "the card did not answer the PIN: not known whether it received it")
         XCTAssertEqual(panel.told.count, 2, "waiting and signing, and nothing after: \(panel.told)")
     }
 

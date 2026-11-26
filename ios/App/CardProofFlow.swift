@@ -427,15 +427,27 @@ final class CardProofFlow {
     // Tap 2 -------------------------------------------------------------------
 
     /// The card signs the scope string; the scoped ID; the card's state.
-    /// A wrong PIN or another card leaves the step to be done again.
+    /// A wrong PIN, another card, no card or a card that left leaves the
+    /// step to be done again: with the same PIN where it did not go to a
+    /// card that may have counted it wrong, with a PIN typed again otherwise.
     /// `signed` is called when the card has signed and can be taken away.
     func confirmCard(pin: PIN, signed: () -> Void) async throws -> CardStatus {
-        try await checksDone()
-        guard let session else { throw fail(Stop.state) }
+        // Whatever stops it before the tap: the PIN is not kept.
+        do {
+            try await checksDone()
+        } catch {
+            pin.clear()
+            throw error
+        }
+        guard let session else {
+            pin.clear()
+            throw fail(Stop.state)
+        }
         let scope: Data
         do {
             scope = try DeviceCore.scopeString(deps.proofLog)
         } catch {
+            pin.clear()
             throw fail(error)
         }
         var signature: Data
@@ -451,9 +463,19 @@ final class CardProofFlow {
             // a computer instead.
             pin.clear()
             throw Stop.card(.channel)
-        } catch CardFailure.otherCard {
-            // The PIN went nowhere.
-            throw Stop.card(.otherCard)
+        } catch let failure as CardFailure where Self.tapCanBeMadeAgain(failure) || (failure == .dropped(.sent) && pin.accepted) {
+            // The PIN did not go to a card that may have counted it wrong
+            // (it never went, or the card has accepted it): it is the
+            // caller's still, for the same tap again.
+            if failure == .dropped(.accepted) { pin.accepted = true }
+            throw Stop.card(failure == .dropped(.sent) ? .dropped(.accepted) : failure)
+        } catch CardFailure.dropped(.sent) {
+            // The card left while the PIN was going to it, and has never
+            // accepted this PIN: whether it counted a try is not known.
+            // Not sent again by itself; the cardholder types it again
+            // (issue #133).
+            pin.clear()
+            throw Stop.card(.dropped(.sent))
         } catch {
             pin.clear()
             throw fail(error)
@@ -467,6 +489,7 @@ final class CardProofFlow {
             } catch let failure as DeviceCore.Failure where failure.code == IDC_ERR_INPUT {
                 throw Stop.cardSignature
             }
+            pin.accepted = true
             self.pin = pin
             scopeSignature = Secret(signature)
             Self.wipe(&signature)
@@ -482,6 +505,18 @@ final class CardProofFlow {
             Self.wipe(&signature)
             pin.clear()
             throw fail(error)
+        }
+    }
+
+    /// A tap with the PIN that ended without the PIN having gone to a card
+    /// that did not accept it: the same tap can be made again with the PIN
+    /// in memory. Another card than the one read, no card, the panel
+    /// closed, the card gone before the PIN was sent or after it had
+    /// accepted it.
+    private static func tapCanBeMadeAgain(_ failure: CardFailure) -> Bool {
+        switch failure {
+        case .otherCard, .noTap, .cancelled, .dropped(.notSent), .dropped(.accepted): return true
+        default: return false
         }
     }
 
@@ -644,7 +679,8 @@ final class CardProofFlow {
     }
 
     /// The card signs the declaration code. Another card than the one of
-    /// tap 1 leaves the step to be done again; the PIN was not sent.
+    /// tap 1, no card, or a card that left leaves the step to be done
+    /// again, with the PIN in memory.
     func sign() async throws {
         try expect(.readyToSign)
         guard let pin, let code else { throw fail(Stop.state) }
@@ -652,8 +688,10 @@ final class CardProofFlow {
             var signature = try await signTap(code, pin: pin)
             codeSignature = Secret(signature)
             Self.wipe(&signature)
-        } catch CardFailure.otherCard {
-            throw Stop.card(.otherCard)
+        } catch let failure as CardFailure where Self.tapCanBeMadeAgain(failure) || failure == .dropped(.sent) {
+            // The card accepted this PIN in tap 2: wherever this tap lost
+            // the card, the PIN is sent again with the next (issue #133).
+            throw Stop.card(failure)
         } catch {
             throw fail(error)
         }

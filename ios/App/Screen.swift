@@ -4,7 +4,9 @@ import Foundation
 /// it and every button. CardProofModel makes it; CardProofView draws it
 /// and nothing else, so what a test reads here is what the screen says.
 struct Screen: Equatable {
-    /// 1 to 8: which of the app's eight steps (design/copy/card-proof.md).
+    /// 1 to 8: which of the app's eight steps (design/copy/card-proof.md);
+    /// 0 for a screen in the place of step 1 that is none of them: this
+    /// version can no longer do a card proof, this phone cannot read a card.
     var step: Int
     var blocks: [Block]
     /// The buttons under the blocks, in their order; the last is the way
@@ -19,7 +21,11 @@ struct Screen: Equatable {
     var links: [Button] = []
     /// The way out at the very bottom: drops the PIN and goes back to step 1.
     var cancel: Button?
-    /// Above the step: the note of a reminder the app was opened from.
+    /// Above everything, in their order: that this version stops being
+    /// able to do a card proof on a day, that the card proof went back to
+    /// its start after five minutes.
+    var warnings: [Notice] = []
+    /// Above the step, under the warnings: the note of a reminder the app was opened from.
     var notice: Notice?
     /// On the right of the header: the settings (steps 1 and 8).
     var settings: Button?
@@ -27,7 +33,7 @@ struct Screen: Equatable {
     /// Every sentence on the screen, in its order: for tests. The
     /// header's are not among them: they are not card-proof.md's.
     var texts: [String] {
-        (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
+        warnings.flatMap(\.texts) + (notice?.texts ?? []) + blocks.flatMap(\.texts) + buttons.map(\.label) + links.map(\.label) + (cancel.map { [$0.label] } ?? [])
     }
 }
 
@@ -276,6 +282,8 @@ enum Action: Equatable {
     case editList
     /// "不改了": back to what the card declares.
     case keep
+    /// The app's page in the store, to update it.
+    case openStore
     /// The phone's map, searching for household registration offices (step 1).
     case findOffice
     /// MOICA's site, in the browser (step 1).

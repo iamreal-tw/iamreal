@@ -23,6 +23,10 @@ final class FakeCard: Card {
     /// What the next signature stops at before the PIN is sent, as a
     /// card the phone cannot set up the secure channel with. One tap only.
     var nextSignFails: CardFailure?
+    /// How the next taps end before anything is read or signed, one for
+    /// each tap, in their order: a card that never came, a panel that was
+    /// closed, a card that left.
+    var nextTapsFail: [CardFailure] = []
 
     init(certificates: [Data], privateKey: Data, pin: String) {
         self.certificates = certificates
@@ -35,6 +39,7 @@ final class FakeCard: Card {
         let card = nextTapFinds ?? self
         nextTapFinds = nil
         card.taps.append(purpose)
+        if !nextTapsFail.isEmpty { throw nextTapsFail.removeFirst() }
         return try await body(Connection(card: card))
     }
 
