@@ -13,7 +13,7 @@ import { icoImages } from "../scripts/favicon.ts";
 import { WORKER_DIR } from "./build.ts";
 import { OG_DESCRIPTION, OG_SITE, OG_TITLE, TITLE_TAG, block, codeBlocks, copyLines, copySection, faqQuestions, firstMatch, needs, notOnPage, previewOf, squash, testProofLogLine, testSiteCardAddress, visibleText, wantLines, wantPreview } from "./copy.ts";
 import { type TestWorker, startWorker } from "./harness.ts";
-import { CARD_A, CARD_B, CLEARED_ON, FAVICON_PATH, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark, withDemo, withScript } from "./pages.ts";
+import { CARD_A, CARD_B, CLEARED_ON, FAVICON_PATH, FONT_PATH, OG_IMAGE_PATH, cardStarting, checkVisitorHeaders, getPage, pagesWorld, r, testProofLogMark } from "./pages.ts";
 import { DAY_MS, START, wantNoAlarmSoon, freshProofLog, mustSubmit, newCard, publishG3, sub } from "./records.ts";
 
 let worker: TestWorker;
@@ -70,7 +70,7 @@ describe("the page of a card", () => {
     assert.ok(page.includes("<div><dt>順序</dt><dd>第 1 張島民證明</dd></div>"), "順序, the first row of section 4");
     assert.equal(page.split("第 1 張島民證明").length - 1, 2, "the ordinal twice, nowhere else");
 
-    for (const link of ['<a href="/proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a class="button" href="/proof">我也要換島民證明</a>']) {
+    for (const link of ['<a href="/proof" data-count="start_card_proof">我要更新這張證明</a>', '<a href="https://www.threads.com/@alice">Threads 的 @alice</a>', `<a href="/hang/${CARD_A}">把它掛到個人檔案上</a>`, '<a class="button" href="/proof" data-count="start_card_proof">我也要換島民證明</a>']) {
       assert.ok(page.includes(link), `the page has ${link}`);
     }
     howToCheckOnce("one card", page);
@@ -347,10 +347,10 @@ describe("the home page", () => {
       ["/faq", "更多常見問題"],
       ["/hang", "用你的帳號承認這張證明"],
     ]) {
-      assert.match(page, new RegExp(`<a (class="[^"]*" )?href="${href}">${words}</a>`), `the page links ${words} to ${href}`);
+      assert.match(page, new RegExp(`<a (class="[^"]*" )?href="${href}"( data-count="start_card_proof")?>${words}</a>`), `the page links ${words} to ${href}`);
     }
     // The one main action, on the first screen and at the end.
-    assert.equal(page.split('<a class="button big" href="/proof">我要換島民證明</a>').length - 1, 2);
+    assert.equal(page.split('<a class="button big" href="/proof" data-count="start_card_proof">我要換島民證明</a>').length - 1, 2);
     // The eight questions fold, each its own <details>, in home.md's order.
     const ids = codeBlocks(copySection("home.md", "常見問題"))[1]!;
     const summaries = [...page.matchAll(/<details><summary>([^<]*)<\/summary>/g)].map((m) => m[1]);
@@ -497,14 +497,16 @@ describe("every page", () => {
 
   test("the pages, the style sheet, the script, the typeface, the link preview's image and the icon take GET and HEAD only; HEAD has the headers of GET", async () => {
     await exampleCards(false);
-    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/privacy", "/hang", `/hang/${CARD_A}`, "/copy.js", FONT_PATH, OG_IMAGE_PATH, FAVICON_PATH]) {
-      // The style sheet, the script, the typeface, the image and the icon are files of Static Assets.
-      const file = path === "/pages.css" || path === "/copy.js" || path === FONT_PATH || path === OG_IMAGE_PATH || path === FAVICON_PATH;
+    for (const path of ["/", `/p/${CARD_A}`, "/p/7K2Q9FM4XE", "/nothing", "/pages.css", "/threads/@alice", "/threads/@a-b", "/proof-log", "/faq", "/verify", "/check", "/prepare", "/privacy", "/hang", `/hang/${CARD_A}`, "/copy.js", "/count.js", FONT_PATH, OG_IMAGE_PATH, FAVICON_PATH]) {
+      // The style sheet, the scripts, the typeface, the image and the icon are files of Static Assets.
+      const file = path === "/pages.css" || path === "/copy.js" || path === "/count.js" || path === FONT_PATH || path === OG_IMAGE_PATH || path === FAVICON_PATH;
       const cache = file ? "no-cache" : "public, max-age=60";
       const head = await worker.fetch(path, { method: "HEAD" });
-      assert.equal(head.status, ["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path) ? 404 : 200, `HEAD ${path}`);
+      const found = !["/p/7K2Q9FM4XE", "/nothing", "/threads/@a-b"].includes(path);
+      assert.equal(head.status, found ? 200 : 404, `HEAD ${path}`);
       assert.equal(await head.text(), "");
-      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: withScript(path) || withDemo(path) });
+      // A page that is found loads the counts' script (and some another); a file, or a page that is not found, none.
+      checkVisitorHeaders(`HEAD ${path}`, head, { cache, script: found && !file });
       for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
         const res = await worker.fetch(path, { method });
         // The pages are the Worker's; the style sheet, the script, the typeface and the image are sent by Static Assets, whose 405 has no

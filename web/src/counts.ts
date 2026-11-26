@@ -13,8 +13,9 @@
 //   carries it too (api.ts). The attempt ID is 16 random bytes kept in
 //   memory, and dropped when the card proof stops or is done.
 // - The browser and the operating system are sent as one of a few names,
-//   worked out here from the `User-Agent`, with the versions it holds
-//   (`versionsOf`); the text itself is not sent in a count.
+//   worked out from the `User-Agent` (protocol/src/families.ts, which the
+//   visitors' pages use too), with the versions it holds (`versionsOf`);
+//   the text itself is not sent in a count.
 // - The card reader's name is the one field the component reports for it,
 //   sent only in its form (letters, digits and spaces, at most 64), with
 //   every count of the attempt once it is known.
@@ -24,9 +25,12 @@
 //   and one that fails is not sent again. The request is marked to be kept
 //   alive, so that the last count of a page being left is still sent.
 import { type Day, formatDay, parseDay, taiwanDay } from "iamreal-protocol/date.ts";
-import { type Browser, COUNT_ID, type CardProofAction, type Os, READER, REASONS, type Reason, type Step, type TimedStep, VERSION, tookOf } from "iamreal-protocol/counts.ts";
+import { type Browser, COUNT_ID, type CardProofAction, READER, REASONS, type Reason, type Step, type TimedStep, VERSION, VISIT_ID_KEY, tookOf } from "iamreal-protocol/counts.ts";
+import { browserOf, familiesOf } from "iamreal-protocol/families.ts";
 import type { Fetch } from "./api.ts";
 import type { Stop } from "./flow.ts";
+
+export { familiesOf };
 
 /** Where the card proof device ID is kept in `localStorage`: `<ID>.<the date it was made on>`. */
 export const DEVICE_ID_KEY = "iamreal.card_proof_device_id";
@@ -65,40 +69,8 @@ export function deviceIdOn(today: Day, storage: IdStorage, random: (bytes: Uint8
   }
 }
 
-/**
- * The browsers a `User-Agent` is told apart by, in the order they are looked
- * for (Edge and Samsung Internet also write `Chrome/`, Chrome writes
- * `Safari/`). The first group is the major version; a browser the table does
- * not name (Opera) is `other`, and has none.
- */
-const BROWSER_PATTERNS: readonly (readonly [Browser, RegExp])[] = [
-  ["edge", /\bEdg(?:e|A|iOS)?\/(\d+)/],
-  ["samsung", /\bSamsungBrowser\/(\d+)/],
-  ["other", /\b(?:OPR|Opera)\//],
-  ["firefox", /\b(?:Firefox|FxiOS)\/(\d+)/],
-  ["chrome", /\b(?:Chrome|CriOS)\/(\d+)/],
-  ["safari", /\bVersion\/(\d+)[\d.]* .*Safari\//],
-];
-
 /** Browsers of Chromium's, whose `User-Agent` holds frozen system versions. */
 const CHROMIUM: ReadonlySet<Browser> = new Set(["chrome", "edge", "samsung"]);
-
-/** The browser, and the major version its pattern found, if any. */
-function browserOf(userAgent: string): { browser: Browser; major: string | undefined } {
-  for (const [browser, re] of BROWSER_PATTERNS) {
-    const m = re.exec(userAgent);
-    if (m !== null) return { browser, major: m[1] };
-  }
-  return { browser: "other", major: undefined };
-}
-
-/** The browser and the operating system as the table names them, from a `User-Agent`. What it cannot tell is `other`. */
-export function familiesOf(userAgent: string): { browser: Browser; os: Os } {
-  const has = (re: RegExp): boolean => re.test(userAgent);
-  const { browser } = browserOf(userAgent);
-  const os: Os = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
-  return { browser, os };
-}
 
 /**
  * The browser's and the system's versions, from a `User-Agent`, as far as
@@ -143,6 +115,20 @@ export function versionsOf(userAgent: string): { browser_version?: string; os_ve
           : undefined;
   if (system !== undefined && VERSION.test(system)) out.os_version = system;
   return out;
+}
+
+/**
+ * Ends the tab's visit, as the card proof page opens: the visit ID the
+ * visitors' pages keep in `sessionStorage` is taken away, unread, so that a
+ * visitor's page opened after this one makes a new one (ADR-0039). A
+ * storage that cannot be used has none to take away.
+ */
+export function endVisit(storage: { removeItem(key: string): void }): void {
+  try {
+    storage.removeItem(VISIT_ID_KEY);
+  } catch {
+    // Nothing kept, nothing to end.
+  }
 }
 
 /** The codes the server answers that the table has a reason for. */

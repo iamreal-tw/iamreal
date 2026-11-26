@@ -17,6 +17,13 @@ export const FAVICON_PATH = "/favicon.ico";
 /** Where the copy buttons' script is (site/copy.js, sent by Static Assets): loaded by /faq, /verify and /hang/<short ID> only. */
 export const COPY_JS_PATH = "/copy.js";
 
+/**
+ * Where the counts' script is (site/count.js, sent by Static Assets): loaded
+ * by every page the Worker makes for visitors, with which page it is
+ * (`Document.count`).
+ */
+export const COUNT_JS_PATH = "/count.js";
+
 /** Where the player of the demonstration is (site/demo.js, sent by Static Assets): loaded by /hang and /hang/<short ID> only (design/copy/hang.md, 示範). */
 export const DEMO_JS_PATH = "/demo.js";
 
@@ -60,6 +67,13 @@ export interface Document {
   readonly demo?: boolean;
   /** og:description, for the one page that has one. */
   readonly description?: string;
+  /**
+   * Which page this is for the counts (spec/counts.md, "Pages"), and the
+   * short ID of the page of a card: the page loads the counts' script
+   * (`COUNT_JS_PATH`), which reads them from its <script> element. None for
+   * a page that is not counted.
+   */
+  readonly count?: { readonly page: string; readonly shortId?: string };
   /** Which page: the class of <body>. */
   readonly kind: string;
   readonly content: Html;
@@ -78,7 +92,7 @@ const NAV_LINKS = html`<a href="/check">如何檢查島民證明</a>
 <a href="/proof-log">證明紀錄</a>
 <a href="/faq">常見問題</a>
 <a href="https://github.com/iamreal-tw/iamreal">GitHub</a>`;
-const NAV_BUTTON = html`<a class="button nav-button" href="/proof">我要換島民證明</a>`;
+const NAV_BUTTON = html`<a class="button nav-button" href="/proof" data-count="start_card_proof">我要換島民證明</a>`;
 
 /**
  * The navigation bar (home.md, 導覽列; design/DESIGN.md, 元件). On a wide
@@ -86,6 +100,8 @@ const NAV_BUTTON = html`<a class="button nav-button" href="/proof">我要換島�
  * sheet hides them and shows the menu instead: a <details>, which opens
  * without a script and from the keyboard, with the same links and button.
  * The two are in the document once each, and the style sheet shows one.
+ * The button is counted when it is pressed (`data-count`, site/count.js),
+ * as every link to the card proof page is.
  * The links and the button are one group, so that where they do not fit
  * beside the name they go to the next row together.
  */
@@ -141,7 +157,8 @@ ${d.preview === false ? new Html("") : html`<meta property="og:title" content="$
 `}${d.description === undefined ? new Html("") : html`<meta property="og:description" content="${d.description}">
 `}<link rel="stylesheet" href="${CSS_PATH}">
 <link rel="icon" href="${FAVICON_PATH}">
-${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
+${d.count === undefined ? new Html("") : html`<script src="${COUNT_JS_PATH}" defer data-page="${d.count.page}"${d.count.shortId === undefined ? new Html("") : html` data-short-id="${d.count.shortId}"`}></script>
+`}${d.script === true ? html`<script src="${COPY_JS_PATH}" defer></script>
 ` : new Html("")}${d.demo === true ? html`<script src="${DEMO_JS_PATH}" defer></script>
 ` : new Html("")}</head>
 <body class="${d.kind}">

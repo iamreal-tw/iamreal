@@ -822,7 +822,20 @@
       "taken": true
     },
     {
-      "name": "a visitor's action on a proof page",
+      "name": "a visitor's action on a proof page, with its short ID",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "short_id": "7K2Q9FM4XD"
+      },
+      "taken": true
+    },
+    {
+      "name": "a visitor's action without a short ID",
       "count": {
         "client": "web",
         "visit_id": "00112233445566778899aabbccddeeff",
@@ -830,6 +843,85 @@
         "os": "ios",
         "event": "action",
         "action": "download_app_ios"
+      },
+      "taken": true
+    },
+    {
+      "name": "a page, with the domain it came from",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.threads.com"
+      },
+      "taken": true
+    },
+    {
+      "name": "a proof page, with its short ID and the domain it came from",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "card",
+        "short_id": "7K2Q9FM4XD",
+        "source": "l.threads.com"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source of one character",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "x"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source of 253 characters",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source that is a name in punycode",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "xn--kpry57d.xn--kpry57d"
+      },
+      "taken": true
+    },
+    {
+      "name": "a source that is an IPv4 address",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "203.0.113.7"
       },
       "taken": true
     },
@@ -1542,6 +1634,150 @@
         "event": "step",
         "step": "done",
         "short_id": "7K2Q9FM4XD"
+      },
+      "taken": false
+    },
+    {
+      "name": "a short ID in a visitor's action, in lowercase",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "short_id": "7k2q9fm4xd"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source on a visitor's action",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "action",
+        "action": "start_card_proof",
+        "source": "www.threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source on a card proof",
+      "count": {
+        "client": "web",
+        "device_id": "0123456789abcdef0123456789abcdef",
+        "attempt_id": "fedcba9876543210fedcba9876543210",
+        "browser": "chrome",
+        "os": "windows",
+        "event": "step",
+        "step": "open",
+        "source": "www.threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with an uppercase letter",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.Threads.com"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a port",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "localhost:8787"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source that is a whole address",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "https://www.threads.com/@alice"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a path",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "www.threads.com/@alice"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with a letter that is not ASCII",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "島民.tw"
+      },
+      "taken": false
+    },
+    {
+      "name": "a source with an underscore",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "a_b.example"
+      },
+      "taken": false
+    },
+    {
+      "name": "an empty source",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": ""
+      },
+      "taken": false
+    },
+    {
+      "name": "a source of 254 characters",
+      "count": {
+        "client": "web",
+        "visit_id": "00112233445566778899aabbccddeeff",
+        "browser": "safari",
+        "os": "ios",
+        "event": "page",
+        "page": "home",
+        "source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
       },
       "taken": false
     },

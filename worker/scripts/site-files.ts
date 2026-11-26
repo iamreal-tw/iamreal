@@ -26,6 +26,9 @@
 //   site/demo.js     the player of the demonstration on the page of hanging a
 //                    proof, from src/teaching-animation.ts and demo/player.js
 //                    (`demoScript`).
+//   site/count.js    the counts of the visitors' pages, from
+//                    protocol/src/families.ts and count/visitor.js
+//                    (`countScript`).
 //
 // And one file of the Worker's own code, src/pages/hang-timeline.ts: its copy
 // of design/motion/hang.json, which that page writes into itself.
@@ -39,6 +42,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { COUNT_ID, SOURCE, VISIT_ID_KEY } from "iamreal-protocol/counts.ts";
 import { EVERY_RESPONSE, VISITOR_FILE_CACHE, TEST_SITE_HEADERS, VISITOR_HEADERS, proofPageHeaders } from "../src/headers.ts";
 
 const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
@@ -52,7 +56,7 @@ const SITE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "site");
  * "Static Assets"). The Worker cannot send a file either way: it has no
  * binding to them.
  */
-export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
+export const RUN_WORKER_FIRST: readonly string[] = ["/*", "!/copy.js", "!/count.js", "!/demo.js", "!/favicon.ico", "!/fonts/*", "!/og-image.png", "!/pages.css", "!/proof", "!/proof/*"];
 
 /**
  * The headings' typeface under site/, where the style sheet loads it from
@@ -102,6 +106,40 @@ export function demoScript(): string {
   return `// Written by scripts/site-files.ts from src/teaching-animation.ts and demo/player.js: change those, not this file.\n"use strict";\n(() => {\n${body}\n})();\n`;
 }
 
+/**
+ * The counts of the visitors' pages (spec/counts.md; ADR-0032, ADR-0039)
+ * under site/, loaded by every page the Worker makes for visitors: written
+ * by this script from the two files of `COUNT_SOURCES`, and in the
+ * repository as written, like the demonstration's player.
+ * test/count-script.test.ts checks that it is the one those two files give.
+ */
+export const COUNT_FILE = "count.js";
+
+/** What COUNT_FILE is made of besides three values of protocol/src/counts.ts: the names of the browser and the operating system, as the card proof page has them, and the script that sends the counts. */
+export const COUNT_SOURCES: readonly string[] = [join(SITE_DIR, "..", "..", "protocol", "src", "families.ts"), join(SITE_DIR, "..", "count", "visitor.js")];
+
+/**
+ * The text of site/count.js: protocol/src/families.ts with its types (and
+ * its one import, of types) taken off, the name of the visit ID's key and
+ * the forms of an ID and of a source (protocol/src/counts.ts), then
+ * count/visitor.js, in one function of their own so that nothing of them is
+ * a name of the page. The lines the stripping left empty are taken out, and
+ * `export`, which a script that is not a module cannot say.
+ */
+export function countScript(): string {
+  const [families, visitor] = COUNT_SOURCES.map((file) => readFileSync(file, "utf8")) as [string, string];
+  const stripped = stripTypeScriptTypes(families).replace(/^export /gm, "");
+  const key = [
+    "// From protocol/src/counts.ts: where the visit ID is kept in sessionStorage, and the forms of an ID and of a source.",
+    `const VISIT_ID_KEY = ${JSON.stringify(VISIT_ID_KEY)};`,
+    `const COUNT_ID = ${COUNT_ID.toString()};`,
+    `const SOURCE = ${SOURCE.toString()};`,
+  ].join("\n");
+  const lines = `${stripped}\n${key}\n\n${visitor}`.split("\n").map((line) => line.trimEnd());
+  const body = lines.filter((line, i) => line !== "" || (i > 0 && lines[i - 1] !== "")).join("\n").trim();
+  return `// Written by scripts/site-files.ts from protocol/src/families.ts and count/visitor.js: change those, not this file.\n"use strict";\n(() => {\n${body}\n})();\n`;
+}
+
 /** The timeline the demonstration plays: design/motion/hang.json (design/motion/README.md). */
 export const HANG_TIMELINE_SOURCE = join(SITE_DIR, "..", "..", "design", "motion", "hang.json");
 
@@ -128,13 +166,13 @@ export const FAVICON_FILE = "favicon.ico";
 
 /**
  * Every file of site/ a deploy uploads besides the card proof page's, by
- * its path under site/, sorted: the copy buttons' script, the demonstration's player, the icon, the typeface, the
+ * its path under site/, sorted: the copy buttons' script, the visitors' counts, the demonstration's player, the icon, the typeface, the
  * link preview's image, the style sheet and the two files of rules. The page's files are under site/proof/, which
  * is not in the repository (.gitignore): a deploy builds them there
  * (deploy.ts, `buildSite`) and checks what the directory then holds
  * (proof-page.ts).
  */
-export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", DEMO_FILE, FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
+export const SITE_FILES: readonly string[] = ["_headers", "_redirects", "copy.js", COUNT_FILE, DEMO_FILE, FAVICON_FILE, FONT_FILE, OG_IMAGE_FILE, "pages.css"];
 
 /** Which proof log a site is of (wrangler.jsonc, `PROOF_LOG_KIND`). */
 export type ProofLogKind = "test" | "production";
@@ -153,7 +191,7 @@ const visitorFile = (path: string, every: Readonly<Record<string, string>>): str
  *   not there is a file, so a 404, a redirect and a 405 under /proof have
  *   them too. On Cloudflare the 404 and the redirect were seen to; the
  *   405 needs a file to be there (README.md, "Static Assets").
- * - /pages.css, /copy.js, /demo.js, /favicon.ico, /fonts/* and /og-image.png: the visitors' pages' headers
+ * - /pages.css, /copy.js, /count.js, /demo.js, /favicon.ico, /fonts/* and /og-image.png: the visitors' pages' headers
  *   (`VISITOR_HEADERS`), and `VISITOR_FILE_CACHE` in place of the
  *   Cache-Control Static Assets sends by itself (taken off with "!", then
  *   set: two values would be joined). The script's policy has no
@@ -174,6 +212,8 @@ export function siteHeaders(kind: ProofLogKind): string {
     visitorFile("/pages.css", every),
     "",
     visitorFile("/copy.js", every),
+    "",
+    visitorFile(`/${COUNT_FILE}`, every),
     "",
     visitorFile(`/${DEMO_FILE}`, every),
     "",
@@ -208,6 +248,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   copyFileSync(FONT_SOURCE, join(SITE_DIR, FONT_FILE));
   copyFileSync(OG_IMAGE_SOURCE, join(SITE_DIR, OG_IMAGE_FILE));
   writeFileSync(join(SITE_DIR, DEMO_FILE), demoScript());
+  writeFileSync(join(SITE_DIR, COUNT_FILE), countScript());
   writeFileSync(HANG_TIMELINE_FILE, hangTimelineModule());
-  console.log(`Wrote _headers, _redirects, ${DEMO_FILE}, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site, and ${HANG_TIMELINE_FILE}.`);
+  console.log(`Wrote _headers, _redirects, ${DEMO_FILE}, ${COUNT_FILE}, ${FONT_FILE} and ${OG_IMAGE_FILE} in ${SITE_DIR}, for a test log's site, and ${HANG_TIMELINE_FILE}.`);
 }

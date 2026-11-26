@@ -36,15 +36,22 @@ export const VISITOR_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`): for the
- * pages that load a script of this site: the copy buttons' (/faq, /verify,
- * /hang/<short ID>) and the player of the demonstration (/hang,
- * /hang/<short ID>). Only scripts of this origin, which are those two files:
- * no inline script, no other site's. The Go backend's `scriptPageHeaders`.
+ * VISITOR_HEADERS with scripts of this origin (`script-src 'self'`) and
+ * requests to this origin (`connect-src 'self'`): for the pages that load a
+ * script of this site, which is every visitor's page the Worker makes but
+ * the ones that say a thing is not there or that there were too many
+ * requests. Each loads the counts' script (/count.js, ADR-0032), which
+ * sends its counts to this origin's `POST /api/v1/counts`; some the copy
+ * buttons' too (/faq, /verify, /hang/<short ID>), or the player of the
+ * demonstration (/hang, /hang/<short ID>). Only scripts of this origin,
+ * which are those three files: no inline script, no other site's. A
+ * request only to this origin: a script, of this site or any other, can
+ * send nothing anywhere else. The Go backend's `scriptPageHeaders`, with
+ * `connect-src` added.
  */
 export const SCRIPT_PAGE_HEADERS: Readonly<Record<string, string>> = {
   ...VISITOR_HEADERS,
-  "Content-Security-Policy": VISITOR_HEADERS["Content-Security-Policy"]!.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; "),
+  "Content-Security-Policy": VISITOR_HEADERS["Content-Security-Policy"]!.replace("default-src 'none'; ", "default-src 'none'; script-src 'self'; connect-src 'self'; "),
 };
 
 /**

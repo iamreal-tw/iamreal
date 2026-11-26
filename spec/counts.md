@@ -26,7 +26,8 @@ A count is a JSON object whose values are all strings. Its members:
 | `client` | A code of "Clients" | Every count |
 | `event` | A code of "Events" | Every count |
 | `page` | A code of "Pages" | `page` |
-| `short_id` | A short ID ([`scoped-id.md`](scoped-id.md)) in its one spelling: 10 characters of the base32 alphabet, uppercase | `page`, when `page` is `card`; no other count |
+| `short_id` | A short ID ([`scoped-id.md`](scoped-id.md)) in its one spelling: 10 characters of the base32 alphabet, uppercase | `page`, when `page` is `card`. May be in an `action` of a visitor, pressed on a proof page; no other count |
+| `source` | A domain a visitor came from (see "Sources") | May be in a `page`; no other count |
 | `step` | A code of "Steps", or for `duration` of "Timed steps" | `step`, `duration` |
 | `reason` | A code of "Reasons" | `stop`, `retry` |
 | `action` | A code of "Actions of a card proof" or "Actions of a visitor" | `action` |
@@ -61,6 +62,14 @@ A count is a JSON object whose values are all strings. Its members:
   reports as the reader's name, 1 to 64 characters, each an ASCII letter, a
   digit or a space. A client leaves out a name that is anything else; it
   does not shorten or rewrite it.
+- **A source** is the host of the `Referer` a visitor's page was opened
+  with, as the browser gives it (`document.referrer`): 1 to 253 characters,
+  each a lowercase ASCII letter, a digit, `.` or `-`. Nothing else of the
+  `Referer` is sent: no scheme, port, path or query. A page opened without
+  a `Referer`, or with one whose host is anything else (an IPv6 address, a
+  name in letters outside ASCII), is counted without a source; the client
+  does not shorten or rewrite it. Nothing of the page's own address is
+  read: not its query, not the part after `#`.
 
 A count has no time (the server uses the time it received it, and keeps
 that to the minute), no account, no scoped ID, nothing read from a card, a
@@ -278,9 +287,9 @@ that went back) none either.
 ### Sources
 
 Where a visitor came from. Until a measurement shows what the built-in
-browsers of apps send (ADR-0032), sources are only told apart as below, and
-no count carries a source yet: the member that will carry the `Referer`'s
-domain is added with the visitors' pages.
+browsers of apps send (ADR-0032), sources are only told apart as below. A
+`page` without `source` is `none`; one with it is `domain`, and `source`
+is that domain.
 
 | Code | Meaning |
 |---|---|
