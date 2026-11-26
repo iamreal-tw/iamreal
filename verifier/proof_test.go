@@ -405,36 +405,52 @@ func outcomeOf(err error) string {
 }
 
 // A bb that crashes or hangs: both are rejections, and the verifier keeps
-// working.
+// working. Each fake bb first waits a second, as a process can take to start
+// on a loaded machine (#220): longer than the timeout the hanging ones get.
+// What is checked does not depend on how long anything took, but for the
+// last bound, which only tells a bb stopped at its timeout from one waited
+// for to the end of its 30 seconds.
 func TestBBCrashAndTimeout(t *testing.T) {
 	d := loadProofs(t)
 	dir := t.TempDir()
 	script := func(name, body string) string {
 		path := filepath.Join(dir, name)
-		src := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 6.0.0; exit 0; fi\n" + body + "\n"
+		src := "#!/bin/sh\nsleep 1\nif [ \"$1\" = --version ]; then echo 6.0.0; exit 0; fi\n" + body + "\n"
 		if err := os.WriteFile(path, []byte(src), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		return path
 	}
-	cases := map[string]string{
-		"abort":                  "kill -ABRT $$",
-		"segfault":               "kill -SEGV $$",
-		"exit 134":               "exit 134",
-		"hang":                   "exec sleep 30",
-		"hang, child holds pipe": "sleep 30",
+	const (
+		crashes = "bb verify failed"
+		hangs   = "bb verify did not finish"
+	)
+	cases := []struct {
+		name, body string
+		// The timeout of the verifier: none to speak of for a bb that crashes, so that it crashes however slowly it starts.
+		timeout time.Duration
+		want    string
+	}{
+		{"abort", "kill -ABRT $$", 0, crashes},
+		{"segfault", "kill -SEGV $$", 0, crashes},
+		{"exit 134", "exit 134", 0, crashes},
+		{"hang", "exec sleep 30", 500 * time.Millisecond, hangs},
+		{"hang, child holds pipe", "sleep 30", 500 * time.Millisecond, hangs},
 	}
 	r := records(t, d)[0]
-	for name, body := range cases {
-		t.Run(name, func(t *testing.T) {
-			v := testVerifier(t, d, verifier.Config{BB: script(strings.ReplaceAll(name, " ", "_"), body), Timeout: 500 * time.Millisecond})
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			// Making the verifier runs bb --version, which takes the second too: it is not held to the per-proof timeout.
+			v := testVerifier(t, d, verifier.Config{BB: script(strings.ReplaceAll(c.name, " ", "_"), c.body), Timeout: c.timeout})
 			start := time.Now()
 			err := v.VerifyRecord(r)
-			if !isRejection(err) {
-				t.Fatalf("%v, want a rejection", err)
+			var rej *verifier.Rejection
+			if !errors.As(err, &rej) || !strings.HasPrefix(rej.Reason, c.want) {
+				t.Fatalf("%v, want a rejection %q", err, c.want)
 			}
-			if el := time.Since(start); el > 5*time.Second {
-				t.Errorf("took %v", el)
+			if el := time.Since(start); el > 20*time.Second {
+				t.Errorf("took %v: waited for the child's 30 seconds", el)
 			}
 			t.Logf("%v", err)
 		})
