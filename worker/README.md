@@ -196,7 +196,7 @@ pnpm local                       # 可加 --port 8080、--data <目錄>
 
 - 第一次等 1 分鐘，是為了避開 R2 一秒只能寫同一個物件一次的限制（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)）。
 - 會自己好的失敗（R2 逾時、暫時的錯誤）幾分鐘內就恢復，不必重啟物件：原因持續了 2 分鐘的，第 3 分鐘那一次就成功；持續了 10 分鐘的，第 15 分鐘那一次。在等的時間到上限之前，原因消失之後最晚再等大約它已經持續的那麼久。
-- 要有人處理的失敗（R2 上的紀錄檔不見或被改過、這一版讀不懂的一筆、儲存桶的指紋檔不是物件的）不會每分鐘整個重做一次：搬檔和每天公布約一小時之後變成每小時一次，衍生表約十分鐘之後變成每 5 分鐘一次，每次照樣寫一行即時輸出（`views_not_filled`、`full_file_not_moved`、`proof_log_not_published`、`fingerprint_file_differs`）。現在沒有東西通知營運者（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- 要有人處理的失敗（R2 上的紀錄檔不見或被改過、這一版讀不懂的一筆、儲存桶的指紋檔不是物件的）不會每分鐘整個重做一次：搬檔和每天公布約一小時之後變成每小時一次，衍生表約十分鐘之後變成每 5 分鐘一次，每次照樣寫一行即時輸出（`views_not_filled`、`full_file_not_moved`、`proof_log_not_published`、`fingerprint_file_differs`）。這些失敗後台不另外往外送（[#413](https://github.com/iamreal-tw/iamreal/issues/413)「通知」）：公布不成的後果是資料網域上沒有今天的那一行和卡片狀態檔，[從外面定時檢查](../.github/README.md#從外面定時檢查53)每小時看一次，沒有就失敗，營運者收到 GitHub 的通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。衍生表、搬檔的失敗，這個檢查看不到，只有這一行即時輸出。
 - **失敗的次數和下一次的時間存在物件的儲存裡**（`retries` 表），不是記憶體：Cloudflare 上的物件沒事做大約 10 秒就休眠，記憶體裡的東西丟掉，alarm 響時建構子重跑（[Lifecycle of a Durable Object](https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/)：「After 10 seconds of no incoming request or event, and all the above conditions satisfied, the Durable Object will transition into the hibernated state」「When hibernated, the in-memory state is discarded, so ensure you persist all important information in the Durable Object's storage」，2026-11-21 讀的）。等的時間最短 1 分鐘，記在記憶體的話，沒人用的物件每一次失敗都會是第一次。所以物件重新啟動（休眠後被叫醒、部署、被換掉）之後，照存著的時間繼續等，不會馬上再試；衍生表的重建也一樣，啟動時還沒到時間就不在啟動當下做，等 alarm（[頁面用的衍生表](#頁面用的衍生表)）。測試的 workerd 不會讓物件休眠，所以測試用「兩次嘗試之間讓物件重啟」代替（`test/publication.test.ts`、`test/proof-log-files.test.ts`）。
 - 代價：原因排除後（例如把 R2 的檔放回去、部署了讀得懂那一筆的程式），重新部署也不會讓它馬上再試，最晚要等到下一次的時間：衍生表最長 5 分鐘，搬檔和每天公布最長 1 小時。
 - **存著的時間不會比「現在加上限」更晚**：時鐘曾經跑快時存下的時間，讀的時候拉回到現在加上限，也照這樣存回去；不會卡到時鐘走到那個時間才再試。
@@ -332,7 +332,7 @@ alarm 的處理函式丟例外時 Cloudflare 會重試，但最多 6 次（上�
   - 這個檢查擋的只有每天公布寫的四樣。寫滿的紀錄檔照搬：換了物件名稱沒清儲存桶時，新的證明紀錄寫滿的檔會蓋掉舊的證明紀錄同名的檔。
 - **寫入那一行之前再看一次日期**：寫 R2 的時候剛好跨過午夜的話，這一次不算，一分鐘後照新的日期重做。一行的日期是它寫入那天的台灣日期。
 - **失敗**：寫一行 `{"event":"proof_log_not_published","error":"Error"}`（儲存桶的指紋檔不是物件的那一種是 `fingerprint_file_differs`，見上面），一分鐘後重做；連續失敗時等得更久，兩種失敗算在一起（[過期的題目怎麼刪](#過期的題目怎麼刪)的「失敗後多久再試」）。一件失敗不擋別的定時工作，各自算各自的等待（[過期的題目怎麼刪](#過期的題目怎麼刪)）。上面寫「一分鐘後」的地方，都是指連續失敗的第一次。
-- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每次嘗試一行 `proof_log_not_published`（間隔照上一條拉長）。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。現在沒有東西會通知營運者「今天沒有公布」（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
+- **有一張卡片存著的狀態寫不成一列時，整個公布不成**（例如存著的名額不是 JSON、平台不在平台表裡）：那一天沒有新的一行，每次嘗試一行 `proof_log_not_published`（間隔照上一條拉長）。每一列在寫的時候檢查格式、而且卡片比前一列大（`cardStateFileWriter`）；複本讀第一遍時就全部檢查過，有一列不對就在寫出卡片狀態檔的任何位元組之前停。那時最後一檔和雜湊清單已經寫了，下一次公布會蓋掉。狀態只是不合規則、但寫得成一列的，照寫出去：卡片狀態檔就是要讓重驗的人看到錯的狀態。營運者知道「今天沒有公布」，是靠[從外面定時檢查](../.github/README.md#從外面定時檢查53)：台灣時間 01:00 之後，資料網域的指紋檔沒有今天那一行、或沒有今天的卡片狀態檔，那一個整點後的檢查就失敗，GitHub 寄通知信（[#53](https://github.com/iamreal-tw/iamreal/issues/53)）。
 
 **什麼時候公布**
 
