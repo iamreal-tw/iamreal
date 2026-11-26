@@ -46,6 +46,11 @@ final class CardProofModel: ObservableObject {
     /// The body of GET /api/v1/config, asked for when the app opens.
     private var config: Data?
     private var configuring: Task<Data, Error>?
+    /// The operator stopped taking card proofs, as the config last said
+    /// (docs/api/card-proof.md, `paused`): step 1 says so in place of its
+    /// button. Until the config answers, and when it does not: false, and
+    /// step 2 asks again.
+    private var paused = false
     /// The step under way; tests wait for it.
     private(set) var work: Task<Void, Never>?
 
@@ -102,7 +107,15 @@ final class CardProofModel: ObservableObject {
     func open() {
         guard configuring == nil, config == nil else { return }
         let backend = deps.flow.backend
-        configuring = Task { try await backend.config() }
+        let asked = Task { try await backend.config() }
+        configuring = asked
+        Task {
+            let said = (try? await asked.value).flatMap(CardProofFlow.paused) == true
+            // Not when it was asked again meanwhile: the later answer says.
+            guard self.configuring == asked else { return }
+            self.paused = said
+            self.redraw()
+        }
     }
 
     /// Whether a PIN is in memory, here or in the flow: for tests.
@@ -204,9 +217,9 @@ final class CardProofModel: ObservableObject {
     private func before() -> Screen {
         let reminderScreens = ReminderScreens(appCopy: deps.appCopy)
         switch fromReminder {
-        case nil: return screens.before()
-        case .asked: return screens.before(notice: reminderScreens.fromNotification(snoozed: nil))
-        case .snoozed(let settings): return screens.before(notice: reminderScreens.fromNotification(snoozed: settings))
+        case nil: return screens.before(paused: paused)
+        case .asked: return screens.before(notice: reminderScreens.fromNotification(snoozed: nil), paused: paused)
+        case .snoozed(let settings): return screens.before(notice: reminderScreens.fromNotification(snoozed: settings), paused: paused)
         }
     }
 
@@ -215,6 +228,12 @@ final class CardProofModel: ObservableObject {
     /// settings: asked again, and set as offered if it is allowed now.
     func cameBack() {
         askAgain()
+        // Card proofs the operator stopped may have resumed meanwhile.
+        if paused, flow == nil, screen.step == 1 {
+            config = nil
+            configuring = nil
+            open()
+        }
     }
 
     /// Step 7 is up and says the system does not let the app notify: the
@@ -335,20 +354,32 @@ final class CardProofModel: ObservableObject {
 
     // Tap 1 -------------------------------------------------------------------------
 
+    /// The config: the one kept, or the one asked for when the app opened,
+    /// or asked for now.
+    private func askedConfig() async throws -> Data? {
+        if let known = config { return known }
+        open()
+        guard let configuring else { return nil }
+        let config = try await configuring.value
+        self.config = config
+        return config
+    }
+
     private func readCard() async {
         reset()
         reached = 0
         screen = screens.read(reached: 0, running: true, stop: nil)
         // The server first: the lowest version that may do a card proof is its to say.
-        let config: Data
+        var config: Data
         do {
-            if let known = self.config {
-                config = known
-            } else {
-                open()
-                guard let configuring else { return }
-                config = try await configuring.value
-                self.config = config
+            guard let known = try await askedConfig() else { return }
+            config = known
+            if CardProofFlow.paused(config) == true {
+                // An answer that said card proofs are stopped is asked again: the operator may have resumed since.
+                self.config = nil
+                configuring = nil
+                guard let again = try await askedConfig() else { return }
+                config = again
             }
         } catch {
             configuring = nil
@@ -359,6 +390,11 @@ final class CardProofModel: ObservableObject {
         let flow: CardProofFlow
         do {
             flow = try CardProofFlow(deps.flow, config: config)
+        } catch CardProofFlow.Stop.server(let failure) where failure.code == "paused" {
+            // Step 1 says so from now on.
+            paused = true
+            screen = screens.read(reached: 0, running: false, stop: .server(failure))
+            return
         } catch {
             screen = screens.read(reached: 0, running: false, stop: error as? CardProofFlow.Stop ?? .state)
             return
