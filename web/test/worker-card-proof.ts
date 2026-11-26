@@ -33,7 +33,9 @@
 //    again; the step being shown is marked; beside the steps on a desktop,
 //    above them on a phone, where it starts once it is on the screen; with
 //    reduced motion it plays all the same; without its player (/demo.js,
-//    blocked) the page is the five pictures. Screenshots of the three.
+//    blocked) the page is the five pictures. Screenshots of the three. The
+//    page without a proof (/hang) plays it too, with the examples; a device
+//    that says it is Android shows Android's way back from the links on both.
 //
 // The screens' own sentences, every way a card proof stops and every kind
 // of record are test/e2e/ui.ts's, which runs against the Worker too (#69);
@@ -354,7 +356,7 @@ try {
       return getComputedStyle(line).opacity === "1" && getComputedStyle(tag).opacity === "1" && r.left >= picture.left && r.right <= picture.right && r.top >= picture.top && r.bottom <= picture.bottom;
     })()`);
   check(await lastFrame(visitor), "the last frame: the line of the link on the profile, with its label, inside the picture");
-  await shot(visitor, "hang-demo-desktop.png", 1100);
+  await shot(visitor, "hang-proof-demo-desktop.png", 1100);
   await desktop(visitor);
   // 再看一次: from the start.
   await visitor.clickButton(replayWord);
@@ -393,7 +395,7 @@ try {
   await phone.send("Emulation.setDeviceMetricsOverride", { width: 340, height: 844, deviceScaleFactor: 1, mobile: true });
   await sleep(500);
   check(await lastFrame(phone), "at another width the last frame is aimed again: the line of the link inside the picture");
-  await shot(phone, "hang-demo-phone.png", 390);
+  await shot(phone, "hang-proof-demo-phone.png", 390);
 
   // With the system set to reduce motion it plays all the same (#369, the comment of 2026-11-26): the button is how to stop it.
   const calm = await browser.newPage();
@@ -422,7 +424,62 @@ try {
     await noPlayer.eval<boolean>(`(() => { const shown = (e) => e.getClientRects().length > 0; return !shown(document.querySelector("[data-demo]")) && !shown(document.querySelector("[data-demo-button]")) && [...document.querySelectorAll("figure.sketch")].filter(shown).length === 5 && document.querySelectorAll("[data-step].now").length === 0; })()`),
     "/hang/<short ID> without the player: the five pictures, no demonstration and no button of it",
   );
-  await shot(noPlayer, "hang-still-desktop.png", 1100);
+  await shot(noPlayer, "hang-proof-still-desktop.png", 1100);
+  // The page without a proof, without the player: its four pictures (it has none of the result), as it was.
+  await desktop(noPlayer);
+  await noPlayer.goto(`${ORIGIN}/hang`);
+  await sleep(300);
+  check(
+    await noPlayer.eval<boolean>(`(() => { const shown = (e) => e.getClientRects().length > 0; return !shown(document.querySelector("[data-demo]")) && !shown(document.querySelector("[data-demo-button]")) && [...document.querySelectorAll("figure.sketch")].filter(shown).length === 4 && !document.querySelector("main").classList.contains("with-demo"); })()`),
+    "/hang without the player: the four pictures, no demonstration and no button of it",
+  );
+
+  // The page without a proof (/hang, from the home page) plays the same demonstration, with hang.md's examples.
+  const entry = await browser.newPage();
+  await entry.send("Page.enable");
+  await entry.send("Runtime.enable");
+  await entry.send("Page.bringToFront");
+  await desktop(entry);
+  await entry.goto(`${ORIGIN}/hang`);
+  await entry.waitFor(`document.querySelector("[data-demo]").dataset.playing`, "the player to show the demonstration on /hang", 10_000);
+  await entry.eval(`document.querySelector(".demo-picture").scrollIntoView({ block: "center" })`);
+  await entry.waitFor(`document.querySelector("[data-demo]").dataset.playing === "true"`, "the demonstration to start on /hang", 10_000);
+  check(squash(await entry.eval<string>(`document.querySelector('[data-box="s0"]').textContent`)).includes(squash("@alice 的個人檔案")) && (await entry.eval<string>(`document.querySelector('[data-box="s0"] .address').textContent`)).endsWith("/p/7K2Q9FM4XD"), "/hang: the demonstration writes the example account and address");
+  check((await entry.eval<string>(`document.querySelector("[data-demo]").dataset.variant`)) === "ios" && (await entry.eval<boolean>(`document.querySelector('[data-box="x3"]').getClientRects().length === 0`)), "/hang on a desktop: the iPhone's way back, ✕ not shown");
+  await entry.eval(`(() => { for (const a of document.getAnimations()) a.currentTime = ${DEMO_LENGTH - 1000}; })()`);
+  await entry.waitFor(`document.querySelector("[data-demo]").dataset.playing === "false"`, "the demonstration to end on /hang", 10_000);
+  demo = await demoNow(entry);
+  check(demo.button === replayWord && demo.at === DEMO_LENGTH && demo.still === 0 && (await lastFrame(entry)), `/hang: played to the end it stops on the last frame: ${JSON.stringify(demo)}`);
+  await shot(entry, "hang-demo-desktop.png", 1100);
+
+  // A browser that says it is Android shows Android's way back, on both pages: ✕ at the top left is marked and pressed, 完成 is grey.
+  // The player chooses in the browser; the page is the one every device gets.
+  const android = await browser.newPage();
+  await android.send("Page.enable");
+  await android.send("Runtime.enable");
+  await android.send("Page.bringToFront");
+  await android.send("Emulation.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36" });
+  await android.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  for (const url of [`${ORIGIN}/hang`, hangUrl]) {
+    await android.goto(url);
+    await android.waitFor(`document.querySelector("[data-demo]").dataset.playing`, "the player to show the demonstration on Android", 10_000);
+    check((await android.eval<string>(`document.querySelector("[data-demo]").dataset.variant`)) === "android", `${url} on Android: Android's version`);
+    // 16.7 s: the tap that goes back has just started (the timeline's `back`, 16.65 s).
+    await android.eval(`(() => { for (const a of document.getAnimations()) { a.pause(); a.currentTime = 16700; } })()`);
+    check(
+      await android.eval<boolean>(`(() => {
+        const picture = document.querySelector(".demo-picture").getBoundingClientRect();
+        const x = document.querySelector('[data-box="x3"]');
+        const done = document.querySelector('[data-box="done3"]');
+        const r = x.getBoundingClientRect();
+        const inside = r.left >= picture.left && r.right <= picture.right && r.top >= picture.top && r.bottom <= picture.bottom;
+        return inside && getComputedStyle(x.querySelector(".mark")).opacity === "1" && Number(getComputedStyle(x.querySelector(".ring")).opacity) > 0.5 && getComputedStyle(done.querySelector(".mark")).opacity === "0" && getComputedStyle(done).color !== getComputedStyle(x).color;
+      })()`),
+      `${url} on Android: going back, the camera is on ✕ at the top left, marked and pressed; 完成 is grey and not marked`,
+    );
+    await android.eval(`(() => { for (const a of document.getAnimations()) a.finish(); })()`);
+    check(await lastFrame(android), `${url} on Android: the last frame is the line of the link`);
+  }
 
   const violations = browser.logs.filter((l) => /Content Security Policy/i.test(l.text) && !/threads\.com/.test(l.text));
   check(violations.length === 0, `no Content-Security-Policy violation on the card proof page or the visitors' pages ${JSON.stringify(violations.map((l) => l.text))}`);

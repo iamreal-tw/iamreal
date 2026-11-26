@@ -90,8 +90,12 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
   // answer a request that accepts HTML otherwise than one that does not say (README.md, "Cloudflare 上看過的").
   const html = (path: string): Promise<Response> => parts.site(path, { Accept: "text/html" });
   const file = (path: string): Promise<Response> => parts.site(path, { Accept: "*/*" });
-  /** The scripts of a page that are not a file of this site: one from elsewhere, or one written into the page. No page of the repository has either. */
-  const foreignScriptsOf = (page: string): string[] => (page.match(/<script\b[^>]*>/gi) ?? []).filter((tag) => !/\ssrc="\/[^/"][^"]*"/.test(tag));
+  /**
+   * The scripts of a page that are not a file of this site: one from elsewhere, or one written into the page. No
+   * page of the repository has either. A block of data is not one: `type="application/json"` and nothing else but
+   * an id, which no browser runs (the timeline of the demonstration on the pages of hanging a proof).
+   */
+  const foreignScriptsOf = (page: string): string[] => (page.match(/<script\b[^>]*>/gi) ?? []).filter((tag) => !/\ssrc="\/[^/"][^"]*"/.test(tag) && !/^<script type="application\/json" id="[a-z-]+">$/.test(tag));
   /** The pages whose HTML has such a script. */
   const foreignScripts: string[] = [];
   const noteScripts = (path: string, page: string): void => {
@@ -121,7 +125,7 @@ export async function checkSite(parts: { site: Reader; data: Reader; today: stri
     ["/verify", 200, true],
     ["/check", 200],
     ["/prepare", 200],
-    ["/hang", 200],
+    ["/hang", 200, true],
     ["/no-such-page", 404],
   ];
   for (const [path, status, script] of pages) {
