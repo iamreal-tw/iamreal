@@ -310,8 +310,8 @@ iamreal-verify -bb <bb> -crs <通用參數目錄> -proof-log test -data https://
 | 資料網域的 `proof-log/fingerprints.jsonl` 最後一行的日期是今天（台灣） | 今天的證明紀錄沒有公布 |
 | 清冊存檔的索引裡，G2、G3 最新的可用清冊，日期不早於昨天 | 鏡像停了，或內政部的清冊沒有更新 |
 | 資料網域有今天的卡片狀態檔 `proof-log/card-state/<日期>.jsonl` | 同上，今天沒有公布 |
-| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；還沒打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
-| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；還沒打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
+| 資料網域的 `connection-log/oldest.json` 讀得懂，`checked` 在 2 小時內，`oldest` 是 `null` 或不早於今天（UTC）的 33 天前（#20；2026-11-27 打開，見下面） | 後台沒有在看連線紀錄，或有超過期限還沒刪的 |
+| 資料網域的 `count-events/oldest.json`，同一種讀法、同樣的門檻（#54；2026-11-27 打開） | 後台沒有在看計數的明細，或有超過期限還沒刪的 |
 | 資料網域的 `count-totals/oldest.json`，同一種讀法，`checked` 在 2 小時內，`oldest` 是測試網站第一天加總的日期（#435；還沒打開） | 後台沒有在看計數的加總，或最早一天的加總被刪了 |
 
 門檻和時間：

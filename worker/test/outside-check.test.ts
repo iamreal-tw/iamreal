@@ -10,7 +10,7 @@ import { type TestWorker, startWorker } from "./harness.ts";
 import { CRL_TIME, freshProofLog, publishCrl, tw } from "./records.ts";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, COUNT_TOTALS_FIRST, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
+import { CONNECTION_LOG_CHECKED, COUNT_EVENTS_CHECKED, COUNT_EVENTS_FILE, COUNT_TOTALS_FIRST, CONNECTION_LOG_FILE, checkFromOutside, runOutsideCheck } from "./outside-check.ts";
 import type { Reader } from "./site-check.ts";
 
 /** The date this test's proof log was cleared on: the day its object first runs. */
@@ -43,7 +43,7 @@ const site: Reader = (path, headers) => worker.fetch(path, { redirect: "manual",
  */
 const LOOKED = '{"checked":"2026-11-21T01:00:05.000Z","oldest":null}\n';
 const data: Reader = async (path) => {
-  if (path === `/${CONNECTION_LOG_FILE}` || path === "/count-events/oldest.json") return new Response(LOOKED, { headers: { "Content-Type": "application/json" } });
+  if (path === `/${CONNECTION_LOG_FILE}` || path === `/${COUNT_EVENTS_FILE}`) return new Response(LOOKED, { headers: { "Content-Type": "application/json" } });
   const file = (await worker.files(path.slice(1))).find((f) => `/${f.key}` === path);
   return file === undefined ? new Response(null, { status: 404 }) : new Response(new Blob([new Uint8Array(file.bytes)]));
 };
