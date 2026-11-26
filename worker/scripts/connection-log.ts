@@ -24,6 +24,7 @@
 // package is added for two kinds of GET.
 import { createHash, createHmac } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
+import { isIPv6 } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -88,6 +89,9 @@ export function daysOf(from: string, to: string): string[] {
   return Array.from({ length: n }, (_, i) => new Date(start + i * DAY_MS).toISOString().slice(0, 10));
 }
 
+/** An IP address in one spelling: an IPv6 one in its shortest lowercase form (as a URL's host writes it), any other as it is. */
+const ipOf = (ip: string): string => (isIPv6(ip) ? new URL(`http://[${ip}]`).hostname.slice(1, -1) : ip);
+
 /** Whether `entry` is one `q` looks for, the day aside. */
 export function matches(entry: Entry, q: Query): boolean {
   const at = Date.parse(entry.time);
@@ -99,14 +103,14 @@ export function matches(entry: Entry, q: Query): boolean {
       r === "accepted" ? entry.seq !== undefined : r === "refused" ? entry.seq === undefined : /^\d{3}$/.test(r) ? entry.result === Number(r) : entry.error === r;
     if (!ok) return false;
   }
-  if (q.ip !== undefined && entry.ip !== q.ip) return false;
+  if (q.ip !== undefined && (entry.ip === null || ipOf(entry.ip) !== ipOf(q.ip))) return false;
   if (q.device !== undefined && entry.device_id !== q.device) return false;
   return true;
 }
 
 /** The entries of the days of `q` that match it, oldest first. An object that is not an entry stops the query: it says which. */
 export async function query(store: Store, q: Query): Promise<Entry[]> {
-  for (const t of [q.after, q.before]) if (t !== undefined && !TIME.test(t)) throw new Error(`${t}: a time is ISO with its zone, such as 2026-11-20T08:00:00Z`);
+  for (const t of [q.after, q.before]) if (t !== undefined && (!TIME.test(t) || Number.isNaN(Date.parse(t)))) throw new Error(`${t}: a time is ISO with its zone, such as 2026-11-20T08:00:00Z`);
   const found: Entry[] = [];
   for (const day of daysOf(q.from, q.to)) {
     for (const key of await store.keys(`${CONNECTION_LOG_PREFIX}${day}/`)) {
@@ -168,14 +172,23 @@ export interface Keys {
  * name is missing; never with anything the file holds.
  */
 export function keysIn(file: string = KEY_FILE): Keys {
+  /** Why the file cannot be read, by the error's code: never its message, which may name more than the file. */
+  const unreadable = (e: unknown): Error => {
+    const code = (e as { code?: unknown }).code;
+    return code === "ENOENT" ? new Error(`no key file at ${file}: how to make the token and this file is in ${README_SECTION}`) : new Error(`cannot read ${file} (${typeof code === "string" ? code : "error"}): ${README_SECTION}`);
+  };
+  let mode: number;
+  try {
+    mode = statSync(file).mode;
+  } catch (e) {
+    throw unreadable(e);
+  }
+  if ((mode & 0o077) !== 0) throw new Error(`${file} can be read or written by other users of this computer: chmod 600 it (${README_SECTION})`);
   let text: string;
   try {
-    const mode = statSync(file).mode;
-    if ((mode & 0o077) !== 0) throw new Error(`${file} can be read by other users of this computer: chmod 600 it (${README_SECTION})`);
     text = readFileSync(file, "utf8");
   } catch (e) {
-    if (e instanceof Error && e.message.includes("chmod 600")) throw e;
-    throw new Error(`no key file at ${file}: how to make the token and this file is in ${README_SECTION}`);
+    throw unreadable(e);
   }
   const values = new Map<string, string>();
   for (const line of text.split("\n")) {
@@ -253,8 +266,9 @@ export function r2Store(keys: Keys, bucket: string = BUCKET, fetchFn: typeof fet
         if (res.status !== 200) throw new Error(`listing ${prefix} in ${bucket}: HTTP ${res.status} (is the token's bucket ${bucket}, and is it still there? ${README_SECTION})`);
         keys.push(...[...xml.matchAll(/<Key>([^<]*)<\/Key>/g)].map((m) => unescapeXml(m[1]!)));
         if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) return keys;
-        token = unescapeXml(/<NextContinuationToken>([^<]*)<\/NextContinuationToken>/.exec(xml)?.[1] ?? "");
-        if (token === "") throw new Error(`listing ${prefix} in ${bucket}: truncated with no continuation token`);
+        const next = unescapeXml(/<NextContinuationToken>([^<]*)<\/NextContinuationToken>/.exec(xml)?.[1] ?? "");
+        if (next === "" || next === token) throw new Error(`listing ${prefix} in ${bucket}: truncated with no new continuation token`);
+        token = next;
       }
     },
     async text(key) {

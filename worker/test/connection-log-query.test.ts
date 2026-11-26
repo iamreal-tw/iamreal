@@ -74,6 +74,7 @@ test("by time: at or after --after, before --before, whatever the zone they are 
   // 16:30 in Taiwan is 08:30 UTC.
   assert.deepEqual(await ids({ after: "2026-11-20T16:30:00+08:00", before: "2026-11-20T16:45:00+08:00" }), ["3"]);
   await assert.rejects(query(store, { from: "2026-11-20", to: "2026-11-20", after: "2026-11-20 08:30" }), /a time is ISO with its zone/);
+  await assert.rejects(query(store, { from: "2026-11-20", to: "2026-11-20", after: "2026-13-01T00:00Z" }), /a time is ISO with its zone/, "a month that is not one");
 });
 
 test("by result: accepted, refused, a status, an error code", async () => {
@@ -88,6 +89,7 @@ test("by IP address: exactly that address, IPv4 or IPv6", async () => {
   assert.deepEqual(await ids({ ip: A }), ["1", "2", "6"]);
   assert.deepEqual(await ids({ ip: V6 }), ["4"]);
   assert.deepEqual(await ids({ ip: "203.0.113.70" }), [], "not a prefix");
+  assert.deepEqual(await ids({ ip: "2001:DB8:0:0::42" }), ["4"], "IPv6 in another spelling");
   assert.deepEqual(await ids({ ip: A, result: "accepted", from: "2026-11-20", to: "2026-11-22" }), ["6"], "the conditions together");
 });
 
@@ -159,7 +161,9 @@ test("the key file: none, another user able to read it, a name missing; the erro
     const secret = "S3CRET-made-up-0123456789";
     writeFileSync(file, `R2_ACCOUNT_ID=0123456789abcdef0123456789abcdef\nR2_ACCESS_KEY_ID=made-up-id\nR2_SECRET_ACCESS_KEY=${secret}\n`);
     chmodSync(file, 0o644);
-    assert.throws(() => keysIn(file), (e: Error) => /can be read by other users of this computer: chmod 600 it/.test(e.message) && !e.message.includes(secret));
+    assert.throws(() => keysIn(file), (e: Error) => /can be read or written by other users of this computer: chmod 600 it/.test(e.message) && !e.message.includes(secret));
+    chmodSync(dir, 0o700);
+    assert.throws(() => keysIn(dir), (e: Error) => e.message === `cannot read ${dir} (EISDIR): worker/README.md「查連線紀錄」`, "a directory where the file should be: said by its code");
     chmodSync(file, 0o600);
     assert.deepEqual(keysIn(file), { accountId: "0123456789abcdef0123456789abcdef", accessKeyId: "made-up-id", secretAccessKey: secret });
     writeFileSync(file, `R2_ACCOUNT_ID=0123456789abcdef0123456789abcdef\nR2_SECRET_ACCESS_KEY=${secret}\n`);
