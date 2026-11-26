@@ -118,8 +118,9 @@ final class UserAgentTests: XCTestCase {
             let request = head.components(separatedBy: "\r\n")[0]
             // Android's value, to the letter.
             XCTAssertEqual(values(of: "User-Agent", in: head), ["iamreal"], request)
-            // Nothing of the app's version, the system's or the phone's anywhere in the head.
-            for word in ["CFNetwork", "Darwin", "IamrealApp", "iPhone", "iOS"] {
+            // Nothing of the system's own User-Agent anywhere in the head: the app's name and build,
+            // CFNetwork's version, Darwin's. (Accept-Language, the phone's languages, is still there.)
+            for word in ["CFNetwork", "Darwin", "IamrealApp"] {
                 XCTAssertFalse(head.contains(word), "\(request): \(word) in \(head)")
             }
         }

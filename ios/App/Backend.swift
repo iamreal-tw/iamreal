@@ -35,8 +35,9 @@ struct BackendFailure: Error, Equatable {
 /// (AppEnvironment); a test gives it the address of a local Worker.
 ///
 /// No request carries a cookie, a cache or an identifier of the device,
-/// nor the app's version or the system's (its User-Agent is one fixed
-/// word), and nothing is stored: the session is ephemeral.
+/// and nothing is stored: the session is ephemeral. Its User-Agent is one
+/// fixed word, not the system's own with the app's build and the system's
+/// version. The system still adds Accept-Language, the phone's languages.
 struct HTTPBackend: Backend {
     let site: URL
     let publicFiles: URL
