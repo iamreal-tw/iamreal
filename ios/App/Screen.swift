@@ -270,6 +270,8 @@ enum Action: Equatable {
     case toPIN
     /// Tap 2.
     case confirmCard
+    /// The card's state asked again, after the server turned it away as too many: nothing signed again.
+    case retryCardState
     /// From step 4 to step 5: what the list typed would do.
     case toConfirm
     /// "更新島民證明" of step 4: the card's list as it is, to step 5.

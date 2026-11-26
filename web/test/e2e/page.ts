@@ -69,7 +69,8 @@ async function main() {
   const results = [];
   for (const [i, r] of fx.runs.entries()) {
     run = i;
-    const card = new FakeCard({ certificates: fx.certificates.map(b64), signingKey, pin: fx.pin });
+    // The reader's name as the test component reports it (fake-component.ts).
+    const card = new FakeCard({ certificates: fx.certificates.map(b64), signingKey, pin: fx.pin, readerName: "Fake Reader 0" });
     const flow = new CardProofFlow(
       {
         proofLog: "test",

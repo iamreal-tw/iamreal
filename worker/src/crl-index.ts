@@ -43,7 +43,7 @@ function formatLine(l: IndexLine): string {
 }
 
 /** Compares decimal numbers without leading zeros, `-` before every number. */
-function compareNumbers(a: string, b: string): number {
+export function compareNumbers(a: string, b: string): number {
   if (a === b) return 0;
   if (a === "-") return -1;
   if (b === "-") return 1;
