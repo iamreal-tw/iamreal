@@ -74,8 +74,8 @@
 
 ## 隱私和營運者看得到什麼
 
-- 連線紀錄記 IP，留 31 天；失敗的請求連內文一起記；對外講到個人資料保護法第 8 條要求的程度。[ADR-0022](0022-connection-log-keeps-ip-for-31-days.md)
-- 分析只數事件：不放 cookie、沒有第三方的程式；計數的欄位只能從寫死的表裡選。[ADR-0032](0032-analytics-counts-events-not-people.md)（部分由 ADR-0039 取代）
+- 連線紀錄只記送出一筆的請求和它的 IP，留 31 天；帶著有效題目而失敗的送出連內文一起記；其他的請求不記；對外講到個人資料保護法第 8 條要求的程度。[ADR-0022](0022-connection-log-keeps-ip-for-31-days.md)
+- 分析只數事件：不放 cookie、沒有第三方的程式；計數的欄位只能從寫死的表裡選；計數不存 IP、不進連線紀錄，明細留 31 天；營運者在自己電腦上看加總。[ADR-0032](0032-analytics-counts-events-not-people.md)（部分由 ADR-0039 取代）
 - 計數可以帶活不過一個月的隨機編號：造訪編號（一次造訪）、過卡裝置編號（31 天換）、嘗試編號（一次過卡）；31 天後對不回證明紀錄裡的紀錄；永久保存的只有加總。[ADR-0039](0039-counts-carry-ids-that-live-under-a-month.md)
 - 過卡停在哪一步和錯誤代碼當成計數送給後台，裡面沒有匿名編號。[ADR-0032](0032-analytics-counts-events-not-people.md)、[ADR-0016](0016-device-protections-not-set-by-server.md)
 - 平常不放 cookie；唯一的例外是緊急時的挑戰頁。[ADR-0026](0026-rate-limiting-in-three-layers.md)
@@ -103,7 +103,6 @@
 
 施工時碰到這些，停下來問，不要自己定。
 
-- 連線紀錄和每天的總數存在哪裡、誰讀得到、到期怎麼刪（ADR-0022、ADR-0032；[#20](https://github.com/iamreal-tw/iamreal/issues/20)）
 - 重驗沒有通過、排程沒跑時怎麼通知營運者（ADR-0025、ADR-0027；[#53](https://github.com/iamreal-tw/iamreal/issues/53)）
 - 頁面的資料撐不住時搬到 KV 還是 D1（ADR-0026）
 - 正式的證明紀錄開張當天，測試的證明紀錄怎麼處理（ADR-0028）
