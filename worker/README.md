@@ -10,7 +10,7 @@
 |---|---|
 | 清冊鏡像（[排程做什麼](#排程做什麼)）：每小時抓內政部的兩份廢止清冊，原始位元組存進 R2 的 `crl/<SHA-256>.crl`，驗章、建樹，寫清冊存檔的索引 `crl/index.jsonl`。`crl/testdata/` 的每一案和 Go 的 `crl/` 比對過 | |
 | 證明紀錄的 Durable Object：題目表、紀錄、卡片狀態表、證明紀錄的一列（[題目、卡片現況、設定](#題目卡片現況設定)、[送出一筆](#送出一筆)），和每把發證金鑰最新兩份可用清冊的樹根、編號、日期 | |
-| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天；部署前核對儲存桶的生命週期規則。其他的請求不記 | 查詢的指令；客戶端還沒有帶過卡裝置編號 |
+| 連線紀錄（[連線紀錄](#連線紀錄)）：被算了一次的送出一筆各記一個 R2 物件（請求編號、時間、結果、IP、國家代碼、網路業者的編號、過卡裝置編號；成功的加第幾筆，沒成功的加錯誤代碼和內文），留 31 天，靠儲存桶的生命週期規則。其他的請求不記 | 部署前核對那條生命週期規則；查詢的指令；客戶端還沒有帶過卡裝置編號 |
 | API 的六個介面：`POST /api/v1/challenges`、`POST /api/v1/card-state`、`POST /api/v1/records`、`GET /api/v1/config`、`GET /api/v1/fingerprint`、`GET /api/v1/rebuild`；存著的規則版本和程式不同時、營運者停止收過卡時（[停止和恢復收過卡](#停止和恢復收過卡)），`challenges` 和 `records` 回 `paused` | 限流 |
 | 寫滿 1,000 筆的紀錄檔和它的雜湊清單搬到 R2，讀回來核對過才刪掉 Durable Object 裡的那 1,000 筆（[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)） | |
 | 每天台灣時間換日公布證明紀錄：還沒寫滿的最後一檔和它的雜湊清單、當天的卡片狀態檔、指紋檔多一行（[每天換日公布證明紀錄](#每天換日公布證明紀錄)）。Go 的 `iamreal-verify` 用預設的讀法重驗寫出來的整個資料網域，通過。測試網站第一次公布是 2026-11-21（空的證明紀錄），重驗通過（[部署後要營運者做的](#每天換日公布證明紀錄)）；清空之後，2026-11-22 公布了營運者用真卡片過卡的那一筆，重驗通過（[#71](https://github.com/iamreal-tw/iamreal/issues/71)） | |
@@ -1185,18 +1185,16 @@ pnpm run deploy:test
 - `--experimental-provision=false`：wrangler 不問 Cloudflare 儲存桶在不在；為什麼要帶，見[下一節](#第一次部署量到的)。
 - `--env-file=/dev/null`：wrangler 4.160.1 啟動時會把工作目錄的 `.env`、`.env.local`、`.env.test`、`.env.test.local` 讀進自己的環境變數，除非 `--env-file` 指定別的檔（`wrangler-dist/cli.js`：`args["env-file"] ?? getDefaultEnvFiles(args.env)`，再交給 `loadDotEnv`）。這樣的檔可以設 `CLOUDFLARE_API_BASE_URL`，把權杖送到別的主機（用假權杖和本機監聽的伺服器試過，請求帶著 `Authorization: Bearer <權杖>` 送到了那裡）。指到 `/dev/null` 就一個也不讀（`test/deploy.test.ts`）。
 
-本機：[`scripts/deploy-test.ts`](scripts/deploy-test.ts) 先建置頁面、打包到暫存目錄、跑完檢查，才讀程式庫根目錄的 `.env.local`：先用 `CLOUDFLARE_API_TOKEN_TEST_R2_READ` 核對連線紀錄的儲存桶的生命週期規則（[連線紀錄](#連線紀錄)；`--dry-run` 不核對），再用 `CLOUDFLARE_API_TOKEN_TEST` 和 `CLOUDFLARE_ACCOUNT_ID` 上傳。那把權杖只能部署 `iamreal-test`（ADR-0029）。不用 `wrangler login`。shell 裡原有的 `CLOUDFLARE_*`、`CF_*`、`WRANGLER_*` 變數都不會傳給 wrangler 的指令（打包和上傳各起一個子程序，環境是濾過的），所以別的權杖或別的 API 網址不會被用到。這句話只對子程序成立：檢查裡讀設定檔的那一步在 `deploy-test.ts` 自己的程序裡用 wrangler 的函式庫做，那個程序的環境就是 shell 的；它只讀 `wrangler.jsonc`、不送請求，而且在讀 `.env.local` 之前就做完，權杖讀進來之後只放在交給上傳那個子程序的環境裡，不放進這個程序自己的環境變數。唯一接受的參數是 `--dry-run`：三段都做，不上傳。正式環境只從 GitHub Actions 部署，這裡沒有它的指令。
+本機：[`scripts/deploy-test.ts`](scripts/deploy-test.ts) 先建置頁面、打包到暫存目錄、跑完檢查，才讀程式庫根目錄的 `.env.local` 裡的兩行，`CLOUDFLARE_API_TOKEN_TEST` 和 `CLOUDFLARE_ACCOUNT_ID`，再上傳。那把權杖只能部署 `iamreal-test`（ADR-0029）。不用 `wrangler login`。shell 裡原有的 `CLOUDFLARE_*`、`CF_*`、`WRANGLER_*` 變數都不會傳給 wrangler 的指令（打包和上傳各起一個子程序，環境是濾過的），所以別的權杖或別的 API 網址不會被用到。這句話只對子程序成立：檢查裡讀設定檔的那一步在 `deploy-test.ts` 自己的程序裡用 wrangler 的函式庫做，那個程序的環境就是 shell 的；它只讀 `wrangler.jsonc`、不送請求，而且在讀 `.env.local` 之前就做完，權杖讀進來之後只放在交給上傳那個子程序的環境裡，不放進這個程序自己的環境變數。唯一接受的參數是 `--dry-run`：三段都做，不上傳。正式環境只從 GitHub Actions 部署，這裡沒有它的指令。
 
 ### 從 GitHub Actions 部署
 
-合併到 `main` 時，[`.github/workflows/deploy-test.yml`](../.github/workflows/deploy-test.yml) 部署測試環境（ADR-0029）。三個工作：
+合併到 `main` 時，[`.github/workflows/deploy-test.yml`](../.github/workflows/deploy-test.yml) 部署測試環境（ADR-0029）。兩個工作：
 
 1. `build`：沒有權杖。跑 [`scripts/build-deploy.ts`](scripts/build-deploy.ts)，就是上面的第 1 段和第 2 段：下載通用參數並核對 SHA-256（從 Aztec 的 CDN，`web/README.md`）、建置並檢查過卡的頁面、打包並檢查 Worker，交成兩個 artifact（`worker-build`、`proof-page`）。
 2. `deploy`：在 `build` 之後。依序：裝 Node、用 npm 從 `https://registry.npmjs.org/` 裝 pnpm（這時還沒 checkout，程式庫裡的 `.npmrc` 不在）、checkout、用 pnpm 照 lockfile 裝 `worker/` 的套件（`--ignore-scripts`：不跑任何安裝腳本；`--ignore-pnpmfile`：不跑 `.pnpmfile.cjs`，`--ignore-scripts` 擋不住它，pnpm 10.16.1 試過；`--registry`：不照 `.npmrc` 換來源）、拿回那兩包（頁面放到 `worker/site/proof/`），最後一步上傳。之前沒有一步跑這個程式庫的程式。
 
-3. `connection-log`：和 `build` 同時跑，`deploy` 也等它。checkout、裝 Node，不裝任何套件，跑 [`scripts/check-connection-log.ts`](scripts/check-connection-log.ts)：連線紀錄的儲存桶沒有「`connection/` 底下 31 天後刪除」的那一條規則就失敗，不部署（[連線紀錄](#連線紀錄)）。它的權杖是另一把，`CLOUDFLARE_API_TOKEN_TEST_R2_READ`，只能讀 R2 的設定；部署的權杖不在這個工作裡，這一把也不在 `deploy` 裡。
-
-部署的權杖只在 `deploy` 最後一步的環境裡：程式庫的 Actions secrets `CLOUDFLARE_API_TOKEN_TEST`、`CLOUDFLARE_ACCOUNT_ID`，交給 wrangler 時的名稱是 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
+權杖只在最後一步的環境裡：程式庫的 Actions secrets `CLOUDFLARE_API_TOKEN_TEST`、`CLOUDFLARE_ACCOUNT_ID`，交給 wrangler 時的名稱是 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。
 
 **上傳的那一步還信任的東西**（改到它們的 PR 要逐行看，`CONTRIBUTING.md`「部署會執行到的東西」）：
 
@@ -1318,13 +1316,13 @@ pnpm run deploy:test
 
 **留 31 天，靠儲存桶的生命週期規則**：前綴 `connection/`，物件建立 31 天後刪除。程式自己不刪。文件寫到期的物件「Objects will typically be removed from a bucket within 24 hours of the `x-amz-expiration` value」（[Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)，2026-11-26 讀的），所以實際是 31 到 32 天。
 
-**部署前核對這條規則**：[`scripts/check-connection-log.ts`](scripts/check-connection-log.ts) 向 Cloudflare 的 API 讀回儲存桶的生命週期規則，下面任何一項不對就失敗，部署不會上傳：
+**這條規則現在沒有程式在部署前核對**（票的驗收條件之一，還沒做到）。[`scripts/check-connection-log.ts`](scripts/check-connection-log.ts) 寫好了，可以手動跑：它向 Cloudflare 的 API 讀回儲存桶的生命週期規則，下面任何一項不對就失敗：
 
 - 啟用中、會刪物件、碰得到 `connection/` 的規則剛好一條
 - 它的前綴是 `connection/` 或沒有前綴
 - 它照物件的年齡刪，年齡是 2,678,400 秒（31 天）
 
-只中止沒傳完的分段上傳的規則（每個儲存桶預設有一條，7 天）、只換儲存等級的規則、沒有啟用的規則、別的前綴的規則都不算。它用自己的一把權杖（`CLOUDFLARE_API_TOKEN_TEST_R2_READ`，只能讀 R2 的設定），不是部署的那一把：工作流程裡是一個單獨的工作 `connection-log`，`deploy` 等它（[從 GitHub Actions 部署](#從-github-actions-部署)）；`pnpm run deploy:test` 在上傳之前跑同一支，讀 `.env.local` 的同名那一行（`--dry-run` 不跑）。這支腳本只用 Node 自己的模組，那個工作不裝任何套件。
+只中止沒傳完的分段上傳的規則（每個儲存桶預設有一條，7 天）、只換儲存等級的規則、沒有啟用的規則、別的前綴的規則都不算。沒有接進部署的原因：讀儲存桶的設定要一把有「Workers R2 Storage: Read」的權杖，而這個權限同時讀得到、列得出帳號裡每個儲存桶的物件，連線紀錄本身也在內；Cloudflare 沒有只讀設定、或只限一個儲存桶又讀得到設定的權限。把這樣一把權杖放進 Actions，等於多一個讀得到 IP 的地方。換哪一種做法還在定（[#20](https://github.com/iamreal-tw/iamreal/issues/20)）。在那之前，這條規則靠營運者設的時候看一次（[營運者在 Cloudflare 和 GitHub 上設的](#營運者在-cloudflare-和-github-上設的)）。
 
 **刪掉的物件救不救得回來**。規格要求確認 R2 沒有把刪掉的物件救回來的機制（救得回來的話，對外說的 31 天就不成立）。2026-11-26 讀 Cloudflare 的文件，結果是「文件上沒有這種機制」，不是「文件保證沒有」：
 
@@ -1564,8 +1562,7 @@ node --experimental-strip-types test/site-check.ts http://localhost:8080 http://
 | R2 | 儲存桶 `iamreal-test-data`，位置 Automatic、存放等級 Standard；自訂網域 `test-data.iamreal.tw` | `wrangler.jsonc` 的 `r2_buckets`；部署不建任何資源（`--experimental-provision=false`，[第一次部署量到的](#第一次部署量到的)） |
 | R2 儲存桶的 CORS | 只允許 `https://test.iamreal.tw` 用 `GET` | 過卡的頁面從資料網域下載清冊存檔（ADR-0027） |
 | R2 儲存桶的生命週期規則 | `card-state-7-days`：前綴 `proof-log/card-state/`（[#277](https://github.com/iamreal-tw/iamreal/issues/277) 之前是改名之前的目錄），物件建立 7 天後刪除（[#185](https://github.com/iamreal-tw/iamreal/issues/185)） | 程式不刪卡片狀態檔（[每天換日公布證明紀錄](#每天換日公布證明紀錄)「部署後要營運者做的」） |
-| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。部署前的檢查讀回這條規則 |
-| 只能讀 R2 設定的權杖 | 一把 Account API token，權限「Workers R2 Storage: Read」，放在程式庫的 Actions secrets `CLOUDFLARE_API_TOKEN_TEST_R2_READ` 和營運者電腦的 `.env.local`（同名）。這個權限夠不夠讀生命週期規則，文件沒有明講，第一次跑的時候看；不夠時檢查會失敗並說明 | 部署前核對上面那條規則（[連線紀錄](#連線紀錄)） |
+| 連線紀錄的儲存桶 `iamreal-test-logs`（[#415](https://github.com/iamreal-tw/iamreal/issues/415)） | Public Access 關著，沒有網域、沒有 CORS。生命週期規則 `connection-31-days`：前綴 `connection/`，物件建立 31 天後刪除。不設 bucket lock | 後台存 IP 的地方，留 31 天（ADR-0022，[連線紀錄](#連線紀錄)）。現在沒有程式核對這條規則，改它之前先讀那一節 |
 | `test-data.iamreal.tw` 的快取規則 | 可以快取；Edge TTL 選「有 `Cache-Control` 就照它，沒有就不快取」，Browser TTL 照物件的標頭。儀表板沒有「沒有就用 60 秒」這個選項 | 所以後台寫進儲存桶的每個物件都自己設 `Cache-Control`：會變的 60 秒，不會變的一年（[排程做什麼](#排程做什麼)、[寫滿的紀錄檔搬到 R2](#寫滿的紀錄檔搬到-r2)、[每天換日公布證明紀錄](#每天換日公布證明紀錄)）；沒設的物件不會被快取 |
 | Real User Measurements（Web Analytics） | `iamreal.tw` → Speed → Real user monitoring 選 **Disable completely**（2026-11-21，[#240](https://github.com/iamreal-tw/iamreal/issues/240)）。沒設定過時是開著的：每個 HTML 頁面會被加一個 `static.cloudflareinsights.com` 的 `<script>`（[Static Assets](#static-assets)「Cloudflare 上看過的」最後一段）。正式的網域在第一次部署之前同樣關掉 | 頁面只載入自己網域的資源（`CONTRIBUTING.md`「頁面」）、沒有第三方的程式（ADR-0032）。`test/site-check.ts` 的「沒有一頁有不是自己網站的 script」檢查它 |
 | `iamreal.tw` 這個 zone | 新增網域時關掉「Bot Preference Sync」：它會在網站的 `robots.txt` 前面插入 Cloudflare 的設定；AI 爬蟲的政策留預設 | `robots.txt` 由程式決定 |

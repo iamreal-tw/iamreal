@@ -7,12 +7,13 @@
 //   CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… \
 //     node --experimental-strip-types scripts/check-connection-log.ts test
 //
-// The workflow runs it in a job of its own, with a token that can read R2's
-// settings and nothing else, and the deploy waits for it
-// (.github/workflows/deploy-test.yml, "connection-log"). The deploy's own
-// token is not here. This file imports nothing but Node's own modules, so
-// that job installs no package: what it runs with its token is this file
-// and Node.
+// Nothing runs it yet: no workflow and no deploy script calls it
+// (README.md, "連線紀錄", says why and what stands in its place). The
+// operator can run it by hand. It needs a token that can read the settings
+// of R2 buckets; Cloudflare has no permission that reads the settings
+// alone, so such a token can also read the objects, the connection log
+// among them. This file imports nothing but Node's own modules: what runs
+// with that token is this file and Node.
 //
 // It sends one GET to Cloudflare's API
 // (https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/lifecycle/methods/get/)

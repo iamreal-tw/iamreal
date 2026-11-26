@@ -79,8 +79,7 @@ export function entryOf(request: Request, requestId: string, time: Date, submiss
 /**
  * Under this prefix, and under no other, the bucket's lifecycle rule
  * deletes after 31 days: the bucket may hold other things under other
- * prefixes. scripts/check-connection-log.ts reads the rule back before a
- * deploy.
+ * prefixes. scripts/check-connection-log.ts reads the rule back.
  */
 export const CONNECTION_LOG_PREFIX = "connection/";
 

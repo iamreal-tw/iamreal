@@ -8,8 +8,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { CHECK_CONNECTION_LOG, WORKER_DIR, buildArgs, deployTokenOf, r2ReadTokenOf, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
-import { DEPLOY_JOBS } from "./workflows.ts";
+import { WORKER_DIR, buildArgs, deployTokenOf, uploadArgs, wranglerEnv } from "../scripts/deploy.ts";
 
 const TOKEN = "made-up-token_0123456789";
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
@@ -158,7 +157,7 @@ test("both ways of deploying build and check the card proof page before the Work
   const increasing = (at: readonly number[]): boolean => at.every((n, i) => n >= 0 && (i === 0 || n > at[i - 1]!));
 
   const local = statements("deploy-test.ts");
-  assert.ok(increasing(order(local, ["buildSite();", "buildDeploy(dir);", "deployTokenOf(", "spawnSync(process.execPath, [...CHECK_CONNECTION_LOG]", "nothing was uploaded", "spawnSync(WRANGLER"])), "deploy-test.ts: the page, the Worker's build, the token, the check of the connection log's bucket, the upload, in that order");
+  assert.ok(increasing(order(local, ["buildSite();", "buildDeploy(dir);", "deployTokenOf(", "spawnSync(WRANGLER"])), "deploy-test.ts: the page, the Worker's build, the token, the upload, in that order");
   assert.equal(local.split("buildSite();").length, 2, "deploy-test.ts builds the page once");
   // What it built is not left for a later upload to find.
   assert.match(local, /finally \{[\s\S]*?rmSync\(PROOF_DIR, \{ recursive: true, force: true \}\);/);
@@ -166,19 +165,4 @@ test("both ways of deploying build and check the card proof page before the Work
   const workflow = statements("build-deploy.ts");
   assert.ok(increasing(order(workflow, ["buildSite();", "buildDeploy(args[0]!)"])), "build-deploy.ts: the page, then the Worker's build");
   assert.ok(!/deployTokenOf|uploadArgs|WRANGLER\b/.test(workflow), "build-deploy.ts reads no token and uploads nothing");
-});
-
-test("the check of the connection log's bucket runs with a token of its own, the same command here and in the workflow", () => {
-  const text = "CLOUDFLARE_API_TOKEN_TEST=deploys\nCLOUDFLARE_API_TOKEN_TEST_R2_READ=reads\nCLOUDFLARE_ACCOUNT_ID=0123456789abcdef0123456789abcdef\n";
-  assert.deepEqual(r2ReadTokenOf(text), { token: "reads", accountId: "0123456789abcdef0123456789abcdef" });
-  assert.deepEqual(deployTokenOf(text).token, "deploys");
-  // Without its line the deploy from this computer stops, naming the variable.
-  assert.throws(() => r2ReadTokenOf("CLOUDFLARE_API_TOKEN_TEST=deploys\nCLOUDFLARE_ACCOUNT_ID=0123456789abcdef0123456789abcdef\n"), /\.env\.local has no CLOUDFLARE_API_TOKEN_TEST_R2_READ/);
-  // The process it runs in has that token and none of the shell's.
-  const env = wranglerEnv({ PATH: "/bin", CLOUDFLARE_API_TOKEN: "the shell's", CLOUDFLARE_API_BASE_URL: "http://elsewhere" }, r2ReadTokenOf(text));
-  assert.deepEqual([env.CLOUDFLARE_API_TOKEN, env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_API_BASE_URL], ["reads", "0123456789abcdef0123456789abcdef", undefined]);
-  // The workflow's job runs the same command, in worker/.
-  const job = (DEPLOY_JOBS["connection-log"] as { steps: { run?: string; "working-directory"?: string }[] }).steps.at(-1)!;
-  assert.equal(job.run, `node ${CHECK_CONNECTION_LOG.join(" ")}`);
-  assert.equal(job["working-directory"], "worker");
 });

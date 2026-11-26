@@ -59,8 +59,7 @@
       // DATA: the public data (ADR-0027). CONNECTION_LOG: the bucket the connection log is written
       // to (ADR-0022), under "connection/": a bucket with no public domain, apart from the public
       // data, whose lifecycle rule deletes every object under that prefix after 31 days (README.md,
-      // "連線紀錄"). The operator makes the bucket and the rule before the first deploy; the
-      // deploy's check reads the rule back (scripts/check-connection-log.ts).
+      // "連線紀錄"). The operator makes the bucket and the rule before the first deploy.
       "r2_buckets": [
         { "binding": "DATA", "bucket_name": "iamreal-test-data" },
         { "binding": "CONNECTION_LOG", "bucket_name": "iamreal-test-logs" }

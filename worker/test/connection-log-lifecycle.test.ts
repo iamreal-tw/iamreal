@@ -1,6 +1,6 @@
-// The check a deploy waits for (scripts/check-connection-log.ts; issue #20):
-// which lifecycle rules of the connection log's bucket it takes, and which
-// it stops the deploy on. The rules here are written as Cloudflare's API
+// The check of the connection log's bucket (scripts/check-connection-log.ts;
+// issue #20): which lifecycle rules it takes, and which it fails on. No
+// deploy runs it yet (README.md, "連線紀錄"). The rules here are written as Cloudflare's API
 // answers them; no request is sent.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -43,7 +43,7 @@ test("one enabled rule that deletes what is under connection/ after 31 days is r
   assert.equal(lifecycleProblem([rule(), { id: "ia", enabled: true, conditions: { prefix: "connection/" }, storageClassTransitions: [{ condition: { type: "Age", maxAge: 86_400 }, storageClass: "InfrequentAccess" }] }]), null);
 });
 
-test("no rule, or none that deletes under connection/, stops the deploy", () => {
+test("no rule, or none that deletes under connection/, fails", () => {
   for (const [what, rules] of [
     ["no rules at all", undefined],
     ["an empty list", []],
@@ -57,7 +57,7 @@ test("no rule, or none that deletes under connection/, stops the deploy", () => 
   assert.match(lifecycleProblem({ rules: [] }) ?? "", /not a list/);
 });
 
-test("any other age than 31 days, or a date, stops the deploy", () => {
+test("any other age than 31 days, or a date, fails", () => {
   for (const days of [1, 30, 32, 90, 365]) assert.match(lifecycleProblem([rule({ deleteObjectsTransition: age(days) })]) ?? "", /it must be 2678400 \(31 days\)/, `${days} days`);
   assert.match(lifecycleProblem([rule({ deleteObjectsTransition: { condition: { type: "Age", maxAge: 31 } } })]) ?? "", /deletes after 31 seconds/);
   assert.match(lifecycleProblem([rule({ deleteObjectsTransition: { condition: { type: "Age", maxAge: "2678400" } } })]) ?? "", /it must be 2678400/);
@@ -65,7 +65,7 @@ test("any other age than 31 days, or a date, stops the deploy", () => {
   assert.match(lifecycleProblem([rule({ deleteObjectsTransition: {} })]) ?? "", /does not delete by age/);
 });
 
-test("a rule that covers only a part of connection/, or a second rule that reaches it, stops the deploy", () => {
+test("a rule that covers only a part of connection/, or a second rule that reaches it, fails", () => {
   // Only one day's objects.
   assert.match(lifecycleProblem([rule({ conditions: { prefix: "connection/2026-11" } })]) ?? "", /it must be "connection\/" or none/);
   // A beginning of the prefix that is not all of the bucket: other things could match it too, and it is not what was agreed.
@@ -104,7 +104,7 @@ test("the command stops before it sends anything when it is not given an environ
   assert.ok(!badAccount.out.includes("a-token-that-must-not-be-printed") && !badAccount.out.includes("not an account"));
 });
 
-test("the script imports nothing but Node's own modules: the job that runs it with a token installs no package", () => {
+test("the script imports nothing but Node's own modules: what runs with its token is that file and Node", () => {
   const source = readFileSync(SCRIPT, "utf8");
   const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]);
   assert.deepEqual(imports, ["node:url"]);

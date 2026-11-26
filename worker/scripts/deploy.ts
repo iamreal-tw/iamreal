@@ -134,41 +134,24 @@ export interface DeployToken {
 }
 
 /**
- * The value of one line of the text of `.env.local`. A line is
+ * Reads the two lines out of the text of `.env.local`. A line is
  * `NAME=value`, with or without `export` before it and quotes around the
  * value; other lines are not looked at. If a name is there twice, the last
- * one counts. Throws, naming the variable and never a value, if it is
+ * one counts. Throws, naming the variable and never a value, if one is
  * missing or empty.
  */
-function valueIn(envFileText: string, name: string): string {
-  let value: string | undefined;
-  for (const line of envFileText.split(/\r?\n/)) {
-    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
-    if (m && m[1] === name) value = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
-  }
-  if (value === undefined || value === "") throw new Error(`.env.local has no ${name}`);
-  return value;
-}
-
-/** Reads the deploy's two lines out of the text of `.env.local` (`valueIn`). */
 export function deployTokenOf(envFileText: string): DeployToken {
-  return { token: valueIn(envFileText, "CLOUDFLARE_API_TOKEN_TEST"), accountId: valueIn(envFileText, "CLOUDFLARE_ACCOUNT_ID") };
+  const valueOf = (name: string): string => {
+    let value: string | undefined;
+    for (const line of envFileText.split(/\r?\n/)) {
+      const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+      if (m && m[1] === name) value = m[2]!.replace(/^(["'])(.*)\1$/, "$2");
+    }
+    if (value === undefined || value === "") throw new Error(`.env.local has no ${name}`);
+    return value;
+  };
+  return { token: valueOf("CLOUDFLARE_API_TOKEN_TEST"), accountId: valueOf("CLOUDFLARE_ACCOUNT_ID") };
 }
-
-/**
- * The token the check of the connection log's bucket runs with
- * (scripts/check-connection-log.ts): CLOUDFLARE_API_TOKEN_TEST_R2_READ of
- * `.env.local`, which can read the settings of R2 buckets and nothing
- * else, with the same account. It is another token than the deploy's, as
- * in the workflow: the deploy's cannot read a bucket's settings, and this
- * one cannot deploy.
- */
-export function r2ReadTokenOf(envFileText: string): DeployToken {
-  return { token: valueIn(envFileText, "CLOUDFLARE_API_TOKEN_TEST_R2_READ"), accountId: valueIn(envFileText, "CLOUDFLARE_ACCOUNT_ID") };
-}
-
-/** The command that checks the connection log's bucket of the test environment, as the workflow's job runs it. */
-export const CHECK_CONNECTION_LOG: readonly string[] = ["--experimental-strip-types", "scripts/check-connection-log.ts", "test"];
 
 /**
  * No usage report to Cloudflare. No banner, and with it no question to npm's

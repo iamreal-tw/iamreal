@@ -659,22 +659,8 @@ export const DEPLOY_JOBS: YamlMap = {
       { uses: uses("actions/upload-artifact"), with: { ...PROOF_PAGE_ARTIFACT, "if-no-files-found": "error" } },
     ],
   },
-  "connection-log": {
-    "runs-on": "ubuntu-24.04",
-    "timeout-minutes": "5",
-    steps: [
-      step("actions/checkout"),
-      step("actions/setup-node"),
-      {
-        name: "The connection log's bucket deletes what is under connection/ after 31 days",
-        "working-directory": "worker",
-        env: { CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN_TEST_R2_READ }}", CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" },
-        run: "node --experimental-strip-types scripts/check-connection-log.ts test",
-      },
-    ],
-  },
   deploy: {
-    needs: ["build", "connection-log"],
+    needs: "build",
     "runs-on": "ubuntu-24.04",
     "timeout-minutes": "15",
     steps: [
@@ -883,8 +869,6 @@ export const UPLOAD_ANDROID_JOBS: YamlMap = {
 
 /** The only lines of all the workflows with the word "secrets" in them, comments included. */
 export const SECRET_LINES: readonly string[] = [
-  "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST_R2_READ }}",
-  "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
   "deploy-test.yml:          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_TEST }}",
   "deploy-test.yml:          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
   "upload-android.yml:          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}",
