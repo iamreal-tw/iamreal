@@ -18,6 +18,8 @@ export interface FakeCardOptions {
   noCard?: boolean;
   /** Simulates a computer with no reader. */
   noReader?: boolean;
+  /** The reader's name the card reports (readerName); none by default. */
+  readerName?: string;
 }
 
 export class FakeCard implements Card {
@@ -36,6 +38,10 @@ export class FakeCard implements Card {
     if (this.opts.noReader) throw new CardError("no_reader");
     if (this.opts.noCard) throw new CardError("no_card");
     return this.opts.certificates.map((c) => c.slice());
+  }
+
+  readerName(): string | null {
+    return this.opts.readerName ?? null;
   }
 
   async sign(message: Uint8Array, pin: string): Promise<CardSignature> {

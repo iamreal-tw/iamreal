@@ -3,30 +3,42 @@
 (() => {
 // The browser and the operating system of a count (spec/counts.md,
 // "Browsers", "Operating systems"), from a `User-Agent`: the one way both the
-// card proof page (web/src/counts.ts) and the visitors' pages
-// (worker/site/count.js, written from this file by
-// worker/scripts/site-files.ts) name them. Only the two names are sent; the
-// text itself is not.
+// card proof page (web/src/counts.ts, which also reads the versions with
+// `browserOf`) and the visitors' pages (worker/site/count.js, written from
+// this file by worker/scripts/site-files.ts) name them. Only the names are
+// sent; the text itself is not.
 //
 // This file is also a part of a script that is no module: it imports
-// nothing but types, and has nothing but this one function.
+// nothing but types, and has nothing but these.
+
+/**
+ * The browsers a `User-Agent` is told apart by, in the order they are looked
+ * for (Edge and Samsung Internet also write `Chrome/`, Chrome writes
+ * `Safari/`). The first group is the major version; a browser the table does
+ * not name (Opera) is `other`, and has none.
+ */
+const BROWSER_PATTERNS                                          = [
+  ["edge", /\bEdg(?:e|A|iOS)?\/(\d+)/],
+  ["samsung", /\bSamsungBrowser\/(\d+)/],
+  ["other", /\b(?:OPR|Opera)\//],
+  ["firefox", /\b(?:Firefox|FxiOS)\/(\d+)/],
+  ["chrome", /\b(?:Chrome|CriOS)\/(\d+)/],
+  ["safari", /\bVersion\/(\d+)[\d.]* .*Safari\//],
+];
+
+/** The browser, and the major version its pattern found, if any. */
+function browserOf(userAgent        )                                                  {
+  for (const [browser, re] of BROWSER_PATTERNS) {
+    const m = re.exec(userAgent);
+    if (m !== null) return { browser, major: m[1] };
+  }
+  return { browser: "other", major: undefined };
+}
 
 /** The browser and the operating system as the table names them, from a `User-Agent`. What it cannot tell is `other`. */
 function familiesOf(userAgent        )                               {
   const has = (re        )          => re.test(userAgent);
-  const browser          = has(/\bEdg(?:e|A|iOS)?\//)
-    ? "edge"
-    : has(/\bSamsungBrowser\//)
-      ? "samsung"
-      : has(/\b(?:OPR|Opera)\//)
-        ? "other"
-        : has(/\b(?:Firefox|FxiOS)\//)
-          ? "firefox"
-          : has(/\b(?:Chrome|CriOS)\//)
-            ? "chrome"
-            : has(/\bVersion\/[\d.]+ .*Safari\//)
-              ? "safari"
-              : "other";
+  const { browser } = browserOf(userAgent);
   const os     = has(/\bAndroid\b/) ? "android" : has(/\b(?:iPhone|iPad|iPod)\b/) ? "ios" : has(/\bWindows NT\b/) ? "windows" : has(/\bCrOS\b/) ? "chromeos" : has(/\bMac OS X\b|\bMacintosh\b/) ? "macos" : has(/\bLinux\b/) ? "linux" : "other";
   return { browser, os };
 }

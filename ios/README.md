@@ -85,7 +85,7 @@
 
 - 在面板上按「取消」和卡片中途離開，系統告訴 app 的先後沒有文件：卡片接上之後按「取消」，系統讓指令失敗比告訴 app「取消了」早到時，app 會當成卡片中途離開（畫面寫再感應一次），不是取消。要真手機才看得出來
 - 第一代的卡片：`GpkiCard` 認得出來（選不到第二代的應用程式、選得到主檔案），但只有在卡片有 `Config/Info.plist` 那三個應用程式之一時，系統才會把卡片交給 app。第一代的卡片有沒有，手上沒有卡片能試；沒有的話持卡人看到的是面板一直等、最後「沒有感應到卡片」
-- 送不出去之後的再送：後台沒有回應時同一筆可以再送一次；網頁版在後台回 429、5xx 時也可以再送，再送被回「題目用過了」時會查現況確認那一筆是不是已經記下，這裡還沒有
+- 送不出去之後的再送：後台沒有回應、或說人太多（`429`、`503` `busy`）時同一筆可以再送一次；網頁版在後台回其他 5xx 時也可以再送，再送被回「題目用過了」時會查現況確認那一筆是不是已經記下，這裡還沒有
 - 文字沒有對應句子的兩種情況，畫面只顯示代碼，和網頁版相同（`web/src/ui/messages.ts`）：核心回了 app 不認得的憑證原因代碼、app 自己把步驟的順序叫錯（`state`）。兩種都是程式的錯，不是持卡人會遇到的情況；要不要有一句話留給 #172
 - 清冊的索引或檔案下載不到時，畫面一律寫「現在拿不到可用的內政部廢止清冊……（代碼 `crl_unavailable`）」，不分是連不上還是 HTTP 的錯誤：`spec/device-checks.md` 把兩種都歸在 `crl_unavailable`，網頁版也一樣
 - `design/copy/card-proof.md` 標了「app 的寫法還沒有定」的句子，先用網頁的那一句：讀卡時的其他錯誤、讀到兩張都通過檢查的憑證、檔案的內容和預期的不同、算不出證明、後台列了而 app 不認得的平台那一列、第 6 步讀不出後台回報每個帳號記成什麼時的那一句；要「再讀一次卡片」的地方，按鈕先用「再感應一次卡片」
@@ -199,8 +199,9 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - 第 1 步「找附近的戶政事務所」和內政部憑證管理中心的連結交給系統開的網址
 - 第一次感應不送 PIN；第二、第三次感應換成另一張卡時，那張卡沒有收到 PIN，畫面請持卡人換回來，再感應一次就接著做
 - 完成、取消、PIN 不正確之後，記憶體裡沒有 PIN
-- app 一打開（畫面第一次畫出來）就向後台拿 `config`，第 1 步每次打開和回到 app 時再拿一次，過卡用的是最近的那一份
+- app 一打開（畫面第一次畫出來）就向後台拿 `config`，第 1 步每次打開和回到 app 時再拿一次；按「下一步」時拿一次帶開始記號的（`config?start`），接著讀卡時再拿一次不帶記號的
 - 停止收過卡（[#394](https://github.com/iamreal-tw/iamreal/issues/394)、[#402](https://github.com/iamreal-tw/iamreal/issues/402)），在新宣告之前：`app-backend.ts` 的 `PUT /__app-test/paused` 切換後台的 `CARD_PROOFS_PAUSED`（`TestBackend.setPaused`）。停止時打開，第 1 步是 `before.paused` 那一句、沒有「下一步」；恢復後回到 app，「下一步」回來了。走到第 5 步才停止：拿題目回 `paused`（卡片沒有被要求簽章），和送出之前才停止（`CountingBackend.beforeSubmit`）而送出回 `paused`，兩次都停在那一項，寫 `stops.paused` 和請求編號，只有「回到開頭」，回到的第 1 步寫停止的那一句。恢復之後的新宣告就是「恢復之後走得完」，所以證明紀錄還是那四筆
+- 人太多（ADR-0026，[#420](https://github.com/iamreal-tw/iamreal/issues/420)），在再次過卡的那一次：`CountingBackend.turnAway` 把指定的請求照後台被擋時的樣子回（`429` `rate_limited` 或 `503` `busy`），不送到 Worker。回到 app 時第 1 步問的 `config` 被擋：第 1 步照常有「下一步」。按「下一步」時的 `config?start` 被擋（`503`、`429` 各一次）：停在第 1 步，`before.busy` 在「下一步」正上方，卡片沒有被感應。讀卡時不帶記號的 `config` 被擋：照樣讀卡。卡片簽完後查現況被擋：`stops.too_many`，按鈕是「上一步」「再試一次」，按「再試一次」直接到第 4 步，卡片沒有再感應、沒有再收到 PIN。拿題目被擋、送出被擋：停在那一項，`stops.too_many`，按鈕是「再試一次」和「取消」；拿題目的「再試一次」之後卡片簽一次，送出的「再試一次」不再感應。每一個畫面的每一句都在 `card-proof.md` 裡，截圖是 `screens-ios/` 的 `1-busy`、`3-busy`、`5-busy`、`5-busy-submit`
 - 手機的日期和後台差一天時，停在第三次感應之前，卡片沒有被要求簽第二次
 - 第 6 步複製的連結、「打開你的島民證明」開的網址（Worker 上那一頁真的列出帳號）、「打開 @alice 的 Threads 個人檔案」開的網址；第 8 步「分享到 Threads」交給分享面板的文字（帶順序號碼的那一句，號碼和 Worker 上那一頁寫的相同，下一行是這張島民證明的網址）
 - 送出之後的三步：新宣告走完整的第 6 步（兩顆按鈕並排；示範給報讀器的說明和按鈕的字照 `design/copy/`，按「停止」後變成「再看一次」，再按又是「停止」）；第 7 步按「開啟提醒」而系統不允許時什麼都不存，「打開通知設定」之後回到 app，沒有允許就還是那個畫面，允許了就照預設排好；再次過卡的第 6 步是短版，「沒有看到連結，重新掛上」換成完整的，提醒已經開著時第 7 步只有「下一步」；更換之後按「這次不要」不向系統要權限、什麼都不存；收回從第 5 步直接到第 8 步。第 7、8 步的「上一步」不碰卡片。四種最後一步的標題各不相同
@@ -230,7 +231,8 @@ IAMREAL_BB=<bb 的路徑> node --experimental-strip-types test/app-backend.ts fi
 - `Tests/TeachingAnimationTests.swift`：示範的算法對 `spec/vectors/teaching-animation.json` 掛上去和感應位置的每一案（兩個平台都有），時間表讀 `design/motion/hang.json`、`sense.json`：數字差在檔案寫的 `tolerance` 以內，其餘逐字相同；時間表沒有的平台不收；任何一刻的狀態和先前問過哪一刻無關；iPhone 的感應位置三輪後停住，卡片留在手機背面的上方、沒有紅圈
 - `Tests/ThemeTests.swift`：`App/Theme.swift` 的每一個數值和 `design/tokens.json` 同名的那一個相同；標題的字型是 `--font-display` 的第一個，而且就是包進 app 的那一份
 - `Tests/ScreensTests.swift`：不用後台，拿 `design/copy/card-proof.md` 的例子（`@alice`、`7K2Q9FM4XD`、2026-11-16、王小明）做出第一次宣告的每一個畫面，和已經宣告 `@alice` 的卡片的第 4、5 步（目前宣告的帳號、改成別的帳號、再次過卡、更換、收回的確認）：每一句都在文字檔裡、沒有「了解更多」；第 1 步、第 3 步、第 4 步的每一種（沒有宣告、全部收回過、已經有宣告、改成別的帳號和它依次數換掉的那一句、不能再更換、今天已經過卡 3 次、卡片在 app 不認得的平台上有帳號）、第 5 步的每一種逐句照文字檔；選間隔和時刻、設定、從通知點進來的第 1 步，每一句照 `design/copy/app.md`；系統不允許通知時選間隔的畫面留著並說為什麼；設定打開的網址；照 app 畫的樣子拍成 390 點寬的整頁截圖，連同啟動畫面和提醒的畫面寫到 `web/test-output/app/screens-ios/`，檔名就是 `design/screens/` 裡對應的那一張（下面「截圖」）
-- `Tests/PausedTests.swift`：停止收過卡（#394），對著假後台（`config` 說不說 `paused`，`challenges`、`records` 回 `paused`）：第 1 步在「下一步」的位置寫 `before.paused`，回到 app 時再問一次；`config` 在第 2 步才說的，讀卡之前停下；第 5 步 `stops.paused` 只給「回到開頭」，不給「再試一次」；說了 `paused` 的 config 下一次過卡開始時再問；第 1 步每次打開（和回到 app 時）都再問一次 `config`，接著的過卡用這個回答，和網頁相同
+- `Tests/PausedTests.swift`：停止收過卡（#394），對著假後台（`config` 說不說 `paused`，`challenges`、`records` 回 `paused`）：第 1 步在「下一步」的位置寫 `before.paused`，回到 app 時再問一次；`config` 在第 2 步才說的，讀卡之前停下；第 5 步 `stops.paused` 只給「回到開頭」，不給「再試一次」；說了 `paused` 的 config 下一次過卡開始時再問；第 1 步每次打開（和回到 app 時）都再問一次 `config`，用來在讀卡之前說停止收過卡
+- `Tests/BusyTests.swift`：人太多（ADR-0026，#420），不用後台：按「下一步」時送的是 `GET /api/v1/config?start`，其他時候不帶記號；`429`、`503` `busy` 算人太多，`503` 別的代碼不算（對著本機的假後台，`NWListener`）。開始的那一次被擋時停在第 1 步，`before.busy` 在「下一步」正上方，卡片沒有被感應；讀卡時不帶記號的 `config` 被擋時用按「下一步」時拿到的那一份，照樣去感應卡片；開始的那一次沒有回答時沒有可以用的，停在讀卡之前寫 `stops.too_many`。第 3 步查現況被擋時寫 `stops.too_many`，按鈕是「上一步」「再試一次」；第 5 步拿題目、送出被擋時停在那一項，寫 `stops.too_many`（送出被擋不是「送出失敗」那一句），按鈕是「再試一次」和「取消」
 - `Tests/SubmitAnswerTests.swift`：對著本機只答一次的假後台（Network 框架的 `NWListener`）送出：201 的內文中途斷線或超過 1 MiB 時，`HTTPBackend.submit` 給沒有位元組、不是 `network`，交給核心讀是「什麼都沒說」（完成畫面只說記下了，#264）；剛好 1 MiB 照收、`503` 照舊是那個代碼
 - `Tests/ChallengeAgainTests.swift`：對著本機一個照順序回應的假後台（`NWListener`）拿題目（#404）：第一次讀完請求就關連線、第二次才回 → 拿到題目，送了兩次；兩次都不回 → `network`，只送兩次；有回應（429）或回應的內文中途斷掉 → 不重送；等回應的工作被取消 → 不重送；`records`、`card-state` 沒有回應時只送一次
 - `Tests/UserAgentTests.swift`：對著本機記下每個請求標頭的假後台，把 `Backend` 的六種請求各送一次，另外讓第一次拿題目的請求沒有回應、看用另一個 session 送的第二次（#404）：每一個的 `User-Agent` 都是 `iamreal`、`Accept-Language` 都是 `zh-TW`，標頭裡沒有 app 的名稱、CFNetwork、Darwin；系統另外加的標頭只有 `Host`、`Accept`、`Accept-Encoding`、`Connection`、`Content-Type`、`Content-Length`，前三個固定的值照模擬器上量到的比（#444；改之前量到的是 `User-Agent: IamrealApp/1 CFNetwork/3860.100.1 Darwin/27.2.0`、`Accept-Language: zh-TW,zh-Hant;q=0.9`）
