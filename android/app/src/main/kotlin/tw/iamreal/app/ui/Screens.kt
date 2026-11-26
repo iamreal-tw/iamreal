@@ -238,7 +238,8 @@ private fun DeclaredAccounts(m: Model, view: Messages.DeclaredView) {
         view.last?.let { Small(it) }
     }
     view.dailyLimit?.let { return DailyLimit(m, it) }
-    m.listMessage?.let { Problem(it) }
+    // Why the list cannot be signed as it is: there is no row here to write it under.
+    for (message in m.rowMessages.values + listOfNotNull(m.listMessage)) Problem(message)
     // The main button: the list as it is, nothing to type.
     Actions { Button(view.refresh, Modifier.fillMaxWidth(), primary = true) { m.refresh() } }
     Small(view.refreshNote, colour = Colours.text)
@@ -261,9 +262,9 @@ private fun AccountRow(m: Model, row: Messages.AccountRow, outside: Outside) = C
     } else {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AccountField(m.fields[row.platform] ?: "", row.prefix, enabled = true, tag = "account-${row.platform}", modifier = Modifier.weight(1f)) {
-                m.fields[row.platform] = it
+                m.type(row.platform, it)
             }
-            if (row.preview) Button(m.copy.say("app_accounts.preview"), height = 52.dp) { m.previewUrl(row.platform)?.let(outside.open) }
+            Button(m.copy.say("app_accounts.preview"), height = 52.dp) { m.previewUrl(row.platform)?.let(outside.open) }
         }
     }
     for (line in row.lines) Small(line)

@@ -508,6 +508,7 @@ async function cardProof(p: Proof): Promise<string> {
     emulator.type(account);
     hideKeyboard();
     check(field("account-threads").text === account, `step 4: the field now holds "${account}"`);
+    check(!textsOf(visible()).includes(say("accounts.need_one")), "step 4: once an account is typed, 請至少填一個帳號。 is gone");
   };
   if (act.do === "fill") {
     if (p.thorough) {
@@ -567,6 +568,13 @@ async function cardProof(p: Proof): Promise<string> {
     await waitText(step(4), "step 4 again, from step 5", 10_000);
     check(field("account-threads").text === act.type, `step 5: 上一步 goes back to step 4 with "${act.type}" still in the field`);
     press(say("common.next"));
+    await waitText(say("confirm.title"), "step 5 again");
+  } else {
+    // 上一步: what the card declares, as before the button was pressed; the same button again.
+    press(say("common.back"));
+    await waitText(say("accounts.refresh"), "step 4 again, from step 5", 10_000);
+    check(field("current-threads").text === `@${p.current}`, "step 5: 上一步 goes back to what the card declares");
+    press(act.do === "refresh" ? say("accounts.refresh") : say("accounts.withdraw", { account: `@${p.current}` }));
     await waitText(say("confirm.title"), "step 5 again");
   }
   press(p.confirm.button);

@@ -31,7 +31,7 @@ class AccountsViewTest {
         assertEquals(listOf("這張卡片還沒有宣告過帳號。", "填上你要宣告的 Threads 帳號。"), view.lead)
         assertEquals(listOf("threads"), view.rows.map { it.platform })
         val row = view.rows[0]
-        assertEquals(listOf("Threads", "@", "", true, true), listOf(row.name, row.prefix, row.current, row.editable, row.preview))
+        assertEquals(listOf("Threads", "@", "", true), listOf(row.name, row.prefix, row.current, row.editable))
         // One platform, never declared: nothing under the row, and no rule of switching.
         assertEquals(emptyList<String>(), row.lines)
         assertEquals(listOf(preview), view.notes)
@@ -81,7 +81,7 @@ class AccountsViewTest {
     fun `3 records today and nothing declared, the row as it is`() {
         val view = messages.accountsView(status(slot("threads", null, lastDeclared = "alice"), daysSince = 0, dailyLimit = true)) as Messages.FillView
         assertEquals("這張卡片今天已經過卡 3 次，明天才能再過卡。", view.dailyLimit)
-        assertEquals(listOf(false, false), listOf(view.rows[0].editable, view.rows[0].preview))
+        assertEquals(false, view.rows[0].editable)
         assertEquals(emptyList<String>(), view.rows[0].lines)
         assertEquals(emptyList<String>(), view.notes)
     }
@@ -93,7 +93,7 @@ class AccountsViewTest {
         assertEquals("這張卡片目前宣告 @alice。", view.intro)
         assertEquals("改成別的帳號", view.heading)
         // The field starts empty: the account is typed, not edited.
-        assertEquals(listOf("threads", "", true, true), view.row!!.let { listOf(it.platform, it.current, it.editable, it.preview) })
+        assertEquals(listOf("threads", "", true), view.row!!.let { listOf(it.platform, it.current, it.editable) })
         assertEquals(emptyList<String>(), view.row!!.lines)
         assertEquals("改了之後，@alice 不再是這張卡片宣告的帳號。一張卡終身最多更換 5 次，這次之後還可以更換 3 次。", view.cost)
         assertEquals(preview, view.previewNote)
@@ -126,6 +126,15 @@ class AccountsViewTest {
         assertEquals("不改了", view.keep)
     }
 
+    @Test
+    fun `the search handed to the map app is for the words of the copy, and nothing else goes with it`() {
+        val office = java.net.URLEncoder.encode("戶政事務所", "UTF-8")
+        // design/copy/card-proof.md, "1. 開始之前": the map app searches for 戶政事務所; no place is given, what is near is the map's to tell.
+        assertTrue(File(System.getProperty("iamreal.copy"), "card-proof.md").readText().contains("搜尋「戶政事務所」"))
+        assertEquals("geo:0,0?q=$office", FIND_OFFICE_MAP)
+        assertEquals("https://www.google.com/maps/search/?api=1&query=$office", FIND_OFFICE_SITE)
+    }
+
     // The server's table with a platform the app does not know, where the card has an account: the screens of several platforms.
 
     private val two = arrayOf(slot("test-example", "alice-b", known = false), slot("threads", "alice", switchCount = 1))
@@ -148,8 +157,8 @@ class AccountsViewTest {
         assertEquals(true, view.editList)
         val (other, threads) = view.rows
         // Kept as the server sent it: no field, no prefix, no preview.
-        assertEquals(listOf("test-example", "", "alice-b", false, false), listOf(other.name, other.prefix, other.current, other.editable, other.preview))
-        assertEquals(listOf("Threads", "@", "alice", true, true), listOf(threads.name, threads.prefix, threads.current, threads.editable, threads.preview))
+        assertEquals(listOf("test-example", "", "alice-b", false), listOf(other.name, other.prefix, other.current, other.editable))
+        assertEquals(listOf("Threads", "@", "alice", true), listOf(threads.name, threads.prefix, threads.current, threads.editable))
         assertEquals(listOf("更換過 1 次，還可以更換 4 次。"), threads.lines)
         assertEquals(listOf("填上空白的是新宣告，清空是收回，改成別的帳號是更換。一張卡終身最多只能更換宣告的帳號 5 次。", preview), view.notes)
     }

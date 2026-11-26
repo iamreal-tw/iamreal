@@ -415,7 +415,10 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     }
 
     /** "改成別的帳號": the same step, with a field for the other account. */
-    fun switchAccount() = openAccounts(AccountsMode.SWITCH)
+    fun switchAccount() {
+        // Only with an account to change: the screen is drawn from that row.
+        if (status?.let(messages::switchSlot) != null) openAccounts(AccountsMode.SWITCH)
+    }
 
     /** "修改帳號清單": the same step, with a row for each platform. */
     fun editList() = openAccounts(AccountsMode.EDIT)
@@ -434,6 +437,13 @@ internal class Model(private val wiring: Wiring, private val bundled: (String) -
     /** "收回對 @alice 的宣告" (one platform): the list without it, to step 5. */
     fun withdraw() {
         choose(listNow(status ?: return).mapValues { "" })
+    }
+
+    /** What is typed into a row's field. What was said of the row and of the list when a button was last pressed is no longer about what is there. */
+    fun type(platform: String, text: String) {
+        fields[platform] = text
+        rowMessages.remove(platform)
+        listMessage = null
     }
 
     /** What is in a row's field, tidied the way its platform writes an account. */

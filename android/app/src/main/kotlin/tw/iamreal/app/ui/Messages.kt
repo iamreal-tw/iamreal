@@ -92,10 +92,8 @@ internal class Messages(private val c: Copy) {
         val prefix: String,
         /** What the field starts with: the account the row holds now, or "". */
         val current: String,
-        /** A field to type in; false for a platform the app does not know (kept as it is), and on a day with 3 records. */
+        /** A field to type in, with app_accounts.preview beside it; false for a platform the app does not know (kept as it is), and on a day with 3 records. */
         val editable: Boolean,
-        /** app_accounts.preview beside the field. */
-        val preview: Boolean,
         /** The lines under the row ("每一列下面的那一行"). */
         val lines: List<String>,
     )
@@ -163,10 +161,17 @@ internal class Messages(private val c: Copy) {
 
     private fun row(slot: CardProof.Slot, daily: Boolean, lines: Boolean, current: String = slot.current ?: ""): AccountRow {
         val p = if (slot.known) Platforms.of(slot.platform) else null
-        return AccountRow(slot.platform, p?.name ?: slot.platform, p?.prefix ?: "", current, p != null && !daily, p != null && !daily, if (daily || !lines) emptyList() else rowLines(slot))
+        return AccountRow(
+            platform = slot.platform,
+            name = p?.name ?: slot.platform,
+            prefix = p?.prefix ?: "",
+            current = current,
+            editable = p != null && !daily,
+            lines = if (daily || !lines) emptyList() else rowLines(slot),
+        )
     }
 
-    private fun previewNotes(rows: List<AccountRow>, single: String?): List<String> = if (rows.any { it.preview }) listOf(previewNote(single)) else emptyList()
+    private fun previewNotes(rows: List<AccountRow>, single: String?): List<String> = if (rows.any { it.editable }) listOf(previewNote(single)) else emptyList()
 
     /** Step 4 as it opens ("4. 你的帳號"): rows to fill when the card declares nothing; what it declares and the actions when it does. */
     fun accountsView(status: CardProof.Status): AccountsView {
@@ -229,7 +234,7 @@ internal class Messages(private val c: Copy) {
     /** The row accounts.switch changes: the one account of a card on one platform; null when it declares none. */
     fun switchSlot(status: CardProof.Status): CardProof.Slot? = status.slots.firstOrNull { it.known && it.current != null }
 
-    /** Step 4 after accounts.switch (one platform): the account now, a field for another, and what it costs. */
+    /** Step 4 after accounts.switch (one platform): the account now, a field for another, and what it costs. Only for a card [switchSlot] has a row of. */
     fun switchView(status: CardProof.Status): SwitchView {
         val single = onePlatform(status)
         val slot = switchSlot(status)!!
